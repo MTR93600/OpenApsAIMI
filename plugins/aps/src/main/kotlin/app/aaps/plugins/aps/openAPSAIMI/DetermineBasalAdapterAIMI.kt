@@ -173,6 +173,7 @@ class DetermineBasalAdapterAIMI internal constructor(private val injector: HasAn
         val afternoonfactor: Double = preferences.get(DoubleKey.OApsAIMIAfternoonFactor) / 100.0
         val eveningfactor: Double = preferences.get(DoubleKey.OApsAIMIEveningFactor) / 100.0
         val hyperfactor: Double = preferences.get(DoubleKey.OApsAIMIHyperFactor) / 100.0
+        val mealfactor: Double = preferences.get(DoubleKey.OApsAIMIMealFactor)
 
         val (adjustedMorningFactor, adjustedAfternoonFactor, adjustedEveningFactor) = adjustFactorsBasedOnBgAndHypo(
             morningfactor.toFloat(), afternoonfactor.toFloat(), eveningfactor.toFloat())
@@ -180,7 +181,7 @@ class DetermineBasalAdapterAIMI internal constructor(private val injector: HasAn
         // Appliquer les ajustements en fonction de l'heure de la journée
         smbToGive = when {
             highCarbTime -> smbToGive * 130.0f
-            mealTime -> smbToGive * 200.0f
+            mealTime -> (smbToGive * mealfactor).toFloat()
             hourOfDay in 1..11 -> smbToGive * adjustedMorningFactor.toFloat()
             hourOfDay in 12..18 -> smbToGive * adjustedAfternoonFactor.toFloat()
             hourOfDay in 19..23 -> smbToGive * adjustedEveningFactor.toFloat()

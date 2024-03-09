@@ -128,6 +128,8 @@
     <string name="oaps_aimi_afternoon_factor_summary">Afternoon reactivity percentage between 12pm and 6 pm</string>
     <string name="key_oaps_aimi_afternoon_factor">key_oaps_aimi_afternoon_factor</string>
     <string name="key_oaps_aimi_hyper_factor">key_oaps_aimi_hyper_factor</string>
+    <string name="key_oaps_aimi_meal_factor">key_oaps_aimi_meal_factor</string>
+
     <string name="key_DynISFAdjusthyper">key_DynISFAdjusthyper</string>
     <string name="oaps_aimi_hyper_factor_summary"><![CDATA[Reactivity factor when bg > 180]]></string>
     <string name="oaps_aimi_hyper_factor_title"><![CDATA[Reactivity factor BG > 180]]></string>
@@ -158,9 +160,12 @@
     <string name="nb_iteration_ML_training_title">NB iteration stopping the loop</string>
     <string name="key_DynISF_Adjust">key_DynISF_Adjust</string>
     <string name="DynISF_Adjust_summary" formatted="false">Increase this value greater than 100 if you want to receive more smb. The opposite is true if you receive too much smb.</string>
-    <string name="DynISF_Adjust_title" formatted="false">DynISF factor to increase or discrease the number of SMB</string>
+    <string name="DynISF_Adjust_title" formatted="false">DynISF factor to increase or decrease the number of SMB</string>
     <string name="oaps_aimi_mealAdjFact_summary">DynISF adjustment factor for Meal mode</string>
-    <string name="oaps_aimi_mealAdjFact_title">Meal Mode DynISF factor</string>
+    <string name="oaps_aimi_mealAdjFact_title">Meal mode DynISF factor</string>
+    <string name="oaps_aimi_mealFactor_summary">Meal mode reactivity factor</string>
+    <string name="oaps_aimi_mealFactor_title">Meal mode reactivity factor</string>
+
     <string name="oaps_aimi_enableMlTraining_title">Enable ML training calculation</string>
     <string name="oaps_aimi_enableMlTraining_summary">\"This option will enable training ML calculation and use the result for the smb size.</string>
     <string name="oaps_aimi_reactivity_factor_0_1_summary">reactivity factor between 0 and 1 am. it\'s the insulin required factor. if the value is 50, you will receive the half value.</string>
