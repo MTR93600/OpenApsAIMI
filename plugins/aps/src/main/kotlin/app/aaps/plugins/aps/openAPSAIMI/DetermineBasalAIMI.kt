@@ -87,7 +87,7 @@ class DetermineBasalaimiSMB @Inject constructor(
     private var lastHourTIRabove170: Double = 0.0
     private var lastHourTIRabove140: Double = 0.0
     private var bg = 0.0
-    private var targetBg = 100.0f
+    private var targetBg = 118.0f
     private var normalBgThreshold = 140.0f
     private var delta = 0.0f
     private var shortAvgDelta = 0.0f
