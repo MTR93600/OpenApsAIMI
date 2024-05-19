@@ -87,7 +87,7 @@ class DetermineBasalaimiSMB @Inject constructor(
     private var lastHourTIRabove170: Double = 0.0
     private var lastHourTIRabove140: Double = 0.0
     private var bg = 0.0
-    private var targetBg = 118.0f
+    private var targetBg = 114.0f
     private var normalBgThreshold = 140.0f
     private var delta = 0.0f
     private var shortAvgDelta = 0.0f
@@ -369,7 +369,7 @@ class DetermineBasalaimiSMB @Inject constructor(
     }
     private fun isLunch2ModeCondition(): Boolean{
         val pbolusLunch2: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
-        val modeLunchPB2 = lunchruntime in 15..22 && lastBolusSMBUnit != pbolusLunch2.toFloat() && lunchTime
+        val modeLunchPB2 = lunchruntime in 15..30 && lastBolusSMBUnit != pbolusLunch2.toFloat() && lunchTime
         return modeLunchPB2
     }
     private fun isDinnerModeCondition(): Boolean{
@@ -379,7 +379,7 @@ class DetermineBasalaimiSMB @Inject constructor(
     }
     private fun isDinner2ModeCondition(): Boolean{
         val pbolusDinner2: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
-        val modeDinnerPB2 = dinnerruntime in 15..22 && lastBolusSMBUnit != pbolusDinner2.toFloat() && dinnerTime
+        val modeDinnerPB2 = dinnerruntime in 15..30 && lastBolusSMBUnit != pbolusDinner2.toFloat() && dinnerTime
         return modeDinnerPB2
     }
     private fun isHighCarbModeCondition(): Boolean{
