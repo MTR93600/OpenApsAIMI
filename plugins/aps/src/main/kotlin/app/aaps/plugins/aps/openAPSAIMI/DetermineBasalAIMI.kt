@@ -975,7 +975,7 @@ class DetermineBasalaimiSMB @Inject constructor(
         this.highCarbrunTime = therapy.getTimeElapsedSinceLastEvent("highcarb")
         this.snackrunTime = therapy.getTimeElapsedSinceLastEvent("snack")
         this.iscalibration = therapy.calibartionTime
-        this.acceleratingUp = if (delta > 2 && delta - longAvgDelta > 2) 1 else 0
+        this.acceleratingUp = if (delta > 4 && delta - longAvgDelta > 4) 1 else 0
         this.decceleratingUp = if (delta > 0 && (delta < shortAvgDelta || delta < longAvgDelta)) 1 else 0
         this.acceleratingDown = if (delta < -2 && delta - longAvgDelta < -2) 1 else 0
         this.decceleratingDown = if (delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta)) 1 else 0
