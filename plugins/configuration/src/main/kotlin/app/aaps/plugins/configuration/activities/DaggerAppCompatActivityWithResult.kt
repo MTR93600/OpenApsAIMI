@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -22,6 +23,8 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable
 import javax.inject.Inject
 
 open class DaggerAppCompatActivityWithResult : DaggerAppCompatActivity() {
+
+    val TAG = "DaggerAppCompatActivityWithResult"
 
     @Inject lateinit var rxBus: RxBus
     @Inject lateinit var rh: ResourceHelper
@@ -57,6 +60,7 @@ open class DaggerAppCompatActivityWithResult : DaggerAppCompatActivity() {
     val callForCustomWatchfaceFile = registerForActivityResult(CustomWatchfaceFileContract()) { }
 
     val callForBatteryOptimization = registerForActivityResult(OptimizationPermissionContract()) {
+        Log.d(TAG, "Enter to callForBatteryOptimization")
         updateButtons()
     }
 

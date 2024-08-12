@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:orientation="vertical"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -12,7 +13,8 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:gravity="center"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        tools:visibility="gone">
 
         <TextView
             android:layout_width="match_parent"
@@ -42,7 +44,6 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="@android:color/transparent"
-
             app:tabMode="scrollable" />
 
         <com.google.android.material.tabs.TabLayout
@@ -52,9 +53,7 @@
             android:background="@android:color/transparent"
             app:tabMinWidth="0dp"
             app:tabPadding="0dp"
-
             app:tabMode="scrollable" />
-
     </com.google.android.material.appbar.MaterialToolbar>
 
     <androidx.drawerlayout.widget.DrawerLayout

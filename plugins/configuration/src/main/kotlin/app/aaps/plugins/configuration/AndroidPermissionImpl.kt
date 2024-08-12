@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import app.aaps.core.interfaces.androidPermissions.AndroidPermission
@@ -33,6 +34,8 @@ class AndroidPermissionImpl @Inject constructor(
     private val config: Config
 ) : AndroidPermission {
 
+    val TAG = "AndroidPermissionImpl"
+
     private var permissionBatteryOptimizationFailed = false
 
     @SuppressLint("BatteryLife")
@@ -40,27 +43,34 @@ class AndroidPermissionImpl @Inject constructor(
         var test = false
         var testBattery = false
         for (s in permissions) {
+            Log.d(TAG, "test = $test, s = $s, not granted = ${ContextCompat.checkSelfPermission(activity, s) != PackageManager.PERMISSION_GRANTED}")
             test = test || ContextCompat.checkSelfPermission(activity, s) != PackageManager.PERMISSION_GRANTED
             if (s == Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) {
                 val powerManager = activity.getSystemService(Context.POWER_SERVICE) as PowerManager
                 val packageName = activity.packageName
                 testBattery = testBattery || !powerManager.isIgnoringBatteryOptimizations(packageName)
+                Log.d(TAG, "testBattery = $testBattery, s = $s, not optimized = ${powerManager.isIgnoringBatteryOptimizations(packageName)}")
             }
         }
+
         if (test) {
             if (activity is DaggerAppCompatActivityWithResult)
                 try {
                     activity.requestMultiplePermissions.launch(permissions)
+
                 } catch (ignored: IllegalStateException) {
+                    Log.e(TAG, "ERROR test: ${ignored.message}")
                     ToastUtils.errorToast(activity, rh.gs(R.string.error_asking_for_permissions))
                 }
         }
+
         if (testBattery) {
             try {
                 if (activity is DaggerAppCompatActivityWithResult)
                     try {
                         activity.callForBatteryOptimization.launch(null)
                     } catch (ignored: IllegalStateException) {
+                        Log.e(TAG, "ERROR testBattery: ${ignored.message}")
                         ToastUtils.errorToast(activity, rh.gs(R.string.error_asking_for_permissions))
                     }
             } catch (e: ActivityNotFoundException) {

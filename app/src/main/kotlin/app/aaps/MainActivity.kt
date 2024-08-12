@@ -11,6 +11,7 @@ import android.text.SpannableString
 import android.text.method.LinkMovementMethod
 import android.text.style.ForegroundColorSpan
 import android.text.util.Linkify
+import android.util.Log
 import android.util.TypedValue
 import android.view.Menu
 import android.view.MenuInflater
@@ -81,6 +82,8 @@ import javax.inject.Inject
 import kotlin.system.exitProcess
 
 class MainActivity : DaggerAppCompatActivityWithResult() {
+
+    val LOGTAG = "MainActivity"
 
     private val disposable = CompositeDisposable()
 
@@ -347,6 +350,7 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
         binding.mainNavigationView.setNavigationItemSelectedListener { true }
         val menu = binding.mainNavigationView.menu.also { it.clear() }
         for (p in activePlugin.getPluginsList()) {
+            Log.d(TAG, "plugin = ${p.name}, preference = ${p.preferencesId}")
             pageAdapter.registerNewFragment(p)
             if (p.isEnabled() && p.hasFragment() && !p.isFragmentVisible() && !p.pluginDescription.neverVisible) {
                 val menuItem = menu.add(p.name)
@@ -378,7 +382,9 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
             binding.toolbar.layoutParams = LinearLayout.LayoutParams(Toolbar.LayoutParams.MATCH_PARENT, resources.getDimension(app.aaps.core.ui.R.dimen.compact_height).toInt())
             TabLayoutMediator(binding.tabsCompact, binding.mainPager) { tab, position ->
                 tab.text = (binding.mainPager.adapter as TabPageAdapter).getPluginAt(position).nameShort
+                Log.d(LOGTAG, "short names, tab = ${tab.text}, position = $position")
             }.attach()
+
         } else {
             binding.tabsNormal.visibility = View.VISIBLE
             binding.tabsCompact.visibility = View.GONE
@@ -391,6 +397,7 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
             }
             TabLayoutMediator(binding.tabsNormal, binding.mainPager) { tab, position ->
                 tab.text = (binding.mainPager.adapter as TabPageAdapter).getPluginAt(position).name
+                Log.d(LOGTAG, "long names, tab = ${tab.text}, position = $position")
             }.attach()
         }
     }
