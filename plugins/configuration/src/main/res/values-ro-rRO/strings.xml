@@ -30,8 +30,6 @@
     <string name="status">Stare:</string>
     <string name="patient_name">Numele pacientului</string>
     <string name="patient_name_summary">Vă rugăm să furnizați numele sau porecla pacientului pentru a diferenția între configurări</string>
-    <string name="privacy_settings">Setări de confidenţialitate</string>
-    <string name="privacy_summary">Puteți furniza o adresă de e-mail opțională dacă doriți să fiți notificat despre erorile aplicației. Acesta nu este un serviciu automat. Veți fi contactat de dezvoltatori în situații periculoase.</string>
     <string name="diawarning">Reamintire: noile profiluri necesită o durată de acțiune a insulinei (DIA) de cel puțin 5 ore. DIA de 5-6 ore în profilurile noi sunt echivalente cu DIA 3 ore din profilele vechi.</string>
     <string name="profile">Profil</string>
     <string name="doprofileswitch">Schimbă profilul</string>
@@ -96,7 +94,6 @@
     <string name="check_preferences_before_import">Verificați preferințele înainte de a le importa:</string>
     <string name="check_preferences_cannot_import">Preferințele nu pot fi importate!</string>
     <string name="check_preferences_dangerous_import">Preferințele nu ar trebui importate!</string>
-    <string name="nav_export">Exportă setările</string>
     <string name="export_to">Exportă setările către</string>
     <string name="import_from">Importă setările din</string>
     <string name="setting_imported">Setări importate</string>
@@ -109,7 +106,6 @@
     <string name="restartingapp">Se iese din aplicație în vederea aplicării setărilor.</string>
     <string name="ue_exported">Înregistrările de la Utilizator exportate</string>
     <string name="protection">Protecţie</string>
-    <string name="master_password_missing">Parola principală nu este setată!\n\nVă rugăm să vă setaţi parola principală în Preferinţe (%1$s &#8594; %2$s)</string>
     <!--    Maintenance-->
     <string name="maintenance">Mentenanță</string>
     <string name="maintenance_shortname">MENTN</string>

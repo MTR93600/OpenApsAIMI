@@ -66,6 +66,7 @@
     <string name="omnipod_common_overview_reservoir_value">%1$.2f U rimanenti</string>
     <string name="omnipod_common_overview_reservoir_value_over50">Oltre 50 U rimanenti</string>
     <string name="omnipod_common_overview_errors">Errori</string>
+    <string name="omnipod_common_uncertain">incerto</string>
     <!-- Omnipod - Wizard Base -->
     <string name="omnipod_common_wizard_button_cancel">Annulla</string>
     <string name="omnipod_common_wizard_button_finish">Fine</string>
@@ -124,6 +125,7 @@
     <string name="omnipod_common_pod_status_waiting_for_activation">Configurazione in corso (attesa attivazione pod)</string>
     <string name="omnipod_common_pod_status_waiting_for_cannula_insertion">Configurazione in corso (attesa inserimento cannula)</string>
     <string name="omnipod_common_pod_status_running">In esecuzione</string>
+    <string name="omnipod_common_pod_status_normal">Normale</string>
     <string name="omnipod_common_pod_status_suspended">Sospeso</string>
     <string name="omnipod_common_pod_status_pod_fault">Guasto pod</string>
     <string name="omnipod_common_pod_status_activation_time_exceeded">Tempo di attivazione superato</string>
@@ -175,6 +177,7 @@
     <string name="omnipod_common_ok">OK</string>
     <string name="omnipod_common_cancel">Annulla</string>
     <string name="omnipod_common_warning">Avviso</string>
+    <string name="omnipod_common_disable_suspend_alerts">DISABILITA ALLARMI DI SOSPENSIONE</string>
     <!-- Omnipod - Times -->
     <string name="omnipod_common_moments_ago">Momenti fa</string>
     <string name="omnipod_common_less_than_a_minute_ago">Meno di un minuto fa</string>

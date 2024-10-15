@@ -68,7 +68,6 @@
     <string name="basaltest_havingregularhighlow">Kai gliukozės kiekis kraujyje dažnai yra per didelis ar per mažas.</string>
     <string name="basaltest_weekly">Mažiausiai kartą per savaitę.</string>
     <string name="basaltest_fixed">Vieną kartą nustačius šių parametrų nebereikia keisti.</string>
-    <string name="basaltest_hint1">https://wiki.aaps.app/en/latest/Getting-Started/FAQ.html#androidaps-settings</string>
     <string name="prerequisites_label">Būtinosios sąlygos</string>
     <string name="prerequisites_what">Ko reikia norint įvesti nustatymus ir pradėti naudoti AndroidAPS?</string>
     <string name="prerequisites_determinedcorrectprofile">Ištestuotų profilio duomenų (bazės, JIF, IA, IVT).</string>
@@ -103,7 +102,6 @@
     <string name="troubleshooting_wheretoask">Kur galima ieškoti pagalbos su AndroidAPS?</string>
     <string name="troubleshooting_fb">Galima kreiptis patarimo AAPS Users Facebook grupėje.</string>
     <string name="troubleshooting_wiki">Būtina skaityti (ir pakartotinai skaityti) AndroidAPS dokumentaciją.</string>
-    <string name="troubleshooting_gitter">Galima prašyti patarimo ar registruoti techninę problemą AAPS Discord kanale.</string>
     <string name="troubleshooting_yourendo">Būtina kreiptis į savo diabeto kliniką/endokrinologą.</string>
     <string name="troubleshooting_hint1">https://wiki.aaps.app/en/latest/Installing-AndroidAPS/Update-to-new-version.html#troubleshooting</string>
     <string name="troubleshooting_hint2">https://www.facebook.com/groups/AndroidAPSUsers/</string>

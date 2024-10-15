@@ -66,6 +66,7 @@
     <string name="omnipod_common_overview_reservoir_value">%1$.2f ед. осталось</string>
     <string name="omnipod_common_overview_reservoir_value_over50">Осталось свыше 50 ед</string>
     <string name="omnipod_common_overview_errors">Ошибки</string>
+    <string name="omnipod_common_uncertain">не подтверждено</string>
     <!-- Omnipod - Wizard Base -->
     <string name="omnipod_common_wizard_button_cancel">Отменить</string>
     <string name="omnipod_common_wizard_button_finish">Завершить</string>
@@ -176,6 +177,7 @@
     <string name="omnipod_common_ok">OK</string>
     <string name="omnipod_common_cancel">Отменить</string>
     <string name="omnipod_common_warning">Внимание</string>
+    <string name="omnipod_common_disable_suspend_alerts">ОТКЛЮЧИТЬ ОПОВЕЩЕНИЯ ОБ ОСТАНОВЕ</string>
     <!-- Omnipod - Times -->
     <string name="omnipod_common_moments_ago">Только что</string>
     <string name="omnipod_common_less_than_a_minute_ago">Менее минуты назад</string>

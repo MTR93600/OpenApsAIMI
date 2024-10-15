@@ -28,6 +28,7 @@ interface Intents {
         const val EXTRA_SENSOR_STARTED_AT = "com.eveningoutpost.dexdrip.Extras.SensorStartedAt"
         const val EXTRA_TIMESTAMP = "com.eveningoutpost.dexdrip.Extras.Time"
         const val EXTRA_RAW = "com.eveningoutpost.dexdrip.Extras.Raw"
+        const val XDRIP_DATA_SOURCE = "com.eveningoutpost.dexdrip.Extras.SourceInfo"
         const val XDRIP_DATA_SOURCE_DESCRIPTION = "com.eveningoutpost.dexdrip.Extras.SourceDesc"
         const val ACTION_NEW_BG_ESTIMATE_NO_DATA = "com.eveningoutpost.dexdrip.BgEstimateNoData"
         const val NS_EMULATOR = "com.eveningoutpost.dexdrip.NS_EMULATOR"
@@ -50,5 +51,9 @@ interface Intents {
 
         // Broadcast status
         const val AAPS_BROADCAST = "info.nightscout.androidaps.status"
+        // Patched Ottai App -> AAPS
+        const val OTTAI_APP = "info.nightscout.androidaps.action.OTTAI_APP"
+        // Patched Syai Tag App -> AAPS
+        const val SYAI_TAG_APP = "info.nightscout.androidaps.action.SYAI_TAG_APP"
     }
 }

@@ -2,11 +2,6 @@
 <resources>
 
     <!-- SMS Communicator & OTP Authenticator -->
-    <string name="key_smscommunicator_otp_password" translatable="false">smscommunicator_otp_password</string>
-    <string name="key_smscommunicator_otp_secret" translatable="false">smscommunicator_otp_secret</string>
-    <string name="key_smscommunicator_remote_bolus_min_distance" translatable="false">smscommunicator_remotebolusmindistance</string>
-    <string name="key_smscommunicator_allowednumbers" translatable="false">smscommunicator_allowednumbers</string>
-    <string name="key_smscommunicator_remote_commands_allowed" translatable="false">smscommunicator_remotecommandsallowed</string>
 
     <string name="smscommunicator">SMS Communicator</string>
     <string name="smscommunicator_shortname">SMS</string>
@@ -168,6 +163,8 @@
     <string name="dia_short">DIA</string>
     <string name="target_short">TARG</string>
     <string name="basal_short">BAS</string>
+    <string name="isf_dynamic_label">Your algorithm can provide dynamic calculation of ISF. Values below are used only as a fallback in case of missing data</string>
+    <string name="ic_dynamic_label">Your algorithm can provide dynamic calculation of IC. Values below are used only as a fallback in case of missing data</string>
 
     <!-- Actions -->
     <string name="actions">Actions</string>
@@ -190,18 +187,6 @@
     <string name="patch_pump">Patch pump</string>
 
     <!-- Overview -->
-    <string name="key_show_calibration_button" translatable="false">show_calibration_button</string>
-    <string name="key_show_cgm_button" translatable="false">show_cgm_button</string>
-    <string name="key_show_carbs_button" translatable="false">show_carbs_button</string>
-    <string name="key_show_wizard_button" translatable="false">show_wizard_button</string>
-    <string name="key_show_insulin_button" translatable="false">show_insulin_button</string>
-    <string name="key_show_treatment_button" translatable="false">show_treatment_button</string>
-    <string name="key_statuslights_copy_ns" translatable="false">statuslights_copy_ns</string>
-    <string name="key_statuslights_overview_advanced" translatable="false">statuslights_overview_advanced</string>
-    <string name="key_keep_screen_on" translatable="false">keep_screen_on</string>
-    <string name="key_short_tabtitles" translatable="false">short_tabtitles</string>
-
-    <string name="key_show_statuslights" translatable="false">show_statuslights</string>
     <string name="show_statuslights">Show status lights on home screen</string>
     <string name="statuslights_cage_warning">Threshold warning cannula age [h]</string>
     <string name="statuslights_cage_critical">Threshold critical cannula age [h]</string>
@@ -209,22 +194,29 @@
     <string name="statuslights_iage_critical">Threshold critical insulin age [h]</string>
     <string name="statuslights_sage_warning">Threshold warning sensor age [h]</string>
     <string name="statuslights_sage_critical">Threshold critical sensor age [h]</string>
-    <string name="key_statuslights_sbat_warning" translatable="false">statuslights_sbat_warning</string>
     <string name="statuslights_sbat_warning">Threshold warning sensor battery level [%]</string>
-    <string name="key_statuslights_sbat_critical" translatable="false">statuslights_sbat_critical</string>
     <string name="statuslights_sbat_critical">Threshold critical sensor battery level [%]</string>
     <string name="statuslights_bage_warning">Threshold warning pump battery age [h]</string>
     <string name="statuslights_bage_critical">Threshold critical pump battery age [h]</string>
-    <string name="key_statuslights_res_warning" translatable="false">statuslights_res_warning</string>
     <string name="statuslights_res_warning">Threshold warning reservoir level [U]</string>
-    <string name="key_statuslights_res_critical" translatable="false">statuslights_res_critical</string>
     <string name="statuslights_res_critical">Threshold critical reservoir level [U]</string>
-    <string name="key_statuslights_bat_warning" translatable="false">statuslights_bat_warning</string>
     <string name="statuslights_bat_warning">Threshold warning pump battery level [%]</string>
-    <string name="key_statuslights_bat_critical" translatable="false">statuslights_bat_critical</string>
     <string name="statuslights_bat_critical">Threshold critical pump battery level [%]</string>
     <string name="statuslights_copy_ns">Copy settings from NS</string>
+    <string name="graph_scale_6h">6h</string>
+    <string name="graph_scale_12h">12h</string>
+    <string name="graph_scale_18h">18h</string>
+    <string name="graph_scale_24h">24h</string>
+    <string name="graph_long_scale_6h">6 hours</string>
+    <string name="graph_long_scale_12h">12 hours</string>
+    <string name="graph_long_scale_18h">18 hours</string>
+    <string name="graph_long_scale_24h">24 hours</string>
     <string name="a11y_graph">graph</string>
+    <string name="a11y_graph_scale">select graph scale</string>
+    <string name="a11y_graph_scale_6h">graph scale 6 hours</string>
+    <string name="a11y_graph_scale_12h">graph scale 12 hours</string>
+    <string name="a11y_graph_scale_18h">graph scale 18 hours</string>
+    <string name="a11y_graph_scale_24h">graph scale 24 hours</string>
     <string name="a11y_insulin_label">insulin</string>
     <string name="chart_menu">Chart menu</string>
     <string name="a11y_bg_quality">blood glucose quality</string>
@@ -271,7 +263,7 @@
     <string name="button1">Button 1</string>
     <string name="button2">Button 2</string>
     <string name="button3">Button 3</string>
-    <string name="prefs_range_title">Range for Visualization</string>
+    <string name="prefs_range_title">Range for visualization</string>
     <string name="prefs_range_summary">High and low mark for the charts in Overview and Smartwatch</string>
     <string name="low_mark">LOW mark</string>
     <string name="high_mark">HIGH mark</string>
@@ -289,19 +281,19 @@
 
     <!--    OverviewMenu-->
     <string name="key_graph_config" translatable="false">graphconfig</string>
-
     <string name="overview_show_predictions">Predictions</string>
     <string name="overview_show_treatments">Treatments</string>
     <string name="overview_show_heartRate">Heart Rate</string>
     <string name="overview_show_deviation_slope">Deviation slope</string>
     <string name="overview_show_activity">Activity</string>
     <string name="overview_show_bgi">Blood Glucose Impact</string>
-    <string name="overview_show_sensitivity">Sensitivity</string>
+    <string name="overview_show_sensitivity">Sensitivity change</string>
     <string name="overview_show_deviations">Deviations</string>
     <string name="overview_show_cob">Carbs On Board</string>
     <string name="overview_show_iob">Insulin On Board</string>
     <string name="overview_show_basals">Basals</string>
     <string name="overview_show_abs_insulin">Absolute insulin</string>
+    <string name="overview_show_variable_sens">Variable sensitivity</string>
     <string name="prediction_shortname">PRED</string>
     <string name="basal_shortname">BAS</string>
     <string name="deviation_shortname">DEV</string>
@@ -311,13 +303,13 @@
     <string name="devslope_shortname">DEVSLOPE</string>
     <string name="treatments_shortname">TREAT</string>
     <string name="heartRate_shortname">HR</string>
-    <string name="sensitivity_shortname">SENS</string>
+    <string name="sensitivity_shortname">SENS%</string>
+    <string name="variable_sensitivity_shortname">VSENS</string>
     <string name="graph_scale">Graph scale</string>
     <string name="graph_menu_divider_header">Graph</string>
+    <string name="temp_basal_overview_short_name">T:</string>
 
     <!-- Skins -->
-    <string name="key_skin" translatable="false">skin</string>
-
     <string name="classic_description">Original skin</string>
     <string name="lowres_description">Low Resolution skin</string>
     <string name="buttonson_description">Buttons are always displayed on bottom of screen</string>
@@ -334,5 +326,8 @@
     <string name="ongoingnotificaction" translatable="false">Ongoing Notification</string>
     <string name="description_persistent_notification">Shows an ongoing notification with a short overview of what your loop is doing</string>
     <string name="old_data">OLD DATA</string>
+    <string name="overview_show_steps">Steps</string>
+    <string name="steps_shortname">STEPS</string>
+    <string name="simple_mode_enabled">Simple mode enabled</string>
 
 </resources>

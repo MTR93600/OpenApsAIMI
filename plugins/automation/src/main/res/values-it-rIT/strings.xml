@@ -87,6 +87,18 @@
     <string name="cobcompared">COB %1$s %2$.0f</string>
     <string name="triggerHeartRate">Frequenza cardiaca</string>
     <string name="triggerHeartRateDesc">FC %1$s %2$.0f</string>
+    <string name="triggerSensorAgeLabel">Età del sensore</string>
+    <string name="triggerSensorAgeDesc">Età del sensore %1$s %2$.1f ore</string>
+    <string name="triggerCannulaAgeLabel">Età della cannula</string>
+    <string name="triggerCannulaAgeDesc">Età della cannula %1$s %2$.1f ore</string>
+    <string name="triggerInsulinAgeLabel">Età dell\'insulina</string>
+    <string name="triggerInsulinAgeDesc">Età dell\'insulina %1$s %2$.1f ore</string>
+    <string name="triggerPumpBatteryAgeLabel">Età della batteria del micro</string>
+    <string name="triggerPumpBatteryAgeDesc">Età batteria del micro %1$s %2$.1f ore</string>
+    <string name="triggerReservoirLevelLabel">Livello serbatoio</string>
+    <string name="triggerReservoirLevelDesc">Livello serbatoio %1$s %2$.0f</string>
+    <string name="triggerPumpBatteryLevelLabel">Livello della batteria del micro</string>
+    <string name="triggerPumpBatteryLevelDesc">Livello della batteria del micro %1$s %2$.0f</string>
     <string name="iob_u">IOB [U]:</string>
     <string name="distance_short">Dist [m]:</string>
     <string name="recurringTime">Tempo ricorrente</string>
@@ -116,4 +128,11 @@
     <string name="time_to_eat">Tempo di mangiare!\nEsegui il calcolatore e fai di nuovi i calcoli.</string>
     <string name="time_to_bolus">Tempo di fare un bolo!\nEsegui il calcolatore e fai di nuovi i calcoli.</string>
     <string name="error_setting_reminder">Errore nell\'impostare l\'allarme futuro</string>
+    <!--    Autotune-->
+    <string name="autotune_profile_name">Profilo Autotune %1$s</string>
+    <string name="autotune_run">Esegui Autotune</string>
+    <string name="autotune_run_without_autoswitch">Autotune eseguito senza cambio profilo</string>
+    <string name="autotune_run_with_autoswitch">Autotune eseguito e profilo cambiato automaticamente</string>
+    <string name="autotune_run_with_error">Errore durante l\'ultima esecuzione di Autotune</string>
+    <string name="autotune_run_cancelled">È stata rilevata un\'altra esecuzione di Autotune, esecuzione annullata</string>
 </resources>

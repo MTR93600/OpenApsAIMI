@@ -87,6 +87,18 @@
     <string name="cobcompared">COB %1$s %2$.0f</string>
     <string name="triggerHeartRate">Puls</string>
     <string name="triggerHeartRateDesc">HR %1$s %2$.0f</string>
+    <string name="triggerSensorAgeLabel">Sensoralder</string>
+    <string name="triggerSensorAgeDesc">Sensoralder %1$s %2$.1f time</string>
+    <string name="triggerCannulaAgeLabel">Kanylealder</string>
+    <string name="triggerCannulaAgeDesc">Kanylealder %1$s %2$.1f time</string>
+    <string name="triggerInsulinAgeLabel">Insulinalder</string>
+    <string name="triggerInsulinAgeDesc">Insulinalder %1$s %2$.1f time</string>
+    <string name="triggerPumpBatteryAgeLabel">Batterialder for pumpe</string>
+    <string name="triggerPumpBatteryAgeDesc">Batterialder for pumpe %1$s %2$.1f time</string>
+    <string name="triggerReservoirLevelLabel">Reservoarnivå</string>
+    <string name="triggerReservoirLevelDesc">Reservoarnivå %1$s %2$.0f</string>
+    <string name="triggerPumpBatteryLevelLabel">Batterinivå for pumpe</string>
+    <string name="triggerPumpBatteryLevelDesc">Batterinivå for pumpe %1$s %2$.0f</string>
     <string name="iob_u">IOB [E]:</string>
     <string name="distance_short">Dist [m]:</string>
     <string name="recurringTime">Gjentakende tidspunkt</string>
@@ -116,4 +128,11 @@
     <string name="time_to_eat">Nå må du spise!\nBruk boluskalkulator og gjør beregning på nytt.</string>
     <string name="time_to_bolus">Tid for bolus!\nStart boluskalkulator og gjør beregning på nytt.</string>
     <string name="error_setting_reminder">Feil under innstilling av fremtidig alarm</string>
+    <!--    Autotune-->
+    <string name="autotune_profile_name">Autotune profil %1$s</string>
+    <string name="autotune_run">Kjør Autotune</string>
+    <string name="autotune_run_without_autoswitch">Autotune ble kjørt uten profilbytte</string>
+    <string name="autotune_run_with_autoswitch">Autotune utført og profil ble automatisk skiftet ut</string>
+    <string name="autotune_run_with_error">Feil oppdaget under siste Autotune kjøring</string>
+    <string name="autotune_run_cancelled">Autotune kjører allerede. Kjøring avbrutt</string>
 </resources>

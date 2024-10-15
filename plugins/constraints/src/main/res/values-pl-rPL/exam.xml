@@ -68,7 +68,6 @@
     <string name="basaltest_havingregularhighlow">W przypadku częstego występowania wysokiego lub niskiego stężenia glukozy we krwi.</string>
     <string name="basaltest_weekly">Co najmniej raz w tygodniu.</string>
     <string name="basaltest_fixed">Po ustawieniu i zweryfikowaniu wartości te nie powinny zmieniać się w czasie.</string>
-    <string name="basaltest_hint1">https://wiki.aaps.app/en/latest/Getting-Started/FAQ.html#androidaps-settings</string>
     <string name="prerequisites_label">Wymagania wstępne</string>
     <string name="prerequisites_what">Co jest niezbędne do ustawienia i używania AAPS?</string>
     <string name="prerequisites_determinedcorrectprofile">Sprawdzone informacje profilowe (Basal, IC, ISF, DIA).</string>
@@ -103,7 +102,6 @@
     <string name="troubleshooting_wheretoask">Gdzie możesz szukać pomocy odnośnie AAPS?</string>
     <string name="troubleshooting_fb">Możesz poprosić o poradę na grupach użytkowników AAPS na Facebooku.</string>
     <string name="troubleshooting_wiki">Powinieneś przeczytać (i ponownie przeczytać) dokumentację AAPS.</string>
-    <string name="troubleshooting_gitter">Możesz poprosić o poradę i zgłosić problemy techniczne na Discordzie AAPS.</string>
     <string name="troubleshooting_yourendo">Należy zwrócić się do diabetologa lub lekarza endokrynologa.</string>
     <string name="troubleshooting_hint1">https://wiki.aaps.app/en/latest/Installing-AndroidAPS/Update-to-new-version.html#troubleshooting</string>
     <string name="troubleshooting_hint2">https://www.facebook.com/groups/AndroidAPSUsers/</string>

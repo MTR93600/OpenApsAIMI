@@ -30,8 +30,6 @@
     <string name="status">Stav:</string>
     <string name="patient_name">Meno pacienta</string>
     <string name="patient_name_summary">Zadajte meno pacienta, alebo prezývku pre rozlíšenie medzi viacerými nastaveniami</string>
-    <string name="privacy_settings">Nastavenia súkromia</string>
-    <string name="privacy_summary">Pokiaľ chcete byť upozornení na zlyhanie aplikácie, môžete zadať voliteľne e-mailovú adresu. Toto nie je automatizovaná služba. Vývojári vás budú kontaktovať v nebezpečných situáciách.</string>
     <string name="diawarning">Prosím, zapamätajte si: Nové inzulínové profily vyžadujú DIA minimálne 5h. DIA 5-6 hodín zodpovedá zhruba nastaveniam 3h na starších typoch profilu.</string>
     <string name="profile">Profil</string>
     <string name="doprofileswitch">Vykonajte zmenu profilu</string>
@@ -96,7 +94,6 @@
     <string name="check_preferences_before_import">Prosím skontrolujte nastavenia predtým, ako importujete:</string>
     <string name="check_preferences_cannot_import">Nastavenia nemôžu byť importované!</string>
     <string name="check_preferences_dangerous_import">Nastavenia by nemali byť importované!</string>
-    <string name="nav_export">Exportovať nastavenia</string>
     <string name="export_to">Exportovať nastavenia do</string>
     <string name="import_from">Importovať nastavenia z</string>
     <string name="setting_imported">Nastavenia importované</string>
@@ -109,13 +106,14 @@
     <string name="restartingapp">Zatváram aplikáciu, aby sa aplikovali nové nastavenia.</string>
     <string name="ue_exported">Užívateľské záznamy exportované</string>
     <string name="protection">Ochrana</string>
-    <string name="master_password_missing">Hlavné heslo nie je nastavené!\n\nProsím nastavte svoje hlavné heslo v nastaveniach (%1$s &#8594; %2$s)</string>
+    <string name="master_password_missing">Hlavné heslo nie je nastavené!\n\nProsím nastavte svoje hlavné heslo v nastaveniach (%1$s)</string>
     <!--    Maintenance-->
     <string name="maintenance">Údržba</string>
     <string name="maintenance_shortname">Údržba</string>
     <string name="description_maintenance">Poskytuje viaceré funkcie pre údržbu (ako napr. zasielanie logov, vymazanie logov).</string>
     <string name="database_cleanup">Vyčistenie databázy</string>
     <string name="reset_db_confirm">Naozaj chcete vymazať databázu?</string>
+    <string name="reset_aps_results_confirm">Naozaj chcete resetovať uložené výsledky AAPS?</string>
     <string name="maintenance_settings">Nastavenie údržby</string>
     <string name="maintenance_email">E-Mail</string>
     <string name="maintenance_amount">Počet protokolov na odoslanie</string>
@@ -167,4 +165,5 @@
     <string name="metadata_format_new">Nový šifrovaný formát</string>
     <string name="metadata_format_debug">Nový formát pre ladenie (nešifrovaný)</string>
     <string name="metadata_format_other">Neznámy formát exportu</string>
+    <string name="reset_aps_results">Resetovať výsledky APS</string>
 </resources>

@@ -153,6 +153,8 @@
     <string name="dia_short">DIA</string>
     <string name="target_short">MÅL</string>
     <string name="basal_short">BAS</string>
+    <string name="isf_dynamic_label">Algoritmen din kan gi dynamisk beregning av ISF. Verdiene nedenfor brukes bare som en reserveløsning i tilfelle av manglende data</string>
+    <string name="ic_dynamic_label">Algoritmen din kan gi dynamisk beregning av IK. Verdiene nedenfor brukes bare som en reserveløsning i tilfelle av manglende data</string>
     <!-- Actions -->
     <string name="actions">Handlinger</string>
     <string name="description_actions">Hurtigknapper for rask tilgang til ofte brukte funksjoner</string>
@@ -169,13 +171,13 @@
     <string name="pb_label">Pumpebatteri</string>
     <string name="cannula">Kanyle</string>
     <string name="ebstopsloop">Bruk av forlenget bolusfunksjon vil deaktivere lukket loop i perioden med forlenget bolus. Vil du virkelig dette?</string>
-    <string name="statuslights_cannula_age">kanyle alder</string>
+    <string name="statuslights_cannula_age">kanylealder</string>
     <string name="statuslights_patch_pump_age">pumpealder</string>
     <string name="patch_pump">Pumpe</string>
     <!-- Overview -->
     <string name="show_statuslights">Vis statusindikatorer på hjem-skjermen</string>
-    <string name="statuslights_cage_warning">Terskel for advarsel om alder på slangesett [t]</string>
-    <string name="statuslights_cage_critical">Terskel for kritisk alder på slangesett [t]</string>
+    <string name="statuslights_cage_warning">Terskel for advarsel om alder på kanyle [t]</string>
+    <string name="statuslights_cage_critical">Terskel for kritisk alder på kanyle [t]</string>
     <string name="statuslights_iage_warning">Terskel for advarsel, alder på insulin [t]</string>
     <string name="statuslights_iage_critical">Terskel for kritisk alder på insulin [t]</string>
     <string name="statuslights_sage_warning">Terskel for advarsel, alder på sensor [t]</string>
@@ -189,7 +191,20 @@
     <string name="statuslights_bat_warning">Terskel for advarsel, batterinivå for pumpe [%]</string>
     <string name="statuslights_bat_critical">Terskel for kritisk batterinivå for pumpe [%]</string>
     <string name="statuslights_copy_ns">Kopier innstillingene fra NS</string>
+    <string name="graph_scale_6h">6t</string>
+    <string name="graph_scale_12h">12t</string>
+    <string name="graph_scale_18h">18t</string>
+    <string name="graph_scale_24h">24t</string>
+    <string name="graph_long_scale_6h">6 timer</string>
+    <string name="graph_long_scale_12h">12 timer</string>
+    <string name="graph_long_scale_18h">18 timer</string>
+    <string name="graph_long_scale_24h">24 timer</string>
     <string name="a11y_graph">graf</string>
+    <string name="a11y_graph_scale">velg graf-skala</string>
+    <string name="a11y_graph_scale_6h">graf-skala 6 timer</string>
+    <string name="a11y_graph_scale_12h">graf-skala 12 timer</string>
+    <string name="a11y_graph_scale_18h">graf-skala 18 timer</string>
+    <string name="a11y_graph_scale_24h">graf-skala 24 timer</string>
     <string name="a11y_insulin_label">insulin</string>
     <string name="chart_menu">Diagram meny</string>
     <string name="a11y_bg_quality">blodsukkermålingens kvalitet</string>
@@ -258,12 +273,13 @@
     <string name="overview_show_deviation_slope">Avvikskurve</string>
     <string name="overview_show_activity">Insulinaktivitet</string>
     <string name="overview_show_bgi">BS-påvirkning (BGI)</string>
-    <string name="overview_show_sensitivity">Sensitivitet</string>
+    <string name="overview_show_sensitivity">Sensitivitetsendring</string>
     <string name="overview_show_deviations">Avvik</string>
     <string name="overview_show_cob">Aktive KH (COB)</string>
     <string name="overview_show_iob">Aktivt insulin (IOB)</string>
     <string name="overview_show_basals">Basaler</string>
     <string name="overview_show_abs_insulin">Absolutt insulinmengde</string>
+    <string name="overview_show_variable_sens">Variabel sensitivitet</string>
     <string name="prediction_shortname">PROGN</string>
     <string name="basal_shortname">BAS</string>
     <string name="deviation_shortname">AVVIK</string>
@@ -273,9 +289,11 @@
     <string name="devslope_shortname">DEVSLOPE</string>
     <string name="treatments_shortname">BEH</string>
     <string name="heartRate_shortname">PULS</string>
-    <string name="sensitivity_shortname">SENS</string>
+    <string name="sensitivity_shortname">SENS%</string>
+    <string name="variable_sensitivity_shortname">VSENS</string>
     <string name="graph_scale">Graf-skala</string>
     <string name="graph_menu_divider_header">Graf</string>
+    <string name="temp_basal_overview_short_name">M:</string>
     <!-- Skins -->
     <string name="classic_description">Opprinnelig visningstema</string>
     <string name="lowres_description">Tema for lav oppløsning</string>
@@ -288,4 +306,7 @@
     <!--    PersistentNotification-->
     <string name="description_persistent_notification">Viser en konstant melding med en kort oppsummering av hva loop gjør</string>
     <string name="old_data">GAMLE DATA</string>
+    <string name="overview_show_steps">Skritt</string>
+    <string name="steps_shortname">SKRITT</string>
+    <string name="simple_mode_enabled">Enkel modus aktivert</string>
 </resources>

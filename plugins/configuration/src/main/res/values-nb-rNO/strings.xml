@@ -26,12 +26,10 @@
     <string name="master_password_summary">Hovedpassordet brukes for å beskytte backup og tilpasse enkelte sikkerhetsinnstillinger i appen. Husk passordet eller lagre det på et trygt sted.</string>
     <string name="current_master_password">Nåværende hovedpassord</string>
     <string name="common_values">Bruk verdiene for det største måltidet du normalt spiser\n</string>
-    <string name="syncinfotext">Synkroniser data til skyen. Du kan hoppe over denne delen nå, men du vil ikke kunne gjennomføre opplæringsmålene før du satte opp Nightscout eller Tidepool-klienten.</string>
+    <string name="syncinfotext">Synkroniser data til skyen. Du kan hoppe over denne delen nå, men du vil ikke kunne gjennomføre opplæringsmålene før du setter opp Nightscout- eller Tidepool-klienten.</string>
     <string name="status">Status:</string>
     <string name="patient_name">Pasientnavn</string>
     <string name="patient_name_summary">Angi pasientnavn eller kallenavn for å kunne skille mellom flere oppsett</string>
-    <string name="privacy_settings">Personverninnstillinger</string>
-    <string name="privacy_summary">Du kan oppgi valgfri e-postadresse hvis du ønsker å bli varslet om krasj. Dette er ikke en automatisert tjeneste. Du vil bli kontaktet av utviklere ved farlige hendelser.</string>
     <string name="diawarning">Husk: nye insulinprofiler krever en DIA på minst 5t. DIA 5-6t på ny profil er lik DIA 3t på gamle insulinprofiler.</string>
     <string name="profile">Profil</string>
     <string name="doprofileswitch">Gjør profilbytte</string>
@@ -96,7 +94,6 @@
     <string name="check_preferences_before_import">Vennligst sjekk innstillingene før du importerer:</string>
     <string name="check_preferences_cannot_import">Innstillingene kan ikke importeres!</string>
     <string name="check_preferences_dangerous_import">Innstillingene bør ikke importeres!</string>
-    <string name="nav_export">Eksporter innstillinger</string>
     <string name="export_to">Eksporter innstillinger til</string>
     <string name="import_from">Importer innstillinger fra</string>
     <string name="setting_imported">Innstillinger importert</string>
@@ -109,13 +106,14 @@
     <string name="restartingapp">Avslutter appen for å aktivere innstillinger.</string>
     <string name="ue_exported">Brukeroppføringer er eksportert</string>
     <string name="protection">Beskyttelse</string>
-    <string name="master_password_missing">Hovedpassord er ikke definert!\n\nAngi hovedpassord i innstillinger (%1$s &#8594; %2$s)</string>
+    <string name="master_password_missing">Hovedpassord er ikke definert!\n\nAngi hovedpassord i innstillinger (%1$s)</string>
     <!--    Maintenance-->
     <string name="maintenance">Vedlikehold</string>
     <string name="maintenance_shortname">VEDL</string>
     <string name="description_maintenance">Flere funksjoner for vedlikehold (f. eks. loggsending, loggsletting).</string>
     <string name="database_cleanup">Databaseopprydding</string>
     <string name="reset_db_confirm">Vil du virkelig nullstille databasene?</string>
+    <string name="reset_aps_results_confirm">Vil du virkelig tilbakestille lagrede APS-resultater?</string>
     <string name="maintenance_settings">Vedlikeholdsinnstillinger</string>
     <string name="maintenance_email">Mottaker av e-post</string>
     <string name="maintenance_amount">Antall logger du vil sende</string>
@@ -167,4 +165,5 @@
     <string name="metadata_format_new">Nytt krypteringsformat</string>
     <string name="metadata_format_debug">Nytt feilsøkingsformat (ukryptert)</string>
     <string name="metadata_format_other">Ukjent eksportformat</string>
+    <string name="reset_aps_results">Tilbakestill APS-resultater</string>
 </resources>

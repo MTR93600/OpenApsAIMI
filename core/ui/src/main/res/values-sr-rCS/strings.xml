@@ -52,7 +52,6 @@
     <string name="basal">Basal</string>
     <string name="basalpct">Basal %</string>
     <!-- Autotune -->
-    <string name="autotune_result">Rezultat: %1$s</string>
     <!-- Alerts -->
     <!-- BolusWizard -->
     <string name="quickwizard">Brzi Čarobnjak</string>
@@ -60,7 +59,6 @@
     <!--    Protection-->
     <!--    Pumps -->
     <!--    Constraints-->
-    <!-- Locale -->
     <!--    Dialogs-->
     <!-- TwoMessagesDialog -->
     <string name="password_preferences_decrypt_prompt">Bit ćete upitani za glavnu lozinku, koja će se koristiti za dešifriranje uvezenih postavki.</string>

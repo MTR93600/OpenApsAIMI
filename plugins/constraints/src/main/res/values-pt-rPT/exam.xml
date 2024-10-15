@@ -68,7 +68,6 @@
     <string name="basaltest_havingregularhighlow">Quando passar por frequente glicose alta ou baixa.</string>
     <string name="basaltest_weekly">Pelo menos uma vez por semana.</string>
     <string name="basaltest_fixed">Uma vez definido e validado, estes valores não devem mudar ao longo do tempo.</string>
-    <string name="basaltest_hint1">https://wiki.aaps.app/en/latest/Getting-Started/FAQ.html#androidaps-settings</string>
     <string name="prerequisites_label">Pré-requisitos</string>
     <string name="prerequisites_what">O que é essencial para configurar e utilizar a AndroidAPS?</string>
     <string name="prerequisites_determinedcorrectprofile">Informações do perfil validadas (Basal, I: HC, FSI, DAI).</string>
@@ -103,7 +102,6 @@
     <string name="troubleshooting_wheretoask">Onde pode procurar ajuda para a AndroidAPS?</string>
     <string name="troubleshooting_fb">Pode pedir conselhos no grupo de utilizadores da AAPS no Facebook.</string>
     <string name="troubleshooting_wiki">Deve ler (e reler) a documentação da AndroidAPS.</string>
-    <string name="troubleshooting_gitter">Pode pedir conselhos e registar problemas técnicos oi dúvidas na sala da AndroidAPS no Discord.</string>
     <string name="troubleshooting_yourendo">Deveria pedir à sua clínica de diabetes/endocrinologista.</string>
     <string name="troubleshooting_hint1">https://wiki.aaps.app/en/latest/Installing-AndroidAPS/Update-to-new-version.html#troubleshooting</string>
     <string name="troubleshooting_hint2">https://www.facebook.com/groups/AndroidAPSUsers/</string>

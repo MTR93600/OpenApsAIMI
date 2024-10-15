@@ -1,8 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!--    <string name="fi_lang" translatable="false">Finnish</string> -->
-    <!--   <string name="he_lang" translatable="false">Hebrew</string> -->
-    <!--    <string name="ja_lang" translatable="false">Japanese</string> -->
     <string name="nav_preferences_plugin">%1$s nustatymai</string>
     <string name="nav_refreshtreatments">Atnaujinti terapiją iš NS</string>
     <string name="nav_exit">Išeiti</string>
@@ -16,11 +13,6 @@
     <string name="wear">Išmanieji laikrodžiai</string>
     <string name="nav_about">Apie</string>
     <string name="smscommunicator_missingphonestatepermission">Trūksta telefono būsenos leidimo</string>
-    <string name="ns_alarm_options">Aliarmų nustatymai</string>
-    <string name="ns_alarms">Kurti pranešimus iš NS aliarmų</string>
-    <string name="ns_announcements">Kurti pranešimus iš NS perspėjimų</string>
-    <string name="ns_alarm_stale_data_value_label">Seni duomenys, riba [min]</string>
-    <string name="ns_alarm_urgent_stale_data_value_label">Kritiškai seni duomenys, riba [min]</string>
     <string name="sensitivity_warning">Įjungę Autosens funkciją nepamirškite įvedinėti visus valgomus angliavandenius. To nedarant, angliavandenių sukeliami glikemijos svyravimai bus klaidingai identifikuojami kaip jautrumo pasikeitimai!</string>
     <string name="notloadedplugins">Ne visi profiliai įkelti!</string>
     <string name="valuesnotstored">Reikšmės neišsaugotos!</string>

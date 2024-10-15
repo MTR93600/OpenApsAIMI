@@ -1,11 +1,9 @@
 package app.aaps.wear.watchfaces.utils
 
 import androidx.viewbinding.ViewBinding
-import app.aaps.wear.databinding.ActivityBigchartBinding
 import app.aaps.wear.databinding.ActivityCustomBinding
 import app.aaps.wear.databinding.ActivityDigitalstyleBinding
 import app.aaps.wear.databinding.ActivityHomeLargeBinding
-import app.aaps.wear.databinding.ActivityNochartBinding
 
 /**
  * WatchfaceViewAdapter binds all WatchFace variants shared attributes to one common view adapter.
@@ -13,14 +11,12 @@ import app.aaps.wear.databinding.ActivityNochartBinding
  */
 class WatchfaceViewAdapter(
     aL: ActivityHomeLargeBinding? = null,
-    bC: ActivityBigchartBinding? = null,
     ds: ActivityDigitalstyleBinding? = null,
-    nC: ActivityNochartBinding? = null,
     cU: ActivityCustomBinding? = null
 ) {
 
     init {
-        if (aL == null && bC == null && ds == null && nC == null && cU == null) {
+        if (aL == null && ds == null && cU == null) {
             throw IllegalArgumentException("Require at least on Binding parameter")
         }
     }
@@ -29,21 +25,21 @@ class WatchfaceViewAdapter(
 
     // Required attributes
     val mainLayout =
-        aL?.mainLayout ?: bC?.mainLayout ?: bC?.mainLayout ?: ds?.mainLayout ?: nC?.mainLayout ?: cU?.mainLayout
+        aL?.mainLayout ?: ds?.mainLayout ?: cU?.mainLayout
         ?: throw IllegalArgumentException(errorMessage)
     val timestamp =
-        aL?.timestamp ?: bC?.timestamp ?: bC?.timestamp ?: ds?.timestamp ?: nC?.timestamp ?: cU?.timestamp
+        aL?.timestamp ?: ds?.timestamp ?: cU?.timestamp
         ?: throw IllegalArgumentException(errorMessage)
     val root =
-        aL?.root ?: bC?.root ?: bC?.root ?: ds?.root ?: nC?.root ?: cU?.root
+        aL?.root ?: ds?.root ?: cU?.root
         ?: throw IllegalArgumentException(errorMessage)
 
     // Optional attributes
-    val sgv = aL?.sgv ?: bC?.sgv ?: bC?.sgv ?: ds?.sgv ?: nC?.sgv ?: cU?.sgv
+    val sgv = aL?.sgv ?: ds?.sgv ?: cU?.sgv
     val direction = aL?.direction ?: ds?.direction
     val loop = cU?.loop
-    val delta = aL?.delta ?: bC?.delta ?: bC?.delta ?: ds?.delta ?: nC?.delta ?: cU?.delta
-    val avgDelta = bC?.avgDelta ?: bC?.avgDelta ?: ds?.avgDelta ?: nC?.avgDelta ?: cU?.avgDelta
+    val delta = aL?.delta ?: ds?.delta ?: cU?.delta
+    val avgDelta = ds?.avgDelta ?: cU?.avgDelta
     val uploaderBattery = aL?.uploaderBattery ?: ds?.uploaderBattery ?: cU?.uploaderBattery
     val rigBattery = ds?.rigBattery ?: cU?.rigBattery
     val basalRate = ds?.basalRate ?: cU?.basalRate
@@ -51,7 +47,7 @@ class WatchfaceViewAdapter(
     val AAPSv2 = ds?.AAPSv2 ?: cU?.AAPSv2
     val cob1 = ds?.cob1 ?: cU?.cob1
     val cob2 = ds?.cob2 ?: cU?.cob2
-    val time = aL?.time ?: bC?.time ?: bC?.time ?: nC?.time ?: cU?.time
+    val time = aL?.time ?: cU?.time
     val second = cU?.second
     val minute = ds?.minute ?: cU?.minute
     val hour = ds?.hour ?: cU?.hour
@@ -59,9 +55,9 @@ class WatchfaceViewAdapter(
     val month = ds?.month ?: cU?.month
     val iob1 = ds?.iob1 ?: cU?.iob1
     val iob2 = ds?.iob2 ?: cU?.iob2
-    val chart = bC?.chart ?: bC?.chart ?: ds?.chart ?: cU?.chart
-    val status = aL?.status ?: bC?.status ?: bC?.status ?: nC?.status
-    val timePeriod = ds?.timePeriod ?: aL?.timePeriod ?: nC?.timePeriod ?: bC?.timePeriod ?: cU?.timePeriod
+    val chart = ds?.chart ?: cU?.chart
+    val status = aL?.status ?: cU?.status
+    val timePeriod = ds?.timePeriod ?: aL?.timePeriod ?: cU?.timePeriod
     val dayName = ds?.dayName ?: cU?.dayName
     val mainMenuTap = ds?.mainMenuTap
     val chartZoomTap = ds?.chartZoomTap
@@ -76,10 +72,8 @@ class WatchfaceViewAdapter(
         fun getBinding(bindLayout: ViewBinding): WatchfaceViewAdapter {
             return when (bindLayout) {
                 is ActivityHomeLargeBinding    -> WatchfaceViewAdapter(bindLayout)
-                is ActivityBigchartBinding     -> WatchfaceViewAdapter(null, bindLayout)
-                is ActivityDigitalstyleBinding -> WatchfaceViewAdapter(null, null, bindLayout)
-                is ActivityNochartBinding      -> WatchfaceViewAdapter(null, null, null, bindLayout)
-                is ActivityCustomBinding       -> WatchfaceViewAdapter(null, null, null, null, bindLayout)
+                is ActivityDigitalstyleBinding -> WatchfaceViewAdapter(null, bindLayout)
+                is ActivityCustomBinding       -> WatchfaceViewAdapter(null, null, bindLayout)
                 else                           -> throw IllegalArgumentException("ViewBinding is not implement in WatchfaceViewAdapter")
             }
         }

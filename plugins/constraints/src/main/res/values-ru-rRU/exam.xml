@@ -68,7 +68,7 @@
     <string name="basaltest_havingregularhighlow">При частом высоком или низком уровне глюкозы в крови.</string>
     <string name="basaltest_weekly">Хотя бы один раз в неделю.</string>
     <string name="basaltest_fixed">После установки и проверки, эти значения не должны меняться со временем.</string>
-    <string name="basaltest_hint1">https://wiki.aaps.app/en/latest/Getting-Started/FAQ.html#androidaps-settings</string>
+    <string name="basaltest_hint1">https://wiki.aaps.app/en/latest/Getting-Started/FAQ.html#aaps-settings</string>
     <string name="prerequisites_label">Предварительные требования</string>
     <string name="prerequisites_what">Что необходимо для настройки и использования AAPS?</string>
     <string name="prerequisites_determinedcorrectprofile">Проверенные данные профиля (базал, углеводный коэффициент IC, фактор чувствительности к инсулину ISF, длительность действия инсулина DIA).</string>
@@ -103,11 +103,15 @@
     <string name="troubleshooting_wheretoask">Где искать помощь по AAPS?</string>
     <string name="troubleshooting_fb">Можно попросить совета в группе AAPS Users на Facebook.</string>
     <string name="troubleshooting_wiki">Следует прочитать (и перечитать) документацию AAPS.</string>
-    <string name="troubleshooting_gitter">Можно консультироваться, a также пересылать логи технических проблем и неполадок в чате Discord по AAPS.</string>
+    <string name="troubleshooting_discord">Вы можете советоваться, обсуждать технические проблемы, запрашивать новую функциональность в чате AAPS в Discord.</string>
+    <string name="troubleshooting_github">Вы можете оставлять запросы на исправление ошибок или создание нового функционала в Github.</string>
     <string name="troubleshooting_yourendo">Вы должны спросить в диабетической клинике / у вашего врача-эндокринолога.</string>
     <string name="troubleshooting_hint1">https://wiki.aaps.app/en/latest/Installing-AndroidAPS/Update-to-new-version.html#troubleshooting</string>
     <string name="troubleshooting_hint2">https://www.facebook.com/groups/AndroidAPSUsers/</string>
     <string name="troubleshooting_hint3">https://discord.gg/4fQUWHZ4Mw</string>
+    <string name="troubleshooting_hint4">https://github.com/nightscout/AndroidAPS/issues
+ 
+Context | Edit Context</string>
     <string name="insulin_plugins">Модули для инсулинов</string>
     <string name="insulin_ultrarapid">Какой инсулин следует использовать с модулем Сверхбыстрый Oref?</string>
     <string name="insulin_fiasp">Fiasp®</string>

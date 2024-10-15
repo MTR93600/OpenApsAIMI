@@ -68,7 +68,7 @@
     <string name="basaltest_havingregularhighlow">Při častém výskytu vysoké nebo nízké hladiny glykémie v krvi.</string>
     <string name="basaltest_weekly">Minimálně jednou týdně.</string>
     <string name="basaltest_fixed">Jakmile jsou tyto hodnoty nastaveny a ověřeny, neměly by se časem měnit.</string>
-    <string name="basaltest_hint1">https://wiki.aaps.app/cs/latest/Getting-Started/FAQ.html#nastaveni-androidaps</string>
+    <string name="basaltest_hint1">https://androidaps.readthedocs.io/cs/latest/Getting-Started/FAQ.html#aaps-settings</string>
     <string name="prerequisites_label">Požadavky</string>
     <string name="prerequisites_what">Co je nezbytné pro nastavení a používání AAPS?</string>
     <string name="prerequisites_determinedcorrectprofile">Ověřené informace o profilu (Bazál, IC, ISF, DIA).</string>
@@ -103,11 +103,13 @@
     <string name="troubleshooting_wheretoask">Kde můžete hledat pomoc s AAPS?</string>
     <string name="troubleshooting_fb">Můžete požádat o radu v Facebookové skupině uživatelů AAPS.</string>
     <string name="troubleshooting_wiki">Měli byste si přečíst (a znovu přečíst) dokumentaci AAPS.</string>
-    <string name="troubleshooting_gitter">Můžete požádat o radu a nahlásit technické problémy nebo potíže na Discordu AAPS.</string>
+    <string name="troubleshooting_discord">Můžete požádat o radu a nahlásit technické problémy nebo potíže na Discordu AAPS.</string>
+    <string name="troubleshooting_github">Problémy a žádosti o funkce můžete odeslat na Githubu.</string>
     <string name="troubleshooting_yourendo">Měli byste se zeptat svého lékaře/endokrinologa.</string>
     <string name="troubleshooting_hint1">https://wiki.aaps.app/cs/latest/Installing-AndroidAPS/Update-to-new-version.html#reseni-problemu</string>
     <string name="troubleshooting_hint2">https://www.facebook.com/groups/AndroidAPSUsers/</string>
     <string name="troubleshooting_hint3">https://discord.gg/4fQUWHZ4Mw</string>
+    <string name="troubleshooting_hint4">https://github.com/nightscout/AndroidAPS/issues</string>
     <string name="insulin_plugins">Pluginy Inzulín</string>
     <string name="insulin_ultrarapid">Který inzulin byste měli používat s pluginem Ultra-Rapid Oref?</string>
     <string name="insulin_fiasp">Fiasp®</string>

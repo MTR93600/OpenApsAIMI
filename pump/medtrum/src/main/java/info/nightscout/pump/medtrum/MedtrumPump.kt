@@ -1,23 +1,24 @@
 package info.nightscout.pump.medtrum
 
 import android.util.Base64
+import app.aaps.core.data.model.TE
+import app.aaps.core.data.pump.defs.PumpType
+import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.profile.Profile
-import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.TemporaryBasalStorage
-import app.aaps.core.interfaces.pump.defs.PumpType
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.interfaces.utils.DateUtil
-import app.aaps.core.interfaces.utils.T
 import info.nightscout.pump.medtrum.code.ConnectionState
 import info.nightscout.pump.medtrum.comm.enums.AlarmSetting
 import info.nightscout.pump.medtrum.comm.enums.AlarmState
 import info.nightscout.pump.medtrum.comm.enums.BasalType
 import info.nightscout.pump.medtrum.comm.enums.MedtrumPumpState
+import info.nightscout.pump.medtrum.comm.enums.ModelType
 import info.nightscout.pump.medtrum.extension.toByteArray
 import info.nightscout.pump.medtrum.extension.toInt
 import info.nightscout.pump.medtrum.util.MedtrumSnUtil
@@ -291,13 +292,13 @@ class MedtrumPump @Inject constructor(
     var desiredPumpWarning = true
     var desiredPumpWarningExpiryThresholdHours = 72L
 
-    fun pumpType(): PumpType = pumpType(deviceType)
+    fun pumpType(): PumpType = pumpType(ModelType.fromValue(deviceType))
 
-    fun pumpType(type: Int): PumpType =
+    fun pumpType(type: ModelType): PumpType =
         when (type) {
-            MedtrumSnUtil.MD_0201, MedtrumSnUtil.MD_8201 -> PumpType.MEDTRUM_NANO
-            MedtrumSnUtil.MD_8301                        -> PumpType.MEDTRUM_300U
-            else                                         -> PumpType.MEDTRUM_UNTESTED
+            ModelType.MD0201, ModelType.MD8201 -> PumpType.MEDTRUM_NANO
+            ModelType.MD8301                   -> PumpType.MEDTRUM_300U
+            else                               -> PumpType.MEDTRUM_UNTESTED
         }
 
     fun loadVarsFromSP() {
@@ -332,7 +333,7 @@ class MedtrumPump @Inject constructor(
     fun loadUserSettingsFromSP() {
         desiredPatchExpiration = sp.getBoolean(R.string.key_patch_expiration, false)
         val alarmSettingCode = sp.getString(R.string.key_alarm_setting, AlarmSetting.LIGHT_VIBRATE_AND_BEEP.code.toString()).toByte()
-        desiredAlarmSetting = AlarmSetting.values().firstOrNull { it.code == alarmSettingCode } ?: AlarmSetting.LIGHT_VIBRATE_AND_BEEP
+        desiredAlarmSetting = AlarmSetting.entries.firstOrNull { it.code == alarmSettingCode } ?: AlarmSetting.LIGHT_VIBRATE_AND_BEEP
         desiredHourlyMaxInsulin = sp.getInt(R.string.key_hourly_max_insulin, 40)
         desiredDailyMaxInsulin = sp.getInt(R.string.key_daily_max_insulin, 180)
         desiredPumpWarning = sp.getBoolean(R.string.key_pump_warning_notification, true)
@@ -569,7 +570,7 @@ class MedtrumPump @Inject constructor(
             AlarmState.EXPIRED              -> R.string.alarm_expired
             AlarmState.RESERVOIR_EMPTY      -> R.string.alarm_reservoir_empty
             AlarmState.PATCH_FAULT          -> R.string.alarm_patch_fault
-            AlarmState.PATCH_FAULT2         -> R.string.alarm_patch_fault2
+            AlarmState.PATCH_FAULT2         -> R.string.alarm_patch_fault // To avoid confusion, medtrum app also doesn't show patch fault 2
             AlarmState.BASE_FAULT           -> R.string.alarm_base_fault
             AlarmState.BATTERY_OUT          -> R.string.alarm_battery_out
             AlarmState.NO_CALIBRATION       -> R.string.alarm_no_calibration
@@ -581,6 +582,9 @@ class MedtrumPump @Inject constructor(
         patchId = 0
         syncedSequenceNumber = 1
         currentSequenceNumber = 1
+        reservoir = 0.0
+        batteryVoltage_B = 0.0
+        patchStartTime = 0L
     }
 
     fun handleNewPatch(newPatchId: Long, sequenceNumber: Int, newStartTime: Long) {
@@ -591,13 +595,13 @@ class MedtrumPump @Inject constructor(
         // Sync cannula change
         pumpSync.insertTherapyEventIfNewWithTimestamp(
             timestamp = newStartTime,
-            type = DetailedBolusInfo.EventType.CANNULA_CHANGE,
+            type = TE.Type.CANNULA_CHANGE,
             pumpType = pumpType(),
             pumpSerial = pumpSN.toString(radix = 16)
         )
         pumpSync.insertTherapyEventIfNewWithTimestamp(
             timestamp = newStartTime,
-            type = DetailedBolusInfo.EventType.INSULIN_CHANGE,
+            type = TE.Type.INSULIN_CHANGE,
             pumpType = pumpType(),
             pumpSerial = pumpSN.toString(radix = 16)
         )
@@ -614,12 +618,12 @@ class MedtrumPump @Inject constructor(
             EnumSet.noneOf(AlarmState::class.java)
         } else {
             alarmsStr.split(",")
-                .mapNotNull { AlarmState.values().find { alarm -> alarm.name == it } }
+                .mapNotNull { AlarmState.entries.find { alarm -> alarm.name == it } }
                 .let { EnumSet.copyOf(it) }
         }
     }
 
     private fun newRecordInfo(newRecord: Boolean): String {
-        return "${if (newRecord) "**NEW** " else ""}"
+        return if (newRecord) "**NEW** " else ""
     }
 }

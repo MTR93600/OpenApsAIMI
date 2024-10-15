@@ -1,8 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!--    <string name="fi_lang" translatable="false">Finnish</string> -->
-    <!--   <string name="he_lang" translatable="false">Hebrew</string> -->
-    <!--    <string name="ja_lang" translatable="false">Japanese</string> -->
     <string name="nav_preferences_plugin">%1$s Preferințe</string>
     <string name="nav_refreshtreatments">Reîncarcă tratamentele din NS</string>
     <string name="nav_exit">Ieșire</string>
@@ -16,11 +13,6 @@
     <string name="wear">Ceas</string>
     <string name="nav_about">Despre</string>
     <string name="smscommunicator_missingphonestatepermission">Nu este acordată permisiunea de citire a stării telefonului</string>
-    <string name="ns_alarm_options">Opțiuni alarmare</string>
-    <string name="ns_alarms">Creare notificări din alarmele NS</string>
-    <string name="ns_announcements">Creare notificări din anunţurile NS</string>
-    <string name="ns_alarm_stale_data_value_label">Prag vechime date [min]</string>
-    <string name="ns_alarm_urgent_stale_data_value_label">Prag date mult prea vechi [min]</string>
     <string name="sensitivity_warning">Trebuie introduși toți carbo la pornirea Autosens. În caz contrar, acțiunea carbo va fi percepută ca schimbare a sensibilității!</string>
     <string name="notloadedplugins">Nu s-au încărcat toate profilurile!</string>
     <string name="valuesnotstored">Nu s-au salvat valorile!</string>
