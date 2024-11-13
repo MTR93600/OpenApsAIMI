@@ -11,10 +11,11 @@ import app.aaps.core.keys.Preferences
 
 fun fromCarbs(t: CA, isAAPSOrWeighted: Boolean, profileFunction: ProfileFunction, aapsLogger: AAPSLogger, dateUtil: DateUtil, preferences: Preferences): AutosensData.CarbsInPast {
     val time = t.timestamp
-    val carbs = t.amount
+    val carbsAmount = t.amount
     val remaining = t.amount
     val min5minCarbImpact: Double
     val profile = profileFunction.getProfile(t.timestamp)
+
     if (isAAPSOrWeighted && profile != null) {
         val maxAbsorptionHours = preferences.get(DoubleKey.AbsorptionMaxTime)
         val sens = profile.getIsfMgdlForCarbs(t.timestamp, "fromCarbs")
@@ -22,10 +23,12 @@ fun fromCarbs(t: CA, isAAPSOrWeighted: Boolean, profileFunction: ProfileFunction
         min5minCarbImpact = t.amount / (maxAbsorptionHours * 60 / 5) * sens / ic
         aapsLogger.debug(
             LTag.AUTOSENS,
-            """Min 5m carbs impact for ${carbs}g @${dateUtil.dateAndTimeString(t.timestamp)} for ${maxAbsorptionHours}h calculated to $min5minCarbImpact ISF: $sens IC: $ic"""
+            """Min 5m carbs impact for ${carbsAmount}g @${dateUtil.dateAndTimeString(t.timestamp)} for ${maxAbsorptionHours}h calculated to $min5minCarbImpact ISF: $sens IC: $ic"""
         )
+
     } else {
         min5minCarbImpact = preferences.get(DoubleKey.ApsAmaMin5MinCarbsImpact)
     }
-    return AutosensData.CarbsInPast(time, carbs, min5minCarbImpact, remaining)
+
+    return AutosensData.CarbsInPast(time, carbsAmount, min5minCarbImpact, remaining)
 }

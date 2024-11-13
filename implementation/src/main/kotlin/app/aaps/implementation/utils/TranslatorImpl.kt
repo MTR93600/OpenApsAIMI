@@ -178,6 +178,14 @@ class TranslatorImpl @Inject internal constructor(
         else                            -> rh.gs(app.aaps.core.ui.R.string.unknown)
     }
 
+    override fun translate(exerciseDuty: TE.ExerciseDuty?): String  = when (exerciseDuty) {
+        TE.ExerciseDuty.LIGHT -> rh.gs(app.aaps.core.ui.R.string.duty_option_light)
+        TE.ExerciseDuty.MIDDLE -> rh.gs(app.aaps.core.ui.R.string.duty_option_middle)
+        TE.ExerciseDuty.HEAVY -> rh.gs(app.aaps.core.ui.R.string.duty_option_heavy)
+
+        else -> rh.gs(app.aaps.core.ui.R.string.duty_option_none)
+    }
+
     override fun translate(reason: TT.Reason?): String = when (reason) {
         TT.Reason.CUSTOM       -> rh.gs(app.aaps.core.ui.R.string.custom)
         TT.Reason.HYPOGLYCEMIA -> rh.gs(app.aaps.core.ui.R.string.hypo)

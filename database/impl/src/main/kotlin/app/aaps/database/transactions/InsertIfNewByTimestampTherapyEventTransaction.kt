@@ -15,9 +15,22 @@ class InsertIfNewByTimestampTherapyEventTransaction(
         enteredBy: String? = null,
         glucose: Double? = null,
         glucoseType: TherapyEvent.MeterType? = null,
-        glucoseUnit: GlucoseUnit
+        glucoseUnit: GlucoseUnit,
+        exerciseDuty: TherapyEvent.ExerciseDuty? = null
     ) :
-        this(TherapyEvent(timestamp = timestamp, type = type, duration = duration, note = note, enteredBy = enteredBy, glucose = glucose, glucoseType = glucoseType, glucoseUnit = glucoseUnit))
+        this(
+            TherapyEvent(
+                timestamp = timestamp,
+                type = type,
+                duration = duration,
+                note = note,
+                enteredBy = enteredBy,
+                glucose = glucose,
+                glucoseType = glucoseType,
+                glucoseUnit = glucoseUnit,
+                exerciseDuty = exerciseDuty
+            )
+        )
 
     override fun run(): TransactionResult {
         val result = TransactionResult()
@@ -28,6 +41,7 @@ class InsertIfNewByTimestampTherapyEventTransaction(
         } else result.existing.add(therapyEvent)
         return result
     }
+
 
     class TransactionResult {
 

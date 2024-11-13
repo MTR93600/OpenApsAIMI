@@ -11,10 +11,16 @@ object Percentile {
         if (arr.isEmpty()) return 0.0
         if (p <= 0) return arr[0]
         if (p >= 1) return arr[arr.size - 1]
+
         val index = arr.size * p
         val lower = floor(index)
         val upper = lower + 1
         val weight = index % 1
-        return if (upper >= arr.size) arr[lower.toInt()] else arr[lower.toInt()] * (1 - weight) + arr[upper.toInt()] * weight
+
+        return if (upper >= arr.size) {
+            arr[lower.toInt()]
+        } else {
+            arr[lower.toInt()] * (1 - weight) + arr[upper.toInt()] * weight
+        }
     }
 }

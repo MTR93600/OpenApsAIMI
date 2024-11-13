@@ -5,8 +5,8 @@ import app.aaps.core.interfaces.overview.OverviewData
 import app.aaps.core.interfaces.rx.events.Event
 
 interface CalculationWorkflow {
-    companion object {
 
+    companion object {
         const val MAIN_CALCULATION = "calculation"
         const val HISTORY_CALCULATION = "history_calculation"
         const val JOB = "job"
@@ -26,7 +26,11 @@ interface CalculationWorkflow {
 
         fun finalPercent(progress: Int): Int {
             var total = 0
-            for (i in entries) if (i.pass < pass) total += i.percentOfTotal
+            for (i in entries) {
+                if (i.pass < pass) {
+                    total += i.percentOfTotal
+                }
+            }
             total += (percentOfTotal.toDouble() * progress / 100.0).toInt()
             return total
         }

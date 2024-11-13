@@ -81,6 +81,7 @@ class KeepAliveWorker(
                     .setInitialDelay(5, TimeUnit.MINUTES)
                     .build()
             )
+
             WorkManager.getInstance(context).enqueueUniqueWork(
                 KA_10,
                 ExistingWorkPolicy.REPLACE,
@@ -89,6 +90,7 @@ class KeepAliveWorker(
                     .setInitialDelay(10, TimeUnit.MINUTES)
                     .build()
             )
+
         } else {
             // Sometimes schedule +5min, +10min gets broken
             // If this happen do nothing
@@ -100,10 +102,12 @@ class KeepAliveWorker(
             aapsLogger.error(LTag.CORE, "KeepAlive fail")
             fabricPrivacy.logCustom("KeepAliveFail")
         }
+
         lastRun = dateUtil.now()
 
         localAlertUtils.shortenSnoozeInterval()
         localAlertUtils.checkStaleBGAlert()
+
         checkPump()
         checkAPS()
         maintenancePlugin.deleteLogs(30)
@@ -117,6 +121,7 @@ class KeepAliveWorker(
     // Keep 6 months
     private fun databaseCleanup() {
         val lastRun = sp.getLong(R.string.key_last_cleanup_run, 0L)
+
         if (lastRun < dateUtil.now() - T.days(1).msecs()) {
             val result = persistenceLayer.cleanupDatabase(6 * 31, deleteTrackedChanges = false)
             aapsLogger.debug(LTag.CORE, "Cleanup result: $result")
@@ -133,6 +138,7 @@ class KeepAliveWorker(
 
         val workInfo: ListenableFuture<List<WorkInfo>> = WorkManager.getInstance(context).getWorkInfos(workQuery)
         aapsLogger.debug(LTag.CORE, "WorkManager size is ${workInfo.get().size}")
+
         if (workInfo.get().size > 1000) {
             WorkManager.getInstance(context).pruneWork()
             aapsLogger.debug(LTag.CORE, "WorkManager pruning ....")
@@ -144,10 +150,19 @@ class KeepAliveWorker(
     // IOB displayed in NS
     private fun checkAPS() {
         var shouldUploadStatus = false
+
         if (config.NSCLIENT) return
-        if (config.PUMPCONTROL) shouldUploadStatus = true
-        else if (!loop.isEnabled() || iobCobCalculator.ads.actualBg() == null) shouldUploadStatus = true
-        else if (dateUtil.isOlderThan(activePlugin.activeAPS.lastAPSRun, 5)) shouldUploadStatus = true
+
+        if (config.PUMPCONTROL) {
+            shouldUploadStatus = true
+
+        } else if (!loop.isEnabled() || iobCobCalculator.ads.actualBg() == null) {
+            shouldUploadStatus = true
+
+        } else if (dateUtil.isOlderThan(activePlugin.activeAPS.lastAPSRun, 5)) {
+            shouldUploadStatus = true
+        }
+
         if (dateUtil.isOlderThan(lastIobUpload, IOB_UPDATE_FREQUENCY_IN_MINUTES) && shouldUploadStatus) {
             lastIobUpload = dateUtil.now()
             loop.buildAndStoreDeviceStatus()
@@ -164,6 +179,7 @@ class KeepAliveWorker(
         val isStatusOutdated = lastConnection + STATUS_UPDATE_FREQUENCY < now
         val isBasalOutdated = abs(requestedProfile.getBasal() - pump.baseBasalRate) > pump.pumpDescription.basalStep
         aapsLogger.debug(LTag.CORE, "Last connection: " + dateUtil.dateAndTimeString(lastConnection))
+
         // Sometimes it can happen that keepalive is not triggered every 5 minutes as it should.
         // In some cases, it may not even have been started at all.
         // If these cases aren't handled, false "pump unreachable" alarms can be produced.
@@ -178,16 +194,20 @@ class KeepAliveWorker(
         if (lastReadStatus != 0L && (now - lastReadStatus).coerceIn(minimumValue = 0, maximumValue = null) <= T.secs(5 * 60 + 30).msecs()) {
             localAlertUtils.checkPumpUnreachableAlarm(lastConnection, isStatusOutdated, loop.isDisconnected)
         }
+
         if (loop.isDisconnected) {
             // do nothing if pump is disconnected
+
         } else if (runningProfile == null || ((!pump.isThisProfileSet(requestedProfile) || !requestedProfile.isEqual(runningProfile)
                 || (runningProfile is ProfileSealed.EPS && runningProfile.value.originalEnd < dateUtil.now() && runningProfile.value.originalDuration != 0L))
                 && !commandQueue.isRunning(Command.CommandType.BASAL_PROFILE))
         ) {
             rxBus.send(EventProfileSwitchChanged())
+
         } else if (isStatusOutdated && !pump.isBusy()) {
             lastReadStatus = now
             commandQueue.readStatus(rh.gs(app.aaps.core.ui.R.string.keepalive_status_outdated), null)
+
         } else if (isBasalOutdated && !pump.isBusy()) {
             lastReadStatus = now
             commandQueue.readStatus(rh.gs(app.aaps.core.ui.R.string.keepalive_basal_outdated), null)

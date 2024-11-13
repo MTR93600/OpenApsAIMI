@@ -26,11 +26,21 @@ abstract class AbstractSensitivityPlugin(
     abstract override fun detectSensitivity(ads: AutosensDataStore, fromTime: Long, toTime: Long): AutosensResult
 
     fun fillResult(
-        ratio: Double, carbsAbsorbed: Double, pastSensitivity: String,
-        ratioLimit: String, sensResult: String, deviationsArraySize: Int
+        ratio: Double,
+        carbsAbsorbed: Double,
+        pastSensitivity: String,
+        ratioLimit: String,
+        sensResult: String,
+        deviationsArraySize: Int
+
     ): AutosensResult {
+
         return fillResult(
-            ratio, carbsAbsorbed, pastSensitivity, ratioLimit, sensResult,
+            ratio,
+            carbsAbsorbed,
+            pastSensitivity,
+            ratioLimit,
+            sensResult,
             deviationsArraySize,
             preferences.get(DoubleKey.AutosensMin),
             preferences.get(DoubleKey.AutosensMax)
@@ -38,10 +48,17 @@ abstract class AbstractSensitivityPlugin(
     }
 
     fun fillResult(
-        ratioParam: Double, carbsAbsorbed: Double, pastSensitivity: String,
-        ratioLimitParam: String, sensResult: String, deviationsArraySize: Int,
-        ratioMin: Double, ratioMax: Double
+        ratioParam: Double,
+        carbsAbsorbed: Double,
+        pastSensitivity: String,
+        ratioLimitParam: String,
+        sensResult: String,
+        deviationsArraySize: Int,
+        ratioMin: Double,
+        ratioMax: Double
+
     ): AutosensResult {
+
         var ratio = ratioParam
         var ratioLimit = ratioLimitParam
         val rawRatio = ratio
@@ -55,20 +72,25 @@ abstract class AbstractSensitivityPlugin(
             max(Sensitivity.MIN_HOURS, deviationsArraySize / 12.0),
             Sensitivity.MIN_HOURS_FULL_AUTOSENS
         ) - Sensitivity.MIN_HOURS) / (Sensitivity.MIN_HOURS_FULL_AUTOSENS - Sensitivity.MIN_HOURS)
+
         ratio = autosensContrib * (ratio - 1) + 1
+
         if (autosensContrib != 1.0) {
             ratioLimit += "(" + deviationsArraySize + " of " + Sensitivity.MIN_HOURS_FULL_AUTOSENS * 12 + " values) "
         }
+
         if (ratio != rawRatio) {
             ratioLimit += "Ratio limited from $rawRatio to $ratio"
             aapsLogger.debug(LTag.AUTOSENS, ratioLimit)
         }
+
         val output = AutosensResult()
         output.ratio = Round.roundTo(ratio, 0.01)
         output.carbsAbsorbed = Round.roundTo(carbsAbsorbed, 0.01)
         output.pastSensitivity = pastSensitivity
         output.ratioLimit = ratioLimit
         output.sensResult = sensResult
+
         return output
     }
 }

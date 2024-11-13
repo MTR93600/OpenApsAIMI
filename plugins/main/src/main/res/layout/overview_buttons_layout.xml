@@ -92,6 +92,20 @@
             app:iconPadding="-4dp" />
 
         <app.aaps.core.ui.elements.SingleClickButton
+            android:id="@+id/exercise_mode_button"
+            style="@style/ButtonSmallFontStyle"
+            android:layout_width="0px"
+            android:layout_height="fill_parent"
+            android:layout_marginEnd="-2dp"
+            android:layout_weight="0.5"
+            android:drawableTop="@drawable/ic_cp_exercise"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="@string/careportal_exercise"
+            android:textColor="?attr/icBolusColor"
+            app:iconPadding="-4dp" />
+
+        <app.aaps.core.ui.elements.SingleClickButton
             android:id="@+id/calibration_button"
             style="@style/ButtonSmallFontStyle"
             android:layout_width="0px"
@@ -133,7 +147,6 @@
             android:text="@string/quickwizard"
             android:textColor="?attr/icQuickWizardColor"
             app:iconPadding="-4dp" />
-
     </LinearLayout>
 
 </LinearLayout>

@@ -4,6 +4,7 @@ import android.widget.Button
 import android.widget.ImageButton
 
 interface OverviewMenus {
+
     enum class CharType {
         PRE,
         TREAT,
@@ -22,6 +23,7 @@ interface OverviewMenus {
     }
 
     val setting: List<Array<Boolean>>
+
     fun loadGraphConfig()
     fun setupChartMenu(chartButton: ImageButton, scaleButton: Button)
     fun enabledTypes(graph: Int): String

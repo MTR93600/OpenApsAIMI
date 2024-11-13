@@ -20,6 +20,7 @@ enum class BooleanKey(
     OverviewShowTreatmentButton("show_treatment_button", false, defaultedBySM = true, hideParentScreenIfHidden = true),
     OverviewShowWizardButton("show_wizard_button", true, defaultedBySM = true),
     OverviewShowInsulinButton("show_insulin_button", true, defaultedBySM = true),
+    OverviewShowExerciseModeButton("show_exercise_mode_button", true, defaultedBySM = true),
     OverviewShowCarbsButton("show_carbs_button", true, defaultedBySM = true),
     OverviewShowCgmButton("show_cgm_button", false, defaultedBySM = true, showInNsClientMode = false),
     OverviewShowCalibrationButton("show_calibration_button", false, defaultedBySM = true, showInNsClientMode = false),

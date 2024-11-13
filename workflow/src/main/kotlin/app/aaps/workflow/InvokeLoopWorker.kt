@@ -33,15 +33,23 @@ class InvokeLoopWorker(
      <p>
     */
     override suspend fun doWorkAndLog(): Result {
-
         val data = dataWorkerStorage.pickupObject(inputData.getLong(DataWorkerStorage.STORE_KEY, -1)) as InvokeLoopData?
             ?: return Result.failure(workDataOf("Error" to "missing input data"))
 
-        if (data.cause !is EventNewBG) return Result.success(workDataOf("Result" to "no calculation needed"))
-        val glucoseValue = iobCobCalculator.ads.actualBg() ?: return Result.success(workDataOf("Result" to "bg outdated"))
-        if (glucoseValue.timestamp <= loop.lastBgTriggeredRun) return Result.success(workDataOf("Result" to "already looped with that value"))
+        if (data.cause !is EventNewBG) {
+            return Result.success(workDataOf("Result" to "no calculation needed"))
+        }
+
+        val glucoseValue = iobCobCalculator.ads.actualBg()
+            ?: return Result.success(workDataOf("Result" to "bg outdated"))
+
+        if (glucoseValue.timestamp <= loop.lastBgTriggeredRun) {
+            return Result.success(workDataOf("Result" to "already looped with that value"))
+        }
+
         loop.lastBgTriggeredRun = glucoseValue.timestamp
         loop.invoke("Calculation for $glucoseValue", true)
+
         return Result.success()
     }
 }

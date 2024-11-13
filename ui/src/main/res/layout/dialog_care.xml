@@ -37,7 +37,6 @@
                 android:text="@string/careportal_profileswitch"
                 android:textAlignment="center"
                 android:textAppearance="?android:attr/textAppearanceLarge" />
-
         </RelativeLayout>
 
         <LinearLayout
@@ -74,8 +73,73 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/bg_other" />
-
         </RadioGroup>
+
+        <LinearLayout
+            android:id="@+id/sport_duty_layout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="24dp"
+                android:orientation="horizontal"
+                android:gravity="center_horizontal|center_vertical"
+                tools:visibility="visible"
+                tools:ignore="UseSwitchCompatOrMaterialXml">
+
+                <TextView
+                    android:id="@+id/sport_duty_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:gravity="center_horizontal"
+                    android:padding="10dp"
+                    android:textAppearance="@style/TextAppearance.AppCompat.Small"
+                    android:textStyle="bold"
+                    android:text="@string/sport_duty_options_label" />
+
+                <Switch
+                    android:id="@+id/switch_duty_options"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:checked="true" />
+            </LinearLayout>
+
+            <RadioGroup
+                android:id="@+id/sport_duty"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginBottom="10dp"
+                android:orientation="horizontal">
+
+                <RadioButton
+                    android:id="@+id/duty_light"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="@string/duty_option_light" />
+
+                <RadioButton
+                    android:id="@+id/duty_middle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
+                    android:text="@string/duty_option_middle" />
+
+                <RadioButton
+                    android:id="@+id/duty_heavy"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/duty_option_heavy" />
+            </RadioGroup>
+        </LinearLayout>
 
         <LinearLayout
             android:id="@+id/bg_layout"
@@ -112,7 +176,6 @@
                 android:paddingEnd="5dp"
                 android:text="@string/mgdl"
                 android:textAppearance="?android:attr/textAppearanceSmall" />
-
         </LinearLayout>
 
         <LinearLayout
@@ -148,7 +211,6 @@
                 android:paddingEnd="5dp"
                 android:text="@string/unit_minute_short"
                 android:textAppearance="?android:attr/textAppearanceSmall" />
-
         </LinearLayout>
 
         <include

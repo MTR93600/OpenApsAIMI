@@ -20,13 +20,23 @@ class UpdateGraphWorker(
     @Inject lateinit var rxBus: RxBus
     @Inject lateinit var activePlugin: ActivePlugin
 
+
     override suspend fun doWorkAndLog(): Result {
         val pass = inputData.getInt(CalculationWorkflow.PASS, -1)
-        if (inputData.getString(CalculationWorkflow.JOB) == CalculationWorkflow.MAIN_CALCULATION)
+
+        if (inputData.getString(CalculationWorkflow.JOB) == CalculationWorkflow.MAIN_CALCULATION) {
             activePlugin.activeOverview.overviewBus.send(EventUpdateOverviewGraph("UpdateGraphWorker"))
-        else
+
+        } else {
             rxBus.send(EventUpdateOverviewGraph("UpdateGraphWorker"))
-        rxBus.send(EventIobCalculationProgress(CalculationWorkflow.ProgressData.values().find { it.pass == pass } ?: throw InvalidParameterSpecException(), 100, null))
+        }
+
+        rxBus.send(EventIobCalculationProgress(
+            CalculationWorkflow.ProgressData.values().find {
+                    it.pass == pass
+                } ?: throw InvalidParameterSpecException(), 100, null)
+        )
+
         return Result.success()
     }
 }

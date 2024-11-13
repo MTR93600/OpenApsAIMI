@@ -162,7 +162,7 @@ class OverviewMenusImpl @Inject constructor(
             scrollView.addView(layout)
             layout.columnCount = MAX_GRAPHS
 
-            // instert primary items
+            // insert primary items
             CharTypeData.entries.forEach { m ->
                 var insert = true
                 if (m == CharTypeData.PRE) insert = predictionsAvailable

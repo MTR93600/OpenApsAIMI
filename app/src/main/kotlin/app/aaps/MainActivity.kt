@@ -116,16 +116,19 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
     private var isProtectionCheckActive = false
     private lateinit var binding: ActivityMainBinding
 
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Iconify.with(FontAwesomeModule())
         LocaleHelper.update(applicationContext)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayShowTitleEnabled(false)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setHomeButtonEnabled(true)
+
         actionBarDrawerToggle = ActionBarDrawerToggle(this, binding.mainDrawerLayout, R.string.open_navigation, R.string.close_navigation).also {
             binding.mainDrawerLayout.addDrawerListener(it)
             it.syncState()
@@ -138,21 +141,27 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
             .toObservable(EventRebuildTabs::class.java)
             .observeOn(aapsSchedulers.main)
             .subscribe({
-                           if (it.recreate) recreate()
-                           else setupViews()
-                           setWakeLock()
-                       }, fabricPrivacy::logException)
+               if (it.recreate) {
+                   recreate()
+               } else {
+                   setupViews()
+               }
+               setWakeLock()
+           }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventPreferenceChange::class.java)
             .observeOn(aapsSchedulers.main)
             .subscribe({ processPreferenceChange(it) }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventAppInitialized::class.java)
             .observeOn(aapsSchedulers.main)
             .subscribe({
-                           // 1st run of app
-                           start()
-                       }, fabricPrivacy::logException)
+                // 1st run of app
+                start()
+            }, fabricPrivacy::logException)
+
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (binding.mainDrawerLayout.isDrawerOpen(GravityCompat.START))
@@ -164,6 +173,7 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
                 else finish()
             }
         })
+
         addMenuProvider(object : MenuProvider {
             override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
                 MenuCompat.setGroupDividerEnabled(menu, true)
@@ -271,6 +281,7 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
                         actionBarDrawerToggle.onOptionsItemSelected(menuItem)
                 }
         })
+
         // Setup views on 2nd and next activity start
         // On 1st start app is still initializing, start() is delayed and run from EventAppInitialized
         if (config.appInitialized) setupViews()
@@ -280,6 +291,7 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
         binding.splash.visibility = View.GONE
         //Check here if loop plugin is disabled. Else check via constraints
         if (!loop.isEnabled()) versionCheckerUtils.triggerCheckVersion()
+
         setUserStats()
         setupViews()
 
@@ -288,18 +300,27 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
                 startActivity(Intent(this, SetupWizardActivity::class.java).setAction("info.nightscout.androidaps.MainActivity"))
             })
         }
+
         androidPermission.notifyForStoragePermission(this)
         androidPermission.notifyForBatteryOptimizationPermission(this)
-        if (!config.NSCLIENT) androidPermission.notifyForLocationPermissions(this)
+
+        if (!config.NSCLIENT) {
+            androidPermission.notifyForLocationPermissions(this)
+        }
+
         if (config.PUMPDRIVERS) {
-            if (smsCommunicator.isEnabled())
+            if (smsCommunicator.isEnabled()) {
                 androidPermission.notifyForSMSPermissions(this)
+            }
             androidPermission.notifyForSystemWindowPermissions(this)
             androidPermission.notifyForBtConnectPermission(this)
         }
+
         passwordResetCheck(this)
-        if (preferences.get(StringKey.ProtectionMasterPassword) == "")
+
+        if (preferences.get(StringKey.ProtectionMasterPassword) == "") {
             rxBus.send(EventNewNotification(Notification(Notification.MASTER_PASSWORD_NOT_SET, rh.gs(R.string.master_password_not_set), Notification.NORMAL)))
+        }
     }
 
     private fun startWizard(): Boolean =
@@ -318,11 +339,14 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
     override fun onResume() {
         super.onResume()
         if (config.appInitialized) binding.splash.visibility = View.GONE
+
         if (!isProtectionCheckActive) {
             isProtectionCheckActive = true
-            protectionCheck.queryProtection(this, ProtectionCheck.Protection.APPLICATION, UIRunnable { isProtectionCheckActive = false },
-                                            UIRunnable { OKDialog.show(this, "", rh.gs(R.string.authorizationfailed)) { isProtectionCheckActive = false; finish() } },
-                                            UIRunnable { OKDialog.show(this, "", rh.gs(R.string.authorizationfailed)) { isProtectionCheckActive = false; finish() } }
+            protectionCheck.queryProtection(
+                this,
+                ProtectionCheck.Protection.APPLICATION, UIRunnable { isProtectionCheckActive = false },
+                UIRunnable { OKDialog.show(this, "", rh.gs(R.string.authorizationfailed)) { isProtectionCheckActive = false; finish() } },
+                UIRunnable { OKDialog.show(this, "", rh.gs(R.string.authorizationfailed)) { isProtectionCheckActive = false; finish() } }
             )
         }
     }
@@ -342,13 +366,17 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
         val pageAdapter = TabPageAdapter(this)
         binding.mainNavigationView.setNavigationItemSelectedListener { true }
         val menu = binding.mainNavigationView.menu.also { it.clear() }
+
         for (p in activePlugin.getPluginsList())
             if (p.isEnabled() && p.hasFragment() && p.showInList(p.getType())) {
                 // Add to tabs if visible
                 if (
                     preferences.simpleMode && p.pluginDescription.simpleModePosition == PluginDescription.Position.TAB ||
                     !preferences.simpleMode && p.isFragmentVisible()
-                ) pageAdapter.registerNewFragment(p)
+                ) {
+                    pageAdapter.registerNewFragment(p)
+                }
+
                 // Add to menu if not visible
                 if (
                     preferences.simpleMode && !p.pluginDescription.neverVisible && p.pluginDescription.simpleModePosition == PluginDescription.Position.MENU ||
@@ -356,19 +384,26 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
                 ) {
                     val menuItem = menu.add(p.name)
                     menuItem.isCheckable = true
-                    if (p.menuIcon != -1) menuItem.setIcon(p.menuIcon)
-                    else menuItem.setIcon(app.aaps.core.ui.R.drawable.ic_settings)
+
+                    if (p.menuIcon != -1) {
+                        menuItem.setIcon(p.menuIcon)
+                    } else {
+                        menuItem.setIcon(app.aaps.core.ui.R.drawable.ic_settings)
+                    }
+
                     menuItem.setOnMenuItemClickListener {
                         startActivity(
                             Intent(this, SingleFragmentActivity::class.java)
                                 .setAction(this::class.simpleName)
                                 .putExtra("plugin", activePlugin.getPluginsList().indexOf(p))
                         )
+
                         binding.mainDrawerLayout.closeDrawers()
                         true
                     }
                 }
             }
+
         binding.mainPager.adapter = pageAdapter
         binding.mainPager.offscreenPageLimit = 8 // This may cause more memory consumption
 
@@ -380,16 +415,19 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
             TabLayoutMediator(binding.tabsCompact, binding.mainPager) { tab, position ->
                 tab.text = (binding.mainPager.adapter as TabPageAdapter).getPluginAt(position).nameShort
             }.attach()
+
         } else {
             binding.tabsNormal.visibility = View.VISIBLE
             binding.tabsCompact.visibility = View.GONE
             val typedValue = TypedValue()
+
             if (theme.resolveAttribute(android.R.attr.actionBarSize, typedValue, true)) {
                 binding.toolbar.layoutParams = LinearLayout.LayoutParams(
                     Toolbar.LayoutParams.MATCH_PARENT,
                     TypedValue.complexToDimensionPixelSize(typedValue.data, resources.displayMetrics)
                 )
             }
+
             TabLayoutMediator(binding.tabsNormal, binding.mainPager) { tab, position ->
                 tab.text = (binding.mainPager.adapter as TabPageAdapter).getPluginAt(position).name
             }.attach()
@@ -399,6 +437,7 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         if (event.action == MotionEvent.ACTION_DOWN) {
             val v = currentFocus
+
             if (v is EditText) {
                 val outRect = Rect()
                 v.getGlobalVisibleRect(outRect)
@@ -409,15 +448,21 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
                 }
             }
         }
+
         return super.dispatchTouchEvent(event)
     }
+
     override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
         menuOpen = true
+
         if (binding.mainDrawerLayout.isDrawerOpen(GravityCompat.START)) {
             binding.mainDrawerLayout.closeDrawers()
         }
+
         val result = super.onMenuOpened(featureId, menu)
+
         menu.findItem(R.id.nav_treatments)?.isEnabled = profileFunction.getProfile() != null
+
         if (binding.mainPager.currentItem >= 0) {
             (binding.mainPager.adapter as? TabPageAdapter)?.let { tabPageAdapter ->
                 val plugin = tabPageAdapter.getPluginAt(binding.mainPager.currentItem)
@@ -425,11 +470,13 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
                 pluginPreferencesMenuItem?.isEnabled = plugin.preferencesId != PluginDescription.PREFERENCE_NONE
             }
         }
+
         if (pluginPreferencesMenuItem?.isEnabled == false) {
             val spanString = SpannableString(this.menu?.findItem(R.id.nav_plugin_preferences)?.title.toString())
             spanString.setSpan(ForegroundColorSpan(rh.gac(app.aaps.core.ui.R.attr.disabledTextColor)), 0, spanString.length, 0)
             this.menu?.findItem(R.id.nav_plugin_preferences)?.title = spanString
         }
+
         return result
     }
 
@@ -463,7 +510,9 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
 
     private fun setUserStats() {
         if (!fabricPrivacy.fabricEnabled()) return
+
         val closedLoopEnabled = if (constraintChecker.isClosedLoopAllowed().value()) "CLOSED_LOOP_ENABLED" else "CLOSED_LOOP_DISABLED"
+
         // Size is limited to 36 chars
         val remote = config.REMOTE.lowercase(Locale.getDefault())
             .replace("https://", "")
@@ -472,20 +521,27 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
             .replace(".com/", ":")
             .replace(".org/", ":")
             .replace(".net/", ":")
+
         fabricPrivacy.setUserProperty("Mode", config.APPLICATION_ID + "-" + closedLoopEnabled)
         fabricPrivacy.setUserProperty("Language", preferences.getIfExists(StringKey.GeneralLanguage) ?: Locale.getDefault().language)
         fabricPrivacy.setUserProperty("Version", config.VERSION_NAME)
         fabricPrivacy.setUserProperty("HEAD", BuildConfig.HEAD)
         fabricPrivacy.setUserProperty("Remote", remote)
+
         val hashes: List<String> = signatureVerifierPlugin.shortHashes()
         if (hashes.isNotEmpty()) fabricPrivacy.setUserProperty("Hash", hashes[0])
+
         activePlugin.activePump.let { fabricPrivacy.setUserProperty("Pump", it::class.java.simpleName) }
-        if (!config.NSCLIENT && !config.PUMPCONTROL)
+
+        if (!config.NSCLIENT && !config.PUMPCONTROL) {
             activePlugin.activeAPS.let { fabricPrivacy.setUserProperty("Aps", it::class.java.simpleName) }
+        }
+
         activePlugin.activeBgSource.let { fabricPrivacy.setUserProperty("BgSource", it::class.java.simpleName) }
         fabricPrivacy.setUserProperty("Profile", activePlugin.activeProfileSource.javaClass.simpleName)
         activePlugin.activeSensitivity.let { fabricPrivacy.setUserProperty("Sensitivity", it::class.java.simpleName) }
         activePlugin.activeInsulin.let { fabricPrivacy.setUserProperty("Insulin", it::class.java.simpleName) }
+
         // Add to crash log too
         FirebaseCrashlytics.getInstance().setCustomKey("HEAD", BuildConfig.HEAD)
         FirebaseCrashlytics.getInstance().setCustomKey("Version", config.VERSION_NAME)

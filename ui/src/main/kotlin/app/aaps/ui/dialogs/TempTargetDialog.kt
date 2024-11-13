@@ -57,6 +57,7 @@ class TempTargetDialog : DialogFragmentWithDate() {
     // This property is only valid between onCreateView and onDestroyView.
     private val binding get() = _binding!!
 
+
     override fun onSaveInstanceState(savedInstanceState: Bundle) {
         super.onSaveInstanceState(savedInstanceState)
         savedInstanceState.putDouble("duration", binding.duration.value)
@@ -73,22 +74,28 @@ class TempTargetDialog : DialogFragmentWithDate() {
         super.onViewCreated(view, savedInstanceState)
 
         binding.duration.setParams(
-            savedInstanceState?.getDouble("duration")
-                ?: 60.0, 0.0, Constants.MAX_PROFILE_SWITCH_DURATION, 10.0, DecimalFormat("0"), false, binding.okcancel.ok
+            savedInstanceState?.getDouble("duration") ?: 60.0,
+            0.0,
+            Constants.MAX_PROFILE_SWITCH_DURATION,
+            10.0,
+            DecimalFormat("0"),
+            false,
+            binding.okcancel.ok
         )
 
-        if (profileUtil.units == GlucoseUnit.MMOL)
+        if (profileUtil.units == GlucoseUnit.MMOL) {
             binding.temptarget.setParams(
                 savedInstanceState?.getDouble("tempTarget")
                     ?: 5.6,
                 Constants.MIN_TT_MMOL, Constants.MAX_TT_MMOL, 0.1, DecimalFormat("0.0"), false, binding.okcancel.ok
             )
-        else
+        } else {
             binding.temptarget.setParams(
                 savedInstanceState?.getDouble("tempTarget")
                     ?: 101.0,
                 Constants.MIN_TT_MGDL, Constants.MAX_TT_MGDL, 1.0, DecimalFormat("0"), false, binding.okcancel.ok
             )
+        }
 
         val units = profileUtil.units
         binding.units.text = if (units == GlucoseUnit.MMOL) rh.gs(app.aaps.core.ui.R.string.mmol) else rh.gs(app.aaps.core.ui.R.string.mgdl)
@@ -114,14 +121,17 @@ class TempTargetDialog : DialogFragmentWithDate() {
                 longClick(it)
                 return@setOnLongClickListener true
             }
+
             binding.activity.setOnLongClickListener {
                 longClick(it)
                 return@setOnLongClickListener true
             }
+
             binding.hypo.setOnLongClickListener {
                 longClick(it)
                 return@setOnLongClickListener true
             }
+
             binding.durationLabel.labelFor = binding.duration.editTextId
             binding.temptargetLabel.labelFor = binding.temptarget.editTextId
         }
@@ -162,11 +172,13 @@ class TempTargetDialog : DialogFragmentWithDate() {
 
     override fun submit(): Boolean {
         if (_binding == null) return false
+
         val actions: LinkedList<String> = LinkedList()
         var reason = binding.reasonList.text.toString()
         val unitResId = if (profileFunction.getUnits() == GlucoseUnit.MGDL) app.aaps.core.ui.R.string.mgdl else app.aaps.core.ui.R.string.mmol
         val target = binding.temptarget.value
         val duration = binding.duration.value.toInt()
+
         if (target != 0.0 && duration != 0) {
             actions.add(rh.gs(app.aaps.core.ui.R.string.reason) + ": " + reason)
             actions.add(rh.gs(app.aaps.core.ui.R.string.target_label) + ": " + profileUtil.stringInCurrentUnitsDetect(target) + " " + rh.gs(unitResId))
@@ -175,8 +187,10 @@ class TempTargetDialog : DialogFragmentWithDate() {
             actions.add(rh.gs(app.aaps.core.ui.R.string.stoptemptarget))
             reason = rh.gs(app.aaps.core.ui.R.string.stoptemptarget)
         }
-        if (eventTimeChanged)
+
+        if (eventTimeChanged) {
             actions.add(rh.gs(app.aaps.core.ui.R.string.time) + ": " + dateUtil.dateAndTimeString(eventTime))
+        }
 
         activity?.let { activity ->
             OKDialog.showConfirmation(activity, rh.gs(app.aaps.core.ui.R.string.temporary_target), HtmlHelper.fromHtml(Joiner.on("<br/>").join(actions)), {
@@ -212,8 +226,9 @@ class TempTargetDialog : DialogFragmentWithDate() {
 
                     rh.gs(app.aaps.core.ui.R.string.stoptemptarget) -> listOf(ValueWithUnit.Timestamp(eventTime).takeIf { eventTimeChanged })
 
-                    else                                            -> listOf()
+                    else                      -> listOf()
                 }
+
                 if (target == 0.0 || duration == 0) {
                     disposable += persistenceLayer.cancelCurrentTemporaryTargetIfAny(
                         timestamp = eventTime,
@@ -243,9 +258,12 @@ class TempTargetDialog : DialogFragmentWithDate() {
                     ).subscribe()
                 }
 
-                if (duration == 10) sp.putBoolean(app.aaps.core.utils.R.string.key_objectiveusetemptarget, true)
+                if (duration == 10) {
+                    sp.putBoolean(app.aaps.core.utils.R.string.key_objectiveusetemptarget, true)
+                }
             })
         }
+
         return true
     }
 

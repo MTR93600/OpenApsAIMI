@@ -23,6 +23,7 @@ import app.aaps.database.daos.TherapyEventDao
 import app.aaps.database.daos.TotalDailyDoseDao
 import app.aaps.database.daos.UserEntryDao
 import app.aaps.database.daos.VersionChangeDao
+import app.aaps.database.entities.APSResult
 import app.aaps.database.entities.Bolus
 import app.aaps.database.entities.BolusCalculatorResult
 import app.aaps.database.entities.Carbs
@@ -44,15 +45,32 @@ import app.aaps.database.entities.UserEntry
 import app.aaps.database.entities.VersionChange
 import java.io.Closeable
 
-const val DATABASE_VERSION = 28
+const val DATABASE_VERSION = 29
 
 @Database(
     version = DATABASE_VERSION,
-    entities = [app.aaps.database.entities.APSResult::class, Bolus::class, BolusCalculatorResult::class, Carbs::class,
-        EffectiveProfileSwitch::class, ExtendedBolus::class, GlucoseValue::class, ProfileSwitch::class,
-        TemporaryBasal::class, TemporaryTarget::class, TherapyEvent::class, TotalDailyDose::class,
-        PreferenceChange::class, VersionChange::class, UserEntry::class,
-        Food::class, DeviceStatus::class, OfflineEvent::class, HeartRate::class, StepsCount::class],
+    entities = [
+        APSResult::class,
+        Bolus::class,
+        BolusCalculatorResult::class,
+        Carbs::class,
+        EffectiveProfileSwitch::class,
+        ExtendedBolus::class,
+        GlucoseValue::class,
+        ProfileSwitch::class,
+        TemporaryBasal::class,
+        TemporaryTarget::class,
+        TherapyEvent::class,
+        TotalDailyDose::class,
+        PreferenceChange::class,
+        VersionChange::class,
+        UserEntry::class,
+        Food::class,
+        DeviceStatus::class,
+        OfflineEvent::class,
+        HeartRate::class,
+        StepsCount::class
+    ],
     exportSchema = true
 )
 @TypeConverters(Converters::class)

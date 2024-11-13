@@ -41,7 +41,11 @@ class LoadBgDataWorker(
             // so add 2 minutes
             bgReadings = persistenceLayer
                 .getBgReadingsDataFromTimeToTime(start, to + T.mins(2).msecs(), false)
-            aapsLogger.debug(LTag.AUTOSENS) { "BG data loaded. Size: ${bgReadings.size} Start date: ${dateUtil.dateAndTimeString(start)} End date: ${dateUtil.dateAndTimeString(to)}" }
+
+            aapsLogger.debug(LTag.AUTOSENS) {
+                "BG data loaded. Size: ${bgReadings.size} Start date: ${dateUtil.dateAndTimeString(start)} End date: ${dateUtil.dateAndTimeString(to)}"
+            }
+
             createBucketedData(aapsLogger, dateUtil)
         }
     }
@@ -56,7 +60,6 @@ class LoadBgDataWorker(
     }
 
     override suspend fun doWorkAndLog(): Result {
-
         val data = dataWorkerStorage.pickupObject(inputData.getLong(DataWorkerStorage.STORE_KEY, -1)) as LoadBgData?
             ?: return Result.failure(workDataOf("Error" to "missing input data"))
 
@@ -64,6 +67,7 @@ class LoadBgDataWorker(
         data.iobCobCalculator.ads.smoothData(activePlugin)
         rxBus.send(EventBucketedDataCreated())
         data.iobCobCalculator.clearCache()
+
         return Result.success()
     }
 }

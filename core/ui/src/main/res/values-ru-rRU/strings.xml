@@ -573,4 +573,13 @@
     <!--    DecimalFormatterImpl -->
     <string name="format_insulin_units1">%1$.1fед</string>
     <string name="format_insulin_units">%1$.2f ед</string>
+
+    <!-- Sport Options -->
+    <string name="exercise_mode">Спортивный Режим</string>
+    <string name="sport_duty_options_label">Опции Спортивных Нагрузок</string>
+    <string name="duty_option_none">Не выбрано</string>
+    <string name="duty_option_light">Лёгкие</string>
+    <string name="duty_option_middle">Средние</string>
+    <string name="duty_option_heavy">Тяжёлые</string>
+
 </resources>

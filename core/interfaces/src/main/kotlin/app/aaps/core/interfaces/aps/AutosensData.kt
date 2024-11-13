@@ -3,7 +3,6 @@ package app.aaps.core.interfaces.aps
 interface AutosensData {
 
     data class CarbsInPast(
-
         var time: Long,
         var carbs: Double,
         var min5minCarbImpact: Double = 0.0,

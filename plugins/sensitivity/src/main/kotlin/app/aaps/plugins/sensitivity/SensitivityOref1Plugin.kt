@@ -43,6 +43,7 @@ class SensitivityOref1Plugin @Inject constructor(
     private val profileFunction: ProfileFunction,
     private val dateUtil: DateUtil,
     private val persistenceLayer: PersistenceLayer
+
 ) : AbstractSensitivityPlugin(
     PluginDescription()
         .mainType(PluginType.SENSITIVITY)
@@ -58,10 +59,12 @@ class SensitivityOref1Plugin @Inject constructor(
 
     override fun detectSensitivity(ads: AutosensDataStore, fromTime: Long, toTime: Long): AutosensResult {
         val profile = profileFunction.getProfile()
+
         if (profile == null) {
             aapsLogger.error("No profile")
             return AutosensResult()
         }
+
         if (ads.autosensDataTable.size() < 4) {
             aapsLogger.debug(LTag.AUTOSENS, "No autosens data available. lastDataTime=" + ads.lastDataTime(dateUtil))
             return AutosensResult()
@@ -73,6 +76,7 @@ class SensitivityOref1Plugin @Inject constructor(
             aapsLogger.debug(LTag.AUTOSENS, "No autosens data available. toTime: " + dateUtil.dateAndTimeString(toTime) + " lastDataTime: " + ads.lastDataTime(dateUtil))
             return AutosensResult()
         }
+
         val siteChanges = persistenceLayer.getTherapyEventDataFromTime(fromTime, TE.Type.CANNULA_CHANGE, true)
         val profileSwitches = persistenceLayer.getProfileSwitchesFromTime(fromTime, true).blockingGet()
 
@@ -86,6 +90,7 @@ class SensitivityOref1Plugin @Inject constructor(
         val deviationCategory = listOf(96.0, 288.0)
         val ratioLimitArray = mutableListOf("", "")
         val hoursDetection = listOf(8.0, 24.0)
+
         var index = 0
         while (index < ads.autosensDataTable.size()) {
             val autosensData = ads.autosensDataTable.valueAt(index)
@@ -93,11 +98,14 @@ class SensitivityOref1Plugin @Inject constructor(
                 index++
                 continue
             }
+
             if (autosensData.time > toTime) {
                 index++
                 continue
             }
+
             var hourSegment = 0
+
             //hourSegment = 0 = 8 hour
             //hourSegment = 1 = 24 hour
             while (hourSegment < deviationsHour.size) {
@@ -120,12 +128,17 @@ class SensitivityOref1Plugin @Inject constructor(
                 //set positive deviations to zero if bg < 80
                 if (autosensData.bg < 80 && deviation > 0) deviation = 0.0
                 if (autosensData.validDeviation) if (autosensData.time > toTime - hoursDetection[hourSegment] * 60 * 60 * 1000L) deviationsArray.add(deviation)
+
                 deviationsArray.addAll(autosensData.extraDeviation)
+
                 if (deviationsArray.size > deviationCategory[hourSegment]) {
                     deviationsArray.removeAt(0)
                 }
+
                 pastSensitivity += autosensData.pastSensitivity
+
                 val secondsFromMidnight = MidnightUtils.secondsFromMidnight(autosensData.time)
+
                 if (secondsFromMidnight % 3600 < 2.5 * 60 || secondsFromMidnight % 3600 > 57.5 * 60) {
                     pastSensitivity += "(" + (secondsFromMidnight / 3600.0).roundToInt() + ")"
                 }

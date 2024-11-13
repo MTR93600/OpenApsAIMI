@@ -18,6 +18,8 @@ data class TE(
     var glucose: Double? = null,
     var glucoseType: MeterType? = null,
     var glucoseUnit: GlucoseUnit,
+    var exerciseDuty: ExerciseDuty? = null,
+
 ) : HasIDs {
 
     fun contentEqualsTo(other: TE): Boolean =
@@ -30,7 +32,8 @@ data class TE(
             enteredBy == other.enteredBy &&
             glucose == other.glucose &&
             glucoseType == other.glucoseType &&
-            glucoseUnit == other.glucoseUnit
+            glucoseUnit == other.glucoseUnit &&
+            exerciseDuty == other.exerciseDuty
 
     fun onlyNsIdAdded(previous: TE): Boolean =
         previous.id != id &&
@@ -52,7 +55,6 @@ data class TE(
 
     @Suppress("unused")
     enum class Type(val text: String, val nsNative: Boolean = false) {
-
         CANNULA_CHANGE("Site Change", nsNative = true),
         INSULIN_CHANGE("Insulin Change", nsNative = true),
         PUMP_BATTERY_CHANGE("Pump Battery Change", nsNative = true),
@@ -108,6 +110,18 @@ data class TE(
         companion object {
 
             fun fromString(text: String?) = entries.firstOrNull { it.text == text } ?: NONE
+        }
+    }
+
+    enum class ExerciseDuty(val text: String) {
+        NONE("None"),
+        LIGHT("Light"),
+        MIDDLE("Middle"),
+        HEAVY("Heavy")
+        ;
+
+        companion object {
+            fun fromString(text: String?) = values().firstOrNull { it.text == text }
         }
     }
 

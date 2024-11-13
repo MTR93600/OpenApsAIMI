@@ -66,6 +66,7 @@ class ActivityMonitor @Inject constructor(
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
     }
 
+    // sargius, Добавляется к экрану Статистика
     fun stats(context: Context): TableLayout =
         TableLayout(context).also { layout ->
             layout.layoutParams = TableLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)

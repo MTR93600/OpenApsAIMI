@@ -13,6 +13,7 @@ interface Translator {
     fun translate(units: ValueWithUnit?): String
     fun translate(meterType: TE.MeterType?): String
     fun translate(type: TE.Type?): String
+    fun translate(exerciseDuty: TE.ExerciseDuty?): String
     fun translate(reason: TT.Reason?): String
     fun translate(reason: OE.Reason?): String
     fun translate(source: Sources): String

@@ -152,4 +152,12 @@
         <item>Только положительный</item>
         <item>Только отрицательный</item>
     </string-array>
+
+    <!-- Sport Options, дублирует :core:ui: -->
+    <string name="sport_duty_options_label">Опции Спортивных Нагрузок</string>
+    <string name="duty_option_none">Не выбрано</string>
+    <string name="duty_option_light">Лёгкие</string>
+    <string name="duty_option_middle">Средние</string>
+    <string name="duty_option_heavy">Тяжёлые</string>
+
 </resources>

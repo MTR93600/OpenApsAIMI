@@ -11,7 +11,6 @@ interface Sensitivity : ConfigExportImport {
         SENSITIVITY_OREF1(2);
 
         companion object {
-
             private val map = entries.associateBy(SensitivityType::value)
             fun fromInt(type: Int) = map[type]
         }
@@ -25,7 +24,6 @@ interface Sensitivity : ConfigExportImport {
     val isOref1: Boolean
 
     companion object {
-
         const val MIN_HOURS = 1.0
         const val MIN_HOURS_FULL_AUTOSENS = 4.0
     }

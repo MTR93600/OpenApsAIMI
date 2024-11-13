@@ -64,5 +64,6 @@ internal class DelegatedAppDatabase(val changes: MutableList<DBEntry>, val datab
     val offlineEventDao: OfflineEventDao = DelegatedOfflineEventDao(changes, database.offlineEventDao)
     val heartRateDao: HeartRateDao = DelegatedHeartRateDao(changes, database.heartRateDao)
     val stepsCountDao: StepsCountDao = DelegatedStepsCountDao(changes, database.stepsCountDao)
+
     fun clearAllTables() = database.clearAllTables()
 }

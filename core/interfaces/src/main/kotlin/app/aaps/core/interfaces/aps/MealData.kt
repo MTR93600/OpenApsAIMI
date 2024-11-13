@@ -4,7 +4,6 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class MealData(
-
     var carbs: Double = 0.0,
     var mealCOB: Double = 0.0,
     var slopeFromMaxDeviation: Double = 0.0,

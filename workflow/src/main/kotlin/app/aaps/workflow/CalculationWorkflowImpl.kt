@@ -34,6 +34,7 @@ class CalculationWorkflowImpl @Inject constructor(
     private val dateUtil: DateUtil,
     private val dataWorkerStorage: DataWorkerStorage,
     private val activePlugin: ActivePlugin
+
 ) : CalculationWorkflow {
 
     init {
@@ -45,10 +46,14 @@ class CalculationWorkflowImpl @Inject constructor(
 
     override fun stopCalculation(job: String, from: String) {
         aapsLogger.debug(LTag.WORKER, "Stopping calculation thread: $from")
+
         WorkManager.getInstance(context).cancelUniqueWork(job)
         val workStatus = WorkManager.getInstance(context).getWorkInfosForUniqueWork(job).get()
-        while (workStatus.size >= 1 && workStatus[0].state == WorkInfo.State.RUNNING)
+
+        while (workStatus.size >= 1 && workStatus[0].state == WorkInfo.State.RUNNING) {
             SystemClock.sleep(100)
+        }
+
         aapsLogger.debug(LTag.WORKER, "Calculation thread stopped: $from")
     }
 
@@ -66,8 +71,15 @@ class CalculationWorkflowImpl @Inject constructor(
         WorkManager.getInstance(context)
             .beginUniqueWork(
                 job, ExistingWorkPolicy.REPLACE,
-                if (bgDataReload) OneTimeWorkRequest.Builder(LoadBgDataWorker::class.java).setInputData(dataWorkerStorage.storeInputData(LoadBgDataWorker.LoadBgData(iobCobCalculator, end))).build()
-                else OneTimeWorkRequest.Builder(DummyWorker::class.java).build()
+
+                if (bgDataReload) {
+                    OneTimeWorkRequest.Builder(LoadBgDataWorker::class.java)
+                        .setInputData(dataWorkerStorage.storeInputData(LoadBgDataWorker.LoadBgData(iobCobCalculator, end)))
+                        .build()
+
+                } else {
+                    OneTimeWorkRequest.Builder(DummyWorker::class.java).build()
+                }
             )
             .then(
                 OneTimeWorkRequest.Builder(PrepareBucketedDataWorker::class.java)
@@ -105,14 +117,16 @@ class CalculationWorkflowImpl @Inject constructor(
                     .build()
             )
             .then(
-                if (activePlugin.activeSensitivity.isOref1)
+                if (activePlugin.activeSensitivity.isOref1) {
                     OneTimeWorkRequest.Builder(IobCobOref1Worker::class.java)
                         .setInputData(dataWorkerStorage.storeInputData(IobCobOref1Worker.IobCobOref1WorkerData(injector, iobCobCalculator, reason, end, job == MAIN_CALCULATION, cause)))
                         .build()
-                else
+
+                } else {
                     OneTimeWorkRequest.Builder(IobCobOrefWorker::class.java)
                         .setInputData(dataWorkerStorage.storeInputData(IobCobOrefWorker.IobCobOrefWorkerData(injector, iobCobCalculator, reason, end, job == MAIN_CALCULATION, cause)))
                         .build()
+                }
             )
             .then(OneTimeWorkRequest.Builder(UpdateIobCobSensWorker::class.java).build())
             .then(

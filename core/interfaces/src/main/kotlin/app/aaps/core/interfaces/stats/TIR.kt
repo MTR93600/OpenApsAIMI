@@ -15,6 +15,7 @@ interface TIR {
     var above: Int
     var error: Int
     var count: Int
+
     fun error()
     fun below()
     fun inRange()

@@ -1,6 +1,7 @@
 package app.aaps.database.di
 
 import android.content.Context
+import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.room.Room
 import androidx.room.RoomDatabase.Callback
@@ -163,7 +164,27 @@ open class DatabaseModule {
         }
     }
 
+    private val migration28to29 = object : Migration(28, 29) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            Log.d("DatabaseModule", "migrate 28 -> 29")
+            database.execSQL("ALTER TABLE `therapyEvents` ADD COLUMN `exerciseDuty` TEXT")
+            // Custom indexes must be dropped on migration to pass room schema checking after upgrade
+            dropCustomIndexes(database)
+        }
+    }
+
+
     /** List of all migrations for easy reply in tests. */
     @VisibleForTesting
-    internal val migrations = arrayOf(migration20to21, migration21to22, migration22to23, migration23to24, migration24to25, migration25to26, migration26to27, migration27to28)
+    internal val migrations = arrayOf(
+        migration20to21,
+        migration21to22,
+        migration22to23,
+        migration23to24,
+        migration24to25,
+        migration25to26,
+        migration26to27,
+        migration27to28,
+        migration28to29
+    )
 }

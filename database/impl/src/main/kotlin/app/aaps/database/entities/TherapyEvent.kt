@@ -45,6 +45,8 @@ data class TherapyEvent(
     var glucose: Double? = null,
     var glucoseType: MeterType? = null,
     var glucoseUnit: GlucoseUnit,
+    var exerciseDuty: ExerciseDuty? = null,
+
 ) : TraceableDBEntry, DBEntryWithTimeAndDuration {
 
     enum class MeterType {
@@ -56,7 +58,6 @@ data class TherapyEvent(
 
     @Suppress("unused")
     enum class Type {
-
         CANNULA_CHANGE,
         INSULIN_CHANGE,
         PUMP_BATTERY_CHANGE,
@@ -107,6 +108,14 @@ data class TherapyEvent(
 
         // Default
         NONE
+        ;
+    }
+
+    enum class ExerciseDuty(val text: String) {
+        NONE("None"),
+        LIGHT("Light"),
+        MIDDLE("Middle"),
+        HEAVY("Heavy")
         ;
     }
 }

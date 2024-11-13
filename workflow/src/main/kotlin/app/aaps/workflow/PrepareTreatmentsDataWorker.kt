@@ -36,6 +36,7 @@ import javax.inject.Inject
 class PrepareTreatmentsDataWorker(
     context: Context,
     params: WorkerParameters
+
 ) : LoggingWorker(context, params, Dispatchers.Default) {
 
     @Inject lateinit var dataWorkerStorage: DataWorkerStorage
@@ -48,21 +49,25 @@ class PrepareTreatmentsDataWorker(
     @Inject lateinit var decimalFormatter: DecimalFormatter
     @Inject lateinit var preferences: Preferences
 
+
     class PrepareTreatmentsData(
         val overviewData: OverviewData
     )
 
-    override suspend fun doWorkAndLog(): Result {
 
+    override suspend fun doWorkAndLog(): Result {
         val data = dataWorkerStorage.pickupObject(inputData.getLong(DataWorkerStorage.STORE_KEY, -1)) as PrepareTreatmentsData?
             ?: return Result.failure(workDataOf("Error" to "missing input data"))
 
         val endTime = data.overviewData.endTime
         val fromTime = data.overviewData.fromTime
+
         rxBus.send(EventIobCalculationProgress(CalculationWorkflow.ProgressData.PREPARE_TREATMENTS_DATA, 0, null))
+
         data.overviewData.maxTreatmentsValue = 0.0
         data.overviewData.maxTherapyEventValue = 0.0
         data.overviewData.maxEpsValue = 0.0
+
         val filteredTreatments: MutableList<DataPointWithLabelInterface> = ArrayList()
         val filteredTherapyEvents: MutableList<DataPointWithLabelInterface> = ArrayList()
         val filteredEps: MutableList<DataPointWithLabelInterface> = ArrayList()
@@ -74,6 +79,7 @@ class PrepareTreatmentsDataWorker(
                 it.y = getNearestBg(data.overviewData, it.x.toLong())
                 filteredTreatments.add(it)
             }
+
         persistenceLayer.getCarbsFromTimeToTimeExpanded(fromTime, endTime, true)
             .map { CarbsDataPoint(it, rh) }
             .forEach {
@@ -125,6 +131,7 @@ class PrepareTreatmentsDataWorker(
         filteredTreatments.maxOfOrNull { it.y }
             ?.let(::addUpperChartMargin)
             ?.let { data.overviewData.maxTreatmentsValue = maxOf(data.overviewData.maxTreatmentsValue, it) }
+
         filteredTherapyEvents.maxOfOrNull { it.y }
             ?.let(::addUpperChartMargin)
             ?.let { data.overviewData.maxTherapyEventValue = maxOf(data.overviewData.maxTherapyEventValue, it) }
@@ -136,32 +143,52 @@ class PrepareTreatmentsDataWorker(
         data.overviewData.heartRateGraphSeries = PointsWithLabelGraphSeries<DataPointWithLabelInterface>(
             persistenceLayer.getHeartRatesFromTimeToTime(fromTime, endTime)
                 .map { hr -> HeartRateDataPoint(hr, rh) }
-                .toTypedArray()).apply { color = rh.gac(null, app.aaps.core.ui.R.attr.heartRateColor) }
+                .toTypedArray()
+        ).apply {
+            color = rh.gac(null, app.aaps.core.ui.R.attr.heartRateColor)
+        }
 
         data.overviewData.stepsCountGraphSeries = PointsWithLabelGraphSeries<DataPointWithLabelInterface>(
             persistenceLayer.getStepsCountFromTimeToTime(fromTime, endTime)
                 .map { steps -> StepsDataPoint(steps, rh) }
-                .toTypedArray()).apply { color = rh.gac(null, app.aaps.core.ui.R.attr.stepsColor) }
-
+                .toTypedArray()
+        ).apply {
+            color = rh.gac(null, app.aaps.core.ui.R.attr.stepsColor)
+        }
 
         rxBus.send(EventIobCalculationProgress(CalculationWorkflow.ProgressData.PREPARE_TREATMENTS_DATA, 100, null))
+
         return Result.success()
     }
 
     private fun addUpperChartMargin(maxBgValue: Double) =
-        if (profileUtil.units == GlucoseUnit.MGDL) Round.roundTo(maxBgValue, 40.0) + 80 else Round.roundTo(maxBgValue, 2.0) + 4
+        if (profileUtil.units == GlucoseUnit.MGDL) {
+            Round.roundTo(maxBgValue, 40.0) + 80
+
+        } else {
+            Round.roundTo(maxBgValue, 2.0) + 4
+        }
 
     private fun getNearestBg(overviewData: OverviewData, date: Long): Double {
         overviewData.bgReadingsArray.let { bgReadingsArray ->
             for (reading in bgReadingsArray) {
-                if (reading.timestamp > date) continue
+                if (reading.timestamp > date) {
+                    continue
+                }
+
                 return profileUtil.fromMgdlToUnits(reading.value)
             }
-            return if (bgReadingsArray.isNotEmpty()) profileUtil.fromMgdlToUnits(bgReadingsArray[0].value)
-            else profileUtil.fromMgdlToUnits(100.0)
+
+            return if (bgReadingsArray.isNotEmpty()) {
+                profileUtil.fromMgdlToUnits(bgReadingsArray[0].value)
+            } else {
+                profileUtil.fromMgdlToUnits(100.0)
+            }
         }
     }
 
     private fun <E : DataPointWithLabelInterface> List<E>.filterTimeframe(fromTime: Long, endTime: Long): List<E> =
-        filter { it.x + it.duration >= fromTime && it.x <= endTime }
+        filter {
+            it.x + it.duration >= fromTime && it.x <= endTime
+        }
 }

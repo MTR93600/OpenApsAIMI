@@ -16,6 +16,7 @@ import kotlin.math.abs
 import kotlin.math.roundToLong
 
 class AutosensDataStoreObject : AutosensDataStore {
+
     override val dataLock = Any()
     override var lastUsed5minCalculation: Boolean? = null // true if used 5min bucketed data
 

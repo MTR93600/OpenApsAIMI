@@ -85,6 +85,7 @@ class ActionStartTempTarget(injector: HasAndroidInjector) : Action(injector) {
             .put("value", value.value)
             .put("units", value.units.asText)
             .put("durationInMinutes", duration.getMinutes())
+
         return JSONObject()
             .put("type", this.javaClass.simpleName)
             .put("data", data)

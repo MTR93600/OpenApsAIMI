@@ -93,6 +93,12 @@ class Converters {
     fun toGlucoseUnit(glucoseUnit: String?) = glucoseUnit?.let { GlucoseUnit.valueOf(it) }
 
     @TypeConverter
+    fun fromTherapyEventExerciseDuty(exerciseDuty: TherapyEvent.ExerciseDuty?) = exerciseDuty?.name
+
+    @TypeConverter
+    fun toTherapyEventExerciseDuty(exerciseDuty: String?) = exerciseDuty?.let { TherapyEvent.ExerciseDuty.valueOf(it) }
+
+    @TypeConverter
     fun fromPumpType(pumpType: InterfaceIDs.PumpType?) = pumpType?.name
 
     @TypeConverter

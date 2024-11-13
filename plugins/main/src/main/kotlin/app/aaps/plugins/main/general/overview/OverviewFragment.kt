@@ -220,8 +220,11 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             sp.putBoolean(app.aaps.core.utils.R.string.key_objectiveusescale, true)
             false
         }
+
         prepareGraphsIfNeeded(overviewMenus.setting.size)
+
         overviewMenus.setupChartMenu(binding.graphsLayout.chartMenuButton, binding.graphsLayout.scaleButton)
+
         binding.graphsLayout.scaleButton.text = overviewMenus.scaleString(overviewData.rangeToDisplay)
 
         binding.graphsLayout.chartMenuButton.visibility = preferences.simpleMode.not().toVisibility()
@@ -241,6 +244,11 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
         binding.buttonsLayout.quickWizardButton.setOnLongClickListener(this)
         binding.infoLayout.apsMode.setOnClickListener(this)
         binding.infoLayout.apsMode.setOnLongClickListener(this)
+
+        // exercise mode
+        binding.buttonsLayout.exerciseModeButton.setOnClickListener {
+            uiInteraction.runCareDialog(childFragmentManager, UiInteraction.EventType.EXERCISE, app.aaps.core.ui.R.string.careportal_exercise)
+        }
     }
 
     @Synchronized
@@ -253,86 +261,103 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
     @Synchronized
     override fun onResume() {
         super.onResume()
+
         disposable += activePlugin.activeOverview.overviewBus
             .toObservable(EventUpdateOverviewCalcProgress::class.java)
             .observeOn(aapsSchedulers.main)
             .subscribe({ updateCalcProgress() }, fabricPrivacy::logException)
+
         disposable += activePlugin.activeOverview.overviewBus
             .toObservable(EventUpdateOverviewIobCob::class.java)
             .debounce(1L, TimeUnit.SECONDS)
             .observeOn(aapsSchedulers.io)
             .subscribe({ updateIobCob() }, fabricPrivacy::logException)
+
         disposable += activePlugin.activeOverview.overviewBus
             .toObservable(EventUpdateOverviewSensitivity::class.java)
             .debounce(1L, TimeUnit.SECONDS)
             .observeOn(aapsSchedulers.main)
             .subscribe({ updateSensitivity() }, fabricPrivacy::logException)
+
         disposable += activePlugin.activeOverview.overviewBus
             .toObservable(EventUpdateOverviewGraph::class.java)
             .debounce(1L, TimeUnit.SECONDS)
             .observeOn(aapsSchedulers.main)
             .subscribe({ updateGraph() }, fabricPrivacy::logException)
+
         disposable += activePlugin.activeOverview.overviewBus
             .toObservable(EventUpdateOverviewNotification::class.java)
             .observeOn(aapsSchedulers.main)
             .subscribe({ updateNotification() }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventScale::class.java)
             .observeOn(aapsSchedulers.main)
             .subscribe({
-                           overviewData.rangeToDisplay = it.hours
-                           sp.putInt(app.aaps.core.utils.R.string.key_rangetodisplay, it.hours)
-                           rxBus.send(EventPreferenceChange(rh.gs(app.aaps.core.utils.R.string.key_rangetodisplay)))
-                           sp.putBoolean(app.aaps.core.utils.R.string.key_objectiveusescale, true)
-                       }, fabricPrivacy::logException)
+               overviewData.rangeToDisplay = it.hours
+               sp.putInt(app.aaps.core.utils.R.string.key_rangetodisplay, it.hours)
+               rxBus.send(EventPreferenceChange(rh.gs(app.aaps.core.utils.R.string.key_rangetodisplay)))
+               sp.putBoolean(app.aaps.core.utils.R.string.key_objectiveusescale, true)
+           }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventBucketedDataCreated::class.java)
             .debounce(1L, TimeUnit.SECONDS)
             .observeOn(aapsSchedulers.io)
             .subscribe({ updateBg() }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventRefreshOverview::class.java)
             .observeOn(aapsSchedulers.io)
             .subscribe({
-                           if (it.now) refreshAll()
-                           else scheduleUpdateGUI()
-                       }, fabricPrivacy::logException)
+               if (it.now) refreshAll()
+               else scheduleUpdateGUI()
+            }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventAcceptOpenLoopChange::class.java)
             .observeOn(aapsSchedulers.io)
             .subscribe({ scheduleUpdateGUI() }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventPreferenceChange::class.java)
             .observeOn(aapsSchedulers.io)
             .subscribe({ scheduleUpdateGUI() }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventNewOpenLoopNotification::class.java)
             .observeOn(aapsSchedulers.io)
             .subscribe({ scheduleUpdateGUI() }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventPumpStatusChanged::class.java)
             .observeOn(aapsSchedulers.main)
             .delay(30, TimeUnit.MILLISECONDS, aapsSchedulers.main)
             .subscribe({
-                           overviewData.pumpStatus = it.getStatus(requireContext())
-                           updatePumpStatus()
-                       }, fabricPrivacy::logException)
+               overviewData.pumpStatus = it.getStatus(requireContext())
+               updatePumpStatus()
+            }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventInitializationChanged::class.java)
             .observeOn(aapsSchedulers.main)
             .subscribe({ processButtonsVisibility() }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventEffectiveProfileSwitchChanged::class.java)
             .observeOn(aapsSchedulers.io)
             .subscribe({ scheduleUpdateGUI() }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventTempTargetChange::class.java)
             .observeOn(aapsSchedulers.io)
             .subscribe({ updateTemporaryTarget() }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventExtendedBolusChange::class.java)
             .observeOn(aapsSchedulers.io)
             .subscribe({ updateExtendedBolus() }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventTempBasalChange::class.java)
             .observeOn(aapsSchedulers.io)
@@ -345,6 +370,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
         handler.postDelayed(refreshLoop, 60 * 1000L)
 
         handler.post { refreshAll() }
+
         updatePumpStatus()
         updateCalcProgress()
     }
@@ -583,11 +609,18 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             // **** Various treatment buttons ****
             binding.buttonsLayout.carbsButton.visibility =
                 (profile != null && preferences.get(BooleanKey.OverviewShowCarbsButton)).toVisibility()
+
             binding.buttonsLayout.treatmentButton.visibility = (!loop.isDisconnected && pump.isInitialized() && !pump.isSuspended() && profile != null
                 && preferences.get(BooleanKey.OverviewShowTreatmentButton)).toVisibility()
+
             binding.buttonsLayout.wizardButton.visibility = (!loop.isDisconnected && pump.isInitialized() && !pump.isSuspended() && profile != null
                 && preferences.get(BooleanKey.OverviewShowWizardButton)).toVisibility()
+
             binding.buttonsLayout.insulinButton.visibility = (profile != null && preferences.get(BooleanKey.OverviewShowInsulinButton)).toVisibility()
+
+            binding.buttonsLayout.exerciseModeButton.visibility = (!loop.isDisconnected && pump.isInitialized() && !pump.isSuspended() && profile != null
+                && preferences.get(BooleanKey.OverviewShowExerciseModeButton)).toVisibility()
+
             if (loop.isDisconnected || !pump.isInitialized() || pump.isSuspended()) {
                 setRibbon(
                     binding.buttonsLayout.insulinButton,
@@ -615,6 +648,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
                     drawable?.colorFilter = PorterDuffColorFilter(rh.gac(context, app.aaps.core.ui.R.attr.cgmDexColor), PorterDuff.Mode.SRC_IN)
                 }
                 binding.buttonsLayout.cgmButton.setTextColor(rh.gac(context, app.aaps.core.ui.R.attr.cgmDexColor))
+
             } else if (xDripIsBgSource) {
                 binding.buttonsLayout.cgmButton.setCompoundDrawablesWithIntrinsicBounds(null, rh.gd(app.aaps.core.objects.R.drawable.ic_xdrip), null, null)
                 for (drawable in binding.buttonsLayout.cgmButton.compoundDrawables) {
