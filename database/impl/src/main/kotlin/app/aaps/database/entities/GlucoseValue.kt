@@ -109,6 +109,7 @@ data class GlucoseValue(
         A_COB_PREDICTION,
         COB_PREDICTION,
         UAM_PREDICTION,
+        TestAlex_PREDICTION,
         ZT_PREDICTION,
         ;
     }

@@ -250,6 +250,19 @@ class DetermineBasalResult @Inject constructor(var injector: HasAndroidInjector)
                     array.add(gv)
                 }
             }
+            predictions?.TestAlex?.let { iob ->
+                for (i in 1 until iob.size) {
+                    val gv = GV(
+                        raw = 0.0,
+                        noise = 0.0,
+                        value = iob[i].toDouble(),
+                        timestamp = startTime + i * 5 * 60 * 1000L,
+                        sourceSensor = SourceSensor.TestAlex_PREDICTION,
+                        trendArrow = TrendArrow.NONE
+                    )
+                    array.add(gv)
+                }
+            }
             predictions?.ZT?.let { iob ->
                 for (i in 1 until iob.size) {
                     val gv = GV(

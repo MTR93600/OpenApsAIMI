@@ -432,11 +432,13 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
     var IOBpredBGs = [];
     var UAMpredBGs = [];
     var ZTpredBGs = [];
+    var TestAlexpredBGs = [];
     COBpredBGs.push(bg);
     aCOBpredBGs.push(bg);
     IOBpredBGs.push(bg);
     ZTpredBGs.push(bg);
     UAMpredBGs.push(bg);
+    TestAlexpredBGs.push(bg);
 
     var enableSMB = enable_smb(
         profile,

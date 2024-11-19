@@ -63,7 +63,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var averageBeatsPerMinute10 = 0.0
     private var averageBeatsPerMinute60 = 0.0
     private var averageBeatsPerMinute180 = 0.0
-    private var eventualBG = 0.0
+    private var eventualBG =
     private var now = System.currentTimeMillis()
     private var iob = 0.0f
     private var cob = 0.0f
@@ -1816,11 +1816,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val slopeFromDeviations = Math.min(slopeFromMaxDeviation, -slopeFromMinDeviation / 3)
         var IOBpredBGs = mutableListOf<Double>()
         var UAMpredBGs = mutableListOf<Double>()
+        var TestAlexpredBGs = mutableListOf<Double>()
         var ZTpredBGs = mutableListOf<Double>()
 
         IOBpredBGs.add(bg)
         ZTpredBGs.add(bg)
         UAMpredBGs.add(bg)
+        TestAlexpredBGs.add(bg)
         var ci: Double
         val cid: Double
         // calculate current carb absorption rate, and how long to absorb all carbs
@@ -1841,9 +1843,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var minIOBPredBG = 999.0
 
         var minUAMPredBG = 999.0
+        var minTestAlexPredBG = 999.0
         var minGuardBG: Double
 
         var minUAMGuardBG = 999.0
+        var minTestAlexGuardBG = 999.0
         var minIOBGuardBG = 999.0
         var minZTGuardBG = 999.0
         var IOBpredBG: Double = eventualBG
@@ -1852,12 +1856,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val lastIOBpredBG: Double
 
         var lastUAMpredBG: Double? = null
+        var lastTestAlexpredBG: Double? = null
         //var lastZTpredBG: Int
         var UAMduration = 0.0
         var remainingCItotal = 0.0
         val remainingCIs = mutableListOf<Int>()
         val predCIs = mutableListOf<Int>()
         var UAMpredBG: Double? = null
+        var TestAlexpredBG: Double? = null
 
 
         iobArray.forEach { iobTick ->
@@ -1872,6 +1878,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 else round((-iobTick.iobWithZeroTemp!!.activity * sens * 5), 2)
             val predUAMBGI =
                 if (dynIsfMode) round((-iobTick.activity * (1800 / (profile.TDD * (ln((max(UAMpredBGs[UAMpredBGs.size - 1], 39.0) / profile.insulinDivisor) + 1)))) * 5), 2)
+                else predBGI
+            val predTestAlexPredictionBGI =
+                if (dynIsfMode) round((-iobTick.activity * (1800 / (profile.TDD * (ln((max(TestAlexpredBGs[TestAlexpredBGs.size - 1], 39.0) / profile.insulinDivisor) + 1)))) * 5), 2)
                 else predBGI
             // for IOBpredBGs, predicted deviation impact drops linearly from current deviation down to zero
             // over 60 minutes (data points every 5m)
@@ -1893,13 +1902,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 UAMduration = round((UAMpredBGs.size + 1) * 5 / 60.0, 1)
             }
             UAMpredBG = UAMpredBGs[UAMpredBGs.size - 1] + predUAMBGI + min(0.0, predDev) + predUCI
+            TestAlexpredBG = TestAlexpredBGs[TestAlexpredBGs.size - 1] + predTestAlexPredictionBGI + min(0.0, predDev) + predUCI
             //console.error(predBGI, predCI, predUCI);
             // truncate all BG predictions at 4 hours
             if (IOBpredBGs.size < 24) IOBpredBGs.add(IOBpredBG)
             if (UAMpredBGs.size < 24) UAMpredBGs.add(UAMpredBG!!)
+            if (TestAlexpredBGs.size < 24) TestAlexpredBGs.add(TestAlexpredBG!!)
             if (ZTpredBGs.size < 24) ZTpredBGs.add(ZTpredBG)
             // calculate minGuardBGs without a wait from COB, UAM, IOB predBGs
             if (UAMpredBG!! < minUAMGuardBG) minUAMGuardBG = round(UAMpredBG!!).toDouble()
+            if (TestAlexpredBG!! < minTestAlexGuardBG) minTestAlexGuardBG = round(TestAlexpredBG!!).toDouble()
             if (IOBpredBG < minIOBGuardBG) minIOBGuardBG = IOBpredBG
             if (ZTpredBG < minZTGuardBG) minZTGuardBG = round(ZTpredBG, 0)
 
@@ -1914,6 +1926,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (IOBpredBGs.size > insulinPeak5m && (IOBpredBG < minIOBPredBG)) minIOBPredBG = round(IOBpredBG, 0)
             if (IOBpredBG > maxIOBPredBG) maxIOBPredBG = IOBpredBG
             if (enableUAM && UAMpredBGs.size > 6 && (UAMpredBG!! < minUAMPredBG)) minUAMPredBG = round(UAMpredBG!!, 0)
+            if (enableUAM && TestAlexpredBGs.size > 6 && (TestAlexpredBG!! < minTestAlexPredBG)) minTestAlexPredBG = round(TestAlexpredBG!!, 0)
         }
 
         rT.predBGs = Predictions()
@@ -1932,6 +1945,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         rT.predBGs?.ZT = ZTpredBGs.map { it.toInt() }
 
+        TestAlexpredBGs = TestAlexpredBGs.map { round(min(401.0, max(39.0, it)), 0) }.toMutableList()
+        for (i in TestAlexpredBGs.size - 1 downTo 13) {
+            if (TestAlexpredBGs[i - 1] != TestAlexpredBGs[i]) break
+            else TestAlexpredBGs.removeLast()
+        }
+        rT.predBGs?.TestAlex = TestAlexpredBGs.map { it.toInt() }
+        lastTestAlexpredBG = TestAlexpredBGs[TestAlexpredBGs.size - 1]
+        eventualBG = max(eventualBG, round(TestAlexpredBGs[TestAlexpredBGs.size - 1], 0))
+
         if (ci > 0 || remainingCIpeak > 0) {
             if (enableUAM) {
                 UAMpredBGs = UAMpredBGs.map { round(min(401.0, max(39.0, it)), 0) }.toMutableList()
@@ -1943,6 +1965,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 lastUAMpredBG = UAMpredBGs[UAMpredBGs.size - 1]
                 eventualBG = max(eventualBG, round(UAMpredBGs[UAMpredBGs.size - 1], 0))
             }
+
 
             // set eventualBG based on COB or UAM predBGs
             rT.eventualBG = eventualBG

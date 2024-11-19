@@ -46,6 +46,7 @@ fun GlucoseValue.SourceSensor.fromDb(): SourceSensor =
         GlucoseValue.SourceSensor.A_COB_PREDICTION          -> SourceSensor.A_COB_PREDICTION
         GlucoseValue.SourceSensor.COB_PREDICTION            -> SourceSensor.COB_PREDICTION
         GlucoseValue.SourceSensor.UAM_PREDICTION            -> SourceSensor.UAM_PREDICTION
+        GlucoseValue.SourceSensor.TestAlex_PREDICTION            -> SourceSensor.TestAlex_PREDICTION
         GlucoseValue.SourceSensor.ZT_PREDICTION             -> SourceSensor.ZT_PREDICTION
     }
 
@@ -92,5 +93,6 @@ fun SourceSensor.toDb(): GlucoseValue.SourceSensor =
         SourceSensor.A_COB_PREDICTION          -> GlucoseValue.SourceSensor.A_COB_PREDICTION
         SourceSensor.COB_PREDICTION            -> GlucoseValue.SourceSensor.COB_PREDICTION
         SourceSensor.UAM_PREDICTION            -> GlucoseValue.SourceSensor.UAM_PREDICTION
+        SourceSensor.TestAlex_PREDICTION            -> GlucoseValue.SourceSensor.TestAlex_PREDICTION
         SourceSensor.ZT_PREDICTION             -> GlucoseValue.SourceSensor.ZT_PREDICTION
     }

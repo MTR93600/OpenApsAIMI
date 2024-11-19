@@ -260,6 +260,19 @@ open class APSResultObject(protected val injector: HasAndroidInjector) : APSResu
                     array.add(gv)
                 }
             }
+            predictions?.TestAlex?.let { iob ->
+                for (i in 1 until iob.size) {
+                    val gv = GV(
+                        raw = 0.0,
+                        noise = 0.0,
+                        value = iob[i].toDouble(),
+                        timestamp = startTime + i * 5 * 60 * 1000L,
+                        sourceSensor = SourceSensor.TestAlex_PREDICTION,
+                        trendArrow = TrendArrow.NONE
+                    )
+                    array.add(gv)
+                }
+            }
             predictions?.ZT?.let { iob ->
                 for (i in 1 until iob.size) {
                     val gv = GV(
@@ -284,6 +297,7 @@ open class APSResultObject(protected val injector: HasAndroidInjector) : APSResu
             predictions?.aCOB?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
             predictions?.COB?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
             predictions?.UAM?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
+            predictions?.TestAlex?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
             predictions?.ZT?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
             return latest
         }

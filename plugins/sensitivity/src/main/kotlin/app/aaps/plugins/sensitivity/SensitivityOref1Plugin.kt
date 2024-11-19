@@ -68,7 +68,7 @@ class SensitivityOref1Plugin @Inject constructor(
         }
 
         // the current
-        val current = ads.getAutosensDataAtTime(toTime) // this is running inside lock already
+        val current = ads.getAutosensDataAtTime(toTime) // this is running inside lock alreadyиии
         if (current == null) {
             aapsLogger.debug(LTag.AUTOSENS, "No autosens data available. toTime: " + dateUtil.dateAndTimeString(toTime) + " lastDataTime: " + ads.lastDataTime(dateUtil))
             return AutosensResult()

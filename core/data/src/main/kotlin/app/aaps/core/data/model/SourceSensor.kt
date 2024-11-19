@@ -42,6 +42,7 @@ enum class SourceSensor(val text: String) {
     A_COB_PREDICTION("aCOBPrediction"),
     COB_PREDICTION("COBPrediction"),
     UAM_PREDICTION("UAMPrediction"),
+    TestAlex_PREDICTION("TestAlexPrediction"),
     ZT_PREDICTION("ZTPrediction"),
     ;
 

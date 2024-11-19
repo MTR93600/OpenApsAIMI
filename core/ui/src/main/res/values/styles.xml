@@ -204,6 +204,7 @@
         <!---Graph data glucose value point colors-->
         <item name="cobColor">@color/cob</item>
         <item name="uamColor">@color/uam</item>
+        <item name="testalexColor">@color/testalex</item>
         <item name="ztColor">@color/zt</item>
         <item name="smbColor">@color/tempbasal</item>
         <item name="bolusDataPointColor">@color/pumpHistory</item>
