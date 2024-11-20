@@ -360,7 +360,7 @@ fun DS.toNSDeviceStatus(): NSDeviceStatus {
             "temp": "absolute",
             "snoozeBG": 181,
             "recieved": true,
-            "зкувИПы": {
+            "predBGs": {
             "IOB": [161, 164, 166, 168, 170, 172, 174, 175, 176, 177, 177, 176, 175, 175, 174, 173, 173, 172, 172, 171, 171, 171, 171, 170, 170, 170, 170, 170, 169, 169, 169, 169, 169, 168]
             },
             "reason": "COB: undefined, Dev: 33, BGI: -2.56, ISF: 80, Target: 115; Eventual BG 181>=115, adj. req. rate:2.4 to maxSafeBasal:2.3, temp 1<2.3U/hr",

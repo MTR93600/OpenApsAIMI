@@ -63,7 +63,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var averageBeatsPerMinute10 = 0.0
     private var averageBeatsPerMinute60 = 0.0
     private var averageBeatsPerMinute180 = 0.0
-    private var eventualBG =
+    private var eventualBG = 0.0
     private var now = System.currentTimeMillis()
     private var iob = 0.0f
     private var cob = 0.0f
