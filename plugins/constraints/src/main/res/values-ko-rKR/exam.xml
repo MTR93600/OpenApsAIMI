@@ -68,7 +68,6 @@
     <string name="basaltest_havingregularhighlow">자주 고혈당 또는 저혈당을 경험할 때</string>
     <string name="basaltest_weekly">적어도 일주일에 한 번</string>
     <string name="basaltest_fixed">한 번 설정하고 확인하면, 이 값은 계속 변하면 안됨.</string>
-    <string name="basaltest_hint1">https://wiki.aaps.app/en/latest/Getting-Started/FAQ.html#androidaps-settings</string>
     <string name="prerequisites_label">기본 준비사항</string>
     <string name="prerequisites_what">AAPS를 설정하고 사용하기 위해 필수적인 것은 무엇입니까?</string>
     <string name="prerequisites_determinedcorrectprofile">유효한 프로파일 정보 (Basal, IC, ISF, DIA).</string>
@@ -103,7 +102,6 @@
     <string name="troubleshooting_wheretoask">어디에서 AAPS에 대한 도움을 받을 수 있습니까?</string>
     <string name="troubleshooting_fb">페이스북의 AAPS 사용자 그룹에 피드백을 요청할 수 있습니다.</string>
     <string name="troubleshooting_wiki">AAPS 문서를 읽어야 (그리고 다시 읽어야) 합니다.</string>
-    <string name="troubleshooting_gitter">AAPS Discord에 기술적 문제들을 기록하고, 조언을 요청할 수 있습니다.</string>
     <string name="troubleshooting_yourendo">당뇨병 클리닉/내분비내과의사에게 문의해야 합니다.</string>
     <string name="troubleshooting_hint1">https://wiki.aaps.app/en/latest/Installing-AndroidAPS/Update-to-new-version.html#troubleshooting</string>
     <string name="troubleshooting_hint2">https://www.facebook.com/groups/AndroidAPSUsers/</string>

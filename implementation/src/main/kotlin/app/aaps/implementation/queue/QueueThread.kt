@@ -5,9 +5,10 @@ import android.content.Context
 import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
+import app.aaps.core.data.configuration.Constants
+import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.androidPermissions.AndroidPermission
 import app.aaps.core.interfaces.configuration.Config
-import app.aaps.core.interfaces.configuration.Constants
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -19,7 +20,8 @@ import app.aaps.core.interfaces.rx.events.EventDismissBolusProgressIfRunning
 import app.aaps.core.interfaces.rx.events.EventPumpStatusChanged
 import app.aaps.core.interfaces.rx.events.EventQueueChanged
 import app.aaps.core.interfaces.sharedPreferences.SP
-import app.aaps.core.interfaces.utils.T
+import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.Preferences
 import app.aaps.core.ui.R
 import app.aaps.core.utils.extensions.safeDisable
 import app.aaps.core.utils.extensions.safeEnable
@@ -32,6 +34,7 @@ class QueueThread internal constructor(
     private val activePlugin: ActivePlugin,
     private val rh: ResourceHelper,
     private val sp: SP,
+    private val preferences: Preferences,
     private val androidPermission: AndroidPermission,
     private val config: Config
 ) : Thread() {
@@ -69,7 +72,7 @@ class QueueThread internal constructor(
                     pump.stopConnecting()
 
                     //BLUETOOTH-WATCHDOG
-                    var watchdog = sp.getBoolean(app.aaps.core.utils.R.string.key_btwatchdog, false)
+                    var watchdog = preferences.get(BooleanKey.PumpBtWatchdog)
                     val lastWatchdog = sp.getLong(app.aaps.core.utils.R.string.key_btwatchdog_lastbark, 0L)
                     watchdog = watchdog && System.currentTimeMillis() - lastWatchdog > Constants.MIN_WATCHDOG_INTERVAL_IN_SECONDS * 1000
                     if (watchdog) {

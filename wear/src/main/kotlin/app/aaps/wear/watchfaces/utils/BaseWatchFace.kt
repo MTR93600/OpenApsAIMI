@@ -12,8 +12,6 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import androidx.viewbinding.ViewBinding
-import app.aaps.core.interfaces.extensions.toVisibility
-import app.aaps.core.interfaces.extensions.toVisibilityKeepSpace
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.rx.AapsSchedulers
@@ -23,10 +21,11 @@ import app.aaps.core.interfaces.rx.weardata.EventData
 import app.aaps.core.interfaces.rx.weardata.EventData.ActionResendData
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.ui.extensions.toVisibility
+import app.aaps.core.ui.extensions.toVisibilityKeepSpace
 import app.aaps.wear.R
 import app.aaps.wear.data.RawDisplayData
 import app.aaps.wear.events.EventWearPreferenceChange
-import app.aaps.wear.heartrate.HeartRateListener
 import app.aaps.wear.interaction.menus.MainMenuActivity
 import app.aaps.wear.interaction.utils.Persistence
 import app.aaps.wear.interaction.utils.WearUtil
@@ -108,7 +107,6 @@ abstract class BaseWatchFace : WatchFace() {
 
     private var mLastSvg = ""
     private var mLastDirection = ""
-    private var heartRateListener: HeartRateListener? = null
 
     override fun onCreate() {
         // Not derived from DaggerService, do injection here
@@ -125,7 +123,6 @@ abstract class BaseWatchFace : WatchFace() {
             .subscribe { event: EventWearPreferenceChange ->
                 simpleUi.updatePreferences()
                 if (event.changedKey != null && event.changedKey == "delta_granularity") rxBus.send(EventWearToMobile(ActionResendData("BaseWatchFace:onSharedPreferenceChanged")))
-                if (event.changedKey == getString(R.string.key_heart_rate_sampling)) updateHeartRateListener()
                 if (layoutSet) setDataFields()
                 invalidate()
             }
@@ -150,27 +147,11 @@ abstract class BaseWatchFace : WatchFace() {
         layoutView = binding.root
         performViewSetup()
         rxBus.send(EventWearToMobile(ActionResendData("BaseWatchFace::onCreate")))
-        updateHeartRateListener()
     }
 
     private fun forceUpdate() {
         setDataFields()
         invalidate()
-    }
-
-    private fun updateHeartRateListener() {
-        if (sp.getBoolean(R.string.key_heart_rate_sampling, false)) {
-            if (heartRateListener == null) {
-                heartRateListener = HeartRateListener(
-                    this, aapsLogger, aapsSchedulers
-                ).also { hrl -> disposable += hrl }
-            }
-        } else {
-            heartRateListener?.let { hrl ->
-                disposable.remove(hrl)
-                heartRateListener = null
-            }
-        }
     }
 
     override fun onTapCommand(tapType: Int, x: Int, y: Int, eventTime: Long) {
@@ -404,7 +385,6 @@ abstract class BaseWatchFace : WatchFace() {
     }
 
     private fun strikeThroughSgvIfNeeded() {
-        @Suppress("DEPRECATION")
         binding.sgv?.let { mSgv ->
             if (ageLevel() <= 0 && singleBg.timeStamp > 0) mSgv.paintFlags = mSgv.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
             else mSgv.paintFlags = mSgv.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
@@ -465,10 +445,5 @@ abstract class BaseWatchFace : WatchFace() {
         mLastSvg = singleBg.sgvString
         mLastDirection = singleBg.sgvString
         return true
-    }
-
-    companion object {
-
-        const val SCREEN_SIZE_SMALL = 280
     }
 }

@@ -1,5 +1,7 @@
 package app.aaps.plugins.constraints.dstHelper
 
+import app.aaps.core.data.plugin.PluginType
+import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.PluginConstraints
@@ -9,19 +11,15 @@ import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
-import app.aaps.core.interfaces.plugin.PluginType
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.sharedPreferences.SP
-import app.aaps.core.interfaces.utils.T
 import app.aaps.plugins.constraints.R
-import dagger.android.HasAndroidInjector
 import java.util.Calendar
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class DstHelperPlugin @Inject constructor(
-    injector: HasAndroidInjector,
     aapsLogger: AAPSLogger,
     rh: ResourceHelper,
     private val sp: SP,
@@ -34,7 +32,7 @@ class DstHelperPlugin @Inject constructor(
         .alwaysEnabled(true)
         .showInList(false)
         .pluginName(R.string.dst_plugin_name),
-    aapsLogger, rh, injector
+    aapsLogger, rh
 ), PluginConstraints {
 
     companion object {
@@ -74,7 +72,7 @@ class DstHelperPlugin @Inject constructor(
             } else {
                 aapsLogger.debug(LTag.CONSTRAINTS, "Loop already suspended")
             }
-            value.set(false, "DST in last 3 hours.", this)
+            value.set(false, rh.gs(R.string.dst_loop_disabled_error), this)
         }
         return value
     }

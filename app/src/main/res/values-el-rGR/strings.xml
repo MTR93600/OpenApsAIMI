@@ -1,8 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!--    <string name="fi_lang" translatable="false">Finnish</string> -->
-    <!--   <string name="he_lang" translatable="false">Hebrew</string> -->
-    <!--    <string name="ja_lang" translatable="false">Japanese</string> -->
     <string name="nav_preferences_plugin">%1$s Preferences</string>
     <string name="nav_refreshtreatments">Ανανέωση Θεραπειών από NS</string>
     <string name="nav_exit">Έξοδος</string>
@@ -16,11 +13,6 @@
     <string name="wear">Wear</string>
     <string name="nav_about">Σχετικά με</string>
     <string name="smscommunicator_missingphonestatepermission">Λείπει η άδεια κατάστασης τηλεφώνου</string>
-    <string name="ns_alarm_options">Επιλογές συναγερμού</string>
-    <string name="ns_alarms">Δημιουργία ειδοποιήσεων από συναγερμούς του NS</string>
-    <string name="ns_announcements">Δημιουργία ειδοποιήσεων από ανακοινώσεις NS</string>
-    <string name="ns_alarm_stale_data_value_label">Οριακή τιμή για παλιά δεδομένα [min]</string>
-    <string name="ns_alarm_urgent_stale_data_value_label">Επείγουσα οριακή τιμή για παλιά δεδομένα [min]</string>
     <string name="sensitivity_warning">Ενεργοποιώντας το autosense θυμηθείτε να εισάγετε όλους τους υδατάνθρακες. Διαφορετικά, οι αποκλίσεις των υδατανθράκων θα εντοπιστούν λανθασμένα ως αλλαγή ευαισθησίας!!</string>
     <string name="notloadedplugins">Δεν έχουν φορτωθεί όλα τα προφίλ!</string>
     <string name="valuesnotstored">Οι τιμές δεν αποθηκεύτηκαν!</string>

@@ -3,7 +3,7 @@ object Libs {
 
     object Kotlin {
 
-        const val kotlin = "1.9.10"
+        const val kotlin = "2.0.0"
 
         const val stdlibJdk8 = "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin"
         const val reflect = "org.jetbrains.kotlin:kotlin-reflect:$kotlin"
@@ -138,8 +138,8 @@ object Libs {
 
     object Logging {
 
-        const val slf4jApi = "org.slf4j:slf4j-api:1.7.36" // 2.0.x breaks logging. Code change needed
-        const val logbackAndroid = "com.github.tony19:logback-android:2.0.0"
+        const val slf4jApi = "org.slf4j:slf4j-api:2.0.7"
+        const val logbackAndroid = "com.github.tony19:logback-android:3.0.0"
     }
 
     object JUnit {

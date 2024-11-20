@@ -100,7 +100,6 @@
     <string name="not_connected">No conectado</string>
     <string name="read_only">Sólo lectura</string>
     <string name="working">Funcionando</string>
-    <!-- xDrip status line -->
     <!-- Xdrip StatusLine -->
     <string name="xdrip">xDrip+</string>
     <string name="xdrip_shortname">XD</string>
@@ -110,17 +109,21 @@
     <string name="xdrip_status_show_bgi_title">Mostrar BGI</string>
     <string name="xdrip_status_show_bgi_summary">Agregar BGI a la línea de estado</string>
     <string name="xdrip_status_settings">xDrip+ Línea de estado avanzada</string>
-    <string name="disabled_loop">Lazo desactivado</string>
+    <string name="disabled_loop">Bucle desactivado</string>
     <string name="xdrip_send_status_title">Enviar línea de estado a xDrip+</string>
     <string name="xdrip_not_installed">xDrip+ no instalado</string>
     <string name="calibration_sent">Calibración enviada a xDrip+</string>
     <string name="xdrip_local_broadcasts_summary">Enviar datos de glucosa y tratamientos a xDrip+. La fuente de datos \"xDrip+ Sync Follower\" debe estar seleccionada y la aceptación de datos debe estar activada en Ajustes - Ajustes entre aplicaciones - Aceptar glucosa/tratamientos</string>
     <string name="xdrip_local_broadcasts_title">Activar las transmisiones a xDrip+</string>
     <!--    DataBroadcast-->
+    <string name="tizen">Samsung Tizen</string>
+    <string name="tizen_short">TIZ</string>
+    <string name="tizen_description">Transmitir datos a la aplicación G-Watch Wear de Samsung (Tizen OS)</string>
     <!-- GarminPlugin -->
     <string name="garmin">Garmin</string>
     <string name="garmin_description">Conexión al dispositivo Garmin (Fénix, Edge, …)</string>
-    <string name="key_garmin_settings">Ajustes de Garmin</string>
+    <string name="garmin_local_http_server_port">Puerto del servidor local HTTP</string>
+    <string name="garmin_local_http_server">Servidor local HTTP</string>
     <!--    Wear-->
     <string name="wear_shortname">RELOJ</string>
     <string name="description_wear">Supervisar y controlar AAPS usando un reloj WearOS</string>
@@ -155,6 +158,7 @@
     <string name="wear_infos_watchface">Información de esferas</string>
     <string name="wear_export_watchface">Exportar plantilla</string>
     <string name="wear_new_custom_watchface_exported">Plantilla de esfera personalizada exportada</string>
+    <string name="wear_link_to_more_cwf_doc">https://androidaps.readthedocs.io/es/latest/ExchangeSiteCustomWatchfaces/index.html</string>
     <string name="resend_all_data">Reenviar todos los datos</string>
     <string name="open_settings_on_wear">Abrir ajustes en el reloj</string>
     <string name="cwf_infos_pref_locked">Lista de preferencias bloqueadas por la esfera</string>
@@ -177,13 +181,14 @@
     <string name="no_profile">Ningún perfil cargado</string>
     <string name="aps_only">Sólo se aplica en modo APS</string>
     <string name="last_aps_result_na">¡Último resultado no disponible!</string>
-    <string name="loop_status_closed">LAZO CERRADO</string>
+    <string name="loop_status_closed">BUCLE CERRADO</string>
     <string name="loop_status_open">LAZO ABIERTO</string>
-    <string name="loop_status_disabled">LAZO DESACTIVADO</string>
+    <string name="loop_status_disabled">BUCLE DESACTIVADO</string>
     <string name="aps">APS</string>
     <string name="last_run">Última ejecución</string>
     <string name="last_enact">Último acto</string>
     <string name="tdd_line">%1$.2fU %1$.0f%%</string>
     <string name="today">Hoy</string>
     <string name="weighted">ponderado</string>
+    <string name="full_xdrip_sync_comment">¿Sincronización completa? Puede tardar un rato y hasta que no finalice, no aparecerán los nuevos datos en xDrip+.</string>
 </resources>

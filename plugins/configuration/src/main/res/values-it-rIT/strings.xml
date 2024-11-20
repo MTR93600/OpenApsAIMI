@@ -30,8 +30,6 @@
     <string name="status">Stato:</string>
     <string name="patient_name">Nome paziente</string>
     <string name="patient_name_summary">Fornisci il nome del paziente o il nickname per distinguere questa configurazione tra altre</string>
-    <string name="privacy_settings">Impostazioni privacy</string>
-    <string name="privacy_summary">Puoi fornire un indirizzo e-mail opzionale se desideri essere avvisato in caso di arresti anomali dell\'app. Questo non è un servizio automatizzato. Sarai contattato dagli sviluppatori in situazioni pericolose.</string>
     <string name="diawarning">Ricorda: i nuovi profili di insulina richiedono una DIA di almeno 5h. DIA di 5-6h sui nuovi profili sono uguali a DIA di 3h sui vecchi profili di insulina.</string>
     <string name="profile">Profilo</string>
     <string name="doprofileswitch">Cambia profilo</string>
@@ -96,7 +94,6 @@
     <string name="check_preferences_before_import">Controlla le preferenze prima dell\'importazione:</string>
     <string name="check_preferences_cannot_import">Le preferenze non possono essere importate!</string>
     <string name="check_preferences_dangerous_import">Le preferenze non dovrebbero essere importate!</string>
-    <string name="nav_export">Esporta impostazioni</string>
     <string name="export_to">Esportare impostazioni su</string>
     <string name="import_from">Importare impostazioni da</string>
     <string name="setting_imported">Impostazioni importate</string>
@@ -109,13 +106,14 @@
     <string name="restartingapp">Uscita dall\'applicazione per applicare le impostazioni.</string>
     <string name="ue_exported">Voci utente esportate</string>
     <string name="protection">Protezione</string>
-    <string name="master_password_missing">La password master non è impostata!\n\nImposta la tua password master in Preferenze (%1$s &#8594; %2$s)</string>
+    <string name="master_password_missing">La password master non è impostata!\n\nImposta la tua password master in Preferenze (%1$s)</string>
     <!--    Maintenance-->
     <string name="maintenance">Manutenzione</string>
     <string name="maintenance_shortname">MANUT</string>
     <string name="description_maintenance">Fornisce numerose funzioni per la manutenzione (es. invio log, eliminazione log).</string>
     <string name="database_cleanup">Pulizia database</string>
     <string name="reset_db_confirm">Vuoi davvero resettare i database?</string>
+    <string name="reset_aps_results_confirm">Sei sicuro di voler resettare i risultati di APS?</string>
     <string name="maintenance_settings">Impostazioni manutenzione</string>
     <string name="maintenance_email">Destinatario email</string>
     <string name="maintenance_amount">Numero di log da inviare</string>
@@ -167,4 +165,5 @@
     <string name="metadata_format_new">Nuovo formato crittografato</string>
     <string name="metadata_format_debug">Nuovo formato di debug (non crittografato)</string>
     <string name="metadata_format_other">Formato esportazione sconosciuto</string>
+    <string name="reset_aps_results">Resetta i risultati di APS</string>
 </resources>

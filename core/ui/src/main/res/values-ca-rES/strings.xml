@@ -343,8 +343,6 @@
     <string name="basalpct">Basal %</string>
     <string name="a11y_user">usuari</string>
     <!-- Autotune -->
-    <string name="autotune_result">Resultat: %1$s</string>
-    <string name="autotune_compare_profile">Comparar perfils</string>
     <!-- Alerts -->
     <string name="raise_notifications_as_android_notifications">Utilitzar avisos del sistema per alarmes i avisos</string>
     <string name="urgent_alarm">Alarma urgent</string>
@@ -391,7 +389,6 @@
     <string name="limitingpercentrate">Limitant percentatge màx a %1$d%% a causa de %2$s</string>
     <string name="itmustbepositivevalue">ha de ser un valor positiu</string>
     <string name="limitingbolus">Limitant bolus a %1$.1f U a causa de %2$s</string>
-    <!-- Locale -->
     <!--    Dialogs-->
     <string name="confirmation">Confirmació</string>
     <string name="message">Missatge</string>

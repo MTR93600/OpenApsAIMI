@@ -1,13 +1,15 @@
 package app.aaps.plugins.aps.autotune
 
-import app.aaps.core.interfaces.sharedPreferences.SP
+import app.aaps.core.data.model.BS
+import app.aaps.core.data.model.CA
+import app.aaps.core.data.model.GV
+import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.MidnightTime
 import app.aaps.core.interfaces.utils.Round
-import app.aaps.core.interfaces.utils.T
-import app.aaps.database.entities.Bolus
-import app.aaps.database.entities.Carbs
-import app.aaps.database.entities.GlucoseValue
+import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.Preferences
 import app.aaps.plugins.aps.autotune.data.ATProfile
 import app.aaps.plugins.aps.autotune.data.BGDatum
 import app.aaps.plugins.aps.autotune.data.CRDatum
@@ -24,7 +26,7 @@ import kotlin.math.roundToInt
 
 @Singleton
 class AutotunePrep @Inject constructor(
-    private val sp: SP,
+    private val preferences: Preferences,
     private val dateUtil: DateUtil,
     private val autotuneFS: AutotuneFS,
     private val autotuneIob: AutotuneIob
@@ -32,7 +34,7 @@ class AutotunePrep @Inject constructor(
 
     fun categorize(tunedProfile: ATProfile): PreppedGlucose? {
         val preppedGlucose = categorizeBGDatums(tunedProfile, tunedProfile.localInsulin)
-        val tuneInsulin = sp.getBoolean(app.aaps.core.utils.R.string.key_autotune_tune_insulin_curve, false)
+        val tuneInsulin = preferences.get(BooleanKey.AutotuneTuneInsulinCurve)
         if (tuneInsulin) {
             var minDeviations = 1000000.0
             val diaDeviations: MutableList<DiaDeviation> = ArrayList()
@@ -141,11 +143,11 @@ class AutotunePrep @Inject constructor(
     //    private static Logger log = LoggerFactory.getLogger(AutotunePlugin.class);
     fun categorizeBGDatums(tunedProfile: ATProfile, localInsulin: LocalInsulin, verbose: Boolean = true): PreppedGlucose? {
         //lib/meals is called before to get only meals data (in AAPS it's done in AutotuneIob)
-        val treatments: MutableList<Carbs> = autotuneIob.meals
-        val boluses: MutableList<Bolus> = autotuneIob.boluses
+        val treatments: MutableList<CA> = autotuneIob.meals
+        val boluses: MutableList<BS> = autotuneIob.boluses
         // Bloc between #21 and # 54 replaced by bloc below (just remove BG value below 39, Collections.sort probably not necessary because BG values already sorted...)
         val glucose = autotuneIob.glucose
-        val glucoseData: MutableList<GlucoseValue> = ArrayList()
+        val glucoseData: MutableList<GV> = ArrayList()
         for (i in glucose.indices) {
             if (glucose[i].value > 39) {
                 glucoseData.add(glucose[i])
@@ -312,7 +314,7 @@ class AutotunePrep @Inject constructor(
 
             // Then, calculate carb absorption for that 5m interval using the deviation.
             if (mealCOB > 0) {
-                val ci = max(deviation, sp.getDouble(app.aaps.core.utils.R.string.key_openapsama_min_5m_carbimpact, 3.0))
+                val ci = max(deviation, preferences.get(DoubleKey.ApsSmbMin5MinCarbsImpact))
                 val absorbed = ci * tunedProfile.ic / sens
                 // Store the COB, and use it as the starting point for the next data point.
                 mealCOB = max(0.0, mealCOB - absorbed)
@@ -463,7 +465,7 @@ class AutotunePrep @Inject constructor(
         var isfLength = isfGlucoseData.size
         val uamLength = uamGlucoseData.size
         var basalLength = basalGlucoseData.size
-        if (sp.getBoolean(app.aaps.core.utils.R.string.key_autotune_categorize_uam_as_basal, false)) {
+        if (preferences.get(BooleanKey.AutotuneCategorizeUamAsBasal)) {
             //aapsLogger.debug(LTag.AUTOTUNE, "Categorizing all UAM data as basal.")
             if (verbose)
                 log("Categorizing all UAM data as basal.")
@@ -539,7 +541,7 @@ class AutotunePrep @Inject constructor(
     }
 
     //dosed.js full
-    private fun dosed(start: Long, end: Long, treatments: List<Bolus>): Double {
+    private fun dosed(start: Long, end: Long, treatments: List<BS>): Double {
         var insulinDosed = 0.0
         //aapsLogger.debug(LTag.AUTOTUNE, "No treatments to process.")
         if (treatments.isEmpty()) {

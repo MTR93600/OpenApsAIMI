@@ -87,6 +87,18 @@
     <string name="cobcompared">Активн углеводы %1$s %2$.0f</string>
     <string name="triggerHeartRate">Частота сердечных сокращений</string>
     <string name="triggerHeartRateDesc">ЧСС%1$s%2$.0f</string>
+    <string name="triggerSensorAgeLabel">Время, отработанное сенсором</string>
+    <string name="triggerSensorAgeDesc">Отработанное сенсором время %1$s %2$.1f час</string>
+    <string name="triggerCannulaAgeLabel">Время, отработанное катетером помпы</string>
+    <string name="triggerCannulaAgeDesc">Отработанное катетером время %1$s %2$.1f час</string>
+    <string name="triggerInsulinAgeLabel">Инсулин проработал</string>
+    <string name="triggerInsulinAgeDesc">Время отработанное инсулином %1$s %2$.1f час</string>
+    <string name="triggerPumpBatteryAgeLabel">Время отработанное батареей помпы</string>
+    <string name="triggerPumpBatteryAgeDesc">Батарея помпы отработала %1$s %2$.1f час</string>
+    <string name="triggerReservoirLevelLabel">Уровень резервуара</string>
+    <string name="triggerReservoirLevelDesc">Уровень резервуара %1$s %2$.0f</string>
+    <string name="triggerPumpBatteryLevelLabel">Уровень заряда батареи помпы</string>
+    <string name="triggerPumpBatteryLevelDesc">Уровень заряда батареи помпы %1$s %2$.0f</string>
     <string name="iob_u">Акт инс IOB [U]:</string>
     <string name="distance_short">Расст [м]:</string>
     <string name="recurringTime">Время повторения</string>
@@ -116,4 +128,11 @@
     <string name="time_to_eat">Пора есть!\n Запустите помощник болюса снова для подсчета.</string>
     <string name="time_to_bolus">Пора дать болюс!\nЗапустите помощник болюса и повторите расчет.</string>
     <string name="error_setting_reminder">Ошибка при настройке будущего оповещения</string>
+    <!--    Autotune-->
+    <string name="autotune_profile_name">Профиль автотюн %1$s</string>
+    <string name="autotune_run">Выполнить Autotune</string>
+    <string name="autotune_run_without_autoswitch">Autotune выполнен без переключения профиля</string>
+    <string name="autotune_run_with_autoswitch">Autotune выполнен и профиль переключён автоматически</string>
+    <string name="autotune_run_with_error">Ошибка во время последнего выполнения Autotune</string>
+    <string name="autotune_run_cancelled">Обнаружен другой запуск Autotune, выполнение отменено</string>
 </resources>

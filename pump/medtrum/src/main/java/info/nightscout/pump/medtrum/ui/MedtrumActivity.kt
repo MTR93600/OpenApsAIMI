@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.lifecycle.ViewModelProvider
+import app.aaps.core.interfaces.pump.BlePreCheck
 import app.aaps.core.utils.extensions.safeGetSerializableExtra
 import info.nightscout.pump.medtrum.R
 import info.nightscout.pump.medtrum.code.PatchStep
@@ -14,8 +15,11 @@ import info.nightscout.pump.medtrum.comm.enums.MedtrumPumpState
 import info.nightscout.pump.medtrum.databinding.ActivityMedtrumBinding
 import info.nightscout.pump.medtrum.extension.replaceFragmentInActivity
 import info.nightscout.pump.medtrum.ui.viewmodel.MedtrumViewModel
+import javax.inject.Inject
 
 class MedtrumActivity : MedtrumBaseActivity<ActivityMedtrumBinding>() {
+
+    @Inject lateinit var blePreCheck: BlePreCheck
 
     override fun getLayoutId(): Int = R.layout.activity_medtrum
 
@@ -27,6 +31,8 @@ class MedtrumActivity : MedtrumBaseActivity<ActivityMedtrumBinding>() {
         title = getString(R.string.change_patch_label)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setDisplayShowHomeEnabled(true)
+
+        blePreCheck.prerequisitesCheck(this)
 
         binding.apply {
             viewModel = ViewModelProvider(this@MedtrumActivity, viewModelFactory)[MedtrumViewModel::class.java]
@@ -43,7 +49,6 @@ class MedtrumActivity : MedtrumBaseActivity<ActivityMedtrumBinding>() {
                         PatchStep.ATTACH_PATCH             -> setupViewFragment(MedtrumAttachPatchFragment.newInstance())
                         PatchStep.ACTIVATE                 -> setupViewFragment(MedtrumActivateFragment.newInstance())
                         PatchStep.ACTIVATE_COMPLETE        -> setupViewFragment(MedtrumActivateCompleteFragment.newInstance())
-                        PatchStep.ERROR                    -> Unit // Do nothing, let activity handle this
                         PatchStep.RETRY_ACTIVATION         -> setupViewFragment(MedtrumRetryActivationFragment.newInstance())
                         PatchStep.RETRY_ACTIVATION_CONNECT -> setupViewFragment(MedtrumRetryActivationConnectFragment.newInstance())
                         PatchStep.START_DEACTIVATION       -> setupViewFragment(MedtrumStartDeactivationFragment.newInstance())

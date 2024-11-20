@@ -359,6 +359,7 @@ class BgGraphBuilder(
         xAxis.textSize = 10
         xAxis.setHasLines(true)
         xAxis.lineColor = gridColour
+        xAxis.lineColor = gridColour
         xAxis.textColor = gridColour
         return xAxis
     }

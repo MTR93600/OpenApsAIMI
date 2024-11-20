@@ -30,8 +30,6 @@
     <string name="status">Status:</string>
     <string name="patient_name">Patientens namn</string>
     <string name="patient_name_summary">Vänligen ange patientens namn eller smeknamn för att kunna skilja mellan flera uppsättningar av inställningar</string>
-    <string name="privacy_settings">Sekretessinställningar</string>
-    <string name="privacy_summary">Du kan ange valfri e-postadress om du vill få meddelanden om appkrascher. Det här är ingen automatiserad tjänst. Du kommer att kontaktas av utvecklare i farliga situationer.</string>
     <string name="diawarning">Kom ihåg: De nya insulinprofilerna kräver en duration (DIA) på minst 5 timmar. En DIA på 5-6 timmar enligt de nya profilerna är ungefär lika med DIA 3 timmar enligt de gamla insulinprofilerna.</string>
     <string name="profile">Profil</string>
     <string name="doprofileswitch">Genomför profilbyte</string>
@@ -96,7 +94,6 @@
     <string name="check_preferences_before_import">Vänligen kontrollera inställningarna innan du importerar:</string>
     <string name="check_preferences_cannot_import">Inställningarna kan inte importeras!</string>
     <string name="check_preferences_dangerous_import">Inställningar bör inte importeras!</string>
-    <string name="nav_export">Exportera inställningar</string>
     <string name="export_to">Exportera inställningar till</string>
     <string name="import_from">Importera inställningar från</string>
     <string name="setting_imported">Inställningar importerade</string>
@@ -109,7 +106,6 @@
     <string name="restartingapp">Avslutar appen för att inställningarna ska läsas in.</string>
     <string name="ue_exported">Användarposter exporterade</string>
     <string name="protection">Skydd</string>
-    <string name="master_password_missing">Huvudlösenord har inte angetts.\n\nAnge huvudlösenord i Inställningar (%1$s &#8594; %2$s)</string>
     <!--    Maintenance-->
     <string name="maintenance">Underhåll</string>
     <string name="maintenance_shortname">UH</string>

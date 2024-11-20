@@ -8,29 +8,32 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.TextView
+import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.configuration.Config
-import app.aaps.core.interfaces.extensions.toVisibility
-import app.aaps.core.interfaces.extensions.toVisibilityKeepSpace
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.overview.OverviewMenus
 import app.aaps.core.interfaces.plugin.ActivePlugin
-import app.aaps.core.interfaces.profile.DefaultValueHelper
+import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventAutosensCalculationFinished
 import app.aaps.core.interfaces.rx.events.EventCustomCalculationFinished
+import app.aaps.core.interfaces.rx.events.EventIobCalculationProgress
 import app.aaps.core.interfaces.rx.events.EventRefreshOverview
 import app.aaps.core.interfaces.rx.events.EventScale
 import app.aaps.core.interfaces.rx.events.EventUpdateOverviewGraph
 import app.aaps.core.interfaces.utils.DateUtil
-import app.aaps.core.interfaces.utils.T
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
-import app.aaps.core.main.events.EventIobCalculationProgress
-import app.aaps.core.main.workflow.CalculationWorkflow
+import app.aaps.core.interfaces.workflow.CalculationWorkflow
+import app.aaps.core.keys.Preferences
+import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.ui.activities.TranslatedDaggerAppCompatActivity
+import app.aaps.core.ui.extensions.toVisibility
+import app.aaps.core.ui.extensions.toVisibilityKeepSpace
 import app.aaps.databinding.ActivityHistorybrowseBinding
+import app.aaps.plugins.main.R
 import app.aaps.plugins.main.general.overview.graphData.GraphData
 import com.google.android.material.datepicker.MaterialDatePicker
 import com.jjoe64.graphview.GraphView
@@ -47,7 +50,7 @@ class HistoryBrowseActivity : TranslatedDaggerAppCompatActivity() {
     @Inject lateinit var historyBrowserData: HistoryBrowserData
     @Inject lateinit var injector: HasAndroidInjector
     @Inject lateinit var aapsSchedulers: AapsSchedulers
-    @Inject lateinit var defaultValueHelper: DefaultValueHelper
+    @Inject lateinit var preferences: Preferences
     @Inject lateinit var activePlugin: ActivePlugin
     @Inject lateinit var config: Config
     @Inject lateinit var fabricPrivacy: FabricPrivacy
@@ -58,6 +61,7 @@ class HistoryBrowseActivity : TranslatedDaggerAppCompatActivity() {
     @Inject lateinit var rxBus: RxBus
     @Inject lateinit var rh: ResourceHelper
     @Inject lateinit var aapsLogger: AAPSLogger
+    @Inject lateinit var profileUtil: ProfileUtil
 
     private val disposable = CompositeDisposable()
 
@@ -109,6 +113,7 @@ class HistoryBrowseActivity : TranslatedDaggerAppCompatActivity() {
             loadAll("onLongClickZoom")
             true
         }
+        binding.chartMenuButton.visibility = preferences.simpleMode.not().toVisibility()
 
         binding.date.setOnClickListener {
             MaterialDatePicker.Builder.datePicker()
@@ -137,7 +142,7 @@ class HistoryBrowseActivity : TranslatedDaggerAppCompatActivity() {
         binding.bgGraph.gridLabelRenderer?.reloadStyles()
         binding.bgGraph.gridLabelRenderer?.labelVerticalWidth = axisWidth
 
-        overviewMenus.setupChartMenu(context, binding.chartMenuButton)
+        overviewMenus.setupChartMenu(binding.chartMenuButton, binding.scaleButton)
         prepareGraphsIfNeeded(overviewMenus.setting.size)
         savedInstanceState?.let { bundle ->
             rangeToDisplay = bundle.getInt("rangeToDisplay", 0)
@@ -174,6 +179,10 @@ class HistoryBrowseActivity : TranslatedDaggerAppCompatActivity() {
             .subscribe({ updateCalcProgress(it.finalPercent) }, fabricPrivacy::logException)
         disposable += rxBus
             .toObservable(EventUpdateOverviewGraph::class.java)
+            .observeOn(aapsSchedulers.main)
+            .subscribe({ updateGUI("EventRefreshOverview") }, fabricPrivacy::logException)
+        disposable += rxBus
+            .toObservable(EventRefreshOverview::class.java)
             .observeOn(aapsSchedulers.main)
             .subscribe({ updateGUI("EventRefreshOverview") }, fabricPrivacy::logException)
         disposable += rxBus
@@ -293,11 +302,15 @@ class HistoryBrowseActivity : TranslatedDaggerAppCompatActivity() {
         aapsLogger.debug(LTag.UI, "updateGui $from")
 
         updateDate()
-
+        binding.scaleButton.text = overviewMenus.scaleString(rangeToDisplay)
         val pump = activePlugin.activePump
         val graphData = GraphData(injector, binding.bgGraph, historyBrowserData.overviewData)
         val menuChartSettings = overviewMenus.setting
-        graphData.addInRangeArea(historyBrowserData.overviewData.fromTime, historyBrowserData.overviewData.endTime, defaultValueHelper.determineLowLine(), defaultValueHelper.determineHighLine())
+        graphData.addInRangeArea(
+            historyBrowserData.overviewData.fromTime, historyBrowserData.overviewData.endTime,
+            preferences.get(UnitDoubleKey.OverviewLowMark),
+            preferences.get(UnitDoubleKey.OverviewHighMark)
+        )
         graphData.addBgReadings(menuChartSettings[0][OverviewMenus.CharType.PRE.ordinal], context)
         graphData.addBucketedData()
         graphData.addTreatments(context)
@@ -329,9 +342,11 @@ class HistoryBrowseActivity : TranslatedDaggerAppCompatActivity() {
             var useCobForScale = false
             var useDevForScale = false
             var useRatioForScale = false
+            var useVarSensForScale = false
             var useDSForScale = false
             var useBGIForScale = false
             var useHRForScale = false
+            var useSTEPSForScale = false
             when {
                 menuChartSettings[g + 1][OverviewMenus.CharType.ABS.ordinal]      -> useABSForScale = true
                 menuChartSettings[g + 1][OverviewMenus.CharType.IOB.ordinal]      -> useIobForScale = true
@@ -339,8 +354,10 @@ class HistoryBrowseActivity : TranslatedDaggerAppCompatActivity() {
                 menuChartSettings[g + 1][OverviewMenus.CharType.DEV.ordinal]      -> useDevForScale = true
                 menuChartSettings[g + 1][OverviewMenus.CharType.BGI.ordinal]      -> useBGIForScale = true
                 menuChartSettings[g + 1][OverviewMenus.CharType.SEN.ordinal]      -> useRatioForScale = true
+                menuChartSettings[g + 1][OverviewMenus.CharType.VAR_SEN.ordinal]  -> useVarSensForScale = true
                 menuChartSettings[g + 1][OverviewMenus.CharType.DEVSLOPE.ordinal] -> useDSForScale = true
                 menuChartSettings[g + 1][OverviewMenus.CharType.HR.ordinal]       -> useHRForScale = true
+                menuChartSettings[g + 1][OverviewMenus.CharType.STEPS.ordinal]    -> useSTEPSForScale = true
             }
             val alignDevBgiScale = menuChartSettings[g + 1][OverviewMenus.CharType.DEV.ordinal] && menuChartSettings[g + 1][OverviewMenus.CharType.BGI.ordinal]
 
@@ -350,9 +367,10 @@ class HistoryBrowseActivity : TranslatedDaggerAppCompatActivity() {
             if (menuChartSettings[g + 1][OverviewMenus.CharType.DEV.ordinal]) secondGraphData.addDeviations(useDevForScale, 1.0)
             if (menuChartSettings[g + 1][OverviewMenus.CharType.BGI.ordinal]) secondGraphData.addMinusBGI(useBGIForScale, if (alignDevBgiScale) 1.0 else 0.8)
             if (menuChartSettings[g + 1][OverviewMenus.CharType.SEN.ordinal]) secondGraphData.addRatio(useRatioForScale, if (useRatioForScale) 1.0 else 0.8)
+            if (menuChartSettings[g + 1][OverviewMenus.CharType.VAR_SEN.ordinal]) secondGraphData.addVarSens(useVarSensForScale, if (useVarSensForScale) 1.0 else 0.8)
             if (menuChartSettings[g + 1][OverviewMenus.CharType.DEVSLOPE.ordinal] && config.isDev()) secondGraphData.addDeviationSlope(useDSForScale, 1.0)
             if (menuChartSettings[g + 1][OverviewMenus.CharType.HR.ordinal] && config.isDev()) secondGraphData.addHeartRate(useHRForScale, 1.0)
-
+            if (menuChartSettings[g + 1][OverviewMenus.CharType.STEPS.ordinal] && config.isDev()) secondGraphData.addSteps(useSTEPSForScale, 1.0)
             // set manual x bounds to have nice steps
             secondGraphData.formatAxis(historyBrowserData.overviewData.fromTime, historyBrowserData.overviewData.endTime)
             secondGraphData.addNowLine(now)
@@ -367,8 +385,10 @@ class HistoryBrowseActivity : TranslatedDaggerAppCompatActivity() {
                     menuChartSettings[g + 1][OverviewMenus.CharType.DEV.ordinal] ||
                     menuChartSettings[g + 1][OverviewMenus.CharType.BGI.ordinal] ||
                     menuChartSettings[g + 1][OverviewMenus.CharType.SEN.ordinal] ||
+                    menuChartSettings[g + 1][OverviewMenus.CharType.VAR_SEN.ordinal] ||
                     menuChartSettings[g + 1][OverviewMenus.CharType.DEVSLOPE.ordinal] ||
-                    menuChartSettings[g + 1][OverviewMenus.CharType.HR.ordinal]
+                    menuChartSettings[g + 1][OverviewMenus.CharType.HR.ordinal] ||
+                    menuChartSettings[g + 1][OverviewMenus.CharType.STEPS.ordinal]
                 ).toVisibility()
             secondaryGraphsData[g].performUpdate()
         }

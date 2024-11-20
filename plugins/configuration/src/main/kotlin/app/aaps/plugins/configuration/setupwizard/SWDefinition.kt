@@ -6,16 +6,16 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.appcompat.app.AppCompatActivity
+import app.aaps.core.data.configuration.Constants
+import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.androidPermissions.AndroidPermission
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.configuration.ConfigBuilder
-import app.aaps.core.interfaces.configuration.Constants
 import app.aaps.core.interfaces.constraints.Objectives
 import app.aaps.core.interfaces.maintenance.ImportExportPrefs
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
-import app.aaps.core.interfaces.plugin.PluginType
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.Medtrum
 import app.aaps.core.interfaces.pump.OmnipodDash
@@ -30,8 +30,13 @@ import app.aaps.core.interfaces.rx.events.EventSWUpdate
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.HardLimits
-import app.aaps.core.main.profile.ProfileSealed
-import app.aaps.core.main.utils.CryptoUtil
+import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.IntKey
+import app.aaps.core.keys.Preferences
+import app.aaps.core.keys.StringKey
+import app.aaps.core.keys.UnitDoubleKey
+import app.aaps.core.objects.crypto.CryptoUtil
+import app.aaps.core.objects.profile.ProfileSealed
 import app.aaps.core.utils.isRunningTest
 import app.aaps.plugins.configuration.R
 import app.aaps.plugins.configuration.setupwizard.elements.SWBreak
@@ -45,7 +50,6 @@ import app.aaps.plugins.configuration.setupwizard.elements.SWFragment
 import app.aaps.plugins.configuration.setupwizard.elements.SWHtmlLink
 import app.aaps.plugins.configuration.setupwizard.elements.SWInfoText
 import app.aaps.plugins.configuration.setupwizard.elements.SWPlugin
-import app.aaps.plugins.configuration.setupwizard.elements.SWPreference
 import app.aaps.plugins.configuration.setupwizard.elements.SWRadioButton
 import dagger.android.HasAndroidInjector
 import javax.inject.Inject
@@ -58,6 +62,7 @@ class SWDefinition @Inject constructor(
     private val context: Context,
     private val rh: ResourceHelper,
     private val sp: SP,
+    private val preferences: Preferences,
     private val profileFunction: ProfileFunction,
     private val activePlugin: ActivePlugin,
     private val commandQueue: CommandQueue,
@@ -76,9 +81,11 @@ class SWDefinition @Inject constructor(
 
     fun getScreens(): List<SWScreen> {
         if (screens.isEmpty()) {
-            if (config.APS) swDefinitionFull()
-            else if (config.PUMPCONTROL) swDefinitionPumpControl()
-            else if (config.NSCLIENT) swDefinitionNSClient()
+            when {
+                config.APS -> swDefinitionFull()
+                config.PUMPCONTROL -> swDefinitionPumpControl()
+                config.NSCLIENT -> swDefinitionNSClient()
+            }
         }
         return screens
     }
@@ -113,26 +120,26 @@ class SWDefinition @Inject constructor(
             .skippable(false)
             .add(
                 SWRadioButton(injector)
-                    .option(R.array.unitsArray, R.array.unitsValues)
-                    .preferenceId(app.aaps.core.utils.R.string.key_units).label(R.string.units)
+                    .option(uiInteraction.unitsEntries, uiInteraction.unitsValues)
+                    .preference(StringKey.GeneralUnits.key).label(R.string.units)
                     .comment(R.string.setupwizard_units_prompt)
             )
-            .validator { sp.contains(app.aaps.core.utils.R.string.key_units) }
+            .validator { preferences.getIfExists(StringKey.GeneralUnits) != null }
 
     private val displaySettings
         get() = SWScreen(injector, R.string.display_settings)
             .skippable(false)
             .add(
-                SWEditNumberWithUnits(injector, Constants.LOW_MARK * Constants.MGDL_TO_MMOLL, 3.0, 8.0)
-                    .preferenceId(app.aaps.core.utils.R.string.key_low_mark)
+                SWEditNumberWithUnits(injector, UnitDoubleKey.OverviewLowMark.defaultValue * Constants.MGDL_TO_MMOLL, 3.0, 8.0)
+                    .preference(UnitDoubleKey.OverviewLowMark)
                     .updateDelay(5)
                     .label(R.string.low_mark)
                     .comment(R.string.low_mark_comment)
             )
             .add(SWBreak(injector))
             .add(
-                SWEditNumberWithUnits(injector, Constants.HIGH_MARK * Constants.MGDL_TO_MMOLL, 5.0, 20.0)
-                    .preferenceId(app.aaps.core.utils.R.string.key_high_mark)
+                SWEditNumberWithUnits(injector, UnitDoubleKey.OverviewHighMark.defaultValue * Constants.MGDL_TO_MMOLL, 5.0, 20.0)
+                    .preference(UnitDoubleKey.OverviewHighMark)
                     .updateDelay(5)
                     .label(R.string.high_mark)
                     .comment(R.string.high_mark_comment)
@@ -207,22 +214,16 @@ class SWDefinition @Inject constructor(
         get() = SWScreen(injector, R.string.patient_name)
             .skippable(true)
             .add(SWInfoText(injector).label(R.string.patient_name_summary))
-            .add(SWEditString(injector).validator(String::isNotEmpty).preferenceId(app.aaps.core.utils.R.string.key_patient_name))
-
-    private val privacy
-        get() = SWScreen(injector, R.string.privacy_settings)
-            .skippable(true)
-            .add(SWInfoText(injector).label(R.string.privacy_summary))
-            .add(SWPreference(injector, this).option(R.xml.pref_datachoices))
+            .add(SWEditString(injector).validator(String::isNotEmpty).preference(StringKey.GeneralPatientName))
 
     private val screenMasterPassword
         get() = SWScreen(injector, app.aaps.core.ui.R.string.master_password)
             .skippable(false)
             .add(SWInfoText(injector).label(app.aaps.core.ui.R.string.master_password))
-            .add(SWEditEncryptedPassword(injector, cryptoUtil).preferenceId(app.aaps.core.utils.R.string.key_master_password))
+            .add(SWEditEncryptedPassword(injector, cryptoUtil).preference(StringKey.ProtectionMasterPassword))
             .add(SWBreak(injector))
             .add(SWInfoText(injector).label(R.string.master_password_summary))
-            .validator { !cryptoUtil.checkPassword("", sp.getString(app.aaps.core.utils.R.string.key_master_password, "")) }
+            .validator { !cryptoUtil.checkPassword("", preferences.get(StringKey.ProtectionMasterPassword)) }
 
     private val screenAge
         get() = SWScreen(injector, app.aaps.core.ui.R.string.patient_type)
@@ -230,30 +231,30 @@ class SWDefinition @Inject constructor(
             .add(SWBreak(injector))
             .add(
                 SWRadioButton(injector)
-                    .option(app.aaps.core.ui.R.array.ageArray, app.aaps.core.utils.R.array.ageValues)
-                    .preferenceId(app.aaps.core.utils.R.string.key_age)
+                    .option(hardLimits.ageEntries(), hardLimits.ageEntryValues())
+                    .preference(StringKey.SafetyAge.key)
                     .label(app.aaps.core.ui.R.string.patient_type)
                     .comment(app.aaps.core.ui.R.string.patient_age_summary)
             )
             .add(SWBreak(injector))
             .add(
                 SWEditNumber(injector, 3.0, 0.1, 25.0)
-                    .preferenceId(app.aaps.core.utils.R.string.key_treatmentssafety_maxbolus)
+                    .preference(DoubleKey.SafetyMaxBolus)
                     .updateDelay(5)
                     .label(app.aaps.core.ui.R.string.max_bolus_title)
                     .comment(R.string.common_values)
             )
             .add(
                 SWEditIntNumber(injector, 48, 1, 100)
-                    .preferenceId(app.aaps.core.utils.R.string.key_treatmentssafety_maxcarbs)
+                    .preference(IntKey.SafetyMaxCarbs)
                     .updateDelay(5)
                     .label(app.aaps.core.ui.R.string.max_carbs_title)
                     .comment(R.string.common_values)
             )
             .validator {
-                sp.contains(app.aaps.core.utils.R.string.key_age)
-                    && sp.getDouble(app.aaps.core.utils.R.string.key_treatmentssafety_maxbolus, 0.0) > 0
-                    && sp.getInt(app.aaps.core.utils.R.string.key_treatmentssafety_maxcarbs, 0) > 0
+                preferences.getIfExists(StringKey.SafetyAge) != null
+                    && preferences.get(DoubleKey.SafetyMaxBolus) > 0
+                    && preferences.get(IntKey.SafetyMaxCarbs) > 0
             }
 
     private val screenInsulin
@@ -284,7 +285,7 @@ class SWDefinition @Inject constructor(
             )
             .validator {
                 activePlugin.activeProfileSource.profile?.getDefaultProfile()
-                    ?.let { ProfileSealed.Pure(it).isValid("StartupWizard", activePlugin.activePump, config, rh, rxBus, hardLimits, false).isValid }
+                    ?.let { ProfileSealed.Pure(it, activePlugin).isValid("StartupWizard", activePlugin.activePump, config, rh, rxBus, hardLimits, false).isValid }
                     ?: false
             }
             .visibility { (activePlugin.activeProfileSource as PluginBase).isEnabled() }
@@ -353,11 +354,11 @@ class SWDefinition @Inject constructor(
             .skippable(false)
             .add(
                 SWRadioButton(injector)
-                    .option(app.aaps.core.ui.R.array.aps_modeArray, app.aaps.core.ui.R.array.aps_modeValues)
-                    .preferenceId(app.aaps.core.utils.R.string.key_aps_mode).label(R.string.apsmode_title)
+                    .option(loop.entries(), loop.entryValues())
+                    .preference(StringKey.LoopApsMode.key).label(R.string.apsmode_title)
                     .comment(R.string.setupwizard_preferred_aps_mode)
             )
-            .validator { sp.contains(app.aaps.core.utils.R.string.key_aps_mode) }
+            .validator { preferences.getIfExists(StringKey.LoopApsMode) != null }
 
     private val screenLoop
         get() = SWScreen(injector, R.string.configbuilder_loop)
@@ -410,7 +411,6 @@ class SWDefinition @Inject constructor(
             .add(screenPermissionStore)
             .add(screenMasterPassword)
             .add(screenImport)
-            .add(privacy)
             .add(screenUnits)
             .add(displaySettings)
             .add(screenNsClient)

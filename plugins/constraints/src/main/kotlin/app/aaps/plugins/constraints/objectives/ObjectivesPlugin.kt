@@ -1,11 +1,11 @@
 package app.aaps.plugins.constraints.objectives
 
+import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.Objectives
 import app.aaps.core.interfaces.constraints.Objectives.Companion.AUTOSENS_OBJECTIVE
 import app.aaps.core.interfaces.constraints.Objectives.Companion.AUTO_OBJECTIVE
-import app.aaps.core.interfaces.constraints.Objectives.Companion.DYN_ISF_OBJECTIVE
 import app.aaps.core.interfaces.constraints.Objectives.Companion.FIRST_OBJECTIVE
 import app.aaps.core.interfaces.constraints.Objectives.Companion.MAXBASAL_OBJECTIVE
 import app.aaps.core.interfaces.constraints.Objectives.Companion.MAXIOB_ZERO_CL_OBJECTIVE
@@ -15,7 +15,6 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
-import app.aaps.core.interfaces.plugin.PluginType
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.plugins.constraints.R
@@ -23,7 +22,6 @@ import app.aaps.plugins.constraints.objectives.objectives.Objective
 import app.aaps.plugins.constraints.objectives.objectives.Objective0
 import app.aaps.plugins.constraints.objectives.objectives.Objective1
 import app.aaps.plugins.constraints.objectives.objectives.Objective10
-import app.aaps.plugins.constraints.objectives.objectives.Objective11
 import app.aaps.plugins.constraints.objectives.objectives.Objective2
 import app.aaps.plugins.constraints.objectives.objectives.Objective3
 import app.aaps.plugins.constraints.objectives.objectives.Objective4
@@ -37,7 +35,7 @@ import javax.inject.Singleton
 
 @Singleton
 class ObjectivesPlugin @Inject constructor(
-    injector: HasAndroidInjector,
+    private val injector: HasAndroidInjector,
     aapsLogger: AAPSLogger,
     rh: ResourceHelper,
     private val activePlugin: ActivePlugin,
@@ -53,7 +51,7 @@ class ObjectivesPlugin @Inject constructor(
         .pluginName(app.aaps.core.ui.R.string.objectives)
         .shortName(R.string.objectives_shortname)
         .description(R.string.description_objectives),
-    aapsLogger, rh, injector
+    aapsLogger, rh
 ), PluginConstraints, Objectives {
 
     var objectives: MutableList<Objective> = ArrayList()
@@ -61,6 +59,7 @@ class ObjectivesPlugin @Inject constructor(
     init {
         setupObjectives()
     }
+
     override fun specialEnableCondition(): Boolean =
         activePlugin.activePump.pumpDescription.isTempBasalCapable
 
@@ -76,7 +75,6 @@ class ObjectivesPlugin @Inject constructor(
         objectives.add(Objective7(injector))
         objectives.add(Objective9(injector))
         objectives.add(Objective10(injector))
-        objectives.add(Objective11(injector))
         // edit companion object if you remove/add Objective
     }
 
@@ -135,12 +133,6 @@ class ObjectivesPlugin @Inject constructor(
     override fun isSMBModeEnabled(value: Constraint<Boolean>): Constraint<Boolean> {
         if (!objectives[SMB_OBJECTIVE].isStarted)
             value.set(false, rh.gs(R.string.objectivenotstarted, SMB_OBJECTIVE + 1), this)
-        return value
-    }
-
-    override fun isDynIsfModeEnabled(value: Constraint<Boolean>): Constraint<Boolean> {
-        if (!objectives[DYN_ISF_OBJECTIVE].isStarted)
-            value.set(false, rh.gs(R.string.objectivenotstarted, DYN_ISF_OBJECTIVE + 1), this)
         return value
     }
 

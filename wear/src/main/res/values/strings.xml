@@ -53,6 +53,10 @@
     <string name="pref_3_hours">3 hours</string>
     <string name="pref_4_hours">4 hours</string>
     <string name="pref_5_hours">5 hours</string>
+    <string name="pref_1_min">disabled</string>
+    <string name="pref_5_min">5 min</string>
+    <string name="pref_10_min">10 min</string>
+    <string name="pref_15_min">15 min</string>
     <string name="pref_input_design">Input Design</string>
     <string name="pref_default">Default</string>
     <string name="pref_quick_righty">Quick righty</string>
@@ -180,7 +184,6 @@
     <string name="wear_control_no_data">No data available</string>
     <string name="key_preference_id" translatable="false">preference_id</string>
     <string name="key_quickwizard" translatable="false">QuickWizard</string>
-    <string name="key_wear_control" translatable="false">wearcontrol</string>
     <string name="key_units_mgdl" translatable="false">units_mgdl</string>
     <string name="key_bolus_wizard_percentage" translatable="false">boluswizard_percentage</string>
     <string name="key_treatments_safety_max_carbs" translatable="false">treatmentssafety_maxcarbs</string>
@@ -226,8 +229,6 @@
     <string name="key_dark" translatable="false">dark</string>
     <string name="key_input_design" translatable="false">input_design</string>
     <string name="key_complication_tap_action" translatable="false">complication_tap_action</string>
-    <string name="key_carbs_button_increment_1" translatable="false">carbs_button_increment_1</string>
-    <string name="key_carbs_button_increment_2" translatable="false">carbs_button_increment_2</string>
     <string name="key_enable_custom_setting" translatable="false">enable_custom_setting</string>
     <string name="key_digital_watchface" translatable="false">digital_watchface</string>
     <string name="key_digital_timing" translatable="false">digital_timing</string>
@@ -263,4 +264,30 @@
     <string name="error">!err!</string>
     <string name="key_heart_rate_sampling" translatable="false">heart_rate_sampling</string>
     <string name="pref_heartRateSampling">Heart Rate</string>
+    <string name="key_heart_rate_smoothing" translatable="false">heart_rate_smoothing</string>
+    <string name="pref_heartRateSmoothing">HR Smoothing</string>
+    <string name="key_steps_sampling" translatable="false">key_steps_sampling</string>
+    <string name="pref_stepsSampling">Enable Steps Count</string>
+    <string name="tile_tempt_1">Temp Target 1</string>
+    <string name="tile_tempt_2">Temp Target 2</string>
+    <string name="tile_tempt_3">Temp Target 3</string>
+    <string name="tile_tempt_4">Temp Target 4</string>
+    <string name="tile_action_1">Action 1</string>
+    <string name="tile_action_2">Action 2</string>
+    <string name="tile_action_3">Action 3</string>
+    <string name="tile_action_4">Action 4</string>
+    <string name="datalayer_notification_title">Data Layer Foreground Service</string>
+    <string name="datalayer_notification_text">AAPS is running in the foreground. To hide notification go to Developer options, App notifications, Allowed watch apps, select AAPS, Turn off Data Layer Foreground Service Channel notification.</string>
+    <string name="on">ON</string>
+    <string name="off">OFF</string>
+    <string name="complication_full_status">Full Status</string>
+    <string name="complication_full_status_flipped">Full Status (flipped)</string>
+    <string name="complication_blood_glucose">Blood Glucose</string>
+    <string name="complication_br_cob_iob">BR, CoB &amp; IoB</string>
+    <string name="complication_cob_iob">CoB &amp; IoB</string>
+    <string name="complication_cob_icon">CoB Icon</string>
+    <string name="complication_cob_detailed">CoB Detailed</string>
+    <string name="complication_iob_icon">IoB Icon</string>
+    <string name="complication_iob_detailed">IoB Detailed</string>
+    <string name="complication_uploader_phone_battery">Uploader/Phone Battery</string>
 </resources>

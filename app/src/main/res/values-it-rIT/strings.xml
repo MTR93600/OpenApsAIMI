@@ -1,8 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!--    <string name="fi_lang" translatable="false">Finnish</string> -->
-    <!--   <string name="he_lang" translatable="false">Hebrew</string> -->
-    <!--    <string name="ja_lang" translatable="false">Japanese</string> -->
     <string name="nav_preferences_plugin">%1$s Preferenze</string>
     <string name="nav_refreshtreatments">Aggiorna trattamenti da NS</string>
     <string name="nav_exit">Esci</string>
@@ -16,11 +13,6 @@
     <string name="wear">Smartwatch</string>
     <string name="nav_about">Informazioni su</string>
     <string name="smscommunicator_missingphonestatepermission">Autorizzazione stato telefono mancante</string>
-    <string name="ns_alarm_options">Opzioni allarme</string>
-    <string name="ns_alarms">Crea notifiche da allarmi NS</string>
-    <string name="ns_announcements">Crea notifiche da avvisi NS</string>
-    <string name="ns_alarm_stale_data_value_label">Soglia dati non aggiornati [min]</string>
-    <string name="ns_alarm_urgent_stale_data_value_label">Soglia dati non aggiornati da molto tempo [min]</string>
     <string name="sensitivity_warning">Attivando la funzione Autosense, ricorda di inserire tutti i carboidrati assunti. Altrimenti le deviazioni di glicemia dovute ai carboidrati saranno identificate erroneamente come variazione di sensibilità !!</string>
     <string name="notloadedplugins">Non tutti i profili caricati!</string>
     <string name="valuesnotstored">Valori non memorizzati!</string>
@@ -57,4 +49,6 @@
     <string name="count_selected">%1$d selezionati</string>
     <string name="sort_label">Ordina</string>
     <string name="search">Cerca</string>
+    <string name="simple_mode">Modalità semplice</string>
+    <string name="master_password_not_set">Password principale non impostata</string>
 </resources>

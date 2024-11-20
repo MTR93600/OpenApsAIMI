@@ -30,8 +30,6 @@
     <string name="status">Status:</string>
     <string name="patient_name">Name des Patienten</string>
     <string name="patient_name_summary">Bitte gib den Namen des Patienten oder einen Spitznamen an, um mehrere Setups unterscheiden zu können.</string>
-    <string name="privacy_settings">Privatsphäre-Einstellungen</string>
-    <string name="privacy_summary">Du kannst optional eine E-Mail-Adresse angeben, wenn Du bei Absturzberichten kontaktiert werden möchtest. Dies ist keine Automatik, Du wirst von den Entwicklern in gefährlichen Situationen kontaktiert. </string>
     <string name="diawarning">Bitte beachte: Neue Insulin-Profile benötigen einen DIA von mind. 5 Stunden. Eine DIA von 5-6 Stunden im neuen Insulin-Profil entspricht einem DIA von 3 Stunden bei alten Insulin-Profilen.</string>
     <string name="profile">Profil</string>
     <string name="doprofileswitch">Profilwechsel durchführen</string>
@@ -96,7 +94,6 @@
     <string name="check_preferences_before_import">Überprüfe die Einstellungen vor dem Import:</string>
     <string name="check_preferences_cannot_import">Einstellungen können nicht importiert werden!</string>
     <string name="check_preferences_dangerous_import">Einstellungen sollten nicht importiert werden!</string>
-    <string name="nav_export">Einstellungen exportieren</string>
     <string name="export_to">Einstellungen exportieren nach</string>
     <string name="import_from">Importiere Einstellungen von</string>
     <string name="setting_imported">Einstellungen importiert</string>
@@ -109,7 +106,6 @@
     <string name="restartingapp">App wird beendet, um neue Einstellungen zu laden.</string>
     <string name="ue_exported">Benutzereinträge exportiert</string>
     <string name="protection">Schutz</string>
-    <string name="master_password_missing">Das Master-Passwort ist nicht festgelegt!\n\nLege Dein Master-Passwort bitte in den Einstellungen fest (%1$s &#8594; %2$s)</string>
     <!--    Maintenance-->
     <string name="maintenance">Wartung</string>
     <string name="maintenance_shortname">WRTNG</string>

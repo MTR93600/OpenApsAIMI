@@ -30,8 +30,6 @@
     <string name="status">Estado:</string>
     <string name="patient_name">Nombre del paciente</string>
     <string name="patient_name_summary">Proporcione el nombre de paciente o el apodo para diferenciar entre varias configuraciones</string>
-    <string name="privacy_settings">Ajustes de privacidad</string>
-    <string name="privacy_summary">Puedes proporcionar una dirección de correo electrónico opcional si quieres ser notificado sobre fallos de la aplicación. Este no es un servicio automatizado. Los desarrolladores se comunicarán contigo en situaciones peligrosas.</string>
     <string name="diawarning">Por favor, recuerde: nuevos perfiles de insulina requieren DIA de al menos 5h. DIA de 5-6h en nuevos perfiles es lo mismo que DIA de 3h en perfiles antiguos.</string>
     <string name="profile">Perfil</string>
     <string name="doprofileswitch">Hacer cambio de perfil</string>
@@ -68,8 +66,8 @@
     <string name="configbuilder_sync">Sincronización</string>
     <string name="configbuilder_sync_description">Subida de datos y sincronización de plugins</string>
     <string name="configbuilder_constraints_description">¿Qué restricciones se aplican?</string>
-    <string name="configbuilder_loop">Lazo</string>
-    <string name="configbuilder_loop_description">Usa esto para habilitar la integración de lazo de AAPS</string>
+    <string name="configbuilder_loop">Bucle</string>
+    <string name="configbuilder_loop_description">Usa esto para habilitar la integración de bucle de AAPS.</string>
     <string name="configbuilder_insulin_description">¿Qué tipo de insulina estás utilizando?</string>
     <string name="configbuilder_bgsource">Origen de Glucosa</string>
     <string name="configbuilder_bgsource_description">¿Desde dónde debería obtener AAPS los datos?</string>
@@ -96,7 +94,6 @@
     <string name="check_preferences_before_import">Por favor, comprueba los ajustes antes de importar:</string>
     <string name="check_preferences_cannot_import">¡Las preferencias no se pueden importar!</string>
     <string name="check_preferences_dangerous_import">¡Las preferencias no se deben importar!</string>
-    <string name="nav_export">Exportar ajustes</string>
     <string name="export_to">Exportar ajustes a</string>
     <string name="import_from">Importar ajustes desde</string>
     <string name="setting_imported">Ajustes importados</string>
@@ -109,13 +106,14 @@
     <string name="restartingapp">Saliendo de la aplicación para aplicar los ajustes.</string>
     <string name="ue_exported">Entradas de usuario exportadas</string>
     <string name="protection">Protección</string>
-    <string name="master_password_missing">¡La contraseña maestra no está configurada!\n\nPor favor, configure su contraseña maestra en Preferencias (%1$s &#8594; %2$s)</string>
+    <string name="master_password_missing">¡La contraseña maestra no está configurada!\n\nPor favor, configure su contraseña maestra dentro de las Preferencias (%1$s)</string>
     <!--    Maintenance-->
     <string name="maintenance">Mantenimiento</string>
     <string name="maintenance_shortname">MANT</string>
     <string name="description_maintenance">Accede a varias opciones de mantenimiento (p. ej. envío y borrado de registros)</string>
     <string name="database_cleanup">Limpiar base de dados</string>
     <string name="reset_db_confirm">¿Realmente quiere restablecer las bases de datos?</string>
+    <string name="reset_aps_results_confirm">¿Realmente quieres restablecer los resultados almacenados de APS?</string>
     <string name="maintenance_settings">Ajustes de mantenimiento</string>
     <string name="maintenance_email">Correo electrónico</string>
     <string name="maintenance_amount">Número de registros para enviar</string>
@@ -167,4 +165,5 @@
     <string name="metadata_format_new">Nuevo formato cifrado</string>
     <string name="metadata_format_debug">Nuevo formato de depuración (sin cifrar)</string>
     <string name="metadata_format_other">Formato de exportación desconocido</string>
+    <string name="reset_aps_results">Restablecer resultados de APS</string>
 </resources>

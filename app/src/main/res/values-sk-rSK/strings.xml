@@ -1,8 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!--    <string name="fi_lang" translatable="false">Finnish</string> -->
-    <!--   <string name="he_lang" translatable="false">Hebrew</string> -->
-    <!--    <string name="ja_lang" translatable="false">Japanese</string> -->
     <string name="nav_preferences_plugin">Nastavenie pluginu %1$s</string>
     <string name="nav_refreshtreatments">Obnoviť ošetrenia z NS</string>
     <string name="nav_exit">Ukončiť</string>
@@ -16,11 +13,6 @@
     <string name="wear">Wear</string>
     <string name="nav_about">O aplikácii</string>
     <string name="smscommunicator_missingphonestatepermission">Chýba oprávnenia pre zisťovanie stavu telefónu</string>
-    <string name="ns_alarm_options">Nastavenie alarmov</string>
-    <string name="ns_alarms">Vytvoriť oznámenia z alarmov NS</string>
-    <string name="ns_announcements">Vytvoriť oznámenia z upozornení NS</string>
-    <string name="ns_alarm_stale_data_value_label">Hraničná hodnota pre zastaralé dáta [min]</string>
-    <string name="ns_alarm_urgent_stale_data_value_label">Vysoká hraničná hodnota pre zastaralé dáta [min]</string>
     <string name="sensitivity_warning">Pri zapnutej automatickej detekcii citlivosti, nezabudnite vkladať všetky prijaté sacharidy. V opačnom prípade, budú odchýlky mylne vyhodnocované, ako zmena citlivosti !!</string>
     <string name="notloadedplugins">Nenačítané všetky profily!</string>
     <string name="valuesnotstored">Hodnoty nie sú uložené!</string>
@@ -57,4 +49,6 @@
     <string name="count_selected">Vybrané: %1$d</string>
     <string name="sort_label">Zoradiť</string>
     <string name="search">Hľadať</string>
+    <string name="simple_mode">Jednoduchý mód</string>
+    <string name="master_password_not_set">Hlavné heslo nie je nastavené</string>
 </resources>

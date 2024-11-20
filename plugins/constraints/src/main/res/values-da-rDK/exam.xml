@@ -68,7 +68,6 @@
     <string name="basaltest_havingregularhighlow">Når du oplever hyppig højt eller lavt blodsukker.</string>
     <string name="basaltest_weekly">Mindst én gang om ugen.</string>
     <string name="basaltest_fixed">Når de er angivet og valideret, skal disse værdier ikke ændres over tid.</string>
-    <string name="basaltest_hint1">https://wiki.aaps.app/da/latest/Getting-Started/FAQ.html#androidaps-settings</string>
     <string name="prerequisites_label">Forudsætninger</string>
     <string name="prerequisites_what">Hvad er afgørende for at opsætte og bruge AAPS?</string>
     <string name="prerequisites_determinedcorrectprofile">Valideret profilinformationer (Basaler, I:C, ISF, DIA).</string>
@@ -103,7 +102,6 @@
     <string name="troubleshooting_wheretoask">Hvor kan du lede efter hjælp til AAPS?</string>
     <string name="troubleshooting_fb">Du kan bede om råd i \"AAPS-users\" Facebook-gruppen.</string>
     <string name="troubleshooting_wiki">Du bør læse (og genlæse) AAPS-dokumentationen.</string>
-    <string name="troubleshooting_gitter">Du kan bede om råd og notere tekniske problemer eller problemer på AAPS Discord.</string>
     <string name="troubleshooting_yourendo">Du bør spørge din diabetessygeplejerske/endokrinolog.</string>
     <string name="troubleshooting_hint1">https://wiki.aaps.app/da/latest/Installing-AndroidAPS/Update-to-new-version.html#troubleshooting</string>
     <string name="troubleshooting_hint2">https://www.facebook.com/groups/AndroidAPSUsers/</string>
