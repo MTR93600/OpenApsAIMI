@@ -103,11 +103,13 @@ class ProfileSwitchDialog : DialogFragmentWithDate() {
                 ?: 0.0, 0.0, Constants.MAX_PROFILE_SWITCH_DURATION, 10.0, DecimalFormat("0"), false, binding.okcancel.ok,
             textWatcher
         )
+
         binding.percentage.setParams(
             savedInstanceState?.getDouble("percentage")
                 ?: 100.0, Constants.CPP_MIN_PERCENTAGE.toDouble(), Constants.CPP_MAX_PERCENTAGE.toDouble(), 5.0,
             DecimalFormat("0"), false, binding.okcancel.ok, textWatcher
         )
+
         binding.timeshift.setParams(
             savedInstanceState?.getDouble("timeshift")
                 ?: 0.0, Constants.CPP_MIN_TIMESHIFT.toDouble(), Constants.CPP_MAX_TIMESHIFT.toDouble(), 1.0, DecimalFormat("0"), false, binding.okcancel.ok
@@ -118,29 +120,39 @@ class ProfileSwitchDialog : DialogFragmentWithDate() {
             val profileStore = activePlugin.activeProfileSource.profile ?: return
             val profileListToCheck = profileStore.getProfileList()
             val profileList = ArrayList<CharSequence>()
+
             for (profileName in profileListToCheck) {
                 val profileToCheck = activePlugin.activeProfileSource.profile?.getSpecificProfile(profileName.toString())
-                if (profileToCheck != null && ProfileSealed.Pure(profileToCheck, activePlugin).isValid("ProfileSwitch", activePlugin.activePump, config, rh, rxBus, hardLimits, false).isValid)
+
+                if (profileToCheck != null && ProfileSealed.Pure(profileToCheck, activePlugin).isValid("ProfileSwitch", activePlugin.activePump, config, rh, rxBus, hardLimits, false).isValid) {
                     profileList.add(profileName)
+                }
             }
+
             if (profileList.isEmpty()) {
                 dismiss()
                 return
             }
+
             binding.profileList.setAdapter(ArrayAdapter(context, app.aaps.core.ui.R.layout.spinner_centered, profileList))
+
             // set selected to actual profile
-            if (profileName != null)
+            if (profileName != null) {
                 binding.profileList.setText(profileName, false)
-            else {
+
+            } else {
                 binding.profileList.setText(profileList[0], false)
-                for (p in profileList.indices)
-                    if (profileList[p] == profileFunction.getOriginalProfileName())
+
+                for (p in profileList.indices) {
+                    if (profileList[p] == profileFunction.getOriginalProfileName()) {
                         binding.profileList.setText(profileList[p], false)
+                    }
+                }
             }
         }
 
         profileFunction.getProfile()?.let { profile ->
-            if (profile is ProfileSealed.EPS)
+            if (profile is ProfileSealed.EPS) {
                 if (profile.value.originalPercentage != 100 || profile.value.originalTimeshift != 0L) {
                     binding.reuselayout.visibility = View.VISIBLE
                     binding.reusebutton.text = rh.gs(R.string.reuse_profile_pct_hours, profile.value.originalPercentage, T.msecs(profile.value.originalTimeshift).hours().toInt())
@@ -149,7 +161,9 @@ class ProfileSwitchDialog : DialogFragmentWithDate() {
                         binding.timeshift.value = T.msecs(profile.value.originalTimeshift).hours().toDouble()
                     }
                 }
+            }
         }
+
         binding.ttLayout.visibility = View.GONE
         binding.durationLabel.labelFor = binding.duration.editTextId
         binding.percentageLabel.labelFor = binding.percentage.editTextId
@@ -164,37 +178,52 @@ class ProfileSwitchDialog : DialogFragmentWithDate() {
 
     override fun submit(): Boolean {
         if (_binding == null) return false
+
         val profileStore = activePlugin.activeProfileSource.profile
             ?: return false
 
         val actions: LinkedList<String> = LinkedList()
+
         val duration = binding.duration.value.toInt()
-        if (duration > 0L)
+        if (duration > 0L) {
             actions.add(rh.gs(app.aaps.core.ui.R.string.duration) + ": " + rh.gs(app.aaps.core.ui.R.string.format_mins, duration))
+        }
+
         val profileName = binding.profileList.text.toString()
         actions.add(rh.gs(app.aaps.core.ui.R.string.profile) + ": " + profileName)
+
         val percent = binding.percentage.value.toInt()
-        if (percent != 100)
+        if (percent != 100) {
             actions.add(rh.gs(app.aaps.core.ui.R.string.percent) + ": " + percent + "%")
+        }
+
         val timeShift = binding.timeshift.value.toInt()
-        if (timeShift != 0)
+        if (timeShift != 0) {
             actions.add(rh.gs(R.string.timeshift_label) + ": " + rh.gs(app.aaps.core.ui.R.string.format_hours, timeShift.toDouble()))
+        }
+
         val notes = binding.notesLayout.notes.text.toString()
-        if (notes.isNotEmpty())
+        if (notes.isNotEmpty()) {
             actions.add(rh.gs(app.aaps.core.ui.R.string.notes_label) + ": " + notes)
-        if (eventTimeChanged)
+        }
+
+        if (eventTimeChanged) {
             actions.add(rh.gs(app.aaps.core.ui.R.string.time) + ": " + dateUtil.dateAndTimeString(eventTime))
+        }
 
         val isTT = binding.duration.value > 0 && binding.percentage.value < 100 && binding.tt.isChecked
         val target = preferences.get(UnitDoubleKey.OverviewActivityTarget)
         val units = profileFunction.getUnits()
-        if (isTT)
+
+        if (isTT) {
             actions.add(rh.gs(app.aaps.core.ui.R.string.temporary_target) + ": " + rh.gs(app.aaps.core.ui.R.string.activity))
+        }
 
         activity?.let { activity ->
             val ps = profileFunction.buildProfileSwitch(profileStore, profileName, duration, percent, timeShift, eventTime) ?: return@let
+
             val validity = ProfileSealed.PS(ps, activePlugin).isValid(rh.gs(app.aaps.core.ui.R.string.careportal_profileswitch), activePlugin.activePump, config, rh, rxBus, hardLimits, false)
-            if (validity.isValid)
+            if (validity.isValid) {
                 OKDialog.showConfirmation(activity, rh.gs(app.aaps.core.ui.R.string.careportal_profileswitch), HtmlHelper.fromHtml(Joiner.on("<br/>").join(actions)), {
                     if (profileFunction.createProfileSwitch(
                             profileStore = profileStore,
@@ -238,15 +267,18 @@ class ProfileSwitchDialog : DialogFragmentWithDate() {
                         }
                     }
                 })
-            else {
+
+            } else {
                 OKDialog.show(
                     activity,
                     rh.gs(app.aaps.core.ui.R.string.careportal_profileswitch),
                     HtmlHelper.fromHtml(Joiner.on("<br/>").join(validity.reasons))
                 )
+
                 return false
             }
         }
+
         return true
     }
 
@@ -254,6 +286,7 @@ class ProfileSwitchDialog : DialogFragmentWithDate() {
         super.onResume()
         if (!queryingProtection) {
             queryingProtection = true
+
             activity?.let { activity ->
                 val cancelFail = {
                     queryingProtection = false
@@ -261,6 +294,7 @@ class ProfileSwitchDialog : DialogFragmentWithDate() {
                     ToastUtils.warnToast(ctx, R.string.dialog_canceled)
                     dismiss()
                 }
+
                 protectionCheck.queryProtection(activity, ProtectionCheck.Protection.BOLUS, { queryingProtection = false }, cancelFail, cancelFail)
             }
         }

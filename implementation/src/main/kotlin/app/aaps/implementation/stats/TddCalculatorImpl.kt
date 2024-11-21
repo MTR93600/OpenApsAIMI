@@ -50,6 +50,7 @@ class TddCalculatorImpl @Inject constructor(
             .toInstant().toEpochMilli()
 
         val result = LongSparseArray<TDD>()
+
         // Try to load cached values
         while (startTime < endTime) {
             persistenceLayer.getCalculatedTotalDailyDose(startTime)?.let { result.put(startTime, it) } ?: break
@@ -61,25 +62,36 @@ class TddCalculatorImpl @Inject constructor(
             var midnight = startTime
             while (midnight < endTime) {
                 val tdd = calculateInterval(midnight, midnight + T.hours(24).msecs(), allowMissingData = false)
-                if (tdd != null) result.put(midnight, tdd)
+
+                if (tdd != null) {
+                    result.put(midnight, tdd)
+                }
+
                 midnight = MidnightTime.calc(midnight + T.hours(27).msecs()) // be sure we find correct midnight
             }
         }
+
         for (i in 0 until result.size()) {
             val tdd = result.valueAt(i)
+
             if (tdd.ids.pumpType != PumpType.CACHE) {
                 tdd.ids.pumpType = PumpType.CACHE
                 aapsLogger.debug(LTag.CORE, "Storing TDD ${tdd.timestamp}")
                 persistenceLayer.insertTotalDailyDose(tdd)
             }
         }
-        if (result.size.toLong() == days || allowMissingDays) return result
+
+        if (result.size.toLong() == days || allowMissingDays) {
+            return result
+        }
+
         return null
     }
 
     override fun calculateToday(): TDD? {
         val startTime = MidnightTime.calc(dateUtil.now())
         val endTime = dateUtil.now()
+
         return calculateInterval(startTime, endTime, allowMissingData = true)
     }
 
@@ -89,8 +101,10 @@ class TddCalculatorImpl @Inject constructor(
     override fun calculateDaily(timestamp: Long, startHours: Long, endHours: Long): TDD? {
         assert(startHours < 0)
         assert(endHours <= 0)
+
         val startTime = timestamp + T.hours(hour = startHours).msecs()
         val endTime = timestamp + T.hours(hour = endHours).msecs()
+
         return calculateInterval(startTime, endTime, allowMissingData = false)
     }
 
@@ -99,20 +113,33 @@ class TddCalculatorImpl @Inject constructor(
         val endTimeAligned = endTime - endTime % (5 * 60 * 1000)
         val tdd = TDD(timestamp = startTimeAligned)
         var tbrFound = false
+
         persistenceLayer.getBolusesFromTimeToTime(startTime, endTime, true)
             .filter { it.type != BS.Type.PRIMING }
             .forEach { t ->
                 tdd.bolusAmount += t.amount
             }
+
         persistenceLayer.getCarbsFromTimeToTimeExpanded(startTime, endTime, true).forEach { t ->
             tdd.carbs += t.amount
         }
-        val calculationStep = T.mins(5).msecs()
-        for (t in startTimeAligned until endTimeAligned step calculationStep) {
 
-            val profile = profileFunction.getProfile(t) ?: if (allowMissingData) continue else return null
+        val calculationStep = T.mins(5).msecs()
+
+        for (t in startTimeAligned until endTimeAligned step calculationStep) {
+            val profile = profileFunction.getProfile(t)
+                ?: if (allowMissingData) {
+                        continue
+                    } else {
+                        return null
+                    }
+
             val tbr = iobCobCalculator.getBasalData(profile, t)
-            if (tbr.isTempBasalRunning) tbrFound = true
+
+            if (tbr.isTempBasalRunning) {
+                tbrFound = true
+            }
+
             val absoluteRate = tbr.tempBasalAbsolute
             tdd.basalAmount += absoluteRate / 60.0 * 5.0
 
@@ -122,25 +149,40 @@ class TddCalculatorImpl @Inject constructor(
                 tdd.bolusAmount += absoluteEbRate / 60.0 * 5.0
             }
         }
+
         tdd.totalAmount = tdd.bolusAmount + tdd.basalAmount
         //aapsLogger.debug(LTag.CORE, tdd.toString())
-        if (tdd.bolusAmount > 0 || tdd.basalAmount > 0 || tbrFound) return tdd
+
+        if (tdd.bolusAmount > 0 || tdd.basalAmount > 0 || tbrFound) {
+            return tdd
+        }
+
         return null
     }
 
     override fun averageTDD(tdds: LongSparseArray<TDD>?): AverageTDD? {
         val totalTdd = TDD(timestamp = dateUtil.now())
         tdds ?: return null
-        if (tdds.size() == 0) return null
+
+        if (tdds.size() == 0) {
+            return null
+        }
+
         var hasCarbs = true
+
         for (i in 0 until tdds.size()) {
             val tdd = tdds.valueAt(i)
+
             totalTdd.basalAmount += tdd.basalAmount
             totalTdd.bolusAmount += tdd.bolusAmount
             totalTdd.totalAmount += tdd.totalAmount
             totalTdd.carbs += tdd.carbs
-            if (tdd.carbs == 0.0) hasCarbs = false
+
+            if (tdd.carbs == 0.0) {
+                hasCarbs = false
+            }
         }
+
         totalTdd.basalAmount /= tdds.size().toDouble()
         totalTdd.bolusAmount /= tdds.size().toDouble()
         totalTdd.totalAmount /= tdds.size().toDouble()
@@ -153,16 +195,23 @@ class TddCalculatorImpl @Inject constructor(
         val averageTdd = averageTDD(tdds)
         val todayTdd = calculateToday()
         val lp = TableRow.LayoutParams(TableRow.LayoutParams.WRAP_CONTENT, TableRow.LayoutParams.WRAP_CONTENT)
+
         return TableLayout(context).also { layout ->
             layout.layoutParams = TableLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+
             layout.addView(TextView(context).apply {
                 text = rh.gs(app.aaps.core.ui.R.string.tdd)
                 setTypeface(typeface, Typeface.BOLD)
                 gravity = Gravity.CENTER_HORIZONTAL
                 setTextAppearance(android.R.style.TextAppearance_Material_Medium)
             })
+
             layout.addView(TDD.toTableRowHeader(context, rh, includeCarbs = true))
-            for (i in 0 until tdds.size()) layout.addView(tdds.valueAt(i).toTableRow(context, rh, dateUtil, includeCarbs = true))
+
+            for (i in 0 until tdds.size()) {
+                layout.addView(tdds.valueAt(i).toTableRow(context, rh, dateUtil, includeCarbs = true))
+            }
+
             averageTdd?.let { averageTdd ->
                 layout.addView(TextView(context).apply {
                     layoutParams = lp
@@ -171,8 +220,10 @@ class TddCalculatorImpl @Inject constructor(
                     gravity = Gravity.CENTER_HORIZONTAL
                     setTextAppearance(android.R.style.TextAppearance_Material_Medium)
                 })
+
                 layout.addView(averageTdd.data.toTableRow(context, rh, tdds.size(), includeCarbs = true))
             }
+
             todayTdd?.let {
                 layout.addView(TextView(context).apply {
                     text = rh.gs(app.aaps.core.interfaces.R.string.today)
@@ -180,6 +231,7 @@ class TddCalculatorImpl @Inject constructor(
                     gravity = Gravity.CENTER_HORIZONTAL
                     setTextAppearance(android.R.style.TextAppearance_Material_Medium)
                 })
+
                 layout.addView(todayTdd.toTableRow(context, rh, dateUtil, includeCarbs = true))
             }
         }

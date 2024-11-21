@@ -1637,11 +1637,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val fourHoursAgo = now - 4 * 60 * 60 * 1000
         this.recentNotes = persistenceLayer.getUserEntryDataFromTime(fourHoursAgo).blockingGet()
-
         this.tags0to60minAgo = parseNotes(0, 60)
         this.tags60to120minAgo = parseNotes(60, 120)
         this.tags120to180minAgo = parseNotes(120, 180)
         this.tags180to240minAgo = parseNotes(180, 240)
+
         this.delta = glucose_status.delta.toFloat()
         this.shortAvgDelta = glucose_status.delta.toFloat()
         this.longAvgDelta = glucose_status.delta.toFloat()
@@ -1672,11 +1672,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.decceleratingUp = if (delta > 0 && (delta < shortAvgDelta || delta < longAvgDelta)) 1 else 0
         this.acceleratingDown = if (delta < -2 && delta - longAvgDelta < -2) 1 else 0
         this.decceleratingDown = if (delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta)) 1 else 0
-        this.stable = if (delta>-3 && delta<3 && shortAvgDelta>-3 && shortAvgDelta<3 && longAvgDelta>-3 && longAvgDelta<3 && bg < 180) 1 else 0
+        this.stable = if (delta > -3 && delta < 3 && shortAvgDelta > -3 && shortAvgDelta < 3 && longAvgDelta > -3 && longAvgDelta < 3 && bg < 180) 1 else 0
 
         if (isMealModeCondition()) {
             val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
-            rT.units = pbolusM
+            rT.units = pbolusM // units of prebolused insulin
             rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
 
             return rT
@@ -2160,7 +2160,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         if (variableSensitivity > (3 * profile.sens.toFloat())) {
-            this.variableSensitivity = profile.sens.toFloat() * 3
+            this.variableSensitivity = 3 * profile.sens.toFloat()
         }
 
         sens = variableSensitivity.toDouble()

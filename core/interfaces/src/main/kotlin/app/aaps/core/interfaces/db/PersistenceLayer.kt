@@ -1343,16 +1343,24 @@ interface PersistenceLayer {
             .maxByOrNull { it.timestamp }
             ?.timestamp
     }
+
     fun getMostRecentCarbAmount(): Double? {
         val now = System.currentTimeMillis()
-        return getCarbsFromTime(now, false) // Supposant que cette méthode existe
+
+        // Supposant que cette méthode existe
+        // Предполагая, что этот метод существует
+        return getCarbsFromTime(now, false)
             .blockingGet()
             .maxByOrNull { it.timestamp }
             ?.amount
     }
+
     fun getFutureCob(): Double {
         val now = System.currentTimeMillis()
-        return getCarbsFromTime(now, true) // Supposant que cette méthode existe
+
+        // Supposant que cette méthode existe
+        // Предполагая, что этот метод существует
+        return getCarbsFromTime(now, true)
             .blockingGet()
             .filter { it.timestamp > now }
             .sumOf { it.amount }

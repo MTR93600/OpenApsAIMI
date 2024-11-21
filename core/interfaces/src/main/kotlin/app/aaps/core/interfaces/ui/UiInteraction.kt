@@ -32,7 +32,9 @@ interface UiInteraction {
         const val PREFERENCE = "Preference"
     }
 
-    enum class Preferences { PROTECTION }
+    enum class Preferences {
+        PROTECTION
+    }
 
     /**
      * Arrays for preferences
@@ -63,6 +65,7 @@ interface UiInteraction {
     fun runExtendedBolusDialog(fragmentManager: FragmentManager)
     fun runFillDialog(fragmentManager: FragmentManager)
     fun runBolusProgressDialog(fragmentManager: FragmentManager, insulin: Double, id: Long)
+
     enum class Mode(val i: Int) {
         RUNNING_PROFILE(1),
         CUSTOM_PROFILE(2),
@@ -71,6 +74,7 @@ interface UiInteraction {
     }
 
     fun runProfileViewerDialog(fragmentManager: FragmentManager, time: Long, mode: Mode, customProfile: String? = null, customProfileName: String? = null, customProfile2: String? = null)
+
     enum class EventType {
         BGCHECK,
         SENSOR_INSERT,

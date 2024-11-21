@@ -29,77 +29,143 @@ class TirCalculatorImpl @Inject constructor(
 ) : TirCalculator {
 
     override fun calculate(days: Long, lowMgdl: Double, highMgdl: Double): LongSparseArray<TIR> {
-        if (lowMgdl < 39) throw RuntimeException("Low below 39")
-        if (lowMgdl > highMgdl) throw RuntimeException("Low > High")
+        if (lowMgdl < 39) {
+            throw RuntimeException("Low below 39")
+        }
+
+        if (lowMgdl > highMgdl) {
+            throw RuntimeException("Low > High")
+        }
+
         val startTime = MidnightTime.calcDaysBack(days)
         val endTime = MidnightTime.calc(dateUtil.now())
 
         val bgReadings = persistenceLayer.getBgReadingsDataFromTimeToTime(startTime, endTime, true)
         val result = LongSparseArray<TIR>()
+
         for (bg in bgReadings) {
             val midnight = MidnightTime.calc(bg.timestamp)
             var tir = result[midnight]
+
             if (tir == null) {
                 tir = TirImpl(midnight, lowMgdl, highMgdl)
                 result.append(midnight, tir)
             }
-            if (bg.value < 39) tir.error()
-            if (bg.value >= 39 && bg.value < lowMgdl) tir.below()
-            if (bg.value in lowMgdl..highMgdl) tir.inRange()
-            if (bg.value > highMgdl) tir.above()
+
+            if (bg.value < 39) {
+                tir.error()
+            }
+
+            if (bg.value >= 39 && bg.value < lowMgdl) {
+                tir.below()
+            }
+
+            if (bg.value in lowMgdl..highMgdl) {
+                tir.inRange()
+            }
+
+            if (bg.value > highMgdl) {
+                tir.above()
+            }
         }
+
         return result
     }
 
     override fun calculateHour(lowMgdl: Double, highMgdl: Double): LongSparseArray<TIR> {
-        if (lowMgdl < 39) throw RuntimeException("Low below 39")
-        if (lowMgdl > highMgdl) throw RuntimeException("Low > High")
+        if (lowMgdl < 39) {
+            throw RuntimeException("Low below 39")
+        }
+
+        if (lowMgdl > highMgdl) {
+            throw RuntimeException("Low > High")
+        }
+
         val startTime = dateUtil.now() - T.hours(hour = 1).msecs()
         val endTime = dateUtil.now()
         val bgReadings = persistenceLayer.getBgReadingsDataFromTimeToTime(startTime, endTime, true)
 
         val result = LongSparseArray<TIR>()
+
         for (bg in bgReadings) {
             var tir = result[startTime]
+
             if (tir == null) {
                 tir = TirImpl(startTime, lowMgdl, highMgdl)
                 result.append(startTime, tir)
             }
-            if (bg.value < 39) tir.error()
-            if (bg.value >= 39 && bg.value < lowMgdl) tir.below()
-            if (bg.value in lowMgdl..highMgdl) tir.inRange()
-            if (bg.value > highMgdl) tir.above()
+
+            if (bg.value < 39) {
+                tir.error()
+            }
+
+            if (bg.value >= 39 && bg.value < lowMgdl) {
+                tir.below()
+            }
+
+            if (bg.value in lowMgdl..highMgdl) {
+                tir.inRange()
+            }
+
+            if (bg.value > highMgdl) {
+                tir.above()
+            }
         }
+
         return result
     }
+
     override fun calculateDaily(lowMgdl: Double, highMgdl: Double): LongSparseArray<TIR> {
-        if (lowMgdl < 39) throw RuntimeException("Low below 39")
-        if (lowMgdl > highMgdl) throw RuntimeException("Low > High")
+        if (lowMgdl < 39) {
+            throw RuntimeException("Low below 39")
+        }
+
+        if (lowMgdl > highMgdl) {
+            throw RuntimeException("Low > High")
+        }
+
         val startTime = MidnightTime.calc(dateUtil.now())
         val endTime = dateUtil.now()
         val bgReadings = persistenceLayer.getBgReadingsDataFromTimeToTime(startTime, endTime, true)
 
         val result = LongSparseArray<TIR>()
+
         for (bg in bgReadings) {
             var tir = result[startTime]
+
             if (tir == null) {
                 tir = TirImpl(startTime, lowMgdl, highMgdl)
                 result.append(startTime, tir)
             }
-            if (bg.value < 39) tir.error()
-            if (bg.value >= 39 && bg.value < lowMgdl) tir.below()
-            if (bg.value in lowMgdl..highMgdl) tir.inRange()
-            if (bg.value > highMgdl) tir.above()
+
+            if (bg.value < 39) {
+                tir.error()
+            }
+
+            if (bg.value >= 39 && bg.value < lowMgdl) {
+                tir.below()
+            }
+
+            if (bg.value in lowMgdl..highMgdl) {
+                tir.inRange()
+            }
+
+            if (bg.value > highMgdl) {
+                tir.above()
+            }
         }
+
         return result
     }
 
     override fun averageTIR(tirs: LongSparseArray<TIR>): TIR {
         val totalTir = if (tirs.size() > 0) {
             TirImpl(tirs.valueAt(0).date, tirs.valueAt(0).lowThreshold, tirs.valueAt(0).highThreshold)
+
         } else {
             TirImpl(7, 70.0, 180.0)
         }
+
         for (i in 0 until tirs.size()) {
             val tir = tirs.valueAt(i)
             totalTir.below += tir.below
@@ -108,6 +174,7 @@ class TirCalculatorImpl @Inject constructor(
             totalTir.error += tir.error
             totalTir.count += tir.count
         }
+
         return totalTir
     }
 
@@ -127,7 +194,9 @@ class TirCalculatorImpl @Inject constructor(
             val averageTit7 = averageTIR(tit7)
             val tit30 = calculate(30, lowTitMgdl, highTitMgdl)
             val averageTit30 = averageTIR(tit30)
+
             layout.layoutParams = TableLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+
             layout.addView(
                 TextView(context).apply {
                     text = rh.gs(app.aaps.core.ui.R.string.tir) + " (" + profileUtil.stringInCurrentUnitsDetect(lowTirMgdl) + "-" + profileUtil.stringInCurrentUnitsDetect(highTirMgdl) + ")"
@@ -135,8 +204,13 @@ class TirCalculatorImpl @Inject constructor(
                     gravity = Gravity.CENTER_HORIZONTAL
                     setTextAppearance(android.R.style.TextAppearance_Material_Medium)
                 })
+
             layout.addView(TirImpl.toTableRowHeader(context, rh))
-            for (i in 0 until tir7.size()) layout.addView(tir7.valueAt(i).toTableRow(context, rh, dateUtil))
+
+            for (i in 0 until tir7.size()) {
+                layout.addView(tir7.valueAt(i).toTableRow(context, rh, dateUtil))
+            }
+        
             layout.addView(
                 TextView(context).apply {
                     text = rh.gs(app.aaps.core.ui.R.string.average) + " (" + profileUtil.stringInCurrentUnitsDetect(lowTirMgdl) + "-" + profileUtil.stringInCurrentUnitsDetect(highTirMgdl) + ")"
@@ -144,6 +218,7 @@ class TirCalculatorImpl @Inject constructor(
                     gravity = Gravity.CENTER_HORIZONTAL
                     setTextAppearance(android.R.style.TextAppearance_Material_Medium)
                 })
+
             layout.addView(averageTir7.toTableRow(context, rh, tir7.size()))
             layout.addView(averageTir30.toTableRow(context, rh, tir30.size()))
             layout.addView(
@@ -153,6 +228,7 @@ class TirCalculatorImpl @Inject constructor(
                     gravity = Gravity.CENTER_HORIZONTAL
                     setTextAppearance(android.R.style.TextAppearance_Material_Medium)
                 })
+
             layout.addView(averageTit7.toTableRow(context, rh, tit7.size()))
             layout.addView(averageTit30.toTableRow(context, rh, tit30.size()))
         }

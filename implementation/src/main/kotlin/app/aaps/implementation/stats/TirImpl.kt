@@ -34,9 +34,24 @@ class TirImpl(override val date: Long, override val lowThreshold: Double, overri
         above++; count++
     }
 
-    override fun belowPct() = if (count > 0) below.toDouble() / count * 100.0 else 0.0
-    override fun inRangePct() = if (count > 0) 100 - belowPct() - abovePct() else 0.0
-    override fun abovePct() = if (count > 0) above.toDouble() / count * 100.0 else 0.0
+    override fun belowPct() = if (count > 0) {
+        below.toDouble() / count * 100.0
+    } else {
+        0.0
+    }
+
+    override fun inRangePct() = if (count > 0) {
+        100 - belowPct() - abovePct()
+    } else {
+        0.0
+    }
+
+    override fun abovePct() = if (count > 0) {
+        above.toDouble() / count * 100.0
+    } else {
+        0.0
+    }
+
 
     companion object {
 
@@ -45,13 +60,38 @@ class TirImpl(override val date: Long, override val lowThreshold: Double, overri
                 val lp = TableRow.LayoutParams(TableRow.LayoutParams.WRAP_CONTENT, TableRow.LayoutParams.WRAP_CONTENT)
                 header.layoutParams = TableRow.LayoutParams(TableRow.LayoutParams.MATCH_PARENT, TableRow.LayoutParams.WRAP_CONTENT)
                 header.gravity = Gravity.CENTER_HORIZONTAL
+
                 header.addView(TextView(context).apply {
-                    gravity = Gravity.CENTER_HORIZONTAL; layoutParams = lp.apply { column = 0; weight = 1f }; text =
-                    rh.gs(app.aaps.core.ui.R.string.date)
+                    gravity = Gravity.CENTER_HORIZONTAL;
+                    layoutParams = lp.apply {
+                        column = 0; weight = 1f
+                    };
+                    text = rh.gs(app.aaps.core.ui.R.string.date)
                 })
-                header.addView(TextView(context).apply { gravity = Gravity.CENTER_HORIZONTAL; layoutParams = lp.apply { column = 1; weight = 1f }; text = rh.gs(R.string.below) })
-                header.addView(TextView(context).apply { gravity = Gravity.CENTER_HORIZONTAL; layoutParams = lp.apply { column = 2; weight = 1f }; text = rh.gs(R.string.in_range) })
-                header.addView(TextView(context).apply { gravity = Gravity.CENTER_HORIZONTAL; layoutParams = lp.apply { column = 3; weight = 1f }; text = rh.gs(R.string.above) })
+
+                header.addView(TextView(context).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL;
+                    layoutParams = lp.apply {
+                        column = 1; weight = 1f
+                    };
+                    text = rh.gs(R.string.below)
+                })
+
+                header.addView(TextView(context).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL;
+                    layoutParams = lp.apply {
+                        column = 2; weight = 1f
+                    };
+                    text = rh.gs(R.string.in_range)
+                })
+
+                header.addView(TextView(context).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL;
+                    layoutParams = lp.apply {
+                        column = 3; weight = 1f
+                    };
+                    text = rh.gs(R.string.above)
+                })
             }
     }
 
@@ -60,18 +100,29 @@ class TirImpl(override val date: Long, override val lowThreshold: Double, overri
             val lp = TableRow.LayoutParams(TableRow.LayoutParams.WRAP_CONTENT, TableRow.LayoutParams.WRAP_CONTENT, 1f)
             row.layoutParams = TableRow.LayoutParams(TableRow.LayoutParams.MATCH_PARENT, TableRow.LayoutParams.WRAP_CONTENT)
             row.gravity = Gravity.CENTER_HORIZONTAL
-            row.addView(TextView(context).apply { gravity = Gravity.CENTER_HORIZONTAL; layoutParams = lp.apply { column = 0 }; text = dateUtil.dateStringShort(date) })
+
             row.addView(TextView(context).apply {
-                gravity = Gravity.CENTER_HORIZONTAL; layoutParams = lp.apply { column = 1 }; text =
-                rh.gs(app.aaps.core.ui.R.string.formatPercent, belowPct())
+                gravity = Gravity.CENTER_HORIZONTAL;
+                layoutParams = lp.apply { column = 0 };
+                text = dateUtil.dateStringShort(date)
             })
+
             row.addView(TextView(context).apply {
-                gravity = Gravity.CENTER_HORIZONTAL; layoutParams = lp.apply { column = 2 }; text =
-                rh.gs(app.aaps.core.ui.R.string.formatPercent, inRangePct())
+                gravity = Gravity.CENTER_HORIZONTAL;
+                layoutParams = lp.apply { column = 1 };
+                text = rh.gs(app.aaps.core.ui.R.string.formatPercent, belowPct())
             })
+
             row.addView(TextView(context).apply {
-                gravity = Gravity.CENTER_HORIZONTAL; layoutParams = lp.apply { column = 3 }; text =
-                rh.gs(app.aaps.core.ui.R.string.formatPercent, abovePct())
+                gravity = Gravity.CENTER_HORIZONTAL;
+                layoutParams = lp.apply { column = 2 };
+                text = rh.gs(app.aaps.core.ui.R.string.formatPercent, inRangePct())
+            })
+
+            row.addView(TextView(context).apply {
+                gravity = Gravity.CENTER_HORIZONTAL;
+                layoutParams = lp.apply { column = 3 };
+                text = rh.gs(app.aaps.core.ui.R.string.formatPercent, abovePct())
             })
         }
 
@@ -81,21 +132,29 @@ class TirImpl(override val date: Long, override val lowThreshold: Double, overri
             val lp = TableRow.LayoutParams(TableRow.LayoutParams.WRAP_CONTENT, TableRow.LayoutParams.WRAP_CONTENT, 1f)
             row.layoutParams = TableRow.LayoutParams(TableRow.LayoutParams.MATCH_PARENT, TableRow.LayoutParams.WRAP_CONTENT)
             row.gravity = Gravity.CENTER_HORIZONTAL
+
             row.addView(TextView(context).apply {
-                gravity = Gravity.CENTER_HORIZONTAL; layoutParams = lp.apply { column = 0 }; text =
-                "%02d".format(days) + " " + rh.gs(app.aaps.core.interfaces.R.string.days)
+                gravity = Gravity.CENTER_HORIZONTAL;
+                layoutParams = lp.apply { column = 0 };
+                text = "%02d".format(days) + " " + rh.gs(app.aaps.core.interfaces.R.string.days)
             })
+
             row.addView(TextView(context).apply {
-                gravity = Gravity.CENTER_HORIZONTAL; layoutParams = lp.apply { column = 1 }; text =
-                rh.gs(app.aaps.core.ui.R.string.formatPercent, belowPct())
+                gravity = Gravity.CENTER_HORIZONTAL;
+                layoutParams = lp.apply { column = 1 };
+                text = rh.gs(app.aaps.core.ui.R.string.formatPercent, belowPct())
             })
+
             row.addView(TextView(context).apply {
-                gravity = Gravity.CENTER_HORIZONTAL; layoutParams = lp.apply { column = 2 }; text =
-                rh.gs(app.aaps.core.ui.R.string.formatPercent, inRangePct())
+                gravity = Gravity.CENTER_HORIZONTAL;
+                layoutParams = lp.apply { column = 2 };
+                text = rh.gs(app.aaps.core.ui.R.string.formatPercent, inRangePct())
             })
+
             row.addView(TextView(context).apply {
-                gravity = Gravity.CENTER_HORIZONTAL; layoutParams = lp.apply { column = 3 }; text =
-                rh.gs(app.aaps.core.ui.R.string.formatPercent, abovePct())
+                gravity = Gravity.CENTER_HORIZONTAL;
+                layoutParams = lp.apply { column = 3 };
+                text = rh.gs(app.aaps.core.ui.R.string.formatPercent, abovePct())
             })
         }
 }
