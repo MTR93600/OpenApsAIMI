@@ -38,6 +38,8 @@ sealed class ValueWithUnit {          //I use a sealed class because of StringRe
     data class TETTReason(val value: TT.Reason) : ValueWithUnit()
 
     data class OEReason(val value: OE.Reason) : ValueWithUnit()
+
+
     companion object {
 
         fun fromGlucoseUnit(value: Double, glucoseUnit: GlucoseUnit): ValueWithUnit =
@@ -46,13 +48,13 @@ sealed class ValueWithUnit {          //I use a sealed class because of StringRe
                 GlucoseUnit.MMOL -> Mmoll(value)
             }
 
-        /*
-                fun fromGlucoseUnit(value: Double, string: String): ValueWithUnit? =
-                    when (string) {
-                        GlucoseUnit.MGDL.asText, "mgdl"   -> Mgdl(value)
-                        GlucoseUnit.MMOL.asText, "mmol/l" -> Mmoll(value)
-                        else                              -> null
-                    }
-        */
+/*
+        fun fromGlucoseUnit(value: Double, string: String): ValueWithUnit? =
+            when (string) {
+                GlucoseUnit.MGDL.asText, "mgdl"   -> Mgdl(value)
+                GlucoseUnit.MMOL.asText, "mmol/l" -> Mmoll(value)
+                else                              -> null
+            }
+*/
     }
 }

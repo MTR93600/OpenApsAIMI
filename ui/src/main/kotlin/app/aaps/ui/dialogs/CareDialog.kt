@@ -13,6 +13,7 @@ import androidx.annotation.StringRes
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TE
+import app.aaps.core.data.model.TT
 import app.aaps.core.data.time.T
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
@@ -44,6 +45,7 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
 import java.text.DecimalFormat
 import java.util.LinkedList
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 class CareDialog : DialogFragmentWithDate() {
@@ -378,6 +380,7 @@ class CareDialog : DialogFragmentWithDate() {
                     binding.sensor.isChecked -> TE.MeterType.SENSOR
                     else                     -> TE.MeterType.MANUAL
                 }
+
             actions.add(rh.gs(R.string.glucose_type) + ": " + translator.translate(meterType))
             actions.add(rh.gs(app.aaps.core.ui.R.string.bg_label) + ": " + profileUtil.stringInCurrentUnitsDetect(binding.bg.value) + " " + rh.gs(unitResId))
             therapyEvent.glucoseType = meterType
@@ -438,6 +441,8 @@ class CareDialog : DialogFragmentWithDate() {
             val validity = ProfileSealed.PS(ps, activePlugin).isValid(rh.gs(app.aaps.core.ui.R.string.careportal_profileswitch), activePlugin.activePump, config, rh, rxBus, hardLimits, false)
             if (validity.isValid) {
                 OKDialog.showConfirmation(activity, rh.gs(event), HtmlHelper.fromHtml(Joiner.on("<br/>").join(actions)), {
+
+                    // old method
                     valuesWithUnit.add(0, ValueWithUnit.Timestamp(eventTime).takeIf { eventTimeChanged })
                     valuesWithUnit.add(1, ValueWithUnit.TEType(therapyEvent.type))
                     disposable += persistenceLayer.insertPumpTherapyEventIfNewByTimestamp(
@@ -447,6 +452,50 @@ class CareDialog : DialogFragmentWithDate() {
                         note = notes,
                         listValues = valuesWithUnit
                     ).subscribe()
+
+                    // transfer from ProfileSwitchDialog
+                    if (profileFunction.createProfileSwitch(
+                            profileStore = profileStore,
+                            profileName = profileName,
+                            durationInMinutes = duration,
+                            percentage = percent,
+                            timeShiftInHours = timeShift,
+                            timestamp = eventTime,
+                            action = Action.PROFILE_SWITCH,
+                            source = Sources.ProfileSwitchDialog,
+                            note = notes,
+                            listValues = listOf(
+                                ValueWithUnit.Timestamp(eventTime).takeIf { eventTimeChanged },
+                                ValueWithUnit.SimpleString(profileName),
+                                ValueWithUnit.Percent(percent),
+                                ValueWithUnit.Hour(timeShift).takeIf { timeShift != 0 },
+                                ValueWithUnit.Minute(duration).takeIf { duration != 0 }
+                            )
+                        )
+                    ) {
+                        if (percent == 90 && duration == 10) sp.putBoolean(app.aaps.core.utils.R.string.key_objectiveuseprofileswitch, true)
+                        if (isTT) {
+                            disposable += persistenceLayer.insertAndCancelCurrentTemporaryTarget(
+                                TT(
+                                    timestamp = eventTime,
+                                    duration = TimeUnit.MINUTES.toMillis(duration.toLong()),
+                                    reason = TT.Reason.ACTIVITY,
+                                    lowTarget = profileUtil.convertToMgdl(target, profileFunction.getUnits()),
+                                    highTarget = profileUtil.convertToMgdl(target, profileFunction.getUnits())
+                                ),
+                                action = Action.TT,
+                                source = Sources.TTDialog,
+                                note = null,
+                                listValues = listOf(
+                                    ValueWithUnit.Timestamp(eventTime).takeIf { eventTimeChanged },
+                                    ValueWithUnit.TETTReason(TT.Reason.ACTIVITY),
+                                    ValueWithUnit.fromGlucoseUnit(target, units),
+                                    ValueWithUnit.Minute(duration)
+                                )
+                            ).subscribe()
+                        }
+                    }
+
                 }, null)
 
             } else {
