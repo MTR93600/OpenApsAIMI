@@ -177,6 +177,7 @@
             android:id="@+id/bg_layout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginBottom="2dp"
             android:orientation="horizontal">
 
             <TextView
@@ -194,7 +195,6 @@
                 android:id="@+id/bg"
                 android:layout_width="130dp"
                 android:layout_height="40dp"
-                android:layout_marginBottom="2dp"
                 app:customContentDescription="@string/bg_label" />
 
             <TextView
@@ -249,6 +249,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginBottom="2dp"
             android:orientation="horizontal">
 
             <TextView
@@ -267,7 +268,6 @@
                 android:id="@+id/percentage"
                 android:layout_width="130dp"
                 android:layout_height="40dp"
-                android:layout_marginBottom="2dp"
                 app:customContentDescription="@string/percentage_label" />
 
             <TextView
@@ -314,7 +314,7 @@
                 android:minWidth="45dp"
                 android:paddingStart="5dp"
                 android:paddingEnd="5dp"
-                android:text="@string/unit_hours"
+                android:text="@string/unit_minutes"
                 android:textAppearance="?android:attr/textAppearanceSmall" />
         </LinearLayout>
 
@@ -341,6 +341,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_vertical"
                 android:layout_weight="1"
+                android:checked="true"
                 android:text="@string/activity" />
         </LinearLayout>
 

@@ -11,6 +11,10 @@ import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import androidx.annotation.StringRes
 import app.aaps.core.data.configuration.Constants
+import app.aaps.core.data.configuration.Constants.NO_SPORT_PERCENTAGE
+import app.aaps.core.data.configuration.Constants.SPORT_PERCENTAGE_LIGHT
+import app.aaps.core.data.configuration.Constants.SPORT_PERCENTAGE_MIDDLE
+import app.aaps.core.data.configuration.Constants.SPORT_PERCENTAGE_HEAVY
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.TT
@@ -169,29 +173,71 @@ class CareDialog : DialogFragmentWithDate() {
             if (binding.switchDutyOptions.isChecked) {
                 Log.d(TAG, "Sport options checked")
                 binding.dutyLight.setChecked(true)
+                binding.percentage.value = SPORT_PERCENTAGE_LIGHT
+                binding.tt.isChecked = true
+
             } else {
                 Log.d(TAG, "Sport options NOT checked")
                 binding.sportDuty.clearCheck()
+                binding.percentage.value = NO_SPORT_PERCENTAGE
+                binding.tt.isChecked = false
             }
         }
 
+        // radio buttons
         binding.sportDuty.setOnClickListener {
+            Log.d(TAG, "sportDuty clicked")
             if (binding.dutyLight.isSelected || binding.dutyMiddle.isSelected || binding.dutyHeavy.isSelected) {
                 binding.switchDutyOptions.setChecked(true)
+                binding.tt.isChecked = true
             }
+        }
+
+        binding.dutyLight.setOnClickListener {
+            Log.d(TAG, "dutyLight clicked")
+            binding.switchDutyOptions.setChecked(true)
+            binding.percentage.value = SPORT_PERCENTAGE_LIGHT
+            binding.tt.isChecked = true
+
+            if (binding.dutyLight.isChecked) {
+                Log.d(TAG, "dutyLight isChecked")
+            }
+        }
+
+        binding.dutyMiddle.setOnClickListener {
+            Log.d(TAG, "dutyMiddle clicked")
+            binding.switchDutyOptions.setChecked(true)
+            binding.percentage.value = SPORT_PERCENTAGE_MIDDLE
+            binding.tt.isChecked = true
+        }
+
+        binding.dutyHeavy.setOnClickListener {
+            Log.d(TAG, "dutyHeavy clicked")
+            binding.switchDutyOptions.setChecked(true)
+            binding.percentage.value = SPORT_PERCENTAGE_HEAVY
+            binding.tt.isChecked = true
         }
         ////
 
         // from ProfileSwitchDialog
         binding.percentage.setParams(
-            savedInstanceState?.getDouble("percentage")
-                ?: 100.0, Constants.CPP_MIN_PERCENTAGE.toDouble(), Constants.CPP_MAX_PERCENTAGE.toDouble(), 5.0,
-            DecimalFormat("0"), false, binding.okcancel.ok, textWatcher
+            savedInstanceState?.getDouble("percentage") ?: SPORT_PERCENTAGE_LIGHT, // 100
+            Constants.CPP_MIN_PERCENTAGE.toDouble(),
+            Constants.CPP_MAX_PERCENTAGE.toDouble(),
+            5.0,
+            DecimalFormat("0"),
+            false,
+            binding.okcancel.ok,
+            textWatcher
         )
 
         binding.timeshift.setParams(
-            savedInstanceState?.getDouble("timeshift")
-                ?: 0.0, Constants.CPP_MIN_TIMESHIFT.toDouble(), Constants.CPP_MAX_TIMESHIFT.toDouble(), 1.0, DecimalFormat("0"), false, binding.okcancel.ok
+            savedInstanceState?.getDouble("timeshift") ?: 0.0,
+            Constants.CPP_MIN_TIMESHIFT.toDouble(),
+            Constants.CPP_MAX_TIMESHIFT.toDouble(),
+            1.0, DecimalFormat("0"),
+            false,
+            binding.okcancel.ok
         )
         ////
 
@@ -249,7 +295,7 @@ class CareDialog : DialogFragmentWithDate() {
                     binding.reusebutton.text = rh.gs(R.string.reuse_profile_pct_hours, profile.value.originalPercentage, T.msecs(profile.value.originalTimeshift).hours().toInt())
                     binding.reusebutton.setOnClickListener {
                         binding.percentage.value = profile.value.originalPercentage.toDouble()
-                        binding.timeshift.value = T.msecs(profile.value.originalTimeshift).hours().toDouble()
+                        binding.timeshift.value = T.msecs(profile.value.originalTimeshift).mins().toDouble() // hours, sargius changed
                     }
                 }
             }
@@ -286,7 +332,7 @@ class CareDialog : DialogFragmentWithDate() {
         binding.durationLabel.labelFor = binding.duration.editTextId
 
         // from ProfileSwitchDialog
-        binding.ttLayout.visibility = View.GONE
+        // binding.ttLayout.visibility = View.GONE
         binding.percentageLabel.labelFor = binding.percentage.editTextId
         binding.timeshiftLabel.labelFor = binding.timeshift.editTextId
     }
@@ -334,7 +380,8 @@ class CareDialog : DialogFragmentWithDate() {
             actions.add(rh.gs(app.aaps.core.ui.R.string.percent) + ": " + percent + "%")
         }
 
-        val timeShift = binding.timeshift.value.toInt()
+        val timeShift = binding.timeshift.value.toInt() // timeShift is given in Minutes here
+        Log.d(TAG, "timeShift = $timeShift")
         if (timeShift != 0) {
             actions.add(rh.gs(R.string.timeshift_label) + ": " + rh.gs(app.aaps.core.ui.R.string.format_hours, timeShift.toDouble()))
         }
@@ -436,7 +483,7 @@ class CareDialog : DialogFragmentWithDate() {
 
         activity?.let { activity ->
             // from ProfileSwitchDialog, pack activity?.let {... into validity checking
-            val ps = profileFunction.buildProfileSwitch(profileStore, profileName, duration, percent, timeShift, eventTime) ?: return@let
+            val ps = profileFunction.buildProfileSwitch2(profileStore, profileName, duration, percent, timeShift, eventTime) ?: return@let
 
             val validity = ProfileSealed.PS(ps, activePlugin).isValid(rh.gs(app.aaps.core.ui.R.string.careportal_profileswitch), activePlugin.activePump, config, rh, rxBus, hardLimits, false)
             if (validity.isValid) {
@@ -453,13 +500,13 @@ class CareDialog : DialogFragmentWithDate() {
                         listValues = valuesWithUnit
                     ).subscribe()
 
-                    // transfer from ProfileSwitchDialog
-                    if (profileFunction.createProfileSwitch(
+                    // transfer from ProfileSwitchDialog, converted for timeshift in Minutes
+                    if (profileFunction.createProfileSwitch2(
                             profileStore = profileStore,
                             profileName = profileName,
                             durationInMinutes = duration,
                             percentage = percent,
-                            timeShiftInHours = timeShift,
+                            timeShiftInMinutes = timeShift,
                             timestamp = eventTime,
                             action = Action.PROFILE_SWITCH,
                             source = Sources.ProfileSwitchDialog,
@@ -468,7 +515,7 @@ class CareDialog : DialogFragmentWithDate() {
                                 ValueWithUnit.Timestamp(eventTime).takeIf { eventTimeChanged },
                                 ValueWithUnit.SimpleString(profileName),
                                 ValueWithUnit.Percent(percent),
-                                ValueWithUnit.Hour(timeShift).takeIf { timeShift != 0 },
+                                ValueWithUnit.Minute(timeShift).takeIf { timeShift != 0 },
                                 ValueWithUnit.Minute(duration).takeIf { duration != 0 }
                             )
                         )

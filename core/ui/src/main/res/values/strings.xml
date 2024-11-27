@@ -615,8 +615,8 @@
     <string name="exercise_mode">Exercise Mode</string>
     <string name="sport_duty_options_label">Sport Duty Options</string>
     <string name="duty_option_none">None</string>
-    <string name="duty_option_light">Light</string>
-    <string name="duty_option_middle">Middle</string>
-    <string name="duty_option_heavy">Heavy</string>
+    <string name="duty_option_light">Light (80%)</string>
+    <string name="duty_option_middle">Middle (60%)</string>
+    <string name="duty_option_heavy">Heavy (30%)</string>
 
 </resources>
