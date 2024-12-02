@@ -540,6 +540,15 @@ class CareDialog : DialogFragmentWithDate() {
                                     ValueWithUnit.Minute(duration)
                                 )
                             ).subscribe()
+
+                        } else { // cancel temporary target if "tt" (Activity checkbox) not checked
+                            disposable += persistenceLayer.cancelCurrentTemporaryTargetIfAny(
+                                timestamp = eventTime,
+                                action = Action.TT,
+                                source = Sources.TTDialog,
+                                note = null,
+                                listValues = listOf()
+                            ).subscribe()
                         }
                     }
 

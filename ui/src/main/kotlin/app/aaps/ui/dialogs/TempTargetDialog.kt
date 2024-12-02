@@ -112,7 +112,10 @@ class TempTargetDialog : DialogFragmentWithDate() {
             )
             binding.reasonList.setAdapter(ArrayAdapter(context, app.aaps.core.ui.R.layout.spinner_centered, reasonList))
 
-            binding.targetCancel.setOnClickListener { binding.duration.value = 0.0; shortClick(it) }
+            binding.targetCancel.setOnClickListener {
+                binding.duration.value = 0.0;
+                shortClick(it)
+            }
             binding.eatingSoon.setOnClickListener { shortClick(it) }
             binding.activity.setOnClickListener { shortClick(it) }
             binding.hypo.setOnClickListener { shortClick(it) }
@@ -237,6 +240,7 @@ class TempTargetDialog : DialogFragmentWithDate() {
                         note = null,
                         listValues = listOf()
                     ).subscribe()
+
                 } else {
                     disposable += persistenceLayer.insertAndCancelCurrentTemporaryTarget(
                         TT(
