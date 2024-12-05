@@ -121,7 +121,7 @@ data class TE(
         ;
 
         companion object {
-            fun fromString(text: String?) = values().firstOrNull { it.text == text }
+            fun fromString(text: String?) = entries.firstOrNull { it.text == text }
         }
     }
 

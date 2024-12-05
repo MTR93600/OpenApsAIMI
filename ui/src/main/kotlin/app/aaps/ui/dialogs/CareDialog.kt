@@ -169,6 +169,34 @@ class CareDialog : DialogFragmentWithDate() {
         }
 
         // sargius added
+        val lastTherapyEvent = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.EXERCISE)
+        val lastExerciseDuty = lastTherapyEvent?.exerciseDuty
+        Log.d(TAG, "id = ${lastTherapyEvent?.id} lastTherapyEvent = $lastTherapyEvent, lastExerciseDuty = $lastExerciseDuty")
+        if (lastExerciseDuty == null || lastExerciseDuty == TE.ExerciseDuty.NONE) {
+            binding.switchDutyOptions.isChecked = false
+            binding.tt.isChecked = false
+
+            binding.dutyLight.isChecked = false
+            binding.dutyMiddle.isChecked = false
+            binding.dutyHeavy.isChecked = false
+
+        } else {
+            binding.switchDutyOptions.isChecked = true
+            binding.tt.isChecked = true
+
+            when (lastExerciseDuty) {
+                TE.ExerciseDuty.LIGHT -> binding.dutyLight.isChecked = true
+                TE.ExerciseDuty.MIDDLE -> binding.dutyMiddle.isChecked = true
+                TE.ExerciseDuty.HEAVY -> binding.dutyHeavy.isChecked = true
+
+                else -> {
+                    binding.dutyLight.isChecked = false
+                    binding.dutyMiddle.isChecked = false
+                    binding.dutyHeavy.isChecked = false
+                }
+            }
+        }
+
         binding.switchDutyOptions.setOnClickListener {
             if (binding.switchDutyOptions.isChecked) {
                 Log.d(TAG, "Sport options checked")
@@ -364,6 +392,7 @@ class CareDialog : DialogFragmentWithDate() {
     override fun submit(): Boolean {
         // from ProfileSwitchDialog
         if (_binding == null) return false
+        Log.d(TAG, "submit")
 
         val profileStore = activePlugin.activeProfileSource.profile
             ?: return false
@@ -404,6 +433,23 @@ class CareDialog : DialogFragmentWithDate() {
 
         eventTime -= eventTime % 1000
 
+        // sargius added
+        val exerciseDutyOption = if (binding.switchDutyOptions.isChecked) {
+            if (binding.dutyLight.isChecked) {
+                TE.ExerciseDuty.LIGHT
+            } else if (binding.dutyMiddle.isChecked) {
+                TE.ExerciseDuty.MIDDLE
+            } else if (binding.dutyHeavy.isChecked) {
+                TE.ExerciseDuty.HEAVY
+            } else {
+                TE.ExerciseDuty.NONE
+            }
+
+        } else {
+            TE.ExerciseDuty.NONE
+        }
+        Log.d(TAG, "exerciseDutyOption = $exerciseDutyOption")
+
         val therapyEvent = TE(
             timestamp = eventTime,
             type = when (options) {
@@ -415,7 +461,8 @@ class CareDialog : DialogFragmentWithDate() {
                 UiInteraction.EventType.QUESTION       -> TE.Type.QUESTION
                 UiInteraction.EventType.ANNOUNCEMENT   -> TE.Type.ANNOUNCEMENT
             },
-            glucoseUnit = profileFunction.getUnits()
+            glucoseUnit = profileFunction.getUnits(),
+            exerciseDuty = exerciseDutyOption
         )
 
         // val actions: LinkedList<String> = LinkedList(), // moved up
@@ -456,7 +503,7 @@ class CareDialog : DialogFragmentWithDate() {
 
             actions.add(rh.gs(R.string.sport_duty_options_label) + ": " + translator.translate(exerciseDuty))
             therapyEvent.exerciseDuty = exerciseDuty
-            Log.d(TAG, "exerciseDuty = $exerciseDuty")
+            Log.d(TAG, "1. exerciseDuty = $exerciseDuty")
         }
 
         val notes = binding.notesLayout.notes.text.toString()
@@ -488,10 +535,10 @@ class CareDialog : DialogFragmentWithDate() {
             val validity = ProfileSealed.PS(ps, activePlugin).isValid(rh.gs(app.aaps.core.ui.R.string.careportal_profileswitch), activePlugin.activePump, config, rh, rxBus, hardLimits, false)
             if (validity.isValid) {
                 OKDialog.showConfirmation(activity, rh.gs(event), HtmlHelper.fromHtml(Joiner.on("<br/>").join(actions)), {
-
                     // old method
                     valuesWithUnit.add(0, ValueWithUnit.Timestamp(eventTime).takeIf { eventTimeChanged })
                     valuesWithUnit.add(1, ValueWithUnit.TEType(therapyEvent.type))
+                    Log.d(TAG, "insert therapyEvent by insertPumpTherapyEventIfNewByTimestamp(), therapyEvent = $therapyEvent")
                     disposable += persistenceLayer.insertPumpTherapyEventIfNewByTimestamp(
                         therapyEvent = therapyEvent,
                         action = Action.CAREPORTAL,

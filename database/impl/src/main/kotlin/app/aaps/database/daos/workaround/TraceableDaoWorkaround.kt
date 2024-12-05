@@ -14,8 +14,7 @@ interface TraceableDaoWorkaround<T : TraceableDBEntry> {
      * @return The ID of the newly generated entry
      */
     @Transaction
-    fun insertNewEntry(entry: T): Long =
-        (this as TraceableDao<T>).insertNewEntryImpl(entry)
+    fun insertNewEntry(entry: T): Long = (this as TraceableDao<T>).insertNewEntryImpl(entry)
 
     /**
      * Updates an existing entry
@@ -23,6 +22,5 @@ interface TraceableDaoWorkaround<T : TraceableDBEntry> {
      * @return The ID of the newly generated HISTORIC entry
      */
     @Transaction
-    fun updateExistingEntry(entry: T): Long =
-        (this as TraceableDao<T>).updateExistingEntryImpl(entry)
+    fun updateExistingEntry(entry: T): Long = (this as TraceableDao<T>).updateExistingEntryImpl(entry)
 }

@@ -109,6 +109,21 @@ fun TE.MeterType.toDb(): TherapyEvent.MeterType = when (this) {
     TE.MeterType.MANUAL -> TherapyEvent.MeterType.MANUAL
 }
 
+
+fun TherapyEvent.ExerciseDuty.fromDb(): TE.ExerciseDuty = when (this) {
+    TherapyEvent.ExerciseDuty.NONE -> TE.ExerciseDuty.NONE
+    TherapyEvent.ExerciseDuty.LIGHT -> TE.ExerciseDuty.LIGHT
+    TherapyEvent.ExerciseDuty.MIDDLE -> TE.ExerciseDuty.MIDDLE
+    TherapyEvent.ExerciseDuty.HEAVY -> TE.ExerciseDuty.HEAVY
+}
+
+fun TE.ExerciseDuty.toDb(): TherapyEvent.ExerciseDuty = when (this) {
+    TE.ExerciseDuty.NONE -> TherapyEvent.ExerciseDuty.NONE
+    TE.ExerciseDuty.LIGHT -> TherapyEvent.ExerciseDuty.LIGHT
+    TE.ExerciseDuty.MIDDLE -> TherapyEvent.ExerciseDuty.MIDDLE
+    TE.ExerciseDuty.HEAVY -> TherapyEvent.ExerciseDuty.HEAVY
+}
+
 fun TherapyEvent.fromDb(): TE = TE(
     id = this.id,
     version = this.version,
@@ -124,7 +139,8 @@ fun TherapyEvent.fromDb(): TE = TE(
     enteredBy = this.enteredBy,
     glucose = this.glucose,
     glucoseType = this.glucoseType?.fromDb(),
-    glucoseUnit = this.glucoseUnit.fromDb()
+    glucoseUnit = this.glucoseUnit.fromDb(),
+    exerciseDuty = this.exerciseDuty?.fromDb()
 )
 
 fun TE.toDb(): TherapyEvent = TherapyEvent(
@@ -142,5 +158,6 @@ fun TE.toDb(): TherapyEvent = TherapyEvent(
     enteredBy = this.enteredBy,
     glucose = this.glucose,
     glucoseType = this.glucoseType?.toDb(),
-    glucoseUnit = this.glucoseUnit.toDb()
+    glucoseUnit = this.glucoseUnit.toDb(),
+    exerciseDuty = this.exerciseDuty?.toDb()
 )
