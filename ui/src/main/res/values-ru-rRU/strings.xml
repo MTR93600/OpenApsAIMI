@@ -160,4 +160,8 @@
     <string name="duty_option_middle">Средние</string>
     <string name="duty_option_heavy">Тяжёлые</string>
 
+    <string name="duration_preset_30">30 мин.</string>
+    <string name="duration_preset_50">50 мин.</string>
+    <string name="duration_preset_80">80 мин.</string>
+
 </resources>

@@ -212,7 +212,7 @@ class CareDialog : DialogFragmentWithDate() {
             }
         }
 
-        // radio buttons
+        // radio buttons sport duty options
         binding.sportDuty.setOnClickListener {
             Log.d(TAG, "sportDuty clicked")
             if (binding.dutyLight.isSelected || binding.dutyMiddle.isSelected || binding.dutyHeavy.isSelected) {
@@ -244,6 +244,20 @@ class CareDialog : DialogFragmentWithDate() {
             binding.switchDutyOptions.setChecked(true)
             binding.percentage.value = SPORT_PERCENTAGE_HEAVY
             binding.tt.isChecked = true
+        }
+        ////
+
+        // radio buttons duration presets
+        binding.duration30.setOnClickListener {
+            binding.duration.value = 30.0
+        }
+
+        binding.duration50.setOnClickListener {
+            binding.duration.value = 50.0
+        }
+
+        binding.duration80.setOnClickListener {
+            binding.duration.value = 80.0
         }
         ////
 

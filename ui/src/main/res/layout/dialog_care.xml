@@ -155,7 +155,7 @@
                     android:id="@+id/duty_light"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true"
+                    android:checked="false"
                     android:text="@string/duty_option_light" />
 
                 <RadioButton
@@ -244,6 +244,35 @@
                 android:text="@string/unit_minute_short"
                 android:textAppearance="?android:attr/textAppearanceSmall" />
         </LinearLayout>
+
+        <RadioGroup
+            android:id="@+id/sport_duration_presets"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginBottom="10dp"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/duration_30"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false"
+                android:text="@string/duration_preset_30" />
+
+            <RadioButton
+                android:id="@+id/duration_50"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false"
+                android:text="@string/duration_preset_50" />
+
+            <RadioButton
+                android:id="@+id/duration_80"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/duration_preset_80" />
+        </RadioGroup>
 
         <!-- sargius added from profile switch dialog -->
         <LinearLayout

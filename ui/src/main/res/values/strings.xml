@@ -182,4 +182,8 @@
     <string name="duty_option_middle">Middle (60%)</string>
     <string name="duty_option_heavy">Heavy (30%)</string>
 
+    <string name="duration_preset_30">30 min.</string>
+    <string name="duration_preset_50">50 min.</string>
+    <string name="duration_preset_80">80 min.</string>
+
 </resources>
