@@ -8,6 +8,7 @@ import app.aaps.wear.interaction.utils.MenuListActivity
 
 class PreferenceMenuActivity : MenuListActivity() {
 
+
     override fun onCreate(savedInstanceState: Bundle?) {
         setTitle(R.string.menu_settings)
         super.onCreate(savedInstanceState)

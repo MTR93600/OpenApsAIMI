@@ -19,6 +19,7 @@ import kotlin.math.roundToInt
 class BolusActivity : ViewSelectorActivity() {
 
     var editInsulin: PlusMinusEditText? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setAdapter(MyGridViewPagerAdapter())
@@ -28,6 +29,7 @@ class BolusActivity : ViewSelectorActivity() {
         super.onPause()
         finish()
     }
+
 
     private inner class MyGridViewPagerAdapter : GridPagerAdapterNonDeprecated() {
 

@@ -28,7 +28,6 @@
             android:gravity="center"
             android:textSize="18sp"
             tools:text="Title" />
-
     </LinearLayout>
 
     <androidx.wear.widget.CurvedTextView

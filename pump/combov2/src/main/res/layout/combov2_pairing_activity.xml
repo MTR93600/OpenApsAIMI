@@ -267,7 +267,8 @@
             android:layout_height="wrap_content"
             android:gravity="center"
             android:orientation="vertical"
-            android:visibility="gone">
+            android:visibility="gone"
+            tools:visibility="visible">
 
             <TextView
                 android:id="@+id/combov2_pairing_aborted_reason_text"
@@ -289,7 +290,6 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/ok" />
-
             </LinearLayout>
 
         </LinearLayout>

@@ -22,6 +22,7 @@ class WatchfaceConfigurationActivity : WearPreferenceActivity(), SharedPreferenc
     @Suppress("PrivatePropertyName")
     private val PHYSICAL_ACTIVITY = 1
 
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val preferenceFile = intent.getIntExtra(getString(R.string.key_preference_id), R.xml.display_preferences)

@@ -1,11 +1,11 @@
 <layout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools">
+
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         tools:context=".plugins.pump.combov2.ComboV2Fragment">
-
 
         <LinearLayout
             android:visibility="gone"
@@ -27,7 +27,6 @@
                     android:gravity="center"
                     android:text="@string/combov2_not_paired"
                     android:textSize="14sp" />
-
             </LinearLayout>
 
             <TextView
@@ -36,7 +35,6 @@
                 android:layout_gravity="center"
                 android:paddingTop="10dp"
                 app:drawableTopCompat="@drawable/ic_combov2" />
-
         </LinearLayout>
 
         <RelativeLayout
@@ -152,8 +150,7 @@
                         android:layout_marginLeft="20dp"
                         android:layout_marginRight="20dp"
                         android:max="100"
-                        style="@android:style/Widget.ProgressBar.Horizontal"
-                        />
+                        style="@android:style/Widget.ProgressBar.Horizontal" />
 
                     <View
                         android:layout_width="fill_parent"
@@ -406,9 +403,7 @@
                         <info.nightscout.pump.combov2.ComboV2RTDisplayFrameView
                             android:id="@+id/combov2_rt_display_frame"
                             android:layout_width="192dp"
-                            android:layout_height="64dp"
-                            />
-
+                            android:layout_height="64dp" />
                     </LinearLayout>
 
                     <TextView
@@ -417,9 +412,7 @@
                         android:layout_gravity="center"
                         android:paddingTop="10dp"
                         app:drawableTopCompat="@drawable/ic_combov2" />
-
                 </LinearLayout>
-
             </ScrollView>
 
             <LinearLayout
@@ -438,10 +431,9 @@
                     android:paddingLeft="0dp"
                     android:paddingRight="0dp"
                     android:text="@string/refresh" />
-
             </LinearLayout>
-
         </RelativeLayout>
 
     </FrameLayout>
+
 </layout>

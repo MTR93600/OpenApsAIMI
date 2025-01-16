@@ -15,6 +15,7 @@ import app.aaps.wear.interaction.utils.MenuListActivity
 
 class MainMenuActivity : MenuListActivity() {
 
+
     override fun onCreate(savedInstanceState: Bundle?) {
         setTitle(R.string.label_actions_activity)
         super.onCreate(savedInstanceState)

@@ -35,23 +35,28 @@ abstract class MenuListActivity : DaggerActivity() {
     protected abstract fun provideElements(): List<MenuItem>
     protected abstract fun doAction(position: String)
 
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.actions_list_activity)
         setTitleBasedOnScreenShape(title.toString())
         elements = provideElements()
+
         val customScrollingLayoutCallback = CustomScrollingLayoutCallback()
         val layoutManager = WearableLinearLayoutManager(this)
         val listView = findViewById<WearableRecyclerView>(R.id.action_list)
         val isScreenRound = this.resources.configuration.isScreenRound
+
         if (isScreenRound) {
             layoutManager.layoutCallback = customScrollingLayoutCallback
             listView.isEdgeItemsCenteringEnabled = true
+
         } else {
             // Bug in androidx.wear:wear:1.2.0 
             // WearableRecyclerView setEdgeItemsCenteringEnabled requires fix for square screen
             listView.setPadding(0, 50, 0, 0)
         }
+
         listView.setHasFixedSize(true)
         listView.layoutManager = layoutManager
         listView.adapter = MenuAdapter(elements) { v: ItemViewHolder ->
@@ -63,16 +68,19 @@ abstract class MenuListActivity : DaggerActivity() {
     private fun setTitleBasedOnScreenShape(title: String) {
         val titleViewCurved = findViewById<CurvedTextView>(R.id.title_curved)
         val titleView = findViewById<TextView>(R.id.title)
+
         if (this.resources.configuration.isScreenRound) {
             titleViewCurved.text = title
             titleViewCurved.visibility = View.VISIBLE
             titleView.visibility = View.GONE
+
         } else {
             titleView.text = title
             titleView.visibility = View.VISIBLE
             titleViewCurved.visibility = View.GONE
         }
     }
+
 
     class MenuAdapter(private val mDataset: List<MenuItem>, private val callback: (ItemViewHolder) -> Unit) : RecyclerView.Adapter<ItemViewHolder>() {
         class ItemViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -106,7 +114,10 @@ abstract class MenuListActivity : DaggerActivity() {
         }
     }
 
+
     class MenuItem(var actionIcon: Int, var actionItem: String)
+
+
     class CustomScrollingLayoutCallback : LayoutCallback() {
 
         override fun onLayoutFinished(child: View, parent: RecyclerView) {
