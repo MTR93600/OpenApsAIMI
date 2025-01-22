@@ -265,5 +265,5 @@
     <string name="pref_heartRateSampling">Heart Rate</string>
 
     //Добавляю дл яработы помпы
-    <string name="pump_connection">Pump Connection</string>
+    <string name="pump_connection">Pump Con</string>
 </resources>

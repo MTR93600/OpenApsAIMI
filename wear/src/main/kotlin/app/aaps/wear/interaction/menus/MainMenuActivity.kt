@@ -7,7 +7,6 @@ import app.aaps.core.interfaces.rx.weardata.EventData
 import app.aaps.core.interfaces.rx.weardata.EventData.ActionResendData
 import app.aaps.wear.R
 import app.aaps.wear.interaction.actions.ECarbActivity
-import app.aaps.wear.interaction.actions.PumpConnectionActivity
 import app.aaps.wear.interaction.actions.TempTargetActivity
 import app.aaps.wear.interaction.actions.TreatmentActivity
 import app.aaps.wear.interaction.actions.WizardActivity
@@ -35,7 +34,7 @@ class MainMenuActivity : MenuListActivity() {
                 add(MenuItem(R.drawable.ic_profile, getString(R.string.status_profile_switch)))
                 add(MenuItem(R.drawable.ic_settings, getString(R.string.menu_settings)))
                 add(MenuItem(R.drawable.ic_status, getString(R.string.menu_status)))
-                add(MenuItem(R.drawable.ic_settings, getString(R.string.pump_connection)))
+               // add(MenuItem(R.drawable.ic_settings, getString(R.string.pump_connection)))
                 if (sp.getBoolean(R.string.key_prime_fill, false))
                     add(MenuItem(R.drawable.ic_canula, getString(R.string.menu_prime_fill)))
             }
@@ -52,7 +51,7 @@ class MainMenuActivity : MenuListActivity() {
             getString(R.string.menu_status)           -> startActivity(Intent(this, StatusMenuActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
             getString(R.string.menu_prime_fill)       -> startActivity(Intent(this, FillMenuActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
             getString(R.string.menu_ecarb)            -> startActivity(Intent(this, ECarbActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
-            getString(R.string.pump_connection)            -> startActivity(Intent(this, PumpConnectionActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+           // getString(R.string.pump_connection)            -> startActivity(Intent(this, TempTargetActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
         }
     }
 }

@@ -75,7 +75,7 @@
     <string name="pref_version">Версия:</string>
     <string name="pref_moreWatchfaceSettings">Еще настройки циферблатов</string>
     <string name="pref_lookInYourWatchfaceConfiguration">Смотрите конфигурацию циферблата.</string>
-    <string name="menu_tempt">ВремЦ</string>
+    <string name="menu_tempt">Подключить помпу</string>
     <string name="menu_wizard">Калькулятор</string>
     <string name="menu_wizard_short">Кальк</string>
     <string name="menu_treatment">Терапия</string>
