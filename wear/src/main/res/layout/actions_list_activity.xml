@@ -39,4 +39,15 @@
         android:visibility="gone"
         tools:text="Title" />
 
+    <Button
+        android:id="@+id/connectPumpButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center|bottom"
+        android:layout_marginBottom="16dp"
+        android:text="Подключить помпу"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
 </FrameLayout>

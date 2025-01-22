@@ -263,4 +263,7 @@
     <string name="error">!err!</string>
     <string name="key_heart_rate_sampling" translatable="false">heart_rate_sampling</string>
     <string name="pref_heartRateSampling">Heart Rate</string>
+
+    //Добавляю дл яработы помпы
+    <string name="pump_connection">Pump Connection</string>
 </resources>
