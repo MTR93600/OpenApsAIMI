@@ -689,7 +689,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // 2️⃣ On choisit la bonne pref en fonction du mode
         var maxBasal = when {
             isMealMode       -> preferences.get(DoubleKey.meal_modes_MaxBasal)
-            isEarlyAutodrive -> preferences.get(DoubleKey.autodriveMaxBasal)
+            isEarlyAutodrive -> {
+                val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                when (hour) {
+                    in 0..10 -> preferences.get(DoubleKey.autodriveMaxBasalMorning)
+                    in 11..17 -> preferences.get(DoubleKey.autodriveMaxBasalAfternoon)
+                    else -> preferences.get(DoubleKey.autodriveMaxBasalEvening)
+                }
+            }
             else             -> preferences.get(DoubleKey.ApsMaxBasal)
         }
 
@@ -793,8 +800,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             key = "AIMI_Settings"
             title = rh.gs(R.string.aimi_preferences)
             initialExpandedChildrenCount = 0
-            addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxBasal, dialogMessage = R.string.openapsma_max_basal_summary, title = R.string.openapsma_max_basal_title))
-            addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsSmbMaxIob, dialogMessage = R.string.openapssmb_max_iob_summary, title = R.string.openapssmb_max_iob_title))
+
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "Global User Preferences"
                 //title = "Global User Preferences"
@@ -815,49 +821,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIhoneymoon, title = R.string.OApsAIMI_Enable_honeymoon))
             })
 
-            addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                key = "OAPS_SMB_Settings"
-                title = rh.gs(R.string.AAPS_SMB_Settings)
-                addPreference(PreferenceCategory(context).apply {
-                    title = rh.gs(R.string.aaps_preferences_title_menu)
-                })
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseDynamicSensitivity, summary = R.string.use_dynamic_sensitivity_summary, title = R.string.use_dynamic_sensitivity_title))
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseAutosens, title = R.string.openapsama_use_autosens))
-                addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.ApsDynIsfAdjustmentFactor, dialogMessage = R.string.dyn_isf_adjust_summary, title = R.string.dyn_isf_adjust_title))
-                addPreference(AdaptiveUnitPreference(ctx = context, unitKey = UnitDoubleKey.ApsLgsThreshold, dialogMessage = R.string.lgs_threshold_summary, title = R.string.lgs_threshold_title))
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsDynIsfAdjustSensitivity, summary = R.string.dynisf_adjust_sensitivity_summary, title = R.string.dynisf_adjust_sensitivity))
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsSensitivityRaisesTarget, summary = R.string.sensitivity_raises_target_summary, title = R.string.sensitivity_raises_target_title))
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsResistanceLowersTarget, summary = R.string.resistance_lowers_target_summary, title = R.string.resistance_lowers_target_title))
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseSmb, summary = R.string.enable_smb_summary, title = R.string.enable_smb))
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseSmbWithHighTt, summary = R.string.enable_smb_with_high_temp_target_summary, title = R.string.enable_smb_with_high_temp_target))
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseSmbAlways, summary = R.string.enable_smb_always_summary, title = R.string.enable_smb_always))
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseSmbWithCob, summary = R.string.enable_smb_with_cob_summary, title = R.string.enable_smb_with_cob))
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseSmbWithLowTt, summary = R.string.enable_smb_with_temp_target_summary, title = R.string.enable_smb_with_temp_target))
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseSmbAfterCarbs, summary = R.string.enable_smb_after_carbs_summary, title = R.string.enable_smb_after_carbs))
-                addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.ApsMaxSmbFrequency, title = R.string.smb_interval_summary))
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseUam, summary = R.string.enable_uam_summary, title = R.string.enable_uam))
-                addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.ApsCarbsRequestThreshold, dialogMessage = R.string.carbs_req_threshold_summary, title = R.string.carbs_req_threshold))
-                addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                    key = "absorption_smb_advanced"
-                    title = rh.gs(app.aaps.core.ui.R.string.advanced_settings_title)
-                    addPreference(PreferenceCategory(context).apply {
-                        title = rh.gs(R.string.aaps_preferences_title_menu)
-                    })
-                    addPreference(
-                        AdaptiveIntentPreference(
-                            ctx = context,
-                            intentKey = IntentKey.ApsLinkToDocs,
-                            intent = Intent().apply { action = Intent.ACTION_VIEW; data = Uri.parse(rh.gs(R.string.openapsama_link_to_preference_json_doc)) },
-                            summary = R.string.openapsama_link_to_preference_json_doc_txt
-                        )
-                    )
-                    addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsAlwaysUseShortDeltas, summary = R.string.always_use_short_avg_summary, title = R.string.always_use_short_avg))
-                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxDailyMultiplier, dialogMessage = R.string.openapsama_max_daily_safety_multiplier_summary, title = R.string.openapsama_max_daily_safety_multiplier))
-                    addPreference(
-                        AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxCurrentBasalMultiplier, dialogMessage = R.string.openapsama_current_basal_safety_multiplier_summary, title = R.string.openapsama_current_basal_safety_multiplier)
-                    )
-                })
-            })
+
 
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "Reactivity"
@@ -983,15 +947,108 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     title = rh.gs(R.string.autodrive_preferences_title_menu)
                 })
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIautoDrive, title = R.string.oaps_aimi_enableMlautoDrive_title))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasal, dialogMessage = R.string.autodrive_max_basal_summary, title = R.string.autodrive_max_basal_title))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolus, dialogMessage = R.string.prebolussmall_autodrive_mode_summary, title = R.string.prebolussmall_autodrive_mode_title))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivePrebolus, dialogMessage = R.string.prebolus_autodrive_mode_summary, title = R.string.prebolus_autodrive_mode_title))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIcombinedDelta, dialogMessage = R.string.OApsAIMI_CombinedDelta_summary, title = R.string.OApsAIMI_CombinedDelta_title))
-                addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIAutodriveTarget, dialogMessage = R.string.oaps_aimi_AutodriveTarget_summary, title = R.string.oaps_aimi_AutodriveTarget_title))
-                addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIAutodriveBG, dialogMessage = R.string.oaps_aimi_AutodriveBG_summary, title = R.string.oaps_aimi_AutodriveBG_title))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodriveDeviation, dialogMessage = R.string.oaps_aimi_AutodriveDeviation_summary, title = R.string.oaps_aimi_AutodriveDeviation_title))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodriveAcceleration, dialogMessage = R.string.oaps_aimi_AutodriveAcceleration_summary, title = R.string.oaps_aimi_AutodriveAcceleration_title))
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                key = "Autodrive morning variables"
+                //title = "Autodrive prebolus variables"
+                title = rh.gs(R.string.autodrive_prebolus_variablesMorning)
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.autodrive_prebolus_title_menuMorning)
+                })
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasalMorning, dialogMessage = R.string.autodrive_max_basal_summaryMorning, title = R.string.autodrive_max_basal_titleMorning))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolusMorning, dialogMessage = R.string.prebolussmall_autodrive_mode_summaryMorning, title = R.string.prebolussmall_autodrive_mode_titleMorning))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodrivePrebolusMorning, dialogMessage = R.string.prebolus_autodrive_mode_summary_Morning, title = R.string.prebolus_autodrive_mode_title_Morning))
+                })
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                key = "Autodrive afternoon variables"
+                //title = "Autodrive prebolus variables"
+                title = rh.gs(R.string.autodrive_prebolus_variablesAfternoon)
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.autodrive_prebolus_title_menuAfternoon)
+                })
+                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasalAfternoon, dialogMessage = R.string.autodrive_max_basal_summaryAfternoon, title = R.string.autodrive_max_basal_titleAfternoon))
+                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolusAfternoon, dialogMessage = R.string.prebolussmall_autodrive_mode_summaryAfternoon, title = R.string.prebolussmall_autodrive_mode_titleAfternoon))
+                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodrivePrebolusAfternoon, dialogMessage = R.string.prebolus_autodrive_mode_summary_Afternoon, title = R.string.prebolus_autodrive_mode_title_Afternoon))
+            })
+
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "Autodrive afternoon variables"
+                    //title = "Autodrive prebolus variables"
+                    title = rh.gs(R.string.autodrive_prebolus_variablesEvening)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.autodrive_prebolus_title_menuEvening)
+                    })
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasalEvening, dialogMessage = R.string.autodrive_max_basal_summaryEvening, title = R.string.autodrive_max_basal_titleEvening))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolusEvening, dialogMessage = R.string.prebolussmall_autodrive_mode_summaryEvening, title = R.string.prebolussmall_autodrive_mode_titleEvening))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodrivePrebolusEvening, dialogMessage = R.string.prebolus_autodrive_mode_summary_Evening, title = R.string.prebolus_autodrive_mode_title_Evening))
+                })
+
+
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "Autodrive evening variables"
+                    //title = "Autodrive prebolus variables"
+                    title = rh.gs(R.string.autodrive_prebolus_variables)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.autodrive_prebolus_title_menu)
+                    })
+                    addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIAutodriveTarget, dialogMessage = R.string.oaps_aimi_AutodriveTarget_summary, title = R.string.oaps_aimi_AutodriveTarget_title))
+                    addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIAutodriveBG, dialogMessage = R.string.oaps_aimi_AutodriveBG_summary, title = R.string.oaps_aimi_AutodriveBG_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIcombinedDelta, dialogMessage = R.string.OApsAIMI_CombinedDelta_summary, title = R.string.OApsAIMI_CombinedDelta_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodriveDeviation, dialogMessage = R.string.oaps_aimi_AutodriveDeviation_summary, title = R.string.oaps_aimi_AutodriveDeviation_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodriveAcceleration, dialogMessage = R.string.oaps_aimi_AutodriveAcceleration_summary, title = R.string.oaps_aimi_AutodriveAcceleration_title))
+
+
+                })
+            })
+            addPreference(PreferenceCategory(context).apply {
+                title = rh.gs(R.string.aimi_preferences_title_menu)
+            })
+            addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxBasal, dialogMessage = R.string.openapsma_max_basal_summary, title = R.string.openapsma_max_basal_title))
+            addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsSmbMaxIob, dialogMessage = R.string.openapssmb_max_iob_summary, title = R.string.openapssmb_max_iob_title))
+            addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                key = "OAPS_SMB_Settings"
+                title = rh.gs(R.string.AAPS_SMB_Settings)
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.aaps_preferences_title_menu)
+                })
+
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseDynamicSensitivity, summary = R.string.use_dynamic_sensitivity_summary, title = R.string.use_dynamic_sensitivity_title))
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseAutosens, title = R.string.openapsama_use_autosens))
+                addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.ApsDynIsfAdjustmentFactor, dialogMessage = R.string.dyn_isf_adjust_summary, title = R.string.dyn_isf_adjust_title))
+                addPreference(AdaptiveUnitPreference(ctx = context, unitKey = UnitDoubleKey.ApsLgsThreshold, dialogMessage = R.string.lgs_threshold_summary, title = R.string.lgs_threshold_title))
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsDynIsfAdjustSensitivity, summary = R.string.dynisf_adjust_sensitivity_summary, title = R.string.dynisf_adjust_sensitivity))
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsSensitivityRaisesTarget, summary = R.string.sensitivity_raises_target_summary, title = R.string.sensitivity_raises_target_title))
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsResistanceLowersTarget, summary = R.string.resistance_lowers_target_summary, title = R.string.resistance_lowers_target_title))
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseSmb, summary = R.string.enable_smb_summary, title = R.string.enable_smb))
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseSmbWithHighTt, summary = R.string.enable_smb_with_high_temp_target_summary, title = R.string.enable_smb_with_high_temp_target))
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseSmbAlways, summary = R.string.enable_smb_always_summary, title = R.string.enable_smb_always))
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseSmbWithCob, summary = R.string.enable_smb_with_cob_summary, title = R.string.enable_smb_with_cob))
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseSmbWithLowTt, summary = R.string.enable_smb_with_temp_target_summary, title = R.string.enable_smb_with_temp_target))
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseSmbAfterCarbs, summary = R.string.enable_smb_after_carbs_summary, title = R.string.enable_smb_after_carbs))
+                addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.ApsMaxSmbFrequency, title = R.string.smb_interval_summary))
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseUam, summary = R.string.enable_uam_summary, title = R.string.enable_uam))
+                addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.ApsCarbsRequestThreshold, dialogMessage = R.string.carbs_req_threshold_summary, title = R.string.carbs_req_threshold))
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "absorption_smb_advanced"
+                    title = rh.gs(app.aaps.core.ui.R.string.advanced_settings_title)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.aaps_preferences_title_menu)
+                    })
+                    addPreference(
+                        AdaptiveIntentPreference(
+                            ctx = context,
+                            intentKey = IntentKey.ApsLinkToDocs,
+                            intent = Intent().apply { action = Intent.ACTION_VIEW; data = Uri.parse(rh.gs(R.string.openapsama_link_to_preference_json_doc)) },
+                            summary = R.string.openapsama_link_to_preference_json_doc_txt
+                        )
+                    )
+                    addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsAlwaysUseShortDeltas, summary = R.string.always_use_short_avg_summary, title = R.string.always_use_short_avg))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxDailyMultiplier, dialogMessage = R.string.openapsama_max_daily_safety_multiplier_summary, title = R.string.openapsama_max_daily_safety_multiplier))
+                    addPreference(
+                        AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxCurrentBasalMultiplier, dialogMessage = R.string.openapsama_current_basal_safety_multiplier_summary, title = R.string.openapsama_current_basal_safety_multiplier)
+                    )
+                })
             })
         }
+
     }
 }

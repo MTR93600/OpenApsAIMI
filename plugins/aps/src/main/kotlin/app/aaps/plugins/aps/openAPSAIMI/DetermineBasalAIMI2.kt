@@ -280,58 +280,70 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             // Option B : on réduit fortement le bolusFactor sans stopper la basale
             bolusFactor *= 0.3
-            reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction du bolus; ")
+            //reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction du bolus; ")
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_1,dropPerHour))
+
         }
         if (delta >= 20f && combinedDelta >= 15f && !honeymoon) {
             // Mode "montée rapide" détecté, on override les réductions habituelles
             bolusFactor = 1.0
-            reasonBuilder.append("Montée rapide détectée (delta ${delta} mg/dL), application du mode d'urgence; ")
+            //reasonBuilder.append("Montée rapide détectée (delta ${delta} mg/dL), application du mode d'urgence; ")
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_2,delta))
+
         }
         // 2. Palier sur le combinedDelta
         when {
             combinedDelta < 1f -> {
                 bolusFactor *= 0.6
-                reasonBuilder.append("combinedDelta très faible ($combinedDelta), réduction x0.6; ")
+                //reasonBuilder.append("combinedDelta très faible ($combinedDelta), réduction x0.6; ")
+                reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_3,combinedDelta))
             }
             combinedDelta < 2f -> {
                 bolusFactor *= 0.8
-                reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
+                //reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
+                reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_4,combinedDelta))
             }
             else -> {
                 bolusFactor *= computeDynamicBolusMultiplier(combinedDelta)
-                reasonBuilder.append("combinedDelta élevé ($combinedDelta), pas de réduction; ")
+                //reasonBuilder.append("combinedDelta élevé ($combinedDelta), pas de réduction; ")
+                reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_5,combinedDelta))
             }
         }
 
         // 3. Plateau si BG élevé + combinedDelta très faible
         if (currentBG > 160f && combinedDelta < 1f) {
             bolusFactor *= 0.8
-            reasonBuilder.append("Plateau BG>180 & combinedDelta<2 => réduction x0.8; ")
+            //reasonBuilder.append("Plateau BG>180 & combinedDelta<2 => réduction x0.8; ")
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_6))
         }
 
         // 4. Contrôle IOB
         if (iob >= maxIob * 0.85f) {
             bolusFactor *= 0.85
-            reasonBuilder.append("IOB élevé ($iob U), réduction x0.8; ")
+            //reasonBuilder.append("IOB élevé ($iob U), réduction x0.8; ")
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_7,iob))
         }
 
         // 5. Contrôle du TDD par heure
         val tddThreshold = tdd24Hrs / 24f
         if (tddPerHour > tddThreshold) {
             bolusFactor *= 0.8
-            reasonBuilder.append("TDD/h élevé ($tddPerHour U/h), réduction x0.8; ")
+            //reasonBuilder.append("TDD/h élevé ($tddPerHour U/h), réduction x0.8; ")
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_8,tddPerHour))
         }
 
         // 6. TIR élevé
         if (tirInhypo >= 8f) {
             bolusFactor *= 0.5
-            reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.5; ")
+            //reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.5; ")
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_9,tirInhypo))
         }
 
         // 7. BG prédit proche de la cible
         if (predictedBG < targetBG + 10) {
             bolusFactor *= 0.5
-            reasonBuilder.append("BG prédit ($predictedBG) proche de la cible ($targetBG), réduction x0.5; ")
+            //reasonBuilder.append("BG prédit ($predictedBG) proche de la cible ($targetBG), réduction x0.5; ")
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_10,predictedBG,targetBG))
         }
         // ---- Intégration du suivi de durée zéro basal ----
         // Si nous avons déjà trop longtemps de basal à 0, on ne souhaite pas stopper la basale.
@@ -341,7 +353,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             stopBasal = false
             basalLS = true
             bolusFactor = 1.0
-            reasonBuilder.append("Zero basal duration ($zeroBasalDurationMinutes min) dépassé, forçant basal minimal; ")
+            //reasonBuilder.append("Zero basal duration ($zeroBasalDurationMinutes min) dépassé, forçant basal minimal; ")
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_11,zeroBasalDurationMinutes))
         }
 
         return SafetyDecision(
@@ -672,10 +685,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 6️⃣ Logging des raisons
         when {
             bypassSafety -> {
-                rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}: rate = ${rate} U/h\n")
+                //rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}: rate = ${rate} U/h\n")
+                val suffix = when {
+                    isMealMode -> context.getString(R.string.meal_mode_suffix)
+                    isEarlyAutodrive -> context.getString(R.string.early_autodrive_suffix)
+                    else -> ""
+                }
+
+                rT.reason.appendLine(context.getString(R.string.safety_adjustments_12, suffix, rate))
             }
             rate != _rate -> {
-                rT.reason.append("→ clamped à maxSafeBasal ${"%.2f".format(maxSafe)} U/h (demandé: ${"%.2f".format(_rate)} U/h)\n")
+
+                //rT.reason.append("→ clamped à maxSafeBasal ${"%.2f".format(maxSafe)} U/h (demandé: ${"%.2f".format(_rate)} U/h)\n")
+                val formattedMaxSafe = "%.2f".format(maxSafe)
+                val formattedRate = "%.2f".format(_rate)
+
+                rT.reason.appendLine(context.getString(R.string.safety_adjustments_13, formattedMaxSafe, formattedRate))
             }
         }
 
@@ -687,7 +712,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             && rate >= currenttemp.rate * 0.8
             && duration > 0
         ) {
-            rT.reason.append("${currenttemp.duration}m restants & ${currenttemp.rate} ~ req $rate U/h : pas de temp.\n")
+            //rT.reason.append("${currenttemp.duration}m restants & ${currenttemp.rate} ~ req $rate U/h : pas de temp.\n")
+            val formattedDuration = "${currenttemp.duration}m"
+            val formattedRate = "%.2f".format(currenttemp.rate)
+            val formattedRequestedRate = "%.2f".format(rate)
+
+            rT.reason.appendLine(context.getString(R.string.safety_adjustments_14, formattedDuration, formattedRate, formattedRequestedRate))
             return rT
         }
 
@@ -697,14 +727,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (rate == profileBasal) {
             if (profile.skip_neutral_temps) {
                 if (currenttemp.duration > 0) {
-                    rT.reason.append("Taux neutre = profil & temp actif → annulation du temp.\n")
+                    //rT.reason.append("Taux neutre = profil & temp actif → annulation du temp.\n")
+                    rT.reason.appendLine(context.getString(R.string.basal_arguments_1))
                     rT.duration = 0
                     rT.rate = 0.0
                 } else {
-                    rT.reason.append("Taux neutre = profil & pas de temp → rien à faire.\n")
+                    //rT.reason.append("Taux neutre = profil & pas de temp → rien à faire.\n")
+                    rT.reason.appendLine(context.getString(R.string.basal_arguments_2))
                 }
             } else {
-                rT.reason.append("Taux neutre = profil → pose d’un temp à $rate U/h.\n")
+                //rT.reason.append("Taux neutre = profil → pose d’un temp à $rate U/h.\n")
+                rT.reason.appendLine(context.getString(R.string.basal_arguments_3, rate))
                 rT.duration = duration
                 rT.rate = rate
             }
@@ -713,7 +746,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // ────────────────────────────────────────────────────────────────
         // 9️⃣ Pose “standard” du temp basal
-        rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
+        //rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
+        rT.reason.appendLine(context.getString(R.string.basal_arguments_4, rate,duration))
         rT.duration = duration
         rT.rate = rate
         return rT
@@ -1076,7 +1110,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bg: Float
     ): Boolean {
         // Récupération de la valeur de pbolusMeal depuis les préférences
-        val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+        //val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val pbolusA = when (hour) {
+            in 0..10 -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusMorning)
+            in 11..17 -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusAfternoon)
+            else -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusEvening)
+        }
         val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
         val autodriveminDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
         //val autodriveISF: Int = preferences.get(IntKey.OApsAIMIautodriveISF)
@@ -1139,7 +1179,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun roundToPoint05(number: Float): Float {
         return (number * 20.0).roundToInt() / 20.0f
     }
-    private fun isCriticalSafetyCondition(mealData: MealData): Pair<Boolean, String> {
+    /*private fun isCriticalSafetyCondition(mealData: MealData): Pair<Boolean, String> {
         val conditionsTrue = mutableListOf<String>()
         //val slopedeviation = mealData.slopeFromMaxDeviation <= -1.5 && mealData.slopeFromMinDeviation < 0.3
         //if (slopedeviation) conditionsTrue.add("slopedeviation")
@@ -1192,6 +1232,60 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             conditionsTrue.joinToString(", ")
         } else {
             "No conditions met"
+        }
+
+        return Pair(result, conditionsTrueString)
+    } */
+    private fun isCriticalSafetyCondition(mealData: MealData): Pair<Boolean, String> {
+        val conditionsTrue = mutableListOf<String>()
+        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
+        val nosmbHM = iob > 0.7 && honeymoon && delta <= 10.0 && !mealTime && !bfastTime && !lunchTime && !dinnerTime && predictedBg < 130
+        if (nosmbHM) conditionsTrue.add(context.getString(R.string.safety_adjustments_15))
+        val honeysmb = honeymoon && delta < 0 && bg < 170
+        if (honeysmb) conditionsTrue.add(context.getString(R.string.safety_adjustments_16))
+        val negdelta = delta <= 0 && !mealTime && !bfastTime && !lunchTime && !dinnerTime && eventualBG < 140
+        if (negdelta) conditionsTrue.add(context.getString(R.string.safety_adjustments_17))
+        val nosmb = iob >= 2*maxSMB && bg < 110 && delta < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+        if (nosmb) conditionsTrue.add(context.getString(R.string.safety_adjustments_18))
+        val fasting = fastingTime
+        if (fasting) conditionsTrue.add(context.getString(R.string.safety_adjustments_19))
+        val belowMinThreshold = bg < 100 && delta < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+        if (belowMinThreshold) conditionsTrue.add(context.getString(R.string.safety_adjustments_20))
+        val isNewCalibration = iscalibration && delta > 8
+        if (isNewCalibration) conditionsTrue.add(context.getString(R.string.safety_adjustments_21))
+        val belowTargetAndDropping = bg < targetBg && delta < -2 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+        if (belowTargetAndDropping) conditionsTrue.add(context.getString(R.string.safety_adjustments_22))
+        val belowTargetAndStableButNoCob = bg < targetBg - 15 && shortAvgDelta <= 2 && cob <= 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+        if (belowTargetAndStableButNoCob) conditionsTrue.add(context.getString(R.string.safety_adjustments_23))
+        val droppingFast = bg < 150 && delta < -2
+        if (droppingFast) conditionsTrue.add(context.getString(R.string.safety_adjustments_24))
+        val droppingFastAtHigh = bg < 220 && delta <= -7
+        if (droppingFastAtHigh) conditionsTrue.add(context.getString(R.string.safety_adjustments_25))
+        val droppingVeryFast = delta < -11
+        if (droppingVeryFast) conditionsTrue.add(context.getString(R.string.safety_adjustments_26))
+        val prediction = predictedBg < targetBg && bg < 135 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+        if (prediction) conditionsTrue.add(context.getString(R.string.safety_adjustments_27))
+        val interval = eventualBG < targetBg && delta > 10 && iob >= maxSMB/2 && lastsmbtime < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime && !snackTime
+        if (interval) conditionsTrue.add(context.getString(R.string.safety_adjustments_28))
+        val targetinterval = targetBg >= 120 && delta > 0 && iob >= maxSMB/2 && lastsmbtime < 12 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime && !snackTime
+        if (targetinterval) conditionsTrue.add(context.getString(R.string.safety_adjustments_29))
+        val acceleratingDown = delta < -2 && delta - longAvgDelta < -2 && lastsmbtime < 15
+        if (acceleratingDown) conditionsTrue.add(context.getString(R.string.safety_adjustments_30))
+        val decceleratingdown = delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta) && lastsmbtime < 15
+        if (decceleratingdown) conditionsTrue.add(context.getString(R.string.safety_adjustments_31))
+        val nosmbhoneymoon = honeymoon && iob > maxIob / 2 && delta < 0
+        if (nosmbhoneymoon) conditionsTrue.add(context.getString(R.string.safety_adjustments_32))
+        val bg90 = bg < 90
+        if (bg90) conditionsTrue.add(context.getString(R.string.safety_adjustments_33))
+
+        val result = belowTargetAndDropping || belowTargetAndStableButNoCob || nosmbHM || honeysmb ||
+            droppingFast || droppingFastAtHigh || droppingVeryFast || prediction || interval || targetinterval || bg90 || negdelta ||
+            fasting || nosmb || isNewCalibration || belowMinThreshold || acceleratingDown || decceleratingdown || nosmbhoneymoon
+
+        val conditionsTrueString = if (conditionsTrue.isNotEmpty()) {
+            conditionsTrue.joinToString(", ")
+        } else {
+            context.getString(R.string.no_conditions_met)
         }
 
         return Pair(result, conditionsTrueString)
@@ -2125,13 +2219,24 @@ private fun neuralnetwork5(
         return finalBasal.coerceIn(0.0, 8.0)
     }
 
-    private fun determineNoteBasedOnBg(bg: Double): String {
+    //private fun determineNoteBasedOnBg(bg: Double): String {
+      //  return when {
+            //bg > 170 -> "more aggressive"
+            //bg in 90.0..100.0 -> "less aggressive"
+            //bg in 80.0..89.9 -> "too aggressive" // Vous pouvez ajuster ces valeurs selon votre logique
+            //bg < 80 -> "low treatment"
+            //else -> "normal" // Vous pouvez définir un autre message par défaut pour les cas non couverts
+
+        //}
+    //}
+
+    private fun determineNoteBasedOnBg(bg: Double, context: Context): String {
         return when {
-            bg > 170 -> "more aggressive"
-            bg in 90.0..100.0 -> "less aggressive"
-            bg in 80.0..89.9 -> "too aggressive" // Vous pouvez ajuster ces valeurs selon votre logique
-            bg < 80 -> "low treatment"
-            else -> "normal" // Vous pouvez définir un autre message par défaut pour les cas non couverts
+            bg > 170 -> context.getString(R.string.table_plugin_miscellaneous_8)
+            bg in 90.0..100.0 -> context.getString(R.string.table_plugin_miscellaneous_9)
+            bg in 80.0..89.9 -> context.getString(R.string.table_plugin_miscellaneous_10)
+            bg < 80 -> context.getString(R.string.table_plugin_miscellaneous_11)
+            else -> context.getString(R.string.table_plugin_miscellaneous_12)
         }
     }
     private fun processNotesAndCleanUp(notes: String): String {
@@ -2228,12 +2333,12 @@ private fun neuralnetwork5(
         return combinedDelta > 3.0f && acceleration > 1.2f
     }
 
-    private fun parseNotes(startMinAgo: Int, endMinAgo: Int): String {
+    private fun parseNotes(context: Context,startMinAgo: Int, endMinAgo: Int): String {
         val olderTimeStamp = now - endMinAgo * 60 * 1000
         val moreRecentTimeStamp = now - startMinAgo * 60 * 1000
         var notes = ""
         val recentNotes2: MutableList<String> = mutableListOf()
-        val autoNote = determineNoteBasedOnBg(bg)
+        val autoNote = determineNoteBasedOnBg(bg,context)
         recentNotes2.add(autoNote)
         notes += autoNote  // Ajout de la note auto générée
 
@@ -2390,10 +2495,10 @@ private fun neuralnetwork5(
         val fourHoursAgo = now - 4 * 60 * 60 * 1000
         this.recentNotes = persistenceLayer.getUserEntryDataFromTime(fourHoursAgo).blockingGet()
 
-        this.tags0to60minAgo = parseNotes(0, 60)
-        this.tags60to120minAgo = parseNotes(60, 120)
-        this.tags120to180minAgo = parseNotes(120, 180)
-        this.tags180to240minAgo = parseNotes(180, 240)
+        this.tags0to60minAgo = parseNotes(context,0, 60)
+        this.tags60to120minAgo = parseNotes(context,60, 120)
+        this.tags120to180minAgo = parseNotes(context,120, 180)
+        this.tags180to240minAgo = parseNotes(context,180, 240)
         this.delta = glucose_status.delta.toFloat()
         this.shortAvgDelta = glucose_status.shortAvgDelta.toFloat()
         this.longAvgDelta = glucose_status.longAvgDelta.toFloat()
@@ -2435,73 +2540,174 @@ private fun neuralnetwork5(
         val AutodriveAcceleration = preferences.get(DoubleKey.OApsAIMIAutodriveAcceleration)
         val nightbis = hourOfDay <= 7
         val modesCondition = !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime
-        val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
+        //val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
+        val hourpbolusAS = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val pbolusAS = when (hourpbolusAS) {
+            in 0..10 -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusMorning)
+            in 11..17 -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusAfternoon)
+            else -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusEvening)
+        }
+
+
         if (bg > 100 && predictedBg > 140 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && modesCondition) {
-            rT.units = pbolusAS
-            rT.reason.append("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
+            rT.units = pbolusAS //original >110
+            //rT.reason.appendLine("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
+            rT.reason.appendLine(
+                String.format(
+                    context.getString(R.string.table_plugin_autodrive_1),
+                    pbolusAS,
+                    //combinedDelta,
+                    //predicted,
+                    //bgAcceleration
+                    combinedDelta.toFloat(), // Assicurati che combinedDelta sia un numero
+                    predicted.toFloat(), // Assicurati che predicted sia un numero
+                    bgAcceleration.toDouble() // Assicurati che bgAcceleration sia un numero
+                )
+            )
             return rT
         }
         if (isMealModeCondition()){
              val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
                  rT.units = pbolusM
-                 rT.reason.append("Microbolusing Meal Mode ${pbolusM}U.")
-             return rT
+                // rT.reason.appendLine("Microbolusing Meal Mode ${pbolusM}U.")
+                rT.reason.appendLine(
+                    String.format(
+                       context.getString(R.string.table_plugin_mealmodes_prebolus_1),
+                      pbolusM
+                 )
+                )
+
+            return rT
          }
         if (!nightbis && isAutodriveModeCondition(targetBg, delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && modesCondition && bgAcceleration.toDouble() >= AutodriveAcceleration){
-            val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+            //val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+
+            val pbolusAMorning = preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusMorning)
+            val pbolusAAfternoon = preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusAfternoon)
+            val pbolusAEvening = preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusEvening)
+
+            val pbolusA: Double = when (hour) {
+                in 0..10 -> pbolusAMorning
+                in 11..17 -> pbolusAAfternoon
+                else -> pbolusAEvening
+            }
             rT.units = pbolusA
-            rT.reason.append("Microbolusing Autodrive Mode ${pbolusA}U. TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}. ")
+            //rT.reason.appendLine("Microbolusing Autodrive Mode ${pbolusA}U. TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}. ")
+            rT.reason.appendLine(
+                String.format(
+                    context.getString(R.string.table_plugin_autodrive_2),
+                    pbolusA,
+                    targetBg.toFloat(), // Assicurati che targetBg sia un numero, altrimenti usa .toFloat() o .toDouble()
+                    combinedDelta.toFloat(), // Assicurati che combinedDelta sia un numero
+                    mealData.slopeFromMinDeviation.toFloat(), // Assicurati che slopeFromMinDeviation sia un numero
+                    bgAcceleration.toDouble() // Assicurati che bgAcceleration sia un numero
+
+                )
+            )
+
             return rT
         }
         if (isbfastModeCondition()){
             val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
             rT.units = pbolusbfast
-            rT.reason.append("Microbolusing 1/2 Breakfast Mode ${pbolusbfast}U.")
+            //rT.reason.appendLine("Microbolusing 1/2 Breakfast Mode ${pbolusbfast}U.")
+            rT.reason.appendLine(
+                String.format(
+                    context.getString(R.string.table_plugin_mealmodes_prebolus_2),
+                    pbolusbfast
+                )
+            )
+
             return rT
         }
         if (isbfast2ModeCondition()){
             val pbolusbfast2: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
             this.maxSMB = pbolusbfast2
             rT.units = pbolusbfast2
-            rT.reason.append("Microbolusing 2/2 Breakfast Mode ${pbolusbfast2}U. ")
-           return rT
+            //rT.reason.appendLine("Microbolusing 2/2 Breakfast Mode ${pbolusbfast2}U. ")
+            rT.reason.appendLine(
+                String.format(
+                    context.getString(R.string.table_plugin_mealmodes_prebolus_3),
+                    pbolusbfast2
+                )
+            )
+
+            return rT
         }
         if (isLunchModeCondition()){
             val pbolusLunch: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
                 rT.units = pbolusLunch
-                rT.reason.append("Microbolusing 1/2 Lunch Mode ${pbolusLunch}U.")
+                //rT.reason.appendLine("Microbolusing 1/2 Lunch Mode ${pbolusLunch}U.")
+            rT.reason.appendLine(
+                String.format(
+                    context.getString(R.string.table_plugin_mealmodes_prebolus_4),
+                    pbolusLunch
+                )
+            )
             return rT
         }
         if (isLunch2ModeCondition()){
             val pbolusLunch2: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
             this.maxSMB = pbolusLunch2
             rT.units = pbolusLunch2
-            rT.reason.append("Microbolusing 2/2 Lunch Mode ${pbolusLunch2}U.")
+            //rT.reason.appendLine("Microbolusing 2/2 Lunch Mode ${pbolusLunch2}U.")
+            rT.reason.appendLine(
+                String.format(
+                    context.getString(R.string.table_plugin_mealmodes_prebolus_5),
+                    pbolusLunch2
+                )
+            )
+
             return rT
         }
         if (isDinnerModeCondition()){
             val pbolusDinner: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
             rT.units = pbolusDinner
-            rT.reason.append("Microbolusing 1/2 Dinner Mode ${pbolusDinner}U.")
+            //rT.reason.appendLine("Microbolusing 1/2 Dinner Mode ${pbolusDinner}U.")
+            rT.reason.appendLine(
+                String.format(
+                    context.getString(R.string.table_plugin_mealmodes_prebolus_6),
+                    pbolusDinner
+                )
+            )
             return rT
         }
         if (isDinner2ModeCondition()){
             val pbolusDinner2: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
             this.maxSMB = pbolusDinner2
             rT.units = pbolusDinner2
-            rT.reason.append("Microbolusing 2/2 Dinner Mode ${pbolusDinner2}U.")
+            //rT.reason.appendLine("Microbolusing 2/2 Dinner Mode ${pbolusDinner2}U.")
+            rT.reason.appendLine(
+                String.format(
+                    context.getString(R.string.table_plugin_mealmodes_prebolus_7),
+                    pbolusDinner2
+                )
+            )
             return rT
         }
         if (isHighCarbModeCondition()){
             val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
             rT.units = pbolusHC
-            rT.reason.append("Microbolusing High Carb Mode ${pbolusHC}U.")
+            //rT.reason.appendLine("Microbolusing High Carb Mode ${pbolusHC}U.")
+            rT.reason.appendLine(
+                String.format(
+                    context.getString(R.string.table_plugin_mealmodes_prebolus_8),
+                    pbolusHC
+                )
+            )
             return rT
         }
         if (issnackModeCondition()){
             val pbolussnack: Double = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
             rT.units = pbolussnack
-            rT.reason.append("Microbolusing snack Mode ${pbolussnack}U.")
+            //rT.reason.appendLine("Microbolusing snack Mode ${pbolussnack}U.")
+            rT.reason.appendLine(
+                String.format(
+                    context.getString(R.string.table_plugin_mealmodes_prebolus_9),
+                    pbolussnack
+                )
+            )
             return rT
         }
 
@@ -3260,7 +3466,13 @@ private fun neuralnetwork5(
         }
 
         val forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
-        val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)
+        //val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)
+        val hourforcedBasal = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val forcedBasal = when (hourforcedBasal) {
+            in 1..11 -> preferences.get(DoubleKey.autodriveMaxBasalMorning)
+            in 12..18 -> preferences.get(DoubleKey.autodriveMaxBasalAfternoon)
+            else -> preferences.get(DoubleKey.autodriveMaxBasalEvening)
+        }
 
 /* var rate = when {
      detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime -> calculateRate(forcedBasal, profile_current_basal, 1.0, "Early Meal detection: activation d'une basale maximale pendant 30 minutes.", currenttemp, rT)
@@ -3345,6 +3557,23 @@ private fun neuralnetwork5(
      appendLine()
 
      appendLine("╔${"═".repeat(screenWidth)}╗")
+     //appendLine(String.format("║ %-${screenWidth}s ║", "TIR Data"))
+     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_tir_title)))
+     appendLine("╠${"═".repeat(screenWidth)}╣")
+     //appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR Low", String.format("%.1f", currentTIRLow)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR In Range", String.format("%.1f", currentTIRRange)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR High", String.format("%.1f", currentTIRAbove)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s%%", "Last Hr TIR Low", String.format("%.1f", lastHourTIRLow)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s%%", "Last Hr TIR >120", String.format("%.1f", lastHourTIRabove120)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s%%", context.getString(R.string.table_plugin_tir_1), String.format("%.1f", currentTIRLow)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s%%", context.getString(R.string.table_plugin_tir_2), String.format("%.1f", currentTIRRange)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s%%", context.getString(R.string.table_plugin_tir_3), String.format("%.1f", currentTIRAbove)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s%%", context.getString(R.string.table_plugin_tir_4), String.format("%.1f", lastHourTIRLow)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s%%", context.getString(R.string.table_plugin_tir_5), String.format("%.1f", lastHourTIRabove120)))
+     appendLine("╚${"═".repeat(screenWidth)}╝")
+     appendLine()
+
+     appendLine("╔${"═".repeat(screenWidth)}╗")
      //appendLine(String.format("║ %-${screenWidth}s ║", "Request"))
      appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_request_title)))
      appendLine("╠${"═".repeat(screenWidth)}╣")
@@ -3373,7 +3602,7 @@ private fun neuralnetwork5(
      //appendLine(String.format("║ %-${screenWidth}s ║", "Limits & Conditions"))
      appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_limits_title)))
      appendLine("╠${"═".repeat(screenWidth)}╣")
-     appendLine(String.format("║ %-${columnWidth}s │ %s u", "Max IOB", String.format("%.1f", maxIob)))
+    /* appendLine(String.format("║ %-${columnWidth}s │ %s u", "Max IOB", String.format("%.1f", maxIob)))
      appendLine(String.format("║ %-${columnWidth}s │ %s u", "IOB", String.format("%.1f", iob)))
      appendLine(String.format("║ %-${columnWidth}s │ %s u", "IOB2", String.format("%.1f", iob2)))
      appendLine(String.format("║ %-${columnWidth}s │ %s u", "Max SMB", String.format("%.1f", maxSMB)))
@@ -3387,6 +3616,23 @@ private fun neuralnetwork5(
      appendLine(String.format("║ %-${columnWidth}s │ %s", "Adjusted Dia H", String.format("%.1f", adjustedDIAInMinutes/60)))
      appendLine(String.format("║ %-${columnWidth}s │ %s", "pumpAgeDays", String.format("%.1f", pumpAgeDays)))
      appendLine(String.format("║ %-${columnWidth}s │ %s", "zeroBasalAccumulatedMinutes", String.format("%.1f", zeroBasalAccumulatedMinutes.toDouble())))
+
+     */
+
+     appendLine(String.format("║ %-${columnWidth}s │ %s u", context.getString(R.string.table_plugin_limits_1), String.format("%.1f", maxIob)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s u", context.getString(R.string.table_plugin_limits_2), String.format("%.1f", iob)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s u", context.getString(R.string.table_plugin_limits_3), String.format("%.1f", iob2)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s u", context.getString(R.string.table_plugin_limits_4), String.format("%.1f", maxSMB)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_5), conditionResult))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_6), conditionsTrue))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_7), String.format("%.1f", profile.peakTime)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_8), String.format("%.1f", profile.currentActivity)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_9), String.format("%.1f", peakintermediaire)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_10), String.format("%.1f", profile.futureActivity / (profile.currentActivity + 0.0001))))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_11), String.format("%.1f", tp)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_12), String.format("%.1f", adjustedDIAInMinutes / 60)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_13), String.format("%.1f", pumpAgeDays)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_14), String.format("%.1f", zeroBasalAccumulatedMinutes.toDouble())))
      appendLine("╚${"═".repeat(screenWidth)}╝")
      appendLine()
 
@@ -3394,7 +3640,7 @@ private fun neuralnetwork5(
      //appendLine(String.format("║ %-${screenWidth}s ║", "Glucose Data"))
      appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_glucose_title)))
      appendLine("╠${"═".repeat(screenWidth)}╣")
-     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Current BG", String.format("%.1f", bg)))
+     /*appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Current BG", String.format("%.1f", bg)))
      appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "predictedBg", String.format("%.1f", predictedBg)))
      appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Target BG", String.format("%.1f", targetBg)))
      appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Prediction", String.format("%.1f", predictedBg)))
@@ -3406,72 +3652,236 @@ private fun neuralnetwork5(
      appendLine(String.format("║ %-${columnWidth}s │ %s", "slopeFromMaxDeviation", String.format("%.1f", mealData.slopeFromMaxDeviation)))
      appendLine(String.format("║ %-${columnWidth}s │ %s", "slopeFromMinDeviation", String.format("%.1f", mealData.slopeFromMinDeviation)))
      appendLine(String.format("║ %-${columnWidth}s │ %s", "bgAcceleration", String.format("%.1f", bgAcceleration)))
+
+      */
+
+     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", context.getString(R.string.table_plugin_glucose_1), String.format("%.1f", bg)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", context.getString(R.string.table_plugin_glucose_2), String.format("%.1f", predictedBg)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", context.getString(R.string.table_plugin_glucose_3), String.format("%.1f", targetBg)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", context.getString(R.string.table_plugin_glucose_4), String.format("%.1f", predictedBg)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", context.getString(R.string.table_plugin_glucose_5), String.format("%.1f", eventualBG)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_glucose_6), String.format("%.1f", delta)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_glucose_7), String.format("%.1f", combinedDelta)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_glucose_8), String.format("%.1f", shortAvgDelta)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_glucose_9), String.format("%.1f", longAvgDelta)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_glucose_10), String.format("%.1f", mealData.slopeFromMaxDeviation)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_glucose_11), String.format("%.1f", mealData.slopeFromMinDeviation)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_glucose_12), String.format("%.1f", bgAcceleration)))
      appendLine("╚${"═".repeat(screenWidth)}╝")
      appendLine()
 
-     appendLine("╔${"═".repeat(screenWidth)}╗")
-     //appendLine(String.format("║ %-${screenWidth}s ║", "TIR Data"))
-     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_tir_title)))
-     appendLine("╠${"═".repeat(screenWidth)}╣")
-     appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR Low", String.format("%.1f", currentTIRLow)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR In Range", String.format("%.1f", currentTIRRange)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR High", String.format("%.1f", currentTIRAbove)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s%%", "Last Hr TIR Low", String.format("%.1f", lastHourTIRLow)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s%%", "Last Hr TIR >120", String.format("%.1f", lastHourTIRabove120)))
-     appendLine("╚${"═".repeat(screenWidth)}╝")
-     appendLine()
 
-     appendLine("╔${"═".repeat(screenWidth)}╗")
-     //appendLine(String.format("║ %-${screenWidth}s ║", "Step Data"))
-     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_steps_title)))
-     appendLine("╠${"═".repeat(screenWidth)}╣")
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (5m)", recentSteps5Minutes))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (30m)", recentSteps30Minutes))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (60m)", recentSteps60Minutes))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (180m)", recentSteps180Minutes))
-     appendLine("╚${"═".repeat(screenWidth)}╝")
-     appendLine()
 
-     appendLine("╔${"═".repeat(screenWidth)}╗")
-     //appendLine(String.format("║ %-${screenWidth}s ║", "Heart Rate Data"))
-     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_heart_title)))
-     appendLine("╠${"═".repeat(screenWidth)}╣")
-     appendLine(String.format("║ %-${columnWidth}s │ %s bpm", "HR (5m)", String.format("%.1f", averageBeatsPerMinute)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s bpm", "HR (60m)", String.format("%.1f", averageBeatsPerMinute60)))
-     appendLine("╚${"═".repeat(screenWidth)}╝")
-     appendLine()
 
-     appendLine("╔${"═".repeat(screenWidth)}╗")
+
+     //appendLine("╔${"═".repeat(screenWidth)}╗")
      //appendLine(String.format("║ %-${screenWidth}s ║", "Modes"))
-     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_manual_modes_title)))
-     appendLine("╠${"═".repeat(screenWidth)}╣")
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Delete Time", if (deleteTime) "Active" else "Inactive"))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Date", deleteEventDate ?: "N/A"))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Sleep", if (sleepTime) "Active" else "Inactive"))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Sport", if (sportTime) "Active" else "Inactive"))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Snack", if (snackTime) "Active" else "Inactive"))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Low Carb", if (lowCarbTime) "Active" else "Inactive"))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "High Carb", if (highCarbTime) "Active" else "Inactive"))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Meal", if (mealTime) "Active" else "Inactive"))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Breakfast", if (bfastTime) "Active" else "Inactive"))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Lunch", if (lunchTime) "Active" else "Inactive"))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Dinner", if (dinnerTime) "Active" else "Inactive"))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Fasting", if (fastingTime) "Active" else "Inactive"))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Calibration", if (iscalibration) "Active" else "Inactive"))
-     appendLine("╚${"═".repeat(screenWidth)}╝")
-     appendLine()
+     //appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_manual_modes_title)))
+     //appendLine("╠${"═".repeat(screenWidth)}╣")
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Delete Time", if (deleteTime) "Active" else "Inactive"))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Date", deleteEventDate ?: "N/A"))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Sleep", if (sleepTime) "Active" else "Inactive"))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Sport", if (sportTime) "Active" else "Inactive"))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Snack", if (snackTime) "Active" else "Inactive"))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Low Carb", if (lowCarbTime) "Active" else "Inactive"))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "High Carb", if (highCarbTime) "Active" else "Inactive"))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Meal", if (mealTime) "Active" else "Inactive"))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Breakfast", if (bfastTime) "Active" else "Inactive"))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Lunch", if (lunchTime) "Active" else "Inactive"))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Dinner", if (dinnerTime) "Active" else "Inactive"))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Fasting", if (fastingTime) "Active" else "Inactive"))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Calibration", if (iscalibration) "Active" else "Inactive"))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_1), if (deleteTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_2), deleteEventDate ?: "N/A"))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_2), deleteEventDate ?: context.getString(R.string.table_plugin_manual_modes_na)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_3), if (sleepTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_4), if (sportTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_5), if (snackTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_6), if (lowCarbTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_7), if (highCarbTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_8), if (mealTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_9), if (bfastTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_10), if (lunchTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_11), if (dinnerTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_12), if (fastingTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_13), if (iscalibration) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine("╚${"═".repeat(screenWidth)}╝")
+     //appendLine()
+
+     val shouldShowTable = deleteTime ||
+         (deleteEventDate != null && deleteEventDate.lowercase() != "null" && deleteEventDate.isNotBlank()) ||
+         sleepTime || sportTime || snackTime || lowCarbTime ||
+         highCarbTime || mealTime || bfastTime || lunchTime ||
+         dinnerTime || fastingTime || iscalibration
+
+     if (shouldShowTable) {
+         appendLine("╔${"═".repeat(screenWidth)}╗")
+         appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_manual_modes_title)))
+         appendLine("╠${"═".repeat(screenWidth)}╣")
+
+         if (deleteTime) {
+             appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_1), context.getString(R.string.table_plugin_manual_modes_active)))
+         }
+         // Stampa la data solo se valida
+         if (!deleteEventDate.isNullOrBlank() && deleteEventDate.lowercase() != "null") {
+             appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_2), deleteEventDate))
+         }
+         if (sleepTime) {
+             appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_3), context.getString(R.string.table_plugin_manual_modes_active)))
+         }
+         if (sportTime) {
+             appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_4), context.getString(R.string.table_plugin_manual_modes_active)))
+         }
+         if (snackTime) {
+             appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_5), context.getString(R.string.table_plugin_manual_modes_active)))
+         }
+         if (lowCarbTime) {
+             appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_6), context.getString(R.string.table_plugin_manual_modes_active)))
+         }
+         if (highCarbTime) {
+             appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_7), context.getString(R.string.table_plugin_manual_modes_active)))
+         }
+         if (mealTime) {
+             appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_8), context.getString(R.string.table_plugin_manual_modes_active)))
+         }
+         if (bfastTime) {
+             appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_9), context.getString(R.string.table_plugin_manual_modes_active)))
+         }
+         if (lunchTime) {
+             appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_10), context.getString(R.string.table_plugin_manual_modes_active)))
+         }
+         if (dinnerTime) {
+             appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_11), context.getString(R.string.table_plugin_manual_modes_active)))
+         }
+         if (fastingTime) {
+             appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_12), context.getString(R.string.table_plugin_manual_modes_active)))
+         }
+         if (iscalibration) {
+             appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_13), context.getString(R.string.table_plugin_manual_modes_active)))
+         }
+
+         appendLine("╚${"═".repeat(screenWidth)}╝")
+         appendLine()
+     }
+
+     if (autodrive) {
+         //val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
+         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+         val pbolusAS = when (hour) {
+             in 1..11 -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusMorning)
+             in 12..18 -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusAfternoon)
+             else -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusEvening)
+         }
+         //val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+         val pbolusA = when (hour) {
+             in 1..11 -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusMorning)
+             in 12..18 -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusAfternoon)
+             else -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusEvening)
+         }
+         val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
+         val AutodriveAcceleration: Double = preferences.get(DoubleKey.OApsAIMIAutodriveAcceleration)
+         val autodriveminDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
+         val autodriveTarget: Int = preferences.get(IntKey.OApsAIMIAutodriveTarget)
+         val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG)
+         val forcedBasal = when (hour) {
+             in 1..11 -> preferences.get(DoubleKey.autodriveMaxBasalMorning)
+             in 12..18 -> preferences.get(DoubleKey.autodriveMaxBasalAfternoon)
+             else -> preferences.get(DoubleKey.autodriveMaxBasalEvening)
+         }
+
+         appendLine("╔${"═".repeat(screenWidth)}╗")
+         appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_autodrive_title)))
+         appendLine("╠${"═".repeat(screenWidth)}╣")
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_autodrive_state), "ON"))
+         appendLine(String.format("║ %-${columnWidth}s │ %.1f", context.getString(R.string.table_plugin_autodrive_prebolus_snack), pbolusAS))
+         appendLine(String.format("║ %-${columnWidth}s │ %.1f", context.getString(R.string.table_plugin_autodrive_prebolus_meal), pbolusA))
+         appendLine(String.format("║ %-${columnWidth}s │ %.1f", context.getString(R.string.table_plugin_autodrive_prebolus_tbr), forcedBasal))
+         appendLine("╠${"═".repeat(screenWidth)}╣")
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_autodrive_conditions_title), ""))
+         appendLine("╠${"═".repeat(screenWidth)}╣")
+         appendLine(String.format("║ %-${columnWidth}s │ %.1f", context.getString(R.string.table_plugin_autodrive_combined_delta_min), autodriveDelta))
+         appendLine(String.format("║ %-${columnWidth}s │ %.1f", context.getString(R.string.table_plugin_autodrive_acceleration_min), AutodriveAcceleration))
+         appendLine(String.format("║ %-${columnWidth}s │ %.1f", context.getString(R.string.table_plugin_autodrive_min_deviation), autodriveminDeviation))
+         appendLine(String.format("║ %-${columnWidth}s │ %d", context.getString(R.string.table_plugin_autodrive_target_bg), autodriveTarget))
+         appendLine(String.format("║ %-${columnWidth}s │ %d", context.getString(R.string.table_plugin_autodrive_min_bg), autodriveBG))
+         appendLine("╚${"═".repeat(screenWidth)}╝")
+         appendLine()
+     }
+
+     //  appendLine("╔${"═".repeat(screenWidth)}╗")
+     //appendLine(String.format("║ %-${screenWidth}s ║", "Step Data"))
+     //  appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_steps_title)))
+     //  appendLine("╠${"═".repeat(screenWidth)}╣")
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (5m)", recentSteps5Minutes))
+     //  appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_1), recentSteps5Minutes))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (30m)", recentSteps30Minutes))
+     // appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_2), recentSteps30Minutes))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (60m)", recentSteps60Minutes))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_3), recentSteps180Minutes))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (180m)", recentSteps180Minutes))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_4), recentSteps180Minutes))
+
+     //appendLine("╚${"═".repeat(screenWidth)}╝")
+     //appendLine()
+
+
+     if (recentSteps5Minutes > 0 || recentSteps30Minutes > 0 || recentSteps60Minutes > 0 || recentSteps180Minutes > 0) {
+         appendLine("╔${"═".repeat(screenWidth)}╗")
+         appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_steps_title)))
+         appendLine("╠${"═".repeat(screenWidth)}╣")
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_1), recentSteps5Minutes))
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_2), recentSteps30Minutes))
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_3), recentSteps60Minutes))
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_4), recentSteps180Minutes))
+         appendLine("╚${"═".repeat(screenWidth)}╝")
+         appendLine()
+     }
+
+     //appendLine("╔${"═".repeat(screenWidth)}╗")
+     //appendLine(String.format("║ %-${screenWidth}s ║", "Heart Rate Data"))
+     //appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_heart_title)))
+     //appendLine("╠${"═".repeat(screenWidth)}╣")
+     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", "HR (5m)", String.format("%.1f", averageBeatsPerMinute)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", context.getString(R.string.table_plugin_heart_1), String.format("%.1f", averageBeatsPerMinute)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", "HR (60m)", String.format("%.1f", averageBeatsPerMinute60)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", context.getString(R.string.table_plugin_heart_2), String.format("%.1f", averageBeatsPerMinute60)))
+
+     //appendLine("╚${"═".repeat(screenWidth)}╝")
+     //appendLine()
+
+     if (
+         (!averageBeatsPerMinute.isNaN() && averageBeatsPerMinute > 0) ||
+         (!averageBeatsPerMinute60.isNaN() && averageBeatsPerMinute60 > 0)
+     ) {
+         appendLine("╔${"═".repeat(screenWidth)}╗")
+         appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_heart_title)))
+         appendLine("╠${"═".repeat(screenWidth)}╣")
+         appendLine(String.format("║ %-${columnWidth}s │ %s bpm", context.getString(R.string.table_plugin_heart_1), String.format("%.1f", averageBeatsPerMinute)))
+         appendLine(String.format("║ %-${columnWidth}s │ %s bpm", context.getString(R.string.table_plugin_heart_2), String.format("%.1f", averageBeatsPerMinute60)))
+         appendLine("╚${"═".repeat(screenWidth)}╝")
+         appendLine()
+     }
 
      appendLine("╔${"═".repeat(screenWidth)}╗")
      //appendLine(String.format("║ %-${screenWidth}s ║", "Miscellaneous"))
      appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_miscellaneous_title)))
      appendLine("╠${"═".repeat(screenWidth)}╣")
-     appendLine(String.format("║ %-${columnWidth}s │ %s min", "Last SMB", lastsmbtime))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Hour", hourOfDay))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Weekend", weekend))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "tags0-60m", tags0to60minAgo))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "tags60-120m", tags60to120minAgo))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "tags120-180m", tags120to180minAgo))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "tags180-240m", tags180to240minAgo))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s min", "Last SMB", lastsmbtime))
+     appendLine(String.format("║ %-${columnWidth}s │ %s min", context.getString(R.string.table_plugin_miscellaneous_1), lastsmbtime))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Hour", hourOfDay))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_miscellaneous_2), hourOfDay))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Weekend", weekend))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_miscellaneous_3), weekend))
+
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "tags0-60m", tags0to60minAgo))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_miscellaneous_4), tags0to60minAgo))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "tags60-120m", tags60to120minAgo))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_miscellaneous_5), tags60to120minAgo))
+    //appendLine(String.format("║ %-${columnWidth}s │ %s", "tags120-180m", tags120to180minAgo))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_miscellaneous_6), tags120to180minAgo))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "tags180-240m", tags180to240minAgo))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_miscellaneous_7), tags180to240minAgo))
+
      appendLine("╚${"═".repeat(screenWidth)}╝")
      appendLine()
 
@@ -3483,19 +3893,19 @@ private fun neuralnetwork5(
  // eventual BG is at/above target
  // if iob is over max, just cancel any temps
  if (eventualBG >= max_bg) {
-     rT.reason.append("Eventual BG " + convertBG(eventualBG) + " >= " + convertBG(max_bg) + ", ")
+     rT.reason.appendLine("Eventual BG " + convertBG(eventualBG) + " >= " + convertBG(max_bg) + ", ")
  }
  if (iob_data.iob > max_iob) {
-     rT.reason.append("IOB ${round(iob_data.iob, 2)} > max_iob $max_iob")
+     rT.reason.appendLine("IOB ${round(iob_data.iob, 2)} > max_iob $max_iob")
      if (delta < 0) {
-         rT.reason.append(", BG is dropping (delta $delta), setting basal to 0. ")
+         rT.reason.appendLine(", BG is dropping (delta $delta), setting basal to 0. ")
          return setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false) // Basal à 0 pendant 30 minutes
      }
      return if (currenttemp.duration > 15 && (roundBasal(basal) == roundBasal(currenttemp.rate))) {
-         rT.reason.append(", temp ${currenttemp.rate} ~ req ${round(basal, 2).withoutZeros()}U/hr. ")
+         rT.reason.appendLine(", temp ${currenttemp.rate} ~ req ${round(basal, 2).withoutZeros()}U/hr. ")
          rT
      } else {
-         rT.reason.append("; setting current basal of ${round(basal, 2)} as temp. ")
+         rT.reason.appendLine("; setting current basal of ${round(basal, 2)} as temp. ")
          setTempBasal(basal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
      }
  } else {
@@ -3531,9 +3941,9 @@ private fun neuralnetwork5(
 
      if (microBolusAllowed && enableSMB) {
          val microBolus = insulinReq
-         rT.reason.append(" insulinReq $insulinReq")
+         rT.reason.appendLine(" insulinReq $insulinReq")
          if (microBolus >= maxSMB) {
-             rT.reason.append("; maxBolus $maxSMB")
+             rT.reason.appendLine("; maxBolus $maxSMB")
          }
          rT.reason.append(". ")
 
@@ -3545,10 +3955,10 @@ private fun neuralnetwork5(
          if (lastBolusAge > smbInterval) {
              if (microBolus > 0) {
                  rT.units = microBolus
-                 rT.reason.append("Microbolusing ${microBolus}U. ")
+                 rT.reason.appendLine("Microbolusing ${microBolus}U. ")
              }
          } else {
-             rT.reason.append("Waiting " + nextBolusMins + "m " + nextBolusSeconds + "s to microbolus again. ")
+             rT.reason.appendLine("Waiting " + nextBolusMins + "m " + nextBolusSeconds + "s to microbolus again. ")
          }
 
      }
@@ -3581,7 +3991,8 @@ private fun neuralnetwork5(
      ) {
          chosenRate     = forcedBasal.toDouble()
          overrideSafety = true
-         rT.reason.append("Early meal detected → TBR forcée à ${forcedBasal}U/h x30 (override).\n")
+         //rT.reason.appendLine("Early meal detected → TBR forcée à ${forcedBasal}U/h x30 (override).\n")
+         rT.reason.appendLine(context.getString(R.string.early_meal_tbr_forced, forcedBasal))
      } else {
          // ------------------------------
          // 3️⃣ Cas snack / meal / bfast / lunch / dinner / highCarb / fasting / sport
@@ -3647,7 +4058,8 @@ private fun neuralnetwork5(
      ) {
          chosenRate     = 0.0
          overrideSafety = false
-         rT.reason.append("Safety cut: predictedBg<100 ou IOB>$maxIob → basale à 0.\n")
+         //rT.reason.append("Safety cut: predictedBg<100 ou IOB>$maxIob → basale à 0.\n")
+         rT.reason.appendLine(context.getString(R.string.safety_cut, maxIob))
      }
 
 // ------------------------------
@@ -3656,31 +4068,31 @@ private fun neuralnetwork5(
          when {
              bg < 80.0 -> {
                  chosenRate = 0.0
-                 rT.reason.append("BG<80 → basale à 0.\n")
+                 rT.reason.appendLine("BG<80 → basale à 0.\n")
              }
              bg in 80.0..90.0 &&
                  slopeFromMaxDeviation <= 0 && iob > 0.1f && !sportTime -> {
                  chosenRate = 0.0
-                 rT.reason.append("BG 80-90 & chute → basale à 0.\n")
+                 rT.reason.appendLine("BG 80-90 & chute → basale à 0.\n")
              }
              bg in 80.0..90.0 &&
                  slopeFromMinDeviation >= 0.3 && slopeFromMaxDeviation >= 0 &&
                  combinedDelta in -1.0..2.0 && !sportTime &&
                  bgAcceleration.toFloat() > 0.0f -> {
                  chosenRate = profile_current_basal * 0.2
-                 rT.reason.append("BG 80-90 stable → basale x0.2.\n")
+                 rT.reason.appendLine("BG 80-90 stable → basale x0.2.\n")
              }
              bg in 90.0..100.0 &&
                  slopeFromMinDeviation <= 0.3 && iob > 0.1f && !sportTime &&
                  bgAcceleration.toFloat() > 0.0f -> {
                  chosenRate = 0.0
-                 rT.reason.append("BG 90-100 & risque modéré → basale à 0.\n")
+                 rT.reason.appendLine("BG 90-100 & risque modéré → basale à 0.\n")
              }
              bg in 90.0..100.0 &&
                  slopeFromMinDeviation >= 0.3 && combinedDelta in -1.0..2.0 && !sportTime &&
                  bgAcceleration.toFloat() > 0.0f -> {
                  chosenRate = profile_current_basal * 0.5
-                 rT.reason.append("BG 90-100 gain léger → basale x0.5.\n")
+                 rT.reason.appendLine("BG 90-100 gain léger → basale x0.5.\n")
              }
          }
      }
@@ -3694,14 +4106,15 @@ private fun neuralnetwork5(
              bgAcceleration.toFloat() > 1.0f
          ) {
              chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, combinedDelta.toDouble())
-             rT.reason.append("Montée lente → ajustement proportionnel.\n")
+             //rT.reason.append("Montée lente → ajustement proportionnel.\n")
+             rT.reason.appendLine(context.getString(R.string.basal_arguments_5))
          }
          else if (eventualBG > 110 && !sportTime && bg > 150 &&
              combinedDelta in -2.0..15.0 &&
              bgAcceleration.toFloat() > 0.0f
          ) {
              chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
-             rT.reason.append("EventualBG>110 & hyper → ajustement par facteur.\n")
+             rT.reason.appendLine(context.getString(R.string.basal_arguments_6))
          }
      }
 
@@ -3714,15 +4127,18 @@ private fun neuralnetwork5(
              bgAcceleration.toFloat() > 0.0f
          ) {
              chosenRate = profile_current_basal * 1.5
-             rT.reason.append("Repas calme & horaire → basale x1.5.\n")
+             //rT.reason.append("Repas calme & horaire → basale x1.5.\n")
+             rT.reason.appendLine(context.getString(R.string.table_plugin_hours_activity_1))
          }
          else if (timenow > sixAMHour && recentSteps5Minutes > 100) {
              chosenRate = 0.0
-             rT.reason.append("Activité matinale → basale à 0.\n")
+             //rT.reason.append("Activité matinale → basale à 0.\n")
+             rT.reason.appendLine(context.getString(R.string.table_plugin_hours_activity_2))
          }
          else if (timenow <= sixAMHour && delta > 0 && bgAcceleration.toFloat() > 0.0f) {
              chosenRate = profile_current_basal.toDouble()
-             rT.reason.append("Matinée montante → basale de profil.\n")
+             //rT.reason.append("Matinée montante → basale de profil.\n")
+             rT.reason.appendLine(context.getString(R.string.table_plugin_hours_activity_3))
          }
      }
 
@@ -3740,12 +4156,14 @@ private fun neuralnetwork5(
          for ((meal, runtime) in mealConditions) {
              if (meal && runtime in 0..30) {
                  chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, 10.0)
-                 rT.reason.append("Repas/snack <30m → basale x10.\n")
+                 //rT.reason.append("Repas/snack <30m → basale x10.\n")
+                 rT.reason.appendLine(context.getString(R.string.table_plugin_meal_snack_1))
                  break
              }
              else if (meal && runtime in 30..60 && delta > 0) {
                  chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, delta.toDouble())
-                 rT.reason.append("Repas/snack 30-60m & montée → basale Δ.\n")
+                 //rT.reason.append("Repas/snack 30-60m & montée → basale Δ.\n")
+                 rT.reason.appendLine(context.getString(R.string.table_plugin_meal_snack_2))
                  break
              }
          }
@@ -3757,11 +4175,13 @@ private fun neuralnetwork5(
          when {
              eventualBG > 180 && delta > 3 ->
                  chosenRate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor).also {
-                     rT.reason.append("EventualBG>180 & hyper → ajustement basalaimi.\n")
+                     //rT.reason.append("EventualBG>180 & hyper → ajustement basalaimi.\n")
+                     rT.reason.appendLine(context.getString(R.string.table_plugin_hyperglycemia_1))
                  }
              bg > 180 && delta in -5.0..1.0 ->
                  chosenRate = (profile_current_basal * basalAdjustmentFactor).also {
-                     rT.reason.append("BG>180 stable → basale x facteur.\n")
+                     //rT.reason.append("BG>180 stable → basale x facteur.\n")
+                     rT.reason.appendLine(context.getString(R.string.table_plugin_hyperglycemia_2))
                  }
          }
      }
@@ -3774,20 +4194,20 @@ private fun neuralnetwork5(
                  chosenRate = profile_current_basal.toDouble().also { rT.reason.append("Honeymoon BG 140-169 → profil.\n") }
              bg > 170 && delta > 0 ->
                  chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor).also {
-                     rT.reason.append("Honeymoon BG>170 → ajustement.\n")
+                     rT.reason.appendLine("Honeymoon BG>170 → ajustement.\n")
                  }
              combinedDelta > 2 && bg in 90.0..119.0 ->
-                 chosenRate = profile_current_basal.toDouble().also { rT.reason.append("Honeymoon Δ>2 & BG 90-119 → profil.\n") }
+                 chosenRate = profile_current_basal.toDouble().also { rT.reason.appendLine("Honeymoon Δ>2 & BG 90-119 → profil.\n") }
              combinedDelta > 0 && bg > 110 && eventualBG > 120 && bg < 160 ->
-                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon corr. mixte.\n") }
+                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.appendLine("Honeymoon corr. mixte.\n") }
              mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg > 110 && combinedDelta > 0 ->
-                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon + repas détection.\n") }
+                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.appendLine("Honeymoon + repas détection.\n") }
              mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.5 &&
                  bg in 120.0..150.0 && delta > 0 ->
-                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon petit slope.\n") }
+                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.appendLine("Honeymoon petit slope.\n") }
              mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 &&
                  bg in 100.0..120.0 && delta > 0 ->
-                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon slope repas.\n") }
+                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.appendLine("Honeymoon slope repas.\n") }
          }
      }
 
@@ -3795,7 +4215,7 @@ private fun neuralnetwork5(
 // 1️⃣1️⃣ Cas grossesse
      if (chosenRate == null && pregnancyEnable && delta > 0 && bg > 110 && !honeymoon) {
          chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
-         rT.reason.append("Grossesse & Δ>0 → ajustement.\n")
+         rT.reason.appendLine("Grossesse & Δ>0 → ajustement.\n")
      }
 
 // ------------------------------

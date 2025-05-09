@@ -68,12 +68,20 @@ enum class DoubleKey(
     OApsAIMIHyperFactor("key_oaps_aimi_hyper_factor", 60.0, 1.0, 150.0),
     OApsAIMIsleepFactor("key_oaps_aimi_sleep_factor", 60.0, 1.0, 150.0),
     OApsAIMIMealPrebolus("key_prebolus_meal_mode", 2.0, 0.1, 10.0),
-    OApsAIMIautodrivePrebolus("key_prebolus_autodrive_mode", 1.0, 0.1, 10.0),
-    OApsAIMIautodrivesmallPrebolus("key_prebolussmall_autodrive_mode", 0.1, 0.05, 2.0),
+    //OApsAIMIautodrivePrebolus("key_prebolus_autodrive_mode", 1.0, 0.1, 10.0),
+    OApsAIMIAutodrivePrebolusMorning("key_prebolus_autodrive_mode_morning", 1.0, 0.1, 10.0),
+    OApsAIMIAutodrivePrebolusAfternoon("key_prebolus_autodrive_mode_afternoon", 1.0, 0.1, 10.0),
+    OApsAIMIAutodrivePrebolusEvening("key_prebolus_autodrive_mode_evening", 1.0, 0.1, 10.0),
+    OApsAIMIautodrivesmallPrebolusMorning("key_prebolussmall_autodrive_mode_morning", 0.1, 0.05, 10.0),
+    OApsAIMIautodrivesmallPrebolusAfternoon("key_prebolussmall_autodrive_mode_afternoon", 0.1, 0.05, 10.0),
+    OApsAIMIautodrivesmallPrebolusEvening("key_prebolussmall_autodrive_mode_evening", 0.1, 0.05, 10.0),
     OApsAIMIcombinedDelta("key_combinedDelta_autodrive_mode", 1.0, 0.1, 20.0),
     OApsAIMIAutodriveDeviation("key_mindeviation_autodrive_mode", 1.0, 0.1, 5.0),
     OApsAIMIAutodriveAcceleration("key_Acceleration_autodrive_mode", 1.0, 0.1, 5.0),
-    autodriveMaxBasal("autodrive_max_basal", 1.0, 0.05, 25.0),
+    autodriveMaxBasalMorning("autodrive_max_basalMorning", 1.0, 0.05, 25.0),
+    autodriveMaxBasalAfternoon("autodrive_max_basalAfternoon", 1.0, 0.05, 25.0),
+    autodriveMaxBasalEvening("autodrive_max_basalEvening", 1.0, 0.05, 25.0),
+
     meal_modes_MaxBasal("meal_modes_max_basal", 1.0, 0.05, 25.0),
     OApsAIMILunchPrebolus("key_prebolus_lunch_mode", 2.5, 0.1, 10.0),
     OApsAIMILunchPrebolus2("key_prebolus2_lunch_mode", 2.0, 0.1, 10.0),
@@ -81,4 +89,5 @@ enum class DoubleKey(
     OApsAIMIDinnerPrebolus2("key_prebolus2_dinner_mode", 2.0, 0.1, 10.0),
     OApsAIMISnackPrebolus("key_prebolus_snack_mode", 1.0, 0.1, 10.0),
     OApsAIMIHighCarbPrebolus("key_prebolus_highcarb_mode", 5.0, 0.1, 10.0);
+
 }

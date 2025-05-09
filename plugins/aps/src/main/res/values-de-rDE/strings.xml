@@ -153,8 +153,7 @@
     <string name="autotune_profile_invalid">Profil ungültig</string>
     <!--    autoISF -->
 
-
-    <!-- AIMI START TRANSLATION CORE -->
+    <!-- AIMI START TRANSLATION CORE - FILE OpenAPSAIMIPlugin.kt -->
 
     <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
@@ -179,8 +178,9 @@
     <string name="key_nb_learningrate_ML_training">key_nb_learningrate_ML_training</string>
     <string name="key_nb_iteration_ML_training">key_nb_iteration_ML_training</string>
     <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
+    <string name="key_use_AimiForceLimits">key_use_AimiForceLimits</string>
 
-    <!--    AIMI START TRANSLATION MENU , SUBMENU AND PREFERENCES   -->
+    <!--    AIMI START TRANSLATION MENU , SUBMENU AND PREFERENCES - FILE OpenAPSAIMIPlugin.kt   -->
 
     <string name="openapsaimi">"AIMI 3.3"</string>
     <string name="openapsaimi_maxsmb_summary">Value of max smb size</string>
@@ -229,12 +229,13 @@
     <string name="oaps_aimi_cho_summary">Average carbs for a meal. it\'s an estimation not a precise value</string>
     <string name="oaps_aimi_cho_title">CHO Meal average lunch or dinner</string>
     <string name="aimi_preferences">AIMI specifics settings</string>
-    <string name="user_preferences">Global User Preferences</string>
+    <string name="aimi_preferences_title_menu">AAPS specifics settings</string>
+    <string name="user_preferences">User Preferences</string>
     <string name="reactivity_preferences"><![CDATA[Reactivity BG < 120]]></string>
-    <string name="high_BG_preferences">High BG Preferences (BG > 120)</string>
-    <string name="training_ml_modes_preferences">Training ML and Modes</string>
-    <string name="autodrive_preferences">Autodrive settings</string>
-    <string name="AAPS_SMB_Settings">AAPS SMB Settings</string>
+    <string name="high_BG_preferences">High BG (BG > 120)</string>
+    <string name="training_ml_modes_preferences">Manual Modes</string>
+    <string name="autodrive_preferences">Autodrive</string>
+    <string name="AAPS_SMB_Settings">Dynamic ISF, SMB and Sensitive AAPS</string>
     <string name="oaps_aimi_enableMlTraining_title">Enable ML training calculation</string>
     <string name="OApsAIMI_MealFactor_summary">% of insulin required by the ai for the meal mode.</string>
     <string name="OApsAIMI_MealFactor_title">Meal mode reactivity percentage</string>
@@ -261,6 +262,7 @@
     <string name="oaps_aimi_sleep_interval_summary">Interval between SMB for the sleep mode.</string>
     <string name="oaps_aimi_sleep_interval_title">SMB interval Sleep Mode</string>
     <string name="OApsAIMI_Enable_pregnancy">Enable Pregnancy mode</string>
+    <string name="OApsAIMI_Force_Limits">Enable forced limits multiplier AAPS </string>
     <string name="OApsAIMI_Enable_honeymoon">Enable child mode for a response better suited to lower insulin needs compared to those of an adult</string>
     <string name="oaps_aimi_HIGHBG_interval_summary">High BG SMB Interval</string>
     <string name="oaps_aimi_HIGHBG_interval_title">High BG SMB Interval</string>
@@ -330,6 +332,8 @@
     <string name="autodrive_max_basal_title">Meal Early Detection TBR</string>
     <string name="user_preferences_title_menu">Global User Preferences</string>
     <string name="autodrive_preferences_title_menu">Autodrive settings</string>
+    <string name="autodrive_prebolus_title_menu">Autodrive Prebolus settings</string>
+    <string name="autodrive_prebolus_variables">Prebolus variables</string>
     <string name="manual_modes_preferences_title_menu">Training ML and Modes</string>
     <string name="bg_under_120_preferences_title_menu"><![CDATA[Reactivity BG < 120]]></string>
     <string name="bg_over_120_preferences_title_menu">High BG Preferences (BG > 120)</string>
@@ -348,20 +352,123 @@
     <string name="high_carb_modes_preferences_title_menu">High Carb - Manual Mode settings</string>
     <string name="generic_meal_modes_preferences_title_menu">Generic Meal - Manual Mode settings</string>
     <string name="sleep_modes_preferences_title_menu">Sleep - Manual Mode - settings</string>
+    <string name="meal_modes_max_basal_summary">Manual modes fixed TBR, after prebolus 1 set 30 minutes a fixed TBR</string>
+    <string name="meal_modes_max_basal_title">Manual modes fixed TBR</string>
 
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN -->
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION TITLE - FILE DetermineBasalAIMI2.kt -->
 
     <string name="table_plugin_main_title_1">AAPS-MASTER-AIMI</string>
     <string name="table_plugin_main_title_2">OpenApsAIMI Settings</string>
-    <string name="table_plugin_main_title_3">30 April 2025</string>
+    <string name="table_plugin_main_title_3">03 May 2025</string>
     <string name="table_plugin_request_title">Request</string>
     <string name="table_plugin_smb_prediction_title">SMB Prediction</string>
     <string name="table_plugin_adjusted_factors_title">Adjusted Factors</string>
     <string name="table_plugin_limits_title">Limits and Conditions</string>
+    <string name="table_plugin_limits_1">Max IOB</string>
+    <string name="table_plugin_limits_2">IOB</string>
+    <string name="table_plugin_limits_3">IOB2</string>
+    <string name="table_plugin_limits_4">Max SMB</string>
+    <string name="table_plugin_limits_5">Safety</string>
+    <string name="table_plugin_limits_6">Met</string>
+    <string name="table_plugin_limits_7">Peak Time Profile</string>
+    <string name="table_plugin_limits_8">Current Activity</string>
+    <string name="table_plugin_limits_9">After IOB Adjustment</string>
+    <string name="table_plugin_limits_10">Activity Ratio</string>
+    <string name="table_plugin_limits_11">Final Peak Time after coerceIn</string>
+    <string name="table_plugin_limits_12">Adjusted Dia (h)</string>
+    <string name="table_plugin_limits_13">Pump Age (days)</string>
+    <string name="table_plugin_limits_14">Zero Basal Accumulated (min)</string>
     <string name="table_plugin_glucose_title">Glucose Data</string>
+    <string name="table_plugin_glucose_1">Current BG</string>
+    <string name="table_plugin_glucose_2">Predicted BG</string>
+    <string name="table_plugin_glucose_3">Target BG</string>
+    <string name="table_plugin_glucose_4">Prediction</string>
+    <string name="table_plugin_glucose_5">Eventual BG</string>
+    <string name="table_plugin_glucose_6">Delta</string>
+    <string name="table_plugin_glucose_7">Combined Delta</string>
+    <string name="table_plugin_glucose_8">Short Δ</string>
+    <string name="table_plugin_glucose_9">Long Δ</string>
+    <string name="table_plugin_glucose_10">Slope from Max Deviation</string>
+    <string name="table_plugin_glucose_11">Slope from Min Deviation</string>
+    <string name="table_plugin_glucose_12">BG Acceleration</string>
     <string name="table_plugin_tir_title">TIR Data</string>
+    <string name="table_plugin_tir_1">TIR Low</string>
+    <string name="table_plugin_tir_2">TIR In Range</string>
+    <string name="table_plugin_tir_3">TIR High</string>
+    <string name="table_plugin_tir_4">Last Hr TIR Low</string>
+    <string name="table_plugin_tir_5">Last Hr TIR &gt;120</string>
     <string name="table_plugin_steps_title">Step Data</string>
+    <string name="table_plugin_steps_1">Steps (5m)</string>
+    <string name="table_plugin_steps_2">Steps (30m)</string>
+    <string name="table_plugin_steps_3">Steps (60m)</string>
+    <string name="table_plugin_steps_4">Steps (180m)</string>
     <string name="table_plugin_heart_title">Heart Rate Data</string>
+    <string name="table_plugin_heart_1">HR (5m)</string>
+    <string name="table_plugin_heart_2">HR (60m)</string>
     <string name="table_plugin_manual_modes_title">Modes</string>
+    <string name="table_plugin_manual_modes_active">Active</string>
+    <string name="table_plugin_manual_modes_inactive">Inactive</string>
+    <string name="table_plugin_manual_modes_na">N/A</string>
+    <string name="table_plugin_manual_modes_1">Delete Time</string>
+    <string name="table_plugin_manual_modes_2">Date</string>
+    <string name="table_plugin_manual_modes_3">Sleep</string>
+    <string name="table_plugin_manual_modes_4">Sport</string>
+    <string name="table_plugin_manual_modes_5">Snack</string>
+    <string name="table_plugin_manual_modes_6">Low Carb</string>
+    <string name="table_plugin_manual_modes_7">High Carb</string>
+    <string name="table_plugin_manual_modes_8">Meal</string>
+    <string name="table_plugin_manual_modes_9">Breakfast</string>
+    <string name="table_plugin_manual_modes_10">Lunch</string>
+    <string name="table_plugin_manual_modes_11">Dinner</string>
+    <string name="table_plugin_manual_modes_12">Fasting</string>
+    <string name="table_plugin_manual_modes_13">Calibration</string>
     <string name="table_plugin_miscellaneous_title">Miscellaneous</string>
+    <string name="table_plugin_miscellaneous_1">Last SMB</string>
+    <string name="table_plugin_miscellaneous_2">Hour</string>
+    <string name="table_plugin_miscellaneous_3">Weekend</string>
+    <string name="table_plugin_miscellaneous_4">tags0-60m</string>
+    <string name="table_plugin_miscellaneous_5">tags60-120m</string>
+    <string name="table_plugin_miscellaneous_6">tags120-180m</string>
+    <string name="table_plugin_miscellaneous_7">tags180-240m</string>
+    <string name="table_plugin_miscellaneous_8">more aggressive</string>
+    <string name="table_plugin_miscellaneous_9">less aggressive</string>
+    <string name="table_plugin_miscellaneous_10">too aggressive</string>
+    <string name="table_plugin_miscellaneous_11">low treatment</string>
+    <string name="table_plugin_miscellaneous_12">normal</string>
+
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BASAL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
+
+    <string name="basal_arguments_1">Neutral rate = profile &amp; TBR active → TBR delete.\n</string>
+    <string name="basal_arguments_2">Neutral rate = profile &amp; no TBR active → do nothing.\n</string>
+    <string name="basal_arguments_3">Neutral rate = profile → set a TBR of %1$.2f U/h.\n</string>
+    <string name="basal_arguments_4">Set TBR of %1$.2f U/h for %2$d minutes.\n</string>
+    <string name="basal_arguments_5">Slow rise → proportional adjustment.\n</string>
+    <string name="basal_arguments_6"><![CDATA[EventualBG>110 & hyper → adjustement by factor]]></string>
+    <string name="table_plugin_hours_activity_1">Calm meal &amp; time → basal x1.5.\n</string>
+    <string name="table_plugin_hours_activity_2">Morning activity → basal to 0.\n</string>
+    <string name="table_plugin_hours_activity_3">Morning rising → profile basal.\n</string>
+    <string name="table_plugin_meal_snack_1"><![CDATA[Meal/snack 30m → basal x10.\n]]></string>
+    <string name="table_plugin_meal_snack_2">Meal/snack 30–60m &amp; rising → basal Δ.\n</string>
+    <string name="table_plugin_hyperglycemia_1">EventualBG&gt;180 &amp; hyper → basal AIMI adjustment.\n</string>
+    <string name="table_plugin_hyperglycemia_2">BG&gt;180 stable → basal X factor adjustment.\n</string>
+
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION SAFETY ADJUSTMENTS - FILE DetermineBasalAIMI2.kt -->
+
+    <string name="safety_adjustments_1">High BG drop (%1$.1f mg/dL/h), strong reduction of the bolus;</string>
+    <string name="safety_adjustments_2">Rapid rise detected (delta %1$.1f mg/dL), emergency mode applied</string>
+    <string name="safety_adjustments_3">Combined delta very low (%1$.1f), reduction x0.6;</string>
+    <string name="safety_adjustments_4">Combined delta moderate (%1$.1f), reduction x0.8;</string>
+    <string name="safety_adjustments_5">Combined delta very high (%1$.1f), no reduction;</string>
+    <string name="safety_adjustments_6"><![CDATA[Stable BG>180 & Combined Delta<2 => reduction x0.8;]]></string>
+    <string name="safety_adjustments_7">High IOB (%1$.2f U), reduction x0.8;</string>
+    <string name="safety_adjustments_8">High TDD/h (%1$.2f U/h), reduction x0.8;</string>
+    <string name="safety_adjustments_9">High TIR (%1$.0f%%), reduction x0.5;</string>
+    <string name="safety_adjustments_10">Predicted BG (%1$.0f) close to target (%2$.0f), reduction x0.5;</string>
+    <string name="safety_adjustments_11">Zero basal duration (%1$d min) exceeded, forcing minimal basal;</string>
+    <string name="meal_mode_suffix">(meal mode)</string>
+    <string name="early_autodrive_suffix">(early autodrive)</string>
+    <string name="safety_adjustments_12">→ safety bypass%s: rate = %2$.2f U/h\n</string>
+    <string name="safety_adjustments_13">→ clamped to maxSafeBasal %1$s U/h (requested: %2$s U/h)\n</string>
+    <string name="safety_adjustments_14">%1$s remaining &amp; %2$s ~ requested %3$s U/h: no temp basal.\n</string>
+    <string name="safety_cut"><![CDATA[Safety cut: predictedBg<100 or IOB>%1$.2f → basal temp. 0.\n]]></string>
 </resources>
