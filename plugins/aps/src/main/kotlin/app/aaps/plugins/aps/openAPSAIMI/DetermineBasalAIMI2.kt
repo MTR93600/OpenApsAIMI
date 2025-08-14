@@ -2596,7 +2596,7 @@ private fun calculateDynamicPeakTime(
 
     reasonBuilder.append("🧠 Calcul Dynamic PeakTime\n")
     reasonBuilder.append("  • PeakTime initial: ${profile.peakTime}\n")
-    reasonBuilder.append("  • BG: $bg, Delta: $delta\n")
+    reasonBuilder.append("  • BG: $bg, Delta: ${round(delta, 2)}\n")
 
     // 1️⃣ Facteur de correction hyperglycémique
     val hyperCorrectionFactor = when {
@@ -2621,7 +2621,7 @@ private fun calculateDynamicPeakTime(
         else -> 1.0
     }
     dynamicPeakTime *= ratioFactor
-    reasonBuilder.append("  • Ratio activité: $activityRatio ➝ facteur $ratioFactor\n")
+    reasonBuilder.append("  • Ratio activité: ${round(activityRatio,2)} ➝ facteur $ratioFactor\n")
 
     // 4️⃣ Nombre de pas
     stepCount?.let {
