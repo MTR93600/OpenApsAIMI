@@ -1,0 +1,63 @@
+name: Generated APK
+
+on:
+
+  push:
+    branches:
+      - 'dev_Plugin_OpenApsAIMI_autobuild'
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Setup JDK
+      uses: actions/setup-java@v2
+      with:
+        java-version: 11
+        distribution: 'adopt'
+
+    - name: Change wrapper permissions
+      run: chmod +x ./gradlew
+
+    - name: Build and Sign Release APK
+      env:
+        KEYSTORE_FILE: ${{ secrets.KEYSTORE_FILE }}
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      run: |
+        echo "KEYSTORE_FILE=$KEYSTORE_FILE" > keystore.properties
+        echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> keystore.properties
+        echo "KEY_ALIAS=$KEY_ALIAS" >> keystore.properties
+        echo "KEY_PASSWORD=$KEY_PASSWORD" >> keystore.properties  
+
+      # Run Tests Build
+      #- name: Run gradle tests
+        #run: ./gradlew test
+
+      # Run Build Project
+    - name: Build gradle project
+      run: ./gradlew build
+
+      # Create APK Debug
+      #- name: Build apk debug project (APK)
+      #  run: ./gradlew assembleDebug
+
+      # Create APK Release
+    #- name: Build apk release project (APK)
+     # run: ./gradlew assemble
+
+     # Noted For Output [main_project_module]/build/outputs/apk/release/
+    - name: Upload APK Release
+      uses: actions/upload-artifact@v3
+      with:
+        name: app-full-release.apk
+        path: app/build/outputs/apk/release/app-full-release.apk
