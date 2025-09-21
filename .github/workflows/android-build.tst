@@ -16,6 +16,7 @@ jobs:
 
     env:
       APP_APK_PATH: app/build/outputs/apk/full/release/app-full-release.apk
+      CLIENT_APK_PATH: app/build/outputs/apk/aapsclient/release/app-aapsclient-release.apk
       WEAR_APK_PATH: wear/build/outputs/apk/full/release/wear-full-release.apk
 
     steps:
@@ -52,10 +53,9 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
-
       # 6. Construire les APKs en mode release (signés)
       - name: Build Release APKs
-        run: ./gradlew :app:assembleFullRelease :wear:assembleFullRelease
+        run: ./gradlew :app:assembleFullRelease :wear:assembleFullRelease :app:assembleAapsClientRelease
         env:
           KEYSTORE_FILE: ${{ github.workspace }}/monkeystore.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -69,7 +69,8 @@ jobs:
           find app/build/outputs/apk -type f -name "*.apk"
           echo "Listing APKs in wear module:"
           find wear/build/outputs/apk -type f -name "*.apk"
-
+          echo "Listing APKs in client module:"
+          find app/build/outputs/apk -type f -name "*.apk"
       # 8. Optionnel : Upload des APKs en tant qu'artefacts
       - name: Upload App APK
         uses: actions/upload-artifact@v4
@@ -82,6 +83,12 @@ jobs:
         with:
           name: wear-full-release.apk
           path: ${{ env.WEAR_APK_PATH }}
+
+      - name: Upload AAPS Client APK
+        uses: actions/upload-artifact@v4
+        with:
+            name: app-aapsclient-release.apk
+            path: ${{ env.CLIENT_APK_PATH }}
 
       # 9. Optionnel : Créer une Release GitHub et y attacher les APKs
       - name: Create GitHub Release
@@ -100,7 +107,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: ${{ env.APP_APK_PATH }}
+          files:
+            ${{ env.APP_APK_PATH }}
+            ${{ env.CLIENT_APK_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
