@@ -1,15 +1,18 @@
 package app.aaps.pump.medtrum.comm.packets
 
 import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
-import com.google.common.truth.Truth.assertThat
-import dagger.android.AndroidInjector
-import dagger.android.HasAndroidInjector
 import app.aaps.pump.medtrum.MedtrumTestBase
 import app.aaps.pump.medtrum.comm.enums.BasalType
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
+import app.aaps.pump.medtrum.util.MedtrumTimeUtil
+import com.google.common.truth.Truth.assertThat
+import dagger.android.AndroidInjector
+import dagger.android.HasAndroidInjector
 import org.junit.jupiter.api.Test
 
 class NotificationPacketTest : MedtrumTestBase() {
+
+    val medtrumTimeUtil = MedtrumTimeUtil()
 
     /** Test base behavior of the Notification packet  */
 
@@ -18,6 +21,7 @@ class NotificationPacketTest : MedtrumTestBase() {
             if (it is NotificationPacket) {
                 it.aapsLogger = aapsLogger
                 it.medtrumPump = medtrumPump
+                it.medtrumTimeUtil = medtrumTimeUtil
             }
         }
     }

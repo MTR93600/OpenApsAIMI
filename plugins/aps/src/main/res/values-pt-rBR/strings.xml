@@ -802,7 +802,7 @@
 
     <string name="original_file_missing">O arquivo original não existe.</string>
     <string name="file_too_short">O arquivo contém 200 linhas ou menos, nenhuma exclusão realizada.</string>
-    <string name="last_200_deleted">As últimas 200 linhas foram excluídas. O arquivo original foi salvo como &#39;%1$s&#39;.</string>
+    <string name="last_200_deleted">As últimas 200 linhas foram excluídas. O arquivo original foi salvo como \'%1$s\'.</string>
     <string name="reason_data_removed">Os valores para a data %1$s foram excluídos porque o TIR1DAYIR é menor que 85%%%.</string>
     <string name="reason_deletion_time_restricted">A exclusão só pode ser executada entre 00:05 e 00:10.</string>
     <string name="reason_no_deletion_needed">Nenhuma exclusão necessária: tir1DAYIR é maior ou igual a 85%.</string>
@@ -962,6 +962,8 @@
     <string name="meal_mode_highcarb">alto carboidrato(%1$dm)</string>
 
     <string name="meal_mode_first_30">Modos manuais refeição 0&#8211;30m [%1$s] → basal forçada em %2$.2f U/h (override).\n</string>
+    <string name="manual_basal_override">Basal forçada → %1$.2f U/h (%2$dmin). Modos manuais refeição %3$s\n</string>
+
     <string name="reason_early_meal">Refeição precoce detectada → TBR forçada para %1$.2fU/h x30 (override).\n</string>
     <string name="safety_cut_tbr">Corte de segurança: glicose prevista&lt;100 ou IOB&gt;%1$.2f → basal para 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → basal para 0.\n</string>

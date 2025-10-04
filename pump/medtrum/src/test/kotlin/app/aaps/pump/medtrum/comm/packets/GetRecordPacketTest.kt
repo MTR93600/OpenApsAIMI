@@ -5,16 +5,19 @@ import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.DetailedBolusInfoStorage
 import app.aaps.core.interfaces.pump.PumpSync
+import app.aaps.pump.medtrum.MedtrumTestBase
+import app.aaps.pump.medtrum.util.MedtrumTimeUtil
 import com.google.common.truth.Truth.assertThat
 import dagger.android.AndroidInjector
 import dagger.android.HasAndroidInjector
-import app.aaps.pump.medtrum.MedtrumTestBase
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
 import org.mockito.Mockito
 import org.mockito.Mockito.mock
 
 class GetRecordPacketTest : MedtrumTestBase() {
+
+    val medtrumTimeUtil = MedtrumTimeUtil()
 
     /** Test packet specific behavior */
 
@@ -28,6 +31,7 @@ class GetRecordPacketTest : MedtrumTestBase() {
                 it.pumpSync = pumpSync
                 it.detailedBolusInfoStorage = detailedBolusInfoStorage
                 it.dateUtil = dateUtil
+                it.medtrumTimeUtil = medtrumTimeUtil
             }
         }
     }

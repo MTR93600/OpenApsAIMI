@@ -21,5 +21,5 @@ enum class MedtrumIntKey(
 
     MedtrumPumpExpiryWarningHours("pump_expiry_warning_hour", defaultValue = 72, min = 48, max = 80, dependency = MedtrumBooleanKey.MedtrumPatchExpiration),
     MedtrumHourlyMaxInsulin("hourly_max_insulin", defaultValue = 25, min = 10, max = 40),
-    MedtrumDailyMaxInsulin("daily_max_insulin", defaultValue = 80, min = 40, max = 180),
+    MedtrumDailyMaxInsulin("daily_max_insulin", defaultValue = 80, min = 20, max = 180),
 }

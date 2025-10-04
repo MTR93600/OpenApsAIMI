@@ -231,8 +231,6 @@
     <string name="key_nb_iteration_ML_training">key_nb_iteration_ML_training</string>
     <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
 
-    <!--    AIMI START TRANSLATION MENU , SUBMENU AND PREFERENCES - FILE OpenAPSAIMIPlugin.kt   -->
-
     <string name="openapsaimi">"AIMI 3.3"</string>
     <string name="oaps_aimi_shortname">AIMI</string>
     <string name="openapsaimi_maxsmb_summary">Max SMB-waarde wanneer BG lager is dan 120</string>
@@ -269,7 +267,7 @@
     <string name="Enable_basal_title">Basaal inschakelen</string>
     <string name="Enable_basal_summary">Deze optie schakelt basaal uit het profiel in wanneer BG hoger is dan 80 en de delta niet negatief is.</string>
     <string name="oaps_aimi_enableDeleteLine_title">Activeer de mogelijkheid om een dag in ML Training te verwijderen</string>
-    <string name="countsteps_watch_title">Step counting watch (if disable, use phone)</string>
+    <string name="countsteps_watch_title">Stappenteller horloge (indien uitgeschakeld, gebruik telefoon)</string>
     <string name="countsteps_watch_summary">Deze optie schakelt stappentelling in door gegevens van het horloge te ontvangen in plaats van de telefoon.</string>
     <string name="oaps_aimi_weight_summary">Gewicht in kg om basaal te berekenen</string>
     <string name="oaps_aimi_weight_title">Gewicht in kg</string>
@@ -278,8 +276,8 @@
     <string name="oaps_aimi_cho_summary">Gemiddelde koolhydraten per maaltijd. Geschatte waarde, niet exact</string>
     <string name="oaps_aimi_cho_title">Gemiddelde hoeveelheid koolhydraten lunch/diner</string>
     <string name="aimi_preferences">AIMI Instellingen</string>
-    <string name="user_preferences">Preferences user</string>
-    <string name="user_modes_preferences_title_menu">Preferences user - Modes</string>
+    <string name="user_preferences">Gebruikersvoorkeuren</string>
+    <string name="user_modes_preferences_title_menu">Gebruikersvoorkeuren - Modi</string>
     <string name="reactivity_preferences"><![CDATA[BG < 120]]></string>
     <string name="high_BG_preferences">BG > 120</string>
     <string name="training_ml_modes_preferences">Handmatige modus</string>
@@ -358,7 +356,7 @@
     <string name="oaps_aimi_BF_interval_title">SMB Interval Ontbijtmodus</string>
     <string name="oaps_aimi_logsize_summary">Aantal AIMI-analysetabelregels in plug-in en Loop-tabbladen</string>
     <string name="oaps_aimi_logsize_title">Aantal AIMI-plug-in/Loop-tabelregels</string>
-    <string name="Enable_xdripOM_title">Libre3 1-minute readings</string>
+    <string name="Enable_xdripOM_title">Libre3 1-minuutmetingen</string>
     <string name="oaps_aimi_enableMlautoDrive_title">Schakel Auto Drive in – automatische maaltijddetectie – EXPERIMENTEEL</string>
     <string name="autodrive_prebolus_variables">Prebolus limieten en voorwaarden</string>
     <string name="autodrive_prebolus_title_menu">Autodrive – Prebolus Instellingen</string>
@@ -368,7 +366,6 @@
     <string name="autodrive_prebolus_title_menuAfternoon">Autodrive – Maaltijd 11:00&#8211;17:00 Instellingen</string>
     <string name="autodrive_prebolus_variablesEvening">Maaltijd 18:00&#8211;00:00</string>
     <string name="autodrive_prebolus_title_menuEvening">Autodrive – Maaltijd 18:00&#8211;00:00 Instellingen</string>
-
     <string name="prebolus_autodrive_mode_summary_morning">Autodrive stuurt een pre-bolus volgens de voorwaarden voor stijgingsdetectie</string>
     <string name="prebolus_autodrive_mode_title">Maaltijd Pre-bolus</string>
     <string name="prebolus_autodrive_mode_summary">Autodrive stuurt een pre-bolus volgens de voorwaarden voor stijgingsdetectie</string>
@@ -377,7 +374,6 @@
     <string name="prebolus_autodrive_mode_title_Afternoon">Maaltijd Pre-bolus</string>
     <string name="prebolus_autodrive_mode_summary_Evening">Autodrive stuurt een pre-bolus volgens de voorwaarden voor stijgingsdetectie</string>
     <string name="prebolus_autodrive_mode_title_Evening">Maaltijd Pre-bolus</string>
-
     <string name="oaps_aimi_AutodriveISF_summary">Onder deze ISF-waarde is de voorwaarde om de pre-bolus te ontvangen waar</string>
     <string name="oaps_aimi_AutodriveISF_title">Autodrive ISF-waarde voor pre-bolus</string>
     <string name="OApsAIMI_CombinedDelta_summary">Boven deze waarde is de voorwaarde om de pre-bolus te ontvangen waar</string>
@@ -390,7 +386,6 @@
     <string name="oaps_aimi_AutodriveDeviation_title">Minimum BG-afwijking voor pre-boluslevering</string>
     <string name="oaps_aimi_AutodriveAcceleration_summary">BG-versnelling: als deze boven deze waarde ligt, is de voorwaarde voor autodrive pre-bolus waar</string>
     <string name="oaps_aimi_AutodriveAcceleration_title">Minimum BG-versnelling voor pre-boluslevering</string>
-
     <string name="prebolussmall_autodrive_mode_summaryMorning"><![CDATA[Gebruikt voor vroege maaltijddetectie: BG > 100, voorspelde BG > 180. Het idee is dat wanneer vroege detectie plaatsvindt, een kleine SMB wordt verzonden om negatieve IOB of late correctie te voorkomen. Dit kan een goede aanpak zijn voor een kleine snack.]]></string>
     <string name="prebolussmall_autodrive_mode_titleMorning">Lichte snack pre-bolus</string>
     <string name="prebolussmall_autodrive_mode_summaryAfternoon"><![CDATA[Gebruikt voor vroege maaltijddetectie: BG > 100, voorspelde BG > 180. Het idee is dat wanneer vroege detectie plaatsvindt, een kleine SMB wordt verzonden om negatieve IOB of late correctie te voorkomen. Dit kan een goede aanpak zijn voor een kleine snack.]]></string>
@@ -399,7 +394,6 @@
     <string name="prebolussmall_autodrive_mode_titleEvening">Lichte snack pre-bolus</string>
     <string name="prebolussmall_autodrive_mode_title">Lichte snack pre-bolus</string>
     <string name="prebolussmall_autodrive_mode_summary"><![CDATA[Gebruikt voor vroege maaltijddetectie: BG > 100, voorspelde BG > 180. Het idee is dat wanneer vroege detectie plaatsvindt, een kleine SMB wordt verzonden om negatieve IOB of late correctie te voorkomen. Dit kan een goede aanpak zijn voor een kleine snack.]]></string>
-
     <string name="autodrive_max_basal_summaryMorning">Wanneer een vroege maaltijd wordt gedetecteerd, voert AIMI gedurende 30 minuten een vast basaal uit. Voer de uurwaarde van dit basaal in (bijv. 4 eenheden levert 2 eenheden in 30 minuten)</string>
     <string name="autodrive_max_basal_titleMorning">Vast basaal 30 min indien maaltijd gedetecteerd (E/u)</string>
     <string name="autodrive_max_basal_summaryAfternoon">Wanneer een vroege maaltijd wordt gedetecteerd, voert AIMI gedurende 30 minuten een vast basaal uit. Voer de uurwaarde van dit basaal in (bijv. 4 eenheden levert 2 eenheden in 30 minuten)</string>
@@ -408,15 +402,13 @@
     <string name="autodrive_max_basal_titleEvening">Vast basaal 30 min indien maaltijd gedetecteerd (E/u)</string>
     <string name="autodrive_max_basal_title">Vast basaal 30 min indien maaltijd gedetecteerd (E/u)</string>
     <string name="autodrive_max_basal_summary">Wanneer een vroege maaltijd wordt gedetecteerd, voert AIMI gedurende 30 minuten een vast basaal uit. Voer de uurwaarde van dit basaal in (bijv. 4 eenheden levert 2 eenheden in 30 minuten)</string>
-
-    <string name="user_preferences_title_menu">Preferences user AIMI</string>
+    <string name="user_preferences_title_menu">Gebruikersvoorkeuren AIMI</string>
     <string name="aimi_preferences_title_menu">AAPS Instellingen</string>
     <string name="autodrive_preferences_title_menu">Autodrive - Auto Maaltijd - Instellingen</string>
     <string name="manual_modes_preferences_title_menu">Handmatige Maaltijd / Activiteit - Instellingen</string>
     <string name="bg_under_120_preferences_title_menu"><![CDATA[BG < 120 - Instellingen]]></string>
     <string name="bg_over_120_preferences_title_menu">BG > 120 - Instellingen</string>
     <string name="aaps_preferences_title_menu">DynamicISF, SMB en Gevoeligheid - Instellingen</string>
-
     <string name="training_ml_breakfast_modes_preferences">Ontbijt</string>
     <string name="training_ml_lunch_modes_preferences">Lunch</string>
     <string name="training_ml_dinner_modes_preferences">Diner</string>
@@ -424,7 +416,6 @@
     <string name="training_ml_snack_modes_preferences">Snack</string>
     <string name="training_ml_generic_meal_modes_preferences">Algemene Maaltijd</string>
     <string name="training_ml_sleep_modes_preferences">Rust</string>
-
     <string name="breakfast_modes_preferences_title_menu">Ontbijt - Handmatige Modus - Instellingen</string>
     <string name="lunch_modes_preferences_title_menu">Lunch - Handmatige Modus - Instellingen</string>
     <string name="dinner_modes_preferences_title_menu">Diner - Handmatige Modus - Instellingen</string>
@@ -432,7 +423,6 @@
     <string name="high_carb_modes_preferences_title_menu">Hoge Koolhydraten - Handmatige Modus - Instellingen</string>
     <string name="generic_meal_modes_preferences_title_menu">Algemene Maaltijd - Handmatige Modus - Instellingen</string>
     <string name="sleep_modes_preferences_title_menu">Rust - Handmatige Modus - Instellingen</string>
-
     <string name="meal_modes_max_basal_summary">Handmatige modi vaste TBR: na pre-bolus 1, stel een vaste TBR in voor 30 minuten</string>
     <string name="meal_modes_max_basal_title">Vast basaal 30 min bij begin maaltijd (E/u)</string>
     <string name="meal_modes_max_basal_title_bfast">Vast basaal 30 min bij begin maaltijd (E/u)</string>
@@ -447,7 +437,6 @@
     <string name="meal_modes_max_basal_summary_snack">Handmatige modus: vaste TBR, na pre-bolus 1 een vaste TBR instellen voor 30 minuten voor een snack</string>
     <string name="meal_modes_max_basal_title_genericmeal">Vast basaal 30 min bij begin maaltijd (E/u)</string>
     <string name="meal_modes_max_basal_summary_genericmeal">Handmatige modus: vaste TBR, na pre-bolus 1 een vaste TBR instellen voor 30 minuten voor een algemene maaltijd</string>
-
     <string name="wcycle_preferences">Menstruatiecyclus Aanpassingen</string>
     <string name="wcycle_preferences_title_menu">Menstruatiecyclus Aanpassingen - Instellingen</string>
     <string name="oaps_aimi_enablewcycle_title">Menstruatiecyclus inschakelen</string>
@@ -459,9 +448,6 @@
     <string name="wcycleovulation_title">Ovulatie % reductie</string>
     <string name="wcycleluteal_summary">De luteale fase vereist ongeveer 8&#8211;15% meer insuline</string>
     <string name="wcycleluteal_title">Luteale fase, stel het % in om toe te passen op basaal en SMB</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BG TREND - FILE DetermineBasalAIMI2.kt -->
-
     <string name="bg_trend_1">BG Trendanalyse</string>
     <string name="bg_trend_2">Eerste bloedglucose</string>
     <string name="bg_trend_3">Laatste bloedglucose</string>
@@ -469,9 +455,6 @@
     <string name="bg_trend_5">Berekende trend</string>
     <string name="bg_trend_interval">interval</string>
     <string name="bg_trend_6">Geen bloedglucosegeschiedenis beschikbaar</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - ADJUST AUTODRIVE CONDITIONS - FILE DetermineBasalAIMI2.kt -->
-
     <string name="adjust_autodrive_condition_1">Autodrive Debug</string>
     <string name="adjust_autodrive_condition_2">BG Trend</string>
     <string name="adjust_autodrive_condition_3">Voorspelde BG</string>
@@ -480,18 +463,12 @@
     <string name="adjust_autodrive_condition_6">✘ Autodrive uitgeschakeld: bloedglucosetrend daalt</string>
     <string name="adjust_autodrive_condition_7">✔ Autodrive ingeschakeld: gunstige voorwaarden</string>
     <string name="adjust_autodrive_condition_8">✘ Autodrive uitgeschakeld: voorwaarden niet voldaan</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION AIMILOG DetermineBasalAIMI2.kt -->
-
     <string name="reason_adjusted_dia_minutes">, Aangepaste DIA (minuten): %1$d, </string>
     <string name="reason_adjusted_morning_factor">aangepaste Ochtendfactor %1$.2f, </string>
     <string name="reason_adjusted_afternoon_factor">aangepaste Middagfactor %1$.2f, </string>
     <string name="reason_adjusted_evening_factor">aangepaste Avondfactor %1$.2f, </string>
     <string name="reason_autodrive_status"> Autodrive: %1$s, autodrive-modus: %2$s, Autodrive Voorwaarde: %3$s, BG Trend: %4$.2f, Gecombineerde Delta: %5$.2f, Voorspelde BG: %6$.2f, BG Versnelling: %7$.2f, SlopeMinDeviation: %8$.2f</string>
     <string name="reason_tir_stats">TIR Onder: %1$d, TIR Binnen Bereik: %2$d, TIR Boven: %3$d</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION TITLE - FILE DetermineBasalAIMI2.kt -->
-
     <string name="table_plugin_main_title_1">AAPS-MASTER-AIMI</string>
     <string name="table_plugin_main_title_2">AIMI Instellingen</string>
     <string name="table_plugin_main_title_3">06 Augustus 2025</string>
@@ -581,9 +558,6 @@
     <string name="table_plugin_miscellaneous_10">te agressief</string>
     <string name="table_plugin_miscellaneous_11">lage behandeling</string>
     <string name="table_plugin_miscellaneous_12">normaal</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION MEAL DETECTION - FILE DetermineBasalAIMI2.kt -->
-
     <string name="table_plugin_autodrive_1">Autodrive vroege maaltijddetectie/snack: Microbolus %1$.1fE, Gecombineerde Delta: %2$.1f, Voorspeld: %3$.1f, Versnelling: %4$.1f.</string>
     <string name="table_plugin_autodrive_2">→ Microbolus Autodrive Modus %1$.1fE\n  • Doel BG: %2$.1f\n  • Helling van min afwijking: %3$.3f\n  • BG versnelling: %4$.2f\n</string>
     <string name="table_plugin_mealmodes_prebolus_1">Microbolus Maaltijdmodus: %1$.1fE.</string>
@@ -595,9 +569,6 @@
     <string name="table_plugin_mealmodes_prebolus_7">Microbolus 2/2 Dinermodus %1$.1fE.</string>
     <string name="table_plugin_mealmodes_prebolus_8">Microbolus Hoge Koolhydraten Modus %1$.1fE.</string>
     <string name="table_plugin_mealmodes_prebolus_9">Microbolus snackmodus %1$.1fE.</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BASAL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
-
     <string name="basal_arguments_1">Neutraal tarief = profiel &amp; TBR actief → TBR verwijderen.\n</string>
     <string name="basal_arguments_2">Neutraal tarief = profiel &amp; geen TBR actief → niets doen.\n</string>
     <string name="basal_arguments_3">Neutraal tarief = profiel → stel een TBR in van %1$.2f E/u.\n</string>
@@ -612,9 +583,6 @@
     <string name="table_plugin_hyperglycemia_1">EventualBG>180 &amp; hyper → basaal AIMI aanpassing.\n</string>
     <string name="table_plugin_hyperglycemia_2">BG>180 stabiel → basaal X factor aanpassing.\n</string>
     <string name="early_meal_tbr_forced">Vroege maaltijd gedetecteerd → TBR geforceerd naar %1$1.2fE/u x30 (overschrijven).\n</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION SAFETY ADJUSTMENTS - FILE DetermineBasalAIMI2.kt -->
-
     <string name="safety_adjustments_1">Hoge BG-daling (%1$.1f mg/dL/u), sterke vermindering van de bolus;</string>
     <string name="safety_adjustments_2">Snelle stijging gedetecteerd (delta %1$.1f mg/dL), noodmodus toegepast</string>
     <string name="safety_adjustments_3">Gecombineerde delta zeer laag (%1$.1f), reductie x0.6;</string>
@@ -652,9 +620,6 @@
     <string name="safety_adjustments_32">Geen SMB honeymoon</string>
     <string name="safety_adjustments_33">BG onder 90</string>
     <string name="no_conditions_met">Aan geen enkele voorwaarde voldaan</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION AIMI MODEL HANDLER - FILE AimiModelHandler.kt -->
-
     <string name="folder_documents">Documenten</string>
     <string name="uam_model_status"> 📦 UAM-model: %1$s (%2$s, %3$s)</string>
     <string name="sanitize_info"> 🧹 Sanitize: %1$d onvolledige waarden -> 0</string>
@@ -667,7 +632,6 @@
     <string name="model_missing"> ❌ Modelbestand niet gevonden: %1$s</string>
     <string name="model_loaded"> 📦 Model geladen ✓ : %1$s (%2$s KB)</string>
     <string name="model_load_failed"> ❌ Model laden mislukt: %1$s</string>
-
     <string name="log_interpreter_closed">Interpreter gesloten</string>
     <string name="log_smb_cache_cleared">SMB-cache gewist</string>
     <string name="log_tflite_failed">TFLite-uitvoering mislukt: %1$s</string>
@@ -675,9 +639,6 @@
     <string name="log_interpreter_initialized">Interpreter geïnitialiseerd vanuit %1$s (%2$s)</string>
     <string name="log_failed_init_uam">Initialiseren UAM-model mislukt: %1$s</string>
     <string name="log_error_closing_interpreter">Fout bij sluiten van interpreter: %1$s</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - FILE DeterminebasalAIMI.kt -->
-
     <string name="bg_drop_high">Hoge BG-daling (%1$.1f mg/dL/u), sterke reductie;</string>
     <string name="bg_rapid_rise">Snelle stijging gedetecteerd (delta %1$.0f mg/dL), noodmodus toepassen;</string>
     <string name="bg_combined_delta_weak">Gecombineerde delta zeer zwak (%1$.2f), reductie x0.6;</string>
@@ -712,7 +673,7 @@
     <string name="bg_insufficient_fallback_force_exact">⚠️ Onvoldoende glucosegegevens, maar maaltijdmodus wordt geforceerd.\n</string>
     <string name="bg_insufficient_fallback">⚠️ BG-gegevens onvoldoende of ongeldig → terugval\n</string>
     <string name="temp_basal_info">Tijdelijk basaal %1$s E/u voor %2$d minuten\n</string>
-    <string name="force_exact_meal_override">Manuele maaltijd modus: geforceerde basaal %1$s U/h voor %2$d minuten.\n</string>
+    <string name="force_exact_meal_override">Handmatige maaltijdmodus: geforceerd basaal %1$s E/u voor %2$d minuten.\n</string>
     <string name="lgs_override">🛑 Lage Glucose Suspend (LGS) overschrijven → TBR 0E/u\n</string>
     <string name="bypass_safety">→ veiligheidsoverbrugging%1$s\n</string>
     <string name="meal_mode"> (maaltijdmodus)</string>
@@ -816,11 +777,11 @@
     <string name="cycle_menstruation">Menstruatie: basaal -%1$.0f%% </string>
     <string name="cycle_follicular">Folliculair: neutraal </string>
     <string name="cycle_ovulation">Ovulatie: SMB -%1$.0f%% </string>
-    <string name="cycle_luteal">Luteale: basaal +%.0f%%, SMB +%.0f%% </string>
+    <string name="cycle_luteal">Luteale fase: basaal +%.0f%%, SMB +%.0f%% </string>
     <string name="cycle_unknown">Onbekend</string>
-    <string name="basal_multiplier_line">♀️⚡ %1$s %2$s → %.2f U/h\n</string>
-    <string name="basal_fmt">Basal×%.2f</string>
-    <string name="wcycle_invalid_day">♀️ WCycle: invalid day</string>
+    <string name="basal_multiplier_line">♀️⚡ %1$s %2$s → %.2f E/u\n</string>
+    <string name="basal_fmt">Basaal×%.2f</string>
+    <string name="wcycle_invalid_day">♀️ WCycle: ongeldige dag</string>
     <string name="sensitivity_ratio_temp_target">Gevoeligheidsratio ingesteld op %.2f op basis van tijdelijk doel van %.0f;</string>
     <string name="autosens_ratio_log">Autosens-ratio: %.2f;</string>
     <string name="console_adjust_basal">Basaal aanpassen van %.2f naar %.2f; </string>
@@ -842,7 +803,7 @@
     <string name="console_mpc_log">MPC-module: dosis=%.2f, Kp=%.3f, corr=%.2f, uit=%.2f</string>
     <string name="reason_mpc_pi">🎛️ MPC voorspellend model: %.2f E (%.0f%%) | PI fysiologisch model: %.2f E (%.0f%%)</string>
     <string name="smb_final">✅ Definitieve SMB: %1$s E</string>
-    <string name="reason_dia_reattivity">📈 DIA: %1$.1f min | REACT◁120 Ochtend: %2$.1f%% | Middag: %3$.1f%% | Avond: %4$.1f%%</string>
+    <string name="reason_dia_reattivity">📈 DIA: %1$.1f min | REACT&lt;120 Ochtend: %2$.1f%% | Middag: %3$.1f%% | Avond: %4$.1f%%</string>
     <string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Snack/prebolus modus: %2$s | </string>
     <string name="autodrive_condition">&#160;Autodrive voorwaarden: %1$s</string>
     <string name="reason_bg_trend">🔍 BG Trend: %.2f | Gecombineerde Δ: %.2f | </string>
@@ -860,13 +821,13 @@
     <string name="reason_max_smb">; maxBolus %1$.2f</string>
     <string name="reason_microbolus">Microbolus van %1$.2fE.</string>
     <string name="reason_wait_microbolus">Wachten %1$.0fmin %2$.0fs om opnieuw een microbolus te geven.</string>
-    <string name="meal_mode_meal">generieke maaltijd(%1$dm)</string>
+    <string name="meal_mode_meal">algemene maaltijd(%1$dm)</string>
     <string name="meal_mode_bfast">ontbijt(%1$dm)</string>
     <string name="meal_mode_lunch">lunch(%1$dm)</string>
     <string name="meal_mode_dinner">avondeten(%1$dm)</string>
-    <string name="meal_mode_highcarb">veel-koolhydraten(%1$dm)</string>
-    <string name="meal_mode_first_30">Manual modes meal 0&#8211;30m [%1$s] → forced basal at %2$.2f U/h (override).\n</string>
-    <string name="manual_basal_override">Forced basal → %1$.2f U/h (%2$dmin). Manual meal mode %3$s\n</string>
+    <string name="meal_mode_highcarb">hoge-koolhydraten(%1$dm)</string>
+    <string name="meal_mode_first_30">Handmatige maaltijdmodus 0&#8211;30m [%1$s] → geforceerd basaal op %2$.2f E/u (overschrijven).\n</string>
+    <string name="manual_basal_override">Geforceerd basaal → %1$.2f E/u (%2$dmin). Handmatige maaltijdmodus %3$s\n</string>
     <string name="reason_early_meal">Vroege maaltijd gedetecteerd → TBR geforceerd naar %1$.2fE/u x30 (overschrijven).\n</string>
     <string name="safety_cut_tbr">Veiligheidsstop: voorspelde BG&lt;100 of IOB>%1$.2f → basaal naar 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → basaal naar 0.\n</string>
