@@ -857,6 +857,10 @@
     <string name="reason_iob_max">IOB %.2f > maxIOB %.2f</string>
     <string name="reason_bg_dropping">, BG is dropping (delta %1$.0f), setting basal to 0.</string>
     <string name="reason_set_temp_basal">; setting current basal of %1$.2f as temp.</string>
+    <!-- Meal-mode safety relaxations -->
+    <string name="smb_enabled_meal_mode">SMB enabled: meal mode rising (BG %1$s, Δ=%2$.1f, eventual %3$s)</string>
+    <string name="reason_meal_high_iob_relaxed">Meal mode rising: IOB %1$.2f &gt; max %2$.2f → SMB damped to %3$d%%.</string>
+    <string name="reason_meal_hold_profile_basal">Meal mode rising: IOB %1$.2f &gt; max %2$.2f → basal kept at profile minimum.\n</string>
     <string name="reason_insulin_required"> insulin required %1$.2f</string>
     <string name="reason_max_smb">; maxBolus %1$.2f</string>
     <string name="reason_microbolus">Microbolusing %1$.2fU.</string>

@@ -862,6 +862,10 @@
     <string name="reason_iob_max">IOB %.2f > maxIOB %.2f</string>
     <string name="reason_bg_dropping">, BG sta calando (delta %1$.0f), imposto basale a 0.</string>
     <string name="reason_set_temp_basal">; imposto basale corrente di %1$.2f come temporanea.</string>
+    <!-- Meal-mode safety relaxations -->
+    <string name="smb_enabled_meal_mode">SMB attivato: aumento post-pasto (glicemia %1$s, Δ=%2$.1f, previsto %3$s)</string>
+    <string name="reason_meal_high_iob_relaxed">Aumento post-pasto: IOB %1$.2f &gt; max %2$.2f → SMB ridotto al %3$d%%.</string>
+    <string name="reason_meal_hold_profile_basal">Aumento post-pasto: IOB %1$.2f &gt; max %2$.2f → basale mantenuta al minimo del profilo.\n</string>
     <string name="reason_insulin_required"> insulina richiesta %1$.2f</string>
     <string name="reason_max_smb">; maxSMB %1$.2f</string>
     <string name="reason_microbolus">Microbolo %1$.2fU.</string>

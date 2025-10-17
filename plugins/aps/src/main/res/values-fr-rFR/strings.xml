@@ -857,6 +857,10 @@
     <string name="reason_iob_max">IOB %.2f > maxIOB %.2f</string>
     <string name="reason_bg_dropping">, BG diminue (delta %1$.0f), basal mis à 0.</string>
     <string name="reason_set_temp_basal">; basale courant de %1$.2f défini comme temporaire.</string>
+    <!-- Meal-mode safety relaxations -->
+    <string name="smb_enabled_meal_mode">SMB activé : augmentation liée au repas (glycémie %1$s, Δ=%2$.1f, prévision %3$s)</string>
+    <string name="reason_meal_high_iob_relaxed">Augmentation post-repas : IOB %1$.2f &gt; max %2$.2f → SMB réduit à %3$d%%.</string>
+    <string name="reason_meal_hold_profile_basal">Augmentation post-repas : IOB %1$.2f &gt; max %2$.2f → basale maintenue au minimum du profil.\n</string>
     <string name="reason_insulin_required"> insuline requise %1$.2f</string>
     <string name="reason_max_smb">; SMB maximum %1$.2f</string>
     <string name="reason_microbolus">Microbolus %1$.2fU.</string>
