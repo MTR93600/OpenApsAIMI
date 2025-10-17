@@ -52,6 +52,32 @@ import android.content.Context
 import app.aaps.plugins.aps.R
 import kotlin.math.exp
 
+// 📝 Structure & helper pour partager la logique de relâchement du plafond IOB en mode repas.
+internal data class MealHighIobDecision(val relax: Boolean, val damping: Double)
+
+// 📝 Calcule si l'on peut assouplir le plafond IOB lors d'un repas montant et le facteur de réduction associé.
+internal fun computeMealHighIobDecision(
+    mealModeActive: Boolean,
+    bg: Double,
+    delta: Double,
+    eventualBg: Double,
+    targetBg: Double,
+    iob: Double,
+    maxIob: Double
+): MealHighIobDecision {
+    if (!mealModeActive) return MealHighIobDecision(false, 1.0)
+    if (maxIob <= 0.0) return MealHighIobDecision(false, 1.0)
+    if (iob <= maxIob) return MealHighIobDecision(false, 1.0)
+    if (bg <= max(120.0, targetBg)) return MealHighIobDecision(false, 1.0)
+    if (delta <= 0.5) return MealHighIobDecision(false, 1.0)
+    if (eventualBg <= targetBg + 10.0) return MealHighIobDecision(false, 1.0)
+    val slack = maxIob * 0.3
+    if (slack <= 0.0) return MealHighIobDecision(false, 1.0)
+    if (iob > maxIob + slack) return MealHighIobDecision(false, 1.0)
+    val excessFraction = ((iob - maxIob) / slack).coerceIn(0.0, 1.0)
+    val damping = 1.0 - 0.5 * excessFraction
+    return MealHighIobDecision(true, damping)
+}
 
 @Singleton
 class DetermineBasalaimiSMB2 @Inject constructor(
@@ -436,108 +462,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
     }
 
-    // -- Fonction de sécurité qui combine plusieurs indicateurs pour ajuster la dose d'insuline --
-    // fun safetyAdjustment(
-    //     currentBG: Float,
-    //     predictedBG: Float,
-    //     bgHistory: List<Float>,
-    //     combinedDelta: Float,
-    //     iob: Float,
-    //     maxIob: Float,
-    //     tdd24Hrs: Float,
-    //     tddPerHour: Float,
-    //     tirInhypo: Float,
-    //     targetBG: Float,
-    //     zeroBasalDurationMinutes: Int  // Nouvel argument indiquant combien de minutes consécutives la basale est restée à 0
-    // ): SafetyDecision {
-    //     val windowMinutes = 30f
-    //     val dropPerHour = calculateDropPerHour(bgHistory, windowMinutes)
-    //     val maxAllowedDropPerHour = 25f  // Ajustez si besoin
-    //     val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-    //     val reasonBuilder = StringBuilder()
-    //     var stopBasal = false
-    //     var basalLS = false
-    //     var bolusFactor = 1.0
-    //
-    //     // 1. Contrôle de la chute
-    //     if (dropPerHour >= maxAllowedDropPerHour) {
-    //         // Option A : on arrête complètement la basale
-    //         stopBasal = true
-    //         // reasonBuilder.append("BG drop élevé: $dropPerHour mg/dL/h; ")
-    //
-    //         // Option B : on réduit fortement le bolusFactor sans stopper la basale
-    //         bolusFactor *= 0.3
-    //         reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction du bolus; ")
-    //     }
-    //     if (delta >= 20f && combinedDelta >= 15f && !honeymoon) {
-    //         // Mode "montée rapide" détecté, on override les réductions habituelles
-    //         bolusFactor = 1.0
-    //         reasonBuilder.append("Montée rapide détectée (delta ${delta} mg/dL), application du mode d'urgence; ")
-    //     }
-    //     // 2. Palier sur le combinedDelta
-    //     when {
-    //         combinedDelta < 1f -> {
-    //             bolusFactor *= 0.6
-    //             reasonBuilder.append("combinedDelta très faible ($combinedDelta), réduction x0.6; ")
-    //         }
-    //         combinedDelta < 2f -> {
-    //             bolusFactor *= 0.8
-    //             reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
-    //         }
-    //         else -> {
-    //             bolusFactor *= computeDynamicBolusMultiplier(combinedDelta)
-    //             reasonBuilder.append("combinedDelta élevé ($combinedDelta), pas de réduction; ")
-    //         }
-    //     }
-    //
-    //     // 3. Plateau si BG élevé + combinedDelta très faible
-    //     if (currentBG > 160f && combinedDelta < 1f) {
-    //         bolusFactor *= 0.8
-    //         reasonBuilder.append("Plateau BG>180 & combinedDelta<2 => réduction x0.8; ")
-    //     }
-    //
-    //     // 4. Contrôle IOB
-    //     if (iob >= maxIob * 0.85f) {
-    //         bolusFactor *= 0.85
-    //         reasonBuilder.append("IOB élevé ($iob U), réduction x0.8; ")
-    //     }
-    //
-    //     // 5. Contrôle du TDD par heure
-    //     val tddThreshold = tdd24Hrs / 24f
-    //     if (tddPerHour > tddThreshold) {
-    //         bolusFactor *= 0.8
-    //         reasonBuilder.append("TDD/h élevé ($tddPerHour U/h), réduction x0.8; ")
-    //     }
-    //
-    //     // 6. TIR élevé
-    //     if (tirInhypo >= 8f) {
-    //         bolusFactor *= 0.5
-    //         reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.5; ")
-    //     }
-    //
-    //     // 7. BG prédit proche de la cible
-    //     if (predictedBG < targetBG + 10) {
-    //         bolusFactor *= 0.5
-    //         reasonBuilder.append("BG prédit ($predictedBG) proche de la cible ($targetBG), réduction x0.5; ")
-    //     }
-    //     // ---- Intégration du suivi de durée zéro basal ----
-    //     // Si nous avons déjà trop longtemps de basal à 0, on ne souhaite pas stopper la basale.
-    //     // Par exemple, si la durée cumulée dépasse 60 minutes, on force l'arrêt de la réduction (i.e. on ne stoppe pas la basale)
-    //     if (zeroBasalDurationMinutes >= MAX_ZERO_BASAL_DURATION) {
-    //         // On annule la demande de stopper la basale et on force le bolusFactor à 1 (aucune réduction)
-    //         stopBasal = false
-    //         basalLS = true
-    //         bolusFactor = 1.0
-    //         reasonBuilder.append("Zero basal duration ($zeroBasalDurationMinutes min) dépassé, forçant basal minimal; ")
-    //     }
-    //
-    //     return SafetyDecision(
-    //         stopBasal = stopBasal,
-    //         bolusFactor = bolusFactor,
-    //         reason = reasonBuilder.toString(),
-    //         basalLS = basalLS
-    //     )
-    // }
     /**
      * Ajuste le DIA (en minutes) en fonction du niveau d'IOB.
      *
@@ -775,7 +699,14 @@ fun appendCompactLog(
     private fun convertBG(value: Double): String =
         profileUtil.fromMgdlToStringInUnits(value).replace("-0.0", "0.0")
 
-    private fun enablesmb(profile: OapsProfileAimi, microBolusAllowed: Boolean, mealData: MealData, targetbg: Double): Boolean {
+    private fun enablesmb(profile: OapsProfileAimi,
+                          microBolusAllowed: Boolean,
+                          mealData: MealData,
+                          targetbg: Double,
+                          mealModeActive: Boolean,
+                          currentBg: Double,
+                          delta: Double,
+                          eventualBg: Double): Boolean {
         // disable SMB when a high temptarget is set
         if (!microBolusAllowed) {
           //consoleError.add("SMB disabled (!microBolusAllowed)")
@@ -814,6 +745,21 @@ fun appendCompactLog(
           //consoleError.add("SMB enabled for temptarget of ${convertBG(targetbg)}")
             consoleError.add(context.getString(R.string.smb_enabled_for_temp_target, convertBG(targetbg)))
             return true
+        }
+        // 📝 Mode repas : autoriser SMB même sans COB si montée franche et cible sûre.
+        if (mealModeActive) {
+            val safeFloor = max(100.0, targetbg - 5)
+            if (currentBg > safeFloor && delta > 0.5 && eventualBg > safeFloor) {
+                consoleError.add(
+                    context.getString(
+                        R.string.smb_enabled_meal_mode,
+                        convertBG(currentBg),
+                        delta,
+                        convertBG(eventualBg)
+                    )
+                )
+                return true
+            }
         }
 
       //consoleError.add("SMB disabled (no enableSMB preferences active or no condition satisfied)")
@@ -4088,8 +4034,20 @@ rT.reason.appendLine(
         val forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
         val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)
 
-        val enableSMB = enablesmb(profile, microBolusAllowed, mealData, target_bg)
+        //val enableSMB = enablesmb(profile, microBolusAllowed, mealData, target_bg)
+        // 📝 Repère l'activation d'un mode repas pour assouplir les gardes SMB/TBR.
+        val mealModeActive = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime
 
+        val enableSMB = enablesmb(
+            profile,
+            microBolusAllowed,
+            mealData,
+            target_bg,
+            mealModeActive,
+            bg,
+            delta.toDouble(),
+            eventualBG
+        )
 
         rT.COB = mealData.mealCOB
         rT.IOB = iob_data.iob
@@ -4165,11 +4123,24 @@ rT.reason.appendLine(
                 )
             }
         }
-        if (iob_data.iob > max_iob) {
+        // 📝 Décision centralisée : peut-on relaxer le plafond IOB pendant un repas montant ?
+        val mealHighIobDecision = computeMealHighIobDecision(
+            mealModeActive,
+            bg,
+            delta.toDouble(),
+            eventualBG,
+            target_bg,
+            iob_data.iob,
+            max_iob
+        )
+        val allowMealHighIob = mealHighIobDecision.relax
+        val mealHighIobDamping = mealHighIobDecision.damping
+
+        if (iob_data.iob > max_iob && !allowMealHighIob) {
           //rT.reason.append("IOB ${round(iob_data.iob, 2)} > max_iob $max_iob")
             rT.reason.append(context.getString(R.string.reason_iob_max, round(iob_data.iob, 2), round(max_iob, 2)))
             if (delta < 0) {
-              //rT.reason.append(", BG is dropping (delta $delta), setting basal to 0. ")
+                //rT.reason.append(", BG is dropping (delta $delta), setting basal to 0. ")
                 rT.reason.append(context.getString(R.string.reason_bg_dropping, delta))
                 return setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false) // Basal à 0 pendant 30 minutes
             }
@@ -4183,6 +4154,18 @@ rT.reason.appendLine(
             }
         } else {
             var insulinReq = smbToGive.toDouble()
+            // 📝 SMB autorisés mais atténués lorsque le repas impose un IOB > max raisonnable.
+            if (allowMealHighIob) {
+                insulinReq *= mealHighIobDamping
+                rT.reason.append(
+                    context.getString(
+                        R.string.reason_meal_high_iob_relaxed,
+                        round(iob_data.iob, 2),
+                        round(max_iob, 2),
+                        (mealHighIobDamping * 100).roundToInt()
+                    )
+                )
+            }
 
             //updateZeroBasalDuration(profile_current_basal)
 
@@ -4233,35 +4216,6 @@ rT.reason.appendLine(
 // Taux basal courant comme valeur de base
             var rate = profile_current_basal
 
-
-
-// ---------- FORÇAGE IMMEDIAT A L’ACTIVATION (30 minutes pleines) ----------
-//             if (isMealActive) {
-//                 val forced = forcedBasalmealmodes.toDouble().coerceAtLeast(0.0)
-//
-//                 // Garde anti "glissement" : si une TBR identique est déjà posée (±0.05 U/h) avec >=25 min restantes, ne pas reposer
-//                 val isAlreadyForced = kotlin.math.abs(currenttemp.rate - forced) < 0.05 && currenttemp.duration >= 25
-//
-//                 // On déclenche au démarrage du mode (runtime ≤ 2 minutes) ET si pas déjà forcé
-//                 if (!isAlreadyForced) {
-//                     rT.reason.append(
-//                         context.getString(
-//                             R.string.meal_mode_first_30,
-//                             "$runtimeMinLabel($runtimeMinValue)",
-//                             forced
-//                         )
-//                     )
-//                     return setTempBasal(
-//                         _rate = forced,
-//                         duration = 30,                 // ← 30 minutes pleines à partir de maintenant
-//                         profile = profile,
-//                         rT = rT,
-//                         currenttemp = currenttemp,
-//                         overrideSafetyLimits = true,
-//                         forceExact = true              // ← ignore clamps/adjust/cycle (sauf LGS)
-//                     )
-//                 }
-//             }
 // ---------------------------------------------------------------------------
 
 // 1️⃣ Préparation des variables
@@ -4333,12 +4287,35 @@ rT.reason.appendLine(
 
 // ------------------------------
 // 4️⃣ Sécurité immédiate avant hypo : predictedBg<100 & slope négative OU IOB trop haut
-            if (chosenRate == null &&
-                (predictedBg < 100 && mealData.slopeFromMaxDeviation <= 0 || iob > maxIob)
-            ) {
-                chosenRate = 0.0
-                overrideSafety = false
-                rT.reason.append(context.getString(R.string.safety_cut_tbr, maxIob))
+//             if (chosenRate == null &&
+//                 (predictedBg < 100 && mealData.slopeFromMaxDeviation <= 0 || iob > maxIob)
+//             ) {
+//                 chosenRate = 0.0
+//                 overrideSafety = false
+//                 rT.reason.append(context.getString(R.string.safety_cut_tbr, maxIob))
+//             }
+            // 📝 Coupe/Tient la basale : préserver la correction repas quand l'IOB élevé reste justifié.
+            if (chosenRate == null) {
+                val predictedLow = predictedBg < 100 && mealData.slopeFromMaxDeviation <= 0
+                val highIobStop = iob > maxIob && !allowMealHighIob
+                when {
+                    predictedLow || highIobStop      -> {
+                        chosenRate = 0.0
+                        overrideSafety = false
+                        rT.reason.append(context.getString(R.string.safety_cut_tbr, maxIob))
+                    }
+
+                    iob > maxIob && allowMealHighIob -> {
+                        chosenRate = max(profile_current_basal, currenttemp.rate.toDouble())
+                        rT.reason.append(
+                            context.getString(
+                                R.string.reason_meal_hold_profile_basal,
+                                round(iob.toDouble(), 2),
+                                round(maxIob, 2)
+                            )
+                        )
+                    }
+                }
             }
 
 // ------------------------------
