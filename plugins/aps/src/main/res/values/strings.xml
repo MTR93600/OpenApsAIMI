@@ -481,7 +481,35 @@
     <string name="wcycleovulation_title">Ovulation % reduction</string>
     <string name="wcycleluteal_summary">The luteal phase requires about 8–15% more insulin</string>
     <string name="wcycleluteal_title">Luteal phase, set the % to apply on basal and SMB</string>
-
+    <!-- Night growth resistance -->
+    <string name="oaps_aimi_ngr_title">Night growth resistance</string>
+    <string name="oaps_aimi_ngr_enabled_title">Enable night growth resistance monitor</string>
+    <string name="oaps_aimi_ngr_enabled_summary">Detect sustained nocturnal rises for pediatric users.</string>
+    <string name="oaps_aimi_ngr_age_title">Pediatric age (years)</string>
+    <string name="oaps_aimi_ngr_age_summary">Age used to enable the monitor by default below adulthood.</string>
+    <string name="oaps_aimi_ngr_night_start_title">Night window start (HH:mm)</string>
+    <string name="oaps_aimi_ngr_night_start_summary">Start of the resistance detection window.</string>
+    <string name="oaps_aimi_ngr_night_end_title">Night window end (HH:mm)</string>
+    <string name="oaps_aimi_ngr_night_end_summary">End of the resistance detection window (next day if before start).</string>
+    <string name="oaps_aimi_ngr_min_rise_title">Minimum rise slope (mg/dL/5&#160;min)</string>
+    <string name="oaps_aimi_ngr_min_rise_summary">Minimum 5-minute rise required to suspect hormonal resistance.</string>
+    <string name="oaps_aimi_ngr_min_duration_title">Minimum duration (minutes)</string>
+    <string name="oaps_aimi_ngr_min_duration_summary">Minutes of continuous rise required before activation.</string>
+    <string name="oaps_aimi_ngr_min_eventual_title">Minimum eventual above target (mg/dL)</string>
+    <string name="oaps_aimi_ngr_min_eventual_summary">Required eventual BG margin above target.</string>
+    <string name="oaps_aimi_ngr_smb_multiplier_title">SMB boost multiplier</string>
+    <string name="oaps_aimi_ngr_smb_multiplier_summary">Multiplier applied to SMB suggestions while resistance is active.</string>
+    <string name="oaps_aimi_ngr_basal_multiplier_title">Basal boost multiplier</string>
+    <string name="oaps_aimi_ngr_basal_multiplier_summary">Multiplier applied to basal adjustments while resistance is active.</string>
+    <string name="oaps_aimi_ngr_max_smb_title">Maximum boosted SMB (U)</string>
+    <string name="oaps_aimi_ngr_max_smb_summary">Upper clamp applied to boosted SMB values.</string>
+    <string name="oaps_aimi_ngr_max_iob_title">Extra IOB headroom (U)</string>
+    <string name="oaps_aimi_ngr_max_iob_summary">Additional IOB allowed during a detected episode.</string>
+    <string name="oaps_aimi_ngr_decay_title">Decay duration (minutes)</string>
+    <string name="oaps_aimi_ngr_decay_summary">Minutes used to smoothly return multipliers to baseline.</string>
+    <string name="oaps_aimi_ngr_headroom">NGR headroom: +%1$.2fU (limit %2$.2fU).</string>
+    <string name="oaps_aimi_ngr_basal_applied">NGR basal boost ×%1$.2f → %2$.2fU/h.</string>
+    <string name="oaps_aimi_ngr_smb_applied">NGR SMB boost ×%1$.2f (req %2$.3fU, clamp %3$.3fU).</string>
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BG TREND - FILE DetermineBasalAIMI2.kt -->
     <string name="bg_trend_1">BG Trend Analysis</string>

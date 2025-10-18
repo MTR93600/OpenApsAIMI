@@ -52,4 +52,6 @@ enum class StringKey(
     TidepoolPassword("tidepool_password", "", isPassword = true),
     TidepoolTestLogin(key = "tidepool_test_login", ""),
     GarminRequestKey(key = "garmin_aaps_key", defaultValue = ""),
+    OApsAIMINightGrowthStart("key_oaps_aimi_ngr_night_start", "22:00"),
+    OApsAIMINightGrowthEnd("key_oaps_aimi_ngr_night_end", "06:00")
 }

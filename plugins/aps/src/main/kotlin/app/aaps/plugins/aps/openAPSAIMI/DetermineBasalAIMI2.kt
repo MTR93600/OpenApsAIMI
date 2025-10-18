@@ -29,9 +29,11 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.Preferences
+import app.aaps.core.keys.StringKey
 import java.io.File
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -198,10 +200,44 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var intervalsmb = 1
     private var peakintermediaire = 0.0
     private var insulinPeakTime = 0.0
+    private val nightGrowthResistanceMode = NightGrowthResistanceMode()
+    private val ngrTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     private var zeroBasalAccumulatedMinutes: Int = 0
     private val MAX_ZERO_BASAL_DURATION = 60  // Durée maximale autorisée en minutes à 0 basal
 
     private fun Double.toFixed2(): String = DecimalFormat("0.00#").format(round(this, 2))
+    private fun parseNgrTime(value: String, fallback: LocalTime): LocalTime =
+        runCatching { LocalTime.parse(value, ngrTimeFormatter) }.getOrElse { fallback }
+
+    private fun buildNightGrowthResistanceConfig(): NGRConfig {
+        val age = preferences.get(IntKey.OApsAIMINightGrowthAgeYears).coerceAtLeast(0)
+        val enabledPref = preferences.getIfExists(BooleanKey.OApsAIMINightGrowthEnabled)
+        val nightStart = parseNgrTime(preferences.get(StringKey.OApsAIMINightGrowthStart), LocalTime.of(22, 0))
+        val nightEnd = parseNgrTime(preferences.get(StringKey.OApsAIMINightGrowthEnd), LocalTime.of(6, 0))
+        val minRise = max(0.0, preferences.get(DoubleKey.OApsAIMINightGrowthMinRiseSlope))
+        val smbMultiplier = max(1.0, preferences.get(DoubleKey.OApsAIMINightGrowthSmbMultiplier))
+        val basalMultiplier = max(1.0, preferences.get(DoubleKey.OApsAIMINightGrowthBasalMultiplier))
+        val maxSmbClamp = max(0.0, preferences.get(DoubleKey.OApsAIMINightGrowthMaxSmbClamp))
+        val maxIobExtra = max(0.0, preferences.get(DoubleKey.OApsAIMINightGrowthMaxIobExtra))
+        val minDuration = preferences.get(IntKey.OApsAIMINightGrowthMinDurationMin).coerceAtLeast(0)
+        val minEventual = preferences.get(IntKey.OApsAIMINightGrowthMinEventualOverTarget).coerceAtLeast(0)
+        val decay = preferences.get(IntKey.OApsAIMINightGrowthDecayMinutes).coerceAtLeast(0)
+        val enabled = enabledPref ?: (age < 18)
+        return NGRConfig(
+            enabled = enabled,
+            pediatricAgeYears = age,
+            nightStart = nightStart,
+            nightEnd = nightEnd,
+            minRiseSlope = minRise,
+            minDurationMin = minDuration,
+            minEventualOverTarget = minEventual,
+            allowSMBBoostFactor = smbMultiplier,
+            allowBasalBoostFactor = basalMultiplier,
+            maxSMBClampU = maxSmbClamp,
+            maxIOBExtraU = maxIobExtra,
+            decayMinutes = decay
+        )
+    }
     /**
      * Prédit l’évolution de la glycémie sur un horizon donné (en minutes),
      * avec des pas de 5 minutes.
@@ -2973,6 +3009,7 @@ fun appendCompactLog(
 
         this.maxSMBHB = if (autodrive && !honeymoon) DynMaxSmb.toDouble() else preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
         this.maxSMB = if (bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.4 || bg > 180 && honeymoon && mealData.slopeFromMinDeviation >= 1.4) maxSMBHB else maxSMB
+        val ngrConfig = buildNightGrowthResistanceConfig()
         this.tir1DAYabove = tirCalculator.averageTIR(tirCalculator.calculate(1, 65.0, 180.0))?.abovePct()!!
         val tir1DAYIR = tirCalculator.averageTIR(tirCalculator.calculate(1, 65.0, 180.0))?.inRangePct()!!
         this.currentTIRLow = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0))?.belowPct()!!
@@ -3199,7 +3236,8 @@ fun appendCompactLog(
 
         // TODO eliminate
         //val max_iob = profile.max_iob // maximum amount of non-bolus IOB OpenAPS will ever deliver
-        val max_iob = maxIob
+        //val max_iob = maxIob
+        var maxIobLimit = maxIob
         //this.maxIob = max_iob
         // if min and max are set, then set target to their average
         var target_bg = (profile.min_bg + profile.max_bg) / 2
@@ -4127,6 +4165,78 @@ rT.reason.appendLine(
                 )
             }
         }
+        val ngrResult = nightGrowthResistanceMode.evaluate(
+            now = Instant.ofEpochMilli(systemTime),
+            bg = bg,
+            delta = delta.toDouble(),
+            shortAvgDelta = shortAvgDelta.toDouble(),
+            longAvgDelta = longAvgDelta.toDouble(),
+            eventualBG = eventualBG,
+            targetBG = target_bg,
+            iob = iob_data.iob,
+            cob = mealData.mealCOB,
+            react = bg,
+            isMealActive = isMealActive,
+            config = ngrConfig
+        )
+        if (ngrResult.reason.isNotEmpty()) {
+            rT.reason.appendLine(ngrResult.reason)
+            consoleLog.add(ngrResult.reason)
+        }
+        val lowTempTarget = profile.temptargetSet && target_bg <= profile.target_bg
+        val originalMaxIobLimit = maxIobLimit
+        if (!lowTempTarget && ngrResult.extraIOBHeadroomU > 0.0) {
+            val absoluteMaxIob = preferences.get(DoubleKey.ApsSmbMaxIob) + ngrConfig.maxIOBExtraU
+            val candidate = maxIobLimit + ngrResult.extraIOBHeadroomU
+            val updatedLimit = min(candidate, absoluteMaxIob)
+            if (updatedLimit > originalMaxIobLimit + 0.01) {
+                maxIobLimit = updatedLimit
+                this.maxIob = maxIobLimit
+                val headroomMessage = context.getString(
+                    R.string.oaps_aimi_ngr_headroom,
+                    round(maxIobLimit - originalMaxIobLimit, 2),
+                    round(maxIobLimit, 2)
+                )
+                rT.reason.appendLine(headroomMessage)
+                consoleLog.add(headroomMessage)
+            }
+        }
+        this.maxIob = maxIobLimit
+        val safeBgThreshold = max(110.0, target_bg)
+        val originalBasal = basal
+        val shouldApplyBasalBoost = ngrResult.basalMultiplier > 1.0001 && !lowTempTarget && delta > 0 && shortAvgDelta > 0 && bg > target_bg
+        if (shouldApplyBasalBoost && originalBasal > 0.0) {
+            val boostedBasal = roundBasal((originalBasal * ngrResult.basalMultiplier).coerceAtLeast(0.05))
+            if (boostedBasal > originalBasal + 0.01) {
+                basal = boostedBasal
+                val basalMessage = context.getString(
+                    R.string.oaps_aimi_ngr_basal_applied,
+                    boostedBasal / originalBasal,
+                    round(boostedBasal, 2)
+                )
+                rT.reason.appendLine(basalMessage)
+                consoleLog.add(basalMessage)
+            }
+        }
+        val originalSmb = smbToGive.toDouble()
+        val shouldApplySmbBoost = ngrResult.smbMultiplier > 1.0001 && !lowTempTarget && safetyDecision.bolusFactor >= 1.0 && eventualBG > target_bg && delta > 0 && bg >= safeBgThreshold
+        if (shouldApplySmbBoost && originalSmb > 0.0) {
+            val boosted = originalSmb * ngrResult.smbMultiplier
+            val smbClamp = min(ngrConfig.maxSMBClampU, maxSMB)
+            val finalSmb = boosted.coerceAtMost(smbClamp)
+            val appliedMultiplier = finalSmb / originalSmb
+            if (appliedMultiplier > 1.0001) {
+                smbToGive = finalSmb.toFloat()
+                val smbMessage = context.getString(
+                    R.string.oaps_aimi_ngr_smb_applied,
+                    appliedMultiplier,
+                    round(finalSmb, 3),
+                    round(smbClamp, 3)
+                )
+                rT.reason.appendLine(smbMessage)
+                consoleLog.add(smbMessage)
+            }
+        }
         // 📝 Décision centralisée : peut-on relaxer le plafond IOB pendant un repas montant ?
         // 📝 Décision centralisée : peut-on relaxer le plafond IOB pendant un repas montant ?
         val mealHighIobDecision = computeMealHighIobDecision(
@@ -4136,14 +4246,14 @@ rT.reason.appendLine(
             eventualBG,
             target_bg,
             iob_data.iob,
-            max_iob
+            maxIobLimit
         )
         val allowMealHighIob = mealHighIobDecision.relax
         val mealHighIobDamping = mealHighIobDecision.damping
 
-        if (iob_data.iob > max_iob && !allowMealHighIob) {
-          //rT.reason.append("IOB ${round(iob_data.iob, 2)} > max_iob $max_iob")
-            rT.reason.append(context.getString(R.string.reason_iob_max, round(iob_data.iob, 2), round(max_iob, 2)))
+        if (iob_data.iob > maxIobLimit && !allowMealHighIob) {
+          //rT.reason.append("IOB ${round(iob_data.iob, 2)} > maxIobLimit maxIobLimit")
+            rT.reason.append(context.getString(R.string.reason_iob_max, round(iob_data.iob, 2), round(maxIobLimit, 2)))
             if (delta < 0) {
                 //rT.reason.append(", BG is dropping (delta $delta), setting basal to 0. ")
                 rT.reason.append(context.getString(R.string.reason_bg_dropping, delta))
@@ -4166,7 +4276,7 @@ rT.reason.appendLine(
                     context.getString(
                         R.string.reason_meal_high_iob_relaxed,
                         round(iob_data.iob, 2),
-                        round(max_iob, 2),
+                        round(maxIobLimit, 2),
                         (mealHighIobDamping * 100).roundToInt()
                     )
                 )

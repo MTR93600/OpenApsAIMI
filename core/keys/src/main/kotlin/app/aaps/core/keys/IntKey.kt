@@ -78,5 +78,9 @@ enum class IntKey(
     //OApsAIMIautodriveISF("key_oaps_aimi_autodriveISF",5,1,500),
     OApsAIMIAutodriveTarget("key_oaps_aimi_autodriveTarget",70,1,160),
     OApsAIMIAutodriveBG("key_oaps_aimi_autodriveBG",90,1,160),
+    OApsAIMINightGrowthAgeYears("key_oaps_aimi_ngr_age_years", 14, 1, 25),
+    OApsAIMINightGrowthMinDurationMin("key_oaps_aimi_ngr_min_duration", 30, 5, 240),
+    OApsAIMINightGrowthMinEventualOverTarget("key_oaps_aimi_ngr_min_eventual_over_target", 15, 0, 120),
+    OApsAIMINightGrowthDecayMinutes("key_oaps_aimi_ngr_decay_minutes", 20, 0, 120),
     OApsAIMIlogsize("key_oaps_aimi_logsize",25,1,50)
 }

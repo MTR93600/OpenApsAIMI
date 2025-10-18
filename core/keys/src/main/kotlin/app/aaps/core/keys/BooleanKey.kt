@@ -121,5 +121,6 @@ enum class BooleanKey(
     OApsAIMIhoneymoon("key_use_Aimi_honeymoon",false),
     OApsxdriponeminute(key = "key_use_Aimi_xdripOM",defaultValue = false),
     OApsAIMIautoDrive(key = "key_use_Aimi_autoDrive",defaultValue = false),
-    OApsAIMIwcycle(key = "key_use_Aimi_wcycle",defaultValue = false)
+    OApsAIMIwcycle(key = "key_use_Aimi_wcycle",defaultValue = false),
+    OApsAIMINightGrowthEnabled("key_oaps_aimi_ngr_enabled", true)
 }
