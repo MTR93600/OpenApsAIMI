@@ -109,7 +109,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // État interne d’hystérèse
     private var lastHypoBlockAt: Long = 0L
     private var hypoClearCandidateSince: Long? = null
-
+    private var mealModeSmbReason: String? = null
     private val consoleError = mutableListOf<String>()
     private val consoleLog = mutableListOf<String>()
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
@@ -699,14 +699,17 @@ fun appendCompactLog(
     private fun convertBG(value: Double): String =
         profileUtil.fromMgdlToStringInUnits(value).replace("-0.0", "0.0")
 
-    private fun enablesmb(profile: OapsProfileAimi,
-                          microBolusAllowed: Boolean,
-                          mealData: MealData,
-                          targetbg: Double,
-                          mealModeActive: Boolean,
-                          currentBg: Double,
-                          delta: Double,
-                          eventualBg: Double): Boolean {
+    private fun enablesmb(
+        profile: OapsProfileAimi,
+        microBolusAllowed: Boolean,
+        mealData: MealData,
+        targetbg: Double,
+        mealModeActive: Boolean,
+        currentBg: Double,
+        delta: Double,
+        eventualBg: Double
+    ): Boolean {
+        mealModeSmbReason = null
         // disable SMB when a high temptarget is set
         if (!microBolusAllowed) {
           //consoleError.add("SMB disabled (!microBolusAllowed)")
@@ -750,13 +753,11 @@ fun appendCompactLog(
         if (mealModeActive) {
             val safeFloor = max(100.0, targetbg - 5)
             if (currentBg > safeFloor && delta > 0.5 && eventualBg > safeFloor) {
-                consoleError.add(
-                    context.getString(
-                        R.string.smb_enabled_meal_mode,
-                        convertBG(currentBg),
-                        delta,
-                        convertBG(eventualBg)
-                    )
+                mealModeSmbReason = context.getString(
+                    R.string.smb_enabled_meal_mode,
+                    convertBG(currentBg),
+                    delta,
+                    convertBG(eventualBg)
                 )
                 return true
             }
@@ -4036,6 +4037,7 @@ rT.reason.appendLine(
 
         //val enableSMB = enablesmb(profile, microBolusAllowed, mealData, target_bg)
         // 📝 Repère l'activation d'un mode repas pour assouplir les gardes SMB/TBR.
+        // 📝 Repère l'activation d'un mode repas pour assouplir les gardes SMB/TBR.
         val mealModeActive = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime
 
         val enableSMB = enablesmb(
@@ -4048,6 +4050,8 @@ rT.reason.appendLine(
             delta.toDouble(),
             eventualBG
         )
+
+        mealModeSmbReason?.let { reason(rT, it) }
 
         rT.COB = mealData.mealCOB
         rT.IOB = iob_data.iob
@@ -4123,6 +4127,7 @@ rT.reason.appendLine(
                 )
             }
         }
+        // 📝 Décision centralisée : peut-on relaxer le plafond IOB pendant un repas montant ?
         // 📝 Décision centralisée : peut-on relaxer le plafond IOB pendant un repas montant ?
         val mealHighIobDecision = computeMealHighIobDecision(
             mealModeActive,
@@ -4299,7 +4304,7 @@ rT.reason.appendLine(
                 val predictedLow = predictedBg < 100 && mealData.slopeFromMaxDeviation <= 0
                 val highIobStop = iob > maxIob && !allowMealHighIob
                 when {
-                    predictedLow || highIobStop      -> {
+                    predictedLow || highIobStop -> {
                         chosenRate = 0.0
                         overrideSafety = false
                         rT.reason.append(context.getString(R.string.safety_cut_tbr, maxIob))
