@@ -1238,7 +1238,7 @@ fun appendCompactLog(
     }
     private fun isHighCarb2ModeCondition(): Boolean {
         val pbolusHC2: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
-        return highCarbrunTime in 0..7 && lastBolusSMBUnit != pbolusHC2.toFloat() && highCarbTime
+        return highCarbrunTime in 15..24 && lastBolusSMBUnit != pbolusHC2.toFloat() && highCarbTime
     }
 
     private fun issnackModeCondition(): Boolean {
