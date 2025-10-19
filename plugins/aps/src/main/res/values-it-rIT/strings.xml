@@ -451,6 +451,8 @@
     <string name="meal_modes_max_basal_title_genericmeal">Basale fissa 30 minuti inizio pasto (U/h)</string>
     <string name="meal_modes_max_basal_summary_genericmeal">Modalità manuale, TBR fissa, dopo il prebolus 1 impostato 30 minuti una TBR fissa per il pasto generico</string>
 
+    <string name="women_preferences">Modalità donna</string>
+    <string name="women_preferences_title_menu">Modalità donna - Impostazioni</string>
     <string name="wcycle_preferences">Modalità ciclo mestruale</string>
     <string name="wcycle_preferences_title_menu">Modalità ciclo mestruale - Impostazioni</string>
     <string name="oaps_aimi_enablewcycle_title">Abilita ciclo mestruale</string>
@@ -462,6 +464,39 @@
     <string name="wcycleovulation_title">Riduzione % per ovulazione</string>
     <string name="wcycleluteal_summary">La fase luteale richiede circa l\'8–15% in più di insulina</string>
     <string name="wcycleluteal_title">Fase luteale, imposta la % da applicare su basale e SMB</string>
+    <!-- Night growth resistance -->
+    <!-- Resistenza insulinica notturna da ormone della crescita -->
+    <string name="child_preferences">Modalità bambino</string>
+    <string name="child_preferences_title_menu">Modalità bambino - Impostazioni</string>
+    <string name="oaps_aimi_ngr_title">Resistenza insulinica notturna</string>
+    <string name="oaps_aimi_ngr_enabled_title">Abilita monitoraggio resistenza insulinica notturna</string>
+    <string name="oaps_aimi_ngr_enabled_summary">Rileva rialzi glicemici notturni prolungati dovuti a resistenza ormonale (utenti pediatrici).</string>
+    <string name="oaps_aimi_ngr_age_title">Età pediatrica (anni)</string>
+    <string name="oaps_aimi_ngr_age_summary">Età sotto la quale il monitor si attiva automaticamente.</string>
+    <string name="oaps_aimi_ngr_night_start_title">Inizio intervallo notturno (HH:mm)</string>
+    <string name="oaps_aimi_ngr_night_start_summary">Ora di inizio della finestra di rilevamento della resistenza.</string>
+    <string name="oaps_aimi_ngr_night_end_title">Fine intervallo notturno (HH:mm)</string>
+    <string name="oaps_aimi_ngr_night_end_summary">Ora di fine della finestra di rilevamento (giorno successivo se precedente all’inizio).</string>
+    <string name="oaps_aimi_ngr_min_rise_title">Pendenza minima di crescita (mg/dL/5&#160;min)</string>
+    <string name="oaps_aimi_ngr_min_rise_summary">Aumento minimo in 5 minuti richiesto per sospettare resistenza ormonale.</string>
+    <string name="oaps_aimi_ngr_min_duration_title">Durata minima (minuti)</string>
+    <string name="oaps_aimi_ngr_min_duration_summary">Durata minima di aumento continuo prima dell’attivazione.</string>
+    <string name="oaps_aimi_ngr_min_eventual_title">Minimo valore previsto sopra target (mg/dL)</string>
+    <string name="oaps_aimi_ngr_min_eventual_summary">Margine previsto richiesto sopra il target glicemico.</string>
+    <string name="oaps_aimi_ngr_smb_multiplier_title">Moltiplicatore SMB</string>
+    <string name="oaps_aimi_ngr_smb_multiplier_summary">Moltiplicatore applicato alle correzioni SMB quando la resistenza è attiva.</string>
+    <string name="oaps_aimi_ngr_basal_multiplier_title">Moltiplicatore basale</string>
+    <string name="oaps_aimi_ngr_basal_multiplier_summary">Moltiplicatore applicato agli aggiustamenti basali durante la resistenza.</string>
+    <string name="oaps_aimi_ngr_max_smb_title">SMB potenziato massimo (U)</string>
+    <string name="oaps_aimi_ngr_max_smb_summary">Limite massimo applicato alle SMB potenziate.</string>
+    <string name="oaps_aimi_ngr_max_iob_title">Margine IOB extra (U)</string>
+    <string name="oaps_aimi_ngr_max_iob_summary">Quantità aggiuntiva di IOB consentita durante un episodio di resistenza.</string>
+    <string name="oaps_aimi_ngr_decay_title">Durata del decadimento (minuti)</string>
+    <string name="oaps_aimi_ngr_decay_summary">Minuti impiegati per riportare gradualmente i moltiplicatori ai valori normali.</string>
+    <string name="oaps_aimi_ngr_headroom">Margine NGR: +%1$.2fU (limite %2$.2fU).</string>
+    <string name="oaps_aimi_ngr_basal_applied">Incremento basale NGR ×%1$.2f → %2$.2fU/h.</string>
+    <string name="oaps_aimi_ngr_smb_applied">Incremento SMB NGR ×%1$.2f (rich %2$.3fU, limite %3$.3fU).</string>
+
 
      <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SEZIONE BG TREND - FILE DetermineBasalAIMI2.kt -->
 

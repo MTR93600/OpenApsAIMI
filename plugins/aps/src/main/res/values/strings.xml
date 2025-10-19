@@ -472,6 +472,8 @@
     <string name="meal_modes_max_basal_title_genericmeal">Fixed basal 30 min at meal start (U/h)</string>
     <string name="meal_modes_max_basal_summary_genericmeal">Manual mode: fixed TBR, after pre-bolus 1 set a fixed TBR for 30 minutes for generic meal</string>
 
+    <string name="women_preferences">Women Adjustments</string>
+    <string name="women_preferences_title_menu">Women Adjustments - Settings</string>
     <string name="wcycle_preferences">Menstrual Cycle Adjustments</string>
     <string name="wcycle_preferences_title_menu">Menstrual Cycle Adjustments - Settings</string>
     <string name="oaps_aimi_enablewcycle_title">Enable menstrual cycle</string>
@@ -484,6 +486,8 @@
     <string name="wcycleluteal_summary">The luteal phase requires about 8–15% more insulin</string>
     <string name="wcycleluteal_title">Luteal phase, set the % to apply on basal and SMB</string>
     <!-- Night growth resistance -->
+    <string name="child_preferences">Child Adjustments</string>
+    <string name="child_preferences_title_menu">Child Adjustments - Settings</string>
     <string name="oaps_aimi_ngr_title">Night growth resistance</string>
     <string name="oaps_aimi_ngr_enabled_title">Enable night growth resistance monitor</string>
     <string name="oaps_aimi_ngr_enabled_summary">Detect sustained nocturnal rises for pediatric users.</string>
