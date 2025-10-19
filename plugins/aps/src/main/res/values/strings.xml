@@ -272,8 +272,10 @@
     <string name="DynISFAdjusthyper_title"><![CDATA[DynISF Adjustment factor % BG > 120]]></string>
     <string name="prebolus_meal_mode_summary">If you set a note on the action page with the word "meal", you will receive this value one time as a pre-bolus.</string>
     <string name="prebolus_meal_mode_title">Prebolus</string>
-    <string name="prebolus_highcarb_mode_title">Prebolus</string>
-    <string name="prebolus_highcarb_mode_summary">If you set a note on the action page with the word "highcarb", you will receive this pre-bolus one time.</string>
+    <string name="prebolus_highcarb_mode_title">Prebolus 1/2</string>
+    <string name="prebolus2_highcarb_mode_title">Prebolus 2/2</string>
+    <string name="prebolus_highcarb_mode_summary">High Carb Mode Prebolus 1/2</string>
+    <string name="prebolus2_highcarb_mode_summary">High Carb Mode Prebolus 2/2</string>
     <string name="number_day_ML_training_summary">Number of days to train the model</string>
     <string name="nb_day_ML_training_title">ML Number of Training Days</string>
     <string name="nb_minutes_ML_training_title">Number of minutes to train the data</string>
@@ -856,7 +858,8 @@
     <string name="reason_prebolus_lunch2">&#160;Microbolusing 2/2 Lunch Mode %.2fU.</string>
     <string name="reason_prebolus_dinner1">&#160;Microbolusing 1/2 Dinner Mode %.2fU.</string>
     <string name="reason_prebolus_dinner2">&#160;Microbolusing 2/2 Dinner Mode %.2fU.</string>
-    <string name="reason_prebolus_highcarb">&#160;Microbolusing High Carb Mode %.2fU.</string>
+    <string name="reason_prebolus_highcarb">&#160;Microbolusing 1/2 High Carb Mode %.2fU.</string>
+    <string name="reason_prebolus_highcarb2">&#160;Microbolusing 2/2 High Carb Mode %.2fU.</string>
     <string name="reason_prebolus_snack">&#160;Microbolusing Snack Mode %.2fU.</string>
     <string name="reason_maxsmb">&#160;| MaxSMB %.1f U&#160;\n</string>
     <string name="reason_cgm_calibrating">CGM is calibrating, in ??? state, or noise is high</string>

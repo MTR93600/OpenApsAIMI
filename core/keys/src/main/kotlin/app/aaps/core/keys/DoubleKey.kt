@@ -81,6 +81,7 @@ enum class DoubleKey(
     OApsAIMIDinnerPrebolus2("key_prebolus2_dinner_mode", 2.0, 0.1, 10.0),
     OApsAIMISnackPrebolus("key_prebolus_snack_mode", 1.0, 0.1, 10.0),
     OApsAIMIHighCarbPrebolus("key_prebolus_highcarb_mode", 5.0, 0.1, 10.0),
+    OApsAIMIHighCarbPrebolus2("key_prebolus_highcarb_mode2", 5.0, 0.1, 10.0),
     OApsAIMIwcycledateday("key_wcycledateday", 1.0, 1.0, 31.0),
     OApsAIMIwcyclemenstruation("key_wcyclemenstruation", 10.0, 1.0, 30.0),
     OApsAIMIwcycleovulation("key_wcycleovulation", 5.0, 1.0, 30.0),
