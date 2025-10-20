@@ -522,7 +522,7 @@
     <!-- Night growth resistance -->
     <string name="child_preferences">Child Adjustments</string>
     <string name="child_preferences_title_menu">Child Adjustments - Settings</string>
-    <string name="oaps_aimi_ngr_title">Night growth resistance</string>
+    <string name="oaps_aimi_ngr_title">Night growth resistance - Settings</string>
     <string name="oaps_aimi_ngr_enabled_title">Enable night growth resistance monitor</string>
     <string name="oaps_aimi_ngr_enabled_summary">Detect sustained nocturnal rises for pediatric users.</string>
     <string name="oaps_aimi_ngr_age_title">Pediatric age (years)</string>
@@ -531,6 +531,8 @@
     <string name="oaps_aimi_ngr_night_start_summary">Start of the resistance detection window.</string>
     <string name="oaps_aimi_ngr_night_end_title">Night window end (HH:mm)</string>
     <string name="oaps_aimi_ngr_night_end_summary">End of the resistance detection window (next day if before start).</string>
+    <string name="nightgrowth_variables_title">Limits and conditions</string>
+    <string name="nightgrowth_variables_title_menu">Child – Night growth resistance - Settings</string>
     <string name="oaps_aimi_ngr_min_rise_title">Minimum rise slope (mg/dL/5&#160;min)</string>
     <string name="oaps_aimi_ngr_min_rise_summary">Minimum 5-minute rise required to suspect hormonal resistance.</string>
     <string name="oaps_aimi_ngr_min_duration_title">Minimum duration (minutes)</string>
