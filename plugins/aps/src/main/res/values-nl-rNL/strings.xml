@@ -408,6 +408,7 @@
     <string name="aimi_preferences_title_menu">AAPS Instellingen</string>
     <string name="autodrive_preferences_title_menu">Autodrive - Auto Maaltijd - Instellingen</string>
     <string name="manual_modes_preferences_title_menu">Handmatige Maaltijd / Activiteit - Instellingen</string>
+    <string name="meal_preferences_title_menu">Manuele Modus</string>
     <string name="bg_under_120_preferences_title_menu"><![CDATA[BG < 120 - Instellingen]]></string>
     <string name="bg_over_120_preferences_title_menu">BG > 120 - Instellingen</string>
     <string name="aaps_preferences_title_menu">DynamicISF, SMB en Gevoeligheid - Instellingen</string>
