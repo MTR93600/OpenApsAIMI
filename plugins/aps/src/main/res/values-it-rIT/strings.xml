@@ -471,7 +471,7 @@
     <!-- Resistenza insulinica notturna da ormone della crescita -->
     <string name="child_preferences">Modalità bambino</string>
     <string name="child_preferences_title_menu">Modalità bambino - Impostazioni</string>
-    <string name="oaps_aimi_ngr_title">Resistenza insulinica notturna</string>
+    <string name="oaps_aimi_ngr_title">Resistenza insulinica notturna - Impostazioni</string>
     <string name="oaps_aimi_ngr_enabled_title">Abilita monitoraggio resistenza insulinica notturna</string>
     <string name="oaps_aimi_ngr_enabled_summary">Rileva rialzi glicemici notturni prolungati dovuti a resistenza ormonale (utenti pediatrici).</string>
     <string name="oaps_aimi_ngr_age_title">Età pediatrica (anni)</string>
@@ -480,6 +480,8 @@
     <string name="oaps_aimi_ngr_night_start_summary">Ora di inizio della finestra di rilevamento della resistenza.</string>
     <string name="oaps_aimi_ngr_night_end_title">Fine intervallo notturno (HH:mm)</string>
     <string name="oaps_aimi_ngr_night_end_summary">Ora di fine della finestra di rilevamento (giorno successivo se precedente all’inizio).</string>
+    <string name="nightgrowth_variables_title">Limiti e condizioni</string>
+    <string name="nightgrowth_variables_title_menu">Bambino - Resistenza insulinica notturna - Impostazioni</string>
     <string name="oaps_aimi_ngr_min_rise_title">Pendenza minima di crescita (mg/dL/5&#160;min)</string>
     <string name="oaps_aimi_ngr_min_rise_summary">Aumento minimo in 5 minuti richiesto per sospettare resistenza ormonale.</string>
     <string name="oaps_aimi_ngr_min_duration_title">Durata minima (minuti)</string>

@@ -799,6 +799,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIwcycleovulation, dialogMessage = R.string.wcycleovulation_summary, title = R.string.wcycleovulation_title))
                         addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIwcycleluteal, dialogMessage = R.string.wcycleluteal_summary, title = R.string.wcycleluteal_title))
                 })
+
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "Child_Menu"
                     title = rh.gs(R.string.child_preferences)
@@ -849,70 +850,80 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             validatorParams = hhmmValidator
                         )
                     )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMINightGrowthMinRiseSlope,
-                            dialogMessage = R.string.oaps_aimi_ngr_min_rise_summary,
-                            title = R.string.oaps_aimi_ngr_min_rise_title
+
+                    addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                        key = "Child menu prefs variables"
+                        title = rh.gs(R.string.nightgrowth_variables_title)
+                        addPreference(PreferenceCategory(context).apply {
+                            title = rh.gs(R.string.nightgrowth_variables_title_menu)
+                        })
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMINightGrowthMinRiseSlope,
+                                dialogMessage = R.string.oaps_aimi_ngr_min_rise_summary,
+                                title = R.string.oaps_aimi_ngr_min_rise_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveIntPreference(
-                            ctx = context,
-                            intKey = IntKey.OApsAIMINightGrowthMinDurationMin,
-                            dialogMessage = R.string.oaps_aimi_ngr_min_duration_summary,
-                            title = R.string.oaps_aimi_ngr_min_duration_title
+                        addPreference(
+                            AdaptiveIntPreference(
+                                ctx = context,
+                                intKey = IntKey.OApsAIMINightGrowthMinDurationMin,
+                                dialogMessage = R.string.oaps_aimi_ngr_min_duration_summary,
+                                title = R.string.oaps_aimi_ngr_min_duration_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveIntPreference(
-                            ctx = context,
-                            intKey = IntKey.OApsAIMINightGrowthMinEventualOverTarget,
-                            dialogMessage = R.string.oaps_aimi_ngr_min_eventual_summary,
-                            title = R.string.oaps_aimi_ngr_min_eventual_title
+                        addPreference(
+                            AdaptiveIntPreference(
+                                ctx = context,
+                                intKey = IntKey.OApsAIMINightGrowthMinEventualOverTarget,
+                                dialogMessage = R.string.oaps_aimi_ngr_min_eventual_summary,
+                                title = R.string.oaps_aimi_ngr_min_eventual_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMINightGrowthSmbMultiplier,
-                            dialogMessage = R.string.oaps_aimi_ngr_smb_multiplier_summary,
-                            title = R.string.oaps_aimi_ngr_smb_multiplier_title
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMINightGrowthSmbMultiplier,
+                                dialogMessage = R.string.oaps_aimi_ngr_smb_multiplier_summary,
+                                title = R.string.oaps_aimi_ngr_smb_multiplier_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMINightGrowthBasalMultiplier,
-                            dialogMessage = R.string.oaps_aimi_ngr_basal_multiplier_summary,
-                            title = R.string.oaps_aimi_ngr_basal_multiplier_title
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMINightGrowthBasalMultiplier,
+                                dialogMessage = R.string.oaps_aimi_ngr_basal_multiplier_summary,
+                                title = R.string.oaps_aimi_ngr_basal_multiplier_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMINightGrowthMaxSmbClamp,
-                            dialogMessage = R.string.oaps_aimi_ngr_max_smb_summary,
-                            title = R.string.oaps_aimi_ngr_max_smb_title
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMINightGrowthMaxSmbClamp,
+                                dialogMessage = R.string.oaps_aimi_ngr_max_smb_summary,
+                                title = R.string.oaps_aimi_ngr_max_smb_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMINightGrowthMaxIobExtra,
-                            dialogMessage = R.string.oaps_aimi_ngr_max_iob_summary,
-                            title = R.string.oaps_aimi_ngr_max_iob_title
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMINightGrowthMaxIobExtra,
+                                dialogMessage = R.string.oaps_aimi_ngr_max_iob_summary,
+                                title = R.string.oaps_aimi_ngr_max_iob_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveIntPreference(
-                            ctx = context,
-                            intKey = IntKey.OApsAIMINightGrowthDecayMinutes,
-                            dialogMessage = R.string.oaps_aimi_ngr_decay_summary,
-                            title = R.string.oaps_aimi_ngr_decay_title
+                        addPreference(
+                            AdaptiveIntPreference(
+                                ctx = context,
+                                intKey = IntKey.OApsAIMINightGrowthDecayMinutes,
+                                dialogMessage = R.string.oaps_aimi_ngr_decay_summary,
+                                title = R.string.oaps_aimi_ngr_decay_title
+                            )
                         )
-                    )
+
+                    })
+
                 })
                     addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMInight, title = R.string.OApsAIMI_Enable_night_title))
 

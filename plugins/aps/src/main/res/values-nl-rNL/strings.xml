@@ -458,7 +458,7 @@
     <!-- Night growth resistance -->
     <string name="child_preferences">Aanpassingen voor kinderen</string>
     <string name="child_preferences_title_menu">Aanpassingen voor kinderen - Instellingen</string>
-    <string name="oaps_aimi_ngr_title">Nachtelijke groeiresistentie</string>
+    <string name="oaps_aimi_ngr_title">Nachtelijke groeiresistentie - Instellingen</string>
     <string name="oaps_aimi_ngr_enabled_title">Monitor voor nachtelijke groeiresistentie inschakelen</string>
     <string name="oaps_aimi_ngr_enabled_summary">Detecteer aanhoudende nachtelijke stijgingen voor pediatrische gebruikers.</string>
     <string name="oaps_aimi_ngr_age_title">Pediatrische leeftijd (jaren)</string>
@@ -467,6 +467,8 @@
     <string name="oaps_aimi_ngr_night_start_summary">Start van het venster voor resistentiedetectie.</string>
     <string name="oaps_aimi_ngr_night_end_title">Einde nachtvenster (UU:mm)</string>
     <string name="oaps_aimi_ngr_night_end_summary">Einde van het venster voor resistentiedetectie (volgende dag indien vóór start).</string>
+    <string name="nightgrowth_variables_title">Limieten en voorwaarden</string>
+    <string name="nightgrowth_variables_title_menu">Kind – Nachtgroeiweerstand - Instellingen</string>
     <string name="oaps_aimi_ngr_min_rise_title">Minimale stijgingshelling (mg/dL/5&#160;min)</string>
     <string name="oaps_aimi_ngr_min_rise_summary">Minimale stijging van 5 minuten vereist om hormonale resistentie te vermoeden.</string>
     <string name="oaps_aimi_ngr_min_duration_title">Minimale duur (minuten)</string>
