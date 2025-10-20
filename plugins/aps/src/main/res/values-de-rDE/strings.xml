@@ -248,8 +248,10 @@
     <string name="DynISFAdjusthyper_title"><![CDATA[DynISF Adjustment factor % BG > 120]]></string>
     <string name="prebolus_meal_mode_summary">Allgemeine Mahlzeit Prebolus 1/1</string>
     <string name="prebolus_meal_mode_title">Prebolus</string>
-    <string name="prebolus_highcarb_mode_title">Prebolus</string>
-    <string name="prebolus_highcarb_mode_summary">High-Carb Modus Prebolus 1/1</string>
+    <string name="prebolus_highcarb_mode_title">Prebolus 1/2</string>
+    <string name="prebolus2_highcarb_mode_title">Prebolus 2/2</string>
+    <string name="prebolus_highcarb_mode_summary">High Carb Mode Prebolus 1/2</string>
+    <string name="prebolus2_highcarb_mode_summary">High Carb Mode Prebolus 2/2</string>
     <string name="number_day_ML_training_summary">Number of days to train the model</string>
     <string name="nb_day_ML_training_title">ML Number of Training Days</string>
     <string name="nb_minutes_ML_training_title">Number of minutes to train the data</string>
