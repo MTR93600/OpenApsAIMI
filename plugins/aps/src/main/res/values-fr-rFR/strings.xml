@@ -415,6 +415,7 @@
     <string name="aimi_preferences_title_menu">Paramètres AAPS</string>
     <string name="autodrive_preferences_title_menu">Autodrive - Repas auto - Paramètres</string>
     <string name="manual_modes_preferences_title_menu">Repas / Activité manuelle - Paramètres</string>
+    <string name="meal_preferences_title_menu">Manual Modes</string>
     <string name="bg_under_120_preferences_title_menu"><![CDATA[BG < 120 - Paramètres]]></string>
     <string name="bg_over_120_preferences_title_menu">BG > 120 - Paramètres</string>
     <string name="aaps_preferences_title_menu">DynamicISF, SMB et Sensibilité - Paramètres</string>
