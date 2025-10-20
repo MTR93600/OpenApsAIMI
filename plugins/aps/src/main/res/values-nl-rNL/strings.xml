@@ -248,8 +248,10 @@
     <string name="DynISFAdjusthyper_title"><![CDATA[DynISF Aanpassingsfactor % BG > 120]]></string>
     <string name="prebolus_meal_mode_summary">Als u een notitie op de actiepagina instelt met het woord "maaltijd", ontvangt u deze waarde eenmalig als pre-bolus.</string>
     <string name="prebolus_meal_mode_title">Prebolus</string>
-    <string name="prebolus_highcarb_mode_title">Prebolus</string>
-    <string name="prebolus_highcarb_mode_summary">Als u een notitie op de actiepagina instelt met het woord "highcarb", ontvangt u deze pre-bolus eenmalig.</string>
+    <string name="prebolus_highcarb_mode_title">Prebolus 1/2</string>
+    <string name="prebolus2_highcarb_mode_title">Prebolus 2/2</string>
+    <string name="prebolus_highcarb_mode_summary">Prebolus met hoge koolhydraatmodus 1/2</string>
+    <string name="prebolus2_highcarb_mode_summary">Prebolus met hoge koolhydraatmodus 2/2</string>
     <string name="number_day_ML_training_summary">Aantal dagen om het model te trainen</string>
     <string name="nb_day_ML_training_title">ML Aantal Trainingsdagen</string>
     <string name="nb_minutes_ML_training_title">Aantal minuten om de gegevens te trainen</string>
@@ -438,8 +440,8 @@
     <string name="meal_modes_max_basal_title_genericmeal">Vast basaal 30 min bij begin maaltijd (E/u)</string>
     <string name="meal_modes_max_basal_summary_genericmeal">Handmatige modus: vaste TBR, na pre-bolus 1 een vaste TBR instellen voor 30 minuten voor een algemene maaltijd</string>
 
-    <string name="women_preferences">Women Adjustments</string>
-    <string name="women_preferences_title_menu">Women Adjustments - Settings</string>
+    <string name="women_preferences">Vrouwelijke Aanpassingen</string>
+    <string name="women_preferences_title_menu">Vrouwelijke Aanpassingen - Instellingen</string>
     <string name="wcycle_preferences">Menstruatiecyclus Aanpassingen</string>
     <string name="wcycle_preferences_title_menu">Menstruatiecyclus Aanpassingen - Instellingen</string>
     <string name="oaps_aimi_enablewcycle_title">Menstruatiecyclus inschakelen</string>
@@ -453,8 +455,8 @@
     <string name="wcycleluteal_title">Luteale fase, stel het % in om toe te passen op basaal en SMB</string>
 
     <!-- Night growth resistance -->
-    <string name="child_preferences">Child Adjustments</string>
-    <string name="child_preferences_title_menu">Child Adjustments - Settings</string>
+    <string name="child_preferences">Aanpassingen voor kinderen</string>
+    <string name="child_preferences_title_menu">Aanpassingen voor kinderen - Instellingen</string>
     <string name="oaps_aimi_ngr_title">Nachtelijke groeiresistentie</string>
     <string name="oaps_aimi_ngr_enabled_title">Monitor voor nachtelijke groeiresistentie inschakelen</string>
     <string name="oaps_aimi_ngr_enabled_summary">Detecteer aanhoudende nachtelijke stijgingen voor pediatrische gebruikers.</string>
