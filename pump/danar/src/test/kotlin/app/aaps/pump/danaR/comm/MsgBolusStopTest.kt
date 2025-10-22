@@ -9,7 +9,7 @@ import org.mockito.Mockito.`when`
 class MsgBolusStopTest : DanaRTestBase() {
 
     @Test fun runTest() {
-        `when`(rh.gs(app.aaps.pump.dana.R.string.overview_bolusprogress_delivered)).thenReturn("Delivered")
+//        `when`(rh.gs(app.aaps.pump.dana.R.string.overview_bolusprogress_delivered)).thenReturn("Delivered")
         danaPump.bolusingDetailedBolusInfo = DetailedBolusInfo()
         val packet = MsgBolusStop(injector)
 

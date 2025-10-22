@@ -30,7 +30,7 @@ class DanaRsPacketNotifyDeliveryRateDisplayTest : DanaRSTestBase() {
     @Test
     fun runTest() {
         `when`(rh.gs(ArgumentMatchers.anyInt(), anyObject())).thenReturn("SomeString")
-        // val packet = DanaRS_Packet_Notify_Delivery_Rate_Display(1.0, Treatment(treatmentInjector))
+        danaPump.bolusingDetailedBolusInfo = DetailedBolusInfo().apply { insulin = 1.0 }
         val packet = DanaRSPacketNotifyDeliveryRateDisplay(aapsLogger, rh, rxBus, danaPump)
         // test params
         Assertions.assertEquals(0, packet.getRequestParams().size)
