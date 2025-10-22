@@ -1,11 +1,11 @@
 package app.aaps.pump.danars.comm
 
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
+import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.DetailedBolusInfoStorage
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.TemporaryBasalStorage
 import app.aaps.core.interfaces.queue.CommandQueue
-import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
 import app.aaps.pump.dana.database.DanaHistoryDatabase
 import app.aaps.pump.danars.DanaRSPlugin
 import app.aaps.pump.danars.DanaRSTestBase
@@ -51,6 +51,6 @@ class DanaRsPacketNotifyDeliveryRateDisplayTest : DanaRSTestBase() {
                 aapsLogger, rh, preferences, commandQueue, aapsSchedulers, rxBus, context, constraintChecker, profileFunction, danaPump, pumpSync,
                 detailedBolusInfoStorage, temporaryBasalStorage, fabricPrivacy, dateUtil, uiInteraction, danaHistoryDatabase, decimalFormatter, pumpEnactResultProvider
             )
-        danaPump.bolusingTreatment = EventOverviewBolusProgress.Treatment(0.0, 0, true, 0)
+        danaPump.bolusingDetailedBolusInfo = DetailedBolusInfo()
     }
 }

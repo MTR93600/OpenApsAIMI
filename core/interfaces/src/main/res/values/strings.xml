@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!--    Events-->
+    <string name="bolus_delivering">Delivering %1$.2fU</string>
+    <string name="bolus_delivered_successfully">Bolus %1$.2fU delivered successfully</string>
+
     <!-- PumpPluginBase -->
     <string name="pump_driver_changed" comment="26 characters max for translation">Pump driver changed.</string>
 

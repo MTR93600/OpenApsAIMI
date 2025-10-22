@@ -17,6 +17,7 @@ import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.ProfileFunction
+import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.receivers.Intents
 import app.aaps.core.interfaces.receivers.ReceiverStatusStore
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -98,9 +99,9 @@ class TizenPlugin @Inject constructor(
         basalStatus(bundle)
         pumpStatus(bundle)
 
-        if (event is EventOverviewBolusProgress && !event.isSMB()) {
-            bundle.putInt("progressPercent", event.percent)
-            bundle.putString("progressStatus", event.status)
+        if (event is EventOverviewBolusProgress && !BolusProgressData.isSMB) {
+            bundle.putInt("progressPercent", BolusProgressData.percent)
+            bundle.putString("progressStatus", BolusProgressData.status)
         }
     }
 

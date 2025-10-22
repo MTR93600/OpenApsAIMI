@@ -511,12 +511,7 @@ class InsightPlugin @Inject constructor(
                         bolusCancelled = false
                     }
                     result.success(true).enacted(true)
-                    val t = EventOverviewBolusProgress.Treatment(0.0, 0, detailedBolusInfo.bolusType === BS.Type.SMB, detailedBolusInfo.id)
-                    val bolusingEvent = EventOverviewBolusProgress
-                    bolusingEvent.t = t
-                    bolusingEvent.status = rh.gs(app.aaps.pump.common.R.string.bolus_delivered_so_far, 0.0, insulin)
-                    bolusingEvent.percent = 0
-                    rxBus.send(bolusingEvent)
+                    rxBus.send(EventOverviewBolusProgress(rh, 0.0, id = detailedBolusInfo.id))
                     var trials = 0
                     val now = dateUtil.now()
                     val serial = serialNumber()
@@ -554,18 +549,12 @@ class InsightPlugin @Inject constructor(
                         }
                         if (activeBolus != null) {
                             trials = -1
-                            val percentBefore = bolusingEvent.percent
-                            bolusingEvent.percent = (100.0 / activeBolus.initialAmount * (activeBolus.initialAmount - activeBolus.remainingAmount)).toInt()
-                            bolusingEvent.status =
-                                rh.gs(app.aaps.pump.common.R.string.bolus_delivered_so_far, activeBolus.initialAmount - activeBolus.remainingAmount, activeBolus.initialAmount)
-                            if (percentBefore != bolusingEvent.percent) rxBus.send(bolusingEvent)
+                            rxBus.send(EventOverviewBolusProgress(rh, delivered = activeBolus.initialAmount - activeBolus.remainingAmount, id = detailedBolusInfo.id))
                         } else {
                             synchronized(_bolusLock) {
                                 if (bolusCancelled || trials == -1 || trials++ >= 5) {
                                     if (!bolusCancelled) {
-                                        bolusingEvent.status = rh.gs(app.aaps.pump.common.R.string.bolus_delivered_so_far, insulin, insulin)
-                                        bolusingEvent.percent = 100
-                                        rxBus.send(bolusingEvent)
+                                        rxBus.send(EventOverviewBolusProgress(rh, delivered = insulin, id = detailedBolusInfo.id))
                                     }
                                 }
                             }

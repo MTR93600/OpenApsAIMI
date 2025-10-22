@@ -644,7 +644,6 @@ class OmnipodDashPumpPlugin @Inject constructor(
                     .comment(rh.gs(R.string.omnipod_dash_bolus_already_in_progress))
             }
 
-            EventOverviewBolusProgress.t = EventOverviewBolusProgress.Treatment(detailedBolusInfo.insulin, 0, detailedBolusInfo.bolusType == BS.Type.SMB, detailedBolusInfo.id)
             var deliveredBolusAmount = 0.0
 
             val beepsConfigurationKey = if (detailedBolusInfo.bolusType == BS.Type.SMB)
@@ -728,10 +727,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
     }
 
     private fun updateBolusProgressDialog(msg: String, percent: Int) {
-        val progressUpdateEvent = EventOverviewBolusProgress
-        progressUpdateEvent.status = msg
-        progressUpdateEvent.percent = percent
-        rxBus.send(progressUpdateEvent)
+        rxBus.send(EventOverviewBolusProgress(status = msg, percent = percent))
     }
 
     private fun waitForBolusDeliveryToComplete(
@@ -769,7 +765,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
             }
             val percent = (waited.toFloat() / estimatedDeliveryTimeSeconds) * 100
             updateBolusProgressDialog(
-                rh.gs(app.aaps.pump.common.R.string.bolus_delivered_so_far, Round.roundTo(percent * requestedBolusAmount / 100, PodConstants.POD_PULSE_BOLUS_UNITS), requestedBolusAmount),
+                rh.gs(app.aaps.core.interfaces.R.string.bolus_delivering, Round.roundTo(percent * requestedBolusAmount / 100, PodConstants.POD_PULSE_BOLUS_UNITS)),
                 percent.toInt()
             )
         }
@@ -800,7 +796,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
                 val remainingUnits = podStateManager.lastBolus!!.bolusUnitsRemaining
                 val percent = ((requestedBolusAmount - remainingUnits) / requestedBolusAmount) * 100
                 updateBolusProgressDialog(
-                    rh.gs(app.aaps.pump.common.R.string.bolus_delivered_so_far, Round.roundTo(requestedBolusAmount - remainingUnits, PodConstants.POD_PULSE_BOLUS_UNITS), requestedBolusAmount),
+                    rh.gs(app.aaps.core.interfaces.R.string.bolus_delivering, Round.roundTo(requestedBolusAmount - remainingUnits, PodConstants.POD_PULSE_BOLUS_UNITS)),
                     percent.toInt()
                 )
 

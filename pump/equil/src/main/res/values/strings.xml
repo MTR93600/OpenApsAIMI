@@ -5,7 +5,6 @@
 
     <!--  start  -->
     <string name="equil_basal_speed">Base basal</string>
-    <string name="equil_bolus_delivered">%1$.3f U / %2$.3f U Delivered</string>
     <string name="equil_btn_cancel">Cancel</string>
     <string name="equil_btn_need">Need</string>
     <string name="equil_btn_skip">Skip</string>

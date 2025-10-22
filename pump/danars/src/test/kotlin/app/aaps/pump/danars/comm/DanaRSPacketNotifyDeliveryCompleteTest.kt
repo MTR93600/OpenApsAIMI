@@ -1,6 +1,6 @@
 package app.aaps.pump.danars.comm
 
-import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
+import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.pump.danars.DanaRSTestBase
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
@@ -14,7 +14,7 @@ class DanaRSPacketNotifyDeliveryCompleteTest : DanaRSTestBase() {
     fun runTest() {
         `when`(rh.gs(anyInt(), anyDouble())).thenReturn("SomeString")
 
-        danaPump.bolusingTreatment = EventOverviewBolusProgress.Treatment(0.0, 0, true, 0)
+        danaPump.bolusingDetailedBolusInfo = DetailedBolusInfo()
         val packet = DanaRSPacketNotifyDeliveryComplete(aapsLogger, rh, rxBus, danaPump)
         // test params
         Assertions.assertEquals(0, packet.getRequestParams().size)

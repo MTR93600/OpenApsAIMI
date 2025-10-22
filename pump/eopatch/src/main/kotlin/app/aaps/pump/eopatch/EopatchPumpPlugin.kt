@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.SystemClock
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceScreen
-import app.aaps.core.data.model.BS
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.pump.defs.ManufacturerType
 import app.aaps.core.data.pump.defs.PumpDescription
@@ -17,6 +16,7 @@ import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.profile.ProfileFunction
+import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.Pump
 import app.aaps.core.interfaces.pump.PumpEnactResult
@@ -62,7 +62,6 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.math.abs
-import kotlin.math.min
 import kotlin.math.roundToInt
 
 @Singleton
@@ -235,7 +234,7 @@ class EopatchPumpPlugin @Inject constructor(
 
             disposable.dispose()
             aapsLogger.info(LTag.PUMP, "Basal Profile was set: $isSuccess")
-            return if (isSuccess == true) {
+            return if (isSuccess) {
                 uiInteraction.addNotificationValidFor(Notification.PROFILE_SET_OK, rh.gs(app.aaps.core.ui.R.string.profile_set_ok), Notification.INFO, 60)
                 pumpEnactResultProvider.get().success(true).enacted(true)
             } else {
@@ -309,26 +308,15 @@ class EopatchPumpPlugin @Inject constructor(
                              .subscribe({ result.onNext(it.isSuccess) }, { result.onNext(false) })
         )
 
-        val tr = detailedBolusInfo.let {
-            EventOverviewBolusProgress.Treatment(it.insulin, it.carbs.toInt(), it.bolusType === BS.Type.SMB, it.id)
-        }
-
         do {
             SystemClock.sleep(100)
             if (patchManagerExecutor.patchConnectionState.isConnected) {
-                val delivering = preferenceManager.bolusCurrent.nowBolus.injected
-                rxBus.send(EventOverviewBolusProgress.apply {
-                    status = rh.gs(app.aaps.core.ui.R.string.bolus_delivering, delivering)
-                    percent = min((delivering / detailedBolusInfo.insulin * 100).toInt(), 100)
-                    t = tr
-                })
+                val delivering = preferenceManager.bolusCurrent.nowBolus.injected.toDouble()
+                rxBus.send(EventOverviewBolusProgress(rh, delivered = delivering, id = detailedBolusInfo.id))
             }
         } while (!preferenceManager.bolusCurrent.nowBolus.endTimeSynced && isSuccess)
 
-        rxBus.send(EventOverviewBolusProgress.apply {
-            status = rh.gs(app.aaps.core.ui.R.string.bolus_delivered_successfully, detailedBolusInfo.insulin)
-            percent = 100
-        })
+        rxBus.send(EventOverviewBolusProgress(rh, percent = 100, id = detailedBolusInfo.id))
 
         detailedBolusInfo.insulin = preferenceManager.bolusCurrent.nowBolus.injected.toDouble()
         patchManager.addBolusToHistory(detailedBolusInfo)
@@ -347,9 +335,7 @@ class EopatchPumpPlugin @Inject constructor(
                 .subscribeOn(aapsSchedulers.io)
                 .observeOn(aapsSchedulers.main)
                 .subscribe {
-                    rxBus.send(EventOverviewBolusProgress.apply {
-                        status = rh.gs(app.aaps.core.ui.R.string.bolus_delivered_successfully, (it.injectedBolusAmount * 0.05f))
-                    })
+                    rxBus.send(EventOverviewBolusProgress(status = rh.gs(app.aaps.core.interfaces.R.string.bolus_delivered_successfully, (it.injectedBolusAmount * 0.05f)), id = BolusProgressData.id))
                 }
         )
     }

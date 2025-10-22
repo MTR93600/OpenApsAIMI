@@ -16,6 +16,8 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.Profile
+import app.aaps.core.interfaces.pump.BolusProgressData
+import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -23,7 +25,6 @@ import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventAppExit
 import app.aaps.core.interfaces.rx.events.EventBTChange
-import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
 import app.aaps.core.interfaces.rx.events.EventPumpStatusChanged
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
@@ -96,7 +97,7 @@ abstract class AbstractDanaRExecutionService : DaggerService() {
     abstract fun connect()
     abstract fun getPumpStatus()
     abstract fun loadEvents(): PumpEnactResult?
-    abstract fun bolus(amount: Double, carbs: Int, carbTimeStamp: Long, t: EventOverviewBolusProgress.Treatment): Boolean
+    abstract fun bolus(detailedBolusInfo: DetailedBolusInfo): Boolean
     abstract fun highTempBasal(percent: Int, durationInMinutes: Int): Boolean // Rv2 only
     abstract fun tempBasalShortDuration(percent: Int, durationInMinutes: Int): Boolean // Rv2 only
     abstract fun tempBasal(percent: Int, durationInHours: Int): Boolean
@@ -190,7 +191,7 @@ abstract class AbstractDanaRExecutionService : DaggerService() {
     }
 
     fun bolusStop() {
-        aapsLogger.debug(LTag.PUMP, "bolusStop >>>>> @ " + if (danaPump.bolusingTreatment == null) "" else danaPump.bolusingTreatment?.insulin)
+        aapsLogger.debug(LTag.PUMP, "bolusStop >>>>> @ ${BolusProgressData.delivered}")
         val stop = MsgBolusStop(injector)
         danaPump.bolusStopForced = true
         if (isConnected) {

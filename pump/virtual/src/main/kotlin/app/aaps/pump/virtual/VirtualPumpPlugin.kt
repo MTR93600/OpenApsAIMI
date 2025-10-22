@@ -5,7 +5,6 @@ import android.os.SystemClock
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
-import app.aaps.core.data.model.BS
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.pump.defs.ManufacturerType
 import app.aaps.core.data.pump.defs.PumpDescription
@@ -58,7 +57,6 @@ import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
-import kotlin.math.min
 
 @Singleton
 open class VirtualPumpPlugin @Inject constructor(
@@ -193,14 +191,10 @@ open class VirtualPumpPlugin @Inject constructor(
             .bolusDelivered(detailedBolusInfo.insulin)
             .enacted(detailedBolusInfo.insulin > 0 || detailedBolusInfo.carbs > 0)
             .comment(rh.gs(app.aaps.core.ui.R.string.virtualpump_resultok))
-        val bolusingEvent = EventOverviewBolusProgress
         var delivering = 0.0
         while (delivering < detailedBolusInfo.insulin) {
             SystemClock.sleep(200)
-            bolusingEvent.status = rh.gs(app.aaps.core.ui.R.string.bolus_delivering, delivering)
-            bolusingEvent.percent = min((delivering / detailedBolusInfo.insulin * 100).toInt(), 100)
-            bolusingEvent.t = EventOverviewBolusProgress.Treatment(detailedBolusInfo.insulin, 0, detailedBolusInfo.bolusType == BS.Type.SMB, detailedBolusInfo.id)
-            rxBus.send(bolusingEvent)
+            rxBus.send(EventOverviewBolusProgress(rh, delivering, id = detailedBolusInfo.id))
             delivering += 0.1
             if (BolusProgressData.stopPressed)
                 return pumpEnactResultProvider.get()
@@ -209,9 +203,7 @@ open class VirtualPumpPlugin @Inject constructor(
                     .comment(rh.gs(app.aaps.core.ui.R.string.stop))
         }
         SystemClock.sleep(200)
-        bolusingEvent.status = rh.gs(app.aaps.core.ui.R.string.bolus_delivered_successfully, detailedBolusInfo.insulin)
-        bolusingEvent.percent = 100
-        rxBus.send(bolusingEvent)
+        rxBus.send(EventOverviewBolusProgress(rh, percent = 100, id = detailedBolusInfo.id))
         SystemClock.sleep(1000)
         aapsLogger.debug(LTag.PUMP, "Delivering treatment insulin: " + detailedBolusInfo.insulin + "U carbs: " + detailedBolusInfo.carbs + "g " + result)
         rxBus.send(EventVirtualPumpUpdateGui())

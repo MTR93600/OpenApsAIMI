@@ -15,15 +15,8 @@ class MsgBolusStop(
 
     override fun handleMessage(bytes: ByteArray) {
         aapsLogger.debug(LTag.PUMPCOMM, "Messsage received")
-        val bolusingEvent = EventOverviewBolusProgress
         danaPump.bolusStopped = true
-        if (!danaPump.bolusStopForced) {
-            danaPump.bolusingTreatment?.insulin = danaPump.bolusAmountToBeDelivered
-            bolusingEvent.status = rh.gs(app.aaps.pump.dana.R.string.overview_bolusprogress_delivered)
-            bolusingEvent.percent = 100
-        } else {
-            bolusingEvent.status = rh.gs(app.aaps.pump.dana.R.string.overview_bolusprogress_stoped)
-        }
-        rxBus.send(bolusingEvent)
+        if (!danaPump.bolusStopForced) rxBus.send(EventOverviewBolusProgress(rh, percent = 100, id = danaPump.bolusingDetailedBolusInfo?.id))
+        else rxBus.send(EventOverviewBolusProgress(status = rh.gs(app.aaps.pump.dana.R.string.overview_bolusprogress_stoped), id = danaPump.bolusingDetailedBolusInfo?.id))
     }
 }

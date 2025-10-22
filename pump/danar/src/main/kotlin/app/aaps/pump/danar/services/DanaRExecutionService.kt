@@ -9,7 +9,9 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.profile.ProfileFunction
+import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.BolusProgressData.stopPressed
+import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.queue.Callback
 import app.aaps.core.interfaces.queue.Command
@@ -32,7 +34,6 @@ import app.aaps.pump.danar.comm.MsgBolusStartWithSpeed
 import app.aaps.pump.danar.comm.MsgCheckValue
 import app.aaps.pump.danar.comm.MsgSetActivateBasalProfile
 import app.aaps.pump.danar.comm.MsgSetBasalProfile
-import app.aaps.pump.danar.comm.MsgSetCarbsEntry
 import app.aaps.pump.danar.comm.MsgSetExtendedBolusStart
 import app.aaps.pump.danar.comm.MsgSetExtendedBolusStop
 import app.aaps.pump.danar.comm.MsgSetTempBasalStart
@@ -225,26 +226,22 @@ class DanaRExecutionService : AbstractDanaRExecutionService() {
 
     override fun loadEvents(): PumpEnactResult = pumpEnactResultProvider.get()
 
-    override fun bolus(amount: Double, carbs: Int, carbTimeStamp: Long, t: EventOverviewBolusProgress.Treatment): Boolean {
+    override fun bolus(detailedBolusInfo: DetailedBolusInfo): Boolean {
         if (!isConnected) return false
         if (stopPressed) return false
-        danaPump.bolusingTreatment = t
+        danaPump.bolusingDetailedBolusInfo = detailedBolusInfo
         danaPump.bolusDone = false
         val preferencesSpeed = preferences.get(DanaIntKey.BolusSpeed)
-        val start: MessageBase = if (preferencesSpeed == 0) MsgBolusStart(injector, amount) else MsgBolusStartWithSpeed(injector, amount, preferencesSpeed)
+        val start: MessageBase =
+            if (preferencesSpeed == 0) MsgBolusStart(injector, detailedBolusInfo.insulin)
+            else MsgBolusStartWithSpeed(injector, detailedBolusInfo.insulin, preferencesSpeed)
         danaPump.bolusStopped = false
         danaPump.bolusStopForced = false
-        if (carbs > 0) {
-            mSerialIOThread?.sendMessage(MsgSetCarbsEntry(injector, carbTimeStamp, carbs))
-        }
-        if (amount > 0) {
-            danaPump.bolusingTreatment = t
-            danaPump.bolusAmountToBeDelivered = amount
+        if (detailedBolusInfo.insulin > 0) {
             val bolusStart = System.currentTimeMillis()
             if (!danaPump.bolusStopped) {
                 mSerialIOThread?.sendMessage(start)
             } else {
-                t.insulin = 0.0
                 return false
             }
             while (!danaPump.bolusStopped && !start.failed) {
@@ -256,10 +253,7 @@ class DanaRExecutionService : AbstractDanaRExecutionService() {
                 }
             }
             SystemClock.sleep(300)
-            val bolusingEvent = EventOverviewBolusProgress
-            bolusingEvent.t = t
-            bolusingEvent.percent = 99
-            danaPump.bolusingTreatment = null
+            danaPump.bolusingDetailedBolusInfo = null
             var speed = 12
             when (preferencesSpeed) {
                 0 -> speed = 12
@@ -267,14 +261,13 @@ class DanaRExecutionService : AbstractDanaRExecutionService() {
                 2 -> speed = 60
             }
             // try to find real amount if bolusing was interrupted or comm failed
-            if (t.insulin != amount) {
+            if (BolusProgressData.insulin != detailedBolusInfo.insulin) {
                 disconnect("bolusingInterrupted")
-                val bolusDurationInMSec = (amount * speed * 1000).toLong()
+                val bolusDurationInMSec = (detailedBolusInfo.insulin * speed * 1000).toLong()
                 val expectedEnd = bolusStart + bolusDurationInMSec + 3000
                 while (System.currentTimeMillis() < expectedEnd) {
                     val waitTime = expectedEnd - System.currentTimeMillis()
-                    bolusingEvent.status = String.format(rh.gs(R.string.waitingforestimatedbolusend), waitTime / 1000)
-                    rxBus.send(bolusingEvent)
+                    rxBus.send(EventOverviewBolusProgress(status = rh.gs(R.string.waitingforestimatedbolusend, waitTime / 1000), id = detailedBolusInfo.id))
                     SystemClock.sleep(1000)
                 }
                 val o = Any()
@@ -282,7 +275,7 @@ class DanaRExecutionService : AbstractDanaRExecutionService() {
                     commandQueue.independentConnect("bolusingInterrupted", object : Callback() {
                         override fun run() {
                             if (danaPump.lastBolusTime > System.currentTimeMillis() - 60 * 1000L) { // last bolus max 1 min old
-                                t.insulin = danaPump.lastBolusAmount
+                                BolusProgressData.delivered = danaPump.lastBolusAmount
                                 aapsLogger.debug(LTag.PUMP, "Used bolus amount from history: " + danaPump.lastBolusAmount)
                             } else {
                                 aapsLogger.debug(LTag.PUMP, "Bolus amount in history too old: " + dateUtil.dateAndTimeString(danaPump.lastBolusTime))

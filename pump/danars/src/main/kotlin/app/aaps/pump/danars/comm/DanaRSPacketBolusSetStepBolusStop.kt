@@ -30,17 +30,13 @@ open class DanaRSPacketBolusSetStepBolusStop @Inject constructor(
             aapsLogger.error("Result Error: $result")
             failed = true
         }
-        val bolusingEvent = EventOverviewBolusProgress
         danaPump.bolusStopped = true
         if (!danaPump.bolusStopForced) {
             // delivery ended without user intervention
-            danaPump.bolusingTreatment?.insulin = danaPump.bolusAmountToBeDelivered
-            bolusingEvent.status = rh.gs(app.aaps.pump.dana.R.string.overview_bolusprogress_delivered)
-            bolusingEvent.percent = 100
+            rxBus.send(EventOverviewBolusProgress(rh, percent = 100, id = danaPump.bolusingDetailedBolusInfo?.id))
         } else {
-            bolusingEvent.status = rh.gs(app.aaps.pump.dana.R.string.overview_bolusprogress_stoped)
+            rxBus.send(EventOverviewBolusProgress(status = rh.gs(app.aaps.pump.dana.R.string.overview_bolusprogress_stoped), id = danaPump.bolusingDetailedBolusInfo?.id))
         }
-        rxBus.send(bolusingEvent)
     }
 
     override val friendlyName: String = "BOLUS__SET_STEP_BOLUS_STOP"

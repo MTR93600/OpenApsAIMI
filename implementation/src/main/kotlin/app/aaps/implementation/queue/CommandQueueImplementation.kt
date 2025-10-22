@@ -26,6 +26,7 @@ import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.profile.ProfileFunction
+import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.pump.PumpSync
@@ -672,16 +673,11 @@ class CommandQueueImplementation @Inject constructor(
     }
 
     private fun showBolusProgressDialog(detailedBolusInfo: DetailedBolusInfo) {
+        BolusProgressData.set(detailedBolusInfo.insulin, isSMB = detailedBolusInfo.bolusType === BS.Type.SMB, id = detailedBolusInfo.id)
         if (detailedBolusInfo.context != null) {
-            uiInteraction.runBolusProgressDialog(
-                (detailedBolusInfo.context as AppCompatActivity).supportFragmentManager,
-                detailedBolusInfo.insulin,
-                detailedBolusInfo.id
-            )
+            uiInteraction.runBolusProgressDialog((detailedBolusInfo.context as AppCompatActivity).supportFragmentManager)
         } else {
             val i = Intent()
-            i.putExtra("insulin", detailedBolusInfo.insulin)
-            i.putExtra("id", detailedBolusInfo.id)
             i.setClass(context, uiInteraction.bolusProgressHelperActivity)
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(i)

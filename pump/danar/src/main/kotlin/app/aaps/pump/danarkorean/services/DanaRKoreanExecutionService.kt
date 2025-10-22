@@ -12,11 +12,11 @@ import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.BolusProgressData
+import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.queue.Command
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.rx.events.EventInitializationChanged
-import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
 import app.aaps.core.interfaces.rx.events.EventProfileSwitchChanged
 import app.aaps.core.interfaces.rx.events.EventPumpStatusChanged
 import app.aaps.pump.dana.R
@@ -24,7 +24,6 @@ import app.aaps.pump.dana.events.EventDanaRNewStatus
 import app.aaps.pump.danar.DanaRPlugin
 import app.aaps.pump.danar.SerialIOThread
 import app.aaps.pump.danar.comm.MsgBolusStart
-import app.aaps.pump.danar.comm.MsgSetCarbsEntry
 import app.aaps.pump.danar.comm.MsgSetExtendedBolusStart
 import app.aaps.pump.danar.comm.MsgSetExtendedBolusStop
 import app.aaps.pump.danar.comm.MsgSetSingleBasalProfile
@@ -220,24 +219,20 @@ class DanaRKoreanExecutionService : AbstractDanaRExecutionService() {
         return null
     }
 
-    override fun bolus(amount: Double, carbs: Int, carbTimeStamp: Long, t: EventOverviewBolusProgress.Treatment): Boolean {
+    override fun bolus(detailedBolusInfo: DetailedBolusInfo): Boolean {
         if (!isConnected) return false
         if (BolusProgressData.stopPressed) return false
-        danaPump.bolusingTreatment = t
+        danaPump.bolusingDetailedBolusInfo = detailedBolusInfo
         danaPump.bolusDone = false
-        val start = MsgBolusStart(injector, amount)
+        val start = MsgBolusStart(injector, detailedBolusInfo.insulin)
         danaPump.bolusStopped = false
         danaPump.bolusStopForced = false
-        if (carbs > 0) {
-            mSerialIOThread?.sendMessage(MsgSetCarbsEntry(injector, carbTimeStamp, carbs))
-        }
-        if (amount > 0) {
-            danaPump.bolusingTreatment = t
-            danaPump.bolusAmountToBeDelivered = amount
+        if (detailedBolusInfo.insulin > 0) {
+            danaPump.bolusingDetailedBolusInfo = detailedBolusInfo
             if (!danaPump.bolusStopped) {
                 mSerialIOThread?.sendMessage(start)
             } else {
-                t.insulin = 0.0
+                BolusProgressData.delivered = 0.0
                 return false
             }
             while (!danaPump.bolusStopped && !start.failed) {
@@ -249,7 +244,7 @@ class DanaRKoreanExecutionService : AbstractDanaRExecutionService() {
                 }
             }
             SystemClock.sleep(300)
-            danaPump.bolusingTreatment = null
+            danaPump.bolusingDetailedBolusInfo = null
             commandQueue.readStatus(rh.gs(app.aaps.core.ui.R.string.bolus_ok), null)
         }
         return !start.failed

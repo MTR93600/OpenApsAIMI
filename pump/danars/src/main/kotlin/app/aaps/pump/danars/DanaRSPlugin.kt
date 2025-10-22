@@ -10,7 +10,6 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
-import app.aaps.core.data.model.BS
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.pump.defs.ManufacturerType
 import app.aaps.core.data.pump.defs.PumpDescription
@@ -26,6 +25,7 @@ import app.aaps.core.interfaces.plugin.OwnDatabasePlugin
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.profile.ProfileFunction
+import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.Dana
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.DetailedBolusInfoStorage
@@ -42,7 +42,6 @@ import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventAppExit
 import app.aaps.core.interfaces.rx.events.EventConfigBuilderChange
 import app.aaps.core.interfaces.rx.events.EventDismissNotification
-import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
@@ -323,17 +322,12 @@ class DanaRSPlugin @Inject constructor(
         detailedBolusInfo.timestamp = dateUtil.now() + (speed * detailedBolusInfo.insulin * 1000).toLong()
         // clean carbs to prevent counting them as twice because they will picked up as another record
         // I don't think it's necessary to copy DetailedBolusInfo right now for carbs records
-        val carbs = detailedBolusInfo.carbs
-        detailedBolusInfo.carbs = 0.0
-        var carbTimeStamp = detailedBolusInfo.carbsTimestamp ?: detailedBolusInfo.timestamp
-        if (carbTimeStamp == detailedBolusInfo.timestamp) carbTimeStamp -= T.mins(1).msecs() // better set 1 min back to prevents clash with insulin
         detailedBolusInfoStorage.add(detailedBolusInfo) // will be picked up on reading history
-        val t = EventOverviewBolusProgress.Treatment(0.0, 0, detailedBolusInfo.bolusType == BS.Type.SMB, detailedBolusInfo.id)
         var connectionOK = false
-        if (detailedBolusInfo.insulin > 0 || carbs > 0) connectionOK = danaRSService?.bolus(detailedBolusInfo.insulin, carbs.toInt(), carbTimeStamp, t) == true
+        if (detailedBolusInfo.insulin > 0) connectionOK = danaRSService?.bolus(detailedBolusInfo) == true
         val result = pumpEnactResultProvider.get()
-        result.success = connectionOK && abs(detailedBolusInfo.insulin - t.insulin) < pumpDescription.bolusStep
-        result.bolusDelivered = t.insulin
+        result.success = connectionOK && abs(detailedBolusInfo.insulin - BolusProgressData.delivered) < pumpDescription.bolusStep
+        result.bolusDelivered = BolusProgressData.delivered
         if (!result.success) {
             var error = "" + danaPump.bolusStartErrorCode
             when (danaPump.bolusStartErrorCode) {
@@ -342,7 +336,7 @@ class DanaRSPlugin @Inject constructor(
                 0x40 -> error = rh.gs(app.aaps.pump.dana.R.string.speederror)
                 0x80 -> error = rh.gs(app.aaps.pump.dana.R.string.insulinlimitviolation)
             }
-            result.comment = rh.gs(app.aaps.pump.dana.R.string.boluserrorcode, detailedBolusInfo.insulin, t.insulin, error)
+            result.comment = rh.gs(app.aaps.pump.dana.R.string.boluserrorcode, detailedBolusInfo.insulin, BolusProgressData.delivered, error)
         } else result.comment = rh.gs(app.aaps.core.ui.R.string.ok)
         aapsLogger.debug(LTag.PUMP, "deliverTreatment: OK. Asked: " + detailedBolusInfo.insulin + " Delivered: " + result.bolusDelivered)
         return result

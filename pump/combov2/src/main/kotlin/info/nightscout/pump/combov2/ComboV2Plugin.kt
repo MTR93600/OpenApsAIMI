@@ -39,7 +39,6 @@ import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventDismissNotification
 import app.aaps.core.interfaces.rx.events.EventInitializationChanged
 import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
-import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress.Treatment
 import app.aaps.core.interfaces.rx.events.EventPumpStatusChanged
 import app.aaps.core.interfaces.rx.events.EventRefreshOverview
 import app.aaps.core.interfaces.sharedPreferences.SP
@@ -1031,34 +1030,16 @@ class ComboV2Plugin @Inject constructor(
             return pumpEnactResult
         }
 
-        // Set up initial bolus progress along with details that are invariant.
-        // FIXME: EventOverviewBolusProgress is a singleton purely for
-        // historical reasons and could be updated to be a regular
-        // class. So far, this hasn't been done, so we must use it
-        // like a singleton, at least for now.
-        EventOverviewBolusProgress.t = Treatment(
-            insulin = 0.0,
-            carbs = 0,
-            isSMB = detailedBolusInfo.bolusType === BS.Type.SMB,
-            id = detailedBolusInfo.id
-        )
-
         val bolusProgressJob = pumpCoroutineScope.launch {
             acquiredPump.bolusDeliveryProgressFlow
                 .collect { progressReport ->
                     when (progressReport.stage) {
                         is RTCommandProgressStage.DeliveringBolus -> {
-                            val bolusingEvent = EventOverviewBolusProgress
-                            bolusingEvent.percent = (progressReport.overallProgress * 100.0).toInt()
-                            bolusingEvent.status = rh.gs(app.aaps.core.ui.R.string.bolus_delivering, detailedBolusInfo.insulin)
-                            rxBus.send(bolusingEvent)
+                            rxBus.send(EventOverviewBolusProgress(rh, id = detailedBolusInfo.id, percent = (progressReport.overallProgress * 100).toInt()))
                         }
 
                         BasicProgressStage.Finished               -> {
-                            val bolusingEvent = EventOverviewBolusProgress
-                            bolusingEvent.percent = (progressReport.overallProgress * 100.0).toInt()
-                            bolusingEvent.status = "Bolus finished, performing post-bolus checks"
-                            rxBus.send(bolusingEvent)
+                            rxBus.send(EventOverviewBolusProgress("Bolus finished, performing post-bolus checks", detailedBolusInfo.id, (progressReport.overallProgress * 100).toInt()))
                         }
 
                         else                                      -> Unit
@@ -1085,12 +1066,12 @@ class ComboV2Plugin @Inject constructor(
                     acquiredPump.deliverBolus(requestedBolusAmount, bolusReason)
                 }
 
-                reportFinishedBolus(rh.gs(app.aaps.core.ui.R.string.bolus_delivered_successfully, detailedBolusInfo.insulin), pumpEnactResult, succeeded = true)
+                reportFinishedBolus(rh.gs(app.aaps.core.interfaces.R.string.bolus_delivered_successfully, detailedBolusInfo.insulin), detailedBolusInfo.id, pumpEnactResult, succeeded = true)
             } catch (e: CancellationException) {
                 // Cancellation is not an error, but it also means
                 // that the profile update was not enacted.
 
-                reportFinishedBolus(R.string.combov2_bolus_cancelled, pumpEnactResult, succeeded = true)
+                reportFinishedBolus(R.string.combov2_bolus_cancelled, detailedBolusInfo.id, pumpEnactResult, succeeded = true)
 
                 // Rethrowing to finish coroutine cancellation.
                 throw e
@@ -1103,19 +1084,19 @@ class ComboV2Plugin @Inject constructor(
                 // CancellationException block above, this is not an
                 // error, hence the "success = true".
 
-                reportFinishedBolus(R.string.combov2_bolus_cancelled, pumpEnactResult, succeeded = true)
+                reportFinishedBolus(R.string.combov2_bolus_cancelled, detailedBolusInfo.id, pumpEnactResult, succeeded = true)
             } catch (_: ComboCtlPump.BolusNotDeliveredException) {
                 aapsLogger.error(LTag.PUMP, "Bolus not delivered")
-                reportFinishedBolus(R.string.combov2_bolus_not_delivered, pumpEnactResult, succeeded = false)
+                reportFinishedBolus(R.string.combov2_bolus_not_delivered, detailedBolusInfo.id, pumpEnactResult, succeeded = false)
             } catch (_: ComboCtlPump.UnaccountedBolusDetectedException) {
                 aapsLogger.error(LTag.PUMP, "Unaccounted bolus detected")
-                reportFinishedBolus(R.string.combov2_unaccounted_bolus_detected_cancelling_bolus, pumpEnactResult, succeeded = false)
+                reportFinishedBolus(R.string.combov2_unaccounted_bolus_detected_cancelling_bolus, detailedBolusInfo.id, pumpEnactResult, succeeded = false)
             } catch (_: ComboCtlPump.InsufficientInsulinAvailableException) {
                 aapsLogger.error(LTag.PUMP, "Insufficient insulin in reservoir")
-                reportFinishedBolus(R.string.combov2_insufficient_insulin_in_reservoir, pumpEnactResult, succeeded = false)
+                reportFinishedBolus(R.string.combov2_insufficient_insulin_in_reservoir, detailedBolusInfo.id, pumpEnactResult, succeeded = false)
             } catch (e: Exception) {
                 aapsLogger.error(LTag.PUMP, "Exception thrown during bolus delivery: $e")
-                reportFinishedBolus(R.string.combov2_bolus_delivery_failed, pumpEnactResult, succeeded = false)
+                reportFinishedBolus(R.string.combov2_bolus_delivery_failed, detailedBolusInfo.id, pumpEnactResult, succeeded = false)
             } finally {
                 // The delivery was enacted if even a partial amount was infused.
                 acquiredPump.lastBolusFlow.value?.also {
@@ -2398,11 +2379,8 @@ class ComboV2Plugin @Inject constructor(
         )
     }
 
-    private fun reportFinishedBolus(status: String, pumpEnactResult: PumpEnactResult, succeeded: Boolean) {
-        val bolusingEvent = EventOverviewBolusProgress
-        bolusingEvent.status = status
-        bolusingEvent.percent = 100
-        rxBus.send(bolusingEvent)
+    private fun reportFinishedBolus(status: String, id: Long, pumpEnactResult: PumpEnactResult, succeeded: Boolean) {
+        rxBus.send(EventOverviewBolusProgress(rh, percent = 100, id = id))
 
         pumpEnactResult.apply {
             success = succeeded
@@ -2410,8 +2388,8 @@ class ComboV2Plugin @Inject constructor(
         }
     }
 
-    private fun reportFinishedBolus(stringId: Int, pumpEnactResult: PumpEnactResult, succeeded: Boolean) =
-        reportFinishedBolus(rh.gs(stringId), pumpEnactResult, succeeded)
+    private fun reportFinishedBolus(stringId: Int, id: Long, pumpEnactResult: PumpEnactResult, succeeded: Boolean) =
+        reportFinishedBolus(rh.gs(stringId), id, pumpEnactResult, succeeded)
 
     private fun createFailurePumpEnactResult(comment: Int) =
         pumpEnactResultProvider.get()

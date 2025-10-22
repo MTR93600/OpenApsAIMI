@@ -390,18 +390,11 @@ public class AapsOmnipodErosManager {
 
         boolean beepsEnabled = detailedBolusInfo.getBolusType() == BS.Type.SMB ? isSmbBeepsEnabled() : isBolusBeepsEnabled();
 
-        EventOverviewBolusProgress.INSTANCE.setT(new EventOverviewBolusProgress.Treatment(detailedBolusInfo.insulin, 0, detailedBolusInfo.getBolusType() == BS.Type.SMB, detailedBolusInfo.getId()));
-
         Date bolusStarted;
         try {
             bolusCommandResult = executeCommand(() -> delegate.bolus(PumpTypeExtensionKt.determineCorrectBolusSize(PumpType.OMNIPOD_EROS, detailedBolusInfo.insulin), beepsEnabled, beepsEnabled,
                     detailedBolusInfo.getBolusType() == BS.Type.SMB ? null :
-                            (estimatedUnitsDelivered, percentage) -> {
-                                EventOverviewBolusProgress progressUpdateEvent = EventOverviewBolusProgress.INSTANCE;
-                                progressUpdateEvent.setStatus(getStringResource(app.aaps.pump.common.R.string.bolus_delivered_so_far, estimatedUnitsDelivered, detailedBolusInfo.insulin));
-                                progressUpdateEvent.setPercent(percentage);
-                                sendEvent(progressUpdateEvent);
-                            }));
+                            (estimatedUnitsDelivered, percentage) -> sendEvent(new EventOverviewBolusProgress(rh, estimatedUnitsDelivered, detailedBolusInfo.getId()))));
 
             bolusStarted = new Date();
         } catch (Exception ex) {
