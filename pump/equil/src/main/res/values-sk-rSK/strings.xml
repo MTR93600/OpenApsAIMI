@@ -3,7 +3,6 @@
     <string name="equil_pump_description">Equil 5.3 alebo novšia pumpa</string>
     <!--  start  -->
     <string name="equil_basal_speed">Základný bazál</string>
-    <string name="equil_bolus_delivered">%1$.3f JI / %2$.3f JI podaných</string>
     <string name="equil_btn_cancel">Zrušiť</string>
     <string name="equil_btn_need">Potreba</string>
     <string name="equil_btn_skip">Preskočiť</string>

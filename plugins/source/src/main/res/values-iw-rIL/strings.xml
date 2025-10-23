@@ -5,7 +5,7 @@
     <string name="ns_client_bg_short">נתוני סוכר מ-NS</string>
     <string name="description_source_ns_client">הורדת ערכי סוכר בדם מ-Nightscout</string>
     <string name="source_xdrip">נתוני סוכר מ-xDrip+</string>
-    <string name="description_source_xdrip">קבלת ערכי סוכר מ-xDrip.</string>
+    <string name="description_source_xdrip">מקבל ערכי סוכר מ-xDrip ומיישומים מתאימים (Juggluco ועוד).</string>
     <string name="dexcom_app_patched">BYODA</string>
     <string name="dexcom_short">BYODA</string>
     <string name="description_source_dexcom">השתמש בנתוני הסוכר מאפליקציית \"בנה לעצמך דקסקום\" (BYODA).</string>

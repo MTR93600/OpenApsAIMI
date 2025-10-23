@@ -219,7 +219,11 @@
     <string name="complication_full_status">État complet</string>
     <string name="complication_full_status_flipped">État complet (transposé)</string>
     <string name="complication_blood_glucose">Glycémie</string>
+    <string name="complication_blood_glucose_ext1">Glycémie Ext1</string>
+    <string name="complication_blood_glucose_ext2">Glycémie Ext2</string>
     <string name="complication_br_cob_iob">DB, GA &amp; IA</string>
+    <string name="complication_br_cob_iob_ext1">DB, GA &amp; IA Ext1</string>
+    <string name="complication_br_cob_iob_ext2">DB, GA &amp; IA Ext2</string>
     <string name="complication_br_iob">Basal &amp; IA</string>
     <string name="complication_br">Débit Basal</string>
     <string name="complication_cob_iob">GA &amp; IA</string>

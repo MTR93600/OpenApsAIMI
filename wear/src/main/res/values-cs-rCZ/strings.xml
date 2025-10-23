@@ -219,7 +219,11 @@
     <string name="complication_full_status">Kompletní stav</string>
     <string name="complication_full_status_flipped">Kompletní stav (obráceně)</string>
     <string name="complication_blood_glucose">Glykémie</string>
+    <string name="complication_blood_glucose_ext1">Glykémie Ext1</string>
+    <string name="complication_blood_glucose_ext2">Glykémie Ext2</string>
     <string name="complication_br_cob_iob">Bazál, COB &amp; IOB</string>
+    <string name="complication_br_cob_iob_ext1">Bazál, COB a IOB Ext1</string>
+    <string name="complication_br_cob_iob_ext2">Bazál, COB a IOB Ext2</string>
     <string name="complication_br_iob">Bazál &amp; IOB</string>
     <string name="complication_br">Bazál</string>
     <string name="complication_cob_iob">COB &amp; IOB</string>

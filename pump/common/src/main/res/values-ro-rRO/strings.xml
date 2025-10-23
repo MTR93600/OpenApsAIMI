@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- PumoCommon - Pump Abstract -->
+    <!-- PumpCommon - Pump Abstract -->
     <string name="pump_operation_not_supported_by_pump_driver">Operațiunea nu este suportată de către pompă și/sau driver.</string>
-    <string name="bolus_delivered_so_far">%1$.2f U din %2$.2f U livrate</string>
     <!-- PumpCommon - Pump Status -->
     <string name="pump_status_not_initialized">Neiniţializat</string>
     <string name="pump_status_initialized">Pornit</string>

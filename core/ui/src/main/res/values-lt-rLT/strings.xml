@@ -5,7 +5,6 @@
     <string name="error">Klaida</string>
     <string name="profile_set_ok">Bazės profilis pompoje atnaujintas</string>
     <string name="invalid_input">Neteisingai įvesti duomenys</string>
-    <string name="bolus_delivering">Leidžiama %1$.2f vv</string>
     <string name="constraint_applied">Taikomas ribojimas!</string>
     <string name="tempbasals_iobtotal_label_string">Visas AIO:</string>
     <string name="tt_label">LT</string>
@@ -14,7 +13,6 @@
     <string name="pump_base_basal_rate">%1$.2f vv/val</string>
     <string name="pump_not_initialized_profile_not_set">Pompa neprijungta, profilis nepasirinktas!</string>
     <string name="failed_update_basal_profile">Nepavyko atnaujinti bazės profilio</string>
-    <string name="bolus_delivered_successfully">%1$.2f v bolusas sėkmingai suleistas</string>
     <string name="no_valid_basal_rate">Bazė iš pompos nenuskaityta</string>
     <string name="limiting_iob">Ribojamas AIO iki %1$.1f v dėl %2$s</string>
     <string name="loop_disabled">CIKLAS NEAKTYVUS DĖL APRIBOJIMŲ</string>

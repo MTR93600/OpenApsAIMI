@@ -3,7 +3,6 @@
     <string name="equil_pump_description">Equil 5.3 veya daha yeni Patch Pompa </string>
     <!--  start  -->
     <string name="equil_basal_speed">Temel Bazal</string>
-    <string name="equil_bolus_delivered">%1$.3f Ü / %2$.3f Ü Gönderildi</string>
     <string name="equil_btn_cancel">İptal</string>
     <string name="equil_btn_need">İhtiyaç</string>
     <string name="equil_btn_skip">Atla</string>

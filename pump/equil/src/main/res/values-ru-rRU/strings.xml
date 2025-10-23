@@ -3,7 +3,6 @@
     <string name="equil_pump_description">Помпа Equil Patch 5.3 или новее </string>
     <!--  start  -->
     <string name="equil_basal_speed">Базовая скорость базала</string>
-    <string name="equil_bolus_delivered">Введено %1$.3f ед / %2$.3f ед</string>
     <string name="equil_btn_cancel">Отмена</string>
     <string name="equil_btn_need">Нужно</string>
     <string name="equil_btn_skip">Пропустить</string>

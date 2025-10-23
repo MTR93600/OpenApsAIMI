@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- PumoCommon - Pump Abstract -->
+    <!-- PumpCommon - Pump Abstract -->
     <string name="pump_operation_not_supported_by_pump_driver">Operationen understøttes ikke af pumpen og/eller driveren.</string>
-    <string name="bolus_delivered_so_far">%1$.2f IE / %2$.2f IE leveret</string>
     <!-- PumpCommon - Pump Status -->
     <string name="pump_status_not_initialized">Ikke initialiseret</string>
     <string name="pump_status_initialized">Initialiseret</string>

@@ -5,7 +5,6 @@
     <string name="error">Chyba</string>
     <string name="profile_set_ok">Bazálny profil v pumpe aktualizovaný</string>
     <string name="invalid_input">Chybné vstupné dáta</string>
-    <string name="bolus_delivering">Podávanie %1$.2f JI</string>
     <string name="constraint_applied">Aplikované obmedzenie!</string>
     <string name="tempbasals_iobtotal_label_string">Celkový IOB:</string>
     <string name="tt_label">DC</string>
@@ -14,7 +13,6 @@
     <string name="pump_base_basal_rate">%1$.2f JI/h</string>
     <string name="pump_not_initialized_profile_not_set">Pumpa nie je inicializovaná, profil nenastavený!</string>
     <string name="failed_update_basal_profile">Chyba pri aktualizovaní bazálneho profilu</string>
-    <string name="bolus_delivered_successfully">Bolus %1$.2f JI podaný úspešne</string>
     <string name="no_valid_basal_rate">Nenačítaný žiadny platný bazál z pumpy</string>
     <string name="limiting_iob">IOB obmedzený na %1$.1f JI: %2$s</string>
     <string name="loop_disabled">UZAVRETÝ OKRUH DEAKTIVOVANÝ OBMEDZENÍM</string>

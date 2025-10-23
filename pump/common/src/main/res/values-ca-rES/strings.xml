@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- PumoCommon - Pump Abstract -->
+    <!-- PumpCommon - Pump Abstract -->
     <string name="pump_operation_not_supported_by_pump_driver">Operació no compatible amb la bomba i/o controlador.</string>
     <!-- PumpCommon - Pump Status -->
     <string name="pump_status_suspended">En pausa</string>

@@ -5,7 +5,6 @@
     <string name="error">錯誤</string>
     <string name="profile_set_ok">幫浦中的基礎率設定已更新</string>
     <string name="invalid_input">輸入資料無效</string>
-    <string name="bolus_delivering">正在注射 %1$.2f U</string>
     <string name="constraint_applied">已套用限制！</string>
     <string name="tempbasals_iobtotal_label_string">總 IOB：</string>
     <string name="tt_label">臨時目標</string>
@@ -14,7 +13,6 @@
     <string name="pump_base_basal_rate">%1$.2f U/h</string>
     <string name="pump_not_initialized_profile_not_set">幫浦未初始化，設定檔未設置！</string>
     <string name="failed_update_basal_profile">更新基礎率設定失敗</string>
-    <string name="bolus_delivered_successfully">注射 %1$.2f U 已成功送達</string>
     <string name="no_valid_basal_rate">未從幫浦讀取到有效的基礎率</string>
     <string name="limiting_iob">因 %2$s 限制 IOB 為 %1$.1f U</string>
     <string name="loop_disabled">循環因限制已停用</string>

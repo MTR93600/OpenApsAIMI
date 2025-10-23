@@ -3,7 +3,6 @@
     <string name="equil_pump_description">Equil Patch 5.3 ar naujesnė pompa </string>
     <!--  start  -->
     <string name="equil_basal_speed">Bazinis insulinas</string>
-    <string name="equil_bolus_delivered">%1$.3f vv / %2$.3f vv suleista</string>
     <string name="equil_btn_cancel">Atšaukti</string>
     <string name="equil_btn_need">Reikia</string>
     <string name="equil_btn_skip">Praleisti</string>

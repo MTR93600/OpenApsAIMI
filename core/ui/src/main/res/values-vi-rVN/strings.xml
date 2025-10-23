@@ -5,7 +5,6 @@
     <string name="error">Lỗi</string>
     <string name="profile_set_ok">Đã cập nhật cấu hình Basal trong bơm</string>
     <string name="invalid_input">Dữ liệu đầu vào không hợp lệ</string>
-    <string name="bolus_delivering">Đang tiêm %1$.2f U</string>
     <string name="constraint_applied">Đã áp dụng giới hạn!</string>
     <string name="tempbasals_iobtotal_label_string">Total IOB:</string>
     <string name="tt_label">TT</string>
@@ -14,7 +13,6 @@
     <string name="pump_base_basal_rate">%1$.2f U/h</string>
     <string name="pump_not_initialized_profile_not_set">Bơm chưa được khởi tạo, cấu hình (profile) chưa được thiết lập!</string>
     <string name="failed_update_basal_profile">Cập nhật cấu hình basal profile thất bại</string>
-    <string name="bolus_delivered_successfully">Đã tiêm Bolus thành công %1$.2f U</string>
     <string name="no_valid_basal_rate">Không đọc được liều basal hợp lệ từ bơm</string>
     <string name="limiting_iob">Giới hạn IOB: %1$.1f U – Lý do: %2$s.</string>
     <string name="loop_disabled">VÒNG LẶP BỊ TẮT DO GIỚI HẠN AN TOÀN</string>

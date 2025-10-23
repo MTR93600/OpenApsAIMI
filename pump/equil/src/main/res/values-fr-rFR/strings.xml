@@ -3,7 +3,6 @@
     <string name="equil_pump_description">Equil 5.3 ou pompe Patch plus récente</string>
     <!--  start  -->
     <string name="equil_basal_speed">Basale normale</string>
-    <string name="equil_bolus_delivered">%1$.3fU / %2$.3fU injectés</string>
     <string name="equil_btn_cancel">Annuler</string>
     <string name="equil_btn_need">Requis</string>
     <string name="equil_btn_skip">Ignorer</string>

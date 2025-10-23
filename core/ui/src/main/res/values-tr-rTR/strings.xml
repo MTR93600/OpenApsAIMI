@@ -5,7 +5,6 @@
     <string name="error">Hata</string>
     <string name="profile_set_ok">Pompadaki Bazal profil güncellendi</string>
     <string name="invalid_input">Geçersiz bilgi girişi</string>
-    <string name="bolus_delivering">%1$.2f Ü gönderiliyor</string>
     <string name="constraint_applied">Sınırlaması uygulanır!</string>
     <string name="tempbasals_iobtotal_label_string">Toplam AİNS:</string>
     <string name="tt_label">GH</string>
@@ -14,7 +13,6 @@
     <string name="pump_base_basal_rate">%1$.2f Ü/sa</string>
     <string name="pump_not_initialized_profile_not_set">Pompa başlatılamadı, profil oluşturulmamış!</string>
     <string name="failed_update_basal_profile">Bazal profiliniz güncellenemedi</string>
-    <string name="bolus_delivered_successfully">%1$.2f Ü bolus başarıyla gönderildi</string>
     <string name="no_valid_basal_rate">Pompadan okunan geçerli bir bazal oranı yok</string>
     <string name="limiting_iob">%2$s\'den dolayı AİNS %1$.1f Ü ile sınırlandırılıyor</string>
     <string name="loop_disabled">DÖNGÜ KISITLAMALARDAN DEVREDIŞI BIRAKILDI</string>

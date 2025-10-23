@@ -5,7 +5,6 @@
     <string name="error">Erreur</string>
     <string name="profile_set_ok">Profil basal dans la pompe mis à jour</string>
     <string name="invalid_input">Données saisies invalides</string>
-    <string name="bolus_delivering">Injection de %1$.2fU en cours</string>
     <string name="constraint_applied">Restriction appliquée !</string>
     <string name="tempbasals_iobtotal_label_string">IA Totale:</string>
     <string name="tt_label">CT</string>
@@ -14,7 +13,6 @@
     <string name="pump_base_basal_rate">%1$.2f U/h</string>
     <string name="pump_not_initialized_profile_not_set">Pompe non initialisée, profil non défini !</string>
     <string name="failed_update_basal_profile">La mise à jour du profil basal a échouée</string>
-    <string name="bolus_delivered_successfully">Bolus de %1$.2f U délivré avec succès</string>
     <string name="no_valid_basal_rate">Aucun débit basal valide lu depuis la pompe</string>
     <string name="limiting_iob">Limiter l’IA %1$.1f U en raison de la %2$s</string>
     <string name="loop_disabled">BOUCLE DÉSACTIVÉE PAR RESTRICTIONS</string>
