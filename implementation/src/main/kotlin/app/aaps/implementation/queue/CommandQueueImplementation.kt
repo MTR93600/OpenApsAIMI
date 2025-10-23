@@ -174,14 +174,33 @@ class CommandQueueImplementation @Inject constructor(
         }
     }
 
-    @Suppress("SameParameterValue")
+    /**
+     * Watchdog. I observed issue where work stuck in RUNNING state but nothing actually happens
+     * (last work completed successfully).
+     * Cancel scheduled work in this case
+     */
+    private var readScheduledDetected: Long? = null
+
     @Synchronized
-    fun isLastScheduled(type: CommandType): Boolean {
+    fun isReadStatusScheduled(): Boolean {
+        /*
+         * Cancel all works if ReadStatus is scheduled for more that 15 min
+         */
+        readScheduledDetected?.let {
+            if (dateUtil.isOlderThan(it, minutes = 15)) {
+                workManager.cancelUniqueWork(jobName.name)
+                fabricPrivacy.logCustom("QueueWorkerStuck")
+                Thread.sleep(5000)
+            }
+        }
+
         synchronized(queue) {
-            if (queue.isNotEmpty() && queue[queue.size - 1].commandType == type) {
+            if (queue.isNotEmpty() && queue[queue.size - 1].commandType == CommandType.READSTATUS) {
+                readScheduledDetected = dateUtil.now()
                 return true
             }
         }
+        readScheduledDetected = null
         return false
     }
 
@@ -477,7 +496,7 @@ class CommandQueueImplementation @Inject constructor(
 
     // returns true if command is queued
     override fun readStatus(reason: String, callback: Callback?): Boolean {
-        if (isLastScheduled(CommandType.READSTATUS)) {
+        if (isReadStatusScheduled()) {
             aapsLogger.debug(LTag.PUMPQUEUE, "READSTATUS $reason ignored as duplicated")
             callback?.result(executingNowError())?.run()
             return false

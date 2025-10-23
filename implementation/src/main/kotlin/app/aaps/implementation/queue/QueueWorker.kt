@@ -55,6 +55,7 @@ class QueueWorker internal constructor(
         var connectionStartTime = lastCommandTime
         try {
             while (true) {
+                if (isStopped) return Result.failure()
                 val secondsElapsed = (System.currentTimeMillis() - connectionStartTime) / 1000
                 val pump = activePlugin.activePump
                 //  Manifest.permission.BLUETOOTH_CONNECT
