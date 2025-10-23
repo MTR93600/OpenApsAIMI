@@ -2,6 +2,7 @@ package app.aaps.pump.danars.comm
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
@@ -33,6 +34,7 @@ open class DanaRSPacketBolusSetStepBolusStop @Inject constructor(
         danaPump.bolusStopped = true
         if (!danaPump.bolusStopForced) {
             // delivery ended without user intervention
+            BolusProgressData.delivered = BolusProgressData.insulin
             rxBus.send(EventOverviewBolusProgress(rh, percent = 100, id = danaPump.bolusingDetailedBolusInfo?.id))
         } else {
             rxBus.send(EventOverviewBolusProgress(status = rh.gs(app.aaps.pump.dana.R.string.overview_bolusprogress_stoped), id = danaPump.bolusingDetailedBolusInfo?.id))
