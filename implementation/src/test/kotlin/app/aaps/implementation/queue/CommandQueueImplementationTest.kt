@@ -3,7 +3,6 @@ package app.aaps.implementation.queue
 import android.content.Context
 import android.os.Handler
 import android.os.PowerManager
-import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -227,8 +226,8 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
                 runBlocking { work.doWorkAndLog() }
             }.start()
             null
-        } as Answer<*>).`when`(workManager).enqueueUniqueWork(anyObject<String>(), anyObject<ExistingWorkPolicy>(), anyObject<OneTimeWorkRequest>())
-        Mockito.`when`(infos.get()).thenReturn(emptyList<WorkInfo>())
+        } as Answer<*>).`when`(workManager).enqueueUniqueWork(anyObject(), anyObject(), anyObject<OneTimeWorkRequest>())
+        Mockito.`when`(infos.get()).thenReturn(emptyList())
     }
 
     @Test
@@ -422,7 +421,7 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
         commandQueue.setUserOptions(null)
 
         // then
-        assertThat(commandQueue.isReadStatusScheduled(Command.CommandType.SET_USER_SETTINGS)).isTrue()
+        assertThat(commandQueue.isReadStatusScheduled()).isFalse()
         assertThat(commandQueue.size()).isEqualTo(1)
         // next should be ignored
         commandQueue.setUserOptions(null)
@@ -438,7 +437,7 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
         commandQueue.loadEvents(null)
 
         // then
-        assertThat(commandQueue.isReadStatusScheduled(Command.CommandType.LOAD_EVENTS)).isTrue()
+        assertThat(commandQueue.isReadStatusScheduled()).isFalse()
         assertThat(commandQueue.size()).isEqualTo(1)
         // next should be ignored
         commandQueue.loadEvents(null)
@@ -454,7 +453,7 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
         commandQueue.clearAlarms(null)
 
         // then
-        assertThat(commandQueue.isReadStatusScheduled(Command.CommandType.CLEAR_ALARMS)).isTrue()
+        assertThat(commandQueue.isReadStatusScheduled()).isFalse()
         assertThat(commandQueue.size()).isEqualTo(1)
         // next should be ignored
         commandQueue.clearAlarms(null)
@@ -470,7 +469,7 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
         commandQueue.deactivate(null)
 
         // then
-        assertThat(commandQueue.isReadStatusScheduled(Command.CommandType.DEACTIVATE)).isTrue()
+        assertThat(commandQueue.isReadStatusScheduled()).isFalse()
         assertThat(commandQueue.size()).isEqualTo(1)
         // next should be ignored
         commandQueue.deactivate(null)
@@ -486,7 +485,7 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
         commandQueue.updateTime(null)
 
         // then
-        assertThat(commandQueue.isReadStatusScheduled(Command.CommandType.UPDATE_TIME)).isTrue()
+        assertThat(commandQueue.isReadStatusScheduled()).isFalse()
         assertThat(commandQueue.size()).isEqualTo(1)
         // next should be ignored
         commandQueue.updateTime(null)
@@ -517,7 +516,7 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
         commandQueue.loadHistory(0, null)
 
         // then
-        assertThat(commandQueue.isReadStatusScheduled(Command.CommandType.LOAD_HISTORY)).isTrue()
+        assertThat(commandQueue.isReadStatusScheduled()).isFalse()
         assertThat(commandQueue.size()).isEqualTo(1)
         // next should be ignored
         commandQueue.loadHistory(0, null)
@@ -569,7 +568,7 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
         commandQueue.stopPump(null)
 
         // then
-        assertThat(commandQueue.isReadStatusScheduled(Command.CommandType.STOP_PUMP)).isTrue()
+        assertThat(commandQueue.isReadStatusScheduled()).isFalse()
         assertThat(commandQueue.size()).isEqualTo(1)
     }
 
@@ -582,7 +581,7 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
         commandQueue.startPump(null)
 
         // then
-        assertThat(commandQueue.isReadStatusScheduled(Command.CommandType.START_PUMP)).isTrue()
+        assertThat(commandQueue.isReadStatusScheduled()).isFalse()
         assertThat(commandQueue.size()).isEqualTo(1)
     }
 
@@ -595,7 +594,7 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
         commandQueue.setTBROverNotification(null, true)
 
         // then
-        assertThat(commandQueue.isReadStatusScheduled(Command.CommandType.INSIGHT_SET_TBR_OVER_ALARM)).isTrue()
+        assertThat(commandQueue.isReadStatusScheduled()).isFalse()
         assertThat(commandQueue.size()).isEqualTo(1)
     }
 
