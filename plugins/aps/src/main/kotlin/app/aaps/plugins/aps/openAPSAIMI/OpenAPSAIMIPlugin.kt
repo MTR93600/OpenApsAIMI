@@ -995,8 +995,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             )
                         )
 
-                        addPreference(PreferenceCategory(context).apply {
-                            title = "kicker"
+                        addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                            key = "aimi_plateau_kicker_settings"
+                            title = "Kicker"
+                            addPreference(PreferenceCategory(context).apply {
+                                title = "Kicker settings"
+                            })
 
 
                         addPreference(
@@ -1033,7 +1037,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         )
                         })
                         addPreference(PreferenceCategory(context).apply {
-                            title = "reprise"
+                            key = "aimi_plateau_reprise_settings"
+                            title = "Reprise"
+                            addPreference(PreferenceCategory(context).apply {
+                                title = "Reprise settings"
+                            })
                         // Micro-reprise de sécurité après 0U/h
                         addPreference(
                             AdaptiveIntPreference(
