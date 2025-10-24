@@ -994,6 +994,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                                 title = R.string.oaps_aimi_max_multiplier_title
                             )
                         )
+
+                        addPreference(PreferenceCategory(context).apply {
+                            title = "kicker"
+
+
                         addPreference(
                             AdaptiveDoublePreference(
                                 ctx = context,
@@ -1026,7 +1031,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                                 title = R.string.oaps_aimi_kicker_maxmin_title
                             )
                         )
-
+                        })
+                        addPreference(PreferenceCategory(context).apply {
+                            title = "reprise"
                         // Micro-reprise de sécurité après 0U/h
                         addPreference(
                             AdaptiveIntPreference(
@@ -1052,6 +1059,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                                 title = R.string.oaps_aimi_zero_resume_max_title
                             )
                         )
+                        })
 
                         // Anti-stagnation & conditions de relâche
                         addPreference(
