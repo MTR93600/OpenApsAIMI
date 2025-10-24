@@ -87,5 +87,11 @@ enum class IntKey(
     OApsAIMINightGrowthMinEventualOverTarget("key_oaps_aimi_ngr_min_eventual_over_target", 15, 0, 120),
     OApsAIMINightGrowthDecayMinutes("key_oaps_aimi_ngr_decay_minutes", 20, 0, 120),
     OApsAIMIlogsize("key_oaps_aimi_logsize",25,1,50),
-    SiteRotationUserProfile("site_rotation_user_profile", 0, 0, 2)
+    SiteRotationUserProfile("site_rotation_user_profile", 0, 0, 2),
+    // --- AIMI Adaptive Basal ---
+    OApsAIMIKickerStartMin(key = "OApsAIMIKickerStartMin", 10, 5, 30), // durée initiale du “kick” plateau (min)
+    OApsAIMIKickerMaxMin(key = "OApsAIMIKickerMaxMin", 30, 10, 60), // durée max du “kick” plateau (min)
+    OApsAIMIZeroResumeMin(key = "OApsAIMIZeroResumeMin", 10,  5, 30), // délai avant micro-reprise (minutes à 0)
+    OApsAIMIZeroResumeMax(key = "OApsAIMIZeroResumeMax", 30, 10, 60), // durée max de la micro-reprise
+
 }

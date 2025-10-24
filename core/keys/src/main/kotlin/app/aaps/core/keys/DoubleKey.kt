@@ -113,5 +113,18 @@ enum class DoubleKey(
     OApsAIMINightGrowthSmbMultiplier("key_oaps_aimi_ngr_smb_multiplier", 1.2, 1.0, 1.5),
     OApsAIMINightGrowthBasalMultiplier("key_oaps_aimi_ngr_basal_multiplier", 1.1, 1.0, 1.5),
     OApsAIMINightGrowthMaxSmbClamp("key_oaps_aimi_ngr_max_smb_clamp", 1.2, 0.1, 5.0),
-    OApsAIMINightGrowthMaxIobExtra("key_oaps_aimi_ngr_max_iob_extra", 0.5, 0.0, 3.0)
+    OApsAIMINightGrowthMaxIobExtra("key_oaps_aimi_ngr_max_iob_extra", 0.5, 0.0, 3.0),
+
+    // --- AIMI Adaptive Basal ---
+    OApsAIMIHighBg(key = "OApsAIMIHighBg", 180.0, 140.0, 250.0), // seuil haut déclenchant les corrections plateau
+    OApsAIMIPlateauBandAbs(key = "OApsAIMIPlateauBandAbs", 2.5, 0.5, 6.0), // bande de tolérance du plateau (|Δ| ≤ X mg/dL/5m)
+    OApsAIMIR2Confident(key = "OApsAIMIR2Confident", 0.7, 0.3, 0.95), // seuil de confiance du fit quadratique
+    OApsAIMIMaxMultiplier(key = "OApsAIMIMaxMultiplier", 1.6, 1.0,2.5), // plafond multiplicatif de la basale (× profil)
+    OApsAIMIKickerStep(key = "OApsAIMIKickerStep", 0.15, 0.05, 0.5), // intensité du “kicker” plateau (incrément multiplicatif)
+    OApsAIMIKickerMinUph(key = "OApsAIMIKickerMinUph", 0.2,0.05, 1.0), // plancher absolu U/h pour les kicks très bas
+    OApsAIMIZeroResumeFrac(key = "OApsAIMIZeroResumeFrac", 0.25, 0.05, 0.8), // fraction du basal profil pour la micro-reprise
+    OApsAIMIAntiStallBias(key = "OApsAIMIAntiStallBias", 0.10, 0.0, 0.5), // biais de “décollage” anti-stagnation (+%)
+    OApsAIMIDeltaPosRelease(key = "OApsAIMIDeltaPosRelease", 1.0, 0.5, 3.0), // seuil Δ positif au-delà duquel on arrête l’intensification
+
+
 }
