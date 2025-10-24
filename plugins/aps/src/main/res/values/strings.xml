@@ -957,7 +957,7 @@
     <string name="pregnancy_delta_over_0_adjustment">Pregnancy &amp; Δ&gt;0 → adjustment.</string>
     <!-- AIMI: Plateau / smart hyperglycemia -->
     <string name="aimi_plateau_high_boost">Boost => Hyper greater than 180 stable bg</string>
-    <string name="aimi_plateau_prefs">Plateau correction (AIMI)</string>
+    <string name="aimi_plateau_prefs">Plateau correction</string>
     <string name="aimi_plateau_prefs_title_menu">Plateau correction settings</string>
     <string name="oaps_aimi_highbg_title">High threshold (mg/dL)</string>
     <string name="oaps_aimi_highbg_summary">Above this BG, the “plateau” logic may intensify basal.</string>
