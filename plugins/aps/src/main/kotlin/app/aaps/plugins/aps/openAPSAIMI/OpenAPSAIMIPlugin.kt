@@ -953,12 +953,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIHighBGinterval, dialogMessage = R.string.oaps_aimi_HIGHBG_interval_summary, title = R.string.oaps_aimi_HIGHBG_interval_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHighBGMaxSMB, dialogMessage = R.string.openapsaimi_highBG_maxsmb_summary, title = R.string.openapsaimi_highBG_maxsmb_title))
 
-                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                addPreference(PreferenceCategory(context).apply {
                     key = "aimi_plateau_settings"
-                    title = rh.gs(R.string.aimi_plateau_prefs)
-                    addPreference(PreferenceCategory(context).apply {
-                        title = rh.gs(R.string.aimi_plateau_prefs_title_menu)
-                    })
+                    title = rh.gs(R.string.aimi_plateau_prefs_title_menu)
+                })
 
                     // Seuil d'activation & détection du plateau
                     addPreference(AdaptiveDoublePreference(
@@ -1066,7 +1064,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         dialogMessage = R.string.oaps_aimi_delta_pos_release_summary,
                         title = R.string.oaps_aimi_delta_pos_release_title
                     ))
-                })
+
             })
 
 
