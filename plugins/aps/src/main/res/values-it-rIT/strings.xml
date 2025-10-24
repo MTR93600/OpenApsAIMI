@@ -946,11 +946,11 @@
     <string name="aimi_plateau_high_boost">Glicemia alta ma stabile (&gt;180)  ⇒ Intensificazione basale </string>
     <string name="aimi_plateau_prefs">Correzione glicemia alta ma stabile </string>
     <string name="aimi_plateau_prefs_title_menu">Impostazioni glicemia alta ma stabile</string>
-    <string name="oaps_aimi_highbg_title">Soglia minima glicemia alta ma stabile (mg/dL)</string>
+    <string name="oaps_aimi_highbg_title">Soglia minima (mg/dL)</string>
     <string name="oaps_aimi_highbg_summary">Sopra questo valore, AIMI può aumentare temporaneamente la basale per evitare stagnazione.</string>
-    <string name="oaps_aimi_plateau_band_title">Tolleranza variazione Δ glicemia ± (mg/dL/5 min)</string>
+    <string name="oaps_aimi_plateau_band_title">Tolleranza variazione ± (mg/dL/5 min)</string>
     <string name="oaps_aimi_plateau_band_summary">Se |Δ| ≤ questo valore, mentre la glicemia è sopra la soglia minima per essere considerata alta, viene considerata stagnante.</string>
-    <string name="oaps_aimi_r2_conf_title">Durata stagnazione glicemia (minuti)</string>
+    <string name="oaps_aimi_r2_conf_title">Durata stagnazione (minuti)</string>
     <string name="oaps_aimi_r2_conf_summary">Tempo minimo in cui la glicemia deve restare alta ma stabile prima che il sistema intervenga considerandola stagnante.</string>
     <string name="oaps_aimi_max_multiplier_title">Moltiplicatore max basale profilo</string>
     <string name="oaps_aimi_max_multiplier_summary">Massimo coefficiente con cui AIMI può aumentare la basale profilo durante una glicemia alta ma stabile.</string>
