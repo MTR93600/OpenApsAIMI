@@ -941,5 +941,36 @@
     <string name="honeymoon_small_slope">Luna di miele piccola pendenza.</string>
     <string name="honeymoon_meal_slope">Luna di miele pendenza pasto.</string>
     <string name="pregnancy_delta_over_0_adjustment">Gravidanza &amp; Δ&gt;0 → aggiustamento.</string>
+
+    <!-- AIMI: Plateau / smart hyperglycemia -->
+    <string name="aimi_plateau_high_boost">Boost => Hyper greater than 180 stable bg</string>
+    <string name="aimi_plateau_prefs">Plateau correction (AIMI)</string>
+    <string name="aimi_plateau_prefs_title_menu">Plateau correction settings</string>
+    <string name="oaps_aimi_highbg_title">High threshold (mg/dL)</string>
+    <string name="oaps_aimi_highbg_summary">Above this BG, the “plateau” logic may intensify basal.</string>
+    <string name="oaps_aimi_plateau_band_title">Plateau band ± (mg/dL/5 min)</string>
+    <string name="oaps_aimi_plateau_band_summary">If |Δ| ≤ this value while BG is high, it’s treated as a plateau.</string>
+    <string name="oaps_aimi_r2_conf_title">R² confidence threshold</string>
+    <string name="oaps_aimi_r2_conf_summary">Quadratic-fit confidence required to trigger/strengthen plateau logic.</string>
+    <string name="oaps_aimi_max_multiplier_title">Max basal multiplier (×)</string>
+    <string name="oaps_aimi_max_multiplier_summary">Upper limit for basal during plateau (× profile basal).</string>
+    <string name="oaps_aimi_kicker_step_title">Kicker increment (×)</string>
+    <string name="oaps_aimi_kicker_step_summary">Step increase of the multiplier at each “kick”.</string>
+    <string name="oaps_aimi_kicker_minuph_title">Kicker floor (U/h)</string>
+    <string name="oaps_aimi_kicker_minuph_summary">Minimum absolute rate when the kicker is applied.</string>
+    <string name="oaps_aimi_kicker_startmin_title">Initial kicker duration (min)</string>
+    <string name="oaps_aimi_kicker_startmin_summary">Duration of the first intensification stage.</string>
+    <string name="oaps_aimi_kicker_maxmin_title">Max kicker duration (min)</string>
+    <string name="oaps_aimi_kicker_maxmin_summary">Total maximum time under “kicker” intensification.</string>
+    <string name="oaps_aimi_zero_resume_min_title">Delay before micro-resume (min)</string>
+    <string name="oaps_aimi_zero_resume_min_summary">After setting 0 U/h, wait this long before a safety micro-resume.</string>
+    <string name="oaps_aimi_zero_resume_frac_title">Micro-resume (× profile)</string>
+    <string name="oaps_aimi_zero_resume_frac_summary">Basal fraction to resume after 0 U/h (relative to profile basal).</string>
+    <string name="oaps_aimi_zero_resume_max_title">Max micro-resume duration (min)</string>
+    <string name="oaps_aimi_zero_resume_max_summary">Upper limit for micro-resume before re-evaluation.</string>
+    <string name="oaps_aimi_antistall_bias_title">Anti-stall bias (+×)</string>
+    <string name="oaps_aimi_antistall_bias_summary">Small bonus to the multiplier to “unstick” when plateauing.</string>
+    <string name="oaps_aimi_delta_pos_release_title">Positive Δ to release (mg/dL/5 min)</string>
+    <string name="oaps_aimi_delta_pos_release_summary">If Δ exceeds this value, reduce/relax the intensification.</string>
 </resources>
 
