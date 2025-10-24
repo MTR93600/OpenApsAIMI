@@ -156,6 +156,10 @@ class CommandQueueImplementation @Inject constructor(
                                })
                            }
                        }, fabricPrivacy::logException)
+        /*
+         * Clear old WorkManager jobs, because they survive restart
+         */
+        workManager.cancelUniqueWork(jobName.name)
     }
 
     private fun executingNowError(): PumpEnactResult =
