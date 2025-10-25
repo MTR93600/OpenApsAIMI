@@ -946,14 +946,14 @@
 
     <string name="aimi_plateau_high_boost">Glicemia alta ma stabile (&gt;180)  ⇒ Intensificazione basale </string>
     <string name="aimi_plateau_prefs">Correzione glicemia alta ma stabile </string>
-    <string name="aimi_plateau_prefs_title_menu">Impostazioni glicemia alta ma stabile</string>
-    <string name="aimi_plateau_kicker_prefs">Intervento correttivo</string>
-    <string name="aimi_plateau_kicker_prefs_title_menu">Intervento correttivo - Impostazioni</string>
-    <string name="aimi_plateau_reprise_prefs">Ripartenza basale</string>
-    <string name="aimi_plateau_reprise_prefs_title_menu">Ripartenza basale - Impostazioni</string>
-    <string name="aimi_plateau_antistall_prefs">Anti-stallo</string>
-    <string name="aimi_plateau_antistall_prefs_title_menu">Anti-stallo - Impostazioni</string>
-    <string name="oaps_aimi_highbg_title">Soglia minima (mg/dL)</string>
+    <string name="aimi_plateau_prefs_title_menu">Gestione della glicemia alta ma stabile</string>
+    <string name="aimi_plateau_kicker_prefs">Aumento temporaneo basale (correzione)</string>
+    <string name="aimi_plateau_kicker_prefs_title_menu">Aumento temporaneo basale (correzione) - Impostazioni</string>
+    <string name="aimi_plateau_reprise_prefs">Ripartenza da basale 0 U/h</string>
+    <string name="aimi_plateau_reprise_prefs_title_menu">Ripartenza da basale 0 U/h - Impostazioni</string>
+    <string name="aimi_plateau_antistall_prefs">Prevenzione anti-stallo</string>
+    <string name="aimi_plateau_antistall_prefs_title_menu">Prevenzione anti-stallo - Impostazioni</string>
+    <string name="oaps_aimi_highbg_title">Soglia glicemia alta (mg/dL)</string>
     <string name="oaps_aimi_highbg_summary">Sopra questo valore, AIMI può aumentare temporaneamente la basale per evitare stagnazione.</string>
     <string name="oaps_aimi_plateau_band_title">Tolleranza variazione ± (mg/dL/5 min)</string>
     <string name="oaps_aimi_plateau_band_summary">Se |Δ| ≤ questo valore, mentre la glicemia è sopra la soglia minima per essere considerata alta, viene considerata stagnante.</string>
