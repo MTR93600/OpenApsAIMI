@@ -96,6 +96,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var iobCobCalculator: IobCobCalculator
     @Inject lateinit var activePlugin: ActivePlugin
 
+    @Inject lateinit var aimiAdaptiveBasal: AIMIAdaptiveBasal
+
     private val context: Context = context.applicationContext
     private val EPS_FALL = 0.3      // mg/dL/5min : seuil de baisse
     private val EPS_ACC  = 0.2      // mg/dL/5min : seuil d'écart short vs long
@@ -2045,30 +2047,6 @@ fun appendCompactLog(
     private fun interpolateFactor(value: Float, start1: Float, end1: Float, start2: Float, end2: Float): Float {
         return start2 + (value - start1) * (end2 - start2) / (end1 - start1)
     }
-    // // Méthode pour récupérer les deltas récents (entre 2.5 et 7.5 minutes par exemple)
-    // private fun getRecentDeltas(): List<Double> {
-    //     val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
-    //     if (data.isEmpty()) return emptyList()
-    //     // Fenêtre standard selon BG
-    //     val standardWindow = if (bg < 130) 40f else 20f
-    //     // Fenêtre raccourcie pour détection rapide
-    //     val rapidRiseWindow = 10f
-    //     // Si le delta instantané est supérieur à 15 mg/dL, on choisit la fenêtre rapide
-    //     val intervalMinutes = if (delta > 15) rapidRiseWindow else standardWindow
-    //
-    //     val nowTimestamp = data.first().timestamp
-    //     val recentDeltas = mutableListOf<Double>()
-    //     for (i in 1 until data.size) {
-    //         if (data[i].value > 39 && !data[i].filledGap) {
-    //             val minutesAgo = ((nowTimestamp - data[i].timestamp) / (1000.0 * 60)).toFloat()
-    //             if (minutesAgo in 0.0f..intervalMinutes) {
-    //                 val delta = (data.first().recalculated - data[i].recalculated) / minutesAgo * 5f
-    //                 recentDeltas.add(delta)
-    //             }
-    //         }
-    //     }
-    //     return recentDeltas
-    // }
     private fun getRecentDeltas(): List<Double> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
         if (data.isEmpty()) return emptyList()
@@ -2924,6 +2902,7 @@ fun appendCompactLog(
             consoleLog = consoleLog,
             consoleError = consoleError
         )
+        val gs = glucose_status
         val reasonAimi = StringBuilder()
         // On définit fromTime pour couvrir une longue période (par exemple, les 7 derniers jours)
         val fromTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7)
@@ -4347,10 +4326,53 @@ rT.reason.appendLine(
 // 1️⃣ Préparation des variables
             var overrideSafety = false
             var chosenRate: Double? = null
+            // Préparer l’input pour AIMI+ (plateau kicker, micro-resume, anti-stall)
+            val activeTbr = currenttemp // ta source TBR en cours
+            val lastTempIsZero = activeTbr?.rate == 0.0
+            val zeroSinceMin = if (lastTempIsZero) {
+                // adapte selon tes champs : ici, estimation grossière
+                max(0, activeTbr.duration - (activeTbr.minutesrunning ?: 0))
+            } else 0
+            val minutesSinceLastChange = /* ta métrique existante (sinon 0) */ 0
+
+            val inAimi = AIMIAdaptiveBasal.Input(
+                bg = glucose_status.glucose,
+                delta = glucose_status.delta,
+                shortAvgDelta = glucose_status.shortAvgDelta,
+                longAvgDelta = glucose_status.longAvgDelta,
+                accel = glucose_status.bgAcceleration,
+                r2 = glucose_status.corrSqu,
+                parabolaMin = glucose_status.parabolaMinutes,
+                combinedDelta = combinedDelta ?: 0.0,
+                profileBasal = profile_current_basal,
+                lastTempIsZero = lastTempIsZero,
+                zeroSinceMin = zeroSinceMin,
+                minutesSinceLastChange = minutesSinceLastChange
+            )
+
+            val aimiDecision = aimiAdaptiveBasal.suggest(inAimi)
+            if (aimiDecision.rateUph != null) {
+                val candidate = aimiDecision.rateUph
+                val dur = aimiDecision.durationMin
+                if (chosenRate == null) {
+                    chosenRate = candidate
+                    rT.duration = dur
+                    rT.reason.append(" | ").append(aimiDecision.reason)
+                } else if (candidate > chosenRate!!) {
+                    // on prend l’option la plus “énergique”, durée la plus courte par prudence
+                    chosenRate = candidate
+                    rT.duration = minOf(rT.duration!!, dur)
+                    rT.reason.append(" | override by AIMI+: ").append(aimiDecision.reason)
+                }
+                // (optionnel) cap dur de sécurité
+                val hardCap = 1.8 * profile_current_basal
+                chosenRate = min(chosenRate!!, hardCap)
+            }
+
 
 // Garde: une TBR "meal" forcée est-elle déjà active ? (≈ même valeur & durée > 0)
             val forcedMealActive =
-                kotlin.math.abs(currenttemp.rate - forcedBasalmealmodes.toDouble()) < 0.05 &&
+                abs(currenttemp.rate - forcedBasalmealmodes.toDouble()) < 0.05 &&
                     currenttemp.duration > 0
 
 // Sommes-nous dans la fenêtre repas 0–30 min ?
@@ -4545,7 +4567,34 @@ rT.reason.appendLine(
                     }
                 }
             }
+// 🎯 Plateau hyperglycémie : BG haut, pentes ~0 => pousser la basale
+            if (chosenRate == null) {
+                val isPlateauHigh =
+                    bg > 180 &&
+                        kotlin.math.abs(delta) <= 2.0 &&
+                        kotlin.math.abs(shortAvgDelta) <= 2.0 &&
+                        kotlin.math.abs(longAvgDelta) <= 2.0 &&
+                        // si tu as les features AIMI (optionnel, sinon enlève ces 2 lignes)
+                        (glucose_status?.duraISFminutes ?: 0.0) >= 15.0 &&
+                        kotlin.math.abs(glucose_status?.bgAcceleration ?: 0.0) <= 0.2
 
+                if (isPlateauHigh) {
+                    // Erreur au-dessus du seuil 180
+                    val err = (bg - 180.0).coerceAtLeast(0.0)
+
+                    // Boost proportionnel plafonné (ex : +15% à +60% selon l’écart)
+                    // 200 mg/dL → ~+33%, 235 → ~+60% cap
+                    val boostFrac = (err /variableSensitivity).coerceIn(0.15, 0.60)
+
+                    // Candidate = basale * (1 + boost); on prend le max vs basalaimi
+                    val candidate = profile_current_basal * (1.0 + boostFrac)
+                    val boosted = maxOf(candidate, basalaimi.toDouble())
+
+                    chosenRate = boosted.also {
+                        rT.reason.append(context.getString(R.string.aimi_plateau_high_boost))
+                    }
+                }
+            }
 // ------------------------------
 // 9️⃣ Hyperglycémies & corrections
             if (chosenRate == null) {
