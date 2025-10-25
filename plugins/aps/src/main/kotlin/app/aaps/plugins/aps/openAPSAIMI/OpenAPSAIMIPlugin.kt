@@ -984,28 +984,21 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         dialogMessage = R.string.oaps_aimi_plateau_band_summary,
                         title = R.string.oaps_aimi_plateau_band_title
                     ))
-                    addPreference(AdaptiveDoublePreference(
-                        ctx = context,
-                        doubleKey = DoubleKey.OApsAIMIR2Confident,
-                        dialogMessage = R.string.oaps_aimi_r2_conf_summary,
-                        title = R.string.oaps_aimi_r2_conf_title
-                    ))
 
-                    // Intensification (“kicker”) et plafonds
-                    addPreference(AdaptiveDoublePreference(
-                        ctx = context,
-                        doubleKey = DoubleKey.OApsAIMIMaxMultiplier,
-                        dialogMessage = R.string.oaps_aimi_max_multiplier_summary,
-                        title = R.string.oaps_aimi_max_multiplier_title
-                    ))
-
-                    // Schermata secondaria KICKER
                     addPreference(preferenceManager.createPreferenceScreen(context).apply {
                         key = "aimi_plateau_kicker_settings"
                         title = rh.gs(R.string.aimi_plateau_kicker_prefs)
                         addPreference(PreferenceCategory(context).apply {
                             title = rh.gs(R.string.aimi_plateau_kicker_prefs_title_menu)
                         })
+
+                        // Intensification (“kicker”) et plafonds
+                        addPreference(AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIMaxMultiplier,
+                            dialogMessage = R.string.oaps_aimi_max_multiplier_summary,
+                            title = R.string.oaps_aimi_max_multiplier_title
+                        ))
 
                         addPreference(AdaptiveDoublePreference(
                             ctx = context,
@@ -1035,9 +1028,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
                     addPreference(preferenceManager.createPreferenceScreen(context).apply {
                         key = "aimi_plateau_reprise_settings"
-                        title = rh.gs(R.string.aimi_plateau_reprise_prefs) // Titolo della riga cliccabile
+                        title = rh.gs(R.string.aimi_plateau_reprise_prefs)
 
-                        // Categoria (titolo *dentro* la nuova schermata)
                         addPreference(PreferenceCategory(context).apply {
                             title = rh.gs(R.string.aimi_plateau_reprise_prefs_title_menu)
                         })
@@ -1063,20 +1055,34 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         ))
                     })
 
+                     addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                         key = "aimi_plateau_antistall_settings"
+                         title = rh.gs(R.string.aimi_plateau_antistall_prefs)
 
-                    // Anti-stagnation & conditions de relâche (nella schermata "aimi_plateau_settings")
-                    addPreference(AdaptiveDoublePreference(
-                        ctx = context,
-                        doubleKey = DoubleKey.OApsAIMIAntiStallBias,
-                        dialogMessage = R.string.oaps_aimi_antistall_bias_summary,
-                        title = R.string.oaps_aimi_antistall_bias_title
-                    ))
-                    addPreference(AdaptiveDoublePreference(
-                        ctx = context,
-                        doubleKey = DoubleKey.OApsAIMIDeltaPosRelease,
-                        dialogMessage = R.string.oaps_aimi_delta_pos_release_summary,
-                        title = R.string.oaps_aimi_delta_pos_release_title
-                    ))
+                        addPreference(PreferenceCategory(context).apply {
+                            title = rh.gs(R.string.aimi_plateau_antistall_prefs_title_menu)
+                        })
+                        // Anti-stagnation & conditions de relâche
+                         addPreference(AdaptiveDoublePreference(
+                             ctx = context,
+                             doubleKey = DoubleKey.OApsAIMIR2Confident,
+                             dialogMessage = R.string.oaps_aimi_r2_conf_summary,
+                             title = R.string.oaps_aimi_r2_conf_title
+                         ))
+
+                        addPreference(AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIAntiStallBias,
+                            dialogMessage = R.string.oaps_aimi_antistall_bias_summary,
+                            title = R.string.oaps_aimi_antistall_bias_title
+                        ))
+                        addPreference(AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIDeltaPosRelease,
+                            dialogMessage = R.string.oaps_aimi_delta_pos_release_summary,
+                            title = R.string.oaps_aimi_delta_pos_release_title
+                        ))
+                    })
 
             })
 
