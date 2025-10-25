@@ -943,6 +943,7 @@
     <string name="pregnancy_delta_over_0_adjustment">Gravidanza &amp; Δ&gt;0 → aggiustamento.</string>
 
     <!-- AIMI: Plateau / smart hyperglycemia -->
+
     <string name="aimi_plateau_high_boost">Glicemia alta ma stabile (&gt;180)  ⇒ Intensificazione basale </string>
     <string name="aimi_plateau_prefs">Correzione glicemia alta ma stabile </string>
     <string name="aimi_plateau_prefs_title_menu">Impostazioni glicemia alta ma stabile</string>
@@ -950,6 +951,8 @@
     <string name="aimi_plateau_kicker_prefs_title_menu">Kicker settings</string>
     <string name="aimi_plateau_reprise_prefs">Reprise</string>
     <string name="aimi_plateau_reprise_prefs_title_menu">Reprise settings</string>
+    <string name="aimi_plateau_antistall_prefs">Anti-stall</string>
+    <string name="aimi_plateau_antistall_prefs_title_menu">Anti-stall settings</string>
     <string name="oaps_aimi_highbg_title">Soglia minima (mg/dL)</string>
     <string name="oaps_aimi_highbg_summary">Sopra questo valore, AIMI può aumentare temporaneamente la basale per evitare stagnazione.</string>
     <string name="oaps_aimi_plateau_band_title">Tolleranza variazione ± (mg/dL/5 min)</string>
