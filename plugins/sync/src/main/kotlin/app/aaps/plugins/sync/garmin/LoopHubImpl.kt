@@ -76,12 +76,12 @@ class LoopHubImpl @Inject constructor(
         get() = iobCobCalculator.calculateIobFromBolus().iob
 
     /** Returns the remaining bolus and basal insulin on board. */
-    override val insulinBasalOnboard :Double
+    override val insulinBasalOnboard: Double
         get() = iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended().basaliob
 
     /** Returns the remaining carbs on board. */
     override val carbsOnboard: Double?
-       get() = iobCobCalculator.getCobInfo("LoopHubImpl").displayCob
+        get() = iobCobCalculator.getCobInfo("LoopHubImpl").displayCob
 
     /** Returns true if the pump is connected. */
     override val isConnected: Boolean get() = loop.runningMode != RM.Mode.DISCONNECTED_PUMP
@@ -102,11 +102,15 @@ class LoopHubImpl @Inject constructor(
             } ?: Double.NaN
         }
 
-    override val lowGlucoseMark get() = profileUtil.convertToMgdl(
-        preferences.get(UnitDoubleKey.OverviewLowMark), glucoseUnit)
+    override val lowGlucoseMark
+        get() = profileUtil.convertToMgdl(
+            preferences.get(UnitDoubleKey.OverviewLowMark), glucoseUnit
+        )
 
-    override val highGlucoseMark get() = profileUtil.convertToMgdl(
-        preferences.get(UnitDoubleKey.OverviewHighMark), glucoseUnit)
+    override val highGlucoseMark
+        get() = profileUtil.convertToMgdl(
+            preferences.get(UnitDoubleKey.OverviewHighMark), glucoseUnit
+        )
 
     /** Tells the loop algorithm that the pump is physically connected. */
     override fun connectPump() {
