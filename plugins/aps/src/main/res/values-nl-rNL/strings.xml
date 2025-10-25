@@ -900,39 +900,40 @@
 
     <!-- AIMI: Plateau / smart hyperglycemia -->
 
-    <string name="aimi_plateau_high_boost">Boost => Hyper greater than 180 stable bg</string>
-    <string name="aimi_plateau_prefs">Plateau correction</string>
-    <string name="aimi_plateau_prefs_title_menu">Plateau correction settings</string>
-    <string name="aimi_plateau_kicker_prefs">Kicker</string>
-    <string name="aimi_plateau_kicker_prefs_title_menu">Kicker settings</string>
-    <string name="aimi_plateau_reprise_prefs">Reprise</string>
-    <string name="aimi_plateau_reprise_prefs_title_menu">Reprise settings</string>
-    <string name="aimi_plateau_antistall_prefs">Anti-stall</string>
-    <string name="aimi_plateau_antistall_prefs_title_menu">Anti-stall settings</string>
-    <string name="oaps_aimi_highbg_title">High threshold (mg/dL)</string>
-    <string name="oaps_aimi_highbg_summary">Above this BG, the “plateau” logic may intensify basal.</string>
-    <string name="oaps_aimi_plateau_band_title">Plateau band ± (mg/dL/5 min)</string>
-    <string name="oaps_aimi_plateau_band_summary">If |Δ| ≤ this value while BG is high, it’s treated as a plateau.</string>
-    <string name="oaps_aimi_r2_conf_title">R² confidence threshold</string>
-    <string name="oaps_aimi_r2_conf_summary">Quadratic-fit confidence required to trigger/strengthen plateau logic.</string>
-    <string name="oaps_aimi_max_multiplier_title">Max basal multiplier (×)</string>
-    <string name="oaps_aimi_max_multiplier_summary">Upper limit for basal during plateau (× profile basal).</string>
-    <string name="oaps_aimi_kicker_step_title">Kicker increment (×)</string>
-    <string name="oaps_aimi_kicker_step_summary">Step increase of the multiplier at each “kick”.</string>
-    <string name="oaps_aimi_kicker_minuph_title">Kicker floor (U/h)</string>
-    <string name="oaps_aimi_kicker_minuph_summary">Minimum absolute rate when the kicker is applied.</string>
-    <string name="oaps_aimi_kicker_startmin_title">Initial kicker duration (min)</string>
-    <string name="oaps_aimi_kicker_startmin_summary">Duration of the first intensification stage.</string>
-    <string name="oaps_aimi_kicker_maxmin_title">Max kicker duration (min)</string>
-    <string name="oaps_aimi_kicker_maxmin_summary">Total maximum time under “kicker” intensification.</string>
-    <string name="oaps_aimi_zero_resume_min_title">Delay before micro-resume (min)</string>
-    <string name="oaps_aimi_zero_resume_min_summary">After setting 0 U/h, wait this long before a safety micro-resume.</string>
-    <string name="oaps_aimi_zero_resume_frac_title">Micro-resume (× profile)</string>
-    <string name="oaps_aimi_zero_resume_frac_summary">Basal fraction to resume after 0 U/h (relative to profile basal).</string>
-    <string name="oaps_aimi_zero_resume_max_title">Max micro-resume duration (min)</string>
-    <string name="oaps_aimi_zero_resume_max_summary">Upper limit for micro-resume before re-evaluation.</string>
-    <string name="oaps_aimi_antistall_bias_title">Anti-stall bias (+×)</string>
-    <string name="oaps_aimi_antistall_bias_summary">Small bonus to the multiplier to “unstick” when plateauing.</string>
-    <string name="oaps_aimi_delta_pos_release_title">Positive Δ to release (mg/dL/5 min)</string>
-    <string name="oaps_aimi_delta_pos_release_summary">If Δ exceeds this value, reduce/relax the intensification.</string>
+    <string name="aimi_plateau_high_boost">High but stable glucose (>180) ⇒ Basal intensification</string>
+    <string name="aimi_plateau_prefs">Correction of high but stable glucose</string>
+    <string name="aimi_plateau_prefs_title_menu">Management of high but stable glucose</string>
+    <string name="aimi_plateau_kicker_prefs">Temporary basal increase (correction)</string>
+    <string name="aimi_plateau_kicker_prefs_title_menu">Temporary basal increase (correction) - Settings</string>
+    <string name="aimi_plateau_reprise_prefs">Restart from 0 U/h basal</string>
+    <string name="aimi_plateau_reprise_prefs_title_menu">Restart from 0 U/h basal - Settings</string>
+    <string name="aimi_plateau_antistall_prefs">Anti-stall prevention</string>
+    <string name="aimi_plateau_antistall_prefs_title_menu">Anti-stall prevention - Settings</string>
+    <string name="oaps_aimi_highbg_title">High glucose threshold (mg/dL)</string>
+    <string name="oaps_aimi_highbg_summary">Above this value, AIMI may temporarily increase basal to prevent stagnation.</string>
+    <string name="oaps_aimi_plateau_band_title">Variation tolerance ± (mg/dL/5 min)</string>
+    <string name="oaps_aimi_plateau_band_summary">If |Δ| ≤ this value while glucose is above the minimum to be considered high, it is considered stagnant.</string>
+    <string name="oaps_aimi_r2_conf_title">Stagnation duration (minutes)</string>
+    <string name="oaps_aimi_r2_conf_summary">Minimum time glucose must remain high but stable before the system considers it stagnant and acts.</string>
+    <string name="oaps_aimi_max_multiplier_title">Max profile basal multiplier</string>
+    <string name="oaps_aimi_max_multiplier_summary">Maximum coefficient by which AIMI can increase profile basal during high but stable glucose.</string>
+    <string name="oaps_aimi_kicker_step_title">Increment of profile basal multiplier per attempt</string>
+    <string name="oaps_aimi_kicker_step_summary">How much to increase the profile basal multiplier at each attempt if glucose does not decrease.</string>
+    <string name="oaps_aimi_kicker_minuph_title">Min. basal for each attempt to move stagnant glucose (U/h)</string>
+    <string name="oaps_aimi_kicker_minuph_summary">Minimum basal during the increase, sufficient to reduce high but stagnant glucose.</string>
+    <string name="oaps_aimi_kicker_startmin_title">Duration of first basal increase attempt (min)</string>
+    <string name="oaps_aimi_kicker_startmin_summary">Duration of the first phase of basal increase.</string>
+    <string name="oaps_aimi_kicker_maxmin_title">Maximum “kicker” duration (min)</string>
+    <string name="oaps_aimi_kicker_maxmin_summary">Total maximum time the intensification remains active.</string>
+    <string name="oaps_aimi_zero_resume_min_title">Waiting time before basal restoration (min)</string>
+    <string name="oaps_aimi_zero_resume_min_summary">After suspending basal (0 U/h), wait this time before safely reactivating it.</string>
+    <string name="oaps_aimi_zero_resume_frac_title">Micro-restoration (× profile)</string>
+    <string name="oaps_aimi_zero_resume_frac_summary">Fraction of profile basal to restore after 0 U/h.</string>
+    <string name="oaps_aimi_zero_resume_max_title">Maximum micro-restoration duration (min)</string>
+    <string name="oaps_aimi_zero_resume_max_summary">Maximum time for micro-restoration before a new evaluation.</string>
+    <string name="oaps_aimi_antistall_bias_title">Anti-stall correction</string>
+    <string name="oaps_aimi_antistall_bias_summary">Adds a small increment to the multiplier to help reduce stable but blocked glucose.</string>
+    <string name="oaps_aimi_delta_pos_release_title">Positive change to deactivate (mg/dL/5 min)</string>
+    <string name="oaps_aimi_delta_pos_release_summary">If Δ exceeds this value, basal intensification is reduced or stopped.</string>
+
 </resources>
