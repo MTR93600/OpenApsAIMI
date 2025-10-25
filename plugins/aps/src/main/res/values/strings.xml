@@ -989,7 +989,9 @@
     <string name="honeymoon_small_slope">Honeymoon small slope.</string>
     <string name="honeymoon_meal_slope">Honeymoon meal slope.</string>
     <string name="pregnancy_delta_over_0_adjustment">Pregnancy &amp; Δ&gt;0 → adjustment.</string>
+
     <!-- AIMI: Plateau / smart hyperglycemia -->
+
     <string name="aimi_plateau_high_boost">Boost => Hyper greater than 180 stable bg</string>
     <string name="aimi_plateau_prefs">Plateau correction</string>
     <string name="aimi_plateau_prefs_title_menu">Plateau correction settings</string>
@@ -997,6 +999,8 @@
     <string name="aimi_plateau_kicker_prefs_title_menu">Kicker settings</string>
     <string name="aimi_plateau_reprise_prefs">Reprise</string>
     <string name="aimi_plateau_reprise_prefs_title_menu">Reprise settings</string>
+    <string name="aimi_plateau_antistall_prefs">Anti-stall</string>
+    <string name="aimi_plateau_antistall_prefs_title_menu">Anti-stall settings</string>
     <string name="oaps_aimi_highbg_title">High threshold (mg/dL)</string>
     <string name="oaps_aimi_highbg_summary">Above this BG, the “plateau” logic may intensify basal.</string>
     <string name="oaps_aimi_plateau_band_title">Plateau band ± (mg/dL/5 min)</string>
