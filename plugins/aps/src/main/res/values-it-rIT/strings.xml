@@ -942,6 +942,15 @@
     <string name="honeymoon_meal_slope">Luna di miele pendenza pasto.</string>
     <string name="pregnancy_delta_over_0_adjustment">Gravidanza &amp; Δ&gt;0 → aggiustamento.</string>
 
+    <!-- AIMIAdaptiveBasal -->
+
+    <string name="aimi_profile_basal_zero">Basale di profilo = 0</string>
+    <string name="aimi_micro_resume">Micro-ripresa dopo %1$d min a 0U/h → %2$sU/h × %3$d min</string>
+    <string name="aimi_plateau_kicker">Spinta plateau (BG=%1$s, Δ≈0, R2=%2$s) → %3$sU/h × %4$d min</string>
+    <string name="aimi_anti_stall_bias">Spinta anti-stallo (+%1$d%%) perché R2=%2$s e Δ≈0</string>
+    <string name="aimi_no_action">Nessuna azione AIMI+</string>
+
+
     <!-- AIMI: Plateau / smart hyperglycemia -->
 
     <string name="aimi_plateau_high_boost">Glicemia alta ma stabile (&gt;180)  ⇒ Intensificazione basale </string>

@@ -13,6 +13,9 @@ import dagger.Reusable
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import android.content.Context
+import app.aaps.plugins.aps.R
+
 
 /**
  * AIMIAdaptiveBasal
@@ -23,6 +26,7 @@ import kotlin.math.min
  */
 @Reusable
 class AIMIAdaptiveBasal @Inject constructor(
+    private val context: Context,
     private val prefs: Preferences,
     private val log: AAPSLogger,
     private val fmt: DecimalFormatter
@@ -88,13 +92,15 @@ class AIMIAdaptiveBasal @Inject constructor(
         val deltaPosRelease = prefs.getOr(DoubleKey.OApsAIMIDeltaPosRelease, Defaults.DELTA_POS_FOR_RELEASE)
 
         // 0) garde-fous
-        if (input.profileBasal <= 0.0) return Decision(null, 0, "profile basal = 0")
+      //if (input.profileBasal <= 0.0) return Decision(null, 0, "profile basal = 0")
+        if (input.profileBasal <= 0.0) return Decision(null, 0, context.getString(R.string.aimi_profile_basal_zero))
 
         // 1) Micro-resume après longue coupure à 0 (sécurité + confort)
         if (input.lastTempIsZero && input.zeroSinceMin >= zeroResumeMin) {
             val rate = max(kickerMinUph, input.profileBasal * zeroResumeRateFrac)
             val dur = min(zeroResumeMax, max(10, input.minutesSinceLastChange / 2))
-            val r = "micro-resume after ${input.zeroSinceMin}m @0U/h → ${fmt.to2Decimal(rate)}U/h × ${dur}m"
+          //val r = "micro-resume after ${input.zeroSinceMin}m @0U/h → ${fmt.to2Decimal(rate)}U/h × ${dur}m"
+            val r = context.getString(R.string.aimi_micro_resume,input.zeroSinceMin,fmt.to2Decimal(rate),dur)
             log.debug(LTag.APS, "AIMI+ $r")
             return Decision(rateUph = rate, durationMin = dur, reason = r)
         }
@@ -113,7 +119,8 @@ class AIMIAdaptiveBasal @Inject constructor(
                 input.minutesSinceLastChange < 15 -> (kickerStartMin + 10)
                 else                              -> kickerMaxMin
             }
-            val r = "plateau kicker (BG=${fmt.to0Decimal(input.bg)}, Δ≈0, R2=${fmt.to2Decimal(input.r2)}) → ${fmt.to2Decimal(target)}U/h × ${dur}m"
+          //val r = "plateau kicker (BG=${fmt.to0Decimal(input.bg)}, Δ≈0, R2=${fmt.to2Decimal(input.r2)}) → ${fmt.to2Decimal(target)}U/h × ${dur}m"
+            val r = context.getString(R.string.aimi_plateau_kicker,fmt.to0Decimal(input.bg),fmt.to2Decimal(input.r2),fmt.to2Decimal(target),dur)
             log.debug(LTag.APS, "AIMI+ $r")
             return Decision(rateUph = target, durationMin = dur, reason = r)
         }
@@ -123,12 +130,14 @@ class AIMIAdaptiveBasal @Inject constructor(
         if (glued && input.bg > highBg && input.delta < deltaPosRelease) {
             val rate = min(input.profileBasal * (1.0 + antiStallBias), input.profileBasal * maxMult)
             val dur = 10
-            val r = "anti-stall bias (+${(antiStallBias*100).toInt()}%) because R2=${fmt.to2Decimal(input.r2)} & Δ≈0"
+          //val r = "anti-stall bias (+${(antiStallBias*100).toInt()}%) because R2=${fmt.to2Decimal(input.r2)} & Δ≈0"
+            val r = context.getString(R.string.aimi_anti_stall_bias,(antiStallBias * 100).toInt(),fmt.to2Decimal(input.r2))
             log.debug(LTag.APS, "AIMI+ $r")
             return Decision(rateUph = rate, durationMin = dur, reason = r)
         }
 
-        return Decision(null, 0, "no AIMI+ action")
+        //return Decision(null, 0, "no AIMI+ action")
+        return Decision(null, 0, context.getString(R.string.aimi_no_action))
     }
 
 
