@@ -63,7 +63,6 @@
     <string name="basaltest_hint1">https://wiki.aaps.app/en/latest/SettingUpAaps/YourAapsProfile.html</string>
     <string name="prerequisites_label">Điều kiện cần</string>
     <string name="prerequisites_what">Điều gì là cần thiết để cài đặt và sử dụng AAPS?</string>
-    <string name="prerequisites_computer">Một máy tính đã cài đặt và cấu hình Android Studio.</string>
     <string name="prerequisites_pump">Một bơm insulin tương thích nếu bạn dự định chạy vòng lặp kín (closed loop).</string>
     <string name="prerequisites_nightscout">Nightscout, để lưu nhật ký toàn bộ dữ liệu và xem lại các thiết lập.</string>
     <string name="prerequisites_beanandroiddeveloper">Kinh nghiệm về lập trình hoặc chỉnh sửa mã.</string>

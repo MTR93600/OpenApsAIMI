@@ -63,7 +63,6 @@
     <string name="basaltest_hint1">https://wiki.aaps.app/en/latest/SettingUpAaps/YourAapsProfile.html</string>
     <string name="prerequisites_label">Prerequisiti</string>
     <string name="prerequisites_what">Cosa è essenziale per configurare e usare AAPS?</string>
-    <string name="prerequisites_computer">Un computer con Android Studio installato e configurato.</string>
     <string name="prerequisites_pump">Un microinfusore compatibile se stai pianificando di eseguire un loop chiuso.</string>
     <string name="prerequisites_nightscout">Nightscout, per tenere un registro di tutti i dati e rivedere le impostazioni.</string>
     <string name="prerequisites_beanandroiddeveloper">Esperienza in programmazione o modifica di codice.</string>

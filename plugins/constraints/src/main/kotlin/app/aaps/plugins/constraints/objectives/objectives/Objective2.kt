@@ -19,7 +19,7 @@ class Objective2 @Inject constructor(
         tasks.add(
             ExamTask(this, R.string.prerequisites_label, R.string.prerequisites_what, "prerequisites")
                 .option(Option(R.string.prerequisites_nightscout, true))
-                .option(Option(R.string.prerequisites_computer, true))
+                .option(Option(R.string.prerequisites_build, true))
                 .option(Option(R.string.prerequisites_pump, true))
                 .option(Option(R.string.prerequisites_beanandroiddeveloper, false))
                 .hint(Hint(R.string.prerequisites_hint1))

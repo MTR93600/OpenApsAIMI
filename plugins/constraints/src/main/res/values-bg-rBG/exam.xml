@@ -54,7 +54,6 @@
     <string name="basaltest_fixed">Веднъж зададени и потвърдени, тези стойности не трябва да се променят с течение на времето.</string>
     <string name="prerequisites_label">Предпоставки</string>
     <string name="prerequisites_what">Какво е важно за настройка и използване на AAPS?</string>
-    <string name="prerequisites_computer">Компютър с инсталирано и конфигурирано Android Studio.</string>
     <string name="prerequisites_pump">Съвместима инсулинова помпа, ако планирате да използвате затворен цикъл.</string>
     <string name="prerequisites_nightscout">Nightscout, за водене на регистър на всички данни и преглед на настройките.</string>
     <string name="prerequisites_beanandroiddeveloper">Опит в програмирането или редактирането на програмен код.</string>

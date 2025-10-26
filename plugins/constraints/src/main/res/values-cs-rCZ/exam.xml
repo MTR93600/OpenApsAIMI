@@ -63,7 +63,6 @@
     <string name="basaltest_hint1">https://wiki.aaps.app/cs/latest/SettingUpAaps/YourAapsProfile.html</string>
     <string name="prerequisites_label">Požadavky</string>
     <string name="prerequisites_what">Co je nezbytné pro nastavení a používání AAPS?</string>
-    <string name="prerequisites_computer">Počítač s nainstalovanou a konfigurovanou aplikací Android Studio.</string>
     <string name="prerequisites_pump">Kompatibilní inzulínová pumpa, pokud plánujete spuštění uzavřené smyčky.</string>
     <string name="prerequisites_nightscout">Nightscout pro záznam všech dat a kontrolu nastavení.</string>
     <string name="prerequisites_beanandroiddeveloper">Zkušenosti s programováním nebo úpravou kódu.</string>

@@ -54,7 +54,6 @@
     <string name="basaltest_fixed">Odată setate și validate, aceste valori nu ar trebui să se modifice în timp.</string>
     <string name="prerequisites_label">Cerinţe preliminare</string>
     <string name="prerequisites_what">Ce este esențial pentru crearea și utilizarea AAPS?</string>
-    <string name="prerequisites_computer">Un computer cu Android Studio instalat și configurat.</string>
     <string name="prerequisites_pump">O pompă de insulină compatibilă dacă intenţionaţi să rulaţi o buclă închisă.</string>
     <string name="prerequisites_nightscout">Nightscout, pentru a păstra un jurnal cu toate datele și pentru evaluarea setărilor.</string>
     <string name="prerequisites_beanandroiddeveloper">Experiență în programare sau editare cod.</string>
