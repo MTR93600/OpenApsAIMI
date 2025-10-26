@@ -168,7 +168,7 @@
     <string name="pump_disconnected">Bomba desconectada</string>
     <!--    autoISF -->
     <string name="half_basal_exercise_target_title">Basal media con objetivo actividad</string>
-    <string name="half_basal_exercise_target_summary">Establecer un número, por ejemplo, 160. Significa que cuando el objetivo temporal es 160 mg/dL y tenemos habilitado \"Objetivo temporal alto aumenta la sensibilidad\", ejecuta el 50%% de la basal en ese nivel (120 = 75%%; 140 = 60%%).</string>
+    <string name="half_basal_exercise_target_summary">Establecer un número, por ejemplo, 160. Significa que cuando el objetivo temporal es 160 mg/dL y tenemos habilitado "Objetivo temporal alto aumenta la sensibilidad", ejecuta el 50%% de la basal en ese nivel (120 = 75%%; 140 = 60%%).</string>
     <string name="autoISF_settings_title">Ajustes de AutoISF</string>
     <string name="autoISF_settings_summary">AutoISF permite adaptar el factor de sensibilidad a la insulina (ISF) en varios escenarios de comportamiento de la glucosa\n\nTambién puede adaptar la configuración de entrega de SMBs</string>
     <string name="smb_delivery_settings_title">Ajustes de entrega de SMB</string>
@@ -180,7 +180,7 @@
     <string name="openapsama_lower_ISFrange_weight_summary">Este es el peso que se aplica cuando la glucosa está debajo del objetivo, que disminuye el ISF, reduciendo potencialmente la administración de insulina.\n\nEl valor por defecto de 0.0 deshabilita esta opción.</string>
     <string name="openapsama_higher_ISFrange_weight_summary">Este es el peso que se aplica cuando la glucosa esta por encima del objetivo, que fortalece el ISF, aumentando potencialmente la administración de insulina.\n\nEl valor por defecto de 0.0 deshabilita esta opción.</string>
     <string name="openapsama_pp_ISF_weight_summary">Este es el peso que se aplica cuando la glucosa esta subiendo, que fortalece el ISF, aumentando potencialmente la administración de insulina.\n\nEl valor por defecto de 0.0 deshabilita esta opción.</string>
-    <string name="openapsama_bgAccel_ISF_weight_summary">Este es el peso que se aplica cuando la glucosa esta accelerando, que fortalece el ISF, aumentando potencialmente la administración de insulina.\n\nEl valor por defecto de 0.0 deshabilita esta opción.</string>
+    <string name="openapsama_bgAccel_ISF_weight_summary">Este es el peso que se aplica cuando la glucosa está acelerando, que fortalece el ISF, aumentando potencialmente la administración de insulina. El valor por defecto de 0.0 deshabilita esta opción.</string>
     <string name="openapsama_bgBrake_ISF_weight_summary">Este es el peso que se aplica cuando la glucosa esta decelerando, que disminuye el ISF, reduciendo potencialmente la administración de insulina.\n\nEl valor por defecto de 0.0 deshabilita esta opción.</string>
     <string name="openapsama_autoISF_max">Ratio máximo de AutoISF\n(autoISF_max)</string>
     <string name="openapsama_autoISF_min">Ratio mínimo de AutoISF\n(autoISF_min)</string>
@@ -192,7 +192,7 @@
     <string name="openapsama_dura_ISF_weight">Peso de dura_ISF\n(dura_ISF_weight)</string>
     <string name="openapsama_smb_delivery_ratio">Tasa de entrega de SMB fija\n(smb_delivery_ratio)</string>
     <string name="openapsama_smb_delivery_ratio_min">Tasa de entrega de SMB variable, extremo inferior\n(smb_delivery_ratio_min)</string>
-    <string name="openapsama_smb_delivery_ratio_max">Tasa de entrega de SMB variable, extremo superior\n(smb_delivery_ratio_min)</string>
+    <string name="openapsama_smb_delivery_ratio_max">Tasa de entrega de SMB variable, extremo superior(smb_delivery_ratio_max)</string>
     <string name="openapsama_smb_delivery_ratio_bg_range">Tasa de entrega de SMB variable, rango de glucosa mapeado\n(smb_delivery_ratio_bg_range)</string>
     <string name="openapsama_smb_max_range_extension">Extensión del rango máximo para SMB/UAM\n(smb_max_range_extension)</string>
     <string name="openapsama_smb_delivery_ratio_summary">Valor predeterminado: 0.5 Este es otro límite de seguridad clave de OpenAPS y especifica qué proporción de la insulina total requerida se puede administrar como SMB. Esto es para evitar que las personas entren en terreno peligroso al configurar solicitudes de SMB desde el teléfono de los cuidadores al mismo tiempo. Aumenta este valor experimental lentamente y con precaución.</string>
@@ -729,7 +729,7 @@
     <string name="original_file_missing">The original file does not exist.</string>
     <string name="file_too_short">The file contains 200 lines or fewer, no deletion performed.</string>
     <string name="last_200_deleted">The last 200 lines have been deleted. The original file was saved as \'%1$s\'.</string>
-    <string name="reason_data_removed">The values for date %1$s have been deleted because TIR1DAYIR is lower than 85%%%.</string>
+    <string name="reason_data_removed">The values for date %1$s have been deleted because TIR1DAYIR is lower than 85%%.</string>
     <string name="reason_deletion_time_restricted">The deletion can only be executed between 00:05 and 00:10.</string>
     <string name="reason_no_deletion_needed">No deletion needed: tir1DAYIR is greater than or equal to 85%.</string>
     <string name="safety_sport_smb_zero">🏃‍♂️ Safety sport → SMB=0</string>
