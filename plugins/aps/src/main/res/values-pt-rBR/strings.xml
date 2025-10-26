@@ -1045,6 +1045,14 @@
     <string name="aimi_anti_stall_bias">Anti-stall bias (+%1$d%%) because R2=%2$s &amp; Δ≈0</string>
     <string name="aimi_no_action">No AIMI+ action</string>
 
+    <!-- AIMIAdaptiveBasal -->
+
+    <string name="aimi_profile_basal_zero">Profile basal = 0</string>
+    <string name="aimi_micro_resume">Micro-resume after %1$dm @0U/h → %2$sU/h × %3$dm</string>
+    <string name="aimi_plateau_kicker">Plateau kicker (BG=%1$s, Δ≈0, R2=%2$s) → %3$sU/h × %4$dm</string>
+    <string name="aimi_anti_stall_bias">Anti-stall bias (+%1$d%%) because R2=%2$s &amp; Δ≈0</string>
+    <string name="aimi_no_action">No AIMI+ action</string>
+
     <!-- AIMI: Plateau / smart hyperglycemia -->
 
     <string name="aimi_plateau_high_boost">High but stable glucose (>180) ⇒ Basal intensification</string>
