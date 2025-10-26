@@ -248,10 +248,10 @@
     <string name="DynISFAdjusthyper_title"><![CDATA[DynISF Aanpassingsfactor % BG > 120]]></string>
     <string name="prebolus_meal_mode_summary">Als u een notitie op de actiepagina instelt met het woord "maaltijd", ontvangt u deze waarde eenmalig als pre-bolus.</string>
     <string name="prebolus_meal_mode_title">Prebolus</string>
-    <string name="prebolus_highcarb_mode_title">Prebolus 1/2</string>
-    <string name="prebolus2_highcarb_mode_title">Prebolus 2/2</string>
-    <string name="prebolus_highcarb_mode_summary">Prebolus met hoge koolhydraatmodus 1/2</string>
-    <string name="prebolus2_highcarb_mode_summary">Prebolus met hoge koolhydraatmodus 2/2</string>
+    <string name="prebolus_highcarb_mode_title">Prebolus 1 of 2</string>
+    <string name="prebolus2_highcarb_mode_title">Prebolus 2 of 2</string>
+    <string name="prebolus_highcarb_mode_summary">Prebolus met hoge koolhydraatmodus 1 of 2</string>
+    <string name="prebolus2_highcarb_mode_summary">Prebolus met hoge koolhydraatmodus 2 of 2</string>
     <string name="number_day_ML_training_summary">Aantal dagen om het model te trainen</string>
     <string name="nb_day_ML_training_title">ML Aantal Trainingsdagen</string>
     <string name="nb_minutes_ML_training_title">Aantal minuten om de gegevens te trainen</string>
@@ -318,16 +318,16 @@
     <string name="openapsaimi_highBG_maxsmb_summary">Max SMB-waarde wanneer BG hoger is dan 120</string>
     <string name="openapsaimi_highBG_maxsmb_title">Max SMB Hoge BG</string>
     <string name="OApsAIMI_Enable_night_title">Nachtmodus (SMB/2)</string>
-    <string name="prebolus_lunch_mode_summary">Lunchmodus Prebolus 1/2</string>
-    <string name="prebolus2_lunch_mode_summary">Lunchmodus Prebolus 2/2</string>
-    <string name="prebolus_lunch_mode_title">Prebolus 1/2</string>
-    <string name="prebolus2_lunch_mode_title">Prebolus 2/2</string>
+    <string name="prebolus_lunch_mode_summary">Lunchmodus Prebolus 1 of 2</string>
+    <string name="prebolus2_lunch_mode_summary">Lunchmodus Prebolus 2 of 2</string>
+    <string name="prebolus_lunch_mode_title">Prebolus 1 of 2</string>
+    <string name="prebolus2_lunch_mode_title">Prebolus 2 of 2</string>
     <string name="oaps_aimi_LunchAdjFact_summary">Lunchmodus DynISF-factor</string>
     <string name="oaps_aimi_LunchAdjFact_title">Lunchmodus DynISF</string>
-    <string name="prebolus_Dinner_mode_summary">Diner Modus Prebolus 1/2</string>
-    <string name="prebolus2_Dinner_mode_summary">Diner Modus Prebolus 2/2</string>
-    <string name="prebolus_Dinner_mode_title">Prebolus 1/2</string>
-    <string name="prebolus2_Dinner_mode_title">Prebolus 2/2</string>
+    <string name="prebolus_Dinner_mode_summary">Diner Modus Prebolus 1 of 2</string>
+    <string name="prebolus2_Dinner_mode_summary">Diner Modus Prebolus 2 of 2</string>
+    <string name="prebolus_Dinner_mode_title">Prebolus 1 of 2</string>
+    <string name="prebolus2_Dinner_mode_title">Prebolus 2 of 2</string>
     <string name="OApsAIMI_LunchFactor_summary">Lunchmodus Reactiviteit is % van insuline vereist voor één SMB</string>
     <string name="OApsAIMI_lunchFactor_title">Reactiviteit</string>
     <string name="oaps_aimi_lunch_interval_summary">Lunchmodus SMB Interval</string>
@@ -346,10 +346,10 @@
     <string name="OApsAIMI_FCLFactor_summary">% van insuline vereist voor SMB in FCL-modus</string>
     <string name="oaps_aimi_FCL_interval_summary">FCL SMB Interval</string>
     <string name="oaps_aimi_FCL_interval_title">FCL SMB Interval</string>
-    <string name="prebolus_BF_mode_summary">Ontbijtmodus Prebolus 1/2</string>
-    <string name="prebolus_BF_mode_title">Prebolus 1/2</string>
-    <string name="prebolus2_BF_mode_summary">Ontbijtmodus Prebolus 2/2</string>
-    <string name="prebolus2_BF_mode_title">Prebolus 2/2</string>
+    <string name="prebolus_BF_mode_summary">Ontbijtmodus Prebolus 1 of 2</string>
+    <string name="prebolus_BF_mode_title">Prebolus 1 of 2</string>
+    <string name="prebolus2_BF_mode_summary">Ontbijtmodus Prebolus 2 of 2</string>
+    <string name="prebolus2_BF_mode_title">Prebolus 2 of 2</string>
     <string name="oaps_aimi_BFdjFact_summary">DynISF Ontbijtmodus</string>
     <string name="oaps_aimi_BFAdjFact_title">DynISF Ontbijtmodus</string>
     <string name="OApsAIMI_BFFactor_summary">% van insuline vereist voor één SMB</string>
@@ -602,12 +602,12 @@
     <string name="table_plugin_autodrive_1">Autodrive vroege maaltijddetectie/snack: Microbolus %1$.1fE, Gecombineerde Delta: %2$.1f, Voorspeld: %3$.1f, Versnelling: %4$.1f.</string>
     <string name="table_plugin_autodrive_2">→ Microbolus Autodrive Modus %1$.1fE\n  • Doel BG: %2$.1f\n  • Helling van min afwijking: %3$.3f\n  • BG versnelling: %4$.2f\n</string>
     <string name="table_plugin_mealmodes_prebolus_1">Microbolus Maaltijdmodus: %1$.1fE.</string>
-    <string name="table_plugin_mealmodes_prebolus_2">Microbolus 1/2 Ontbijtmodus %1$.1fE.</string>
-    <string name="table_plugin_mealmodes_prebolus_3">Microbolus 2/2 Ontbijtmodus %1$.1fE.</string>
-    <string name="table_plugin_mealmodes_prebolus_4">Microbolus 1/2 Lunchmodus %1$.1fE.</string>
-    <string name="table_plugin_mealmodes_prebolus_5">Microbolus 2/2 Lunchmodus %1$.1fE.</string>
-    <string name="table_plugin_mealmodes_prebolus_6">Microbolus 1/2 Dinermodus %1$.1fE.</string>
-    <string name="table_plugin_mealmodes_prebolus_7">Microbolus 2/2 Dinermodus %1$.1fE.</string>
+    <string name="table_plugin_mealmodes_prebolus_2">Microbolus 1 of 2 Ontbijtmodus %1$.1fE.</string>
+    <string name="table_plugin_mealmodes_prebolus_3">Microbolus 2 of 2 Ontbijtmodus %1$.1fE.</string>
+    <string name="table_plugin_mealmodes_prebolus_4">Microbolus 1 of 2 Lunchmodus %1$.1fE.</string>
+    <string name="table_plugin_mealmodes_prebolus_5">Microbolus 2 of 2 Lunchmodus %1$.1fE.</string>
+    <string name="table_plugin_mealmodes_prebolus_6">Microbolus 1 of 2 Dinermodus %1$.1fE.</string>
+    <string name="table_plugin_mealmodes_prebolus_7">Microbolus 2 of 2 Dinermodus %1$.1fE.</string>
     <string name="table_plugin_mealmodes_prebolus_8">Microbolus Hoge Koolhydraten Modus %1$.1fE.</string>
     <string name="table_plugin_mealmodes_prebolus_9">Microbolus snackmodus %1$.1fE.</string>
     <string name="basal_arguments_1">Neutraal tarief = profiel &amp; TBR actief → TBR verwijderen.\n</string>
@@ -802,12 +802,12 @@
     <string name="target_bg">&#160;• Doel BG: %1$.0f</string>
     <string name="slope_from_min_deviation">&#160;• Helling van min. afwijking: %1$.2f</string>
     <string name="bg_acceleration">&#160;• BG versnelling: %1$s</string>
-    <string name="reason_prebolus_bfast1">&#160;Microbolus 1/2 Ontbijtmodus %.2fE.</string>
-    <string name="reason_prebolus_bfast2">&#160;Microbolus 2/2 Ontbijtmodus %.2fE.</string>
-    <string name="reason_prebolus_lunch1">&#160;Microbolus 1/2 Lunchmodus %.2fE.</string>
-    <string name="reason_prebolus_lunch2">&#160;Microbolus 2/2 Lunchmodus %.2fE.</string>
-    <string name="reason_prebolus_dinner1">&#160;Microbolus 1/2 Dinermodus %.2fE.</string>
-    <string name="reason_prebolus_dinner2">&#160;Microbolus 2/2 Dinermodus %.2fE.</string>
+    <string name="reason_prebolus_bfast1">&#160;Microbolus 1 of 2 Ontbijtmodus %.2fE.</string>
+    <string name="reason_prebolus_bfast2">&#160;Microbolus 2 of 2 Ontbijtmodus %.2fE.</string>
+    <string name="reason_prebolus_lunch1">&#160;Microbolus 1 of 2 Lunchmodus %.2fE.</string>
+    <string name="reason_prebolus_lunch2">&#160;Microbolus 2 of 2 Lunchmodus %.2fE.</string>
+    <string name="reason_prebolus_dinner1">&#160;Microbolus 1 of 2 Dinermodus %.2fE.</string>
+    <string name="reason_prebolus_dinner2">&#160;Microbolus 2 of 2 Dinermodus %.2fE.</string>
     <string name="reason_prebolus_highcarb">&#160;Microbolus Hoge Koolhydraten Modus %.2fE.</string>
     <string name="reason_prebolus_snack">&#160;Microbolus Snackmodus %.2fE.</string>
     <string name="reason_maxsmb">&#160;| MaxSMB %.1f E&#160;\n</string>
@@ -900,11 +900,11 @@
 
     <!-- AIMIAdaptiveBasal -->
 
-    <string name="aimi_profile_basal_zero">Profile basal = 0</string>
-    <string name="aimi_micro_resume">Micro-resume after %1$dm @0U/h → %2$sU/h × %3$dm</string>
-    <string name="aimi_plateau_kicker">Plateau kicker (BG=%1$s, Δ≈0, R2=%2$s) → %3$sU/h × %4$dm</string>
-    <string name="aimi_anti_stall_bias">Anti-stall bias (+%1$d%%) because R2=%2$s &amp; Δ≈0</string>
-    <string name="aimi_no_action">No AIMI+ action</string>
+    <string name="aimi_profile_basal_zero">Profile basal = 0&#160;</string>
+    <string name="aimi_micro_resume">Micro-resume after %1$dm @0U/h → %2$sU/h × %3$dm&#160;</string>
+    <string name="aimi_plateau_kicker">Plateau kicker (BG=%1$s, Δ≈0, R2=%2$s) → %3$sU/h × %4$dm&#160;</string>
+    <string name="aimi_anti_stall_bias">Anti-stall bias (+%1$d%%) because R2=%2$s &amp; Δ≈0&#160;</string>
+    <string name="aimi_no_action">No AIMI+ action&#160;</string>
 
     <!-- AIMI: Plateau / smart hyperglycemia -->
 
