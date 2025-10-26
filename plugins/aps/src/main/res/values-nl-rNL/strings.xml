@@ -900,11 +900,11 @@
 
     <!-- AIMIAdaptiveBasal -->
 
-    <string name="aimi_profile_basal_zero">Profile basal = 0&#160;</string>
-    <string name="aimi_micro_resume">Micro-resume after %1$dm @0U/h → %2$sU/h × %3$dm&#160;</string>
-    <string name="aimi_plateau_kicker">Plateau kicker (BG=%1$s, Δ≈0, R2=%2$s) → %3$sU/h × %4$dm&#160;</string>
-    <string name="aimi_anti_stall_bias">Anti-stall bias (+%1$d%%) because R2=%2$s &amp; Δ≈0&#160;</string>
-    <string name="aimi_no_action">No AIMI+ action&#160;</string>
+    <string name="aimi_profile_basal_zero">Profiel basaal = 0&#160;</string>
+    <string name="aimi_micro_resume">Micro-hervatting na %1$dm @0E/u → %2$sE/u × %3$dm&#160;</string>
+    <string name="aimi_plateau_kicker">Plateau kicker (BG=%1$s, Δ≈0, R2=%2$s) → %3$sE/u × %4$dm&#160;</string>
+    <string name="aimi_anti_stall_bias">Anti-vastloop bias (+%1$d%%) omdat R2=%2$s &amp; Δ≈0&#160;</string>
+    <string name="aimi_no_action">Geen AIMI+ actie&#160;</string>
 
     <!-- AIMI: Plateau / smart hyperglycemia -->
 
