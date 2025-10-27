@@ -16,7 +16,6 @@ import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.EPS
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
-import app.aaps.core.interfaces.androidPermissions.AndroidPermission
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -48,7 +47,6 @@ import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
-import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.objects.constraints.ConstraintObject
 import app.aaps.core.objects.extensions.getCustomizedName
 import app.aaps.core.objects.profile.ProfileSealed
@@ -89,17 +87,15 @@ class CommandQueueImplementation @Inject constructor(
     private val injector: HasAndroidInjector,
     private val aapsLogger: AAPSLogger,
     private val rxBus: RxBus,
-    private val aapsSchedulers: AapsSchedulers,
+    aapsSchedulers: AapsSchedulers,
     private val rh: ResourceHelper,
     private val constraintChecker: ConstraintsChecker,
     private val profileFunction: ProfileFunction,
     private val activePlugin: ActivePlugin,
     private val context: Context,
-    private val preferences: Preferences,
     private val config: Config,
     private val dateUtil: DateUtil,
     private val fabricPrivacy: FabricPrivacy,
-    private val androidPermission: AndroidPermission,
     private val uiInteraction: UiInteraction,
     private val persistenceLayer: PersistenceLayer,
     private val decimalFormatter: DecimalFormatter,
@@ -269,17 +265,6 @@ class CommandQueueImplementation @Inject constructor(
         }
     }
 
-    override fun independentConnect(reason: String, callback: Callback?) {
-        aapsLogger.debug(LTag.PUMPQUEUE, "Starting new queue")
-        val tempCommandQueue = CommandQueueImplementation(
-            injector, aapsLogger, rxBus, aapsSchedulers, rh,
-            constraintChecker, profileFunction, activePlugin, context, preferences,
-            config, dateUtil, fabricPrivacy, androidPermission, uiInteraction, persistenceLayer, decimalFormatter, pumpEnactResultProvider, CommandQueueName("CommandQueueIndependentInstance"), workManager
-        )
-        tempCommandQueue.readStatus(reason, callback)
-        tempCommandQueue.disposable.clear()
-    }
-
     @Synchronized
     override fun bolusInQueue(): Boolean {
         if (isRunning(CommandType.BOLUS)) return true
@@ -354,6 +339,7 @@ class CommandQueueImplementation @Inject constructor(
         detailedBolusInfo.carbs =
             constraintChecker.applyCarbsConstraints(ConstraintObject(detailedBolusInfo.carbs.toInt(), aapsLogger)).value().toDouble()
         // add new command to queue
+        BolusProgressData.set(detailedBolusInfo.insulin, isSMB = detailedBolusInfo.bolusType === BS.Type.SMB, id = detailedBolusInfo.id)
         if (detailedBolusInfo.bolusType == BS.Type.SMB) {
             add(CommandSMBBolus(injector, detailedBolusInfo, callback))
         } else {
@@ -696,7 +682,6 @@ class CommandQueueImplementation @Inject constructor(
     }
 
     private fun showBolusProgressDialog(detailedBolusInfo: DetailedBolusInfo) {
-        BolusProgressData.set(detailedBolusInfo.insulin, isSMB = detailedBolusInfo.bolusType === BS.Type.SMB, id = detailedBolusInfo.id)
         if (detailedBolusInfo.context != null) {
             uiInteraction.runBolusProgressDialog((detailedBolusInfo.context as AppCompatActivity).supportFragmentManager)
         } else {

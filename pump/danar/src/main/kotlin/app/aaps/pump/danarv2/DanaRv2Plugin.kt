@@ -173,7 +173,7 @@ class DanaRv2Plugin @Inject constructor(
         var connectionOK = false
         if (detailedBolusInfo.insulin > 0) connectionOK = executionService?.bolus(detailedBolusInfo) == true
         val result = pumpEnactResultProvider.get()
-        result.success(connectionOK && abs(detailedBolusInfo.insulin - BolusProgressData.delivered) < pumpDescription.bolusStep)
+        result.success(connectionOK && (abs(detailedBolusInfo.insulin - BolusProgressData.delivered) < pumpDescription.bolusStep || danaPump.bolusStopped))
             .bolusDelivered(BolusProgressData.delivered)
         if (!result.success) result.comment(
             rh.gs(

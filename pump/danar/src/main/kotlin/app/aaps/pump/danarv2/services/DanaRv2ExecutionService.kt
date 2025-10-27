@@ -1,6 +1,5 @@
 package app.aaps.pump.danarv2.services
 
-import android.annotation.SuppressLint
 import android.os.Binder
 import android.os.SystemClock
 import app.aaps.core.data.configuration.Constants
@@ -25,7 +24,6 @@ import app.aaps.core.interfaces.rx.events.EventPumpStatusChanged
 import app.aaps.pump.dana.R
 import app.aaps.pump.dana.events.EventDanaRNewStatus
 import app.aaps.pump.dana.keys.DanaIntKey
-import app.aaps.pump.danar.SerialIOThread
 import app.aaps.pump.danar.comm.MessageBase
 import app.aaps.pump.danar.comm.MsgBolusStart
 import app.aaps.pump.danar.comm.MsgBolusStartWithSpeed
@@ -58,7 +56,6 @@ import app.aaps.pump.danarv2.comm.MessageHashTableRv2
 import app.aaps.pump.danarv2.comm.MsgCheckValueV2
 import app.aaps.pump.danarv2.comm.MsgHistoryEventsV2
 import app.aaps.pump.danarv2.comm.MsgSetAPSTempBasalStartV2
-import java.io.IOException
 import javax.inject.Inject
 import kotlin.math.abs
 
@@ -69,37 +66,12 @@ class DanaRv2ExecutionService : AbstractDanaRExecutionService() {
     @Inject lateinit var commandQueue: CommandQueue
     @Inject lateinit var messageHashTableRv2: MessageHashTableRv2
     @Inject lateinit var profileFunction: ProfileFunction
+
+    override fun messageHashTable() = messageHashTableRv2
+
     override fun onCreate() {
         super.onCreate()
         mBinder = LocalBinder()
-    }
-
-    @SuppressLint("MissingPermission") override fun connect() {
-        if (isConnecting) return
-        Thread(Runnable {
-            mHandshakeInProgress = false
-            isConnecting = true
-            getBTSocketForSelectedPump()
-            if (mRfcommSocket == null || mBTDevice == null) {
-                isConnecting = false
-                return@Runnable  // Device not found
-            }
-            try {
-                mRfcommSocket?.connect()
-            } catch (e: IOException) {
-                //log.error("Unhandled exception", e);
-                if (e.message?.contains("socket closed") == true) {
-                    aapsLogger.error("Unhandled exception", e)
-                }
-            }
-            if (isConnected) {
-                mSerialIOThread?.disconnect("Recreate SerialIOThread")
-                mSerialIOThread = SerialIOThread(aapsLogger, mRfcommSocket!!, messageHashTableRv2, danaPump)
-                mHandshakeInProgress = true
-                rxBus.send(EventPumpStatusChanged(EventPumpStatusChanged.Status.HANDSHAKING, 0))
-            }
-            isConnecting = false
-        }).start()
     }
 
     override fun getPumpStatus() {
@@ -294,6 +266,7 @@ class DanaRv2ExecutionService : AbstractDanaRExecutionService() {
         danaPump.bolusStopped = false
         danaPump.bolusStopForced = false
         val bolusStart = System.currentTimeMillis()
+        var connectionBroken = false
         if (detailedBolusInfo.insulin > 0) {
             if (!danaPump.bolusStopped) {
                 mSerialIOThread?.sendMessage(start)
@@ -301,11 +274,10 @@ class DanaRv2ExecutionService : AbstractDanaRExecutionService() {
                 BolusProgressData.delivered = 0.0
                 return false
             }
-            while (!danaPump.bolusStopped && !start.failed) {
+            while (!danaPump.bolusStopped && !start.failed && !connectionBroken) {
                 SystemClock.sleep(100)
                 if (System.currentTimeMillis() - danaPump.bolusProgressLastTimeStamp > 15 * 1000L) { // if i didn't receive status for more than 15 sec expecting broken comm
-                    danaPump.bolusStopped = true
-                    danaPump.bolusStopForced = true
+                    connectionBroken = true
                     aapsLogger.error("Communication stopped")
                 }
             }
@@ -333,7 +305,7 @@ class DanaRv2ExecutionService : AbstractDanaRExecutionService() {
                 rxBus.send(EventPumpStatusChanged(rh.gs(app.aaps.core.interfaces.R.string.disconnecting)))
             }
         })
-        return !start.failed
+        return !start.failed && !connectionBroken
     }
 
     override fun loadEvents(): PumpEnactResult {

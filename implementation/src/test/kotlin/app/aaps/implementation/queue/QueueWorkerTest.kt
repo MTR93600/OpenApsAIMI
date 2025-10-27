@@ -62,7 +62,7 @@ class QueueWorkerTest : TestBaseWithProfile() {
     fun prepare() {
         commandQueue = CommandQueueImplementation(
             injector, aapsLogger, rxBus, aapsSchedulers, rh, constraintChecker,
-            profileFunction, activePlugin, context, preferences, config, dateUtil, fabricPrivacy, androidPermission,
+            profileFunction, activePlugin, context, config, dateUtil, fabricPrivacy,
             uiInteraction, persistenceLayer, decimalFormatter, pumpEnactResultProvider, jobName, workManager
         )
 

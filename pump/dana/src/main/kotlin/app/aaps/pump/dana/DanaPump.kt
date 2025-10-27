@@ -106,7 +106,6 @@ class DanaPump @Inject constructor(
     var pumpSuspended = false
     var calculatorEnabled = false
     var dailyTotalUnits = 0.0
-    var decRatio = 0 // RS v3: [%] for pump IOB calculation
     var maxDailyTotalUnits = 0
     var bolusStep = 0.1
     var basalStep = 0.1

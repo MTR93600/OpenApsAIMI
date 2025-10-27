@@ -1,6 +1,5 @@
 package app.aaps.pump.danar.services
 
-import android.annotation.SuppressLint
 import android.os.Binder
 import android.os.SystemClock
 import app.aaps.core.data.configuration.Constants
@@ -13,20 +12,17 @@ import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.BolusProgressData.stopPressed
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpEnactResult
-import app.aaps.core.interfaces.queue.Callback
 import app.aaps.core.interfaces.queue.Command
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.rx.events.EventInitializationChanged
 import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
 import app.aaps.core.interfaces.rx.events.EventProfileSwitchChanged
 import app.aaps.core.interfaces.rx.events.EventPumpStatusChanged
-import app.aaps.core.utils.notifyAll
-import app.aaps.core.utils.wait
+import app.aaps.core.ui.toast.ToastUtils
 import app.aaps.pump.dana.R
 import app.aaps.pump.dana.events.EventDanaRNewStatus
 import app.aaps.pump.dana.keys.DanaIntKey
 import app.aaps.pump.danar.DanaRPlugin
-import app.aaps.pump.danar.SerialIOThread
 import app.aaps.pump.danar.comm.MessageBase
 import app.aaps.pump.danar.comm.MessageHashTableR
 import app.aaps.pump.danar.comm.MsgBolusStart
@@ -55,7 +51,6 @@ import app.aaps.pump.danar.comm.MsgStatusBasic
 import app.aaps.pump.danar.comm.MsgStatusBolusExtended
 import app.aaps.pump.danar.comm.MsgStatusTempBasal
 import app.aaps.pump.danarkorean.DanaRKoreanPlugin
-import java.io.IOException
 import javax.inject.Inject
 import kotlin.math.abs
 
@@ -66,36 +61,12 @@ class DanaRExecutionService : AbstractDanaRExecutionService() {
     @Inject lateinit var commandQueue: CommandQueue
     @Inject lateinit var messageHashTableR: MessageHashTableR
     @Inject lateinit var profileFunction: ProfileFunction
+
+    override fun messageHashTable() = messageHashTableR
+
     override fun onCreate() {
         super.onCreate()
         mBinder = LocalBinder()
-    }
-
-    @SuppressLint("MissingPermission") override fun connect() {
-        if (isConnecting) return
-        Thread(Runnable {
-            mHandshakeInProgress = false
-            isConnecting = true
-            getBTSocketForSelectedPump()
-            if (mRfcommSocket == null || mBTDevice == null) {
-                isConnecting = false
-                return@Runnable  // Device not found
-            }
-            try {
-                mRfcommSocket?.connect()
-            } catch (e: IOException) {
-                if (e.message?.contains("socket closed") == true) {
-                    aapsLogger.error("Unhandled exception", e)
-                }
-            }
-            if (isConnected) {
-                mSerialIOThread?.disconnect("Recreate SerialIOThread")
-                mSerialIOThread = SerialIOThread(aapsLogger, mRfcommSocket!!, messageHashTableR, danaPump)
-                mHandshakeInProgress = true
-                rxBus.send(EventPumpStatusChanged(EventPumpStatusChanged.Status.HANDSHAKING, 0))
-            }
-            isConnecting = false
-        }).start()
     }
 
     override fun getPumpStatus() {
@@ -261,8 +232,12 @@ class DanaRExecutionService : AbstractDanaRExecutionService() {
                 2 -> speed = 60
             }
             // try to find real amount if bolusing was interrupted or comm failed
-            if (BolusProgressData.insulin != detailedBolusInfo.insulin) {
+            if (BolusProgressData.delivered != detailedBolusInfo.insulin) {
                 disconnect("bolusingInterrupted")
+                for (i in 0..59) {
+                    rxBus.send(EventPumpStatusChanged(rh.gs(app.aaps.pump.danar.R.string.waiting_1_minute, i, 60)))
+                    SystemClock.sleep(1000)
+                }
                 val bolusDurationInMSec = (detailedBolusInfo.insulin * speed * 1000).toLong()
                 val expectedEnd = bolusStart + bolusDurationInMSec + 3000
                 while (System.currentTimeMillis() < expectedEnd) {
@@ -270,24 +245,25 @@ class DanaRExecutionService : AbstractDanaRExecutionService() {
                     rxBus.send(EventOverviewBolusProgress(status = rh.gs(R.string.waitingforestimatedbolusend, waitTime / 1000), id = detailedBolusInfo.id))
                     SystemClock.sleep(1000)
                 }
-                val o = Any()
-                synchronized(o) {
-                    commandQueue.independentConnect("bolusingInterrupted", object : Callback() {
-                        override fun run() {
-                            if (danaPump.lastBolusTime > System.currentTimeMillis() - 60 * 1000L) { // last bolus max 1 min old
-                                BolusProgressData.delivered = danaPump.lastBolusAmount
-                                aapsLogger.debug(LTag.PUMP, "Used bolus amount from history: " + danaPump.lastBolusAmount)
-                            } else {
-                                aapsLogger.debug(LTag.PUMP, "Bolus amount in history too old: " + dateUtil.dateAndTimeString(danaPump.lastBolusTime))
-                            }
-                            synchronized(o) { o.notifyAll() }
-                        }
-                    })
-                    try {
-                        o.wait()
-                    } catch (e: InterruptedException) {
-                        aapsLogger.error("Unhandled exception", e)
-                    }
+                connect()
+                for (i in 0..30) {
+                    rxBus.send(EventPumpStatusChanged(EventPumpStatusChanged.Status.CONNECTING, i))
+                    if (isConnected) break
+                    SystemClock.sleep(1000)
+                }
+                if (!isConnected) {
+                    ToastUtils.errorToast(context, app.aaps.core.ui.R.string.treatmentdeliveryerror)
+                    BolusProgressData.delivered = 0.0
+                    return false
+                }
+                mSerialIOThread?.sendMessage(MsgStatus(injector))
+                if (danaPump.lastBolusTime > System.currentTimeMillis() - 2 * 60 * 1000L) { // last bolus max 2 min old
+                    BolusProgressData.delivered = danaPump.lastBolusAmount
+                    aapsLogger.debug(LTag.PUMP, "Used bolus amount from history: " + danaPump.lastBolusAmount)
+                } else {
+                    BolusProgressData.delivered = 0.0
+                    aapsLogger.debug(LTag.PUMP, "Bolus amount in history too old: " + dateUtil.dateAndTimeString(danaPump.lastBolusTime))
+                    return false
                 }
             } else {
                 commandQueue.readStatus(rh.gs(app.aaps.core.ui.R.string.bolus_ok), null)

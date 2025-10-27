@@ -19,6 +19,8 @@ object BolusProgressData {
         delivered = 0.0
         bolusEnded = false
         stopPressed = false
+        status = ""
+        percent = 0
     }
 
     /**
@@ -49,16 +51,6 @@ object BolusProgressData {
     var percent = 0
 
     var bolusEnded = false
-        set(value) {
-            field = value
-            if (value) {
-                insulin = 0.0
-                isSMB = false
-                id = -1
-                status = ""
-                percent = 0
-            }
-        }
 
     /**
      * set to true if user press STOP button

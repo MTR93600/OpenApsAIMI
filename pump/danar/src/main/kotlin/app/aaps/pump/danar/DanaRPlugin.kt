@@ -163,10 +163,10 @@ class DanaRPlugin @Inject constructor(
             throw IllegalArgumentException(detailedBolusInfo.toString(), Exception())
         }
         detailedBolusInfo.insulin = constraintChecker.applyBolusConstraints(ConstraintObject(detailedBolusInfo.insulin, aapsLogger)).value()
-        var connectionOK = false
-        if (detailedBolusInfo.insulin > 0) connectionOK = executionService?.bolus(detailedBolusInfo) == true
+        var resultOK = false
+        if (detailedBolusInfo.insulin > 0) resultOK = executionService?.bolus(detailedBolusInfo) == true
         val result = pumpEnactResultProvider.get()
-        result.success(connectionOK && abs(detailedBolusInfo.insulin - BolusProgressData.delivered) < pumpDescription.bolusStep)
+        result.success(resultOK && (abs(detailedBolusInfo.insulin - BolusProgressData.delivered) < pumpDescription.bolusStep || danaPump.bolusStopped))
             .bolusDelivered(BolusProgressData.delivered)
         if (!result.success) result.comment(
             rh.gs(

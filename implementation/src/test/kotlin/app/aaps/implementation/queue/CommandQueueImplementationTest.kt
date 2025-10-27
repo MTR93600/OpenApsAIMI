@@ -28,7 +28,6 @@ import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
-import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.objects.constraints.ConstraintObject
 import app.aaps.implementation.queue.commands.CommandBolus
 import app.aaps.implementation.queue.commands.CommandCancelExtendedBolus
@@ -81,11 +80,9 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
         profileFunction: ProfileFunction,
         activePlugin: ActivePlugin,
         context: Context,
-        preferences: Preferences,
         config: Config,
         dateUtil: DateUtil,
         fabricPrivacy: FabricPrivacy,
-        androidPermission: AndroidPermission,
         uiInteraction: UiInteraction,
         persistenceLayer: PersistenceLayer,
         decimalFormatter: DecimalFormatter,
@@ -94,7 +91,7 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
         workManager: WorkManager
     ) : CommandQueueImplementation(
         injector, aapsLogger, rxBus, aapsSchedulers, rh, constraintChecker, profileFunction,
-        activePlugin, context, preferences, config, dateUtil, fabricPrivacy, androidPermission,
+        activePlugin, context, config, dateUtil, fabricPrivacy,
         uiInteraction, persistenceLayer, decimalFormatter, pumpEnactResultProvider, jobName, workManager
     ) {
 
@@ -234,8 +231,8 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
     fun commandIsPickedUp() {
         commandQueue = CommandQueueImplementation(
             injector, aapsLogger, rxBus, aapsSchedulers, rh,
-            constraintChecker, profileFunction, activePlugin, context, preferences,
-            config, dateUtil, fabricPrivacy, androidPermission, uiInteraction, persistenceLayer, decimalFormatter, pumpEnactResultProvider, jobName, workManager
+            constraintChecker, profileFunction, activePlugin, context,
+            config, dateUtil, fabricPrivacy, uiInteraction, persistenceLayer, decimalFormatter, pumpEnactResultProvider, jobName, workManager
         )
         val handler = mock(Handler::class.java)
         Mockito.`when`(handler.post(anyObject())).thenAnswer { invocation: InvocationOnMock ->
