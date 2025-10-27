@@ -874,6 +874,15 @@
     <string name="meal_mode_first_30">Handmatige maaltijdmodus 0&#8211;30m [%1$s] → geforceerd basaal op %2$.2f E/u (overschrijven).\n</string>
     <string name="manual_basal_override">Geforceerd basaal → %1$.2f E/u (%2$dmin). Handmatige maaltijdmodus %3$s\n</string>
     <string name="reason_early_meal">Vroege maaltijd gedetecteerd → TBR geforceerd naar %1$.2fE/u x30 (overschrijven).\n</string>
+
+    <!-- AIMI: Reasons for basal adjustments (Snack / Fasting / Sport / Honeymoon) -->
+    <string name="reason_snacktime">SnackTime</string>
+    <string name="reason_fastingtime">FastingTime</string>
+    <string name="reason_sporttime">SportTime</string>
+    <string name="reason_honeymoon">Honeymoon</string>
+    <string name="reason_honeymoon_smallrise">Honeymoon small-rise</string>
+    <string name="reason_honeymoon_correction">Honeymoon corr.</string>
+
     <string name="safety_cut_tbr">Veiligheidsstop: voorspelde BG&lt;100 of IOB>%1$.2f → basaal naar 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → basaal naar 0.\n</string>
     <string name="bg_80_90_fall">BG 80&#8211;90 &amp; vrije val → basaal naar 0.\n</string>
