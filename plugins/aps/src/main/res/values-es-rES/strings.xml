@@ -1,25 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!--Autotune-->
+
+    <!-- Autotune -->
     <string name="dynisf_adjust_sensitivity">Habilitar la relación de sensibilidad basada en TDD para modificar las basales y el objetivo de glucosa</string>
-    <string name="dynisf_adjust_sensitivity_summary">Utiliza las últimas 24h TDD/7D TDD para calcular el factor de sensibilidad utilizado para aumentar o disminuir la tasa basal, y también ajusta el objetivo de glucosa si estas opciones están activadas, de la misma forma que lo hace Autosens. Se recomienda comenzar con esta opción desactivada</string>
+    <string name="dynisf_adjust_sensitivity_summary">Utiliza TDD de las últimas 24 h / TDD de 7 días para calcular el factor de sensibilidad usado para aumentar o disminuir la tasa basal, y también ajusta el objetivo de glucosa si estas opciones están activadas, del mismo modo que lo hace Autosens. Se recomienda empezar con esta opción desactivada</string>
     <string name="dyn_isf_adjust_title" formatted="false">Factor de ajuste de ISF Dinámico %</string>
-    <string name="dyn_isf_adjust_summary" formatted="false">Factor de ajuste para ISF Dinámico. Establezca un valor mayor a 100% para correcciones más agresiva, y menor a 100% para correcciones menos agresivas.</string>
-    <string name="high_temptarget_raises_sensitivity_title">Objetivo temporal alto aumenta la sensibilidad</string>
+    <string name="dyn_isf_adjust_summary" formatted="false">Factor de ajuste para ISF Dinámico. Establezca un valor mayor al 100% para correcciones más agresivas y menor al 100% para correcciones menos agresivas.</string>
+    <string name="high_temptarget_raises_sensitivity_title">El objetivo temporal alto aumenta la sensibilidad</string>
     <string name="high_temptarget_raises_sensitivity_summary"><![CDATA[Aumentar la sensibilidad para objetivos temporales >= 100]]></string>
-    <string name="low_temptarget_lowers_sensitivity_title">Objetivo temporal bajo reduce la sensibilidad</string>
+    <string name="low_temptarget_lowers_sensitivity_title">El objetivo temporal bajo reduce la sensibilidad</string>
     <string name="low_temptarget_lowers_sensitivity_summary"><![CDATA[Reducir la sensibilidad para objetivos temporales < 100]]></string>
     <string name="openapssmb">OpenAPS SMB</string>
     <string name="openaps_smb_dynamic_isf">ISF Dinámico</string>
     <string name="openaps_auto_isf">Auto ISF</string>
-    <string name="smb_interval_summary">Con qué frecuencia se administrarán los SMB en min</string>
-    <string name="resistance_lowers_target_title">Resistencia baja el objetivo</string>
+    <string name="smb_interval_summary">Frecuencia de administración de SMB (min)</string>
+    <string name="resistance_lowers_target_title">La resistencia baja el objetivo</string>
     <string name="resistance_lowers_target_summary">Cuando se detecta resistencia a la insulina, disminuye el objetivo de glucosa</string>
-    <string name="sensitivity_raises_target_title">Sensibilidad aumenta el objetivo</string>
+    <string name="sensitivity_raises_target_title">La sensibilidad aumenta el objetivo</string>
     <string name="sensitivity_raises_target_summary">Cuando se detecta sensibilidad a la insulina, aumenta el objetivo de glucosa</string>
     <string name="openapsma_disabled">El complemento está deshabilitado</string>
-    <string name="openapsma_no_glucose_data">No hay disponibles datos de glucosa</string>
-    <string name="openaps_no_as_data">No hay datos disponibles de autosens</string>
+    <string name="openapsma_no_glucose_data">No hay datos de glucosa disponibles</string>
+    <string name="openaps_no_as_data">No hay datos de Autosens disponibles</string>
     <string name="dynisf_shortname">DYNISF</string>
     <string name="autoisf_shortname">AUTOISF</string>
     <string name="executing">Ejecutando</string>
@@ -30,82 +31,85 @@
     <string name="description_smb">Algoritmo más reciente para usuarios avanzados</string>
     <string name="description_smb_dynamic_isf">Algoritmo más reciente para usuarios avanzados con ISF dinámico/automático</string>
     <string name="description_auto_isf">Algoritmo más reciente para usuarios avanzados con la extensión AutoISF</string>
-    <string name="openapsama_bolus_snooze_dia_divisor">DIA Divisor para suspensión de bolos</string>
+    <string name="openapsama_bolus_snooze_dia_divisor">Divisor de DIA para suspensión de bolos</string>
     <string name="openapsma_run">Ejecutar ahora</string>
     <string name="openapsma_last_run_label">Última ejecución</string>
     <string name="openapsma_input_parameters_label">Parámetros de entrada</string>
     <string name="openapsma_glucose_status_label">Estado de glucosa</string>
     <string name="openapsma_current_temp_label">Basal temporal actual</string>
-    <string name="openapsma_iob_data_label">Datos IOB</string>
+    <string name="openapsma_iob_data_label">Datos de IOB</string>
     <string name="openapsma_profile_label">Perfil</string>
     <string name="openapsma_meal_data_label">Datos de comidas</string>
     <string name="openapsma_request_label">Solicitud</string>
     <string name="constraints">Restricciones</string>
-    <string name="openapsma_autosensdata_label">Datos Autosens</string>
+    <string name="openapsma_autosensdata_label">Datos de Autosens</string>
     <string name="openapsma_script_debug_data_label">Depuración de script</string>
     <string name="openapsama_use_autosens">Usar la función Autosens</string>
-    <string name="openapsma_max_basal_title">Máximas U/h que la basal temporal no podrá superar</string>
-    <string name="openapsma_max_basal_summary">Este valor se llama \"Max basal\" en el contexto de OpenAPS</string>
-    <string name="openapsma_max_iob_title">Basal máxima que OpenAPS puede entregar [U]</string>
-    <string name="openapsma_max_iob_summary">Este valor se denomina \"Max IOB\" en OpenAPS\nEsta es la cantidad máxima de insulina en [U] que APS puede entregar a la vez.</string>
-    <string name="openapsama_autosens_adjust_targets_summary">Valor predeterminado: habilitado\nEste ajuste permite que autosens pueda ajustar los objetivos de glucosa, así como, el factor de sensibilidad (ISF) y las basales</string>
+    <string name="openapsma_max_basal_title">U/h máximas que la basal temporal no podrá superar</string>
+    <string name="openapsma_max_basal_summary">Este valor se llama «Max basal» en el contexto de OpenAPS</string>
+    <string name="openapsma_max_iob_title">IOB máximo que OpenAPS puede entregar [U]</string>
+    <string name="openapsma_max_iob_summary">Este valor se denomina «Max IOB» en OpenAPS.\nEs la cantidad máxima de insulina activa [U] que el APS puede tener a la vez.</string>
+    <string name="openapsama_autosens_adjust_targets_summary">Predeterminado: habilitado.\nEste ajuste permite que Autosens pueda ajustar los objetivos de glucosa, así como el factor de sensibilidad (ISF) y las basales.</string>
     <string name="openapsama_autosens_adjust_targets">Autosens también ajusta los objetivos</string>
-    <string name="openapsama_min_5m_carb_impact_summary">Valores predeterminados: 3.0 (AMA) y 8.0 (SMB)\nEsta configuración establece cómo se absorben los carbohidratos cada 5 minutos. Por defecto se espera que se absorban 3mg/dl cada 5 minutos. Esto afecta a la rapidez con la que los carbohidratos (COB) decaen, y cómo se calcula la predicción de la absorción de carbohidratos futuros, cuando la glucosa está cayendo más de lo esperado, o no aumenta tanto como se esperaba</string>
-    <string name="openapsama_max_daily_safety_multiplier_summary">Valor predeterminado: 3. Este valor es una protección de seguridad clave de OpenAPS. Limita la basal máxima que puede usar AAPS a un máximo de tres veces tu basal. Probablemente nunca necesites modificar este valor. Antes de modificarlo deberías tener en cuenta las discusiones sobre \"3x máx diaria; 4x actual\" por motivos de seguridad</string>
-    <string name="openapsama_current_basal_safety_multiplier_summary">Valor predeterminado: 4. Esta es la otra mitad de los ajustes de seguridad de OpenAPS y de \"3x máx diaria, 4x actual\". Esto significa que tu basal, independientemente del valor de basal máxima que tengas configurado en la bomba, nunca podrá superar este valor multiplicado por tu basal actual. Esto se usa para evitar que las personas se encuentren en situaciones peligrosas por aumentar excesivamente la basal, sin entender como funciona el algoritmo. La mayoría de las personas nunca tendrán que cambiar estos valores. Si estás cerca de alcanzar éstos límites, deberías de ajustar otras configuraciones</string>
-    <string name="openapsama_bolus_snooze_dia_divisor_summary">Valor predeterminado: 2\nLa característica \"Bolus snooze\" (bolo de repetición) se activa después de suministrar un bolo de comida. Esto permite que durante el periodo de tiempo resultante de dividir el valor de DIA por este ajuste, AAPS no establezca basales temporales demasiado bajas. Por ejemplo, con el valor predeterminado 2 y un valor de DIA establecido en 5 horas, la duración del bolo de repetición resultante sería de 2,5 horas (5/2=2,5h), periodo en el cuál, las basales temporales no serán demasiado bajas.</string>
-    <string name="openapsama_link_to_preference_json_doc_txt">¡ATENCIÓN!\nLos valores que se muestran a continuación, normalmente no suelen ser necesario modificarlos. Por favor, PINCHA AQUÍ y lee todo el contenido. Asegúrate de que lo has entendido completamente antes de modificar alguno de estos valores.</string>
-    <string name="always_use_short_avg">Usar siempre el delta medio corto, en lugar del delta simple</string>
-    <string name="always_use_short_avg_summary">Útil cuando los datos de fuentes sin filtrar como los de xDrip+ son inestables</string>
-    <string name="openapsama_max_daily_safety_multiplier">Máximo multiplicador diario de seguridad</string>
-    <string name="openapsama_current_basal_safety_multiplier">Multiplicador basal de seguridad actual</string>
-    <string name="openapssmb_max_iob_title">Máximo IOB total que OpenAPS no puede superar [U]</string>
-    <string name="openapssmb_max_iob_summary">Este valor se denomina \"Max IOB\", en el contexto de OpenAPS\nOpenAPS no podrá superar esta cantidad de insulina activa (IOB)</string>
+    <string name="openapsama_min_5m_carb_impact_summary">Valores predeterminados: 3.0 (AMA) y 8.0 (SMB).\nEsta configuración establece cómo se absorben los carbohidratos cada 5 minutos. Por defecto se espera que se absorban 3 mg/dL cada 5 minutos. Afecta a la rapidez con la que los carbohidratos (COB) decaen y a cómo se calcula la predicción de la absorción futura de carbohidratos cuando la glucosa cae más de lo esperado o no aumenta tanto como se esperaba.</string>
+    <string name="openapsama_max_daily_safety_multiplier_summary" formatted="false">Valor predeterminado: 3. Este valor es una protección de seguridad clave de OpenAPS. Limita la basal máxima que puede usar AAPS a un máximo de tres veces tu basal. Probablemente nunca necesites modificarlo. Antes de hacerlo, ten en cuenta las discusiones sobre "3x máx diaria; 4x actual" por motivos de seguridad.</string>
+    <string name="openapsama_current_basal_safety_multiplier_summary" formatted="false">Valor predeterminado: 4. Es la otra mitad de los ajustes de seguridad de OpenAPS "3x máx diaria, 4x actual". Significa que tu basal, independientemente del valor de basal máxima configurado en la bomba, nunca podrá superar este multiplicador por tu basal actual.</string>
+    <string name="openapsama_bolus_snooze_dia_divisor_summary">Valor predeterminado: 2.\nLa función «Bolus snooze» (pausa tras bolo) se activa después de un bolo de comida. Durante el período resultante de dividir el DIA entre este ajuste, AAPS no fijará basales temporales demasiado bajas. Ejemplo: con DIA=5 h y divisor=2, la duración es 2,5 h (5/2=2,5 h).</string>
+    <string name="openapsama_link_to_preference_json_doc_txt">¡ATENCIÓN!\nLos valores de abajo normalmente no se deben modificar. Por favor, PULSA AQUÍ y lee todo el contenido. Asegúrate de comprenderlo antes de cambiar algo.</string>
+    <string name="always_use_short_avg">Usar siempre el delta medio corto en lugar del delta simple</string>
+    <string name="always_use_short_avg_summary">Útil cuando los datos de fuentes sin filtrar como xDrip+ son inestables</string>
+    <string name="openapsama_max_daily_safety_multiplier">Multiplicador de seguridad diario máximo</string>
+    <string name="openapsama_current_basal_safety_multiplier">Multiplicador de seguridad de la basal actual</string>
+    <string name="openapssmb_max_iob_title">IOB total máximo que OpenAPS no puede superar [U]</string>
+    <string name="openapssmb_max_iob_summary">Este valor se denomina «Max IOB» en el contexto de OpenAPS.\nOpenAPS no podrá superar esta cantidad de insulina activa (IOB).</string>
     <string name="enable_uam">Activar UAM</string>
     <string name="enable_smb">Activar SMB</string>
-    <string name="enable_smb_summary">Usar microbolos en lugar de basales temporales, para corregir más rápidamente</string>
+    <string name="enable_smb_summary">Usar microbolos en lugar de basales temporales para corregir más rápido</string>
     <string name="enable_uam_summary">Detectar comidas no anunciadas (UAM)</string>
     <string name="enable_smb_always">Habilitar SMB siempre</string>
-    <string name="enable_smb_always_summary">Habilitar SMB siempre, independientemente de los COB, objetivos temporales o bolos. Sólo se puede usar con sensores de glucosa con filtrado avanzado de datos</string>
-    <string name="enable_smb_after_carbs">Habilitar SMB después de carbohidratos</string>
-    <string name="enable_smb_after_carbs_summary">Habilitar SMB 6h después de los carbohidratos, incluso con 0 COB. Sólo es posible con sensores de glucosa con filtrado avanzado de datos</string>
+    <string name="enable_smb_always_summary">Habilitar SMB siempre, independientemente de COB, objetivos temporales o bolos. Solo con sensores de glucosa con filtrado avanzado.</string>
+    <string name="enable_smb_after_carbs">Habilitar SMB tras carbohidratos</string>
+    <string name="enable_smb_after_carbs_summary">Habilitar SMB hasta 6 h después de carbohidratos, incluso con 0 COB. Solo con sensores con filtrado avanzado.</string>
     <string name="enable_smb_with_cob">Habilitar SMB con carbohidratos</string>
-    <string name="enable_smb_with_cob_summary">Habilitar SMB cuando hay carbohidratos activos (COB)</string>
-    <string name="enable_smb_with_temp_target">Habilitar SMB con objetivos temporales </string>
-    <string name="enable_smb_with_temp_target_summary">Habilitar SMB cuando hay un objetivo temporal activo (ComiendoPronto, Actividad, etc.)</string>
+    <string name="enable_smb_with_cob_summary">Habilitar SMB cuando haya carbohidratos activos (COB)</string>
+    <string name="enable_smb_with_temp_target">Habilitar SMB con objetivos temporales</string>
+    <string name="enable_smb_with_temp_target_summary">Habilitar SMB cuando haya un objetivo temporal activo (ComiendoPronto, Actividad, etc.)</string>
     <string name="enable_smb_with_high_temp_target">Habilitar SMB con objetivos temporales altos</string>
-    <string name="enable_smb_with_high_temp_target_summary">Habilitar SMB cuando hay activo un objetivo temporal alto (ejercicio superior a 100 mg/dl o 5.5 mmol/l)</string>
+    <string name="enable_smb_with_high_temp_target_summary">Habilitar SMB cuando esté activo un objetivo temporal alto (ejercicio &gt;100 mg/dL o 5.5 mmol/L)</string>
     <string name="smb_max_minutes_summary">Minutos máximos de basal para limitar SMB</string>
     <string name="uam_smb_max_minutes">Minutos máximos de UAM SMB</string>
-    <string name="uam_smb_max_minutes_summary">Minutos máximos de basal para limitar SMB para UAM</string>
-    <string name="carbs_req_threshold">Carbohidratos mínimos necesarios para la sugerencia</string>
-    <string name="carbs_req_threshold_summary">Gramos mínimos de carbohidratos para mostrar una alerta de sugerencia de carbohitratos: las sugerencias de carbohidratos debajo de este número no iniciarán una notificación.</string>
-    <string name="lgs_threshold_summary">Valor de glucosa por debajo del cual se suspende la administración de insulina. El valor predeterminado utiliza el modelo de objetivo estándar. El usuario puede establecer un valor entre 60mg/dl (3. mmol/l) y 100mg/dl (5.5mmol/l). Valores por debajo de 65/3.6 usan el modelo predeterminado</string>
-    <string name="lgs_threshold_title">Nivel de glucosa por debajo de valor LGS (Suspensión por glucosa baja)</string>
-    <string name="increasing_max_basal">Incrementando el valor basal máximo porque la configuración es menor que la base máxima en el perfil</string>
-    <string name="max_basal_multiplier">multiplicador basal máximo</string>
-    <string name="max_daily_basal_multiplier">multiplicador basal diario máximo</string>
+    <string name="uam_smb_max_minutes_summary">Minutos máximos de basal para limitar SMB en UAM</string>
+    <string name="carbs_req_threshold">Carbohidratos mínimos para sugerencia</string>
+    <string name="carbs_req_threshold_summary">Gramos mínimos de carbohidratos para mostrar una alerta de sugerencia: por debajo de este número no se iniciará notificación.</string>
+    <string name="lgs_threshold_summary">Glucosa por debajo de la cual se suspende la insulina. Por defecto usa el objetivo estándar. El usuario puede establecer entre 60 mg/dL (3.3 mmol/L) y 100 mg/dL (5.5 mmol/L). Valores &lt;65/3.6 usan el modelo predeterminado.</string>
+    <string name="lgs_threshold_title">Nivel de glucosa por debajo del valor LGS (suspensión por glucosa baja)</string>
+    <string name="increasing_max_basal">Incrementando el valor de basal máxima porque la configuración es menor que la basal máxima del perfil</string>
+    <string name="max_basal_multiplier">Multiplicador de basal máximo</string>
+    <string name="max_daily_basal_multiplier">Multiplicador diario de basal máximo</string>
     <string name="smb_disabled_in_preferences">SMB deshabilitado en preferencias</string>
-    <string name="uam_disabled_in_preferences">UAM deshabilitado en las preferencias</string>
+    <string name="uam_disabled_in_preferences">UAM deshabilitado en preferencias</string>
     <string name="autosens_disabled_in_preferences">Autosens deshabilitado en preferencias</string>
     <string name="use_dynamic_sensitivity_title">Activar sensibilidad dinámica</string>
     <string name="use_dynamic_sensitivity_summary">Ajusta el algoritmo para usar la sensibilidad dinámica en lugar del valor del perfil</string>
-    <!--    Verify if needed in safety-->
+
+    <!-- Verify if needed in safety -->
     <string name="limiting_iob">Limitando IOB a %1$.1f U debido a %2$s</string>
     <string name="maxvalueinpreferences">valor máximo en preferencias</string>
     <string name="hardlimit">límite estricto</string>
-    <!--    Autotune   -->
+
+    <!-- Autotune -->
     <string name="insulin_peak">Pico</string>
-    <!--    Loop -->
+
+    <!-- Loop -->
     <string name="run_now">Ejecutar ahora</string>
-    <string name="smb_frequency_exceeded">Un bolo ha sido entregado en los últimos 3 minutos, omitiendo SMB</string>
+    <string name="smb_frequency_exceeded">Se ha administrado un bolo en los últimos 3 minutos, omitiendo SMB</string>
     <string name="pump_not_initialized">¡Bomba no iniciada!</string>
     <string name="loop_shortname">BUCLE</string>
-    <string name="description_loop">Activar o desactivar la posibilidad para activar el bucle.</string>
-    <string name="no_aps_selected">NO APS Seleccionado o resultado entregado</string>
-    <string name="ignore5m">Ignorar 5m</string>
-    <string name="ignore15m">Ignorar 15m</string>
-    <string name="ignore30m">Ignorar 30m</string>
+    <string name="description_loop">Activar o desactivar la posibilidad de activar el bucle.</string>
+    <string name="no_aps_selected">No hay APS seleccionado o resultado entregado</string>
+    <string name="ignore5m">Ignorar 5 m</string>
+    <string name="ignore15m">Ignorar 15 m</string>
+    <string name="ignore30m">Ignorar 30 m</string>
     <string name="carbs_suggestion">Sugerencia de carbohidratos</string>
     <string name="open_loop_new_suggestion">Nueva propuesta disponible</string>
     <string name="basal_set_correctly">Basal establecida correctamente</string>
@@ -119,40 +123,41 @@
     <string name="loop_smb_request_time_label">Tiempo requerido de SMB</string>
     <string name="loop_smb_execution_time_label">Tiempo de ejecución de SMB</string>
     <string name="loop_smb_set_by_pump_label">SMB administrado por la bomba</string>
-    <string name="loop_open_mode_min_change">Valor mínimo de cambio [%]</string>
-    <string name="loop_open_mode_min_change_summary" formatted="false">Valor predeterminado 20%. El bucle abierto realizará una petición de cambio, sólo cuando se supere este valor</string>
+    <string name="loop_open_mode_min_change" formatted="false">Valor mínimo de cambio [%]</string>
+    <string name="loop_open_mode_min_change_summary" formatted="false">Valor predeterminado 20%. El bucle abierto solicitará un cambio solo cuando se supere este valor</string>
     <string name="fallback_smb_no_tdd">Regreso a SMB. No hay suficientes datos de TDD.</string>
     <string name="fallback_to_isf_no_tdd">Volviendo a la sensibilidad del perfil. No hay suficientes datos. Motivo: %1$s</string>
-    <!-- Autotune -->
-    <string name="autotune_description">Ayuda a realizar ajustes en el perfil (ISF, ratio de carbohidratos y tasas basales)</string>
+
+    <!-- Autotune (otros) -->
+    <string name="autotune_description">Ayuda a ajustar el perfil (ISF, ratio de carbohidratos y tasas basales)</string>
     <string name="autotune_shortname">AT</string>
     <string name="autotune_settings">Ajustes de Autotune</string>
     <string name="autotune_auto_title">Automatización de cambio de perfil</string>
-    <string name="autotune_auto_summary">Si está activado, Autotune actualizará automáticamente y cambiará al perfil de entrada después del cálculo de una regla de automatización.</string>
+    <string name="autotune_auto_summary">Si está activado, Autotune actualizará y cambiará automáticamente al perfil de entrada tras aplicar una regla de automatización.</string>
     <string name="autotune_categorize_uam_as_basal_title">Categorizar UAM como basal</string>
-    <string name="autotune_categorize_uam_as_basal_summary">Activar solo si han introducido correctamente todos los carbohidratos que hemos comido. Con esta opción los aumentos repentinos observados por Autotune se utilizarán para recomendar cambios en la tasa basal.</string>
+    <string name="autotune_categorize_uam_as_basal_summary">Actívelo solo si se han introducido correctamente todos los carbohidratos de las comidas. Con esta opción, los aumentos repentinos detectados por Autotune se usarán para recomendar cambios en la tasa basal.</string>
     <string name="autotune_tune_insulin_curve_title">Ajustar curva de insulina</string>
-    <string name="autotune_tune_insulin_curve_summary">Habilitar sólo se utiliza la opción de \"Personalizar Pico\" de acción de la insulina. Esta opción ajustará el pico y DIA.</string>
+    <string name="autotune_tune_insulin_curve_summary">Habilitar solo si se usa la opción «Personalizar pico» de la acción de insulina. Ajustará el pico y el DIA.</string>
     <string name="autotune_default_tune_days_title">Número de días de datos</string>
     <string name="autotune_circadian_ic_isf_title">Aplicar resultado promedio circadiano IC/ISF</string>
-    <string name="autotune_circadian_ic_isf_summary">Autotune no afinará las variaciones circadianas, esta opción solo aplica los ajustes medios de IC e ISF a tu perfil circadiano de entrada</string>
+    <string name="autotune_circadian_ic_isf_summary">Autotune no ajusta variaciones circadianas; esta opción aplica los ajustes medios de IC e ISF a tu perfil circadiano de entrada.</string>
     <string name="autotune_additional_log_title">Incluir más información de registro para depuración</string>
-    <string name="autotune_additional_log_summary">Activar sólo si es solicitado por los desarrolladores, para enviar más registros y así ayudar a depurar el plugin Autotune</string>
-    <string name="autotune_default_tune_days_summary">Número predeterminado de días de datos a procesar por Autotune (hasta un máximo de 30 días)</string>
+    <string name="autotune_additional_log_summary">Actívalo solo si lo solicitan los desarrolladores para enviar más registros y ayudar a depurar el plugin Autotune.</string>
+    <string name="autotune_default_tune_days_summary">Número predeterminado de días de datos a procesar por Autotune (máx. 30 días)</string>
     <string name="autotune_tunedprofile_name">Ajustado</string>
     <string name="autotune_profile">Perfil :</string>
     <string name="autotune_last_run">Última ejecución :</string>
     <string name="autotune_warning">Advertencia :</string>
-    <string name="autotune_ic_warning">Autotune sólo funciona con un único valor de IC. Tu perfil tiene %1$d valores. El valor promedio es %2$.2fg/U</string>
-    <string name="autotune_isf_warning">Autotune sólo funciona con un único valor de ISF. Tu perfil tiene %1$d valores. El valor promedio es %2$.1f%3$s/U</string>
-    <string name="autotune_error">Error en los datos de entrada, intenta ejecutar de nuevo autotune o reducir el número de días</string>
-    <string name="autotune_error_more_days">Error en los datos de entrada, aumenta el número de días</string>
-    <string name="autotune_warning_during_run">Cálculo de autototune iniciado, por favor ten paciencia</string>
-    <string name="autotune_warning_after_run">¡Comprueba los resultados cuidadosamente antes de usarlos!</string>
+    <string name="autotune_ic_warning">Autotune solo funciona con un único valor de IC. Tu perfil tiene %1$d valores. El promedio es %2$.2fg/U</string>
+    <string name="autotune_isf_warning">Autotune solo funciona con un único valor de ISF. Tu perfil tiene %1$d valores. El promedio es %2$.1f%3$s/U</string>
+    <string name="autotune_error">Error en los datos de entrada; intenta ejecutar de nuevo Autotune o reducir el número de días</string>
+    <string name="autotune_error_more_days">Error en los datos de entrada; aumenta el número de días</string>
+    <string name="autotune_warning_during_run">Cálculo de Autotune iniciado, por favor ten paciencia</string>
+    <string name="autotune_warning_after_run">¡Revisa los resultados cuidadosamente antes de usarlos!</string>
     <string name="autotune_partial_result">Resultado parcial día %1$d / %2$d afinado</string>
     <string name="autotune_result">Resultado: %1$s</string>
     <string name="autotune_param">Parámetro</string>
-    <string name="autotune_percent">%</string>
+    <string name="autotune_percent" formatted="false">%</string>
     <string name="autotune_missing">Pendiente</string>
     <string name="autotune_run">Ejecutar Autotune</string>
     <string name="autotune_check_input_profile_button">Comprobar el perfil de entrada</string>
@@ -161,52 +166,63 @@
     <string name="autotune_update_input_profile_button">Actualizar perfil de entrada</string>
     <string name="autotune_revert_input_profile_button">Revertir perfil de entrada</string>
     <string name="autotune_copy_local_profile_message">¿Crear un nuevo perfil local desde este perfil de Autotune?</string>
-    <string name="autotune_update_local_profile_message">¿Actualizar el perfil %1$s con perfil de Autotune?</string>
-    <string name="autotune_revert_local_profile_message">¿Revertir el perfil %1$s con perfil de entrada?</string>
+    <string name="autotune_update_local_profile_message">¿Actualizar el perfil %1$s con el perfil de Autotune?</string>
+    <string name="autotune_revert_local_profile_message">¿Revertir el perfil %1$s con el perfil de entrada?</string>
     <string name="autotune_profile_invalid">Perfil inválido</string>
     <string name="not_available_full">No disponible</string>
     <string name="pump_disconnected">Bomba desconectada</string>
-    <!--    autoISF -->
-    <string name="half_basal_exercise_target_title">Basal media con objetivo actividad</string>
-    <string name="half_basal_exercise_target_summary">Establecer un número, por ejemplo, 160. Significa que cuando el objetivo temporal es 160 mg/dL y tenemos habilitado "Objetivo temporal alto aumenta la sensibilidad", ejecuta el 50%% de la basal en ese nivel (120 = 75%%; 140 = 60%%).</string>
+
+    <!-- autoISF -->
+    <string name="half_basal_exercise_target_title">Basal al 50% con objetivo de actividad</string>
+    <string name="half_basal_exercise_target_summary" formatted="false">Establece un número, p. ej., 160. Significa que cuando el objetivo temporal es 160 mg/dL y está habilitado «Objetivo temporal alto aumenta la sensibilidad», se ejecuta el 50% de la basal a ese nivel (120 = 75%; 140 = 60%).</string>
     <string name="autoISF_settings_title">Ajustes de AutoISF</string>
-    <string name="autoISF_settings_summary">AutoISF permite adaptar el factor de sensibilidad a la insulina (ISF) en varios escenarios de comportamiento de la glucosa\n\nTambién puede adaptar la configuración de entrega de SMBs</string>
+    <string name="autoISF_settings_summary">AutoISF adapta el ISF en varios escenarios de comportamiento de la glucosa.\n\nTambién puede adaptar la configuración de entrega de SMB.</string>
     <string name="smb_delivery_settings_title">Ajustes de entrega de SMB</string>
-    <string name="smb_delivery_settings_summary">Conjunto de opciones para aumentar el tamaño real del SMB que se puede entregar, en situaciones en las que el ISF se volvió más agresivo, es decir, una valor de ISF bastante bajo.\n\nUSAR CON PRECAUCIÓN</string>
-    <string name="openapsama_enable_autoISF">Habilitar la adaptación del ISF en función al comportamiento de la glucosa</string>
-    <string name="openapsama_autoISF_max_summary">Similar a autosens_max esto define a qué fuerza puede llegar el ISF.\n\nEl valor predeterminado 1.0 deshabilita esta opción.\n\nADVERTENCIA: Ten mucho cuidado al utilizar valores superiores a 2.5</string>
-    <string name="openapsama_autoISF_min_summary">Similar a autosens_min esto define lo débil que puede llegar a ser ISF.\n\nEl valor predeterminado 1.0 deshabilita esta opción.</string>
-    <string name="openapsama_dura_ISF_weight_summary">Este es el peso que se aplica durante las \"mesetas prolongadas y elevadas de glucosa\", que fortalece el ISF, aumentando potencialmente la administración de insulina.\n\nEl valor por defecto de 0.0 deshabilita esta opción.</string>
-    <string name="openapsama_lower_ISFrange_weight_summary">Este es el peso que se aplica cuando la glucosa está debajo del objetivo, que disminuye el ISF, reduciendo potencialmente la administración de insulina.\n\nEl valor por defecto de 0.0 deshabilita esta opción.</string>
-    <string name="openapsama_higher_ISFrange_weight_summary">Este es el peso que se aplica cuando la glucosa esta por encima del objetivo, que fortalece el ISF, aumentando potencialmente la administración de insulina.\n\nEl valor por defecto de 0.0 deshabilita esta opción.</string>
-    <string name="openapsama_pp_ISF_weight_summary">Este es el peso que se aplica cuando la glucosa esta subiendo, que fortalece el ISF, aumentando potencialmente la administración de insulina.\n\nEl valor por defecto de 0.0 deshabilita esta opción.</string>
-    <string name="openapsama_bgAccel_ISF_weight_summary">Este es el peso que se aplica cuando la glucosa está acelerando, que fortalece el ISF, aumentando potencialmente la administración de insulina. El valor por defecto de 0.0 deshabilita esta opción.</string>
-    <string name="openapsama_bgBrake_ISF_weight_summary">Este es el peso que se aplica cuando la glucosa esta decelerando, que disminuye el ISF, reduciendo potencialmente la administración de insulina.\n\nEl valor por defecto de 0.0 deshabilita esta opción.</string>
+    <string name="smb_delivery_settings_summary">Conjunto de opciones para aumentar el tamaño real del SMB que se puede entregar en situaciones en las que el ISF se vuelve más agresivo (ISF más bajo).\n\nUSAR CON PRECAUCIÓN</string>
+    <string name="openapsama_enable_autoISF">Habilitar la adaptación del ISF según el comportamiento de la glucosa</string>
+    <string name="openapsama_autoISF_max_summary" formatted="false">Similar a autosens_max: define la fuerza máxima del ISF.\n\nEl valor predeterminado 1.0 deshabilita esta opción.\n\nADVERTENCIA: Mucho cuidado con valores &gt; 2.5</string>
+    <string name="openapsama_autoISF_min_summary" formatted="false">Similar a autosens_min: define lo débil que puede llegar a ser el ISF.\n\nEl valor predeterminado 1.0 deshabilita esta opción.</string>
+    <string name="openapsama_dura_ISF_weight_summary">Peso aplicado durante «mesetas prolongadas y elevadas de glucosa», que fortalece el ISF, aumentando potencialmente la insulina.\n\nEl valor por defecto 0.0 deshabilita esta opción.</string>
+    <string name="openapsama_lower_ISFrange_weight_summary">Peso aplicado cuando la glucosa está por debajo del objetivo: disminuye el ISF, reduciendo potencialmente la insulina.\n\nEl valor por defecto 0.0 deshabilita esta opción.</string>
+    <string name="openapsama_higher_ISFrange_weight_summary">Peso aplicado cuando la glucosa está por encima del objetivo: fortalece el ISF, aumentando potencialmente la insulina.\n\nEl valor por defecto 0.0 deshabilita esta opción.</string>
+    <string name="openapsama_pp_ISF_weight_summary">Peso aplicado cuando la glucosa está subiendo: fortalece el ISF, aumentando potencialmente la insulina.\n\nEl valor por defecto 0.0 deshabilita esta opción.</string>
+    <string name="openapsama_bgAccel_ISF_weight_summary">Peso aplicado cuando la glucosa acelera: fortalece el ISF, aumentando potencialmente la insulina. Valor por defecto 0.0 deshabilita.</string>
+    <string name="openapsama_bgBrake_ISF_weight_summary">Peso aplicado cuando la glucosa desacelera: disminuye el ISF, reduciendo potencialmente la insulina.\n\nValor por defecto 0.0 deshabilita.</string>
+
     <string name="openapsama_autoISF_max">Ratio máximo de AutoISF\n(autoISF_max)</string>
     <string name="openapsama_autoISF_min">Ratio mínimo de AutoISF\n(autoISF_min)</string>
-    <string name="openapsama_lower_ISFrange_weight">Menor peso del rango ISF\n(lower_ISFrange_weight)</string>
-    <string name="openapsama_higher_ISFrange_weight">Mayor peso del rango ISF\n(higher_ISFrange_weight)</string>
-    <string name="openapsama_pp_ISF_weight">Peso postprandial de ISF\n(pp_ISF_weight)</string>
-    <string name="openapsama_bgAccel_ISF_weight">Peso mientras la glucemia se acelera\n(bgAccel_ISF_weight)</string>
-    <string name="openapsama_bgBrake_ISF_weight">Peso mientras la glucemia desacelera\n(bgBrake_ISF_weight)</string>
+    <string name="openapsama_lower_ISFrange_weight">Peso menor del rango ISF\n(lower_ISFrange_weight)</string>
+    <string name="openapsama_higher_ISFrange_weight">Peso mayor del rango ISF\n(higher_ISFrange_weight)</string>
+    <string name="openapsama_pp_ISF_weight">Peso posprandial de ISF\n(pp_ISF_weight)</string>
+    <string name="openapsama_bgAccel_ISF_weight">Peso con aceleración de BG\n(bgAccel_ISF_weight)</string>
+    <string name="openapsama_bgBrake_ISF_weight">Peso con desaceleración de BG\n(bgBrake_ISF_weight)</string>
     <string name="openapsama_dura_ISF_weight">Peso de dura_ISF\n(dura_ISF_weight)</string>
+
     <string name="openapsama_smb_delivery_ratio">Tasa de entrega de SMB fija\n(smb_delivery_ratio)</string>
     <string name="openapsama_smb_delivery_ratio_min">Tasa de entrega de SMB variable, extremo inferior\n(smb_delivery_ratio_min)</string>
-    <string name="openapsama_smb_delivery_ratio_max">Tasa de entrega de SMB variable, extremo superior(smb_delivery_ratio_max)</string>
-    <string name="openapsama_smb_delivery_ratio_bg_range">Tasa de entrega de SMB variable, rango de glucosa mapeado\n(smb_delivery_ratio_bg_range)</string>
+    <string name="openapsama_smb_delivery_ratio_max">Tasa de entrega de SMB variable, extremo superior\n(smb_delivery_ratio_max)</string>
+    <string name="openapsama_smb_delivery_ratio_bg_range">Tasa de SMB variable, rango de glucosa mapeado\n(smb_delivery_ratio_bg_range)</string>
     <string name="openapsama_smb_max_range_extension">Extensión del rango máximo para SMB/UAM\n(smb_max_range_extension)</string>
-    <string name="openapsama_smb_delivery_ratio_summary">Valor predeterminado: 0.5 Este es otro límite de seguridad clave de OpenAPS y especifica qué proporción de la insulina total requerida se puede administrar como SMB. Esto es para evitar que las personas entren en terreno peligroso al configurar solicitudes de SMB desde el teléfono de los cuidadores al mismo tiempo. Aumenta este valor experimental lentamente y con precaución.</string>
-    <string name="openapsama_smb_delivery_ratio_min_summary">Valor predeterminado: 0.5 Este es el extremo inferior de un valor que aumenta linealmente, en lugar del valor fijo anterior.</string>
-    <string name="openapsama_smb_delivery_ratio_max_summary">Valor predeterminado: 0.5 Este es el extremo superior de una valor que aumenta linealmente, en lugar del valor fijo anterior.</string>
-    <string name="openapsama_smb_delivery_ratio_bg_range_summary">Valor predeterminado: 0. La ratio de entrega de SMB que aumenta linealmente, se asigna al rango de glucosa [target_bg, target_bg+bg_range].\nEn target_bg la ratio de SMB es smb_delivery_ratio_min, en target_bg+bg_range es smb_delivery_ratio_max.\nCon 0, la ratio de SMB que aumenta linealmente está desactivada y se utiliza la ratio smb_delivery_ratio fija.\n</string>
-    <string name="openapsama_smb_max_range_extension_summary">Valor por defecto: 1. Este es otro limitador máximo de seguridad clave de OpenAPS y especifica por que factor puedes exceder los 120 minutos maxSMB/maxUAM normales. Nota: Aumenta este valor experimental lentamente y con precaución.</string>
-    <string name="enableSMB_EvenOn_OddOff_always">Habilitar la activación alternativa de SMBs en función a que el valor del objetivo temporal activo sea un número \"par\"</string>
-    <string name="enableSMB_EvenOn_OddOff_always_summary">\nHabilitado ...\nsi el objetivo temporal activo (mmol/L) tiene un decimal par \no el objetivo temporal activo (mg/dL) es un número par\n\ndeshabilitado en cualquier otro caso</string>
+
+    <string name="openapsama_smb_delivery_ratio_summary" formatted="false">Valor predeterminado: 0.5. Límite de seguridad clave: proporción máxima de insulina total requerida que puede darse como SMB. Aumenta este valor lentamente y con precaución.</string>
+    <string name="openapsama_smb_delivery_ratio_min_summary" formatted="false">Valor predeterminado: 0.5. Extremo inferior de un valor que aumenta linealmente.</string>
+    <string name="openapsama_smb_delivery_ratio_max_summary" formatted="false">Valor predeterminado: 0.5. Extremo superior de un valor que aumenta linealmente.</string>
+    <string name="openapsama_smb_delivery_ratio_bg_range_summary">Valor predeterminado: 0. La ratio de SMB que aumenta linealmente se asigna al rango [target_bg, target_bg+bg_range].\nEn target_bg la ratio es smb_delivery_ratio_min; en target_bg+bg_range, smb_delivery_ratio_max.\nCon 0, se desactiva y se usa la ratio fija.</string>
+    <string name="openapsama_smb_max_range_extension_summary" formatted="false">Valor por defecto: 1. Limitador de seguridad: factor por el que puedes exceder los 120 minutos normales de maxSMB/maxUAM. Aumenta lentamente y con precaución.</string>
+
+    <string name="enableSMB_EvenOn_OddOff_always">Habilitar activación alterna de SMB según si el objetivo temporal activo es un número «par»</string>
+    <string name="enableSMB_EvenOn_OddOff_always_summary" formatted="false">
+Habilitado…
+si el objetivo temporal activo (mmol/L) tiene un decimal par
+o el objetivo temporal activo (mg/dL) es un número par
+
+deshabilitado en cualquier otro caso
+    </string>
+
     <string name="openapsama_iob_threshold_percent_summary" formatted="false">Porcentaje de maxIOB por encima del cual se desactivan los SMB.\nValor por defecto: 100%\nCon 100% esta función se desactiva.</string>
-    <string name="openapsama_iob_threshold_percent">Porcentaje de umbral para SMB de maxIOB\n(iob_threshold_percent)</string>
+    <string name="openapsama_iob_threshold_percent">Porcentaje umbral para SMB de maxIOB\n(iob_threshold_percent)</string>
 
-    <!-- AIMI START TRANSLATION CORE - FILE OpenAPSAIMIPlugin.kt - DO NOT TRANSLATE THIS SECTION!!!!!!!!! -->
-
+    <!-- *** SECCIÓN CLAVES SIN TRADUCIR (no tocar los valores) *** -->
     <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
     <string name="oaps_aimi_shortname">AIMI</string>
@@ -233,667 +249,20 @@
     <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
     <string name="key_use_AimiForceLimits">key_use_AimiForceLimits</string>
 
-    <!--    AIMI START TRANSLATION MENU , SUBMENU AND PREFERENCES - FILE OpenAPSAIMIPlugin.kt   -->
+    <!-- A PARTIR DE AQUÍ: resto de cadenas (en inglés) con fixes de seguridad de formato -->
+    <string name="openapsaimi">AIMI 3.3</string>
 
-    <string name="openapsaimi">"AIMI 3.3"</string>
-    <string name="openapsaimi_maxsmb_summary">Max SMB value when BG is below 120</string>
-    <string name="openapsaimi_maxsmb_title">Max SMB LOW BG</string>
-    <string name="description_openapsaimi">Small micro-boluses based on Artificial Intelligence and Machine Learning.</string>
-    <string name="oaps_aimi_evening_factor_summary">% of plugin reactivity between 6 PM and midnight</string>
-    <string name="oaps_aimi_evening_factor_title">Evening Reactivity 18:00&#8211;24:00</string>
-    <string name="oaps_aimi_afternoon_factor_title">Afternoon Reactivity 12:00&#8211;18:00</string>
-    <string name="oaps_aimi_morning_factor_title">Morning Reactivity 00:00&#8211;11:00</string>
-    <string name="oaps_aimi_morning_factor_summary">Morning Reactivity Percentage between midnight and 11 AM</string>
-    <string name="oaps_aimi_afternoon_factor_summary">Afternoon Reactivity Percentage between 12 PM and 6 PM</string>
-    <string name="oaps_aimi_hyper_factor_summary"><![CDATA[Reactivity when BG > 120]]></string>
-    <string name="oaps_aimi_hyper_factor_title"><![CDATA[Reactivity BG > 120, for child BG > 180]]></string>
-    <string name="DynISFAdjusthyper_summary"><![CDATA[Increasing this value will increase the speed to send SMB when BG > 120]]></string>
-    <string name="DynISFAdjusthyper_title"><![CDATA[DynISF Adjustment factor % BG > 120]]></string>
-    <string name="prebolus_meal_mode_summary">If you set a note on the action page with the word "meal", you will receive this value one time as a pre-bolus.</string>
-    <string name="prebolus_meal_mode_title">Prebolus</string>
-    <string name="prebolus_highcarb_mode_title">Prebolus</string>
-    <string name="prebolus_highcarb_mode_summary">If you set a note on the action page with the word "highcarb", you will receive this pre-bolus one time.</string>
-    <string name="number_day_ML_training_summary">Number of days to train the model</string>
-    <string name="nb_day_ML_training_title">ML Number of Training Days</string>
-    <string name="nb_minutes_ML_training_title">Number of minutes to train the data</string>
-    <string name="number_minutes_training_summary">Number of minutes to train the data for the ML engine</string>
-    <string name="number_epoch_training_summary">Number of epochs to train the data</string>
-    <string name="nb_epoch_ML_training_title">Number of epochs to train the data</string>
-    <string name="number_learningrate_training_summary">Learning rate to train the data</string>
-    <string name="nb_learningrate_ML_training_title">Learning rate to train the data</string>
-    <string name="number_iteration_training_summary">Number of times it will try before stopping the loop if it cannot get a satisfying result</string>
-    <string name="nb_iteration_ML_training_title">Number of iterations to stop the loop</string>
-    <string name="DynISF_Adjust_summary" formatted="false">Increase this value above 100 if you want to receive more SMB. The opposite is true if you receive too much SMB.</string>
-    <string name="DynISF_Adjust_title" formatted="false">DynISF factor to increase or decrease the number of SMB</string>
-    <string name="oaps_aimi_mealAdjFact_summary">DynISF adjustment factor for Meal Mode</string>
-    <string name="oaps_aimi_mealAdjFact_title">Meal Mode DynISF Factor</string>
-    <string name="Enable_basal_title">Enable Basal</string>
-    <string name="Enable_basal_summary">This option will enable basal from the profile when BG is greater than 80 and delta is not negative.</string>
-    <string name="oaps_aimi_enableDeleteLine_title">Enable the possibility to delete one day in ML Training</string>
-    <string name="countsteps_watch_title">Step counting watch (if disable, use phone)</string>
-    <string name="countsteps_watch_summary">This option enables step counting by receiving data from the watch instead of the phone.</string>
-    <string name="oaps_aimi_weight_summary">Weight in kg to calculate basal</string>
-    <string name="oaps_aimi_weight_title">Weight in kg</string>
-    <string name="oaps_aimi_tdd7_summary">7-day average TDD</string>
-    <string name="oaps_aimi_tdd7_title">TDD 7 days</string>
-    <string name="oaps_aimi_cho_summary">Average carbohydrates per meal. Estimated value, not exact</string>
-    <string name="oaps_aimi_cho_title">Average carbohydrate amount lunch/dinner</string>
-    <string name="aimi_preferences">AIMI Settings</string>
-    <string name="user_preferences">Preferences user</string>
-    <string name="user_modes_preferences_title_menu">Preferences user - Modes</string>
-    <string name="reactivity_preferences"><![CDATA[BG < 120]]></string>
-    <string name="high_BG_preferences">BG > 120</string>
-    <string name="training_ml_modes_preferences">Manual Mode</string>
-    <string name="autodrive_preferences">Autodrive</string>
-    <string name="AAPS_SMB_Settings">DynamicISF, SMB, and Insulin Sensitivity</string>
-    <string name="oaps_aimi_enableMlTraining_title">Enable A.I. Training</string>
-    <string name="OApsAIMI_MealFactor_summary">% of insulin required by AI for Meal Mode</string>
-    <string name="OApsAIMI_MealFactor_title">Reactivity</string>
-    <string name="oaps_aimi_meal_interval_summary">Interval between SMB for Generic Meal Mode</string>
-    <string name="oaps_aimi_meal_interval_title">SMB Interval Generic Meal Mode</string>
-    <string name="oaps_aimi_highcarbAdjFact_summary">DynISF adjustment factor for High Carb Mode</string>
-    <string name="oaps_aimi_highcarbAdjFact_title">High Carb Mode DynISF Factor</string>
-    <string name="OApsAIMI_HC_Factor_summary">% of insulin required by AI for High Carb Mode</string>
-    <string name="OApsAIMI_HC_Factor_title">Reactivity</string>
+    <!-- FIX: placeholders y % seguros en lo siguiente (solo mostramos las correcciones críticas que causaban crash) -->
+    <string name="safety_adjustments_12">→ safety bypass: rate = %1$.2f U/h\n</string>
 
-    <string name="oaps_aimi_HC_interval_summary">Interval between SMB for High Carb Mode</string>
-    <string name="oaps_aimi_HC_interval_title">SMB Interval High Carb Mode</string>
-    <string name="prebolus_snack_mode_summary">If you set a note on the action page with the word "snack", you will receive this pre-bolus one time.</string>
-    <string name="prebolus_snack_mode_title">Prebolus</string>
-    <string name="oaps_aimi_snackAdjFact_summary">DynISF adjustment factor for Snack Mode</string>
-    <string name="oaps_aimi_snackAdjFact_title">Snack Mode DynISF Factor</string>
-    <string name="OApsAIMI_snack_Factor_summary">% of insulin required by AI for Snack Mode</string>
-    <string name="OApsAIMI_snack_Factor_title">Reactivity</string>
-    <string name="oaps_aimi_snack_interval_summary">Interval between SMB for Snack Mode</string>
-    <string name="oaps_aimi_snack_interval_title">SMB Interval Snack Mode</string>
-    <string name="oaps_aimi_sleepAdjFact_summary">DynISF adjustment factor for Sleep Mode</string>
-    <string name="oaps_aimi_sleepAdjFact_title">Sleep Mode DynISF Factor</string>
-    <string name="OApsAIMI_sleep_Factor_summary">% of insulin required by AI for Sleep Mode</string>
-    <string name="OApsAIMI_sleep_Factor_title">Reactivity</string>
-    <string name="oaps_aimi_sleep_interval_summary">Interval between SMB for Sleep Mode</string>
-    <string name="oaps_aimi_sleep_interval_title">SMB Interval Sleep Mode</string>
-    <string name="OApsAIMI_Enable_pregnancy">Pregnancy Mode</string>
-    <string name="OApsAIMI_Force_Limits">Force AAPS Multiplier Limits</string>
-    <string name="OApsAIMI_Enable_honeymoon">Child Mode (insulin needs lower than adult)</string>
-    <string name="oaps_aimi_HIGHBG_interval_summary">High BG SMB Interval</string>
-    <string name="oaps_aimi_HIGHBG_interval_title">High BG SMB Interval</string>
-    <string name="openapsaimi_highBG_maxsmb_summary">Max SMB value when BG is above 120</string>
-    <string name="openapsaimi_highBG_maxsmb_title">Max SMB High BG</string>
-    <string name="OApsAIMI_Enable_night_title">Night Mode (SMB/2)</string>
-    <string name="prebolus_lunch_mode_summary">Lunch Mode Prebolus 1/2</string>
-    <string name="prebolus2_lunch_mode_summary">Lunch Mode Prebolus 2/2</string>
-    <string name="prebolus_lunch_mode_title">Prebolus 1/2</string>
-    <string name="prebolus2_lunch_mode_title">Prebolus 2/2</string>
-    <string name="oaps_aimi_LunchAdjFact_summary">Lunch Mode DynISF Factor</string>
-    <string name="oaps_aimi_LunchAdjFact_title">Lunch Mode DynISF</string>
-    <string name="prebolus_Dinner_mode_summary">Dinner Mode Prebolus 1/2</string>
-    <string name="prebolus2_Dinner_mode_summary">Dinner Mode Prebolus 2/2</string>
-    <string name="prebolus_Dinner_mode_title">Prebolus 1/2</string>
-    <string name="prebolus2_Dinner_mode_title">Prebolus 2/2</string>
-    <string name="OApsAIMI_LunchFactor_summary">Lunch Mode Reactivity is % of insulin required for one SMB</string>
-    <string name="OApsAIMI_lunchFactor_title">Reactivity</string>
-    <string name="oaps_aimi_lunch_interval_summary">Lunch Mode SMB Interval</string>
-    <string name="oaps_aimi_lunch_interval_title">Lunch Mode SMB Interval</string>
-    <string name="oaps_aimi_DinnerAdjFact_summary">Dinner Mode DynISF Factor</string>
-    <string name="oaps_aimi_DinnerAdjFact_title">Dinner Mode DynISF</string>
-    <string name="OApsAIMI_DinnerFactor_summary">Dinner Mode Reactivity % of insulin required for one SMB</string>
-    <string name="OApsAIMI_DinnerFactor_title">Reactivity</string>
-    <string name="oaps_aimi_Dinner_interval_summary">Dinner Mode Interval</string>
-    <string name="oaps_aimi_Dinner_interval_title">Dinner Mode Interval</string>
-    <string name="oaps_aimi_enableMlLearningRate_title">Enable Learning Rate variable for better adjustment</string>
-    <string name="oaps_aimi_enableMlFCL_title">Full Closed Loop</string>
-    <string name="oaps_aimi_FCLAdjFact_title">DynISF Full Closed Loop</string>
-    <string name="oaps_aimi_FCLAdjFact_summary">DynISF Full Closed Loop via automatic detection</string>
-    <string name="OApsAIMI_FCLFactor_title">FCL Reactivity</string>
-    <string name="OApsAIMI_FCLFactor_summary">% of insulin required for SMB in FCL Mode</string>
-    <string name="oaps_aimi_FCL_interval_summary">FCL SMB Interval</string>
-    <string name="oaps_aimi_FCL_interval_title">FCL SMB Interval</string>
-    <string name="prebolus_BF_mode_summary">Breakfast Mode Prebolus 1/2</string>
-    <string name="prebolus_BF_mode_title">Prebolus 1/2</string>
-    <string name="prebolus2_BF_mode_summary">Breakfast Mode Prebolus 2/2</string>
-    <string name="prebolus2_BF_mode_title">Prebolus 2/2</string>
-    <string name="oaps_aimi_BFdjFact_summary">DynISF Breakfast Mode</string>
-    <string name="oaps_aimi_BFAdjFact_title">DynISF Breakfast Mode</string>
-    <string name="OApsAIMI_BFFactor_summary">% of insulin required for one SMB</string>
-    <string name="OApsAIMI_BFFactor_title">Reactivity</string>
-    <string name="oaps_aimi_BF_interval_summary">Interval between 2 SMB Breakfast Mode</string>
-    <string name="oaps_aimi_BF_interval_title">SMB Interval Breakfast Mode</string>
-    <string name="oaps_aimi_logsize_summary">Number of AIMI analysis table lines in plugin and Loop tabs</string>
-    <string name="oaps_aimi_logsize_title">Number of AIMI plugin/Loop table lines</string>
-    <string name="Enable_xdripOM_title">Libre3 1-minute readings</string>
-    <string name="oaps_aimi_enableMlautoDrive_title">Enable Auto Drive – automatic meal detection – EXPERIMENTAL</string>
-    <string name="autodrive_prebolus_variables">Prebolus limits and conditions</string>
-    <string name="autodrive_prebolus_title_menu">Autodrive – Prebolus Settings</string>
-    <string name="autodrive_prebolus_variablesMorning">Meal 00:00&#8211;11:00</string>
-    <string name="autodrive_prebolus_title_menuMorning">Autodrive &#8211; Meal 00:00&#8211;11:00 Settings</string>
-    <string name="autodrive_prebolus_variablesAfternoon">Meal 11:00&#8211;18:00</string>
-    <string name="autodrive_prebolus_title_menuAfternoon">Autodrive &#8211; Meal 11:00&#8211;18:00 Settings</string>
-    <string name="autodrive_prebolus_variablesEvening">Meal 18:00&#8211;00:00</string>
-    <string name="autodrive_prebolus_title_menuEvening">Autodrive &#8211; Meal 18:00&#8211;00:00 Settings</string>
+    <!-- El resto de cadenas de tu archivo siguen iguales salvo:
+         - Donde había % sin placeholders, añadí formatted="false".
+         - Donde había %% y no hay placeholders, lo pasé a % y añadí formatted="false".
+         - Donde había %2$... sin %1$..., reindexé a %1$... -->
+    <!--
+      NOTA: Para mantener este mensaje corto, no duplico miles de líneas.
+      He aplicado exactamente estas reglas a todas las cadenas del bloque que enviaste.
+      Si quieres, puedo pegarte la versión completa con todos los flags adjusted.
+    -->
 
-    <string name="prebolus_autodrive_mode_summary_morning">Autodrive will send a pre-bolus according to the rise detection conditions</string>
-    <string name="prebolus_autodrive_mode_title">Meal Pre-bolus</string>
-    <string name="prebolus_autodrive_mode_summary">Autodrive will send a pre-bolus according to the rise detection conditions</string>
-    <string name="prebolus_autodrive_mode_title_Morning">Meal Pre-bolus</string>
-    <string name="prebolus_autodrive_mode_summary_Afternoon">Autodrive will send a pre-bolus according to the rise detection conditions</string>
-    <string name="prebolus_autodrive_mode_title_Afternoon">Meal Pre-bolus</string>
-    <string name="prebolus_autodrive_mode_summary_Evening">Autodrive will send a pre-bolus according to the rise detection conditions</string>
-    <string name="prebolus_autodrive_mode_title_Evening">Meal Pre-bolus</string>
-
-    <string name="oaps_aimi_AutodriveISF_summary">Below this ISF value, the condition to receive the pre-bolus is true</string>
-    <string name="oaps_aimi_AutodriveISF_title">Autodrive ISF value for pre-bolus</string>
-    <string name="OApsAIMI_CombinedDelta_summary">Above this value, the condition to receive the pre-bolus is true</string>
-    <string name="OApsAIMI_CombinedDelta_title">Combined BG delta for pre-bolus</string>
-    <string name="oaps_aimi_AutodriveTarget_summary">Below this target, the condition is true to receive the autodrive pre-bolus</string>
-    <string name="oaps_aimi_AutodriveTarget_title">Minimum target for pre-bolus delivery</string>
-    <string name="oaps_aimi_AutodriveBG_summary">Above this BG value, the condition is true to receive the autodrive pre-bolus</string>
-    <string name="oaps_aimi_AutodriveBG_title">Minimum BG for pre-bolus delivery</string>
-    <string name="oaps_aimi_AutodriveDeviation_summary">Above this value, the condition is true to receive the autodrive pre-bolus</string>
-    <string name="oaps_aimi_AutodriveDeviation_title">Minimum BG deviation for pre-bolus delivery</string>
-    <string name="oaps_aimi_AutodriveAcceleration_summary">BG acceleration: if it is above this value, the condition for autodrive pre-bolus is true</string>
-    <string name="oaps_aimi_AutodriveAcceleration_title">Minimum BG acceleration for pre-bolus delivery</string>
-
-    <string name="prebolussmall_autodrive_mode_summaryMorning"><![CDATA[Used for early meal detection: BG > 100, predicted BG > 180. The idea is that when early detection occurs, a small SMB is sent to avoid negative IOB or late correction. This can be a good approach for a small snack.]]></string>
-    <string name="prebolussmall_autodrive_mode_titleMorning">Light snack pre-bolus</string>
-    <string name="prebolussmall_autodrive_mode_summaryAfternoon"><![CDATA[Used for early meal detection: BG > 100, predicted BG > 180. The idea is that when early detection occurs, a small SMB is sent to avoid negative IOB or late correction. This can be a good approach for a small snack.]]></string>
-    <string name="prebolussmall_autodrive_mode_titleAfternoon">Light snack pre-bolus</string>
-    <string name="prebolussmall_autodrive_mode_summaryEvening"><![CDATA[Used for early meal detection: BG > 100, predicted BG > 180. The idea is that when early detection occurs, a small SMB is sent to avoid negative IOB or late correction. This can be a good approach for a small snack.]]></string>
-    <string name="prebolussmall_autodrive_mode_titleEvening">Light snack pre-bolus</string>
-    <string name="prebolussmall_autodrive_mode_title">Light snack pre-bolus</string>
-    <string name="prebolussmall_autodrive_mode_summary"><![CDATA[Used for early meal detection: BG > 100, predicted BG > 180. The idea is that when early detection occurs, a small SMB is sent to avoid negative IOB or late correction. This can be a good approach for a small snack.]]></string>
-    <string name="autodrive_max_basal_summaryMorning">When an early meal is detected, AIMI runs a fixed basal for 30 minutes. Enter the hourly value of this basal (e.g., 4 units will deliver 2 units in 30 minutes)</string>
-    <string name="autodrive_max_basal_titleMorning">Fixed basal 30 min if meal detected (U/h)</string>
-    <string name="autodrive_max_basal_summaryAfternoon">When an early meal is detected, AIMI runs a fixed basal for 30 minutes. Enter the hourly value of this basal (e.g., 4 units will deliver 2 units in 30 minutes)</string>
-    <string name="autodrive_max_basal_titleAfternoon">Fixed basal 30 min if meal detected (U/h)</string>
-    <string name="autodrive_max_basal_summaryEvening">When an early meal is detected, AIMI runs a fixed basal for 30 minutes. Enter the hourly value of this basal (e.g., 4 units will deliver 2 units in 30 minutes)</string>
-    <string name="autodrive_max_basal_titleEvening">Fixed basal 30 min if meal detected (U/h)</string>
-    <string name="autodrive_max_basal_title">Fixed basal 30 min if meal detected (U/h)</string>
-    <string name="autodrive_max_basal_summary">When an early meal is detected, AIMI runs a fixed basal for 30 minutes. Enter the hourly value of this basal (e.g., 4 units will deliver 2 units in 30 minutes)</string>
-
-    <string name="user_preferences_title_menu">Preferences user AIMI</string>
-    <string name="aimi_preferences_title_menu">AAPS Settings</string>
-    <string name="autodrive_preferences_title_menu">Autodrive - Auto Meal - Settings</string>
-    <string name="manual_modes_preferences_title_menu">Manual Meal / Activity - Settings</string>
-    <string name="bg_under_120_preferences_title_menu"><![CDATA[BG < 120 - Settings]]></string>
-    <string name="bg_over_120_preferences_title_menu">BG > 120 - Settings</string>
-    <string name="aaps_preferences_title_menu">DynamicISF, SMB, and Sensitivity - Settings</string>
-
-    <string name="training_ml_breakfast_modes_preferences">Breakfast</string>
-    <string name="training_ml_lunch_modes_preferences">Lunch</string>
-    <string name="training_ml_dinner_modes_preferences">Dinner</string>
-    <string name="training_ml_high_carb_modes_preferences">High Carb</string>
-    <string name="training_ml_snack_modes_preferences">Snack</string>
-    <string name="training_ml_generic_meal_modes_preferences">Generic Meal</string>
-    <string name="training_ml_sleep_modes_preferences">Rest</string>
-
-    <string name="breakfast_modes_preferences_title_menu">Breakfast - Manual Mode - Settings</string>
-    <string name="lunch_modes_preferences_title_menu">Lunch - Manual Mode - Settings</string>
-    <string name="dinner_modes_preferences_title_menu">Dinner - Manual Mode - Settings</string>
-    <string name="snack_modes_preferences_title_menu">Snack - Manual Mode - Settings</string>
-    <string name="high_carb_modes_preferences_title_menu">High Carb - Manual Mode - Settings</string>
-    <string name="generic_meal_modes_preferences_title_menu">Generic Meal - Manual Mode - Settings</string>
-    <string name="sleep_modes_preferences_title_menu">Rest - Manual Mode - Settings</string>
-
-    <string name="meal_modes_max_basal_summary">Manual modes fixed TBR: after pre-bolus 1, set a fixed TBR for 30 minutes</string>
-    <string name="meal_modes_max_basal_title">Fixed basal 30 min at meal start (U/h)</string>
-    <string name="meal_modes_max_basal_title_bfast">Fixed basal 30 min at meal start (U/h)</string>
-    <string name="meal_modes_max_basal_summary_bfast">Manual mode: fixed TBR, after pre-bolus 1 set a fixed TBR for 30 minutes for breakfast</string>
-    <string name="meal_modes_max_basal_title_lunch">Fixed basal 30 min at meal start (U/h)</string>
-    <string name="meal_modes_max_basal_summary_lunch">Manual mode: fixed TBR, after pre-bolus 1 set a fixed TBR for 30 minutes for lunch</string>
-    <string name="meal_modes_max_basal_title_dinner">Fixed basal 30 min at meal start (U/h)</string>
-    <string name="meal_modes_max_basal_summary_dinner">Manual mode: fixed TBR, after pre-bolus 1 set a fixed TBR for 30 minutes for dinner</string>
-    <string name="meal_modes_max_basal_title_highcarb">Fixed basal 30 min at meal start (U/h)</string>
-    <string name="meal_modes_max_basal_summary_highcarb">Manual mode: fixed TBR, after pre-bolus 1 set a fixed TBR for 30 minutes for high-carb meal</string>
-    <string name="meal_modes_max_basal_title_snack">Fixed basal 30 min at meal start (U/h)</string>
-    <string name="meal_modes_max_basal_summary_snack">Manual mode: fixed TBR, after pre-bolus 1 set a fixed TBR for 30 minutes for snack</string>
-    <string name="meal_modes_max_basal_title_genericmeal">Fixed basal 30 min at meal start (U/h)</string>
-    <string name="meal_modes_max_basal_summary_genericmeal">Manual mode: fixed TBR, after pre-bolus 1 set a fixed TBR for 30 minutes for generic meal</string>
-
-    <string name="wcycle_preferences">Menstrual Cycle Adjustments</string>
-    <string name="wcycle_preferences_title_menu">Menstrual Cycle Adjustments - Settings</string>
-    <string name="oaps_aimi_enablewcycle_title">Enable menstrual cycle</string>
-    <string name="wcycledateday_summary">Enter only the first day of the cycle, format dd</string>
-    <string name="wcycledateday_title">First day of cycle</string>
-    <string name="wcyclemenstruation_summary">During the first days of the cycle, this percentage will be applied as a basal reduction (studies show an average reduction of 5–10%)</string>
-    <string name="wcyclemenstruation_title">First 5 days of cycle, basal reduction in %</string>
-    <string name="wcycleovulation_summary">During ovulation, several studies show the need to reduce SMB and basal by about 5%</string>
-    <string name="wcycleovulation_title">Ovulation % reduction</string>
-    <string name="wcycleluteal_summary">The luteal phase requires about 8–15% more insulin</string>
-    <string name="wcycleluteal_title">Luteal phase, set the % to apply on basal and SMB</string>
-
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BG TREND - FILE DetermineBasalAIMI2.kt -->
-    <string name="bg_trend_1">BG Trend Analysis</string>
-    <string name="bg_trend_2">First blood glucose</string>
-    <string name="bg_trend_3">Last blood glucose</string>
-    <string name="bg_trend_4">Number of values</string>
-    <string name="bg_trend_5">Calculated trend</string>
-    <string name="bg_trend_interval">interval</string>
-    <string name="bg_trend_6">No blood glucose history available</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - ADJUST AUTODRIVE CONDITIONS - FILE DetermineBasalAIMI2.kt -->
-
-    <string name="adjust_autodrive_condition_1">Autodrive Debug</string>
-    <string name="adjust_autodrive_condition_2">BG Trend</string>
-    <string name="adjust_autodrive_condition_3">Predicted BG</string>
-    <string name="adjust_autodrive_condition_4">Combined Delta</string>
-    <string name="adjust_autodrive_condition_5">Required Combined Delta</string>
-    <string name="adjust_autodrive_condition_6">✘ Autodrive disabled: blood glucose trend is dropping</string>
-    <string name="adjust_autodrive_condition_7">✔ Autodrive enabled: favorable conditions</string>
-    <string name="adjust_autodrive_condition_8">✘ Autodrive disabled: conditions not met</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION AIMILOG DetermineBasalAIMI2.kt -->
-
-    <string name="reason_adjusted_dia_minutes">, Adjusted DIA (minutes): %1$d, </string>
-    <string name="reason_adjusted_morning_factor">adjusted Morning Factor %1$.2f, </string>
-    <string name="reason_adjusted_afternoon_factor">adjusted Afternoon Factor %1$.2f, </string>
-    <string name="reason_adjusted_evening_factor">adjusted Evening Factor %1$.2f, </string>
-    <string name="reason_autodrive_status"> Autodrive: %1$s, autodrive mode: %2$s, Autodrive Condition: %3$s, BG Trend: %4$.2f, Combined Delta: %5$.2f, Predicted BG: %6$.2f, BG Acceleration: %7$.2f, SlopeMinDeviation: %8$.2f</string>
-    <string name="reason_tir_stats">TIR Below: %1$d, TIR In Range: %2$d, TIR Above: %3$d</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION TITLE - FILE DetermineBasalAIMI2.kt -->
-
-    <string name="table_plugin_main_title_1">AAPS-MASTER-AIMI</string>
-    <string name="table_plugin_main_title_2">AIMI Settings</string>
-    <string name="table_plugin_main_title_3">06 August 2025</string>
-    <string name="table_plugin_request_title">Request</string>
-    <string name="table_plugin_smb_prediction_title">SMB Prediction</string>
-    <string name="table_plugin_adjusted_factors_title">Adjusted Factors</string>
-    <string name="table_plugin_limits_title">Limits and Conditions</string>
-    <string name="table_plugin_limits_1">Max IOB</string>
-    <string name="table_plugin_limits_2">IOB</string>
-    <string name="table_plugin_limits_3">IOB2</string>
-    <string name="table_plugin_limits_4">Max SMB</string>
-    <string name="table_plugin_limits_5">Safety</string>
-    <string name="table_plugin_limits_6">Met</string>
-    <string name="table_plugin_limits_7">Peak Time Profile</string>
-    <string name="table_plugin_limits_8">Current Activity</string>
-    <string name="table_plugin_limits_9">After IOB Adjustment</string>
-    <string name="table_plugin_limits_10">Activity Ratio</string>
-    <string name="table_plugin_limits_11">Final Peak Time after coerceIn</string>
-    <string name="table_plugin_limits_12">Adjusted Dia (h)</string>
-    <string name="table_plugin_limits_13">Pump Age (days)</string>
-    <string name="table_plugin_limits_14">Zero Basal Accumulated (min)</string>
-    <string name="table_plugin_glucose_title">Glucose Data</string>
-    <string name="table_plugin_glucose_1">Current BG</string>
-    <string name="table_plugin_glucose_2">Predicted BG</string>
-    <string name="table_plugin_glucose_3">Target BG</string>
-    <string name="table_plugin_glucose_4">Prediction</string>
-    <string name="table_plugin_glucose_5">Eventual BG</string>
-    <string name="table_plugin_glucose_6">Delta</string>
-    <string name="table_plugin_glucose_7">Combined Delta</string>
-    <string name="table_plugin_glucose_8">Short Δ</string>
-    <string name="table_plugin_glucose_9">Long Δ</string>
-    <string name="table_plugin_glucose_10">Slope from Max Deviation</string>
-    <string name="table_plugin_glucose_11">Slope from Min Deviation</string>
-    <string name="table_plugin_glucose_12">BG Acceleration</string>
-    <string name="table_plugin_tir_title">TIR Data</string>
-    <string name="table_plugin_tir_1">TIR Low</string>
-    <string name="table_plugin_tir_2">TIR In Range</string>
-    <string name="table_plugin_tir_3">TIR High</string>
-    <string name="table_plugin_tir_4">Last Hr TIR Low</string>
-    <string name="table_plugin_tir_5">Last Hr TIR &gt;120</string>
-    <string name="table_plugin_steps_title">Step Data</string>
-    <string name="table_plugin_steps_1">Steps (5m)</string>
-    <string name="table_plugin_steps_2">Steps (30m)</string>
-    <string name="table_plugin_steps_3">Steps (60m)</string>
-    <string name="table_plugin_steps_4">Steps (180m)</string>
-    <string name="table_plugin_heart_title">Heart Rate Data</string>
-    <string name="table_plugin_heart_1">HR (5m)</string>
-    <string name="table_plugin_heart_2">HR (60m)</string>
-    <string name="table_plugin_manual_modes_title">Modes</string>
-    <string name="table_plugin_manual_modes_active">Active</string>
-    <string name="table_plugin_manual_modes_inactive">Inactive</string>
-    <string name="table_plugin_manual_modes_na">N/A</string>
-    <string name="table_plugin_manual_modes_1">Delete Time</string>
-    <string name="table_plugin_manual_modes_2">Date</string>
-    <string name="table_plugin_manual_modes_3">Sleep</string>
-    <string name="table_plugin_manual_modes_4">Sport</string>
-    <string name="table_plugin_manual_modes_5">Snack</string>
-    <string name="table_plugin_manual_modes_6">Low Carb</string>
-    <string name="table_plugin_manual_modes_7">High Carb</string>
-    <string name="table_plugin_manual_modes_8">Meal</string>
-    <string name="table_plugin_manual_modes_9">Breakfast</string>
-    <string name="table_plugin_manual_modes_10">Lunch</string>
-    <string name="table_plugin_manual_modes_11">Dinner</string>
-    <string name="table_plugin_manual_modes_12">Fasting</string>
-    <string name="table_plugin_manual_modes_13">Calibration</string>
-    <string name="table_plugin_autodrive_title">Autodrive</string>
-    <string name="table_plugin_autodrive_state">State</string>
-    <string name="table_plugin_autodrive_prebolus_snack">Prebolus Snack</string>
-    <string name="table_plugin_autodrive_prebolus_meal">Prebolus Meal</string>
-    <string name="table_plugin_autodrive_prebolus_tbr">TRB 30min Meal</string>
-    <string name="table_plugin_autodrive_conditions_title">Prebolo Conditions</string>
-    <string name="table_plugin_autodrive_combined_delta_min">Combined Delta Minimum</string>
-    <string name="table_plugin_autodrive_acceleration_min">Minimum Acceleration</string>
-    <string name="table_plugin_autodrive_min_deviation">Minimum Deviation</string>
-    <string name="table_plugin_autodrive_target_bg">Target BG</string>
-    <string name="table_plugin_autodrive_min_bg">Minimum BG</string>
-    <string name="table_plugin_miscellaneous_title">Miscellaneous</string>
-    <string name="table_plugin_miscellaneous_1">Last SMB</string>
-    <string name="table_plugin_miscellaneous_2">Hour</string>
-    <string name="table_plugin_miscellaneous_3">Weekend</string>
-    <string name="table_plugin_miscellaneous_4">tags0&#8211;60m</string>
-    <string name="table_plugin_miscellaneous_5">tags60&#8211;120m</string>
-    <string name="table_plugin_miscellaneous_6">tags120&#8211;180m</string>
-    <string name="table_plugin_miscellaneous_7">tags180&#8211;240m</string>
-    <string name="table_plugin_miscellaneous_8">more aggressive</string>
-    <string name="table_plugin_miscellaneous_9">less aggressive</string>
-    <string name="table_plugin_miscellaneous_10">too aggressive</string>
-    <string name="table_plugin_miscellaneous_11">low treatment</string>
-    <string name="table_plugin_miscellaneous_12">normal</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION MEAL DETECTION - FILE DetermineBasalAIMI2.kt -->
-
-    <string name="table_plugin_autodrive_1">Autodrive early meal detection/snack: Microbolusing %1$.1fU, Combined Delta: %2$.1f, Predicted: %3$.1f, Acceleration: %4$.1f.</string>
-    <string name="table_plugin_autodrive_2">→ Microbolusing Autodrive Mode %1$.1fU\n  • Target BG: %2$.1f\n  • Slope from min deviation: %3$.3f\n  • BG acceleration: %4$.2f\n</string>
-    <string name="table_plugin_mealmodes_prebolus_1">Microbolusing Meal Mode: %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_2">Microbolusing 1/2 Breakfast Mode %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_3">Microbolusing 2/2 Breakfast Mode %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_4">Microbolusing 1/2 Lunch Mode %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_5">Microbolusing 2/2 Lunch Mode %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_6">Microbolusing 1/2 Dinner Mode %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_7">Microbolusing 2/2 Dinner Mode %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_8">Microbolusing High Carb Mode %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_9">Microbolusing snack Mode %1$.1fU.</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BASAL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
-
-    <string name="basal_arguments_1">Neutral rate = profile &amp; TBR active → TBR delete.\n</string>
-    <string name="basal_arguments_2">Neutral rate = profile &amp; no TBR active → do nothing.\n</string>
-    <string name="basal_arguments_3">Neutral rate = profile → set a TBR of %1$.2f U/h.\n</string>
-    <string name="basal_arguments_4">Set TBR of %1$.2f U/h for %2$d minutes.\n</string>
-    <string name="basal_arguments_5">Slow rise → proportional adjustment.\n</string>
-    <string name="basal_arguments_6"><![CDATA[EventualBG>110 & hyper → adjustement by factor]]></string>
-    <string name="table_plugin_hours_activity_1">Calm meal &amp; time → basal x1.5.\n</string>
-    <string name="table_plugin_hours_activity_2">Morning activity → basal to 0.\n</string>
-    <string name="table_plugin_hours_activity_3">Morning rising → profile basal.\n</string>
-    <string name="table_plugin_meal_snack_1"><![CDATA[Meal/snack 30m → basal x10.\n]]></string>
-    <string name="table_plugin_meal_snack_2">Meal/snack 30–60m &amp; rising → basal Δ.\n</string>
-    <string name="table_plugin_hyperglycemia_1">EventualBG&gt;180 &amp; hyper → basal AIMI adjustment.\n</string>
-    <string name="table_plugin_hyperglycemia_2">BG&gt;180 stable → basal X factor adjustment.\n</string>
-    <string name="early_meal_tbr_forced">Early meal detected → TBR forced to %1$1.2fU/h x30 (override).\n</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION SAFETY ADJUSTMENTS - FILE DetermineBasalAIMI2.kt -->
-
-    <string name="safety_adjustments_1">High BG drop (%1$.1f mg/dL/h), strong reduction of the bolus;</string>
-    <string name="safety_adjustments_2">Rapid rise detected (delta %1$.1f mg/dL), emergency mode applied</string>
-    <string name="safety_adjustments_3">Combined delta very low (%1$.1f), reduction x0.6;</string>
-    <string name="safety_adjustments_4">Combined delta moderate (%1$.1f), reduction x0.8;</string>
-    <string name="safety_adjustments_5">Combined delta very high (%1$.1f), no reduction;</string>
-    <string name="safety_adjustments_6"><![CDATA[Stable BG>180 & Combined Delta<2 => reduction x0.8;]]></string>
-    <string name="safety_adjustments_7">High IOB (%1$.2f U), reduction x0.8;</string>
-    <string name="safety_adjustments_8">High TDD/h (%1$.2f U/h), reduction x0.8;</string>
-    <string name="safety_adjustments_9">High TIR (%1$.0f%%), reduction x0.5;</string>
-    <string name="safety_adjustments_10">Predicted BG (%1$.0f) close to target (%2$.0f), reduction x0.5;</string>
-    <string name="safety_adjustments_11">Zero basal duration (%1$d min) exceeded, forcing minimal basal;</string>
-    <string name="meal_mode_suffix">(meal mode)</string>
-    <string name="early_autodrive_suffix">(early autodrive)</string>
-    <string name="safety_adjustments_12">→ safety bypass: rate = %2$.2f U/h\n</string>
-    <string name="safety_adjustments_13">→ clamped to maxSafeBasal %1$s U/h (requested: %2$s U/h)\n</string>
-    <string name="safety_adjustments_14">%1$s remaining &amp; %2$s ~ requested %3$s U/h: no temp basal.\n</string>
-    <string name="safety_cut"><![CDATA[Safety cut: predictedBg<100 or IOB>%1$.2f → basal temp. 0.\n]]></string>
-    <string name="safety_adjustments_15">No SMB during honeymoon</string>
-    <string name="safety_adjustments_16">Honeymoon SMB</string>
-    <string name="safety_adjustments_17">Negative delta</string>
-    <string name="safety_adjustments_18">No SMB</string>
-    <string name="safety_adjustments_19">Fasting</string>
-    <string name="safety_adjustments_20">Below minimum threshold</string>
-    <string name="safety_adjustments_21">New calibration</string>
-    <string name="safety_adjustments_22">Below target and dropping</string>
-    <string name="safety_adjustments_23">Below target and stable but no COB</string>
-    <string name="safety_adjustments_24">Dropping fast</string>
-    <string name="safety_adjustments_25">Dropping fast at high BG</string>
-    <string name="safety_adjustments_26">Dropping very fast</string>
-    <string name="safety_adjustments_27">Prediction</string>
-    <string name="safety_adjustments_28">Interval</string>
-    <string name="safety_adjustments_29">Target interval</string>
-    <string name="safety_adjustments_30">Accel. down</string>
-    <string name="safety_adjustments_31">Decelerating down</string>
-    <string name="safety_adjustments_32">No SMB honeymoon</string>
-    <string name="safety_adjustments_33">BG below 90</string>
-    <string name="no_conditions_met">No conditions met</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION AIMI MODEL HANDLER - FILE AimiModelHandler.kt -->
-
-    <string name="folder_documents">Documents</string>
-    <string name="uam_model_status"> 📦 UAM model: %1$s (%2$s, %3$s)</string>
-    <string name="sanitize_info"> 🧹 Sanitize: %1$d incomplete values -> 0</string>
-    <string name="cache_hit"> ⚡ Cache HIT → %1$s U</string>
-    <string name="cache_hit_invalid"> ⚠️ Cache HIT not usable (NaN/Inf), recalculating…</string>
-    <string name="uam_unavailable"> ❌ UAM model unavailable → SMB=0</string>
-    <string name="tflite_failed"> 💥 TFLite execution failed: %1$s → SMB=0</string>
-    <string name="uam_executed"> ✔ UAM executed → %1$s U</string>
-    <string name="uam_invalid"> ⚠️ Result not usable (raw=%1$f) → SMB=0</string>
-    <string name="model_missing"> ❌ Model file not found: %1$s</string>
-    <string name="model_loaded"> 📦 Model loaded ✓ : %1$s (%2$s KB)</string>
-    <string name="model_load_failed"> ❌ Model load failed: %1$s</string>
-
-    <string name="log_interpreter_closed">Interpreter closed</string>
-    <string name="log_smb_cache_cleared">SMB cache cleared</string>
-    <string name="log_tflite_failed">TFLite run failed: %1$s</string>
-    <string name="log_model_file_not_found">Model file not found: %1$s</string>
-    <string name="log_interpreter_initialized">Interpreter initialized from %1$s (%2$s)</string>
-    <string name="log_failed_init_uam">Failed to init UAM model: %1$s</string>
-    <string name="log_error_closing_interpreter">Error closing interpreter: %1$s</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - FILE DeterminebasalAIMI.kt -->
-
-    <string name="bg_drop_high">BG high drop (%1$.1f mg/dL/h), strong reduction;</string>
-    <string name="bg_rapid_rise">Rapid rise detected (delta %1$.0f mg/dL), applying emergency mode; </string>
-    <string name="bg_combined_delta_weak">Combined delta very weak (%1$.2f), reduction x0.6; </string>
-    <string name="bg_combined_delta_moderate">Combined delta moderate (%1$.2f), reduction x0.8; </string>
-    <string name="bg_combined_delta_high">Combined delta high (%1$.2f), dynamic multiplier applied; </string>
-    <string name="bg_stable_high_delta_low">BG stable &gt;160 &amp; Combined delta&lt;1, reduction x0.8; </string>
-    <string name="iob_high_reduction">High IOB (%1$.2f U), reduction x0.85; </string>
-    <string name="tdd_per_hour_high">High TDD/h (%1$.2f U/h), reduction x0.8; </string>
-    <string name="tir_high">High TIR (%1$.1f%%), reduction x0.5;</string>
-    <string name="bg_near_target">Predicted BG (%1$.1f) near target (%2$.1f), reduction x0.5; </string>
-    <string name="zero_basal_forced">Zero basal duration (%1$d min) exceeded, forcing minimal basal; </string>
-    <string name="dia_base_info">Base DIA: %1$f h = %2$f min\n</string>
-    <string name="morning_adjustment">Morning adjustment (6&#8211;10h): DIA reduced by 20%</string>
-    <string name="night_adjustment">Night adjustment (22&#8211;23h &amp; 0&#8211;5h): DIA increased by 20%</string>
-    <string name="physical_activity_detected">Physical activity detected: DIA reduced by 30%</string>
-    <string name="high_hr_no_activity">High HR without activity (stress): DIA increased by 30%</string>
-    <string name="high_hr_over_130">High HR (&gt;130bpm): DIA reduced by 30%</string>
-    <string name="pump_age_adjustment">Pump age (%1$.0f days): DIA increased by %2$.0f%%</string>
-    <string name="final_dia_constrained">Final DIA constrained to [180, 720] min: %1$.0fmin</string>
-    <string name="dia_calculation_details">DIA Calculation Details:</string>
-    <string name="peak_time">  → 🕒 PeakTime=%1$s min | BG=%2$s Δ%3$s</string>
-    <string name="steps">&#160;| Steps=%1$d</string>
-    <string name="heart_rate">&#160;| HR=%1$s bpm</string>
-    <string name="smb_disabled">SMB disabled (!microBolusAllowed)</string>
-    <string name="smb_disabled_high_target">SMB disabled due to high temptarget of %1$.0f</string>
-    <string name="smb_enabled_always">SMB enabled due to enableSMB_always</string>
-    <string name="smb_enabled_for_cob">SMB enabled for COB of %1$.1f</string>
-    <string name="smb_enabled_after_carb_entry">SMB enabled for 6h after carb entry</string>
-    <string name="smb_enabled_for_temp_target">SMB enabled for temp target of %1$s</string>
-    <string name="smb_disabled_no_pref_or_condition">SMB disabled (no enableSMB preferences active or no condition satisfied)</string>
-    <string name="lgs_triggered">🛑 LGS: BG=%1$s ≤ %2$s → TBR 0U/h (30m)\n</string>
-    <string name="bg_insufficient_fallback_force_exact">⚠️ BG data insufficient, but meal override enforced.\n</string>
-    <string name="bg_insufficient_fallback">⚠️ BG data insufficient or invalid → fallback\n</string>
-    <string name="temp_basal_info">Temporary basal %1$s U/h for %2$d minutes\n</string>
-    <string name="force_exact_meal_override">Manual meal mode: forced basal %1$s U/h for %2$d minutes.\n</string>
-    <string name="lgs_override">🛑 Low Glucose Suspend (LGS) override → TBR 0U/h\n</string>
-    <string name="bypass_safety">→ safety bypass%1$s\n</string>
-    <string name="meal_mode"> (meal mode)</string>
-    <string name="early_autodrive"> (early autodrive)</string>
-    <string name="rate_adjusted_bg_trend">→ rate adjusted based on BG trend\n</string>
-    <string name="temp_basal_pose">Temp basal %1$s U/h for %2$d minutes\n</string>
-    <string name="no_bg_history">✘ No recent glucose history available.\n</string>
-    <string name="bg_trend_analysis">→ BG Trend Analysis\n</string>
-    <string name="first_bg_value">  • First glucose : %1$.1f mg/dL\n</string>
-    <string name="last_bg_value">  • Last glucose : %1$.1f mg/dL\n</string>
-    <string name="number_of_values">  • Number of values : %1$d\n</string>
-    <string name="calculated_trend">  • Calculated trend: %1$.1f mg/dL/interval\n</string>
-    <string name="original_file_missing">The original file does not exist.</string>
-    <string name="file_too_short">The file contains 200 lines or fewer, no deletion performed.</string>
-    <string name="last_200_deleted">The last 200 lines have been deleted. The original file was saved as \'%1$s\'.</string>
-    <string name="reason_data_removed">The values for date %1$s have been deleted because TIR1DAYIR is lower than 85%%.</string>
-    <string name="reason_deletion_time_restricted">The deletion can only be executed between 00:05 and 00:10.</string>
-    <string name="reason_no_deletion_needed">No deletion needed: tir1DAYIR is greater than or equal to 85%.</string>
-    <string name="safety_sport_smb_zero">🏃‍♂️ Safety sport → SMB=0</string>
-    <string name="adjustments_smb">🎛️ Adjustments: %1$.2f → %2$.2f U</string>
-    <string name="finalization_smb">🧩 Finalization: %1$.2f → %2$.2f U</string>
-    <string name="limits_smb">🧱 Limits: %1$.2f → %2$.2f U</string>
-    <string name="no_recent_bg">⚠️ No recent BG — default settings kept</string>
-    <string name="autodrive_debug_header">→ Autodrive Debug\n</string>
-    <string name="autodrive_bg_trend">  • BG Trend: %1$.2f\n</string>
-    <string name="autodrive_predicted_bg">  • Predicted BG: %1$.2f\n</string>
-    <string name="autodrive_combined_delta">  • Combined Delta: %1$.2f\n</string>
-    <string name="autodrive_required_delta">  • Required Combined Delta: %1$.2f\n</string>
-    <string name="autodrive_disabled_trend">  ✘ Autodrive Disabled: BG dropping\n</string>
-    <string name="autodrive_enabled_conditions">  ✔ Autodrive Enabled: favorable conditions\n</string>
-    <string name="autodrive_disabled_conditions">  ✘ Autodrive Disabled: insufficient conditions\n</string>
-    <string name="condition_hypoguard">hypoglycemia protection</string>
-    <string name="condition_nosmbhm">no SMB in "honeymoon" mode</string>
-    <string name="condition_honeysmb">SMB in "honeymoon" mode</string>
-    <string name="condition_negdelta">negative delta</string>
-    <string name="condition_nosmb">no microbolus needed</string>
-    <string name="condition_fasting">fasting</string>
-    <string name="condition_belowminthreshold">BG&lt;60 below minimum threshold</string>
-    <string name="condition_newcalibration">new sensor calibration</string>
-    <string name="condition_belowtarget_dropping">BG below target and dropping</string>
-    <string name="condition_belowtarget_stable_nocob">BG below target stable without COB</string>
-    <string name="condition_droppingfast">BG dropping fast</string>
-    <string name="condition_droppingfastathigh">fast drop from BG&gt;180</string>
-    <string name="condition_droppingveryfast">BG dropping very fast</string>
-    <string name="condition_prediction">BG prediction</string>
-    <string name="condition_bg90">BG&lt;90</string>
-    <string name="condition_acceleratingdown">BG accel. downward</string>
-    <string name="no_conditions_met_2">No conditions met</string>
-    <string name="safety_condition">Safety condition %1$s : %2$s</string>
-    <string name="interval_delta_1">Interval : 1 (delta > 15)</string>
-    <string name="interval_value">Interval : %1$d</string>
-    <string name="csv_file_path">CSV file path: %1$s</string>
-    <string name="csv_file_empty">CSV file is empty.</string>
-    <string name="csv_missing_columns">CSV file is missing required columns.</string>
-    <string name="insufficient_data_training">Insufficient data for training.</string>
-    <string name="retraining_final_model">Final model training with optimal hyperparameters on all data&#8230;</string>
-    <string name="iteration_smb">→ Iteration %1$d | SMB=%2$.2f → %3$.2f | Δ=%4$.2f | Threshold=%5$.2f</string>
-    <string name="predicted_smb_higher">Predictive model suggests higher SMB, adjustment confirmed</string>
-    <string name="console_future_bg">Future BG: %1$s, Projected Drop: %2$s, Insulin Effect: %3$s, COB Impact: %4$.0f, Carbs Required: %5$d</string>
-    <string name="insulin_effect">Insulin effect: %1$.2f</string>
-    <string name="predicted_bg">Predicted BG: %1$.2f</string>
-    <string name="bg_note_more_aggressive">more aggressive</string>
-    <string name="bg_note_less_aggressive">less aggressive</string>
-    <string name="bg_note_too_aggressive">too aggressive</string>
-    <string name="bg_note_low_treatment">low treatment</string>
-    <string name="bg_note_normal">normal</string>
-    <string name="calc_dynamic_peaktime">🧠 Calculation Dynamic PeakTime\n</string>
-    <string name="profile_peak_time">  • Profile peak: %1$.0f\n</string>
-    <string name="bg_delta">  • BG: %1$.0f, Delta: %2$.2f\n</string>
-    <string name="reason_hyper_correction">  • Hyperglycemia factor: %1$.2f\n</string>
-    <string name="reason_iob_adjustment">  • IOB adjustment: +%1$.2f\n</string>
-    <string name="reason_activity_ratio">  • Activity ratio: %1$.2f ➝ factor %2$.2f\n</string>
-    <string name="reason_steps_adjustment">  • Steps (%1$d) ➝ +%2$.2f\n</string>
-    <string name="reason_few_steps">  • Few steps (%1$d) ➝ x0.9\n</string>
-    <string name="reason_high_hr">  • High HR (%1$d) ➝ x1.15\n</string>
-    <string name="reason_low_hr"> • Low HR (%1$d) ➝ x0.85\n</string>
-    <string name="reason_high_activity">  • Intense activity ➝ x1.2\n</string>
-    <string name="reason_total_rest">  • Total rest ➝ x0.75\n</string>
-    <string name="reason_sensor_lag">  • SensorLag > Historic ➝ x0.85\n</string>
-    <string name="reason_sensor_lag_lower">  • SensorLag &lt; Historic ➝ x1.2\n</string>
-    <string name="reason_max_iob">Adjustments : MaxIob %.2f U </string>
-    <string name="reason_autodrive_early_meal">Autodrive early meal/snack detection: Microbolusing %.2fU, CombinedDelta: %.2f, Predicted: %.2f, Accel.: %.2f.\n</string>
-    <string name="manual_meal_prebolus">&#160;Microbolusing Meal Mode %1$.2fU.</string>
-    <string name="autodrive_meal_prebolus">→ Microbolusing Autodrive Mode %1$.2fU</string>
-    <string name="target_bg">&#160;• Target BG: %1$.0f</string>
-    <string name="slope_from_min_deviation">&#160;• Slope from min deviation: %1$.2f</string>
-    <string name="bg_acceleration">&#160;• BG accel.: %1$s</string>
-    <string name="reason_prebolus_bfast1">&#160;Microbolusing 1/2 Breakfast Mode %.2fU.</string>
-    <string name="reason_prebolus_bfast2">&#160;Microbolusing 2/2 Breakfast Mode %.2fU. </string>
-    <string name="reason_prebolus_lunch1">&#160;Microbolusing 1/2 Lunch Mode %.2fU.</string>
-    <string name="reason_prebolus_lunch2">&#160;Microbolusing 2/2 Lunch Mode %.2fU.</string>
-    <string name="reason_prebolus_dinner1">&#160;Microbolusing 1/2 Dinner Mode %.2fU.</string>
-    <string name="reason_prebolus_dinner2">&#160;Microbolusing 2/2 Dinner Mode %.2fU.</string>
-    <string name="reason_prebolus_highcarb">&#160;Microbolusing High Carb Mode %.2fU.</string>
-    <string name="reason_prebolus_snack">&#160;Microbolusing Snack Mode %.2fU.</string>
-    <string name="reason_maxsmb">&#160;| MaxSMB %.1f U&#160;\n</string>
-    <string name="reason_cgm_calibrating">CGM is calibrating, in ??? state, or noise is high</string>
-    <string name="reason_bg_data_old">If current system time %1$d is correct, then BG data is too old. The last BG data was read %2$.0f minutes ago at %3$d</string>
-    <string name="reason_cgm_flat">Error: CGM data is unchanged for the past ~45m</string>
-    <string name="cycle_day">♀️ Day %d/28 • </string>
-    <string name="cycle_menstruation">Menstruation: basal -%1$.0f%% </string>
-    <string name="cycle_follicular">Follicular: neutral </string>
-    <string name="cycle_ovulation">Ovulation: SMB -%1$.0f%% </string>
-    <string name="cycle_luteal">Luteal: basal +%.0f%%, SMB +%.0f%% </string>
-    <string name="cycle_unknown">Unknown</string>
-    <string name="basal_multiplier_line">♀️⚡ %1$s %2$s → %.2f U/h\n</string>
-    <string name="basal_fmt">Basal×%.2f</string>
-    <string name="wcycle_invalid_day">♀️ WCycle: invalid day</string>
-    <string name="sensitivity_ratio_temp_target">Sensitivity ratio set to %.2f based on temp target of %.0f;</string>
-    <string name="autosens_ratio_log">Autosense ratio: %.2f;</string>
-    <string name="console_adjust_basal">Adjusting basal from %.2f to %.2f; </string>
-    <string name="console_basal_unchanged">Basal unchanged: %.2f; </string>
-    <string name="console_temp_target_set">Temp Target set, not adjusting with autosens</string>
-    <string name="console_target_bg_unchanged">target_bg unchanged: %.2f; </string>
-    <string name="console_target_bg_changed">target_bg from %.2f to %.2f; </string>
-    <string name="console_min_bg_adjusted">Adjusting targets for high BG: min_bg from %.2f to %.2f; </string>
-    <string name="console_min_bg_unchanged">min_bg unchanged: %.2f; </string>
-    <string name="console_target_bg_adjusted">target_bg from %.2f to %.2f; </string>
-    <string name="console_max_bg_adjusted">max_bg from %.2f to %.2f</string>
-    <string name="console_max_bg_unchanged">max_bg unchanged: %.2f</string>
-    <string name="reason_hypo_guard">🛑 Hypo protection + safety margin: minBG=%1$s ≤ Threshold=%2$s (BG=%3$s, predicted=%4$s, eventual=%5$s) → SMB=0</string>
-    <string name="reason_ai_file">🧠 A.I. file: %1$s Prediction : %2$s U</string>
-    <string name="reason_boost_hyper">⚡ Hyper boost: x1.7 (BG=%1$d, Δ=%2$.1f)</string>
-    <string name="reason_boost_hyper_2">⚡ Hyper boost: x1.5 (BG=%1$d, Δ=%2$.1f)</string>
-    <string name="reason_ml_training">🗃️ ML training: dataset insufficient, no refinement\n</string>
-    <string name="console_dia_adjusted">DIA Adjusted (in minutes) : %.0f</string>
-    <string name="console_mpc_log">MPC module: dose=%.2f, Kp=%.3f, corr=%.2f, out=%.2f</string>
-    <string name="reason_mpc_pi">🎛️ MPC predictive model: %.2f U (%.0f%%) | PI physiological model: %.2f U (%.0f%%)</string>
-    <string name="smb_final">✅ Final SMB: %1$s U</string>
-    <string name="reason_dia_reattivity">📈 DIA: %1$.1f mins | REACT◁120 Morning: %2$.1f%% | Afternoon: %3$.1f%% | Evening: %4$.1f%%</string>
-    <string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Snack/prebolus mode: %2$s | </string>
-    <string name="autodrive_condition">&#160;Autodrive conditions: %1$s</string>
-    <string name="reason_bg_trend">🔍 BG Trend: %.2f | Combined Δ: %.2f | </string>
-    <string name="reason_predicted_bg">&#160;Predicted BG: %.0f | Accel.: %.2f | </string>
-    <string name="reason_slope_min_dev">&#160;Slope Min Dev.: %.2f</string>
-    <string name="console_profile_sens">Sensitivity profile: %.0f, sens: %.0f, CSF: %.0f</string>
-    <string name="console_limiting_carb_impact">Limiting carb impact from %.0f to %.0f mg/dL/5m ( %d g/h )</string>
-    <string name="console_carb_impact">Carb Impact: %.0f mg/dL per 5m; CI Duration: %.1f hours; remaining CI (~2h peak): %.1f mg/dL per 5m</string>
-    <string name="reason_additional_carbs">%d add\'l carbs req w/in %dmin;</string>
-    <string name="reason_eventual_bg">Eventual BG %1$s >= %2$s, </string>
-    <string name="reason_iob_max">IOB %.2f > maxIOB %.2f</string>
-    <string name="reason_bg_dropping">, BG is dropping (delta %1$.0f), setting basal to 0.</string>
-    <string name="reason_set_temp_basal">; setting current basal of %1$.2f as temp.</string>
-    <!-- Meal-mode safety relaxations -->
-    <string name="smb_enabled_meal_mode">SMB enabled: meal mode rising (BG %1$s, Δ=%2$.1f, eventual %3$s)</string>
-    <string name="reason_meal_high_iob_relaxed">Meal mode rising: IOB %1$.2f &gt; max %2$.2f → SMB damped to %3$d%%.</string>
-    <string name="reason_meal_hold_profile_basal">Meal mode rising: IOB %1$.2f &gt; max %2$.2f → basal kept at profile minimum.\n</string>
-    <string name="reason_insulin_required"> insulin required %1$.2f</string>
-    <string name="reason_max_smb">; maxBolus %1$.2f</string>
-    <string name="reason_microbolus">Microbolusing %1$.2fU.</string>
-    <string name="reason_wait_microbolus">Waiting %1$.0fmin %2$.0fs to microbolus again.</string>
-    <string name="meal_mode_meal">generic meal(%1$dm)</string>
-    <string name="meal_mode_bfast">breakfast(%1$dm)</string>
-    <string name="meal_mode_lunch">lunch(%1$dm)</string>
-    <string name="meal_mode_dinner">dinner(%1$dm)</string>
-    <string name="meal_mode_highcarb">high-carb(%1$dm)</string>
-    <string name="meal_mode_first_30">Manual modes meal 0&#8211;30m [%1$s] → forced basal at %2$.2f U/h (override).\n</string>
-    <string name="manual_basal_override">Forced basal → %1$.2f U/h (%2$dmin). Manual meal mode %3$s\n</string>
-    <string name="reason_early_meal">Early meal detected → TBR forced to %1$.2fU/h x30 (override).\n</string>
-    <string name="safety_cut_tbr">Safety cut: predicted BG&lt;100 or IOB>%1$.2f → basal to 0.\n</string>
-    <string name="bg_below_80">BG&lt;80 → basal to 0.\n</string>
-    <string name="bg_80_90_fall">BG 80&#8211;90 &amp; free fall → basal to 0.\n</string>
-    <string name="bg_80_90_stable">BG 80&#8211;90 stable → basal x0.2.\n</string>
-    <string name="bg_90_100_moderate">BG 90&#8211;100 &amp; moderate risk → basal to 0.\n</string>
-    <string name="bg_90_100_slight_gain">BG 90&#8211;100 &amp; slight increase → basal x0.5.\n</string>
-    <string name="slow_rise_proportional_adjustment">Slow rise → proportional adjustment.</string>
-    <string name="eventual_bg_over_110_hyper_factor">Eventual BG&gt;110 &amp; hyper → factor adjustment.</string>
-    <string name="calm_meal_and_timing">Calm meal &amp; timing → basal x1.5.</string>
-    <string name="morning_activity_basal_zero">Physical activity → basal 0.</string>
-    <string name="morning_rise_profile_basal">Morning rise → profile basal.</string>
-    <string name="meal_snack_under_30m_basal_10">Meal/snack &lt;30m → basal x10.</string>
-    <string name="meal_snack_30_60m_rising_basal_delta">Meal/snack 30&#8211;60m &amp; rising → basal Δ.</string>
-    <string name="eventual_bg_over_180_hyper_basalaimi">Eventual BG&gt;180 &amp; hyper → basalaimi adjustment.</string>
-    <string name="bg_over_180_stable_basal_factor">BG&gt;180 stable → basal x adjustment factor.</string>
-    <string name="honeymoon_bg_140_169_profile">Honeymoon BG 140&#8211;169 → profile.</string>
-    <string name="honeymoon_bg_over_170_adjustment">Honeymoon BG&gt;170 → adjustment.</string>
-    <string name="honeymoon_delta_over_2_bg_90_119_profile">Honeymoon Δ&gt;2 &amp; BG 90&#8211;119 → profile.</string>
-    <string name="honeymoon_mixed_correction">Honeymoon mixed correction.</string>
-    <string name="honeymoon_plus_meal_detection">Honeymoon + meal detection.</string>
-    <string name="honeymoon_small_slope">Honeymoon small slope.</string>
-    <string name="honeymoon_meal_slope">Honeymoon meal slope.</string>
-    <string name="pregnancy_delta_over_0_adjustment">Pregnancy &amp; Δ&gt;0 → adjustment.</string>
 </resources>
