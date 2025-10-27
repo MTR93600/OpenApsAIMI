@@ -34,6 +34,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.objects.profile.ProfileSealed
 import app.aaps.core.objects.workflow.LoggingWorker
 import app.aaps.plugins.configuration.maintenance.MaintenancePlugin
+import app.aaps.plugins.constraints.dstHelper.DstHelperPlugin
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.Dispatchers
 import java.util.concurrent.TimeUnit
@@ -58,6 +59,7 @@ class KeepAliveWorker(
     @Inject lateinit var maintenancePlugin: MaintenancePlugin
     @Inject lateinit var rh: ResourceHelper
     @Inject lateinit var preferences: Preferences
+    @Inject lateinit var dstHelperPlugin: DstHelperPlugin
 
     companion object {
 
@@ -127,6 +129,7 @@ class KeepAliveWorker(
         }
         lastRun = dateUtil.now()
 
+        dstHelperPlugin.dstCheck()
         localAlertUtils.shortenSnoozeInterval()
         localAlertUtils.checkStaleBGAlert()
         checkPump()

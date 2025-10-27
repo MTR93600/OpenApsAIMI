@@ -720,6 +720,13 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
                         binding.infoLayout.apsModeText.visibility = View.VISIBLE
                     }
 
+                    RM.Mode.SUSPENDED_BY_DST -> {
+                        binding.infoLayout.apsMode.setImageResource(app.aaps.core.ui.R.drawable.ic_loop_paused)
+                        apsModeSetA11yLabel(app.aaps.core.ui.R.string.loop_suspended_by_dst)
+                        binding.infoLayout.apsModeText.text = dateUtil.age(loop.minutesToEndOfSuspend() * 60000L, true, rh)
+                        binding.infoLayout.apsModeText.visibility = View.VISIBLE
+                    }
+
                     RM.Mode.CLOSED_LOOP_LGS   -> {
                         binding.infoLayout.apsMode.setImageResource(app.aaps.core.ui.R.drawable.ic_loop_lgs)
                         apsModeSetA11yLabel(app.aaps.core.ui.R.string.uel_lgs_loop_mode)

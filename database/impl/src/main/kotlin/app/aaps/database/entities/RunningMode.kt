@@ -56,7 +56,8 @@ data class RunningMode(
         SUPER_BOLUS,
         DISCONNECTED_PUMP,
         SUSPENDED_BY_PUMP,
-        SUSPENDED_BY_USER
+        SUSPENDED_BY_USER,
+        SUSPENDED_BY_DST
         ;
     }
 }

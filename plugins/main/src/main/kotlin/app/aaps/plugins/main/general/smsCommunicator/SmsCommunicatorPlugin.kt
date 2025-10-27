@@ -425,6 +425,7 @@ class SmsCommunicatorPlugin @Inject constructor(
                         RM.Mode.SUPER_BOLUS       -> rh.gs(app.aaps.core.ui.R.string.superbolus)
                         RM.Mode.DISCONNECTED_PUMP -> rh.gs(app.aaps.core.ui.R.string.pump_disconnected)
                         RM.Mode.SUSPENDED_BY_PUMP -> rh.gs(app.aaps.core.ui.R.string.pumpsuspended)
+                        RM.Mode.SUSPENDED_BY_DST  -> rh.gs(app.aaps.core.ui.R.string.loop_suspended_by_dst)
                         RM.Mode.SUSPENDED_BY_USER -> rh.gs(R.string.sms_loop_suspended_for, loop.minutesToEndOfSuspend())
                         RM.Mode.RESUME            -> error("Invalid mode")
                     }

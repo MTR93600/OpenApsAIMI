@@ -257,25 +257,14 @@ class LoopPlugin @Inject constructor(
             RM.Mode.DISABLED_LOOP     ->
                 mutableListOf(RM.Mode.OPEN_LOOP, RM.Mode.CLOSED_LOOP, RM.Mode.CLOSED_LOOP_LGS, RM.Mode.DISCONNECTED_PUMP, RM.Mode.SUPER_BOLUS)
 
-            RM.Mode.OPEN_LOOP         ->
-                mutableListOf(RM.Mode.DISABLED_LOOP, RM.Mode.CLOSED_LOOP, RM.Mode.CLOSED_LOOP_LGS, RM.Mode.DISCONNECTED_PUMP, RM.Mode.SUSPENDED_BY_USER, RM.Mode.SUPER_BOLUS)
-
-            RM.Mode.CLOSED_LOOP       ->
-                mutableListOf(RM.Mode.DISABLED_LOOP, RM.Mode.OPEN_LOOP, RM.Mode.CLOSED_LOOP_LGS, RM.Mode.DISCONNECTED_PUMP, RM.Mode.SUSPENDED_BY_USER, RM.Mode.SUPER_BOLUS)
-
-            RM.Mode.CLOSED_LOOP_LGS   ->
-                mutableListOf(RM.Mode.DISABLED_LOOP, RM.Mode.OPEN_LOOP, RM.Mode.CLOSED_LOOP, RM.Mode.DISCONNECTED_PUMP, RM.Mode.SUSPENDED_BY_USER, RM.Mode.SUPER_BOLUS)
-
-            RM.Mode.SUPER_BOLUS       ->
-                mutableListOf(RM.Mode.DISCONNECTED_PUMP, RM.Mode.RESUME)
-
-            RM.Mode.DISCONNECTED_PUMP ->
-                mutableListOf(RM.Mode.RESUME)
-
+            RM.Mode.OPEN_LOOP         -> mutableListOf(RM.Mode.DISABLED_LOOP, RM.Mode.CLOSED_LOOP, RM.Mode.CLOSED_LOOP_LGS, RM.Mode.DISCONNECTED_PUMP, RM.Mode.SUSPENDED_BY_USER, RM.Mode.SUPER_BOLUS)
+            RM.Mode.CLOSED_LOOP       -> mutableListOf(RM.Mode.DISABLED_LOOP, RM.Mode.OPEN_LOOP, RM.Mode.CLOSED_LOOP_LGS, RM.Mode.DISCONNECTED_PUMP, RM.Mode.SUSPENDED_BY_USER, RM.Mode.SUPER_BOLUS)
+            RM.Mode.CLOSED_LOOP_LGS   -> mutableListOf(RM.Mode.DISABLED_LOOP, RM.Mode.OPEN_LOOP, RM.Mode.CLOSED_LOOP, RM.Mode.DISCONNECTED_PUMP, RM.Mode.SUSPENDED_BY_USER, RM.Mode.SUPER_BOLUS)
+            RM.Mode.SUPER_BOLUS       -> mutableListOf(RM.Mode.DISCONNECTED_PUMP, RM.Mode.RESUME)
+            RM.Mode.DISCONNECTED_PUMP -> mutableListOf(RM.Mode.RESUME)
+            RM.Mode.SUSPENDED_BY_DST  -> mutableListOf(RM.Mode.DISCONNECTED_PUMP)
             RM.Mode.SUSPENDED_BY_PUMP -> mutableListOf() // handled independently
-            RM.Mode.SUSPENDED_BY_USER ->
-                mutableListOf(RM.Mode.DISCONNECTED_PUMP, RM.Mode.RESUME, RM.Mode.SUSPENDED_BY_USER)
-
+            RM.Mode.SUSPENDED_BY_USER -> mutableListOf(RM.Mode.DISCONNECTED_PUMP, RM.Mode.RESUME, RM.Mode.SUSPENDED_BY_USER)
             RM.Mode.RESUME            -> error("Invalid mode")
         }
         if (constraintChecker.isLoopInvocationAllowed().value().not()) {
@@ -336,7 +325,7 @@ class LoopPlugin @Inject constructor(
                 return inserted.inserted.isNotEmpty()
             }
 
-            RM.Mode.SUSPENDED_BY_USER                      -> {
+            RM.Mode.SUSPENDED_BY_USER, RM.Mode.SUSPENDED_BY_DST -> {
                 suspendLoop(
                     mode = newRM,
                     autoForced = false,
@@ -452,11 +441,11 @@ class LoopPlugin @Inject constructor(
 
         if (
         // Revert back from DISABLED_LOOP temporary mode
-            runningMode.autoForced == true && runningMode.mode == RM.Mode.DISABLED_LOOP && loopInvocationAllowed.value() ||
+            runningMode.autoForced && runningMode.mode == RM.Mode.DISABLED_LOOP && loopInvocationAllowed.value() ||
             // Revert back from OPEN_LOOP temporary mode
-            runningMode.autoForced == true && runningMode.mode == RM.Mode.OPEN_LOOP && closedLoopAllowed.value() ||
+            runningMode.autoForced && runningMode.mode == RM.Mode.OPEN_LOOP && closedLoopAllowed.value() ||
             // Revert back from LGS temporary mode
-            runningMode.autoForced == true && runningMode.mode == RM.Mode.CLOSED_LOOP_LGS && !lgsModeForced.value()
+            runningMode.autoForced && runningMode.mode == RM.Mode.CLOSED_LOOP_LGS && !lgsModeForced.value()
         ) {
             // End now
             runningMode.duration = dateUtil.now() - runningMode.timestamp
@@ -1058,8 +1047,8 @@ class LoopPlugin @Inject constructor(
                 val requested = JSONObject()
                 if (lastRun.tbrSetByPump?.enacted == true) { // enacted
                     enacted = lastRun.request?.json()?.also {
-                        it.put("rate", lastRun.tbrSetByPump?.json(profile.getBasal())["rate"])
-                        it.put("duration", lastRun.tbrSetByPump?.json(profile.getBasal())["duration"])
+                        it.put("rate", lastRun.tbrSetByPump!!.json(profile.getBasal())["rate"])
+                        it.put("duration", lastRun.tbrSetByPump!!.json(profile.getBasal())["duration"])
                         it.put("received", true)
                     }
                     requested.put("duration", lastRun.request?.duration)
