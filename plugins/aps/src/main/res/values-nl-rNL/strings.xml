@@ -872,11 +872,11 @@
     <string name="reason_early_meal">Vroege maaltijd gedetecteerd → TBR geforceerd naar %1$.2fE/u x30 (overschrijven).\n</string>
 
     <!-- AIMI: Reasons for basal adjustments (Snack / Fasting / Sport / Honeymoon) -->
-    <string name="reason_snacktime">SnackTime</string>
-    <string name="reason_fastingtime">FastingTime</string>
-    <string name="reason_sporttime">SportTime</string>
+    <string name="reason_snacktime">Snacktijd</string>
+    <string name="reason_fastingtime">Vastentijd</string>
+    <string name="reason_sporttime">Sporttijd</string>
     <string name="reason_honeymoon">Honeymoon</string>
-    <string name="reason_honeymoon_smallrise">Honeymoon small-rise</string>
+    <string name="reason_honeymoon_smallrise">Honeymoon lichte stijging</string>
     <string name="reason_honeymoon_correction">Honeymoon corr.</string>
 
     <string name="safety_cut_tbr">Veiligheidsstop: voorspelde BG&lt;100 of IOB>%1$.2f → basaal naar 0.\n</string>
