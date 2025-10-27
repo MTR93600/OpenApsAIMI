@@ -4448,23 +4448,29 @@ rT.reason.appendLine(
                 chosenRate = when {
                     // Snack : aligne le test sur minutes (robuste secondes/minutes)
                     snackTime && (runtimeToMinutes(snackrunTime) in 0..30) && delta < 10 -> {
-                        calculateRate(basal, profile_current_basal, 4.0, "SnackTime", currenttemp, rT).toDouble()
+                      //calculateRate(basal, profile_current_basal, 4.0, "SnackTime", currenttemp, rT).toDouble()
+                        calculateRate(basal, profile_current_basal, 4.0, context.getString(R.string.reason_snacktime), currenttemp, rT).toDouble()
                     }
 
                     fastingTime                                                          ->
-                        calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "FastingTime", currenttemp, rT).toDouble()
+                      //calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "FastingTime", currenttemp, rT).toDouble()
+                        calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), context.getString(R.string.reason_fastingtime), currenttemp, rT).toDouble()
 
                     sportTime && bg > 169 && delta > 4                                   ->
-                        calculateRate(profile_current_basal, profile_current_basal, 1.3, "SportTime", currenttemp, rT).toDouble()
+                      //calculateRate(profile_current_basal, profile_current_basal, 1.3, "SportTime", currenttemp, rT).toDouble()
+                        calculateRate(profile_current_basal, profile_current_basal, 1.3, context.getString(R.string.reason_sporttime), currenttemp, rT).toDouble()
 
                     honeymoon && delta in 0.0..6.0 && bg in 99.0..141.0                  ->
-                        calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "Honeymoon", currenttemp, rT).toDouble()
+                      //calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "Honeymoon", currenttemp, rT).toDouble()
+                        calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), context.getString(R.string.reason_honeymoon), currenttemp, rT).toDouble()
 
                     bg in 81.0..99.0 && delta in 3.0..7.0 && honeymoon                   ->
-                        calculateRate(basal, profile_current_basal, 1.0, "Honeymoon small-rise", currenttemp, rT).toDouble()
+                      //calculateRate(basal, profile_current_basal, 1.0, "Honeymoon small-rise", currenttemp, rT).toDouble()
+                        calculateRate(basal, profile_current_basal, 1.0, context.getString(R.string.reason_honeymoon_smallrise), currenttemp, rT).toDouble()
 
                     bg > 120 && delta > 0 && smbToGive == 0.0f && honeymoon              ->
-                        calculateRate(basal, profile_current_basal, 5.0, "Honeymoon corr.", currenttemp, rT).toDouble()
+                      //calculateRate(basal, profile_current_basal, 5.0, "Honeymoon corr.", currenttemp, rT).toDouble()
+                        calculateRate(basal, profile_current_basal, 5.0, context.getString(R.string.reason_honeymoon_correction), currenttemp, rT).toDouble()
 
                     else                                                                 -> null
                 }
