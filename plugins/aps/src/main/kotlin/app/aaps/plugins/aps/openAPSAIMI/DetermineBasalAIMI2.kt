@@ -52,7 +52,10 @@ import kotlin.math.sqrt
 import android.content.Context
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.R
-import kotlin.collections.get
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import kotlin.math.exp
 
 // 📝 Structure & helper pour partager la logique de relâchement du plafond IOB en mode repas.
@@ -122,6 +125,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
     private val csvfile = File(externalDir, "oapsaimiML2_records.csv")
     private val csvfile2 = File(externalDir, "oapsaimi2_records.csv")
+    private val pkpdIntegration = PkPdIntegration(preferences)
     //private val tempFile = File(externalDir, "temp.csv")
     private var bgacc = 0.0
     private var predictedSMB = 0.0f
@@ -1042,7 +1046,10 @@ fun appendCompactLog(
         mealData: MealData,
         smbToGiveParam: Float,
         hypoThreshold: Double,
-        reason: StringBuilder? = null
+        reason: StringBuilder? = null,
+        pkpdRuntime: PkPdRuntime? = null,
+        exerciseFlag: Boolean = false,
+        suspectedLateFatMeal: Boolean = false
     ): Float {
         var smbToGive = smbToGiveParam
 
@@ -1065,6 +1072,21 @@ fun appendCompactLog(
         if (smbToGive != beforeAdj) {
           //reason?.appendLine("🎛️ Ajustements: ${"%.2f".format(beforeAdj)} → ${"%.2f".format(smbToGive)} U")
             reason?.appendLine(context.getString(R.string.adjustments_smb, beforeAdj, smbToGive))
+        }
+        pkpdRuntime?.let { runtime ->
+            val beforeDamp = smbToGive
+            val damped = runtime.dampSmb(beforeDamp.toDouble(), exerciseFlag, suspectedLateFatMeal).toFloat()
+            if (damped != beforeDamp) {
+                reason?.appendLine(
+                    context.getString(
+                        R.string.reason_tail_damping,
+                        beforeDamp,
+                        damped,
+                        (runtime.tailFraction * 100).coerceIn(0.0, 100.0)
+                    )
+                )
+            }
+            smbToGive = damped
         }
 
         // Finalisation
@@ -2944,6 +2966,9 @@ fun appendCompactLog(
             corrSqu = f?.corrR2 ?: 0.0
         )
         val reasonAimi = StringBuilder()
+        var pkpdRuntime: PkPdRuntime? = null
+        var windowSinceDoseInt = 0
+        var carbsActiveForPkpd = 0.0
         // On définit fromTime pour couvrir une longue période (par exemple, les 7 derniers jours)
         val fromTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7)
 // Récupération des événements de changement de cannule
@@ -3240,10 +3265,34 @@ fun appendCompactLog(
 
         // TODO eliminate
         val systemTime = currentTime
-
+        val iobArray = iob_data_array
+        val iob_data = iobArray[0]
+        val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
+        var tdd24Hrs = tddCalculator.calculateDaily(-24, 0)?.totalAmount?.toFloat() ?: 0.0f
+        if (tdd24Hrs == 0.0f) tdd24Hrs = tdd7P.toFloat()
         // TODO eliminate
         val bgTime = glucoseStatus.date
         val minAgo = round((systemTime - bgTime) / 60.0 / 1000.0, 1)
+        val windowSinceDoseMin = if (iob_data.lastBolusTime > 0) {
+            ((systemTime - iob_data.lastBolusTime) / 60000.0).coerceAtLeast(0.0)
+        } else 0.0
+        windowSinceDoseInt = windowSinceDoseMin.toInt()
+        val carbsActiveG = mealData.mealCOB.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+        carbsActiveForPkpd = carbsActiveG
+        val pkpdRuntimeTemp = pkpdIntegration.computeRuntime(
+            epochMillis = currentTime,
+            bg = bg,
+            deltaMgDlPer5 = delta.toDouble(),
+            iobU = iob.toDouble(),
+            carbsActiveG = carbsActiveG,
+            windowMin = windowSinceDoseInt,
+            exerciseFlag = sportTime,
+            profileIsf = profile.sens,
+            tdd24h = tdd24Hrs.toDouble()
+        )
+        if (pkpdRuntimeTemp != null) {
+            pkpdRuntime = pkpdRuntimeTemp
+        }
         // TODO eliminate
         //bg = glucoseStatus.glucose.toFloat()
         //this.bg = bg.toFloat()
@@ -3376,8 +3425,6 @@ fun appendCompactLog(
         }
 
         var iob2 = 0.0f
-        val iobArray = iob_data_array
-        val iob_data = iobArray[0]
         this.iob = iob_data.iob.toFloat()
         if (iob_data.basaliob < 0) {
             iob2 = -iob_data.basaliob.toFloat() + iob
@@ -3392,7 +3439,6 @@ fun appendCompactLog(
         val minDelta = min(glucoseStatus.delta, glucoseStatus.shortAvgDelta)
         val minAvgDelta = min(glucoseStatus.shortAvgDelta, glucoseStatus.longAvgDelta)
         // val maxDelta = max(glucoseStatus.delta, max(glucoseStatus.shortAvgDelta, glucoseStatus.longAvgDelta))
-        val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
         var tdd7Days = profile.TDD
         if (tdd7Days == 0.0 || tdd7Days < tdd7P) tdd7Days = tdd7P
         this.tdd7DaysPerHour = (tdd7Days / 24).toFloat()
@@ -3405,11 +3451,9 @@ fun appendCompactLog(
         if (tddDaily == 0.0f || tddDaily < tdd7P / 2) tddDaily = tdd7P.toFloat()
         this.tddPerHour = tddDaily / 24
 
-        var tdd24Hrs = tddCalculator.calculateDaily(-24, 0)?.totalAmount?.toFloat() ?: 0.0f
-        if (tdd24Hrs == 0.0f) tdd24Hrs = tdd7P.toFloat()
-
         this.tdd24HrsPerHour = tdd24Hrs / 24
-        var sens = profile.variable_sens
+        val baseSensitivity = pkpdRuntime?.fusedIsf ?: profile.sens
+        var sens = if (pkpdRuntime != null) pkpdRuntime.fusedIsf else profile.variable_sens
         this.variableSensitivity = sens.toFloat()
         consoleError.add("CR:${profile.carb_ratio}")
         this.predictedBg = predictEventualBG(bg.toFloat(), iob, variableSensitivity, minDelta.toFloat(), shortAvgDelta, longAvgDelta, mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime, snackTime, honeymoon)
@@ -3536,26 +3580,26 @@ fun appendCompactLog(
 
         this.variableSensitivity = if (honeymoon) {
             if (bg < 150) {
-                profile.sens.toFloat() * 1.2f // Légère augmentation pour honeymoon en cas de BG bas
+                (baseSensitivity * 1.2).toFloat() // Légère augmentation pour honeymoon en cas de BG bas
             } else {
                 max(
-                    profile.sens.toFloat() / 3.0f, // Réduction plus forte en honeymoon
+                    (baseSensitivity / 3.0).toFloat(), // Réduction plus forte en honeymoon
                     sens.toFloat() //* calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
                 )
             }
         } else {
             if (bg < 100) {
                 // 🔹 Correction : Permettre une légère adaptation de l’ISF même en dessous de 100 mg/dL
-                profile.sens.toFloat() * 1.1f
+                (baseSensitivity * 1.1).toFloat()
             } else if (bg > 120) {
                 // 🔹 Si BG > 120, on applique une réduction progressive plus forte
                 max(
-                    profile.sens.toFloat() / 5.0f,  // 🔥 Réduction plus agressive (divisé par 5)
+                    (baseSensitivity / 5.0).toFloat(),  // 🔥 Réduction plus agressive (divisé par 5)
                     sens.toFloat() //* calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
                 )
             } else {
-                // 🔹 Plage intermédiaire (100-120) avec ajustement plus doux
-                sens.toFloat() //* calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
+
+                sens.toFloat()
             }
         }
 
@@ -3632,6 +3676,7 @@ fun appendCompactLog(
         fun safe(v: Double) = if (v.isFinite()) v else Double.POSITIVE_INFINITY
         //val expectedDelta = calculateExpectedDelta(target_bg, eventualBG, bgi)
         val modelcal = calculateSMBFromModel(rT.reason)
+        val smbProposed = modelcal.toDouble()
         val minBg = minOf(safe(bg), safe(predictedBg.toDouble()), safe(eventualBG))
         val threshold = computeHypoThreshold(minBg, profile.lgsThreshold)
 
@@ -3851,7 +3896,8 @@ fun appendCompactLog(
 // ===== Fin MPC =====
 
 // ⚠️ passer la DECISION courante à la safety (pas finalInsulinDose)
-        smbDecision = applySafetyPrecautions(mealData, smbDecision, threshold,rT.reason)
+        val suspectedLateFatMeal = highCarbTime && runtimeToMinutes(highCarbrunTime) > 90
+        smbDecision = applySafetyPrecautions(mealData, smbDecision, threshold, rT.reason, pkpdRuntime, sportTime, suspectedLateFatMeal)
 //      rT.reason.appendLine("✅ SMB final: ${"%.2f".format(smbDecision)} U")
         rT.reason.appendLine(context.getString(R.string.smb_final, "%.2f".format(smbDecision)))
 
@@ -3860,6 +3906,28 @@ fun appendCompactLog(
 
         logDataMLToCsv(predictedSMB, smbToGive)
         logDataToCsv(predictedSMB, smbToGive)
+        pkpdRuntime?.let { runtime ->
+            val dateStr = dateUtil.dateAndTimeString(currentTime)
+            PkPdCsvLogger.append(
+                PkPdLogRow(
+                    dateStr = dateStr,
+                    epochMin = TimeUnit.MILLISECONDS.toMinutes(currentTime),
+                    bg = bg,
+                    delta5 = delta.toDouble(),
+                    iobU = iob_data.iob,
+                    carbsActiveG = carbsActiveForPkpd,
+                    windowMin = windowSinceDoseInt,
+                    diaH = runtime.params.diaHrs,
+                    peakMin = runtime.params.peakMin,
+                    fusedIsf = runtime.fusedIsf,
+                    tddIsf = runtime.tddIsf,
+                    profileIsf = runtime.profileIsf,
+                    tailFrac = runtime.tailFraction,
+                    smbProposedU = smbProposed,
+                    smbFinalU = smbToGive.toDouble()
+                )
+            )
+        }
 
         //logDataToCsv(predictedSMB, smbToGive)
         //logDataToCsvHB(predictedSMB, smbToGive)
@@ -3926,7 +3994,7 @@ rT.reason.appendLine(
         rT.reason.append(reasonAimi.toString())
         val csf = sens / profile.carb_ratio
       //consoleError.add("profile.sens: ${profile.sens}, sens: $sens, CSF: $csf")
-        consoleError.add(context.getString(R.string.console_profile_sens, profile.sens, sens, csf))
+        consoleError.add(context.getString(R.string.console_profile_sens, baseSensitivity, sens, csf))
 
         val maxCarbAbsorptionRate = 30 // g/h; maximum rate to assume carbs will absorb if no CI observed
         // limit Carb Impact to maxCarbAbsorptionRate * csf in mg/dL per 5m
