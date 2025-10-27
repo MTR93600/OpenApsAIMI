@@ -3,12 +3,12 @@ name: Android Build (Signed)
 on:
   push:
     branches:
-      - dev_OAPSAIMI_insulin
+      - dev_OAPSAIMI_insulin_sipp
     tags:
       - 'v*.*.*'  # Déclenche sur les tags de version
   pull_request:
     branches:
-      - dev_OAPSAIMI_insulin
+      - dev_OAPSAIMI_insulin_sipp
 
 jobs:
   build-signed:
