@@ -646,7 +646,7 @@ class DanaRSPlugin @Inject constructor(
 
     override val isFakingTempsByExtendedBoluses: Boolean = false
     override fun loadTDDs(): PumpEnactResult = loadHistory(RecordTypes.RECORD_TYPE_DAILY)
-    override fun canHandleDST(): Boolean = false
+    override fun canHandleDST(): Boolean = danaPump.usingUTC
     override fun clearPairing() {
         aapsLogger.debug(LTag.PUMPCOMM, "Pairing keys cleared")
         preferences.remove(DanaStringComposedKey.ParingKey, mDeviceName)

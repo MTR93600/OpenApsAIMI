@@ -59,7 +59,7 @@ class DanaRSPacketAPSSetEventHistory @Inject constructor(
             aapsLogger.error(LTag.PUMPCOMM, "Set history entry result: $result ERROR!!!")
         } else {
             failed = false
-            aapsLogger.debug(LTag.PUMPCOMM, "Set history entry result: $result")
+            aapsLogger.debug(LTag.PUMPCOMM, "Set history entry result: OK")
         }
     }
 
