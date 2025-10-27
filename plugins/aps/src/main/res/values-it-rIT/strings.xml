@@ -918,6 +918,15 @@
     <string name="meal_mode_first_30">Mod.manuale pasto 0&#8211;30m [%1$s] → basale forzata a %2$.2f U/h (override).\n</string>
     <string name="manual_basal_override">Basale forzata → %1$.2f U/h (%2$dmin). Mod. manuale pasto %3$s\n</string>
     <string name="reason_early_meal">Pasto precoce rilevato → TBR forzata a %1$.2fU/h x30 (override).\n</string>
+
+    <!-- AIMI: Reasons for basal adjustments (Snack / Fasting / Sport / Honeymoon) -->
+    <string name="reason_snacktime">Modalità manuale Snack</string>
+    <string name="reason_fastingtime">Modalità manuale Digiuno</string>
+    <string name="reason_sporttime">Modalità manuale Sport</string>
+    <string name="reason_honeymoon">Luna di miele</string>
+    <string name="reason_honeymoon_smallrise">Luna di miele – lieve rialzo</string>
+    <string name="reason_honeymoon_correction">Luna di miele – correzione</string>
+
     <string name="safety_cut_tbr">Sicurezza : BG previsto&lt;100 o IOB>%1$.2f → basale a 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → basale a 0.\n</string>
     <string name="bg_80_90_fall">BG 80&#8211;90 &amp; caduta libera → basale a 0.\n</string>
