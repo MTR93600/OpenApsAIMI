@@ -795,6 +795,12 @@
     <string name="reason_total_rest">  • Volledige rust ➝ x0.75\n</string>
     <string name="reason_sensor_lag">  • Sensorvertraging > Historisch ➝ x0.85\n</string>
     <string name="reason_sensor_lag_lower">  • Sensorvertraging &lt; Historisch ➝ x1.2\n</string>
+
+    <!--    AIMI START TRANSLATION  GS + features AIMI- FILE DeterminebasalAIMI.kt -->
+    <string name="aimi_gs_compute_failed">❌ GlucoseStatusCalculatorAimi.compute() failed: %1$s</string>
+    <string name="aimi_gs_no_data">❌ No glucose data (AIMI pack empty)</string>
+    <string name="aimi_gs_reason_no_gs">no GS</string>
+
     <string name="reason_max_iob">Aanpassingen: MaxIob %.2f E </string>
     <string name="reason_autodrive_early_meal">Autodrive vroege maaltijd/snack detectie: Microbolus van %.2fE, GecombineerdeDelta: %.2f, Voorspeld: %.2f, Versnelling: %.2f.\n</string>
     <string name="manual_meal_prebolus">&#160;Microbolus Maaltijdmodus %1$.2fE.</string>

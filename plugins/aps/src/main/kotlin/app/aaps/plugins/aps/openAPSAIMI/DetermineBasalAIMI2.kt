@@ -2907,13 +2907,16 @@ fun appendCompactLog(
         val pack = try {
             glucoseStatusCalculatorAimi.compute(false)
         } catch (e: Exception) {
-            consoleError.add("❌ GlucoseStatusCalculatorAimi.compute() failed: ${e.message}")
+            //consoleError.add("❌ GlucoseStatusCalculatorAimi.compute() failed: ${e.message}")
+            consoleError.add(context.getString(R.string.aimi_gs_compute_failed, e.message))
             null
         }
 
         if (pack == null || pack.gs == null) {
-            consoleError.add("❌ No glucose data (AIMI pack empty)")
-            return rT.also { it.reason.append("no GS") } // ou ton handling habituel
+            //consoleError.add("❌ No glucose data (AIMI pack empty)")
+            consoleError.add(context.getString(R.string.aimi_gs_no_data))
+            //return rT.also { it.reason.append("no GS") } // ou ton handling habituel
+            return rT.also { it.reason.append(context.getString(R.string.aimi_gs_reason_no_gs)) }
         }
 
         val gs = pack.gs!!
