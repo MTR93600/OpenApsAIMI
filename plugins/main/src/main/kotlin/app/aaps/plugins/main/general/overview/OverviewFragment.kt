@@ -365,7 +365,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
         updatePumpStatus()
         updateCalcProgress()
 
-        popupBolusDialogIfRunning()
+        popupBolusDialogIfRunning(onClick = false)
     }
 
     fun refreshAll() {
@@ -480,7 +480,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
 
                 R.id.pump_status_layout  -> {
                     // Check if there is a bolus in progress
-                    popupBolusDialogIfRunning()
+                    popupBolusDialogIfRunning(onClick = true)
                 }
             }
         }
@@ -1248,13 +1248,13 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
         binding.notifications.let { notificationStore.updateNotifications(it) }
     }
 
-    fun popupBolusDialogIfRunning() {
+    fun popupBolusDialogIfRunning(onClick: Boolean) {
         // Check if bolus is in progress and show dialog if needed
         // Only show for manual bolus (not SMB) with progress > 0
         if (commandQueue.bolusInQueue()) {
 
             // Show bolus progress dialog automatically only for manual bolus with progress
-            if (!BolusProgressData.bolusEnded && !BolusProgressData.isSMB) {
+            if (!BolusProgressData.bolusEnded && (!BolusProgressData.isSMB || onClick)) {
                 activity?.let { activity ->
                     protectionCheck.queryProtection(activity, ProtectionCheck.Protection.BOLUS, UIRunnable {
                         if (isAdded)
