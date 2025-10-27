@@ -839,6 +839,12 @@
     <string name="reason_total_rest">  • Corpo a riposo ➝ x0.75\n</string>
     <string name="reason_sensor_lag">  • Ritardo lettura sensore > Storico ➝ x0.85\n</string>
     <string name="reason_sensor_lag_lower">  • Ritardo lettura sensore &lt; Storico ➝ x1.2\n</string>
+
+    <!--    AIMI START TRANSLATION  GS + features AIMI- FILE DeterminebasalAIMI.kt -->
+    <string name="aimi_gs_compute_failed">❌ GlucoseStatusCalculatorAimi.compute() non riuscito: %1$s</string>
+    <string name="aimi_gs_no_data">❌ Nessun dato glicemico (pacchetto AIMI vuoto)</string>
+    <string name="aimi_gs_reason_no_gs">nessun GS</string>
+
     <string name="reason_max_iob">Adeguamenti : MaxIob %.2f U </string>
     <string name="reason_autodrive_early_meal">Autodrive rilevamento precoce pasto/snack: Prebolo %.2fU, Delta Combinato: %.2f, BG Previsto: %.2f, BG Accel.: %.2f.</string>
     <string name="manual_meal_prebolus">&#160;Prebolo modalità manuale Pasto Generico %1$.2fU.</string>

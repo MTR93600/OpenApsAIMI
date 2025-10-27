@@ -834,6 +834,12 @@
     <string name="reason_total_rest">  • Repos total ➝ x0.75\n</string>
     <string name="reason_sensor_lag">  • SensorLag > Historique ➝ x0.85\n</string>
     <string name="reason_sensor_lag_lower">  • SensorLag &lt; Historique ➝ x1.2\n</string>
+
+    <!--    AIMI START TRANSLATION  GS + features AIMI- FILE DeterminebasalAIMI.kt -->
+    <string name="aimi_gs_compute_failed">❌ GlucoseStatusCalculatorAimi.compute() a échoué : %1$s</string>
+    <string name="aimi_gs_no_data">❌ Aucune donnée de glucose (paquet AIMI vide)</string>
+    <string name="aimi_gs_reason_no_gs">aucun GS</string>
+
     <string name="reason_max_iob">Ajustements : MaxIob %.2f U </string>
     <string name="reason_autodrive_early_meal">Détection précoce repas/collation Autodrive : Microbolus %.2fU, Delta combiné: %.2f, Prévu: %.2f, Accél.: %.2f.</string>
     <string name="manual_meal_prebolus">&#160;Prébolus Mode manuel Repas générique %1$.2fU.</string>
