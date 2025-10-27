@@ -505,180 +505,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
     }
 
-    /**
-     * Ajuste le DIA (en minutes) en fonction du niveau d'IOB.
-     *
-     * @param diaMinutes Le DIA courant (en minutes) après les autres ajustements.
-     * @param currentIOB La quantité actuelle d'insuline active (U).
-     * @param threshold Le seuil d'IOB à partir duquel on commence à augmenter le DIA (par défaut 7 U).
-     * @return Le DIA ajusté en minutes tenant compte de l'impact de l'IOB.
-     */
-    fun adjustDIAForIOB(diaMinutes: Float, currentIOB: Float, threshold: Float = 2f): Float {
-        // Si l'IOB est inférieur ou égal au seuil, pas d'ajustement.
-        if (currentIOB <= threshold) return diaMinutes
-
-        // Calculer l'excès d'IOB
-        val excess = currentIOB - threshold
-        // Pour chaque unité au-dessus du seuil, augmenter le DIA de 5 %.
-        val multiplier = 1 + 0.05f * excess
-        return diaMinutes * multiplier
-    }
-    /**
-     * Calcule le DIA ajusté en minutes en fonction de plusieurs paramètres :
-     * - baseDIAHours : le DIA de base en heures (par exemple, 9.0 pour 9 heures)
-     * - currentHour : l'heure actuelle (0 à 23)
-     * - recentSteps5Minutes : nombre de pas sur les 5 dernières minutes
-     * - currentHR : fréquence cardiaque actuelle (bpm)
-     * - averageHR60 : fréquence cardiaque moyenne sur les 60 dernières minutes (bpm)
-     *
-     * La logique appliquée :
-     * 1. Conversion du DIA de base en minutes.
-     * 2. Ajustement selon l'heure de la journée :
-     *    - Matin (6-10h) : réduction de 20% (×0.8),
-     *    - Soir/Nuit (22-23h et 0-5h) : augmentation de 20% (×1.2).
-     * 3. Ajustement en fonction de l'activité physique :
-     *    - Si recentSteps5Minutes > 200 et que currentHR > averageHR60, on réduit le DIA de 30% (×0.7).
-     *    - Si recentSteps5Minutes == 0 et que currentHR > averageHR60, on augmente le DIA de 30% (×1.3).
-     * 4. Ajustement selon la fréquence cardiaque absolue :
-     *    - Si currentHR > 130 bpm, on réduit le DIA de 30% (×0.7).
-     * 5. Le résultat final est contraint entre 180 minutes (3h) et 720 minutes (12h).
-     */
-    fun calculateAdjustedDIA(
-        baseDIAHours: Float,
-        currentHour: Int,
-        recentSteps5Minutes: Int,
-        currentHR: Float,
-        averageHR60: Float,
-        pumpAgeDays: Float,
-        iob: Double = 0.0 // Ajout du paramètre IOB
-    ): Double {
-        val reasonBuilder = StringBuilder()
-
-        // 1. Conversion du DIA de base en minutes
-        var diaMinutes = baseDIAHours * 60f  // Pour 9h, 9*60 = 540 min
-      //reasonBuilder.append("Base DIA: ${baseDIAHours}h = ${diaMinutes}min\n")
-        reasonBuilder.append(context.getString(R.string.dia_base_info, baseDIAHours, diaMinutes))
-
-        // 2. Ajustement selon l'heure de la journée
-        // Matin (6-10h) : absorption plus rapide, réduction du DIA de 20%
-        if (currentHour in 6..10) {
-            diaMinutes *= 0.8f
-          //reasonBuilder.append("Morning adjustment (6-10h): reduced by 20%\n")
-            reasonBuilder.append(context.getString(R.string.morning_adjustment))
-        }
-        // Soir/Nuit (22-23h et 0-5h) : absorption plus lente, augmentation du DIA de 20%
-        else if (currentHour in 22..23 || currentHour in 0..5) {
-            diaMinutes *= 1.2f
-          //reasonBuilder.append("Night adjustment (22-23h & 0-5h): increased by 20%\n")
-            reasonBuilder.append(context.getString(R.string.night_adjustment))
-        }
-
-        // 3. Ajustement en fonction de l'activité physique
-        if (recentSteps5Minutes > 200 && currentHR > averageHR60) {
-            // Exercice : absorption accélérée, réduction du DIA de 30%
-            diaMinutes *= 0.7f
-          //reasonBuilder.append("Physical activity detected: reduced by 30%\n")
-            reasonBuilder.append(context.getString(R.string.physical_activity_detected))
-        } else if (recentSteps5Minutes == 0 && currentHR > averageHR60) {
-            // Aucune activité mais HR élevée (stress) : absorption potentiellement plus lente, augmentation du DIA de 30%
-            diaMinutes *= 1.3f
-          //reasonBuilder.append("High HR without activity (stress): increased by 30%\n")
-            reasonBuilder.append(context.getString(R.string.high_hr_no_activity))
-        }
-
-        // 4. Ajustement en fonction du niveau absolu de fréquence cardiaque
-        if (currentHR > 130f) {
-            // HR très élevée : circulation rapide, réduction du DIA de 30%
-            diaMinutes *= 0.7f
-          //reasonBuilder.append("High HR (>130bpm): reduced by 30%\n")
-            reasonBuilder.append(context.getString(R.string.high_hr_over_130))
-        }
-
-        // 5. Ajustement en fonction de l'IOB (Insulin on Board)
-        // Si le patient a déjà beaucoup d'insuline active, il faut réduire le DIA pour éviter l'hypoglycémie
-        diaMinutes = adjustDIAForIOB(diaMinutes, iob.toFloat())
-        // if (iob > 2.0) {
-        //     diaMinutes *= 0.8f
-        //     reasonBuilder.append("High IOB (${iob}U): reduced by 20%\n")
-        // } else if (iob < 0.5) {
-        //     diaMinutes *= 1.1f
-        //     reasonBuilder.append("Low IOB (${iob}U): increased by 10%\n")
-        // }
-
-        // 6. Ajustement en fonction de l'âge du site d'insuline
-        // Si le site est utilisé depuis 2 jours ou plus, augmenter le DIA de 10% par jour supplémentaire.
-        if (pumpAgeDays >= 2f) {
-            val extraDays = pumpAgeDays - 2f
-            val ageMultiplier = 1 + 0.1f * extraDays  // 10% par jour supplémentaire
-            diaMinutes *= ageMultiplier
-          //reasonBuilder.append("Pump age (${pumpAgeDays} days): increased by ${extraDays * 10}%\n")
-            reasonBuilder.append(context.getString(R.string.pump_age_adjustment, pumpAgeDays, extraDays * 10))
-        }
-
-        // 7. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
-        val finalDiaMinutes = diaMinutes.coerceIn(180f, 720f)
-      //reasonBuilder.append("Final DIA constrained to [180, 720] min: ${finalDiaMinutes}min")
-        reasonBuilder.append(context.getString(R.string.final_dia_constrained, finalDiaMinutes))
-
-
-        //println("DIA Calculation Details:")
-        println(context.getString(R.string.dia_calculation_details))
-        println(reasonBuilder.toString())
-
-        return finalDiaMinutes.toDouble()
-    }
-
-    // fun calculateAdjustedDIA(
-    //     baseDIAHours: Float,
-    //     currentHour: Int,
-    //     recentSteps5Minutes: Int,
-    //     currentHR: Float,
-    //     averageHR60: Float,
-    //     pumpAgeDays: Float
-    // ): Double {
-    //     val reasonBuilder = StringBuilder()
-    //     // 1. Conversion du DIA de base en minutes
-    //     var diaMinutes = baseDIAHours * 60f  // Pour 9h, 9*60 = 540 min
-    //
-    //     // 2. Ajustement selon l'heure de la journée
-    //     if (currentHour in 6..10) {
-    //         // Le matin : absorption plus rapide, on réduit le DIA de 20%
-    //         diaMinutes *= 0.8f
-    //     } else if (currentHour in 22..23 || currentHour in 0..5) {
-    //         // Soir/Nuit : absorption plus lente, on augmente le DIA de 20%
-    //         diaMinutes *= 1.2f
-    //     }
-    //
-    //     // 3. Ajustement en fonction de l'activité physique
-    //     if (recentSteps5Minutes > 200 && currentHR > averageHR60) {
-    //         // Exercice : absorption accélérée, réduire le DIA de 30%
-    //         diaMinutes *= 0.7f
-    //     } else if (recentSteps5Minutes == 0 && currentHR > averageHR60) {
-    //         // Aucune activité mais HR élevée (stress) : absorption potentiellement plus lente, augmenter le DIA de 30%
-    //         diaMinutes *= 1.3f
-    //     }
-    //
-    //     // 4. Ajustement en fonction du niveau absolu de fréquence cardiaque
-    //     if (currentHR > 130f) {
-    //         // HR très élevée : circulation rapide, réduire le DIA de 30%
-    //         diaMinutes *= 0.7f
-    //     }
-    //
-    //     // 5. Ajustement en fonction de l'IOB
-    //     diaMinutes = adjustDIAForIOB(diaMinutes, iob)
-    //     // Si le site est utilisé depuis 2 jours ou plus, augmenter le DIA de 10% par jour supplémentaire.
-    //     if (pumpAgeDays >= 2f) {
-    //         val extraDays = pumpAgeDays - 2f
-    //         val ageMultiplier = 1 + 0.2f * extraDays  // par exemple, 2 jours => 1 + 0.2*1 = 1.2
-    //         diaMinutes *= ageMultiplier
-    //     }
-    //
-    //     // 6. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
-    //     diaMinutes = diaMinutes.coerceIn(180f, 720f)
-    //     reasonBuilder.append("Dia in minutes : $diaMinutes")
-    //     return diaMinutes.toDouble()
-    // }
-
     // -- Méthode pour obtenir l'historique récent de BG, similaire à getRecentBGs() --
     private fun getRecentBGs(): List<Float> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
@@ -2760,124 +2586,6 @@ fun appendCompactLog(
         return out
     }
 
-    private fun calculateDynamicPeakTime(
-    currentActivity: Double,
-    futureActivity: Double,
-    sensorLagActivity: Double,
-    historicActivity: Double,
-    profile: OapsProfileAimi,
-    stepCount: Int? = null, // Nombre de pas
-    heartRate: Int? = null, // Rythme cardiaque
-    bg: Double,             // Glycémie actuelle
-    delta: Double,          // Variation glycémique
-    reasonBuilder: StringBuilder // Builder pour accumuler les logs
-): Double {
-    var dynamicPeakTime = profile.peakTime
-    val activityRatio = futureActivity / (currentActivity + 0.0001)
-
-    //reasonBuilder.append("🧠 Calcul Dynamic PeakTime\n")
-    reasonBuilder.append(context.getString(R.string.calc_dynamic_peaktime))
-//  reasonBuilder.append("  • PeakTime initial: ${profile.peakTime}\n")
-    reasonBuilder.append(context.getString(R.string.profile_peak_time, profile.peakTime))
-//  reasonBuilder.append("  • BG: $bg, Delta: ${round(delta, 2)}\n")
-    reasonBuilder.append(context.getString(R.string.bg_delta, bg, delta))
-
-    // 1️⃣ Facteur de correction hyperglycémique
-    val hyperCorrectionFactor = when {
-        bg <= 130 || delta <= 4 -> 1.0
-        bg in 130.0..240.0 -> 0.6 - (bg - 130) * (0.6 - 0.3) / (240 - 130)
-        else -> 0.3
-    }
-    dynamicPeakTime *= hyperCorrectionFactor
-//  reasonBuilder.append("  • Facteur hyperglycémie: $hyperCorrectionFactor\n")
-    reasonBuilder.append(context.getString(R.string.reason_hyper_correction, hyperCorrectionFactor))
-
-    // 2️⃣ Basé sur currentActivity (IOB)
-    if (currentActivity > 0.1) {
-        val adjustment = currentActivity * 20 + 5
-        dynamicPeakTime += adjustment
-      //reasonBuilder.append("  • Ajout lié IOB: +$adjustment\n")
-        reasonBuilder.append(context.getString(R.string.reason_iob_adjustment, adjustment))
-    }
-
-    // 3️⃣ Ratio d'activité
-    val ratioFactor = when {
-        activityRatio > 1.5 -> 0.5 + (activityRatio - 1.5) * 0.05
-        activityRatio < 0.5 -> 1.5 + (0.5 - activityRatio) * 0.05
-        else -> 1.0
-    }
-    dynamicPeakTime *= ratioFactor
-//  reasonBuilder.append("  • Ratio activité: ${round(activityRatio,2)} ➝ facteur $ratioFactor\n")
-    reasonBuilder.append(context.getString(R.string.reason_activity_ratio, round(activityRatio,2), ratioFactor))
-
-    // 4️⃣ Nombre de pas
-    stepCount?.let {
-        when {
-            it > 500 -> {
-                val stepAdj = it * 0.015
-                dynamicPeakTime += stepAdj
-//              reasonBuilder.append("  • Pas ($it) ➝ +$stepAdj\n")
-                reasonBuilder.append(context.getString(R.string.reason_steps_adjustment, it, stepAdj))
-            }
-            it < 100 -> {
-                dynamicPeakTime *= 0.9
-//              reasonBuilder.append("  • Peu de pas ($it) ➝ x0.9\n")
-                reasonBuilder.append(context.getString(R.string.reason_few_steps, it))
-            }
-        }
-    }
-
-    // 5️⃣ Fréquence cardiaque
-    heartRate?.let {
-        when {
-            it > 110 -> {
-                dynamicPeakTime *= 1.15
-//              reasonBuilder.append("  • FC élevée ($it) ➝ x1.15\n")
-                reasonBuilder.append(context.getString(R.string.reason_high_hr, it))
-            }
-            it < 55 -> {
-                dynamicPeakTime *= 0.85
-//              reasonBuilder.append("  • FC basse ($it) ➝ x0.85\n")
-                reasonBuilder.append(context.getString(R.string.reason_low_hr, it))
-            }
-        }
-    }
-
-    // 6️⃣ Corrélation FC + pas
-    if (stepCount != null && heartRate != null) {
-        if (stepCount > 1000 && heartRate > 110) {
-            dynamicPeakTime *= 1.2
-//          reasonBuilder.append("  • Activité intense ➝ x1.2\n")
-            reasonBuilder.append(context.getString(R.string.reason_high_activity))
-        } else if (stepCount < 200 && heartRate < 50) {
-            dynamicPeakTime *= 0.75
-//          reasonBuilder.append("  • Repos total ➝ x0.75\n")
-            reasonBuilder.append(context.getString(R.string.reason_total_rest))
-        }
-    }
-
-    this.peakintermediaire = dynamicPeakTime
-
-    // 7️⃣ Sensor lag vs historique
-    if (dynamicPeakTime > 40) {
-        if (sensorLagActivity > historicActivity) {
-            dynamicPeakTime *= 0.85
-//          reasonBuilder.append("  • SensorLag > Historic ➝ x0.85\n")
-            reasonBuilder.append(context.getString(R.string.reason_sensor_lag))
-        } else if (sensorLagActivity < historicActivity) {
-            dynamicPeakTime *= 1.2
-//          reasonBuilder.append("  • SensorLag < Historic ➝ x1.2\n")
-            reasonBuilder.append(context.getString(R.string.reason_sensor_lag_lower))
-        }
-    }
-
-    // 🔚 Clamp entre 35 et 120
-    val finalPeak = dynamicPeakTime.coerceIn(35.0, 120.0)
-//  reasonBuilder.append("  → Résultat PeakTime final : $finalPeak\n")
-    //reasonBuilder.append("  → Picco insulina dinamico : ${"%.0f".format(finalPeak)}\n")
-    return finalPeak
-}
-
     fun detectMealOnset(delta: Float, predictedDelta: Float, acceleration: Float): Boolean {
         val combinedDelta = (delta + predictedDelta) / 2.0f
         return combinedDelta > 3.0f && acceleration > 1.2f
@@ -2967,6 +2675,7 @@ fun appendCompactLog(
         )
         val reasonAimi = StringBuilder()
         var pkpdRuntime: PkPdRuntime? = null
+        var tp = profile.peakTime
         var windowSinceDoseInt = 0
         var carbsActiveForPkpd = 0.0
         // On définit fromTime pour couvrir une longue période (par exemple, les 7 derniers jours)
@@ -2988,73 +2697,10 @@ fun appendCompactLog(
         val predicted = predictedDelta(recentDeltas)
         // Calcul du delta combiné : on combine le delta mesuré et le delta prédit
         val combinedDelta = (delta + predicted) / 2.0f
-        val tp = calculateDynamicPeakTime(
-            currentActivity = profile.currentActivity,
-            futureActivity = profile.futureActivity,
-            sensorLagActivity = profile.sensorLagActivity,
-            historicActivity = profile.historicActivity,
-            profile,
-            recentSteps15Minutes,
-            averageBeatsPerMinute.toInt(),
-            bg,
-            combinedDelta,
-            reasonAimi
-        )
-        val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
-
-        val calendarInstance = Calendar.getInstance()
-        this.hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
-        val dayOfWeek = calendarInstance[Calendar.DAY_OF_WEEK]
-        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-        this.bg = glucoseStatus.glucose
-        val getlastBolusSMB = persistenceLayer.getNewestBolusOfType(BS.Type.SMB)
-        val lastBolusSMBTime = getlastBolusSMB?.timestamp ?: 0L
-        //val lastBolusSMBMinutes = lastBolusSMBTime / 60000
-        this.lastBolusSMBUnit = getlastBolusSMB?.amount?.toFloat() ?: 0.0F
-        val diff = abs(now - lastBolusSMBTime)
-        this.lastsmbtime = (diff / (60 * 1000)).toInt()
-        this.maxIob = preferences.get(DoubleKey.ApsSmbMaxIob)
-// Tarciso Dynamic Max IOB
-        var DinMaxIob = ((bg / 100.0) * (bg / 55.0) + (combinedDelta / 2.0)).toFloat()
-
-// Calcul initial avec un ajustement dynamique basé sur bg et delta
-        DinMaxIob = ((bg / 100.0) * (bg / 55.0) + (combinedDelta / 2.0)).toFloat()
-
-// Sécurisation : imposer une borne minimale et une borne maximale
-        DinMaxIob = DinMaxIob.coerceAtLeast(1.0f).coerceAtMost(maxIob.toFloat() * 1.3f)
-
-// Réduction de l'augmentation si on est la nuit (0h-6h)
-        if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) {
-            DinMaxIob = DinMaxIob.coerceAtMost(maxIob.toFloat())
-        }
-
-        this.maxIob = if (autodrive) DinMaxIob.toDouble() else maxIob
-      //rT.reason.append(", MaxIob: $maxIob")
-        rT.reason.append(context.getString(R.string.reason_max_iob, maxIob))
-        this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
-        this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
-        // Calcul initial avec ajustement basé sur la glycémie et le delta
-        var DynMaxSmb = ((bg / 200) * (bg / 100) + (combinedDelta / 2)).toFloat()
-
-// ⚠ Sécurisation : bornes min/max pour éviter des valeurs extrêmes
-        DynMaxSmb = DynMaxSmb.coerceAtLeast(0.1f).coerceAtMost(maxSMBHB.toFloat() * 2.5f)
-
-// ⚠ Ajustement si delta est négatif (la glycémie baisse) pour éviter un SMB trop fort
-        if (combinedDelta < 0) {
-            DynMaxSmb *= 0.75f // Réduction de 25% si la glycémie baisse
-        }
-
-// ⚠ Réduction nocturne pour éviter une surcorrection pendant le sommeil (0h - 6h)
-        if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) {
-            DynMaxSmb *= 0.6f
-        }
-
-// ⚠ Alignement avec `maxSMB` et `profile.peakTime`
-        DynMaxSmb = DynMaxSmb.coerceAtMost(maxSMBHB.toFloat() * (tp / 60.0).toFloat())
-
-        //val DynMaxSmb = (bg / 200) * (bg / 100) + (delta / 2)
         val enableUAM = profile.enableUAM
-
+        val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
+        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
+        var DynMaxSmb = ((bg / 200) * (bg / 100) + (combinedDelta / 2)).toFloat()
         this.maxSMBHB = if (autodrive && !honeymoon) DynMaxSmb.toDouble() else preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
         this.maxSMB = if (bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.4 || bg > 180 && honeymoon && mealData.slopeFromMinDeviation >= 1.4) maxSMBHB else maxSMB
         val ngrConfig = buildNightGrowthResistanceConfig()
@@ -3075,7 +2721,9 @@ fun appendCompactLog(
         //this.enablebasal = preferences.get(BooleanKey.OApsAIMIEnableBasal)
         this.now = System.currentTimeMillis()
         automateDeletionIfBadDay(tir1DAYIR.toInt())
-
+        val calendarInstance = Calendar.getInstance()
+        this.hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
+        val dayOfWeek = calendarInstance[Calendar.DAY_OF_WEEK]
         this.weekend = if (dayOfWeek == Calendar.SUNDAY || dayOfWeek == Calendar.SATURDAY) 1 else 0
         var lastCarbTimestamp = mealData.lastCarbTime
         if (lastCarbTimestamp.toInt() == 0) {
@@ -3295,6 +2943,36 @@ fun appendCompactLog(
         }
         // TODO eliminate
         //bg = glucoseStatus.glucose.toFloat()
+        var pkpdDiaMinutes = profile.dia * 60.0
+        pkpdRuntime?.let { runtime ->
+            val params = runtime.params
+            tp = params.peakMin
+            pkpdDiaMinutes = params.diaHrs * 60.0
+            reasonAimi.append(
+                context.getString(
+                    R.string.pkpd_runtime_log,
+                    params.diaHrs,
+                    params.peakMin,
+                    runtime.fusedIsf,
+                    runtime.pkpdScale,
+                    runtime.tailFraction * 100
+                )
+            )
+        } ?: run {
+            reasonAimi.append(
+                context.getString(
+                    R.string.pkpd_runtime_fallback,
+                    profile.dia,
+                    profile.peakTime
+                )
+            )
+        }
+        DynMaxSmb = DynMaxSmb.coerceAtMost(maxSMBHB.toFloat() * (tp / 60.0).toFloat())
+        val finalMaxSmbHb = if (autodrive && !honeymoon) DynMaxSmb.toDouble() else preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
+        this.maxSMBHB = finalMaxSmbHb
+        this.maxSMB = if (bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.4 ||
+            bg > 180 && honeymoon && mealData.slopeFromMinDeviation >= 1.4
+        ) finalMaxSmbHb else maxSMB
         //this.bg = bg.toFloat()
         // TODO eliminate
         val noise = glucoseStatus.noise
@@ -3812,24 +3490,15 @@ fun appendCompactLog(
             hour in 19..23 -> adjustedEveningFactor
             else -> 0.5 // fallback factor pour traçabilité : correspond à la valeur de sécurité
         }
-
 // Heure courante (si tu préfères ce mécanisme ailleurs)
         val currentHour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
 
 // Calcul du DIA ajusté en minutes
-        val adjustedDIAInMinutes = calculateAdjustedDIA(
-            baseDIAHours = profile.dia.toFloat(),
-            currentHour = currentHour,
-            recentSteps5Minutes = recentSteps5Minutes,
-            currentHR = averageBeatsPerMinute.toFloat(),
-            averageHR60 = averageBeatsPerMinute60.toFloat(),
-            pumpAgeDays = pumpAgeDays
-        )
-//consoleLog.add("DIA ajusté (en minutes) : $adjustedDIAInMinutes")
+        val adjustedDIAInMinutes = pkpdDiaMinutes
         consoleLog.add(context.getString(R.string.console_dia_adjusted, adjustedDIAInMinutes))
         val actCurr = profile.sensorLagActivity
-        val actFuture = profile.futureActivity
         val td = adjustedDIAInMinutes
+        val actFuture = profile.futureActivity
         val deltaGross = round((glucoseStatus.delta + actCurr * sens).coerceIn(0.0, 35.0), 1)
         val actTarget = deltaGross / sens * factors.toFloat()
         var actMissing = 0.0
