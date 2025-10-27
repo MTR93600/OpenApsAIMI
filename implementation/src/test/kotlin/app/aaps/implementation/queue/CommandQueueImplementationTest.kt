@@ -187,7 +187,7 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
     fun prepare() {
         commandQueue = CommandQueueMocked(
             injector, aapsLogger, rxBus, aapsSchedulers, rh, constraintChecker, profileFunction, activePlugin, context,
-            preferences, config, dateUtil, fabricPrivacy, androidPermission, uiInteraction, persistenceLayer, decimalFormatter, pumpEnactResultProvider, jobName, workManager
+            config, dateUtil, fabricPrivacy, uiInteraction, persistenceLayer, decimalFormatter, pumpEnactResultProvider, jobName, workManager
         )
         testPumpPlugin.pumpDescription.basalMinimumRate = 0.1
         testPumpPlugin.connected = true
