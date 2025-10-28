@@ -205,7 +205,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var highCarbrunTime: Long = 0
     private var snackrunTime: Long = 0
     private var intervalsmb = 1
-    private var peakintermediaire = 0.0
+    //private var peakintermediaire = 0.0
     private var insulinPeakTime = 0.0
     private val nightGrowthResistanceMode = NightGrowthResistanceMode()
     private val ngrTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
@@ -3605,16 +3605,13 @@ fun appendCompactLog(
             bg = bg,
             tick = tick,
             eventualBG = eventualBG,
-          //targetBG = target_bg,
-            targetBG = "%.0f".format(target_bg).toDouble(),
+            targetBG = round(target_bg, 0),
             insulinReq = 0.0,
-            deliverAt = deliverAt, // The time at which the microbolus should be delivered
-          //sensitivityRatio = sensitivityRatio, // autosens ratio (fraction of normal basal)
-            sensitivityRatio = "%.0f".format(sensitivityRatio).toDouble(),
+            deliverAt = deliverAt,
+            sensitivityRatio = sensitivityRatio,
             consoleLog = consoleLog,
             consoleError = consoleError,
-          //variable_sens = variableSensitivity.toDouble()
-            variable_sens = "%.0f".format(variableSensitivity.toDouble()).toDouble()
+            variable_sens = variableSensitivity.toDouble()
         )
         rT.reason.append(savedReason)
         //rT.reason.append(", DIA ajusté (en minutes) : $adjustedDIAInMinutes, ")
@@ -3656,171 +3653,163 @@ context.getString(R.string.reason_slope_min_dev, mealData.slopeFromMinDeviation)
 rT.reason.appendLine(
     "📊 TIR: <70: ${"%.1f".format(currentTIRLow)}% | 70–180: ${"%.1f".format(currentTIRRange)}% | >180: ${"%.1f".format(currentTIRAbove)}%"
 )
-        appendCompactLog(reasonAimi, tp, bg, delta, recentSteps5Minutes, averageBeatsPerMinute)
+        //appendCompactLog(reasonAimi, tp, bg, delta, recentSteps5Minutes, averageBeatsPerMinute)
+        val predictionPeakMinutes = tp.coerceIn(30.0, 120.0)
+        appendCompactLog(reasonAimi, predictionPeakMinutes, bg, delta, recentSteps5Minutes, averageBeatsPerMinute)
         rT.reason.append(reasonAimi.toString())
         val csf = sens / profile.carb_ratio
-      //consoleError.add("profile.sens: ${profile.sens}, sens: $sens, CSF: $csf")
         consoleError.add(context.getString(R.string.console_profile_sens, baseSensitivity, sens, csf))
 
-        val maxCarbAbsorptionRate = 30 // g/h; maximum rate to assume carbs will absorb if no CI observed
-        // limit Carb Impact to maxCarbAbsorptionRate * csf in mg/dL per 5m
-        val maxCI = round(maxCarbAbsorptionRate * csf * 5 / 60, 1)
+// ---- CI: compute ONCE (Double), then clamp ----
+        val maxCarbAbsorptionRate = 30.0 // g/h
+        val maxCI = round(maxCarbAbsorptionRate * csf * 5.0 / 60.0, 1)
+
+        var ci: Double = round((minDelta - bgi), 1)   // current carb impact mg/dL/5m
         if (ci > maxCI) {
-          //consoleError.add("Limiting carb impact from $ci to $maxCI mg/dL/5m ( $maxCarbAbsorptionRate g/h )")
-            consoleError.add(context.getString(R.string.console_limiting_carb_impact, ci, maxCI, maxCarbAbsorptionRate))
-            ci = maxCI.toFloat()
+            consoleError.add(context.getString(
+                R.string.console_limiting_carb_impact, ci, maxCI, maxCarbAbsorptionRate.toInt()
+            ))
+            ci = maxCI
         }
-        var remainingCATimeMin = 2.0
-        remainingCATimeMin = remainingCATimeMin / sensitivityRatio
-        var remainingCATime = remainingCATimeMin
-        val totalCI = max(0.0, ci / 5 * 60 * remainingCATime / 2)
-        // totalCI (mg/dL) / CSF (mg/dL/g) = total carbs absorbed (g)
+
+// ---- Remaining CI geometry (guard divides) ----
+        var remainingCATimeMin = 2.0 / max(0.25, sensitivityRatio)  // avoid division by ~0; softer than 0.0/1.0
+        var remainingCATime = max(0.5, remainingCATimeMin)          // minutes proxy in hours later
+
+        val totalCI = max(0.0, ci / 5.0 * 60.0 * remainingCATime / 2.0)
         val totalCA = totalCI / csf
-        val remainingCarbsCap: Int // default to 90
-        remainingCarbsCap = min(90, profile.remainingCarbsCap)
+
+        val remainingCarbsCap = min(90, profile.remainingCarbsCap)
         var remainingCarbs = max(0.0, mealData.mealCOB - totalCA)
         remainingCarbs = min(remainingCarbsCap.toDouble(), remainingCarbs)
-        val remainingCIpeak = remainingCarbs * csf * 5 / 60 / (remainingCATime / 2)
+
+        val remainingCIpeak = (remainingCarbs * csf * 5.0 / 60.0) / max(0.5, (remainingCATime / 2.0))
+
         val slopeFromMaxDeviation = mealData.slopeFromMaxDeviation
         val slopeFromMinDeviation = mealData.slopeFromMinDeviation
-        val slopeFromDeviations = Math.min(slopeFromMaxDeviation, -slopeFromMinDeviation / 3)
+        val slopeFromDeviations = min(slopeFromMaxDeviation, -slopeFromMinDeviation / 3.0)
+
+// ---- Initialize prediction series ----
         var IOBpredBGs = mutableListOf<Double>()
         var UAMpredBGs = mutableListOf<Double>()
-        var ZTpredBGs = mutableListOf<Double>()
-
+        var ZTpredBGs  = mutableListOf<Double>()
         IOBpredBGs.add(bg)
         ZTpredBGs.add(bg)
         UAMpredBGs.add(bg)
-        var ci: Double
-        val cid: Double
-        // calculate current carb absorption rate, and how long to absorb all carbs
-        // CI = current carb impact on BG in mg/dL/5m
-        ci = round((minDelta - bgi), 1)
-        val uci = round((minDelta - bgi), 1)
-        val aci = 8
-        if (ci == 0.0) {
-            // avoid divide by zero
-            cid = 0.0
-        } else {
-            cid = min(remainingCATime * 60 / 5 / 2, Math.max(0.0, mealData.mealCOB * csf / ci))
-        }
+
+        val uci = ci
+        val aci = 8.0
+        val cid = if (ci == 0.0) 0.0 else min(
+            remainingCATime * 60.0 / 5.0 / 2.0,
+            max(0.0, mealData.mealCOB * csf / ci)
+        )
         val acid = max(0.0, mealData.mealCOB * csf / aci)
-        // duration (hours) = duration (5m) * 5 / 60 * 2 (to account for linear decay)
-      //consoleError.add("Carb Impact: ${ci} mg/dL per 5m; CI Duration: ${round(cid * 5 / 60 * 2, 1)} hours; remaining CI (~2h peak): ${round(remainingCIpeak, 1)} mg/dL per 5m")
-        consoleError.add(context.getString(R.string.console_carb_impact, ci, round(cid * 5 / 60 * 2, 1), round(remainingCIpeak, 1)))
-        //console.error("Accel. Carb Impact:",aci,"mg/dL per 5m; ACI Duration:",round(acid*5/60*2,1),"hours");
+
+        consoleError.add(context.getString(
+            R.string.console_carb_impact, ci, round(cid * 5.0 / 60.0 * 2.0, 1), round(remainingCIpeak, 1)
+        ))
+
         var minIOBPredBG = 999.0
-
         var minUAMPredBG = 999.0
-        var minGuardBG: Double
-
         var minUAMGuardBG = 999.0
         var minIOBGuardBG = 999.0
-        var minZTGuardBG = 999.0
+        var minZTGuardBG  = 999.0
         var IOBpredBG: Double = eventualBG
         var maxIOBPredBG = bg
 
-        val lastIOBpredBG: Double
-
-        var lastUAMpredBG: Double? = null
-        //var lastZTpredBG: Int
+        var lastUAMpredBG: Double
         var UAMduration = 0.0
-        var remainingCItotal = 0.0
-        val remainingCIs = mutableListOf<Int>()
-        val predCIs = mutableListOf<Int>()
-        var UAMpredBG: Double? = null
 
-
+// ---- Iterate future ticks ----
         iobArray.forEach { iobTick ->
-            //console.error(iobTick);
-            val predBGI: Double = round((-iobTick.activity * sens * 5), 2)
-            val IOBpredBGI: Double =
-                if (dynIsfMode) round((-iobTick.activity * (1800 / (profile.TDD * (ln((max(IOBpredBGs[IOBpredBGs.size - 1], 39.0) / profile.insulinDivisor) + 1)))) * 5), 2)
-                else predBGI
+            val predBGI = round((-iobTick.activity * sens * 5.0), 2)
+            val IOBpredBGI = if (dynIsfMode)
+                round((-iobTick.activity * (1800.0 / (profile.TDD * (ln((max(IOBpredBGs.last(), 39.0) / profile.insulinDivisor) + 1.0)))) * 5.0), 2)
+            else predBGI
+
             iobTick.iobWithZeroTemp ?: error("iobTick.iobWithZeroTemp missing")
-            // try to find where is crashing https://console.firebase.google.com/u/0/project/androidaps-c34f8/crashlytics/app/android:info.nightscout.androidaps/issues/950cdbaf63d545afe6d680281bb141e5?versions=3.3.0-dev-d%20(1500)&time=last-thirty-days&types=crash&sessionEventKey=673BF7DD032300013D4704707A053273_2017608123846397475
             if (iobTick.iobWithZeroTemp!!.activity.isNaN() || sens.isNaN())
                 fabricPrivacy.logCustom("iobTick.iobWithZeroTemp!!.activity=${iobTick.iobWithZeroTemp!!.activity} sens=$sens")
-            val predZTBGI =
-                if (dynIsfMode) round((-iobTick.iobWithZeroTemp!!.activity * (1800 / (profile.TDD * (ln((max(ZTpredBGs[ZTpredBGs.size - 1], 39.0) / profile.insulinDivisor) + 1)))) * 5), 2)
-                else round((-iobTick.iobWithZeroTemp!!.activity * sens * 5), 2)
-            val predUAMBGI =
-                if (dynIsfMode) round((-iobTick.activity * (1800 / (profile.TDD * (ln((max(UAMpredBGs[UAMpredBGs.size - 1], 39.0) / profile.insulinDivisor) + 1)))) * 5), 2)
-                else predBGI
-            // for IOBpredBGs, predicted deviation impact drops linearly from current deviation down to zero
-            // over 60 minutes (data points every 5m)
-            val predDev: Double = ci * (1 - min(1.0, IOBpredBGs.size / (60.0 / 5.0)))
-            IOBpredBG = IOBpredBGs[IOBpredBGs.size - 1] + IOBpredBGI + predDev
-            // calculate predBGs with long zero temp without deviations
-            val ZTpredBG = ZTpredBGs[ZTpredBGs.size - 1] + predZTBGI
-            // for UAMpredBGs, predicted carb impact drops at slopeFromDeviations
-            // calculate predicted CI from UAM based on slopeFromDeviations
+
+            val predZTBGI = if (dynIsfMode)
+                round((-iobTick.iobWithZeroTemp!!.activity * (1800.0 / (profile.TDD * (ln((max(ZTpredBGs.last(), 39.0) / profile.insulinDivisor) + 1.0)))) * 5.0), 2)
+            else round((-iobTick.iobWithZeroTemp!!.activity * sens * 5.0), 2)
+
+            val predUAMBGI = if (dynIsfMode)
+                round((-iobTick.activity * (1800.0 / (profile.TDD * (ln((max(UAMpredBGs.last(), 39.0) / profile.insulinDivisor) + 1.0)))) * 5.0), 2)
+            else predBGI
+
+            // deviation term
+            val predDev = ci * (1.0 - min(1.0, IOBpredBGs.size / (60.0 / 5.0)))
+
+            IOBpredBG = IOBpredBGs.last() + IOBpredBGI + predDev
+            val ZTpredBG = ZTpredBGs.last() + predZTBGI
+
+            // UAM slope model
             val predUCIslope = max(0.0, uci + (UAMpredBGs.size * slopeFromDeviations))
-            // if slopeFromDeviations is too flat, predicted deviation impact drops linearly from
-            // current deviation down to zero over 3h (data points every 5m)
-            val predUCImax = max(0.0, uci * (1 - UAMpredBGs.size / max(3.0 * 60 / 5, 1.0)))
-            //console.error(predUCIslope, predUCImax);
-            // predicted CI from UAM is the lesser of CI based on deviationSlope or DIA
-            val predUCI = min(predUCIslope, predUCImax)
-            if (predUCI > 0) {
-                //console.error(UAMpredBGs.length,slopeFromDeviations, predUCI);
-                UAMduration = round((UAMpredBGs.size + 1) * 5 / 60.0, 1)
-            }
-            UAMpredBG = UAMpredBGs[UAMpredBGs.size - 1] + predUAMBGI + min(0.0, predDev) + predUCI
-            //console.error(predBGI, predCI, predUCI);
-            // truncate all BG predictions at 4 hours
+            val predUCImax   = max(0.0, uci * (1.0 - UAMpredBGs.size / max(3.0 * 60.0 / 5.0, 1.0)))
+            val predUCI      = min(predUCIslope, predUCImax)
+            if (predUCI > 0) UAMduration = round((UAMpredBGs.size + 1) * 5.0 / 60.0, 1)
+
+            val UAMpredBG = UAMpredBGs.last() + predUAMBGI + min(0.0, predDev) + predUCI
+
             if (IOBpredBGs.size < 24) IOBpredBGs.add(IOBpredBG)
             if (UAMpredBGs.size < 24) UAMpredBGs.add(UAMpredBG)
-            if (ZTpredBGs.size < 24) ZTpredBGs.add(ZTpredBG)
-            // calculate minGuardBGs without a wait from COB, UAM, IOB predBGs
+            if (ZTpredBGs.size < 24)  ZTpredBGs.add(ZTpredBG)
+
             if (UAMpredBG < minUAMGuardBG) minUAMGuardBG = round(UAMpredBG).toDouble()
             if (IOBpredBG < minIOBGuardBG) minIOBGuardBG = IOBpredBG
-            if (ZTpredBG < minZTGuardBG) minZTGuardBG = round(ZTpredBG, 0)
+            if (ZTpredBG  < minZTGuardBG)  minZTGuardBG  = round(ZTpredBG, 0)
 
-            // set minPredBGs starting when currently-dosed insulin activity will peak
-            // look ahead 60m (regardless of insulin type) so as to be less aggressive on slower insulins
-            // add 30m to allow for insulin delivery (SMBs or temps)
-            this.insulinPeakTime = tp
-            val insulinPeak5m = (insulinPeakTime / 60.0) * 12.0
-            //console.error(insulinPeakTime, insulinPeak5m, profile.insulinPeakTime, profile.curve);
+            this.insulinPeakTime = predictionPeakMinutes
+            val insulinPeak5m = (predictionPeakMinutes / 60.0) * 12.0
 
-            // wait 90m before setting minIOBPredBG
-            if (IOBpredBGs.size > insulinPeak5m && (IOBpredBG < minIOBPredBG)) minIOBPredBG = round(IOBpredBG, 0)
+            if (IOBpredBGs.size > insulinPeak5m && IOBpredBG < minIOBPredBG) minIOBPredBG = round(IOBpredBG, 0)
             if (IOBpredBG > maxIOBPredBG) maxIOBPredBG = IOBpredBG
-            if (enableUAM && UAMpredBGs.size > 6 && (UAMpredBG < minUAMPredBG)) minUAMPredBG = round(UAMpredBG, 0)
+            if (enableUAM && UAMpredBGs.size > 6 && UAMpredBG < minUAMPredBG) minUAMPredBG = round(UAMpredBG, 0)
+
+            lastUAMpredBG = UAMpredBG
         }
 
+// ---- Publish predictions (always) ----
         rT.predBGs = Predictions()
+
         IOBpredBGs = IOBpredBGs.map { round(min(401.0, max(39.0, it)), 0) }.toMutableList()
-        for (i in IOBpredBGs.size - 1 downTo 13) {
-            if (IOBpredBGs[i - 1] != IOBpredBGs[i]) break
-            else IOBpredBGs.removeAt(IOBpredBGs.lastIndex)
+        if (IOBpredBGs.size > 3) {
+            for (i in IOBpredBGs.size - 1 downTo 13) {
+                if (IOBpredBGs[i - 1] != IOBpredBGs[i]) break else IOBpredBGs.removeAt(IOBpredBGs.lastIndex)
+            }
         }
         rT.predBGs?.IOB = IOBpredBGs.map { it.toInt() }
-        lastIOBpredBG = round(IOBpredBGs[IOBpredBGs.size - 1]).toDouble()
+        val lastIOBpredBG = round(IOBpredBGs.last()).toDouble()
+
         ZTpredBGs = ZTpredBGs.map { round(min(401.0, max(39.0, it)), 0) }.toMutableList()
-        for (i in ZTpredBGs.size - 1 downTo 7) {
-            // stop displaying ZTpredBGs once they're rising and above target
-            if (ZTpredBGs[i - 1] >= ZTpredBGs[i] || ZTpredBGs[i] <= target_bg) break
-            else ZTpredBGs.removeAt(ZTpredBGs.lastIndex)
+        if (ZTpredBGs.size > 3) {
+            for (i in ZTpredBGs.size - 1 downTo 7) {
+                if (ZTpredBGs[i - 1] >= ZTpredBGs[i] || ZTpredBGs[i] <= target_bg) break
+                else ZTpredBGs.removeAt(ZTpredBGs.lastIndex)
+            }
         }
         rT.predBGs?.ZT = ZTpredBGs.map { it.toInt() }
 
-        if (ci > 0 || remainingCIpeak > 0) {
-            if (enableUAM) {
-                UAMpredBGs = UAMpredBGs.map { round(min(401.0, max(39.0, it)), 0) }.toMutableList()
+// UAM: publish even if ci<=0 so UI always has a series
+        if (enableUAM) {
+            UAMpredBGs = UAMpredBGs.map { round(min(401.0, max(39.0, it)), 0) }.toMutableList()
+            if (UAMpredBGs.size > 3) {
                 for (i in UAMpredBGs.size - 1 downTo 13) {
-                    if (UAMpredBGs[i - 1] != UAMpredBGs[i]) break
-                    else UAMpredBGs.removeAt(UAMpredBGs.lastIndex)
+                    if (UAMpredBGs[i - 1] != UAMpredBGs[i]) break else UAMpredBGs.removeAt(UAMpredBGs.lastIndex)
                 }
-                rT.predBGs?.UAM = UAMpredBGs.map { it.toInt() }
-                lastUAMpredBG = UAMpredBGs[UAMpredBGs.size - 1]
-                eventualBG = max(eventualBG, round(UAMpredBGs[UAMpredBGs.size - 1], 0))
             }
-
-            // set eventualBG based on COB or UAM predBGs
-            rT.eventualBG = eventualBG
+            rT.predBGs?.UAM = UAMpredBGs.map { it.toInt() }
         }
+
+// Robust eventualBG (min of the three)
+        val lastIOB = IOBpredBGs.last()
+        val lastZT  = ZTpredBGs.last()
+        val lastUAM = if (enableUAM && UAMpredBGs.isNotEmpty()) UAMpredBGs.last() else Int.MAX_VALUE.toDouble()
+        eventualBG = listOf(lastIOB, lastZT, lastUAM).minOrNull() ?: eventualBG
+        rT.eventualBG = round(eventualBG, 0)
+
         //fin predictions
         ////////////////////////////////////////////
         //estimation des glucides nécessaires si risque hypo

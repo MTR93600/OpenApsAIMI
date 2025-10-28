@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.pkpd
 
+import android.os.Environment
 import android.util.Log
 import java.io.File
 
@@ -22,7 +23,8 @@ data class PkPdLogRow(
 )
 
 object PkPdCsvLogger {
-    private const val PATH = "/Documents/AAPS/oapsaimi_pkpd_records.csv"
+    private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
+    private val PATH = File(externalDir, "oapsaimi_pkpd_records.csv")
     private const val TAG = "PkPdCsvLogger"
 
     fun append(row: PkPdLogRow) {
@@ -45,13 +47,13 @@ object PkPdCsvLogger {
                 row.smbFinalU
             ).joinToString(",")
 
-            val file = File(PATH)
-            file.parentFile?.let { parent ->
+            //val file = File(PATH)
+            PATH.parentFile?.let { parent ->
                 if (!parent.exists() && !parent.mkdirs()) {
                     error("Unable to create directory ${parent.absolutePath}")
                 }
             }
-            file.appendText(line + "\n")
+            PATH.appendText(line + "\n")
         }
 
         appendResult.exceptionOrNull()?.let { throwable ->
