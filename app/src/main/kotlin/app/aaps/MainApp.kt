@@ -165,6 +165,7 @@ class MainApp : DaggerApplication(), ComposeUiProvider {
         aapsLogger.debug("Version: " + config.VERSION_NAME)
         aapsLogger.debug("BuildVersion: " + config.BUILD_VERSION)
         aapsLogger.debug("Remote: " + config.REMOTE)
+        aapsLogger.debug("Phone: " + Build.MANUFACTURER + " " + Build.MODEL)
         registerLocalBroadcastReceiver()
         setupRemoteConfig()
 
