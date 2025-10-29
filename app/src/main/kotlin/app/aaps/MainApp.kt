@@ -76,6 +76,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.Firebase
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
 import com.google.firebase.remoteconfig.remoteConfig
+import configureLeakCanary
 import dagger.android.AndroidInjector
 import dagger.android.DaggerApplication
 import io.reactivex.rxjava3.disposables.CompositeDisposable
@@ -135,6 +136,7 @@ class MainApp : DaggerApplication(), ComposeUiProvider {
         copyModelToInternalStorage(this)
         aapsLogger.debug("onCreate - après copyModelToFileSystem")
         ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleListener.get())
+        if (config.disableLeakCanary())  configureLeakCanary(false)
 
         // Do necessary migrations
         doMigrations()
