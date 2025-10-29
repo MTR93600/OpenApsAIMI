@@ -3447,9 +3447,21 @@ fun appendCompactLog(
         this.tddPerHour = tddDaily / 24
 
         this.tdd24HrsPerHour = tdd24Hrs / 24
-        val baseSensitivity = pkpdRuntime?.fusedIsf ?: profile.sens
-        var sens = if (pkpdRuntime != null) pkpdRuntime.fusedIsf else profile.variable_sens
+        val fusedSensitivity = pkpdRuntime?.fusedIsf
+        val dynSensitivity = profile.variable_sens.takeIf { it > 0.0 } ?: profile.sens
+        val baseSensitivity = fusedSensitivity ?: profile.sens
+        var sens = when {
+            fusedSensitivity == null -> dynSensitivity
+            dynSensitivity <= 0.0 -> fusedSensitivity
+            else -> min(fusedSensitivity, dynSensitivity)
+        }
+        if (sens <= 0.0) sens = baseSensitivity
         this.variableSensitivity = sens.toFloat()
+        if (fusedSensitivity != null) {
+            consoleError.add(
+                "ISF fusionné=${"%.1f".format(fusedSensitivity)} dynISF=${"%.1f".format(dynSensitivity)} → appliqué=${"%.1f".format(sens)}"
+            )
+        }
         consoleError.add("CR:${profile.carb_ratio}")
         this.predictedBg = predictEventualBG(bg.toFloat(), iob, variableSensitivity, minDelta.toFloat(), shortAvgDelta, longAvgDelta, mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime, snackTime, honeymoon)
         //val insulinEffect = calculateInsulinEffect(bg.toFloat(),iob,variableSensitivity,cob,normalBgThreshold,recentSteps180Minutes,averageBeatsPerMinute.toFloat(),averageBeatsPerMinute10.toFloat(),profile.insulinDivisor.toFloat())
@@ -3893,13 +3905,6 @@ fun appendCompactLog(
 // ⚠️ passer la DECISION courante à la safety (pas finalInsulinDose)
         val suspectedLateFatMeal = highCarbTime && runtimeToMinutes(highCarbrunTime) > 90
         smbDecision = applySafetyPrecautions(mealData, smbDecision, threshold, rT.reason, pkpdRuntime, sportTime, suspectedLateFatMeal)
-        if (!microBolusAllowed) {
-            rT.reason.appendLine(context.getString(R.string.smb_disabled))
-            smbDecision = 0f
-        } else if (!profile.enableSMB_always) {
-            rT.reason.appendLine(context.getString(R.string.smb_disabled_no_pref_or_condition))
-            smbDecision = 0f
-        }
 //      rT.reason.appendLine("✅ SMB final: ${"%.2f".format(smbDecision)} U")
         rT.reason.appendLine(context.getString(R.string.smb_final, "%.2f".format(smbDecision)))
 
