@@ -14,14 +14,19 @@ class IsfFusion(
     fun fused(profileIsf: Double, tddIsf: Double, pkpdScale: Double): Double {
         val pkpdIsf = (tddIsf * pkpdScale).coerceAtLeast(1.0)
         val candidates = listOf(profileIsf, tddIsf, pkpdIsf).sorted()
-        var median = candidates[1]
-        median = median.coerceIn(tddIsf * bounds.minFactor, tddIsf * bounds.maxFactor)
+        var fused = candidates[1]
+        fused = if (pkpdScale >= 1.0) {
+            fused.coerceAtLeast(pkpdIsf)
+        } else {
+            fused.coerceAtMost(pkpdIsf)
+        }
+        fused = fused.coerceIn(tddIsf * bounds.minFactor, tddIsf * bounds.maxFactor)
         lastIsf?.let { prev ->
             val maxUp = prev * (1.0 + bounds.maxChangePer5Min)
             val maxDown = prev * (1.0 - bounds.maxChangePer5Min)
-            median = median.coerceIn(maxDown, maxUp)
+            fused = fused.coerceIn(maxDown, maxUp)
         }
-        lastIsf = median
-        return median
+        lastIsf = fused
+        return fused
     }
 }
