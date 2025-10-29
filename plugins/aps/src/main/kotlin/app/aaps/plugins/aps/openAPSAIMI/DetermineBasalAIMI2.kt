@@ -753,63 +753,66 @@ fun appendCompactLog(
         eventualBg: Double
     ): Boolean {
         mealModeSmbReason = null
-        // disable SMB when a high temptarget is set
+
+        // 0) Garde globale
         if (!microBolusAllowed) {
-          //consoleError.add("SMB disabled (!microBolusAllowed)")
             consoleError.add(context.getString(R.string.smb_disabled))
             return false
-        } else if (!profile.allowSMB_with_high_temptarget && profile.temptargetSet && targetbg > 100) {
-          //consoleError.add("SMB disabled due to high temptarget of $targetbg")
+        }
+
+        // 1) Détecter un vrai "meal-rise" sûr (avant les autres règles)
+        val safeFloor = max(100.0, targetbg - 5.0)
+        val isMealRise = mealModeActive &&
+            (delta >= 0.3) &&
+            (currentBg > safeFloor) &&
+            (eventualBg > safeFloor)
+
+        if (isMealRise) {
+            mealModeSmbReason = context.getString(
+                R.string.smb_enabled_meal_mode,
+                convertBG(currentBg), delta, convertBG(eventualBg)
+            )
+            // NB: on ne "return true" pas tout de suite, on laisse passer les "enable" positifs.
+            // Mais on neutralise l'interdiction high TT ci-dessous via la condition.
+        }
+
+        // 2) Interdiction "high temp target" SAUF meal-rise
+        if (!profile.allowSMB_with_high_temptarget &&
+            profile.temptargetSet && targetbg > 100 &&
+            !isMealRise
+        ) {
             consoleError.add(context.getString(R.string.smb_disabled_high_target, targetbg))
             return false
         }
 
-        // enable SMB/UAM if always-on (unless previously disabled for high temptarget)
+        // 3) Enable cases (préférences)
         if (profile.enableSMB_always) {
-          //consoleError.add("SMB enabled due to enableSMB_always")
-            consoleError.add(context.getString(R.string.smb_enabled_always))
+            consoleLog.add(context.getString(R.string.smb_enabled_always))
             return true
         }
-
-        // enable SMB/UAM (if enabled in preferences) while we have COB
         if (profile.enableSMB_with_COB && mealData.mealCOB != 0.0) {
-          //consoleError.add("SMB enabled for COB of ${mealData.mealCOB}")
-            consoleError.add(context.getString(R.string.smb_enabled_for_cob, mealData.mealCOB))
+            consoleLog.add(context.getString(R.string.smb_enabled_for_cob, mealData.mealCOB))
             return true
         }
-
-        // enable SMB/UAM (if enabled in preferences) for a full 6 hours after any carb entry
-        // (6 hours is defined in carbWindow in lib/meal/total.js)
         if (profile.enableSMB_after_carbs && mealData.carbs != 0.0) {
-          //consoleError.add("SMB enabled for 6h after carb entry")
-            consoleError.add(context.getString(R.string.smb_enabled_after_carb_entry))
+            consoleLog.add(context.getString(R.string.smb_enabled_after_carb_entry))
+            return true
+        }
+        if (profile.enableSMB_with_temptarget && profile.temptargetSet && targetbg < 100) {
+            consoleLog.add(context.getString(R.string.smb_enabled_for_temp_target, convertBG(targetbg)))
             return true
         }
 
-        // enable SMB/UAM (if enabled in preferences) if a low temptarget is set
-        if (profile.enableSMB_with_temptarget && (profile.temptargetSet && targetbg < 100)) {
-          //consoleError.add("SMB enabled for temptarget of ${convertBG(targetbg)}")
-            consoleError.add(context.getString(R.string.smb_enabled_for_temp_target, convertBG(targetbg)))
+        // 4) Enfin, l’exception meal-rise si elle est vraie
+        if (isMealRise) {
+            consoleLog.add(mealModeSmbReason ?: "SMB enabled: meal mode rising.")
             return true
         }
-        // 📝 Mode repas : autoriser SMB même sans COB si montée franche et cible sûre.
-        if (mealModeActive) {
-            val safeFloor = max(100.0, targetbg - 5)
-            if (currentBg > safeFloor && delta > 0.5 && eventualBg > safeFloor) {
-                mealModeSmbReason = context.getString(
-                    R.string.smb_enabled_meal_mode,
-                    convertBG(currentBg),
-                    delta,
-                    convertBG(eventualBg)
-                )
-                return true
-            }
-        }
 
-      //consoleError.add("SMB disabled (no enableSMB preferences active or no condition satisfied)")
         consoleError.add(context.getString(R.string.smb_disabled_no_pref_or_condition))
         return false
     }
+
 
     fun reason(rT: RT, msg: String) {
         if (rT.reason.toString().isNotEmpty()) rT.reason.append(". ")
@@ -824,7 +827,7 @@ fun appendCompactLog(
         rT: RT,
         currenttemp: CurrentTemp,
         overrideSafetyLimits: Boolean = false,
-        forceExact: Boolean = false // ← NEW
+        forceExact: Boolean = false
     ): RT {
         // 0) LGS kill-switch (inchangé)
         val lgsPref = profile.lgsThreshold
@@ -837,26 +840,21 @@ fun appendCompactLog(
             return rT
         }
 
-        // 1) (facultatif) on peut garder Therapy pour du logging, mais on n'en dépend PAS pour le forçage
         val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
         val isMealMode = therapy.snackTime || therapy.highCarbTime || therapy.mealTime
             || therapy.lunchTime || therapy.dinnerTime || therapy.bfastTime
 
-        // 2) BG disponibles ?
         val recentBGs = getRecentBGs()
         val hasBgData = (bgNow > 39.0) && recentBGs.isNotEmpty()
 
-        // 3) CAS FORCE EXACT (ignorer clamps/trends/cycle, sauf LGS)
         if (forceExact) {
             val rate = _rate.coerceAtLeast(0.0)
-          //rT.reason.append("FORCE-EXACT → ${"%.2f".format(rate)} U/h (${duration}m). isMealMode=${isMealMode}\n")
             rT.reason.append( context.getString(R.string.manual_basal_override,rate,duration,if (isMealMode)  "✔" else "✘"))
             rT.duration = duration
             rT.rate = rate
             return rT
         }
 
-        // 4) (reste de ta logique standard inchangée)
         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
         val night = hour <= 7
         val predDelta = predictedDelta(getRecentDeltas()).toFloat()
@@ -3895,6 +3893,13 @@ fun appendCompactLog(
 // ⚠️ passer la DECISION courante à la safety (pas finalInsulinDose)
         val suspectedLateFatMeal = highCarbTime && runtimeToMinutes(highCarbrunTime) > 90
         smbDecision = applySafetyPrecautions(mealData, smbDecision, threshold, rT.reason, pkpdRuntime, sportTime, suspectedLateFatMeal)
+        if (!microBolusAllowed) {
+            rT.reason.appendLine(context.getString(R.string.smb_disabled))
+            smbDecision = 0f
+        } else if (!profile.enableSMB_always) {
+            rT.reason.appendLine(context.getString(R.string.smb_disabled_no_pref_or_condition))
+            smbDecision = 0f
+        }
 //      rT.reason.appendLine("✅ SMB final: ${"%.2f".format(smbDecision)} U")
         rT.reason.appendLine(context.getString(R.string.smb_final, "%.2f".format(smbDecision)))
 

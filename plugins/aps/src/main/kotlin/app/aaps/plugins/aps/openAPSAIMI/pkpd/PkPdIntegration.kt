@@ -68,7 +68,7 @@ class PkPdIntegration(private val preferences: Preferences) {
         val params = estimator.params()
         persistStateIfNeeded(params, config.bounds)
         val tailFraction = estimator.iobResidualAt(windowMin.toDouble()).coerceIn(0.0, 1.0)
-        val pkpdScale = 1.0 + 0.15 * tailFraction
+        val pkpdScale = 1.0 + 0.15 * (2.0 * tailFraction - 1.0)
         val fusedIsf = fusion.fused(profileIsf, tddIsf, pkpdScale)
         return PkPdRuntime(
             params = params,
