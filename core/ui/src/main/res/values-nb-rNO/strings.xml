@@ -120,6 +120,7 @@
     <string name="pump_running">Pumpe i drift</string>
     <string name="notconfigured">Ikke konfigurert</string>
     <string name="loopsuspended">Loop pauset</string>
+    <string name="loop_suspended_by_dst">Loop suspendert av DST (Sommertid)</string>
     <string name="trend_arrow">Trendpil</string>
     <string name="a11y_autosens_label">Autosens</string>
     <string name="required">nødv</string>

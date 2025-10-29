@@ -63,6 +63,7 @@
     <string name="basaltest_hint1">https://wiki.aaps.app/zh-tw/latest/SettingUpAaps/YourAapsProfile.html</string>
     <string name="prerequisites_label">前置條件</string>
     <string name="prerequisites_what">設置和使用AAPS的必要條件是什麼？</string>
+    <string name="prerequisites_build">建立 AAPS 的方法。可以透過瀏覽器，或是在安裝了 Android Studio 的電腦上進行。</string>
     <string name="prerequisites_pump">如果計劃運行閉環，則需要一個相容的胰島素幫浦。</string>
     <string name="prerequisites_nightscout">Nightscout，用於紀錄所有資料並檢查設定。</string>
     <string name="prerequisites_beanandroiddeveloper">有編程或編輯代碼的經驗。</string>

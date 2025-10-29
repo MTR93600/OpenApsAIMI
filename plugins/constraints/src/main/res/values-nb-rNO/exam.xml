@@ -63,6 +63,7 @@
     <string name="basaltest_hint1">https://wiki.aaps.app/en/latest/SettingUpAaps/YourAapsProfile.html</string>
     <string name="prerequisites_label">Forutsetninger</string>
     <string name="prerequisites_what">Hva er nødvendig for å sette opp og bruke AAPS?</string>
+    <string name="prerequisites_build">En måte å bygge AAPS på. Enten via en nettleser eller en datamaskin med Android Studio installert.</string>
     <string name="prerequisites_pump">En kompatibel insulinpumpe hvis du planlegger å kjøre lukket loop.</string>
     <string name="prerequisites_nightscout">Nightscout, for å logge alle dine data og kontrollere dine innstillinger.</string>
     <string name="prerequisites_beanandroiddeveloper">Erfaring fra programmering eller redigering av kode.</string>

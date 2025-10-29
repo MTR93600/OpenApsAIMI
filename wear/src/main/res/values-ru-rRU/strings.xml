@@ -219,7 +219,11 @@
     <string name="complication_full_status">Полная информация о статусе</string>
     <string name="complication_full_status_flipped">Полный статус (в обратном виде)</string>
     <string name="complication_blood_glucose">Гликемия</string>
+    <string name="complication_blood_glucose_ext1">ГК усл1</string>
+    <string name="complication_blood_glucose_ext2">ГК усл2</string>
     <string name="complication_br_cob_iob">База, актУг &amp; актИнс</string>
+    <string name="complication_br_cob_iob_ext1">СкБаз, АктгУ&amp; АктИнсУсл1</string>
+    <string name="complication_br_cob_iob_ext2">СкБаз, АктгУ&amp; АктИнсУсл2</string>
     <string name="complication_br_iob">BR &amp; IoB</string>
     <string name="complication_br">Базальная скорость</string>
     <string name="complication_cob_iob">АктУг &amp; актИнс</string>

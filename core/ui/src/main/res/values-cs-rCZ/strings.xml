@@ -120,6 +120,7 @@
     <string name="pump_running">Pumpa běží</string>
     <string name="notconfigured">Není nakonfigurováno</string>
     <string name="loopsuspended">Smyčka pozastavena</string>
+    <string name="loop_suspended_by_dst">Smyčka pozastavena kvůli změně času</string>
     <string name="trend_arrow">Šipka trendu</string>
     <string name="a11y_autosens_label">Automatická detekce senzitivity</string>
     <string name="required">pož</string>

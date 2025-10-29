@@ -9,6 +9,7 @@
     <string name="equil_date_device">Прошлое соединение</string>
     <string name="equil_dressing">Замена резервуара</string>
     <string name="equil_dressing_onkey_msg">Плунжер автоматически перемещается в нижнюю часть резервуара. По достижении нижней части он остановится автоматически. Нажмите \'Остановить\', чтобы прервать при необходимости.</string>
+    <string name="equil_finish">Готово</string>
     <string name="equil_next">Далее</string>
     <string name="equil_hint_dressing">Эта операция прекратит инфузию инсулина и переместит плунжер помпы на дно!</string>
     <string name="equil_history">Журнал</string>
@@ -161,6 +162,7 @@
     <string name="equil_set_pair_password">Установите пароль сопряжения</string>
     <string name="equil_hint1">После установки помпы на платформу выберите, следует ли выдуть воздух из иглы.</string>
     <string name="equil_unbind">Разъединить устройство</string>
+    <string name="equil_device_unpaired">Устройство разъединено</string>
     <string name="equil_assemble">Соберите помпу, резервуар и заряженную батарею</string>
     <string name="equil_devices_number">Введите идентификационный номер новой помпы</string>
     <string name="equil_insert">Выполните заполнение до появления капли инсулина на кончике иглы</string>
@@ -173,4 +175,5 @@
     <string name="equil_maxbolus_tips">Максимально допустимый болюс в помпе [%1$s ед]</string>
     <string name="equil_replace_reservoir">Резервуар пуст. Замените резервуар</string>
     <string name="error_mustbe6hexadidits">Должно быть 6 символов: из этих: ABCDEF0123456789</string>
+    <string name="equil_removed_anyway">Ошибка при выполнении команды Разъединить. Помпа будет удалена в любом случае. Пароль, установленный при сопряжении, не удаляется из помпы.</string>
 </resources>

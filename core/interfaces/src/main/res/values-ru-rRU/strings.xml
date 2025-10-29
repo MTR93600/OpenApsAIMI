@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--    Events-->
+    <string name="bolus_delivering">Подается %1$.2fед</string>
+    <string name="bolus_delivered_successfully">Болюс %1$.2fед. введен успешно</string>
     <!-- PumpPluginBase -->
     <string name="pump_driver_changed" comment="26 characters max for translation">Драйвер помпы изменен.</string>
     <!--    DateUtil-->
+    <string name="minago">%1$d мин. назад</string>
+    <string name="secago">%1$d сек назад</string>
     <string name="minago_long">%1$d минут назад</string>
+    <string name="hoursago">%1$.1fч. назад</string>
     <string name="days_ago">%1$s дн назад</string>
     <string name="days_ago_round">%1$s дн назад</string>
     <string name="in_days">через %1$.0f дн</string>

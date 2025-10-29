@@ -33,7 +33,7 @@
     <string name="statuslights">狀態燈</string>
     <string name="do_ns_upload_title">將血糖資料上傳至 NS 伺服器</string>
     <string name="configbuilder_insulin">胰島素</string>
-    <string name="value_unavailable_short">無法使用</string>
+    <string name="value_unavailable_short">n/a</string>
     <string name="master_password">主密碼</string>
     <string name="ue_export_to_csv">匯出使用者輸入到 Excel (csv)</string>
     <string name="confirm">確認</string>
@@ -48,7 +48,7 @@
     <string name="aps_mode_title">APS 模式</string>
     <string name="extended_bolus">延長注射</string>
     <string name="paused">已暫停</string>
-    <string name="tdd_total">總 TDD</string>
+    <string name="tdd_total">總每日劑量</string>
     <string name="tdd_old_data">舊資料</string>
     <string name="goingtodeliver">將注射 %1$.2f U</string>
     <string name="waitingforpump">等待幫浦</string>
@@ -120,6 +120,7 @@
     <string name="pump_running">幫浦運行中</string>
     <string name="notconfigured">未配置</string>
     <string name="loopsuspended">循環已暫停</string>
+    <string name="loop_suspended_by_dst">因夏令時間切換，循環已暫停</string>
     <string name="trend_arrow">趨勢箭頭</string>
     <string name="a11y_autosens_label">自動感應(autosens)</string>
     <string name="required">需要</string>
@@ -223,8 +224,8 @@
     <string name="careportal_exercise_message">運動：%1$s</string>
     <string name="careportal_pump_site_change">幫浦位置更改</string>
     <string name="cgm_sensor_insert">CGM 傳感器植入</string>
-    <string name="careportal_pump_site_management">幫浦穿刺部位</string>
-    <string name="careportal_cgm_site_management">CGM 感測器部位</string>
+    <string name="careportal_pump_site_management">幫浦植入部位</string>
+    <string name="careportal_cgm_site_management">CGM 植入部位</string>
     <string name="careportal_cgmsensorstart">CGM 傳感器啟動</string>
     <string name="careportal_cgm_sensor_stop">CGM 傳感器停止</string>
     <string name="careportal_dad_alert">D.A.D. 警報</string>
@@ -303,18 +304,18 @@
     <!--    CarbsReq-->
     <string name="carbsreq">%1$d g 額外碳水化合物需要在 %2$d 分鐘內</string>
     <!--    TDDStatsActivity-->
-    <string name="cumulative_tdd">累積 TDD</string>
-    <string name="expweight">指數加權 TDD</string>
+    <string name="cumulative_tdd">累積每日總劑量</string>
+    <string name="expweight">指數加權每日總劑量</string>
     <string name="basalrate">基礎率</string>
     <string name="bolus">注射</string>
-    <string name="tdd">每日總劑量(TDD)</string>
+    <string name="tdd">每日總劑量</string>
     <string name="ratio">比率</string>
     <string name="amount_days">天數</string>
     <string name="weight">權重</string>
     <string name="warning_Message">如果使用注射進行注射/填充，可能不準確！</string>
     <string name="olddata_Message">舊資料，請按「重新載入」</string>
-    <string name="tbb">總基礎胰島素基礎量(TBB)</string>
-    <string name="tbb2">總基礎胰島素基礎量(TBB) * 2</string>
+    <string name="tbb">總基礎胰島素基礎量</string>
+    <string name="tbb2">總基礎胰島素基礎量 * 2</string>
     <!--    Ntp-->
     <string name="timedetection">時間偵測</string>
     <!-- User Entry -->
@@ -350,7 +351,7 @@
     <string name="uel_cancel_extended_bolus">取消延長注射</string>
     <string name="uel_cancel_tt">取消臨時目標</string>
     <string name="uel_careportal">照護</string>
-    <string name="uel_sensor_location">感測器位置</string>
+    <string name="uel_sensor_location">傳感器位置</string>
     <string name="uel_site_change">更換位置</string>
     <string name="uel_site_location">部位位置</string>
     <string name="uel_reservoir_change">更換儲存器</string>
@@ -439,7 +440,7 @@
     <string name="deactivate">停用</string>
     <string name="update_time">更新時間</string>
     <string name="load_history">載入歷史 %1$d</string>
-    <string name="load_tdds">載入 TDDs</string>
+    <string name="load_tdds">載入每日總劑量</string>
     <string name="set_profile">設置設定檔</string>
     <string name="set_user_settings">設置使用者設定</string>
     <string name="smb_bolus_u">SMB 注射 %1$.2f U</string>

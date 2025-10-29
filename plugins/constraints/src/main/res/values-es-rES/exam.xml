@@ -63,6 +63,7 @@
     <string name="basaltest_hint1">https://wiki.aaps.app/es/latest/SettingUpAaps/YourAapsProfile.html</string>
     <string name="prerequisites_label">Requisitos previos</string>
     <string name="prerequisites_what">¿Qué es esencial para configurar y utilizar AAPS?</string>
+    <string name="prerequisites_build">Una forma de construir AAPS. Ya sea a través de un navegador o un ordenador con Android Studio instalado.</string>
     <string name="prerequisites_pump">Una bomba de insulina compatible, si planeas usar el sistema en modo bucle cerrado.</string>
     <string name="prerequisites_nightscout">Nightscout, para tener un registro de los datos y revisar los parámetros de configuración.</string>
     <string name="prerequisites_beanandroiddeveloper">Experiencia programando o editando código.</string>

@@ -120,6 +120,7 @@
     <string name="pump_running">Micro in esecuzione</string>
     <string name="notconfigured">Non configurato</string>
     <string name="loopsuspended">Loop sospeso</string>
+    <string name="loop_suspended_by_dst">Loop sospeso da DST</string>
     <string name="trend_arrow">Freccia trend</string>
     <string name="a11y_autosens_label">Auto sens</string>
     <string name="required">ric</string>
