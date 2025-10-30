@@ -103,6 +103,7 @@
     <string name="name_short">Meno:</string>
     <string name="time">Čas</string>
     <string name="ns_wifi_ssids">WiFi SSID</string>
+    <string name="loading">Načítavanie…</string>
     <string name="notes_label">Poznámky</string>
     <string name="remove_button">Vymazať</string>
     <string name="add_new">Pridať nový</string>
@@ -119,6 +120,7 @@
     <string name="pump_running">Pumpa beží</string>
     <string name="notconfigured">Nenakonfigurované</string>
     <string name="loopsuspended">Uzavretý okruh pozastavený</string>
+    <string name="loop_suspended_by_dst">Uzavretý okruh pozastavený kvôli zmene času</string>
     <string name="trend_arrow">Trendová šípka</string>
     <string name="a11y_autosens_label">Automatická detekcia citlivosti</string>
     <string name="required">pož.</string>
@@ -155,6 +157,7 @@
     <string name="login">Prihlásenie</string>
     <string name="logout">Odhlásiť</string>
     <string name="prime_fill">Plnenie/doplňovanie</string>
+    <string name="site_rotation">Striedanie miest</string>
     <string name="overview_insulin_label">Inzulín</string>
     <string name="stoptemptarget">Koniec dočasného cieľa</string>
     <string name="closedloop">Uzavretý okruh</string>
@@ -221,6 +224,8 @@
     <string name="careportal_exercise_message">Cvičenie : %1$s</string>
     <string name="careportal_pump_site_change">Výmena setu</string>
     <string name="cgm_sensor_insert">Výmena senzora</string>
+    <string name="careportal_pump_site_management">Miesto aplikovania setu</string>
+    <string name="careportal_cgm_site_management">Miesto aplikácie senzora</string>
     <string name="careportal_cgmsensorstart">Spustenie senzora</string>
     <string name="careportal_cgm_sensor_stop">Zastavenie senzora</string>
     <string name="careportal_dad_alert">Hlásenie strážneho psa</string>
@@ -254,6 +259,39 @@
     <string name="loop">Uzavretý okruh</string>
     <string name="ns">NS</string>
     <string name="record">Záznam</string>
+    <string name="location_front_right_upper_chest">Hruď vpravo</string>
+    <string name="location_front_left_upper_chest">Hruď vľavo</string>
+    <string name="location_side_right_upper_arm">Horná, vonkajšia strana pravej ruky</string>
+    <string name="location_side_left_upper_arm">Horná, vonkajšia strana ľavej ruky</string>
+    <string name="location_back_right_upper_arm">Horná, zadná strana pravej ruky</string>
+    <string name="location_back_left_upper_arm">Horná, zadná strana ľavej ruky</string>
+    <string name="location_side_right_upper_abdomen">Vonkajšia strana brucha vpravo hore</string>
+    <string name="location_side_left_upper_abdomen">Vonkajšia strana brucha vľavo hore</string>
+    <string name="location_side_right_lower_abdomen">Vonkajšia strana brucha vpravo dole</string>
+    <string name="location_side_left_lower_abdomen">Vonkajšia strana brucha vľavo dole</string>
+    <string name="location_front_right_upper_abdomen">Predná strana brucha vpravo hore</string>
+    <string name="location_front_left_upper_abdomen">Predná strana brucha vľavo hore</string>
+    <string name="location_front_right_lower_abdomen">Predná strana brucha vpravo dole</string>
+    <string name="location_front_left_lower_abdomen">Predná strana brucha vľavo dole</string>
+    <string name="location_back_right_buttock">Pravá strana bedier</string>
+    <string name="location_back_left_buttock">Ľavá strana bedier</string>
+    <string name="location_side_right_upper_thigh">Vonkajšia strana stehna vpravo hore</string>
+    <string name="location_side_left_upper_thigh">Vonkajšia strana stehna vľavo hore</string>
+    <string name="location_side_right_lower_thigh">Vonkajšia strana stehna vpravo dole</string>
+    <string name="location_side_left_lower_thigh">Vonkajšia strana stehna vľavo dole</string>
+    <string name="location_front_right_upper_thigh">Predná strana stehna vpravo hore</string>
+    <string name="location_front_left_upper_thigh">Predná strana stehna vľavo hore</string>
+    <string name="location_front_right_lower_thigh">Predná strana stehna vpravo dole</string>
+    <string name="location_front_left_lower_thigh">Predná strana stehna vľavo dole</string>
+    <string name="arrow_up">Hore</string>
+    <string name="arrow_up_right">Vpravo hore</string>
+    <string name="arrow_right">Vpravo</string>
+    <string name="arrow_down_right">Vpravo dole</string>
+    <string name="arrow_down">Dole</string>
+    <string name="arrow_down_left">Vľavo dole</string>
+    <string name="arrow_left">Vľavo</string>
+    <string name="arrow_up_left">Vľavo hore</string>
+    <string name="arrow_center">V strede</string>
     <!--    Command-->
     <string name="connectiontimedout">Vypršal čas na pripojenie</string>
     <!--    PumpEnactResult-->
@@ -313,7 +351,9 @@
     <string name="uel_cancel_extended_bolus">ZRUŠIŤ PREDĹŽENÝ BOLUS</string>
     <string name="uel_cancel_tt">ZRUŠIŤ DOČASNÝ CIEĽ</string>
     <string name="uel_careportal">OŠETRENIA</string>
+    <string name="uel_sensor_location">MIESTO APLIKÁCIE SENZORA</string>
     <string name="uel_site_change">VÝMENA SETU</string>
+    <string name="uel_site_location">MIESTO APLIKÁCIE SENZORA</string>
     <string name="uel_reservoir_change">VÝMENA ZÁSOBNÍKA</string>
     <string name="uel_calibration">KALIBRÁCIA</string>
     <string name="uel_prime_bolus">PLNIACI BOLUS</string>

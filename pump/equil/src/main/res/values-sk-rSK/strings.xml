@@ -9,6 +9,7 @@
     <string name="equil_date_device">Posledné spojenie</string>
     <string name="equil_dressing">Vymeniť zásobník</string>
     <string name="equil_dressing_onkey_msg">Automatické pretáčanie piestu do východzej polohy. Po dosiahnutí dna sa automaticky zastaví. V prípade potreby akciu prerušte kliknutím na tlačítko \"Stop\".</string>
+    <string name="equil_finish">Ukončiť</string>
     <string name="equil_next">Ďalšia</string>
     <string name="equil_hint_dressing">Táto operácia zastaví vydávanie inzulínu, a spôsobí pretočenie piestu do východzej polohy!</string>
     <string name="equil_history">História</string>
@@ -161,6 +162,7 @@ Pravidlo pre tvorbu hesla: musí mať 4 znaky a musí obsahovať znaky z tejto s
     <string name="equil_set_pair_password">Nastaviť heslo pre spárovanie</string>
     <string name="equil_hint1">Po pripojení pumpy k základni zvoľte, či chcete vyprázdniť vzduch z vnútornej ihly.</string>
     <string name="equil_unbind">Zrušiť párovanie zariadenia</string>
+    <string name="equil_device_unpaired">Zariadenie odpárované</string>
     <string name="equil_assemble">Prosím, zostavte pumpu, naplnený zásobník a nabitú batériu</string>
     <string name="equil_devices_number">Zadajte ID novej pumpy</string>
     <string name="equil_insert">Prosím naplňte zásobník, pokiaľ sa na ihle neobjaví kvapka inzulínu</string>
@@ -173,4 +175,5 @@ Pravidlo pre tvorbu hesla: musí mať 4 znaky a musí obsahovať znaky z tejto s
     <string name="equil_maxbolus_tips">Maximální povolený bolus v pumpe [%1$s JI]</string>
     <string name="equil_replace_reservoir">Zásobník je prázdny. Prosím vymeňte zásobník</string>
     <string name="error_mustbe6hexadidits">Musí byť 6 znakov z ABCDEF0123456789</string>
+    <string name="equil_removed_anyway">Príkaz na odpárovanie zlyhal. Pumpa bude aj tak odstránená. Heslo nastavené počas párovania nie je z pumpy odstránené.</string>
 </resources>

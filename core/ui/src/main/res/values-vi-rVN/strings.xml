@@ -120,6 +120,7 @@
     <string name="pump_running">Pump đang chạy</string>
     <string name="notconfigured">Chưa được thiết lập</string>
     <string name="loopsuspended">Vòng lặp đã tạm dừng</string>
+    <string name="loop_suspended_by_dst">Vòng lặp bị tạm dừng do thay đổi múi giờ (DST)</string>
     <string name="trend_arrow">Mũi tên xu hướng</string>
     <string name="a11y_autosens_label">Auto sens</string>
     <string name="required">req</string>

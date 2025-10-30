@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--    Events-->
+    <string name="bolus_delivering">Podávanie %1$.2fJI</string>
+    <string name="bolus_delivered_successfully">Bolus %1$.2fJI podaný úspešne</string>
     <!-- PumpPluginBase -->
     <string name="pump_driver_changed" comment="26 characters max for translation">Ovládač pumpy zmenený.</string>
     <!--    DateUtil-->
+    <string name="minago">pred %1$dm</string>
+    <string name="secago">pred %1$ds</string>
     <string name="minago_long">pred %1$d minútami</string>
+    <string name="hoursago">pred %1$.1fh</string>
     <string name="days_ago">Pred %1$.1f dňami</string>
     <string name="days_ago_round">Pred %1$.0f dňami</string>
     <string name="in_days">za %1$.0f dní</string>

@@ -63,6 +63,7 @@
     <string name="basaltest_hint1">https://wiki.aaps.app/cs/latest/SettingUpAaps/YourAapsProfile.html</string>
     <string name="prerequisites_label">Požiadavky</string>
     <string name="prerequisites_what">Čo je nevyhnutné pre nastavenie a používanie AAPS?</string>
+    <string name="prerequisites_build">Spôsob, ako zostaviť AAPS. Buď cez webový prehliadač, alebo počítač s nainštalovaným Android Studio.</string>
     <string name="prerequisites_pump">Kompatibilná inzulínová pumpa, pokiaľ plánujete spustenie uzavretého okruhu.</string>
     <string name="prerequisites_nightscout">Nightscout pre záznam všetkých dát a kontrolu nastavení.</string>
     <string name="prerequisites_beanandroiddeveloper">Skúsenosti s programovaním, alebo úpravou kódu.</string>
