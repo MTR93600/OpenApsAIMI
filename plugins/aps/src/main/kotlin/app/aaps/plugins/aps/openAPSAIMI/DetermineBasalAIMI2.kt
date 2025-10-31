@@ -628,57 +628,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return finalDiaMinutes.toDouble()
     }
 
-    // fun calculateAdjustedDIA(
-    //     baseDIAHours: Float,
-    //     currentHour: Int,
-    //     recentSteps5Minutes: Int,
-    //     currentHR: Float,
-    //     averageHR60: Float,
-    //     pumpAgeDays: Float
-    // ): Double {
-    //     val reasonBuilder = StringBuilder()
-    //     // 1. Conversion du DIA de base en minutes
-    //     var diaMinutes = baseDIAHours * 60f  // Pour 9h, 9*60 = 540 min
-    //
-    //     // 2. Ajustement selon l'heure de la journée
-    //     if (currentHour in 6..10) {
-    //         // Le matin : absorption plus rapide, on réduit le DIA de 20%
-    //         diaMinutes *= 0.8f
-    //     } else if (currentHour in 22..23 || currentHour in 0..5) {
-    //         // Soir/Nuit : absorption plus lente, on augmente le DIA de 20%
-    //         diaMinutes *= 1.2f
-    //     }
-    //
-    //     // 3. Ajustement en fonction de l'activité physique
-    //     if (recentSteps5Minutes > 200 && currentHR > averageHR60) {
-    //         // Exercice : absorption accélérée, réduire le DIA de 30%
-    //         diaMinutes *= 0.7f
-    //     } else if (recentSteps5Minutes == 0 && currentHR > averageHR60) {
-    //         // Aucune activité mais HR élevée (stress) : absorption potentiellement plus lente, augmenter le DIA de 30%
-    //         diaMinutes *= 1.3f
-    //     }
-    //
-    //     // 4. Ajustement en fonction du niveau absolu de fréquence cardiaque
-    //     if (currentHR > 130f) {
-    //         // HR très élevée : circulation rapide, réduire le DIA de 30%
-    //         diaMinutes *= 0.7f
-    //     }
-    //
-    //     // 5. Ajustement en fonction de l'IOB
-    //     diaMinutes = adjustDIAForIOB(diaMinutes, iob)
-    //     // Si le site est utilisé depuis 2 jours ou plus, augmenter le DIA de 10% par jour supplémentaire.
-    //     if (pumpAgeDays >= 2f) {
-    //         val extraDays = pumpAgeDays - 2f
-    //         val ageMultiplier = 1 + 0.2f * extraDays  // par exemple, 2 jours => 1 + 0.2*1 = 1.2
-    //         diaMinutes *= ageMultiplier
-    //     }
-    //
-    //     // 6. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
-    //     diaMinutes = diaMinutes.coerceIn(180f, 720f)
-    //     reasonBuilder.append("Dia in minutes : $diaMinutes")
-    //     return diaMinutes.toDouble()
-    // }
-
     // -- Méthode pour obtenir l'historique récent de BG, similaire à getRecentBGs() --
     private fun getRecentBGs(): List<Float> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
@@ -760,26 +709,20 @@ fun appendCompactLog(
             return false
         }
 
-        // 1) Détecter un vrai "meal-rise" sûr (avant les autres règles)
+        // 1) Détection meal-rise plus tolérante
         val safeFloor = max(100.0, targetbg - 5.0)
+// avant : delta >= 0.3 && currentBg > safeFloor && eventualBg > safeFloor
         val isMealRise = mealModeActive &&
-            (delta >= 0.3) &&
-            (currentBg > safeFloor) &&
-            (eventualBg > safeFloor)
+            (delta >= 0.1) &&
+            (currentBg > safeFloor)
 
-        if (isMealRise) {
-            mealModeSmbReason = context.getString(
-                R.string.smb_enabled_meal_mode,
-                convertBG(currentBg), delta, convertBG(eventualBg)
-            )
-            // NB: on ne "return true" pas tout de suite, on laisse passer les "enable" positifs.
-            // Mais on neutralise l'interdiction high TT ci-dessous via la condition.
-        }
+// 2) Garde high TT : bypass si mode repas actif et pas de risque hypo
+        val hypoGuard = computeHypoThreshold(minBg = profile.min_bg, lgsThreshold = profile.lgsThreshold)
+        val mealBypassHighTT = mealModeActive && currentBg > hypoGuard
 
-        // 2) Interdiction "high temp target" SAUF meal-rise
         if (!profile.allowSMB_with_high_temptarget &&
             profile.temptargetSet && targetbg > 100 &&
-            !isMealRise
+            !mealBypassHighTT && !isMealRise
         ) {
             consoleError.add(context.getString(R.string.smb_disabled_high_target, targetbg))
             return false
@@ -804,8 +747,12 @@ fun appendCompactLog(
         }
 
         // 4) Enfin, l’exception meal-rise si elle est vraie
-        if (isMealRise) {
-            consoleLog.add(mealModeSmbReason ?: "SMB enabled: meal mode rising.")
+        if (mealModeActive) {
+            mealModeSmbReason = context.getString(
+                R.string.smb_enabled_meal_mode,
+                convertBG(currentBg), delta, convertBG(eventualBg)
+            )
+            consoleLog.add(mealModeSmbReason!!)
             return true
         }
 
@@ -1698,14 +1645,21 @@ fun appendCompactLog(
 
         // 1) hard/tempo guards existants
         when {
-            shouldApplyIntervalAdjustment(intervals) -> return 0.0f
+            // En mode repas, on ne coupe pas : on peut juste amortir légèrement
+            shouldApplyIntervalAdjustment(intervals) -> {
+                // Option 1 : pas d’amortissement
+                // return smbAmount
+                // Option 2 : léger damping pour éviter l’emballement
+                return (smbAmount * 0.8f).coerceAtLeast(0f)
+            }
             shouldApplySafetyAdjustment() -> {
                 this.intervalsmb = 10
-                return smbAmount / 2
+                return (smbAmount * 0.5f).coerceAtLeast(0f)
             }
             shouldApplyTimeAdjustment() -> {
                 this.intervalsmb = 10
-                return 0.0f
+                // idem : on amortit mais on ne tue pas
+                return (smbAmount * 0.5f).coerceAtLeast(0f)
             }
         }
 
@@ -1773,45 +1727,6 @@ fun appendCompactLog(
 
 
 
-    // private fun calculateSMBFromModel(): Float {
-    //     val selectedModelFile: File?
-    //     val modelInputs: FloatArray
-    //
-    //     when {
-    //         cob > 0 && lastCarbAgeMin < 240 && modelFile.exists() -> {
-    //             selectedModelFile = modelFile
-    //             modelInputs = floatArrayOf(
-    //                 hourOfDay.toFloat(), weekend.toFloat(),
-    //                 bg.toFloat(), targetBg, iob, cob, lastCarbAgeMin.toFloat(), futureCarbs, delta, shortAvgDelta, longAvgDelta
-    //             )
-    //         }
-    //
-    //         modelFileUAM.exists()   -> {
-    //             selectedModelFile = modelFileUAM
-    //             modelInputs = floatArrayOf(
-    //                 hourOfDay.toFloat(), weekend.toFloat(),
-    //                 bg.toFloat(), targetBg, iob, delta, shortAvgDelta, longAvgDelta,
-    //                 tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
-    //                 recentSteps5Minutes.toFloat(),recentSteps10Minutes.toFloat(),recentSteps15Minutes.toFloat(),recentSteps30Minutes.toFloat(),recentSteps60Minutes.toFloat(),recentSteps180Minutes.toFloat()
-    //             )
-    //         }
-    //
-    //         else                 -> {
-    //             return 0.0F
-    //         }
-    //     }
-    //
-    //     val interpreter = Interpreter(selectedModelFile)
-    //     val output = arrayOf(floatArrayOf(0.0F))
-    //     interpreter.run(modelInputs, output)
-    //     interpreter.close()
-    //     var smbToGive = output[0][0].toString().replace(',', '.').toDouble()
-    //
-    //     val formatter = DecimalFormat("#.####", DecimalFormatSymbols(Locale.US))
-    //     smbToGive = formatter.format(smbToGive).toDouble()
-    //
-    //     return smbToGive.toFloat()
-    // }
 
     private fun neuralnetwork5(
     delta: Float,
