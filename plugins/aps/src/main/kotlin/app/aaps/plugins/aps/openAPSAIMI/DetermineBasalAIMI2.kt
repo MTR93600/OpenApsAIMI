@@ -109,7 +109,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val HYPO_MARGIN_BASE = 0.0     // mg/dL
     private val HYPO_MARGIN_FALL  = 5.0    // delta <= -1.5 mg/dL/5min
     private val HYPO_MARGIN_FAST  = 10.0   // delta <= -3.0 mg/dL/5min
-
+    private var lateFatRiseFlag: Boolean = false
     // — Hystérèse anti-pompage —
     private val HYPO_RELEASE_MARGIN   = 5.0      // mg/dL au-dessus du seuil
     private val HYPO_RELEASE_HOLD_MIN = 5        // minutes à rester > seuil+margin
@@ -776,43 +776,54 @@ fun appendCompactLog(
         overrideSafetyLimits: Boolean = false,
         forceExact: Boolean = false
     ): RT {
-        // 0) LGS kill-switch (inchangé)
+        // 0) LGS kill-switch (sans récursion)
         val lgsPref = profile.lgsThreshold
         val hypoGuard = computeHypoThreshold(minBg = profile.min_bg, lgsThreshold = lgsPref)
-        val bgNow = bg
-        if (bgNow <= hypoGuard) {
-            rT.reason.append(context.getString(R.string.lgs_triggered, "%.0f".format(bgNow), "%.0f".format(hypoGuard)))
+        val blockLgs = isBelowHypoThreshold(bg, predictedBg.toDouble(), eventualBG, hypoGuard, delta.toDouble())
+        if (blockLgs) {
+            rT.reason.append(context.getString(R.string.lgs_triggered, "%.0f".format(bg), "%.0f".format(hypoGuard)))
             rT.duration = maxOf(duration, 30)
             rT.rate = 0.0
             return rT
         }
 
-        val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
-        val isMealMode = therapy.snackTime || therapy.highCarbTime || therapy.mealTime
-            || therapy.lunchTime || therapy.dinnerTime || therapy.bfastTime
+        val bgNow = bg
 
-        val recentBGs = getRecentBGs()
-        val hasBgData = (bgNow > 39.0) && recentBGs.isNotEmpty()
-
+        // 1) Mode manuel : on pose exactement la valeur demandée (toujours bornée ≥ 0)
         if (forceExact) {
             val rate = _rate.coerceAtLeast(0.0)
-            rT.reason.append( context.getString(R.string.manual_basal_override,rate,duration,if (isMealMode)  "✔" else "✘"))
+            rT.reason.append(
+                context.getString(
+                    R.string.manual_basal_override,
+                    rate,
+                    duration,
+                    if (Therapy(persistenceLayer).let { it.updateStatesBasedOnTherapyEvents();
+                            it.snackTime || it.highCarbTime || it.mealTime || it.lunchTime || it.dinnerTime || it.bfastTime
+                        }) "✔" else "✘"
+                )
+            )
             rT.duration = duration
             rT.rate = rate
             return rT
         }
 
+        // 2) Contexte
+        val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
+        val isMealMode = therapy.snackTime || therapy.highCarbTime || therapy.mealTime
+            || therapy.lunchTime || therapy.dinnerTime || therapy.bfastTime
+
         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
-        val night = hour <= 7
+        val night = hour <= 7 // (OK tel quel, utilisé pour l’autodrive)
         val predDelta = predictedDelta(getRecentDeltas()).toFloat()
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
-        val isEarlyAutodrive = !night && !isMealMode && autodrive && bgNow > 110 && detectMealOnset(delta, predDelta, bgacc.toFloat())
+        val isEarlyAutodrive = !night && !isMealMode && autodrive &&
+            bgNow > hypoGuard && bgNow > 110 && detectMealOnset(delta, predDelta, bgacc.toFloat())
 
-        val bgTrend = calculateBgTrend(recentBGs, StringBuilder())
-        var rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend)
+        // 3) Tendance & ajustement
+        val bgTrend = calculateBgTrend(getRecentBGs(), StringBuilder())
+        var rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend).coerceAtLeast(0.0)
 
-        val bypassSafety = (overrideSafetyLimits || isMealMode || isEarlyAutodrive) && bgNow > hypoGuard
-
+        // 4) Limites de sécurité
         val maxSafe = min(
             profile.max_basal,
             min(
@@ -821,14 +832,20 @@ fun appendCompactLog(
             )
         )
 
+        // 5) Application des limites
+        val bypassSafety = (overrideSafetyLimits || isMealMode || isEarlyAutodrive) && bgNow > hypoGuard
+
+        // Même en bypass, on ne dépasse JAMAIS max_basal (hard cap)
         var rate = when {
             bgNow <= hypoGuard -> 0.0
-            bypassSafety       -> rateAdjustment
+            bypassSafety       -> rateAdjustment.coerceIn(0.0, profile.max_basal)
             else               -> rateAdjustment.coerceIn(0.0, maxSafe)
         }
 
+        // 6) Ajustements cycle féminin (conserve un cap)
         if (bgNow > hypoGuard) {
             rate = applyWCycleOnBasal(rate, bypassSafety, maxSafe, profile, rT)
+            rate = if (bypassSafety) rate.coerceAtMost(profile.max_basal) else rate.coerceAtMost(maxSafe)
         }
 
         rT.reason.append(context.getString(R.string.temp_basal_pose, "%.2f".format(rate), duration))
@@ -836,6 +853,7 @@ fun appendCompactLog(
         rT.rate = rate
         return rT
     }
+
 
 
 
@@ -1645,25 +1663,28 @@ fun appendCompactLog(
 
         // 1) hard/tempo guards existants
         when {
-            // En mode repas, on ne coupe pas : on peut juste amortir légèrement
             shouldApplyIntervalAdjustment(intervals) -> {
-                // Option 1 : pas d’amortissement
-                // return smbAmount
-                // Option 2 : léger damping pour éviter l’emballement
-                return (smbAmount * 0.8f).coerceAtLeast(0f)
+                // avant : return 0.0f
+                return if (lateFatRiseFlag) (smbAmount * 0.9f).coerceAtLeast(0f)
+                else             (smbAmount * 0.8f).coerceAtLeast(0f)
             }
             shouldApplySafetyAdjustment() -> {
                 this.intervalsmb = 10
+                // avant : smbAmount / 2 (ok) -> on garde
                 return (smbAmount * 0.5f).coerceAtLeast(0f)
             }
             shouldApplyTimeAdjustment() -> {
                 this.intervalsmb = 10
-                // idem : on amortit mais on ne tue pas
-                return (smbAmount * 0.5f).coerceAtLeast(0f)
+                // avant : return 0.0f
+                return if (lateFatRiseFlag) (smbAmount * 0.7f).coerceAtLeast(0f)
+                else             (smbAmount * 0.5f).coerceAtLeast(0f)
             }
         }
-
-        if (shouldApplyStepAdjustment()) return 0.0f
+        if (shouldApplyStepAdjustment()) {
+            // avant : return 0.0f
+            return if (lateFatRiseFlag) (smbAmount * 0.8f).coerceAtLeast(0f)
+            else             (smbAmount * 0.7f).coerceAtLeast(0f)
+        }
 
         // 2) 🔧 AJUSTEMENT “falling decelerating” (soft)
         //    On baisse encore (deltas négatifs) mais la baisse RALENTIT :
@@ -1697,11 +1718,11 @@ fun appendCompactLog(
 
     private fun finalizeSmbToGive(smbToGive: Float): Float {
         var result = smbToGive
-        // Assurez-vous que smbToGive n'est pas négatif
-        if (result < 0.0f) {
-            result = 0.0f
-        }
-        if (iob <= 0.1 && bg > 120 && delta >= 2 && result == 0.0f) {
+
+        if (result < 0.0f) result = 0.0f
+        if (iob <= 0.1 && bg > 120 && delta >= 2 && result == 0.0f) result = 0.1f
+        // + déclencheur spécifique montée tardive
+        if (lateFatRiseFlag && result == 0.0f && bg > 130 && delta >= 1.0f) {
             result = 0.1f
         }
         return result
@@ -1724,8 +1745,34 @@ fun appendCompactLog(
         )
         return smb.coerceAtLeast(0f)
     }
-
-
+    private data class MealFlags(
+        val mealTime: Boolean,
+        val bfastTime: Boolean,
+        val lunchTime: Boolean,
+        val dinnerTime: Boolean,
+        val highCarbTime: Boolean
+    )
+    private fun isLateFatProteinRise(
+        bg: Double,
+        predictedBg: Double,
+        delta: Double,
+        shortAvgDelta: Double,
+        longAvgDelta: Double,
+        iob: Double,
+        cob: Double,
+        maxSMB: Double,
+        lastBolusTimeMs: Long?,           // null si inconnu
+        mealFlags: MealFlags,
+        nowMs: Long = dateUtil.now()      // ou System.currentTimeMillis()
+    ): Boolean {
+        val hoursSinceBolus = lastBolusTimeMs?.let { (nowMs - it) / 3_600_000.0 } ?: Double.POSITIVE_INFINITY
+        val rising = delta >= 1.0 && (shortAvgDelta >= 0.5 || longAvgDelta >= 0.3)
+        val highish = bg > 130 || predictedBg > 140
+        val lowIOB  = iob < maxSMB
+        val noMeal  = !(mealFlags.mealTime || mealFlags.bfastTime || mealFlags.lunchTime
+            || mealFlags.dinnerTime || mealFlags.highCarbTime)
+        return noMeal && hoursSinceBolus in 2.0..7.0 && rising && highish && lowIOB && cob <= 1.0
+    }
 
 
     private fun neuralnetwork5(
@@ -3047,7 +3094,6 @@ fun appendCompactLog(
         this.acceleratingDown = if (delta < -2 && delta - longAvgDelta < -2) 1 else 0
         this.decceleratingDown = if (delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta)) 1 else 0
         this.stable = if (delta > -3 && delta < 3 && shortAvgDelta > -3 && shortAvgDelta < 3 && longAvgDelta > -3 && longAvgDelta < 3 && bg < 180) 1 else 0
-        //val AutodriveAcceleration = preferences.get(DoubleKey.OApsAIMIAutodriveAcceleration)
         val nightbis = hourOfDay <= 7
         val modesCondition = !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime
         val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
@@ -3180,6 +3226,24 @@ fun appendCompactLog(
         val systemTime = currentTime
         val iobArray = iob_data_array
         val iob_data = iobArray[0]
+        val mealFlags = MealFlags(mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime)
+
+// Heure du dernier bolus : iob_data est bien disponible ici (voir initialisation iob_data plus haut).
+// Tu as déjà iob_data.lastBolusTime et windowSinceDoseInt calculés dans ce bloc. :contentReference[oaicite:0]{index=0}
+        val lastBolusTimeMs: Long? = iob_data.lastBolusTime.takeIf { it > 0L }
+
+        val lateFatRiseFlag  = isLateFatProteinRise(
+            bg = bg,
+            predictedBg = predictedBg.toDouble(),
+            delta = delta.toDouble(),
+            shortAvgDelta = shortAvgDelta.toDouble(),
+            longAvgDelta = longAvgDelta.toDouble(),
+            iob = iob.toDouble(),
+            cob = cob.toDouble(),
+            maxSMB = maxSMB,
+            lastBolusTimeMs = lastBolusTimeMs,
+            mealFlags = mealFlags
+        )
         val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
         var tdd24Hrs = tddCalculator.calculateDaily(-24, 0)?.totalAmount?.toFloat() ?: 0.0f
         if (tdd24Hrs == 0.0f) tdd24Hrs = tdd7P.toFloat()
