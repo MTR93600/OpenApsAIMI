@@ -315,7 +315,7 @@
     <string name="oaps_aimi_smb_tail_damping_title">Tail damping factor</string>
     <string name="oaps_aimi_smb_tail_damping_summary">Multiplier applied to SMB when tail IOB is high.</string>
     <string name="pkpd_runtime_log">PK/PD: DIA %1$.1fh, peak %2$.0fmin, fused ISF %3$.0f mg/dL/U (scale ×%4$.2f, tail %5$.0f%%)\n</string>
-    <string name="pkpd_runtime_fallback">PK/PD disabled → profile DIA %1$.1fh, peak %2$.0fmin\n</string>
+    <string name="pkpd_runtime_fallback">PK/PD disabilitato → profilo DIA %1$.1fh, picco insulina %2$.0fmin\n</string>
     <string name="oaps_aimi_smb_exercise_damping_title">Exercise damping factor</string>
     <string name="oaps_aimi_smb_exercise_damping_summary">Multiplier applied to SMB after recent exercise.</string>
     <string name="oaps_aimi_smb_late_fat_damping_title">Late meal damping factor</string>
