@@ -69,7 +69,7 @@ enum class DoubleKey(
     OApsAIMITDD7("key_tdd7", 40.0, 1.0, 150.0),
 
     OApsAIMIPkpdInitialDiaH("aimi_pkpd_initial_dia_h", 20.0, 6.0, 24.0),
-    OApsAIMIPkpdInitialPeakMin("aimi_pkpd_initial_peak_min", 180.0, 40.0, 300.0),
+    OApsAIMIPkpdInitialPeakMin("aimi_pkpd_initial_peak_min", 180.0, 35.0, 300.0),
     OApsAIMIPkpdBoundsDiaMinH("aimi_pkpd_bounds_dia_min_h", 6.0, 4.0, 24.0),
     OApsAIMIPkpdBoundsDiaMaxH("aimi_pkpd_bounds_dia_max_h", 24.0, 6.0, 36.0),
     OApsAIMIPkpdBoundsPeakMinMin("aimi_pkpd_bounds_peak_min_min", 40.0, 20.0, 240.0),
@@ -80,7 +80,7 @@ enum class DoubleKey(
     OApsAIMIPkpdStatePeakMin("aimi_pkpd_state_peak_min", 180.0, 40.0, 300.0),
     OApsAIMIIsfFusionMinFactor("aimi_isf_fusion_min_factor", 0.75, 0.3, 1.0),
     OApsAIMIIsfFusionMaxFactor("aimi_isf_fusion_max_factor", 1.25, 1.0, 2.0),
-    OApsAIMIIsfFusionMaxChangePerTick("aimi_isf_fusion_max_change_per_tick", 0.03, 0.0, 0.2),
+    OApsAIMIIsfFusionMaxChangePerTick("aimi_isf_fusion_max_change_per_tick", 0.03, 0.0, 0.5),
     OApsAIMISmbTailThreshold("aimi_smb_tail_threshold", 0.25, 0.0, 1.0),
     OApsAIMISmbTailDamping("aimi_smb_tail_damping", 0.5, 0.0, 1.0),
     OApsAIMISmbExerciseDamping("aimi_smb_exercise_damping", 0.6, 0.0, 1.0),
