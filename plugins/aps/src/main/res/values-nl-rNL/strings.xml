@@ -842,6 +842,7 @@
     <string name="console_max_bg_adjusted">max_bg van %.2f naar %.2f</string>
     <string name="console_max_bg_unchanged">max_bg ongewijzigd: %.2f</string>
     <string name="reason_hypo_guard">🛑 Hypobescherming + veiligheidsmarge: minBG=%1$s ≤ Drempel=%2$s (BG=%3$s, voorspeld=%4$s, uiteindelijk=%5$s) → SMB=0</string>
+    <string name="reason_tail_damping">SMB reduced due to residual IOB: %1$.2fU → %2$.2fU (-%3$.0f%%)</string>
     <string name="reason_ai_file">🧠 A.I. bestand: %1$s Voorspelling: %2$s E</string>
     <string name="reason_boost_hyper">⚡ Hyper boost: x1.7 (BG=%1$d, Δ=%2$.1f)</string>
     <string name="reason_boost_hyper_2">⚡ Hyper boost: x1.5 (BG=%1$d, Δ=%2$.1f)</string>
