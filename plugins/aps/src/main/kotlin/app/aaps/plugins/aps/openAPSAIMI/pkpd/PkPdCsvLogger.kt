@@ -19,7 +19,13 @@ data class PkPdLogRow(
     val profileIsf: Double,
     val tailFrac: Double,
     val smbProposedU: Double,
-    val smbFinalU: Double
+    val smbFinalU: Double,
+    val tailMult: Double? = null,
+    val exerciseMult: Double? = null,
+    val lateFatMult: Double? = null,
+    val highBgOverride: Boolean? = null,
+    val lateFatRise: Boolean? = null,
+    val quantStepU: Double? = null
 )
 
 object PkPdCsvLogger {
@@ -44,7 +50,13 @@ object PkPdCsvLogger {
                 row.profileIsf,
                 row.tailFrac,
                 row.smbProposedU,
-                row.smbFinalU
+                row.smbFinalU,
+                row.tailMult,
+                row.exerciseMult,
+                row.lateFatMult,
+                row.highBgOverride,
+                row.lateFatRise,
+                row.quantStepU
             ).joinToString(",")
 
             //val file = File(PATH)
