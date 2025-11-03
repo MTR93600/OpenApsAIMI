@@ -453,7 +453,8 @@
     <string name="autodrive_max_basal_title">Basale fissa 30 minuti se pasto rilevato (U/h)</string>
     <string name="autodrive_max_basal_summary">Quando viene rilevato precocemente un pasto, AIMI esegue una basale fissa per 30 minuti. Inserire il valore orario di questa basale (es. 4 unità, farà 2 unità in 30 minuti)</string>
     <string name="user_preferences_title_menu">Preferenze utente AIMI</string>
-    <string name="aimi_preferences_title_menu">AAPS impostazioni</string>
+    <string name="aimi_preferences_basal_title_menu">AAPS Basale impostazioni</string>
+    <string name="aimi_preferences_dynisf_title_menu">AAPS DynamicISF impostazioni</string>
     <string name="autodrive_preferences_title_menu">Autodrive - Pasto autom. - Impostazioni</string>
     <string name="manual_modes_preferences_title_menu">Pasto / Attività manuale - Impostazioni</string>
     <string name="meal_preferences_title_menu">Modalità manuale</string>
@@ -1004,18 +1005,18 @@
 
     <!-- AIMI: Plateau / smart hyperglycemia -->
 
-    <string name="aimi_plateau_high_boost">Glicemia alta ma stabile (&gt;180)  ⇒ Intensificazione basale </string>
+    <string name="aimi_plateau_high_boost">Glicemia alta ma stabile ⇒ Intensificazione basale </string>
     <string name="aimi_plateau_prefs">Correzione glicemia alta ma stabile </string>
-    <string name="aimi_plateau_prefs_title_menu">Gestione della glicemia alta ma stabile</string>
-    <string name="aimi_plateau_kicker_prefs">Aumento temporaneo basale (correzione)</string>
+    <string name="aimi_plateau_prefs_title_menu">Gestione glicemia alta ma stabile</string>
+    <string name="aimi_plateau_kicker_prefs">Correzione glicemia stagnante</string>
     <string name="aimi_plateau_kicker_prefs_title_menu">Aumento temporaneo basale (correzione) - Impostazioni</string>
-    <string name="aimi_plateau_reprise_prefs">Ripartenza da basale 0 U/h</string>
-    <string name="aimi_plateau_reprise_prefs_title_menu">Ripartenza da basale 0 U/h - Impostazioni</string>
+    <string name="aimi_plateau_reprise_prefs">Ripartenza da basale 0</string>
+    <string name="aimi_plateau_reprise_prefs_title_menu">Ripartenza da basale 0 - Impostazioni</string>
     <string name="aimi_plateau_antistall_prefs">Prevenzione anti-stallo</string>
     <string name="aimi_plateau_antistall_prefs_title_menu">Prevenzione anti-stallo - Impostazioni</string>
     <string name="oaps_aimi_highbg_title">Soglia glicemia alta (mg/dL)</string>
     <string name="oaps_aimi_highbg_summary">Sopra questo valore, AIMI può aumentare temporaneamente la basale per evitare stagnazione.</string>
-    <string name="oaps_aimi_plateau_band_title">Tolleranza variazione ± (mg/dL/5 min)</string>
+    <string name="oaps_aimi_plateau_band_title">Tolleranza variazione BG ± (mg/dL/5 min)</string>
     <string name="oaps_aimi_plateau_band_summary">Se |Δ| ≤ questo valore, mentre la glicemia è sopra la soglia minima per essere considerata alta, viene considerata stagnante.</string>
     <string name="oaps_aimi_r2_conf_title">Durata stagnazione (minuti)</string>
     <string name="oaps_aimi_r2_conf_summary">Tempo minimo in cui la glicemia deve restare alta ma stabile prima che il sistema intervenga considerandola stagnante.</string>
