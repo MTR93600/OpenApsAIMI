@@ -3292,7 +3292,6 @@ fun appendCompactLog(
         if (pkpdRuntimeTemp != null) {
             pkpdRuntime = pkpdRuntimeTemp
         }
-
         // TODO eliminate
         //bg = glucoseStatus.glucose.toFloat()
         //this.bg = bg.toFloat()
@@ -3688,7 +3687,7 @@ fun appendCompactLog(
         fun safe(v: Double) = if (v.isFinite()) v else Double.POSITIVE_INFINITY
         //val expectedDelta = calculateExpectedDelta(target_bg, eventualBG, bgi)
         val modelcal = calculateSMBFromModel(rT.reason)
-        //val smbProposed = modelcal.toDouble()
+        val smbProposed = modelcal.toDouble()
         val minBg = minOf(safe(bg), safe(predictedBg.toDouble()), safe(eventualBG))
         val threshold = computeHypoThreshold(minBg, profile.lgsThreshold)
 
@@ -3913,14 +3912,7 @@ fun appendCompactLog(
 //      rT.reason.appendLine("✅ SMB final: ${"%.2f".format(smbDecision)} U")
         rT.reason.appendLine(context.getString(R.string.smb_final, "%.2f".format(smbDecision)))
         val hypoGuard = threshold ?: computeHypoThreshold(profile.min_bg, profile.lgsThreshold)
-        val pkpd = pkpdRuntime   // (non-null ici)
 
-
-// Audit damping
-        val exFlag = sportTime
-        val lateFatFlag = lateFatRiseFlag  // ton flag calculé ce matin
-        val dmp = pkpd?.dampSmbWithAudit(smbDecision.toFloat(), exFlag, lateFatFlag)
-        var smbAfterDamping = dmp?.out
         val highBgOverride =
             (bg >= 180.0 || (bg >= 150.0 && delta >= 1.5)) &&
                 !isBelowHypoThreshold(
@@ -3935,69 +3927,39 @@ fun appendCompactLog(
         if (highBgOverride) {
             this.intervalsmb = 0                      // cadence agressive
             val step = INSULIN_STEP
-            if (smbAfterDamping != null) {
-                if (smbAfterDamping < step) smbAfterDamping = step
-            }
-            smbAfterDamping = min(smbAfterDamping, maxSMB.toFloat()) // hard cap
+            if (smbDecision < step) smbDecision = step
+            smbDecision = min(smbDecision, maxSMB.toFloat()) // hard cap
             highBgOverrideUsed = true                 // flag pour le log
         }
         //smbToGive = roundToPoint05(smbDecision)
-        val finalSmb = quantizeToPumpStep(smbAfterDamping.toFloat(), INSULIN_STEP)
+        val finalSmb = quantizeToPumpStep(smbDecision, INSULIN_STEP)
         smbToGive = finalSmb
-        val quantized = kotlin.math.ceil(smbAfterDamping / step) * step
-        rT.reason.append(
-            "\nPKPD: DIA=%.0f min, Peak=%.0f min, Tail=%.0f%%, ISF(fused)=%.0f (profile=%.0f, TDD=%.0f, scale=%.2f)".format(
-                pkpd?.params.diaHrs * 60.0, pkpd?.params.peakMin, pkpd?.tailFraction * 100.0,
-                pkpd?.fusedIsf, pkpd?.profileIsf, pkpd?.tddIsf, pkpd?.pkpdScale
-            )
-        )
-        rT.reason.append(
-            "\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s".format(
-                smbDecision, smbAfterDamping,
-                if (dmp?.tailApplied) "✔" else "✘", dmp?.tailMult,
-                if (dmp?.exerciseApplied) "✔" else "✘", dmp?.exerciseMult,
-                if (dmp?.lateFatApplied) "✔" else "✘", dmp?.lateFatMult,
-                quantized, if (highBgOverride) " (HighBG override)" else ""
-            )
-        )
+
         logDataMLToCsv(predictedSMB, smbToGive)
         logDataToCsv(predictedSMB, smbToGive)
         pkpdRuntime?.let { runtime ->
             val dateStr = dateUtil.dateAndTimeString(currentTime)
-            //     PkPdCsvLogger.append(
-            //         PkPdLogRow(
-            //             dateStr = dateStr,
-            //             epochMin = TimeUnit.MILLISECONDS.toMinutes(currentTime),
-            //             bg = bg,
-            //             delta5 = delta.toDouble(),
-            //             iobU = iob_data.iob,
-            //             carbsActiveG = carbsActiveForPkpd,
-            //             windowMin = windowSinceDoseInt,
-            //             diaH = runtime.params.diaHrs,
-            //             peakMin = runtime.params.peakMin,
-            //             fusedIsf = runtime.fusedIsf,
-            //             tddIsf = runtime.tddIsf,
-            //             profileIsf = runtime.profileIsf,
-            //             tailFrac = runtime.tailFraction,
-            //             smbProposedU = smbAfterDamping.toFloat(),
-            //             smbFinalU = smbToGive.toDouble()
-            //         )
-            //     )
-            // }
             PkPdCsvLogger.append(
                 PkPdLogRow(
                     dateStr = dateStr,
-                    epochMin = TimeUnit . MILLISECONDS . toMinutes (currentTime),
-                    bg = bg, delta5 = delta.toDouble(), iobU = iob.toDouble(), carbsActiveG = cob.toDouble(),
-                    windowMin = windowSinceDoseInt, // ta variable
-                    diaH = pkpd.params.diaHrs, peakMin = pkpd.params.peakMin,
-                    fusedIsf = pkpd.fusedIsf, tddIsf = pkpd.tddIsf, profileIsf = pkpd.profileIsf,
-                    tailFrac = pkpd.tailFraction, smbProposedU = smbDecision, smbFinalU = quantized,
-                    tailMult = dmp?.tailMult, exerciseMult = dmp?.exerciseMult, lateFatMult = dmp.lateFatMult,
-                    highBgOverride = highBgOverride, lateFatRise = lateFatFlag, quantStepU = step
+                    epochMin = TimeUnit.MILLISECONDS.toMinutes(currentTime),
+                    bg = bg,
+                    delta5 = delta.toDouble(),
+                    iobU = iob_data.iob,
+                    carbsActiveG = carbsActiveForPkpd,
+                    windowMin = windowSinceDoseInt,
+                    diaH = runtime.params.diaHrs,
+                    peakMin = runtime.params.peakMin,
+                    fusedIsf = runtime.fusedIsf,
+                    tddIsf = runtime.tddIsf,
+                    profileIsf = runtime.profileIsf,
+                    tailFrac = runtime.tailFraction,
+                    smbProposedU = smbProposed,
+                    smbFinalU = smbToGive.toDouble()
                 )
             )
         }
+
         //logDataToCsv(predictedSMB, smbToGive)
         //logDataToCsvHB(predictedSMB, smbToGive)
         val savedReason = rT.reason.toString()
