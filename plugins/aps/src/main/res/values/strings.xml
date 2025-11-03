@@ -469,7 +469,8 @@
     <string name="autodrive_max_basal_summary">When an early meal is detected, AIMI runs a fixed basal for 30 minutes. Enter the hourly value of this basal (e.g., 4 units will deliver 2 units in 30 minutes)</string>
 
     <string name="user_preferences_title_menu">Preferences user AIMI</string>
-    <string name="aimi_preferences_title_menu">AAPS Settings</string>
+    <string name="aimi_preferences_basal_title_menu">AAPS Basals Settings</string>
+    <string name="aimi_preferences_dynisf_title_menu">AAPS DynamicISF Settings</string>
     <string name="autodrive_preferences_title_menu">Autodrive - Auto Meal - Settings</string>
     <string name="manual_modes_preferences_title_menu">Manual Meal / Activity - Settings</string>
     <string name="meal_preferences_title_menu">Manual Modes</string>
