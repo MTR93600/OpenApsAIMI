@@ -120,11 +120,6 @@
     <string name="equil_history_item16">Baterija tuščia!</string>
     <string name="equil_history_item17">Įjungimo atstatymas</string>
     <string name="equil_history_item18">Neįprastas suleidimas sustabdytas</string>
-    <string name="equil_common_short_status_last_connection">Pask. prijung: prieš %1$d min</string>
-    <string name="equil_common_short_status_last_bolus">Pask. Bolusas: %1$s @ %2$s</string>
-    <string name="equil_common_short_status_temp_basal">Laik. bazė: %1$s</string>
-    <string name="equil_common_short_status_extended_bolus">Ištęstas: %1$s</string>
-    <string name="equil_common_short_status_reservoir">Rezervuaras: %1$svv</string>
     <string name="equil_common_overview_button_suspend_delivery">Sustabdyti</string>
     <string name="equil_common_overview_button_resume_delivery">Atnaujinti suleidimą</string>
     <string name="equil_common_overview_temp_basal_value">%1$.2fvv/val @%2$s (%3$d/%4$d min)</string>

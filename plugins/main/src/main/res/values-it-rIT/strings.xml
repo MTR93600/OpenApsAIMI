@@ -191,10 +191,10 @@
     <string name="statuslights_bat_warning">Livello batteria micro: soglia di avviso [%]</string>
     <string name="statuslights_bat_critical">Livello batteria micro: soglia critica [%]</string>
     <string name="statuslights_copy_ns">Copia impostazioni da NS</string>
-    <string name="graph_scale_6h">6 ore</string>
-    <string name="graph_scale_12h">12 ore</string>
-    <string name="graph_scale_18h">18 ore</string>
-    <string name="graph_scale_24h">24 ore</string>
+    <string name="graph_scale_6h">6h</string>
+    <string name="graph_scale_12h">12h</string>
+    <string name="graph_scale_18h">18h</string>
+    <string name="graph_scale_24h">24h</string>
     <string name="graph_long_scale_6h">6 ore</string>
     <string name="graph_long_scale_12h">12 ore</string>
     <string name="graph_long_scale_18h">18 ore</string>

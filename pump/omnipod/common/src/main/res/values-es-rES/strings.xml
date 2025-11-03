@@ -161,13 +161,6 @@
     <string name="omnipod_common_alert_shutdown_imminent">El apagado es inminente</string>
     <string name="omnipod_common_alert_low_reservoir">Reservorio bajo</string>
     <string name="omnipod_common_alert_unknown_alert">Alerta desconocida</string>
-    <!-- Omnipod - Short status -->
-    <string name="omnipod_common_short_status_no_active_pod">Ningún Pod Activo</string>
-    <string name="omnipod_common_short_status_last_connection">ÚltimaConexión: hace %1$d minutos</string>
-    <string name="omnipod_common_short_status_last_bolus">ÚltimoBolo: %1$s U @ %2$s</string>
-    <string name="omnipod_common_short_status_temp_basal">Temp: %1$s</string>
-    <string name="omnipod_common_short_status_extended_bolus">Extendido: %1$s</string>
-    <string name="omnipod_common_short_status_reservoir">Reservorio: %1$sU</string>
     <!-- Omnipod - Other -->
     <string name="omnipod_common_yes">Si</string>
     <string name="omnipod_common_no">No</string>

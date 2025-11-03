@@ -147,10 +147,6 @@
     <string name="omnipod_common_alert_shutdown_imminent">Herunterfahren steht unmittelbar bevor</string>
     <string name="omnipod_common_alert_low_reservoir">Niedriger Reservoirstand</string>
     <string name="omnipod_common_alert_unknown_alert">Unbekannter Alarm</string>
-    <!-- Omnipod - Short status -->
-    <string name="omnipod_common_short_status_no_active_pod">Kein aktiver Pod</string>
-    <string name="omnipod_common_short_status_last_connection">Letzte Verb.: vor %1$d min</string>
-    <string name="omnipod_common_short_status_extended_bolus">Verlängert: %1$s</string>
     <!-- Omnipod - Other -->
     <string name="omnipod_common_yes">Ja</string>
     <string name="omnipod_common_no">Nein</string>

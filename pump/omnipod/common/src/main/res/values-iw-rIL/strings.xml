@@ -158,12 +158,6 @@
     <string name="omnipod_common_alert_shutdown_imminent">כיבוי בלתי נמנע</string>
     <string name="omnipod_common_alert_low_reservoir">מכל נמוך</string>
     <string name="omnipod_common_alert_unknown_alert">התראה לא ידועה</string>
-    <!-- Omnipod - Short status -->
-    <string name="omnipod_common_short_status_no_active_pod">אין פוד פעיל</string>
-    <string name="omnipod_common_short_status_last_connection">חיבור אחרון: לפני %1$d דקות</string>
-    <string name="omnipod_common_short_status_temp_basal">בזאלי זמני: %1$s</string>
-    <string name="omnipod_common_short_status_extended_bolus">ממושך: %1$s</string>
-    <string name="omnipod_common_short_status_reservoir">מכל: %1$s יח\'</string>
     <!-- Omnipod - Other -->
     <string name="omnipod_common_yes">כן</string>
     <string name="omnipod_common_no">לא</string>

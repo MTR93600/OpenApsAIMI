@@ -36,13 +36,6 @@
     <string name="timeout_during_handshake">Hết thời gian chờ trong quá trình trao đổi – đặt lại Bluetooth</string>
     <string name="pump_stopped">Đã dừng Pump</string>
     <string name="pump_started">Đã khởi động Pump</string>
-    <string name="short_status_last_connected">Kết nối gần nhất: cách đây %1$d phút</string>
-    <string name="short_status_tbr">TBR: %1$d%% trong %2$d / %3$d phút</string>
-    <string name="short_status_extended">Mở rộng: %1$.2f / %2$.2f U trong %3$d phút</string>
-    <string name="short_status_multiwave">Multiwave: %1$.2f / %2$.2f U trong %3$d phút</string>
-    <string name="short_status_tdd">Tổng liều hàng ngày (TDD): %1$.2f</string>
-    <string name="short_status_reservoir">Reser.: %1$.2f U</string>
-    <string name="short_status_battery">Pin: %1$d%%</string>
     <string name="release_software_version">Phiên bản phần mềm</string>
     <string name="ui_processor_software_version">Phiên bản phần mềm xử lý giao diện</string>
     <string name="pc_processor_software_version">Phiên bản phần mềm bộ xử lý PC</string>

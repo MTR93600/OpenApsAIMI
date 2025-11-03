@@ -161,13 +161,6 @@
     <string name="omnipod_common_alert_shutdown_imminent">Vypnutie je bezprostredné</string>
     <string name="omnipod_common_alert_low_reservoir">Nízka hladina zásobníka</string>
     <string name="omnipod_common_alert_unknown_alert">Neznáma výstraha</string>
-    <!-- Omnipod - Short status -->
-    <string name="omnipod_common_short_status_no_active_pod">Žiadny aktívny Pod</string>
-    <string name="omnipod_common_short_status_last_connection">Posledné spoj: pred %1$d min</string>
-    <string name="omnipod_common_short_status_last_bolus">Posledný bolus: %1$s JI @ %2$s</string>
-    <string name="omnipod_common_short_status_temp_basal">Doč. bazál: %1$s</string>
-    <string name="omnipod_common_short_status_extended_bolus">Predl. bolus: %1$s</string>
-    <string name="omnipod_common_short_status_reservoir">Zásobník: %1$sJI</string>
     <!-- Omnipod - Other -->
     <string name="omnipod_common_yes">Áno</string>
     <string name="omnipod_common_no">Nie</string>

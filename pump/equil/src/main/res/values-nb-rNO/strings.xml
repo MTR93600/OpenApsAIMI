@@ -121,11 +121,6 @@
     <string name="equil_history_item16">Batteri tomt!</string>
     <string name="equil_history_item17">Tilbakestilling ved oppstart</string>
     <string name="equil_history_item18">Unormal infusjon stoppet</string>
-    <string name="equil_common_short_status_last_connection">Sist tilkoblet: %1$d min siden</string>
-    <string name="equil_common_short_status_last_bolus">Siste bolus: %1$s @ %2$s</string>
-    <string name="equil_common_short_status_temp_basal">Midl. basal: %1$s</string>
-    <string name="equil_common_short_status_extended_bolus">Forlenget: %1$s</string>
-    <string name="equil_common_short_status_reservoir">Reservoar: %1$sE</string>
     <string name="equil_common_overview_button_suspend_delivery">Pause</string>
     <string name="equil_common_overview_button_resume_delivery">Gjenoppta tilførselen</string>
     <string name="equil_common_overview_temp_basal_value">%1$.2fE/t @%2$s (%3$d/%4$d min)</string>

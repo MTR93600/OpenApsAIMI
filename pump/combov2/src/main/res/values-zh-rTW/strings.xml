@@ -103,15 +103,7 @@
     <string name="combov2_unpair_pump_summary">將 AndroidAPS 和 Android 與目前配對的 Accu-Chek Combo 幫浦取消配對</string>
     <string name="combov2_unknown_tbr_detected">偵測到未知的臨時基礎率並已停止；百分比：%1$d%%；剩餘持續時間：%2$s</string>
     <string name="combov2_connection_error">連線錯誤：%1$s</string>
-    <string name="combov2_short_status_last_connection">最後連線：%1$d 分鐘前</string>
     <string name="combov2_short_status_alert">警報：%s</string>
-    <string name="combov2_short_status_last_bolus">最後注射：%1$sU @ %2$s</string>
-    <string name="combov2_short_status_temp_basal">臨時基礎速率：%s</string>
-    <string name="combov2_short_status_reservoir">儲液器：%dU</string>
-    <string name="combov2_short_status_battery_state_empty">空</string>
-    <string name="combov2_short_status_battery_state_low">低</string>
-    <string name="combov2_short_status_battery_state_full">滿</string>
-    <string name="combov2_short_status_battery_state">電池：%s</string>
     <string name="combov2_automatic_reservoir_entry">自動偵測並自動輸入胰島素儲液器更換</string>
     <string name="combov2_automatic_battery_entry">自動偵測並自動輸入電池更換</string>
     <string name="combov2_timezone_changed">時區已更改</string>

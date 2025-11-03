@@ -121,11 +121,6 @@
     <string name="equil_history_item16">電池耗盡！</string>
     <string name="equil_history_item17">上電重置</string>
     <string name="equil_history_item18">異常輸液停止</string>
-    <string name="equil_common_short_status_last_connection">最後連線：%1$d 分鐘前</string>
-    <string name="equil_common_short_status_last_bolus">最後注射：%1$s @ %2$s</string>
-    <string name="equil_common_short_status_temp_basal">臨時基礎速率：%1$s</string>
-    <string name="equil_common_short_status_extended_bolus">延長注射：%1$s</string>
-    <string name="equil_common_short_status_reservoir">儲液盒：%1$sU</string>
     <string name="equil_common_overview_button_suspend_delivery">暫停</string>
     <string name="equil_common_overview_button_resume_delivery">恢復輸送</string>
     <string name="equil_common_overview_temp_basal_value">%1$.2fU/h @%2$s（%3$d/%4$d 分鐘）</string>
