@@ -50,6 +50,7 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import android.content.Context
+import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
@@ -113,6 +114,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // — Hystérèse anti-pompage —
     private val HYPO_RELEASE_MARGIN   = 5.0      // mg/dL au-dessus du seuil
     private val HYPO_RELEASE_HOLD_MIN = 5        // minutes à rester > seuil+margin
+    private var highBgOverrideUsed = false
+    private val INSULIN_STEP = 0.05f
 
     // État interne d’hystérèse
     private var lastHypoBlockAt: Long = 0L
@@ -215,6 +218,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun Double.toFixed2(): String = DecimalFormat("0.00#").format(round(this, 2))
     private fun parseNgrTime(value: String, fallback: LocalTime): LocalTime =
         runCatching { LocalTime.parse(value, ngrTimeFormatter) }.getOrElse { fallback }
+    private fun quantizeToPumpStep(u: Float, step: Float): Float {
+        if (u <= 0f) return 0f
+        val q = (kotlin.math.ceil((u / step).toDouble()) * step).toFloat()
+        return if (q == 0f && u >= (0.6f * step)) step else q
+    }
+
 
     private fun buildNightGrowthResistanceConfig(): NGRConfig {
         val age = preferences.get(IntKey.OApsAIMINightGrowthAgeYears).coerceAtLeast(0)
@@ -1587,23 +1596,37 @@ fun appendCompactLog(
     }
 
     // Hard safety: vrai si BG, predictedBG ou eventualBG passent sous le seuil
+    // private fun isBelowHypoThreshold(
+    //     bg: Double,
+    //     predictedBg: Double,
+    //     eventualBg: Double,
+    //     threshold: Double,
+    //     deltaMgdlPer5min: Double = 0.0
+    // ): Boolean {
+    //     fun safe(v: Double) = if (v.isFinite()) v else Double.POSITIVE_INFINITY
+    //     val minBg = minOf(safe(bg), safe(predictedBg), safe(eventualBg))
+    //
+    //     val extraMargin = when {
+    //         minBg <= threshold           -> 0.0
+    //         deltaMgdlPer5min <= -3.0     -> HYPO_MARGIN_FAST
+    //         deltaMgdlPer5min <= -1.5     -> HYPO_MARGIN_FALL
+    //         else                         -> HYPO_MARGIN_BASE
+    //     }
+    //     return minBg <= threshold + extraMargin
+    // }
     private fun isBelowHypoThreshold(
-        bg: Double,
-        predictedBg: Double,
-        eventualBg: Double,
-        threshold: Double,
-        deltaMgdlPer5min: Double = 0.0
+        bgNow: Double,
+        predicted: Double,
+        eventual: Double,
+        hypo: Double,
+        delta: Double
     ): Boolean {
-        fun safe(v: Double) = if (v.isFinite()) v else Double.POSITIVE_INFINITY
-        val minBg = minOf(safe(bg), safe(predictedBg), safe(eventualBg))
-
-        val extraMargin = when {
-            minBg <= threshold           -> 0.0
-            deltaMgdlPer5min <= -3.0     -> HYPO_MARGIN_FAST
-            deltaMgdlPer5min <= -1.5     -> HYPO_MARGIN_FALL
-            else                         -> HYPO_MARGIN_BASE
-        }
-        return minBg <= threshold + extraMargin
+        val tol = 5.0
+        val floor = hypo - tol
+        val strongNow = bgNow <= floor
+        val strongFuture = (predicted <= floor && eventual <= floor)
+        val fastFall = (delta <= -2.0 && predicted <= hypo)
+        return strongNow || strongFuture || fastFall
     }
     // Hystérèse : on ne débloque qu’après avoir été > (seuil+margin) pendant X minutes
     private fun shouldBlockHypoWithHysteresis(
@@ -1617,7 +1640,7 @@ fun appendCompactLog(
         fun safe(v: Double) = if (v.isFinite()) v else Double.POSITIVE_INFINITY
         val minBg = minOf(safe(bg), safe(predictedBg), safe(eventualBg))
 
-        val blockedNow = isBelowHypoThreshold(bg, predictedBg, eventualBg, threshold, deltaMgdlPer5min)
+        val blockedNow = isBelowHypoThreshold(bg, predictedBg, eventualBg, computeHypoThreshold(80.0, profileUtil.convertToMgdlDetect(preferences.get(UnitDoubleKey.ApsLgsThreshold)).toInt() ), deltaMgdlPer5min)
         if (blockedNow) {
             lastHypoBlockAt = now
             hypoClearCandidateSince = null
@@ -1660,7 +1683,6 @@ fun appendCompactLog(
 
         val currentHour = LocalTime.now().hour
         val honeymoon   = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-
         // 1) hard/tempo guards existants
         when {
             shouldApplyIntervalAdjustment(intervals) -> {
@@ -3889,9 +3911,29 @@ fun appendCompactLog(
         smbDecision = applySafetyPrecautions(mealData, smbDecision, threshold, rT.reason, pkpdRuntime, sportTime, suspectedLateFatMeal)
 //      rT.reason.appendLine("✅ SMB final: ${"%.2f".format(smbDecision)} U")
         rT.reason.appendLine(context.getString(R.string.smb_final, "%.2f".format(smbDecision)))
+        val hypoGuard = threshold ?: computeHypoThreshold(profile.min_bg, profile.lgsThreshold)
 
-        smbToGive = roundToPoint05(smbDecision)
+        val highBgOverride =
+            (bg >= 180.0 || (bg >= 150.0 && delta >= 1.5)) &&
+                !isBelowHypoThreshold(
+                    bg,
+                    predictedBg.toDouble(),
+                    eventualBG,
+                    hypoGuard,
+                    delta.toDouble()
+                ) &&
+                iob < maxSMB
 
+        if (highBgOverride) {
+            this.intervalsmb = 0                      // cadence agressive
+            val step = INSULIN_STEP
+            if (smbDecision < step) smbDecision = step
+            smbDecision = min(smbDecision, maxSMB.toFloat()) // hard cap
+            highBgOverrideUsed = true                 // flag pour le log
+        }
+        //smbToGive = roundToPoint05(smbDecision)
+        val finalSmb = quantizeToPumpStep(smbDecision, INSULIN_STEP)
+        smbToGive = finalSmb
 
         logDataMLToCsv(predictedSMB, smbToGive)
         logDataToCsv(predictedSMB, smbToGive)
