@@ -213,7 +213,8 @@
         <item name="therapyEvent_FINGER_STICK_BG_VALUE">@color/red</item>
         <item name="therapyEvent_EXERCISE">@color/blue</item>
         <item name="therapyEvent_APS_OFFLINE">@color/mdtp_line_dark</item>
-        <item name="therapyEvent_Default">@color/mdtp_line_dark</item>
+ <!--   <item name="therapyEvent_Default">@color/mdtp_line_dark</item>  ORIGINAL AAPS VALUES FOR THERAPY NOTE -->
+        <item name="therapyEvent_Default">@color/defaultTextColor</item> <!-- MOD FOR AIMI MANUAL MODES -->
         <!-- Graph specific colors  -->
         <item name="inRangeBackground">@color/inRangeBackground</item>
         <item name="devSlopePosColor">@color/devSlopePos</item>

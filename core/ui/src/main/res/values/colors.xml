@@ -6,6 +6,7 @@
     <color name="colorPrimaryDark">#676767</color>
     <color name="colorAccent">#40bbaa</color>
     <color name="mdtp_line_dark">#808080</color>
+    <color name="mdtp_line_dark_mod">#9C27B0</color>
     <color name="colorLightGray">#d8d8d8</color>
     <color name="cardColorBackground">#CBCBCB</color>
     <color name="gray">#BBBBBB</color>
