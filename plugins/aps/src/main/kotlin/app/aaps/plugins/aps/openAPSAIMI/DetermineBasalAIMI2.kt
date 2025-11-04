@@ -3916,11 +3916,15 @@ fun appendCompactLog(
         val pkpd = pkpdRuntime   // (non-null ici)
 
 
-// Audit damping
+// === Audit damping ===
         val exFlag = sportTime
-        val lateFatFlag = lateFatRiseFlag  // ton flag calculé ce matin
+        val lateFatFlag = lateFatRiseFlag
         val dmp = pkpd?.dampSmbWithAudit(smbDecision.toFloat(), exFlag, lateFatFlag)
-        var smbAfterDamping = dmp?.out
+
+// on travaille en Double (non-null) dès maintenant
+        var smbAfterDamping: Double = (dmp?.out ?: 0.0)
+
+// Override “haut BG sans risque d’hypo”
         val highBgOverride =
             (bg >= 180.0 || (bg >= 150.0 && delta >= 1.5)) &&
                 !isBelowHypoThreshold(
@@ -3933,31 +3937,42 @@ fun appendCompactLog(
                 iob < maxSMB
 
         if (highBgOverride) {
-            this.intervalsmb = 0                      // cadence agressive
-            val step = INSULIN_STEP
-            if (smbAfterDamping != null) {
-                if (smbAfterDamping < step) smbAfterDamping = step
-            }
-            smbAfterDamping = min(smbAfterDamping, maxSMB.toFloat()) // hard cap
-            highBgOverrideUsed = true                 // flag pour le log
+            this.intervalsmb = 0 // cadence agressive
+            val stepD = INSULIN_STEP.toDouble()
+            if (smbAfterDamping < stepD) smbAfterDamping = stepD
+            smbAfterDamping = kotlin.math.min(smbAfterDamping, maxSMB.toDouble())
+            highBgOverrideUsed = true
         }
-        //smbToGive = roundToPoint05(smbDecision)
-        val finalSmb = quantizeToPumpStep(smbAfterDamping.toFloat(), INSULIN_STEP)
+
+// Quantification pompe (vers Float)
+        val finalSmb: Float = quantizeToPumpStep(smbAfterDamping.toFloat(), INSULIN_STEP)
         smbToGive = finalSmb
-        val quantized = kotlin.math.ceil(smbAfterDamping / step) * step
+
+// Pour le log “quantized” en Double (pure info)
+        val quantized = kotlin.math.ceil(smbAfterDamping / INSULIN_STEP.toDouble()) * INSULIN_STEP.toDouble()
+
+// ---- LOGS ----
         rT.reason.append(
             "\nPKPD: DIA=%.0f min, Peak=%.0f min, Tail=%.0f%%, ISF(fused)=%.0f (profile=%.0f, TDD=%.0f, scale=%.2f)".format(
-                pkpd?.params.diaHrs * 60.0, pkpd?.params.peakMin, pkpd?.tailFraction * 100.0,
-                pkpd?.fusedIsf, pkpd?.profileIsf, pkpd?.tddIsf, pkpd?.pkpdScale
+                pkpd?.params?.diaHrs?.let { it * 60.0 } ?: Double.NaN,
+                pkpd?.params?.peakMin ?: Double.NaN,
+                (pkpd?.tailFraction ?: 0.0) * 100.0,
+                pkpd?.fusedIsf ?: Double.NaN,
+                pkpd?.profileIsf ?: Double.NaN,
+                pkpd?.tddIsf ?: Double.NaN,
+                pkpd?.pkpdScale ?: Double.NaN
             )
         )
+
         rT.reason.append(
             "\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s".format(
-                smbDecision, smbAfterDamping,
-                if (dmp?.tailApplied) "✔" else "✘", dmp?.tailMult,
-                if (dmp?.exerciseApplied) "✔" else "✘", dmp?.exerciseMult,
-                if (dmp?.lateFatApplied) "✔" else "✘", dmp?.lateFatMult,
-                quantized, if (highBgOverride) " (HighBG override)" else ""
+                smbDecision,
+                smbAfterDamping,
+                if (dmp?.tailApplied == true) "✔" else "✘", dmp?.tailMult ?: 1.0,
+                if (dmp?.exerciseApplied == true) "✔" else "✘", dmp?.exerciseMult ?: 1.0,
+                if (dmp?.lateFatApplied == true) "✔" else "✘", dmp?.lateFatMult ?: 1.0,
+                quantized,
+                if (highBgOverride) " (HighBG override)" else ""
             )
         )
         logDataMLToCsv(predictedSMB, smbToGive)
@@ -3992,9 +4007,9 @@ fun appendCompactLog(
                     windowMin = windowSinceDoseInt, // ta variable
                     diaH = pkpd.params.diaHrs, peakMin = pkpd.params.peakMin,
                     fusedIsf = pkpd.fusedIsf, tddIsf = pkpd.tddIsf, profileIsf = pkpd.profileIsf,
-                    tailFrac = pkpd.tailFraction, smbProposedU = smbDecision, smbFinalU = quantized,
-                    tailMult = dmp?.tailMult, exerciseMult = dmp?.exerciseMult, lateFatMult = dmp.lateFatMult,
-                    highBgOverride = highBgOverride, lateFatRise = lateFatFlag, quantStepU = step
+                    tailFrac = pkpd.tailFraction, smbProposedU = smbDecision.toDouble(), smbFinalU = quantized,
+                    tailMult = dmp?.tailMult, exerciseMult = dmp?.exerciseMult, lateFatMult = dmp?.lateFatMult,
+                    highBgOverride = highBgOverride, lateFatRise = lateFatFlag, quantStepU = INSULIN_STEP.toDouble()
                 )
             )
         }

@@ -174,6 +174,5 @@ class PkPdRuntime(
         damping.damp(smb, tailFraction, exercise, suspectedLateFatMeal)
 
     fun dampSmbWithAudit(smb: Float, exercise: Boolean, suspectedLateFatMeal: Boolean): SmbDampingResult =
-        damping.dampWithAudit(smb, tailFraction, exercise, suspectedLateFatMeal)
-}
+        damping.dampWithAudit(smb.toDouble(), tailFraction, exercise, suspectedLateFatMeal)
 }
