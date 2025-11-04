@@ -586,7 +586,7 @@ class EquilPumpPlugin @Inject constructor(
         parent.addPreference(category)
         category.apply {
             key = "equil_settings"
-            title = rh.gs(R.string.equil_settings)
+            title = rh.gs(R.string.equil_name)
             initialExpandedChildrenCount = 0
             addPreference(
                 AdaptiveSwitchPreference(
