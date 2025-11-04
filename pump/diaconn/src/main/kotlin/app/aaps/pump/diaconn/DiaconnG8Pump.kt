@@ -4,8 +4,8 @@ import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.profile.Profile
+import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpSync
-import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import javax.inject.Inject
@@ -177,8 +177,7 @@ class DiaconnG8Pump @Inject constructor(
     var resultErrorCode: Int = 0 // last start bolus erroCode
 
     // Bolus settings
-    var bolusingTreatment: EventOverviewBolusProgress.Treatment? = null // actually delivered treatment
-    var bolusAmountToBeDelivered = 0.0 // amount to be delivered
+    var bolusingDetailedBolusInfo: DetailedBolusInfo? = null // actually delivered treatment
     var bolusProgressLastTimeStamp: Long = 0 // timestamp of last bolus progress message
     var bolusStopped = false // bolus finished
     var bolusStopForced = false // bolus forced to stop by user

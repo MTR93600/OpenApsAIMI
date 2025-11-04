@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- PumoCommon - Pump Abstract -->
+    <!-- PumpCommon - Pump Abstract -->
     <string name="pump_operation_not_supported_by_pump_driver">Bewerking niet ondersteund door pomp en/of driver.</string>
-    <string name="bolus_delivered_so_far">%1$.2f E / %2$.2f E toegediend</string>
     <!-- PumpCommon - Pump Status -->
     <string name="pump_status_not_initialized">Niet geïnitialiseerd</string>
     <string name="pump_status_initialized">Geïnitialiseerd</string>

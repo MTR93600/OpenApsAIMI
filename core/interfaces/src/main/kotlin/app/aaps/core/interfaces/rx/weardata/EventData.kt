@@ -2,7 +2,6 @@ package app.aaps.core.interfaces.rx.weardata
 
 import app.aaps.core.interfaces.rx.events.Event
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.InternalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoBuf
@@ -10,7 +9,6 @@ import java.util.Date
 import java.util.Objects
 
 @Serializable
-@OptIn(InternalSerializationApi::class)
 sealed class EventData : Event() {
 
     var sourceNodeId = ""

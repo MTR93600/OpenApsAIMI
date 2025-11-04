@@ -5,7 +5,6 @@
     <string name="error">Fout</string>
     <string name="profile_set_ok">Basaal profiel in pomp bijgewerkt</string>
     <string name="invalid_input">Verkeerde ingave</string>
-    <string name="bolus_delivering">%1$.2f eh worden toegediend</string>
     <string name="constraint_applied">Beperking toegepast!</string>
     <string name="tempbasals_iobtotal_label_string">Totale IOB:</string>
     <string name="tt_label">TT</string>
@@ -14,7 +13,6 @@
     <string name="pump_base_basal_rate">%1$.2f E/h</string>
     <string name="pump_not_initialized_profile_not_set">Pomp niet geïnitialiseerd, profiel niet ingesteld!</string>
     <string name="failed_update_basal_profile">Update basaal profiel mislukt</string>
-    <string name="bolus_delivered_successfully">Bolus van %1$.2f E succesvol toegediend</string>
     <string name="no_valid_basal_rate">Geen correcte basale snelheid van pomp kunnen lezen</string>
     <string name="limiting_iob">IOB gelimiteerd tot %1$.1f E doordat %2$s</string>
     <string name="loop_disabled">LOOP UITGESCHAKELD DOOR BEPERKINGEN</string>

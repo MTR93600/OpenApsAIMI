@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!--    Events-->
+    <string name="bolus_delivering">Podávání %1$.2fU</string>
+    <string name="bolus_delivered_successfully">Bolus %1$.2fU byl úspěšně aplikován</string>
     <!-- PumpPluginBase -->
     <string name="pump_driver_changed" comment="26 characters max for translation">Změněn ovladač pumpy.</string>
     <!--    DateUtil-->

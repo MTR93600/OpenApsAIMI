@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- PumoCommon - Pump Abstract -->
+    <!-- PumpCommon - Pump Abstract -->
     <string name="pump_operation_not_supported_by_pump_driver">펌프 및/또는 드라이버가 작동을 지원하지 않습니다.</string>
-    <string name="bolus_delivered_so_far">%1$.2f U / %2$.2f U 주입됨</string>
     <!-- PumpCommon - Pump Status -->
     <string name="pump_status_not_initialized">초기화되지 않음</string>
     <string name="pump_status_initialized">초기화됨</string>

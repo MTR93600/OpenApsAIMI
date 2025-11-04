@@ -5,6 +5,8 @@ import app.aaps.wear.complications.BaseComplicationProviderService
 import app.aaps.wear.complications.BrIobComplication
 import app.aaps.wear.complications.BrComplication
 import app.aaps.wear.complications.BrCobIobComplication
+import app.aaps.wear.complications.BrCobIobComplicationExt1
+import app.aaps.wear.complications.BrCobIobComplicationExt2
 import app.aaps.wear.complications.CobDetailedComplication
 import app.aaps.wear.complications.CobIconComplication
 import app.aaps.wear.complications.CobIobComplication
@@ -14,6 +16,8 @@ import app.aaps.wear.complications.IobIconComplication
 import app.aaps.wear.complications.LongStatusComplication
 import app.aaps.wear.complications.LongStatusFlippedComplication
 import app.aaps.wear.complications.SgvComplication
+import app.aaps.wear.complications.SgvComplicationExt1
+import app.aaps.wear.complications.SgvComplicationExt2
 import app.aaps.wear.complications.UploaderBatteryComplication
 import app.aaps.wear.complications.WallpaperComplication
 import app.aaps.wear.heartrate.HeartRateListener
@@ -40,6 +44,8 @@ abstract class WearServicesModule {
     @ContributesAndroidInjector abstract fun contributesStepsCountListenerService(): StepCountListener
     @ContributesAndroidInjector abstract fun contributesBaseComplicationProviderService(): BaseComplicationProviderService
     @ContributesAndroidInjector abstract fun contributesBrCobIobComplication(): BrCobIobComplication
+    @ContributesAndroidInjector abstract fun contributesBrCobIobComplicationExt1(): BrCobIobComplicationExt1
+    @ContributesAndroidInjector abstract fun contributesBrCobIobComplicationExt2(): BrCobIobComplicationExt2
     @ContributesAndroidInjector abstract fun contributesBrIobComplication(): BrIobComplication
     @ContributesAndroidInjector abstract fun contributesBrComplication(): BrComplication
     @ContributesAndroidInjector abstract fun contributesCobDetailedComplication(): CobDetailedComplication
@@ -51,6 +57,8 @@ abstract class WearServicesModule {
     @ContributesAndroidInjector abstract fun contributesLongStatusComplication(): LongStatusComplication
     @ContributesAndroidInjector abstract fun contributesLongStatusFlippedComplication(): LongStatusFlippedComplication
     @ContributesAndroidInjector abstract fun contributesSgvComplication(): SgvComplication
+    @ContributesAndroidInjector abstract fun contributesSgvComplicationExt1(): SgvComplicationExt1
+    @ContributesAndroidInjector abstract fun contributesSgvComplicationExt2(): SgvComplicationExt2
     @ContributesAndroidInjector abstract fun contributesUploaderBatteryComplication(): UploaderBatteryComplication
     @ContributesAndroidInjector abstract fun contributesWallpaperComplication(): WallpaperComplication
 

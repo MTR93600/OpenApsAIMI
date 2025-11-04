@@ -16,6 +16,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.appcompat.view.ContextThemeWrapper
 import androidx.core.content.ContextCompat
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -65,7 +66,7 @@ class ResourceHelperImpl @Inject constructor(var context: Context, private val f
 
     override fun gc(@ColorRes id: Int): Int = ContextCompat.getColor(context, id)
 
-    override fun gd(@DrawableRes id: Int): Drawable? = context.getDrawable(id)
+    override fun gd(@DrawableRes id: Int): Drawable? = AppCompatResources.getDrawable(context, id)
 
     override fun gb(@BoolRes id: Int): Boolean = context.resources.getBoolean(id)
 

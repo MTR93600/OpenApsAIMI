@@ -122,8 +122,6 @@ import app.aaps.pump.insight.keys.InsightIntentKey
 import app.aaps.pump.insight.keys.InsightLongNonKey
 import app.aaps.pump.insight.utils.ExceptionTranslator
 import app.aaps.pump.insight.utils.ParameterBlockUtil
-import org.json.JSONException
-import org.json.JSONObject
 import java.util.Calendar
 import java.util.Date
 import java.util.TimeZone
@@ -167,7 +165,7 @@ class InsightPlugin @Inject constructor(
 
     override val pumpDescription: PumpDescription = PumpDescription().also { it.fillFor(PumpType.ACCU_CHEK_INSIGHT) }
     private val _bolusLock: Any = arrayOfNulls<Any>(0)
-    var lastBolusAmount = 0.0
+    override var lastBolusAmount = 0.0
         private set
     var lastBolusTimestamp = 0L
         private set
@@ -479,19 +477,16 @@ class InsightPlugin @Inject constructor(
         return true
     }
 
-    override fun lastDataTime(): Long {
-        return if (connectionService == null || alertService == null) dateUtil.now() else connectionService?.lastDataTime ?: 0
-    }
+    override val lastDataTime: Long get() = if (connectionService == null || alertService == null) dateUtil.now() else connectionService?.lastDataTime ?: 0
+    override val lastBolusTime: Long? get() = lastBolusTimestamp
 
     override val baseBasalRate: Double
         get() {
             if (connectionService == null || alertService == null) return 0.0
             return activeBasalRate?.activeBasalRate ?: 0.0
         }
-    override val reservoirLevel: Double
-        get() = cartridgeStatus?.remainingAmount ?: 0.0
-    override val batteryLevel: Int
-        get() = batteryStatus?.batteryAmount ?: 0
+    override val reservoirLevel: Double get() = cartridgeStatus?.remainingAmount ?: 0.0
+    override val batteryLevel: Int get() = batteryStatus?.batteryAmount ?: 0
 
     override fun deliverTreatment(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult {
         if (detailedBolusInfo.insulin.equals(0.0) || detailedBolusInfo.carbs > 0) {
@@ -513,12 +508,7 @@ class InsightPlugin @Inject constructor(
                         bolusCancelled = false
                     }
                     result.success(true).enacted(true)
-                    val t = EventOverviewBolusProgress.Treatment(0.0, 0, detailedBolusInfo.bolusType === BS.Type.SMB, detailedBolusInfo.id)
-                    val bolusingEvent = EventOverviewBolusProgress
-                    bolusingEvent.t = t
-                    bolusingEvent.status = ch.bolusProgress(0.0, insulin)
-                    bolusingEvent.percent = 0
-                    rxBus.send(bolusingEvent)
+                    rxBus.send(EventOverviewBolusProgress(rh, 0.0, id = detailedBolusInfo.id))
                     var trials = 0
                     val now = dateUtil.now()
                     val serial = serialNumber()
@@ -556,17 +546,12 @@ class InsightPlugin @Inject constructor(
                         }
                         if (activeBolus != null) {
                             trials = -1
-                            val percentBefore = bolusingEvent.percent
-                            bolusingEvent.percent = (100.0 / activeBolus.initialAmount * (activeBolus.initialAmount - activeBolus.remainingAmount)).toInt()
-                            bolusingEvent.status = ch.bolusProgress(activeBolus.initialAmount - activeBolus.remainingAmount, activeBolus.initialAmount)
-                            if (percentBefore != bolusingEvent.percent) rxBus.send(bolusingEvent)
+                            rxBus.send(EventOverviewBolusProgress(rh, delivered = activeBolus.initialAmount - activeBolus.remainingAmount, id = detailedBolusInfo.id))
                         } else {
                             synchronized(_bolusLock) {
                                 if (bolusCancelled || trials == -1 || trials++ >= 5) {
                                     if (!bolusCancelled) {
-                                        bolusingEvent.status = ch.bolusProgress(insulin, insulin)
-                                        bolusingEvent.percent = 100
-                                        rxBus.send(bolusingEvent)
+                                        rxBus.send(EventOverviewBolusProgress(rh, delivered = insulin, id = detailedBolusInfo.id))
                                     }
                                 }
                             }
@@ -879,62 +864,8 @@ class InsightPlugin @Inject constructor(
         }
     }
 
-    override fun getJSONStatus(profile: Profile, profileName: String, version: String): JSONObject {
-        val now = dateUtil.now()
-        if (connectionService == null) return JSONObject()
-        val pump = JSONObject()
-        val battery = JSONObject()
-        val status = JSONObject()
-        val extended = JSONObject()
-        connectionService?.let { service ->
-            if (dateUtil.now() - service.lastConnected > 60 * 60 * 1000) {
-                return JSONObject()
-            }
-            try {
-                status.put("timestamp", dateUtil.toISOString(service.lastConnected))
-                extended.put("Version", version)
-                try {
-                    extended.put("ActiveProfile", profileFunction.getProfileName())
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-                val tb = pumpSync.expectedPumpState().temporaryBasal
-                if (tb != null) {
-                    extended.put("TempBasalAbsoluteRate", tb.convertedToAbsolute(now, profile))
-                    extended.put("TempBasalStart", dateUtil.dateAndTimeString(tb.timestamp))
-                    extended.put("TempBasalRemaining", tb.plannedRemainingMinutes)
-                }
-                val eb = pumpSync.expectedPumpState().extendedBolus
-                if (eb != null) {
-                    extended.put("ExtendedBolusAbsoluteRate", eb.rate)
-                    extended.put("ExtendedBolusStart", dateUtil.dateAndTimeString(eb.timestamp))
-                    extended.put("ExtendedBolusRemaining", eb.plannedRemainingMinutes)
-                }
-                extended.put("BaseBasalRate", baseBasalRate)
-                status.put("timestamp", dateUtil.toISOString(now))
-                pump.put("extended", extended)
-                if (statusLoaded) {
-                    status.put("status", if (operatingMode != OperatingMode.STARTED) "suspended" else "normal")
-                    pump.put("status", status)
-                    battery.put("percent", batteryStatus?.batteryAmount ?: 0)
-                    pump.put("battery", battery)
-                    pump.put("reservoir", cartridgeStatus?.remainingAmount ?: 0.0)
-                }
-                pump.put("clock", dateUtil.toISOString(now))
-            } catch (e: JSONException) {
-                aapsLogger.error("Unhandled exception", e)
-            }
-        }
-        return pump
-    }
-
-    override fun manufacturer(): ManufacturerType {
-        return ManufacturerType.Roche
-    }
-
-    override fun model(): PumpType {
-        return PumpType.ACCU_CHEK_INSIGHT
-    }
+    override fun manufacturer(): ManufacturerType = ManufacturerType.Roche
+    override fun model(): PumpType = PumpType.ACCU_CHEK_INSIGHT
 
     override fun serialNumber(): String {
         return connectionService?.let { service ->
@@ -1018,38 +949,11 @@ class InsightPlugin @Inject constructor(
         return result
     }
 
-    override fun shortStatus(veryShort: Boolean): String {
-        val ret = StringBuilder()
-        connectionService?.let { service ->
-            if (service.lastConnected != 0L) {
-                val agoMsec = dateUtil.now() - service.lastConnected
-                val agoMin = (agoMsec / 60.0 / 1000.0).toInt()
-                ret.append(rh.gs(R.string.short_status_last_connected, agoMin)).append("\n")
-            }
-            activeTBR?.let { ret.append(rh.gs(R.string.short_status_tbr, it.percentage, it.initialDuration - it.remainingDuration, it.initialDuration)).append("\n") }
-            activeBoluses?.forEach {
-                if (it.bolusType != BolusType.STANDARD)
-                    ret.append(
-                        rh.gs(
-                            if (it.bolusType == BolusType.MULTIWAVE) R.string.short_status_multiwave else R.string.short_status_extended,
-                            it.remainingAmount, it.initialAmount, it.remainingDuration
-                        )
-                    ).append("\n")
-            }
-            if (!veryShort)
-                totalDailyDose?.let { ret.append(rh.gs(R.string.short_status_tdd, it.bolusAndBasal)).append("\n") }
-            cartridgeStatus?.let { ret.append(rh.gs(R.string.short_status_reservoir, it.remainingAmount)).append("\n") }
-            batteryStatus?.let { ret.append(rh.gs(R.string.short_status_battery, it.batteryAmount)).append("\n") }
-        }
-        return ret.toString()
-    }
-
     override val isFakingTempsByExtendedBoluses: Boolean
         get() = preferences.get(InsightBooleanKey.EnableTbrEmulation)
 
-    override fun loadTDDs(): PumpEnactResult {
-        return pumpEnactResultProvider.get().success(true)
-    }
+    override fun loadTDDs(): PumpEnactResult =
+        pumpEnactResultProvider.get().success(true)
 
     private fun readHistory() {
         connectionService?.let { service ->

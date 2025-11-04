@@ -3,7 +3,6 @@
     <string name="equil_pump_description">Equil 5.3 of nieuwere Patch Pomp </string>
     <!--  start  -->
     <string name="equil_basal_speed">Basis basaal</string>
-    <string name="equil_bolus_delivered">%1$.3f E / %2$.3f E toegediend</string>
     <string name="equil_btn_cancel">Annuleren</string>
     <string name="equil_btn_need">Nodig</string>
     <string name="equil_btn_skip">Overslaan</string>

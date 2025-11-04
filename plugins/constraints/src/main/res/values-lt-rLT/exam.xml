@@ -63,7 +63,6 @@
     <string name="basaltest_hint1">https://wiki.aaps.app/en/latest/SettingUpAaps/YourAapsProfile.html</string>
     <string name="prerequisites_label">Būtinosios sąlygos</string>
     <string name="prerequisites_what">Ko reikia norint įvesti nustatymus ir pradėti naudoti AndroidAPS?</string>
-    <string name="prerequisites_computer">Kompiuterio su įdiegta ir sukonfigūruota Android Studio programa.</string>
     <string name="prerequisites_pump">Tinkamos insulino pompos, jei ketinate naudoti uždarą ciklą.</string>
     <string name="prerequisites_nightscout">Nightscout, kad galima būtų išsaugoti ir peržiūrėti visų duomenų bei nustatymų istoriją.</string>
     <string name="prerequisites_beanandroiddeveloper">Turėti programavimo ar kodo redagavimo patirties.</string>

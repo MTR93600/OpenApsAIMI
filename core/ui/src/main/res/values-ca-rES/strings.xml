@@ -5,7 +5,6 @@
     <string name="error">Error</string>
     <string name="profile_set_ok">Perfil de basal actualitzat a la bomba</string>
     <string name="invalid_input">Dades no vàlides</string>
-    <string name="bolus_delivering">Lliurant %1$.2f U</string>
     <string name="constraint_applied">Restricció aplicada!</string>
     <string name="tempbasals_iobtotal_label_string">IOB total:</string>
     <string name="tt_label">OT</string>

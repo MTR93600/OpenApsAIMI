@@ -14,8 +14,8 @@
     <string name="operating_mode">運行模式</string>
     <string name="description_pump_insight_local">Accu-Chek Insight 幫浦整合</string>
     <string name="not_inserted">未植入</string>
-    <string name="tdd_bolus">TDD 注射</string>
-    <string name="tdd_basal">TDD 基礎率</string>
+    <string name="tdd_bolus">每日總劑量注射</string>
+    <string name="tdd_basal">每日總劑量基礎率</string>
     <string name="tbr_formatter">%1$d%% 持續 %2$d / %3$d 分鐘</string>
     <string name="multiwave_bolus">多波段胰島素注射</string>
     <string name="eb_formatter">%1$.2f / %2$.2f U 持續 %3$d 分鐘</string>

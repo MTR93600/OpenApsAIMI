@@ -22,7 +22,6 @@ import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.insulin.Insulin
 import app.aaps.core.interfaces.logging.L
-import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.VirtualPump
 import app.aaps.core.interfaces.source.NSClientSource
@@ -46,7 +45,6 @@ internal class NSClientV3PluginTest : TestBaseWithProfile() {
     @Mock lateinit var receiverDelegate: ReceiverDelegate
     @Mock lateinit var dataSyncSelectorV3: DataSyncSelectorV3
     @Mock lateinit var nsAndroidClient: NSAndroidClient
-    @Mock lateinit var uel: UserEntryLogger
     @Mock lateinit var nsClientSource: NSClientSource
     @Mock lateinit var virtualPump: VirtualPump
     @Mock lateinit var mockedProfileFunction: ProfileFunction
@@ -67,7 +65,7 @@ internal class NSClientV3PluginTest : TestBaseWithProfile() {
 
     @BeforeEach
     fun prepare() {
-        storeDataForDb = StoreDataForDbImpl(aapsLogger, rxBus, persistenceLayer, preferences, uel, config, nsClientSource, virtualPump)
+        storeDataForDb = StoreDataForDbImpl(aapsLogger, rxBus, persistenceLayer, preferences, config, nsClientSource, virtualPump)
         sut =
             NSClientV3Plugin(
                 aapsLogger, rh, preferences, aapsSchedulers, rxBus, context, fabricPrivacy,

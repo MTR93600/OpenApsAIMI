@@ -54,7 +54,6 @@
     <string name="basaltest_fixed">Uma vez definido e validado, estes valores não devem mudar ao longo do tempo.</string>
     <string name="prerequisites_label">Pré-requisitos</string>
     <string name="prerequisites_what">O que é essencial para configurar e utilizar a AndroidAPS?</string>
-    <string name="prerequisites_computer">Um computador com Android Studio instalado e configurado.</string>
     <string name="prerequisites_pump">Uma bomba de insulina compatível se planeia correr um closed loop.</string>
     <string name="prerequisites_nightscout">Nightscout, para manter um registo de todos os dados e rever as configurações.</string>
     <string name="prerequisites_beanandroiddeveloper">Experiência na programação ou edição de código.</string>

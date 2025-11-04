@@ -12,6 +12,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
+import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.receivers.Intents
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.AapsSchedulers
@@ -89,8 +90,8 @@ class WearPlugin @Inject constructor(
             .toObservable(EventOverviewBolusProgress::class.java)
             .observeOn(aapsSchedulers.io)
             .subscribe({ event: EventOverviewBolusProgress ->
-                           if (!event.isSMB() || preferences.get(BooleanKey.WearNotifyOnSmb)) {
-                               if (isEnabled()) rxBus.send(EventMobileToWear(EventData.BolusProgress(percent = event.percent, status = event.status)))
+                           if (!BolusProgressData.isSMB || preferences.get(BooleanKey.WearNotifyOnSmb)) {
+                               if (isEnabled()) rxBus.send(EventMobileToWear(EventData.BolusProgress(percent = BolusProgressData.percent, status = BolusProgressData.status)))
                            }
                        }, fabricPrivacy::logException)
         disposable += rxBus
@@ -167,7 +168,7 @@ class WearPlugin @Inject constructor(
     private fun broadcastData(payload: EventData) {
         // Identify and update source set before broadcast
         val client = if (config.AAPSCLIENT1) 1 else if (config.AAPSCLIENT2) 2 else throw UnsupportedOperationException()
-        var dataToSend = when (payload) {
+        val dataToSend = when (payload) {
             is EventData.SingleBg -> payload.copy().apply { dataset = client }
             is EventData.Status   -> payload.copy().apply { dataset = client }
             else                  -> payload

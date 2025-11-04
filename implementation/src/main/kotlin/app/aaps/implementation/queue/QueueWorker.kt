@@ -55,6 +55,7 @@ class QueueWorker internal constructor(
         var connectionStartTime = lastCommandTime
         try {
             while (true) {
+                if (isStopped) return Result.failure()
                 val secondsElapsed = (System.currentTimeMillis() - connectionStartTime) / 1000
                 val pump = activePlugin.activePump
                 //  Manifest.permission.BLUETOOTH_CONNECT
@@ -170,7 +171,7 @@ class QueueWorker internal constructor(
             }
         } finally {
             if (wakeLock?.isHeld == true) wakeLock.release()
-            aapsLogger.debug(LTag.PUMPQUEUE, "thread end")
+            aapsLogger.debug(LTag.PUMPQUEUE, "work end")
         }
     }
 }

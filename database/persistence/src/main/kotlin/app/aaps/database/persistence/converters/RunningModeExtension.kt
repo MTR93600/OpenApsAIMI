@@ -13,6 +13,7 @@ fun RunningMode.Mode.fromDb(): RM.Mode =
         RunningMode.Mode.DISCONNECTED_PUMP -> RM.Mode.DISCONNECTED_PUMP
         RunningMode.Mode.SUSPENDED_BY_PUMP -> RM.Mode.SUSPENDED_BY_PUMP
         RunningMode.Mode.SUSPENDED_BY_USER -> RM.Mode.SUSPENDED_BY_USER
+        RunningMode.Mode.SUSPENDED_BY_DST -> RM.Mode.SUSPENDED_BY_DST
     }
 
 fun RM.Mode.toDb(): RunningMode.Mode =
@@ -25,6 +26,7 @@ fun RM.Mode.toDb(): RunningMode.Mode =
         RM.Mode.DISCONNECTED_PUMP -> RunningMode.Mode.DISCONNECTED_PUMP
         RM.Mode.SUSPENDED_BY_PUMP -> RunningMode.Mode.SUSPENDED_BY_PUMP
         RM.Mode.SUSPENDED_BY_USER -> RunningMode.Mode.SUSPENDED_BY_USER
+        RM.Mode.SUSPENDED_BY_DST -> RunningMode.Mode.SUSPENDED_BY_DST
         RM.Mode.RESUME            -> error("Invalid mode")
     }
 

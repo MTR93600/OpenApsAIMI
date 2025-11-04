@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- PumoCommon - Pump Abstract -->
+    <!-- PumpCommon - Pump Abstract -->
     <!-- PumpCommon - Pump Status -->
     <string name="pump_status_not_initialized">Nije inicijalizirano</string>
     <string name="pump_status_initialized">Inicijalizirano</string>

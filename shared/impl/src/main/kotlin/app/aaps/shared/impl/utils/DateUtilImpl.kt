@@ -8,7 +8,6 @@ import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.SafeParse
 import app.aaps.core.utils.pump.ThreadUtil
-import org.apache.commons.lang3.ThreadUtils
 import org.apache.commons.lang3.time.DateUtils.isSameDay
 import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
@@ -208,9 +207,11 @@ class DateUtilImpl @Inject constructor(private val context: Context) : DateUtil 
         return timeString(start) + " - " + timeString(end)
     }
 
-    override fun dateAndTimeString(mills: Long): String {
-        return if (mills == 0L) "" else dateString(mills) + " " + timeString(mills)
-    }
+    override fun dateAndTimeString(mills: Long): String =
+        if (mills == 0L) "" else dateString(mills) + " " + timeString(mills)
+
+    override fun dateAndTimeStringNullable(mills: Long?): String? =
+        if (mills == null || mills == 0L) null else dateString(mills) + " " + timeString(mills)
 
     override fun dateAndTimeAndSecondsString(mills: Long): String {
         return if (mills == 0L) "" else dateString(mills) + " " + timeStringWithSeconds(mills)

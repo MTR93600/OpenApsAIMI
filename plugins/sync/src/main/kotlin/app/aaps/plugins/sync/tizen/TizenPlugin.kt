@@ -18,6 +18,8 @@ import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.ProfileFunction
+import app.aaps.core.interfaces.pump.BolusProgressData
+import app.aaps.core.interfaces.pump.PumpStatusProvider
 import app.aaps.core.interfaces.receivers.Intents
 import app.aaps.core.interfaces.receivers.ReceiverStatusStore
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -61,6 +63,7 @@ class TizenPlugin @Inject constructor(
     private val config: Config,
     private val glucoseStatusProvider: GlucoseStatusProvider,
     private val ch: ConcentrationHelper
+    private val pumpStatusProvider: PumpStatusProvider
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.SYNC)
@@ -100,9 +103,9 @@ class TizenPlugin @Inject constructor(
         basalStatus(bundle)
         pumpStatus(bundle)
 
-        if (event is EventOverviewBolusProgress && !event.isSMB()) {
-            bundle.putInt("progressPercent", event.percent)
-            bundle.putString("progressStatus", event.status)
+        if (event is EventOverviewBolusProgress && !BolusProgressData.isSMB) {
+            bundle.putInt("progressPercent", BolusProgressData.percent)
+            bundle.putString("progressStatus", BolusProgressData.status)
         }
     }
 
@@ -186,10 +189,10 @@ class TizenPlugin @Inject constructor(
 
     private fun pumpStatus(bundle: Bundle) {
         val pump = activePlugin.activePump
-        bundle.putLong("pumpTimeStamp", pump.lastDataTime())
+        bundle.putLong("pumpTimeStamp", pump.lastDataTime)
         bundle.putInt("pumpBattery", pump.batteryLevel)
         bundle.putDouble("pumpReservoir", ch.fromPump(pump.reservoirLevel))
-        bundle.putString("pumpStatus", pump.shortStatus(false))
+        bundle.putString("pumpStatus", pumpStatusProvider.shortStatus(false))
     }
 
     private fun sendBroadcast(intent: Intent) {

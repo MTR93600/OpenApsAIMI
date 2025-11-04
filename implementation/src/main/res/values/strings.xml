@@ -18,6 +18,16 @@
     <string name="night_tir">Night TIR</string>
     <string name="carbs_short" comment="max 6 characters">Carbs</string>
 
+    <!--    PumpStatusGenerator-->
+    <string name="short_status_last_connection">LastConn: %1$d min ago</string>
+    <string name="short_status_alert">Alert: %s</string>
+    <string name="short_status_last_bolus">LastBolus: %1$sU @ %2$s</string>
+    <string name="short_status_temp_basal">Temp: %s</string>
+    <string name="short_status_extended">Ext: %s</string>
+    <string name="short_status_reservoir">Reserv: %dU</string>
+    <string name="short_status_battery">Batt: %d%%</string>
+    <string name="short_status_not_initialized">Pump not initialized</string>
+
     <!--       ConcentrationHelper -->
     <string name="bolus_with_volume">%1$sU (%2$.1fµl)</string>
     <string name="insulin_concentration">U%1$d</string>

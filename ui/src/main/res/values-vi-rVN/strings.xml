@@ -7,7 +7,7 @@
     <string name="start_activity_tt">Start Activity TT</string>
     <string name="start_eating_soon_tt">Start Eating soon TT</string>
     <string name="start_hypo_tt">Start Hypo TT</string>
-    <string name="time_offset">Bù trừ thời gian</string>
+    <string name="time_offset">Time offset</string>
     <string name="unit_minute_short">phút</string>
     <string name="remind_to_bolus_later">Nhắc tiêm bolus sau</string>
     <string name="a11y_carb_reminder">đặt lời nhắc</string>
@@ -38,6 +38,22 @@
     <string name="format_carbs_ic">%1$.0fg IC: %2$.1f</string>
     <string name="treatments_wizard_total_label">Tổng</string>
     <!-- SiteRotationDialog -->
+    <string name="site_front">Phía trước</string>
+    <string name="site_back">Quay lại</string>
+    <string name="site_man">Nam</string>
+    <string name="site_woman">Nữ</string>
+    <string name="site_child">Trẻ em</string>
+    <string name="user_profile">Cấu hình người dùng</string>
+    <string name="user_profile_description">Mô tả cấu hình người dùng được dùng để hiển thị các vị trí tiêm phổ biến nhất đối với nam, nữ hoặc trẻ em</string>
+    <string name="site_management">Cấu hình quản lý vị trí tiêm</string>
+    <string name="site_management_description">Tại đây bạn có thể chọn quản lý vị trí tiêm, vị trí cảm biến CGM hoặc cả hai. Thiết lập này sẽ được dùng để tự động hiển thị hộp thoại quản lý vị trí mỗi khi phát hiện mục nhập mới</string>
+    <string name="select_site">Nhấn bên dưới để chọn vị trí</string>
+    <string name="record_site_change">Ghi lại vị trí tiêm/cảm biến</string>
+    <string name="edit_site">Chỉnh sửa</string>
+    <string name="record_site_location">Vị trí: %1$s</string>
+    <string name="record_site_arrow">Hướng vị trí: %1$s</string>
+    <string name="record_site_note">Ghi chú: %1$s</string>
+    <string name="delete_site_note">Đã xóa ghi chú</string>
     <!-- FillDialog -->
     <string name="fill_warning">Hãy chắc chắn rằng liều lượng phù hợp với thông số của bộ dây truyền!</string>
     <string name="record_pump_site_change">Ghi lại việc thay vị trí tiêm</string>

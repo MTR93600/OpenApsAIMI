@@ -5,7 +5,6 @@
     <string name="error">Lỗi</string>
     <string name="profile_set_ok">Đã cập nhật cấu hình Basal trong bơm</string>
     <string name="invalid_input">Dữ liệu đầu vào không hợp lệ</string>
-    <string name="bolus_delivering">Đang tiêm %1$.2f U</string>
     <string name="constraint_applied">Đã áp dụng giới hạn!</string>
     <string name="tempbasals_iobtotal_label_string">Total IOB:</string>
     <string name="tt_label">TT</string>
@@ -14,7 +13,6 @@
     <string name="pump_base_basal_rate">%1$.2f U/h</string>
     <string name="pump_not_initialized_profile_not_set">Bơm chưa được khởi tạo, cấu hình (profile) chưa được thiết lập!</string>
     <string name="failed_update_basal_profile">Cập nhật cấu hình basal profile thất bại</string>
-    <string name="bolus_delivered_successfully">Đã tiêm Bolus thành công %1$.2f U</string>
     <string name="no_valid_basal_rate">Không đọc được liều basal hợp lệ từ bơm</string>
     <string name="limiting_iob">Giới hạn IOB: %1$.1f U – Lý do: %2$s.</string>
     <string name="loop_disabled">VÒNG LẶP BỊ TẮT DO GIỚI HẠN AN TOÀN</string>
@@ -105,6 +103,7 @@
     <string name="name_short">Tên:</string>
     <string name="time">Thời gian</string>
     <string name="ns_wifi_ssids">WiFi SSID</string>
+    <string name="loading">Đang tải…</string>
     <string name="notes_label">Ghi chú</string>
     <string name="remove_button">Xóa</string>
     <string name="add_new">Thêm mới</string>
@@ -115,12 +114,13 @@
     <string name="alarminxmin">Báo động sau %1$d phút</string>
     <string name="treatmentdeliveryerror">Bolus gặp lỗi. Hãy kiểm tra thủ công lượng insulin và carb đã bơm</string>
     <string name="bolus_reminder">Nhắc nhở bolus</string>
-    <string name="duration_label">Thời lượng</string>
+    <string name="duration_label">Duration</string>
     <string name="shortgramm">g</string>
     <string name="pumpsuspended">Bơm đã tạm dừng</string>
     <string name="pump_running">Pump đang chạy</string>
     <string name="notconfigured">Chưa được thiết lập</string>
     <string name="loopsuspended">Vòng lặp đã tạm dừng</string>
+    <string name="loop_suspended_by_dst">Vòng lặp bị tạm dừng do thay đổi múi giờ (DST)</string>
     <string name="trend_arrow">Mũi tên xu hướng</string>
     <string name="a11y_autosens_label">Auto sens</string>
     <string name="required">req</string>
@@ -157,6 +157,7 @@
     <string name="login">Đăng nhập</string>
     <string name="logout">Đăng xuất</string>
     <string name="prime_fill">Prime/Fill</string>
+    <string name="site_rotation">Chuyển vị trí tiêm</string>
     <string name="overview_insulin_label">Insulin</string>
     <string name="stoptemptarget">Dừng mục tiêu tạm thời</string>
     <string name="closedloop">Vòng lặp kín</string>
@@ -200,7 +201,7 @@
     <string name="cancel_temp">Huỷ liều basal tạm</string>
     <string name="let_temp_basal_run">Cho basal tạm thời tiếp tục</string>
     <string name="rate">Rate</string>
-    <string name="duration">Thời lượng</string>
+    <string name="duration">Duration</string>
     <string name="reason">Lý do</string>
     <string name="nochangerequested">Không có thay đổi nào được yêu cầu</string>
     <!--    ProfileSwitch-->
@@ -223,6 +224,8 @@
     <string name="careportal_exercise_message">Bài tập luyện : %1$s</string>
     <string name="careportal_pump_site_change">Thay vị trí kim truyền</string>
     <string name="cgm_sensor_insert">Gắn cảm biến CGM</string>
+    <string name="careportal_pump_site_management">Các vị trí tiêm</string>
+    <string name="careportal_cgm_site_management">Các vị trí CGM</string>
     <string name="careportal_cgmsensorstart">Khởi động cảm biến CGM</string>
     <string name="careportal_cgm_sensor_stop">Dừng cảm biến CGM</string>
     <string name="careportal_dad_alert">Cảnh báo D.A.D</string>
@@ -256,6 +259,39 @@
     <string name="loop">Loop</string>
     <string name="ns">NS</string>
     <string name="record">Record</string>
+    <string name="location_front_right_upper_chest">Ngực phải</string>
+    <string name="location_front_left_upper_chest">Ngực trái</string>
+    <string name="location_side_right_upper_arm">Phần ngoài cánh tay phải phía trên</string>
+    <string name="location_side_left_upper_arm">Phần ngoài cánh tay trái phía trên</string>
+    <string name="location_back_right_upper_arm">Phần sau cánh tay phải phía trên</string>
+    <string name="location_back_left_upper_arm">Phần sau cánh tay trái phía trên</string>
+    <string name="location_side_right_upper_abdomen">Vùng bụng phải phía trên, bên ngoài</string>
+    <string name="location_side_left_upper_abdomen">Vùng bụng trái phía trên, bên ngoài</string>
+    <string name="location_side_right_lower_abdomen">Vùng bụng phải phía dưới, bên ngoài</string>
+    <string name="location_side_left_lower_abdomen">Vùng bụng trái phía dưới, bên ngoài</string>
+    <string name="location_front_right_upper_abdomen">Vùng bụng phải phía trên, mặt trước</string>
+    <string name="location_front_left_upper_abdomen">Vùng bụng trái phía trên, mặt trước</string>
+    <string name="location_front_right_lower_abdomen">Vùng bụng phải phía dưới, mặt trước</string>
+    <string name="location_front_left_lower_abdomen">Vùng bụng trái phía dưới, mặt trước</string>
+    <string name="location_back_right_buttock">Mông phải</string>
+    <string name="location_back_left_buttock">Mông trái</string>
+    <string name="location_side_right_upper_thigh">Phần ngoài đùi phải phía trên</string>
+    <string name="location_side_left_upper_thigh">Phần ngoài đùi trái phía trên</string>
+    <string name="location_side_right_lower_thigh">Phần ngoài đùi phải phía dưới</string>
+    <string name="location_side_left_lower_thigh">Phần ngoài đùi trái phía dưới</string>
+    <string name="location_front_right_upper_thigh">Phần trước đùi phải phía trên</string>
+    <string name="location_front_left_upper_thigh">Phần trước đùi trái phía trên</string>
+    <string name="location_front_right_lower_thigh">Phần trước đùi phải phía dưới</string>
+    <string name="location_front_left_lower_thigh">Phần trước đùi trái phía dưới</string>
+    <string name="arrow_up">Phía trên</string>
+    <string name="arrow_up_right">Phía trên bên phải</string>
+    <string name="arrow_right">Bên phải</string>
+    <string name="arrow_down_right">Phía dưới bên phải</string>
+    <string name="arrow_down">Phía dưới</string>
+    <string name="arrow_down_left">Phía dưới bên trái</string>
+    <string name="arrow_left">Bên trái</string>
+    <string name="arrow_up_left">Phía trên bên trái</string>
+    <string name="arrow_center">Ở giữa</string>
     <!--    Command-->
     <string name="connectiontimedout">Hết thời gian chờ kết nối</string>
     <!--    PumpEnactResult-->
@@ -315,7 +351,9 @@
     <string name="uel_cancel_extended_bolus">HỦY BOLUS MỞ RỘNG</string>
     <string name="uel_cancel_tt">CANCEL TEMP TARGET</string>
     <string name="uel_careportal">CAREPORTAL</string>
+    <string name="uel_sensor_location">SENSOR LOCATION</string>
     <string name="uel_site_change">THAY ĐIỂM GẮN</string>
+    <string name="uel_site_location">SITE LOCATION</string>
     <string name="uel_reservoir_change">THAY RESERVOIR</string>
     <string name="uel_calibration">CALIBRATION</string>
     <string name="uel_prime_bolus">BOLUS MỒI</string>
@@ -542,7 +580,7 @@
     <string name="you_are_on_allowed_limit">Đã đạt giới hạn cho phép</string>
     <string name="format_hour_minute">%1$dh %2$dm</string>
     <!-- datetime layout -->
-    <string name="event_time_label">Thời gian sự kiện</string>
+    <string name="event_time_label">Event time</string>
     <!-- BluetoothDevicePreference -->
     <string name="need_connect_permission">Ứng dụng yêu cầu quyền Bluetooth</string>
     <!--    Combo-->

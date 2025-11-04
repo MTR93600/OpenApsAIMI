@@ -2,7 +2,6 @@ package app.aaps.plugins.sync.nsclientV3
 
 import app.aaps.core.data.model.GV
 import app.aaps.core.interfaces.db.PersistenceLayer
-import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.nsclient.StoreDataForDb
 import app.aaps.core.interfaces.pump.VirtualPump
 import app.aaps.core.interfaces.source.BgSource
@@ -17,7 +16,6 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
-import org.mockito.Mockito.verifyNoMoreInteractions
 import org.mockito.Mockito.`when`
 import org.mockito.internal.verification.Times
 import org.mockito.kotlin.clearInvocations
@@ -26,7 +24,6 @@ import org.mockito.kotlin.verify
 class DataSyncSelectorV3Test : TestBaseWithProfile() {
 
     @Mock lateinit var persistenceLayer: PersistenceLayer
-    @Mock lateinit var uel: UserEntryLogger
     @Mock lateinit var virtualPump: VirtualPump
     @Mock lateinit var nsClientSource: NSClientSource
 
@@ -35,7 +32,7 @@ class DataSyncSelectorV3Test : TestBaseWithProfile() {
 
     @BeforeEach
     fun setUp() {
-        storeDataForDb = StoreDataForDbImpl(aapsLogger, rxBus, persistenceLayer, preferences, uel, config, nsClientSource, virtualPump)
+        storeDataForDb = StoreDataForDbImpl(aapsLogger, rxBus, persistenceLayer, preferences, config, nsClientSource, virtualPump)
         sut = DataSyncSelectorV3(preferences, aapsLogger, dateUtil, profileFunction, activePlugin, persistenceLayer, rxBus, storeDataForDb, config)
     }
 

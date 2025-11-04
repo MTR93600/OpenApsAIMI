@@ -5,7 +5,6 @@ import android.text.util.Linkify
 import android.widget.CheckBox
 import android.widget.TextView
 import androidx.annotation.StringRes
-import androidx.fragment.app.FragmentActivity
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.utils.DateUtil
@@ -25,11 +24,21 @@ abstract class Objective(
     @StringRes val gate: Int
 ) {
     var startedOn: Long = 0
+        get() = preferences.get(ObjectivesLongComposedKey.Started, spName)
         set(value) {
             field = value
-            preferences.put(ObjectivesLongComposedKey.Started, spName, value = startedOn)
+            preferences.put(ObjectivesLongComposedKey.Started, spName, value = value)
         }
     var accomplishedOn: Long = 0
+        get() {
+            var value = preferences.get(ObjectivesLongComposedKey.Accomplished, spName)
+            if (value - dateUtil.now() > T.hours(3).msecs() || startedOn - dateUtil.now() > T.hours(3).msecs()) { // more than 3 hours in the future
+                startedOn = 0
+                accomplishedOn = 0
+                value = 0
+            }
+            return value
+        }
         set(value) {
             field = value
             preferences.put(ObjectivesLongComposedKey.Accomplished, spName, value = value)
@@ -45,16 +54,6 @@ abstract class Objective(
             return true
         }
 
-    init {
-        @Suppress("LeakingThis")
-        startedOn = preferences.get(ObjectivesLongComposedKey.Started, spName)
-        accomplishedOn = preferences.get(ObjectivesLongComposedKey.Accomplished, spName)
-        if (accomplishedOn - dateUtil.now() > T.hours(3).msecs() || startedOn - dateUtil.now() > T.hours(3).msecs()) { // more than 3 hours in the future
-            startedOn = 0
-            accomplishedOn = 0
-        }
-    }
-
     fun isCompleted(trueTime: Long): Boolean {
         for (task in tasks) {
             if (!task.shouldBeIgnored() && !task.isCompleted(trueTime)) return false
@@ -66,13 +65,6 @@ abstract class Objective(
         get() = accomplishedOn != 0L && accomplishedOn < dateUtil.now()
     val isStarted: Boolean
         get() = startedOn != 0L
-
-    @Suppress("unused")
-    open fun specialActionEnabled(): Boolean = true
-
-    @Suppress("unused")
-    open fun specialAction(activity: FragmentActivity, input: String) {
-    }
 
     abstract inner class Task(var objective: Objective, @StringRes val task: Int) {
 

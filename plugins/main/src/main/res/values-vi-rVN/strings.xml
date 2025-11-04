@@ -129,6 +129,7 @@
     <!-- Profile -->
     <string name="localprofile">Cấu hình</string>
     <string name="localprofile_shortname">LP</string>
+    <string name="description_profile_local">Tạo một cấu hình phản ánh nhu cầu insulin của bạn.</string>
     <string name="a11y_add_new_to_list">thêm mới vào danh sách</string>
     <string name="do_you_want_switch_profile">Bạn có muốn chuyển sang Cấu hình khác và hủy các thay đổi đã thực hiện trên Cấu hình hiện tại không?</string>
     <string name="save_or_reset_changes_first">Lưu hoặc đặt lại các thay đổi hiện tại trước</string>
@@ -161,6 +162,7 @@
     <string name="extended_bolus_button">Bolus mở rộng</string>
     <string name="extended_bolus_cancel_button">Hủy liều Bolus mở rộng</string>
     <string name="tools">Công cụ</string>
+    <string name="site_rotation">Chuyển vị trí tiêm</string>
     <string name="nav_history_browser">Lịch sử trình duyệt</string>
     <string name="sensor_label">Cảm biến</string>
     <string name="age_label">tuổi:</string>

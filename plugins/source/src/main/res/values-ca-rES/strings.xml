@@ -2,7 +2,6 @@
 <resources>
     <!-- Source -->
     <string name="description_source_ns_client">Descarrega dades de glucèmia des de Nightscout</string>
-    <string name="description_source_xdrip">Rebre valors de glucèmia de xDrip+.</string>
     <string name="dexcom_app_patched">Dexcom (BYODA)</string>
     <string name="dexcom_short">BYODA</string>
     <string name="description_source_dexcom">Rebre els valors de glucosa de l\'aplicació Dexcom \'Build Your Own Device\'.</string>

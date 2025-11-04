@@ -63,7 +63,6 @@
     <string name="basaltest_hint1">https://wiki.aaps.app/nl/latest/SettingUpAaps/YourAapsProfile.html</string>
     <string name="prerequisites_label">Vereisten</string>
     <string name="prerequisites_what">Wat is minimaal nodig om AAPS in te stellen en te gebruiken?</string>
-    <string name="prerequisites_computer">Een computer waarop Android Studio is geïnstalleerd en geconfigureerd.</string>
     <string name="prerequisites_pump">Een ondersteunde insulinepomp als je van plan bent een closed loop te gebruiken.</string>
     <string name="prerequisites_nightscout">Nightscout, om een logboek van alle gegevens bij te houden en instellingen te bekijken.</string>
     <string name="prerequisites_beanandroiddeveloper">Ervaar met programmeren of code aanpassen.</string>

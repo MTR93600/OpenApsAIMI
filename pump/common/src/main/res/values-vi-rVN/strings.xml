@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- PumoCommon - Pump Abstract -->
+    <!-- PumpCommon - Pump Abstract -->
     <string name="pump_operation_not_supported_by_pump_driver">Thao tác không được hỗ trợ bởi bơm insulin và/hoặc trình điều khiển.</string>
-    <string name="bolus_delivered_so_far">%1$.2f U / %2$.2f U đã tiêm</string>
     <!-- PumpCommon - Pump Status -->
     <string name="pump_status_not_initialized">Chưa khởi tạo</string>
     <string name="pump_status_initialized">Đã được khởi tạo</string>

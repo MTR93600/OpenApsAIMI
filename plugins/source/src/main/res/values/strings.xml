@@ -5,7 +5,7 @@
     <string name="ns_client_bg_short">NS BG</string>
     <string name="description_source_ns_client">Downloads BG data from Nightscout</string>
     <string name="source_xdrip">xDrip+ BG</string>
-    <string name="description_source_xdrip">Receive BG values from xDrip+.</string>
+    <string name="description_source_xdrip">Receive BG values from xDrip+ and compatible apps (Juggluco etc.).</string>
     <string name="dexcom_app_patched">BYODA</string>
     <string name="dexcom_short">BYODA</string>
     <string name="description_source_dexcom">Receive BG values from the \'Build Your Own Dexcom App\'.</string>

@@ -35,6 +35,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.objects.profile.ProfileSealed
 import app.aaps.core.objects.workflow.LoggingWorker
 import app.aaps.plugins.configuration.maintenance.MaintenancePlugin
+import app.aaps.plugins.constraints.dstHelper.DstHelperPlugin
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.Dispatchers
 import java.util.concurrent.TimeUnit
@@ -60,6 +61,7 @@ class KeepAliveWorker(
     @Inject lateinit var rh: ResourceHelper
     @Inject lateinit var preferences: Preferences
     @Inject lateinit var ch: ConcentrationHelper
+    @Inject lateinit var dstHelperPlugin: DstHelperPlugin
 
     companion object {
 
@@ -129,6 +131,7 @@ class KeepAliveWorker(
         }
         lastRun = dateUtil.now()
 
+        dstHelperPlugin.dstCheck()
         localAlertUtils.shortenSnoozeInterval()
         localAlertUtils.checkStaleBGAlert()
         checkPump()
@@ -186,7 +189,7 @@ class KeepAliveWorker(
         val ps = profileFunction.getRequestedProfile() ?: return
         val requestedProfile = ProfileSealed.PS(ps, activePlugin)
         val runningProfile = profileFunction.getProfile()
-        val lastConnection = pump.lastDataTime()
+        val lastConnection = pump.lastDataTime
         val now = dateUtil.now()
         val isStatusOutdated = lastConnection + STATUS_UPDATE_FREQUENCY < now
         val isBasalOutdated = abs(requestedProfile.getBasal() - ch.fromPump(pump.baseBasalRate)) > ch.fromPump(pump.pumpDescription.basalStep)

@@ -219,7 +219,11 @@
     <string name="complication_full_status">完整狀態</string>
     <string name="complication_full_status_flipped">完整狀態（翻轉）</string>
     <string name="complication_blood_glucose">血糖</string>
+    <string name="complication_blood_glucose_ext1">血糖 Ext1</string>
+    <string name="complication_blood_glucose_ext2">血糖  Ext2</string>
     <string name="complication_br_cob_iob">BR、CoB及IoB</string>
+    <string name="complication_br_cob_iob_ext1">BR, CoB &amp; IoB Ext1</string>
+    <string name="complication_br_cob_iob_ext2">BR, CoB &amp; IoB Ext2</string>
     <string name="complication_br_iob">BR &amp; IoB</string>
     <string name="complication_br">基礎率</string>
     <string name="complication_cob_iob">BR、CoB及IoB</string>

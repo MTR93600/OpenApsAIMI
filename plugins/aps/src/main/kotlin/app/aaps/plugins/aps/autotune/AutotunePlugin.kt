@@ -83,7 +83,7 @@ class AutotunePlugin @Inject constructor(
         .pluginName(app.aaps.core.ui.R.string.autotune)
         .shortName(R.string.autotune_shortname)
         .preferencesId(PluginDescription.PREFERENCE_SCREEN)
-        .showInList { config.isEngineeringMode() && config.isDev() }
+        .showInList { config.isEngineeringMode() && config.isDev() || config.enableAutotune() }
         .description(R.string.autotune_description),
     ownPreferences = listOf(AutotuneStringKey::class.java),
     aapsLogger, rh, preferences

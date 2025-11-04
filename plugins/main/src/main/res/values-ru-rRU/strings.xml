@@ -129,6 +129,7 @@
     <!-- Profile -->
     <string name="localprofile">Профиль</string>
     <string name="localprofile_shortname">ЛП</string>
+    <string name="description_profile_local">Определите профиль с описанием потребности в инсулине.</string>
     <string name="a11y_add_new_to_list">добавить новый в список</string>
     <string name="do_you_want_switch_profile">Хотите переключить профиль и сбросить изменения, внесенные в текущий профиль?</string>
     <string name="save_or_reset_changes_first">Сначала сохраните или сбросьте текущие изменения</string>
@@ -161,6 +162,7 @@
     <string name="extended_bolus_button">Пролонгированный болюс</string>
     <string name="extended_bolus_cancel_button">Отменить пролонгированный болюс</string>
     <string name="tools">Инструменты</string>
+    <string name="site_rotation">Вращение места установки</string>
     <string name="nav_history_browser">Просмотр журнала</string>
     <string name="sensor_label">Сенсор</string>
     <string name="age_label">возраст:</string>
