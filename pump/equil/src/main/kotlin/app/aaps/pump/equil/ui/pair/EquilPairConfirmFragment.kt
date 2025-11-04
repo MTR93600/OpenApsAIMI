@@ -4,10 +4,12 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.view.View
 import android.widget.Button
+import androidx.navigation.fragment.findNavController
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.queue.Callback
+import app.aaps.core.ui.extensions.runOnUiThread
 import app.aaps.core.ui.toast.ToastUtils
 import app.aaps.pump.equil.EquilConst
 import app.aaps.pump.equil.R
@@ -17,6 +19,7 @@ import app.aaps.pump.equil.database.ResolvedResult
 import app.aaps.pump.equil.driver.definition.ActivationProgress
 import app.aaps.pump.equil.manager.command.CmdInsulinGet
 import app.aaps.pump.equil.manager.command.CmdModelSet
+import app.aaps.pump.equil.manager.command.CmdSettingSet
 
 class EquilPairConfirmFragment : EquilPairFragmentBase() {
 
@@ -82,13 +85,28 @@ class EquilPairConfirmFragment : EquilPairFragmentBase() {
                 aapsLogger.debug(LTag.PUMPCOMM, "setModel result====" + result.success + "====")
                 dismissLoading()
                 if (result.success) {
+                    SystemClock.sleep(EquilConst.EQUIL_BLE_NEXT_CMD)
+                    setLimits()
+                } else ToastUtils.errorToast(requireContext(), rh.gs(R.string.equil_error))
+            }
+        })
+    }
+
+    private fun setLimits() {
+        showLoading()
+        val profile = pumpSync.expectedPumpState().profile ?: return
+        commandQueue.customCommand(CmdSettingSet(constraintsChecker.getMaxBolusAllowed().value(), constraintsChecker.getMaxBasalAllowed(profile).value(), aapsLogger, preferences, equilManager), object : Callback() {
+            override fun run() {
+                if (activity == null) return
+                aapsLogger.debug(LTag.PUMPCOMM, "setLimits result====" + result.success + "====")
+                dismissLoading()
+                if (result.success) {
                     equilManager.setRunMode(RunMode.RUN)
                     toSave()
                 } else ToastUtils.errorToast(requireContext(), rh.gs(R.string.equil_error))
             }
         })
     }
-
     private fun getCurrentInsulin() {
         showLoading()
         commandQueue.customCommand(CmdInsulinGet(aapsLogger, preferences, equilManager), object : Callback() {

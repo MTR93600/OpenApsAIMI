@@ -91,7 +91,7 @@ class EquilManager @Inject constructor(
         loadPodState()
         initEquilError()
         equilBLE.init(this)
-        equilBLE.checkEquilStatus()
+        equilBLE.checkEquilStatus("EquilManager::init")
     }
 
     var listEvent: MutableList<PumpEvent> = ArrayList<PumpEvent>()
@@ -133,7 +133,7 @@ class EquilManager @Inject constructor(
     fun readStatus(): PumpEnactResult {
         val result = pumpEnactResultProvider.get()
         try {
-            equilBLE.checkEquilStatus()
+            equilBLE.checkEquilStatus("EquilManager::readStatus")
         } catch (ex: Exception) {
             result.success(false).enacted(false).comment(ex.message ?: "Exception")
         }
