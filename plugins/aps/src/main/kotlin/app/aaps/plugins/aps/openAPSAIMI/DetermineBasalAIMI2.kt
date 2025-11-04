@@ -4010,8 +4010,6 @@ fun appendCompactLog(
                 )
             )
         }
-        //logDataToCsv(predictedSMB, smbToGive)
-        //logDataToCsvHB(predictedSMB, smbToGive)
         val savedReason = rT.reason.toString()
         rT = RT(
             algorithm = APSResult.Algorithm.AIMI,
