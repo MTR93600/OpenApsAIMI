@@ -340,7 +340,7 @@ import kotlin.math.min
         val t = EventOverviewBolusProgress.Treatment(0.0, 0, detailedBolusInfo.bolusType == BS.Type.SMB, detailedBolusInfo.id)
         val connectionOK = medtrumService?.setBolus(detailedBolusInfo, t) == true
         val result = pumpEnactResultProvider.get()
-        result.success = connectionOK && abs(detailedBolusInfo.insulin - t.insulin) < pumpDescription.bolusStep
+        result.success = (connectionOK && abs(detailedBolusInfo.insulin - t.insulin) < pumpDescription.bolusStep) || medtrumPump.bolusErrorReason == rh.gs(R.string.bolus_error_reason_user)
         result.bolusDelivered = t.insulin
         if (!result.success) {
             result.comment(medtrumPump.bolusErrorReason ?: rh.gs(R.string.bolus_error_reason_pump_error))
