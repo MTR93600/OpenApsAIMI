@@ -62,7 +62,7 @@ class TizenPlugin @Inject constructor(
     private var receiverStatusStore: ReceiverStatusStore,
     private val config: Config,
     private val glucoseStatusProvider: GlucoseStatusProvider,
-    private val ch: ConcentrationHelper
+    private val ch: ConcentrationHelper,
     private val pumpStatusProvider: PumpStatusProvider
 ) : PluginBase(
     PluginDescription()
