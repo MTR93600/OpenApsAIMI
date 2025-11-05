@@ -926,7 +926,7 @@
     <string name="console_mpc_log">Module MPC : dose=%.2f, Kp=%.3f, corr=%.2f, out=%.2f</string>
     <string name="reason_mpc_pi">🎛️ MPC modèle prédictif: %.2f U (%.0f%%) | PI modèle physiologique: %.2f U (%.0f%%)</string>
     <string name="smb_final">✅ SMB final: %1$s U</string>
-    <string name="console_pkpd_log">PKPD : DIA=%1$.0s, pic=%2$.0s, queue=%3$.0f%%, ISF fusionné=%4$.0f (profil=%5$.0f, TDD=%6$.0f, échelle=%7$.2f)</string>
+    <string name="console_pkpd_log">PKPD : DIA=%1$s, pic=%2$s, queue=%3$.0f%%, ISF fusionné=%4$.0f (profil=%5$.0f, TDD=%6$.0f, échelle=%7$.2f)</string>
     <string name="console_smb_log">SMB : proposé=%1$.2f → appliqué=%2$.2f [IOB résiduelle%3$s×%4$.2f, activité physique%5$s×%6$.2f, digestion lente%7$s×%8$.2f] → final=%9$.2f%10$s</string>
     <string name="console_high_bg_override"> (BG&gt;120 préférences en usage)</string>
     <string name="ai_force_basal_reason_snack">AI Basale forcée car Mode manuel Collation</string>
