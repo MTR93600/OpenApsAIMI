@@ -3952,10 +3952,18 @@ fun appendCompactLog(
 
 // ---- LOGS ----
         val diaMin = pkpd?.params?.diaHrs?.let { it * 60.0 } ?: Double.NaN
-        val diaText = if (diaMin < 60.0) "%.0f min".format(diaMin) else "%.1f h".format(diaMin / 60.0)
+        val diaText = if (diaMin < 60.0) {
+            "%.0fmin".format(diaMin)       // meno di 60 → mostra in minuti, senza spazio
+        } else {
+            "%.1fh".format(diaMin / 60.0)  // 60 o più → mostra in ore, senza spazio
+        }
 
         val peakMin = pkpd?.params?.peakMin ?: Double.NaN
-        val peakText = if (peakMin < 60.0) "%.0f min".format(peakMin) else "%.1f h".format(peakMin / 60.0)
+        val peakText = if (peakMin < 60.0) {
+            "%.0fmin".format(peakMin)
+        } else {
+            "%.1fh".format(peakMin / 60.0)
+        }
 
         rT.reason.append(
           //"\nPKPD: DIA=%.0f min, Peak=%.0f min, Tail=%.0f%%, ISF(fused)=%.0f (profile=%.0f, TDD=%.0f, scale=%.2f)".format(
