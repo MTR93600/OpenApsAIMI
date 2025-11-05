@@ -97,6 +97,7 @@ class StoreDataForDbImpl @Inject constructor(
         else put(key, amount)
     }
 
+    fun <T> HashMap<T, Int>.removeClass(key: T) = synchronized(this) { remove(key) }
 
     override fun storeGlucoseValuesToDb() {
         synchronized(glucoseValues) {
@@ -105,16 +106,16 @@ class StoreDataForDbImpl @Inject constructor(
                     persistenceLayer.insertCgmSourceData(Sources.NSClient, it.toMutableList(), emptyList(), null)
                         .blockingGet()
                         .also { result ->
-                            result.updated.forEach {
-                                nsClientSource.detectSource(it)
+                            result.updated.forEach { gv ->
+                                nsClientSource.detectSource(gv)
                                 updated.inc(GV::class.java.simpleName)
                             }
-                            result.inserted.forEach {
-                                nsClientSource.detectSource(it)
+                            result.inserted.forEach { gv ->
+                                nsClientSource.detectSource(gv)
                                 inserted.inc(GV::class.java.simpleName)
                             }
-                            result.updatedNsId.forEach {
-                                nsClientSource.detectSource(it)
+                            result.updatedNsId.forEach { gv ->
+                                nsClientSource.detectSource(gv)
                                 nsIdUpdated.inc(GV::class.java.simpleName)
                             }
                             sendLog("GlucoseValue", GV::class.java.simpleName)
@@ -134,8 +135,8 @@ class StoreDataForDbImpl @Inject constructor(
                     updated.add(FD::class.java.simpleName, result.updated.size)
                     inserted.add(FD::class.java.simpleName, result.inserted.size)
                     nsIdUpdated.add(FD::class.java.simpleName, result.invalidated.size)
-                        sendLog("Food", FD::class.java.simpleName)
-                    }
+                    sendLog("Food", FD::class.java.simpleName)
+                }
                 SystemClock.sleep(pause)
                 foods.clear()
             }
@@ -154,8 +155,8 @@ class StoreDataForDbImpl @Inject constructor(
                         invalidated.add(BS::class.java.simpleName, result.invalidated.size)
                         nsIdUpdated.add(BS::class.java.simpleName, result.updatedNsId.size)
                         updated.add(BS::class.java.simpleName, result.updated.size)
-                            sendLog("Bolus", BS::class.java.simpleName)
-                        }
+                        sendLog("Bolus", BS::class.java.simpleName)
+                    }
                     SystemClock.sleep(pause)
                 }
                 boluses.clear()
@@ -170,8 +171,8 @@ class StoreDataForDbImpl @Inject constructor(
                         invalidated.add(CA::class.java.simpleName, result.invalidated.size)
                         updated.add(CA::class.java.simpleName, result.updated.size)
                         nsIdUpdated.add(CA::class.java.simpleName, result.updatedNsId.size)
-                            sendLog("Carbs", CA::class.java.simpleName)
-                        }
+                        sendLog("Carbs", CA::class.java.simpleName)
+                    }
                     SystemClock.sleep(pause)
                 }
                 carbs.clear()
@@ -187,8 +188,8 @@ class StoreDataForDbImpl @Inject constructor(
                         ended.add(TT::class.java.simpleName, result.ended.size)
                         nsIdUpdated.add(TT::class.java.simpleName, result.updatedNsId.size)
                         durationUpdated.add(TT::class.java.simpleName, result.updatedDuration.size)
-                            sendLog("TemporaryTarget", TT::class.java.simpleName)
-                        }
+                        sendLog("TemporaryTarget", TT::class.java.simpleName)
+                    }
                     SystemClock.sleep(pause)
                 }
                 temporaryTargets.clear()
@@ -204,8 +205,8 @@ class StoreDataForDbImpl @Inject constructor(
                         ended.add(TB::class.java.simpleName, result.ended.size)
                         nsIdUpdated.add(TB::class.java.simpleName, result.updatedNsId.size)
                         durationUpdated.add(TB::class.java.simpleName, result.updatedDuration.size)
-                            sendLog("TemporaryBasal", TB::class.java.simpleName)
-                        }
+                        sendLog("TemporaryBasal", TB::class.java.simpleName)
+                    }
                     SystemClock.sleep(pause)
                 }
                 temporaryBasals.clear()
@@ -219,8 +220,8 @@ class StoreDataForDbImpl @Inject constructor(
                         inserted.add(EPS::class.java.simpleName, result.inserted.size)
                         invalidated.add(EPS::class.java.simpleName, result.invalidated.size)
                         nsIdUpdated.add(EPS::class.java.simpleName, result.updatedNsId.size)
-                            sendLog("EffectiveProfileSwitch", EPS::class.java.simpleName)
-                        }
+                        sendLog("EffectiveProfileSwitch", EPS::class.java.simpleName)
+                    }
                     SystemClock.sleep(pause)
                 }
                 effectiveProfileSwitches.clear()
@@ -296,8 +297,8 @@ class StoreDataForDbImpl @Inject constructor(
             if (extendedBoluses.isNotEmpty()) {
                 extendedBoluses.chunked(chunk).forEach {
                     persistenceLayer.syncNsExtendedBoluses(it.toMutableList(), doLog = !fullSync).blockingGet().also { result ->
-                        result.inserted.forEach {
-                            if (it.isEmulatingTempBasal) virtualPump.fakeDataDetected = true
+                        result.inserted.forEach { eb ->
+                            if (eb.isEmulatingTempBasal) virtualPump.fakeDataDetected = true
                             inserted.inc(EB::class.java.simpleName)
                         }
                         invalidated.add(EB::class.java.simpleName, result.invalidated.size)
@@ -336,70 +337,96 @@ class StoreDataForDbImpl @Inject constructor(
 
     @Synchronized
     override fun updateNsIds() {
-        persistenceLayer.updateTemporaryTargetsNsIds(nsIdTemporaryTargets).blockingGet().also { result ->
+        synchronized(nsIdTemporaryTargets) {
+            persistenceLayer.updateTemporaryTargetsNsIds(nsIdTemporaryTargets).blockingGet().also { result ->
                 nsIdTemporaryTargets.clear()
-            nsIdUpdated.add(TT::class.java.simpleName, result.updatedNsId.size)
+                nsIdUpdated.add(TT::class.java.simpleName, result.updatedNsId.size)
             }
+        }
 
-        persistenceLayer.updateGlucoseValuesNsIds(nsIdGlucoseValues).blockingGet().also { result ->
+        synchronized(nsIdGlucoseValues) {
+            persistenceLayer.updateGlucoseValuesNsIds(nsIdGlucoseValues).blockingGet().also { result ->
                 nsIdGlucoseValues.clear()
-            nsIdUpdated.add(GV::class.java.simpleName, result.updatedNsId.size)
+                nsIdUpdated.add(GV::class.java.simpleName, result.updatedNsId.size)
             }
+        }
 
-        persistenceLayer.updateFoodsNsIds(nsIdFoods).blockingGet().also { result ->
+        synchronized(nsIdFoods) {
+            persistenceLayer.updateFoodsNsIds(nsIdFoods).blockingGet().also { result ->
                 nsIdFoods.clear()
-            nsIdUpdated.add(FD::class.java.simpleName, result.updatedNsId.size)
+                nsIdUpdated.add(FD::class.java.simpleName, result.updatedNsId.size)
             }
+        }
 
-        persistenceLayer.updateTherapyEventsNsIds(nsIdTherapyEvents).blockingGet().also { result ->
+        synchronized(nsIdTherapyEvents) {
+            persistenceLayer.updateTherapyEventsNsIds(nsIdTherapyEvents).blockingGet().also { result ->
                 nsIdTherapyEvents.clear()
-            nsIdUpdated.add(TE::class.java.simpleName, result.updatedNsId.size)
+                nsIdUpdated.add(TE::class.java.simpleName, result.updatedNsId.size)
             }
+        }
 
-        persistenceLayer.updateBolusesNsIds(nsIdBoluses).blockingGet().also { result ->
+        synchronized(nsIdBoluses) {
+            persistenceLayer.updateBolusesNsIds(nsIdBoluses).blockingGet().also { result ->
                 nsIdBoluses.clear()
-            nsIdUpdated.add(BS::class.java.simpleName, result.updatedNsId.size)
+                nsIdUpdated.add(BS::class.java.simpleName, result.updatedNsId.size)
             }
+        }
 
-        persistenceLayer.updateCarbsNsIds(nsIdCarbs).blockingGet().also { result ->
+        synchronized(nsIdCarbs) {
+            persistenceLayer.updateCarbsNsIds(nsIdCarbs).blockingGet().also { result ->
                 nsIdCarbs.clear()
-            nsIdUpdated.add(CA::class.java.simpleName, result.updatedNsId.size)
+                nsIdUpdated.add(CA::class.java.simpleName, result.updatedNsId.size)
             }
+        }
 
-        persistenceLayer.updateBolusCalculatorResultsNsIds(nsIdBolusCalculatorResults).blockingGet().also { result ->
+        synchronized(nsIdBolusCalculatorResults) {
+            persistenceLayer.updateBolusCalculatorResultsNsIds(nsIdBolusCalculatorResults).blockingGet().also { result ->
                 nsIdBolusCalculatorResults.clear()
-            nsIdUpdated.add(BCR::class.java.simpleName, result.updatedNsId.size)
+                nsIdUpdated.add(BCR::class.java.simpleName, result.updatedNsId.size)
             }
+        }
 
-        persistenceLayer.updateTemporaryBasalsNsIds(nsIdTemporaryBasals).blockingGet().also { result ->
+        synchronized(nsIdTemporaryBasals) {
+            persistenceLayer.updateTemporaryBasalsNsIds(nsIdTemporaryBasals).blockingGet().also { result ->
                 nsIdTemporaryBasals.clear()
-            nsIdUpdated.add(TB::class.java.simpleName, result.updatedNsId.size)
+                nsIdUpdated.add(TB::class.java.simpleName, result.updatedNsId.size)
             }
+        }
 
-        persistenceLayer.updateExtendedBolusesNsIds(nsIdExtendedBoluses).blockingGet().also { result ->
+        synchronized(nsIdExtendedBoluses) {
+            persistenceLayer.updateExtendedBolusesNsIds(nsIdExtendedBoluses).blockingGet().also { result ->
                 nsIdExtendedBoluses.clear()
-            nsIdUpdated.add(EB::class.java.simpleName, result.updatedNsId.size)
+                nsIdUpdated.add(EB::class.java.simpleName, result.updatedNsId.size)
             }
+        }
 
-        persistenceLayer.updateProfileSwitchesNsIds(nsIdProfileSwitches).blockingGet().also { result ->
+        synchronized(nsIdProfileSwitches) {
+            persistenceLayer.updateProfileSwitchesNsIds(nsIdProfileSwitches).blockingGet().also { result ->
                 nsIdProfileSwitches.clear()
-            nsIdUpdated.add(PS::class.java.simpleName, result.updatedNsId.size)
+                nsIdUpdated.add(PS::class.java.simpleName, result.updatedNsId.size)
             }
+        }
 
-        persistenceLayer.updateEffectiveProfileSwitchesNsIds(nsIdEffectiveProfileSwitches).blockingGet().also { result ->
+        synchronized(nsIdEffectiveProfileSwitches) {
+            persistenceLayer.updateEffectiveProfileSwitchesNsIds(nsIdEffectiveProfileSwitches).blockingGet().also { result ->
                 nsIdEffectiveProfileSwitches.clear()
-            nsIdUpdated.add(EPS::class.java.simpleName, result.updatedNsId.size)
+                nsIdUpdated.add(EPS::class.java.simpleName, result.updatedNsId.size)
             }
+        }
 
-        persistenceLayer.updateDeviceStatusesNsIds(nsIdDeviceStatuses).blockingGet().also { result ->
+        synchronized(nsIdDeviceStatuses) {
+            persistenceLayer.updateDeviceStatusesNsIds(nsIdDeviceStatuses).blockingGet().also { result ->
                 nsIdDeviceStatuses.clear()
-            nsIdUpdated.add(DS::class.java.simpleName, result.updatedNsId.size)
+                nsIdUpdated.add(DS::class.java.simpleName, result.updatedNsId.size)
             }
+        }
 
-        persistenceLayer.updateRunningModesNsIds(nsIdRunningModes).blockingGet().also { result ->
+        synchronized(nsIdRunningModes) {
+            persistenceLayer.updateRunningModesNsIds(nsIdRunningModes).blockingGet().also { result ->
                 nsIdRunningModes.clear()
-            nsIdUpdated.add(RM::class.java.simpleName, result.updatedNsId.size)
+                nsIdUpdated.add(RM::class.java.simpleName, result.updatedNsId.size)
             }
+        }
 
         sendLog("GlucoseValue", GV::class.java.simpleName)
         sendLog("Bolus", BS::class.java.simpleName)
@@ -417,76 +444,79 @@ class StoreDataForDbImpl @Inject constructor(
     }
 
     override fun updateDeletedTreatmentsInDb() {
-        deleteTreatment.forEach { id ->
-            if (preferences.get(BooleanKey.NsClientAcceptInsulin) || config.AAPSCLIENT)
-                persistenceLayer.getBolusByNSId(id)?.let { bolus ->
-                    persistenceLayer.invalidateBolus(bolus.id, Action.BOLUS_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(bolus.timestamp))).blockingGet().also { result ->
-                        invalidated.add(BS::class.java.simpleName, result.invalidated.size)
-                        sendLog("Bolus", BS::class.java.simpleName)
+        synchronized(deleteTreatment) {
+            deleteTreatment.forEach { id ->
+                if (preferences.get(BooleanKey.NsClientAcceptInsulin) || config.AAPSCLIENT)
+                    persistenceLayer.getBolusByNSId(id)?.let { bolus ->
+                        persistenceLayer.invalidateBolus(bolus.id, Action.BOLUS_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(bolus.timestamp))).blockingGet().also { result ->
+                            invalidated.add(BS::class.java.simpleName, result.invalidated.size)
+                            sendLog("Bolus", BS::class.java.simpleName)
+                        }
+                    }
+                if (preferences.get(BooleanKey.NsClientAcceptCarbs) || config.AAPSCLIENT)
+                    persistenceLayer.getCarbsByNSId(id)?.let { carb ->
+                        persistenceLayer.invalidateCarbs(carb.id, Action.CARBS_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(carb.timestamp))).blockingGet().also { result ->
+                            invalidated.add(CA::class.java.simpleName, result.invalidated.size)
+                            sendLog("Carbs", CA::class.java.simpleName)
+                        }
+                    }
+                if (preferences.get(BooleanKey.NsClientAcceptTempTarget) || config.AAPSCLIENT)
+                    persistenceLayer.getTemporaryTargetByNSId(id)?.let { tt ->
+                        persistenceLayer.invalidateTemporaryTarget(tt.id, Action.TT_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(tt.timestamp))).blockingGet().also { result ->
+                            invalidated.add(TT::class.java.simpleName, result.invalidated.size)
+                            sendLog("TemporaryTarget", TT::class.java.simpleName)
+                        }
+                    }
+                if (preferences.get(BooleanKey.NsClientAcceptTbrEb) || config.AAPSCLIENT)
+                    persistenceLayer.getTemporaryBasalByNSId(id)?.let { tb ->
+                        persistenceLayer.invalidateTemporaryBasal(tb.id, Action.TEMP_BASAL_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(tb.timestamp))).blockingGet().also { result ->
+                            invalidated.add(TB::class.java.simpleName, result.invalidated.size)
+                            sendLog("TemporaryBasal", TB::class.java.simpleName)
+                        }
+                    }
+                if (preferences.get(BooleanKey.NsClientAcceptProfileSwitch) || config.AAPSCLIENT)
+                    persistenceLayer.getEffectiveProfileSwitchByNSId(id)?.let { eps ->
+                        persistenceLayer.invalidateEffectiveProfileSwitch(eps.id, Action.PROFILE_SWITCH_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(eps.timestamp))).blockingGet().also { result ->
+                            invalidated.add(EPS::class.java.simpleName, result.invalidated.size)
+                            sendLog("EffectiveProfileSwitch", EPS::class.java.simpleName)
+                        }
+                    }
+                if (preferences.get(BooleanKey.NsClientAcceptProfileSwitch) || config.AAPSCLIENT)
+                    persistenceLayer.getProfileSwitchByNSId(id)?.let { ps ->
+                        persistenceLayer.invalidateProfileSwitch(ps.id, Action.PROFILE_SWITCH_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(ps.timestamp))).blockingGet().also { result ->
+                            invalidated.add(PS::class.java.simpleName, result.invalidated.size)
+                            sendLog("ProfileSwitch", PS::class.java.simpleName)
+                        }
+                    }
+                persistenceLayer.getBolusCalculatorResultByNSId(id)?.let { bcr ->
+                    persistenceLayer.invalidateBolusCalculatorResult(bcr.id, Action.BOLUS_CALCULATOR_RESULT_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(bcr.timestamp))).blockingGet().also { result ->
+                        invalidated.add(BCR::class.java.simpleName, result.invalidated.size)
+                        sendLog("BolusCalculatorResult", BCR::class.java.simpleName)
                     }
                 }
-            if (preferences.get(BooleanKey.NsClientAcceptCarbs) || config.AAPSCLIENT)
-                persistenceLayer.getCarbsByNSId(id)?.let { carb ->
-                    persistenceLayer.invalidateCarbs(carb.id, Action.CARBS_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(carb.timestamp))).blockingGet().also { result ->
-                        invalidated.add(CA::class.java.simpleName, result.invalidated.size)
-                        sendLog("Carbs", CA::class.java.simpleName)
+                if (preferences.get(BooleanKey.NsClientAcceptTherapyEvent) || config.AAPSCLIENT)
+                    persistenceLayer.getTherapyEventByNSId(id)?.let { te ->
+                        persistenceLayer.invalidateTherapyEvent(te.id, Action.TREATMENT_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(te.timestamp))).blockingGet().also { result ->
+                            invalidated.add(TE::class.java.simpleName, result.invalidated.size)
+                            sendLog("TherapyEvent", TE::class.java.simpleName)
+                        }
                     }
-                }
-            if (preferences.get(BooleanKey.NsClientAcceptTempTarget) || config.AAPSCLIENT)
-                persistenceLayer.getTemporaryTargetByNSId(id)?.let { tt ->
-                    persistenceLayer.invalidateTemporaryTarget(tt.id, Action.TT_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(tt.timestamp))).blockingGet().also { result ->
-                        invalidated.add(TT::class.java.simpleName, result.invalidated.size)
-                        sendLog("TemporaryTarget", TT::class.java.simpleName)
+                if (preferences.get(BooleanKey.NsClientAcceptRunningMode) && config.isEngineeringMode() || config.AAPSCLIENT)
+                    persistenceLayer.getRunningModeByNSId(id)?.let { rm ->
+                        persistenceLayer.invalidateRunningMode(rm.id, Action.TREATMENT_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(rm.timestamp))).blockingGet().also { result ->
+                            invalidated.add(RM::class.java.simpleName, result.invalidated.size)
+                            sendLog("RunningMode", RM::class.java.simpleName)
+                        }
                     }
-                }
-            if (preferences.get(BooleanKey.NsClientAcceptTbrEb) || config.AAPSCLIENT)
-                persistenceLayer.getTemporaryBasalByNSId(id)?.let { tb ->
-                    persistenceLayer.invalidateTemporaryBasal(tb.id, Action.TEMP_BASAL_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(tb.timestamp))).blockingGet().also { result ->
-                        invalidated.add(TB::class.java.simpleName, result.invalidated.size)
-                        sendLog("TemporaryBasal", TB::class.java.simpleName)
+                if (preferences.get(BooleanKey.NsClientAcceptTbrEb) || config.AAPSCLIENT)
+                    persistenceLayer.getExtendedBolusByNSId(id)?.let { eb ->
+                        persistenceLayer.invalidateExtendedBolus(eb.id, Action.EXTENDED_BOLUS_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(eb.timestamp))).blockingGet().also { result ->
+                            invalidated.add(EB::class.java.simpleName, result.invalidated.size)
+                            sendLog("EB", EB::class.java.simpleName)
+                        }
                     }
-                }
-            if (preferences.get(BooleanKey.NsClientAcceptProfileSwitch) || config.AAPSCLIENT)
-                persistenceLayer.getEffectiveProfileSwitchByNSId(id)?.let { eps ->
-                    persistenceLayer.invalidateEffectiveProfileSwitch(eps.id, Action.PROFILE_SWITCH_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(eps.timestamp))).blockingGet().also { result ->
-                        invalidated.add(EPS::class.java.simpleName, result.invalidated.size)
-                        sendLog("EffectiveProfileSwitch", EPS::class.java.simpleName)
-                    }
-                }
-            if (preferences.get(BooleanKey.NsClientAcceptProfileSwitch) || config.AAPSCLIENT)
-                persistenceLayer.getProfileSwitchByNSId(id)?.let { ps ->
-                    persistenceLayer.invalidateProfileSwitch(ps.id, Action.PROFILE_SWITCH_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(ps.timestamp))).blockingGet().also { result ->
-                        invalidated.add(PS::class.java.simpleName, result.invalidated.size)
-                        sendLog("ProfileSwitch", PS::class.java.simpleName)
-                    }
-                }
-            persistenceLayer.getBolusCalculatorResultByNSId(id)?.let { bcr ->
-                persistenceLayer.invalidateBolusCalculatorResult(bcr.id, Action.BOLUS_CALCULATOR_RESULT_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(bcr.timestamp))).blockingGet().also { result ->
-                    invalidated.add(BCR::class.java.simpleName, result.invalidated.size)
-                    sendLog("BolusCalculatorResult", BCR::class.java.simpleName)
-                }
             }
-            if (preferences.get(BooleanKey.NsClientAcceptTherapyEvent) || config.AAPSCLIENT)
-                persistenceLayer.getTherapyEventByNSId(id)?.let { te ->
-                    persistenceLayer.invalidateTherapyEvent(te.id, Action.TREATMENT_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(te.timestamp))).blockingGet().also { result ->
-                        invalidated.add(TE::class.java.simpleName, result.invalidated.size)
-                        sendLog("TherapyEvent", TE::class.java.simpleName)
-                    }
-                }
-            if (preferences.get(BooleanKey.NsClientAcceptRunningMode) && config.isEngineeringMode() || config.AAPSCLIENT)
-                persistenceLayer.getRunningModeByNSId(id)?.let { rm ->
-                    persistenceLayer.invalidateRunningMode(rm.id, Action.TREATMENT_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(rm.timestamp))).blockingGet().also { result ->
-                        invalidated.add(RM::class.java.simpleName, result.invalidated.size)
-                        sendLog("RunningMode", RM::class.java.simpleName)
-                    }
-                }
-            if (preferences.get(BooleanKey.NsClientAcceptTbrEb) || config.AAPSCLIENT)
-                persistenceLayer.getExtendedBolusByNSId(id)?.let { eb ->
-                    persistenceLayer.invalidateExtendedBolus(eb.id, Action.EXTENDED_BOLUS_REMOVED, Sources.NSClient, null, listValues = listOf(ValueWithUnit.Timestamp(eb.timestamp))).blockingGet().also { result ->
-                        invalidated.add(EB::class.java.simpleName, result.invalidated.size)
-                        sendLog("EB", EB::class.java.simpleName)
-                    }
-                }
+            deleteTreatment.clear()
         }
     }
 
@@ -519,13 +549,16 @@ class StoreDataForDbImpl @Inject constructor(
     override fun addToDeleteGlucoseValue(payload: String): Boolean = synchronized(deleteGlucoseValue) { deleteGlucoseValue.add(payload) }
 
     override fun updateDeletedGlucoseValuesInDb() {
-        deleteGlucoseValue.forEach { id ->
-            persistenceLayer.getBgReadingByNSId(id)?.let { gv ->
-                persistenceLayer.invalidateGlucoseValue(id = gv.id, action = Action.BG_REMOVED, source = Sources.NSClient, note = null, listValues = listOf(ValueWithUnit.Timestamp(gv.timestamp))).blockingGet().also { result ->
-                    invalidated.add(GV::class.java.simpleName, result.invalidated.size)
+        synchronized(deleteGlucoseValue) {
+            deleteGlucoseValue.forEach { id ->
+                persistenceLayer.getBgReadingByNSId(id)?.let { gv ->
+                    persistenceLayer.invalidateGlucoseValue(id = gv.id, action = Action.BG_REMOVED, source = Sources.NSClient, note = null, listValues = listOf(ValueWithUnit.Timestamp(gv.timestamp))).blockingGet().also { result ->
+                        invalidated.add(GV::class.java.simpleName, result.invalidated.size)
                         sendLog("GlucoseValue", GV::class.java.simpleName)
                     }
+                }
             }
+            deleteGlucoseValue.clear()
         }
     }
 
@@ -533,26 +566,26 @@ class StoreDataForDbImpl @Inject constructor(
         inserted[clazz]?.let {
             if (it > 0) rxBus.send(EventNSClientNewLog("◄ INSERT", "$item $it"))
         }
-        inserted.remove(clazz)
+        inserted.removeClass(clazz)
         updated[clazz]?.let {
             if (it > 0) rxBus.send(EventNSClientNewLog("◄ UPDATE", "$item $it"))
         }
-        updated.remove(clazz)
+        updated.removeClass(clazz)
         invalidated[clazz]?.let {
             if (it > 0) rxBus.send(EventNSClientNewLog("◄ INVALIDATE", "$item $it"))
         }
-        invalidated.remove(clazz)
+        invalidated.removeClass(clazz)
         nsIdUpdated[clazz]?.let {
             if (it > 0) rxBus.send(EventNSClientNewLog("◄ NS_ID", "$item $it"))
         }
-        nsIdUpdated.remove(clazz)
+        nsIdUpdated.removeClass(clazz)
         durationUpdated[clazz]?.let {
             if (it > 0) rxBus.send(EventNSClientNewLog("◄ DURATION", "$item $it"))
         }
-        durationUpdated.remove(clazz)
+        durationUpdated.removeClass(clazz)
         ended[clazz]?.let {
             if (it > 0) rxBus.send(EventNSClientNewLog("◄ CUT", "$item $it"))
         }
-        ended.remove(clazz)
+        ended.removeClass(clazz)
     }
 }
