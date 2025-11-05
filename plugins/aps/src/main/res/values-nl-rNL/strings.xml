@@ -909,6 +909,7 @@
     <string name="reason_max_smb">; maxBolus %1$.2f</string>
     <string name="reason_microbolus">Microbolus van %1$.2fE.</string>
     <string name="reason_wait_microbolus">Wachten %1$.0fmin %2$.0fs om opnieuw een microbolus te geven.</string>
+    <string name="override_aimi"> | override by AIMI+: %1$s</string>
     <string name="meal_mode_meal">algemene maaltijd(%1$dm)</string>
     <string name="meal_mode_bfast">ontbijt(%1$dm)</string>
     <string name="meal_mode_lunch">lunch(%1$dm)</string>

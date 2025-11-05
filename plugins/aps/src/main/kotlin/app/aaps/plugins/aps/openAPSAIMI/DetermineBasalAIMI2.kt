@@ -4618,7 +4618,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     // on prend l’option la plus “énergique”, durée la plus courte par prudence
                     chosenRate = candidate
                     rT.duration = minOf(rT.duration!!, dur)
-                    rT.reason.append(" | override by AIMI+: ").append(aimiDecision.reason)
+                   //rT.reason.append(" | override by AIMI+: ").append(aimiDecision.reason)
+                    rT.reason.append(context.getString(R.string.override_aimi, aimiDecision.reason))
                 }
                 // (optionnel) cap dur de sécurité
                 val hardCap = 1.8 * profile_current_basal
