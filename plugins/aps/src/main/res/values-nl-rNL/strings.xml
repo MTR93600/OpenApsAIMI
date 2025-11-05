@@ -891,6 +891,12 @@
     <string name="console_smb_log">\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s</string>
     <string name="console_smb_log_2">\nSMB: proposed=%.2f → damped=%.2f → quantized=%.2f%s</string>
     <string name="console_high_bg_override"> (BG&gt;120 preferences in use)</string>
+    <string name="ai_force_basal_reason_snack">AI Force basal because Manual mode Snack</string>
+    <string name="ai_force_basal_reason_meal">AI Force basal because Manual mode Meal</string>
+    <string name="ai_force_basal_reason_lunch">AI Force basal because Manual mode Lunch</string>
+    <string name="ai_force_basal_reason_dinner">AI Force basal because Manual mode Dinner</string>
+    <string name="ai_force_basal_reason_highcarb">AI Force basal because Manual mode High Carb</string>
+    <string name="ai_force_basal_reason_fasting">AI Force basal because Manual mode Fasting</string>
     <string name="reason_dia_reattivity">📈 DIA: %1$.1f min | REACT&lt;120 Ochtend: %2$.1f%% | Middag: %3$.1f%% | Avond: %4$.1f%%</string>
     <string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Snack/prebolus modus: %2$s | </string>
     <string name="autodrive_condition">&#160;Autodrive voorwaarden: %1$s</string>

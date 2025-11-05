@@ -4084,12 +4084,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         rT.reason.append(savedReason)
         var rate = when {
-            snackTime && snackrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 4.0, "AI Force basal because mealTime $snackrunTime.", currenttemp, rT)
-            mealTime && mealruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because mealTime $mealruntime.", currenttemp, rT)
-            lunchTime && lunchruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because lunchTime $lunchruntime.", currenttemp, rT)
-            dinnerTime && dinnerruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because dinnerTime $dinnerruntime.", currenttemp, rT)
-            highCarbTime && highCarbrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because highcarb $highcarbfactor.", currenttemp, rT)
-            fastingTime -> calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "AI Force basal because fastingTime", currenttemp, rT)
+         // snackTime && snackrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 4.0, "AI Force basal because mealTime $snackrunTime.", currenttemp, rT)
+         // mealTime && mealruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because mealTime $mealruntime.", currenttemp, rT)
+         // lunchTime && lunchruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because lunchTime $lunchruntime.", currenttemp, rT)
+         // dinnerTime && dinnerruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because dinnerTime $dinnerruntime.", currenttemp, rT)
+         // highCarbTime && highCarbrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because highcarb $highcarbfactor.", currenttemp, rT)
+         // fastingTime -> calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "AI Force basal because fastingTime", currenttemp, rT)
+
+            snackTime && snackrunTime in 0..30 && delta < 15 ->
+                calculateRate(basal, profile_current_basal, 4.0, context.getString(R.string.ai_force_basal_reason_snack), currenttemp, rT)
+
+            mealTime && mealruntime in 0..30 && delta < 15 ->
+                calculateRate(basal, profile_current_basal, 10.0, context.getString(R.string.ai_force_basal_reason_meal), currenttemp, rT)
+
+            lunchTime && lunchruntime in 0..30 && delta < 15 ->
+                calculateRate(basal, profile_current_basal, 10.0, context.getString(R.string.ai_force_basal_reason_lunch), currenttemp, rT)
+
+            dinnerTime && dinnerruntime in 0..30 && delta < 15 ->
+                calculateRate(basal, profile_current_basal, 10.0, context.getString(R.string.ai_force_basal_reason_dinner), currenttemp, rT)
+
+            highCarbTime && highCarbrunTime in 0..30 && delta < 15 ->
+                calculateRate(basal, profile_current_basal, 10.0, context.getString(R.string.ai_force_basal_reason_highcarb), currenttemp, rT)
+
+            fastingTime ->
+                calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), context.getString(R.string.ai_force_basal_reason_fasting), currenttemp, rT)
+
             else -> null
         }
 

@@ -930,6 +930,12 @@
     <string name="console_smb_log">\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s</string>
     <string name="console_smb_log_2">\nSMB: proposed=%.2f → damped=%.2f → quantized=%.2f%s</string>
     <string name="console_high_bg_override"> (BG&gt;120 préférences en usage)</string>
+    <string name="ai_force_basal_reason_snack">AI Basale forcée car Mode manuel Collation</string>
+    <string name="ai_force_basal_reason_meal">AI Basale forcée car Mode manuel Repas</string>
+    <string name="ai_force_basal_reason_lunch">AI Basale forcée car Mode manuel Déjeuner</string>
+    <string name="ai_force_basal_reason_dinner">AI Basale forcée car Mode manuel Dîner</string>
+    <string name="ai_force_basal_reason_highcarb">AI Basale forcée car Mode manuel High Carb</string>
+    <string name="ai_force_basal_reason_fasting">AI Basale forcée car Mode manuel Jeûne</string>
     <string name="reason_dia_reattivity">📈 DIA: %1$.1f mins | REACT◁120 Matin: %2$.1f%% | Après-midi: %3$.1f%% | Soir: %4$.1f%%</string>
     <string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Mode collation / pré-bolus: %2$s | </string>
     <string name="autodrive_condition">&#160;Autodrive Conditions: %1$s</string>
