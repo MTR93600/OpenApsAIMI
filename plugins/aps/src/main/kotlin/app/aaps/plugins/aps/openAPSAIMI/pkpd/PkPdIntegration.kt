@@ -68,7 +68,7 @@ class PkPdIntegration(private val preferences: Preferences) {
         val params = estimator.params()
         persistStateIfNeeded(params, config.bounds)
         val tailFraction = estimator.iobResidualAt(windowMin.toDouble()).coerceIn(0.0, 1.0)
-        val pkpdScale = 1.0 + 0.15 * (2.0 * tailFraction - 1.0)
+        val pkpdScale = 1.0 + 0.15 * tailFraction
         val fusedIsf = fusion.fused(profileIsf, tddIsf, pkpdScale)
         return PkPdRuntime(
             params = params,
@@ -173,6 +173,10 @@ class PkPdRuntime(
     fun dampSmb(smb: Double, exercise: Boolean, suspectedLateFatMeal: Boolean): Double =
         damping.damp(smb, tailFraction, exercise, suspectedLateFatMeal)
 
-    fun dampSmbWithAudit(smb: Float, exercise: Boolean, suspectedLateFatMeal: Boolean): SmbDampingResult =
-        damping.dampWithAudit(smb.toDouble(), tailFraction, exercise, suspectedLateFatMeal)
+    // NEW
+    fun dampSmbWithAudit(
+        smb: Double,
+        exercise: Boolean,
+        suspectedLateFatMeal: Boolean
+    ): SmbDampingAudit = damping.dampWithAudit(smb, tailFraction, exercise, suspectedLateFatMeal)
 }

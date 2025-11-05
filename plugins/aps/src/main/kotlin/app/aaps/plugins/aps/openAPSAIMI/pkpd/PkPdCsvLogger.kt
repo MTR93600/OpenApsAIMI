@@ -20,6 +20,7 @@ data class PkPdLogRow(
     val tailFrac: Double,
     val smbProposedU: Double,
     val smbFinalU: Double,
+    // NEW – audit (nullable pour compat ascendante)
     val tailMult: Double? = null,
     val exerciseMult: Double? = null,
     val lateFatMult: Double? = null,

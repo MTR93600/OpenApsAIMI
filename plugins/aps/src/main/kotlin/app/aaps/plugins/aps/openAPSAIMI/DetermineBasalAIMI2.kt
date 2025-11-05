@@ -757,12 +757,16 @@ fun appendCompactLog(
 
         // 4) Enfin, l’exception meal-rise si elle est vraie
         if (mealModeActive) {
-            mealModeSmbReason = context.getString(
-                R.string.smb_enabled_meal_mode,
-                convertBG(currentBg), delta, convertBG(eventualBg)
-            )
-            consoleLog.add(mealModeSmbReason!!)
-            return true
+            val safeFloor = max(100.0, targetbg - 5)
+            if (currentBg > safeFloor && delta > 0.5 && eventualBg > safeFloor) {
+                mealModeSmbReason = context.getString(
+                    R.string.smb_enabled_meal_mode,
+                    convertBG(currentBg),
+                    delta,
+                    convertBG(eventualBg)
+                )
+                return true
+            }
         }
 
         consoleError.add(context.getString(R.string.smb_disabled_no_pref_or_condition))
@@ -3910,26 +3914,30 @@ fun appendCompactLog(
 //      rT.reason.appendLine("✅ SMB final: ${"%.2f".format(smbDecision)} U")
         rT.reason.appendLine(context.getString(R.string.smb_final, "%.2f".format(smbDecision)))
         val hypoGuard = threshold ?: computeHypoThreshold(profile.min_bg, profile.lgsThreshold)
-        val pkpd = pkpdRuntime   // (non-null ici)
+        //val pkpd = pkpdRuntime   // (non-null ici)
 
 
-// === Audit damping ===
+// === Audit & damping ===
         val exFlag = sportTime
         val lateFatFlag = lateFatRiseFlag
-        val dmp = pkpd?.dampSmbWithAudit(smbDecision.toFloat(), exFlag, lateFatFlag)
 
-// on travaille en Double (non-null) dès maintenant
-        var smbAfterDamping: Double = (dmp?.out ?: 0.0)
+        val dmp = pkpdRuntime?.dampSmbWithAudit(
+            smb = smbDecision.toDouble(),
+            exercise = exFlag,
+            suspectedLateFatMeal = lateFatFlag
+        )
 
-// Override “haut BG sans risque d’hypo”
+        var smbAfterDamping: Double = dmp?.out ?: smbDecision.toDouble()
+
+// ---- Override “haut BG sans risque d’hypo” (agressif mais safe) ----
         val highBgOverride =
             (bg >= 180.0 || (bg >= 150.0 && delta >= 1.5)) &&
                 !isBelowHypoThreshold(
-                    bg,
-                    predictedBg.toDouble(),
-                    eventualBG,
-                    hypoGuard,
-                    delta.toDouble()
+                    bgNow = bg,
+                    predicted = predictedBg.toDouble(),
+                    eventual = eventualBG,
+                    hypo = hypoGuard,
+                    delta = delta.toDouble()
                 ) &&
                 iob < maxSMB
 
@@ -3941,72 +3949,82 @@ fun appendCompactLog(
             highBgOverrideUsed = true
         }
 
-// Quantification pompe (vers Float)
+// ---- Quantification pompe (respecte la signature Float, Float) ----
         val finalSmb: Float = quantizeToPumpStep(smbAfterDamping.toFloat(), INSULIN_STEP)
         smbToGive = finalSmb
 
-// Pour le log “quantized” en Double (pure info)
+// Pour le log info « quantized » (Double)
         val quantized = kotlin.math.ceil(smbAfterDamping / INSULIN_STEP.toDouble()) * INSULIN_STEP.toDouble()
 
-// ---- LOGS ----
+// ---- LOGS PKPD ----
         rT.reason.append(
-            "\nPKPD: DIA=%.0f min, Peak=%.0f min, Tail=%.0f%%, ISF(fused)=%.0f (profile=%.0f, TDD=%.0f, scale=%.2f)".format(
-                pkpd?.params?.diaHrs?.let { it * 60.0 } ?: Double.NaN,
-                pkpd?.params?.peakMin ?: Double.NaN,
-                (pkpd?.tailFraction ?: 0.0) * 100.0,
-                pkpd?.fusedIsf ?: Double.NaN,
-                pkpd?.profileIsf ?: Double.NaN,
-                pkpd?.tddIsf ?: Double.NaN,
-                pkpd?.pkpdScale ?: Double.NaN
+            "\nPKPD: DIA=%s min, Peak=%s min, Tail=%.0f%%, ISF(fused)=%s (profile=%s, TDD=%s, scale=%.2f)".format(
+                pkpdRuntime?.params?.diaHrs?.let { "%.0f".format(it * 60.0) } ?: "n/a",
+                pkpdRuntime?.params?.peakMin?.let { "%.0f".format(it) } ?: "n/a",
+                (pkpdRuntime?.tailFraction ?: 0.0) * 100.0,
+                pkpdRuntime?.fusedIsf?.let { "%.0f".format(it) } ?: "n/a",
+                pkpdRuntime?.profileIsf?.let { "%.0f".format(it) } ?: "n/a",
+                pkpdRuntime?.tddIsf?.let { "%.0f".format(it) } ?: "n/a",
+                pkpdRuntime?.pkpdScale ?: Double.NaN
             )
         )
 
-        rT.reason.append(
-            "\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s".format(
-                smbDecision,
-                smbAfterDamping,
-                if (dmp?.tailApplied == true) "✔" else "✘", dmp?.tailMult ?: 1.0,
-                if (dmp?.exerciseApplied == true) "✔" else "✘", dmp?.exerciseMult ?: 1.0,
-                if (dmp?.lateFatApplied == true) "✔" else "✘", dmp?.lateFatMult ?: 1.0,
-                quantized,
-                if (highBgOverride) " (HighBG override)" else ""
+// ---- LOGS SMB détaillés (si audit dispo) ----
+        if (dmp != null) {
+            rT.reason.append(
+                "\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s".format(
+                    smbDecision,
+                    smbAfterDamping,
+                    if (dmp.tailApplied) "✔" else "✘", dmp.tailMult,
+                    if (dmp.exerciseApplied) "✔" else "✘", dmp.exerciseMult,
+                    if (dmp.lateFatApplied) "✔" else "✘", dmp.lateFatMult,
+                    quantized,
+                    if (highBgOverride) " (HighBG override)" else ""
+                )
             )
-        )
+        } else {
+            rT.reason.append(
+                "\nSMB: proposed=%.2f → damped=%.2f → quantized=%.2f%s".format(
+                    smbDecision,
+                    smbAfterDamping,
+                    quantized,
+                    if (highBgOverride) " (HighBG override)" else ""
+                )
+            )
+        }
         logDataMLToCsv(predictedSMB, smbToGive)
         logDataToCsv(predictedSMB, smbToGive)
         pkpdRuntime?.let { runtime ->
-            val dateStr = dateUtil.dateAndTimeString(currentTime)
-            //     PkPdCsvLogger.append(
-            //         PkPdLogRow(
-            //             dateStr = dateStr,
-            //             epochMin = TimeUnit.MILLISECONDS.toMinutes(currentTime),
-            //             bg = bg,
-            //             delta5 = delta.toDouble(),
-            //             iobU = iob_data.iob,
-            //             carbsActiveG = carbsActiveForPkpd,
-            //             windowMin = windowSinceDoseInt,
-            //             diaH = runtime.params.diaHrs,
-            //             peakMin = runtime.params.peakMin,
-            //             fusedIsf = runtime.fusedIsf,
-            //             tddIsf = runtime.tddIsf,
-            //             profileIsf = runtime.profileIsf,
-            //             tailFrac = runtime.tailFraction,
-            //             smbProposedU = smbAfterDamping.toFloat(),
-            //             smbFinalU = smbToGive.toDouble()
-            //         )
-            //     )
-            // }
+            val dateStr   = dateUtil.dateAndTimeString(currentTime)
+            val epochMin  = TimeUnit.MILLISECONDS.toMinutes(currentTime)
+
+            val tailMultLog  = dmp?.tailMult
+            val exMultLog    = dmp?.exerciseMult
+            val lateMultLog  = dmp?.lateFatMult
+
             PkPdCsvLogger.append(
                 PkPdLogRow(
-                    dateStr = dateStr,
-                    epochMin = TimeUnit . MILLISECONDS . toMinutes (currentTime),
-                    bg = bg, delta5 = delta.toDouble(), iobU = iob.toDouble(), carbsActiveG = cob.toDouble(),
-                    windowMin = windowSinceDoseInt, // ta variable
-                    diaH = pkpd.params.diaHrs, peakMin = pkpd.params.peakMin,
-                    fusedIsf = pkpd.fusedIsf, tddIsf = pkpd.tddIsf, profileIsf = pkpd.profileIsf,
-                    tailFrac = pkpd.tailFraction, smbProposedU = smbDecision.toDouble(), smbFinalU = quantized,
-                    tailMult = dmp?.tailMult, exerciseMult = dmp?.exerciseMult, lateFatMult = dmp?.lateFatMult,
-                    highBgOverride = highBgOverride, lateFatRise = lateFatFlag, quantStepU = INSULIN_STEP.toDouble()
+                    dateStr        = dateStr,
+                    epochMin       = epochMin,
+                    bg             = bg,
+                    delta5         = delta.toDouble(),
+                    iobU           = iob.toDouble(),
+                    carbsActiveG   = cob.toDouble(),
+                    windowMin      = windowSinceDoseInt,
+                    diaH           = runtime.params.diaHrs,
+                    peakMin        = runtime.params.peakMin,
+                    fusedIsf       = runtime.fusedIsf,
+                    tddIsf         = runtime.tddIsf,
+                    profileIsf     = runtime.profileIsf,
+                    tailFrac       = runtime.tailFraction,
+                    smbProposedU   = smbDecision.toDouble(),
+                    smbFinalU      = quantized,
+                    tailMult       = tailMultLog,
+                    exerciseMult   = exMultLog,
+                    lateFatMult    = lateMultLog,
+                    highBgOverride = highBgOverride,
+                    lateFatRise    = lateFatFlag,
+                    quantStepU     = INSULIN_STEP.toDouble()
                 )
             )
         }
