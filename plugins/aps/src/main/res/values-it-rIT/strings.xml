@@ -935,6 +935,12 @@
     <string name="console_pkpd_log">PKPD: DIA=%1$.0s, picco=%2$.0s, coda=%3$.0f%%, ISF combinato=%4$.0f (profilo=%5$.0f, TDD=%6$.0f, scala=%7$.2f)</string>
     <string name="console_smb_log">SMB: proposto=%1$.2f → applicato=%2$.2f [IOB residua%3$s×%4$.2f, attività fisica%5$s×%6$.2f, digestione lenta%7$s×%8$.2f] → finale=%9$.2f%10$s</string>
     <string name="console_high_bg_override"> (preferenze Glicemia&gt;120 in uso)</string>
+    <string name="ai_force_basal_reason_snack">AI forzatura basale perchè Modalità manuale pasto Snack</string>
+    <string name="ai_force_basal_reason_meal">AI forzatura basale perchè Modalità manuale pasto Pasto</string>
+    <string name="ai_force_basal_reason_lunch">AI forzatura basale perchè Modalità manuale pasto Pranzo</string>
+    <string name="ai_force_basal_reason_dinner">AI forzatura basale perchè Modalità manuale pasto Cena</string>
+    <string name="ai_force_basal_reason_highcarb">AI forzatura basale perchè Modalità manuale pasto High Carb</string>
+    <string name="ai_force_basal_reason_fasting">AI forzatura basale perchè Modalità manuale Digiuno</string>
     <string name="reason_dia_reattivity">📈 DIA: %1$.1f min | REATT◁120 Mattina: %2$.1f%% | Pomeriggio: %3$.1f%% | Sera: %4$.1f%%</string>
     <string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Modalità snack/prebolo: %2$s | </string>
     <string name="autodrive_condition">&#160;Autodrive condizioni: %1$s</string>
