@@ -957,6 +957,7 @@
     <string name="reason_max_smb">; maxSMB %1$.2f</string>
     <string name="reason_microbolus">Microbolo %1$.2fU.</string>
     <string name="reason_wait_microbolus">Attesa %1$.0fmin %2$.0fs per un altro SMB.</string>
+    <string name="override_aimi"> | sovrascritto da AIMI+: %1$s</string>
     <string name="meal_mode_meal">pasto generico(%1$dm)</string>
     <string name="meal_mode_bfast">colazione(%1$dm)</string>
     <string name="meal_mode_lunch">pranzo(%1$dm)</string>
