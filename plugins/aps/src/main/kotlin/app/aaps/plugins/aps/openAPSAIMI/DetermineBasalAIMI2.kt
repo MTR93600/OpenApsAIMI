@@ -3952,17 +3952,33 @@ fun appendCompactLog(
 
 // ---- LOGS ----
         val diaMin = pkpd?.params?.diaHrs?.let { it * 60.0 } ?: Double.NaN
-        val diaText = if (diaMin < 60.0) {
-            "%.0fmin".format(diaMin)       // meno di 60 → mostra in minuti, senza spazio
-        } else {
-            "%.1fh".format(diaMin / 60.0)  // 60 o più → mostra in ore, senza spazio
+        val diaText = when {
+            diaMin.isNaN() -> "--"
+            diaMin < 60.0 -> "%.0fm".format(diaMin)  // meno di 60 → solo minuti
+            else -> {
+                val hours = (diaMin / 60.0).toInt()
+                val minutes = (diaMin % 60.0).toInt()
+                if (minutes == 0) {
+                    "%dh".format(hours)                // ore intere → solo h
+                } else {
+                    "%dh%02dm".format(hours, minutes)  // ore + minuti → h e m
+                }
+            }
         }
 
         val peakMin = pkpd?.params?.peakMin ?: Double.NaN
-        val peakText = if (peakMin < 60.0) {
-            "%.0fmin".format(peakMin)
-        } else {
-            "%.1fh".format(peakMin / 60.0)
+        val peakText = when {
+            peakMin.isNaN() -> "--"
+            peakMin < 60.0 -> "%.0fm".format(peakMin) // meno di 60 → solo minuti
+            else -> {
+                val hours = (peakMin / 60.0).toInt()
+                val minutes = (peakMin % 60.0).toInt()
+                if (minutes == 0) {
+                    "%dh".format(hours)                // ore intere → solo h
+                } else {
+                    "%dh%02dm".format(hours, minutes)  // ore + minuti → h e m
+                }
+            }
         }
 
         rT.reason.append(
@@ -3970,7 +3986,7 @@ fun appendCompactLog(
                 context.getString(R.string.console_pkpd_log,
               //pkpd?.params?.diaHrs?.let { it * 60.0 } ?: Double.NaN,
               //pkpd?.params?.peakMin ?: Double.NaN,
-   diaText,
+                diaText,
                 peakText,
                 (pkpd?.tailFraction ?: 0.0) * 100.0,
                 pkpd?.fusedIsf ?: Double.NaN,
@@ -4101,19 +4117,25 @@ fun appendCompactLog(
     //"Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
     //"Evening: ${"%.1f".format(adjustedEveningFactor)}"
 //)
+        val diaFormatted = when {
+            adjustedDIAInMinutes < 60 -> "%.0fm".format(adjustedDIAInMinutes)
+            adjustedDIAInMinutes % 60 == 0.0 -> "%.0fh".format(adjustedDIAInMinutes / 60)
+            else -> {
+                val hours = (adjustedDIAInMinutes / 60).toInt()
+                val minutes = (adjustedDIAInMinutes % 60).toInt()
+                "%dh%02dm".format(hours, minutes)
+            }
+        }
 
         rT.reason.appendLine(
             context.getString(
                 R.string.reason_dia_reattivity,
-             //adjustedDIAInMinutes,
-  if (adjustedDIAInMinutes < 60.0) "%.1fmin".format(adjustedDIAInMinutes)
-                else "%.1fh".format(adjustedDIAInMinutes / 60.0),  // %1$s
-                adjustedMorningFactor * 100,                         // %2$.1f
-                adjustedAfternoonFactor * 100,                       // %3$.1f
-                adjustedEveningFactor * 100                          // %4$.1f
+                diaFormatted,                        // %1$s
+                adjustedMorningFactor * 100,         // %2$.1f
+                adjustedAfternoonFactor * 100,       // %3$.1f
+                adjustedEveningFactor * 100          // %4$.1f
             )
         )
-
 
 rT.reason.appendLine( //"🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
 context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", if (isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)) "✔" else "✘") +
