@@ -946,8 +946,8 @@
     <string name="console_mpc_log">MPC module: dose=%.2f, Kp=%.3f, corr=%.2f, out=%.2f</string>
     <string name="reason_mpc_pi">🎛️ MPC predictive model: %.2f U (%.0f%%) | PI physiological model: %.2f U (%.0f%%)</string>
     <string name="smb_final">✅ Final SMB: %1$s U</string>
-    <string name="console_pkpd_log">PKPD: DIA=%1$s, peak=%2$s, tail=%3$.0f%%, fused ISF=%4$.0f (profile=%5$.0f, TDD=%6$.0f, scale=%7$.2f)</string>
-    <string name="console_smb_log">SMB: proposed=%1$.2f → applied=%2$.2f [IOB residual%3$s×%4$.2f, physical activity%5$s×%6$.2f, slow digestion%7$s×%8$.2f] → final=%9$.2f%10$s</string>
+    <string name="console_pkpd_log">⚗️ DIA=%1$s, peak=%2$s, tail=%3$.0f%%, fused ISF=%4$.0f (profile=%5$.0f, TDD=%6$.0f, scale=%7$.2f)</string>
+    <string name="console_smb_log">🧪 SMB: proposed=%1$.2f → applied=%2$.2f [IOB residual%3$s×%4$.2f, physical activity%5$s×%6$.2f, slow digestion%7$s×%8$.2f] → final=%9$.2f%10$s</string>
     <string name="console_high_bg_override"> (BG&gt;120 preferences in use)</string>
     <string name="ai_force_basal_reason_snack">AI Force basal because Manual mode Snack</string>
     <string name="ai_force_basal_reason_meal">AI Force basal because Manual mode Meal</string>
