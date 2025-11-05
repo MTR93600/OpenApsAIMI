@@ -4103,11 +4103,17 @@ fun appendCompactLog(
 //)
 
         rT.reason.appendLine(
-    context.getString(R.string.reason_dia_reattivity,(adjustedDIAInMinutes),
-    (adjustedMorningFactor * 100),
-    (adjustedAfternoonFactor * 100),
-    (adjustedEveningFactor * 100))
-)
+            context.getString(
+                R.string.reason_dia_reattivity,
+             //adjustedDIAInMinutes,
+  if (adjustedDIAInMinutes < 60.0) "%.1fmin".format(adjustedDIAInMinutes)
+                else "%.1fh".format(adjustedDIAInMinutes / 60.0),  // %1$s
+                adjustedMorningFactor * 100,                         // %2$.1f
+                adjustedAfternoonFactor * 100,                       // %3$.1f
+                adjustedEveningFactor * 100                          // %4$.1f
+            )
+        )
+
 
 rT.reason.appendLine( //"🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
 context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", if (isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)) "✔" else "✘") +
