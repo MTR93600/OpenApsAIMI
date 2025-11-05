@@ -26,7 +26,7 @@ class EquilPumpPluginTest : TestBaseWithProfile() {
         equilPumpPlugin =
             EquilPumpPlugin(
                 aapsLogger, rh, preferences, commandQueue, aapsSchedulers, rxBus, context,
-                fabricPrivacy, pumpSync, equilManager, pumpEnactResultProvider, constraintsChecker
+                fabricPrivacy, dateUtil, pumpSync, equilManager, decimalFormatter, pumpEnactResultProvider
             )
     }
 

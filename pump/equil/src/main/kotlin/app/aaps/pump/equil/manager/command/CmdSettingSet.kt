@@ -9,8 +9,7 @@ import app.aaps.pump.equil.manager.EquilManager
 import app.aaps.pump.equil.manager.Utils
 
 class CmdSettingSet(
-    maxBolus: Double,
-    maxBasal: Double,
+    maxBolus: Double? = null,
     aapsLogger: AAPSLogger,
     preferences: Preferences,
     equilManager: EquilManager
@@ -18,11 +17,9 @@ class CmdSettingSet(
 
     var lowAlarm: Double = 0.0
     var bolusThresholdStep: Int = EquilConst.EQUIL_BOLUS_THRESHOLD_STEP
-    var basalThresholdStep: Int = EquilConst.EQUIL_BASAL_THRESHOLD_STEP
 
     init {
-        bolusThresholdStep = Utils.decodeSpeedToUH(maxBolus)
-        basalThresholdStep = Utils.decodeSpeedToUH(maxBasal)
+        maxBolus?.let { bolusThresholdStep = Utils.decodeSpeedToUH(maxBolus) }
     }
 
     override fun getFirstData(): ByteArray {
@@ -34,7 +31,7 @@ class CmdSettingSet(
         val fastBolus = Utils.intToTwoBytes(0)
         val occlusion = Utils.intToTwoBytes(2800)
         val insulinUnit = Utils.intToTwoBytes(8)
-        val basalThreshold = Utils.intToTwoBytes(basalThresholdStep)
+        val basalThreshold = Utils.intToTwoBytes(240)
         val bolusThreshold = Utils.intToTwoBytes(bolusThresholdStep)
         val data = Utils.concat(
             indexByte, equilCmd, useTime, autoCloseTime,
@@ -58,6 +55,21 @@ class CmdSettingSet(
     }
 
     override fun decodeConfirmData(data: ByteArray) {
+        //val index = data[4].toInt()
+        //        int i1 = ((data[15] & 0x0f) << 8) | data[14] & 0xff;
+//        int i2 = ((data[17] & 0x0f) << 8) | data[16] & 0xff;
+//        int i3 = ((data[19] & 0x0f) << 8) | data[18] & 0xff;
+//        int i4 = ((data[21] & 0x0f) << 8) | data[20] & 0xff;
+//        int i5 = ((data[23] & 0x0f) << 8) | data[22] & 0xff;
+//        int i6 = ((data[25] & 0x0f) << 8) | data[24] & 0xff;
+//        lowAlarm = Utils.internalDecodeSpeedToUH(i1);
+//        largefastAlarm = Utils.internalDecodeSpeedToUH(i2);
+//        stopAlarm = Utils.internalDecodeSpeedToUH(i3);
+//        infusionUnit = Utils.internalDecodeSpeedToUH(i4);
+//        basalAlarm = Utils.internalDecodeSpeedToUH(i5);
+//        largeAlarm = Utils.internalDecodeSpeedToUH(i6);
+//        aapsLogger.debug(LTag.PUMPCOMM,
+//                "CmdSettingSet===" + Crc.bytesToHex(data) + "====" + lowAlarm);
         synchronized(this) {
             cmdStatus = true
             (this as Object).notify()

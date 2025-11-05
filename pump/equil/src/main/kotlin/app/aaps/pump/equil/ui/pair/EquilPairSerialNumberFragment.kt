@@ -76,9 +76,17 @@ class EquilPairSerialNumberFragment : EquilPairFragmentBase() {
         }
     }
 
-    override fun getLayoutId(): Int = R.layout.equil_pair_serial_number_fragment
-    override fun getNextPageActionId(): Int = R.id.action_startEquilActivationFragment_to_startEquilPairFillFragment
-    override fun getIndex(): Int = 2
+    override fun getLayoutId(): Int {
+        return R.layout.equil_pair_serial_number_fragment
+    }
+
+    override fun getNextPageActionId(): Int {
+        return R.id.action_startEquilActivationFragment_to_startEquilPairFillFragment
+    }
+
+    override fun getIndex(): Int {
+        return 2
+    }
 
     lateinit var textTips: TextView
     lateinit var buttonPair: Button
@@ -98,38 +106,50 @@ class EquilPairSerialNumberFragment : EquilPairFragmentBase() {
         equilTextInputLayout = view.findViewById(R.id.devicesPwdLayout)
         devicesNameText = view.findViewById(R.id.devicesName)
         devicesNameInputLayout = view.findViewById(R.id.devicesNameLayout)
-        buttonNext.setOnClickListener { findNavController().navigate(getNextPageActionId()) }
+        buttonNext.setOnClickListener {
+            context?.let {
+                val nextPage = getNextPageActionId()
+                findNavController().navigate(nextPage)
 
+            }
+        }
         equilPasswordText.setText(preferences.get(EquilStringKey.PairPassword))
         equilPasswordText.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun afterTextChanged(s: Editable?) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                s?.let { validatePassword(s.toString()) }
+                s?.let {
+                    validatePassword(s.toString())
+                }
             }
         })
         devicesNameText.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun afterTextChanged(s: Editable?) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                s?.let { validateDeviceName(s.toString()) }
+                s?.let {
+                    validateDeviceName(s.toString())
+                }
             }
 
         })
         buttonPair.setOnClickListener {
-            equilManager.setAddress("")
-            equilManager.setSerialNumber("")
-            password = equilPasswordText.getText().toString().trim()
-            serialNumber = devicesNameText.text.toString().trim()
-            if (validateDeviceName(serialNumber) && validatePassword(password)) {
-                val imm = activity?.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                imm.hideSoftInputFromWindow(equilPasswordText.windowToken, 0)
-                preferences.put(EquilStringKey.PairPassword, password)
-                buttonPair.isClickable = false
-                buttonPair.alpha = 0.3f
-                textTips.visibility = View.INVISIBLE
-                buttonPair.text = rh.gs(R.string.equil_pair)
-                startLeDeviceScan()
+            context?.let {
+
+                equilManager.setAddress("")
+                equilManager.setSerialNumber("")
+                password = equilPasswordText.getText().toString().trim()
+                serialNumber = devicesNameText.text.toString().trim()
+                if (validateDeviceName(serialNumber) && validatePassword(password)) {
+                    val imm = activity?.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                    imm.hideSoftInputFromWindow(equilPasswordText.windowToken, 0)
+                    preferences.put(EquilStringKey.PairPassword, password)
+                    buttonPair.isClickable = false
+                    buttonPair.alpha = 0.3f
+                    textTips.visibility = View.INVISIBLE
+                    buttonPair.text = rh.gs(R.string.equil_pair)
+                    startLeDeviceScan()
+                }
             }
         }
         buttonNext.alpha = 0.3f
@@ -217,6 +237,7 @@ class EquilPairSerialNumberFragment : EquilPairFragmentBase() {
                 handler.removeCallbacks(stopScanAfterTimeoutRunnable)
                 stopLeDeviceScan()
                 getVersion(scanRecord.device)
+                // pair(scanRecord.device)
             }
         }
 
@@ -289,6 +310,7 @@ class EquilPairSerialNumberFragment : EquilPairFragmentBase() {
                 aapsLogger.debug(LTag.PUMPCOMM, "result====" + result.success + "===" + result.enacted)
                 if (result.success) {
                     if (result.enacted) {
+
                         SystemClock.sleep(EquilConst.EQUIL_BLE_NEXT_CMD)
                         pumpSettings(scanResult.address.toString(), scanResult.name.toString())
                     } else {
@@ -321,8 +343,7 @@ class EquilPairSerialNumberFragment : EquilPairFragmentBase() {
     }
 
     private fun pumpSettings(address: String, serialNumber: String) {
-        val profile = pumpSync.expectedPumpState().profile ?: return
-        commandQueue.customCommand(CmdSettingSet(constraintsChecker.getMaxBolusAllowed().value(), constraintsChecker.getMaxBasalAllowed(profile).value(), aapsLogger, preferences, equilManager), object : Callback() {
+        commandQueue.customCommand(CmdSettingSet(null, aapsLogger, preferences, equilManager), object : Callback() {
             override fun run() {
                 if (activity == null) return
                 if (result.success) {

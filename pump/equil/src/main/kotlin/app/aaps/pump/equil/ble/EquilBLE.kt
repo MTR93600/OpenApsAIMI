@@ -333,8 +333,7 @@ class EquilBLE @Inject constructor(
                     val data = equilResponse.send[indexData].array()
                     write(data)
                     indexData++
-                } else { // no more data to send
-                }
+                } else aapsLogger.debug(LTag.PUMPCOMM, "indexData error ")
             } else aapsLogger.debug(LTag.PUMPCOMM, "equil cmd time out ")
         }
     }
@@ -423,8 +422,8 @@ class EquilBLE @Inject constructor(
         baseCmd?.resolvedResult = result
     }
 
-    fun checkEquilStatus(from: String) {
-        aapsLogger.debug(LTag.PUMPCOMM, "getEquilStatus====$startTrue====$isConnected from $from")
+    fun checkEquilStatus() {
+        aapsLogger.debug(LTag.PUMPCOMM, "getEquilStatus====$startTrue====$isConnected")
         if (startTrue || isConnected) {
             return
         }
