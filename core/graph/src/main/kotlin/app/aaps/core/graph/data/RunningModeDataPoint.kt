@@ -38,6 +38,7 @@ class RunningModeDataPoint(
             RM.Mode.DISCONNECTED_PUMP -> rh.gac(context, R.attr.loopDisconnected)
             RM.Mode.SUSPENDED_BY_PUMP -> rh.gac(context, R.attr.loopSuspended)
             RM.Mode.SUSPENDED_BY_USER -> rh.gac(context, R.attr.loopSuspended)
+            RM.Mode.SUSPENDED_BY_DST -> rh.gac(context, R.attr.loopSuspended)
             RM.Mode.RESUME            -> 0
         }
     }

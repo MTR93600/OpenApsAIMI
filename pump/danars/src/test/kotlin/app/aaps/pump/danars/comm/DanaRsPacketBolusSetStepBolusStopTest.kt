@@ -1,6 +1,6 @@
 package app.aaps.pump.danars.comm
 
-import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
+import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.pump.danars.DanaRSTestBase
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
@@ -13,7 +13,7 @@ class DanaRsPacketBolusSetStepBolusStopTest : DanaRSTestBase() {
     fun runTest() {
         `when`(rh.gs(Mockito.anyInt())).thenReturn("SomeString")
 
-        danaPump.bolusingTreatment = EventOverviewBolusProgress.Treatment(0.0, 0, true, 0)
+        danaPump.bolusingDetailedBolusInfo = DetailedBolusInfo()
         val testPacket = DanaRSPacketBolusSetStepBolusStop(aapsLogger, rxBus, rh, danaPump)
         // test message decoding
         testPacket.handleMessage(byteArrayOf(0.toByte(), 0.toByte(), 0.toByte()))

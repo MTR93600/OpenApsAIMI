@@ -3,7 +3,6 @@
     <string name="equil_pump_description">Pompa Equil 5.3 lub nowsza </string>
     <!--  start  -->
     <string name="equil_basal_speed">Baza podstawowa</string>
-    <string name="equil_bolus_delivered">Podano %1$.3f U / %2$.3f U</string>
     <string name="equil_btn_cancel">Anuluj</string>
     <string name="equil_btn_need">Potrzeba</string>
     <string name="equil_btn_skip">Pomiń</string>

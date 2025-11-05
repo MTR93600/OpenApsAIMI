@@ -9,7 +9,6 @@ import app.aaps.plugins.main.general.overview.OverviewDataImpl
 import app.aaps.plugins.main.general.overview.OverviewFragment
 import app.aaps.plugins.main.general.overview.OverviewMenusImpl
 import app.aaps.plugins.main.general.overview.graphData.GraphData
-import app.aaps.plugins.main.general.overview.notifications.NotificationWithAction
 import app.aaps.plugins.main.general.overview.notifications.receivers.DismissNotificationReceiver
 import dagger.Binds
 import dagger.Module

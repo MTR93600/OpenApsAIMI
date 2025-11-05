@@ -2,7 +2,6 @@ package app.aaps.pump.danar.services
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothSocket
 import android.content.Context
@@ -16,6 +15,8 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.Profile
+import app.aaps.core.interfaces.pump.BolusProgressData
+import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -23,7 +24,6 @@ import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventAppExit
 import app.aaps.core.interfaces.rx.events.EventBTChange
-import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
 import app.aaps.core.interfaces.rx.events.EventPumpStatusChanged
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
@@ -36,6 +36,7 @@ import app.aaps.pump.dana.comm.RecordTypes
 import app.aaps.pump.dana.keys.DanaStringKey
 import app.aaps.pump.danar.SerialIOThread
 import app.aaps.pump.danar.comm.MessageBase
+import app.aaps.pump.danar.comm.MessageHashTableBase
 import app.aaps.pump.danar.comm.MsgBolusStop
 import app.aaps.pump.danar.comm.MsgHistoryAlarm
 import app.aaps.pump.danar.comm.MsgHistoryBasalHour
@@ -80,23 +81,21 @@ abstract class AbstractDanaRExecutionService : DaggerService() {
     @Inject lateinit var pumpEnactResultProvider: Provider<PumpEnactResult>
 
     private val disposable = CompositeDisposable()
-    private var mDevName: String? = null
     protected var mRfcommSocket: BluetoothSocket? = null
-    protected var mBTDevice: BluetoothDevice? = null
     var isConnecting = false
         protected set
     protected var mHandshakeInProgress = false
     protected var mSerialIOThread: SerialIOThread? = null
     protected var mBinder: IBinder? = null
+    abstract fun messageHashTable(): MessageHashTableBase
 
     @Suppress("PrivatePropertyName")
     private val SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
     protected var lastApproachingDailyLimit: Long = 0
     abstract fun updateBasalsInPump(profile: Profile): Boolean
-    abstract fun connect()
     abstract fun getPumpStatus()
     abstract fun loadEvents(): PumpEnactResult?
-    abstract fun bolus(amount: Double, carbs: Int, carbTimeStamp: Long, t: EventOverviewBolusProgress.Treatment): Boolean
+    abstract fun bolus(detailedBolusInfo: DetailedBolusInfo): Boolean
     abstract fun highTempBasal(percent: Int, durationInMinutes: Int): Boolean // Rv2 only
     abstract fun tempBasalShortDuration(percent: Int, durationInMinutes: Int): Boolean // Rv2 only
     abstract fun tempBasal(percent: Int, durationInHours: Int): Boolean
@@ -114,7 +113,7 @@ abstract class AbstractDanaRExecutionService : DaggerService() {
             .subscribe({ event: EventBTChange ->
                            if (event.state === EventBTChange.Change.DISCONNECT) {
                                aapsLogger.debug(LTag.PUMP, "Device was disconnected " + event.deviceName) //Device was disconnected
-                               if (mBTDevice?.name == event.deviceName) {
+                               if (preferences.get(DanaStringKey.RName) == event.deviceName) {
                                    mSerialIOThread?.disconnect("BT disconnection broadcast")
                                    rxBus.send(EventPumpStatusChanged(EventPumpStatusChanged.Status.DISCONNECTED))
                                }
@@ -155,42 +154,60 @@ abstract class AbstractDanaRExecutionService : DaggerService() {
 
     fun disconnect(from: String) {
         mSerialIOThread?.disconnect(from)
+        mRfcommSocket = null
+        mSerialIOThread = null
     }
 
     fun stopConnecting() {
         mSerialIOThread?.disconnect("stopConnecting")
     }
 
-    protected fun getBTSocketForSelectedPump() {
-        mDevName = preferences.get(DanaStringKey.RName)
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
-            val bluetoothAdapter = (context.getSystemService(BLUETOOTH_SERVICE) as BluetoothManager).adapter
-            if (bluetoothAdapter != null) {
-                val bondedDevices = bluetoothAdapter.bondedDevices
-                for (device in bondedDevices) {
-                    if (mDevName == device.name) {
-                        mBTDevice = device
-                        try {
-                            mRfcommSocket = mBTDevice?.createRfcommSocketToServiceRecord(SPP_UUID)
-                        } catch (e: IOException) {
-                            aapsLogger.error("Error creating socket: ", e)
-                        }
-                        break
-                    }
+    @SuppressLint("MissingPermission") fun connect() {
+        if (isConnecting) return
+        Thread(Runnable {
+            mHandshakeInProgress = false
+            isConnecting = true
+            getBTSocketForSelectedPump()
+            if (mRfcommSocket == null) {
+                isConnecting = false
+                return@Runnable  // Device not found
+            }
+            try {
+                mRfcommSocket?.connect()
+            } catch (e: IOException) {
+                if (e.message?.contains("socket closed") == true) {
+                    aapsLogger.error("Unhandled exception", e)
                 }
-            } else {
-                errorToast(context.applicationContext, R.string.nobtadapter)
             }
-            if (mBTDevice == null) {
-                errorToast(context.applicationContext, R.string.devicenotfound)
+            if (isConnected) {
+                mSerialIOThread?.disconnect("Recreate SerialIOThread")
+                mSerialIOThread = SerialIOThread(aapsLogger, mRfcommSocket!!, messageHashTable(), danaPump)
+                mHandshakeInProgress = true
+                rxBus.send(EventPumpStatusChanged(EventPumpStatusChanged.Status.HANDSHAKING, 0))
             }
+            isConnecting = false
+        }).start()
+    }
+
+    protected fun getBTSocketForSelectedPump() {
+        val deviceName = preferences.get(DanaStringKey.RName)
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+            (context.getSystemService(BLUETOOTH_SERVICE) as BluetoothManager).adapter
+                ?.bondedDevices?.firstOrNull { it.name == deviceName }?.let { mBTDevice ->
+                    try {
+                        mRfcommSocket = mBTDevice.createRfcommSocketToServiceRecord(SPP_UUID)
+                    } catch (e: IOException) {
+                        aapsLogger.error("Error creating socket: ", e)
+                        errorToast(context.applicationContext, "Error creating socket")
+                    }
+                } ?: { errorToast(context.applicationContext, R.string.devicenotfound) }
         } else {
             errorToast(context, app.aaps.core.ui.R.string.need_connect_permission)
         }
     }
 
     fun bolusStop() {
-        aapsLogger.debug(LTag.PUMP, "bolusStop >>>>> @ " + if (danaPump.bolusingTreatment == null) "" else danaPump.bolusingTreatment?.insulin)
+        aapsLogger.debug(LTag.PUMP, "bolusStop >>>>> @ ${BolusProgressData.delivered}")
         val stop = MsgBolusStop(injector)
         danaPump.bolusStopForced = true
         if (isConnected) {

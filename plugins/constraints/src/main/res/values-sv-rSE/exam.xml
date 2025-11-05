@@ -54,7 +54,6 @@
     <string name="basaltest_fixed">När du väl har ställt in och validerat dessa värden bör dessa värden inte ändras över tiden.</string>
     <string name="prerequisites_label">Förutsättningar</string>
     <string name="prerequisites_what">Vad är nödvändigt för att installera och använda AAPS?</string>
-    <string name="prerequisites_computer">En dator med Android Studio installerad och konfigurerad.</string>
     <string name="prerequisites_pump">En kompatibel insulinpump om du planerar att köra closed loop.</string>
     <string name="prerequisites_nightscout">Nightscout, för att logga allt data och få en överblick över inställningar.</string>
     <string name="prerequisites_beanandroiddeveloper">Erfarenhet av programmering eller redigering av kod.</string>

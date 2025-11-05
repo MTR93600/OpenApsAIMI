@@ -18,6 +18,7 @@ fun RM.toJson(isAdd: Boolean, dateUtil: DateUtil): JSONObject {
         RM.Mode.SUPER_BOLUS,
         RM.Mode.DISCONNECTED_PUMP,
         RM.Mode.SUSPENDED_BY_PUMP,
+        RM.Mode.SUSPENDED_BY_DST,
         RM.Mode.SUSPENDED_BY_USER -> duration
 
         RM.Mode.RESUME            -> error("Invalid mode")

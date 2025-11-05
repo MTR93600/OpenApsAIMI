@@ -8,7 +8,6 @@ import app.aaps.core.data.ue.Sources
 import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.utils.Translator
-import app.aaps.implementation.R
 import dagger.Reusable
 import javax.inject.Inject
 
@@ -246,6 +245,7 @@ class TranslatorImpl @Inject internal constructor(
         RM.Mode.DISCONNECTED_PUMP -> rh.gs(app.aaps.core.ui.R.string.pump_disconnected)
         RM.Mode.SUSPENDED_BY_PUMP -> rh.gs(app.aaps.core.ui.R.string.pump_suspended)
         RM.Mode.SUSPENDED_BY_USER -> rh.gs(app.aaps.core.ui.R.string.loopsuspended)
+        RM.Mode.SUSPENDED_BY_DST  -> rh.gs(app.aaps.core.ui.R.string.loop_suspended_by_dst)
         RM.Mode.RESUME            -> rh.gs(app.aaps.core.ui.R.string.resumeloop)
         null                      -> ""
     }

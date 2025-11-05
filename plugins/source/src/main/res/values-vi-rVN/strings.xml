@@ -5,7 +5,7 @@
     <string name="ns_client_bg_short">NS BG</string>
     <string name="description_source_ns_client">Tải dữ liệu đường huyết (BG) từ Nightscout</string>
     <string name="source_xdrip">xDrip+ BG</string>
-    <string name="description_source_xdrip">Nhận đường huyết từ xDrip+.</string>
+    <string name="description_source_xdrip">Nhận giá trị đường huyết (BG) từ xDrip+ và các ứng dụng tương thích (như Juggluco, v.v.).</string>
     <string name="dexcom_app_patched">BYODA</string>
     <string name="dexcom_short">BYODA</string>
     <string name="description_source_dexcom">Nhận đường huyết từ ứng dụng \'Build Your Own Dexcom App\'.</string>

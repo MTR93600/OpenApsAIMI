@@ -5,7 +5,6 @@
     <string name="error">错误</string>
     <string name="profile_set_ok">泵基础率配置文件更新了</string>
     <string name="invalid_input">无效的输入数据</string>
-    <string name="bolus_delivering">正在输注 %1$.2f U</string>
     <string name="constraint_applied">应用约束!</string>
     <string name="tempbasals_iobtotal_label_string">总 IOB:</string>
     <string name="tt_label">临时目标</string>

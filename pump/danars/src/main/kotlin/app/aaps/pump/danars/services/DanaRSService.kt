@@ -15,6 +15,7 @@ import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.pump.BolusProgressData
+import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.queue.Callback
@@ -322,61 +323,47 @@ class DanaRSService : DaggerService() {
         return pumpEnactResultProvider.get().success(message.success())
     }
 
-    fun bolus(insulin: Double, carbs: Int, carbTime: Long, t: EventOverviewBolusProgress.Treatment): Boolean {
+    fun bolus(detailedBolusInfo: DetailedBolusInfo): Boolean {
         if (!isConnected) return false
         if (BolusProgressData.stopPressed) return false
         rxBus.send(EventPumpStatusChanged(rh.gs(R.string.startingbolus)))
         val preferencesSpeed = preferences.get(DanaIntKey.BolusSpeed)
         danaPump.bolusDone = false
-        danaPump.bolusingTreatment = t
-        danaPump.bolusAmountToBeDelivered = insulin
+        danaPump.bolusingDetailedBolusInfo = detailedBolusInfo
         danaPump.bolusStopped = false
         danaPump.bolusStopForced = false
         danaPump.bolusProgressLastTimeStamp = dateUtil.now()
-        val start = danaRSPacketBolusSetStepBolusStart.get().with(insulin, preferencesSpeed)
-        if (carbs > 0) {
-//            MsgSetCarbsEntry msg = new MsgSetCarbsEntry(carbTime, carbs); ####
-//            sendMessage(msg);
-            val msgSetHistoryEntryV2 = danaRSPacketAPSSetEventHistory.get().with(DanaPump.HistoryEntry.CARBS.value, carbTime, carbs, 0)
-            sendMessage(msgSetHistoryEntryV2)
-            danaPump.readHistoryFrom = min(danaPump.readHistoryFrom, carbTime - T.mins(1).msecs())
-            if (!msgSetHistoryEntryV2.isReceived || msgSetHistoryEntryV2.failed)
-                uiInteraction.runAlarm(rh.gs(R.string.carbs_store_error), rh.gs(app.aaps.core.ui.R.string.error), app.aaps.core.ui.R.raw.boluserror)
-        }
+        val start = danaRSPacketBolusSetStepBolusStart.get().with(detailedBolusInfo.insulin, preferencesSpeed)
         val bolusStart = System.currentTimeMillis()
-        if (insulin > 0) {
+        var connectionBroken = false
+        if (detailedBolusInfo.insulin > 0) {
             if (!danaPump.bolusStopped) {
                 sendMessage(start)
             } else {
-                t.insulin = 0.0
+                BolusProgressData.bolusEnded = true
                 return false
             }
-            while (!danaPump.bolusStopped && !start.failed && !danaPump.bolusDone) {
+            while (!danaPump.bolusStopped && !start.failed && !danaPump.bolusDone && !connectionBroken) {
                 SystemClock.sleep(100)
                 if (System.currentTimeMillis() - danaPump.bolusProgressLastTimeStamp > 15 * 1000L) { // if i didn't receive status for more than 20 sec expecting broken comm
-                    danaPump.bolusStopped = true
-                    danaPump.bolusStopForced = true
+                    connectionBroken = true
                     aapsLogger.debug(LTag.PUMPCOMM, "Communication stopped")
                     bleComm.disconnect("Communication stopped")
                 }
             }
         }
-        val bolusingEvent = EventOverviewBolusProgress
-        bolusingEvent.t = t
-        bolusingEvent.percent = 99
-        danaPump.bolusingTreatment = null
+        danaPump.bolusingDetailedBolusInfo = null
         var speed = 12
         when (preferencesSpeed) {
             0 -> speed = 12
             1 -> speed = 30
             2 -> speed = 60
         }
-        val bolusDurationInMSec = (insulin * speed * 1000).toLong()
+        val bolusDurationInMSec = (detailedBolusInfo.insulin * speed * 1000).toLong()
         val expectedEnd = bolusStart + bolusDurationInMSec + 2000
         while (System.currentTimeMillis() < expectedEnd) {
             val waitTime = expectedEnd - System.currentTimeMillis()
-            bolusingEvent.status = rh.gs(R.string.waitingforestimatedbolusend, waitTime / 1000)
-            rxBus.send(bolusingEvent)
+            rxBus.send(EventOverviewBolusProgress(status = rh.gs(R.string.waitingforestimatedbolusend, waitTime / 1000), id = detailedBolusInfo.id))
             SystemClock.sleep(1000)
         }
         // do not call loadEvents() directly, reconnection may be needed
@@ -385,15 +372,15 @@ class DanaRSService : DaggerService() {
                 // reread bolus status
                 rxBus.send(EventPumpStatusChanged(rh.gs(R.string.gettingbolusstatus)))
                 sendMessage(danaRSPacketBolusGetStepBolusInformation.get()) // last bolus
-                bolusingEvent.percent = 100
-                rxBus.send(EventPumpStatusChanged(rh.gs(app.aaps.core.interfaces.R.string.disconnecting)))
+                rxBus.send(EventOverviewBolusProgress(status = rh.gs(app.aaps.core.interfaces.R.string.disconnecting), id = detailedBolusInfo.id, percent = 100))
+                rxBus.send(EventPumpStatusChanged(EventPumpStatusChanged.Status.DISCONNECTING))
             }
         })
-        return !start.failed
+        return !start.failed && !connectionBroken
     }
 
     fun bolusStop() {
-        aapsLogger.debug(LTag.PUMPCOMM, "bolusStop >>>>> @ " + if (danaPump.bolusingTreatment == null) "" else danaPump.bolusingTreatment?.insulin)
+        aapsLogger.debug(LTag.PUMPCOMM, "bolusStop >>>>> @${BolusProgressData.delivered}")
         val stop = danaRSPacketBolusSetStepBolusStop.get()
         danaPump.bolusStopForced = true
         if (isConnected) {

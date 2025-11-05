@@ -52,6 +52,7 @@ import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.protection.ProtectionCheck
+import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.defs.determineCorrectBolusStepSize
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -64,7 +65,6 @@ import app.aaps.core.interfaces.rx.events.EventExtendedBolusChange
 import app.aaps.core.interfaces.rx.events.EventInitializationChanged
 import app.aaps.core.interfaces.rx.events.EventMobileToWear
 import app.aaps.core.interfaces.rx.events.EventNewOpenLoopNotification
-import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
 import app.aaps.core.interfaces.rx.events.EventPreferenceChange
 import app.aaps.core.interfaces.rx.events.EventPumpStatusChanged
 import app.aaps.core.interfaces.rx.events.EventRefreshOverview
@@ -365,7 +365,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
         updatePumpStatus()
         updateCalcProgress()
 
-        popupBolusDialogIfRunning()
+        popupBolusDialogIfRunning(onClick = false)
     }
 
     fun refreshAll() {
@@ -480,7 +480,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
 
                 R.id.pump_status_layout  -> {
                     // Check if there is a bolus in progress
-                    popupBolusDialogIfRunning()
+                    popupBolusDialogIfRunning(onClick = true)
                 }
             }
         }
@@ -716,6 +716,13 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
                     RM.Mode.SUSPENDED_BY_USER -> {
                         binding.infoLayout.apsMode.setImageResource(app.aaps.core.ui.R.drawable.ic_loop_paused)
                         apsModeSetA11yLabel(app.aaps.core.ui.R.string.loopsuspended)
+                        binding.infoLayout.apsModeText.text = dateUtil.age(loop.minutesToEndOfSuspend() * 60000L, true, rh)
+                        binding.infoLayout.apsModeText.visibility = View.VISIBLE
+                    }
+
+                    RM.Mode.SUSPENDED_BY_DST -> {
+                        binding.infoLayout.apsMode.setImageResource(app.aaps.core.ui.R.drawable.ic_loop_paused)
+                        apsModeSetA11yLabel(app.aaps.core.ui.R.string.loop_suspended_by_dst)
                         binding.infoLayout.apsModeText.text = dateUtil.age(loop.minutesToEndOfSuspend() * 60000L, true, rh)
                         binding.infoLayout.apsModeText.visibility = View.VISIBLE
                     }
@@ -1248,22 +1255,17 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
         binding.notifications.let { notificationStore.updateNotifications(it) }
     }
 
-    fun popupBolusDialogIfRunning() {
+    fun popupBolusDialogIfRunning(onClick: Boolean) {
         // Check if bolus is in progress and show dialog if needed
         // Only show for manual bolus (not SMB) with progress > 0
         if (commandQueue.bolusInQueue()) {
-            val treatment = EventOverviewBolusProgress.t
-            val percent = EventOverviewBolusProgress.percent
 
             // Show bolus progress dialog automatically only for manual bolus with progress
-            if (treatment != null && percent > 0 && !treatment.isSMB) {
+            if (!BolusProgressData.bolusEnded && (!BolusProgressData.isSMB || onClick)) {
                 activity?.let { activity ->
                     protectionCheck.queryProtection(activity, ProtectionCheck.Protection.BOLUS, UIRunnable {
-                        if (isAdded) {
-                            val insulin = treatment.insulin
-                            val id = treatment.id
-                            uiInteraction.runBolusProgressDialog(childFragmentManager, insulin, id)
-                        }
+                        if (isAdded)
+                            uiInteraction.runBolusProgressDialog(childFragmentManager)
                     })
                 }
             }

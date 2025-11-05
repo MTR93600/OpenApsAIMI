@@ -15,7 +15,6 @@ interface CommandQueue {
     fun size(): Int
     fun performing(): Command?
     fun resetPerforming()
-    fun independentConnect(reason: String, callback: Callback?)
     fun bolusInQueue(): Boolean
     fun bolus(detailedBolusInfo: DetailedBolusInfo, callback: Callback?): Boolean
     fun cancelAllBoluses(id: Long?)

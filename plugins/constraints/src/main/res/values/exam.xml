@@ -63,7 +63,7 @@
     <string name="basaltest_hint1">https://wiki.aaps.app/en/latest/SettingUpAaps/YourAapsProfile.html</string>
     <string name="prerequisites_label">Prerequisites</string>
     <string name="prerequisites_what">What is essential to set up and use AAPS?</string>
-    <string name="prerequisites_computer">A computer with Android Studio installed and configured.</string>
+    <string name="prerequisites_build">A way to build AAPS. Either via a browser or a computer with Android Studio installed.</string>
     <string name="prerequisites_pump">A compatible insulin pump if you are planning to run a closed loop.</string>
     <string name="prerequisites_nightscout">Nightscout, to keep a log of all data and review settings.</string>
     <string name="prerequisites_beanandroiddeveloper">Experience in programming or editing code.</string>

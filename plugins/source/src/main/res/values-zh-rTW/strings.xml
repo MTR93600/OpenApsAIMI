@@ -5,7 +5,7 @@
     <string name="ns_client_bg_short">NS 血糖</string>
     <string name="description_source_ns_client">從 Nightscout 下載血糖資料</string>
     <string name="source_xdrip">xDrip+ 血糖</string>
-    <string name="description_source_xdrip">接收來自 xDrip+ 的血糖值。</string>
+    <string name="description_source_xdrip">從 xDrip+ 及相容的應用程式（例如 Juggluco 等）接收血糖數值。</string>
     <string name="dexcom_app_patched">BYODA</string>
     <string name="dexcom_short">BYODA</string>
     <string name="description_source_dexcom">接收來自「Build Your Own Dexcom App」的血糖值。</string>

@@ -1,16 +1,18 @@
 package app.aaps.plugins.constraints.dstHelper
 
+import app.aaps.core.data.model.RM
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.time.T
+import app.aaps.core.data.ue.Action
+import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.aps.Loop
-import app.aaps.core.interfaces.constraints.Constraint
-import app.aaps.core.interfaces.constraints.PluginConstraints
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBaseWithPreferences
 import app.aaps.core.interfaces.plugin.PluginDescription
+import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.interfaces.Preferences
@@ -27,17 +29,18 @@ class DstHelperPlugin @Inject constructor(
     preferences: Preferences,
     private val activePlugin: ActivePlugin,
     private val uiInteraction: UiInteraction,
-    private val loop: Loop
+    private val loop: Loop,
+    private val profileFunction: ProfileFunction
 ) : PluginBaseWithPreferences(
     pluginDescription = PluginDescription()
-        .mainType(PluginType.CONSTRAINTS)
+        .mainType(PluginType.GENERAL)
         .neverVisible(true)
         .alwaysEnabled(true)
         .showInList { false }
         .pluginName(R.string.dst_plugin_name),
     ownPreferences = listOf(DstHelperLongKey::class.java),
     aapsLogger, rh, preferences
-), PluginConstraints {
+) {
 
     companion object {
 
@@ -46,12 +49,9 @@ class DstHelperPlugin @Inject constructor(
     }
 
     //Return false if time to DST change happened in the last 3 hours.
-    override fun isLoopInvocationAllowed(value: Constraint<Boolean>): Constraint<Boolean> {
+    fun dstCheck() {
         val pump = activePlugin.activePump
-        if (pump.canHandleDST()) {
-            aapsLogger.debug(LTag.CONSTRAINTS, "Pump can handle DST")
-            return value
-        }
+        if (pump.canHandleDST()) return
         val cal = Calendar.getInstance()
         if (willBeDST(cal)) {
             val snoozedTo: Long = preferences.get(DstHelperLongKey.SnoozeDstIn24h)
@@ -61,12 +61,10 @@ class DstHelperPlugin @Inject constructor(
                 }, null)
             }
         }
-        if (!value.value()) {
-            aapsLogger.debug(LTag.CONSTRAINTS, "Already not allowed - don't check further")
-            return value
-        }
         if (wasDST(cal)) {
             if (!loop.runningMode.isSuspended()) {
+                val profile = profileFunction.getProfile() ?: return
+                loop.handleRunningModeChange(newRM = RM.Mode.SUSPENDED_BY_DST, durationInMinutes = T.hours((-DISABLE_TIME_FRAME_HOURS).toLong()).mins().toInt(), action = Action.SUSPEND, source = Sources.Aaps, profile = profile)
                 val snoozedTo: Long = preferences.get(DstHelperLongKey.SnoozeLoopDisabled)
                 if (snoozedTo == 0L || System.currentTimeMillis() > snoozedTo) {
                     uiInteraction.addNotification(
@@ -81,18 +79,16 @@ class DstHelperPlugin @Inject constructor(
             } else {
                 aapsLogger.debug(LTag.CONSTRAINTS, "Loop already suspended")
             }
-            value.set(false, rh.gs(R.string.dst_loop_disabled_error), this)
         }
-        return value
     }
 
-    fun wasDST(now: Calendar): Boolean {
+    internal fun wasDST(now: Calendar): Boolean {
         val ago = now.clone() as Calendar
         ago.add(Calendar.HOUR, DISABLE_TIME_FRAME_HOURS)
         return now[Calendar.DST_OFFSET] != ago[Calendar.DST_OFFSET]
     }
 
-    fun willBeDST(now: Calendar): Boolean {
+    internal fun willBeDST(now: Calendar): Boolean {
         val ago = now.clone() as Calendar
         ago.add(Calendar.HOUR, WARN_PRIOR_TIME_FRAME_HOURS)
         return now[Calendar.DST_OFFSET] != ago[Calendar.DST_OFFSET]

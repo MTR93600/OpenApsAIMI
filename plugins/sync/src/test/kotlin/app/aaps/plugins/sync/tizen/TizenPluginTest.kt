@@ -12,6 +12,7 @@ import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
+import app.aaps.core.interfaces.pump.PumpStatusProvider
 import app.aaps.core.interfaces.receivers.ReceiverStatusStore
 import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
 import app.aaps.shared.tests.BundleMock
@@ -19,6 +20,7 @@ import app.aaps.shared.tests.TestBaseWithProfile
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers.anyBoolean
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.Mock
 import org.mockito.Mockito
@@ -30,6 +32,7 @@ internal class TizenPluginTest : TestBaseWithProfile() {
     @Mock lateinit var glucoseStatusProvider: GlucoseStatusProvider
     @Mock lateinit var autosensDataStore: AutosensDataStore
     @Mock lateinit var processedDeviceStatusData: ProcessedDeviceStatusData
+    @Mock lateinit var pumpStatusProvider: PumpStatusProvider
 
     private lateinit var sut: TizenPlugin
 
@@ -37,7 +40,7 @@ internal class TizenPluginTest : TestBaseWithProfile() {
     fun setUp() {
         sut = TizenPlugin(
             aapsLogger, rh, aapsSchedulers, context, dateUtil, fabricPrivacy, rxBus, iobCobCalculator, processedTbrEbData, profileFunction, preferences, processedDeviceStatusData,
-            loop, activePlugin, receiverStatusStore, config, glucoseStatusProvider, ch
+            loop, activePlugin, receiverStatusStore, config, glucoseStatusProvider, ch, pumpStatusProvider
         )
         Mockito.`when`(iobCobCalculator.ads).thenReturn(autosensDataStore)
         Mockito.`when`(autosensDataStore.lastBg()).thenReturn(InMemoryGlucoseValue(1000, 100.0, sourceSensor = SourceSensor.UNKNOWN))
@@ -63,15 +66,13 @@ internal class TizenPluginTest : TestBaseWithProfile() {
             it.clockEnacted = 1000L
             it.enacted = RT(runningDynamicIsf = false)
         })
+        Mockito.`when`(pumpStatusProvider.shortStatus(anyBoolean())).thenReturn(testPumpPlugin.pumpSpecificShortStatus(true))
     }
 
     @Test
     fun prepareDataTestAPS() {
         Mockito.`when`(config.APS).thenReturn(true)
-        val event = EventOverviewBolusProgress.also {
-            it.status = "Some status"
-            it.percent = 100
-        }
+        val event = EventOverviewBolusProgress(status = "Some status", percent = 100)
         val bundle = BundleMock.mock()
         sut.prepareData(event, bundle)
         assertThat(bundle.containsKey("progressPercent")).isTrue()
@@ -110,10 +111,7 @@ internal class TizenPluginTest : TestBaseWithProfile() {
     @Test
     fun prepareDataTestAAPSClient() {
         Mockito.`when`(config.APS).thenReturn(false)
-        val event = EventOverviewBolusProgress.also {
-            it.status = "Some status"
-            it.percent = 100
-        }
+        val event = EventOverviewBolusProgress(status = "Some status", percent = 100)
         val bundle = BundleMock.mock()
         sut.prepareData(event, bundle)
         assertThat(bundle.containsKey("progressPercent")).isTrue()

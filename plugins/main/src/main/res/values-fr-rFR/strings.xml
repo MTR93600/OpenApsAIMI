@@ -129,6 +129,7 @@
     <!-- Profile -->
     <string name="localprofile">Profil</string>
     <string name="localprofile_shortname">PL</string>
+    <string name="description_profile_local">Définissez un profil décrivant vos besoins en insuline.</string>
     <string name="a11y_add_new_to_list">ajouter un nouveau à la liste</string>
     <string name="do_you_want_switch_profile">Voulez-vous changer de profil et annuler les modifications faites dans le profil actuel ?</string>
     <string name="save_or_reset_changes_first">Sauver ou réinitialiser les modifications actuelles en premier</string>

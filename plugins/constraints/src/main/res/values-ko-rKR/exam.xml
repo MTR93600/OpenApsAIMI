@@ -54,7 +54,6 @@
     <string name="basaltest_fixed">한 번 설정하고 확인하면, 이 값은 계속 변하면 안됨.</string>
     <string name="prerequisites_label">기본 준비사항</string>
     <string name="prerequisites_what">AAPS를 설정하고 사용하기 위해 필수적인 것은 무엇입니까?</string>
-    <string name="prerequisites_computer">Android Studio가 설치되고 환경설정된 컴퓨터</string>
     <string name="prerequisites_pump">Closed loop을 사용할 계획이라면 호환되는 인슐린 펌프</string>
     <string name="prerequisites_nightscout">모든 데이터의 log를 보관하고 설정을 검토하기 위한 Nightscout</string>
     <string name="prerequisites_beanandroiddeveloper">프로그래밍이나 코딩을 해 본 경험</string>

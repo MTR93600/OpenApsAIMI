@@ -219,7 +219,11 @@
     <string name="complication_full_status">Toàn bộ trạng thái</string>
     <string name="complication_full_status_flipped">Toàn bộ trạng thái (lật)</string>
     <string name="complication_blood_glucose">Đường máu</string>
+    <string name="complication_blood_glucose_ext1">Đường huyết Ext1</string>
+    <string name="complication_blood_glucose_ext2">Đường huyết Ext2</string>
     <string name="complication_br_cob_iob">BR, CoB &amp; IoB</string>
+    <string name="complication_br_cob_iob_ext1">BR, CoB &amp; IoB Ext1</string>
+    <string name="complication_br_cob_iob_ext2">BR, CoB &amp; IoB Ext2</string>
     <string name="complication_br_iob">BR &amp; IoB</string>
     <string name="complication_br">Tỷ lệ liều Basal</string>
     <string name="complication_cob_iob">CoB &amp; IoB</string>

@@ -3,7 +3,6 @@
     <string name="equil_pump_description">Integración de bomba parche Equil 5.3 o superior</string>
     <!--  start  -->
     <string name="equil_basal_speed">Basal base</string>
-    <string name="equil_bolus_delivered">%1$.3f U / %2$.3f U Entregado</string>
     <string name="equil_btn_cancel">Cancelar</string>
     <string name="equil_btn_need">Necesitas</string>
     <string name="equil_btn_skip">Saltar</string>

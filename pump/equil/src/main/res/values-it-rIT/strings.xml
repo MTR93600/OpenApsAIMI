@@ -3,7 +3,6 @@
     <string name="equil_pump_description">Pompa Patch Equil 5.3 o più recente </string>
     <!--  start  -->
     <string name="equil_basal_speed">Basale originale</string>
-    <string name="equil_bolus_delivered">%1$.3f U / %2$.3f U erogate</string>
     <string name="equil_btn_cancel">Annulla</string>
     <string name="equil_btn_need">Bisogno</string>
     <string name="equil_btn_skip">Salta</string>

@@ -54,7 +54,6 @@
     <string name="basaltest_fixed">Μόλις ρυθμιστούν και επικυρωθούν, οι τιμές αυτές δεν θα πρέπει να μεταβάλλονται με την πάροδο του χρόνου.</string>
     <string name="prerequisites_label">Προϋποθέσεις</string>
     <string name="prerequisites_what">Τι είναι ουσιώδες για τη ρύθμιση και τη χρήση του AAPS;</string>
-    <string name="prerequisites_computer">Ένας υπολογιστής με εγκατεστημένο και ρυθμισμένο το Android Studio.</string>
     <string name="prerequisites_pump">Μια συμβατή αντλία ινσουλίνης αν σκοπεύετε να τρέξετε ένα κλειστό κύκλωμα.</string>
     <string name="prerequisites_nightscout">Nightscout, για να κρατήσετε ένα αρχείο καταγραφής όλων των δεδομένων και την αναθεώρηση των ρυθμίσεων.</string>
     <string name="prerequisites_beanandroiddeveloper">Εμπειρία στον προγραμματισμό ή την επεξεργασία κώδικα.</string>

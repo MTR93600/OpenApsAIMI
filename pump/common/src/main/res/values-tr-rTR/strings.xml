@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- PumoCommon - Pump Abstract -->
+    <!-- PumpCommon - Pump Abstract -->
     <string name="pump_operation_not_supported_by_pump_driver">Pompa ve/veya sürücü tarafından desteklenmeyen işlem.</string>
-    <string name="bolus_delivered_so_far">%1$.2f Ü / %2$.2f Ü gönderildi</string>
     <!-- PumpCommon - Pump Status -->
     <string name="pump_status_not_initialized">Başlatılmadı</string>
     <string name="pump_status_initialized">Başlatıldı</string>

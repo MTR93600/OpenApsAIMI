@@ -8,8 +8,8 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.profile.ProfileStore
+import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpSync
-import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.keys.interfaces.Preferences
@@ -106,7 +106,6 @@ class DanaPump @Inject constructor(
     var pumpSuspended = false
     var calculatorEnabled = false
     var dailyTotalUnits = 0.0
-    var decRatio = 0 // RS v3: [%] for pump IOB calculation
     var maxDailyTotalUnits = 0
     var bolusStep = 0.1
     var basalStep = 0.1
@@ -265,8 +264,7 @@ class DanaPump @Inject constructor(
     }
 
     var bolusStartErrorCode: Int = 0 // last start bolus errorCode
-    var bolusingTreatment: EventOverviewBolusProgress.Treatment? = null // actually delivered treatment
-    var bolusAmountToBeDelivered = 0.0 // amount to be delivered
+    var bolusingDetailedBolusInfo: DetailedBolusInfo? = null // actually delivered treatment
     var bolusProgressLastTimeStamp: Long = 0 // timestamp of last bolus progress message
     var bolusStopped = false // bolus finished
     var bolusStopForced = false // bolus forced to stop by user

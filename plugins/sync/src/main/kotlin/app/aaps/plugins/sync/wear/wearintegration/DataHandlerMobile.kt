@@ -43,6 +43,7 @@ import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
+import app.aaps.core.interfaces.pump.PumpStatusProvider
 import app.aaps.core.interfaces.pump.defs.determineCorrectBolusStepSize
 import app.aaps.core.interfaces.queue.Callback
 import app.aaps.core.interfaces.queue.CommandQueue
@@ -125,7 +126,8 @@ class DataHandlerMobile @Inject constructor(
     private val importExportPrefs: ImportExportPrefs,
     private val decimalFormatter: DecimalFormatter,
     private val bolusWizardProvider: Provider<BolusWizard>,
-    private val ch: ConcentrationHelper
+    private val ch: ConcentrationHelper,
+    private val pumpStatusProvider: PumpStatusProvider
 ) {
 
     @Inject lateinit var automation: Automation
@@ -175,7 +177,7 @@ class DataHandlerMobile @Inject constructor(
                                EventMobileToWear(
                                    EventData.ConfirmAction(
                                        rh.gs(R.string.pump_status).uppercase(),
-                                       activePlugin.activePump.shortStatus(false),
+                                       pumpStatusProvider.shortStatus(false),
                                        returnCommand = null
                                    )
                                )
@@ -933,6 +935,7 @@ class DataHandlerMobile @Inject constructor(
                 RM.Mode.DISCONNECTED_PUMP -> AvailableLoopState(AvailableLoopState.LoopState.PUMP_DISCONNECT, disconnectDurs)
                 RM.Mode.SUSPENDED_BY_PUMP -> null
                 RM.Mode.SUSPENDED_BY_USER -> AvailableLoopState(AvailableLoopState.LoopState.LOOP_USER_SUSPEND, listOf(1, 2, 3, 10).map { it * 60 })
+                RM.Mode.SUSPENDED_BY_DST  -> null
                 RM.Mode.RESUME            -> AvailableLoopState(AvailableLoopState.LoopState.LOOP_RESUME)
             }
 

@@ -7,10 +7,10 @@ import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.profile.Profile
+import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.TemporaryBasalStorage
 import app.aaps.core.interfaces.resources.ResourceHelper
-import app.aaps.core.interfaces.rx.events.EventOverviewBolusProgress
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.pump.medtrum.code.ConnectionState
@@ -257,7 +257,6 @@ class MedtrumPump @Inject constructor(
             preferences.put(MedtrumDoubleNonKey.BolusAmountToBeDelivered, value)
         }
 
-    var bolusingTreatment: EventOverviewBolusProgress.Treatment? = null // actually delivered treatment
     var bolusProgressLastTimeStamp: Long = 0 // timestamp of last bolus progress message
     var bolusStopped = false // bolus stopped by user
     var bolusDone = true // Bolus completed or stopped on pump, initialize as true as to don't show bolus on init
@@ -405,7 +404,7 @@ class MedtrumPump @Inject constructor(
         aapsLogger.debug(LTag.PUMP, "handleBolusStatusUpdate: bolusType: $bolusType bolusCompleted: $bolusCompleted amountDelivered: $amountDelivered")
         bolusProgressLastTimeStamp = dateUtil.now()
         _bolusAmountDelivered.value = amountDelivered
-        bolusingTreatment?.insulin = amountDelivered
+        BolusProgressData.delivered = amountDelivered
         bolusDone = bolusCompleted
     }
 

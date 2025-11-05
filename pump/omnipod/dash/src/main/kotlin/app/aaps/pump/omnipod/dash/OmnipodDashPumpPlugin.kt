@@ -1,7 +1,6 @@
 package app.aaps.pump.omnipod.dash
 
 import android.content.Context
-import android.text.format.DateFormat
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
@@ -25,8 +24,6 @@ import app.aaps.core.interfaces.pump.Pump
 import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.pump.PumpPluginBase
 import app.aaps.core.interfaces.pump.PumpSync
-import app.aaps.core.interfaces.pump.actions.CustomAction
-import app.aaps.core.interfaces.pump.actions.CustomActionType
 import app.aaps.core.interfaces.pump.defs.fillFor
 import app.aaps.core.interfaces.queue.Command
 import app.aaps.core.interfaces.queue.CommandQueue
@@ -41,8 +38,6 @@ import app.aaps.core.interfaces.rx.events.EventProfileSwitchChanged
 import app.aaps.core.interfaces.rx.events.EventRefreshOverview
 import app.aaps.core.interfaces.rx.events.EventTempBasalChange
 import app.aaps.core.interfaces.ui.UiInteraction
-import app.aaps.core.interfaces.utils.DateUtil
-import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.Round
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.interfaces.Preferences
@@ -88,10 +83,8 @@ import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
-import org.json.JSONObject
 import java.time.Duration
 import java.time.ZonedDateTime
-import java.util.Date
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -113,9 +106,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
     private val rxBus: RxBus,
     private val aapsSchedulers: AapsSchedulers,
     private val fabricPrivacy: FabricPrivacy,
-    private val dateUtil: DateUtil,
     private val uiInteraction: UiInteraction,
-    private val decimalFormatter: DecimalFormatter,
     private val pumpEnactResultProvider: Provider<PumpEnactResult>,
     private val ch: ConcentrationHelper,
     private val dashHistoryDatabase: DashHistoryDatabase
@@ -589,10 +580,9 @@ class OmnipodDashPumpPlugin @Inject constructor(
         return equal
     }
 
-    override fun lastDataTime(): Long {
-        return podStateManager.lastUpdatedSystem
-    }
-
+    override val lastBolusTime: Long? get() = podStateManager.lastBolus?.startTime
+    override val lastBolusAmount: Double? get() = podStateManager.lastBolus?.requestedUnits
+    override val lastDataTime: Long get() = podStateManager.lastUpdatedSystem
     override val baseBasalRate: Double
         get() {
             val date = System.currentTimeMillis()
@@ -644,7 +634,6 @@ class OmnipodDashPumpPlugin @Inject constructor(
                     .comment(rh.gs(R.string.omnipod_dash_bolus_already_in_progress))
             }
 
-            EventOverviewBolusProgress.t = EventOverviewBolusProgress.Treatment(detailedBolusInfo.insulin, 0, detailedBolusInfo.bolusType == BS.Type.SMB, detailedBolusInfo.id)
             var deliveredBolusAmount = 0.0
 
             val beepsConfigurationKey = if (detailedBolusInfo.bolusType == BS.Type.SMB)
@@ -728,10 +717,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
     }
 
     private fun updateBolusProgressDialog(msg: String, percent: Int) {
-        val progressUpdateEvent = EventOverviewBolusProgress
-        progressUpdateEvent.status = msg
-        progressUpdateEvent.percent = percent
-        rxBus.send(progressUpdateEvent)
+        rxBus.send(EventOverviewBolusProgress(status = msg, percent = percent))
     }
 
     private fun waitForBolusDeliveryToComplete(
@@ -769,7 +755,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
             }
             val percent = (waited.toFloat() / estimatedDeliveryTimeSeconds) * 100
             updateBolusProgressDialog(
-                ch.bolusProgress(Round.roundTo(percent * requestedBolusAmount / 100, PodConstants.POD_PULSE_BOLUS_UNITS), requestedBolusAmount),
+                rh.gs(app.aaps.core.interfaces.R.string.bolus_delivering, Round.roundTo(percent * requestedBolusAmount / 100, PodConstants.POD_PULSE_BOLUS_UNITS)),
                 percent.toInt()
             )
         }
@@ -800,7 +786,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
                 val remainingUnits = podStateManager.lastBolus!!.bolusUnitsRemaining
                 val percent = ((requestedBolusAmount - remainingUnits) / requestedBolusAmount) * 100
                 updateBolusProgressDialog(
-                    ch.bolusProgress(Round.roundTo(requestedBolusAmount - remainingUnits, PodConstants.POD_PULSE_BOLUS_UNITS), requestedBolusAmount),
+                    rh.gs(app.aaps.core.interfaces.R.string.bolus_delivering, Round.roundTo(requestedBolusAmount - remainingUnits, PodConstants.POD_PULSE_BOLUS_UNITS)),
                     percent.toInt()
                 )
 
@@ -1042,118 +1028,17 @@ class OmnipodDashPumpPlugin @Inject constructor(
             .comment("Omnipod Dash driver does not support extended boluses")
     }
 
-    override fun getJSONStatus(profile: Profile, profileName: String, version: String): JSONObject {
-        val now = System.currentTimeMillis()
-        if (podStateManager.lastUpdatedSystem + 60 * 60 * 1000L < now) {
-            return JSONObject()
-        }
-        val pumpJson = JSONObject()
-        val status = JSONObject()
-        val extended = JSONObject()
-        try {
-            val podStatus = when {
-                podStateManager.isPodRunning && podStateManager.isSuspended -> rh.gs(app.aaps.pump.omnipod.common.R.string.omnipod_common_pod_status_suspended).lowercase()
-                podStateManager.isPodRunning                                -> rh.gs(app.aaps.pump.omnipod.common.R.string.omnipod_common_pod_status_normal).lowercase()
-                else                                                        -> rh.gs(app.aaps.pump.omnipod.common.R.string.omnipod_common_pod_status_no_active_pod)
-                    .lowercase()
-            }
-            status.put("status", podStatus)
-            status.put("timestamp", dateUtil.toISOString(podStateManager.lastUpdatedSystem))
-
-            extended.put("Version", version)
-            try {
-                extended.put("ActiveProfile", profileName)
-            } catch (_: Exception) {
-            }
-            val tb = pumpSync.expectedPumpState().temporaryBasal
-            tb?.run {
-                extended.put("TempBasalAbsoluteRate", this.convertedToAbsolute(now, profile))
-                extended.put("TempBasalStart", dateUtil.dateAndTimeString(this.timestamp))
-                extended.put("TempBasalRemaining", this.plannedRemainingMinutes)
-            }
-            podStateManager.lastBolus?.run {
-                extended.put("LastBolus", dateUtil.dateAndTimeString(this.startTime))
-                extended.put("LastBolusAmount", this.deliveredUnits() ?: this.requestedUnits)
-            }
-            extended.put("BaseBasalRate", baseBasalRate)
-
-            pumpJson.put("status", status)
-            pumpJson.put("extended", extended)
-            if (podStateManager.pulsesRemaining == null) {
-                pumpJson.put("reservoir_display_override", "50+")
-            }
-            pumpJson.put("reservoir", reservoirLevel.toInt())
-            pumpJson.put("clock", dateUtil.toISOString(now))
-        } catch (e: Exception) {
-            aapsLogger.error(LTag.PUMP, "Unhandled exception: $e")
-        }
-        return pumpJson
-    }
-
     override val pumpDescription: PumpDescription = Companion.pumpDescription
+    override fun manufacturer(): ManufacturerType = ManufacturerType.Insulet
+    override fun model(): PumpType = pumpDescription.pumpType
+    override fun serialNumber(): String = podStateManager.uniqueId?.toString() ?: Constants.PUMP_SERIAL_FOR_FAKE_TBR
+    override val isFakingTempsByExtendedBoluses: Boolean = false
 
-    override fun manufacturer(): ManufacturerType {
-        return ManufacturerType.Insulet
-    }
-
-    override fun model(): PumpType {
-        return pumpDescription.pumpType
-    }
-
-    override fun serialNumber(): String =
-        podStateManager.uniqueId?.toString() ?: Constants.PUMP_SERIAL_FOR_FAKE_TBR
-
-    override fun shortStatus(veryShort: Boolean): String {
-        if (!podStateManager.isActivationCompleted) {
-            return rh.gs(app.aaps.pump.omnipod.common.R.string.omnipod_common_short_status_no_active_pod)
-        }
-        var ret = ""
-        if (podStateManager.lastUpdatedSystem != 0L) {
-            val agoMsec: Long = System.currentTimeMillis() - podStateManager.lastUpdatedSystem
-            val agoMin = (agoMsec / 60.0 / 1000.0).toInt()
-            ret += rh.gs(app.aaps.pump.omnipod.common.R.string.omnipod_common_short_status_last_connection, agoMin) + "\n"
-        }
-        podStateManager.lastBolus?.run {
-            ret += rh.gs(
-                app.aaps.pump.omnipod.common.R.string.omnipod_common_short_status_last_bolus, decimalFormatter.to2Decimal(this.deliveredUnits() ?: this.requestedUnits),
-                DateFormat.format("HH:mm", Date(this.startTime))
-            ) + "\n"
-        }
-        val temporaryBasal = pumpSync.expectedPumpState().temporaryBasal
-        temporaryBasal?.run {
-            ret += rh.gs(
-                app.aaps.pump.omnipod.common.R.string.omnipod_common_short_status_temp_basal,
-                this.toStringFull(dateUtil, rh)
-            ) + "\n"
-        }
-        ret += rh.gs(
-            app.aaps.pump.omnipod.common.R.string.omnipod_common_short_status_reservoir,
-            podStateManager.pulsesRemaining?.let { decimalFormatter.to0Decimal(reservoirLevel) } ?: "50+"
-        )
-        return ret.trim()
-    }
-
-    override val isFakingTempsByExtendedBoluses: Boolean
-        get() = false
-
-    override fun loadTDDs(): PumpEnactResult {
-        // TODO i18n
-        return pumpEnactResultProvider.get().success(false).enacted(false)
+    override fun loadTDDs(): PumpEnactResult =
+        pumpEnactResultProvider.get().success(false).enacted(false)
             .comment("Omnipod Dash driver does not support TDD")
-    }
 
-    override fun canHandleDST(): Boolean {
-        return false
-    }
-
-    override fun getCustomActions(): List<CustomAction> {
-        return emptyList()
-    }
-
-    override fun executeCustomAction(customActionType: CustomActionType) {
-        aapsLogger.warn(LTag.PUMP, "Unsupported custom action: $customActionType")
-    }
-
+    override fun canHandleDST(): Boolean = false
     override fun executeCustomCommand(customCommand: CustomCommand): PumpEnactResult {
         return when (customCommand) {
             is CommandSilenceAlerts            ->
@@ -1614,8 +1499,8 @@ class OmnipodDashPumpPlugin @Inject constructor(
             return@defer observeNoActiveTempBasal()
                 .concatWith(
                     podStateManager.updateActiveCommand()
-                                .map { handleCommandConfirmation(it) }
-                                .ignoreElement())
+                        .map { handleCommandConfirmation(it) }
+                        .ignoreElement())
         }
 
         return@defer Completable.complete()

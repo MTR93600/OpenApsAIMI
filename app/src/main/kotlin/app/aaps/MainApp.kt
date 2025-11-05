@@ -72,6 +72,7 @@ import app.aaps.receivers.KeepAliveWorker
 import app.aaps.receivers.TimeDateOrTZChangeReceiver
 import app.aaps.ui.activityMonitor.ActivityMonitor
 import app.aaps.ui.widget.Widget
+import app.aaps.utils.configureLeakCanary
 import com.google.firebase.FirebaseApp
 import com.google.firebase.Firebase
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
@@ -135,6 +136,7 @@ class MainApp : DaggerApplication(), ComposeUiProvider {
         copyModelToInternalStorage(this)
         aapsLogger.debug("onCreate - après copyModelToFileSystem")
         ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleListener.get())
+        if (config.disableLeakCanary())  configureLeakCanary(false)
 
         // Do necessary migrations
         doMigrations()
@@ -165,6 +167,7 @@ class MainApp : DaggerApplication(), ComposeUiProvider {
         aapsLogger.debug("Version: " + config.VERSION_NAME)
         aapsLogger.debug("BuildVersion: " + config.BUILD_VERSION)
         aapsLogger.debug("Remote: " + config.REMOTE)
+        aapsLogger.debug("Phone: " + Build.MANUFACTURER + " " + Build.MODEL)
         registerLocalBroadcastReceiver()
         setupRemoteConfig()
 

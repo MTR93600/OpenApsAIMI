@@ -51,6 +51,7 @@ data class RM(
         DISCONNECTED_PUMP,
         SUSPENDED_BY_PUMP,
         SUSPENDED_BY_USER,
+        SUSPENDED_BY_DST,
 
         /**
          * Not a real mode but only option to cancel temporary mode
@@ -61,9 +62,9 @@ data class RM(
 
         fun isClosedLoopOrLgs() = this == CLOSED_LOOP || this == CLOSED_LOOP_LGS
         fun isLoopRunning() = this == OPEN_LOOP || this == CLOSED_LOOP || this == CLOSED_LOOP_LGS
-        fun isSuspended() = this == DISCONNECTED_PUMP || this == SUSPENDED_BY_PUMP || this == SUSPENDED_BY_USER || this == SUPER_BOLUS
+        fun isSuspended() = this == DISCONNECTED_PUMP || this == SUSPENDED_BY_PUMP || this == SUSPENDED_BY_USER || this == SUSPENDED_BY_DST || this == SUPER_BOLUS
         // DISABLED_LOOP is added to "mustBeTemporary" to be properly rendered in NS
-        fun mustBeTemporary() = this == DISCONNECTED_PUMP || this == SUSPENDED_BY_PUMP || this == SUSPENDED_BY_USER || this == SUPER_BOLUS || this == DISABLED_LOOP
+        fun mustBeTemporary() = this == DISCONNECTED_PUMP || this == SUSPENDED_BY_PUMP || this == SUSPENDED_BY_USER || this == SUSPENDED_BY_DST || this == SUPER_BOLUS || this == DISABLED_LOOP
 
         companion object {
 

@@ -4,7 +4,6 @@
     <string name="equil_pump_description">Pump Patch Equil 5.3 trở lên </string>
     <!--  start  -->
     <string name="equil_basal_speed">Base basal</string>
-    <string name="equil_bolus_delivered">Đã bơm %1$.3f U / %2$.3f U</string>
     <string name="equil_btn_cancel">Hủy</string>
     <string name="equil_btn_need">Cần</string>
     <string name="equil_btn_skip">Bỏ qua</string>

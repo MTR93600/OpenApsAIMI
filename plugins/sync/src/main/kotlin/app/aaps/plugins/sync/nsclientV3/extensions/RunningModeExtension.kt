@@ -48,6 +48,7 @@ fun RM.toNSOfflineEvent(): NSOfflineEvent =
         RM.Mode.SUPER_BOLUS,
         RM.Mode.DISCONNECTED_PUMP,
         RM.Mode.SUSPENDED_BY_PUMP,
+        RM.Mode.SUSPENDED_BY_DST,
         RM.Mode.SUSPENDED_BY_USER ->
             NSOfflineEvent(
                 eventType = EventType.APS_OFFLINE,

@@ -17,7 +17,7 @@
     <!--     Activities-->
     <string name="activity_monitor">活動監視器</string>
     <string name="do_you_want_reset_stats">您要重置活動統計嗎？</string>
-    <string name="do_you_want_recalculate_tdd_stats">您要重新計算 TDD 統計嗎？</string>
+    <string name="do_you_want_recalculate_tdd_stats">您要重新計算每日總劑量統計嗎？</string>
     <string name="statistics">統計資料</string>
     <string name="calculation_in_progress">計算中</string>
     <string name="invalid_age">年齡輸入無效</string>
