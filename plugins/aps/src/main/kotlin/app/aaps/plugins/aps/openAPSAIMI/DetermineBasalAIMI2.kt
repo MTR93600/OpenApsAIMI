@@ -3464,9 +3464,8 @@ fun appendCompactLog(
         this.variableSensitivity = sens.toFloat()
         if (fusedSensitivity != null) {
             consoleError.add(
-                "ISF fusionné=${"%.1f".format(fusedSensitivity)} dynISF=${"%.1f".format(dynSensitivity)} → appliqué=${"%.1f".format(sens)}"
-            )
-        }
+              //"ISF fusionné=${"%.1f".format(fusedSensitivity)} dynISF=${"%.1f".format(dynSensitivity)} → appliqué=${"%.1f".format(sens)}"
+              context.getString(R.string.console_fused_sensitivity,fusedSensitivity,dynSensitivity,sens))}
         consoleError.add("CR:${profile.carb_ratio}")
         this.predictedBg = predictEventualBG(bg.toFloat(), iob, variableSensitivity, minDelta.toFloat(), shortAvgDelta, longAvgDelta, mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime, snackTime, honeymoon)
         //val insulinEffect = calculateInsulinEffect(bg.toFloat(),iob,variableSensitivity,cob,normalBgThreshold,recentSteps180Minutes,averageBeatsPerMinute.toFloat(),averageBeatsPerMinute10.toFloat(),profile.insulinDivisor.toFloat())
@@ -3952,10 +3951,19 @@ fun appendCompactLog(
         val quantized = kotlin.math.ceil(smbAfterDamping / INSULIN_STEP.toDouble()) * INSULIN_STEP.toDouble()
 
 // ---- LOGS ----
+        val diaMin = pkpd?.params?.diaHrs?.let { it * 60.0 } ?: Double.NaN
+        val diaText = if (diaMin < 60.0) "%.0f min".format(diaMin) else "%.1f h".format(diaMin / 60.0)
+
+        val peakMin = pkpd?.params?.peakMin ?: Double.NaN
+        val peakText = if (peakMin < 60.0) "%.0f min".format(peakMin) else "%.1f h".format(peakMin / 60.0)
+
         rT.reason.append(
-            "\nPKPD: DIA=%.0f min, Peak=%.0f min, Tail=%.0f%%, ISF(fused)=%.0f (profile=%.0f, TDD=%.0f, scale=%.2f)".format(
-                pkpd?.params?.diaHrs?.let { it * 60.0 } ?: Double.NaN,
-                pkpd?.params?.peakMin ?: Double.NaN,
+          //"\nPKPD: DIA=%.0f min, Peak=%.0f min, Tail=%.0f%%, ISF(fused)=%.0f (profile=%.0f, TDD=%.0f, scale=%.2f)".format(
+                context.getString(R.string.console_pkpd_log,
+              //pkpd?.params?.diaHrs?.let { it * 60.0 } ?: Double.NaN,
+              //pkpd?.params?.peakMin ?: Double.NaN,
+   diaText,
+                peakText,
                 (pkpd?.tailFraction ?: 0.0) * 100.0,
                 pkpd?.fusedIsf ?: Double.NaN,
                 pkpd?.profileIsf ?: Double.NaN,
@@ -3965,14 +3973,18 @@ fun appendCompactLog(
         )
 
         rT.reason.append(
-            "\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s".format(
+          //"\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s".format(
+                context.getString(R.string.console_smb_log,
                 smbDecision,
                 smbAfterDamping,
                 if (dmp?.tailApplied == true) "✔" else "✘", dmp?.tailMult ?: 1.0,
                 if (dmp?.exerciseApplied == true) "✔" else "✘", dmp?.exerciseMult ?: 1.0,
                 if (dmp?.lateFatApplied == true) "✔" else "✘", dmp?.lateFatMult ?: 1.0,
                 quantized,
-                if (highBgOverride) " (HighBG override)" else ""
+                if (highBgOverride)
+                  //" (HighBG override)"
+                    context.getString(R.string.console_high_bg_override)
+                else ""
             )
         )
         logDataMLToCsv(predictedSMB, smbToGive)
