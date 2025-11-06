@@ -124,7 +124,7 @@ class LoopPlugin @Inject constructor(
     private val pumpEnactResultProvider: Provider<PumpEnactResult>,
     private val processedDeviceStatusData: ProcessedDeviceStatusData,
     private val ch: ConcentrationHelper,
-    private val glucoseStatusCalculatorAimi: GlucoseStatusCalculatorAimi
+    private val glucoseStatusCalculatorAimi: GlucoseStatusCalculatorAimi,
     private val pumpStatusProvider: PumpStatusProvider
 ) : PluginBase(
     PluginDescription()
