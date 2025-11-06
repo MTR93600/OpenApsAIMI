@@ -16,4 +16,5 @@
     <string name="day_tir">Время в целевом диапазоне днем</string>
     <string name="night_tir">Время в целевом диапазоне ночью</string>
     <string name="carbs_short" comment="max 6 characters">Угли</string>
+    <!--    PumpStatusGenerator-->
 </resources>

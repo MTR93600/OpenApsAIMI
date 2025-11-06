@@ -7,7 +7,7 @@ import app.aaps.pump.equil.database.EquilHistoryRecord
 import app.aaps.pump.equil.manager.EquilManager
 import app.aaps.pump.equil.manager.Utils
 
-class CmdModelGet(
+class CmdRunningModeGet(
     aapsLogger: AAPSLogger,
     preferences: Preferences,
     equilManager: EquilManager
@@ -31,9 +31,9 @@ class CmdModelGet(
 
     override fun decodeConfirmData(data: ByteArray) {
         val mode = data[6].toInt() and 0xff
-        aapsLogger.debug(LTag.PUMPCOMM, "CmdGetModel====$mode")
-        equilManager.setModel(mode)
-        cmdStatus = true
+        aapsLogger.debug(LTag.PUMPCOMM, "CmdRunningModeGet====$mode")
+        equilManager.setRunMode(mode)
+        cmdSuccess = true
         synchronized(this) {
             (this as Object).notify()
         }

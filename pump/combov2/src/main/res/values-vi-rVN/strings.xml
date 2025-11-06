@@ -103,15 +103,7 @@ Nếu sau khoảng 5 phút vẫn chưa thiết lập được kết nối:\n\n
     <string name="combov2_unpair_pump_summary">Hủy ghép nối AndroidAPS và Android khỏi bơm Accu-Chek Combo đã ghép nối</string>
     <string name="combov2_unknown_tbr_detected">Phát hiện TBR không xác định và đã dừng; phần trăm: %1$d%%; thời gian còn lại: %2$s</string>
     <string name="combov2_connection_error">Lỗi kết nối: %1$s</string>
-    <string name="combov2_short_status_last_connection">Kết nối gần nhất: cách đây %1$d phút</string>
     <string name="combov2_short_status_alert">Cảnh báo: %s</string>
-    <string name="combov2_short_status_last_bolus">Liều bolus cuối: %1$s U lúc %2$s</string>
-    <string name="combov2_short_status_temp_basal">Temp: %s</string>
-    <string name="combov2_short_status_reservoir">Bình chứa: %dU</string>
-    <string name="combov2_short_status_battery_state_empty">trống rỗng</string>
-    <string name="combov2_short_status_battery_state_low">thấp</string>
-    <string name="combov2_short_status_battery_state_full">đầy đủ</string>
-    <string name="combov2_short_status_battery_state">Pin: %s</string>
     <string name="combov2_automatic_reservoir_entry">Tự động phát hiện và nhập thay đổi bình chứa insulin</string>
     <string name="combov2_automatic_battery_entry">Tự động phát hiện và nhập thay pin</string>
     <string name="combov2_timezone_changed">Múi giờ đã thay đổi</string>

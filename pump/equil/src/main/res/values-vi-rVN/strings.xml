@@ -122,11 +122,6 @@
     <string name="equil_history_item16">Hết Pin!</string>
     <string name="equil_history_item17">Đặt lại khi bật nguồn</string>
     <string name="equil_history_item18">Đã dừng lại do dây truyền bất thường</string>
-    <string name="equil_common_short_status_last_connection">LastConn: %1$d phút trước</string>
-    <string name="equil_common_short_status_last_bolus">LastBolus: %1$s @ %2$s</string>
-    <string name="equil_common_short_status_temp_basal">Temp: %1$s</string>
-    <string name="equil_common_short_status_extended_bolus">Extended: %1$s</string>
-    <string name="equil_common_short_status_reservoir">Reservoir: %1$sU</string>
     <string name="equil_common_overview_button_suspend_delivery">Tạm dừng</string>
     <string name="equil_common_overview_button_resume_delivery">Tiếp tục bơm insulin</string>
     <string name="equil_common_overview_temp_basal_value">%1$.2fU/h @%2$s (%3$d/%4$d min)</string>

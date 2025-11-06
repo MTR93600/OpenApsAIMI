@@ -36,7 +36,7 @@ class CmdResistanceGet(
 
     override fun decodeConfirmData(data: ByteArray) {
         val value = Utils.bytesToInt(data[7], data[6])
-        cmdStatus = true
+        cmdSuccess = true
         enacted = value >= 500
         synchronized(this) {
             (this as Object).notify()

@@ -9,9 +9,7 @@ import app.aaps.pump.equil.manager.EquilCmdModel
 import app.aaps.pump.equil.manager.EquilManager
 import app.aaps.pump.equil.manager.EquilResponse
 import app.aaps.pump.equil.manager.Utils
-import java.lang.Exception
 import java.nio.ByteBuffer
-import java.util.ArrayList
 import java.util.Locale
 
 class CmdDevicesOldGet(
@@ -129,7 +127,7 @@ class CmdDevicesOldGet(
         )
         reqModel.ciphertext = Utils.bytesToHex(getNextData())
         synchronized(this) {
-            cmdStatus = true
+            cmdSuccess = true
             (this as Object).notify()
         }
         return responseCmd(reqModel, "0000" + reqModel.code)
@@ -171,7 +169,7 @@ class CmdDevicesOldGet(
                 + (firmwareVersion < EquilConst.EQUIL_SUPPORT_LEVEL))
         )
         synchronized(this) {
-            cmdStatus = true
+            cmdSuccess = true
             (this as Object).notify()
         }
     }

@@ -9,7 +9,6 @@ import app.aaps.pump.equil.driver.definition.BasalSchedule
 import app.aaps.pump.equil.keys.EquilBooleanKey
 import app.aaps.pump.equil.manager.EquilManager
 import app.aaps.pump.equil.manager.Utils
-import java.util.ArrayList
 
 class CmdBasalSet(
     var basalSchedule: BasalSchedule,
@@ -56,7 +55,7 @@ class CmdBasalSet(
     override fun decodeConfirmData(data: ByteArray) {
         synchronized(this) {
             preferences.put(EquilBooleanKey.BasalSet, true)
-            cmdStatus = true
+            cmdSuccess = true
             (this as Object).notifyAll()
         }
     }

@@ -156,12 +156,6 @@
     <string name="omnipod_common_alert_shutdown_imminent">Nedlukning af Pod er nært forestående</string>
     <string name="omnipod_common_alert_low_reservoir">Lavt reservoir</string>
     <string name="omnipod_common_alert_unknown_alert">Ukendt Advarsel</string>
-    <!-- Omnipod - Short status -->
-    <string name="omnipod_common_short_status_no_active_pod">Ingen aktiv pod</string>
-    <string name="omnipod_common_short_status_last_connection">Seneste forb: %1$d min siden</string>
-    <string name="omnipod_common_short_status_temp_basal">Midl: %1$s</string>
-    <string name="omnipod_common_short_status_extended_bolus">Forlænget: %1$s</string>
-    <string name="omnipod_common_short_status_reservoir">Reservoir: %1$sIE</string>
     <!-- Omnipod - Other -->
     <string name="omnipod_common_yes">Ja</string>
     <string name="omnipod_common_no">Nej</string>

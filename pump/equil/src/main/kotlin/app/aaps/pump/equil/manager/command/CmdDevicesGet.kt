@@ -43,7 +43,7 @@ class CmdDevicesGet(
         )
         equilManager.setFirmwareVersion(firmwareVersion)
         synchronized(this) {
-            cmdStatus = true
+            cmdSuccess = true
             (this as Object).notify()
         }
     }

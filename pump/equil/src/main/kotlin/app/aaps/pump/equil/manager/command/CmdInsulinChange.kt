@@ -35,7 +35,7 @@ class CmdInsulinChange(
 //        byte[] byteData = Crc.hexStringToBytes(data);
         val status = data[6].toInt() and 0xff
         synchronized(this) {
-            cmdStatus = true
+            cmdSuccess = true
             (this as Object).notify()
         }
         equilManager.setInsulinChange(status)

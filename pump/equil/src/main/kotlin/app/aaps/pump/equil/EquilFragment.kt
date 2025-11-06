@@ -125,16 +125,13 @@ class EquilFragment : DaggerFragment() {
             binding.battery.text = equilManager.equilState?.battery.toString() + "%"
             binding.insulinReservoir.text = equilManager.equilState?.currentInsulin.toString()
             binding.basalSpeed.text = String.format(rh.gs(R.string.equil_unit_u_hours), equilPumpPlugin.baseBasalRate)
-            binding.firmwareVersion.text = equilManager.equilState?.firmwareVersion?.toString()
+            binding.firmwareVersion.text = equilManager.equilState?.firmwareVersion
             equilManager.equilState?.startInsulin?.let {
                 if (it == -1) {
                     binding.totalDelivered.text = "-"
                 } else {
                     val totalDelivered = it - (equilManager.equilState?.currentInsulin ?: 0)
-                    binding.totalDelivered.text = String.format(
-                        rh.gs(R.string.equil_unit_u),
-                        totalDelivered.toString()
-                    )
+                    binding.totalDelivered.text = rh.gs(R.string.equil_unit_u, totalDelivered.toString())
                 }
             }
 

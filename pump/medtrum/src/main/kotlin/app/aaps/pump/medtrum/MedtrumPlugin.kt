@@ -309,7 +309,7 @@ class MedtrumPlugin @Inject constructor(
         return result
     }
 
-    override val lastDataTime: Long = medtrumPump.lastConnection
+    override val lastDataTime: Long get() = medtrumPump.lastConnection
     override val lastBolusTime: Long? get() = medtrumPump.lastBolusTime
     override val lastBolusAmount: Double? get() = medtrumPump.lastBolusAmount
     override val baseBasalRate: Double get() = medtrumPump.baseBasalRate

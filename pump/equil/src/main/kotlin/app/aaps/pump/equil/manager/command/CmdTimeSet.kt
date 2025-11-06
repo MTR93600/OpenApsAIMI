@@ -51,7 +51,7 @@ class CmdTimeSet(
 
     override fun decodeConfirmData(data: ByteArray) {
         synchronized(this) {
-            cmdStatus = true
+            cmdSuccess = true
             (this as Object).notify()
         }
     }

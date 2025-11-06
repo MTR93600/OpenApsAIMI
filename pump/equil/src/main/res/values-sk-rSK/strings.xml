@@ -121,11 +121,6 @@
     <string name="equil_history_item16">Batéria vybitá!</string>
     <string name="equil_history_item17">Obnovenie napájania</string>
     <string name="equil_history_item18">Zastavené abnormálne podávanie izulínu</string>
-    <string name="equil_common_short_status_last_connection">Posledné spoj: pred %1$d min</string>
-    <string name="equil_common_short_status_last_bolus">Posledný bolus: %1$sJI @ %2$s</string>
-    <string name="equil_common_short_status_temp_basal">Doč. bazál: %1$s</string>
-    <string name="equil_common_short_status_extended_bolus">Predl. bolus: %1$s</string>
-    <string name="equil_common_short_status_reservoir">Zásobník: %1$sJI</string>
     <string name="equil_common_overview_button_suspend_delivery">Pozastaviť</string>
     <string name="equil_common_overview_button_resume_delivery">Obnoviť podávanie inzulínu</string>
     <string name="equil_common_overview_temp_basal_value">%1$.2fJI/h @%2$s (%3$d/%4$d minút)</string>

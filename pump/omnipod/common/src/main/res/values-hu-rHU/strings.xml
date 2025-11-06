@@ -23,7 +23,6 @@
     <string name="omnipod_common_cmd_set_tbr">Átmeneti bázis beállítása</string>
     <string name="omnipod_common_cmd_cancel_tbr">Átmeneti bázis törlése</string>
     <!-- Omnipod - Alerts -->
-    <!-- Omnipod - Short status -->
     <!-- Omnipod - Other -->
     <string name="omnipod_common_yes">Igen</string>
     <string name="omnipod_common_no">Nem</string>

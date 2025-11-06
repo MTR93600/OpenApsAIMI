@@ -37,7 +37,7 @@ class CmdStepSet(
 //        byte[] byteData = Crc.hexStringToBytes(data);
 //        int status = byteData[6] & 0xff;
         synchronized(this) {
-            cmdStatus = true
+            cmdSuccess = true
             (this as Object).notify()
         }
     }

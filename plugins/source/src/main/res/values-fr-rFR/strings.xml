@@ -5,6 +5,7 @@
     <string name="ns_client_bg_short">Gly NS</string>
     <string name="description_source_ns_client">Télécharge les glycémies depuis Nightscout</string>
     <string name="source_xdrip">xDrip+ Glycémie</string>
+    <string name="description_source_xdrip">Recevoir des valeurs de glycémie depuis xDrip+ et des applications compatibles (Juggluco etc.).</string>
     <string name="dexcom_app_patched">BYODA</string>
     <string name="dexcom_short">BYODA</string>
     <string name="description_source_dexcom">Recevoir les valeurs de glycémie de l’application Dexcom patchée (BYODA).</string>

@@ -7,7 +7,6 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.pump.equil.database.EquilHistoryRecord
 import app.aaps.pump.equil.manager.EquilManager
 import app.aaps.pump.equil.manager.Utils
-import java.lang.StringBuilder
 
 class CmdBasalGet(
     var profile: Profile,
@@ -46,7 +45,7 @@ class CmdBasalGet(
         val rspBasal = Utils.bytesToHex(rspByte)
         aapsLogger.debug(LTag.PUMPCOMM, "CmdBasalGet==$currentBasal====\n==$rspBasal")
         synchronized(this) {
-            cmdStatus = true
+            cmdSuccess = true
             enacted = currentBasal.toString() == rspBasal
             (this as Object).notify()
         }

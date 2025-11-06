@@ -38,7 +38,7 @@ class CmdInsulinGet(
         equilManager.setStartInsulin(insulin)
         equilManager.setCurrentInsulin(insulin)
         synchronized(this) {
-            cmdStatus = true
+            cmdSuccess = true
             (this as Object).notify()
         }
     }

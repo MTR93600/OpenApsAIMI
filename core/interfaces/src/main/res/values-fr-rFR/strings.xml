@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--    Events-->
+    <string name="bolus_delivering">Injection en cours %1$.2fU</string>
+    <string name="bolus_delivered_successfully">%1$.2fU de bolus injecté avec succès</string>
     <!-- PumpPluginBase -->
     <string name="pump_driver_changed" comment="26 characters max for translation">Pilote pompe changé.</string>
     <!--    DateUtil-->

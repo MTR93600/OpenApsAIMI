@@ -152,12 +152,6 @@
     <string name="omnipod_common_alert_shutdown_imminent">Спирането е неизбежно</string>
     <string name="omnipod_common_alert_low_reservoir">Минимален инсулин в резервоара</string>
     <string name="omnipod_common_alert_unknown_alert">Непозната аларма</string>
-    <!-- Omnipod - Short status -->
-    <string name="omnipod_common_short_status_no_active_pod">Няма активен под</string>
-    <string name="omnipod_common_short_status_last_connection">Последно свързване: преди %1$d минути</string>
-    <string name="omnipod_common_short_status_temp_basal">Врем базал: %1$s</string>
-    <string name="omnipod_common_short_status_extended_bolus">Удължен: %1$s</string>
-    <string name="omnipod_common_short_status_reservoir">Рез.: %1$sU</string>
     <!-- Omnipod - Other -->
     <string name="omnipod_common_yes">Да</string>
     <string name="omnipod_common_no">Не</string>

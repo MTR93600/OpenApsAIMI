@@ -158,12 +158,6 @@
     <string name="omnipod_common_alert_shutdown_imminent">Wyłączenie jest nieuchronne</string>
     <string name="omnipod_common_alert_low_reservoir">Niski poziom w zbiorniku</string>
     <string name="omnipod_common_alert_unknown_alert">Nieznany alarm</string>
-    <!-- Omnipod - Short status -->
-    <string name="omnipod_common_short_status_no_active_pod">Brak akt. Poda</string>
-    <string name="omnipod_common_short_status_last_connection">Ost.Poł.: %1$d m. temu</string>
-    <string name="omnipod_common_short_status_temp_basal">Tymcz.: %1$s</string>
-    <string name="omnipod_common_short_status_extended_bolus">Rozsz.: %1$s</string>
-    <string name="omnipod_common_short_status_reservoir">Zbior.: %1$sU</string>
     <!-- Omnipod - Other -->
     <string name="omnipod_common_yes">Tak</string>
     <string name="omnipod_common_no">Nie</string>

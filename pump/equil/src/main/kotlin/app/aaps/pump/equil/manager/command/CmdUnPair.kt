@@ -8,7 +8,6 @@ import app.aaps.pump.equil.manager.AESUtil
 import app.aaps.pump.equil.manager.EquilManager
 import app.aaps.pump.equil.manager.EquilResponse
 import app.aaps.pump.equil.manager.Utils
-import java.lang.Exception
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 
@@ -128,7 +127,7 @@ class CmdUnPair(
         //val equilCmdModel = decodeModel()
         //val content = AESUtil.decrypt(equilCmdModel, Utils.hexStringToBytes(runPwd))
         synchronized(this) {
-            cmdStatus = true
+            cmdSuccess = true
             (this as Object).notify()
         }
         return null

@@ -40,7 +40,7 @@ class CmdTempBasalGet(
         aapsLogger.debug(LTag.PUMPCOMM, "CmdTempBasalGet===$step====$time")
         //        Utils.by
         synchronized(this) {
-            cmdStatus = true
+            cmdSuccess = true
             (this as Object).notify()
         }
     }

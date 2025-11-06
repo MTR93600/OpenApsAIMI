@@ -121,11 +121,6 @@
     <string name="equil_history_item16">Батарея разряжена!</string>
     <string name="equil_history_item17">Сброс при включении</string>
     <string name="equil_history_item18">Аномалия инфузии остановлена</string>
-    <string name="equil_common_short_status_last_connection">Предыдущее соединение: %1$d мин. назад</string>
-    <string name="equil_common_short_status_last_bolus">Предыдущий болюс: %1$s @ %2$s</string>
-    <string name="equil_common_short_status_temp_basal">Временный базал %1$s</string>
-    <string name="equil_common_short_status_extended_bolus">Пролонгированный: %1$s</string>
-    <string name="equil_common_short_status_reservoir">Резервуар: %1$sед</string>
     <string name="equil_common_overview_button_suspend_delivery">Останов</string>
     <string name="equil_common_overview_button_resume_delivery">Возобновить ввод</string>
     <string name="equil_common_overview_temp_basal_value">%1$.2fед/ч @%2$s (%3$d/%4$d мин)</string>

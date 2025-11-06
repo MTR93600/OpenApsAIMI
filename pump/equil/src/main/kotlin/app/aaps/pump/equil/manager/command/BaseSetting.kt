@@ -8,7 +8,6 @@ import app.aaps.pump.equil.manager.EquilCmdModel
 import app.aaps.pump.equil.manager.EquilManager
 import app.aaps.pump.equil.manager.EquilResponse
 import app.aaps.pump.equil.manager.Utils
-import java.lang.Exception
 import java.nio.ByteBuffer
 
 abstract class BaseSetting(
@@ -38,7 +37,7 @@ abstract class BaseSetting(
             return responseCmd(equilCmdModel, DEFAULT_PORT + "0000")
         } catch (_: Exception) {
             synchronized(this) {
-                cmdStatus = false
+                cmdSuccess = false
             }
         }
         return null
@@ -116,7 +115,7 @@ abstract class BaseSetting(
         } catch (e: Exception) {
             aapsLogger.debug(LTag.PUMPCOMM, "getNextEquilResponse===" + e.message)
             synchronized(this) {
-                cmdStatus = false
+                cmdSuccess = false
             }
         }
         return null

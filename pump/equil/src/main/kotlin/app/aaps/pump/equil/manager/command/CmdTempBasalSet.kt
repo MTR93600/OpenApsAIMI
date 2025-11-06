@@ -48,7 +48,7 @@ class CmdTempBasalSet(
         // val index = data[4].toInt()
         // val status = data[6].toInt() and 0xff
         synchronized(this) {
-            cmdStatus = true
+            cmdSuccess = true
             (this as Object).notify()
         }
     }

@@ -8,7 +8,7 @@ enum class EquilStringKey(
     override val exportable: Boolean = true
 ) : StringNonPreferenceKey {
 
-    Devices("key_equil_devices", ""),
+    Device("key_equil_devices", ""),
     Password("key_equil_password", ""),
     PairPassword("key_equil_pair_password", ""),
     State("key_equil_state1", ""),

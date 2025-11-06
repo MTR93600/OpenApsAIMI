@@ -12,11 +12,9 @@ import app.aaps.pump.equil.manager.EquilCmdModel
 import app.aaps.pump.equil.manager.EquilManager
 import app.aaps.pump.equil.manager.EquilResponse
 import app.aaps.pump.equil.manager.Utils
-import java.lang.StringBuilder
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.nio.ByteBuffer
-import java.util.ArrayList
 import java.util.Locale
 
 abstract class BaseCmd(
@@ -33,7 +31,7 @@ abstract class BaseCmd(
     var port: String = "0404"
     var config: Boolean = false
     var isEnd: Boolean = false
-    var cmdStatus: Boolean = false
+    var cmdSuccess: Boolean = false
     var enacted = true
     var response: EquilResponse? = null
     var runPwd: String? = null
@@ -51,7 +49,7 @@ abstract class BaseCmd(
     override val statusDescription: String = this.javaClass.getSimpleName()
 
     fun checkData(data: ByteArray): Boolean {
-        response?.let { response ->
+        requireNotNull(response).let { response ->
             if (response.send.isNotEmpty()) {
                 val preData = response.send[response.send.size - 1].array()
                 val index = data[3].toInt() and 0xff
@@ -68,20 +66,12 @@ abstract class BaseCmd(
                 return false
             }
             return true
-        } ?: throw IllegalStateException()
+        }
     }
 
-    fun getEquilDevices(): String {
-        return preferences.get(EquilStringKey.Devices)
-    }
-
-    fun getEquilPassWord(): String {
-        return preferences.get(EquilStringKey.Password)
-    }
-
-    open fun isPairStep(): Boolean {
-        return false
-    }
+    fun getEquilDevices(): String = preferences.get(EquilStringKey.Device)
+    fun getEquilPassWord(): String = preferences.get(EquilStringKey.Password)
+    open fun isPairStep(): Boolean = false
 
     fun responseCmd(equilCmdModel: EquilCmdModel, port: String?): EquilResponse {
         val allData = StringBuilder()
@@ -94,7 +84,7 @@ abstract class BaseCmd(
         allByte = Utils.hexStringToBytes(allData.toString())
         var byteIndex = 0
         var lastLen = 0
-        var index: Int = if ((allByte.size - 8) % 10 == 0) 1
+        val index: Int = if ((allByte.size - 8) % 10 == 0) 1
         else 2
 
         val equilResponse = EquilResponse(createTime)
@@ -158,9 +148,9 @@ abstract class BaseCmd(
     }
 
     open fun decodeModel(): EquilCmdModel {
-        response?.let { response ->
+        requireNotNull(response).let { response ->
             val equilCmdModel = EquilCmdModel()
-            val list: MutableList<Byte?> = ArrayList<Byte?>()
+            val list: MutableList<Byte?> = ArrayList()
             var index = 0
             for (b in response.send) {
                 if (index == 0) {
@@ -183,7 +173,7 @@ abstract class BaseCmd(
             equilCmdModel.tag = Utils.bytesToHex(list1).lowercase(Locale.getDefault())
             equilCmdModel.ciphertext = Utils.bytesToHex(list3).lowercase(Locale.getDefault())
             return equilCmdModel
-        } ?: throw IllegalStateException()
+        }
     }
 
     // 清除指定位（设置为0）

@@ -151,12 +151,6 @@
     <string name="omnipod_common_alert_shutdown_imminent">종료가 임박했습니다.</string>
     <string name="omnipod_common_alert_low_reservoir">인슐린 부족</string>
     <string name="omnipod_common_alert_unknown_alert">알 수 없는 경고</string>
-    <!-- Omnipod - Short status -->
-    <string name="omnipod_common_short_status_no_active_pod">활성화된 Pod 없음</string>
-    <string name="omnipod_common_short_status_last_connection">마지막 연결: %1$d 분 전</string>
-    <string name="omnipod_common_short_status_temp_basal">임시: %1$s</string>
-    <string name="omnipod_common_short_status_extended_bolus">확장: %1$s</string>
-    <string name="omnipod_common_short_status_reservoir">잔여 인슐린 양: %1$s U</string>
     <!-- Omnipod - Other -->
     <string name="omnipod_common_yes">네</string>
     <string name="omnipod_common_no">아니오</string>

@@ -378,11 +378,8 @@ class EquilHistoryRecordActivity : TranslatedDaggerAppCompatActivity() {
                 val time2 = record.eventTimestamp
 
                 val format2 = dateFormat.format(time2)
-                val format3 = "%.3f".format(
-                    (abs(time - time2) / 1000.0)
-                        * Utils.decodeSpeedToUS(record.largeRate)
-                )
-                val t = (abs(time - time2) / 1000.0)
+                val format3 = "%.3f".format((abs(time - time2) / 1000.0) * Utils.decodeSpeedToUS(record.largeRate))
+                //val t = (abs(time - time2) / 1000.0)
 //                aapsLogger.debug(LTag.PUMPCOMM, "time===$t===$format3")
                 arrayList.add(ItemModel(format2, format3, ItemModel.TYPE_BOLUS, time2))
                 record = null
