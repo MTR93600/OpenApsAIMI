@@ -27,7 +27,7 @@ materialPullRefresh = "1.2.0"
 android-library = { id = "com.android.library" }
 klint = { id = "org.jlleitschuh.gradle.ktlint", version = "13.1.0" }
 moduleDependencyGraph = { id = "com.savvasdalkitsis.module-dependency-graph", version = "0.12" }
-ksp = { id = "com.google.devtools.ksp", version = "2.3.1" }
+ksp = { id = "com.google.devtools.ksp", version = "2.3.2" }
 android-test = { id = "com.android.test", version.ref = "gradlePlugin" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
