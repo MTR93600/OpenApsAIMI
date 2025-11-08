@@ -940,10 +940,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         title = rh.gs(R.string.oaps_aimi_pkpd_sections_title)
                     })
 
-                    // === SEZIONE DIA ===
                     addPreference(preferenceManager.createPreferenceScreen(context).apply {
                         key = "AIMI_PKPD_DIA"
                         title = rh.gs(R.string.oaps_aimi_pkpd_dia_section_title)
+
+                        addPreference(PreferenceCategory(context).apply {
+                            title = rh.gs(R.string.oaps_aimi_pkpd_dia_header_title)
+                        })
 
                         addPreference(
                             AdaptiveDoublePreference(
@@ -983,6 +986,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         key = "AIMI_PKPD_PEAK"
                         title = rh.gs(R.string.oaps_aimi_pkpd_peak_section_title)
 
+                        addPreference(PreferenceCategory(context).apply {
+                            title = rh.gs(R.string.oaps_aimi_pkpd_peak_header_title)
+                        })
+
                         addPreference(
                             AdaptiveDoublePreference(
                                 ctx = context,
@@ -1017,10 +1024,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         )
                     })
 
-                    // === SEZIONE ISF ===
                     addPreference(preferenceManager.createPreferenceScreen(context).apply {
                         key = "AIMI_PKPD_ISF"
                         title = rh.gs(R.string.oaps_aimi_pkpd_isf_section_title)
+
+                        addPreference(PreferenceCategory(context).apply {
+                            title = rh.gs(R.string.oaps_aimi_pkpd_isf_header_title)
+                        })
 
                         addPreference(
                             AdaptiveDoublePreference(
@@ -1051,6 +1061,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     addPreference(preferenceManager.createPreferenceScreen(context).apply {
                         key = "AIMI_PKPD_DAMPING"
                         title = rh.gs(R.string.oaps_aimi_pkpd_damping_section_title)
+
+                        addPreference(PreferenceCategory(context).apply {
+                            title = rh.gs(R.string.oaps_aimi_pkpd_damping_header_title)
+                        })
 
                         addPreference(
                             AdaptiveDoublePreference(
@@ -1086,7 +1100,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         )
                     })
                 })
-
 
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIEnableStepsFromWatch, title = R.string.countsteps_watch_title))
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsxdriponeminute, title = R.string.Enable_xdripOM_title))

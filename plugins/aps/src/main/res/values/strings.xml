@@ -307,6 +307,10 @@
     <string name="oaps_aimi_pkpd_peak_section_title">Insulin peak</string>
     <string name="oaps_aimi_pkpd_isf_section_title">ISF parameters</string>
     <string name="oaps_aimi_pkpd_damping_section_title">Damping</string>
+    <string name="oaps_aimi_pkpd_dia_header_title">DIA – PK/PD Settings</string>
+    <string name="oaps_aimi_pkpd_peak_header_title">Peak – PK/PD Settings</string>
+    <string name="oaps_aimi_pkpd_isf_header_title">ISF – PK/PD Settings</string>
+    <string name="oaps_aimi_pkpd_damping_header_title">Damping – PK/PD Settings</string>
     <string name="oaps_aimi_pkpd_enabled_summary">Learn DIA and peak time continuously to refine AIMI dosing.</string>
     <string name="oaps_aimi_pkpd_initial_dia_title">Initial DIA (h)</string>
     <string name="oaps_aimi_pkpd_initial_dia_summary">Starting duration of insulin action used when learning begins.</string>
