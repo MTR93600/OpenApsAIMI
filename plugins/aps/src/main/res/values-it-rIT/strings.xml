@@ -244,7 +244,7 @@
 
     <string name="openapsaimi">"AIMI 3.3"</string>
     <string name="openapsaimi_maxsmb_summary">Max SMB value quando BG è minore di 120</string>
-    <string name="openapsaimi_maxsmb_title">Max SMB LOW BG</string>
+    <string name="openapsaimi_maxsmb_title">Dimensione massima SMB (U)</string>
     <string name="description_openapsaimi">Piccoli micro-bolus basati su Intelligenza Artificiale e Apprendimento Automatico.</string>
     <string name="oaps_aimi_evening_factor_summary">% of Reactivity of the plugin between 6 pm and midnight</string>
     <string name="oaps_aimi_evening_factor_title">Reattività Sera 18:00&#8211;24:00</string>
@@ -253,7 +253,7 @@
     <string name="oaps_aimi_morning_factor_summary">Morning Reactivity Percentage between midnight and 11 am</string>
     <string name="oaps_aimi_afternoon_factor_summary">Afternoon reactivity percentage between 12pm and 6 pm</string>
     <string name="oaps_aimi_hyper_factor_summary"><![CDATA[Reattività quando  bg > 120]]></string>
-    <string name="oaps_aimi_hyper_factor_title"><![CDATA[Reattività BG > 120, per bambino BG > 180]]></string>
+    <string name="oaps_aimi_hyper_factor_title"><![CDATA[Reattività BG > 120 (bambino > 180)]]></string>
     <string name="DynISFAdjusthyper_summary"><![CDATA[Increasing this value will increase the velocity to send smb when bg > 120]]></string>
     <string name="DynISFAdjusthyper_title"><![CDATA[Dynisf Adjustment factor % BG > 120]]></string>
     <string name="prebolus_meal_mode_summary">If you set a note in action page, with the word meal, you will receive one time this value like a pre-bolus.</string>
@@ -360,9 +360,9 @@
     <string name="OApsAIMI_Force_Limits">Forza limiti moltiplicatori AAPS</string>
     <string name="OApsAIMI_Enable_honeymoon">Modalità Luna di miele / fabbisogno insulina ridotto / bambino</string>
     <string name="oaps_aimi_HIGHBG_interval_summary">High BG SMB Interval</string>
-    <string name="oaps_aimi_HIGHBG_interval_title">High BG SMB Interval</string>
+    <string name="oaps_aimi_HIGHBG_interval_title">Frequenza SMB (minuti)</string>
     <string name="openapsaimi_highBG_maxsmb_summary">Max SMB value quando BG è maggiore di 120</string>
-    <string name="openapsaimi_highBG_maxsmb_title">Max SMB High BG</string>
+    <string name="openapsaimi_highBG_maxsmb_title">Dimensione massima SMB (U)</string>
     <string name="OApsAIMI_Enable_night_title">Modalità notturna (smb/2)</string>
     <string name="prebolus_lunch_mode_summary">Prebolo 1 di 2 modalità Pranzo</string>
     <string name="prebolus2_lunch_mode_summary">Prebolo 2 di 2 modalità Pranzo</string>
@@ -1019,7 +1019,7 @@
 
     <string name="aimi_plateau_high_boost">Glicemia alta ma stabile ⇒ Intensificazione basale </string>
     <string name="aimi_plateau_prefs">Correzione glicemia alta ma stabile </string>
-    <string name="aimi_plateau_prefs_title_menu">Gestione glicemia alta ma stabile</string>
+    <string name="aimi_plateau_prefs_title_menu">Glicemia alta ma stabile - Impostazioni</string>
     <string name="aimi_plateau_kicker_prefs">Correzione glicemia stagnante</string>
     <string name="aimi_plateau_kicker_prefs_title_menu">Aumento temporaneo basale (correzione) - Impostazioni</string>
     <string name="aimi_plateau_reprise_prefs">Ripartenza da basale 0</string>
