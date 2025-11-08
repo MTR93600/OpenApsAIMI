@@ -57,7 +57,11 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
+import java.time.temporal.ChronoUnit
+import kotlin.math.ceil
 import kotlin.math.exp
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.SmbDampingAudit
+
 
 // 📝 Structure & helper pour partager la logique de relâchement du plafond IOB en mode repas.
 internal data class MealHighIobDecision(val relax: Boolean, val damping: Double)
@@ -220,7 +224,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         runCatching { LocalTime.parse(value, ngrTimeFormatter) }.getOrElse { fallback }
     private fun quantizeToPumpStep(u: Float, step: Float): Float {
         if (u <= 0f) return 0f
-        val q = (kotlin.math.ceil((u / step).toDouble()) * step).toFloat()
+        val q = (ceil((u / step).toDouble()) * step).toFloat()
         return if (q == 0f && u >= (0.6f * step)) step else q
     }
 
@@ -2596,7 +2600,7 @@ fun appendCompactLog(
 
     // --- Cycle féminin : phases et multiplicateurs ---
     private enum class CyclePhase { MENSTRUATION, FOLLICULAR, OVULATION, LUTEAL, UNKNOWN }
-    private inline fun Double.isUnity(eps: Double = 1e-6) = kotlin.math.abs(this - 1.0) < eps
+    private inline fun Double.isUnity(eps: Double = 1e-6) = abs(this - 1.0) < eps
     private data class WCycleInfo(
         val enabled: Boolean,
         val dayInCycle: Int,                 // 0..27
@@ -2652,7 +2656,7 @@ fun appendCompactLog(
             prev.withDayOfMonth(startDomPref.coerceAtMost(prev.lengthOfMonth()))
         }
 
-        val days = java.time.temporal.ChronoUnit.DAYS.between(cycleStart, nowDate).toInt()
+        val days = ChronoUnit.DAYS.between(cycleStart, nowDate).toInt()
         val dayInCycle = ((days % 28) + 28) % 28
 
         val pctMen = preferences.get(DoubleKey.OApsAIMIwcyclemenstruation)    // 1..30 (ex: 10) => appliqué en -pctMen% sur basal en menstruation
@@ -3921,13 +3925,31 @@ fun appendCompactLog(
         val exFlag = sportTime
         val lateFatFlag = lateFatRiseFlag
 
-        val dmp = pkpdRuntime?.dampSmbWithAudit(
+        val mealModeRun = (mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime)
+
+// heuristique hyper hors repas — ajuste si besoin
+        val highBgRiseActive =
+            (bg >= 150.0 && (delta >= 1.5 || combinedDelta >= 4.0)) &&
+                (iob < maxSMB) &&
+                !isBelowHypoThreshold(
+                    bgNow = bg,
+                    predicted = predictedBg.toDouble(),
+                    eventual = eventualBG,
+                    hypo = hypoGuard,
+                    delta = delta.toDouble()
+                )
+
+        val bypassDamping = mealModeRun || highBgRiseActive
+
+        val audit: SmbDampingAudit? = pkpdRuntime?.dampSmbWithAudit(
             smb = smbDecision.toDouble(),
             exercise = exFlag,
-            suspectedLateFatMeal = lateFatFlag
+            suspectedLateFatMeal = lateFatFlag,
+            bypassDamping = bypassDamping
         )
 
-        var smbAfterDamping: Double = dmp?.out ?: smbDecision.toDouble()
+        var smbAfterDamping: Double = audit?.out ?: smbDecision.toDouble()
+
 
 // ---- Override “haut BG sans risque d’hypo” (agressif mais safe) ----
         val highBgOverride =
@@ -3945,7 +3967,7 @@ fun appendCompactLog(
             this.intervalsmb = 0 // cadence agressive
             val stepD = INSULIN_STEP.toDouble()
             if (smbAfterDamping < stepD) smbAfterDamping = stepD
-            smbAfterDamping = kotlin.math.min(smbAfterDamping, maxSMB.toDouble())
+            smbAfterDamping = min(smbAfterDamping, maxSMB.toDouble())
             highBgOverrideUsed = true
         }
 
@@ -3954,7 +3976,7 @@ fun appendCompactLog(
         smbToGive = finalSmb
 
 // Pour le log info « quantized » (Double)
-        val quantized = kotlin.math.ceil(smbAfterDamping / INSULIN_STEP.toDouble()) * INSULIN_STEP.toDouble()
+        val quantized = ceil(smbAfterDamping / INSULIN_STEP.toDouble()) * INSULIN_STEP.toDouble()
 
 // ---- LOGS PKPD ----
         rT.reason.append(
@@ -3970,14 +3992,14 @@ fun appendCompactLog(
         )
 
 // ---- LOGS SMB détaillés (si audit dispo) ----
-        if (dmp != null) {
+        if (audit != null) {
             rT.reason.append(
                 "\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s".format(
                     smbDecision,
                     smbAfterDamping,
-                    if (dmp.tailApplied) "✔" else "✘", dmp.tailMult,
-                    if (dmp.exerciseApplied) "✔" else "✘", dmp.exerciseMult,
-                    if (dmp.lateFatApplied) "✔" else "✘", dmp.lateFatMult,
+                    if (audit.tailApplied) "✔" else "✘", audit.tailMult,
+                    if (audit.exerciseApplied) "✔" else "✘", audit.exerciseMult,
+                    if (audit.lateFatApplied) "✔" else "✘", audit.lateFatMult,
                     quantized,
                     if (highBgOverride) " (HighBG override)" else ""
                 )
@@ -3998,9 +4020,9 @@ fun appendCompactLog(
             val dateStr   = dateUtil.dateAndTimeString(currentTime)
             val epochMin  = TimeUnit.MILLISECONDS.toMinutes(currentTime)
 
-            val tailMultLog  = dmp?.tailMult
-            val exMultLog    = dmp?.exerciseMult
-            val lateMultLog  = dmp?.lateFatMult
+            val tailMultLog = audit?.tailMult
+            val exMultLog   = audit?.exerciseMult
+            val lateMultLog = audit?.lateFatMult
 
             PkPdCsvLogger.append(
                 PkPdLogRow(
@@ -4792,12 +4814,12 @@ rT.reason.appendLine(
             if (chosenRate == null) {
                 val isPlateauHigh =
                     bg > 180 &&
-                        kotlin.math.abs(delta) <= 2.0 &&
-                        kotlin.math.abs(shortAvgDelta) <= 2.0 &&
-                        kotlin.math.abs(longAvgDelta) <= 2.0 &&
+                        abs(delta) <= 2.0 &&
+                        abs(shortAvgDelta) <= 2.0 &&
+                        abs(longAvgDelta) <= 2.0 &&
                         // si tu as les features AIMI (optionnel, sinon enlève ces 2 lignes)
                         (glucoseStatus?.duraISFminutes ?: 0.0) >= 15.0 &&
-                        kotlin.math.abs(glucoseStatus?.bgAcceleration ?: 0.0) <= 0.2
+                        abs(glucoseStatus?.bgAcceleration ?: 0.0) <= 0.2
 
                 if (isPlateauHigh) {
                     // Erreur au-dessus du seuil 180
