@@ -286,7 +286,13 @@
     <string name="oaps_aimi_tdd7_summary">TDD media 7 giorni</string>
     <string name="oaps_aimi_tdd7_title">Insulina giornaliera media per 7 giorni (TDD 7 giorni)</string>
     <string name="oaps_aimi_pkpd_section_title">DIA e Picco azione insulina adattivi</string>
+    <string name="oaps_aimi_pkpd_overview_title">Panoramica PKPD</string>
+    <string name="oaps_aimi_pkpd_sections_title">Opzioni PKPD</string>
     <string name="oaps_aimi_pkpd_enabled_title">Abilita adaptive PK/PD</string>
+    <string name="oaps_aimi_pkpd_dia_section_title">DIA</string>
+    <string name="oaps_aimi_pkpd_peak_section_title">Picco insulina</string>
+    <string name="oaps_aimi_pkpd_isf_section_title">ISF</string>
+    <string name="oaps_aimi_pkpd_damping_section_title">Smorzamento</string>
     <string name="oaps_aimi_pkpd_enabled_summary">Calcola DIA e picco azione insulina continuamente per rifinire le dosi AIMI.</string>
     <string name="oaps_aimi_pkpd_initial_dia_title">DIA iniziale (hr)</string>
     <string name="oaps_aimi_pkpd_initial_dia_summary">Starting duration of insulin action used when learning begins.</string>

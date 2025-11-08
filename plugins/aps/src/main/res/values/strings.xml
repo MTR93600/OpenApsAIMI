@@ -300,7 +300,13 @@
     <string name="oaps_aimi_tdd7_summary">7-day average TDD</string>
     <string name="oaps_aimi_tdd7_title">TDD 7 days</string>
     <string name="oaps_aimi_pkpd_section_title">Adaptive PK/PD</string>
+    <string name="oaps_aimi_pkpd_overview_title">PKPD overview</string>
     <string name="oaps_aimi_pkpd_enabled_title">Enable adaptive PK/PD</string>
+    <string name="oaps_aimi_pkpd_sections_title">PKPD options</string>
+    <string name="oaps_aimi_pkpd_dia_section_title">DIA parameters</string>
+    <string name="oaps_aimi_pkpd_peak_section_title">Insulin peak</string>
+    <string name="oaps_aimi_pkpd_isf_section_title">ISF parameters</string>
+    <string name="oaps_aimi_pkpd_damping_section_title">Damping</string>
     <string name="oaps_aimi_pkpd_enabled_summary">Learn DIA and peak time continuously to refine AIMI dosing.</string>
     <string name="oaps_aimi_pkpd_initial_dia_title">Initial DIA (h)</string>
     <string name="oaps_aimi_pkpd_initial_dia_summary">Starting duration of insulin action used when learning begins.</string>
