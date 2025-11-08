@@ -1,3 +1,4 @@
+// SmbDamping.kt
 package app.aaps.plugins.aps.openAPSAIMI.pkpd
 
 data class TailAwareSmbPolicy(
@@ -14,19 +15,22 @@ data class SmbDampingAudit(
     val exerciseApplied: Boolean,
     val exerciseMult: Double,
     val lateFatApplied: Boolean,
-    val lateFatMult: Double
+    val lateFatMult: Double,
+    val mealBypass: Boolean
 )
 
 class SmbDamping(
     private val policy: TailAwareSmbPolicy = TailAwareSmbPolicy()
 ) {
-    // existe déjà – on la garde pour compat
+
     fun damp(
         smbU: Double,
         iobTailFrac: Double,
         exercise: Boolean,
-        suspectedLateFatMeal: Boolean
+        suspectedLateFatMeal: Boolean,
+        bypassDamping: Boolean = false
     ): Double {
+        if (bypassDamping) return smbU
         var out = smbU
         if (iobTailFrac > policy.tailIobHigh) out *= policy.smbDampingAtTail
         if (exercise) out *= policy.postExerciseDamping
@@ -34,13 +38,22 @@ class SmbDamping(
         return out
     }
 
-    // NEW – version auditée
     fun dampWithAudit(
         smbU: Double,
         iobTailFrac: Double,
         exercise: Boolean,
-        suspectedLateFatMeal: Boolean
+        suspectedLateFatMeal: Boolean,
+        bypassDamping: Boolean = false
     ): SmbDampingAudit {
+        if (bypassDamping) {
+            return SmbDampingAudit(
+                out = smbU,
+                tailApplied = false, tailMult = 1.0,
+                exerciseApplied = false, exerciseMult = 1.0,
+                lateFatApplied = false, lateFatMult = 1.0,
+                mealBypass = true // (optionnel: renommer en pkpdBypass si tu veux)
+            )
+        }
         var out = smbU
         val tailApplied = iobTailFrac > policy.tailIobHigh
         val tailMult = if (tailApplied) policy.smbDampingAtTail else 1.0
@@ -58,7 +71,8 @@ class SmbDamping(
             out = out,
             tailApplied = tailApplied, tailMult = tailMult,
             exerciseApplied = exerciseApplied, exerciseMult = exerciseMult,
-            lateFatApplied = lateApplied, lateFatMult = lateMult
+            lateFatApplied = lateApplied, lateFatMult = lateMult,
+            mealBypass = false
         )
     }
 }

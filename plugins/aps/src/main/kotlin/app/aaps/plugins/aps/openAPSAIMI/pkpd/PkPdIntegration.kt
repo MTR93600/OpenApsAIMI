@@ -170,13 +170,22 @@ class PkPdRuntime(
     val pkpdScale: Double,
     private val damping: SmbDamping
 ) {
-    fun dampSmb(smb: Double, exercise: Boolean, suspectedLateFatMeal: Boolean): Double =
-        damping.damp(smb, tailFraction, exercise, suspectedLateFatMeal)
 
-    // NEW
+    // ✅ API audit (garde)
     fun dampSmbWithAudit(
         smb: Double,
         exercise: Boolean,
-        suspectedLateFatMeal: Boolean
-    ): SmbDampingAudit = damping.dampWithAudit(smb, tailFraction, exercise, suspectedLateFatMeal)
+        suspectedLateFatMeal: Boolean,
+        bypassDamping: Boolean = false
+    ): SmbDampingAudit =
+        damping.dampWithAudit(smb, tailFraction, exercise, suspectedLateFatMeal, bypassDamping)
+
+    // ✅ API non-audit (garde) — utile si on veut le résultat sans traces
+    fun dampSmb(
+        smb: Double,
+        exercise: Boolean,
+        suspectedLateFatMeal: Boolean,
+        bypassDamping: Boolean = false
+    ): Double =
+        damping.damp(smb, tailFraction, exercise, suspectedLateFatMeal, bypassDamping)
 }

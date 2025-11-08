@@ -85,7 +85,10 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.math.floor
-
+import app.aaps.plugins.aps.openAPSAIMI.ISF.IsfBlender
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfFusion
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfFusionBounds
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
 
 @Singleton
 open class OpenAPSAIMIPlugin  @Inject constructor(
@@ -155,9 +158,22 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     override val algorithm = APSResult.Algorithm.AIMI
     override var lastAPSResult: APSResult? = null
     override fun supportsDynamicIsf(): Boolean = preferences.get(BooleanKey.ApsUseDynamicSensitivity)
-
+    private val pkpdIntegration = PkPdIntegration(preferences)
+    private var lastPkpdScale: Double = 1.0
     // Dans votre classe principale (ou plugin), vous pouvez déclarer :
     private val kalmanISFCalculator = KalmanISFCalculator(tddCalculator, preferences, aapsLogger)
+    // Fusion lente (TDD/profile) + rate-limit de blend
+    private val isfBlender = IsfBlender()
+
+    // Recrée les bornes de la fusion ISF depuis les préférences (mêmes clés que PkPdIntegration)
+    private fun isfFusion(): IsfFusion {
+        val bounds = IsfFusionBounds(
+            minFactor = preferences.get(DoubleKey.OApsAIMIIsfFusionMinFactor),
+            maxFactor = preferences.get(DoubleKey.OApsAIMIIsfFusionMaxFactor),
+            maxChangePer5Min = preferences.get(DoubleKey.OApsAIMIIsfFusionMaxChangePerTick)
+        )
+        return IsfFusion(bounds)
+    }
 
     @SuppressLint("DefaultLocale")
     override fun getIsfMgdl(profile: Profile, caller: String): Double? {
@@ -241,7 +257,21 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val weightedSum = deltaHistory.zip(weights).sumOf { it.first * it.second }
         return weightedSum / weights.sum()
     }
+    private fun estimateKalmanTrustFromDelta(delta: Double?): Double {
+        val d = kotlin.math.abs(delta ?: 0.0)
+        // 0..10 mg/dL/5min -> 0.1..0.9
+        return (d / 10.0).coerceIn(0.1, 0.9)
+    }
 
+    // ISF basé TDD (ancre 1800/TDD 24h) avec garde-fous
+    private fun tddIsf24hOr(profileIsf: Double): Double {
+        val tdd24 = tddCalculator
+            .averageTDD(tddCalculator.calculate(1, allowMissingDays = false))
+            ?.data?.totalAmount
+            ?: preferences.get(DoubleKey.OApsAIMITDD7) // fallback 7j
+        val anchored = if (tdd24 > 0.1) 1800.0 / tdd24 else profileIsf
+        return anchored.coerceIn(5.0, 400.0)
+    }
     private fun dynamicDeltaCorrectionFactor(delta: Double?, predicted: Double?, bg: Double?): Double {
         if (delta == null || predicted == null || bg == null) return 1.0
         val combinedDelta = (delta + predicted) / 2.0
@@ -303,25 +333,71 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             return Pair("DB", result.variableSens)
         }
 
+        // val glucose = bg ?: glucoseStatusProvider.glucoseStatusData?.glucose ?: return Pair("GLUC", null)
+        // val currentDelta = glucoseStatusProvider.glucoseStatusData?.delta
+        // val recentDeltas = getRecentDeltas()
+        // val predictedDelta = predictedDelta(recentDeltas)
+        // val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta, predictedDelta, bg)
+        // // Calcul adaptatif via filtre Kalman (la classe KalmanISFCalculator doit être instanciée préalablement)
+        // var adaptiveISF = kalmanISFCalculator.calculateISF(glucose, currentDelta, predictedDelta)
+        // aapsLogger.debug(LTag.APS, "Adaptive ISF computed via Kalman: $adaptiveISF for BG: $glucose")
+        // var sensitivity = adaptiveISF * dynamicFactor
+        // // Imposer une valeur minimale de 5 et maximale de 300
+        // sensitivity = sensitivity.coerceIn(5.0, 300.0)
+        // aapsLogger.debug(LTag.APS, "Final ISF after clamping: $sensitivity (min=5, max=300)")
+        //
+        // // Vous pouvez ensuite mettre en cache cette valeur si nécessaire
+        // val key = timestamp - timestamp % T.mins(30).msecs() + glucose.toLong()
+        // if (dynIsfCache.size() > 1000) dynIsfCache.clear()
+        // dynIsfCache.put(key, sensitivity)
+        //
+        // return Pair("CALC", sensitivity)
         val glucose = bg ?: glucoseStatusProvider.glucoseStatusData?.glucose ?: return Pair("GLUC", null)
         val currentDelta = glucoseStatusProvider.glucoseStatusData?.delta
         val recentDeltas = getRecentDeltas()
         val predictedDelta = predictedDelta(recentDeltas)
-        val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta, predictedDelta, bg)
-        // Calcul adaptatif via filtre Kalman (la classe KalmanISFCalculator doit être instanciée préalablement)
-        var adaptiveISF = kalmanISFCalculator.calculateISF(glucose, currentDelta, predictedDelta)
-        aapsLogger.debug(LTag.APS, "Adaptive ISF computed via Kalman: $adaptiveISF for BG: $glucose")
-        var sensitivity = adaptiveISF * dynamicFactor
-        // Imposer une valeur minimale de 5 et maximale de 300
-        sensitivity = sensitivity.coerceIn(5.0, 300.0)
-        aapsLogger.debug(LTag.APS, "Final ISF after clamping: $sensitivity (min=5, max=300)")
 
-        // Vous pouvez ensuite mettre en cache cette valeur si nécessaire
+// 1) Facteur historique (inchangé)
+        val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta, predictedDelta, bg)
+
+// 2) ISF rapide (Kalman) - inchangé
+        val kalmanFastIsf = kalmanISFCalculator.calculateISF(glucose, currentDelta, predictedDelta)
+        aapsLogger.debug(LTag.APS, "Adaptive ISF via Kalman: $kalmanFastIsf for BG: $glucose")
+
+// 3) ISF lent (TDD/profile) via IsfFusion (mêmes bornes que PK/PD)
+        val profileIsf = profileFunction.getProfile()?.getProfileIsfMgdl() ?: 20.0
+        val tddIsf = tddIsf24hOr(profileIsf)
+        val fusedSlowIsf = isfFusion().fused(profileIsf, tddIsf, lastPkpdScale)
+        aapsLogger.debug(LTag.APS, "Fused slow ISF (profile/TDD): $fusedSlowIsf (profile=$profileIsf, tddIsf=$tddIsf)")
+
+// 4) Confiance du "rapide" (faute de variance Kalman exposée ici)
+        val trustFast = estimateKalmanTrustFromDelta(currentDelta)
+
+// 5) Blend + rate-limit temporel (empêche les yoyos si tick fréquent)
+        var blended = isfBlender.blend(
+            fusedIsf = fusedSlowIsf,
+            kalmanIsf = kalmanFastIsf,
+            trustFast = trustFast,
+            nowMs = System.currentTimeMillis()
+        )
+
+// 6) Application de ton facteur dynamique + bornes (inchangé)
+        blended *= dynamicFactor
+        blended = blended.coerceIn(5.0, 300.0)
+
+        aapsLogger.debug(LTag.APS, "Final DynISF (blend+factor+clamp): $blended")
+        aapsLogger.debug(
+            LTag.APS,
+            "DynISF inputs: fusedSlowIsf=$fusedSlowIsf, kalmanFastIsf=$kalmanFastIsf, trustFast=$trustFast, pkpdScale=$lastPkpdScale"
+        )
+
+// 7) Cache (inchangé)
         val key = timestamp - timestamp % T.mins(30).msecs() + glucose.toLong()
         if (dynIsfCache.size() > 1000) dynIsfCache.clear()
-        dynIsfCache.put(key, sensitivity)
+        dynIsfCache.put(key, blended)
 
-        return Pair("CALC", sensitivity)
+        return Pair("CALC", blended)
+
     }
 
     override fun invoke(initiator: String, tempBasalFallback: Boolean) {
@@ -523,6 +599,37 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             sensorLagActivity = Round.roundTo(sensorLagActivity, 0.0001)
             historicActivity = Round.roundTo(historicActivity, 0.0001)
             currentActivity = Round.roundTo(currentActivity, 0.0001)
+            // === PK/PD: calcule un pkpdScale cohérent et le mémorise ===
+            // === PK/PD: calcule un pkpdScale cohérent et le mémorise (SANS dyn ISF) ===
+            val nowMs = dateUtil.now()
+
+// valeurs BG/delta déjà dispo dans invoke (glucoseStatus)
+            val bgNow = glucoseStatus.glucose
+            val deltaNow = glucoseStatus.delta
+
+// IOB instantané
+            val iobNow = iobCobCalculator.calculateFromTreatmentsAndTemps(nowMs, profile).iob
+
+// Utilise le TDD 24h que tu as déjà calculé/chargé dans invoke (évite les IO coûteuses)
+            val tdd24ForPk = tdd24Hrs  // garde ta variable existante ici (Double)
+
+// IMPORTANT : passer un ISF "profil brut" pour éviter toute ré-entrée dans dynISF
+            val profileIsfRaw = profile.getProfileIsfMgdl()   // mg/dL/U du profil, SANS dynamique
+
+            val pkpdRuntimeNow = pkpdIntegration.computeRuntime(
+                epochMillis = nowMs,
+                bg = bgNow,
+                deltaMgDlPer5 = deltaNow,
+                iobU = iobNow,
+                carbsActiveG = 0.0,          // branche tes carbs actifs réels si tu les as ici
+                windowMin = 240,             // fenêtre standard (4h) – ajuste si besoin
+                exerciseFlag = false,        // remplace par ton flag 'sportTime' si dispo ICI
+                profileIsf = profileIsfRaw,  // ← **PROFIL BRUT, PAS getIsfMgdl()**
+                tdd24h = tdd24ForPk
+            )
+
+            lastPkpdScale = pkpdRuntimeNow?.pkpdScale ?: 1.0
+            aapsLogger.debug(LTag.APS, "PK/PD: pkpdScale=$lastPkpdScale (bg=$bgNow, delta=$deltaNow, iob=$iobNow, tdd24=$tdd24ForPk, isfRaw=$profileIsfRaw)")
             var tdd4D = tddCalculator.averageTDD(tddCalculator.calculate(4, allowMissingDays = false))
             val oapsProfile = OapsProfileAimi(
                 dia = profile.dia,
