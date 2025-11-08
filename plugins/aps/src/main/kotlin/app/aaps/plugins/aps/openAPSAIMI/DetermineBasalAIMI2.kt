@@ -3468,9 +3468,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.variableSensitivity = sens.toFloat()
         if (fusedSensitivity != null) {
             consoleError.add(
-                "ISF fusionné=${"%.1f".format(fusedSensitivity)} dynISF=${"%.1f".format(dynSensitivity)} → appliqué=${"%.1f".format(sens)}"
-            )
-        }
+              //"ISF fusionné=${"%.1f".format(fusedSensitivity)} dynISF=${"%.1f".format(dynSensitivity)} → appliqué=${"%.1f".format(sens)}"
+              context.getString(R.string.console_fused_sensitivity,fusedSensitivity,dynSensitivity,sens))}
         consoleError.add("CR:${profile.carb_ratio}")
         this.predictedBg = predictEventualBG(bg.toFloat(), iob, variableSensitivity, minDelta.toFloat(), shortAvgDelta, longAvgDelta, mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime, snackTime, honeymoon)
         //val insulinEffect = calculateInsulinEffect(bg.toFloat(),iob,variableSensitivity,cob,normalBgThreshold,recentSteps180Minutes,averageBeatsPerMinute.toFloat(),averageBeatsPerMinute10.toFloat(),profile.insulinDivisor.toFloat())
@@ -3960,10 +3959,35 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val quantized = kotlin.math.ceil(smbAfterDamping / INSULIN_STEP.toDouble()) * INSULIN_STEP.toDouble()
 
 // ---- LOGS PKPD ----
+        val diaMin = pkpdRuntime?.params?.diaHrs?.let { it * 60.0 }
+        val diaText = when {
+            diaMin == null || diaMin.isNaN() -> "n/a"
+            diaMin < 60.0 -> "%.0fm".format(diaMin)
+            else -> {
+                val h = diaMin.toInt() / 60
+                val m = diaMin.toInt() % 60
+                if (m == 0) "${h}h" else "${h}h${m}m"
+            }
+        }
+
+        val peakMin = pkpdRuntime?.params?.peakMin
+        val peakText = when {
+            peakMin == null || peakMin.isNaN() -> "n/a"
+            peakMin < 60.0 -> "%.0fm".format(peakMin)
+            else -> {
+                val h = peakMin.toInt() / 60
+                val m = peakMin.toInt() % 60
+                if (m == 0) "${h}h" else "${h}h${m}m"
+            }
+        }
+
         rT.reason.append(
-            "\nPKPD: DIA=%s min, Peak=%s min, Tail=%.0f%%, ISF(fused)=%s (profile=%s, TDD=%s, scale=%.2f)".format(
-                pkpdRuntime?.params?.diaHrs?.let { "%.0f".format(it * 60.0) } ?: "n/a",
-                pkpdRuntime?.params?.peakMin?.let { "%.0f".format(it) } ?: "n/a",
+        //"\nPKPD: DIA=%s min, Peak=%s min, Tail=%.0f%%, ISF(fused)=%s (profile=%s, TDD=%s, scale=%.2f)".format(
+                context.getString(R.string.console_pkpd_log,
+              //pkpdRuntime?.params?.diaHrs?.let { "%.0f".format(it * 60.0) } ?: "n/a",
+              //pkpdRuntime?.params?.peakMin?.let { "%.0f".format(it) } ?: "n/a",
+                diaText,
+                peakText,
                 (pkpdRuntime?.tailFraction ?: 0.0) * 100.0,
                 pkpdRuntime?.fusedIsf?.let { "%.0f".format(it) } ?: "n/a",
                 pkpdRuntime?.profileIsf?.let { "%.0f".format(it) } ?: "n/a",
@@ -3975,23 +3999,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 // ---- LOGS SMB détaillés (si audit dispo) ----
         if (dmp != null) {
             rT.reason.append(
-                "\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s".format(
+              //"\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s".format(
+                    context.getString(R.string.console_smb_log,
                     smbDecision,
                     smbAfterDamping,
                     if (dmp.tailApplied) "✔" else "✘", dmp.tailMult,
                     if (dmp.exerciseApplied) "✔" else "✘", dmp.exerciseMult,
                     if (dmp.lateFatApplied) "✔" else "✘", dmp.lateFatMult,
                     quantized,
-                    if (highBgOverride) " (HighBG override)" else ""
+                    if (highBgOverride)
+                    //" (HighBG override)"
+                        context.getString(R.string.console_high_bg_override)
+                    else ""
                 )
             )
         } else {
             rT.reason.append(
-                "\nSMB: proposed=%.2f → damped=%.2f → quantized=%.2f%s".format(
+                //"\nSMB: proposed=%.2f → damped=%.2f → quantized=%.2f%s".format(
+                    context.getString(R.string.console_smb_log_2,
                     smbDecision,
                     smbAfterDamping,
                     quantized,
-                    if (highBgOverride) " (HighBG override)" else ""
+                    if (highBgOverride)
+                    //" (HighBG override)"
+                        context.getString(R.string.console_high_bg_override)
+                    else ""
                 )
             )
         }

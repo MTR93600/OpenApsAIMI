@@ -910,6 +910,7 @@
     <string name="console_temp_target_set">Cible temporaire définie, non ajustée avec autosens</string>
     <string name="console_target_bg_unchanged">Cible BG inchangée : %.2f; </string>
     <string name="console_target_bg_changed">Cible BG de %.2f à %.2f; </string>
+    <string name="console_fused_sensitivity">ISF fusionné=%1$.1f dynISF=%2$.1f → appliqué=%3$.1f</string>
     <string name="console_min_bg_adjusted">Ajustement de la cible pour BG élevé : min_bg de %.2f à %.2f; </string>
     <string name="console_min_bg_unchanged">min_bg inchangé : %.2f; </string>
     <string name="console_target_bg_adjusted">BG cible modifié de %.2f à %.2f; </string>
@@ -925,6 +926,10 @@
     <string name="console_mpc_log">Module MPC : dose=%.2f, Kp=%.3f, corr=%.2f, out=%.2f</string>
     <string name="reason_mpc_pi">🎛️ MPC modèle prédictif: %.2f U (%.0f%%) | PI modèle physiologique: %.2f U (%.0f%%)</string>
     <string name="smb_final">✅ SMB final: %1$s U</string>
+    <string name="console_pkpd_log">⚗️ DIA=%1$s, peak=%2$s, tail=%3$.0f%%, ISF(fused)=%4$s (profile=%5$s, TDD=%6$s, scale=%7$.2f)</string>
+    <string name="console_smb_log">\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s</string>
+    <string name="console_smb_log_2">\nSMB: proposed=%.2f → damped=%.2f → quantized=%.2f%s</string>
+    <string name="console_high_bg_override"> (BG&gt;120 préférences en usage)</string>
     <string name="reason_dia_reattivity">📈 DIA: %1$.1f mins | REACT◁120 Matin: %2$.1f%% | Après-midi: %3$.1f%% | Soir: %4$.1f%%</string>
     <string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Mode collation / pré-bolus: %2$s | </string>
     <string name="autodrive_condition">&#160;Autodrive Conditions: %1$s</string>
