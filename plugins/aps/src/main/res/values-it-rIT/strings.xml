@@ -933,8 +933,8 @@
     <string name="reason_mpc_pi">🎛️ MPC modello predittivo: %.2f U (%.0f%%) | PI modello fisiologico: %.2f U (%.0f%%)</string>
     <string name="smb_final">✅ SMB finale: %1$s U</string>
     <string name="console_pkpd_log">⚗️ DIA=%1$s, picco=%2$s, coda=%3$.0f%%, ISF(combinato)=%4$s (profilo=%5$s, TDD=%6$s, scala=%7$.2f)</string>
-    <string name="console_smb_log">\nSMB: proposto=%.2f → applicato=%.2f [IOB residua%s×%.2f, attività fisica%s×%.2f, digestione lenta%s×%.2f] → finale=%.2f%s</string>
-    <string name="console_smb_log_2">\nSMB: proposto=%.2f → applicato=%.2f → finale=%.2f%s</string>
+    <string name="console_smb_log">\n🧪 SMB: proposto=%.2f → applicato=%.2f [IOB residua%s×%.2f, attività fisica%s×%.2f, digestione lenta%s×%.2f] → finale=%.2f%s</string>
+    <string name="console_smb_log_2">\n🧪 SMB: proposto=%.2f → applicato=%.2f → finale=%.2f%s</string>
     <string name="console_high_bg_override"> (preferenze Glicemia&gt;120 in uso)</string>
     <string name="ai_force_basal_reason_snack">AI forzatura basale perchè Modalità manuale pasto Snack</string>
     <string name="ai_force_basal_reason_meal">AI forzatura basale perchè Modalità manuale pasto Pasto</string>

@@ -927,8 +927,8 @@
     <string name="reason_mpc_pi">🎛️ MPC modèle prédictif: %.2f U (%.0f%%) | PI modèle physiologique: %.2f U (%.0f%%)</string>
     <string name="smb_final">✅ SMB final: %1$s U</string>
     <string name="console_pkpd_log">⚗️ DIA=%1$s, peak=%2$s, tail=%3$.0f%%, ISF(fused)=%4$s (profile=%5$s, TDD=%6$s, scale=%7$.2f)</string>
-    <string name="console_smb_log">\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s</string>
-    <string name="console_smb_log_2">\nSMB: proposed=%.2f → damped=%.2f → quantized=%.2f%s</string>
+    <string name="console_smb_log">\n🧪 SMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s</string>
+    <string name="console_smb_log_2">\n🧪 SMB: proposed=%.2f → damped=%.2f → quantized=%.2f%s</string>
     <string name="console_high_bg_override"> (BG&gt;120 préférences en usage)</string>
     <string name="ai_force_basal_reason_snack">AI Basale forcée car Mode manuel Collation</string>
     <string name="ai_force_basal_reason_meal">AI Basale forcée car Mode manuel Repas</string>
