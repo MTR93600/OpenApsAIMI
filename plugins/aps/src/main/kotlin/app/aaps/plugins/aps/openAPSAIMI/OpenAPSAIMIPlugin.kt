@@ -600,34 +600,36 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             historicActivity = Round.roundTo(historicActivity, 0.0001)
             currentActivity = Round.roundTo(currentActivity, 0.0001)
             // === PK/PD: calcule un pkpdScale cohérent et le mémorise ===
+            // === PK/PD: calcule un pkpdScale cohérent et le mémorise (SANS dyn ISF) ===
             val nowMs = dateUtil.now()
-            val prof = profile
+
+// valeurs BG/delta déjà dispo dans invoke (glucoseStatus)
             val bgNow = glucoseStatus.glucose
             val deltaNow = glucoseStatus.delta
-// IOB instantané
-            val iobNow = iobCobCalculator.calculateFromTreatmentsAndTemps(nowMs, prof).iob
-// TDD 24h (fallback sur TDD7 si indispo)
-            val tdd24ForPk = tddCalculator.calculateDaily(-24, 0)?.totalAmount
-                ?: preferences.get(DoubleKey.OApsAIMITDD7)
 
-// Fenêtre & flags simples pour PK/PD (tu pourras affiner ensuite)
-            val windowMin = 240            // 4h de fenêtre PK par défaut
-            val exerciseFlag = false       // si tu as un flag sportTime à cet endroit, remplace-le ici
+// IOB instantané
+            val iobNow = iobCobCalculator.calculateFromTreatmentsAndTemps(nowMs, profile).iob
+
+// Utilise le TDD 24h que tu as déjà calculé/chargé dans invoke (évite les IO coûteuses)
+            val tdd24ForPk = tdd24Hrs  // garde ta variable existante ici (Double)
+
+// IMPORTANT : passer un ISF "profil brut" pour éviter toute ré-entrée dans dynISF
+            val profileIsfRaw = profile.getProfileIsfMgdl()   // mg/dL/U du profil, SANS dynamique
 
             val pkpdRuntimeNow = pkpdIntegration.computeRuntime(
                 epochMillis = nowMs,
                 bg = bgNow,
                 deltaMgDlPer5 = deltaNow,
                 iobU = iobNow,
-                carbsActiveG = 0.0,        // si tu veux, branche tes carbs actifs réels ici
-                windowMin = windowMin,
-                exerciseFlag = exerciseFlag,
-                profileIsf = prof.getIsfMgdl("OpenAPSAIMIPlugin"),
+                carbsActiveG = 0.0,          // branche tes carbs actifs réels si tu les as ici
+                windowMin = 240,             // fenêtre standard (4h) – ajuste si besoin
+                exerciseFlag = false,        // remplace par ton flag 'sportTime' si dispo ICI
+                profileIsf = profileIsfRaw,  // ← **PROFIL BRUT, PAS getIsfMgdl()**
                 tdd24h = tdd24ForPk
             )
 
             lastPkpdScale = pkpdRuntimeNow?.pkpdScale ?: 1.0
-            aapsLogger.debug(LTag.APS, "PK/PD: pkpdScale=$lastPkpdScale (bg=$bgNow, delta=$deltaNow, iob=$iobNow, tdd24=$tdd24ForPk)")
+            aapsLogger.debug(LTag.APS, "PK/PD: pkpdScale=$lastPkpdScale (bg=$bgNow, delta=$deltaNow, iob=$iobNow, tdd24=$tdd24ForPk, isfRaw=$profileIsfRaw)")
             var tdd4D = tddCalculator.averageTDD(tddCalculator.calculate(4, allowMissingDays = false))
             val oapsProfile = OapsProfileAimi(
                 dia = profile.dia,
