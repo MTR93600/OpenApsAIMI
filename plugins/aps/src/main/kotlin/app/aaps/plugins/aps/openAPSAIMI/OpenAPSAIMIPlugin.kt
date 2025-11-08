@@ -365,7 +365,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         aapsLogger.debug(LTag.APS, "Adaptive ISF via Kalman: $kalmanFastIsf for BG: $glucose")
 
 // 3) ISF lent (TDD/profile) via IsfFusion (mêmes bornes que PK/PD)
-        val profileIsf = profileFunction.getProfile()?.getIsfMgdl("OpenAPSAIMIPlugin") ?: 20.0
+        val profileIsf = profileFunction.getProfile()?.getProfileIsfMgdl() ?: 20.0
         val tddIsf = tddIsf24hOr(profileIsf)
         val fusedSlowIsf = isfFusion().fused(profileIsf, tddIsf, lastPkpdScale)
         aapsLogger.debug(LTag.APS, "Fused slow ISF (profile/TDD): $fusedSlowIsf (profile=$profileIsf, tddIsf=$tddIsf)")
