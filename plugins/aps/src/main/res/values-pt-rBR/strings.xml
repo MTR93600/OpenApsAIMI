@@ -1057,5 +1057,4 @@
     <string name="oaps_aimi_antistall_bias_summary">Adds a small increment to the multiplier to help reduce stable but blocked glucose.</string>
     <string name="oaps_aimi_delta_pos_release_title">Positive change to deactivate (mg/dL/5 min)</string>
     <string name="oaps_aimi_delta_pos_release_summary">If Δ exceeds this value, basal intensification is reduced or stopped.</string>
-
 </resources>

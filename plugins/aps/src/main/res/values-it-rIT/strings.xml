@@ -3,7 +3,7 @@
     <!--Autotune-->
     <string name="dynisf_adjust_sensitivity">Abilita il rapporto di sensibilità basato sul TDD per la modifica della basale e del target del glucosio</string>
     <string name="dynisf_adjust_sensitivity_summary">Usa le ultime 24h TDD/7D TDD per calcolare il rapporto di sensibilità utilizzato per aumentare o diminuire la velocità basale e anche per regolare il target di glucosio se le relative opzioni sono abilitate, allo stesso modo in cui fa Autosens. Si consiglia di iniziare con questa opzione disattivata</string>
-    <string name="dyn_isf_adjust_title" formatted="false">Fattore di regolazione per ISF Dinamico (%)</string>
+    <string name="dyn_isf_adjust_title" formatted="false">ISF Dinamico (%)</string>
     <string name="dyn_isf_adjust_summary" formatted="false">Fattore di regolazione per ISF Dinamico. Imposta piÃ¹ del 100% per dosi di correzione più aggressive e meno del 100% per correzioni meno aggressive.</string>
     <string name="high_temptarget_raises_sensitivity_title">Target temporaneo \"alto\" aumenta la sensibilità</string>
     <string name="high_temptarget_raises_sensitivity_summary"><![CDATA[Aumenta la sensibilità per Target temporaneo >= 100]]></string>
@@ -57,8 +57,8 @@
     <string name="openapsama_link_to_preference_json_doc_txt">Attenzione!\nNormalmente non dovresti modificare questi valori. FAI CLICK QUI e leggi il testo e assicurati di AVERLO CAPITO prima di cambiare uno di questi valori.</string>
     <string name="always_use_short_avg">Usa sempre il delta medio ridotto</string>
     <string name="always_use_short_avg_summary">Utile quando i dati provenienti da sorgenti non filtrate come xDrip+ diventano \"rumorosi\" (instabili).</string>
-    <string name="openapsama_max_daily_safety_multiplier">Moltiplicatore di sicurezza max basale giornaliera</string>
-    <string name="openapsama_current_basal_safety_multiplier">Moltiplicatore di sicurezza basale corrente</string>
+    <string name="openapsama_max_daily_safety_multiplier">Moltiplicatore max basale giornaliera</string>
+    <string name="openapsama_current_basal_safety_multiplier">Moltiplicatore basale corrente</string>
     <string name="openapssmb_max_iob_title">Max IOB totale a cui limitare OpenAPS [U]</string>
     <string name="openapssmb_max_iob_summary">Questo valore è chiamato Max IOB nel contesto OpenAPS\nOpenAPS non aggiungerà ulteriore insulina se l\'IOB corrente è maggiore di questo valore</string>
     <string name="enable_uam">Abilita UAM</string>
@@ -329,7 +329,7 @@
     <string name="high_BG_preferences">Reattività glicemia > 120</string>
     <string name="training_ml_modes_preferences">Modalità manuale pasti/attività</string>
     <string name="autodrive_preferences">Autodrive</string>
-    <string name="AAPS_SMB_Settings">DynamicISF, SMB e Sensibilità insulina</string>
+    <string name="AAPS_SMB_Settings">Sensibilità insulina</string>
     <string name="oaps_aimi_enableMlTraining_title">Abilita apprendimento A.I.</string>
     <string name="OApsAIMI_MealFactor_summary">% of insulin required by the ai for the meal mode.</string>
     <string name="OApsAIMI_MealFactor_title">Reattività</string>
@@ -1052,6 +1052,5 @@
     <string name="oaps_aimi_antistall_bias_summary">Aggiunge un piccolo incremento al moltiplicatore per aiutare a far scendere una glicemia stabile ma bloccata.</string>
     <string name="oaps_aimi_delta_pos_release_title">Variazione positiva per disattivare (mg/dL/5 min)</string>
     <string name="oaps_aimi_delta_pos_release_summary">Se Δ supera questo valore, l’intensificazione basale viene ridotta o interrotta.</string>
-
 </resources>
 
