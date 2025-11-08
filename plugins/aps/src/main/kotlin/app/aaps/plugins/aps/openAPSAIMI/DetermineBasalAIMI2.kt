@@ -4131,12 +4131,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         //"Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
         //"Evening: ${"%.1f".format(adjustedEveningFactor)}"
 //)
-
+        val diaReactivityText = when {
+            adjustedDIAInMinutes.isNaN() -> "n/a"
+            adjustedDIAInMinutes < 60.0 -> "%.0fm".format(adjustedDIAInMinutes)
+            else -> {
+                val h = adjustedDIAInMinutes.toInt() / 60
+                val m = adjustedDIAInMinutes.toInt() % 60
+                if (m == 0) "${h}h" else "${h}h${m}m"
+            }
+        }
         rT.reason.appendLine(
-            context.getString(R.string.reason_dia_reattivity,(adjustedDIAInMinutes),
-                              (adjustedMorningFactor * 100),
-                              (adjustedAfternoonFactor * 100),
-                              (adjustedEveningFactor * 100))
+            context.getString(R.string.reason_dia_reactivity,
+              //(adjustedDIAInMinutes)
+                diaReactivityText,
+                adjustedMorningFactor * 100,
+                adjustedAfternoonFactor * 100,
+                adjustedEveningFactor * 100
+            )
         )
 
         rT.reason.appendLine( //"🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +

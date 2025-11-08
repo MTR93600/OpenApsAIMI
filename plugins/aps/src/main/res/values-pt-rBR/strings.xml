@@ -952,7 +952,7 @@
     <string name="ai_force_basal_reason_dinner">AI Force basal because Manual mode Dinner</string>
     <string name="ai_force_basal_reason_highcarb">AI Force basal because Manual mode High Carb</string>
     <string name="ai_force_basal_reason_fasting">AI Force basal because Manual mode Fasting</string>
-    <string name="reason_dia_reattivity">📈 DIA: %1$.1f mins | REACT◁120 Morning: %2$.1f%% | Afternoon: %3$.1f%% | Evening: %4$.1f%%</string>
+    <string name="reason_dia_reactivity">📈 DIA: %1$s | REACT◁120 Morning: %2$.1f%% | Afternoon: %3$.1f%% | Evening: %4$.1f%%</string>
     <string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Snack/prebolus mode: %2$s | </string>
     <string name="autodrive_condition">&#160;Autodrive conditions: %1$s</string>
     <string name="reason_bg_trend">🔍 BG Trend: %.2f | Combined Δ: %.2f | </string>

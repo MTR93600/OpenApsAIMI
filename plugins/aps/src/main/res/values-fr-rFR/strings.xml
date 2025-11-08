@@ -936,7 +936,7 @@
     <string name="ai_force_basal_reason_dinner">AI Basale forcée car Mode manuel Dîner</string>
     <string name="ai_force_basal_reason_highcarb">AI Basale forcée car Mode manuel High Carb</string>
     <string name="ai_force_basal_reason_fasting">AI Basale forcée car Mode manuel Jeûne</string>
-    <string name="reason_dia_reattivity">📈 DIA: %1$.1f mins | REACT◁120 Matin: %2$.1f%% | Après-midi: %3$.1f%% | Soir: %4$.1f%%</string>
+    <string name="reason_dia_reactivity">📈 DIA: %1$s | REACT◁120 Morning: %2$.1f%% | Afternoon: %3$.1f%% | Evening: %4$.1f%%</string>
     <string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Mode collation / pré-bolus: %2$s | </string>
     <string name="autodrive_condition">&#160;Autodrive Conditions: %1$s</string>
     <string name="reason_bg_trend">🔍 BGTrend: %.2f | ΔCombiné: %.2f | </string>
