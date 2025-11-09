@@ -684,4 +684,7 @@
     <string name="rate_percent_duration">Rate: %1$.2f U/h (%2$.2f%%) Duration: %3$d min</string>
     <string name="percent_rate_duration_formatted"><![CDATA[<b>Rate</b>: %1$.2f%% (%2$.2f U/h)<br><b>Duration</b>: %3$d min<br>]]></string>
     <string name="rate_percent_duration_formatted"><![CDATA[<b>Rate</b>: %1$.2f U/h (%2$.2f%%) <br><b>Duration</b>: %3$d min<br>]]></string>
+
+    <!--    Playback-->
+    <string name="audio_playback_attribution">"AAPS plays audio"</string>
 </resources>
