@@ -90,7 +90,6 @@
     <string name="equil_command_connect_no_response">幫浦未回應</string>
     <string name="equil_command__unknown">命令的未知狀態</string>
     <string name="equil_install">將幫浦植入體內</string>
-    <string name="equil_settings">設定</string>
     <string name="equil_settings_alarm_battery">低電量警報</string>
     <string name="equil_settings_alarm_insulin">胰島素劑量不足警報</string>
     <string name="equil_init_insulin_error">儲液盒初始化未完成</string>
@@ -157,7 +156,6 @@
     <string name="equil_hint_dressing2">請將幫浦從底座上取下</string>
     <string name="equil_unpair">停用舊幫浦 %1$s？</string>
     <string name="equil_pump_updated">幫浦已更新</string>
-    <string name="equil_maxbolus_tips">幫浦中允許的最大注射量[%1$sU]</string>
     <string name="equil_replace_reservoir">儲液盒已空。請更換儲液盒</string>
     <string name="error_mustbe6hexadidits">必須為ABCDEF0123456789的6個字符</string>
     <string name="equil_removed_anyway">無法解除配對，但仍會移除幫浦。配對時設定的密碼仍保留在幫浦中。</string>

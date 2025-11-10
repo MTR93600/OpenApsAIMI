@@ -90,7 +90,6 @@
     <string name="equil_command_connect_no_response">Nessuna risposta dal micro</string>
     <string name="equil_command__unknown">Stato sconosciuto per il comando</string>
     <string name="equil_install">Apporre il micro sul corpo</string>
-    <string name="equil_settings">Impostazioni</string>
     <string name="equil_settings_alarm_battery">Allarme batteria bassa</string>
     <string name="equil_settings_alarm_insulin">Allarme livello basso insulina</string>
     <string name="equil_init_insulin_error">L\'inizializzazione del serbatoio non è completa</string>
@@ -161,7 +160,6 @@ Regola password: deve contenere 4 caratteri, scelti tra ABCDEF0123456789.</strin
     <string name="equil_hint_dressing2">Si prega di rimuovere il micro dalla base</string>
     <string name="equil_unpair">Disattivare il vecchio micro %1$s?</string>
     <string name="equil_pump_updated">Micro aggiornato</string>
-    <string name="equil_maxbolus_tips">Bolo massimo consentito dal micro [%1$sU]</string>
     <string name="equil_replace_reservoir">Il serbatoio è vuoto. Sostituire il serbatoio</string>
     <string name="error_mustbe6hexadidits">Deve essere 6 caratteri tra ABCDEF0123456789</string>
     <string name="equil_removed_anyway">Comando disaccoppiamento non riuscito. Il micro verrà comunque rimosso. La password impostata durante l\'accoppiamento non verrà rimossa dal micro.</string>

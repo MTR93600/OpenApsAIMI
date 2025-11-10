@@ -91,7 +91,6 @@
     <string name="equil_command_connect_no_response">Không có phản hồi từ Pump</string>
     <string name="equil_command__unknown">Không xác định được trạng thái của lệnh</string>
     <string name="equil_install">Gắn bơm vào cơ thể</string>
-    <string name="equil_settings">Cài đặt</string>
     <string name="equil_settings_alarm_battery">Cảnh báo mức pin yếu</string>
     <string name="equil_settings_alarm_insulin">Cảnh báo insulin thấp</string>
     <string name="equil_init_insulin_error">Khởi tạo ống chứa insulin chưa hoàn tất</string>
@@ -158,7 +157,6 @@
     <string name="equil_hint_dressing2">Vui lòng tháo bơm ra khỏi đế</string>
     <string name="equil_unpair">Vô hiệu hóa bơm cũ %1$s?</string>
     <string name="equil_pump_updated">Đã đồng bộ thời gian Pump</string>
-    <string name="equil_maxbolus_tips">Lượng bolus tối đa được phép trong bơm [%1$sU]</string>
     <string name="equil_replace_reservoir">Ống chứa trống. Vui lòng thay ống chứa mới</string>
     <string name="error_mustbe6hexadidits">Phải gồm 6 ký tự, chọn từ ABCDEF0123456789</string>
     <string name="equil_removed_anyway">Lệnh hủy ghép nối không thành công. Bơm vẫn sẽ bị xóa. Mật khẩu được đặt trong quá trình ghép nối sẽ không bị xóa khỏi bơm.</string>

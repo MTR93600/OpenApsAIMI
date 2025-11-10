@@ -636,4 +636,5 @@
     <string name="rate_percent_duration">Tốc độ: %1$.2f U/h (%2$.2f%%) Thời gian: %3$d min</string>
     <string name="percent_rate_duration_formatted"><![CDATA[<b>Tốc độ</b>: %1$.2f%% (%2$.2f U/h)<br><b>Thời gian</b>: %3$d phút<br>]]></string>
     <string name="rate_percent_duration_formatted"><![CDATA[<b>Tốc độ</b>: %1$.2f U/h (%2$.2f%%) <br><b>Thời gian</b>: %3$d phút<br>]]></string>
+    <!--    Playback-->
 </resources>
