@@ -640,4 +640,5 @@
     <string name="percent_rate_duration_formatted"><![CDATA[<b>Ratio</b>: %1$.2f%% (%2$.2f U/h)<br><b>Duración</b>: %3$d min<br>]]></string>
     <string name="rate_percent_duration_formatted"><![CDATA[<b>Ratio</b>: %1$.2f U/h (%2$.2f%%) <br><b>Duración</b>: %3$d min<br>]]></string>
     <!--    Playback-->
+    <string name="audio_playback_attribution">"Reproducir audio de AAPS"</string>
 </resources>
