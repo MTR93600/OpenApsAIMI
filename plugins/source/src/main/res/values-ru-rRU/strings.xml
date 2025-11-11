@@ -34,6 +34,6 @@
     <string name="ottai_app">Ottai</string>
     <string name="description_source_patched_ottai_app">Получать данные о ГК от приложения Ottai.</string>
     <!-- Patched Syai Tag App -->
-    <string name="syai_tag_app">Syai Tag</string>
-    <string name="description_source_patched_syai_tag_app">Получать уровень ГК из приложения Syai Tag.</string>
+    <string name="syai_tag_app">Syai</string>
+    <string name="description_source_patched_syai_tag_app">Получать уровень ГК из приложения Syai.</string>
 </resources>

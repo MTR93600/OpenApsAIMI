@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <attribution
+        android:label="@string/audio_playback_attribution"
+        android:tag="aapsAudio" />
 </manifest>

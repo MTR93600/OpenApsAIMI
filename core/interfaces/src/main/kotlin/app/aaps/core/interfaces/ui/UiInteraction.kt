@@ -124,7 +124,7 @@ interface UiInteraction {
      */
     fun addNotification(id: Int, text: String, level: Int, @StringRes actionButtonId: Int, action: Runnable, validityCheck: (() -> Boolean)?)
 
-    fun showToastAndNotification(ctx: Context?, string: String, @RawRes soundID: Int)
+    fun showToastAndNotification(ctx: Context, string: String, @RawRes soundID: Int)
 
     fun startAlarm(@RawRes sound: Int, reason: String)
     fun stopAlarm(reason: String)

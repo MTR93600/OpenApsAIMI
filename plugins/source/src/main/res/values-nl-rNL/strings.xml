@@ -33,6 +33,6 @@
     <string name="ottai_app">Ottai</string>
     <string name="description_source_patched_ottai_app">Ontvang glucose-gegevens van de Ottai App.</string>
     <!-- Patched Syai Tag App -->
-    <string name="syai_tag_app">Syai Tag</string>
-    <string name="description_source_patched_syai_tag_app">Ontvang glucose gegevens van de Syai Tag App.</string>
+    <string name="syai_tag_app">Syai</string>
+    <string name="description_source_patched_syai_tag_app">Ontvang glucose gegevens van de Syai App.</string>
 </resources>
