@@ -48,6 +48,8 @@ class WCycleLearner(
         }.onFailure { /* ignore */ }
         initialized = true
     }
+    fun provideWCycleLearner(context: Context): WCycleLearner =
+        WCycleLearner(ctx = context)
 
     fun persistToDisk() {
         runCatching {

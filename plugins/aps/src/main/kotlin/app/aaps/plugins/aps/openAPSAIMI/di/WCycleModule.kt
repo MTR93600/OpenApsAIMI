@@ -17,15 +17,19 @@ object WCycleModule {
 
     @Provides
     @Singleton
-    fun provideWCyclePreferences(preferences: Preferences): WCyclePreferences = WCyclePreferences(preferences)
+    fun provideWCyclePreferences(preferences: Preferences): WCyclePreferences =
+        WCyclePreferences(preferences)
 
     @Provides
     @Singleton
-    fun provideWCycleEstimator(preferences: WCyclePreferences): WCycleEstimator = WCycleEstimator(preferences)
+    fun provideWCycleEstimator(preferences: WCyclePreferences): WCycleEstimator =
+        WCycleEstimator(preferences)
+
 
     @Provides
     @Singleton
-    fun provideWCycleLearner(): WCycleLearner = WCycleLearner()
+    fun provideWCycleLearner(context: Context): WCycleLearner =
+        WCycleLearner(ctx = context)
 
     @Provides
     @Singleton
@@ -33,16 +37,19 @@ object WCycleModule {
         preferences: WCyclePreferences,
         estimator: WCycleEstimator,
         learner: WCycleLearner
-    ): WCycleAdjuster = WCycleAdjuster(preferences, estimator, learner)
+    ): WCycleAdjuster =
+        WCycleAdjuster(preferences, estimator, learner)
 
     @Provides
     @Singleton
-    fun provideWCycleCsvLogger(context: Context): WCycleCsvLogger = WCycleCsvLogger(context)
+    fun provideWCycleCsvLogger(context: Context): WCycleCsvLogger =
+        WCycleCsvLogger(context)
 
     @Provides
     @Singleton
     fun provideWCycleFacade(
         adjuster: WCycleAdjuster,
         logger: WCycleCsvLogger
-    ): WCycleFacade = WCycleFacade(adjuster, logger)
+    ): WCycleFacade =
+        WCycleFacade(adjuster, logger)
 }
