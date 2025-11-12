@@ -2737,6 +2737,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         wCycleInfoForRun = null
         wCycleReasonLogged = false
         lastProfile = profile
+        // 👇 Force la création du CSV (premier snapshot WCycle “pré-décision”)
+        ensureWCycleInfo()
         // --- GS + features AIMI -----------------------------------------------------
         val pack = try {
             glucoseStatusCalculatorAimi.compute(false)
