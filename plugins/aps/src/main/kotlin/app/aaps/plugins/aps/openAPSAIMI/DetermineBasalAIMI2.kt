@@ -55,6 +55,10 @@ import app.aaps.plugins.aps.openAPSAIMI.smb.MealHighIobDecision
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbDampingUsecase
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbInstructionExecutor
 import app.aaps.plugins.aps.openAPSAIMI.smb.computeMealHighIobDecision
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleFacade
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleInfo
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
 import java.io.File
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -62,7 +66,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -112,6 +115,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val profileUtil: ProfileUtil,
     private val fabricPrivacy: FabricPrivacy,
     private val preferences: Preferences,
+    private val wCycleFacade: WCycleFacade,
+    private val wCyclePreferences: WCyclePreferences,
+    private val wCycleLearner: WCycleLearner,
     context: Context
 ) {
     @Inject lateinit var persistenceLayer: PersistenceLayer
@@ -198,6 +204,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var tags180to240minAgo = ""
     private var tir1DAYabove: Double = 0.0
     private var currentTIRLow: Double = 0.0
+    private var lastProfile: OapsProfileAimi? = null
+    private var wCycleInfoForRun: WCycleInfo? = null
+    private var wCycleReasonLogged: Boolean = false
     private var currentTIRRange: Double = 0.0
     private var currentTIRAbove: Double = 0.0
     private var lastHourTIRLow: Double = 0.0
@@ -957,6 +966,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // 2) Contexte
+        lastProfile = profile
         val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
         val isMealMode = therapy.snackTime || therapy.highCarbTime || therapy.mealTime
             || therapy.lunchTime || therapy.dinnerTime || therapy.bfastTime
@@ -992,8 +1002,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // 6) Ajustements cycle féminin (conserve un cap)
+        val wCycleInfo = ensureWCycleInfo()
+        if (wCycleInfo != null) {
+            appendWCycleReason(rT.reason, wCycleInfo)
+        }
         if (bgNow > hypoGuard) {
-            rate = applyWCycleOnBasal(rate, bypassSafety, maxSafe, profile, rT)
+            if (wCycleInfo != null && wCycleInfo.applied) {
+                val pre = rate
+                val scaled = rate * wCycleInfo.basalMultiplier
+                val limit = if (bypassSafety) profile.max_basal else maxSafe
+                rate = scaled.coerceIn(0.0, limit)
+                val need = if (pre > 0.0) rate / pre else null
+                updateWCycleLearner(need, null)
+            }
             rate = if (bypassSafety) rate.coerceAtMost(profile.max_basal) else rate.coerceAtMost(maxSafe)
         }
 
@@ -1176,8 +1197,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             reason?.appendLine(context.getString(R.string.safety_sport_smb_zero))
             return 0f
         }
-        // ♀️ Ajustement cycle sur SMB (Ovulation: -, Lutéale: +5%, etc.)
-        smbToGive = applyWCycleOnSmb(smbToGive, reason)
+        val wCycleInfo = ensureWCycleInfo()
+        if (wCycleInfo != null) {
+            if (wCycleInfo.applied) {
+                val pre = smbToGive
+                smbToGive = (smbToGive * wCycleInfo.smbMultiplier.toFloat()).coerceAtLeast(0f)
+                val need = if (pre > 0f) (smbToGive / pre).toDouble() else null
+                updateWCycleLearner(null, need)
+            }
+        }
         // Ajustements spécifiques
         val beforeAdj = smbToGive
         smbToGive = applySpecificAdjustments(smbToGive)
@@ -2459,166 +2487,44 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             .replace("and", " ")
             .replace("\\s+", " ")
     }
-    /** Log cycle : affiche dans reason et dans le consoleLog (colon). */
-    private fun logWCycle(reason: StringBuilder?, msg: String) {
-        reason?.append(msg)
-        consoleLog.add(msg.replace("\n", "")) // colon : on évite les retours à la ligne
-    }
-
-    /** Format commun basique pour les multiplicateurs afin de ne pas spammer. */
-    private fun fmtMul(tag: String, mul: Double): String =
-        "$tag×${"%.2f".format(mul)}"
-
-    // --- Cycle féminin : phases et multiplicateurs ---
-    private enum class CyclePhase { MENSTRUATION, FOLLICULAR, OVULATION, LUTEAL, UNKNOWN }
-    private inline fun Double.isUnity(eps: Double = 1e-6) = abs(this - 1.0) < eps
-    private data class WCycleInfo(
-        val enabled: Boolean,
-        val dayInCycle: Int,                 // 0..27
-        val phase: CyclePhase,
-        val basalMultiplier: Double,         // multiplicateur pour TBR
-        val smbMultiplier: Double,           // multiplicateur pour SMB
-        val log: String
-    )
-
-    /**
-     * Calcule la phase courante sur un cycle fixe de 28 jours à partir du "jour du mois"
-     * saisi par l'utilisatrice (ex: 18 = 18 du mois courant). Gère le changement de mois.
-     *
-     * Les % sont lus dans Preferences :
-     *  - OApsAIMIwcyclemenstruation : -5 à -10 % (basal)
-     *  - OApsAIMIwcycleovulation    : -2 à -3 % (SMB)
-     *  - OApsAIMIwcycleluteal       : +8 à +15 % (basal)
-     *
-     * Recommandation tableau : en phase lutéale on ajoute aussi +5% au bolus → SMB ×1.05.
-     */
-    private fun computeCurrentWCycleInfo(nowDate: LocalDate = LocalDate.now()): WCycleInfo {
-        val enabled = preferences.get(BooleanKey.OApsAIMIwcycle)
-        if (!enabled) {
-            return WCycleInfo(
-                enabled = false,
-                dayInCycle = 0,
-                phase = CyclePhase.UNKNOWN,
-                basalMultiplier = 1.0,
-                smbMultiplier = 1.0,
-                log = "" // ✅ pas de texte => aucun log
+    private fun ensureWCycleInfo(): WCycleInfo? {
+        val profile = lastProfile ?: return null
+        wCycleInfoForRun?.let { return it }
+        val info = wCycleFacade.infoAndLog(
+            mapOf(
+                "trackingMode" to wCyclePreferences.trackingMode().name,
+                "contraceptive" to wCyclePreferences.contraceptive().name,
+                "thyroid" to wCyclePreferences.thyroid().name,
+                "verneuil" to wCyclePreferences.verneuil().name,
+                "bg" to bg,
+                "delta5" to delta.toDouble(),
+                "iob" to iob.toDouble(),
+                "tdd24h" to (tdd24HrsPerHour * 24f).toDouble(),
+                "isfProfile" to profile.sens,
+                "dynIsf" to variableSensitivity.toDouble()
             )
-        }
-
-        val startDomPref = preferences.get(DoubleKey.OApsAIMIwcycledateday).toInt()
-        if (startDomPref !in 1..31) {
-            return WCycleInfo(
-                enabled = true,
-                dayInCycle = 0,
-                phase = CyclePhase.UNKNOWN,
-                basalMultiplier = 1.0,
-                smbMultiplier = 1.0,
-                //log = "♀️ WCycle: invalid day"
-                log = context.getString(R.string.wcycle_invalid_day)
-            )
-        }
-
-        val thisMonthStartDom = startDomPref.coerceAtMost(nowDate.lengthOfMonth())
-        val candidateThisMonth = nowDate.withDayOfMonth(thisMonthStartDom)
-        val cycleStart = if (!candidateThisMonth.isAfter(nowDate)) {
-            candidateThisMonth
-        } else {
-            val prev = nowDate.minusMonths(1)
-            prev.withDayOfMonth(startDomPref.coerceAtMost(prev.lengthOfMonth()))
-        }
-
-        val days = ChronoUnit.DAYS.between(cycleStart, nowDate).toInt()
-        val dayInCycle = ((days % 28) + 28) % 28
-
-        val pctMen = preferences.get(DoubleKey.OApsAIMIwcyclemenstruation)    // 1..30 (ex: 10) => appliqué en -pctMen% sur basal en menstruation
-        val pctOvu = preferences.get(DoubleKey.OApsAIMIwcycleovulation)       // 1..30 (ex: 5)  => appliqué en -pctOvu% sur SMB en ovulation
-        val pctLut = preferences.get(DoubleKey.OApsAIMIwcycleluteal)          // 1..30 (ex: 15) => appliqué en +pctLut% sur basal en lutéale
-
-
-        val phase = when (dayInCycle) {
-            in 0..4   -> CyclePhase.MENSTRUATION
-            in 5..12  -> CyclePhase.FOLLICULAR
-            in 13..15 -> CyclePhase.OVULATION
-            in 16..27 -> CyclePhase.LUTEAL
-            else      -> CyclePhase.UNKNOWN
-        }
-
-        var basalMul = 1.0
-        var smbMul   = 1.0
-        //val sb = StringBuilder("♀️ Day ${dayInCycle + 1}/28 • ")
-        val sb = StringBuilder("♀️ " + context.getString(R.string.cycle_day, dayInCycle + 1))
-
-        when (phase) {
-            CyclePhase.MENSTRUATION -> {
-                basalMul *= (1.0 - pctMen / 100.0)
-                //sb.append("Menstruation: basal -${pctMen}% ")
-                sb.append(context.getString(R.string.cycle_menstruation, pctMen))
-            }
-            CyclePhase.FOLLICULAR -> {
-                //sb.append("Follicular: neutral ")
-                sb.append(context.getString(R.string.cycle_follicular))
-            }
-            CyclePhase.OVULATION -> {
-                smbMul   *= (1.0 - pctOvu / 100.0)
-                //sb.append("Ovulation: SMB -${pctOvu}% ")
-                sb.append(context.getString(R.string.cycle_ovulation, pctOvu))
-            }
-            CyclePhase.LUTEAL -> {
-                basalMul *= (1.0 + pctLut / 100.0)
-                smbMul   *= (1.0 + pctLut / 100.0)
-                //sb.append("Luteal: basal +${pctLut}%, SMB +${pctLut}% ")
-                sb.append(context.getString(R.string.cycle_luteal, pctLut, pctLut))
-            }
-            CyclePhase.UNKNOWN ->
-                // sb.append("Unknown")
-                sb.append(context.getString(R.string.cycle_unknown))
-        }
-
-        // Bornes ±30%
-        basalMul = basalMul.coerceIn(0.7, 1.3)
-        smbMul   = smbMul.coerceIn(0.7, 1.3)
-
-        return WCycleInfo(
-            enabled = true,
-            dayInCycle = dayInCycle,
-            phase = phase,
-            basalMultiplier = basalMul,
-            smbMultiplier = smbMul,
-            log = sb.toString()
         )
+        wCycleInfoForRun = info
+        return info
     }
 
-    /** Applique le multiplicateur basal du cycle et journalise (reason + colon). */
-    private fun applyWCycleOnBasal(
-        rate: Double,
-        bypassSafety: Boolean,
-        maxSafe: Double,
-        profile: OapsProfileAimi,
-        rT: RT
-    ): Double {
-        val info = computeCurrentWCycleInfo()
-        if (!info.enabled || info.basalMultiplier.isUnity()) return rate               // ✅ option OFF → silence total
-        if (info.basalMultiplier == 1.0) return rate  // neutre → pas de log pour éviter le bruit
-
-        val limit = if (bypassSafety) profile.max_basal else maxSafe
-        val adjusted = (rate * info.basalMultiplier).coerceIn(0.0, limit)
-        //val line = "♀️⚡ ${info.log} ${fmtMul("Basal", info.basalMultiplier)} → ${"%.2f".format(adjusted)} U/h\n"
-        val line = context.getString(R.string.basal_multiplier_line, info.log, context.getString(R.string.basal_fmt, info.basalMultiplier), adjusted)
-        logWCycle(rT.reason, line)
-        return adjusted
+    private fun appendWCycleReason(target: StringBuilder, info: WCycleInfo) {
+        if (wCycleReasonLogged) return
+        if (info.reason.isBlank()) return
+        target.append(", WCycle: ").append(info.reason)
+        wCycleReasonLogged = true
     }
 
-
-    /** Applique le multiplicateur SMB du cycle et journalise (reason + colon). */
-    private fun applyWCycleOnSmb(smb: Float, reason: StringBuilder?): Float {
-        val info = computeCurrentWCycleInfo()
-        if (!info.enabled || info.smbMultiplier.isUnity())   return smb               // ✅ option OFF → silence total
-        if (info.smbMultiplier == 1.0) return smb    // neutre → pas de log
-
-        val out = (smb * info.smbMultiplier.toFloat()).coerceAtLeast(0f)
-        val line = "♀️⚡ ${info.log} ${fmtMul("SMB", info.smbMultiplier)} → ${"%.2f".format(out)} U\n"
-        logWCycle(reason, line)
-        return out
+    private fun updateWCycleLearner(needBasalScale: Double?, needSmbScale: Double?) {
+        val info = wCycleInfoForRun ?: return
+        if (!info.enabled) return
+        val minClamp = wCyclePreferences.clampMin()
+        val maxClamp = wCyclePreferences.clampMax()
+        wCycleLearner.update(
+            info.phase,
+            needBasalScale?.coerceIn(minClamp, maxClamp),
+            needSmbScale?.coerceIn(minClamp, maxClamp)
+        )
     }
 
     private fun calculateDynamicPeakTime(
@@ -2786,6 +2692,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog = consoleLog,
             consoleError = consoleError
         )
+        wCycleInfoForRun = null
+        wCycleReasonLogged = false
+        lastProfile = profile
         // --- GS + features AIMI -----------------------------------------------------
         val pack = try {
             glucoseStatusCalculatorAimi.compute(false)

@@ -507,17 +507,17 @@
     <string name="meal_modes_max_basal_title_genericmeal">Fixed basal 30 min at meal start (U/h)</string>
     <string name="meal_modes_max_basal_summary_genericmeal">Manual mode: fixed TBR, after pre-bolus 1 set a fixed TBR for 30 minutes for generic meal</string>
 
-    <string name="wcycle_preferences">Menstrual Cycle Adjustments</string>
-    <string name="wcycle_preferences_title_menu">Menstrual Cycle Adjustments - Settings</string>
-    <string name="oaps_aimi_enablewcycle_title">Enable menstrual cycle</string>
-    <string name="wcycledateday_summary">Enter only the first day of the cycle, format dd</string>
-    <string name="wcycledateday_title">First day of cycle</string>
-    <string name="wcyclemenstruation_summary">During the first days of the cycle, this percentage will be applied as a basal reduction (studies show an average reduction of 5–10%)</string>
-    <string name="wcyclemenstruation_title">First 5 days of cycle, basal reduction in %</string>
-    <string name="wcycleovulation_summary">During ovulation, several studies show the need to reduce SMB and basal by about 5%</string>
-    <string name="wcycleovulation_title">Ovulation % reduction</string>
-    <string name="wcycleluteal_summary">The luteal phase requires about 8–15% more insulin</string>
-    <string name="wcycleluteal_title">Luteal phase, set the % to apply on basal and SMB</string>
+<!--    <string name="wcycle_preferences">Menstrual Cycle Adjustments</string>-->
+<!--    <string name="wcycle_preferences_title_menu">Menstrual Cycle Adjustments - Settings</string>-->
+<!--    <string name="oaps_aimi_enablewcycle_title">Enable menstrual cycle</string>-->
+<!--    <string name="wcycledateday_summary">Enter only the first day of the cycle, format dd</string>-->
+<!--    <string name="wcycledateday_title">First day of cycle</string>-->
+<!--    <string name="wcyclemenstruation_summary">During the first days of the cycle, this percentage will be applied as a basal reduction (studies show an average reduction of 5–10%)</string>-->
+<!--    <string name="wcyclemenstruation_title">First 5 days of cycle, basal reduction in %</string>-->
+<!--    <string name="wcycleovulation_summary">During ovulation, several studies show the need to reduce SMB and basal by about 5%</string>-->
+<!--    <string name="wcycleovulation_title">Ovulation % reduction</string>-->
+<!--    <string name="wcycleluteal_summary">The luteal phase requires about 8–15% more insulin</string>-->
+<!--    <string name="wcycleluteal_title">Luteal phase, set the % to apply on basal and SMB</string>-->
     <!-- Night growth resistance -->
     <string name="oaps_aimi_ngr_title">Night growth resistance</string>
     <string name="oaps_aimi_ngr_enabled_title">Enable night growth resistance monitor</string>

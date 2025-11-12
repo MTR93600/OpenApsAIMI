@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.autotune.Autotune
 import app.aaps.plugins.aps.OpenAPSFragment
 import app.aaps.plugins.aps.autotune.AutotunePlugin
 import app.aaps.plugins.aps.loop.LoopPlugin
+import app.aaps.plugins.aps.openAPSAIMI.di.WCycleModule
 import dagger.Binds
 import dagger.Module
 import dagger.android.ContributesAndroidInjector
@@ -13,6 +14,7 @@ import dagger.android.ContributesAndroidInjector
     includes = [
         AutotuneModule::class,
         LoopModule::class,
+        WCycleModule::class,
         ApsModule.Bindings::class
     ]
 )

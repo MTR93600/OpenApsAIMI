@@ -53,6 +53,10 @@ enum class StringKey(
     PumpCommonBolusStorage("pump_sync_storage_bolus", ""),
     PumpCommonTbrStorage("pump_sync_storage_tbr", ""),
     GarminRequestKey(key = "garmin_aaps_key", defaultValue = ""),
+    OApsAIMIWCycleTrackingMode("key_oaps_aimi_wcycle_tracking_mode", "FIXED_28"),
+    OApsAIMIWCycleContraceptive("key_oaps_aimi_wcycle_contraceptive", "NONE"),
+    OApsAIMIWCycleThyroid("key_oaps_aimi_wcycle_thyroid", "EUTHYROID"),
+    OApsAIMIWCycleVerneuil("key_oaps_aimi_wcycle_verneuil", "NONE"),
     OApsAIMINightGrowthStart("key_oaps_aimi_ngr_night_start", "22:00"),
     OApsAIMINightGrowthEnd("key_oaps_aimi_ngr_night_end", "06:00")
 }

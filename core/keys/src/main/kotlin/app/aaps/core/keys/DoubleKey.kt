@@ -122,9 +122,8 @@ enum class DoubleKey(
     OApsAIMIHighCarbPrebolus2("key_prebolus_highcarb_mode2", 5.0, 0.1, 10.0),
 
     OApsAIMIwcycledateday("key_wcycledateday", 1.0, 1.0, 31.0),
-    OApsAIMIwcyclemenstruation("key_wcyclemenstruation", 10.0, 1.0, 30.0),
-    OApsAIMIwcycleovulation("key_wcycleovulation", 5.0, 1.0, 30.0),
-    OApsAIMIwcycleluteal("key_wcycleluteal", 15.0, 1.0, 30.0),
+    OApsAIMIWCycleClampMin("key_wcycle_clamp_min", 0.8, 0.5, 1.0),
+    OApsAIMIWCycleClampMax("key_wcycle_clamp_max", 1.25, 1.0, 2.0),
 
     OApsAIMINightGrowthMinRiseSlope("key_oaps_aimi_ngr_min_rise_slope", 5.0, 0.5, 30.0),
     OApsAIMINightGrowthSmbMultiplier("key_oaps_aimi_ngr_smb_multiplier", 1.2, 1.0, 1.5),
