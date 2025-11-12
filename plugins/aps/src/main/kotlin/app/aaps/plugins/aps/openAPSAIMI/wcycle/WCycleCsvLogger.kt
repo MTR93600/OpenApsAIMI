@@ -20,8 +20,11 @@ class WCycleCsvLogger(ctx: Context) {
     private fun build(row: Map<String, Any?>, header: Boolean): String {
         val keys = listOf(
             "ts","trackingMode","cycleDay","phase","contraceptive","thyroid","verneuil",
-            "bg","delta5","iob","tdd24h","isfProfile","dynIsf","basalBase","smbBase","basalLearn","smbLearn",
-            "basalApplied","smbApplied","applied","reason"
+            "bg","delta5","iob","tdd24h","isfProfile","dynIsf",
+            "basalBase","smbBase","basalLearn","smbLearn",
+            "basalApplied","smbApplied",
+            "needBasalScale","needSmbScale",   // <-- NEW
+            "applied","reason"
         )
         val sb = StringBuilder()
         if (header) sb.append(keys.joinToString(",")).append("\n")

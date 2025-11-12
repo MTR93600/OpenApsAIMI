@@ -16,6 +16,9 @@ class WCycleFacade(
                 "smbLearn" to info.learnedSmbMultiplier,
                 "basalApplied" to info.basalMultiplier,
                 "smbApplied" to info.smbMultiplier,
+                // NEW: accepte si le contextRow les fournit (sinon vide)
+                "needBasalScale" to contextRow["needBasalScale"],
+                "needSmbScale" to contextRow["needSmbScale"],
                 "applied" to info.applied,
                 "reason" to info.reason
             )

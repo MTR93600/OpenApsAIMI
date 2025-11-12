@@ -1014,6 +1014,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 rate = scaled.coerceIn(0.0, limit)
                 val need = if (pre > 0.0) rate / pre else null
                 updateWCycleLearner(need, null)
+                // 🔁 log "post-application" avec la mesure d'écart réellement appliquée
+                val profile = lastProfile
+                if (profile != null) {
+                    wCycleFacade.infoAndLog(
+                        mapOf(
+                            "trackingMode" to wCyclePreferences.trackingMode().name,
+                            "contraceptive" to wCyclePreferences.contraceptive().name,
+                            "thyroid" to wCyclePreferences.thyroid().name,
+                            "verneuil" to wCyclePreferences.verneuil().name,
+                            "bg" to bg,
+                            "delta5" to delta.toDouble(),
+                            "iob" to iob.toDouble(),
+                            "tdd24h" to (tdd24HrsPerHour * 24f).toDouble(),
+                            "isfProfile" to profile.sens,
+                            "dynIsf" to variableSensitivity.toDouble(),
+                            "needBasalScale" to need
+                        )
+                    )
+                }
             }
             rate = if (bypassSafety) rate.coerceAtMost(profile.max_basal) else rate.coerceAtMost(maxSafe)
         }
@@ -1204,6 +1223,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 smbToGive = (smbToGive * wCycleInfo.smbMultiplier.toFloat()).coerceAtLeast(0f)
                 val need = if (pre > 0f) (smbToGive / pre).toDouble() else null
                 updateWCycleLearner(null, need)
+
+// 🔁 log "post-application" avec la mesure d'écart réellement appliquée
+                val profile = lastProfile
+                if (profile != null) {
+                    wCycleFacade.infoAndLog(
+                        mapOf(
+                            "trackingMode" to wCyclePreferences.trackingMode().name,
+                            "contraceptive" to wCyclePreferences.contraceptive().name,
+                            "thyroid" to wCyclePreferences.thyroid().name,
+                            "verneuil" to wCyclePreferences.verneuil().name,
+                            "bg" to bg,
+                            "delta5" to delta.toDouble(),
+                            "iob" to iob.toDouble(),
+                            "tdd24h" to (tdd24HrsPerHour * 24f).toDouble(),
+                            "isfProfile" to profile.sens,
+                            "dynIsf" to variableSensitivity.toDouble(),
+                            "needSmbScale" to need
+                        )
+                    )
+                }
             }
         }
         // Ajustements spécifiques
