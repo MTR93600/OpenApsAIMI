@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
+import app.aaps.plugins.aps.openAPSAIMI.model.Constants
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdParams
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.SmbDamping
@@ -139,6 +140,24 @@ class SmbDomainHeuristicsTest {
         assertFalse(res.overrideUsed)
         assertEquals(0.2, res.dose, 1e-6)
         assertEquals(null, res.newInterval)
+    }
+
+    @Test
+    fun highBgOverrideTriggersAtStrongThreshold() {
+        val res = HighBgOverride.apply(
+            bg = Constants.HIGH_BG_OVERRIDE_BG_STRONG,
+            delta = 0.2,
+            predictedBg = 170.0,
+            eventualBg = 168.0,
+            hypoGuard = 90.0,
+            iob = 0.1,
+            maxSmb = 2.0,
+            currentDose = 0.0,
+            pumpStep = Constants.DEFAULT_INSULIN_STEP_U
+        )
+        assertTrue(res.overrideUsed)
+        assertEquals(Constants.DEFAULT_INSULIN_STEP_U, res.dose, 1e-6)
+        assertEquals(0, res.newInterval)
     }
 
     @Test

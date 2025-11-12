@@ -37,6 +37,7 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
 import app.aaps.plugins.aps.openAPSAIMI.model.BasalPlan
+import app.aaps.plugins.aps.openAPSAIMI.model.Constants
 import app.aaps.plugins.aps.openAPSAIMI.model.LoopContext
 import app.aaps.plugins.aps.openAPSAIMI.model.SafetyReport
 import app.aaps.plugins.aps.openAPSAIMI.model.SmbPlan
@@ -160,7 +161,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val HYPO_RELEASE_MARGIN   = 5.0      // mg/dL au-dessus du seuil
     private val HYPO_RELEASE_HOLD_MIN = 5        // minutes à rester > seuil+margin
     private var highBgOverrideUsed = false
-    private val INSULIN_STEP = 0.05f
+    private val INSULIN_STEP = Constants.DEFAULT_INSULIN_STEP_U.toFloat()
 
     // État interne d’hystérèse
     private var lastHypoBlockAt: Long = 0L

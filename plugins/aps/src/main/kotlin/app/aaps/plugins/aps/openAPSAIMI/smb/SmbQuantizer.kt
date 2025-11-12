@@ -1,11 +1,13 @@
 package app.aaps.plugins.aps.openAPSAIMI.smb
 
+import app.aaps.plugins.aps.openAPSAIMI.model.Constants
+
 object SmbQuantizer {
 
     /** API générique en Double (déjà présente) */
     fun quantize(
         units: Double,
-        step: Double = 0.05,
+        step: Double = Constants.DEFAULT_INSULIN_STEP_U,
         minU: Double = 0.0,
         maxU: Double = Double.POSITIVE_INFINITY
     ): Double {

@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.safety
 
+import app.aaps.plugins.aps.openAPSAIMI.model.Constants
+
 /**
  * Implémente l’override HighBG agressif mais “safe”.
  * Renvoie la (nouvelleDose, overrideUsed, newIntervalSmb)
@@ -29,7 +31,8 @@ object HighBgOverride {
         pumpStep: Double
     ): Result {
         val highBgOverride =
-            (bg >= 180.0 || (bg >= 150.0 && delta >= 1.5)) &&
+            (bg >= Constants.HIGH_BG_OVERRIDE_BG_STRONG ||
+                (bg >= Constants.HIGH_BG_OVERRIDE_BG_MIN && delta >= 1.5)) &&
                 !isBelowHypoThreshold(
                     bgNow = bg,
                     predicted = predictedBg,
