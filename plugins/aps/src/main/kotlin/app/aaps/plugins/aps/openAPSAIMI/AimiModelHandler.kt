@@ -16,7 +16,9 @@ import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import android.content.Context
+import app.aaps.core.keys.DoubleKey
 import app.aaps.plugins.aps.R
+import app.aaps.core.keys.interfaces.Preferences
 
 /**
  * Handler UAM-only :
@@ -32,15 +34,12 @@ import app.aaps.plugins.aps.R
  */
 object AimiUamHandler {
     private const val TAG = "AIMI-UAM"
-
     // Emplacement standard du modèle
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
     private val modelUamFile = File(externalDir, "ml/modelUAM.tflite")
-
     // Interpreter TFLite (lazy/persistant)
     @Volatile private var interpreter: Interpreter? = null
     private val lock = Any()
-
     // Cache des prédictions
     private val smbCache: Cache<String, Float> = CacheBuilder.newBuilder()
         .maximumSize(1000)
@@ -52,7 +51,25 @@ object AimiUamHandler {
     @Volatile private var lastLoadOk: Boolean = false
     @Volatile private var lastLoadError: String? = null
     @Volatile private var lastLoadTime: Long = 0L
+    @Volatile private var runtimeConfidence: Double? = null
+    @Volatile private var confidenceSupplier: (() -> Double?)? = null
 
+    /** Appelé par le moteur UAM ou la logique de détection pour pousser une confiance live (0..1). */
+    fun updateRuntimeConfidence(value: Double?) {
+        runtimeConfidence = value?.coerceIn(0.0, 1.0)
+    }
+
+    /** Installé par le plugin (qui a accès à Preferences) pour récupérer une confiance persistée. */
+    fun installConfidenceSupplier(supplier: (() -> Double?)?) {
+        confidenceSupplier = supplier
+    }
+
+    /** Lecture "safe" sans dépendance au contexte/DI. Ordre: runtime -> supplier -> 0.0 */
+    fun confidenceOrZero(): Double {
+        runtimeConfidence?.let { return it.coerceIn(0.0, 1.0) }
+        val fromSupplier = try { confidenceSupplier?.invoke() } catch (_: Throwable) { null }
+        return (fromSupplier ?: 0.0).coerceIn(0.0, 1.0)
+    }
     // Pour compat avec code existant qui attend un "getInstance()"
     fun getInstance(): AimiUamHandler = this
 

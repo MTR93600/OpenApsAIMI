@@ -77,6 +77,7 @@ import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.events.EventOpenAPSUpdateGui
 import app.aaps.plugins.aps.events.EventResetOpenAPSGui
 import app.aaps.plugins.aps.openAPS.TddStatus
+import app.aaps.plugins.aps.openAPSAIMI.ISF.IsfAdjustmentEngine
 import dagger.android.HasAndroidInjector
 import org.json.JSONObject
 import java.util.Calendar
@@ -134,7 +135,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     override fun onStart() {
         super.onStart()
         AimiUamHandler.clearCache(context)
-
+        AimiUamHandler.installConfidenceSupplier {
+            // retourne null si tu veux "laisser la main" au runtime
+            preferences.get(DoubleKey.AimiUamConfidence)
+        }
         var count = 0
         val apsResults = persistenceLayer.getApsResults(dateUtil.now() - T.days(1).msecs(), dateUtil.now())
         apsResults.forEach {
@@ -164,6 +168,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val kalmanISFCalculator = KalmanISFCalculator(tddCalculator, preferences, aapsLogger)
     // Fusion lente (TDD/profile) + rate-limit de blend
     private val isfBlender = IsfBlender()
+    // top-level (à côté de isfBlender / pkpdIntegration)
+    private val isfAdjEngine = IsfAdjustmentEngine()
+
+    // état EMA persistant (clé Prefs à créer si tu veux le garder entre runs)
+    private var tddEma: Double? = null
+    private val TDD_EMA_ALPHA = 0.2 // ou pref
+
 
     // Recrée les bornes de la fusion ISF depuis les préférences (mêmes clés que PkPdIntegration)
     private fun isfFusion(): IsfFusion {
@@ -325,80 +336,85 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         return recent
     }
     @Synchronized
+    @SuppressLint("DefaultLocale")
     private fun calculateVariableIsf(timestamp: Long, bg: Double?): Pair<String, Double?> {
-        if (!preferences.get(BooleanKey.ApsUseDynamicSensitivity)) return Pair("OFF", null)
+        if (!preferences.get(BooleanKey.ApsUseDynamicSensitivity)) return "OFF" to null
 
+        // 0) cache DB existant
         val result = persistenceLayer.getApsResultCloseTo(timestamp)
-        if (result?.variableSens != null) {
-            return Pair("DB", result.variableSens)
-        }
+        if (result?.variableSens != null) return "DB" to result.variableSens
 
-        // val glucose = bg ?: glucoseStatusProvider.glucoseStatusData?.glucose ?: return Pair("GLUC", null)
-        // val currentDelta = glucoseStatusProvider.glucoseStatusData?.delta
-        // val recentDeltas = getRecentDeltas()
-        // val predictedDelta = predictedDelta(recentDeltas)
-        // val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta, predictedDelta, bg)
-        // // Calcul adaptatif via filtre Kalman (la classe KalmanISFCalculator doit être instanciée préalablement)
-        // var adaptiveISF = kalmanISFCalculator.calculateISF(glucose, currentDelta, predictedDelta)
-        // aapsLogger.debug(LTag.APS, "Adaptive ISF computed via Kalman: $adaptiveISF for BG: $glucose")
-        // var sensitivity = adaptiveISF * dynamicFactor
-        // // Imposer une valeur minimale de 5 et maximale de 300
-        // sensitivity = sensitivity.coerceIn(5.0, 300.0)
-        // aapsLogger.debug(LTag.APS, "Final ISF after clamping: $sensitivity (min=5, max=300)")
-        //
-        // // Vous pouvez ensuite mettre en cache cette valeur si nécessaire
-        // val key = timestamp - timestamp % T.mins(30).msecs() + glucose.toLong()
-        // if (dynIsfCache.size() > 1000) dynIsfCache.clear()
-        // dynIsfCache.put(key, sensitivity)
-        //
-        // return Pair("CALC", sensitivity)
-        val glucose = bg ?: glucoseStatusProvider.glucoseStatusData?.glucose ?: return Pair("GLUC", null)
+        // 1) BG & deltas actuels
+        val glucose = bg ?: glucoseStatusProvider.glucoseStatusData?.glucose ?: return "GLUC" to null
         val currentDelta = glucoseStatusProvider.glucoseStatusData?.delta
         val recentDeltas = getRecentDeltas()
         val predictedDelta = predictedDelta(recentDeltas)
 
-// 1) Facteur historique (inchangé)
+        // 2) facteur historique (comme avant)
         val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta, predictedDelta, bg)
 
-// 2) ISF rapide (Kalman) - inchangé
+        // 3) ISF rapide #1 : Kalman existant
         val kalmanFastIsf = kalmanISFCalculator.calculateISF(glucose, currentDelta, predictedDelta)
         aapsLogger.debug(LTag.APS, "Adaptive ISF via Kalman: $kalmanFastIsf for BG: $glucose")
 
-// 3) ISF lent (TDD/profile) via IsfFusion (mêmes bornes que PK/PD)
+        // 4) ISF lent (socle) : profil/TDD fusionné + pkpdScale (inchangé)
         val profileIsf = profileFunction.getProfile()?.getProfileIsfMgdl() ?: 20.0
         val tddIsf = tddIsf24hOr(profileIsf)
         val fusedSlowIsf = isfFusion().fused(profileIsf, tddIsf, lastPkpdScale)
-        aapsLogger.debug(LTag.APS, "Fused slow ISF (profile/TDD): $fusedSlowIsf (profile=$profileIsf, tddIsf=$tddIsf)")
+        aapsLogger.debug(LTag.APS, "Fused slow ISF: $fusedSlowIsf (profile=$profileIsf, tddIsf=$tddIsf, pkpdScale=$lastPkpdScale)")
 
-// 4) Confiance du "rapide" (faute de variance Kalman exposée ici)
-        val trustFast = estimateKalmanTrustFromDelta(currentDelta)
+        // 5) EMA TDD (stabilise l’ajustement AF)
+        val tdd24 = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: tddIsf /* fallback */
+        tddEma = when (val prev = tddEma) {
+            null -> tdd24
+            else -> prev + TDD_EMA_ALPHA * (tdd24 - prev)
+        }
 
-// 5) Blend + rate-limit temporel (empêche les yoyos si tick fréquent)
+        // 6) proxys de confiance (si variance non exposée ici)
+        val kalmanTrustProxy = estimateKalmanTrustFromDelta(currentDelta)             // 0..1
+        val kalmanVarProxy = (1.0 - kalmanTrustProxy).coerceIn(0.0, 1.0)             // 1-trust
+        val sippConfidence = AimiUamHandler.confidenceOrZero().coerceIn(0.0, 1.0)
+
+        // 7) ISF rapide #2 : IsfAdjustmentEngine (AF ln(BG/55) + TDD-EMA + rate-limit)
+        val isfAdj = isfAdjEngine.compute(
+            bgKalman = glucose,
+            tddEma   = (tddEma ?: tdd24),
+            profileIsf = profileIsf,
+            sippConfidence = sippConfidence,
+            kalmanVar = kalmanVarProxy,
+            nowMs = System.currentTimeMillis()
+        )
+        aapsLogger.debug(LTag.APS, "Adaptive ISF via IsfAdjustmentEngine: $isfAdj (tddEma=$tddEma, sipp=$sippConfidence, var=$kalmanVarProxy)")
+
+        // 8) Combine les deux rapides par médiane robuste (résistant aux outliers)
+        val fastMedian = listOf(kalmanFastIsf, isfAdj).sorted()[1]
+
+        // 9) Blend final (socle lent vs rapide), avec rate-limit temporel de IsfBlender
         var blended = isfBlender.blend(
             fusedIsf = fusedSlowIsf,
-            kalmanIsf = kalmanFastIsf,
-            trustFast = trustFast,
+            kalmanIsf = fastMedian,
+            trustFast = kalmanTrustProxy,
             nowMs = System.currentTimeMillis()
         )
 
-// 6) Application de ton facteur dynamique + bornes (inchangé)
+        // 10) facteur dynamique + bornes globales
         blended *= dynamicFactor
         blended = blended.coerceIn(5.0, 300.0)
 
-        aapsLogger.debug(LTag.APS, "Final DynISF (blend+factor+clamp): $blended")
+        aapsLogger.debug(LTag.APS, "Final DynISF: $blended")
         aapsLogger.debug(
             LTag.APS,
-            "DynISF inputs: fusedSlowIsf=$fusedSlowIsf, kalmanFastIsf=$kalmanFastIsf, trustFast=$trustFast, pkpdScale=$lastPkpdScale"
+            "DynISF inputs: fusedSlowIsf=$fusedSlowIsf, kalmanFastIsf=$kalmanFastIsf, isfAdj=$isfAdj, trustFast=$kalmanTrustProxy, pkpdScale=$lastPkpdScale"
         )
 
-// 7) Cache (inchangé)
+        // 11) cache
         val key = timestamp - timestamp % T.mins(30).msecs() + glucose.toLong()
         if (dynIsfCache.size() > 1000) dynIsfCache.clear()
         dynIsfCache.put(key, blended)
 
-        return Pair("CALC", blended)
-
+        return "CALC" to blended
     }
+
 
     override fun invoke(initiator: String, tempBasalFallback: Boolean) {
         aapsLogger.debug(LTag.APS, "invoke from $initiator tempBasalFallback: $tempBasalFallback")
