@@ -1648,15 +1648,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             context.shortAvgDelta < 0
 
     private fun isSportSafetyCondition(): Boolean {
-        val sport = targetBg >= 140 && recentSteps5Minutes >= 200 && recentSteps10Minutes >= 400
-        val sport1 = targetBg >= 140 && recentSteps5Minutes >= 200 && averageBeatsPerMinute > averageBeatsPerMinute10
-        val sport2 = recentSteps5Minutes >= 200 && averageBeatsPerMinute > averageBeatsPerMinute10
-        val sport3 = recentSteps5Minutes >= 200 && recentSteps10Minutes >= 500
-        val sport4 = targetBg >= 140
-        val sport5= sportTime
+        val manualSport = sportTime
+        val recentBurst = recentSteps5Minutes >= 200 && recentSteps10Minutes >= 500
+        val sustainedActivity =
+            recentSteps30Minutes >= 800 || recentSteps60Minutes >= 1500 || recentSteps180Minutes >= 2500
 
-        return sport || sport1 || sport2 || sport3 || sport4 || sport5
+        val baselineHr = if (averageBeatsPerMinute10 > 0.0) averageBeatsPerMinute10 else averageBeatsPerMinute
+        val elevatedHeartRate = baselineHr > 0 && averageBeatsPerMinute > baselineHr * 1.1
+        val shortActivityWithHr = (recentSteps5Minutes >= 200 || recentSteps10Minutes >= 400) && elevatedHeartRate
 
+        val highTargetExercise = targetBg >= 140 && (shortActivityWithHr || sustainedActivity)
+
+        return manualSport || recentBurst || sustainedActivity || highTargetExercise
     }
     private fun calculateSMBInterval(): Int {
         val reasonBuilder = StringBuilder()

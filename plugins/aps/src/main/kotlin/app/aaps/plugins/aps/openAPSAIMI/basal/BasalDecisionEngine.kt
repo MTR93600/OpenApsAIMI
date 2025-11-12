@@ -337,6 +337,38 @@ class BasalDecisionEngine @Inject constructor(
         }
 
         if (chosenRate == null) {
+            val trendSignals = listOfNotNull(
+                input.delta,
+                input.shortAvgDelta,
+                input.longAvgDelta,
+                input.combinedDelta,
+                input.featuresCombinedDelta
+            )
+            val strongestRise = trendSignals.maxOrNull() ?: Double.NEGATIVE_INFINITY
+            if (strongestRise >= 4.0 && input.bg > 120 && !input.sportTime) {
+                val multiplier = when {
+                    strongestRise >= 8.0 -> 1.8
+                    strongestRise >= 6.0 -> 1.6
+                    else -> 1.3
+                }
+                val candidate = helpers.calculateBasalRate(
+                    finalBasalRate,
+                    input.profileCurrentBasal,
+                    multiplier
+                )
+                val capped = min(candidate, input.profileCurrentBasal * 2.0)
+                chosenRate = capped
+                rT.reason.append(
+                    context.getString(
+                        R.string.reason_strong_rise_basal,
+                        helpers.round(strongestRise, 1),
+                        helpers.round(multiplier, 2)
+                    )
+                )
+            }
+        }
+
+        if (chosenRate == null) {
             val windows = listOf(
                 input.snackTime to input.snackRuntimeMin,
                 input.mealTime to input.mealRuntimeMin,
