@@ -44,8 +44,10 @@ class AdaptivePkPdEstimator(
 
         val p0 = state.get()
         val isfTddMgDlPerU = IsfTddProvider.isfTdd()
-        val dIoBdt = approximateAction(iobU, p0)
-        val expectedDropPer5 = dIoBdt * isfTddMgDlPerU * (5.0 / 60.0)
+        //val dIoBdt = approximateAction(iobU, p0)
+        //val expectedDropPer5 = dIoBdt * isfTddMgDlPerU * (5.0 / 60.0)
+        val action = kernel.actionAt(windowMin.toDouble(), p0).coerceAtLeast(1e-6)
+        val expectedDropPer5 = action * iobU * isfTddMgDlPerU * (5.0 / 60.0)
         val err = (-deltaMgDlPer5) - expectedDropPer5
         val tailFactor = 1.0 + cfg.tailWeight * max(0.0, (windowMin - p0.peakMin) / max(1.0, p0.peakMin))
         val diaAdj = cfg.lr * tailFactor * sign(err) * min(1.0, abs(err) / 10.0)
