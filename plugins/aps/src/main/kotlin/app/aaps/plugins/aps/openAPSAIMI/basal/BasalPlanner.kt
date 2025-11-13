@@ -25,12 +25,12 @@ class BasalPlanner @Inject constructor(
     private val HYPO_SUSPEND_SOFT = 85.0      // seuil "soft" si Δ négatif
     private val HYPO_SUSPEND_MIN = 30
 
-    private val ZERO_RESUME_MIN = 10          // reprise si >=10 min à 0U/h
-    private val ZERO_RESUME_FRAC = 0.25       // 25% du profil
+    private val ZERO_RESUME_MIN = 5          // reprise si >=5 min à 0U/h
+    private val ZERO_RESUME_FRAC = 0.50       // 25% du profil
     private val ZERO_RESUME_MAX_MIN = 30
 
-    private val HIGH_BG = 180.0
-    private val PLATEAU_DELTA_ABS = 2.5       // mg/dL/5min
+    private val HIGH_BG = 160.0
+    private val PLATEAU_DELTA_ABS = 3.0       // mg/dL/5min
     private val KICK_FRAC = 0.15              // +15% profil
     private val KICK_MIN_UPH = 0.20
     private val KICK_MINUTES = 10

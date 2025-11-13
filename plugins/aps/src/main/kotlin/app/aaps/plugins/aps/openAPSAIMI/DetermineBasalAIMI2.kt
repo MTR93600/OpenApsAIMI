@@ -3284,6 +3284,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val fusedSensitivity = pkpdRuntime?.fusedIsf
         val dynSensitivity = profile.variable_sens.takeIf { it > 0.0 } ?: profile.sens
         val baseSensitivity = fusedSensitivity ?: profile.sens
+
         var sens = when {
             fusedSensitivity == null -> dynSensitivity
             dynSensitivity <= 0.0 -> fusedSensitivity
@@ -3291,11 +3292,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         if (sens <= 0.0) sens = baseSensitivity
         this.variableSensitivity = sens.toFloat()
+
         if (fusedSensitivity != null) {
+            // --- LOG ---
             consoleError.add(
                 "ISF fusionné=${"%.1f".format(fusedSensitivity)} dynISF=${"%.1f".format(dynSensitivity)} → appliqué=${"%.1f".format(sens)}"
             )
+
+            // --- 🔥 NOUVEAU : synchroniser l’ISF dans le provider PKPD ---
+            try {
+                app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfTddProvider.set(fusedSensitivity)
+            } catch (e: Exception) {
+                consoleError.add("Impossible de mettre à jour IsfTddProvider: ${e.message}")
+            }
         }
+
         consoleError.add("CR:${profile.carb_ratio}")
         this.predictedBg = predictEventualBG(bg.toFloat(), iob, variableSensitivity, minDelta.toFloat(), shortAvgDelta, longAvgDelta, mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime, snackTime, honeymoon)
         //val insulinEffect = calculateInsulinEffect(bg.toFloat(),iob,variableSensitivity,cob,normalBgThreshold,recentSteps180Minutes,averageBeatsPerMinute.toFloat(),averageBeatsPerMinute10.toFloat(),profile.insulinDivisor.toFloat())

@@ -57,14 +57,40 @@ class SmbDamping(
         var out = smbU
         val tailApplied = iobTailFrac > policy.tailIobHigh
         val tailMult = if (tailApplied) policy.smbDampingAtTail else 1.0
+        // --- Late fat correction: plus permissif après plusieurs heures post-meal ---
+        val lateApplied = suspectedLateFatMeal
+        var lateMult = 1.0
+
+        if (lateApplied) {
+            // par défaut on n’a pas le temps depuis le repas
+            var elapsedSinceMealMin = 0.0
+
+            try {
+                // on tente de récupérer la valeur dans un état global, si dispo
+                val stateClass = Class.forName("app.aaps.plugins.aps.openAPSAIMI.model.ModeState")
+                val field = stateClass.getDeclaredField("timeSinceMealMin")
+                field.isAccessible = true
+                elapsedSinceMealMin = (field.get(null) as? Double) ?: 0.0
+            } catch (_: Exception) {
+                // fallback : reste à 0.0
+            }
+
+            val lateFatFactor = when {
+                elapsedSinceMealMin < 120 -> 0.85    // 0–2h post-meal → légère réduction
+                elapsedSinceMealMin < 240 -> 0.9     // 2–4h → s’allège
+                else -> 0.95                         // >4h → quasi neutralisé
+            }
+            lateMult = lateFatFactor
+            out *= lateMult
+        }
         if (tailApplied) out *= tailMult
 
         val exerciseApplied = exercise
         val exerciseMult = if (exerciseApplied) policy.postExerciseDamping else 1.0
         if (exerciseApplied) out *= exerciseMult
 
-        val lateApplied = suspectedLateFatMeal
-        val lateMult = if (lateApplied) policy.lateFattyMealDamping else 1.0
+        //val lateApplied = suspectedLateFatMeal
+        //val lateMult = if (lateApplied) policy.lateFattyMealDamping else 1.0
         if (lateApplied) out *= lateMult
 
         return SmbDampingAudit(

@@ -314,7 +314,7 @@ object SmbInstructionExecutor {
 
         val optimalBasalMpc = (optimalDose + correction).coerceIn(doseMin, doseMax)
 
-        val alpha = 0.3 + 0.5 * deltaScore
+        val alpha = 0.4 + 0.5 * deltaScore
         input.rT.reason.appendLine(
             input.context.getString(
                 R.string.reason_mpc_pi,
@@ -324,7 +324,13 @@ object SmbInstructionExecutor {
                 (1 - alpha) * 100
             )
         )
-
+        run {
+            val mpcUsed = kotlin.math.max(0.0, alpha * optimalBasalMpc)
+            val piUsed  = kotlin.math.max(0.0, (1 - alpha) * finalInsulinDose)
+            val denom = mpcUsed + piUsed
+            val mpcShare = if (denom > 1e-6) 100.0 * mpcUsed / denom else 0.0
+            input.rT.reason.append(" | MPC utile: %.0f%% (alpha=%.0f%%)".format(mpcShare, 100 * alpha))
+        }
         var smbDecision = (alpha * optimalBasalMpc + (1 - alpha) * finalInsulinDose).toFloat()
 
         val suspectedLateFatMeal = input.highCarbTime && hooks.runtimeToMinutes(input.highCarbRunTime) > 90
@@ -369,7 +375,7 @@ object SmbInstructionExecutor {
         )
         var smbAfterDamping = dampingOut.smbAfterDamping
         val audit = dampingOut.audit
-
+        val dampedRaw = smbAfterDamping
         var highBgOverrideFlag = false
         var highBgOverrideUsed = input.highBgOverrideUsed
         var newInterval = input.currentInterval
@@ -418,23 +424,29 @@ object SmbInstructionExecutor {
             input.rT.reason.append(
                 "\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s%s".format(
                     smbDecision,
-                    smbAfterDamping,
+                    dampedRaw,
                     if (audit.tailApplied) "✔" else "✘", audit.tailMult,
                     if (audit.exerciseApplied) "✔" else "✘", audit.exerciseMult,
                     if (audit.lateFatApplied) "✔" else "✘", audit.lateFatMult,
                     quantized,
                     highBgTag,
-                    bypassTag
+                    bypassTag,
+                    smbAfterDamping,     // après override
+                    quantized,
+                    highBgTag
                 )
             )
         } else {
             input.rT.reason.append(
                 "\nSMB: proposed=%.2f → damped=%.2f → quantized=%.2f%s%s".format(
                     smbDecision,
-                    smbAfterDamping,
+                    dampedRaw,
                     quantized,
                     highBgTag,
-                    bypassTag
+                    bypassTag,
+                    smbAfterDamping,     // après override
+                    quantized,
+                    highBgTag
                 )
             )
         }

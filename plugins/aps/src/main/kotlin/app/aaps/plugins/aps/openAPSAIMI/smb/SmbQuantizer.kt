@@ -17,14 +17,27 @@ object SmbQuantizer {
     }
 
     /** Surcouche “convenience” pour rester compatible avec les appels existants */
-    fun quantizeToPumpStep(units: Float, step: Float, minU: Float = 0f, maxU: Float = Float.POSITIVE_INFINITY): Float {
-        val out = quantize(
+    fun quantizeToPumpStep(
+        units: Float,
+        step: Float,
+        minU: Float = 0f,
+        maxU: Float = Float.POSITIVE_INFINITY
+    ): Float {
+        // D'abord, on quantifie normalement
+        var quantized = quantize(
             units = units.toDouble(),
             step  = step.toDouble(),
             minU  = minU.toDouble(),
             maxU  = maxU.toDouble()
         )
-        return out.toFloat()
+
+        // --- Nouveau : plancher sécurité ---
+        if (quantized == 0.0 && units > 0.02) {
+            // si tout est OK, injecte le pas mini (ex: 0.05U)
+            quantized = step.toDouble()
+        }
+
+        return quantized.toFloat()
     }
 
     /** Variante Double si tu veux standardiser tout en Double dans le futur */

@@ -20,7 +20,7 @@ data class PkPdLearningConfig(
 class AdaptivePkPdEstimator(
     private val kernel: Kernel = LogNormalKernel(),
     private val cfg: PkPdLearningConfig = PkPdLearningConfig(),
-    initial: PkPdParams = PkPdParams(diaHrs = 20.0, peakMin = 180.0)
+    initial: PkPdParams = PkPdParams(diaHrs = 12.0, peakMin = 90.0)
 ) {
     private val state = AtomicReference(initial)
     private var lastUpdateEpochMin: Long = 0
@@ -52,16 +52,23 @@ class AdaptivePkPdEstimator(
         val tailFactor = 1.0 + cfg.tailWeight * max(0.0, (windowMin - p0.peakMin) / max(1.0, p0.peakMin))
         val diaAdj = cfg.lr * tailFactor * sign(err) * min(1.0, abs(err) / 10.0)
         val tpAdj = cfg.lr * 0.5 * sign(err) * min(1.0, abs(err) / 10.0)
+        val anchorDia = 12.0
+        val anchorTp  = 90.0
+        val reg = 0.002   // régularisation très faible
+
+        val diaAdjReg = diaAdj - reg * (p0.diaHrs - anchorDia)
+        val tpAdjReg  = tpAdj  - reg * (p0.peakMin - anchorTp)
+
         val now = epochMin
         val dtDays = if (lastUpdateEpochMin == 0L) 1.0 else max(1.0, (now - lastUpdateEpochMin) / (60.0 * 24.0))
         lastUpdateEpochMin = now
         val bounds = cfg.bounds
         val maxDiaStep = bounds.maxDiaChangePerDayH * cfg.maxRateChangeScale * dtDays
         val maxTpStep = bounds.maxPeakChangePerDayMin * cfg.maxRateChangeScale * dtDays
-        val newDia = (p0.diaHrs + diaAdj)
+        val newDia = (p0.diaHrs + diaAdjReg)
             .coerceIn(p0.diaHrs - maxDiaStep, p0.diaHrs + maxDiaStep)
             .coerceIn(bounds.diaMinH, bounds.diaMaxH)
-        val newTp = (p0.peakMin + tpAdj)
+        val newTp = (p0.peakMin + tpAdjReg)
             .coerceIn(p0.peakMin - maxTpStep, p0.peakMin + maxTpStep)
             .coerceIn(bounds.peakMinMin, bounds.peakMinMax)
         state.set(PkPdParams(newDia, newTp))

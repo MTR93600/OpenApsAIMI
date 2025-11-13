@@ -16,11 +16,11 @@ data class PkPdParams(
 /** Bounds and maximum daily change limits applied to the learned PK/PD parameters. */
 data class PkPdBounds(
     val diaMinH: Double = 6.0,
-    val diaMaxH: Double = 24.0,
-    val peakMinMin: Double = 40.0,
-    val peakMinMax: Double = 240.0,
-    val maxDiaChangePerDayH: Double = 2.0,
-    val maxPeakChangePerDayMin: Double = 20.0
+    val diaMaxH: Double = 12.0,
+    val peakMinMin: Double = 30.0,
+    val peakMinMax: Double = 180.0,
+    val maxDiaChangePerDayH: Double = 1.0,
+    val maxPeakChangePerDayMin: Double = 10.0
 )
 
 interface Kernel {

@@ -42,8 +42,8 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
     private object Defaults {
         const val FRESHNESS_MIN = 7L
         const val SERIES_GAP_MIN = 13L
-        const val FIT_GAP_MIN = 11L
-        const val CUTOFF_MIN = 47.5
+        const val FIT_GAP_MIN = 9L
+        const val CUTOFF_MIN = 30.0
         const val BW_FRACTION = 0.05
         const val CACHE_TTL_MS = 30_000L
     }
@@ -210,7 +210,7 @@ private object QuadraticFit {
         val a1: Double,
         val a2: Double
     )
-
+    private var accelFiltered = 0.0
     fun <T> fit5min(
         data: List<T>,
         cutoffMin: Double,
@@ -286,7 +286,14 @@ private object QuadraticFit {
                 val r2 = if (ssTot != 0.0) 1 - ssRes / ssTot else 0.0
 
                 val dt = 5 * 60 / SCALE_TIME
-                val accel = 2 * a * SCALE_BG / 60.0
+                val accelCurrent = 2 * a * SCALE_BG / 60.0  // mg/dL/min²
+
+// --- Nouveau : filtrage exponentiel léger pour stabiliser ---
+                accelFiltered = 0.6 * accelFiltered + 0.4 * accelCurrent
+
+// --- Affectation finale ---
+                val accel = accelFiltered
+
                 val deltaPl = -SCALE_BG * (a * (-dt) * (-dt) - b * dt)
                 val deltaPn =  SCALE_BG * (a * ( dt) * ( dt) + b * dt)
 
