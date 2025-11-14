@@ -393,7 +393,7 @@ class BasalDecisionEngine @Inject constructor(
 
         if (chosenRate == null) {
             val isPlateauHigh =
-                input.bg > 180 &&
+                input.bg > 150 &&
                     abs(input.delta) <= 2.0 &&
                     abs(input.shortAvgDelta) <= 2.0 &&
                     abs(input.longAvgDelta) <= 2.0 &&
@@ -401,7 +401,7 @@ class BasalDecisionEngine @Inject constructor(
                     abs(input.glucoseStatus?.bgAcceleration ?: 0.0) <= 0.2
 
             if (isPlateauHigh) {
-                val err = (input.bg - 180.0).coerceAtLeast(0.0)
+                val err = (input.bg - 150.0).coerceAtLeast(0.0)
                 val boostFrac = (err / input.variableSensitivity).coerceIn(0.15, 0.60)
                 val candidate = input.profileCurrentBasal * (1.0 + boostFrac)
                 val boosted = max(candidate, input.basalEstimate)
@@ -412,11 +412,11 @@ class BasalDecisionEngine @Inject constructor(
 
         if (chosenRate == null) {
             when {
-                input.eventualBg > 180 && input.delta > 3 -> {
+                input.eventualBg > 150 && input.delta > 3 -> {
                     chosenRate = helpers.calculateBasalRate(input.basalEstimate, input.profileCurrentBasal, basalAdjustmentFactor)
                     rT.reason.append(context.getString(R.string.eventual_bg_over_180_hyper_basalaimi))
                 }
-                input.bg > 180 && input.delta in -5.0..1.0 -> {
+                input.bg > 150 && input.delta in -5.0..1.0 -> {
                     chosenRate = input.profileCurrentBasal * basalAdjustmentFactor
                     rT.reason.append(context.getString(R.string.bg_over_180_stable_basal_factor))
                 }

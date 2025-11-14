@@ -307,14 +307,17 @@ object SmbInstructionExecutor {
             }
         }
 
-        val baseKp = 0.1
+        val baseKp = 0.15
         val kp = baseKp * (0.5 + deltaScore)
         val error = input.bg - input.targetBg
         val correction = -kp * error
 
         val optimalBasalMpc = (optimalDose + correction).coerceIn(doseMin, doseMax)
+        // --- Mix MPC / PI : MPC plus dominant pour BG > cible ---
+        val alphaRaw = 0.5 + 0.5 * deltaScore  // 0.3 → 0.5 de base
+        val alpha = alphaRaw.coerceIn(0.3, 0.9)
 
-        val alpha = 0.4 + 0.5 * deltaScore
+        //val alpha = 0.4 + 0.5 * deltaScore
         input.rT.reason.appendLine(
             input.context.getString(
                 R.string.reason_mpc_pi,
