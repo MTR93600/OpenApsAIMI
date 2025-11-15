@@ -4,15 +4,23 @@ import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.IntKey
+import app.aaps.core.keys.BooleanKey
 import javax.inject.Inject
 import dagger.Reusable
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import java.util.Locale
+import android.content.Context
+import app.aaps.plugins.aps.R
 
 @Reusable
 class AIMIAdaptiveBasal @Inject constructor(
+    private val context: Context,
+    private val prefs: Preferences,
     private val log: AAPSLogger,
     private val fmt: DecimalFormatter
 ) {
@@ -38,22 +46,6 @@ class AIMIAdaptiveBasal @Inject constructor(
         val reason: String
     )
 
-    private data class PlateauSettings(
-        val highBg: Double,
-        val plateauBand: Double,
-        val r2Conf: Double,
-        val maxMultiplier: Double,
-        val kickerStep: Double,
-        val kickerMinUph: Double,
-        val kickerStartMin: Int,
-        val kickerMaxMin: Int,
-        val zeroResumeMin: Int,
-        val zeroResumeRateFrac: Double,
-        val zeroResumeMax: Int,
-        val antiStallBias: Double,
-        val deltaPosRelease: Double
-    )
-
     private object Defaults {
         const val HIGH_BG = 180.0
         const val PLATEAU_DELTA_ABS = 2.5
@@ -71,27 +63,29 @@ class AIMIAdaptiveBasal @Inject constructor(
     }
 
     fun suggest(input: Input): Decision {
-        val settings = buildSettings(input)
-        val highBg = settings.highBg
-        val plateauBand = settings.plateauBand
-        val r2Conf = settings.r2Conf
-        val maxMult = settings.maxMultiplier
-        val kickerStep = settings.kickerStep
-        val kickerMinUph = settings.kickerMinUph
-        val kickerStartMin = settings.kickerStartMin
-        val kickerMaxMin = settings.kickerMaxMin
-        val zeroResumeMin = settings.zeroResumeMin
-        val zeroResumeRateFrac = settings.zeroResumeRateFrac
-        val zeroResumeMax = settings.zeroResumeMax
-        val antiStallBias = settings.antiStallBias
-        val deltaPosRelease = settings.deltaPosRelease
+        val highBg = prefs.getOr(DoubleKey.OApsAIMIHighBg, Defaults.HIGH_BG)
+        val plateauBand = prefs.getOr(DoubleKey.OApsAIMIPlateauBandAbs, Defaults.PLATEAU_DELTA_ABS)
+        val r2Conf = prefs.getOr(DoubleKey.OApsAIMIR2Confident, Defaults.R2_CONFIDENT)
+        val maxMult = prefs.getOr(DoubleKey.OApsAIMIMaxMultiplier, Defaults.MAX_MULTIPLIER)
+        val kickerStep = prefs.getOr(DoubleKey.OApsAIMIKickerStep, Defaults.KICKER_STEP)
+        val kickerMinUph = prefs.getOr(DoubleKey.OApsAIMIKickerMinUph, Defaults.KICKER_MIN)
+        val kickerStartMin = prefs.getOr(IntKey.OApsAIMIKickerStartMin, Defaults.KICKER_START_MIN)
+        val kickerMaxMin = prefs.getOr(IntKey.OApsAIMIKickerMaxMin, Defaults.KICKER_MAX_MIN)
+        val zeroResumeMin = prefs.getOr(IntKey.OApsAIMIZeroResumeMin, Defaults.ZERO_MICRO_RESUME_MIN)
+        val zeroResumeRateFrac = prefs.getOr(DoubleKey.OApsAIMIZeroResumeFrac, Defaults.ZERO_MICRO_RESUME_RATE)
+        val zeroResumeMax = prefs.getOr(IntKey.OApsAIMIZeroResumeMax, Defaults.ZERO_MICRO_RESUME_MAX)
+        val antiStallBias = prefs.getOr(DoubleKey.OApsAIMIAntiStallBias, Defaults.ANTI_STALL_BIAS)
+        val deltaPosRelease = prefs.getOr(DoubleKey.OApsAIMIDeltaPosRelease, Defaults.DELTA_POS_FOR_RELEASE)
 
-        if (input.profileBasal <= 0.0) return Decision(null, 0, "profile basal = 0")
+        // 0) garde-fous
+      //if (input.profileBasal <= 0.0) return Decision(null, 0, "profile basal = 0")
+        if (input.profileBasal <= 0.0) return Decision(null, 0, context.getString(R.string.aimi_profile_basal_zero))
 
         if (input.lastTempIsZero && input.zeroSinceMin >= zeroResumeMin) {
             val rate = max(kickerMinUph, input.profileBasal * zeroResumeRateFrac)
             val dur = min(zeroResumeMax, max(10, input.minutesSinceLastChange / 2))
-            val r = "micro-resume after ${input.zeroSinceMin}m @0U/h → ${fmt.to2Decimal(rate)}U/h × ${dur}m"
+          //val r = "micro-resume after ${input.zeroSinceMin}m @0U/h → ${fmt.to2Decimal(rate)}U/h × ${dur}m"
+            val r = context.getString(R.string.aimi_micro_resume,input.zeroSinceMin,fmt.to2Decimal(rate),dur)
             log.debug(LTag.APS, "AIMI+ $r")
             return Decision(rate, dur, r)
         }
@@ -109,7 +103,8 @@ class AIMIAdaptiveBasal @Inject constructor(
                 input.minutesSinceLastChange < 15 -> (kickerStartMin + 10)
                 else                              -> kickerMaxMin
             }
-            val r = "plateau kicker (BG=${fmt.to0Decimal(input.bg)}, Δ≈0, R2=${fmt.to2Decimal(input.r2)}) → ${fmt.to2Decimal(target)}U/h × ${dur}m"
+          //val r = "plateau kicker (BG=${fmt.to0Decimal(input.bg)}, Δ≈0, R2=${fmt.to2Decimal(input.r2)}) → ${fmt.to2Decimal(target)}U/h × ${dur}m"
+            val r = context.getString(R.string.aimi_plateau_kicker,fmt.to0Decimal(input.bg),fmt.to2Decimal(input.r2),fmt.to2Decimal(target),dur)
             log.debug(LTag.APS, "AIMI+ $r")
             return Decision(target, dur, r)
         }
@@ -118,15 +113,24 @@ class AIMIAdaptiveBasal @Inject constructor(
         if (glued && input.bg > highBg && input.delta < deltaPosRelease) {
             val rate = min(input.profileBasal * (1.0 + antiStallBias), input.profileBasal * maxMult)
             val dur = 10
-            val r = "anti-stall bias (+${(antiStallBias*100).toInt()}%) because R2=${fmt.to2Decimal(input.r2)} & Δ≈0"
+          //val r = "anti-stall bias (+${(antiStallBias*100).toInt()}%) because R2=${fmt.to2Decimal(input.r2)} & Δ≈0"
+            val r = context.getString(R.string.aimi_anti_stall_bias,(antiStallBias * 100).toInt(),fmt.to2Decimal(input.r2))
             log.debug(LTag.APS, "AIMI+ $r")
             return Decision(rate, dur, r)
         }
 
-        return Decision(null, 0, "no AIMI+ action")
+        //return Decision(null, 0, "no AIMI+ action")
+        return Decision(null, 0, context.getString(R.string.aimi_no_action))
     }
 
     // helpers
+    private fun Preferences.getOr(key: DoubleKey, default: Double) =
+        runCatching { this.get(key) }.getOrNull() ?: default
+    private fun Preferences.getOr(key: IntKey, default: Int) =
+        runCatching { this.get(key) }.getOrNull() ?: default
+    private fun Preferences.getOr(key: BooleanKey, default: Boolean) =
+        runCatching { this.get(key) }.getOrNull() ?: default
+
     companion object {
         /**
          * Version statique “sans DI” : aucune dépendance à Preferences/Logger/Formatter.
@@ -134,109 +138,53 @@ class AIMIAdaptiveBasal @Inject constructor(
          */
         @JvmStatic
         fun pureSuggest(input: Input): Decision {
-            val settings = buildSettings(input)
             if (input.profileBasal <= 0.0) return Decision(null, 0, "profile basal = 0")
 
             fun d0(v: Double) = String.format(Locale.US, "%.0f", v)
             fun d2(v: Double) = String.format(Locale.US, "%.2f", v)
 
-            if (input.lastTempIsZero && input.zeroSinceMin >= settings.zeroResumeMin) {
-                val rate = max(settings.kickerMinUph, input.profileBasal * settings.zeroResumeRateFrac)
-                val dur = min(settings.zeroResumeMax, max(10, input.minutesSinceLastChange / 2))
+            if (input.lastTempIsZero && input.zeroSinceMin >= Defaults.ZERO_MICRO_RESUME_MIN) {
+                val rate = max(Defaults.KICKER_MIN, input.profileBasal * Defaults.ZERO_MICRO_RESUME_RATE)
+                val dur = min(Defaults.ZERO_MICRO_RESUME_MAX, max(10, input.minutesSinceLastChange / 2))
                 val r = "micro-resume after ${input.zeroSinceMin}m @0U/h → ${d2(rate)}U/h × ${dur}m"
                 return Decision(rate, dur, r)
             }
 
-            val plateau = abs(input.delta) <= settings.plateauBand &&
-                abs(input.shortAvgDelta) <= settings.plateauBand
-            val highAndFlat = input.bg > settings.highBg && plateau
+            val plateau = abs(input.delta) <= Defaults.PLATEAU_DELTA_ABS &&
+                abs(input.shortAvgDelta) <= Defaults.PLATEAU_DELTA_ABS
+            val highAndFlat = input.bg > Defaults.HIGH_BG && plateau
 
             if (highAndFlat) {
-                val conf = min(1.0, max(0.0, (input.r2 - 0.3) / (settings.r2Conf - 0.3)))
+                val r2Conf = Defaults.R2_CONFIDENT
+                val conf = min(1.0, max(0.0, (input.r2 - 0.3) / (r2Conf - 0.3)))
                 val accelBrake = if (input.accel < 0) 0.6 else 1.0
-                val mult = 1.0 + settings.kickerStep * conf * accelBrake *
+                val mult = 1.0 + Defaults.KICKER_STEP * conf * accelBrake *
                     (1.0 + min(1.0, input.parabolaMin / 15.0))
                 val target = min(
-                    input.profileBasal * settings.maxMultiplier,
-                    max(settings.kickerMinUph, input.profileBasal * mult)
+                    input.profileBasal * Defaults.MAX_MULTIPLIER,
+                    max(Defaults.KICKER_MIN, input.profileBasal * mult)
                 )
                 val dur = when {
-                    input.minutesSinceLastChange < 5  -> settings.kickerStartMin
-                    input.minutesSinceLastChange < 15 -> (settings.kickerStartMin + 10)
-                    else                              -> settings.kickerMaxMin
+                    input.minutesSinceLastChange < 5  -> Defaults.KICKER_START_MIN
+                    input.minutesSinceLastChange < 15 -> (Defaults.KICKER_START_MIN + 10)
+                    else                              -> Defaults.KICKER_MAX_MIN
                 }
                 val r = "plateau kicker (BG=${d0(input.bg)}, Δ≈0, R2=${d2(input.r2)}) → ${d2(target)}U/h × ${dur}m"
                 return Decision(target, dur, r)
             }
 
-            val glued = input.r2 >= settings.r2Conf &&
-                abs(input.delta) <= settings.plateauBand &&
-                abs(input.longAvgDelta) <= settings.plateauBand
-            if (glued && input.bg > settings.highBg && input.delta < settings.deltaPosRelease) {
-                val rate = min(
-                    input.profileBasal * (1.0 + settings.antiStallBias),
-                    input.profileBasal * settings.maxMultiplier
-                )
+            val glued = input.r2 >= Defaults.R2_CONFIDENT &&
+                abs(input.delta) <= Defaults.PLATEAU_DELTA_ABS &&
+                abs(input.longAvgDelta) <= Defaults.PLATEAU_DELTA_ABS
+            if (glued && input.bg > Defaults.HIGH_BG && input.delta < Defaults.DELTA_POS_FOR_RELEASE) {
+                val rate = min(input.profileBasal * (1.0 + Defaults.ANTI_STALL_BIAS),
+                               input.profileBasal * Defaults.MAX_MULTIPLIER)
                 val dur = 10
-                val r = "anti-stall bias (+${(settings.antiStallBias*100).toInt()}%) because R2=${d2(input.r2)} & Δ≈0"
+                val r = "anti-stall bias (+${(Defaults.ANTI_STALL_BIAS*100).toInt()}%) because R2=${d2(input.r2)} & Δ≈0"
                 return Decision(rate, dur, r)
             }
 
             return Decision(null, 0, "no AIMI+ action")
-        }
-
-        private fun buildSettings(input: Input): PlateauSettings {
-            val highBg = when {
-                input.profileBasal < 0.4 -> 150.0
-                input.profileBasal < 0.8 -> 165.0
-                else -> Defaults.HIGH_BG
-            }
-            val plateauBand = (
-                Defaults.PLATEAU_DELTA_ABS +
-                    max(0.0, 1.2 - abs(input.delta)) * 0.2 +
-                    max(0.0, -input.accel) * 0.25
-                ).coerceIn(1.5, 3.5)
-            val r2Conf = (
-                Defaults.R2_CONFIDENT -
-                    min(0.15, abs(input.combinedDelta) / 40.0)
-                ).coerceIn(0.55, 0.8)
-            val maxMult = (
-                Defaults.MAX_MULTIPLIER +
-                    min(0.15, input.parabolaMin / 80.0)
-                ).coerceIn(1.35, 1.8)
-            val kickerStep = (
-                Defaults.KICKER_STEP +
-                    min(0.1, input.parabolaMin / 90.0)
-                ).coerceIn(0.1, 0.3)
-            val kickerMinUph = max(Defaults.KICKER_MIN, input.profileBasal * 0.35)
-            val kickerStartMin = max(Defaults.KICKER_START_MIN, min(25, input.minutesSinceLastChange / 2 + 5))
-            val kickerMaxMin = max(kickerStartMin + 10, Defaults.KICKER_MAX_MIN)
-            val zeroResumeMin = max(Defaults.ZERO_MICRO_RESUME_MIN - input.zeroSinceMin / 8, 5)
-            val zeroResumeRate = (
-                Defaults.ZERO_MICRO_RESUME_RATE + input.profileBasal * 0.05
-                ).coerceIn(0.15, 0.35)
-            val zeroResumeMax = Defaults.ZERO_MICRO_RESUME_MAX
-            val antiStallBias = (
-                Defaults.ANTI_STALL_BIAS + max(0.0, -input.accel) * 0.05
-                ).coerceIn(0.1, 0.2)
-            val deltaPosRelease = (
-                Defaults.DELTA_POS_FOR_RELEASE + max(-0.3, input.delta / 15.0)
-                ).coerceIn(0.5, 1.5)
-            return PlateauSettings(
-                highBg = highBg,
-                plateauBand = plateauBand,
-                r2Conf = r2Conf,
-                maxMultiplier = maxMult,
-                kickerStep = kickerStep,
-                kickerMinUph = kickerMinUph,
-                kickerStartMin = kickerStartMin,
-                kickerMaxMin = kickerMaxMin,
-                zeroResumeMin = zeroResumeMin,
-                zeroResumeRateFrac = zeroResumeRate,
-                zeroResumeMax = zeroResumeMax,
-                antiStallBias = antiStallBias,
-                deltaPosRelease = deltaPosRelease
-            )
         }
     }
 
