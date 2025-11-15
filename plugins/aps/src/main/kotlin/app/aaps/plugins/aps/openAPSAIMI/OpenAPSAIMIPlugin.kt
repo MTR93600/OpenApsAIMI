@@ -723,8 +723,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 microBolusAllowed = microBolusAllowed,
                 currentTime = now,
                 flatBGsDetected = flatBGsDetected,
-                dynIsfMode = dynIsfMode,
-                uiInteraction = uiInteraction
+                dynIsfMode = dynIsfMode
             ).also {
                 val determineBasalResult = apsResultProvider.get().with(it)
                 // Preserve input data
@@ -1390,9 +1389,65 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(
                     AdaptiveDoublePreference(
                         ctx = context,
+                        doubleKey = DoubleKey.OApsAIMINightGrowthMinRiseSlope,
+                        dialogMessage = R.string.oaps_aimi_ngr_min_rise_summary,
+                        title = R.string.oaps_aimi_ngr_min_rise_title
+                    )
+                )
+                addPreference(
+                    AdaptiveIntPreference(
+                        ctx = context,
+                        intKey = IntKey.OApsAIMINightGrowthMinDurationMin,
+                        dialogMessage = R.string.oaps_aimi_ngr_min_duration_summary,
+                        title = R.string.oaps_aimi_ngr_min_duration_title
+                    )
+                )
+                addPreference(
+                    AdaptiveIntPreference(
+                        ctx = context,
+                        intKey = IntKey.OApsAIMINightGrowthMinEventualOverTarget,
+                        dialogMessage = R.string.oaps_aimi_ngr_min_eventual_summary,
+                        title = R.string.oaps_aimi_ngr_min_eventual_title
+                    )
+                )
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMINightGrowthSmbMultiplier,
+                        dialogMessage = R.string.oaps_aimi_ngr_smb_multiplier_summary,
+                        title = R.string.oaps_aimi_ngr_smb_multiplier_title
+                    )
+                )
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMINightGrowthBasalMultiplier,
+                        dialogMessage = R.string.oaps_aimi_ngr_basal_multiplier_summary,
+                        title = R.string.oaps_aimi_ngr_basal_multiplier_title
+                    )
+                )
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMINightGrowthMaxSmbClamp,
+                        dialogMessage = R.string.oaps_aimi_ngr_max_smb_summary,
+                        title = R.string.oaps_aimi_ngr_max_smb_title
+                    )
+                )
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
                         doubleKey = DoubleKey.OApsAIMINightGrowthMaxIobExtra,
                         dialogMessage = R.string.oaps_aimi_ngr_max_iob_summary,
                         title = R.string.oaps_aimi_ngr_max_iob_title
+                    )
+                )
+                addPreference(
+                    AdaptiveIntPreference(
+                        ctx = context,
+                        intKey = IntKey.OApsAIMINightGrowthDecayMinutes,
+                        dialogMessage = R.string.oaps_aimi_ngr_decay_summary,
+                        title = R.string.oaps_aimi_ngr_decay_title
                     )
                 )
 
@@ -1420,6 +1475,126 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHyperFactor, dialogMessage = R.string.oaps_aimi_hyper_factor_summary, title = R.string.oaps_aimi_hyper_factor_title))
                 addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIHighBGinterval, dialogMessage = R.string.oaps_aimi_HIGHBG_interval_summary, title = R.string.oaps_aimi_HIGHBG_interval_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHighBGMaxSMB, dialogMessage = R.string.openapsaimi_highBG_maxsmb_summary, title = R.string.openapsaimi_highBG_maxsmb_title))
+          //})
+          //addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                addPreference(PreferenceCategory(context).apply {
+                key = "aimi_plateau_settings"
+              //title = rh.gs(R.string.aimi_plateau_prefs)
+              //addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.aimi_plateau_prefs_title_menu)
+                })
+
+                // Seuil d'activation & détection du plateau
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMIHighBg,
+                        dialogMessage = R.string.oaps_aimi_highbg_summary,
+                        title = R.string.oaps_aimi_highbg_title
+                    )
+                )
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMIPlateauBandAbs,
+                        dialogMessage = R.string.oaps_aimi_plateau_band_summary,
+                        title = R.string.oaps_aimi_plateau_band_title
+                    )
+                )
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMIR2Confident,
+                        dialogMessage = R.string.oaps_aimi_r2_conf_summary,
+                        title = R.string.oaps_aimi_r2_conf_title
+                    )
+                )
+
+                // Intensification (“kicker”) et plafonds
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMIMaxMultiplier,
+                        dialogMessage = R.string.oaps_aimi_max_multiplier_summary,
+                        title = R.string.oaps_aimi_max_multiplier_title
+                    )
+                )
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMIKickerStep,
+                        dialogMessage = R.string.oaps_aimi_kicker_step_summary,
+                        title = R.string.oaps_aimi_kicker_step_title
+                    )
+                )
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMIKickerMinUph,
+                        dialogMessage = R.string.oaps_aimi_kicker_minuph_summary,
+                        title = R.string.oaps_aimi_kicker_minuph_title
+                    )
+                )
+                addPreference(
+                    AdaptiveIntPreference(
+                        ctx = context,
+                        intKey = IntKey.OApsAIMIKickerStartMin,
+                        dialogMessage = R.string.oaps_aimi_kicker_startmin_summary,
+                        title = R.string.oaps_aimi_kicker_startmin_title
+                    )
+                )
+                addPreference(
+                    AdaptiveIntPreference(
+                        ctx = context,
+                        intKey = IntKey.OApsAIMIKickerMaxMin,
+                        dialogMessage = R.string.oaps_aimi_kicker_maxmin_summary,
+                        title = R.string.oaps_aimi_kicker_maxmin_title
+                    )
+                )
+
+                // Micro-reprise de sécurité après 0U/h
+                addPreference(
+                    AdaptiveIntPreference(
+                        ctx = context,
+                        intKey = IntKey.OApsAIMIZeroResumeMin,
+                        dialogMessage = R.string.oaps_aimi_zero_resume_min_summary,
+                        title = R.string.oaps_aimi_zero_resume_min_title
+                    )
+                )
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMIZeroResumeFrac,
+                        dialogMessage = R.string.oaps_aimi_zero_resume_frac_summary,
+                        title = R.string.oaps_aimi_zero_resume_frac_title
+                    )
+                )
+                addPreference(
+                    AdaptiveIntPreference(
+                        ctx = context,
+                        intKey = IntKey.OApsAIMIZeroResumeMax,
+                        dialogMessage = R.string.oaps_aimi_zero_resume_max_summary,
+                        title = R.string.oaps_aimi_zero_resume_max_title
+                    )
+                )
+
+                // Anti-stagnation & conditions de relâche
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMIAntiStallBias,
+                        dialogMessage = R.string.oaps_aimi_antistall_bias_summary,
+                        title = R.string.oaps_aimi_antistall_bias_title
+                    )
+                )
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMIDeltaPosRelease,
+                        dialogMessage = R.string.oaps_aimi_delta_pos_release_summary,
+                        title = R.string.oaps_aimi_delta_pos_release_title
+                    )
+                )
             })
 
 
@@ -1433,6 +1608,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 })
 
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.meal_modes_MaxBasal, dialogMessage = R.string.meal_modes_max_basal_summary, title = R.string.meal_modes_max_basal_title))
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.meal_preferences_title_menu)
+                })
 
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_Breakfast"
