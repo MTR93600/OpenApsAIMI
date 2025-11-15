@@ -59,6 +59,8 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleFacade
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleInfo
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionProfiler
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.IobActionProfile
 import java.io.File
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -2764,6 +2766,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         wCycleInfoForRun = null
         wCycleReasonLogged = false
         lastProfile = profile
+        // ✅ ETAPE 1: Calculer le Profil d'Action de l'IOB
+        val iobActionProfile = InsulinActionProfiler.calculate(iob_data_array, profile)
+
+// Stocker les résultats dans des variables locales pour plus de clarté
+        val iobTotal = iobActionProfile.iobTotal
+        val iobPeakMinutes = iobActionProfile.peakMinutes
+        val iobActivityNow = iobActionProfile.activityNow
+        val iobActivityIn30Min = iobActionProfile.activityIn30Min
+
+// On met à jour la variable `iob` globale de la classe avec la valeur de notre profiler pour la cohérence
+        this.iob = iobTotal.toFloat()
+
+// On ajoute les nouvelles informations au log pour le débogage
+        consoleLog.add(
+            "PAI: Peak in ${"%.0f".format(iobPeakMinutes)}m | " +
+                "Activity Now=${"%.0f".format(iobActivityNow * 100)}%, " +
+                "in 30m=${"%.0f".format(iobActivityIn30Min * 100)}%"
+        )
         // 👇 Force la création du CSV (premier snapshot WCycle “pré-décision”)
         ensureWCycleInfo()
         // --- GS + features AIMI -----------------------------------------------------
@@ -3280,12 +3300,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
 
-        var iob2 = 0.0f
-        this.iob = iob_data.iob.toFloat()
-        if (iob_data.basaliob < 0) {
-            iob2 = -iob_data.basaliob.toFloat() + iob
-            this.iob = iob2
-        }
+        // var iob2 = 0.0f
+        // this.iob = iob_data.iob.toFloat()
+        // if (iob_data.basaliob < 0) {
+        //     iob2 = -iob_data.basaliob.toFloat() + iob
+        //     this.iob = iob2
+        // }
 
         val tick: String = if (glucoseStatus.delta > -0.5) {
             "+" + round(glucoseStatus.delta)
@@ -3470,27 +3490,88 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             this.basalaimi = (this.basalaimi * boostFactor).coerceAtMost(profile.max_basal.toFloat())
             consoleLog.add("Basal boosté (+20%) pour accélération BG.")
         }
-        this.variableSensitivity = if (honeymoon) {
-            if (bg < 150) {
-                (baseSensitivity * 1.2).toFloat() // Légère augmentation pour honeymoon en cas de BG bas
-            } else {
-                max(
-                    (baseSensitivity / 3.0).toFloat(), // Réduction plus forte en honeymoon
-                    sens.toFloat()
-                )
-            }
-        } else {
-            if (bg < 100) {
-                (baseSensitivity * 1.1).toFloat()
-            } else if (bg > 120) {
-                val aggressivenessFactor = (1.0 + 0.4 * ((bg - 120.0) / 60.0)).coerceIn(1.0, 1.4)
-                val aggressiveSens = (sens / aggressivenessFactor).toFloat()
-                max( (baseSensitivity * 0.7).toFloat(), aggressiveSens)
-            }else{
+        // this.variableSensitivity = if (honeymoon) {
+        //     if (bg < 150) {
+        //         (baseSensitivity * 1.2).toFloat() // Légère augmentation pour honeymoon en cas de BG bas
+        //     } else {
+        //         max(
+        //             (baseSensitivity / 3.0).toFloat(), // Réduction plus forte en honeymoon
+        //             sens.toFloat()
+        //         )
+        //     }
+        // } else {
+        //     if (bg < 100) {
+        //         (baseSensitivity * 1.1).toFloat()
+        //     } else if (bg > 120) {
+        //         val aggressivenessFactor = (1.0 + 0.4 * ((bg - 120.0) / 60.0)).coerceIn(1.0, 1.4)
+        //         val aggressiveSens = (sens / aggressivenessFactor).toFloat()
+        //         max( (baseSensitivity * 0.7).toFloat(), aggressiveSens)
+        //     }else{
+        //
+        //         sens.toFloat()
+        //     }
+        // }
+        var newVariableSensitivity = sens // On part de la sensibilité de base (fusionnée)
 
-                sens.toFloat()
+// --- ✅ ETAPE 2: NOUVELLE LOGIQUE PROACTIVE BASÉE SUR LE PAI ---
+        consoleLog.add("PAI Logic: Base ISF=${"%.1f".format(sens)}")
+
+// Scénario 1 : Montée glycémique détectée
+        if (delta > 1.5 && bg > 120) {
+            val urgencyFactor = when {
+                // Le pic est loin (>45min) OU le pic est déjà bien passé (<-30min) -> URGENCE
+                iobPeakMinutes > 45 || iobPeakMinutes < -30 -> {
+                    consoleLog.add("PAI: BG rising & IOB badly timed. AGGRESSIVE.")
+                    0.80 // ISF réduit de 20%
+                }
+                // L'activité de l'insuline va diminuer. On anticipe.
+                iobActivityIn30Min < iobActivityNow * 0.9 -> {
+                    consoleLog.add("PAI: BG rising & IOB activity will drop. PROACTIVE.")
+                    0.90 // ISF réduit de 10%
+                }
+                // Le pic est dans un avenir proche (0-45min). On peut être patient.
+                iobPeakMinutes in 0.0..45.0 -> {
+                    consoleLog.add("PAI: BG rising but IOB peak is coming. PATIENT.")
+                    1.0 // Pas de changement
+                }
+                else -> 1.0 // Cas par défaut
+            }
+            newVariableSensitivity *= urgencyFactor
+            if (urgencyFactor != 1.0) {
+                consoleLog.add("PAI: Urgency factor ${"%.2f".format(urgencyFactor)} applied. New ISF=${"%.1f".format(newVariableSensitivity)}")
             }
         }
+
+// Scénario 2 : Tendance stable ou en légère baisse mais BG toujours haut
+        if (delta in -1.0..1.5 && bg > 140) {
+            // Si l'activité de l'insuline va chuter, on risque un rebond.
+            if (iobActivityIn30Min < iobActivityNow * 0.8) {
+                consoleLog.add("PAI: BG high/stable but IOB will fade. Anti-rebound.")
+                newVariableSensitivity *= 0.95 // On est 5% plus agressif
+            }
+        }
+
+        this.variableSensitivity = newVariableSensitivity.toFloat()
+
+// --- FIN DE LA NOUVELLE LOGIQUE ---
+
+// 🔹 On conserve les ajustements existants pour l'activité physique,
+// mais ils s'appliquent à la sensibilité déjà modulée par le PAI.
+        if (recentSteps5Minutes > 100 && recentSteps10Minutes > 200 && bg < 130 && delta < 10
+            || recentSteps180Minutes > 1500 && bg < 130 && delta < 10
+        ) {
+            this.variableSensitivity *= 1.3f
+        }
+        if (recentSteps30Minutes > 500 && recentSteps5Minutes in 1..99 && bg < 130 && delta < 10) {
+            this.variableSensitivity *= 1.2f
+        }
+
+// 🔹 Et on conserve la sécurisation finale des bornes
+        this.variableSensitivity = this.variableSensitivity.coerceIn(5.0f, 300.0f)
+
+// On met à jour la variable `sens` pour que le reste de la fonction l'utilise
+        sens = variableSensitivity.toDouble()
+        consoleError.add("Final ISF after PAI & activity: ${"%.1f".format(sens)}")
 
 // 🔹 Ajustement basé sur l'activité physique : correction plus fine des valeurs
         if (recentSteps5Minutes > 100 && recentSteps10Minutes > 200 && bg < 130 && delta < 10
