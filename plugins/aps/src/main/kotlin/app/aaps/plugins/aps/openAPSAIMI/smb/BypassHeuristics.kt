@@ -16,7 +16,7 @@ object BypassHeuristics {
         val delta = ctx.bg.delta5
         val combined = (ctx.bg.combinedDelta ?: 0.0)
         val highBgRiseActive =
-            (ctx.bg.mgdl >= 150.0 && (delta >= 1.5 || combined >= 4.0)) &&
+            (ctx.bg.mgdl >= 120.0 && (delta >= 1.5 || combined >= 4.0)) &&
                 (ctx.iobU < ctx.pump.maxSmb) &&
                 !hypoRisk
 
