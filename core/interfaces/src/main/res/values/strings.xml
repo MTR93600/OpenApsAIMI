@@ -12,6 +12,7 @@
     <string name="secago">%1$ds ago</string>
     <string name="minago_long">%1$d minutes ago</string>
     <string name="hoursago">%1$.1fh ago</string>
+    <string name="time_ago">ago</string>
     <string name="days_ago">%1$.1f days ago</string>
     <string name="days_ago_round">%1$.0f days ago</string>
     <string name="in_days">in %1$.0f days</string>
