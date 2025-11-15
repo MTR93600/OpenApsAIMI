@@ -3412,6 +3412,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             averageBeatsPerMinute180 = 80.0
         }
+        val heartRateTrend = averageBeatsPerMinute10 / averageBeatsPerMinute60
+        if (recentSteps10Minutes < 100 && heartRateTrend > 1.1 && bg > 110) {
+            // Si la FC augmente de >10% sur les 10 dernières minutes (sans marche)
+            // On rend l'ISF 10% plus agressif pour contrer une potentielle résistance
+            this.variableSensitivity *= 0.9f
+            consoleLog.add("ISF réduit de 10% (tendance FC anormale).")
+        }
         if (tdd7Days.toFloat() != 0.0f) {
             basalaimi = (tdd7Days / preferences.get(DoubleKey.OApsAIMIweight)).toFloat()
         }
@@ -3455,8 +3462,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         this.basalaimi = if (honeymoon && basalaimi > profile_current_basal * 2) (profile_current_basal.toFloat() * 2) else basalaimi
 
-        this.basalaimi = if (basalaimi < 0.0f) 0.0f else basalaimi
-
+        //this.basalaimi = if (basalaimi < 0.0f) 0.0f else basalaimi
+        val deltaAcceleration = glucoseStatus.delta - glucoseStatus.shortAvgDelta
+        if (deltaAcceleration > 1.5 && bg > 130) {
+            // Si la glycémie accélère (+1.5mg/dL/5min par rapport à la moyenne), on augmente le basal
+            val boostFactor = 1.2f // Boost de 20%
+            this.basalaimi = (this.basalaimi * boostFactor).coerceAtMost(profile.max_basal.toFloat())
+            consoleLog.add("Basal boosté (+20%) pour accélération BG.")
+        }
         this.variableSensitivity = if (honeymoon) {
             if (bg < 150) {
                 (baseSensitivity * 1.2).toFloat() // Légère augmentation pour honeymoon en cas de BG bas
@@ -3468,15 +3481,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         } else {
             if (bg < 100) {
-                // 🔹 Correction : Permettre une légère adaptation de l’ISF même en dessous de 100 mg/dL
                 (baseSensitivity * 1.1).toFloat()
             } else if (bg > 120) {
-                // 🔹 Si BG > 120, on applique une réduction progressive plus forte
-                max(
-                    (baseSensitivity / 5.0).toFloat(),  // 🔥 Réduction plus agressive (divisé par 5)
-                    sens.toFloat()
-                )
-            } else {
+                val aggressivenessFactor = (1.0 + 0.4 * ((bg - 120.0) / 60.0)).coerceIn(1.0, 1.4)
+                val aggressiveSens = (sens / aggressivenessFactor).toFloat()
+                max( (baseSensitivity * 0.7).toFloat(), aggressiveSens)
+            }else{
 
                 sens.toFloat()
             }
