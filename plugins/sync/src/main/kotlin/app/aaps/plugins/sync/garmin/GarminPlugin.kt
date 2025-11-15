@@ -296,7 +296,7 @@ class GarminPlugin @Inject constructor(
 
     /** Responses to get glucose value request by the device.
      *
-     * Also, gets the heart rate readings from the device.
+     * Also, gets the heart rate and steps readings from the device.
      */
     @VisibleForTesting
     fun onGetBloodGlucose(uri: URI): CharSequence {
@@ -383,6 +383,11 @@ class GarminPlugin @Inject constructor(
     // end mod
 
     private fun toLong(v: Any?) = (v as? Number?)?.toLong() ?: 0L
+    private fun toInt(v: Any?) = when (v) {
+        is Number -> v.toInt()
+        is String -> v.toDoubleOrNull()?.toInt()
+        else -> null
+    }
 
     @VisibleForTesting
     fun receiveHeartRate(msg: Map<String, Any>, test: Boolean) {
@@ -394,6 +399,7 @@ class GarminPlugin @Inject constructor(
             Instant.ofEpochSecond(samplingStartSec), Instant.ofEpochSecond(samplingEndSec),
             avg, device, test
         )
+        receiveSteps(msg, test)
     }
 
     @VisibleForTesting
@@ -406,6 +412,7 @@ class GarminPlugin @Inject constructor(
             Instant.ofEpochSecond(samplingStartSec), Instant.ofEpochSecond(samplingEndSec),
             avg, device, getQueryParameter(uri, "test", false)
         )
+        receiveSteps(uri)
     }
 
     private fun receiveHeartRate(
@@ -418,6 +425,99 @@ class GarminPlugin @Inject constructor(
             loopHub.storeHeartRate(samplingStart, samplingEnd, avg, device)
         } else if (avg > 0) {
             aapsLogger.warn(LTag.GARMIN, "Skip saving invalid HR $avg $samplingStart..$samplingEnd")
+        }
+    }
+
+    @VisibleForTesting
+    fun receiveSteps(msg: Map<String, Any>, test: Boolean) {
+        if (!msg.containsKey("stepsStart") || !msg.containsKey("stepsEnd")) return
+        val samplingStartSec = toLong(msg["stepsStart"])
+        val samplingEndSec = toLong(msg["stepsEnd"])
+        val steps5 = toInt(msg["steps5"]) ?: return
+        val steps10 = toInt(msg["steps10"]) ?: return
+        val steps15 = toInt(msg["steps15"]) ?: return
+        val steps30 = toInt(msg["steps30"]) ?: return
+        val steps60 = toInt(msg["steps60"]) ?: return
+        val steps180 = toInt(msg["steps180"]) ?: return
+        val device: String? = msg["device"] as String?
+        receiveSteps(
+            Instant.ofEpochSecond(samplingStartSec),
+            Instant.ofEpochSecond(samplingEndSec),
+            steps5,
+            steps10,
+            steps15,
+            steps30,
+            steps60,
+            steps180,
+            device,
+            test,
+        )
+    }
+
+    @VisibleForTesting
+    fun receiveSteps(uri: URI) {
+        val samplingStart = getQueryParameter(uri, "stepsStart")?.toLongOrNull() ?: return
+        val samplingEnd = getQueryParameter(uri, "stepsEnd")?.toLongOrNull() ?: return
+        val steps5 = getQueryParameter(uri, "steps5")?.toIntOrNull() ?: return
+        val steps10 = getQueryParameter(uri, "steps10")?.toIntOrNull() ?: return
+        val steps15 = getQueryParameter(uri, "steps15")?.toIntOrNull() ?: return
+        val steps30 = getQueryParameter(uri, "steps30")?.toIntOrNull() ?: return
+        val steps60 = getQueryParameter(uri, "steps60")?.toIntOrNull() ?: return
+        val steps180 = getQueryParameter(uri, "steps180")?.toIntOrNull() ?: return
+        val device = getQueryParameter(uri, "device")
+        val test = getQueryParameter(uri, "test", false)
+        receiveSteps(
+            Instant.ofEpochSecond(samplingStart),
+            Instant.ofEpochSecond(samplingEnd),
+            steps5,
+            steps10,
+            steps15,
+            steps30,
+            steps60,
+            steps180,
+            device,
+            test,
+        )
+    }
+
+    private fun receiveSteps(
+        samplingStart: Instant,
+        samplingEnd: Instant,
+        steps5: Int,
+        steps10: Int,
+        steps15: Int,
+        steps30: Int,
+        steps60: Int,
+        steps180: Int,
+        device: String?,
+        test: Boolean,
+    ) {
+        if (steps5 < 0 || steps10 < 0 || steps15 < 0 || steps30 < 0 || steps60 < 0 || steps180 < 0) {
+            aapsLogger.warn(LTag.GARMIN, "Skip saving invalid steps values $steps5/$steps10/$steps15/$steps30/$steps60/$steps180")
+            return
+        }
+        aapsLogger.info(
+            LTag.GARMIN,
+            "steps $steps5/$steps10/$steps15/$steps30/$steps60/$steps180 from $samplingStart to $samplingEnd",
+        )
+        if (test) return
+        if (samplingEnd > samplingStart) {
+            loopHub.storeStepsCount(
+                samplingStart,
+                samplingEnd,
+                steps5,
+                steps10,
+                steps15,
+                steps30,
+                steps60,
+                steps180,
+                device,
+            )
+        } else {
+            aapsLogger.warn(
+                LTag.GARMIN,
+                "Skip saving invalid steps period $samplingStart..$samplingEnd",
+            )
         }
     }
 

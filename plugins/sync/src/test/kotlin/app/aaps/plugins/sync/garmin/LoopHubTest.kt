@@ -5,6 +5,7 @@ import app.aaps.core.data.model.EPS
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.HR
+import app.aaps.core.data.model.SC
 import app.aaps.core.data.model.ICfg
 import app.aaps.core.data.model.RM
 import app.aaps.core.data.model.SourceSensor
@@ -321,5 +322,38 @@ class LoopHubTest : TestBase() {
             samplingStart, samplingEnd, 101, "Test Device"
         )
         verify(persistenceLayer).insertOrUpdateHeartRate(hr)
+    }
+
+    @Test
+    fun testStoreStepsCount() {
+        val samplingStart = Instant.ofEpochMilli(1_001_000)
+        val samplingEnd = Instant.ofEpochMilli(1_301_000)
+        val sc = SC(
+            duration = samplingEnd.toEpochMilli() - samplingStart.toEpochMilli(),
+            timestamp = samplingEnd.toEpochMilli(),
+            steps5min = 12,
+            steps10min = 18,
+            steps15min = 24,
+            steps30min = 36,
+            steps60min = 48,
+            steps180min = 60,
+            device = "Test Device",
+            dateCreated = clock.millis(),
+        )
+        whenever(persistenceLayer.insertOrUpdateStepsCount(sc)).thenReturn(
+            Single.just(PersistenceLayer.TransactionResult())
+        )
+        loopHub.storeStepsCount(
+            samplingStart,
+            samplingEnd,
+            12,
+            18,
+            24,
+            36,
+            48,
+            60,
+            "Test Device",
+        )
+        verify(persistenceLayer).insertOrUpdateStepsCount(sc)
     }
 }

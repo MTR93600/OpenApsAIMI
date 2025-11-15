@@ -68,4 +68,17 @@ interface LoopHub {
         avgHeartRate: Int,
         device: String?
     )
+
+    /** Stores steps count readings aggregated over multiple intervals. */
+    fun storeStepsCount(
+        samplingStart: Instant,
+        samplingEnd: Instant,
+        steps5min: Int,
+        steps10min: Int,
+        steps15min: Int,
+        steps30min: Int,
+        steps60min: Int,
+        steps180min: Int,
+        device: String?,
+    )
 }

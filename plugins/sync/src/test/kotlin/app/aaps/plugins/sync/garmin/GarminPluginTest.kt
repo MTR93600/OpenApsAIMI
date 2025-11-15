@@ -33,6 +33,7 @@ import org.mockito.Mockito.verifyNoMoreInteractions
 import org.mockito.Mockito.`when`
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.whenever
 import java.net.ConnectException
@@ -91,6 +92,23 @@ class GarminPluginTest : TestBaseWithProfile() {
         verify(loopHub, atMost(3)).carbsOnboard
         verify(loopHub, atMost(3)).lowGlucoseMark
         verify(loopHub, atMost(3)).highGlucoseMark
+        verify(loopHub, atMost(1)).storeHeartRate(
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+        )
+        verify(loopHub, atMost(1)).storeStepsCount(
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+        )
         verifyNoMoreInteractions(loopHub)
     }
 
@@ -109,6 +127,18 @@ class GarminPluginTest : TestBaseWithProfile() {
         "hrStart" to 1001L,
         "hrEnd" to 2001L,
         "device" to "Test_Device"
+    )
+
+    private fun createSteps() = mapOf<String, Any>(
+        "stepsStart" to 2001L,
+        "stepsEnd" to 2301L,
+        "steps5" to 12,
+        "steps10" to 18,
+        "steps15" to 24,
+        "steps30" to 36,
+        "steps60" to 48,
+        "steps180" to 60,
+        "device" to "Test_Device",
     )
 
     private fun createGlucoseValue(timestamp: Instant, value: Double = 93.0) = GV(
@@ -149,6 +179,41 @@ class GarminPluginTest : TestBaseWithProfile() {
         params["test"] = true
         val uri = createUri(params)
         gp.receiveHeartRate(uri)
+    }
+
+    @Test
+    fun testReceiveStepsMap() {
+        val steps = createSteps()
+        gp.receiveSteps(steps, false)
+        verify(loopHub).storeStepsCount(
+            Instant.ofEpochSecond(steps["stepsStart"] as Long),
+            Instant.ofEpochSecond(steps["stepsEnd"] as Long),
+            steps["steps5"] as Int,
+            steps["steps10"] as Int,
+            steps["steps15"] as Int,
+            steps["steps30"] as Int,
+            steps["steps60"] as Int,
+            steps["steps180"] as Int,
+            steps["device"] as String,
+        )
+    }
+
+    @Test
+    fun testReceiveStepsUri() {
+        val steps = createSteps()
+        val uri = createUri(steps)
+        gp.receiveSteps(uri)
+        verify(loopHub).storeStepsCount(
+            Instant.ofEpochSecond(steps["stepsStart"] as Long),
+            Instant.ofEpochSecond(steps["stepsEnd"] as Long),
+            steps["steps5"] as Int,
+            steps["steps10"] as Int,
+            steps["steps15"] as Int,
+            steps["steps30"] as Int,
+            steps["steps60"] as Int,
+            steps["steps180"] as Int,
+            steps["device"] as String,
+        )
     }
 
     @Test
@@ -344,6 +409,38 @@ class GarminPluginTest : TestBaseWithProfile() {
             Instant.ofEpochSecond(hr["hrEnd"] as Long),
             99,
             hr["device"] as String
+        )
+    }
+
+    @Test
+    fun testOnGetBloodGlucose_WithSteps() {
+        `when`(loopHub.isConnected).thenReturn(true)
+        `when`(loopHub.insulinOnboard).thenReturn(1.23)
+        `when`(loopHub.insulinBasalOnboard).thenReturn(0.0)
+        `when`(loopHub.temporaryBasal).thenReturn(0.0)
+        val from = getGlucoseValuesFrom
+        `when`(loopHub.getGlucoseValues(from, true)).thenReturn(
+            listOf(createGlucoseValue(Instant.ofEpochSecond(1_000)))
+        )
+        val params = createHeartRate(88).toMutableMap().apply { putAll(createSteps()) }
+        val uri = createUri(params)
+        gp.onGetBloodGlucose(uri)
+        verify(loopHub).storeHeartRate(
+            Instant.ofEpochSecond(params["hrStart"] as Long),
+            Instant.ofEpochSecond(params["hrEnd"] as Long),
+            88,
+            params["device"] as String,
+        )
+        verify(loopHub).storeStepsCount(
+            Instant.ofEpochSecond(params["stepsStart"] as Long),
+            Instant.ofEpochSecond(params["stepsEnd"] as Long),
+            params["steps5"] as Int,
+            params["steps10"] as Int,
+            params["steps15"] as Int,
+            params["steps30"] as Int,
+            params["steps60"] as Int,
+            params["steps180"] as Int,
+            params["device"] as String,
         )
     }
 
