@@ -68,7 +68,12 @@ class PkPdIntegration(private val preferences: Preferences) {
         val params = estimator.params()
         persistStateIfNeeded(params, config.bounds)
         val tailFraction = estimator.iobResidualAt(windowMin.toDouble()).coerceIn(0.0, 1.0)
-        val pkpdScale = 1.0 + 0.15 * tailFraction
+        val activityState = estimator.activityStateAt(windowMin.toDouble())
+        val freshness = (1.0 - activityState.postWindowFraction).coerceIn(0.0, 1.0)
+        val activityBlend = (0.6 * activityState.relativeActivity + 0.4 * freshness).coerceIn(0.0, 1.0)
+        val anticipatoryBoost = activityState.anticipationWeight * 0.1
+        val pkpdScale = (1.0 + 0.12 * tailFraction + 0.22 * activityBlend + anticipatoryBoost)
+            .coerceIn(0.8, 1.4)
         val fusedIsf = fusion.fused(profileIsf, tddIsf, pkpdScale)
         return PkPdRuntime(
             params = params,
@@ -77,7 +82,8 @@ class PkPdIntegration(private val preferences: Preferences) {
             profileIsf = profileIsf,
             tddIsf = tddIsf,
             pkpdScale = pkpdScale,
-            damping = damping
+            damping = damping,
+            activity = activityState
         )
     }
 
@@ -168,7 +174,8 @@ class PkPdRuntime(
     val profileIsf: Double,
     val tddIsf: Double,
     val pkpdScale: Double,
-    private val damping: SmbDamping
+    private val damping: SmbDamping,
+    val activity: InsulinActivityState
 ) {
 
     // ✅ API audit (garde)
@@ -178,7 +185,7 @@ class PkPdRuntime(
         suspectedLateFatMeal: Boolean,
         bypassDamping: Boolean = false
     ): SmbDampingAudit =
-        damping.dampWithAudit(smb, tailFraction, exercise, suspectedLateFatMeal, bypassDamping)
+        damping.dampWithAudit(smb, tailFraction, exercise, suspectedLateFatMeal, bypassDamping, activity)
 
     // ✅ API non-audit (garde) — utile si on veut le résultat sans traces
     fun dampSmb(
@@ -187,5 +194,5 @@ class PkPdRuntime(
         suspectedLateFatMeal: Boolean,
         bypassDamping: Boolean = false
     ): Double =
-        damping.damp(smb, tailFraction, exercise, suspectedLateFatMeal, bypassDamping)
+        damping.damp(smb, tailFraction, exercise, suspectedLateFatMeal, bypassDamping, activity)
 }

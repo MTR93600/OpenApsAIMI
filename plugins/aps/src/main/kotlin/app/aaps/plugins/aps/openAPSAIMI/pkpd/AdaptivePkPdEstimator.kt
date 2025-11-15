@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.pkpd
 
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sign
@@ -79,11 +80,43 @@ class AdaptivePkPdEstimator(
         return iobU / max(60.0, diaMin)
     }
 
-    fun iobResidualAt(minFromDose: Double): Double =
-        kernel.iobResidual(minFromDose, state.get()).coerceIn(0.0, 1.0)
+    fun iobResidualAt(minFromDose: Double): Double {
+        val params = state.get()
+        val cdfFrac = kernel.normalizedCdf(minFromDose, params)
+        return (1.0 - cdfFrac).coerceIn(0.0, 1.0)
+    }
 
     fun actionAt(minFromDose: Double): Double =
         kernel.actionAt(minFromDose, state.get()).coerceAtLeast(0.0)
+
+    fun activityStateAt(minFromDose: Double): InsulinActivityState {
+        val params = state.get()
+        val window = kernel.activityWindow(params)
+        val diaMin = window.diaMin
+        val clampedMin = minFromDose.coerceIn(0.0, diaMin)
+        val peakAction = kernel.actionAt(window.peakMin, params).coerceAtLeast(1e-6)
+        val currentAction = if (clampedMin <= 0.0) 0.0 else kernel.actionAt(clampedMin, params) / peakAction
+        val normalizedPosition = window.normalizedPosition(clampedMin)
+        val postWindow = window.postWindowFraction(clampedMin)
+        val minutesUntilOnset = (window.onsetMin - clampedMin).coerceAtLeast(0.0)
+        val anticipation = if (minutesUntilOnset <= 0.0) 0.0 else exp(-minutesUntilOnset / 45.0)
+        val stage = when {
+            clampedMin < window.onsetMin - 1e-6 -> InsulinActivityStage.PRE_ONSET
+            clampedMin < window.peakMin -> InsulinActivityStage.RISING
+            clampedMin <= window.offsetMin -> InsulinActivityStage.PEAK
+            clampedMin < diaMin - 1e-6 -> InsulinActivityStage.TAIL
+            else -> InsulinActivityStage.EXHAUSTED
+        }
+        return InsulinActivityState(
+            window = window,
+            relativeActivity = currentAction.coerceIn(0.0, 1.0),
+            normalizedPosition = normalizedPosition.coerceIn(0.0, 1.0),
+            postWindowFraction = postWindow.coerceIn(0.0, 1.0),
+            anticipationWeight = anticipation.coerceIn(0.0, 1.0),
+            minutesUntilOnset = minutesUntilOnset,
+            stage = stage
+        )
+    }
 }
 
 object IsfTddProvider {

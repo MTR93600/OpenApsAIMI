@@ -1,6 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityState
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityWindow
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdParams
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.SmbDamping
@@ -15,7 +18,13 @@ import org.junit.jupiter.api.Test
 
 class SmbDomainHeuristicsTest {
 
-    private fun runtime(tailFraction: Double = 0.0): PkPdRuntime =
+    private fun runtime(
+        tailFraction: Double = 0.0,
+        stage: InsulinActivityStage = InsulinActivityStage.PEAK,
+        relativeActivity: Double = 0.5,
+        postWindowFraction: Double = 0.0,
+        anticipation: Double = 0.0
+    ): PkPdRuntime =
         PkPdRuntime(
             params = PkPdParams(diaHrs = 10.0, peakMin = 60.0),
             tailFraction = tailFraction,
@@ -23,7 +32,21 @@ class SmbDomainHeuristicsTest {
             profileIsf = 45.0,
             tddIsf = 45.0,
             pkpdScale = 1.0,
-            damping = SmbDamping()
+            damping = SmbDamping(),
+            activity = InsulinActivityState(
+                window = InsulinActivityWindow(
+                    onsetMin = 30.0,
+                    peakMin = 60.0,
+                    offsetMin = 240.0,
+                    diaMin = 600.0
+                ),
+                relativeActivity = relativeActivity,
+                normalizedPosition = 0.5,
+                postWindowFraction = postWindowFraction,
+                anticipationWeight = anticipation,
+                minutesUntilOnset = 0.0,
+                stage = stage
+            )
         )
 
     @Test
@@ -93,7 +116,12 @@ class SmbDomainHeuristicsTest {
     @Test
     fun tailDampingApplied() {
         val out = SmbDampingUsecase.run(
-            runtime(tailFraction = 0.6),
+            runtime(
+                tailFraction = 0.6,
+                stage = InsulinActivityStage.TAIL,
+                relativeActivity = 0.0,
+                postWindowFraction = 0.8
+            ),
             SmbDampingUsecase.Input(
                 smbDecision = 1.0,
                 exercise = false,

@@ -26,7 +26,11 @@ data class PkPdLogRow(
     val lateFatMult: Double? = null,
     val highBgOverride: Boolean? = null,
     val lateFatRise: Boolean? = null,
-    val quantStepU: Double? = null
+    val quantStepU: Double? = null,
+    val activityStage: String? = null,
+    val activityRelief: Double? = null,
+    val activityFraction: Double? = null,
+    val anticipation: Double? = null
 )
 
 object PkPdCsvLogger {
@@ -57,7 +61,11 @@ object PkPdCsvLogger {
                 row.lateFatMult,
                 row.highBgOverride,
                 row.lateFatRise,
-                row.quantStepU
+                row.quantStepU,
+                row.activityStage,
+                row.activityRelief,
+                row.activityFraction,
+                row.anticipation
             ).joinToString(",")
 
             //val file = File(PATH)

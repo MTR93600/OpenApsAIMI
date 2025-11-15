@@ -6,6 +6,7 @@ import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.sqrt
+import kotlin.math.min
 
 /** Parameters describing the insulin action model. */
 data class PkPdParams(
@@ -63,4 +64,81 @@ class LogNormalKernel : Kernel {
             t * (1.48851587 + t * (-0.82215223 + t * 0.17087277)))))))))
         return if (z >= 0) ans else -ans
     }
+}
+
+data class InsulinActivityWindow(
+    val onsetMin: Double,
+    val peakMin: Double,
+    val offsetMin: Double,
+    val diaMin: Double
+) {
+    fun normalizedPosition(minFromDose: Double): Double {
+        if (offsetMin <= onsetMin) return 1.0
+        return when {
+            minFromDose <= onsetMin -> 0.0
+            minFromDose >= offsetMin -> 1.0
+            else -> (minFromDose - onsetMin) / (offsetMin - onsetMin)
+        }
+    }
+
+    fun postWindowFraction(minFromDose: Double): Double {
+        if (diaMin <= offsetMin) return 1.0
+        return when {
+            minFromDose <= offsetMin -> 0.0
+            minFromDose >= diaMin -> 1.0
+            else -> (minFromDose - offsetMin) / (diaMin - offsetMin)
+        }
+    }
+}
+
+enum class InsulinActivityStage {
+    PRE_ONSET,
+    RISING,
+    PEAK,
+    TAIL,
+    EXHAUSTED
+}
+
+data class InsulinActivityState(
+    val window: InsulinActivityWindow,
+    val relativeActivity: Double,
+    val normalizedPosition: Double,
+    val postWindowFraction: Double,
+    val anticipationWeight: Double,
+    val minutesUntilOnset: Double,
+    val stage: InsulinActivityStage
+)
+
+fun Kernel.normalizedCdf(minFromDose: Double, p: PkPdParams): Double {
+    if (minFromDose <= 0.0) return 0.0
+    val dia = p.diaHrs * 60.0
+    val total = cdf(dia, p).coerceAtLeast(1e-6)
+    val partial = cdf(min(minFromDose, dia), p)
+    return (partial / total).coerceIn(0.0, 1.0)
+}
+
+fun Kernel.findTimeForNormalizedCdf(target: Double, p: PkPdParams): Double {
+    val dia = p.diaHrs * 60.0
+    val clampedTarget = target.coerceIn(0.0, 1.0)
+    if (clampedTarget <= 0.0) return 0.0
+    if (clampedTarget >= 1.0) return dia
+    var lo = 0.0
+    var hi = dia
+    repeat(50) {
+        val mid = 0.5 * (lo + hi)
+        val value = normalizedCdf(mid, p)
+        if (value < clampedTarget) lo = mid else hi = mid
+    }
+    return hi.coerceIn(0.0, dia)
+}
+
+fun Kernel.activityWindow(
+    p: PkPdParams,
+    onsetFraction: Double = 0.1,
+    offsetFraction: Double = 0.9
+): InsulinActivityWindow {
+    val dia = p.diaHrs * 60.0
+    val onset = findTimeForNormalizedCdf(onsetFraction, p)
+    val offset = findTimeForNormalizedCdf(offsetFraction, p).coerceIn(onset, dia)
+    return InsulinActivityWindow(onset, p.peakMin, offset, dia)
 }

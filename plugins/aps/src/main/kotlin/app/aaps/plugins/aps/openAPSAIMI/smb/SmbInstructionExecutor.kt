@@ -409,11 +409,20 @@ object SmbInstructionExecutor {
 
         val quantized = finalSmb.toDouble()
 
+        val activity = input.pkpdRuntime?.activity
+        val activityPct = (activity?.relativeActivity ?: 0.0) * 100.0
+        val anticipationPct = (activity?.anticipationWeight ?: 0.0) * 100.0
+        val freshnessPct = (activity?.let { (1.0 - it.postWindowFraction).coerceIn(0.0, 1.0) } ?: 0.0) * 100.0
+        val activityStage = activity?.stage?.name ?: "n/a"
         input.rT.reason.append(
-            "\nPKPD: DIA=%s min, Peak=%s min, Tail=%.0f%%, ISF(fused)=%s (profile=%s, TDD=%s, scale=%.2f)".format(
+            "\nPKPD: DIA=%s min, Peak=%s min, Tail=%.0f%%, Activity=%.0f%% (%s, anticip=%.0f%%, fresh=%.0f%%), ISF(fused)=%s (profile=%s, TDD=%s, scale=%.2f)".format(
                 input.pkpdRuntime?.params?.diaHrs?.let { "%.0f".format(it * 60.0) } ?: "n/a",
                 input.pkpdRuntime?.params?.peakMin?.let { "%.0f".format(it) } ?: "n/a",
                 (input.pkpdRuntime?.tailFraction ?: 0.0) * 100.0,
+                activityPct,
+                activityStage,
+                anticipationPct,
+                freshnessPct,
                 input.pkpdRuntime?.fusedIsf?.let { "%.0f".format(it) } ?: "n/a",
                 input.pkpdRuntime?.profileIsf?.let { "%.0f".format(it) } ?: "n/a",
                 input.pkpdRuntime?.tddIsf?.let { "%.0f".format(it) } ?: "n/a",
@@ -425,10 +434,12 @@ object SmbInstructionExecutor {
         val highBgTag = if (highBgOverrideFlag) " (HighBG override)" else ""
         if (audit != null) {
             input.rT.reason.append(
-                "\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f, ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s%s".format(
+                "\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f (relief=%.0f%%, %s), ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s%s".format(
                     smbDecision,
                     dampedRaw,
                     if (audit.tailApplied) "✔" else "✘", audit.tailMult,
+                    audit.activityRelief * 100.0,
+                    audit.activityStage.name,
                     if (audit.exerciseApplied) "✔" else "✘", audit.exerciseMult,
                     if (audit.lateFatApplied) "✔" else "✘", audit.lateFatMult,
                     quantized,
@@ -486,7 +497,11 @@ object SmbInstructionExecutor {
                     lateFatMult = lateMultLog,
                     highBgOverride = highBgOverrideFlag,
                     lateFatRise = input.lateFatRiseFlag,
-                    quantStepU = input.insulinStep.toDouble()
+                    quantStepU = input.insulinStep.toDouble(),
+                    activityStage = activityStage,
+                    activityRelief = audit?.activityRelief,
+                    activityFraction = activity?.relativeActivity,
+                    anticipation = activity?.anticipationWeight
                 )
             )
         }
