@@ -1007,6 +1007,7 @@
     <string name="meal_snack_30_60m_rising_basal_delta">Pasto/snack 30&#8211;60m &amp; rialzo → basale Δ.</string>
     <string name="eventual_bg_over_180_hyper_basalaimi">BG eventuale&gt;180 &amp; iper → aggiustamento basalaimi.</string>
     <string name="bg_over_180_stable_basal_factor">BG&gt;180 stabile → basale x fattore aggiustamento.</string>
+    <string name="reason_strong_rise_basal">Strong rise (Δmax=%1$.1f) → basal x%2$.2f.</string>
     <string name="honeymoon_bg_140_169_profile">Luna di miele BG 140&#8211;169 → profilo.</string>
     <string name="honeymoon_bg_over_170_adjustment">Luna di miele BG&gt;170 → aggiustamento.</string>
     <string name="honeymoon_delta_over_2_bg_90_119_profile">Luna di miele Δ&gt;2 &amp; BG 90&#8211;119 → profilo.</string>
