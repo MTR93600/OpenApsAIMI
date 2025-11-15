@@ -2294,7 +2294,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         averageBeatsPerMinute10: Float
     ): Float {
         val currentHour = LocalTime.now().hour
-        var delayFactor = if (bg.isNaN() || averageBeatsPerMinute.isNaN() || averageBeatsPerMinute10.isNaN() || averageBeatsPerMinute10 == 0f) {
+        val highBgOverrideThreshold = normalBgThreshold + 40f
+        val severeHighBgThreshold = normalBgThreshold + 80f
+
+        var delayFactor = if (
+            bg.isNaN() ||
+            averageBeatsPerMinute.isNaN() ||
+            averageBeatsPerMinute10.isNaN() ||
+            averageBeatsPerMinute10 == 0f
+        ) {
             1f
         } else {
             val stepActivityThreshold = 1500
@@ -2302,8 +2310,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val insulinSensitivityDecreaseThreshold = 1.5 * normalBgThreshold
 
             val increasedPhysicalActivity = recentSteps180Minutes > stepActivityThreshold
-            val heartRateChange = averageBeatsPerMinute / averageBeatsPerMinute10
-            val increasedHeartRateActivity = heartRateChange >= heartRateIncreaseThreshold
+            val sanitizedHr10 = if (averageBeatsPerMinute10.isFinite() && averageBeatsPerMinute10 > 0f) {
+                averageBeatsPerMinute10
+            } else {
+                Float.NaN
+            }
+            val heartRateChange = if (sanitizedHr10.isNaN()) 1.0 else averageBeatsPerMinute / sanitizedHr10
+            val increasedHeartRateActivity = !sanitizedHr10.isNaN() && (heartRateChange.toDouble() >= heartRateIncreaseThreshold)
 
             val baseFactor = when {
                 bg <= normalBgThreshold -> 1f
@@ -2311,11 +2324,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 else -> 0.5f
             }
 
-            if (increasedPhysicalActivity || increasedHeartRateActivity) {
-                (baseFactor.toFloat() * 0.8f).coerceAtLeast(0.5f)
-            } else {
-                baseFactor.toFloat()
+            val shouldDampenForActivity = (increasedPhysicalActivity || increasedHeartRateActivity) && bg < highBgOverrideThreshold
+            var adjusted = baseFactor.toFloat()
+            if (shouldDampenForActivity) {
+                adjusted = (adjusted * 0.85f).coerceAtLeast(0.6f)
             }
+            if (bg >= highBgOverrideThreshold) {
+                adjusted = adjusted.coerceAtLeast(1f)
+            }
+            if (bg >= severeHighBgThreshold) {
+                adjusted = adjusted.coerceAtLeast(1.1f)
+            }
+            adjusted
         }
         // Augmenter le délai si l'heure est le soir (18h à 23h) ou diminuer le besoin entre 00h à 5h
         if (currentHour in 18..23) {
@@ -2347,8 +2367,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Ajustement hypothétique basé sur la présence de glucides. Ce facteur doit être déterminé par des tests/logique métier.
             insulinEffect *= 0.9f
         }
-        val physicalActivityFactor = 1.0f - recentSteps180Min / 10000f
-        insulinEffect *= physicalActivityFactor
+        val highBgOverrideThreshold = normalBgThreshold + 40f
+        val severeHighBgThreshold = normalBgThreshold + 80f
+        val rawPhysicalActivityFactor = 1.0f - (recentSteps180Min / 10000f).coerceAtMost(0.4f)
+        val physicalActivityFactor = rawPhysicalActivityFactor.coerceIn(0.7f, 1.0f)
+        if (bg < highBgOverrideThreshold) {
+            insulinEffect *= physicalActivityFactor
+        }
         // Calculer le facteur de retard ajusté en fonction de l'activité physique
         val adjustedDelayFactor = calculateAdjustedDelayFactor(
             bg,
@@ -2359,7 +2384,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // Appliquer le facteur de retard ajusté à l'effet de l'insuline
         insulinEffect *= adjustedDelayFactor
-        if (bg > normalBgThreshold) {
+        if (bg >= severeHighBgThreshold) {
+            insulinEffect *= 1.3f
+        } else if (bg > normalBgThreshold) {
             insulinEffect *= 1.2f
         }
         val currentHour = LocalTime.now().hour

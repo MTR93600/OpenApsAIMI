@@ -555,40 +555,44 @@ class OapsAIMIsmb {
 
 
         private fun calculateAdjustedDelayFactor(
-            bg: Float, recentSteps180Minutes: Int, averageBeatsPerMinute60: Float, averageBeatsPerMinute180: Float
+            bg: Float,
+            recentSteps180Minutes: Int,
+            averageBeatsPerMinute60: Float,
+            averageBeatsPerMinute180: Float
         ): Float {
-            // Seuil pour une activité physique significative basée sur les étapes
             val stepActivityThreshold = 1500
-
-            // Seuil d'augmentation de la fréquence cardiaque indiquant une activité accrue
-            val heartRateIncreaseThreshold = 1.2  // par exemple, une augmentation de 20%
-
-            // Seuil à partir duquel l'efficacité de l'insuline commence à diminuer
+            val heartRateIncreaseThreshold = 1.2
+            val highBgOverrideThreshold = normalBgThreshold + 40f
+            val severeHighBgThreshold = normalBgThreshold + 80f
             val insulinSensitivityDecreaseThreshold = 1.5 * normalBgThreshold
 
-            // Déterminer si une activité physique significative a eu lieu
             val increasedPhysicalActivity = recentSteps180Minutes > stepActivityThreshold
+            val sanitizedHr180 = if (averageBeatsPerMinute180.isFinite() && averageBeatsPerMinute180 > 0f) {
+                averageBeatsPerMinute180
+            } else {
+                Float.NaN
+            }
+            val heartRateChange = if (sanitizedHr180.isNaN()) 1.0 else averageBeatsPerMinute60 / sanitizedHr180
+            val increasedHeartRateActivity = !sanitizedHr180.isNaN() && heartRateChange >= heartRateIncreaseThreshold
 
-            // Calculer le changement relatif de la fréquence cardiaque
-            val heartRateChange = averageBeatsPerMinute60 / averageBeatsPerMinute180
-
-            // Indicateur d'une augmentation possible de la fréquence cardiaque due à l'exercice
-            val increasedHeartRateActivity = heartRateChange >= heartRateIncreaseThreshold
-
-            // Calculer le facteur de base avant de prendre en compte l'activité physique
             val baseFactor = when {
                 bg <= normalBgThreshold -> 1f
                 bg <= insulinSensitivityDecreaseThreshold -> 1f - ((bg - normalBgThreshold) / (insulinSensitivityDecreaseThreshold - normalBgThreshold))
-                else -> 0.5f // Arbitraire, à ajuster en fonction de la physiologie individuelle
+                else -> 0.5f
             }
 
-            // Si une activité physique est détectée (soit par les étapes, soit par la fréquence cardiaque),
-            // nous ajustons le facteur de retard pour augmenter la sensibilité à l'insuline.
-            return if (increasedPhysicalActivity || increasedHeartRateActivity) {
-                (baseFactor.toFloat() * 0.8f).coerceAtLeast(0.5f)  // Ici, nous utilisons 0.8f pour indiquer qu'il s'agit d'un Float
-            } else {
-                baseFactor.toFloat()  // Cela devrait déjà être un Float
+            val shouldDampenForActivity = (increasedPhysicalActivity || increasedHeartRateActivity) && bg < highBgOverrideThreshold
+            var adjusted = baseFactor.toFloat()
+            if (shouldDampenForActivity) {
+                adjusted = (adjusted * 0.85f).coerceAtLeast(0.6f)
             }
+            if (bg >= highBgOverrideThreshold) {
+                adjusted = adjusted.coerceAtLeast(1f)
+            }
+            if (bg >= severeHighBgThreshold) {
+                adjusted = adjusted.coerceAtLeast(1.1f)
+            }
+            return adjusted
         }
 
         private fun calculateInsulinEffect(
@@ -604,6 +608,14 @@ class OapsAIMIsmb {
             // Calculer l'effet initial de l'insuline
             var insulinEffect = iob * variableSensitivity
 
+            val highBgOverrideThreshold = normalBgThreshold + 40f
+            val severeHighBgThreshold = normalBgThreshold + 80f
+            val rawPhysicalActivityFactor = 1.0f - (recentSteps180Min / 10000f).coerceAtMost(0.4f)
+            val physicalActivityFactor = rawPhysicalActivityFactor.coerceIn(0.7f, 1.0f)
+            if (bg < highBgOverrideThreshold) {
+                insulinEffect *= physicalActivityFactor
+            }
+
             // Si des glucides sont présents, nous pourrions vouloir ajuster l'effet de l'insuline pour tenir compte de l'absorption des glucides.
             if (cob > 0) {
                 // Ajustement hypothétique basé sur la présence de glucides. Ce facteur doit être déterminé par des tests/logique métier.
@@ -612,7 +624,7 @@ class OapsAIMIsmb {
 
             // Calculer le facteur de retard ajusté en fonction de l'activité physique
             val adjustedDelayFactor = calculateAdjustedDelayFactor(
-                normalBgThreshold,
+                bg,
                 recentSteps180Min,
                 averageBeatsPerMinute60,
                 averageBeatsPerMinute180
@@ -620,8 +632,10 @@ class OapsAIMIsmb {
 
             // Appliquer le facteur de retard ajusté à l'effet de l'insuline
             insulinEffect *= adjustedDelayFactor
-            if (bg > normalBgThreshold) {
-                insulinEffect *= 1.1f
+            if (bg >= severeHighBgThreshold) {
+                insulinEffect *= 1.25f
+            } else if (bg > normalBgThreshold) {
+                insulinEffect *= 1.15f
             }
 
             return insulinEffect
