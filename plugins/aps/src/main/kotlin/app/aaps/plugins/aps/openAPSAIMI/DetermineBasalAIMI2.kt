@@ -3522,7 +3522,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // Le pic est loin (>45min) OU le pic est déjà bien passé (<-30min) -> URGENCE
                 iobPeakMinutes > 45 || iobPeakMinutes < -30 -> {
                     consoleLog.add("PAI: BG rising & IOB badly timed. AGGRESSIVE.")
-                    0.80 // ISF réduit de 20%
+                    0.60 // ISF réduit de 40%
                 }
                 // L'activité de l'insuline va diminuer. On anticipe.
                 iobActivityIn30Min < iobActivityNow * 0.9 -> {
