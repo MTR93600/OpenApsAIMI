@@ -454,7 +454,8 @@ object SmbInstructionExecutor {
         val freshnessPct = (activity?.let { (1.0 - it.postWindowFraction).coerceIn(0.0, 1.0) } ?: 0.0) * 100.0
         val activityStage = activity?.stage?.name ?: "n/a"
         input.rT.reason.append(
-            "\nPKPD: DIA=%s min, Peak=%s min, Tail=%.0f%%, Activity=%.0f%% (%s, anticip=%.0f%%, fresh=%.0f%%), ISF(fused)=%s (profile=%s, TDD=%s, scale=%.2f)".format(
+            //"\nPKPD: DIA=%s min, Peak=%s min, Tail=%.0f%%, Activity=%.0f%% (%s, anticip=%.0f%%, fresh=%.0f%%), ISF(fused)=%s (profile=%s, TDD=%s, scale=%.2f)".format(
+              input.context.getString(R.string.console_pkpd_log,
               //input.pkpdRuntime?.params?.diaHrs?.let { "%.0f".format(it * 60.0) } ?: "n/a",
                 diaText,
               //input.pkpdRuntime?.params?.peakMin?.let { "%.0f".format(it) } ?: "n/a",

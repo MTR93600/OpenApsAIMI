@@ -942,7 +942,7 @@
     <string name="console_mpc_log">MPC modello predittivo: dose=%.2f, Kp=%.3f, corr=%.2f, out=%.2f</string>
     <string name="reason_mpc_pi">🎛️ MPC modello predittivo: %.2f U (%.0f%%) | PI modello fisiologico: %.2f U (%.0f%%)</string>
     <string name="smb_final">✅ SMB finale: %1$s U</string>
-    <string name="console_pkpd_log">⚗️ DIA=%1$s, picco=%2$s, coda=%3$.0f%%, ISF(combinato)=%4$s (profilo=%5$s, TDD=%6$s, scala=%7$.2f)</string>
+    <string name="console_pkpd_log">\n⚗️ DIA=%1$s, picco=%2$s, coda=%3$.0f%%, esercizio=%4$.0f%% (%5$s, anticip=%6$.0f%%, fresco=%7$.0f%%), ISF(combinato)=%8$s (profilo=%9$s, TDD=%10$s, scala=%11$.2f)</string>
     <string name="console_smb_log">\n🧪 SMB: proposto=%.2f → applicato=%.2f [IOB residua%s×%.2f, attività fisica%s×%.2f, digestione lenta%s×%.2f] → finale=%.2f%s</string>
     <string name="console_smb_log_2">\n🧪 SMB: proposto=%.2f → applicato=%.2f → finale=%.2f%s</string>
     <string name="console_high_bg_override"> (preferenze Glicemia&gt;120 in uso)</string>
