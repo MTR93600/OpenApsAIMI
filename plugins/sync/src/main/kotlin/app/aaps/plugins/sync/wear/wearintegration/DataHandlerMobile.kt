@@ -1232,14 +1232,12 @@ class DataHandlerMobile @Inject constructor(
 
     private fun predictionColor(context: Context?, data: GV): Int {
         return when (data.sourceSensor) {
-            SourceSensor.IOB_PREDICTION        -> rh.gac(context, app.aaps.core.ui.R.attr.iobColor)
-            SourceSensor.COB_PREDICTION        -> rh.gac(context, app.aaps.core.ui.R.attr.cobColor)
-            SourceSensor.A_COB_PREDICTION      -> -0x7f000001 and rh.gac(context, app.aaps.core.ui.R.attr.cobColor)
-            SourceSensor.UAM_PREDICTION        -> rh.gac(context, app.aaps.core.ui.R.attr.uamColor)
-            SourceSensor.ZT_PREDICTION         -> rh.gac(context, app.aaps.core.ui.R.attr.ztColor)
-            SourceSensor.PREDICTION_BAND_LOW   -> rh.gac(context, app.aaps.core.ui.R.attr.predictionBandLowColor)
-            SourceSensor.PREDICTION_BAND_HIGH  -> rh.gac(context, app.aaps.core.ui.R.attr.predictionBandHighColor)
-            else                               -> rh.gac(context, app.aaps.core.ui.R.attr.defaultTextColor)
+            SourceSensor.IOB_PREDICTION   -> rh.gac(context, app.aaps.core.ui.R.attr.iobColor)
+            SourceSensor.COB_PREDICTION   -> rh.gac(context, app.aaps.core.ui.R.attr.cobColor)
+            SourceSensor.A_COB_PREDICTION -> -0x7f000001 and rh.gac(context, app.aaps.core.ui.R.attr.cobColor)
+            SourceSensor.UAM_PREDICTION   -> rh.gac(context, app.aaps.core.ui.R.attr.uamColor)
+            SourceSensor.ZT_PREDICTION    -> rh.gac(context, app.aaps.core.ui.R.attr.ztColor)
+            else                          -> rh.gac(context, app.aaps.core.ui.R.attr.defaultTextColor)
         }
     }
 
