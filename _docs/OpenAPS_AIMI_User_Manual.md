@@ -134,6 +134,7 @@ AIMI applique un garde-fou qui bloque SMB si la glycémie se rapproche du seuil 
 - **Bornes & vitesse** (`OApsAIMIPkpdBoundsDia*`, `OApsAIMIPkpdBoundsPeak*`, `OApsAIMIPkpdMax*`) limitent l’apprentissage quotidien.【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L71-L78】
 - **État persistant** (`OApsAIMIPkpdStateDiaH`, `OApsAIMIPkpdStatePeakMin`) mémorise le dernier DIA/pic appris.【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L79-L80】
 - **Effet :** lorsque activé, AIMI fusionne l’ISF profil/TDD avec l’estimation PK/PD et applique un *pkpdScale* lié à la fraction de queue d’IOB.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/pkpd/PkPdIntegration.kt†L27-L82】
+- **Priorité repas :** lorsque les modes repas/COB actifs annoncent une montée, le *pkpdScale* est relevé (planche 0.9 → plafond 1.5) et les gardes SMB sont assouplies pour conserver de petits bolus rapprochés tant que la prédiction reste au-dessus de la cible.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/pkpd/PkPdIntegration.kt†L1-L86】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L1180-L1360】
 - **Ajustements :**
   - **Hypos tardives** : réduisez `OApsAIMIPkpdMaxDiaChangePerDayH` pour freiner l’allongement de DIA.【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L77-L78】
   - **Hypers post-repas** : baissez `OApsAIMIPkpdBoundsPeakMinMax` (ex. 180) pour favoriser des pics plus courts.

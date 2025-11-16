@@ -42,6 +42,7 @@ import app.aaps.plugins.aps.openAPSAIMI.model.LoopContext
 import app.aaps.plugins.aps.openAPSAIMI.model.SafetyReport
 import app.aaps.plugins.aps.openAPSAIMI.model.SmbPlan
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.MealAggressionContext
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
@@ -281,7 +282,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         private val pkpdIntegration: PkPdIntegration
     ) : PkpdPort {
 
+        private fun LoopContext.mealModeActive(): Boolean =
+            modes.meal || modes.breakfast || modes.lunch || modes.dinner || modes.highCarb || modes.snack
+
         override fun snapshot(ctx: LoopContext): PkpdPort.Snapshot {
+            val mealCtx = MealAggressionContext(
+                mealModeActive = ctx.mealModeActive(),
+                predictedBgMgdl = ctx.eventualBg,
+                targetBgMgdl = ctx.profile.targetMgdl
+            )
             val rt = pkpdIntegration.computeRuntime(
                 epochMillis = ctx.nowEpochMillis,
                 bg = ctx.bg.mgdl,
@@ -291,7 +300,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 windowMin = ctx.settings.smbIntervalMin,
                 exerciseFlag = false, // remplace par ctx.modes.sport si dispo
                 profileIsf = ctx.profile.isfMgdlPerU,
-                tdd24h = ctx.tdd24hU
+                tdd24h = ctx.tdd24hU,
+                mealContext = mealCtx
             )
             return if (rt != null) {
                 PkpdPort.Snapshot(
@@ -307,6 +317,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         override fun dampSmb(units: Double, ctx: LoopContext, bypassDamping: Boolean): PkpdPort.DampingAudit {
+            val mealCtx = MealAggressionContext(
+                mealModeActive = ctx.mealModeActive(),
+                predictedBgMgdl = ctx.eventualBg,
+                targetBgMgdl = ctx.profile.targetMgdl
+            )
             val rt = pkpdIntegration.computeRuntime(epochMillis = ctx.nowEpochMillis,
                                                     bg = ctx.bg.mgdl,
                                                     deltaMgDlPer5 = ctx.bg.delta5,
@@ -315,7 +330,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                                                     windowMin = ctx.settings.smbIntervalMin,
                                                     exerciseFlag = false, // remplace par ctx.modes.sport si dispo
                                                     profileIsf = ctx.profile.isfMgdlPerU,
-                                                    tdd24h = ctx.tdd24hU)
+                                                    tdd24h = ctx.tdd24hU,
+                                                    mealContext = mealCtx)
 
             val damping = SmbDampingUsecase.run(
                 rt,
@@ -1224,6 +1240,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         suspectedLateFatMeal: Boolean = false
     ): Float {
         var smbToGive = smbToGiveParam
+        val mealWeights = computeMealAggressionWeights(mealData, hypoThreshold)
 
         val (isCrit, critMsg) = isCriticalSafetyCondition(mealData, hypoThreshold,context)
         if (isCrit) {
@@ -1232,9 +1249,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         if (isSportSafetyCondition()) {
-            //reason?.appendLine("🏃‍♂️ Safety sport → SMB=0")
-            reason?.appendLine(context.getString(R.string.safety_sport_smb_zero))
-            return 0f
+            if (mealWeights.guardScale > 0.0 && smbToGive > 0f) {
+                val before = smbToGive
+                smbToGive = (smbToGive * mealWeights.guardScale.toFloat()).coerceAtLeast(0f)
+                reason?.appendLine(
+                    context.getString(R.string.reason_safety_sport_meal_reduction, before, smbToGive)
+                )
+            } else {
+                reason?.appendLine(context.getString(R.string.safety_sport_smb_zero))
+                return 0f
+            }
         }
         val wCycleInfo = ensureWCycleInfo()
         if (wCycleInfo != null) {
@@ -1272,10 +1296,35 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             //reason?.appendLine("🎛️ Ajustements: ${"%.2f".format(beforeAdj)} → ${"%.2f".format(smbToGive)} U")
             reason?.appendLine(context.getString(R.string.adjustments_smb, beforeAdj, smbToGive))
         }
+        if (mealWeights.active && mealWeights.boostFactor > 1.0 && smbToGive > 0f) {
+            val beforeBoost = smbToGive
+            smbToGive = (smbToGive * mealWeights.boostFactor.toFloat()).coerceAtLeast(0f)
+            reason?.appendLine(
+                context.getString(
+                    R.string.reason_meal_aggression_boost,
+                    beforeBoost,
+                    smbToGive,
+                    mealWeights.boostFactor
+                )
+            )
+        }
         pkpdRuntime?.let { runtime ->
             val beforeDamp = smbToGive
-            val damped = runtime.dampSmb(beforeDamp.toDouble(), exerciseFlag, suspectedLateFatMeal).toFloat()
-            if (damped != beforeDamp) {
+            val audit = runtime.dampSmbWithAudit(
+                beforeDamp.toDouble(),
+                exerciseFlag,
+                suspectedLateFatMeal,
+                bypassDamping = mealWeights.bypassTail
+            )
+            val damped = audit.out.toFloat()
+            if (audit.mealBypass) {
+                reason?.appendLine(
+                    context.getString(
+                        R.string.reason_meal_tail_bypass,
+                        mealWeights.predictedOvershoot
+                    )
+                )
+            } else if (damped != beforeDamp) {
                 reason?.appendLine(
                     context.getString(
                         R.string.reason_tail_damping,
@@ -1497,6 +1546,33 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
     private fun roundToPoint05(number: Float): Float {
         return (number * 20.0).roundToInt() / 20.0f
+    }
+
+    private data class MealAggressionWeights(
+        val active: Boolean,
+        val boostFactor: Double,
+        val guardScale: Double,
+        val bypassTail: Boolean,
+        val predictedOvershoot: Double
+    )
+
+    private fun isMealContextActive(mealData: MealData): Boolean {
+        val manualFlags = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime
+        val cobActive = mealData.mealCOB > 5.0
+        return manualFlags || cobActive
+    }
+
+    private fun computeMealAggressionWeights(mealData: MealData, hypoThreshold: Double): MealAggressionWeights {
+        if (!isMealContextActive(mealData)) return MealAggressionWeights(false, 1.0, 0.0, false, 0.0)
+        val predicted = predictedBg.toDouble()
+        val overshoot = (predicted - targetBg).coerceAtLeast(0.0)
+        val normalized = (overshoot / 80.0).coerceIn(0.0, 1.0)
+        val boost = 1.0 + 0.05 + 0.15 * normalized
+        val guardScale = if (overshoot > 10 && (bg - hypoThreshold) > 5.0) {
+            (0.4 + 0.3 * normalized).coerceAtMost(0.85)
+        } else 0.0
+        val bypassTail = overshoot > 20 && mealData.mealCOB > 10.0
+        return MealAggressionWeights(true, boost, guardScale, bypassTail, overshoot)
     }
 
     private fun isCriticalSafetyCondition(mealData: MealData,  hypoThreshold: Double,ctx: Context): Pair<Boolean, String> {
@@ -3172,6 +3248,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         windowSinceDoseInt = windowSinceDoseMin.toInt()
         val carbsActiveG = mealData.mealCOB.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
         carbsActiveForPkpd = carbsActiveG
+        val mealModeActiveNow = isMealContextActive(mealData)
+        val pkpdMealContext = MealAggressionContext(
+            mealModeActive = mealModeActiveNow,
+            predictedBgMgdl = predictedBg.toDouble(),
+            targetBgMgdl = targetBg.toDouble()
+        )
         val pkpdRuntimeTemp = pkpdIntegration.computeRuntime(
             epochMillis = currentTime,
             bg = bg,
@@ -3181,7 +3263,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             windowMin = windowSinceDoseInt,
             exerciseFlag = sportTime,
             profileIsf = profile.sens,
-            tdd24h = tdd24Hrs.toDouble()
+            tdd24h = tdd24Hrs.toDouble(),
+            mealContext = pkpdMealContext
         )
         if (pkpdRuntimeTemp != null) {
             pkpdRuntime = pkpdRuntimeTemp

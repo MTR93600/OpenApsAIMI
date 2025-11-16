@@ -6,6 +6,12 @@ import app.aaps.core.keys.interfaces.Preferences
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
+data class MealAggressionContext(
+    val mealModeActive: Boolean,
+    val predictedBgMgdl: Double? = null,
+    val targetBgMgdl: Double? = null
+)
+
 class PkPdIntegration(private val preferences: Preferences) {
 
     private data class Config(
@@ -33,7 +39,8 @@ class PkPdIntegration(private val preferences: Preferences) {
         windowMin: Int,
         exerciseFlag: Boolean,
         profileIsf: Double,
-        tdd24h: Double
+        tdd24h: Double,
+        mealContext: MealAggressionContext? = null
     ): PkPdRuntime? {
         val config = readConfig()
         if (!config.enabled) {
@@ -72,8 +79,19 @@ class PkPdIntegration(private val preferences: Preferences) {
         val freshness = (1.0 - activityState.postWindowFraction).coerceIn(0.0, 1.0)
         val activityBlend = (0.6 * activityState.relativeActivity + 0.4 * freshness).coerceIn(0.0, 1.0)
         val anticipatoryBoost = activityState.anticipationWeight * 0.1
-        val pkpdScale = (1.0 + 0.12 * tailFraction + 0.22 * activityBlend + anticipatoryBoost)
-            .coerceIn(0.8, 1.4)
+        val mealBoost = mealContext?.let { ctx ->
+            if (!ctx.mealModeActive) return@let 0.0
+            val predicted = ctx.predictedBgMgdl
+            val target = ctx.targetBgMgdl
+            val normalizedRise = if (predicted != null && target != null) {
+                ((predicted - target).coerceAtLeast(0.0) / 70.0).coerceIn(0.0, 1.0)
+            } else 0.0
+            0.05 + 0.15 * normalizedRise
+        } ?: 0.0
+        val minScale = if (mealContext?.mealModeActive == true) 0.9 else 0.8
+        val maxScale = if (mealContext?.mealModeActive == true) 1.5 else 1.4
+        val pkpdScale = (1.0 + 0.12 * tailFraction + 0.22 * activityBlend + anticipatoryBoost + mealBoost)
+            .coerceIn(minScale, maxScale)
         val fusedIsf = fusion.fused(profileIsf, tddIsf, pkpdScale)
         return PkPdRuntime(
             params = params,
