@@ -59,6 +59,7 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleFacade
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleInfo
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionEngine
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionProfiler
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.IobActionProfile
 import java.io.File
@@ -3845,146 +3846,55 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val slopeFromMaxDeviation = mealData.slopeFromMaxDeviation
         val slopeFromMinDeviation = mealData.slopeFromMinDeviation
         val slopeFromDeviations = Math.min(slopeFromMaxDeviation, -slopeFromMinDeviation / 3)
-        var IOBpredBGs = mutableListOf<Double>()
-        var UAMpredBGs = mutableListOf<Double>()
-        var ZTpredBGs = mutableListOf<Double>()
-
-        IOBpredBGs.add(bg)
-        ZTpredBGs.add(bg)
-        UAMpredBGs.add(bg)
         var ci: Double
         val cid: Double
         // calculate current carb absorption rate, and how long to absorb all carbs
         // CI = current carb impact on BG in mg/dL/5m
         ci = round((minDelta - bgi), 1)
-        val uci = round((minDelta - bgi), 1)
-        val aci = 8
         if (ci == 0.0) {
             // avoid divide by zero
             cid = 0.0
         } else {
             cid = min(remainingCATime * 60 / 5 / 2, Math.max(0.0, mealData.mealCOB * csf / ci))
         }
-        val acid = max(0.0, mealData.mealCOB * csf / aci)
         // duration (hours) = duration (5m) * 5 / 60 * 2 (to account for linear decay)
         //consoleError.add("Carb Impact: ${ci} mg/dL per 5m; CI Duration: ${round(cid * 5 / 60 * 2, 1)} hours; remaining CI (~2h peak): ${round(remainingCIpeak, 1)} mg/dL per 5m")
         consoleError.add(context.getString(R.string.console_carb_impact, ci, round(cid * 5 / 60 * 2, 1), round(remainingCIpeak, 1)))
-        //console.error("Accel. Carb Impact:",aci,"mg/dL per 5m; ACI Duration:",round(acid*5/60*2,1),"hours");
-        var minIOBPredBG = 999.0
 
-        var minUAMPredBG = 999.0
-        var minGuardBG: Double
+        consoleLog.add("Prédiction avancée avec ISF final de ${"%.1f".format(sens)}")
+        val advancedPredictions = AdvancedPredictionEngine.predict(
+            currentBG = bg,
+            iobArray = iob_data_array,
+            finalSensitivity = sens,
+            cobG = mealData.mealCOB,
+            profile = profile
+        )
 
-        var minUAMGuardBG = 999.0
-        var minIOBGuardBG = 999.0
-        var minZTGuardBG = 999.0
-        var IOBpredBG: Double = eventualBG
-        var maxIOBPredBG = bg
+// Normalisation et saturation des prédictions dans la plage 39–401 mg/dL
+        val sanitizedPredictions = advancedPredictions.map { round(min(401.0, max(39.0, it)), 0) }
+        val intsPredictions = sanitizedPredictions.map { it.toInt() }
 
-        val lastIOBpredBG: Double
-
-        var lastUAMpredBG: Double? = null
-        //var lastZTpredBG: Int
-        var UAMduration = 0.0
-        var remainingCItotal = 0.0
-        val remainingCIs = mutableListOf<Int>()
-        val predCIs = mutableListOf<Int>()
-        var UAMpredBG: Double? = null
-
-
-        iobArray.forEach { iobTick ->
-            //console.error(iobTick);
-            val predBGI: Double = round((-iobTick.activity * sens * 5), 2)
-            val IOBpredBGI: Double =
-                if (dynIsfMode) round((-iobTick.activity * (1800 / (profile.TDD * (ln((max(IOBpredBGs[IOBpredBGs.size - 1], 39.0) / profile.insulinDivisor) + 1)))) * 5), 2)
-                else predBGI
-            iobTick.iobWithZeroTemp ?: error("iobTick.iobWithZeroTemp missing")
-            // try to find where is crashing https://console.firebase.google.com/u/0/project/androidaps-c34f8/crashlytics/app/android:info.nightscout.androidaps/issues/950cdbaf63d545afe6d680281bb141e5?versions=3.3.0-dev-d%20(1500)&time=last-thirty-days&types=crash&sessionEventKey=673BF7DD032300013D4704707A053273_2017608123846397475
-            if (iobTick.iobWithZeroTemp!!.activity.isNaN() || sens.isNaN())
-                fabricPrivacy.logCustom("iobTick.iobWithZeroTemp!!.activity=${iobTick.iobWithZeroTemp!!.activity} sens=$sens")
-            val predZTBGI =
-                if (dynIsfMode) round((-iobTick.iobWithZeroTemp!!.activity * (1800 / (profile.TDD * (ln((max(ZTpredBGs[ZTpredBGs.size - 1], 39.0) / profile.insulinDivisor) + 1)))) * 5), 2)
-                else round((-iobTick.iobWithZeroTemp!!.activity * sens * 5), 2)
-            val predUAMBGI =
-                if (dynIsfMode) round((-iobTick.activity * (1800 / (profile.TDD * (ln((max(UAMpredBGs[UAMpredBGs.size - 1], 39.0) / profile.insulinDivisor) + 1)))) * 5), 2)
-                else predBGI
-            // for IOBpredBGs, predicted deviation impact drops linearly from current deviation down to zero
-            // over 60 minutes (data points every 5m)
-            val predDev: Double = ci * (1 - min(1.0, IOBpredBGs.size / (60.0 / 5.0)))
-            IOBpredBG = IOBpredBGs[IOBpredBGs.size - 1] + IOBpredBGI + predDev
-            // calculate predBGs with long zero temp without deviations
-            val ZTpredBG = ZTpredBGs[ZTpredBGs.size - 1] + predZTBGI
-            // for UAMpredBGs, predicted carb impact drops at slopeFromDeviations
-            // calculate predicted CI from UAM based on slopeFromDeviations
-            val predUCIslope = max(0.0, uci + (UAMpredBGs.size * slopeFromDeviations))
-            // if slopeFromDeviations is too flat, predicted deviation impact drops linearly from
-            // current deviation down to zero over 3h (data points every 5m)
-            val predUCImax = max(0.0, uci * (1 - UAMpredBGs.size / max(3.0 * 60 / 5, 1.0)))
-            //console.error(predUCIslope, predUCImax);
-            // predicted CI from UAM is the lesser of CI based on deviationSlope or DIA
-            val predUCI = min(predUCIslope, predUCImax)
-            if (predUCI > 0) {
-                //console.error(UAMpredBGs.length,slopeFromDeviations, predUCI);
-                UAMduration = round((UAMpredBGs.size + 1) * 5 / 60.0, 1)
-            }
-            UAMpredBG = UAMpredBGs[UAMpredBGs.size - 1] + predUAMBGI + min(0.0, predDev) + predUCI
-            //console.error(predBGI, predCI, predUCI);
-            // truncate all BG predictions at 4 hours
-            if (IOBpredBGs.size < 24) IOBpredBGs.add(IOBpredBG)
-            if (UAMpredBGs.size < 24) UAMpredBGs.add(UAMpredBG)
-            if (ZTpredBGs.size < 24) ZTpredBGs.add(ZTpredBG)
-            // calculate minGuardBGs without a wait from COB, UAM, IOB predBGs
-            if (UAMpredBG < minUAMGuardBG) minUAMGuardBG = round(UAMpredBG).toDouble()
-            if (IOBpredBG < minIOBGuardBG) minIOBGuardBG = IOBpredBG
-            if (ZTpredBG < minZTGuardBG) minZTGuardBG = round(ZTpredBG, 0)
-
-            // set minPredBGs starting when currently-dosed insulin activity will peak
-            // look ahead 60m (regardless of insulin type) so as to be less aggressive on slower insulins
-            // add 30m to allow for insulin delivery (SMBs or temps)
-            this.insulinPeakTime = tp
-            val insulinPeak5m = (insulinPeakTime / 60.0) * 12.0
-            //console.error(insulinPeakTime, insulinPeak5m, profile.insulinPeakTime, profile.curve);
-
-            // wait 90m before setting minIOBPredBG
-            if (IOBpredBGs.size > insulinPeak5m && (IOBpredBG < minIOBPredBG)) minIOBPredBG = round(IOBpredBG, 0)
-            if (IOBpredBG > maxIOBPredBG) maxIOBPredBG = IOBpredBG
-            if (enableUAM && UAMpredBGs.size > 6 && (UAMpredBG < minUAMPredBG)) minUAMPredBG = round(UAMpredBG, 0)
+// Remplit toutes les séries de prédictions pour rester compatible avec la UI
+// et tout code qui attend IOB/COB/ZT/UAM non vides.
+        rT.predBGs = Predictions().apply {
+            IOB = intsPredictions
+            COB = intsPredictions
+            ZT = intsPredictions
+            UAM = intsPredictions
         }
 
-        rT.predBGs = Predictions()
-        IOBpredBGs = IOBpredBGs.map { round(min(401.0, max(39.0, it)), 0) }.toMutableList()
-        for (i in IOBpredBGs.size - 1 downTo 13) {
-            if (IOBpredBGs[i - 1] != IOBpredBGs[i]) break
-            else IOBpredBGs.removeAt(IOBpredBGs.lastIndex)
-        }
-        rT.predBGs?.IOB = IOBpredBGs.map { it.toInt() }
-        lastIOBpredBG = round(IOBpredBGs[IOBpredBGs.size - 1]).toDouble()
-        ZTpredBGs = ZTpredBGs.map { round(min(401.0, max(39.0, it)), 0) }.toMutableList()
-        for (i in ZTpredBGs.size - 1 downTo 7) {
-            // stop displaying ZTpredBGs once they're rising and above target
-            if (ZTpredBGs[i - 1] >= ZTpredBGs[i] || ZTpredBGs[i] <= target_bg) break
-            else ZTpredBGs.removeAt(ZTpredBGs.lastIndex)
-        }
-        rT.predBGs?.ZT = ZTpredBGs.map { it.toInt() }
+// Mélange éventuel BG "naïf" (IOB+déviation) avec la prédiction avancée pour un comportement plus lissé.
+// - eventualBG : calcul OpenAPS/AIMI historique (naive_eventual + deviation, ajustements hypo/target).
+// - advancedEventual : dernier point de la courbe prédite avancée.
+        val advancedEventual = intsPredictions.lastOrNull()?.toDouble() ?: eventualBG
+        val blendedEventual = (eventualBG + advancedEventual) / 2.0
 
-        if (ci > 0 || remainingCIpeak > 0) {
-            if (enableUAM) {
-                UAMpredBGs = UAMpredBGs.map { round(min(401.0, max(39.0, it)), 0) }.toMutableList()
-                for (i in UAMpredBGs.size - 1 downTo 13) {
-                    if (UAMpredBGs[i - 1] != UAMpredBGs[i]) break
-                    else UAMpredBGs.removeAt(UAMpredBGs.lastIndex)
-                }
-                rT.predBGs?.UAM = UAMpredBGs.map { it.toInt() }
-                lastUAMpredBG = UAMpredBGs[UAMpredBGs.size - 1]
-                eventualBG = max(eventualBG, round(UAMpredBGs[UAMpredBGs.size - 1], 0))
-            }
+        this.eventualBG = blendedEventual
+        rT.eventualBG = blendedEventual
+//fin predictions
+////////////////////////////////////////////
+//estimation des glucides nécessaires si risque hypo
 
-            // set eventualBG based on COB or UAM predBGs
-            rT.eventualBG = eventualBG
-        }
-        //fin predictions
-        ////////////////////////////////////////////
-        //estimation des glucides nécessaires si risque hypo
         val thresholdBG = 70.0
         val carbsRequired = CarbsAdvisor.estimateRequiredCarbs(
             bg = bg,
