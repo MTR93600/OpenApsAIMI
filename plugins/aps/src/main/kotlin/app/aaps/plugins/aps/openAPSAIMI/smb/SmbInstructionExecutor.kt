@@ -19,6 +19,7 @@ import app.aaps.plugins.aps.openAPSAIMI.smb.SmbQuantizer
 import java.io.File
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
+import kotlin.isNaN
 import kotlin.math.max
 import kotlin.math.min
 
@@ -426,7 +427,27 @@ object SmbInstructionExecutor {
         )
 
         val quantized = finalSmb.toDouble()
+        val diaMin = input.pkpdRuntime?.params?.diaHrs?.let { it * 60.0 }
+        val diaText = when {
+            diaMin == null || diaMin.isNaN() -> "n/a"
+            diaMin < 60.0 -> "%.0fm".format(diaMin)
+            else -> {
+                val h = diaMin.toInt() / 60
+                val m = diaMin.toInt() % 60
+                if (m == 0) "${h}h" else "${h}h${m}m"
+            }
+        }
 
+        val peakMin = input.pkpdRuntime?.params?.peakMin
+        val peakText = when {
+            peakMin == null || peakMin.isNaN() -> "n/a"
+            peakMin < 60.0 -> "%.0fm".format(peakMin)
+            else -> {
+                val h = peakMin.toInt() / 60
+                val m = peakMin.toInt() % 60
+                if (m == 0) "${h}h" else "${h}h${m}m"
+            }
+        }
         val activity = input.pkpdRuntime?.activity
         val activityPct = (activity?.relativeActivity ?: 0.0) * 100.0
         val anticipationPct = (activity?.anticipationWeight ?: 0.0) * 100.0
@@ -434,8 +455,10 @@ object SmbInstructionExecutor {
         val activityStage = activity?.stage?.name ?: "n/a"
         input.rT.reason.append(
             "\nPKPD: DIA=%s min, Peak=%s min, Tail=%.0f%%, Activity=%.0f%% (%s, anticip=%.0f%%, fresh=%.0f%%), ISF(fused)=%s (profile=%s, TDD=%s, scale=%.2f)".format(
-                input.pkpdRuntime?.params?.diaHrs?.let { "%.0f".format(it * 60.0) } ?: "n/a",
-                input.pkpdRuntime?.params?.peakMin?.let { "%.0f".format(it) } ?: "n/a",
+              //input.pkpdRuntime?.params?.diaHrs?.let { "%.0f".format(it * 60.0) } ?: "n/a",
+                diaText,
+              //input.pkpdRuntime?.params?.peakMin?.let { "%.0f".format(it) } ?: "n/a",
+                peakText,
                 (input.pkpdRuntime?.tailFraction ?: 0.0) * 100.0,
                 activityPct,
                 activityStage,
