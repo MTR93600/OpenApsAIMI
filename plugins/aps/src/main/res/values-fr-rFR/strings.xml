@@ -819,8 +819,6 @@
     <string name="cycle_ovulation">Ovulation : SMB -%1$.0f%% </string>
     <string name="cycle_luteal">Lutéale : basal +%.0f%%, SMB +%.0f%% </string>
     <string name="cycle_unknown">Inconnu</string>
-    <string name="wcycle_auto_profile_title">♀️ WCycle profil auto</string>
-    <string name="wcycle_auto_profile_summary">Laisse AIMI apprendre l’ajustement dominant et masque les modificateurs manuels.</string>
     <string name="basal_multiplier_line">♀️⚡ %1$s %2$s → %.2f U/h\n</string>
     <string name="basal_fmt">Basale×%.2f</string>
     <string name="wcycle_invalid_day">♀️ WCycle: jour invalide</string>

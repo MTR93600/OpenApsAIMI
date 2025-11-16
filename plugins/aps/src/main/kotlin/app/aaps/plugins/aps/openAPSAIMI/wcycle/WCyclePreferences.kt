@@ -16,7 +16,6 @@ class WCyclePreferences(private val p: Preferences) {
     fun avgLen(): Int = p.get(IntKey.OApsAIMIWCycleAvgLength).coerceIn(24, 45)
     fun shadow(): Boolean = p.get(BooleanKey.OApsAIMIWCycleShadow)
     fun requireConfirm(): Boolean = p.get(BooleanKey.OApsAIMIWCycleRequireConfirm)
-    fun autoProfile(): Boolean = p.get(BooleanKey.OApsAIMIWCycleAutoProfile)
     fun clampMin(): Double = p.get(DoubleKey.OApsAIMIWCycleClampMin).coerceAtMost(1.0)
     fun clampMax(): Double = p.get(DoubleKey.OApsAIMIWCycleClampMax).coerceAtLeast(1.0)
 
