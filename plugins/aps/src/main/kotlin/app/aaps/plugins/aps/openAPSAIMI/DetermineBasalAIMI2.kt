@@ -15,6 +15,8 @@ import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.OapsProfileAimi
+import app.aaps.core.interfaces.aps.PredictionAnnotation
+import app.aaps.core.interfaces.aps.PredictionAnnotationType
 import app.aaps.core.interfaces.aps.Predictions
 import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -38,9 +40,11 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
 import app.aaps.plugins.aps.openAPSAIMI.model.BasalPlan
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
+import app.aaps.plugins.aps.openAPSAIMI.NGRState
 import app.aaps.plugins.aps.openAPSAIMI.model.LoopContext
 import app.aaps.plugins.aps.openAPSAIMI.model.SafetyReport
 import app.aaps.plugins.aps.openAPSAIMI.model.SmbPlan
+import app.aaps.plugins.aps.openAPSAIMI.prediction.PredictionUncertaintyEstimator
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
@@ -76,6 +80,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.collections.asSequence
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.max
@@ -843,6 +848,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
     private fun calculateBasalRate(basal: Double, currentBasal: Double, multiplier: Double): Double =
         if (basal == 0.0) currentBasal * multiplier else roundBasal(basal * multiplier)
+
+    private fun computePredictionTickLimit(pkpdRuntime: PkPdRuntime?, profile: OapsProfileAimi): Int {
+        val diaMinutes = ((pkpdRuntime?.params?.diaHrs ?: profile.dia) * 60.0).coerceIn(120.0, 240.0)
+        return max(24, ceil(diaMinutes / 5.0).toInt())
+    }
 
     private fun convertBG(value: Double): String =
         profileUtil.fromMgdlToStringInUnits(value).replace("-0.0", "0.0")
@@ -2763,6 +2773,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog = consoleLog,
             consoleError = consoleError
         )
+        val predictionAnnotations = mutableListOf<PredictionAnnotation>()
         wCycleInfoForRun = null
         wCycleReasonLogged = false
         lastProfile = profile
@@ -2801,6 +2812,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val gs = pack.gs!!
         val f  = pack.features
+        val combinedDeltaFeature = f?.combinedDelta
+        val parabolaMinutesFeature = f?.parabolaMinutes
+        val nightGrowthCandidate = f?.isNightGrowthCandidate ?: false
 
 // Construit un GlucoseStatusAIMI complet (plus de 0.0 par défaut)
         val glucoseStatus = glucose_status ?: GlucoseStatusAIMI(
@@ -3142,6 +3156,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             lastBolusTimeMs = lastBolusTimeMs,
             mealFlags = mealFlags
         )
+        if (lateFatRiseFlag) {
+            predictionAnnotations.add(
+                PredictionAnnotation(
+                    type = PredictionAnnotationType.LATE_FAT,
+                    label = context.getString(R.string.prediction_annotation_late_fat),
+                    offsetMinutes = 0
+                )
+            )
+        }
         val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
         var tdd24Hrs = tddCalculator.calculateDaily(-24, 0)?.totalAmount?.toFloat() ?: 0.0f
         if (tdd24Hrs == 0.0f) tdd24Hrs = tdd7P.toFloat()
@@ -3845,6 +3868,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val slopeFromMaxDeviation = mealData.slopeFromMaxDeviation
         val slopeFromMinDeviation = mealData.slopeFromMinDeviation
         val slopeFromDeviations = Math.min(slopeFromMaxDeviation, -slopeFromMinDeviation / 3)
+        val predictionTickLimit = computePredictionTickLimit(pkpdRuntime, profile)
         var IOBpredBGs = mutableListOf<Double>()
         var UAMpredBGs = mutableListOf<Double>()
         var ZTpredBGs = mutableListOf<Double>()
@@ -3930,9 +3954,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             UAMpredBG = UAMpredBGs[UAMpredBGs.size - 1] + predUAMBGI + min(0.0, predDev) + predUCI
             //console.error(predBGI, predCI, predUCI);
             // truncate all BG predictions at 4 hours
-            if (IOBpredBGs.size < 24) IOBpredBGs.add(IOBpredBG)
-            if (UAMpredBGs.size < 24) UAMpredBGs.add(UAMpredBG)
-            if (ZTpredBGs.size < 24) ZTpredBGs.add(ZTpredBG)
+            if (IOBpredBGs.size < predictionTickLimit) IOBpredBGs.add(IOBpredBG)
+            if (UAMpredBGs.size < predictionTickLimit) UAMpredBGs.add(UAMpredBG)
+            if (ZTpredBGs.size < predictionTickLimit) ZTpredBGs.add(ZTpredBG)
             // calculate minGuardBGs without a wait from COB, UAM, IOB predBGs
             if (UAMpredBG < minUAMGuardBG) minUAMGuardBG = round(UAMpredBG).toDouble()
             if (IOBpredBG < minIOBGuardBG) minIOBGuardBG = IOBpredBG
@@ -3951,6 +3975,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (enableUAM && UAMpredBGs.size > 6 && (UAMpredBG < minUAMPredBG)) minUAMPredBG = round(UAMpredBG, 0)
         }
 
+        val rawPredictionSnapshot = PredictionUncertaintyEstimator.SeriesSnapshot(
+            iob = IOBpredBGs.toList(),
+            uam = if (enableUAM) UAMpredBGs.toList() else null,
+            zt = ZTpredBGs.toList()
+        )
         rT.predBGs = Predictions()
         IOBpredBGs = IOBpredBGs.map { round(min(401.0, max(39.0, it)), 0) }.toMutableList()
         for (i in IOBpredBGs.size - 1 downTo 13) {
@@ -3981,6 +4010,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             // set eventualBG based on COB or UAM predBGs
             rT.eventualBG = eventualBG
+        }
+        val scenarioWeights = PredictionUncertaintyEstimator.scenarioWeights(
+            PredictionUncertaintyEstimator.Input(
+                combinedDelta = combinedDeltaFeature ?: combinedDelta.toDouble(),
+                parabolaMinutes = parabolaMinutesFeature,
+                slopeFromDeviations = slopeFromDeviations,
+                nightGrowthCandidate = nightGrowthCandidate,
+                pkpdTailFraction = pkpdRuntime?.tailFraction,
+                carbsActive = carbsActiveForPkpd,
+                mealModeActive = mealModeActive,
+                lateFatRise = lateFatRiseFlag
+            )
+        )
+        val percentileBands = PredictionUncertaintyEstimator.percentileBands(
+            scenarioWeights,
+            rawPredictionSnapshot
+        )
+        rT.predBGs?.scenarioConfidence = scenarioWeights.mapKeys { it.key.code }
+        if (percentileBands.isNotEmpty()) {
+            rT.predBGs?.percentileBands = percentileBands
+        }
+        if (predictionAnnotations.isNotEmpty()) {
+            rT.predBGs?.annotations = predictionAnnotations.toList()
         }
         //fin predictions
         ////////////////////////////////////////////
@@ -4022,7 +4074,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             eventualBG
         )
 
-        mealModeSmbReason?.let { reason(rT, it) }
+        mealModeSmbReason?.let {
+            reason(rT, it)
+            predictionAnnotations.add(
+                PredictionAnnotation(
+                    type = PredictionAnnotationType.MEAL_MODE,
+                    label = it,
+                    offsetMinutes = 0
+                )
+            )
+        }
 
         rT.COB = mealData.mealCOB
         rT.IOB = iob_data.iob
@@ -4118,6 +4179,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.appendLine(ngrResult.reason)
             consoleLog.add(ngrResult.reason)
         }
+        if (ngrResult.state != NGRState.INACTIVE) {
+            val ngrLabel = ngrResult.reason.ifBlank { "NGR ${ngrResult.state}" }
+            predictionAnnotations.add(
+                PredictionAnnotation(
+                    type = PredictionAnnotationType.NIGHT_GROWTH,
+                    label = ngrLabel,
+                    offsetMinutes = 0
+                )
+            )
+        }
         val lowTempTarget = profile.temptargetSet && target_bg <= profile.target_bg
         val originalMaxIobLimit = maxIobLimit
         if (!lowTempTarget && ngrResult.extraIOBHeadroomU > 0.0) {
@@ -4207,12 +4278,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // 📝 SMB autorisés mais atténués lorsque le repas impose un IOB > max raisonnable.
             if (allowMealHighIob) {
                 insulinReq *= mealHighIobDamping
-                rT.reason.append(
-                    context.getString(
-                        R.string.reason_meal_high_iob_relaxed,
-                        round(iob_data.iob, 2),
-                        round(maxIobLimit, 2),
-                        (mealHighIobDamping * 100).roundToInt()
+                val relaxMessage = context.getString(
+                    R.string.reason_meal_high_iob_relaxed,
+                    round(iob_data.iob, 2),
+                    round(maxIobLimit, 2),
+                    (mealHighIobDamping * 100).roundToInt()
+                )
+                rT.reason.append(relaxMessage)
+                predictionAnnotations.add(
+                    PredictionAnnotation(
+                        type = PredictionAnnotationType.MEAL_IOB_RELAX,
+                        label = relaxMessage,
+                        offsetMinutes = 0
                     )
                 )
             }

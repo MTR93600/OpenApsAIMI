@@ -47,6 +47,8 @@ enum class SourceSensor(val text: String) {
     COB_PREDICTION("COBPrediction"),
     UAM_PREDICTION("UAMPrediction"),
     ZT_PREDICTION("ZTPrediction"),
+    PREDICTION_BAND_LOW("PredictionBandLow"),
+    PREDICTION_BAND_HIGH("PredictionBandHigh"),
     ;
 
     fun isLibre1(): Boolean = arrayListOf(

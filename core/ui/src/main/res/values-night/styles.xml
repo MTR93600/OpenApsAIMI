@@ -205,6 +205,8 @@
         <item name="cobColor">@color/cob</item>
         <item name="uamColor">@color/uam</item>
         <item name="ztColor">@color/zt</item>
+        <item name="predictionBandLowColor">@color/prediction_band_low</item>
+        <item name="predictionBandHighColor">@color/prediction_band_high</item>
         <item name="smbColor">@color/tempbasal</item>
         <item name="bolusDataPointColor">@color/pumpHistory</item>
         <item name="profileSwitchColor">@color/profileSwitch</item>

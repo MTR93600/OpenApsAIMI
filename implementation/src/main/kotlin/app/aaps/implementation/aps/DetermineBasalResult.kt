@@ -247,6 +247,31 @@ class DetermineBasalResult @Inject constructor(
                     )
                 }
             }
+            predictions?.percentileBands?.let { bands ->
+                bands.forEach { band ->
+                    val timestamp = startTime + band.offsetMinutes * 60 * 1000L
+                    array.add(
+                        GV(
+                            raw = 0.0,
+                            noise = 0.0,
+                            value = band.p05.toDouble(),
+                            timestamp = timestamp,
+                            sourceSensor = SourceSensor.PREDICTION_BAND_LOW,
+                            trendArrow = TrendArrow.NONE
+                        )
+                    )
+                    array.add(
+                        GV(
+                            raw = 0.0,
+                            noise = 0.0,
+                            value = band.p95.toDouble(),
+                            timestamp = timestamp,
+                            sourceSensor = SourceSensor.PREDICTION_BAND_HIGH,
+                            trendArrow = TrendArrow.NONE
+                        )
+                    )
+                }
+            }
             return array
         }
 
@@ -261,6 +286,12 @@ class DetermineBasalResult @Inject constructor(
             preds?.COB?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
             preds?.UAM?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
             preds?.ZT?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
+            preds?.percentileBands?.let { bands ->
+                if (bands.isNotEmpty()) {
+                    val maxOffset = bands.maxOf { it.offsetMinutes }
+                    latest = max(latest, startTime + maxOffset * 60 * 1000L)
+                }
+            }
             return latest
         }
 

@@ -62,7 +62,7 @@ class PreparePredictionsWorker(
         }
         if (predictionsAvailable && apsResult != null && menuChartSettings[0][OverviewMenus.CharType.PRE.ordinal]) {
             var predictionHours = (ceil(apsResult.latestPredictionsTime - System.currentTimeMillis().toDouble()) / (60 * 60 * 1000)).toInt()
-            predictionHours = min(2, predictionHours)
+            predictionHours = min(4, predictionHours)
             predictionHours = max(0, predictionHours)
             val hoursToFetch = data.overviewData.rangeToDisplay - predictionHours
             data.overviewData.toTime = calendar.timeInMillis + 100000 // little bit more to avoid wrong rounding - GraphView specific

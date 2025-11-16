@@ -180,6 +180,8 @@
     <attr name="cobColor" format="reference|color" />
     <attr name="uamColor" format="reference|color" />
     <attr name="ztColor" format="reference|color" />
+    <attr name="predictionBandLowColor" format="reference|color" />
+    <attr name="predictionBandHighColor" format="reference|color" />
     <attr name="smbColor" format="reference|color" />
     <attr name="bolusDataPointColor" format="reference|color" />
     <attr name="profileSwitchColor" format="reference|color" />
