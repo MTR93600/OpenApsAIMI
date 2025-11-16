@@ -53,10 +53,29 @@ enum class StringKey(
     PumpCommonBolusStorage("pump_sync_storage_bolus", ""),
     PumpCommonTbrStorage("pump_sync_storage_tbr", ""),
     GarminRequestKey(key = "garmin_aaps_key", defaultValue = ""),
-    OApsAIMIWCycleTrackingMode("key_oaps_aimi_wcycle_tracking_mode", "FIXED_28"),
-    OApsAIMIWCycleContraceptive("key_oaps_aimi_wcycle_contraceptive", "NONE"),
-    OApsAIMIWCycleThyroid("key_oaps_aimi_wcycle_thyroid", "EUTHYROID"),
-    OApsAIMIWCycleVerneuil("key_oaps_aimi_wcycle_verneuil", "NONE"),
+    OApsAIMIWCycleTrackingMode(
+        "key_oaps_aimi_wcycle_tracking_mode",
+        "FIXED_28",
+        dependency = BooleanKey.OApsAIMIwcycle
+    ),
+    OApsAIMIWCycleContraceptive(
+        "key_oaps_aimi_wcycle_contraceptive",
+        "NONE",
+        dependency = BooleanKey.OApsAIMIwcycle,
+        negativeDependency = BooleanKey.OApsAIMIWCycleAutoProfile
+    ),
+    OApsAIMIWCycleThyroid(
+        "key_oaps_aimi_wcycle_thyroid",
+        "EUTHYROID",
+        dependency = BooleanKey.OApsAIMIwcycle,
+        negativeDependency = BooleanKey.OApsAIMIWCycleAutoProfile
+    ),
+    OApsAIMIWCycleVerneuil(
+        "key_oaps_aimi_wcycle_verneuil",
+        "NONE",
+        dependency = BooleanKey.OApsAIMIwcycle,
+        negativeDependency = BooleanKey.OApsAIMIWCycleAutoProfile
+    ),
     OApsAIMINightGrowthStart("key_oaps_aimi_ngr_night_start", "22:00"),
     OApsAIMINightGrowthEnd("key_oaps_aimi_ngr_night_end", "06:00")
 }

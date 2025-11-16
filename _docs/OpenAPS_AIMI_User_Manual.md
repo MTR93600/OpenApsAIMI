@@ -250,6 +250,7 @@ AIMI peut adapter basales et SMB selon votre phase menstruelle.
 - **`OApsAIMIwcycle`** : active le module (OFF par défaut).【F:core/keys/src/main/kotlin/app/aaps/core/keys/BooleanKey.kt†L130-L134】
 - **Modes de suivi** : `OApsAIMIWCycleTrackingMode` (`FIXED_28`, `CALENDAR_VARIABLE`, etc.).【F:core/keys/src/main/kotlin/app/aaps/core/keys/StringKey.kt†L56-L59】
 - **Paramètres physiologiques** : contraceptif, statut thyroïde, Verneuil influencent l'amplitude des multiplicateurs.【F:core/keys/src/main/kotlin/app/aaps/core/keys/StringKey.kt†L56-L59】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/wcycle/WCycleTypes.kt†L1-L39】
+- **Profil auto** : activez `OApsAIMIWCycleAutoProfile` pour masquer ces menus et laisser le learner WCycle ajuster automatiquement l'amplitude (seuls les clamps/longueur restent visibles).【F:core/keys/src/main/kotlin/app/aaps/core/keys/BooleanKey.kt†L132-L139】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/wcycle/WCycleAdjuster.kt†L22-L69】
 - **Clamp min/max** (`OApsAIMIWCycleClampMin` 0.8, `ClampMax` 1.25) bornent l'échelle appliquée.【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L124-L126】
 - **Options shadow/confirm** :
   - `OApsAIMIWCycleShadow` garde les calculs sans les appliquer (mode observation).【F:core/keys/src/main/kotlin/app/aaps/core/keys/BooleanKey.kt†L132-L135】

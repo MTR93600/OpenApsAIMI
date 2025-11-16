@@ -20,15 +20,23 @@ class WCycleAdjuster(
             reason = ""
         )
         val profile = WCycleProfile(
-            prefs.trackingMode(), prefs.contraceptive(), prefs.thyroid(), prefs.verneuil(),
-            prefs.startDom(), prefs.avgLen(), prefs.shadow(), prefs.requireConfirm(),
-            prefs.clampMin(), prefs.clampMax()
+            prefs.trackingMode(),
+            prefs.contraceptive(),
+            prefs.thyroid(),
+            prefs.verneuil(),
+            prefs.autoProfile(),
+            prefs.startDom(),
+            prefs.avgLen(),
+            prefs.shadow(),
+            prefs.requireConfirm(),
+            prefs.clampMin(),
+            prefs.clampMax()
         )
         val (day, phase0) = estimator.estimate()
         val (b0, s0) = WCycleDefaults.baseMultipliers(phase0)
 
-        val ampContraceptive = WCycleDefaults.amplitudeScale(profile.contraceptive)
-        val ampMode = when (profile.trackingMode) {
+        val ampContraceptive = if (profile.autoProfile) 1.0 else WCycleDefaults.amplitudeScale(profile.contraceptive)
+        val ampMode = if (profile.autoProfile) 1.0 else when (profile.trackingMode) {
             CycleTrackingMode.PERIMENOPAUSE -> 0.7
             CycleTrackingMode.NO_MENSES_LARC -> 0.4
             else -> 1.0
@@ -36,13 +44,17 @@ class WCycleAdjuster(
         val amp = ampContraceptive * ampMode
         var basal = 1.0 + (b0 - 1.0) * amp
         var smb   = 1.0 + (s0 - 1.0) * amp
-        val (vb, vs) = WCycleDefaults.verneuilBump(profile.verneuil)
+        val (vb, vs) = if (profile.autoProfile) 1.0 to 1.0 else WCycleDefaults.verneuilBump(profile.verneuil)
         basal *= vb; smb *= vs
 
-        val thyroidDamp = when (profile.thyroid) {
-            ThyroidStatus.HASHIMOTO, ThyroidStatus.THYROIDECTOMY -> 0.8
-            ThyroidStatus.HYPOTHYROID_TREATED -> 0.9
-            else -> 1.0
+        val thyroidDamp = if (profile.autoProfile) {
+            1.0
+        } else {
+            when (profile.thyroid) {
+                ThyroidStatus.HASHIMOTO, ThyroidStatus.THYROIDECTOMY -> 0.8
+                ThyroidStatus.HYPOTHYROID_TREATED -> 0.9
+                else -> 1.0
+            }
         }
         basal = 1.0 + (basal - 1.0) * thyroidDamp
         smb   = 1.0 + (smb   - 1.0) * thyroidDamp
@@ -63,7 +75,12 @@ class WCycleAdjuster(
             else -> "apply"
         }
 
-        val reason = "♀️ ${phase0} J${day + 1} | amp=${fmt(amp)} thy=${fmt(thyroidDamp)} ver=${profile.verneuil} | base=(${fmt(baseBasal)},${fmt(baseSmb)}) learn=(${fmt(bLearn)},${fmt(sLearn)}) ${guardReason}"
+        val tuningDescriptor = if (profile.autoProfile) {
+            "auto"
+        } else {
+            "amp=${fmt(amp)} thy=${fmt(thyroidDamp)} ver=${profile.verneuil}"
+        }
+        val reason = "♀️ ${phase0} J${day + 1} | ${tuningDescriptor} | base=(${fmt(baseBasal)},${fmt(baseSmb)}) learn=(${fmt(bLearn)},${fmt(sLearn)}) ${guardReason}"
         return WCycleInfo(
             enabled = true,
             dayInCycle = day,

@@ -1063,6 +1063,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             summary = R.string.wcycle_enable_summary
                         )
                     )
+                    addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.OApsAIMIWCycleAutoProfile,
+                            title = R.string.wcycle_auto_profile_title,
+                            summary = R.string.wcycle_auto_profile_summary
+                        )
+                    )
                     val trackingEntries = context.resources.getStringArray(R.array.wcycle_tracking_entries).map { it as CharSequence }.toTypedArray()
                     val trackingValues = context.resources.getStringArray(R.array.wcycle_tracking_values).map { it as CharSequence }.toTypedArray()
                     addPreference(

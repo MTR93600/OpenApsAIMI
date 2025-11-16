@@ -11,6 +11,7 @@ data class WCycleProfile(
     val contraceptive: ContraceptiveType,
     val thyroid: ThyroidStatus,
     val verneuil: VerneuilStatus,
+    val autoProfile: Boolean,
     val startDom: Int?,
     val cycleAvgLength: Int,
     val shadowMode: Boolean,
