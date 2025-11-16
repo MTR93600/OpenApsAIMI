@@ -219,14 +219,12 @@ Ce module gère les pics d'hormone de croissance chez l'enfant/adolescent.
 - **Activation** : auto pour <18 ans ou via `OApsAIMINightGrowthEnabled` (ON par défaut).【F:core/keys/src/main/kotlin/app/aaps/core/keys/BooleanKey.kt†L133-L136】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L417-L444】
 - **Paramètres clés** :
   - `OApsAIMINightGrowthAgeYears` (14 ans), fenêtres `OApsAIMINightGrowthStart`/`End` (22:00–06:00).【F:core/keys/src/main/kotlin/app/aaps/core/keys/IntKey.kt†L87-L90】【F:core/keys/src/main/kotlin/app/aaps/core/keys/StringKey.kt†L56-L61】
-  - `OApsAIMINightGrowthMinRiseSlope` (≥5 mg/dL/5 min), `MinDuration`, `MinEventualOverTarget` définissent la détection.【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L128-L132】【F:core/keys/src/main/kotlin/app/aaps/core/keys/IntKey.kt†L87-L90】
-  - Multiplicateurs SMB/Basal et plafonds IOB (`NightGrowthSmbMultiplier`, etc.).【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L128-L132】
-- **Fonctionnement** : NGR surveille la pente maximale, confirme l'événement et applique des multiplicateurs jusqu'à un état DECAY contrôlé.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/NightGrowthResistanceMonitor.kt†L13-L198】
+  - `OApsAIMINightGrowthMaxIobExtra` = marge d'IOB autorisée par tranche de 30 min lorsque l'épisode est actif.【F:plugins/aps/src/main/res/values/strings.xml†L543-L544】
+- **Fonctionnement** : les seuils de pente/durée, les multiplicateurs SMB/basal et la phase de décroissance sont désormais apprises automatiquement à partir de l'autosens, de la DIA, de la stabilité CGM et du profil basale.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L420-L471】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/NightGrowthResistanceLearner.kt†L1-L59】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/NightGrowthResistanceMonitor.kt†L13-L215】
 
 **Conseils :**
-- Si hypers nocturnes persistantes → augmentez `NightGrowthSmbMultiplier` (1.3) et `NightGrowthBasalMultiplier` (1.2).
-- Si hypos à la fin de l'épisode → réduisez `NightGrowthMaxSmbClamp` ou `MaxIobExtra`.
-- Pour un enfant plus jeune, réduisez `MinRiseSlope` (3–4) afin de détecter plus tôt.
+- Ajustez uniquement la fenêtre horaire et l'IOB supplémentaire si la croissance déborde encore les plafonds.
+- Pour les plus jeunes, réduisez la tranche horaire si l'épisode commence plus tôt/laissez le learner décider des intensités.
 
 ---
 

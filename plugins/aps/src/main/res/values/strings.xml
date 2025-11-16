@@ -540,8 +540,8 @@
     <string name="oaps_aimi_ngr_basal_multiplier_summary">Multiplier applied to basal adjustments while resistance is active.</string>
     <string name="oaps_aimi_ngr_max_smb_title">Maximum boosted SMB (U)</string>
     <string name="oaps_aimi_ngr_max_smb_summary">Upper clamp applied to boosted SMB values.</string>
-    <string name="oaps_aimi_ngr_max_iob_title">Extra IOB headroom (U)</string>
-    <string name="oaps_aimi_ngr_max_iob_summary">Additional IOB allowed during a detected episode.</string>
+    <string name="oaps_aimi_ngr_max_iob_title">Extra IOB per 30 min slot (U)</string>
+    <string name="oaps_aimi_ngr_max_iob_summary">Amount of additional IOB granted for each 30‑minute block while NGR is active.</string>
     <string name="oaps_aimi_ngr_decay_title">Decay duration (minutes)</string>
     <string name="oaps_aimi_ngr_decay_summary">Minutes used to smoothly return multipliers to baseline.</string>
     <string name="oaps_aimi_ngr_headroom">NGR headroom: +%1$.2fU (limit %2$.2fU).</string>

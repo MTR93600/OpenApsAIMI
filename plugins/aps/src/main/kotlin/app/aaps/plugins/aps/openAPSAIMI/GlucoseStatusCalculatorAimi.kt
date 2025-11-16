@@ -9,10 +9,12 @@ import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.plugins.aps.openAPS.DeltaCalculator
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.IntKey
 import app.aaps.plugins.aps.openAPSAIMI.extensions.asRounded
 import dagger.Reusable
 import javax.inject.Inject
 import kotlin.math.max
+import kotlin.math.min
 
 /** Features additionnels pour AIMI, calculés en même temps que GlucoseStatusAIMI. */
 data class AimiBgFeatures(
@@ -123,7 +125,8 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
         )
 
         // 5) Heuristique Night-Growth
-        val ngrSlopeMin = preferences.getOr(DoubleKey.OApsAIMINightGrowthMinRiseSlope, 5.0)
+        val pediatricAge = runCatching { preferences.get(IntKey.OApsAIMINightGrowthAgeYears) }.getOrNull() ?: 12
+        val ngrSlopeMin = deriveNightSlopeThreshold(pediatricAge, minutesDur)
         val isNg = (fit?.deltaPl ?: 0.0) >= ngrSlopeMin || (fit?.accel ?: 0.0) > 0.0
 
         // 6) GS AIMI + features
@@ -192,6 +195,16 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
 
     private fun Preferences.getOr(key: DoubleKey, default: Double): Double =
         runCatching { this.get(key) }.getOrNull() ?: default
+
+    private fun deriveNightSlopeThreshold(age: Int, stabilityMinutes: Double): Double {
+        val ageBase = when {
+            age <= 7 -> 3.5
+            age <= 12 -> 4.5
+            else -> 5.0
+        }
+        val stabilityBonus = min(1.0, stabilityMinutes / 60.0)
+        return max(2.5, ageBase - stabilityBonus)
+    }
 
     private fun combineDelta(d: Double, s: Double, l: Double, wD: Double, wS: Double, wL: Double): Double {
         val sumW = max(1e-9, wD + wS + wL)

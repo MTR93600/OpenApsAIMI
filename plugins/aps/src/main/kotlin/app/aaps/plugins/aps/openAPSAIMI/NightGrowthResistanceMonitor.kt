@@ -21,8 +21,9 @@ data class NGRConfig(
     val allowSMBBoostFactor: Double,
     val allowBasalBoostFactor: Double,
     val maxSMBClampU: Double,
-    val maxIOBExtraU: Double,
-    val decayMinutes: Int
+    val extraIobPer30Min: Double,
+    val decayMinutes: Int,
+    val headroomSlotCap: Int = 4
 )
 
 enum class NGRState { INACTIVE, SUSPECTED, CONFIRMED, DECAY }
@@ -144,7 +145,7 @@ class DefaultNightGrowthResistanceMonitor(
                 state = candidateState
                 stateSince = now
             }
-            val multipliers = computeActiveMultipliers(candidateState, config, isMealActive)
+            val multipliers = computeActiveMultipliers(now, candidateState, config, isMealActive)
             lastActiveMultipliers = multipliers
             decayStart = null
             decayEnd = null
@@ -235,13 +236,22 @@ class DefaultNightGrowthResistanceMonitor(
         }
     }
 
-    private fun computeActiveMultipliers(state: NGRState, config: NGRConfig, isMealActive: Boolean): Triple<Double, Double, Double> {
+    private fun computeActiveMultipliers(now: Instant, state: NGRState, config: NGRConfig, isMealActive: Boolean): Triple<Double, Double, Double> {
         val intensity = if (state == NGRState.CONFIRMED) 1.0 else 0.6
         val mealFactor = if (isMealActive) 0.5 else 1.0
         val smb = 1.0 + (config.allowSMBBoostFactor - 1.0) * intensity * mealFactor
         val basal = 1.0 + (config.allowBasalBoostFactor - 1.0) * intensity * mealFactor
-        val headroom = config.maxIOBExtraU * intensity * mealFactor
+        val headroom = computeHeadroom(now, config, intensity * mealFactor)
         return Triple(smb.coerceAtLeast(1.0), basal.coerceAtLeast(1.0), headroom.coerceAtLeast(0.0))
+    }
+
+    private fun computeHeadroom(now: Instant, config: NGRConfig, scaledIntensity: Double): Double {
+        if (config.extraIobPer30Min <= 0.0 || stateSince == null) return 0.0
+        val activeMinutes = Duration.between(stateSince, now).toMinutes().coerceAtLeast(0)
+        val slots = max(1, ceil(activeMinutes / 30.0).toInt())
+        val cappedSlots = min(config.headroomSlotCap, slots)
+        val raw = cappedSlots * config.extraIobPer30Min * scaledIntensity
+        return raw.coerceAtMost(config.headroomSlotCap * config.extraIobPer30Min)
     }
 
     private fun buildActiveReason(

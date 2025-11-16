@@ -417,33 +417,50 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
 
-    private fun buildNightGrowthResistanceConfig(): NGRConfig {
+    private val nightGrowthLearner = NightGrowthResistanceLearner()
+
+    private fun buildNightGrowthResistanceConfig(
+        profile: OapsProfileAimi,
+        autosens: AutosensResult,
+        glucoseStatus: GlucoseStatusAIMI?,
+        targetBg: Double
+    ): NGRConfig {
         val age = preferences.get(IntKey.OApsAIMINightGrowthAgeYears).coerceAtLeast(0)
         val enabledPref = preferences.getIfExists(BooleanKey.OApsAIMINightGrowthEnabled)
         val nightStart = parseNgrTime(preferences.get(StringKey.OApsAIMINightGrowthStart), LocalTime.of(22, 0))
         val nightEnd = parseNgrTime(preferences.get(StringKey.OApsAIMINightGrowthEnd), LocalTime.of(6, 0))
-        val minRise = max(0.0, preferences.get(DoubleKey.OApsAIMINightGrowthMinRiseSlope))
-        val smbMultiplier = max(1.0, preferences.get(DoubleKey.OApsAIMINightGrowthSmbMultiplier))
-        val basalMultiplier = max(1.0, preferences.get(DoubleKey.OApsAIMINightGrowthBasalMultiplier))
-        val maxSmbClamp = max(0.0, preferences.get(DoubleKey.OApsAIMINightGrowthMaxSmbClamp))
-        val maxIobExtra = max(0.0, preferences.get(DoubleKey.OApsAIMINightGrowthMaxIobExtra))
-        val minDuration = preferences.get(IntKey.OApsAIMINightGrowthMinDurationMin).coerceAtLeast(0)
-        val minEventual = preferences.get(IntKey.OApsAIMINightGrowthMinEventualOverTarget).coerceAtLeast(0)
-        val decay = preferences.get(IntKey.OApsAIMINightGrowthDecayMinutes).coerceAtLeast(0)
+        val extraIobPerSlot = max(0.0, preferences.get(DoubleKey.OApsAIMINightGrowthMaxIobExtra))
+        val diaMinutes = max(60, (profile.dia * 60.0).roundToInt())
+        val features = glucoseStatusCalculatorAimi.getAimiFeatures(true)
+        val learnerOutput = nightGrowthLearner.derive(
+            NightGrowthResistanceLearner.Input(
+                ageYears = age,
+                autosensRatio = autosens.ratio,
+                diaMinutes = diaMinutes,
+                isfMgdl = profile.sens,
+                targetBg = targetBg,
+                basalRate = profile.current_basal,
+                stabilityMinutes = features?.stable5pctMinutes ?: 0.0,
+                combinedDelta = features?.combinedDelta ?: 0.0,
+                bgNoise = glucoseStatus?.noise ?: 0.0
+            )
+        )
         val enabled = enabledPref ?: (age < 18)
+        val slotCap = if (age < 10) 6 else 4
         return NGRConfig(
             enabled = enabled,
             pediatricAgeYears = age,
             nightStart = nightStart,
             nightEnd = nightEnd,
-            minRiseSlope = minRise,
-            minDurationMin = minDuration,
-            minEventualOverTarget = minEventual,
-            allowSMBBoostFactor = smbMultiplier,
-            allowBasalBoostFactor = basalMultiplier,
-            maxSMBClampU = maxSmbClamp,
-            maxIOBExtraU = maxIobExtra,
-            decayMinutes = decay
+            minRiseSlope = learnerOutput.minRiseSlope,
+            minDurationMin = learnerOutput.minDurationMinutes,
+            minEventualOverTarget = learnerOutput.minEventualOverTarget,
+            allowSMBBoostFactor = learnerOutput.smbBoost,
+            allowBasalBoostFactor = learnerOutput.basalBoost,
+            maxSMBClampU = learnerOutput.maxSmbClamp,
+            extraIobPer30Min = extraIobPerSlot,
+            decayMinutes = learnerOutput.decayMinutes,
+            headroomSlotCap = slotCap
         )
     }
     /**
@@ -2916,7 +2933,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         this.maxSMBHB = if (autodrive && !honeymoon) DynMaxSmb.toDouble() else preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
         this.maxSMB = if (bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0 || bg > 180 && honeymoon && mealData.slopeFromMinDeviation >= 1.4) maxSMBHB else maxSMB
-        val ngrConfig = buildNightGrowthResistanceConfig()
+        val ngrConfig = buildNightGrowthResistanceConfig(profile, autosens_data, glucoseStatus, target_bg)
         this.tir1DAYabove = tirCalculator.averageTIR(tirCalculator.calculate(1, 65.0, 180.0))?.abovePct()!!
         val tir1DAYIR = tirCalculator.averageTIR(tirCalculator.calculate(1, 65.0, 180.0))?.inRangePct()!!
         this.currentTIRLow = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0))?.belowPct()!!
@@ -4031,7 +4048,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val lowTempTarget = profile.temptargetSet && target_bg <= profile.target_bg
         val originalMaxIobLimit = maxIobLimit
         if (!lowTempTarget && ngrResult.extraIOBHeadroomU > 0.0) {
-            val absoluteMaxIob = preferences.get(DoubleKey.ApsSmbMaxIob) + ngrConfig.maxIOBExtraU
+            val slotBudget = ngrConfig.extraIobPer30Min * ngrConfig.headroomSlotCap
+            val absoluteMaxIob = preferences.get(DoubleKey.ApsSmbMaxIob) + slotBudget
             val candidate = maxIobLimit + ngrResult.extraIOBHeadroomU
             val updatedLimit = min(candidate, absoluteMaxIob)
             if (updatedLimit > originalMaxIobLimit + 0.01) {
