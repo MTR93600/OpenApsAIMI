@@ -11,8 +11,8 @@ object Constants {
     const val HYPO_GUARD_TARGET_MGDL = 70.0
 
     /** Lower bound where aggressive high BG override can activate when the trend is rising. */
-    const val HIGH_BG_OVERRIDE_BG_MIN = 150.0
+    const val HIGH_BG_OVERRIDE_BG_MIN = 120.0
 
     /** Strong hyperglycemia threshold triggering immediate override regardless of trend. */
-    const val HIGH_BG_OVERRIDE_BG_STRONG = 180.0
+    const val HIGH_BG_OVERRIDE_BG_STRONG = 160.0
 }

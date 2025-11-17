@@ -342,5 +342,6 @@
     <string name="overview_show_steps">Steps</string>
     <string name="steps_shortname">STEPS</string>
     <string name="simple_mode_enabled">Simple mode enabled</string>
+    <string name="minimal_skin_description">New skin dashboard</string>
 
 </resources>

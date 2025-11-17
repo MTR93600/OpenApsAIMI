@@ -3982,15 +3982,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
 // Calcul du BG final
         val advancedEventual = intsPredictions.lastOrNull()?.toDouble() ?: this.eventualBG
-        val predictedEventual = predictedBg.toDouble()
+        //val predictedEventual = predictedBg.toDouble()
 
 // moyenne simple des deux estimations
-        val blendedEventual = (predictedEventual + advancedEventual) / 2.0
+        //val blendedEventual = (predictedEventual + advancedEventual) / 2.0
 
 // synchronisation de toutes les variables de sortie
-        this.eventualBG = blendedEventual
-        rT.eventualBG = blendedEventual
-        this.predictedBg = blendedEventual.toFloat()
+        this.eventualBG = advancedEventual
+        rT.eventualBG = advancedEventual
+        this.predictedBg = advancedEventual.toFloat()
 //fin predictions
 ////////////////////////////////////////////
 //estimation des glucides nécessaires si risque hypo

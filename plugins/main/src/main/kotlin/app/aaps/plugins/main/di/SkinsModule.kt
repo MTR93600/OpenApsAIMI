@@ -5,6 +5,7 @@ import app.aaps.plugins.main.skins.SkinClassic
 import app.aaps.plugins.main.skins.SkinInterface
 import app.aaps.plugins.main.skins.SkinLargeDisplay
 import app.aaps.plugins.main.skins.SkinLowRes
+import app.aaps.plugins.main.skins.SkinMinimal
 import dagger.Module
 import dagger.Provides
 import dagger.multibindings.IntKey
@@ -42,7 +43,7 @@ open class SkinsModule {
     @Skin
     @IntoMap
     @IntKey(40)
-    fun bindsSkinDashboard(skinDashboard: SkinClassic): SkinInterface = skinDashboard
+    fun bindsSkinDashboard(skinDashboard: SkinMinimal): SkinInterface = skinDashboard
 
     @Qualifier
     annotation class Skin
