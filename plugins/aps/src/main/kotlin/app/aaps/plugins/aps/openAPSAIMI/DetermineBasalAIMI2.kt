@@ -3970,27 +3970,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             profile = profile
         )
 
-// Normalisation et saturation des prédictions dans la plage 39–401 mg/dL
+// Normalisation et remplissage des listes
         val sanitizedPredictions = advancedPredictions.map { round(min(401.0, max(39.0, it)), 0) }
         val intsPredictions = sanitizedPredictions.map { it.toInt() }
-
-// Remplit toutes les séries de prédictions pour rester compatible avec la UI
-// et tout code qui attend IOB/COB/ZT/UAM non vides.
         rT.predBGs = Predictions().apply {
             IOB = intsPredictions
             COB = intsPredictions
-            ZT = intsPredictions
+            ZT  = intsPredictions
             UAM = intsPredictions
         }
 
-// Mélange éventuel BG "naïf" (IOB+déviation) avec la prédiction avancée pour un comportement plus lissé.
-// - eventualBG : calcul OpenAPS/AIMI historique (naive_eventual + deviation, ajustements hypo/target).
-// - advancedEventual : dernier point de la courbe prédite avancée.
-        val advancedEventual = intsPredictions.lastOrNull()?.toDouble() ?: eventualBG
-        val blendedEventual = (eventualBG + advancedEventual) / 2.0
+// Calcul du BG final
+        val advancedEventual = intsPredictions.lastOrNull()?.toDouble() ?: this.eventualBG
+        val predictedEventual = predictedBg.toDouble()
 
+// moyenne simple des deux estimations
+        val blendedEventual = (predictedEventual + advancedEventual) / 2.0
+
+// synchronisation de toutes les variables de sortie
         this.eventualBG = blendedEventual
         rT.eventualBG = blendedEventual
+        this.predictedBg = blendedEventual.toFloat()
 //fin predictions
 ////////////////////////////////////////////
 //estimation des glucides nécessaires si risque hypo
