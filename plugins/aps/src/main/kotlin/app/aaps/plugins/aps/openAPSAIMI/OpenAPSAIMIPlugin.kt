@@ -1237,7 +1237,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "Women_Cycle"
-                    title = rh.gs(R.string.wcycle_preferences)
+                  //title = rh.gs(R.string.wcycle_preferences)
+                    title = rh.gs(R.string.women_preferences)
+                    addPreference(PreferenceCategory(context).apply {
+                      //title = rh.gs(R.string.wcycle_preferences_title_menu)
+                        title = rh.gs(R.string.women_preferences_title_menu)
+                    })
+                    addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIpregnancy, title = R.string.OApsAIMI_Enable_pregnancy))
                     addPreference(PreferenceCategory(context).apply {
                         title = rh.gs(R.string.wcycle_preferences_title_menu)
                     })
@@ -1340,7 +1346,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         )
                     )
                 })
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIpregnancy, title = R.string.OApsAIMI_Enable_pregnancy))
+              //addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIpregnancy, title = R.string.OApsAIMI_Enable_pregnancy))
               //addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIhoneymoon, title = R.string.OApsAIMI_Enable_honeymoon))
               //addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMInight, title = R.string.OApsAIMI_Enable_night_title))
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
