@@ -3926,7 +3926,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // duration (hours) = duration (5m) * 5 / 60 * 2 (to account for linear decay)
         //consoleError.add("Carb Impact: ${ci} mg/dL per 5m; CI Duration: ${round(cid * 5 / 60 * 2, 1)} hours; remaining CI (~2h peak): ${round(remainingCIpeak, 1)} mg/dL per 5m")
         consoleError.add(context.getString(R.string.console_carb_impact, ci, round(cid * 5 / 60 * 2, 1), round(remainingCIpeak, 1)))
-
+        val advancedPredictions = AdvancedPredictionEngine.predict(
+            currentBG = bg,
+            iobArray = iob_data_array,
+            finalSensitivity = sens,
+            cobG = mealData.mealCOB,
+            profile = profile
+        )
+        val sanitizedPredictions = advancedPredictions.map { round(min(401.0, max(39.0, it)), 0) }
+        val intsPredictions = sanitizedPredictions.map { it.toInt() }
+        rT.predBGs = Predictions().apply {
+            IOB = intsPredictions
+            COB = intsPredictions
+            ZT  = intsPredictions
+            UAM = intsPredictions
+        }
         consoleLog.add("Prédiction avancée avec ISF final de ${"%.1f".format(sens)} (PKPD cache reused)")
 //fin predictions
 ////////////////////////////////////////////
