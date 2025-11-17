@@ -356,16 +356,14 @@ object SmbInstructionExecutor {
 
         val mealModeRun =
             input.mealTime || input.bfastTime || input.lunchTime || input.dinnerTime || input.highCarbTime
-        val highBgRiseActive = (input.bg >= 120.0 && (input.delta >= 1.5 || input.combinedDelta >= 4.0)) &&
-            (input.iob < input.maxSmb) &&
-            !hooks.isBelowHypo(
-                input.bg,
-                input.predictedBg.toDouble(),
-                input.eventualBg,
-                hypoGuard,
-                input.delta
-            )
+        val hyperPlateauActive = (input.bg >= 160.0 && input.predictedBg.toDouble() >= 180.0) &&
+            (input.delta < 1.0 && input.combinedDelta < 3.0) &&
+            (input.iob < input.maxSmb)
 
+        val highBgRiseActive =
+            ((input.bg >= 120.0 && (input.delta >= 1.5 || input.combinedDelta >= 2.0)) || hyperPlateauActive) &&
+                (input.iob < input.maxSmb) &&
+                !hooks.isBelowHypo(input.bg, input.predictedBg.toDouble(), input.eventualBg, hypoGuard, input.delta)
         val dampingOut = SmbDampingUsecase.run(
             input.pkpdRuntime,
             SmbDampingUsecase.Input(
