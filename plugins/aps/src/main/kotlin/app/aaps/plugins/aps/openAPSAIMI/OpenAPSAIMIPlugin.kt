@@ -1341,11 +1341,19 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     )
                 })
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIpregnancy, title = R.string.OApsAIMI_Enable_pregnancy))
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIhoneymoon, title = R.string.OApsAIMI_Enable_honeymoon))
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMInight, title = R.string.OApsAIMI_Enable_night_title))
+              //addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIhoneymoon, title = R.string.OApsAIMI_Enable_honeymoon))
+              //addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMInight, title = R.string.OApsAIMI_Enable_night_title))
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "Child_Menu"
+                    title = rh.gs(R.string.child_preferences)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.child_preferences_title_menu)
+                    })
+                    addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIhoneymoon, title = R.string.OApsAIMI_Enable_honeymoon))
                 addPreference(PreferenceCategory(context).apply {
                     title = rh.gs(R.string.oaps_aimi_ngr_title)
                 })
+
                 addPreference(
                     AdaptiveSwitchPreference(
                         ctx = context,
@@ -1450,6 +1458,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         title = R.string.oaps_aimi_ngr_decay_title
                     )
                 )
+
+            })
+
+            addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMInight, title = R.string.OApsAIMI_Enable_night_title))
 
             })
 
