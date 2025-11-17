@@ -81,6 +81,8 @@ interface DateUtil {
     //Map:{DAYS=1, HOURS=3, MINUTES=46, SECONDS=40, MILLISECONDS=0, MICROSECONDS=0, NANOSECONDS=0}
     fun computeDiff(date1: Long, date2: Long): Map<TimeUnit, Long>
     fun age(milliseconds: Long, useShortText: Boolean, rh: ResourceHelper): String
+    fun timeAgoFullString(milliseconds: Long, rh: ResourceHelper): String
+
     fun niceTimeScalar(time: Long, rh: ResourceHelper): String
     fun qs(x: Double, numDigits: Int): String
     fun formatHHMM(timeAsSeconds: Int): String
