@@ -29,6 +29,11 @@
         app:showAsAction="never"
         android:title="@string/nav_setupwizard" />
     <item
+        android:id="@+id/nav_dashboard_preview"
+        android:orderInCategory="1"
+        app:showAsAction="never"
+        android:title="@string/nav_dashboard_preview" />
+    <item
         android:id="@+id/nav_stats"
         android:orderInCategory="1"
         app:showAsAction="never"

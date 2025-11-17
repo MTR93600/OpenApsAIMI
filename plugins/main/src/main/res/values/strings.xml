@@ -158,6 +158,24 @@
     <string name="profile_name">Profile name:</string>
     <string name="a11y_add_new_profile">add new profile</string>
     <string name="a11y_clone_profile">clone current profile</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_nav_home">Home</string>
+    <string name="dashboard_nav_history">History</string>
+    <string name="dashboard_nav_bolus">Bolus/Carbs</string>
+    <string name="dashboard_nav_adjustments">Adjustments</string>
+    <string name="dashboard_nav_settings">Settings</string>
+    <string name="dashboard_adjustments">Active adjustments</string>
+    <string name="dashboard_no_adjustments">No active adjustments</string>
+    <string name="dashboard_graph_placeholder">Glucose graph placeholder</string>
+    <string name="dashboard_graph_updated">Graph updated at %1$s</string>
+    <string name="dashboard_adjustment_temp_basal">Temp basal: %1$s</string>
+    <string name="dashboard_adjustment_temp_target">Temp target: %1$s (%2$s)</string>
+    <string name="dashboard_adjustment_extended_bolus">Extended bolus: %1$s</string>
+    <string name="dashboard_iob_label">IOB</string>
+    <string name="dashboard_cob_label">COB</string>
+    <string name="dashboard_loop_label">Loop</string>
+    <string name="dashboard_trend">Trend</string>
     <string name="a11y_delete_current_profile">delete current profile</string>
     <string name="dia_short">DIA</string>
     <string name="target_short">TARG</string>

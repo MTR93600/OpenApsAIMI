@@ -29,6 +29,7 @@ import androidx.appcompat.widget.Toolbar
 import androidx.core.view.GravityCompat
 import androidx.core.view.MenuCompat
 import androidx.core.view.MenuProvider
+import app.aaps.activities.DashboardPreviewActivity
 import app.aaps.activities.HistoryBrowseActivity
 import app.aaps.activities.PreferencesActivity
 import app.aaps.core.data.ue.Action
@@ -198,6 +199,11 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
                         protectionCheck.queryProtection(this@MainActivity, ProtectionCheck.Protection.PREFERENCES, {
                             startActivity(Intent(this@MainActivity, SetupWizardActivity::class.java).setAction("info.nightscout.androidaps.MainActivity"))
                         })
+                        true
+                    }
+
+                    R.id.nav_dashboard_preview  -> {
+                        startActivity(Intent(this@MainActivity, DashboardPreviewActivity::class.java))
                         true
                     }
 

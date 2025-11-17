@@ -38,6 +38,12 @@ open class SkinsModule {
     @IntKey(30)
     fun bindsSkinLowRes(skinLowRes: SkinLowRes): SkinInterface = skinLowRes
 
+    @Provides
+    @Skin
+    @IntoMap
+    @IntKey(40)
+    fun bindsSkinDashboard(skinDashboard: SkinClassic): SkinInterface = skinDashboard
+
     @Qualifier
     annotation class Skin
 }

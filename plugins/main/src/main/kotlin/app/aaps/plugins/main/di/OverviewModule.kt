@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.overview.OverviewMenus
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.main.general.dashboard.DashboardFragment
 import app.aaps.plugins.main.general.overview.OverviewDataImpl
 import app.aaps.plugins.main.general.overview.OverviewFragment
 import app.aaps.plugins.main.general.overview.OverviewMenusImpl
@@ -26,6 +27,7 @@ abstract class OverviewModule {
 
     @ContributesAndroidInjector abstract fun contributesDismissNotificationReceiver(): DismissNotificationReceiver
     @ContributesAndroidInjector abstract fun contributesOverviewFragment(): OverviewFragment
+    @ContributesAndroidInjector abstract fun contributesDashboardFragment(): DashboardFragment
     @ContributesAndroidInjector abstract fun graphDataInjector(): GraphData
 
     @Module
