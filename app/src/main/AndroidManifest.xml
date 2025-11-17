@@ -76,6 +76,10 @@
             android:exported="false"
             android:theme="@style/AppTheme" />
         <activity
+            android:name="app.aaps.activities.NewManualAimiActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+        <activity
             android:name="app.aaps.activities.DashboardPreviewActivity"
             android:exported="false"
             android:theme="@style/AppTheme" />

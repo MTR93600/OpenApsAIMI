@@ -85,6 +85,7 @@ import io.reactivex.rxjava3.kotlin.plusAssign
 import java.util.Locale
 import javax.inject.Inject
 import android.provider.Settings
+import app.aaps.activities.NewManualAimiActivity
 
 class MainActivity : DaggerAppCompatActivityWithResult() {
 
@@ -191,7 +192,7 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
                     }
 
                     R.id.nav_manual_aimi_preview  -> {
-                        startActivity(Intent(this@MainActivity, DashboardPreviewActivity::class.java))
+                        startActivity(Intent(this@MainActivity, NewManualAimiActivity::class.java))
                         true
                     }
 
