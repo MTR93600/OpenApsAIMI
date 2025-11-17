@@ -377,6 +377,26 @@ object SmbInstructionExecutor {
         var smbAfterDamping = dampingOut.smbAfterDamping
         val audit = dampingOut.audit
         val dampedRaw = smbAfterDamping
+        input.pkpdRuntime?.let { runtime ->
+                        if (input.bg >= 140.0 &&
+                                input.delta >= 0.0 &&
+                                runtime.tailFraction < 0.30 &&
+                                runtime.fusedIsf <= runtime.profileIsf
+                            ) {
+                                val boostFactor = 1.20
+                                val boosted = smbAfterDamping * boostFactor
+                                input.rT.reason.append(
+                                        "\nHighBG PKPD boost: tail=%.0f%%, scale=%.2f → SMB ×%.2f (%.2f→%.2f)".format(
+                                                runtime.tailFraction * 100.0,
+                                                runtime.pkpdScale,
+                                                boostFactor,
+                                                smbAfterDamping,
+                                                boosted
+                                                )
+                                        )
+                                smbAfterDamping = boosted
+                            }
+                    }
         var highBgOverrideFlag = false
         var highBgOverrideUsed = input.highBgOverrideUsed
         var newInterval = input.currentInterval
