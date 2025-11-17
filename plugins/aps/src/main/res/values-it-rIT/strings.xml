@@ -937,7 +937,8 @@
     <string name="reason_ai_file">🧠 A.I. file: %1$s Previsione : %2$s U</string>
     <string name="reason_boost_hyper">⚡ Boost iperglicemia: x1.7 (BG=%1$d, Δ=%2$.1f)</string>
     <string name="reason_boost_hyper_2">⚡ Boost iperglicemia: x1.5 (BG=%1$d, Δ=%2$.1f)</string>
-    <string name="reason_ml_training">🗃️ Addestramento A.I: set di dati insufficiente, nessun aggiustamento</string>
+    <string name="reason_ml_training">🗃️ Addestramento A.I: set di dati insufficiente, nessun aggiustamento - 🛑 Preferenza OFF\n</string>
+    <string name="reason_ml_no_file">🗃️ Addestramento A.I: set di dati insufficiente, nessun aggiustamento - ❌ CSV file!!\n</string>
     <string name="console_dia_adjusted">DIA aggiustata (in minuti) : %.0f</string>
     <string name="console_mpc_log">MPC modello predittivo: dose=%.2f, Kp=%.3f, corr=%.2f, out=%.2f</string>
     <string name="reason_mpc_pi">🎛️ MPC modello predittivo: %.2f U (%.0f%%) | PI modello fisiologico: %.2f U (%.0f%%)</string>

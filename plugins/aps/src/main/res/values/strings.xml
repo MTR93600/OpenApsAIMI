@@ -951,7 +951,8 @@
     <string name="reason_ai_file">🧠 A.I. file: %1$s Prediction : %2$s U</string>
     <string name="reason_boost_hyper">⚡ Hyper boost: x1.7 (BG=%1$d, Δ=%2$.1f)</string>
     <string name="reason_boost_hyper_2">⚡ Hyper boost: x1.5 (BG=%1$d, Δ=%2$.1f)</string>
-    <string name="reason_ml_training">🗃️ ML training: dataset insufficient, no refinement\n</string>
+    <string name="reason_ml_training">🗃️ ML training: dataset insufficient, no refinement - 🛑 Pref. DISABLED!!\n</string>
+    <string name="reason_ml_no_file">🗃️ ML training: dataset insufficient, no refinement - ❌ CSV file!!\n</string>
     <string name="console_dia_adjusted">DIA Adjusted (in minutes) : %.0f</string>
     <string name="console_mpc_log">MPC module: dose=%.2f, Kp=%.3f, corr=%.2f, out=%.2f</string>
     <string name="reason_mpc_pi">🎛️ MPC predictive model: %.2f U (%.0f%%) | PI physiological model: %.2f U (%.0f%%)</string>

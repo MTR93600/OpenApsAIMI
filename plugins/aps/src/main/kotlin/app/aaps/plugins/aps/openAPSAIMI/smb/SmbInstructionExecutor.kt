@@ -161,8 +161,18 @@ object SmbInstructionExecutor {
                 basal = hooks.roundBasal(basal)
             }
         } else {
-            input.rT.reason.appendLine(input.context.getString(R.string.reason_ml_training))
+            //input.rT.reason.appendLine(input.context.getString(R.string.reason_ml_training))
+            if (!trainingEnabled) {
+                input.rT.reason.appendLine(
+                    input.context.getString(R.string.reason_ml_training)
+                )
+            } else if (!input.csvFile.exists()) {
+                input.rT.reason.appendLine(
+                    input.context.getString(R.string.reason_ml_no_file)
+                )
+            }
         }
+
 
         var smbToGive = if (input.bg > 130 && input.delta > 2 && predictedSmb == 0.0f) {
             input.modelValue
