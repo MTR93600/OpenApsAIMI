@@ -378,7 +378,7 @@ object SmbInstructionExecutor {
         val audit = dampingOut.audit
         val dampedRaw = smbAfterDamping
         input.pkpdRuntime?.let { runtime ->
-                        if (input.bg >= 140.0 &&
+                        if (input.bg >= 120.0 &&
                                 input.delta >= 0.0 &&
                                 runtime.tailFraction < 0.30 &&
                                 runtime.fusedIsf <= runtime.profileIsf
