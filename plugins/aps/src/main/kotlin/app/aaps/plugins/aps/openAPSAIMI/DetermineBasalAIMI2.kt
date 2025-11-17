@@ -114,6 +114,19 @@ import kotlin.math.sqrt
 //     return MealHighIobDecision(true, damping)
 // }
 
+/**
+ * Main orchestrator for the AIMI loop.
+ *
+ * High level flow (all numbers are mg/dL unless stated otherwise):
+ *  1. Gather loop context (profile, COB/IOB, modes, history) and build the PKPD runtime.
+ *  2. Use PKPD engines to derive final insulin action parameters and predictions
+ *     (eventual BG + full prediction curve) that feed both basal and SMB logic.
+ *  3. Blend ISF/autosens, apply wCycle/NGR adjustments, then run ML to propose an SMB.
+ *  4. Pipe the proposed SMB through centralized safety and damping (tail/exercise/meal),
+ *     then quantize before execution via the SMB engine.
+ *  5. Basal decisions reuse the same PKPD/ISF context and the shared safety gates to
+ *     avoid diverging behaviours between basal and SMB paths.
+ */
 @Singleton
 class DetermineBasalaimiSMB2 @Inject constructor(
     private val profileUtil: ProfileUtil,
@@ -1245,6 +1258,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val (isCrit, critMsg) = isCriticalSafetyCondition(mealData, hypoThreshold,context)
         if (isCrit) {
             reason?.appendLine("🛑 $critMsg → SMB=0")
+            consoleLog.add("SMB forced to 0 by critical safety: $critMsg")
             return 0f
         }
 
@@ -1257,6 +1271,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
             } else {
                 reason?.appendLine(context.getString(R.string.safety_sport_smb_zero))
+                consoleLog.add("SMB forced to 0 by sport safety guard")
                 return 0f
             }
         }
@@ -2531,100 +2546,41 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
-    private fun predictEventualBG(
-        bg: Float,                     // Glycémie actuelle (mg/dL)
-        iob: Float,                    // Insuline active (IOB)
-        variableSensitivity: Float,    // Sensibilité insulinique (mg/dL/U)
-        minDelta: Float,               // Delta instantané (mg/dL/5min)
-        minAvgDelta: Float,            // Delta moyen court terme (mg/dL/5min)
-        longAvgDelta: Float,           // Delta moyen long terme (mg/dL/5min)
-        mealTime: Boolean,
-        bfastTime: Boolean,
-        lunchTime: Boolean,
-        dinnerTime: Boolean,
-        highCarbTime: Boolean,
-        snackTime: Boolean,
-        honeymoon: Boolean
-    ): Float {
-        val reasonBuilder = StringBuilder()
-        // 1. Détermination des paramètres glucidiques en fonction du contexte
-        val (averageCarbAbsorptionTime, carbTypeFactor, estimatedCob) = when {
-            highCarbTime -> Triple(3.5f, 0.75f, 100f)
-            snackTime    -> Triple(1.5f, 1.25f, 15f)
-            mealTime     -> Triple(2.5f, 1.0f, 55f)
-            bfastTime    -> Triple(3.5f, 1.0f, 55f)
-            lunchTime    -> Triple(2.5f, 1.0f, 70f)
-            dinnerTime   -> Triple(2.5f, 1.0f, 70f)
-            else         -> Triple(2.5f, 1.0f, 70f)
-        }
+    private data class PredictionResult(
+        val eventual: Double,
+        val series: List<Int>
+    )
 
-        // 2. Détermination du facteur d'absorption en fonction de l'heure de la journée
-        val currentHour = LocalTime.now().hour
-        val absorptionFactor = when (currentHour) {
-            in 6..10 -> 1.3f
-            in 11..15 -> 0.8f
-            in 16..23 -> 1.2f
-            else -> 1.0f
-        }
-
-        // 3. Calcul de l'effet insuline
-        val insulinEffect = iob * variableSensitivity
-
-        // 4. Calcul de la déviation basée sur la tendance sur 30 minutes
-        var deviation = (30f / 5f) * minDelta
-        deviation *= absorptionFactor * carbTypeFactor
-        if (deviation < 0) {
-            deviation = (30f / 5f) * minAvgDelta * absorptionFactor * carbTypeFactor
-            if (deviation < 0) {
-                deviation = (30f / 5f) * longAvgDelta * absorptionFactor * carbTypeFactor
-            }
-        }
-
-        // 5. Prédiction alternative basée sur un modèle dédié qui prend aussi le contexte alimentaire
-        val predictedFutureBG = predictFutureBg(
-            bg, iob, variableSensitivity,
-            averageCarbAbsorptionTime, carbTypeFactor, estimatedCob,
-            honeymoon
+    private fun computePkpdPredictions(
+        currentBg: Double,
+        iobArray: Array<IobTotal>,
+        finalSensitivity: Double,
+        cobG: Double,
+        profile: OapsProfileAimi,
+        rT: RT
+    ): PredictionResult {
+        val advancedPredictions = AdvancedPredictionEngine.predict(
+            currentBG = currentBg,
+            iobArray = iobArray,
+            finalSensitivity = finalSensitivity,
+            cobG = cobG,
+            profile = profile
         )
 
-        // 6. Combinaison finale : effet insuline + tendance + impact COB
-        val predictedBG = predictedFutureBG + deviation + (estimatedCob * 0.05f)
-
-        // 7. Seuil minimal de sécurité
-        val finalPredictedBG = when {
-            !honeymoon && predictedBG < 39f -> 39f
-            honeymoon && predictedBG < 50f -> 50f
-            else -> predictedBG
-        }
-        //reasonBuilder.append("Predicted BG : $finalPredictedBG")
-        reasonBuilder.append(context.getString(R.string.predicted_bg, finalPredictedBG))
-        return finalPredictedBG
-    }
-
-    private fun predictFutureBg(
-        bg: Float,
-        iob: Float,
-        variableSensitivity: Float,
-        averageCarbAbsorptionTime: Float,
-        carbTypeFactor: Float,
-        estimatedCob: Float,
-        honeymoon: Boolean
-    ): Float {
-        // Prise en compte de l'effet insuline
-        val insulinEffect = iob * variableSensitivity
-
-        // Prise en compte d'une absorption glucidique estimée (simple modèle linéaire)
-        val carbImpact = (estimatedCob / averageCarbAbsorptionTime) * carbTypeFactor
-
-        var futureBg = bg - insulinEffect + carbImpact
-
-        if (!honeymoon && futureBg < 39f) {
-            futureBg = 39f
-        } else if (honeymoon && futureBg < 50f) {
-            futureBg = 50f
+        val sanitizedPredictions = advancedPredictions.map { round(min(401.0, max(39.0, it)), 0) }
+        val intsPredictions = sanitizedPredictions.map { it.toInt() }
+        rT.predBGs = Predictions().apply {
+            IOB = intsPredictions
+            COB = intsPredictions
+            ZT = intsPredictions
+            UAM = intsPredictions
         }
 
-        return futureBg
+        val eventual = intsPredictions.lastOrNull()?.toDouble() ?: currentBg
+        consoleLog.add(
+            "PKPD predictions → eventual=${"%.0f".format(eventual)} mg/dL from ${intsPredictions.size} steps"
+        )
+        return PredictionResult(eventual, intsPredictions)
     }
 
 
@@ -3456,7 +3412,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         consoleError.add("CR:${profile.carb_ratio}")
-        this.predictedBg = predictEventualBG(bg.toFloat(), iob, variableSensitivity, minDelta.toFloat(), shortAvgDelta, longAvgDelta, mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime, snackTime, honeymoon)
         //val insulinEffect = calculateInsulinEffect(bg.toFloat(),iob,variableSensitivity,cob,normalBgThreshold,recentSteps180Minutes,averageBeatsPerMinute.toFloat(),averageBeatsPerMinute10.toFloat(),profile.insulinDivisor.toFloat())
 
         val now = System.currentTimeMillis()
@@ -3692,6 +3647,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
 
         sens = variableSensitivity.toDouble()
+        val pkpdPredictions = computePkpdPredictions(
+            currentBg = bg,
+            iobArray = iob_data_array,
+            finalSensitivity = sens,
+            cobG = mealData.mealCOB,
+            profile = profile,
+            rT = rT
+        )
+        this.eventualBG = pkpdPredictions.eventual
+        this.predictedBg = pkpdPredictions.eventual.toFloat()
+        rT.eventualBG = pkpdPredictions.eventual
         //calculate BG impact: the amount BG "should" be rising or falling based on insulin activity alone
         val bgi = round((-iob_data.activity * sens * 5), 2)
         // project deviations for 30 minutes
@@ -3706,8 +3672,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         // calculate the naive (bolus calculator math) eventual BG based on net IOB and sensitivity
         val naive_eventualBG = round(bg - (iob_data.iob * sens), 0)
-        // and adjust it for the deviation above
-        this.eventualBG = naive_eventualBG + deviation
+        // and adjust it for the deviation above (used only for noisy target heuristics)
+        val legacyEventual = naive_eventualBG + deviation
 
         // raise target for noisy / raw CGM data
         if (bg > max_bg && profile.adv_target_adjustments && !profile.temptargetSet) {
@@ -3717,7 +3683,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val adjustedMaxBG = round(max(80.0, max_bg - (bg - max_bg) / 3.0), 0)
             // if eventualBG, naive_eventualBG, and target_bg aren't all above adjustedMinBG, don’t use it
             //console.error("naive_eventualBG:",naive_eventualBG+", eventualBG:",eventualBG);
-            if (eventualBG > adjustedMinBG && naive_eventualBG > adjustedMinBG && min_bg > adjustedMinBG) {
+            if (eventualBG > adjustedMinBG && legacyEventual > adjustedMinBG && min_bg > adjustedMinBG) {
                 //consoleLog.add("Adjusting targets for high BG: min_bg from $min_bg to $adjustedMinBG; ")
                 consoleLog.add(context.getString(R.string.console_min_bg_adjusted, min_bg, adjustedMinBG))
                 min_bg = adjustedMinBG
@@ -3726,7 +3692,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add(context.getString(R.string.console_min_bg_unchanged, min_bg))
             }
             // if eventualBG, naive_eventualBG, and target_bg aren't all above adjustedTargetBG, don’t use it
-            if (eventualBG > adjustedTargetBG && naive_eventualBG > adjustedTargetBG && target_bg > adjustedTargetBG) {
+            if (eventualBG > adjustedTargetBG && legacyEventual > adjustedTargetBG && target_bg > adjustedTargetBG) {
                 //consoleLog.add("target_bg from $target_bg to $adjustedTargetBG; ")
                 consoleLog.add(context.getString(R.string.console_target_bg_adjusted, target_bg, adjustedTargetBG))
                 target_bg = adjustedTargetBG
@@ -3735,7 +3701,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add(context.getString(R.string.console_target_bg_unchanged, target_bg))
             }
             // if eventualBG, naive_eventualBG, and max_bg aren't all above adjustedMaxBG, don’t use it
-            if (eventualBG > adjustedMaxBG && naive_eventualBG > adjustedMaxBG && max_bg > adjustedMaxBG) {
+            if (eventualBG > adjustedMaxBG && legacyEventual > adjustedMaxBG && max_bg > adjustedMaxBG) {
                 //consoleError.add("max_bg from $max_bg to $adjustedMaxBG")
                 consoleError.add(context.getString(R.string.console_max_bg_adjusted, max_bg, adjustedMaxBG))
                 max_bg = adjustedMaxBG
@@ -3961,36 +3927,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         //consoleError.add("Carb Impact: ${ci} mg/dL per 5m; CI Duration: ${round(cid * 5 / 60 * 2, 1)} hours; remaining CI (~2h peak): ${round(remainingCIpeak, 1)} mg/dL per 5m")
         consoleError.add(context.getString(R.string.console_carb_impact, ci, round(cid * 5 / 60 * 2, 1), round(remainingCIpeak, 1)))
 
-        consoleLog.add("Prédiction avancée avec ISF final de ${"%.1f".format(sens)}")
-        val advancedPredictions = AdvancedPredictionEngine.predict(
-            currentBG = bg,
-            iobArray = iob_data_array,
-            finalSensitivity = sens,
-            cobG = mealData.mealCOB,
-            profile = profile
-        )
-
-// Normalisation et remplissage des listes
-        val sanitizedPredictions = advancedPredictions.map { round(min(401.0, max(39.0, it)), 0) }
-        val intsPredictions = sanitizedPredictions.map { it.toInt() }
-        rT.predBGs = Predictions().apply {
-            IOB = intsPredictions
-            COB = intsPredictions
-            ZT  = intsPredictions
-            UAM = intsPredictions
-        }
-
-// Calcul du BG final
-        val advancedEventual = intsPredictions.lastOrNull()?.toDouble() ?: this.eventualBG
-        //val predictedEventual = predictedBg.toDouble()
-
-// moyenne simple des deux estimations
-        //val blendedEventual = (predictedEventual + advancedEventual) / 2.0
-
-// synchronisation de toutes les variables de sortie
-        this.eventualBG = advancedEventual
-        rT.eventualBG = advancedEventual
-        this.predictedBg = advancedEventual.toFloat()
+        consoleLog.add("Prédiction avancée avec ISF final de ${"%.1f".format(sens)} (PKPD cache reused)")
 //fin predictions
 ////////////////////////////////////////////
 //estimation des glucides nécessaires si risque hypo
