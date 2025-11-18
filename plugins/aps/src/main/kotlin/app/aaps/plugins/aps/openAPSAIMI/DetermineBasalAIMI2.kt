@@ -1833,11 +1833,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return 1
         }
 
-        var interval = 5 // Intervalle de base
+        var interval = 3 // Intervalle de base
 
         // Vérification des ajustements basés sur les intervalles configurés
         if (shouldApplyIntervalAdjustment(intervals)) {
-            interval = 0
+            interval = 10
         } else if (shouldApplySafetyAdjustment()) {
             interval = 10
         } else if (shouldApplyTimeAdjustment()) {
@@ -1846,7 +1846,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // Ajustement basé sur l'activité physique
         if (shouldApplyStepAdjustment()) {
-            interval = 0
+            interval = 15
         }
 
         // Ajustements supplémentaires :
@@ -1907,7 +1907,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private fun shouldApplyStepAdjustment(): Boolean {
-        return recentSteps5Minutes > 100 && recentSteps30Minutes > 500 && lastsmbtime < 20
+        return recentSteps5Minutes > 100 && recentSteps30Minutes > 500 && lastsmbtime > 20
     }
     // Calcule le seuil "OpenAPS-like" et applique LGS si plus haut
     private fun computeHypoThreshold(minBg: Double, lgsThreshold: Int?): Double {
