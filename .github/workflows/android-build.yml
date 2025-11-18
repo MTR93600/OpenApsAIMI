@@ -3,12 +3,12 @@ name: Android Build (Signed)
 on:
   push:
     branches:
-      - dev_OAPSAIMI_neverUseForSafety
+      - dev_OAPSAIMI_neverUseForSafety_ui
     tags:
       - 'v*.*.*'  # Déclenche sur les tags de version
   pull_request:
     branches:
-      - dev_OAPSAIMI_neverUseForSafety
+      - dev_OAPSAIMI_neverUseForSafety_ui
 
 jobs:
   build-signed:
