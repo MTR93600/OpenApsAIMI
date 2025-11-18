@@ -4160,19 +4160,36 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // allow SMBIntervals between 1 and 10 minutes
                 //val SMBInterval = min(10, max(1, profile.SMBInterval))
                 val smbInterval = calculateSMBInterval()
+                // Debug interval SMB : on journalise l'intervalle choisi et l'âge du dernier bolus
+                val intervalStr = String.format(java.util.Locale.US, "%.1f", smbInterval.toDouble())
+                val lastBolusStr = String.format(java.util.Locale.US, "%.1f", lastBolusAge)
+                val deltaStr = String.format(java.util.Locale.US, "%.1f", delta.toDouble())
+                rT.reason.append(" [SMB interval=")
+                rT.reason.append(intervalStr)
+                rT.reason.append(" min, lastBolusAge=")
+                rT.reason.append(lastBolusStr)
+                rT.reason.append(" min, Δ=")
+                rT.reason.append(deltaStr)
+                rT.reason.append(", BG=")
+                rT.reason.append(bg.toInt().toString())
+                rT.reason.append("] ")
+
                 val nextBolusMins = round(smbInterval - lastBolusAge, 0)
                 val nextBolusSeconds = round((smbInterval - lastBolusAge) * 60, 0) % 60
                 if (lastBolusAge > smbInterval) {
                     if (microBolus > 0) {
                         rT.units = microBolus
-                        //rT.reason.append("Microbolusing ${microBolus}U. ")
                         rT.reason.append(context.getString(R.string.reason_microbolus, microBolus))
                     }
                 } else {
-                    //rT.reason.append("Waiting " + nextBolusMins + "m " + nextBolusSeconds + "s to microbolus again. ")
-                    rT.reason.append(context.getString(R.string.reason_wait_microbolus, nextBolusMins, nextBolusSeconds))
+                    rT.reason.append(
+                        context.getString(
+                            R.string.reason_wait_microbolus,
+                            nextBolusMins,
+                            nextBolusSeconds
+                        )
+                    )
                 }
-
             }
 
             val forcedMealActive =
