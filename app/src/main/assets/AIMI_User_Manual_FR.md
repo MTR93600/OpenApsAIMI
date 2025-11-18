@@ -28,9 +28,9 @@ AIMI n'est pas une boîte noire : pensez-le comme un co-pilote. Plus vos donnée
 2. **Redémarrez la boucle** : au démarrage AIMI recharge vos sensibilités variables passées et installe son calculateur Kalman/PK-PD.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/OpenAPSAIMIPlugin.kt†L140-L175】
 3. **Autorisez les permissions** : si vous activez les pas/FC, assurez-vous que la montre Wear OS synchronise bien vers AAPS (voir section ❤️).
 4. **Vérifiez l'état**
-   - L'écran OpenAPS affiche *Algorithme AIMI* et la date du dernier calcul (`lastAPSRun`).【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/OpenAPSAIMIPlugin.kt†L162-L165】
-   - Les logs contiennent des raisons `AIMI+` lorsque l'adaptatif basal déclenche un kicker ou une micro-reprise.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/AIMIAdaptiveBasal.kt†L79-L112】
-   - Les colonnes `SMB`/`Basal` du statut montrent les multiplicateurs WCycle ou NightGrowth lorsqu'ils sont actifs.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L2493-L2531】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L417-L444】
+    - L'écran OpenAPS affiche *Algorithme AIMI* et la date du dernier calcul (`lastAPSRun`).【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/OpenAPSAIMIPlugin.kt†L162-L165】
+    - Les logs contiennent des raisons `AIMI+` lorsque l'adaptatif basal déclenche un kicker ou une micro-reprise.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/AIMIAdaptiveBasal.kt†L79-L112】
+    - Les colonnes `SMB`/`Basal` du statut montrent les multiplicateurs WCycle ou NightGrowth lorsqu'ils sont actifs.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L2493-L2531】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L417-L444】
 
 ---
 
@@ -49,27 +49,27 @@ Ces paramètres posent la base physiologique utilisée par toutes les briques AI
 - **But :** autoriser l'entraînement du modèle SMB local (fichier `oapsaimiML_records.csv`).【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/OapsAIMIsmb.kt†L205-L223】
 - **Effet :** en mode entraînement, AIMI consigne vos boucles pour affiner le réseau `neuralnetwork5` après accumulation d'au moins 60 min de données.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/OapsAIMIsmb.kt†L236-L244】
 - **Ajuster si :**
-  - **Hypos fréquentes :** laissez désactivé le temps d'identifier la source avant de réentraîner.
-  - **Hypers fréquentes :** activez pour apprendre vos patterns, mais surveillez la sécurité (SMB est toujours borné).
-  - **Variabilité :** n'entraînez qu'après avoir stabilisé vos profils (au moins 3-4 jours de données homogènes).
+    - **Hypos fréquentes :** laissez désactivé le temps d'identifier la source avant de réentraîner.
+    - **Hypers fréquentes :** activez pour apprendre vos patterns, mais surveillez la sécurité (SMB est toujours borné).
+    - **Variabilité :** n'entraînez qu'après avoir stabilisé vos profils (au moins 3-4 jours de données homogènes).
 
 ### 🔹 `OApsAIMIweight`, `OApsAIMICHO`, `OApsAIMITDD7`
 - **Valeurs par défaut :** 50 kg, 50 g, 40 U respectivement.【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L67-L69】
 - **But :** renseigner des bornes physiologiques utilisées pour initialiser le filtre de Kalman ISF et la PK/PD si votre historique est vide.
 - **Effet :** un poids/TDD sous-estimé rendra l'ISF trop agressif; un CHO moyen trop faible détectera plus souvent des repas « gras ».
 - **Ajuster :**
-  - **Hypos :** augmentez légèrement `OApsAIMIweight` ou `OApsAIMITDD7` vers vos valeurs réelles → l'ISF se radoucit.
-  - **Hypers :** ajustez `OApsAIMICHO` vers vos apports réels pour que les modèles repas restent réalistes.
-  - **Variabilité :** harmonisez ces paramètres avec votre profil (mêmes unités que les rapports journaliers).
+    - **Hypos :** augmentez légèrement `OApsAIMIweight` ou `OApsAIMITDD7` vers vos valeurs réelles → l'ISF se radoucit.
+    - **Hypers :** ajustez `OApsAIMICHO` vers vos apports réels pour que les modèles repas restent réalistes.
+    - **Variabilité :** harmonisez ces paramètres avec votre profil (mêmes unités que les rapports journaliers).
 
 ### 🔹 `AimiUamConfidence`
 - **Valeur par défaut :** `0.5` (confiance moyenne).【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L144-L146】
 - **But :** pondérer l'apprentissage « UAM » quand la détection de repas non annoncés est fiable.
 - **Effet :** plus la confiance est élevée, moins l'algorithme dynamique de sensibilité (IsfAdjustmentEngine) s'éloigne du profil.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/ISF/IsfAdjustmentEngine.kt†L13-L36】
 - **Ajuster :**
-  - **Hypos post-UAM :** augmentez (0.6–0.8) pour limiter la baisse d'ISF.
-  - **Hyper prolongées non annoncées :** réduisez (0.3–0.4) afin que l'ISF s'adapte plus vite.
-  - **Variabilité :** laissez par défaut le temps que le moteur accumule assez de Kalman trust.
+    - **Hypos post-UAM :** augmentez (0.6–0.8) pour limiter la baisse d'ISF.
+    - **Hyper prolongées non annoncées :** réduisez (0.3–0.4) afin que l'ISF s'adapte plus vite.
+    - **Variabilité :** laissez par défaut le temps que le moteur accumule assez de Kalman trust.
 
 ### 🔹 `OApsAIMIEnableBasal`
 - **Valeur par défaut :** `false`.【F:core/keys/src/main/kotlin/app/aaps/core/keys/BooleanKey.kt†L123-L136】
@@ -115,11 +115,11 @@ Les préférences `OApsAIMIHighBGinterval`, `OApsAIMImealinterval`, etc., défin
 - **Anti-stall** `OApsAIMIAntiStallBias` (10 %) et `OApsAIMIDeltaPosRelease` (Δ+1 mg/dL) définissent l’overdrive minimal en plateau collant.【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L142-L143】
 
 **Décision tree pratique :**
-
+```
 Si plateau >180 mg/dL et Δ≈0 → augmenter `OApsAIMIKickerStep` (+0,05) pour corriger plus vite.
 Si hypos après reprise basale → réduire `OApsAIMIZeroResumeFrac` (0,2) ou augmenter `ZeroResumeMin` (15 min).
 Si montée lente malgré kicks → augmenter `OApsAIMIMaxMultiplier` (1,8 max) et vérifier `KickerMinUph`.
-
+```
 
 ### Sécurité hypoglycémie
 AIMI applique un garde-fou qui bloque SMB si la glycémie se rapproche du seuil hypo avec pente négative, en tenant compte d'une marge supplémentaire selon la vitesse de chute.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L400-L413】
@@ -134,10 +134,11 @@ AIMI applique un garde-fou qui bloque SMB si la glycémie se rapproche du seuil 
 - **Bornes & vitesse** (`OApsAIMIPkpdBoundsDia*`, `OApsAIMIPkpdBoundsPeak*`, `OApsAIMIPkpdMax*`) limitent l’apprentissage quotidien.【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L71-L78】
 - **État persistant** (`OApsAIMIPkpdStateDiaH`, `OApsAIMIPkpdStatePeakMin`) mémorise le dernier DIA/pic appris.【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L79-L80】
 - **Effet :** lorsque activé, AIMI fusionne l’ISF profil/TDD avec l’estimation PK/PD et applique un *pkpdScale* lié à la fraction de queue d’IOB.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/pkpd/PkPdIntegration.kt†L27-L82】
+- **Priorité repas :** lorsque les modes repas/COB actifs annoncent une montée, le *pkpdScale* est relevé (planche 0.9 → plafond 1.5) et les gardes SMB sont assouplies pour conserver de petits bolus rapprochés tant que la prédiction reste au-dessus de la cible.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/pkpd/PkPdIntegration.kt†L1-L86】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L1180-L1360】
 - **Ajustements :**
-  - **Hypos tardives** : réduisez `OApsAIMIPkpdMaxDiaChangePerDayH` pour freiner l’allongement de DIA.【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L77-L78】
-  - **Hypers post-repas** : baissez `OApsAIMIPkpdBoundsPeakMinMax` (ex. 180) pour favoriser des pics plus courts.
-  - **Données instables** : désactivez temporairement `PkpdEnabled` et revenez aux valeurs initiales (reset via préférences).
+    - **Hypos tardives** : réduisez `OApsAIMIPkpdMaxDiaChangePerDayH` pour freiner l’allongement de DIA.【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L77-L78】
+    - **Hypers post-repas** : baissez `OApsAIMIPkpdBoundsPeakMinMax` (ex. 180) pour favoriser des pics plus courts.
+    - **Données instables** : désactivez temporairement `PkpdEnabled` et revenez aux valeurs initiales (reset via préférences).
 
 ### Fusion ISF & blending rapide
 - **`OApsAIMIIsfFusionMinFactor` / `MaxFactor`** : facteurs min/max appliqués à l’ISF de profil (0.75–2.0 par défaut).【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L81-L83】
@@ -152,8 +153,8 @@ AIMI applique un garde-fou qui bloque SMB si la glycémie se rapproche du seuil 
 ### SMB damping intelligent
 Les paramètres `OApsAIMISmbTailThreshold`, `OApsAIMISmbTailDamping`, `OApsAIMISmbExerciseDamping`, `OApsAIMISmbLateFatDamping` contrôlent la réduction des SMB en fin d’action, après exercice ou repas gras.【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L84-L87】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/pkpd/SmbDamping.kt†L4-L77】
 - **Conseil :**
-  - Si vous restez haut en fin d’action → augmentez `SmbTailThreshold` (0.35) ou relevez `SmbTailDamping` (0.6).
-  - Si hypos après sport → réduisez `SmbExerciseDamping` (0.4) pour couper plus fort.
+    - Si vous restez haut en fin d’action → augmentez `SmbTailThreshold` (0.35) ou relevez `SmbTailDamping` (0.6).
+    - Si hypos après sport → réduisez `SmbExerciseDamping` (0.4) pour couper plus fort.
 
 ### PeakTime dynamique
 Le calcul `calculateDynamicPeakTime` combine IOB, activité future, pas, FC, et capteur pour ajuster le temps de pic entre 35 et 120 min.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L2533-L2645】
@@ -200,11 +201,11 @@ AIMI scanne vos notes (sleep, sport, meal…) pour activer les modes si vous oub
 - `applySpecificAdjustments` réduit de moitié les SMB si vous êtes en sommeil/snack/basse activité prolongée.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/OapsAIMIsmb.kt†L353-L360】
 
 ### Décision tree sécurité
-
+```
 Si hypos après sport → activer `OApsAIMIEnableStepsFromWatch` + réduire `SmbExerciseDamping`.
 Si hypos grossesse → réduire `OApsAIMIMaxMultiplier` et vérifier `pregnancy` activé.
 Si hypers en lune de miel → activer `OApsAIMIhoneymoon` pour autoriser plus d'agressivité.
-
+```
 
 ---
 
@@ -218,24 +219,22 @@ Si hypers en lune de miel → activer `OApsAIMIhoneymoon` pour autoriser plus d'
 Ce module gère les pics d'hormone de croissance chez l'enfant/adolescent.
 - **Activation** : auto pour <18 ans ou via `OApsAIMINightGrowthEnabled` (ON par défaut).【F:core/keys/src/main/kotlin/app/aaps/core/keys/BooleanKey.kt†L133-L136】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L417-L444】
 - **Paramètres clés** :
-  - `OApsAIMINightGrowthAgeYears` (14 ans), fenêtres `OApsAIMINightGrowthStart`/`End` (22:00–06:00).【F:core/keys/src/main/kotlin/app/aaps/core/keys/IntKey.kt†L87-L90】【F:core/keys/src/main/kotlin/app/aaps/core/keys/StringKey.kt†L56-L61】
-  - `OApsAIMINightGrowthMinRiseSlope` (≥5 mg/dL/5 min), `MinDuration`, `MinEventualOverTarget` définissent la détection.【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L128-L132】【F:core/keys/src/main/kotlin/app/aaps/core/keys/IntKey.kt†L87-L90】
-  - Multiplicateurs SMB/Basal et plafonds IOB (`NightGrowthSmbMultiplier`, etc.).【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L128-L132】
-- **Fonctionnement** : NGR surveille la pente maximale, confirme l'événement et applique des multiplicateurs jusqu'à un état DECAY contrôlé.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/NightGrowthResistanceMonitor.kt†L13-L198】
+    - `OApsAIMINightGrowthAgeYears` (14 ans), fenêtres `OApsAIMINightGrowthStart`/`End` (22:00–06:00).【F:core/keys/src/main/kotlin/app/aaps/core/keys/IntKey.kt†L87-L90】【F:core/keys/src/main/kotlin/app/aaps/core/keys/StringKey.kt†L56-L61】
+    - `OApsAIMINightGrowthMaxIobExtra` = marge d'IOB autorisée par tranche de 30 min lorsque l'épisode est actif.【F:plugins/aps/src/main/res/values/strings.xml†L543-L544】
+- **Fonctionnement** : les seuils de pente/durée, les multiplicateurs SMB/basal et la phase de décroissance sont désormais apprises automatiquement à partir de l'autosens, de la DIA, de la stabilité CGM et du profil basale.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L420-L471】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/NightGrowthResistanceLearner.kt†L1-L59】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/NightGrowthResistanceMonitor.kt†L13-L215】
 
 **Conseils :**
-- Si hypers nocturnes persistantes → augmentez `NightGrowthSmbMultiplier` (1.3) et `NightGrowthBasalMultiplier` (1.2).
-- Si hypos à la fin de l'épisode → réduisez `NightGrowthMaxSmbClamp` ou `MaxIobExtra`.
-- Pour un enfant plus jeune, réduisez `MinRiseSlope` (3–4) afin de détecter plus tôt.
+- Ajustez uniquement la fenêtre horaire et l'IOB supplémentaire si la croissance déborde encore les plafonds.
+- Pour les plus jeunes, réduisez la tranche horaire si l'épisode commence plus tôt/laissez le learner décider des intensités.
 
 ---
 
 ## ❤️ Intégration fréquence cardiaque & pas (Wear OS)
 - **Activation** : `OApsAIMIEnableStepsFromWatch` (OFF par défaut).【F:core/keys/src/main/kotlin/app/aaps/core/keys/BooleanKey.kt†L123-L129】
 - **Effets** :
-  - Les pas sur 5–180 min (`recentSteps*`) et la FC moyenne 5/60/180 min sont utilisés pour ajuster le temps de pic, moduler SMB (sport) et décider des reprises basales.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/OapsAIMIsmb.kt†L848-L911】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L2539-L2645】
-  - En cas d'activité intense (>1000 pas et FC>110), AIMI allonge le pic (×1.2) et limite SMB.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L2616-L2626】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/OapsAIMIsmb.kt†L342-L350】
-  - Au repos (pas<200, FC<50), le pic est raccourci (×0.75) pour éviter les retards d'action.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L2618-L2626】
+    - Les pas sur 5–180 min (`recentSteps*`) et la FC moyenne 5/60/180 min sont utilisés pour ajuster le temps de pic, moduler SMB (sport) et décider des reprises basales.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/OapsAIMIsmb.kt†L848-L911】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L2539-L2645】
+    - En cas d'activité intense (>1000 pas et FC>110), AIMI allonge le pic (×1.2) et limite SMB.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L2616-L2626】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/OapsAIMIsmb.kt†L342-L350】
+    - Au repos (pas<200, FC<50), le pic est raccourci (×0.75) pour éviter les retards d'action.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L2618-L2626】
 
 **Astuces :**
 - Vérifiez que la montre transmet bien toutes les 5 min (sinon les valeurs resteront nulles et AIMI n'ajustera pas).
@@ -252,8 +251,8 @@ AIMI peut adapter basales et SMB selon votre phase menstruelle.
 - **Paramètres physiologiques** : contraceptif, statut thyroïde, Verneuil influencent l'amplitude des multiplicateurs.【F:core/keys/src/main/kotlin/app/aaps/core/keys/StringKey.kt†L56-L59】【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/wcycle/WCycleTypes.kt†L1-L39】
 - **Clamp min/max** (`OApsAIMIWCycleClampMin` 0.8, `ClampMax` 1.25) bornent l'échelle appliquée.【F:core/keys/src/main/kotlin/app/aaps/core/keys/DoubleKey.kt†L124-L126】
 - **Options shadow/confirm** :
-  - `OApsAIMIWCycleShadow` garde les calculs sans les appliquer (mode observation).【F:core/keys/src/main/kotlin/app/aaps/core/keys/BooleanKey.kt†L132-L135】
-  - `OApsAIMIWCycleRequireConfirm` demande une confirmation avant d'appliquer un changement.【F:core/keys/src/main/kotlin/app/aaps/core/keys/BooleanKey.kt†L132-L135】
+    - `OApsAIMIWCycleShadow` garde les calculs sans les appliquer (mode observation).【F:core/keys/src/main/kotlin/app/aaps/core/keys/BooleanKey.kt†L132-L135】
+    - `OApsAIMIWCycleRequireConfirm` demande une confirmation avant d'appliquer un changement.【F:core/keys/src/main/kotlin/app/aaps/core/keys/BooleanKey.kt†L132-L135】
 
 ### Fonctionnement
 - `ensureWCycleInfo()` interroge `WCycleFacade` avec vos préférences et renvoie la phase, les multiplicateurs et un texte `reason` injecté dans les logs.【F:plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt†L2493-L2517】
@@ -276,11 +275,11 @@ AIMI peut adapter basales et SMB selon votre phase menstruelle.
 | Variabilité forte | Stabiliser poids/TDD, désactiver `PkpdEnabled`, activer `Shadow` WCycle | Général & WCycle |
 
 ### Mini decision tree quotidien
-
+```
 Si vous restez >180 mg/dL malgré SMB → vérifier HighBG mode : augmenter `HighBGMaxSMB` et `HyperFactor`.
 Si descente trop rapide après autoDrive → diminuer `autodrivePrebolus` et augmenter `AutodriveDeviation` (1.5).
 Si tendance haute pendant activité → activer suivi pas/FC et réduire `SmbExerciseDamping` pour conserver un peu de SMB.
-
+```
 
 ---
 
