@@ -328,6 +328,9 @@
     <string name="oaps_aimi_pkpd_max_dia_delta_summary">Limits how quickly the learned DIA can change each day.</string>
     <string name="oaps_aimi_pkpd_max_peak_delta_title">Max peak change per day (min)</string>
     <string name="oaps_aimi_pkpd_max_peak_delta_summary">Limits how quickly the learned peak time can change each day.</string>
+    <string name="oaps_aimi_AimiUamConfidence_title">AimiUamConfidence</string>
+    <string name="oaps_aimi_AimiUamConfidence_summary">Weight the "UAM" learning when the detection of unannounced meals is reliable. Effect: The higher the confidence, the less the dynamic sensitivity algorithm (IsfAdjustmentEngine) deviates from the profile.Post-UAM Hypos: Increase (0.6–0.8) to limit ISF reduction.
+Prolonged Unannounced Hypers: Decrease (0.3–0.4) so the ISF adapts more quickly.</string>
     <string name="oaps_aimi_isf_fusion_min_title">ISF fusion minimum factor</string>
     <string name="oaps_aimi_isf_fusion_min_summary">Lower bound applied to the fused ISF relative to the TDD anchor.</string>
     <string name="oaps_aimi_isf_fusion_max_title">ISF fusion maximum factor</string>

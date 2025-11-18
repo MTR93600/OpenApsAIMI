@@ -1164,6 +1164,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         addPreference(
                             AdaptiveDoublePreference(
                                 ctx = context,
+                                doubleKey = DoubleKey.AimiUamConfidence,
+                                dialogMessage = R.string.oaps_aimi_AimiUamConfidence_summary,
+                                title = R.string.oaps_aimi_AimiUamConfidence_title
+                            )
+                        )
+
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
                                 doubleKey = DoubleKey.OApsAIMIIsfFusionMinFactor,
                                 dialogMessage = R.string.oaps_aimi_isf_fusion_min_summary,
                                 title = R.string.oaps_aimi_isf_fusion_min_title
