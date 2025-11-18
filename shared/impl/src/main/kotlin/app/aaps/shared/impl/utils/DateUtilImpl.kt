@@ -358,24 +358,18 @@ class DateUtilImpl @Inject constructor(private val context: Context) : DateUtil 
             val daysAgo = T.msecs(milliseconds).days()
             val hoursAgo = T.msecs(milliseconds).hours() % 24
             val minutesAgo = T.msecs(milliseconds).mins() % 60
-            val agoString = if (daysAgo > 1)
-                // Show multiple days and hours ago
-                rh.gs(R.string.days_hours_ago, daysAgo.toString(), hoursAgo.toString())
-            else if (daysAgo > 0)
-                // Show single day and hours ago
-                rh.gs(R.string.day_hours_ago, daysAgo.toString(), hoursAgo.toString())
-            else if (hoursAgo > 1)
-                // Only show multiple hours ago
-                rh.gs(R.string.hours_ago, hoursAgo.toString())
+
+            val agoString = if (daysAgo > 0)
+                // Show multiple day(s) and hours ago
+                rh.gq(R.plurals.plurals_day_hour_ago, daysAgo.toInt(), daysAgo.toString(), hoursAgo.toString())
             else if (hoursAgo > 0)
-                // Only show single hour ago
-                rh.gs(R.string.hour_ago, hoursAgo.toString())
-            else if (minutesAgo > 1)
-                // Only show multiple minutes ago
-                rh.gs(R.string.minutes_ago, minutesAgo.toString())
+                // Only show single hour(s) ago
+                rh.gq(R.plurals.plurals_hour_ago, hoursAgo.toInt(), hoursAgo.toString())
             else if (minutesAgo > 0)
-                rh.gs(R.string.moment_ago)
+                // Only show minute(s) ago
+                rh.gq(R.plurals.plurals_minute_ago, minutesAgo.toInt(), minutesAgo.toString())
             else
+                // Show other
                 rh.gs(R.string.seconds_ago)
 
             return agoString
