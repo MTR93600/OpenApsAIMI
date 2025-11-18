@@ -5,6 +5,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="@drawable/dashboard_card_surface"
         android:orientation="vertical"
         android:padding="16dp">
 
@@ -19,6 +20,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:textColor="@color/dashboard_on_surface"
                 android:textAppearance="@style/TextAppearance.MaterialComponents.Headline4"
                 android:text="--" />
 
@@ -34,6 +36,7 @@
                 android:id="@+id/time_ago"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:textColor="@color/dashboard_on_surface"
                 android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
                 android:text="--" />
         </LinearLayout>
@@ -43,6 +46,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
+            android:textColor="@color/dashboard_on_surface"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
             android:text="--" />
 
@@ -55,6 +59,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:textColor="@color/dashboard_on_surface"
                 android:text="@string/dashboard_iob_label"
                 android:textAppearance="@style/TextAppearance.MaterialComponents.Body2" />
 
@@ -64,6 +69,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:gravity="end"
+                android:textColor="@color/dashboard_on_surface"
                 android:text="--" />
         </LinearLayout>
 
@@ -76,6 +82,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:textColor="@color/dashboard_on_surface"
                 android:text="@string/dashboard_cob_label"
                 android:textAppearance="@style/TextAppearance.MaterialComponents.Body2" />
 
@@ -85,6 +92,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:gravity="end"
+                android:textColor="@color/dashboard_on_surface"
                 android:text="--" />
         </LinearLayout>
 
@@ -98,6 +106,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:textColor="@color/dashboard_on_surface"
                 android:text="@string/dashboard_loop_label"
                 android:textAppearance="@style/TextAppearance.MaterialComponents.Body2" />
 
@@ -107,6 +116,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:gravity="end"
+                android:textColor="@color/dashboard_on_surface"
                 android:text="--" />
 
             <View

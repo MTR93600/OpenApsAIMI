@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners
+        android:topLeftRadius="@dimen/dashboard_card_corner_large"
+        android:topRightRadius="@dimen/dashboard_card_corner_large"
+        android:bottomRightRadius="@dimen/dashboard_card_corner_large"
+        android:bottomLeftRadius="@dimen/dashboard_card_corner_small" />
+    <gradient
+        android:angle="135"
+        android:startColor="@color/dashboard_surface_start"
+        android:endColor="@color/dashboard_surface_end" />
+</shape>

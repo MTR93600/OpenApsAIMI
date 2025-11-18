@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="dashboard_card_corner_large">24dp</dimen>
+    <dimen name="dashboard_card_corner_small">18dp</dimen>
+    <dimen name="dashboard_card_elevation">8dp</dimen>
+    <dimen name="dashboard_block_spacing">20dp</dimen>
+    <dimen name="dashboard_chip_padding_vertical">8dp</dimen>
+    <dimen name="dashboard_chip_padding_horizontal">14dp</dimen>
+    <dimen name="dashboard_chip_spacing">8dp</dimen>
+</resources>
