@@ -1812,9 +1812,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return manualSport || recentBurst || sustainedActivity || highTargetExercise
     }
     private fun calculateSMBInterval(): Int {
-        val reasonBuilder = StringBuilder()
+        val defaultInterval = 3
 
-        // Récupération préalable des intervalles depuis les préférences
+        // 1) Lecture des préférences
         val intervals = SMBIntervals(
             snack = preferences.get(IntKey.OApsAIMISnackinterval),
             meal = preferences.get(IntKey.OApsAIMImealinterval),
@@ -1826,50 +1826,69 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             highBG = preferences.get(IntKey.OApsAIMIHighBGinterval)
         )
 
-        // Condition critique : si delta > 15, intervalle fixe à 1
+        // 2) Cas critique : montée très rapide -> SMB toutes les minutes
         if (delta > 15f) {
-            //reasonBuilder.append("Interval : 1 (delta > 15)")
-            reasonBuilder.append(context.getString(R.string.interval_delta_1))
             return 1
         }
 
-        var interval = 3 // Intervalle de base
+        // 3) Intervalle de base en fonction du mode actif
+        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
 
-        // Vérification des ajustements basés sur les intervalles configurés
-        if (shouldApplyIntervalAdjustment(intervals)) {
-            interval = 10
-        } else if (shouldApplySafetyAdjustment()) {
-            interval = 10
-        } else if (shouldApplyTimeAdjustment()) {
-            interval = 10
+        val modeInterval = when {
+            snackTime                -> intervals.snack
+            mealTime                 -> intervals.meal
+            bfastTime                -> intervals.bfast
+            lunchTime                -> intervals.lunch
+            dinnerTime               -> intervals.dinner
+            sleepTime                -> intervals.sleep
+            highCarbTime             -> intervals.hc
+            !honeymoon && bg > 120f  -> intervals.highBG
+            honeymoon && bg > 180f   -> intervals.highBG
+            else                     -> defaultInterval
+        }.coerceAtLeast(1)
+
+        var interval = modeInterval
+
+        // 4) Sécurité : sport important ou low carb -> au moins 10 min
+        val safetySport = recentSteps180Minutes > 1500 && bg < 120f
+        val safetyLowCarb = lowCarbTime
+        if (safetySport || safetyLowCarb) {
+            interval = interval.coerceAtLeast(10)
         }
 
-        // Ajustement basé sur l'activité physique
-        if (shouldApplyStepAdjustment()) {
-            interval = 15
+        // 5) Activité très soutenue -> on peut monter jusqu'à 15 min
+        val strongActivity = recentSteps5Minutes > 100 &&
+            recentSteps30Minutes > 500 &&
+            lastsmbtime > 20
+        if (strongActivity) {
+            interval = interval.coerceAtLeast(15)
         }
 
-        // Ajustements supplémentaires :
+        // 6) BG sous la cible -> on espace davantage les SMB
         if (bg < targetBg) {
             interval = (interval * 2).coerceAtMost(20)
         }
 
-        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-        if (honeymoon && bg < 170 && delta < 5) {
+        // 7) Honeymoon calme -> on espace aussi
+        if (honeymoon && bg < 170f && delta < 5f) {
             interval = (interval * 2).coerceAtMost(20)
         }
 
+        // 8) Nuit (optionnelle) : on permet un peu plus de réactivité
         val currentHour = LocalTime.now().hour
-        if (preferences.get(BooleanKey.OApsAIMInight) && currentHour == 23 && delta < 10 && iob < maxSMB) {
-            interval = (interval * 0.8).toInt()
+        if (preferences.get(BooleanKey.OApsAIMInight) &&
+            currentHour == 23 &&
+            delta < 10f &&
+            iob < maxSMB
+        ) {
+            interval = (interval * 0.8).toInt().coerceAtLeast(1)
         }
 
-        //reasonBuilder.append("Interval : $interval")
-        reasonBuilder.append(context.getString(R.string.interval_value, interval))
-        return interval
+        // 9) Clamp final : mécanique SMB entre 1 et 10 min
+        return interval.coerceIn(1, 10)
     }
 
-    // Structure pour regrouper les intervalles
+    // Structure simple, inchangée
     data class SMBIntervals(
         val snack: Int,
         val meal: Int,
@@ -1880,35 +1899,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val hc: Int,
         val highBG: Int
     )
-
-    // Refacto des fonctions de vérification conditionnelles
-    private fun shouldApplyIntervalAdjustment(intervals: SMBIntervals): Boolean {
-        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-
-        return (lastsmbtime < intervals.snack && snackTime)
-            || (lastsmbtime < intervals.meal && mealTime)
-            || (lastsmbtime < intervals.bfast && bfastTime)
-            || (lastsmbtime < intervals.lunch && lunchTime)
-            || (lastsmbtime < intervals.dinner && dinnerTime)
-            || (lastsmbtime < intervals.sleep && sleepTime)
-            || (lastsmbtime < intervals.hc && highCarbTime)
-            || (!honeymoon && lastsmbtime < intervals.highBG && bg > 120)
-            || (honeymoon && lastsmbtime < intervals.highBG && bg > 180)
-    }
-
-    private fun shouldApplySafetyAdjustment(): Boolean {
-        val safetysmb = recentSteps180Minutes > 1500 && bg < 120
-        return (safetysmb || lowCarbTime) && lastsmbtime >= 15
-    }
-
-    private fun shouldApplyTimeAdjustment(): Boolean {
-        val safetysmb = recentSteps180Minutes > 1500 && bg < 120
-        return (safetysmb || lowCarbTime) && lastsmbtime < 15
-    }
-
-    private fun shouldApplyStepAdjustment(): Boolean {
-        return recentSteps5Minutes > 100 && recentSteps30Minutes > 500 && lastsmbtime > 20
-    }
     // Calcule le seuil "OpenAPS-like" et applique LGS si plus haut
     private fun computeHypoThreshold(minBg: Double, lgsThreshold: Int?): Double {
         var t = minBg - 0.5 * (minBg - 40.0) // 90→65, 100→70, 110→75, 130→85
@@ -1972,43 +1962,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private fun applySpecificAdjustments(smbAmount: Float): Float {
-        val intervals = SMBIntervals(
-            snack  = preferences.get(IntKey.OApsAIMISnackinterval),
-            meal   = preferences.get(IntKey.OApsAIMImealinterval),
-            bfast  = preferences.get(IntKey.OApsAIMIBFinterval),
-            lunch  = preferences.get(IntKey.OApsAIMILunchinterval),
-            dinner = preferences.get(IntKey.OApsAIMIDinnerinterval),
-            sleep  = preferences.get(IntKey.OApsAIMISleepinterval),
-            hc     = preferences.get(IntKey.OApsAIMIHCinterval),
-            highBG = preferences.get(IntKey.OApsAIMIHighBGinterval)
-        )
 
         val currentHour = LocalTime.now().hour
         val honeymoon   = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-        // 1) hard/tempo guards existants
-        when {
-            shouldApplyIntervalAdjustment(intervals) -> {
-                // avant : return 0.0f
-                return if (lateFatRiseFlag) (smbAmount * 0.9f).coerceAtLeast(0f)
-                else             (smbAmount * 0.8f).coerceAtLeast(0f)
-            }
-            shouldApplySafetyAdjustment() -> {
-                this.intervalsmb = 10
-                // avant : smbAmount / 2 (ok) -> on garde
-                return (smbAmount * 0.5f).coerceAtLeast(0f)
-            }
-            shouldApplyTimeAdjustment() -> {
-                this.intervalsmb = 10
-                // avant : return 0.0f
-                return if (lateFatRiseFlag) (smbAmount * 0.7f).coerceAtLeast(0f)
-                else             (smbAmount * 0.5f).coerceAtLeast(0f)
-            }
-        }
-        if (shouldApplyStepAdjustment()) {
-            // avant : return 0.0f
-            return if (lateFatRiseFlag) (smbAmount * 0.8f).coerceAtLeast(0f)
-            else             (smbAmount * 0.7f).coerceAtLeast(0f)
-        }
 
         // 2) 🔧 AJUSTEMENT “falling decelerating” (soft)
         //    On baisse encore (deltas négatifs) mais la baisse RALENTIT :
@@ -4203,7 +4159,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
                 // allow SMBIntervals between 1 and 10 minutes
                 //val SMBInterval = min(10, max(1, profile.SMBInterval))
-                val smbInterval = min(10, max(1, calculateSMBInterval()))
+                val smbInterval = calculateSMBInterval()
                 val nextBolusMins = round(smbInterval - lastBolusAge, 0)
                 val nextBolusSeconds = round((smbInterval - lastBolusAge) * 60, 0) % 60
                 if (lastBolusAge > smbInterval) {
