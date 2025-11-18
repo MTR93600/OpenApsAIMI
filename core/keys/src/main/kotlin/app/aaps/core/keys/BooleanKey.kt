@@ -27,6 +27,7 @@ enum class BooleanKey(
     OverviewShowCgmButton("show_cgm_button", false, defaultedBySM = true, showInNsClientMode = false),
     OverviewShowCalibrationButton("show_calibration_button", false, defaultedBySM = true, showInNsClientMode = false),
     OverviewShortTabTitles("short_tabtitles", false, defaultedBySM = true),
+    OverviewUseDashboardLayout("overview_use_dashboard", true, defaultedBySM = true),
     OverviewShowNotesInDialogs("show_notes_entry_dialogs", false, defaultedBySM = true),
     OverviewShowStatusLights("show_statuslights", true, defaultedBySM = true, hideParentScreenIfHidden = true),
     OverviewUseBolusAdvisor("use_bolus_advisor", true, defaultedBySM = true),

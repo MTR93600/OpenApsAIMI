@@ -50,6 +50,7 @@ import app.aaps.core.validators.preferences.AdaptiveIntentPreference
 import app.aaps.core.validators.preferences.AdaptiveSwitchPreference
 import app.aaps.core.validators.preferences.AdaptiveUnitPreference
 import app.aaps.plugins.main.R
+import app.aaps.plugins.main.general.overview.OverviewEntryFragment
 import app.aaps.plugins.main.general.overview.keys.OverviewStringKey
 import app.aaps.plugins.main.general.overview.notifications.NotificationStore
 import app.aaps.plugins.main.general.overview.notifications.events.EventUpdateOverviewNotification
@@ -80,7 +81,7 @@ class OverviewPlugin @Inject constructor(
 ) : PluginBaseWithPreferences(
     pluginDescription = PluginDescription()
         .mainType(PluginType.GENERAL)
-        .fragmentClass(OverviewFragment::class.qualifiedName)
+        .fragmentClass(OverviewEntryFragment::class.qualifiedName)
         .alwaysVisible(true)
         .alwaysEnabled(true)
         .simpleModePosition(PluginDescription.Position.TAB)
@@ -230,6 +231,7 @@ class OverviewPlugin @Inject constructor(
             title = rh.gs(R.string.overview)
             initialExpandedChildrenCount = 0
             addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OverviewKeepScreenOn, summary = R.string.keep_screen_on_summary, title = R.string.keep_screen_on_title))
+            addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OverviewUseDashboardLayout, summary = R.string.overview_use_dashboard_summary, title = R.string.overview_use_dashboard_title))
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "overview_buttons_settings"
                 title = rh.gs(R.string.overview_buttons_selection)
