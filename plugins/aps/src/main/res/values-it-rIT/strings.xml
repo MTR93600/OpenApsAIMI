@@ -1066,7 +1066,6 @@
     <string name="oaps_aimi_delta_pos_release_summary">Se Δ supera questo valore, l’intensificazione basale viene ridotta o interrotta.</string>
 
     <!--AIMI REFACTORING TRANSLATION CODE -->
-    <string name="overview_use_dashboard_title">Abilita layout dashboard</string>
 
 </resources>
 

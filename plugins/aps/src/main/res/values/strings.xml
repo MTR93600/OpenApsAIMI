@@ -1082,6 +1082,5 @@ Prolonged Unannounced Hypers: Decrease (0.3–0.4) so the ISF adapts more quickl
     <string name="oaps_aimi_delta_pos_release_summary">If Δ exceeds this value, basal intensification is reduced or stopped.</string>
 
     <!--AIMI REFACTORING TRANSLATION CODE -->
-    <string name="overview_use_dashboard_title">Use dashboard layout</string>
 
 </resources>

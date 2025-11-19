@@ -908,7 +908,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     title = rh.gs(R.string.user_preferences_title_menu)
                 })
 
-            addPreference(AdaptiveSwitchPreference(ctx = context,booleanKey = BooleanKey.OverviewUseDashboardLayout,title = R.string.overview_use_dashboard_title))
             addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIMLtraining, title = R.string.oaps_aimi_enableMlTraining_title))
             addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIweight, dialogMessage = R.string.oaps_aimi_weight_summary, title = R.string.oaps_aimi_weight_title))
             addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMICHO, dialogMessage = R.string.oaps_aimi_cho_summary, title = R.string.oaps_aimi_cho_title))
