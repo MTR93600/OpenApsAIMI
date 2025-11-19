@@ -5,13 +5,18 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import app.aaps.core.data.iob.InMemoryGlucoseValue
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.RM
+import app.aaps.core.data.model.TE
+import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.Loop
+import app.aaps.core.interfaces.aps.GlucoseStatus
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
 import app.aaps.core.interfaces.iob.IobCobCalculator
+import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.overview.LastBgData
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
@@ -40,12 +45,16 @@ import app.aaps.core.objects.extensions.toStringShort
 import app.aaps.plugins.main.R
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
+import java.util.concurrent.TimeUnit
+import kotlin.math.abs
+import kotlin.math.max
 
 class OverviewViewModel(
     private val context: Context,
     private val lastBgData: LastBgData,
     private val trendCalculator: TrendCalculator,
     private val iobCobCalculator: IobCobCalculator,
+    private val glucoseStatusProvider: GlucoseStatusProvider,
     private val profileUtil: ProfileUtil,
     private val profileFunction: ProfileFunction,
     private val resourceHelper: ResourceHelper,
@@ -66,8 +75,8 @@ class OverviewViewModel(
     private val _statusCardState = MutableLiveData<StatusCardState>()
     val statusCardState: LiveData<StatusCardState> = _statusCardState
 
-    private val _adjustmentState = MutableLiveData<List<String>>()
-    val adjustmentState: LiveData<List<String>> = _adjustmentState
+    private val _adjustmentState = MutableLiveData<AdjustmentCardState>()
+    val adjustmentState: LiveData<AdjustmentCardState> = _adjustmentState
 
     private val _graphMessage = MutableLiveData<String>()
     val graphMessage: LiveData<String> = _graphMessage
@@ -199,19 +208,21 @@ class OverviewViewModel(
 
     private fun updateAdjustments() {
         val now = dateUtil.now()
-        val adjustments = mutableListOf<String>()
-        processedTbrEbData.getTempBasalIncludingConvertedExtended(now)?.takeIf { it.isInProgress }?.let {
-            adjustments += resourceHelper.gs(R.string.dashboard_adjustment_temp_basal, it.toStringShort(resourceHelper))
-        }
-        persistenceLayer.getTemporaryTargetActiveAt(now)?.let { target ->
-            val units = profileFunction.getUnits() ?: GlucoseUnit.MGDL
-            val range = profileUtil.toTargetRangeString(target.lowTarget, target.highTarget, GlucoseUnit.MGDL, units)
-            adjustments += resourceHelper.gs(R.string.dashboard_adjustment_temp_target, range, dateUtil.untilString(target.end, resourceHelper))
-        }
-        persistenceLayer.getExtendedBolusActiveAt(now)?.takeIf { it.isInProgress(dateUtil) }?.let {
-            adjustments += resourceHelper.gs(R.string.dashboard_adjustment_extended_bolus, it.toStringFull(dateUtil, resourceHelper))
-        }
-        _adjustmentState.postValue(adjustments)
+        val lastBg = lastBgData.lastBg()
+        val trendArrow = trendCalculator.getTrendArrow(iobCobCalculator.ads)
+        val glucoseStatus = glucoseStatusProvider.glucoseStatusData
+        val adjustments = buildActiveAdjustments(now)
+        val state = AdjustmentCardState(
+            glycemiaLine = buildGlycemiaLine(lastBg, trendArrow, glucoseStatus),
+            predictionLine = buildPredictionLine(now),
+            iobActivityLine = buildIobActivityLine(),
+            decisionLine = buildDecisionLine(),
+            pumpLine = buildPumpLine(now),
+            safetyLine = buildSafetyLine(lastBg, glucoseStatus),
+            modeLine = resolveModeLine(now),
+            adjustments = adjustments
+        )
+        _adjustmentState.postValue(state)
     }
 
     private fun updateGraphMessage() {
@@ -219,11 +230,153 @@ class OverviewViewModel(
         _graphMessage.postValue(message)
     }
 
+    private fun buildActiveAdjustments(now: Long): List<String> {
+        val adjustments = mutableListOf<String>()
+        processedTbrEbData.getTempBasalIncludingConvertedExtended(now)?.takeIf { it.isInProgress }?.let {
+            adjustments += resourceHelper.gs(R.string.dashboard_adjustment_temp_basal, it.toStringShort(resourceHelper))
+        }
+        persistenceLayer.getTemporaryTargetActiveAt(now)?.let { target ->
+            val units = profileFunction.getUnits() ?: GlucoseUnit.MGDL
+            val range = profileUtil.toTargetRangeString(target.lowTarget, target.highTarget, GlucoseUnit.MGDL, units)
+            adjustments += resourceHelper.gs(
+                R.string.dashboard_adjustment_temp_target,
+                range,
+                dateUtil.untilString(target.end, resourceHelper)
+            )
+        }
+        persistenceLayer.getExtendedBolusActiveAt(now)?.takeIf { it.isInProgress(dateUtil) }?.let {
+            adjustments += resourceHelper.gs(
+                R.string.dashboard_adjustment_extended_bolus,
+                it.toStringFull(dateUtil, resourceHelper)
+            )
+        }
+        return adjustments
+    }
+
+    private fun buildGlycemiaLine(
+        lastBg: InMemoryGlucoseValue?,
+        trendArrow: TrendArrow?,
+        glucoseStatus: GlucoseStatus?
+    ): String {
+        val glucoseText = profileUtil.fromMgdlToStringInUnits(lastBg?.recalculated)
+        val deltaText = glucoseStatus?.shortAvgDelta?.let { profileUtil.fromMgdlToSignedStringInUnits(it) }
+            ?: resourceHelper.gs(app.aaps.core.ui.R.string.value_unavailable_short)
+        return resourceHelper.gs(
+            R.string.dashboard_adjustment_glycemia,
+            glucoseText,
+            trendSymbol(trendArrow),
+            deltaText
+        )
+    }
+
+    private fun buildPredictionLine(now: Long): String {
+        val request = loop.lastRun?.request ?: return resourceHelper.gs(R.string.dashboard_adjustment_prediction_unavailable)
+        val predictions = request.predictionsAsGv
+        if (predictions.isEmpty()) return resourceHelper.gs(R.string.dashboard_adjustment_prediction_unavailable)
+        val targetTime = now + TimeUnit.MINUTES.toMillis(PREDICTION_LOOKAHEAD_MINUTES)
+        val closest = predictions.minByOrNull { abs(it.timestamp - targetTime) }
+            ?: return resourceHelper.gs(R.string.dashboard_adjustment_prediction_unavailable)
+        val valueText = profileUtil.fromMgdlToStringInUnits(closest.value)
+        val minutes = max(1L, abs(closest.timestamp - now) / TimeUnit.MINUTES.toMillis(1))
+        val minutesText = resourceHelper.gs(R.string.dashboard_adjustment_minutes, minutes)
+        return resourceHelper.gs(R.string.dashboard_adjustment_prediction, "→", valueText, minutesText)
+    }
+
+    private fun buildIobActivityLine(): String {
+        val autosensPercent = ((loop.lastRun?.request?.autosensResult?.ratio ?: 1.0) * 100.0)
+        val activityText = decimalFormatter.to0Decimal(autosensPercent)
+        return resourceHelper.gs(R.string.dashboard_adjustment_iob_activity, totalIobText(), activityText)
+    }
+
+    private fun buildDecisionLine(): String {
+        val request = loop.lastRun?.request ?: return resourceHelper.gs(R.string.dashboard_adjustment_decision_unavailable)
+        val smbText = decimalFormatter.to2Decimal(request.smb)
+        val basalText = decimalFormatter.to2Decimal(request.rate)
+        return resourceHelper.gs(R.string.dashboard_adjustment_decision, smbText, basalText)
+    }
+
+    private fun buildPumpLine(now: Long): String {
+        val reservoirLevel = activePlugin.activePump.reservoirLevel
+        val reservoirText =
+            if (reservoirLevel > 0)
+                resourceHelper.gs(app.aaps.core.ui.R.string.format_insulin_units, reservoirLevel)
+            else resourceHelper.gs(app.aaps.core.ui.R.string.value_unavailable_short)
+        val siteAge = formatTherapyAge(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.CANNULA_CHANGE), now)
+        val sensorAge = formatTherapyAge(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE), now)
+        return resourceHelper.gs(R.string.dashboard_adjustment_pump, reservoirText, siteAge, sensorAge)
+    }
+
+    private fun buildSafetyLine(lastBg: InMemoryGlucoseValue?, glucoseStatus: GlucoseStatus?): String {
+        val bgValue = lastBg?.recalculated
+        val level = when {
+            bgValue == null -> null
+            bgValue < SAFETY_CRITICAL_BG -> resourceHelper.gs(R.string.dashboard_adjustment_safety_level_critical)
+            bgValue < SAFETY_LIMITED_BG -> resourceHelper.gs(R.string.dashboard_adjustment_safety_level_limited)
+            else -> resourceHelper.gs(R.string.dashboard_adjustment_safety_level_normal)
+        }
+        if (level == null) return resourceHelper.gs(R.string.dashboard_adjustment_safety_unknown)
+        val reasons = mutableListOf<String>()
+        bgValue?.let {
+            val res = if (it < SAFETY_LIMITED_BG)
+                R.string.dashboard_adjustment_reason_low
+            else R.string.dashboard_adjustment_reason_high
+            reasons += resourceHelper.gs(res, profileUtil.fromMgdlToStringInUnits(it))
+        }
+        glucoseStatus?.shortAvgDelta?.let {
+            val trendRes = when {
+                it > 0.5 -> R.string.dashboard_adjustment_trend_rising
+                it < -0.5 -> R.string.dashboard_adjustment_trend_falling
+                else -> R.string.dashboard_adjustment_trend_stable
+            }
+            reasons += resourceHelper.gs(R.string.dashboard_adjustment_reason_trend, resourceHelper.gs(trendRes))
+        }
+        if (reasons.isEmpty()) reasons += resourceHelper.gs(R.string.dashboard_adjustment_reason_unknown)
+        return resourceHelper.gs(R.string.dashboard_adjustment_safety, level, reasons.joinToString(", "))
+    }
+
+    private fun resolveModeLine(now: Long): String? {
+        val events = persistenceLayer.getTherapyEventDataFromTime(now - MODE_LOOKBACK_MS, TE.Type.NOTE, false)
+        var latest: Pair<TE, ModeKeyword>? = null
+        events.forEach { event ->
+            val keyword = modeKeywords.firstOrNull { event.note?.contains(it.token, ignoreCase = true) == true } ?: return@forEach
+            val remaining = event.timestamp + event.duration - now
+            if (remaining <= 0) return@forEach
+            if (latest == null || event.timestamp > latest!!.first.timestamp) {
+                latest = event to keyword
+            }
+        }
+        val result = latest ?: return null
+        val remaining = (result.first.timestamp + result.first.duration) - now
+        if (remaining <= 0) return null
+        val remainingText = dateUtil.age(remaining, true, resourceHelper).trim()
+        val modeName = resourceHelper.gs(result.second.labelRes)
+        return resourceHelper.gs(R.string.dashboard_adjustment_mode, modeName, remainingText)
+    }
+
+    private fun formatTherapyAge(event: TE?, now: Long): String {
+        return event?.let {
+            val diff = now - it.timestamp
+            dateUtil.age(diff, true, resourceHelper).trim()
+        } ?: resourceHelper.gs(app.aaps.core.ui.R.string.value_unavailable_short)
+    }
+
+    private fun trendSymbol(arrow: TrendArrow?): String = when (arrow) {
+        TrendArrow.DOUBLE_DOWN -> "⬇⬇"
+        TrendArrow.SINGLE_DOWN -> "⬇️"
+        TrendArrow.FORTY_FIVE_DOWN -> "↘️"
+        TrendArrow.FLAT -> "→"
+        TrendArrow.FORTY_FIVE_UP -> "↗️"
+        TrendArrow.SINGLE_UP -> "⬆️"
+        TrendArrow.DOUBLE_UP -> "⬆⬆"
+        else -> "→"
+    }
+
     class Factory(
         private val context: Context,
         private val lastBgData: LastBgData,
         private val trendCalculator: TrendCalculator,
         private val iobCobCalculator: IobCobCalculator,
+        private val glucoseStatusProvider: GlucoseStatusProvider,
         private val profileUtil: ProfileUtil,
         private val profileFunction: ProfileFunction,
         private val resourceHelper: ResourceHelper,
@@ -246,6 +399,7 @@ class OverviewViewModel(
                     lastBgData,
                     trendCalculator,
                     iobCobCalculator,
+                    glucoseStatusProvider,
                     profileUtil,
                     profileFunction,
                     resourceHelper,
@@ -263,6 +417,26 @@ class OverviewViewModel(
             throw IllegalArgumentException("Unknown ViewModel class $modelClass")
         }
     }
+
+    private data class ModeKeyword(val token: String, val labelRes: Int)
+
+    companion object {
+        private const val PREDICTION_LOOKAHEAD_MINUTES = 30L
+        private const val SAFETY_LIMITED_BG = 90.0
+        private const val SAFETY_CRITICAL_BG = 70.0
+        private val MODE_LOOKBACK_MS = TimeUnit.HOURS.toMillis(12)
+        private val modeKeywords = listOf(
+            ModeKeyword("meal", R.string.dashboard_mode_meal),
+            ModeKeyword("bfast", R.string.dashboard_mode_breakfast),
+            ModeKeyword("lunch", R.string.dashboard_mode_lunch),
+            ModeKeyword("dinner", R.string.dashboard_mode_dinner),
+            ModeKeyword("highcarb", R.string.dashboard_mode_highcarb),
+            ModeKeyword("lowcarb", R.string.dashboard_mode_lowcarb),
+            ModeKeyword("snack", R.string.dashboard_mode_snack),
+            ModeKeyword("sport", R.string.dashboard_mode_sport),
+            ModeKeyword("sleep", R.string.dashboard_mode_sleep)
+        )
+    }
 }
 
 data class StatusCardState(
@@ -278,4 +452,15 @@ data class StatusCardState(
     val timeAgoDescription: String,
     val isGlucoseActual: Boolean,
     val contentDescription: String
+)
+
+data class AdjustmentCardState(
+    val glycemiaLine: String,
+    val predictionLine: String,
+    val iobActivityLine: String,
+    val decisionLine: String,
+    val pumpLine: String,
+    val safetyLine: String,
+    val modeLine: String?,
+    val adjustments: List<String>
 )

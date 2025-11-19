@@ -12,18 +12,76 @@
             android:id="@+id/adjustment_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/dashboard_on_surface"
             android:text="@string/dashboard_adjustments"
-            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1"
+            android:textColor="@color/dashboard_on_surface" />
+
+        <TextView
+            android:id="@+id/glycemia_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
+            android:textColor="@color/dashboard_on_surface"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/prediction_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+            android:textColor="@color/dashboard_on_surface" />
+
+        <TextView
+            android:id="@+id/iob_activity_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+            android:textColor="@color/dashboard_on_surface" />
+
+        <TextView
+            android:id="@+id/decision_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+            android:textColor="@color/dashboard_on_surface" />
+
+        <TextView
+            android:id="@+id/mode_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+            android:textColor="@color/dashboard_on_surface"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/pump_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+            android:textColor="@color/dashboard_on_surface" />
+
+        <TextView
+            android:id="@+id/safety_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+            android:textColor="@color/dashboard_on_surface" />
 
         <TextView
             android:id="@+id/empty_message"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:textColor="@color/dashboard_on_surface"
             android:text="@string/dashboard_no_adjustments"
-            android:textAppearance="@style/TextAppearance.MaterialComponents.Body2" />
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+            android:textColor="@color/dashboard_on_surface" />
 
         <LinearLayout
             android:id="@+id/adjustment_container"

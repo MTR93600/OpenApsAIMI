@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.widget.TextViewCompat
 import com.google.android.material.card.MaterialCardView
 import app.aaps.plugins.main.databinding.ComponentAdjustmentStatusBinding
+import app.aaps.plugins.main.general.dashboard.viewmodel.AdjustmentCardState
 
 class AdjustmentStatusView @JvmOverloads constructor(
     context: Context,
@@ -20,13 +21,22 @@ class AdjustmentStatusView @JvmOverloads constructor(
 
     private val binding = ComponentAdjustmentStatusBinding.inflate(LayoutInflater.from(context), this)
 
-    fun update(adjustments: List<String>) {
-        binding.adjustmentContainer.removeAllViews()
-        if (adjustments.isEmpty()) {
-            binding.emptyMessage.visibility = View.VISIBLE
-            return
+    fun update(state: AdjustmentCardState) {
+        binding.glycemiaLine.text = state.glycemiaLine
+        binding.predictionLine.text = state.predictionLine
+        binding.iobActivityLine.text = state.iobActivityLine
+        binding.decisionLine.text = state.decisionLine
+        binding.pumpLine.text = state.pumpLine
+        binding.safetyLine.text = state.safetyLine
+        if (state.modeLine.isNullOrBlank()) {
+            binding.modeLine.visibility = View.GONE
+        } else {
+            binding.modeLine.text = state.modeLine
+            binding.modeLine.visibility = View.VISIBLE
         }
-        binding.emptyMessage.visibility = View.GONE
+        val adjustments = state.adjustments
+        binding.adjustmentContainer.removeAllViews()
+        binding.emptyMessage.visibility = if (adjustments.isEmpty()) View.VISIBLE else View.GONE
         val chipVerticalPadding = resources.getDimensionPixelSize(app.aaps.plugins.main.R.dimen.dashboard_chip_padding_vertical)
         val chipHorizontalPadding = resources.getDimensionPixelSize(app.aaps.plugins.main.R.dimen.dashboard_chip_padding_horizontal)
         val chipSpacing = resources.getDimensionPixelSize(app.aaps.plugins.main.R.dimen.dashboard_chip_spacing)

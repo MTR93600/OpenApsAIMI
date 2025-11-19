@@ -6,11 +6,13 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.viewModels
+import app.aaps.core.interfaces.automation.Automation
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
 import app.aaps.core.interfaces.iob.IobCobCalculator
+import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.overview.LastBgData
 import app.aaps.core.interfaces.overview.OverviewData
 import app.aaps.core.interfaces.overview.OverviewMenus
@@ -37,6 +39,7 @@ import app.aaps.plugins.main.R
 import app.aaps.plugins.main.databinding.FragmentDashboardBinding
 import app.aaps.plugins.main.general.dashboard.viewmodel.OverviewViewModel
 import app.aaps.plugins.main.general.overview.graphData.GraphData
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.android.support.DaggerFragment
 import javax.inject.Inject
 import javax.inject.Provider
@@ -46,6 +49,7 @@ class DashboardFragment : DaggerFragment() {
     @Inject lateinit var lastBgData: LastBgData
     @Inject lateinit var trendCalculator: TrendCalculator
     @Inject lateinit var iobCobCalculator: IobCobCalculator
+    @Inject lateinit var glucoseStatusProvider: GlucoseStatusProvider
     @Inject lateinit var profileUtil: ProfileUtil
     @Inject lateinit var profileFunction: ProfileFunction
     @Inject lateinit var resourceHelper: ResourceHelper
@@ -66,6 +70,7 @@ class DashboardFragment : DaggerFragment() {
     @Inject lateinit var protectionCheck: ProtectionCheck
     @Inject lateinit var uiInteraction: UiInteraction
     @Inject lateinit var aapsLogger: AAPSLogger
+    @Inject lateinit var automation: Automation
 
     private var _binding: FragmentDashboardBinding? = null
     private val binding get() = _binding!!
@@ -76,6 +81,7 @@ class DashboardFragment : DaggerFragment() {
             lastBgData,
             trendCalculator,
             iobCobCalculator,
+            glucoseStatusProvider,
             profileUtil,
             profileFunction,
             resourceHelper,
@@ -121,7 +127,7 @@ class DashboardFragment : DaggerFragment() {
         }
 
         viewModel.statusCardState.observe(viewLifecycleOwner) { binding.statusCard.update(it) }
-        viewModel.adjustmentState.observe(viewLifecycleOwner) { binding.adjustmentStatus.update(it) }
+        viewModel.adjustmentState.observe(viewLifecycleOwner) { state -> state?.let { binding.adjustmentStatus.update(it) } }
         viewModel.graphMessage.observe(viewLifecycleOwner) {
             binding.glucoseGraph.setUpdateMessage(it)
             updateGraph()
@@ -162,7 +168,16 @@ class DashboardFragment : DaggerFragment() {
     }
 
     private fun openAdjustments(): Boolean {
-        startActivity(Intent(requireContext(), uiInteraction.historyBrowseActivity))
+        val context = context ?: return false
+        val actions = automation.userEvents().filter { it.isEnabled && it.canRun() }
+        val message = if (actions.isEmpty())
+            resourceHelper.gs(R.string.dashboard_user_actions_empty)
+        else actions.joinToString("\n") { "• ${it.title}" }
+        MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.dashboard_nav_adjustments)
+            .setMessage(message)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
         return true
     }
 
