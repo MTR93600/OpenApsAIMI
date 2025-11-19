@@ -947,12 +947,12 @@
     <string name="console_smb_log">\n🧪 SMB: proposto=%.2f → applicato=%.2f [IOB residua%s×%.2f, attività fisica%s×%.2f, digestione lenta%s×%.2f] → finale=%.2f%s</string>
     <string name="console_smb_log_2">\n🧪 SMB: proposto=%.2f → applicato=%.2f → finale=%.2f%s</string>
     <string name="console_high_bg_override"> (preferenze Glicemia&gt;120 in uso)</string>
-    <string name="ai_force_basal_reason_snack">AI forzatura basale perchè Modalità manuale pasto Snack</string>
-    <string name="ai_force_basal_reason_meal">AI forzatura basale perchè Modalità manuale pasto Pasto</string>
-    <string name="ai_force_basal_reason_lunch">AI forzatura basale perchè Modalità manuale pasto Pranzo</string>
-    <string name="ai_force_basal_reason_dinner">AI forzatura basale perchè Modalità manuale pasto Cena</string>
-    <string name="ai_force_basal_reason_highcarb">AI forzatura basale perchè Modalità manuale pasto High Carb</string>
-    <string name="ai_force_basal_reason_fasting">AI forzatura basale perchè Modalità manuale Digiuno</string>
+    <string name="ai_force_basal_reason_snack">AI forzatura basale perché Modalità manuale pasto Snack</string>
+    <string name="ai_force_basal_reason_meal">AI forzatura basale perché Modalità manuale pasto Pasto</string>
+    <string name="ai_force_basal_reason_lunch">AI forzatura basale perché Modalità manuale pasto Pranzo</string>
+    <string name="ai_force_basal_reason_dinner">AI forzatura basale perché Modalità manuale pasto Cena</string>
+    <string name="ai_force_basal_reason_highcarb">AI forzatura basale perché Modalità manuale pasto High Carb</string>
+    <string name="ai_force_basal_reason_fasting">AI forzatura basale perché Modalità manuale Digiuno</string>
     <string name="reason_dia_reactivity">📈 DIA: %1$s | REATT◁120 Mattina: %2$.1f%% | Pomeriggio: %3$.1f%% | Sera: %4$.1f%%</string>
     <string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Modalità snack/prebolo: %2$s | </string>
     <string name="autodrive_condition">&#160;Autodrive condizioni: %1$s</string>
