@@ -74,6 +74,46 @@ class DashboardFragment : DaggerFragment() {
 
     private var _binding: FragmentDashboardBinding? = null
     private val binding get() = _binding!!
+    private fun sensor(): Boolean {
+        val ctx = context ?: return false
+
+        // BG source actuellement utilisée dans AAPS
+        val bgSource = activePlugin.activeBgSource as? PluginBase
+
+        // On force en String pour pouvoir utiliser contains(ignoreCase = true)
+        val pluginName = bgSource
+            ?.pluginDescription
+            ?.pluginName
+            ?.toString()
+            .orEmpty()
+
+        return when {
+            pluginName.contains("dexcom", ignoreCase = true) -> {
+                // Essaye d’ouvrir l’appli Dexcom
+                launchPackageIfExists(ctx, "com.dexcom.g6") ||   // à adapter selon ta config
+                    launchPackageIfExists(ctx, "com.dexcom.one") ||  // ex. Dexcom One
+                    openSettings()                                   // fallback
+            }
+            pluginName.contains("xdrip", ignoreCase = true) -> {
+                // Essaye d’ouvrir xDrip
+                launchPackageIfExists(ctx, "com.eveningoutpost.dexdrip") || openSettings()
+            }
+            else -> {
+                // Ni Dexcom ni xDrip détecté → on ouvre les prefs
+                openSettings()
+            }
+        }
+    }
+    private fun launchPackageIfExists(ctx: android.content.Context, packageName: String): Boolean {
+        val pm = ctx.packageManager
+        val intent = pm.getLaunchIntentForPackage(packageName)
+        return if (intent != null) {
+            startActivity(intent)
+            true
+        } else {
+            false
+        }
+    }
 
     private val viewModel: OverviewViewModel by viewModels {
         OverviewViewModel.Factory(
@@ -114,13 +154,13 @@ class DashboardFragment : DaggerFragment() {
                     openHistory()
                 }
                 R.id.dashboard_nav_bolus -> {
-                    openBolusWizard()
+                    openBolus()
                 }
                 R.id.dashboard_nav_adjustments -> {
                     openModes()
                 }
                 R.id.dashboard_nav_settings -> {
-                    openSettings()
+                    sensor()
                 }
                 else -> true
             }
@@ -160,10 +200,10 @@ class DashboardFragment : DaggerFragment() {
         return true
     }
 
-    private fun openBolusWizard(): Boolean {
+    private fun openBolus(): Boolean {
         activity?.let { activity ->
             protectionCheck.queryProtection(activity, ProtectionCheck.Protection.BOLUS, UIRunnable {
-                uiInteraction.runWizardDialog(childFragmentManager)
+                uiInteraction.runInsulinDialog(childFragmentManager)
             })
         }
         return true
