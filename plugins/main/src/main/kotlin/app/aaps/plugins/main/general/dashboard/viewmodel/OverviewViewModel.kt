@@ -38,6 +38,7 @@ import app.aaps.core.interfaces.utils.TrendCalculator
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.objects.extensions.directionToIcon
 import app.aaps.core.objects.extensions.displayText
+import java.io.Serializable
 import app.aaps.core.objects.extensions.round
 import app.aaps.core.objects.extensions.isInProgress
 import app.aaps.core.objects.extensions.toStringFull
@@ -182,7 +183,7 @@ class OverviewViewModel(
     private fun totalIobText(): String {
         val bolus = bolusIob()
         val basal = basalIob()
-        val total = bolus.iob + basal.basaliob
+        val total = abs(bolus.iob + basal.basaliob)
         return resourceHelper.gs(app.aaps.core.ui.R.string.format_insulin_units, total)
     }
 
@@ -463,4 +464,4 @@ data class AdjustmentCardState(
     val safetyLine: String,
     val modeLine: String?,
     val adjustments: List<String>
-)
+) : Serializable

@@ -164,6 +164,13 @@
     <string name="dashboard_nav_history">History</string>
     <string name="dashboard_nav_bolus">Bolus/Carbs</string>
     <string name="dashboard_nav_adjustments">Adjustments</string>
+    <string name="dashboard_nav_modes">Modes</string>
+    <string name="dashboard_modes_description">Manage your personalized modes and trigger their actions instantly.</string>
+    <string name="dashboard_modes_list_title">Available modes</string>
+    <string name="dashboard_modes_empty">No user actions are available right now.</string>
+    <string name="dashboard_adjustments_details_title">Adjustments</string>
+    <string name="dashboard_adjustments_details_decisions">Loop decisions</string>
+    <string name="dashboard_adjustments_details_empty">No active adjustments.</string>
     <string name="dashboard_nav_settings">Settings</string>
     <string name="dashboard_adjustments">Active adjustments</string>
     <string name="dashboard_no_adjustments">No active adjustments</string>

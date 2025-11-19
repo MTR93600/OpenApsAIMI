@@ -37,9 +37,9 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.UIRunnable
 import app.aaps.plugins.main.R
 import app.aaps.plugins.main.databinding.FragmentDashboardBinding
+import app.aaps.plugins.main.general.dashboard.viewmodel.AdjustmentCardState
 import app.aaps.plugins.main.general.dashboard.viewmodel.OverviewViewModel
 import app.aaps.plugins.main.general.overview.graphData.GraphData
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.android.support.DaggerFragment
 import javax.inject.Inject
 import javax.inject.Provider
@@ -117,7 +117,7 @@ class DashboardFragment : DaggerFragment() {
                     openBolusWizard()
                 }
                 R.id.dashboard_nav_adjustments -> {
-                    openAdjustments()
+                    openModes()
                 }
                 R.id.dashboard_nav_settings -> {
                     openSettings()
@@ -133,7 +133,9 @@ class DashboardFragment : DaggerFragment() {
             updateGraph()
         }
 
-        binding.adjustmentStatus.setOnClickListener { openAdjustments() }
+        binding.adjustmentStatus.isClickable = true
+        binding.adjustmentStatus.isFocusable = true
+        binding.adjustmentStatus.setOnClickListener { openAdjustmentDetails() }
         binding.glucoseGraph.graph.gridLabelRenderer?.gridColor = resourceHelper.gac(requireContext(), app.aaps.core.ui.R.attr.graphGrid)
         binding.glucoseGraph.graph.gridLabelRenderer?.reloadStyles()
     }
@@ -167,17 +169,18 @@ class DashboardFragment : DaggerFragment() {
         return true
     }
 
-    private fun openAdjustments(): Boolean {
+    private fun openModes(): Boolean {
         val context = context ?: return false
-        val actions = automation.userEvents().filter { it.isEnabled && it.canRun() }
-        val message = if (actions.isEmpty())
-            resourceHelper.gs(R.string.dashboard_user_actions_empty)
-        else actions.joinToString("\n") { "• ${it.title}" }
-        MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.dashboard_nav_adjustments)
-            .setMessage(message)
-            .setPositiveButton(android.R.string.ok, null)
-            .show()
+        startActivity(Intent(context, DashboardModesActivity::class.java))
+        return true
+    }
+
+    private fun openAdjustmentDetails(): Boolean {
+        val context = context ?: return false
+        val state: AdjustmentCardState = viewModel.adjustmentState.value ?: return false
+        val intent = Intent(context, AdjustmentDetailsActivity::class.java)
+            .putExtra(AdjustmentDetailsActivity.EXTRA_ADJUSTMENT_STATE, state)
+        startActivity(intent)
         return true
     }
 

@@ -28,6 +28,16 @@
             android:exported="false"
             android:theme="@style/AppTheme" />
 
+        <activity
+            android:name=".general.dashboard.DashboardModesActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+
+        <activity
+            android:name=".general.dashboard.AdjustmentDetailsActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+
         <service android:name=".general.persistentNotification.DummyService" />
 
         <service
