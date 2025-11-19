@@ -55,7 +55,7 @@ class DashboardModesActivity : TranslatedDaggerAppCompatActivity() {
                 setOnClickListener {
                     OKDialog.showConfirmation(
                         this@DashboardModesActivity,
-                        resourceHelper.gs(app.aaps.core.ui.R.string.run_question, event.title)
+                        resourceHelper.gs(app.aaps.core.ui.R.string.dashboard_run_question, event.title)
                     ) {
                         handler.post { automation.processEvent(event) }
                     }

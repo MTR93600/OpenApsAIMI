@@ -261,6 +261,7 @@
     <string name="pump_battery_change">Pump Battery Change</string>
     <string name="temporary_target">Temporary target</string>
     <string name="running_mode">Running mode</string>
+    <string name="dashboard_run_question">Run %1$s?</string>
     <string name="careportal_temporarytargetvalue">Temporary target value</string>
     <string name="careportal_temporarytargetcancel">Temporary target cancel</string>
     <string name="boluswizard">Bolus wizard</string>
