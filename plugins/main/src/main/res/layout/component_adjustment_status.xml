@@ -8,22 +8,22 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <TextView
-            android:id="@+id/adjustment_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/dashboard_adjustments"
-            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1"
-            android:textColor="@color/dashboard_on_surface" />
+<!--        <TextView-->
+<!--            android:id="@+id/adjustment_title"-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:text="@string/dashboard_adjustments"-->
+<!--            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1"-->
+<!--            android:textColor="@color/dashboard_on_surface" />-->
 
-        <TextView
-            android:id="@+id/glycemia_line"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
-            android:textColor="@color/dashboard_on_surface"
-            android:textStyle="bold" />
+<!--        <TextView-->
+<!--            android:id="@+id/glycemia_line"-->
+<!--            android:layout_width="match_parent"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:layout_marginTop="12dp"-->
+<!--            android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"-->
+<!--            android:textColor="@color/dashboard_on_surface"-->
+<!--            android:textStyle="bold" />-->
 
         <TextView
             android:id="@+id/prediction_line"
@@ -63,9 +63,6 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:drawablePadding="8dp"
-            android:drawableStart="@drawable/ic_reservoir"
-            android:drawableTint="@color/dashboard_on_surface"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
             android:textColor="@color/dashboard_on_surface" />
 
@@ -74,9 +71,6 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:drawablePadding="8dp"
-            android:drawableStart="@drawable/ic_cp_age_sensor"
-            android:drawableTint="@color/dashboard_on_surface"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
             android:textColor="@color/dashboard_on_surface" />
 

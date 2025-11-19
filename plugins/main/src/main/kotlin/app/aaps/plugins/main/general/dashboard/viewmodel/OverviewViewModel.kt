@@ -1,6 +1,8 @@
 package app.aaps.plugins.main.general.dashboard.viewmodel
 
 import android.content.Context
+import android.graphics.Paint
+import android.view.View
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -43,6 +45,10 @@ import app.aaps.core.objects.extensions.round
 import app.aaps.core.objects.extensions.isInProgress
 import app.aaps.core.objects.extensions.toStringFull
 import app.aaps.core.objects.extensions.toStringShort
+import app.aaps.core.ui.dialogs.OKDialog
+import app.aaps.core.ui.extensions.runOnUiThread
+import app.aaps.core.ui.extensions.toVisibility
+import app.aaps.core.ui.extensions.toVisibilityKeepSpace
 import app.aaps.plugins.main.R
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
@@ -163,6 +169,7 @@ class OverviewViewModel(
             resourceHelper.gs(R.string.a11y_blood_glucose) + " " +
                 glucoseText + " " + lastBgData.lastBgDescription() + " " + timeAgoLong
 
+
         val state = StatusCardState(
             glucoseText = glucoseText,
             glucoseColor = lastBgData.lastBgColor(context),
@@ -214,7 +221,7 @@ class OverviewViewModel(
         val glucoseStatus = glucoseStatusProvider.glucoseStatusData
         val adjustments = buildActiveAdjustments(now)
         val state = AdjustmentCardState(
-            glycemiaLine = buildGlycemiaLine(lastBg, trendArrow, glucoseStatus),
+            //glycemiaLine = buildGlycemiaLine(lastBg, trendArrow, glucoseStatus),
             predictionLine = buildPredictionLine(now),
             iobActivityLine = buildIobActivityLine(),
             decisionLine = buildDecisionLine(),
@@ -456,7 +463,7 @@ data class StatusCardState(
 )
 
 data class AdjustmentCardState(
-    val glycemiaLine: String,
+    //val glycemiaLine: String,
     val predictionLine: String,
     val iobActivityLine: String,
     val decisionLine: String,
