@@ -39,20 +39,14 @@ import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
 import app.aaps.plugins.aps.openAPSAIMI.model.BasalPlan
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
 import app.aaps.plugins.aps.openAPSAIMI.model.LoopContext
-import app.aaps.plugins.aps.openAPSAIMI.model.SafetyReport
-import app.aaps.plugins.aps.openAPSAIMI.model.SmbPlan
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.MealAggressionContext
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
-import app.aaps.plugins.aps.openAPSAIMI.ports.MlUamPort
 import app.aaps.plugins.aps.openAPSAIMI.ports.PkpdPort
-import app.aaps.plugins.aps.openAPSAIMI.ports.SafetyGuards
-import app.aaps.plugins.aps.openAPSAIMI.safety.HighBgOverride
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoTools
 import app.aaps.plugins.aps.openAPSAIMI.safety.SafetyDecision
-import app.aaps.plugins.aps.openAPSAIMI.smb.MealHighIobDecision
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbDampingUsecase
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbInstructionExecutor
 import app.aaps.plugins.aps.openAPSAIMI.smb.computeMealHighIobDecision
@@ -62,7 +56,6 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionEngine
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionProfiler
-import app.aaps.plugins.aps.openAPSAIMI.pkpd.IobActionProfile
 import java.io.File
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -86,33 +79,6 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
-
-// 📝 Structure & helper pour partager la logique de relâchement du plafond IOB en mode repas.
-// internal data class MealHighIobDecision(val relax: Boolean, val damping: Double)
-//
-// // 📝 Calcule si l'on peut assouplir le plafond IOB lors d'un repas montant et le facteur de réduction associé.
-// internal fun computeMealHighIobDecision(
-//     mealModeActive: Boolean,
-//     bg: Double,
-//     delta: Double,
-//     eventualBg: Double,
-//     targetBg: Double,
-//     iob: Double,
-//     maxIob: Double
-// ): MealHighIobDecision {
-//     if (!mealModeActive) return MealHighIobDecision(false, 1.0)
-//     if (maxIob <= 0.0) return MealHighIobDecision(false, 1.0)
-//     if (iob <= maxIob) return MealHighIobDecision(false, 1.0)
-//     if (bg <= max(120.0, targetBg)) return MealHighIobDecision(false, 1.0)
-//     if (delta <= 0.5) return MealHighIobDecision(false, 1.0)
-//     if (eventualBg <= targetBg + 10.0) return MealHighIobDecision(false, 1.0)
-//     val slack = maxIob * 0.3
-//     if (slack <= 0.0) return MealHighIobDecision(false, 1.0)
-//     if (iob > maxIob + slack) return MealHighIobDecision(false, 1.0)
-//     val excessFraction = ((iob - maxIob) / slack).coerceIn(0.0, 1.0)
-//     val damping = 1.0 - 0.5 * excessFraction
-//     return MealHighIobDecision(true, damping)
-// }
 
 /**
  * Main orchestrator for the AIMI loop.
@@ -175,10 +141,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val context: Context = context.applicationContext
     private val EPS_FALL = 0.3      // mg/dL/5min : seuil de baisse
     private val EPS_ACC  = 0.2      // mg/dL/5min : seuil d'écart short vs long
-    // — Hypo guard —
-    private val HYPO_MARGIN_BASE = 0.0     // mg/dL
-    private val HYPO_MARGIN_FALL  = 5.0    // delta <= -1.5 mg/dL/5min
-    private val HYPO_MARGIN_FAST  = 10.0   // delta <= -3.0 mg/dL/5min
     private var lateFatRiseFlag: Boolean = false
     // — Hystérèse anti-pompage —
     private val HYPO_RELEASE_MARGIN   = 5.0      // mg/dL au-dessus du seuil
@@ -407,44 +369,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         }
     }
-    private class MlUamPortAdapter(
-        private val context: android.content.Context
-    ) : MlUamPort {
-        override fun predictSmbDelta(ctx: LoopContext): Double {
-            // ⚠️ Construit EXACTEMENT le vecteur actuel :
-            val features = floatArrayOf(
-                ctx.bg.mgdl.toFloat(),
-                ctx.bg.delta5.toFloat(),
-                (ctx.bg.shortAvgDelta ?: 0.0).toFloat(),
-                (ctx.bg.longAvgDelta ?: 0.0).toFloat(),
-                (ctx.bg.accel ?: 0.0).toFloat(),
-                ctx.iobU.toFloat(),
-                ctx.cobG.toFloat(),
-                (ctx.bg.combinedDelta ?: 0.0).toFloat()
-                // ⬅️ Ajoute ici toute autre feature utilisée aujourd’hui, dans le même ordre !
-            )
-            val out = AimiUamHandler.predictSmbUam(features, /*reason*/null, context)
-            return out.toDouble()
-        }
-    }
-    private class SafetyGuardsAdapter(
-        private val hypoThreshold: Double,
-        private val marginFast: Double = 10.0,
-        private val marginFall: Double = 5.0
-    ) : SafetyGuards {
-        override fun apply(ctx: LoopContext, basal: BasalPlan?, smb: SmbPlan?): SafetyReport {
-            val d = ctx.bg.delta5
-            val margin = when {
-                d <= -3.0 -> marginFast
-                d <= -1.5 -> marginFall
-                else -> 0.0
-            }
-            val hypoRisk = (ctx.bg.mgdl <= hypoThreshold + margin) || (ctx.eventualBg <= hypoThreshold + margin)
-            val blocked = hypoRisk && ((smb?.units ?: 0.0) > 0.0)
-            return SafetyReport(hypoBlocked = blocked, notes = emptyList())
-        }
-    }
-
 
     private val nightGrowthLearner = NightGrowthResistanceLearner()
 
@@ -2657,7 +2581,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 4️⃣ Nombre de pas
         stepCount?.let {
             when {
-                it > 500 -> {
+                it > 1000 -> {
                     val stepAdj = it * 0.015
                     dynamicPeakTime += stepAdj
 //              reasonBuilder.append("  • Pas ($it) ➝ +$stepAdj\n")
@@ -2679,8 +2603,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 //              reasonBuilder.append("  • FC élevée ($it) ➝ x1.15\n")
                     reasonBuilder.append(context.getString(R.string.reason_high_hr, it))
                 }
-                it < 55 -> {
-                    dynamicPeakTime *= 0.85
+                it < 70 -> {
+                    dynamicPeakTime *= 0.65
 //              reasonBuilder.append("  • FC basse ($it) ➝ x0.85\n")
                     reasonBuilder.append(context.getString(R.string.reason_low_hr, it))
                 }
@@ -2693,7 +2617,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 dynamicPeakTime *= 1.2
 //          reasonBuilder.append("  • Activité intense ➝ x1.2\n")
                 reasonBuilder.append(context.getString(R.string.reason_high_activity))
-            } else if (stepCount < 200 && heartRate < 50) {
+            } else if (stepCount < 200 && heartRate < 70) {
                 dynamicPeakTime *= 0.75
 //          reasonBuilder.append("  • Repos total ➝ x0.75\n")
                 reasonBuilder.append(context.getString(R.string.reason_total_rest))
@@ -2847,12 +2771,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Si aucun changement n'est enregistré, vous pouvez définir une valeur par défaut
             0f
         }
+        val effectiveDiaH = pkpdRuntime?.params?.diaHrs
+            ?: profile.dia   // → ou ton DIA ajusté SI PKPD est désactivé
 
+        val effectivePeakMin = pkpdRuntime?.params?.peakMin
+            ?: profile.peakTime  // idem, legacy seulement en fallback
         val recentDeltas = getRecentDeltas()
         val predicted = predictedDelta(recentDeltas)
+        val useLegacyDynamics = (pkpdRuntime == null)
         // Calcul du delta combiné : on combine le delta mesuré et le delta prédit
         val combinedDelta = (delta + predicted) / 2.0f
-        val tp = calculateDynamicPeakTime(
+        val tp = if (useLegacyDynamics) {
+        calculateDynamicPeakTime(
             currentActivity = profile.currentActivity,
             futureActivity = profile.futureActivity,
             sensorLagActivity = profile.sensorLagActivity,
@@ -2864,6 +2794,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             combinedDelta,
             reasonAimi
         )
+        } else {
+            pkpdRuntime.params.peakMin
+        }
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
 
         val calendarInstance = Calendar.getInstance()
@@ -3691,7 +3624,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.appendLine("💉 SMB (UAM): ${"%.2f".format(modelcal)} U")
             this.predictedSMB = modelcal
         }
-
+        val pkpdDiaMinutesOverride: Double? = pkpdRuntime?.params?.diaHrs?.let { it * 60.0 } // PKPD donne des heures → on passe en minutes
+        val useLegacyDynamicsdia = pkpdDiaMinutesOverride == null
         val smbExecution = SmbInstructionExecutor.execute(
             SmbInstructionExecutor.Input(
                 context = context,
@@ -3760,7 +3694,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     adjustFactorsBasedOnBgAndHypo(morning, afternoon, evening)
                 },
                 calculateAdjustedDia = { baseDia, currentHour, steps5, currentHr, avgHr60, pumpAge, iobValue ->
-                    calculateAdjustedDIA(baseDia, currentHour, steps5, currentHr, avgHr60, pumpAge, iobValue)
+                    // 🔀 Si PKPD est actif → on impose son DIA (en minutes)
+                    if (!useLegacyDynamicsdia && pkpdDiaMinutesOverride != null) {
+                        pkpdDiaMinutesOverride
+                    } else {
+                        // 🔙 Sinon on garde toute ta logique dynamique legacy
+                        calculateAdjustedDIA(
+                            baseDia,
+                            currentHour,
+                            steps5,
+                            currentHr,
+                            avgHr60,
+                            pumpAge,
+                            iobValue
+                        )
+                    }
                 },
                 costFunction = { basalInput, bgInput, targetInput, horizon, sensitivity, candidate ->
                     costFunction(basalInput, bgInput, targetInput, horizon, sensitivity, candidate)

@@ -29,7 +29,7 @@ class BasalPlanner @Inject constructor(
     private val ZERO_RESUME_FRAC = 0.50       // 25% du profil
     private val ZERO_RESUME_MAX_MIN = 30
 
-    private val HIGH_BG = 160.0
+    private val HIGH_BG = 120.0
     private val PLATEAU_DELTA_ABS = 3.0       // mg/dL/5min
     private val KICK_FRAC = 0.15              // +15% profil
     private val KICK_MIN_UPH = 0.20
