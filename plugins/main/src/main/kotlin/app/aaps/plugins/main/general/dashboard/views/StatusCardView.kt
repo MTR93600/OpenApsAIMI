@@ -36,7 +36,7 @@ class StatusCardView @JvmOverloads constructor(
         binding.glucoseValue.paintFlags =
             if (state.isGlucoseActual) binding.glucoseValue.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
             else binding.glucoseValue.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
-        binding.trendDescription.text = state.trendDescription
+        //binding.trendDescription.text = state.trendDescription
         binding.loopIndicator.alpha = if (state.loopIsRunning) 1f else 0.4f
         contentDescription = state.contentDescription
     }
