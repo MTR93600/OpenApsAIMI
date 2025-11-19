@@ -486,7 +486,8 @@ object SmbInstructionExecutor {
         val highBgTag = if (highBgOverrideFlag) " (HighBG override)" else ""
         if (audit != null) {
             input.rT.reason.append(
-                "\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f (relief=%.0f%%, %s), ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s%s".format(
+              //"\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f (relief=%.0f%%, %s), ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s%s".format(
+                input.context.getString(R.string.console_smb_log,
                     smbDecision,
                     dampedRaw,
                     if (audit.tailApplied) "✔" else "✘", audit.tailMult,
@@ -497,22 +498,23 @@ object SmbInstructionExecutor {
                     quantized,
                     highBgTag,
                     bypassTag,
-                    smbAfterDamping,     // après override
-                    quantized,
-                    highBgTag
+                  //smbAfterDamping,     // après override
+                  //quantized,
+                  //highBgTag
                 )
             )
         } else {
             input.rT.reason.append(
-                "\nSMB: proposed=%.2f → damped=%.2f → quantized=%.2f%s%s".format(
+              //"\nSMB: proposed=%.2f → damped=%.2f → quantized=%.2f%s%s".format(
+                input.context.getString(R.string.console_smb_log_2,
                     smbDecision,
                     dampedRaw,
                     quantized,
                     highBgTag,
                     bypassTag,
-                    smbAfterDamping,     // après override
-                    quantized,
-                    highBgTag
+                  //smbAfterDamping,     // après override
+                  //quantized,
+                  //highBgTag
                 )
             )
         }
