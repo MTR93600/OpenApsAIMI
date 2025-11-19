@@ -28,8 +28,7 @@ class StatusCardView @JvmOverloads constructor(
         binding.trendArrow.visibility = if (state.trendArrowRes == null) View.GONE else View.VISIBLE
         state.trendArrowRes?.let { binding.trendArrow.setImageResource(it) }
         binding.trendArrow.contentDescription = state.trendDescription
-        //glycemiaLinebinding.iobValue.text = state.iobText
-        //binding.cobValue.text = state.cobText
+        binding.trendDelta.text = state.deltaText
         binding.loopStatus.text = state.loopStatusText
         binding.timeAgo.text = state.timeAgo
         binding.timeAgo.contentDescription = state.timeAgoDescription

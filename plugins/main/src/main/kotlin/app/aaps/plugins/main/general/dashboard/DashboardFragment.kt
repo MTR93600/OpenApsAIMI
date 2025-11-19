@@ -1,10 +1,13 @@
 package app.aaps.plugins.main.general.dashboard
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.annotation.RequiresApi
 import androidx.fragment.app.viewModels
 import app.aaps.core.interfaces.automation.Automation
 import app.aaps.core.interfaces.configuration.Config
@@ -22,6 +25,8 @@ import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.protection.ProtectionCheck
 import app.aaps.core.interfaces.ui.UiInteraction
+import app.aaps.core.interfaces.source.DexcomBoyda
+import app.aaps.core.interfaces.source.XDripSource
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.PluginBase
@@ -71,6 +76,8 @@ class DashboardFragment : DaggerFragment() {
     @Inject lateinit var uiInteraction: UiInteraction
     @Inject lateinit var aapsLogger: AAPSLogger
     @Inject lateinit var automation: Automation
+    @Inject lateinit var xDripSource: XDripSource
+    @Inject lateinit var dexcomBoyda: DexcomBoyda
 
     private var _binding: FragmentDashboardBinding? = null
     private val binding get() = _binding!!
@@ -157,7 +164,7 @@ class DashboardFragment : DaggerFragment() {
                     openBolus()
                 }
                 R.id.dashboard_nav_adjustments -> {
-                    openModes()
+                    openSensorApp()
                 }
                 R.id.dashboard_nav_settings -> {
                     sensor()
@@ -213,6 +220,30 @@ class DashboardFragment : DaggerFragment() {
         val context = context ?: return false
         startActivity(Intent(context, DashboardModesActivity::class.java))
         return true
+    }
+
+    @RequiresApi(Build.VERSION_CODES.CUPCAKE)
+    private fun openSensorApp(): Boolean {
+        if (xDripSource.isEnabled()) return openCgmApp("com.eveningoutpost.dexdrip")
+        if (dexcomBoyda.isEnabled()) {
+            dexcomBoyda.dexcomPackages().forEach { if (openCgmApp(it)) return true }
+        }
+        return openModes()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.CUPCAKE)
+    private fun openCgmApp(packageName: String): Boolean {
+        val context = context ?: return false
+        val packageManager = context.packageManager
+        return try {
+            val intent = packageManager.getLaunchIntentForPackage(packageName) ?: throw ActivityNotFoundException()
+            intent.addCategory(Intent.CATEGORY_LAUNCHER)
+            context.startActivity(intent)
+            true
+        } catch (_: ActivityNotFoundException) {
+            aapsLogger.debug(LTag.CORE, "Error opening CGM app")
+            false
+        }
     }
 
     private fun openAdjustmentDetails(): Boolean {

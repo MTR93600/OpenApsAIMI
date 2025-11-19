@@ -158,6 +158,9 @@ class OverviewViewModel(
         val glucoseText = profileUtil.fromMgdlToStringInUnits(lastBg?.recalculated)
         val trendArrow = trendCalculator.getTrendArrow(iobCobCalculator.ads)?.directionToIcon()
         val trendDescription = trendCalculator.getTrendDescription(iobCobCalculator.ads) ?: ""
+        val deltaText = glucoseStatusProvider.glucoseStatusData?.shortAvgDelta?.let {
+            profileUtil.fromMgdlToSignedStringInUnits(it)
+        } ?: resourceHelper.gs(app.aaps.core.ui.R.string.value_unavailable_short)
         val iobText = totalIobText()
         val cobText = iobCobCalculator
             .getCobInfo("Dashboard COB")
@@ -175,6 +178,7 @@ class OverviewViewModel(
             glucoseColor = lastBgData.lastBgColor(context),
             trendArrowRes = trendArrow,
             trendDescription = trendDescription,
+            deltaText = deltaText,
             iobText = iobText,
             cobText = cobText,
             loopStatusText = loopStatusText(loop.runningMode),
@@ -452,6 +456,7 @@ data class StatusCardState(
     val glucoseColor: Int,
     val trendArrowRes: Int?,
     val trendDescription: String,
+    val deltaText: String,
     val iobText: String,
     val cobText: String,
     val loopStatusText: String,
