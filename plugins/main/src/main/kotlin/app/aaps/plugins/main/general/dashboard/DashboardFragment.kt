@@ -164,10 +164,10 @@ class DashboardFragment : DaggerFragment() {
                     openBolus()
                 }
                 R.id.dashboard_nav_adjustments -> {
-                    openSensorApp()
+                    openModes()
                 }
                 R.id.dashboard_nav_settings -> {
-                    sensor()
+                    openSensorApp()
                 }
                 else -> true
             }
