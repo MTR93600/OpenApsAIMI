@@ -1020,11 +1020,11 @@
 
     <!-- AIMIAdaptiveBasal -->
 
-    <string name="aimi_profile_basal_zero">Basale profilo = 0&#160;</string>
-    <string name="aimi_micro_resume">Micro-ripresa dopo %1$d min a 0U/h → %2$sU/h × %3$d min&#160;</string>
-    <string name="aimi_plateau_kicker">Spinta plateau (BG=%1$s, Δ≈0, R2=%2$s) → %3$sU/h × %4$d min&#160;</string>
-    <string name="aimi_anti_stall_bias">Spinta anti-stallo (+%1$d%%) perché R2=%2$s e Δ≈0&#160;</string>
-    <string name="aimi_no_action">Nessuna azione AIMI+&#160;</string>
+    <string name="aimi_profile_basal_zero">basale profilo = 0&#160;</string>
+    <string name="aimi_micro_resume">micro-ripresa dopo %1$d min a 0U/h → %2$sU/h × %3$d min&#160;</string>
+    <string name="aimi_plateau_kicker">spinta plateau (BG=%1$s, Δ≈0, R2=%2$s) → %3$sU/h × %4$d min&#160;</string>
+    <string name="aimi_anti_stall_bias">spinta anti-stallo (+%1$d%%) perché R2=%2$s e Δ≈0&#160;</string>
+    <string name="aimi_no_action">nessuna azione AIMI+&#160;</string>
 
 
     <!-- AIMI: Plateau / smart hyperglycemia -->
