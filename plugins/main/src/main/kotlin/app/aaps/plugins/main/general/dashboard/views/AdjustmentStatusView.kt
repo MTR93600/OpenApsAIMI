@@ -22,7 +22,7 @@ class AdjustmentStatusView @JvmOverloads constructor(
     private val binding = ComponentAdjustmentStatusBinding.inflate(LayoutInflater.from(context), this)
 
     fun update(state: AdjustmentCardState) {
-        //binding.glycemiaLine.text = state.glycemiaLine
+        binding.glycemiaLine.text = state.glycemiaLine
         binding.predictionLine.text = state.predictionLine
         binding.iobActivityLine.text = state.iobActivityLine
         binding.decisionLine.text = state.decisionLine

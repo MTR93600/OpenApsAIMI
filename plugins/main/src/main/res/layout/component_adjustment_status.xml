@@ -16,14 +16,14 @@
 <!--            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1"-->
 <!--            android:textColor="@color/dashboard_on_surface" />-->
 
-<!--        <TextView-->
-<!--            android:id="@+id/glycemia_line"-->
-<!--            android:layout_width="match_parent"-->
-<!--            android:layout_height="wrap_content"-->
-<!--            android:layout_marginTop="12dp"-->
-<!--            android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"-->
-<!--            android:textColor="@color/dashboard_on_surface"-->
-<!--            android:textStyle="bold" />-->
+        <TextView
+            android:id="@+id/glycemia_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
+            android:textColor="@color/dashboard_on_surface"
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/prediction_line"

@@ -221,7 +221,7 @@ class OverviewViewModel(
         val glucoseStatus = glucoseStatusProvider.glucoseStatusData
         val adjustments = buildActiveAdjustments(now)
         val state = AdjustmentCardState(
-            //glycemiaLine = buildGlycemiaLine(lastBg, trendArrow, glucoseStatus),
+            glycemiaLine = buildGlycemiaLine(lastBg, trendArrow, glucoseStatus),
             predictionLine = buildPredictionLine(now),
             iobActivityLine = buildIobActivityLine(),
             decisionLine = buildDecisionLine(),
@@ -463,7 +463,7 @@ data class StatusCardState(
 )
 
 data class AdjustmentCardState(
-    //val glycemiaLine: String,
+    val glycemiaLine: String,
     val predictionLine: String,
     val iobActivityLine: String,
     val decisionLine: String,
