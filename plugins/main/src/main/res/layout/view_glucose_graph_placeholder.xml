@@ -25,7 +25,7 @@
         android:id="@+id/graph_updated_at"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
+        android:layout_gravity="top|end"
         android:padding="8dp"
         android:textColor="@color/dashboard_on_surface"
         android:textAppearance="@style/TextAppearance.MaterialComponents.Caption" />
