@@ -253,7 +253,7 @@ class BasalDecisionEngine @Inject constructor(
         }
 
         if (chosenRate == null) {
-            val predictedLow = input.predictedBg < 100 && input.mealData.slopeFromMaxDeviation <= 0
+            val predictedLow = input.predictedBg < 80 && input.mealData.slopeFromMaxDeviation <= 0
             val highIobStop = input.iob > input.maxIob && !input.allowMealHighIob
             when {
                 predictedLow || highIobStop -> {
@@ -277,8 +277,13 @@ class BasalDecisionEngine @Inject constructor(
                 }
                 input.bg in 80.0..90.0 &&
                     input.slopeFromMaxDeviation <= 0 && input.iob > 0.1 && !input.sportTime -> {
-                    chosenRate = 0.0
-                    rT.reason.append(context.getString(R.string.bg_80_90_fall))
+                    if (input.delta < -2.0) {
+                        chosenRate = 0.0
+                        rT.reason.append(context.getString(R.string.bg_80_90_fall))
+                    } else {
+                        chosenRate = input.profileCurrentBasal * 0.25
+                        rT.reason.append("BG 80-90 falling slow: 25%")
+                    }
                 }
                 input.bg in 80.0..90.0 &&
                     input.slopeFromMinDeviation >= 0.3 && input.slopeFromMaxDeviation >= 0 &&
@@ -290,8 +295,8 @@ class BasalDecisionEngine @Inject constructor(
                 input.bg in 90.0..100.0 &&
                     input.slopeFromMinDeviation <= 0.3 && input.iob > 0.1 && !input.sportTime &&
                     input.bgAcceleration > 0.0 -> {
-                    chosenRate = 0.0
-                    rT.reason.append(context.getString(R.string.bg_90_100_moderate))
+                    chosenRate = input.profileCurrentBasal * 0.5
+                    rT.reason.append("BG 90-100 moderate: 50%")
                 }
                 input.bg in 90.0..100.0 &&
                     input.slopeFromMinDeviation >= 0.3 && input.combinedDelta in -1.0..2.0 && !input.sportTime &&
@@ -328,8 +333,8 @@ class BasalDecisionEngine @Inject constructor(
                 chosenRate = input.profileCurrentBasal * 1.5
                 rT.reason.append(context.getString(R.string.calm_meal_and_timing))
             } else if (input.timenow > input.sixAmHour && input.recentSteps5Minutes > 100) {
-                chosenRate = 0.0
-                rT.reason.append(context.getString(R.string.morning_activity_basal_zero))
+                chosenRate = input.profileCurrentBasal * 0.5
+                rT.reason.append("Morning activity: 50%")
             } else if (input.timenow <= input.sixAmHour && input.delta > 0 && input.bgAcceleration > 0.0) {
                 chosenRate = input.profileCurrentBasal
                 rT.reason.append(context.getString(R.string.morning_rise_profile_basal))

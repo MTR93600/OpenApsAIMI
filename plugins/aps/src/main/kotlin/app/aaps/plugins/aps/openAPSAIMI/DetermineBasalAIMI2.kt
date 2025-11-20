@@ -1051,8 +1051,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun adjustRateBasedOnBgTrend(_rate: Double, bgTrend: Float): Double {
         // Si la BG est accessible dans le scope, on peut aussi y jeter un œil ici :
         val bgNow = bg
-        // Si on s’approche du seuil hypo et que la tendance est négative, coupe à 0
-        if (bgNow <=  (80.0 + 10.0) && bgTrend < 0f) return 0.0
+        // Si on s’approche du seuil hypo et que la tendance est négative, coupe à 0 SEULEMENT si chute rapide
+        if (bgNow <= 90.0 && bgTrend < -2.0f) return 0.0
         val adjustmentFactor = if (bgTrend < 0.0f) 0.8 else 1.2
         return _rate * adjustmentFactor
     }
