@@ -1692,7 +1692,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun isAcceleratingDown(context: SafetyContext): Boolean =
         context.delta < 0 &&
             context.longAvgDelta < 0 &&
-            context.shortAvgDelta < 0
+            context.shortAvgDelta < 0 &&
+            (context.bg < context.targetBg || context.delta < -2.0)
 
     private fun isSportSafetyCondition(): Boolean {
         val manualSport = sportTime
