@@ -30,9 +30,9 @@ class UserManualActivity : AppCompatActivity() {
     }
 
     private fun setupSection(viewId: Int, titleRes: Int, contentRes: Int) {
-        val sectionView = findViewById<android.view.View>(viewId)
-        sectionView.findViewById<TextView>(R.id.section_title).setText(titleRes)
-        sectionView.findViewById<TextView>(R.id.section_content).setText(contentRes)
+        val sectionView = findViewById<android.view.View>(viewId) ?: return
+        sectionView.findViewById<TextView>(R.id.section_title)?.setText(titleRes)
+        sectionView.findViewById<TextView>(R.id.section_content)?.setText(contentRes)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
