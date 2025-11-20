@@ -51,18 +51,18 @@
             </com.google.android.material.card.MaterialCardView>
 
             <!-- Sections -->
-            <include layout="@layout/item_manual_section" android:id="@+id/section1" />
-            <include layout="@layout/item_manual_section" android:id="@+id/section2" />
-            <include layout="@layout/item_manual_section" android:id="@+id/section3" />
-            <include layout="@layout/item_manual_section" android:id="@+id/section4" />
-            <include layout="@layout/item_manual_section" android:id="@+id/section5" />
-            <include layout="@layout/item_manual_section" android:id="@+id/section6" />
-            <include layout="@layout/item_manual_section" android:id="@+id/section7" />
-            <include layout="@layout/item_manual_section" android:id="@+id/section8" />
-            <include layout="@layout/item_manual_section" android:id="@+id/section9" />
-            <include layout="@layout/item_manual_section" android:id="@+id/section10" />
-            <include layout="@layout/item_manual_section" android:id="@+id/section11" />
-            <include layout="@layout/item_manual_section" android:id="@+id/section12" />
+            <include layout="@layout/item_manual_section" android:id="@+id/section1" android:layout_width="match_parent" android:layout_height="wrap_content" />
+            <include layout="@layout/item_manual_section" android:id="@+id/section2" android:layout_width="match_parent" android:layout_height="wrap_content" />
+            <include layout="@layout/item_manual_section" android:id="@+id/section3" android:layout_width="match_parent" android:layout_height="wrap_content" />
+            <include layout="@layout/item_manual_section" android:id="@+id/section4" android:layout_width="match_parent" android:layout_height="wrap_content" />
+            <include layout="@layout/item_manual_section" android:id="@+id/section5" android:layout_width="match_parent" android:layout_height="wrap_content" />
+            <include layout="@layout/item_manual_section" android:id="@+id/section6" android:layout_width="match_parent" android:layout_height="wrap_content" />
+            <include layout="@layout/item_manual_section" android:id="@+id/section7" android:layout_width="match_parent" android:layout_height="wrap_content" />
+            <include layout="@layout/item_manual_section" android:id="@+id/section8" android:layout_width="match_parent" android:layout_height="wrap_content" />
+            <include layout="@layout/item_manual_section" android:id="@+id/section9" android:layout_width="match_parent" android:layout_height="wrap_content" />
+            <include layout="@layout/item_manual_section" android:id="@+id/section10" android:layout_width="match_parent" android:layout_height="wrap_content" />
+            <include layout="@layout/item_manual_section" android:id="@+id/section11" android:layout_width="match_parent" android:layout_height="wrap_content" />
+            <include layout="@layout/item_manual_section" android:id="@+id/section12" android:layout_width="match_parent" android:layout_height="wrap_content" />
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

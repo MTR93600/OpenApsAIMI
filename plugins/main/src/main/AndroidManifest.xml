@@ -41,7 +41,7 @@
         <activity
             android:name=".general.manual.UserManualActivity"
             android:exported="false"
-            android:theme="@style/AppTheme" />
+            android:theme="@style/AppTheme.NoActionBar" />
 
         <service android:name=".general.persistentNotification.DummyService" />
 
