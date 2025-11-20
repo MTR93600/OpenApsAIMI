@@ -310,7 +310,7 @@ object SmbInstructionExecutor {
         val baseKp = 0.2
         val kp = baseKp * (0.5 + deltaScore)
         val error = input.bg - input.targetBg
-        val correction = -kp * error
+        val correction = kp * error
 
         val optimalBasalMpc = (optimalDose + correction).coerceIn(doseMin, doseMax)
         // --- Mix MPC / PI : MPC plus dominant pour BG > cible ---
