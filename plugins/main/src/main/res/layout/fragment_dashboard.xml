@@ -5,32 +5,43 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="@dimen/dashboard_block_spacing"
     tools:context="app.aaps.plugins.main.general.dashboard.DashboardFragment">
 
-    <app.aaps.plugins.main.general.dashboard.views.StatusCardView
-        android:id="@+id/status_card"
+<androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginBottom="@dimen/dashboard_block_spacing"
-        android:layout_weight="0.7"
-        style="@style/Widget.AAPS.Dashboard.Card" />
+        android:layout_weight="1"
+        android:fillViewport="true">
 
-    <app.aaps.plugins.main.general.dashboard.views.GlucoseGraphView
-        android:id="@+id/glucose_graph"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginBottom="@dimen/dashboard_block_spacing"
-        android:layout_weight="1.3"
-        style="@style/Widget.AAPS.Dashboard.Card" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="@dimen/dashboard_block_spacing">
 
-    <app.aaps.plugins.main.general.dashboard.views.AdjustmentStatusView
-        android:id="@+id/adjustment_status"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginBottom="@dimen/dashboard_block_spacing"
-        android:layout_weight="1.0"
-        style="@style/Widget.AAPS.Dashboard.Card" />
+            <app.aaps.plugins.main.general.dashboard.views.StatusCardView
+                android:id="@+id/status_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/dashboard_block_spacing"
+                style="@style/Widget.AAPS.Dashboard.Card" />
+
+            <app.aaps.plugins.main.general.dashboard.views.GlucoseGraphView
+                android:id="@+id/glucose_graph"
+                android:layout_width="match_parent"
+                android:layout_height="300dp"
+                android:layout_marginBottom="@dimen/dashboard_block_spacing"
+                style="@style/Widget.AAPS.Dashboard.Card" />
+
+            <app.aaps.plugins.main.general.dashboard.views.AdjustmentStatusView
+                android:id="@+id/adjustment_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/dashboard_block_spacing"
+                style="@style/Widget.AAPS.Dashboard.Card" />
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottom_navigation"
