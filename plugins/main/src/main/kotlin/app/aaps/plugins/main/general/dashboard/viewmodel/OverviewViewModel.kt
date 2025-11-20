@@ -233,7 +233,7 @@ class OverviewViewModel(
             safetyLine = buildSafetyLine(lastBg, glucoseStatus),
             modeLine = resolveModeLine(now),
             adjustments = adjustments,
-            reason = loop.lastRun?.request?.reason
+            reason = buildDecisionLine()
         )
         _adjustmentState.postValue(state)
     }
@@ -475,7 +475,6 @@ data class AdjustmentCardState(
     val decisionLine: String,
     val pumpLine: String,
     val safetyLine: String,
-    val modeLine: String?,
     val modeLine: String?,
     val adjustments: List<String>,
     val reason: String?
