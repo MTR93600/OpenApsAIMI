@@ -30,6 +30,7 @@ class StatusCardView @JvmOverloads constructor(
         binding.trendArrow.contentDescription = state.trendDescription
         binding.loopStatus.text = state.loopStatusText
         binding.timeAgo.text = state.timeAgo
+        binding.deltaValue.text = state.deltaText
         binding.timeAgo.contentDescription = state.timeAgoDescription
         binding.glucoseValue.paintFlags =
             if (state.isGlucoseActual) binding.glucoseValue.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()

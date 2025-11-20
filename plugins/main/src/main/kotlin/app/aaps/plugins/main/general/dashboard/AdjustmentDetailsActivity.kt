@@ -32,6 +32,14 @@ class AdjustmentDetailsActivity : TranslatedDaggerAppCompatActivity() {
             return
         }
         binding.adjustmentSummary.update(state)
+        
+        if (!state.reason.isNullOrEmpty()) {
+            binding.reasonCard.isVisible = true
+            binding.reasonText.text = state.reason
+        } else {
+            binding.reasonCard.isVisible = false
+        }
+
         renderDecisions(state.adjustments)
     }
 

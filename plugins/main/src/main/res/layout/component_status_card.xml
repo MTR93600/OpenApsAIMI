@@ -2,75 +2,86 @@
 <merge xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <LinearLayout
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/dashboard_card_surface"
-        android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="24dp">
 
-        <LinearLayout
-            android:layout_width="match_parent"
+        <!-- Loop Status (Top Center) -->
+        <TextView
+            android:id="@+id/loop_status"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:textColor="@color/dashboard_on_surface"
+            android:alpha="0.7"
+            android:text="Closed Loop"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
 
-            <TextView
-                android:id="@+id/glucose_value"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textColor="@color/dashboard_on_surface"
-                android:textAppearance="@style/TextAppearance.MaterialComponents.Headline4"
-                android:text="--" />
+        <View
+            android:id="@+id/loop_indicator"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/dashboard_loop_indicator"
+            app:layout_constraintStart_toEndOf="@id/loop_status"
+            app:layout_constraintTop_toTopOf="@id/loop_status"
+            app:layout_constraintBottom_toBottomOf="@id/loop_status" />
 
-            <ImageView
-                android:id="@+id/trend_arrow"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:contentDescription="@string/dashboard_trend"
-                android:padding="4dp"
-                android:visibility="gone" />
-
-            <TextView
-                android:id="@+id/time_ago"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/dashboard_on_surface"
-                android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-                android:text="--" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
+        <!-- Glucose Value (Center) -->
+        <TextView
+            android:id="@+id/glucose_value"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:layout_marginTop="16dp"
+            android:textColor="@color/dashboard_on_surface"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Headline2"
+            android:textStyle="bold"
+            android:text="--"
+            app:layout_constraintTop_toBottomOf="@id/loop_status"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/dashboard_on_surface"
-                android:text="@string/dashboard_loop_label"
-                android:textAppearance="@style/TextAppearance.MaterialComponents.Body2" />
+        <!-- Trend Arrow (Right of Glucose) -->
+        <ImageView
+            android:id="@+id/trend_arrow"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:contentDescription="@string/dashboard_trend"
+            app:layout_constraintStart_toEndOf="@id/glucose_value"
+            app:layout_constraintBottom_toBottomOf="@id/glucose_value"
+            app:layout_constraintTop_toTopOf="@id/glucose_value" />
 
-            <TextView
-                android:id="@+id/loop_status"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="end"
-                android:textColor="@color/dashboard_on_surface"
-                android:text="--" />
+        <!-- Delta (Bottom Center) -->
+        <TextView
+            android:id="@+id/delta_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/dashboard_on_surface"
+            android:alpha="0.8"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
+            android:text="--"
+            app:layout_constraintTop_toBottomOf="@id/glucose_value"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
 
-            <View
-                android:id="@+id/loop_indicator"
-                android:layout_width="12dp"
-                android:layout_height="12dp"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/dashboard_loop_indicator" />
-        </LinearLayout>
+        <!-- Time Ago (Bottom Right) -->
+        <TextView
+            android:id="@+id/time_ago"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textColor="@color/dashboard_on_surface"
+            android:alpha="0.5"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+            android:text="--"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/delta_value" />
 
-    </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
 </merge>

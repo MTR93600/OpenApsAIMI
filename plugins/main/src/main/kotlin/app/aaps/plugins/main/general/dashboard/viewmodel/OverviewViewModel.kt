@@ -232,7 +232,8 @@ class OverviewViewModel(
             pumpLine = buildPumpLine(now),
             safetyLine = buildSafetyLine(lastBg, glucoseStatus),
             modeLine = resolveModeLine(now),
-            adjustments = adjustments
+            adjustments = adjustments,
+            reason = loop.lastRun?.request?.reason
         )
         _adjustmentState.postValue(state)
     }
@@ -475,5 +476,7 @@ data class AdjustmentCardState(
     val pumpLine: String,
     val safetyLine: String,
     val modeLine: String?,
-    val adjustments: List<String>
+    val modeLine: String?,
+    val adjustments: List<String>,
+    val reason: String?
 ) : Serializable
