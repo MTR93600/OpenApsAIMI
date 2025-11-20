@@ -227,7 +227,11 @@ class DashboardFragment : DaggerFragment() {
     }
 
     private fun openLoopDialog() {
-        app.aaps.ui.dialogs.LoopDialog().show(childFragmentManager, "LoopDialog")
+        activity?.let { activity ->
+            protectionCheck.queryProtection(activity, ProtectionCheck.Protection.BOLUS, UIRunnable {
+                if (isAdded) uiInteraction.runLoopDialog(childFragmentManager, 1)
+            })
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.CUPCAKE)
