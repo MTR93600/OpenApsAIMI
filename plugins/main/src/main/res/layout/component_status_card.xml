@@ -41,61 +41,6 @@
                 android:text="--" />
         </LinearLayout>
 
-        <!--        <TextView-->
-        <!--            android:id="@+id/trend_description"-->
-        <!--            android:layout_width="match_parent"-->
-        <!--            android:layout_height="wrap_content"-->
-        <!--            android:layout_marginTop="4dp"-->
-        <!--            android:textColor="@color/dashboard_on_surface"-->
-        <!--            android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"-->
-        <!--            android:text="&#45;&#45;" />-->
-
-        <!--        <LinearLayout-->
-        <!--            android:layout_width="match_parent"-->
-        <!--            android:layout_height="wrap_content"-->
-        <!--            android:layout_marginTop="8dp"-->
-        <!--            android:orientation="horizontal">-->
-
-        <!--            <TextView-->
-        <!--                android:layout_width="wrap_content"-->
-        <!--                android:layout_height="wrap_content"-->
-        <!--                android:textColor="@color/dashboard_on_surface"-->
-        <!--                android:text="@string/dashboard_iob_label"-->
-        <!--                android:textAppearance="@style/TextAppearance.MaterialComponents.Body2" />-->
-
-        <!--            <TextView-->
-        <!--                android:id="@+id/iob_value"-->
-        <!--                android:layout_width="0dp"-->
-        <!--                android:layout_height="wrap_content"-->
-        <!--                android:layout_weight="1"-->
-        <!--                android:gravity="end"-->
-        <!--                android:textColor="@color/dashboard_on_surface"-->
-        <!--                android:text="&#45;&#45;" />-->
-        <!--        </LinearLayout>-->
-
-        <!--        <LinearLayout-->
-        <!--            android:layout_width="match_parent"-->
-        <!--            android:layout_height="wrap_content"-->
-        <!--            android:layout_marginTop="4dp"-->
-        <!--            android:orientation="horizontal">-->
-
-        <!--            <TextView-->
-        <!--                android:layout_width="wrap_content"-->
-        <!--                android:layout_height="wrap_content"-->
-        <!--                android:textColor="@color/dashboard_on_surface"-->
-        <!--                android:text="@string/dashboard_cob_label"-->
-        <!--                android:textAppearance="@style/TextAppearance.MaterialComponents.Body2" />-->
-
-        <!--            <TextView-->
-        <!--                android:id="@+id/cob_value"-->
-        <!--                android:layout_width="0dp"-->
-        <!--                android:layout_height="wrap_content"-->
-        <!--                android:layout_weight="1"-->
-        <!--                android:gravity="end"-->
-        <!--                android:textColor="@color/dashboard_on_surface"-->
-        <!--                android:text="&#45;&#45;" />-->
-        <!--        </LinearLayout>-->
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
