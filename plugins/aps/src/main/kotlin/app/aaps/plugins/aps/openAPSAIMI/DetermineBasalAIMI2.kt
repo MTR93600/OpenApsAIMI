@@ -1247,34 +1247,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
             )
         }
-        pkpdRuntime?.let { runtime ->
-            val beforeDamp = smbToGive
-            val audit = runtime.dampSmbWithAudit(
-                beforeDamp.toDouble(),
-                exerciseFlag,
-                suspectedLateFatMeal,
-                bypassDamping = mealWeights.bypassTail
-            )
-            val damped = audit.out.toFloat()
-            if (audit.mealBypass) {
-                reason?.appendLine(
-                    context.getString(
-                        R.string.reason_meal_tail_bypass,
-                        mealWeights.predictedOvershoot
-                    )
-                )
-            } else if (damped != beforeDamp) {
-                reason?.appendLine(
-                    context.getString(
-                        R.string.reason_tail_damping,
-                        beforeDamp,
-                        damped,
-                        (runtime.tailFraction * 100).coerceIn(0.0, 100.0)
-                    )
-                )
-            }
-            smbToGive = damped
-        }
+        // pkpdRuntime damping removed to avoid double application (handled in SmbInstructionExecutor)
 
         // Finalisation
         val beforeFinalize = smbToGive

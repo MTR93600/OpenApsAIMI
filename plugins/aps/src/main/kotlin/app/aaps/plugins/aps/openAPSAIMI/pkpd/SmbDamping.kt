@@ -101,7 +101,7 @@ class SmbDamping(
 
         //val lateApplied = suspectedLateFatMeal
         //val lateMult = if (lateApplied) policy.lateFattyMealDamping else 1.0
-        if (lateApplied) out *= lateMult
+        // if (lateApplied) out *= lateMult  <-- REMOVED DUPLICATE
 
         return SmbDampingAudit(
             out = out,
