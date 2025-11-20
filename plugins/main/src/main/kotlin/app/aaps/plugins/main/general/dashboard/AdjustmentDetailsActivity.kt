@@ -32,10 +32,17 @@ class AdjustmentDetailsActivity : TranslatedDaggerAppCompatActivity() {
             return
         }
         binding.adjustmentSummary.update(state)
-        
-        if (!state.reason.isNullOrEmpty()) {
+
+        binding.peakTimeValue.text = state.peakTime?.let { "%.0f min".format(it) } ?: "--"
+        binding.diaValue.text = state.dia?.let { "%.1f h".format(it) } ?: "--"
+        binding.targetBgValue.text = state.targetBg?.let { "%.0f".format(it) } ?: "--"
+        binding.smbValue.text = state.smb?.let { "%.2f U".format(it) } ?: "--"
+        binding.basalValue.text = state.basal?.let { "%.2f U/h".format(it) } ?: "--"
+
+        val reasonToShow = state.detailedReason ?: state.reason
+        if (!reasonToShow.isNullOrEmpty()) {
             binding.reasonCard.isVisible = true
-            binding.reasonText.text = state.reason
+            binding.reasonText.text = reasonToShow
         } else {
             binding.reasonCard.isVisible = false
         }

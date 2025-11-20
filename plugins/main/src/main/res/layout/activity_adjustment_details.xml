@@ -24,6 +24,86 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/dashboard_block_spacing"
+                style="@style/Widget.AAPS.Dashboard.Card">
+
+                <GridLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:columnCount="2"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:text="Peak Time"
+                        android:layout_columnWeight="1"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                        android:textColor="@color/dashboard_on_surface_variant"/>
+                    <TextView
+                        android:id="@+id/peak_time_value"
+                        android:layout_columnWeight="1"
+                        android:gravity="end"
+                        android:text="--"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
+                        android:textColor="@color/dashboard_on_surface"/>
+
+                    <TextView
+                        android:text="DIA"
+                        android:layout_columnWeight="1"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                        android:textColor="@color/dashboard_on_surface_variant"/>
+                    <TextView
+                        android:id="@+id/dia_value"
+                        android:layout_columnWeight="1"
+                        android:gravity="end"
+                        android:text="--"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
+                        android:textColor="@color/dashboard_on_surface"/>
+
+                    <TextView
+                        android:text="Target BG"
+                        android:layout_columnWeight="1"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                        android:textColor="@color/dashboard_on_surface_variant"/>
+                    <TextView
+                        android:id="@+id/target_bg_value"
+                        android:layout_columnWeight="1"
+                        android:gravity="end"
+                        android:text="--"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
+                        android:textColor="@color/dashboard_on_surface"/>
+
+                    <TextView
+                        android:text="SMB"
+                        android:layout_columnWeight="1"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                        android:textColor="@color/dashboard_on_surface_variant"/>
+                    <TextView
+                        android:id="@+id/smb_value"
+                        android:layout_columnWeight="1"
+                        android:gravity="end"
+                        android:text="--"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
+                        android:textColor="@color/dashboard_on_surface"/>
+
+                    <TextView
+                        android:text="Basal"
+                        android:layout_columnWeight="1"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                        android:textColor="@color/dashboard_on_surface_variant"/>
+                    <TextView
+                        android:id="@+id/basal_value"
+                        android:layout_columnWeight="1"
+                        android:gravity="end"
+                        android:text="--"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
+                        android:textColor="@color/dashboard_on_surface"/>
+
+                </GridLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <app.aaps.plugins.main.general.dashboard.views.AdjustmentStatusView
                 android:id="@+id/adjustment_summary"
                 android:layout_width="match_parent"

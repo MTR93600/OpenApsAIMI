@@ -183,6 +183,10 @@ class DashboardFragment : DaggerFragment() {
         binding.adjustmentStatus.isClickable = true
         binding.adjustmentStatus.isFocusable = true
         binding.adjustmentStatus.setOnClickListener { openAdjustmentDetails() }
+
+        binding.statusCard.isClickable = true
+        binding.statusCard.isFocusable = true
+        binding.statusCard.setOnClickListener { openModes() }
         binding.glucoseGraph.graph.gridLabelRenderer?.gridColor = resourceHelper.gac(requireContext(), app.aaps.core.ui.R.attr.graphGrid)
         binding.glucoseGraph.graph.gridLabelRenderer?.reloadStyles()
     }
