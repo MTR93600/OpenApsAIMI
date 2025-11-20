@@ -207,7 +207,7 @@ class DashboardFragment : DaggerFragment() {
     }
 
     private fun openHistory(): Boolean {
-        startActivity(Intent(requireContext(), uiInteraction.historyBrowseActivity))
+        startActivity(Intent(requireContext(), app.aaps.plugins.main.general.manual.UserManualActivity::class.java))
         return true
     }
 

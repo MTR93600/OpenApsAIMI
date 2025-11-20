@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="manual_title">Manuel utilisateur – OpenAPS AIMI</string>
+    <string name="manual_intro">Bienvenue dans AIMI (Adaptive Insulin Management Intelligence), le moteur prédictif d\'AndroidAPS qui combine apprentissage automatique, surveillance physiologique et garde-fous avancés pour piloter basal et SMB (Super Micro-Bolus). AIMI observe votre historique glycémique, vos bolus, vos pas/rythme cardiaque et vos modes déclarés pour ajuster dynamiquement sensibilité, durée d\'action de l\'insuline et micro-bolus, tout en conservant les sécurités OpenAPS historiques.\n\nAIMI n\'est pas une boîte noire : pensez-le comme un co-pilote. Plus vos données sont propres (profil à jour, enregistrement des repas, fermeture des boucles nocturnes), plus AIMI anticipe finement et stabilise vos glycémies.</string>
+
+    <string name="manual_section_1_title">1. Installation et activation</string>
+    <string name="manual_section_1_content">1. **Activez le plugin** depuis *Configuration ▶️ Plugins ▶️ APS* et cochez **OpenAPS AIMI**. AIMI vérifie automatiquement que votre pompe accepte les basales temporaires.\n2. **Redémarrez la boucle** : au démarrage AIMI recharge vos sensibilités variables passées et installe son calculateur Kalman/PK-PD.\n3. **Autorisez les permissions** : si vous activez les pas/FC, assurez-vous que la montre Wear OS synchronise bien vers AAPS.\n4. **Vérifiez l\'état**\n   - L\'écran OpenAPS affiche *Algorithme AIMI* et la date du dernier calcul (`lastAPSRun`).\n   - Les logs contiennent des raisons `AIMI+` lorsque l\'adaptatif basal déclenche un kicker ou une micro-reprise.\n   - Les colonnes `SMB`/`Basal` du statut montrent les multiplicateurs WCycle ou NightGrowth lorsqu\'ils sont actifs.</string>
+
+    <string name="manual_section_2_title">2. Principes généraux</string>
+    <string name="manual_section_2_content">- **Boucle complète** : AIMI récupère le `GlucoseStatusAIMI`, calcule un plan basale via `BasalPlanner`, applique `AIMIAdaptiveBasal` pour les plateaux et ajuste les SMB via PK/PD et ISF adaptatif.\n- **Apprentissage continu** : les paramètres PK/PD (DIA et temps de pic) sont mis à jour lorsqu\'assez d\'IOB est disponible, sauf si du sport ou des graisses retardées sont détectés.\n- **Logs utiles** : `rT.reason` inclut les déclencheurs (plateau kicker, NGR, WCycle). Les CSV AIMI (`AAPS/oapsaimi*.csv`) enregistrent chaque décision pour analyse ultérieure.</string>
+
+    <string name="manual_section_3_title">3. 🔧 Réglages généraux</string>
+    <string name="manual_section_3_content">Ces paramètres posent la base physiologique utilisée par toutes les briques AIMI.\n\n**🔹 OApsAIMIMLtraining**\n- **But :** autoriser l\'entraînement du modèle SMB local.\n- **Ajuster si :** Hypos fréquentes (désactiver), Hypers fréquentes (activer).\n\n**🔹 OApsAIMIweight, OApsAIMICHO, OApsAIMITDD7**\n- **But :** renseigner des bornes physiologiques pour initialiser le filtre de Kalman ISF.\n- **Ajuster :** Hypos (augmenter weight/TDD), Hypers (ajuster CHO).\n\n**🔹 AimiUamConfidence**\n- **But :** pondérer l\'apprentissage « UAM ».\n- **Ajuster :** Hypos post-UAM (augmenter), Hyper prolongées (réduire).\n\n**🔹 OApsAIMIautoDrive**\n- **But :** activer l\'utilisation automatique des facteurs modes et du profil combiné.</string>
+
+    <string name="manual_section_4_title">4. ⚙️ Régulation basale &amp; SMB</string>
+    <string name="manual_section_4_content">AIMI contrôle simultanément la basale temporaire et l\'intensité des SMB.\n\n**Paramètres SMB globaux**\n- `OApsAIMIMaxSMB` : plafond SMB standard.\n- `OApsAIMIHighBGMaxSMB` : plafond SMB en plateau haut.\n- `autodriveMaxBasal` : plafond basale autoDrive.\n\n**AIMIAdaptiveBasal**\n- `OApsAIMIHighBg` (180) : déclenche les kicks.\n- `OApsAIMIPlateauBandAbs` : tolérance de variation.\n- `OApsAIMIZeroResumeMin` : relance une basale faible après un arrêt pour éviter les remontées.</string>
+
+    <string name="manual_section_5_title">5. 🧠 Intelligence adaptative</string>
+    <string name="manual_section_5_content">**PK/PD dynamique**\n- AIMI fusionne l’ISF profil/TDD avec l’estimation PK/PD.\n- Priorité repas : lorsque les modes repas sont actifs, les gardes SMB sont assouplies.\n\n**Ajustement adaptatif ISF**\n- Recalcule l’ISF cible tout en limitant le changement à ±5% par boucle.\n\n**PeakTime dynamique**\n- Combine IOB, activité future, pas, FC pour ajuster le temps de pic entre 35 et 120 min.</string>
+
+    <string name="manual_section_6_title">6. 💡 Modes &amp; détection repas</string>
+    <string name="manual_section_6_content">**Facteurs journaliers**\n- `MorningFactor`, `AfternoonFactor`, `EveningFactor` pondèrent le SMB selon l'heure.\n\n**Modes repas spécifiques**\n- Chaque mode (Petit déj, Déjeuner, Dîner) a ses propres prébolus et facteurs.\n- `OApsAIMIHyperFactor` renforce les SMB si BG>180.\n\n**AutoDrive prébolus**\n- Limites pour des micro-prébolus automatiques lorsque `autoDrive` est actif.</string>
+
+    <string name="manual_section_7_title">7. 💪 Exercice &amp; règles de sécurité</string>
+    <string name="manual_section_7_content">**Toggles physiologiques**\n- `OApsAIMIpregnancy`, `OApsAIMIhoneymoon` : ajustements spécifiques.\n\n**Détection sport**\n- Coupe les SMB lorsque pas/FC indiquent une activité intense ou cible >140.\n- Réduit de moitié les SMB si sommeil/snack/basse activité.</string>
+
+    <string name="manual_section_8_title">8. 🌙 Mode nuit &amp; croissance</string>
+    <string name="manual_section_8_content">**Mode nuit classique**\n- `OApsAIMIsleepFactor` modère les SMB durant la nuit.\n\n**Night Growth Resistance (NGR)**\n- Gère les pics d\'hormone de croissance chez l\'enfant/adolescent.\n- Apprend automatiquement les seuils et multiplicateurs.</string>
+
+    <string name="manual_section_9_title">9. ❤️ Intégration Wear OS</string>
+    <string name="manual_section_9_content">**Activation :** `OApsAIMIEnableStepsFromWatch`.\n\n**Effets :**\n- Activité intense (>1000 pas, FC>110) : allonge le pic et limite SMB.\n- Repos : raccourcit le pic pour éviter les retards.</string>
+
+    <string name="manual_section_10_title">10. ♀️ WCycle – Cycle menstruel</string>
+    <string name="manual_section_10_content">AIMI adapte basales et SMB selon votre phase menstruelle.\n- **Activation :** `OApsAIMIwcycle`.\n- **Fonctionnement :** ajuste les multiplicateurs selon la phase (ex. +12% en phase lutéale).</string>
+
+    <string name="manual_section_11_title">11. Conseils d\'ajustement</string>
+    <string name="manual_section_11_content">**Hypos post-SMB :** ↓ `OApsAIMIMaxSMB`, ↑ `OApsAIMISmbTailDamping`.\n**Hypos nocturnes :** ↑ `OApsAIMIZeroResumeMin`, ↓ `NightGrowthBasalMultiplier`.\n**Hypers post-repas :** ↑ facteurs repas, ↓ `OApsAIMIPkpdBoundsPeakMinMax`.\n**Hyper plateau :** ↑ `OApsAIMIKickerStep`.</string>
+
+    <string name="manual_section_12_title">12. Dépannage</string>
+    <string name="manual_section_12_content">1. **Lire `rT.reason`** : cherchez les phrases `AIMI+`.\n2. **CSV AIMI** : `_records.csv` contient toutes les variables.\n3. **PK/PD** : vérifiez que `PkpdEnabled` est ON.\n4. **Aucun SMB** : vérifiez les sécurités `isCriticalSafetyCondition`.</string>
+</resources>

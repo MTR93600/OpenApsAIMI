@@ -38,6 +38,11 @@
             android:exported="false"
             android:theme="@style/AppTheme" />
 
+        <activity
+            android:name=".general.manual.UserManualActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+
         <service android:name=".general.persistentNotification.DummyService" />
 
         <service

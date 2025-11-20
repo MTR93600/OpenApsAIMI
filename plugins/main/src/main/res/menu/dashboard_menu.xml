@@ -10,8 +10,8 @@
 
     <item
         android:id="@+id/dashboard_nav_history"
-        android:icon="@android:drawable/ic_menu_recent_history"
-        android:title="@string/dashboard_nav_history"
+        android:icon="@drawable/ic_menu_info_details"
+        android:title="@string/manual_title"
         app:showAsAction="ifRoom" />
 
     <item
