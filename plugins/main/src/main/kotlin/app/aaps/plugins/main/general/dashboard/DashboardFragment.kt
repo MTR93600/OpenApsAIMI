@@ -226,6 +226,10 @@ class DashboardFragment : DaggerFragment() {
         return true
     }
 
+    private fun openLoopDialog() {
+        app.aaps.ui.dialogs.LoopDialog().show(childFragmentManager, "LoopDialog")
+    }
+
     @RequiresApi(Build.VERSION_CODES.CUPCAKE)
     private fun openSensorApp(): Boolean {
         if (xDripSource.isEnabled()) return openCgmApp("com.eveningoutpost.dexdrip")
