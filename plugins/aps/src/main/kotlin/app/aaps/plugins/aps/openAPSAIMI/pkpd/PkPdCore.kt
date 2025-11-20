@@ -16,8 +16,8 @@ data class PkPdParams(
 
 /** Bounds and maximum daily change limits applied to the learned PK/PD parameters. */
 data class PkPdBounds(
-    val diaMinH: Double = 6.0,
-    val diaMaxH: Double = 12.0,
+    val diaMinH: Double = 3.0,
+    val diaMaxH: Double = 8.0,
     val peakMinMin: Double = 30.0,
     val peakMinMax: Double = 180.0,
     val maxDiaChangePerDayH: Double = 1.0,
@@ -103,7 +103,7 @@ data class InsulinActivityState(
     val window: InsulinActivityWindow,
     val relativeActivity: Double,
     val normalizedPosition: Double,
-    val postWindowFraction: Double,
+val postWindowFraction: Double,
     val anticipationWeight: Double,
     val minutesUntilOnset: Double,
     val stage: InsulinActivityStage

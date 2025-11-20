@@ -21,7 +21,7 @@ data class PkPdLearningConfig(
 class AdaptivePkPdEstimator(
     private val kernel: Kernel = LogNormalKernel(),
     private val cfg: PkPdLearningConfig = PkPdLearningConfig(),
-    initial: PkPdParams = PkPdParams(diaHrs = 12.0, peakMin = 90.0)
+    initial: PkPdParams = PkPdParams(diaHrs = 4.0, peakMin = 75.0)
 ) {
     private val state = AtomicReference(initial)
     private var lastUpdateEpochMin: Long = 0
@@ -53,8 +53,8 @@ class AdaptivePkPdEstimator(
         val tailFactor = 1.0 + cfg.tailWeight * max(0.0, (windowMin - p0.peakMin) / max(1.0, p0.peakMin))
         val diaAdj = cfg.lr * tailFactor * sign(err) * min(1.0, abs(err) / 10.0)
         val tpAdj = cfg.lr * 0.5 * sign(err) * min(1.0, abs(err) / 10.0)
-        val anchorDia = 12.0
-        val anchorTp  = 90.0
+        val anchorDia = 4.0
+        val anchorTp  = 75.0
         val reg = 0.002   // régularisation très faible
 
         val diaAdjReg = diaAdj - reg * (p0.diaHrs - anchorDia)

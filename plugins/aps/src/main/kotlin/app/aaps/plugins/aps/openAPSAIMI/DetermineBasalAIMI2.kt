@@ -2821,7 +2821,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         DinMaxIob = DinMaxIob.coerceAtLeast(1.0f).coerceAtMost(maxIob.toFloat() * 1.3f)
 
 // Réduction de l'augmentation si on est la nuit (0h-6h)
-        if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) {
+        if (hourOfDay in 0..5 && bg < 160) {
             DinMaxIob = DinMaxIob.coerceAtMost(maxIob.toFloat())
         }
 
