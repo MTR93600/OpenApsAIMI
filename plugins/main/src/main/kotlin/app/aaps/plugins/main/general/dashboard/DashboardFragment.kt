@@ -186,7 +186,7 @@ class DashboardFragment : DaggerFragment() {
 
         binding.statusCard.isClickable = true
         binding.statusCard.isFocusable = true
-        binding.statusCard.setOnClickListener { openModes() }
+        binding.statusCard.setOnClickListener { openLoopDialog() }
         binding.glucoseGraph.graph.gridLabelRenderer?.gridColor = resourceHelper.gac(requireContext(), app.aaps.core.ui.R.attr.graphGrid)
         binding.glucoseGraph.graph.gridLabelRenderer?.reloadStyles()
     }
