@@ -40,66 +40,66 @@
                         android:text="Peak Time"
                         android:layout_columnWeight="1"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-                        android:textColor="@color/dashboard_on_surface_variant"/>
+                        android:textColor="@color/defaultText"/>
                     <TextView
                         android:id="@+id/peak_time_value"
                         android:layout_columnWeight="1"
                         android:gravity="end"
                         android:text="--"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
-                        android:textColor="@color/dashboard_on_surface"/>
+                        android:textColor="@color/defaultTextColor"/>
 
                     <TextView
                         android:text="DIA"
                         android:layout_columnWeight="1"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-                        android:textColor="@color/dashboard_on_surface_variant"/>
+                        android:textColor="@color/defaultText"/>
                     <TextView
                         android:id="@+id/dia_value"
                         android:layout_columnWeight="1"
                         android:gravity="end"
                         android:text="--"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
-                        android:textColor="@color/dashboard_on_surface"/>
+                        android:textColor="@color/defaultTextColor"/>
 
                     <TextView
                         android:text="Target BG"
                         android:layout_columnWeight="1"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-                        android:textColor="@color/dashboard_on_surface_variant"/>
+                        android:textColor="@color/defaultText"/>
                     <TextView
                         android:id="@+id/target_bg_value"
                         android:layout_columnWeight="1"
                         android:gravity="end"
                         android:text="--"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
-                        android:textColor="@color/dashboard_on_surface"/>
+                        android:textColor="@color/defaultTextColor"/>
 
                     <TextView
                         android:text="SMB"
                         android:layout_columnWeight="1"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-                        android:textColor="@color/dashboard_on_surface_variant"/>
+                        android:textColor="@color/defaultText"/>
                     <TextView
                         android:id="@+id/smb_value"
                         android:layout_columnWeight="1"
                         android:gravity="end"
                         android:text="--"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
-                        android:textColor="@color/dashboard_on_surface"/>
+                        android:textColor="@color/defaultTextColor"/>
 
                     <TextView
                         android:text="Basal"
                         android:layout_columnWeight="1"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-                        android:textColor="@color/dashboard_on_surface_variant"/>
+                        android:textColor="@color/defaultText"/>
                     <TextView
                         android:id="@+id/basal_value"
                         android:layout_columnWeight="1"
                         android:gravity="end"
                         android:text="--"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
-                        android:textColor="@color/dashboard_on_surface"/>
+                        android:textColor="@color/defaultTextColor"/>
 
                 </GridLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -129,7 +129,7 @@
                         android:layout_height="wrap_content"
                         android:text="Reasoning (rT)"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1"
-                        android:textColor="@color/dashboard_on_surface" />
+                        android:textColor="@color/defaultTextColor" />
 
                     <TextView
                         android:id="@+id/reason_text"
@@ -138,7 +138,7 @@
                         android:layout_marginTop="8dp"
                         android:fontFamily="monospace"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
-                        android:textColor="@color/dashboard_on_surface" />
+                        android:textColor="@color/defaultTextColor" />
 
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -159,7 +159,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/dashboard_adjustments_details_decisions"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1"
-                        android:textColor="@color/dashboard_on_surface" />
+                        android:textColor="@color/defaultTextColor" />
 
                     <LinearLayout
                         android:id="@+id/decisions_container"
@@ -175,7 +175,7 @@
                         android:layout_marginTop="12dp"
                         android:text="@string/dashboard_adjustments_details_empty"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
-                        android:textColor="@color/dashboard_on_surface" />
+                        android:textColor="@color/defaultTextColor" />
 
                 </LinearLayout>
 
