@@ -233,7 +233,14 @@ class OverviewViewModel(
             safetyLine = buildSafetyLine(lastBg, glucoseStatus),
             modeLine = resolveModeLine(now),
             adjustments = adjustments,
-            reason = buildDecisionLine()
+            reason = buildDecisionLine(),
+            // Populate new fields
+            peakTime = loop.lastRun?.request?.oapsProfileAimi?.peakTime,
+            dia = loop.lastRun?.request?.oapsProfileAimi?.dia,
+            targetBg = loop.lastRun?.request?.oapsProfileAimi?.target_bg,
+            smb = loop.lastRun?.request?.smb,
+            basal = loop.lastRun?.request?.rate,
+            detailedReason = loop.lastRun?.request?.reason
         )
         _adjustmentState.postValue(state)
     }
@@ -477,5 +484,12 @@ data class AdjustmentCardState(
     val safetyLine: String,
     val modeLine: String?,
     val adjustments: List<String>,
-    val reason: String?
+    val reason: String?,
+    // New fields for detailed view
+    val peakTime: Double? = null,
+    val dia: Double? = null,
+    val targetBg: Double? = null,
+    val smb: Double? = null,
+    val basal: Double? = null,
+    val detailedReason: String? = null
 ) : Serializable
