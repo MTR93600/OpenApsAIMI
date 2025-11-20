@@ -40,9 +40,10 @@
             android:textAppearance="@style/TextAppearance.MaterialComponents.Headline3"
             android:textStyle="bold"
             android:text="--"
+            app:layout_constraintHorizontal_chainStyle="packed"
             app:layout_constraintTop_toBottomOf="@id/loop_status"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
+            app:layout_constraintEnd_toStartOf="@id/trend_arrow" />
 
         <!-- Trend Arrow (Right of Glucose) -->
         <ImageView
@@ -52,6 +53,7 @@
             android:layout_marginStart="8dp"
             android:contentDescription="@string/dashboard_trend"
             app:layout_constraintStart_toEndOf="@id/glucose_value"
+            app:layout_constraintEnd_toStartOf="@id/delta_value"
             app:layout_constraintBottom_toBottomOf="@id/glucose_value"
             app:layout_constraintTop_toTopOf="@id/glucose_value" />
 
@@ -60,14 +62,15 @@
             android:id="@+id/delta_value"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginStart="8dp"
             android:textColor="@color/dashboard_on_surface"
             android:alpha="0.8"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
             android:text="--"
-            app:layout_constraintTop_toBottomOf="@id/glucose_value"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
+            app:layout_constraintStart_toEndOf="@id/trend_arrow"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintBottom_toBottomOf="@id/glucose_value"
+            app:layout_constraintTop_toTopOf="@id/glucose_value" />
 
         <!-- Time Ago (Bottom Right) -->
         <TextView
@@ -81,7 +84,7 @@
             android:text="--"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/delta_value" />
+            app:layout_constraintTop_toBottomOf="@id/glucose_value" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </merge>
