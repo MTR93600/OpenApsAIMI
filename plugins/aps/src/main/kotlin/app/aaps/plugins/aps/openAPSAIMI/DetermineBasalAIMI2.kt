@@ -530,7 +530,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): SafetyDecision {
         val windowMinutes = 30f
         val dropPerHour = HypoTools.calculateDropPerHour(bgHistory, windowMinutes)
-        val maxAllowedDropPerHour = 25f  // Seuil de chute rapide à ajuster si besoin
+        val maxAllowedDropPerHour = 50f  // Seuil de chute rapide à ajuster si besoin
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
 
         val reasonBuilder = StringBuilder()
