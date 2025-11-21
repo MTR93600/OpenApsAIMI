@@ -184,7 +184,7 @@ class DashboardFragment : DaggerFragment() {
         binding.adjustmentStatus.isFocusable = true
         binding.adjustmentStatus.setOnClickListener {
             loop.invoke("Dashboard", true)
-            app.aaps.core.ui.toast.ToastUtils.showToastInMainThread(context, "Loop run requested")
+            app.aaps.core.ui.toast.ToastUtils.infoToast(context, "Loop run requested")
         }
 
         binding.statusCard.isClickable = true
