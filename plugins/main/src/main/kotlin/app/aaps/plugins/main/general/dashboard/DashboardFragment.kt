@@ -180,10 +180,9 @@ class DashboardFragment : DaggerFragment() {
             updateGraph()
         }
 
+        binding.adjustmentStatus.isClickable = true
+        binding.adjustmentStatus.isFocusable = true
         binding.adjustmentStatus.setOnClickListener {
-            openAdjustmentDetails()
-        }
-        binding.adjustmentStatus.setOnRunLoopClickListener {
             app.aaps.core.ui.toast.ToastUtils.infoToast(context, "Loop run requested")
             Thread {
                 try {
@@ -245,7 +244,8 @@ class DashboardFragment : DaggerFragment() {
     private fun openLoopDialog() {
         activity?.let { activity ->
             protectionCheck.queryProtection(activity, ProtectionCheck.Protection.BOLUS, UIRunnable {
-                if (isAdded) uiInteraction.runLoopDialog(childFragmentManager, 1)
+                val context = context ?: return@UIRunnable
+                startActivity(Intent(context, LoopStateActivity::class.java))
             })
         }
     }
