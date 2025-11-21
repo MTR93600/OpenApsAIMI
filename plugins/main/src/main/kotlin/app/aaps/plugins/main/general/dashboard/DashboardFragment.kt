@@ -189,7 +189,11 @@ class DashboardFragment : DaggerFragment() {
         binding.statusCard.setOnClickListener { openLoopDialog() }
         binding.glucoseGraph.graph.gridLabelRenderer?.gridColor = resourceHelper.gac(requireContext(), app.aaps.core.ui.R.attr.graphGrid)
         binding.glucoseGraph.graph.viewport.isScrollable = true
-        binding.glucoseGraph.graph.viewport.isScalable = false
+        binding.glucoseGraph.graph.viewport.isScalable = true
+        binding.glucoseGraph.graph.setOnTouchListener { v, _ ->
+            v.parent.requestDisallowInterceptTouchEvent(true)
+            false
+        }
         binding.glucoseGraph.graph.gridLabelRenderer?.reloadStyles()
     }
 
