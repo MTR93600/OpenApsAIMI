@@ -90,5 +90,15 @@
             android:layout_marginTop="8dp"
             android:orientation="vertical" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/run_loop_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Run Loop"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:textColor="@color/dashboard_on_surface"
+            app:strokeColor="@color/dashboard_on_surface" />
+
     </LinearLayout>
 </merge>

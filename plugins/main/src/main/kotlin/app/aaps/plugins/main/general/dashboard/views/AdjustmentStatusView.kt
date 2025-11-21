@@ -21,6 +21,12 @@ class AdjustmentStatusView @JvmOverloads constructor(
 
     private val binding = ComponentAdjustmentStatusBinding.inflate(LayoutInflater.from(context), this)
 
+    private val binding = ComponentAdjustmentStatusBinding.inflate(LayoutInflater.from(context), this)
+
+    fun setOnRunLoopClickListener(listener: OnClickListener) {
+        binding.runLoopButton.setOnClickListener(listener)
+    }
+
     fun update(state: AdjustmentCardState) {
         binding.glycemiaLine.text = state.glycemiaLine
         binding.predictionLine.text = state.predictionLine
