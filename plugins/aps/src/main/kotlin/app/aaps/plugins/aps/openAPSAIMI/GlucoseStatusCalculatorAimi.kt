@@ -66,6 +66,12 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
     fun getAimiFeatures(allowOldData: Boolean): AimiBgFeatures? =
         (if (shouldRecompute(allowOldData)) compute(allowOldData) else last)?.features
 
+    /** Renvoie l'historique récent des glycémies (pour safetyAdjustment). */
+    fun getRecentGlucose(): List<Float> {
+        val data = iobCobCalculator.ads.getBucketedDataTableCopy()
+        return data?.map { it.recalculated.toFloat() } ?: emptyList()
+    }
+
     /** Recalcule et renvoie (GS AIMI + features). */
     fun compute(allowOldData: Boolean): Result {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy()
