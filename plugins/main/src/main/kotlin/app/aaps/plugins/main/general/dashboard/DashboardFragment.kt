@@ -189,7 +189,7 @@ class DashboardFragment : DaggerFragment() {
         binding.statusCard.setOnClickListener { openLoopDialog() }
         binding.glucoseGraph.graph.gridLabelRenderer?.gridColor = resourceHelper.gac(requireContext(), app.aaps.core.ui.R.attr.graphGrid)
         binding.glucoseGraph.graph.viewport.isScrollable = true
-        binding.glucoseGraph.graph.viewport.isScalable = true
+        binding.glucoseGraph.graph.viewport.isScalable = false
         binding.glucoseGraph.graph.gridLabelRenderer?.reloadStyles()
     }
 
@@ -229,11 +229,8 @@ class DashboardFragment : DaggerFragment() {
     }
 
     private fun openLoopDialog() {
-        activity?.let { activity ->
-            protectionCheck.queryProtection(activity, ProtectionCheck.Protection.BOLUS, UIRunnable {
-                if (isAdded) uiInteraction.runLoopDialog(childFragmentManager, 1)
-            })
-        }
+        val context = context ?: return
+        startActivity(Intent(context, LoopStateActivity::class.java))
     }
 
     @RequiresApi(Build.VERSION_CODES.CUPCAKE)
