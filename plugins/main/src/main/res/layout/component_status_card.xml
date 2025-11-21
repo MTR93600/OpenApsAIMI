@@ -30,6 +30,20 @@
             app:layout_constraintTop_toTopOf="@id/loop_indicator"
             app:layout_constraintBottom_toBottomOf="@id/loop_indicator" />
 
+        <!-- Unicorn Icon (Left of Glucose) -->
+        <ImageView
+            android:id="@+id/unicorn_icon"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="8dp"
+            android:contentDescription="@string/app_name"
+            android:src="@drawable/unicorn"
+            app:layout_constraintHorizontal_chainStyle="packed"
+            app:layout_constraintBottom_toBottomOf="@id/glucose_value"
+            app:layout_constraintEnd_toStartOf="@id/glucose_value"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@id/glucose_value" />
+
         <!-- Glucose Value (Center) -->
         <TextView
             android:id="@+id/glucose_value"
@@ -40,9 +54,8 @@
             android:textAppearance="@style/TextAppearance.MaterialComponents.Headline3"
             android:textStyle="bold"
             android:text="--"
-            app:layout_constraintHorizontal_chainStyle="packed"
             app:layout_constraintTop_toBottomOf="@id/loop_status"
-            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintStart_toEndOf="@id/unicorn_icon"
             app:layout_constraintEnd_toStartOf="@id/trend_arrow" />
 
         <!-- Trend Arrow (Right of Glucose) -->
