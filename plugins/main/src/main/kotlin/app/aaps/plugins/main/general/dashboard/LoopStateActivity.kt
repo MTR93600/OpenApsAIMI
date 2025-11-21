@@ -66,11 +66,12 @@ class LoopStateActivity : TranslatedDaggerAppCompatActivity() {
                 setOnClickListener {
                     OKDialog.showConfirmation(
                         this@LoopStateActivity,
-                        "${resourceHelper.gs(app.aaps.core.ui.R.string.confirm)}: $title"
-                    ) {
-                        handler.post { onClick() }
-                        finish()
-                    }
+                        "${resourceHelper.gs(app.aaps.core.ui.R.string.confirm)}: $title",
+                        Runnable {
+                            handler.post { onClick() }
+                            finish()
+                        }
+                    )
                 }
             }
             icon?.mutate()?.setTint(resourceHelper.gac(this, app.aaps.core.ui.R.attr.userOptionColor))
