@@ -9,12 +9,20 @@ import app.aaps.core.ui.activities.TranslatedDaggerAppCompatActivity
 import app.aaps.plugins.main.R
 import app.aaps.plugins.main.databinding.ActivityAdjustmentDetailsBinding
 import app.aaps.plugins.main.general.dashboard.viewmodel.AdjustmentCardState
+import app.aaps.core.interfaces.aps.Loop
+import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.ui.toast.ToastUtils
+import javax.inject.Inject
 
 class AdjustmentDetailsActivity : TranslatedDaggerAppCompatActivity() {
 
     companion object {
         const val EXTRA_ADJUSTMENT_STATE = "extra_adjustment_state"
     }
+
+    @Inject lateinit var loop: Loop
+    @Inject lateinit var aapsLogger: AAPSLogger
 
     private lateinit var binding: ActivityAdjustmentDetailsBinding
 
@@ -48,6 +56,17 @@ class AdjustmentDetailsActivity : TranslatedDaggerAppCompatActivity() {
         }
 
         renderDecisions(state.adjustments)
+
+        binding.runLoopButton.setOnClickListener {
+            ToastUtils.infoToast(this, "Loop run requested")
+            Thread {
+                try {
+                    loop.invoke("AdjustmentDetails", true)
+                } catch (e: Exception) {
+                    aapsLogger.error(LTag.APS, "Error invoking loop from details", e)
+                }
+            }.start()
+        }
     }
 
     private fun renderDecisions(decisions: List<String>) {

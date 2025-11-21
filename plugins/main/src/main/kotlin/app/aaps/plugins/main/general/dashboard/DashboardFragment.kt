@@ -183,14 +183,7 @@ class DashboardFragment : DaggerFragment() {
         binding.adjustmentStatus.isClickable = true
         binding.adjustmentStatus.isFocusable = true
         binding.adjustmentStatus.setOnClickListener {
-            app.aaps.core.ui.toast.ToastUtils.infoToast(context, "Loop run requested")
-            Thread {
-                try {
-                    loop.invoke("Dashboard", true)
-                } catch (e: Exception) {
-                    aapsLogger.error(app.aaps.core.interfaces.logging.LTag.APS, "Error invoking loop from dashboard", e)
-                }
-            }.start()
+            openAdjustmentDetails()
         }
 
         binding.statusCard.isClickable = true
@@ -244,8 +237,7 @@ class DashboardFragment : DaggerFragment() {
     private fun openLoopDialog() {
         activity?.let { activity ->
             protectionCheck.queryProtection(activity, ProtectionCheck.Protection.BOLUS, UIRunnable {
-                val context = context ?: return@UIRunnable
-                startActivity(Intent(context, LoopStateActivity::class.java))
+                if (isAdded) uiInteraction.runLoopDialog(childFragmentManager, 1)
             })
         }
     }
