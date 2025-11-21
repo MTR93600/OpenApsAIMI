@@ -182,7 +182,7 @@
             </com.google.android.material.card.MaterialCardView>
 
         </LinearLayout>
-
+        </LinearLayout>
     </ScrollView>
 
     <com.google.android.material.button.MaterialButton
