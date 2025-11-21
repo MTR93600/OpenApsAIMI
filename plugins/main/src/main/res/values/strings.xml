@@ -384,4 +384,17 @@
     <string name="simple_mode_enabled">Simple mode enabled</string>
     <string name="minimal_skin_description">New skin dashboard</string>
 
+    <string name="suspendloopfor1h">Suspend loop for 1h</string>
+    <string name="suspendloopfor2h">Suspend loop for 2h</string>
+    <string name="suspendloopfor3h">Suspend loop for 3h</string>
+    <string name="suspendloopfor10h">Suspend loop for 10 h</string>
+    <string name="disconnectpump">Disconnect pump</string>
+    <string name="disconnectpumpfor15m">Disconnect pump for 15 min</string>
+    <string name="disconnectpumpfor30m">Disconnect pump for 30 min</string>
+    <string name="disconnectpumpfor1h">Disconnect pump for 1 h</string>
+    <string name="disconnectpumpfor2h">Disconnect pump for 2 h</string>
+    <string name="disconnectpumpfor3h">Disconnect pump for 3 h</string>
+    <string name="resume">Resume</string>
+    <string name="reconnect">Reconnect Pump</string>
+
 </resources>
