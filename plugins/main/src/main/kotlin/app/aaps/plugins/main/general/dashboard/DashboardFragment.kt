@@ -180,10 +180,18 @@ class DashboardFragment : DaggerFragment() {
             updateGraph()
         }
 
-        binding.adjustmentStatus.isClickable = true
-        binding.adjustmentStatus.isFocusable = true
         binding.adjustmentStatus.setOnClickListener {
             openAdjustmentDetails()
+        }
+        binding.adjustmentStatus.setOnRunLoopClickListener {
+            app.aaps.core.ui.toast.ToastUtils.infoToast(context, "Loop run requested")
+            Thread {
+                try {
+                    loop.invoke("Dashboard", true)
+                } catch (e: Exception) {
+                    aapsLogger.error(app.aaps.core.interfaces.logging.LTag.APS, "Error invoking loop from dashboard", e)
+                }
+            }.start()
         }
 
         binding.statusCard.isClickable = true

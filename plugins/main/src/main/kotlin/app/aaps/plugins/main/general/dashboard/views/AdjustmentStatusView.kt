@@ -21,6 +21,8 @@ class AdjustmentStatusView @JvmOverloads constructor(
 
     private val binding = ComponentAdjustmentStatusBinding.inflate(LayoutInflater.from(context), this)
 
+    private val binding = ComponentAdjustmentStatusBinding.inflate(LayoutInflater.from(context), this)
+
     fun setOnRunLoopClickListener(listener: OnClickListener) {
         binding.runLoopButton.setOnClickListener(listener)
     }
