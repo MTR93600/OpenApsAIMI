@@ -1019,4 +1019,5 @@
     <string name="oaps_aimi_delta_pos_release_title">Positive Δ to release (mg/dL/5 min)</string>
     <string name="oaps_aimi_delta_pos_release_summary">If Δ exceeds this value, reduce/relax the intensification.</string>
 
+    <string name="hypo_risk_notification_text">Hypo risk detected: Rapid drop!</string>
 </resources>

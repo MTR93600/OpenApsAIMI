@@ -98,6 +98,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val profileUtil: ProfileUtil,
     private val fabricPrivacy: FabricPrivacy,
     private val preferences: Preferences,
+    private val uiInteraction: app.aaps.core.interfaces.ui.UiInteraction,
     private val wCycleFacade: WCycleFacade,
     private val wCyclePreferences: WCyclePreferences,
     private val wCycleLearner: WCycleLearner,
@@ -533,6 +534,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val reasonBuilder = StringBuilder()
         var stopBasal = false
         var basalLS = false
+        var isHypoRisk = false
 
         // Liste des facteurs multiplicatifs proposés ; on calculera la moyenne à la fin
         val factors = mutableListOf<Float>()
@@ -540,6 +542,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 1. Contrôle de la chute rapide
         if (dropPerHour >= maxAllowedDropPerHour) {
             stopBasal = true
+            isHypoRisk = true
             factors.add(0.3f)
             //reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction; ")
             reasonBuilder.append(context.getString(R.string.bg_drop_high, dropPerHour))
@@ -628,7 +631,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             stopBasal = stopBasal,
             bolusFactor = bolusFactor,
             reason = reasonBuilder.toString(),
-            basalLS = basalLS
+            basalLS = basalLS,
+            isHypoRisk = isHypoRisk
         )
     }
 
@@ -2656,7 +2660,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     @SuppressLint("NewApi", "DefaultLocale") fun determine_basal(
         glucose_status: GlucoseStatusAIMI, currenttemp: CurrentTemp, iob_data_array: Array<IobTotal>, profile: OapsProfileAimi, autosens_data: AutosensResult, mealData: MealData,
-        microBolusAllowed: Boolean, currentTime: Long, flatBGsDetected: Boolean, dynIsfMode: Boolean
+        microBolusAllowed: Boolean, currentTime: Long, flatBGsDetected: Boolean, dynIsfMode: Boolean, uiInteraction: UiInteraction
     ): RT {
         consoleError.clear()
         consoleLog.clear()
@@ -3113,7 +3117,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         //val max_iob = profile.max_iob // maximum amount of non-bolus IOB OpenAPS will ever deliver
         //val max_iob = maxIob
         var maxIobLimit = maxIob
-        //this.maxIob = max_iob
+        //this.maxIob = maxIob
         // if min and max are set, then set target to their average
         var target_bg = (profile.min_bg + profile.max_bg) / 2
         var min_bg = profile.min_bg
@@ -3881,20 +3885,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             //rT.reason.append("Eventual BG " + convertBG(eventualBG) + " >= " + convertBG(max_bg) + ", ")
             rT.reason.append(context.getString(R.string.reason_eventual_bg, convertBG(eventualBG), convertBG(max_bg)))
         }
-        val recentBGValues: List<Float> = getRecentBGs()
+        val tdd24h = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount ?: 0.0
+        val tirInHypo = tirCalculator.averageTIR(tirCalculator.calculate(1, 65.0, 180.0))?.belowPct() ?: 0.0
         val safetyDecision = safetyAdjustment(
-            currentBG = bg.toFloat(),
-            predictedBG = predictedBg,
-            bgHistory = recentBGValues,
+            currentBG = glucoseStatus.glucose.toFloat(),
+            predictedBG = eventualBG.toFloat(),
+            bgHistory = glucoseStatusCalculatorAimi.getRecentGlucose(),
             combinedDelta = combinedDelta.toFloat(),
             iob = iob,
-            maxIob = maxIob.toFloat(),
-            tdd24Hrs = tdd24Hrs,
+            maxIob = profile.max_iob.toFloat(),
+            tdd24Hrs = tdd24h.toFloat(),
             tddPerHour = tddPerHour,
-            tirInhypo = currentTIRLow.toFloat(),
-            targetBG = targetBg,
-            zeroBasalDurationMinutes = zeroBasalAccumulatedMinutes
+            tirInhypo = tirInHypo.toFloat(),
+            targetBG = profile.target_bg.toFloat(),
+            zeroBasalDurationMinutes = windowSinceDoseInt
         )
+
+        if (safetyDecision.isHypoRisk) {
+            uiInteraction.addNotification(
+                app.aaps.core.interfaces.notifications.Notification.HYPO_RISK_ALARM,
+                context.getString(R.string.hypo_risk_notification_text),
+                app.aaps.core.interfaces.notifications.Notification.URGENT
+            )
+        }
         // --- helpers ---
         fun runtimeToMinutes(rt: Long?): Int {
             if (rt == null) return Int.MAX_VALUE

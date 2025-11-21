@@ -143,6 +143,7 @@ open class Notification {
         const val AAPS_DIR_NOT_SELECTED = 92
         const val EQUIL_ALARM = 93
         const val EQUIL_ALARM_INSULIN = 94
+        const val HYPO_RISK_ALARM = 95
 
         const val USER_MESSAGE = 1000
 
