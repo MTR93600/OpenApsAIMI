@@ -3,7 +3,7 @@
     <dimen name="dashboard_card_corner_large">24dp</dimen>
     <dimen name="dashboard_card_corner_small">18dp</dimen>
     <dimen name="dashboard_card_elevation">8dp</dimen>
-    <dimen name="dashboard_block_spacing">5dp</dimen>
+    <dimen name="dashboard_block_spacing">10dp</dimen>
     <dimen name="dashboard_chip_padding_vertical">8dp</dimen>
     <dimen name="dashboard_chip_padding_horizontal">14dp</dimen>
     <dimen name="dashboard_chip_spacing">8dp</dimen>
