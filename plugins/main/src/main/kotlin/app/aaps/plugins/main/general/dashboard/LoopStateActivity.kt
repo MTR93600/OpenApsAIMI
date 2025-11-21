@@ -66,8 +66,7 @@ class LoopStateActivity : TranslatedDaggerAppCompatActivity() {
                 setOnClickListener {
                     OKDialog.showConfirmation(
                         this@LoopStateActivity,
-                        resourceHelper.gs(app.aaps.core.ui.R.string.confirm),
-                        title
+                        "${resourceHelper.gs(app.aaps.core.ui.R.string.confirm)}: $title"
                     ) {
                         handler.post { onClick() }
                         finish()
@@ -107,45 +106,45 @@ class LoopStateActivity : TranslatedDaggerAppCompatActivity() {
         }
         if (allowedModes.contains(RM.Mode.RESUME)) {
              val action = if (runningMode == RM.Mode.DISCONNECTED_PUMP) Action.RECONNECT else Action.RESUME
-             val title = if (runningMode == RM.Mode.DISCONNECTED_PUMP) resourceHelper.gs(app.aaps.ui.R.string.reconnect) else resourceHelper.gs(app.aaps.ui.R.string.resume)
+             val title = if (runningMode == RM.Mode.DISCONNECTED_PUMP) resourceHelper.gs(app.aaps.core.ui.R.string.reconnect) else resourceHelper.gs(app.aaps.core.ui.R.string.resume)
              addButton(title, app.aaps.core.ui.R.drawable.ic_loop_resume) {
                 loop.handleRunningModeChange(newRM = RM.Mode.RESUME, action = action, source = Sources.LoopDialog, profile = profile)
                 if (runningMode == RM.Mode.DISCONNECTED_PUMP) preferences.put(BooleanNonKey.ObjectivesReconnectUsed, true)
             }
         }
         if (allowedModes.contains(RM.Mode.SUSPENDED_BY_USER)) {
-            addButton(resourceHelper.gs(app.aaps.ui.R.string.suspendloopfor1h), app.aaps.core.ui.R.drawable.ic_loop_paused) {
+            addButton(resourceHelper.gs(app.aaps.core.ui.R.string.suspendloopfor1h), app.aaps.core.ui.R.drawable.ic_loop_paused) {
                 loop.handleRunningModeChange(newRM = RM.Mode.SUSPENDED_BY_USER, durationInMinutes = T.hours(1).mins().toInt(), action = Action.SUSPEND, source = Sources.LoopDialog, profile = profile)
             }
-            addButton(resourceHelper.gs(app.aaps.ui.R.string.suspendloopfor2h), app.aaps.core.ui.R.drawable.ic_loop_paused) {
+            addButton(resourceHelper.gs(app.aaps.core.ui.R.string.suspendloopfor2h), app.aaps.core.ui.R.drawable.ic_loop_paused) {
                 loop.handleRunningModeChange(newRM = RM.Mode.SUSPENDED_BY_USER, durationInMinutes = T.hours(2).mins().toInt(), action = Action.SUSPEND, source = Sources.LoopDialog, profile = profile)
             }
-             addButton(resourceHelper.gs(app.aaps.ui.R.string.suspendloopfor3h), app.aaps.core.ui.R.drawable.ic_loop_paused) {
+             addButton(resourceHelper.gs(app.aaps.core.ui.R.string.suspendloopfor3h), app.aaps.core.ui.R.drawable.ic_loop_paused) {
                 loop.handleRunningModeChange(newRM = RM.Mode.SUSPENDED_BY_USER, durationInMinutes = T.hours(3).mins().toInt(), action = Action.SUSPEND, source = Sources.LoopDialog, profile = profile)
             }
-             addButton(resourceHelper.gs(app.aaps.ui.R.string.suspendloopfor10h), app.aaps.core.ui.R.drawable.ic_loop_paused) {
+             addButton(resourceHelper.gs(app.aaps.core.ui.R.string.suspendloopfor10h), app.aaps.core.ui.R.drawable.ic_loop_paused) {
                 loop.handleRunningModeChange(newRM = RM.Mode.SUSPENDED_BY_USER, durationInMinutes = T.hours(10).mins().toInt(), action = Action.SUSPEND, source = Sources.LoopDialog, profile = profile)
             }
         }
         if (allowedModes.contains(RM.Mode.DISCONNECTED_PUMP) && config.APS) {
              if (pumpDescription.tempDurationStep15mAllowed) {
-                addButton(resourceHelper.gs(app.aaps.ui.R.string.disconnectpumpfor15m), app.aaps.core.ui.R.drawable.ic_loop_disconnected) {
+                addButton(resourceHelper.gs(app.aaps.core.ui.R.string.disconnectpumpfor15m), app.aaps.core.ui.R.drawable.ic_loop_disconnected) {
                     loop.handleRunningModeChange(newRM = RM.Mode.DISCONNECTED_PUMP, durationInMinutes = 15, action = Action.DISCONNECT, source = Sources.LoopDialog, profile = profile)
                 }
              }
              if (pumpDescription.tempDurationStep30mAllowed) {
-                addButton(resourceHelper.gs(app.aaps.ui.R.string.disconnectpumpfor30m), app.aaps.core.ui.R.drawable.ic_loop_disconnected) {
+                addButton(resourceHelper.gs(app.aaps.core.ui.R.string.disconnectpumpfor30m), app.aaps.core.ui.R.drawable.ic_loop_disconnected) {
                     loop.handleRunningModeChange(newRM = RM.Mode.DISCONNECTED_PUMP, durationInMinutes = 30, action = Action.DISCONNECT, source = Sources.LoopDialog, profile = profile)
                 }
              }
-            addButton(resourceHelper.gs(app.aaps.ui.R.string.disconnectpumpfor1h), app.aaps.core.ui.R.drawable.ic_loop_disconnected) {
+            addButton(resourceHelper.gs(app.aaps.core.ui.R.string.disconnectpumpfor1h), app.aaps.core.ui.R.drawable.ic_loop_disconnected) {
                 loop.handleRunningModeChange(newRM = RM.Mode.DISCONNECTED_PUMP, durationInMinutes = 60, action = Action.DISCONNECT, source = Sources.LoopDialog, profile = profile)
                 preferences.put(BooleanNonKey.ObjectivesDisconnectUsed, true)
             }
-            addButton(resourceHelper.gs(app.aaps.ui.R.string.disconnectpumpfor2h), app.aaps.core.ui.R.drawable.ic_loop_disconnected) {
+            addButton(resourceHelper.gs(app.aaps.core.ui.R.string.disconnectpumpfor2h), app.aaps.core.ui.R.drawable.ic_loop_disconnected) {
                 loop.handleRunningModeChange(newRM = RM.Mode.DISCONNECTED_PUMP, durationInMinutes = 120, action = Action.DISCONNECT, source = Sources.LoopDialog, profile = profile)
             }
-            addButton(resourceHelper.gs(app.aaps.ui.R.string.disconnectpumpfor3h), app.aaps.core.ui.R.drawable.ic_loop_disconnected) {
+            addButton(resourceHelper.gs(app.aaps.core.ui.R.string.disconnectpumpfor3h), app.aaps.core.ui.R.drawable.ic_loop_disconnected) {
                 loop.handleRunningModeChange(newRM = RM.Mode.DISCONNECTED_PUMP, durationInMinutes = 180, action = Action.DISCONNECT, source = Sources.LoopDialog, profile = profile)
             }
         }
