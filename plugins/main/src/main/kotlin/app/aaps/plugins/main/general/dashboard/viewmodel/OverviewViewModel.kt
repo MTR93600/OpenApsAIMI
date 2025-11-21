@@ -321,8 +321,27 @@ class OverviewViewModel(
             if (reservoirLevel > 0)
                 resourceHelper.gs(app.aaps.core.ui.R.string.format_insulin_units, reservoirLevel)
             else resourceHelper.gs(app.aaps.core.ui.R.string.value_unavailable_short)
-        val siteAge = formatTherapyAge(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.CANNULA_CHANGE), now)
-        val sensorAge = formatTherapyAge(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE), now)
+
+        val siteEvent = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.CANNULA_CHANGE)
+        var siteAge = formatTherapyAge(siteEvent, now)
+        siteEvent?.let {
+            val diff = now - it.timestamp
+            // > 3 days (72 hours) -> Yellow
+            if (diff > TimeUnit.DAYS.toMillis(3)) {
+                siteAge = "<font color='#FFFF00'>$siteAge</font>"
+            }
+        }
+
+        val sensorEvent = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)
+        var sensorAge = formatTherapyAge(sensorEvent, now)
+        sensorEvent?.let {
+            val diff = now - it.timestamp
+            // > 8 days (9th day start) -> Orange
+            if (diff > TimeUnit.DAYS.toMillis(8)) {
+                sensorAge = "<font color='#FFA500'>$sensorAge</font>"
+            }
+        }
+
         return resourceHelper.gs(R.string.dashboard_adjustment_pump, reservoirText, siteAge, sensorAge)
     }
 

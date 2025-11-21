@@ -26,7 +26,7 @@ class AdjustmentStatusView @JvmOverloads constructor(
         binding.predictionLine.text = state.predictionLine
         binding.iobActivityLine.text = state.iobActivityLine
         binding.decisionLine.text = state.decisionLine
-        binding.pumpLine.text = state.pumpLine
+        binding.pumpLine.text = androidx.core.text.HtmlCompat.fromHtml(state.pumpLine, androidx.core.text.HtmlCompat.FROM_HTML_MODE_LEGACY)
         binding.safetyLine.text = state.safetyLine
         if (state.modeLine.isNullOrBlank()) {
             binding.modeLine.visibility = View.GONE
