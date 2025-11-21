@@ -723,7 +723,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 microBolusAllowed = microBolusAllowed,
                 currentTime = now,
                 flatBGsDetected = flatBGsDetected,
-                dynIsfMode = dynIsfMode
+                dynIsfMode = dynIsfMode,
+                uiInteraction = uiInteraction
             ).also {
                 val determineBasalResult = apsResultProvider.get().with(it)
                 // Preserve input data
