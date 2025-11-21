@@ -229,8 +229,12 @@ class DashboardFragment : DaggerFragment() {
     }
 
     private fun openLoopDialog() {
-        val context = context ?: return
-        startActivity(Intent(context, LoopStateActivity::class.java))
+        activity?.let { activity ->
+            protectionCheck.queryProtection(activity, ProtectionCheck.Protection.BOLUS, UIRunnable {
+                val context = context ?: return@UIRunnable
+                startActivity(Intent(context, LoopStateActivity::class.java))
+            })
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.CUPCAKE)
