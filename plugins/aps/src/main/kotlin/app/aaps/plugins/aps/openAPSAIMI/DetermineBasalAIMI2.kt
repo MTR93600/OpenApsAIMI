@@ -542,7 +542,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val factors = mutableListOf<Float>()
 
         // 1. Contrôle de la chute rapide
-        if (dropPerHour >= maxAllowedDropPerHour && (delta < 0 || currentBG < 110f)) {
+        if (dropPerHour >= maxAllowedDropPerHour && delta < 0 && currentBG < 110f) {
             stopBasal = true
             isHypoRisk = true
             factors.add(0.3f)
