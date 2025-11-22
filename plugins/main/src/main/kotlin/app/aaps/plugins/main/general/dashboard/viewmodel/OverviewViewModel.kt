@@ -240,7 +240,8 @@ class OverviewViewModel(
             targetBg = loop.lastRun?.request?.oapsProfileAimi?.target_bg,
             smb = loop.lastRun?.request?.smb,
             basal = loop.lastRun?.request?.rate,
-            detailedReason = loop.lastRun?.request?.reason
+            detailedReason = loop.lastRun?.request?.reason,
+            isHypoRisk = loop.lastRun?.request?.isHypoRisk ?: false
         )
         _adjustmentState.postValue(state)
     }
@@ -510,5 +511,6 @@ data class AdjustmentCardState(
     val targetBg: Double? = null,
     val smb: Double? = null,
     val basal: Double? = null,
-    val detailedReason: String? = null
+    val detailedReason: String? = null,
+    val isHypoRisk: Boolean = false
 ) : Serializable

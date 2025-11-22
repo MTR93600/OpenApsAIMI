@@ -79,6 +79,7 @@ class DetermineBasalResult @Inject constructor(
     override var variableSens: Double? = null
     override var isfMgdlForCarbs: Double? = null // used only to pass to AAPS client
     override var scriptDebug: List<String>? = null
+    override var isHypoRisk: Boolean = false
     var eventualBG = 0.0
     var snoozeBG = 0.0
 
@@ -125,6 +126,7 @@ class DetermineBasalResult @Inject constructor(
         variableSens = result.variable_sens
         isfMgdlForCarbs = result.isfMgdlForCarbs
         scriptDebug = result.consoleError
+        isHypoRisk = result.isHypoRisk
     }
 
     override val carbsRequiredText: String

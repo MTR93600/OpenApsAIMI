@@ -174,7 +174,14 @@ class DashboardFragment : DaggerFragment() {
         }
 
         viewModel.statusCardState.observe(viewLifecycleOwner) { binding.statusCard.update(it) }
-        viewModel.adjustmentState.observe(viewLifecycleOwner) { state -> state?.let { binding.adjustmentStatus.update(it) } }
+        viewModel.adjustmentState.observe(viewLifecycleOwner) { state ->
+            state?.let {
+                binding.adjustmentStatus.update(it)
+                if (it.isHypoRisk) {
+                    showHypoRiskDialog()
+                }
+            }
+        }
         viewModel.graphMessage.observe(viewLifecycleOwner) {
             binding.glucoseGraph.setUpdateMessage(it)
             updateGraph()
@@ -323,5 +330,17 @@ class DashboardFragment : DaggerFragment() {
         graphData.setNumVerticalLabels()
         graphData.formatAxis(overviewData.fromTime, overviewData.endTime)
         graphData.performUpdate()
+        graphData.performUpdate()
+    }
+
+    private var hypoRiskDialog: android.app.AlertDialog? = null
+
+    private fun showHypoRiskDialog() {
+        if (hypoRiskDialog?.isShowing == true) return
+        hypoRiskDialog = android.app.AlertDialog.Builder(requireContext())
+            .setTitle(R.string.hypo_risk_notification_title)
+            .setMessage(R.string.hypo_risk_notification_text)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 }
