@@ -1624,9 +1624,112 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     )
                 )
             })
+/*
+                    addPreference(PreferenceCategory(context).apply {
+                        key = "aimi_plateau_settings"
+                        title = rh.gs(R.string.aimi_plateau_prefs_title_menu)
 
 
+                    // Seuil d'attivazione & détection du plateau
+                    addPreference(AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMIHighBg,
+                        dialogMessage = R.string.oaps_aimi_highbg_summary,
+                        title = R.string.oaps_aimi_highbg_title
+                    ))
+                    addPreference(AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMIPlateauBandAbs,
+                        dialogMessage = R.string.oaps_aimi_plateau_band_summary,
+                        title = R.string.oaps_aimi_plateau_band_title
+                    ))
 
+                    // 2. Temporary basal increase (correction) - Kicker
+
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.aimi_plateau_kicker_prefs_title_menu)
+
+                        addPreference(AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIMaxMultiplier,
+                            dialogMessage = R.string.oaps_aimi_max_multiplier_summary,
+                            title = R.string.oaps_aimi_max_multiplier_title
+                        ))
+                        addPreference(AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIKickerStep,
+                            dialogMessage = R.string.oaps_aimi_kicker_step_summary,
+                            title = R.string.oaps_aimi_kicker_step_title
+                        ))
+                        addPreference(AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIKickerMinUph,
+                            dialogMessage = R.string.oaps_aimi_kicker_minuph_summary,
+                            title = R.string.oaps_aimi_kicker_minuph_title
+                        ))
+                        addPreference(AdaptiveIntPreference(
+                            ctx = context,
+                            intKey = IntKey.OApsAIMIKickerStartMin,
+                            dialogMessage = R.string.oaps_aimi_kicker_startmin_summary,
+                            title = R.string.oaps_aimi_kicker_startmin_title
+                        ))
+                        addPreference(AdaptiveIntPreference(
+                            ctx = context,
+                            intKey = IntKey.OApsAIMIKickerMaxMin,
+                            dialogMessage = R.string.oaps_aimi_kicker_maxmin_summary,
+                            title = R.string.oaps_aimi_kicker_maxmin_title
+                        ))
+                    })
+
+                    // 3. Restart from 0 U/h basal - Reprise
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.aimi_plateau_reprise_prefs_title_menu)
+
+                        addPreference(AdaptiveIntPreference(
+                            ctx = context,
+                            intKey = IntKey.OApsAIMIZeroResumeMin,
+                            dialogMessage = R.string.oaps_aimi_zero_resume_min_summary,
+                            title = R.string.oaps_aimi_zero_resume_min_title
+                        ))
+                        addPreference(AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIZeroResumeFrac,
+                            dialogMessage = R.string.oaps_aimi_zero_resume_frac_summary,
+                            title = R.string.oaps_aimi_zero_resume_frac_title
+                        ))
+                        addPreference(AdaptiveIntPreference(
+                            ctx = context,
+                            intKey = IntKey.OApsAIMIZeroResumeMax,
+                            dialogMessage = R.string.oaps_aimi_zero_resume_max_summary,
+                            title = R.string.oaps_aimi_zero_resume_max_title
+                        ))
+                    })
+
+                    // 4. Anti-stall prevention - Antistall
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.aimi_plateau_antistall_prefs_title_menu)
+
+                        addPreference(AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIR2Confident,
+                            dialogMessage = R.string.oaps_aimi_r2_conf_summary,
+                            title = R.string.oaps_aimi_r2_conf_title
+                        ))
+                        addPreference(AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIAntiStallBias,
+                            dialogMessage = R.string.oaps_aimi_antistall_bias_summary,
+                            title = R.string.oaps_aimi_antistall_bias_title
+                        ))
+                        addPreference(AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIDeltaPosRelease,
+                            dialogMessage = R.string.oaps_aimi_delta_pos_release_summary,
+                            title = R.string.oaps_aimi_delta_pos_release_title
+                        ))
+                    })
+                })
+                })*/
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "Training_ML_Modes"
                 //title = "Training ML and Modes"
