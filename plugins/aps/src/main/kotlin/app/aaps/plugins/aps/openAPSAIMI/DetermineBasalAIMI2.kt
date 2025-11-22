@@ -3914,8 +3914,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 app.aaps.core.interfaces.notifications.Notification.HYPO_RISK_ALARM,
                 context.getString(R.string.hypo_risk_notification_text),
                 app.aaps.core.interfaces.notifications.Notification.URGENT
-            )*/
-        }
+            )
+        }*/
         // --- helpers ---
         fun runtimeToMinutes(rt: Long?): Int {
             if (rt == null) return Int.MAX_VALUE
