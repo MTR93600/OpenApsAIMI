@@ -47,7 +47,8 @@ data class RT(
     var aimilog: StringBuilder = StringBuilder(),
 
     var consoleLog: MutableList<String>? = null,
-    var consoleError: MutableList<String>? = null
+    var consoleError: MutableList<String>? = null,
+    var isHypoRisk: Boolean = false
 ) {
 
     fun serialize() = Json.encodeToString(serializer(), this)

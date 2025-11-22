@@ -397,4 +397,7 @@
     <string name="resume">Resume</string>
     <string name="reconnect">Reconnect Pump</string>
 
+    <string name="hypo_risk_notification_title">Hypo Risk</string>
+    <string name="hypo_risk_notification_text">Hypo risk detected! Please check your BG.</string>
+
 </resources>

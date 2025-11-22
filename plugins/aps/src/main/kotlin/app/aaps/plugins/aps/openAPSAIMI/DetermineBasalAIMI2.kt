@@ -3908,6 +3908,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             targetBG = profile.target_bg.toFloat(),
             zeroBasalDurationMinutes = windowSinceDoseInt
         )
+        rT.isHypoRisk = safetyDecision.isHypoRisk
 
         if (safetyDecision.isHypoRisk) {
             uiInteraction.addNotification(

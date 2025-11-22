@@ -24,6 +24,7 @@ interface APSResult {
     var variableSens: Double?
     var isfMgdlForCarbs: Double? // used only to pass to AAPS client
     var scriptDebug: List<String>?
+    var isHypoRisk: Boolean
 
     val predictionsAsGv: MutableList<GV>
     val latestPredictionsTime: Long
