@@ -330,7 +330,6 @@ class DashboardFragment : DaggerFragment() {
         graphData.setNumVerticalLabels()
         graphData.formatAxis(overviewData.fromTime, overviewData.endTime)
         graphData.performUpdate()
-        graphData.performUpdate()
     }
 
     private var hypoRiskDialog: android.app.AlertDialog? = null
