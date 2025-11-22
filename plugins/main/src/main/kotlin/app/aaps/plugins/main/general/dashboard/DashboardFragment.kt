@@ -332,14 +332,18 @@ class DashboardFragment : DaggerFragment() {
         graphData.performUpdate()
     }
 
-    private var hypoRiskDialog: android.app.AlertDialog? = null
+    private var isHypoRiskDialogShowing = false
 
     private fun showHypoRiskDialog() {
-        if (hypoRiskDialog?.isShowing == true) return
-        hypoRiskDialog = android.app.AlertDialog.Builder(requireContext())
-            .setTitle(R.string.hypo_risk_notification_title)
-            .setMessage(R.string.hypo_risk_notification_text)
-            .setPositiveButton(android.R.string.ok, null)
-            .show()
+        if (isHypoRiskDialogShowing) return
+        isHypoRiskDialogShowing = true
+        app.aaps.core.ui.dialogs.OKDialog.show(
+            requireContext(),
+            getString(R.string.hypo_risk_notification_title),
+            getString(R.string.hypo_risk_notification_text),
+            runOnDismiss = true
+        ) {
+            isHypoRiskDialogShowing = false
+        }
     }
 }
