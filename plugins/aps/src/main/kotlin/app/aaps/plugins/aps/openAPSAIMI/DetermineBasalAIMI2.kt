@@ -542,6 +542,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val factors = mutableListOf<Float>()
 
         // 1. Contrôle de la chute rapide
+        /*
         if (dropPerHour >= maxAllowedDropPerHour && delta < 0 && currentBG < 110f) {
             stopBasal = true
             isHypoRisk = true
@@ -549,6 +550,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             //reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction; ")
             reasonBuilder.append(context.getString(R.string.bg_drop_high, dropPerHour))
         }
+        */
 
         // 2. Mode montée très rapide : override de toutes les réductions
         if (delta >= 20f && combinedDelta >= 15f && !honeymoon) {
