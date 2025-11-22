@@ -723,7 +723,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 microBolusAllowed = microBolusAllowed,
                 currentTime = now,
                 flatBGsDetected = flatBGsDetected,
-                dynIsfMode = dynIsfMode
+                dynIsfMode = dynIsfMode,
+                uiInteraction = uiInteraction
             ).also {
                 val determineBasalResult = apsResultProvider.get().with(it)
                 // Preserve input data
@@ -907,7 +908,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(PreferenceCategory(context).apply {
                     title = rh.gs(R.string.user_preferences_title_menu)
                 })
-
             addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIMLtraining, title = R.string.oaps_aimi_enableMlTraining_title))
             addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIweight, dialogMessage = R.string.oaps_aimi_weight_summary, title = R.string.oaps_aimi_weight_title))
             addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMICHO, dialogMessage = R.string.oaps_aimi_cho_summary, title = R.string.oaps_aimi_cho_title))
@@ -1245,6 +1245,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(PreferenceCategory(context).apply {
                     title = rh.gs(R.string.user_modes_preferences_title_menu)
                 })
+
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "Women_Cycle"
                   //title = rh.gs(R.string.wcycle_preferences)
@@ -1369,7 +1370,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(PreferenceCategory(context).apply {
                     title = rh.gs(R.string.oaps_aimi_ngr_title)
                 })
-
                 addPreference(
                     AdaptiveSwitchPreference(
                         ctx = context,

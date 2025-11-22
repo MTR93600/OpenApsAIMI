@@ -19,7 +19,6 @@ import app.aaps.plugins.aps.openAPSAIMI.smb.SmbQuantizer
 import java.io.File
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
-import kotlin.isNaN
 import kotlin.math.max
 import kotlin.math.min
 
@@ -172,7 +171,6 @@ object SmbInstructionExecutor {
                 )
             }
         }
-
 
         var smbToGive = if (input.bg > 130 && input.delta > 2 && predictedSmb == 0.0f) {
             input.modelValue

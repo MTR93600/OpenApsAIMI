@@ -896,7 +896,7 @@ Prolonged Unannounced Hypers: Decrease (0.3–0.4) so the ISF adapts more quickl
     <string name="reason_steps_adjustment">  • Steps (%1$d) ➝ +%2$.2f\n</string>
     <string name="reason_few_steps">  • Few steps (%1$d) ➝ x0.9\n</string>
     <string name="reason_high_hr">  • High HR (%1$d) ➝ x1.15\n</string>
-    <string name="reason_low_hr"> • Low HR (%1$d) ➝ x0.85\n</string>
+    <string name="reason_low_hr"> • Low HR (%1$d) ➝ x0.65\n</string>
     <string name="reason_high_activity">  • Intense activity ➝ x1.2\n</string>
     <string name="reason_total_rest">  • Total rest ➝ x0.75\n</string>
     <string name="reason_sensor_lag">  • SensorLag > Historic ➝ x0.85\n</string>
@@ -951,6 +951,9 @@ Prolonged Unannounced Hypers: Decrease (0.3–0.4) so the ISF adapts more quickl
     <string name="console_max_bg_unchanged">max_bg unchanged: %.2f</string>
     <string name="reason_hypo_guard">🛑 Hypo protection + safety margin: minBG=%1$s ≤ Threshold=%2$s (BG=%3$s, predicted=%4$s, eventual=%5$s) → SMB=0</string>
     <string name="reason_tail_damping">SMB reduced due to residual IOB: %1$.2fU → %2$.2fU (-%3$.0f%%)</string>
+    <string name="reason_meal_aggression_boost">🍽️ Meal weighting: %1$.2fU → %2$.2fU (x%3$.2f)</string>
+    <string name="reason_safety_sport_meal_reduction">🏃‍♂️ Sport safety softened by meal: %1$.2fU → %2$.2fU</string>
+    <string name="reason_meal_tail_bypass">🍽️ Meal context bypassed PK/PD damping (+%1$.0f mg/dL predicted)</string>
     <string name="reason_ai_file">🧠 A.I. file: %1$s Prediction : %2$s U</string>
     <string name="reason_boost_hyper">⚡ Hyper boost: x1.7 (BG=%1$d, Δ=%2$.1f)</string>
     <string name="reason_boost_hyper_2">⚡ Hyper boost: x1.5 (BG=%1$d, Δ=%2$.1f)</string>
@@ -959,7 +962,8 @@ Prolonged Unannounced Hypers: Decrease (0.3–0.4) so the ISF adapts more quickl
     <string name="console_dia_adjusted">DIA Adjusted (in minutes) : %.0f</string>
     <string name="console_mpc_log">MPC module: dose=%.2f, Kp=%.3f, corr=%.2f, out=%.2f</string>
     <string name="reason_mpc_pi">🎛️ MPC predictive model: %.2f U (%.0f%%) | PI physiological model: %.2f U (%.0f%%)</string>
-    <string name="reason_mpc_pi_utile">🎛️ MPC predictive model: %1$.2f U (theor. %2$.0f%%, real %5$.0f%%) | PI physiological model: %3$.2f U (theor. %4$.0f%%, real %6$.0f%%)</string>    <string name="smb_final">✅ Final SMB: %1$s U</string>
+    <string name="reason_mpc_pi_utile">🎛️ MPC predictive model: %1$.2f U (theor. %2$.0f%%, real %5$.0f%%) | PI physiological model: %3$.2f U (theor. %4$.0f%%, real %6$.0f%%)</string>
+    <string name="smb_final">✅ Final SMB: %1$s U</string>
     <string name="console_pkpd_log">\n⚗️ DIA=%1$s, peak=%2$s, tail=%3$.0f%%, exercise=%4$.0f%% (%5$s, anticip=%6$.0f%%, fresh=%7$.0f%%), ISF(fused)=%8$s (profile=%9$s, TDD=%10$s, scale=%11$.2f)</string>
     <string name="console_pkpd_log_2">\n⚗️ HighBG PKPD boost: tail=%.0f%%, scale=%.2f → SMB ×%.2f (%.2f→%.2f)</string>
     <string name="console_smb_log">\n🧪 SMB: proposed=%.2f → damped=%.2f [tail%s×%.2f (relief=%.0f%%, %s), ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s%s</string>
@@ -1082,6 +1086,5 @@ Prolonged Unannounced Hypers: Decrease (0.3–0.4) so the ISF adapts more quickl
     <string name="oaps_aimi_delta_pos_release_title">Positive change to deactivate (mg/dL/5 min)</string>
     <string name="oaps_aimi_delta_pos_release_summary">If Δ exceeds this value, basal intensification is reduced or stopped.</string>
 
-    <!--AIMI REFACTORING TRANSLATION CODE -->
-
+    <string name="hypo_risk_notification_text">Hypo risk detected: Rapid drop!</string>
 </resources>
