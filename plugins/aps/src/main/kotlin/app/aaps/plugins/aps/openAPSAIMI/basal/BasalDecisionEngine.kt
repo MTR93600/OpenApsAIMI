@@ -255,17 +255,25 @@ class BasalDecisionEngine @Inject constructor(
         if (chosenRate == null) {
             val predictedLow = input.predictedBg < 80 && input.mealData.slopeFromMaxDeviation <= 0
             val highIobStop = input.iob > input.maxIob && !input.allowMealHighIob
-            when {
-                predictedLow || highIobStop -> {
+            
+            if (predictedLow) {
+                if (input.predictedBg < 65) {
                     chosenRate = 0.0
                     overrideSafety = false
                     rT.reason.append(context.getString(R.string.safety_cut_tbr, input.maxIob))
+                } else {
+                    chosenRate = input.profileCurrentBasal * 0.25
+                    overrideSafety = false
+                    rT.reason.append("PredLow 65-80: 25% basal")
                 }
-                input.iob > input.maxIob && input.allowMealHighIob -> {
-                    chosenRate = max(input.profileCurrentBasal, input.currentTemp.rate)
-                    rT.reason.append(context.getString(R.string.reason_meal_hold_profile_basal,
-                                                       helpers.round(input.iob, 2), helpers.round(input.maxIob, 2)))
-                }
+            } else if (highIobStop) {
+                chosenRate = input.profileCurrentBasal * 0.5
+                overrideSafety = false
+                rT.reason.append("HighIOB: 50% basal")
+            } else if (input.iob > input.maxIob && input.allowMealHighIob) {
+                chosenRate = max(input.profileCurrentBasal, input.currentTemp.rate)
+                rT.reason.append(context.getString(R.string.reason_meal_hold_profile_basal,
+                                                   helpers.round(input.iob, 2), helpers.round(input.maxIob, 2)))
             }
         }
 
