@@ -37,6 +37,9 @@ class StatusCardView @JvmOverloads constructor(
             else binding.glucoseValue.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
         //binding.trendDescription.text = state.trendDescription
         binding.loopIndicator.alpha = if (state.loopIsRunning) 1f else 0.4f
+        binding.iobText.text = state.iobText
+        binding.pumpStatusText.text = state.pumpStatusText
+        binding.predictionText.text = state.predictionText
         contentDescription = state.contentDescription
     }
 }
