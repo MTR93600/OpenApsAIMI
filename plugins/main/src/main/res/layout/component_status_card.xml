@@ -90,12 +90,11 @@
             android:id="@+id/iob_text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="16dp"
             android:textColor="@color/dashboard_on_surface"
             android:textSize="14sp"
             app:layout_constraintTop_toBottomOf="@id/glucose_value"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
+            app:layout_constraintStart_toStartOf="parent" />
 
         <!-- Pump Status (Below IOB) -->
         <TextView
@@ -107,8 +106,7 @@
             android:textSize="12sp"
             android:alpha="0.8"
             app:layout_constraintTop_toBottomOf="@id/iob_text"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
+            app:layout_constraintStart_toStartOf="parent" />
 
         <!-- Prediction (Below Pump) -->
         <TextView
@@ -120,8 +118,7 @@
             android:textSize="12sp"
             android:alpha="0.8"
             app:layout_constraintTop_toBottomOf="@id/pump_status_text"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
+            app:layout_constraintStart_toStartOf="parent" />
 
         <!-- Time Ago (Bottom Right) -->
         <TextView

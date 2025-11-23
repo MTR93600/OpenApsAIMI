@@ -38,7 +38,7 @@ class StatusCardView @JvmOverloads constructor(
         //binding.trendDescription.text = state.trendDescription
         binding.loopIndicator.alpha = if (state.loopIsRunning) 1f else 0.4f
         binding.iobText.text = state.iobText
-        binding.pumpStatusText.text = state.pumpStatusText
+        binding.pumpStatusText.text = androidx.core.text.HtmlCompat.fromHtml(state.pumpStatusText, androidx.core.text.HtmlCompat.FROM_HTML_MODE_LEGACY)
         binding.predictionText.text = state.predictionText
         contentDescription = state.contentDescription
     }
