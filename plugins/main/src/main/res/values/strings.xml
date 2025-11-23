@@ -190,7 +190,7 @@
     <string name="dashboard_adjustment_pump">Pump: Reservoir %1$s | Site %2$s | Sensor %3$s</string>
     <string name="dashboard_adjustment_safety">Safety: %1$s (%2$s)</string>
     <string name="dashboard_adjustment_safety_unknown">Safety: unavailable</string>
-    <string name="dashboard_adjustment_safety_level_normal">Normal</string>
+    <string name="dashboard_adjustment_safety_level_normal">Neutral</string>
     <string name="dashboard_adjustment_safety_level_limited">Limited</string>
     <string name="dashboard_adjustment_safety_level_critical">Critical</string>
     <string name="dashboard_adjustment_reason_low">BG %1$s</string>
