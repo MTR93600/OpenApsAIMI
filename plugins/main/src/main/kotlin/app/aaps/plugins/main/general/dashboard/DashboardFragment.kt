@@ -217,13 +217,16 @@ class DashboardFragment : DaggerFragment() {
                 overviewData.rangeToDisplay = currentRange
                 overviewData.initRange()
                 calculationWorkflow.runOnScaleChanged(iobCobCalculator, overviewData)
-                // updateGraph() is called by the worker, but we can keep it for immediate feedback if needed, 
-                // though the worker is async. Let's rely on the worker or keep it for immediate UI update if data is cached?
-                // Actually, runOnScaleChanged is async (WorkManager). Calling updateGraph immediately might show old data or partial data.
-                // But let's keep it to at least update the X-axis range immediately.
-                updateGraph()
+                // Removed manual updateGraph() to avoid showing empty data before worker completes.
                 app.aaps.core.ui.toast.ToastUtils.infoToast(context, getString(R.string.graph_range_updated, currentRange))
                 return true
+            }
+
+            override fun onLongPress(e: android.view.MotionEvent) {
+                overviewData.rangeToDisplay = 6
+                overviewData.initRange()
+                calculationWorkflow.runOnScaleChanged(iobCobCalculator, overviewData)
+                app.aaps.core.ui.toast.ToastUtils.infoToast(context, getString(R.string.graph_range_updated, 6))
             }
         })
 
