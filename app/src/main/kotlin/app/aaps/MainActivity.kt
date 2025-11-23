@@ -585,7 +585,7 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
                 fh.delete()
                 // Also clear any stored password
                 exportPasswordDataStore.clearPasswordDataStore(context)
-                ToastUtils.okToast(context, context.getString(app.aaps.core.ui.R.string.password_set))
+                ToastUtils.okToast(context, context.getString(app.aaps.core.ui.R.string.password_set), isShort = false)
             }.start()
         }
     }

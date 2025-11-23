@@ -401,7 +401,7 @@ class MedtrumPlugin @Inject constructor(
 
     override fun manufacturer(): ManufacturerType = ManufacturerType.Medtrum
     override fun model(): PumpType = medtrumPump.pumpType()
-    override fun serialNumber(): String = medtrumPump.pumpSNFromSP.toString(radix = 16)
+    override fun serialNumber(): String = medtrumPump.pumpSNFromSP.toString(radix = 16).uppercase()
     override val pumpDescription: PumpDescription get() = PumpDescription().fillFor(medtrumPump.pumpType())
     override val isFakingTempsByExtendedBoluses: Boolean = false
     override fun loadTDDs(): PumpEnactResult = pumpEnactResultProvider.get() // Note: Can implement this if we implement history fully (no priority)
