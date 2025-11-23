@@ -197,7 +197,7 @@ class OverviewViewModel(
         val bolus = bolusIob()
         val basal = basalIob()
         val total = abs(bolus.iob + basal.basaliob)
-        return resourceHelper.gs(app.aaps.core.ui.R.string.format_insulin_units, total)
+        return "IOB: " + resourceHelper.gs(app.aaps.core.ui.R.string.format_insulin_units, total)
     }
 
     private fun bolusIob(): IobTotal = iobCobCalculator.calculateIobFromBolus().round()
