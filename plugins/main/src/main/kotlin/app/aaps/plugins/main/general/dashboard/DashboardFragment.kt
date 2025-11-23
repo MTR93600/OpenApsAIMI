@@ -207,7 +207,22 @@ class DashboardFragment : DaggerFragment() {
         binding.glucoseGraph.graph.gridLabelRenderer?.gridColor = resourceHelper.gac(requireContext(), app.aaps.core.ui.R.attr.graphGrid)
         binding.glucoseGraph.graph.viewport.isScrollable = true
         binding.glucoseGraph.graph.viewport.isScalable = true
-        binding.glucoseGraph.graph.setOnTouchListener { v, _ ->
+
+        val gestureDetector = android.view.GestureDetector(context, object : android.view.GestureDetector.SimpleOnGestureListener() {
+            override fun onDoubleTap(e: android.view.MotionEvent): Boolean {
+                var currentRange = overviewData.rangeToDisplay
+                currentRange += 3
+                if (currentRange > 24) currentRange = 3
+                overviewData.rangeToDisplay = currentRange
+                overviewData.initRange()
+                updateGraph()
+                app.aaps.core.ui.toast.ToastUtils.infoToast(context, getString(R.string.graph_range_updated, currentRange))
+                return true
+            }
+        })
+
+        binding.glucoseGraph.graph.setOnTouchListener { v, event ->
+            gestureDetector.onTouchEvent(event)
             v.parent.requestDisallowInterceptTouchEvent(true)
             false
         }
