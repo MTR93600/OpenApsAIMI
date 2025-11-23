@@ -78,6 +78,7 @@ class DashboardFragment : DaggerFragment() {
     @Inject lateinit var automation: Automation
     @Inject lateinit var xDripSource: XDripSource
     @Inject lateinit var dexcomBoyda: DexcomBoyda
+    @Inject lateinit var calculationWorkflow: app.aaps.core.interfaces.workflow.CalculationWorkflow
 
     private var _binding: FragmentDashboardBinding? = null
     private val binding get() = _binding!!
@@ -215,6 +216,11 @@ class DashboardFragment : DaggerFragment() {
                 if (currentRange > 24) currentRange = 3
                 overviewData.rangeToDisplay = currentRange
                 overviewData.initRange()
+                calculationWorkflow.runOnScaleChanged(iobCobCalculator, overviewData)
+                // updateGraph() is called by the worker, but we can keep it for immediate feedback if needed, 
+                // though the worker is async. Let's rely on the worker or keep it for immediate UI update if data is cached?
+                // Actually, runOnScaleChanged is async (WorkManager). Calling updateGraph immediately might show old data or partial data.
+                // But let's keep it to at least update the X-axis range immediately.
                 updateGraph()
                 app.aaps.core.ui.toast.ToastUtils.infoToast(context, getString(R.string.graph_range_updated, currentRange))
                 return true
