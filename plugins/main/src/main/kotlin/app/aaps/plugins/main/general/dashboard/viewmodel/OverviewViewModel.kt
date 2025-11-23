@@ -186,7 +186,9 @@ class OverviewViewModel(
             timeAgo = timeAgo,
             timeAgoDescription = timeAgoLong,
             isGlucoseActual = lastBgData.isActualBg(),
-            contentDescription = contentDescription
+            contentDescription = contentDescription,
+            pumpStatusText = buildPumpLine(dateUtil.now()),
+            predictionText = buildPredictionLine(dateUtil.now())
         )
         _statusCardState.postValue(state)
     }
@@ -492,7 +494,9 @@ data class StatusCardState(
     val timeAgo: String,
     val timeAgoDescription: String,
     val isGlucoseActual: Boolean,
-    val contentDescription: String
+    val contentDescription: String,
+    val pumpStatusText: String = "",
+    val predictionText: String = ""
 )
 
 data class AdjustmentCardState(
