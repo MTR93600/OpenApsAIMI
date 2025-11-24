@@ -19,6 +19,15 @@
             android:orientation="vertical"
             android:padding="@dimen/dashboard_block_spacing">
 
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/overview_notifications"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/dashboard_block_spacing"
+                android:visibility="gone"
+                tools:listitem="@layout/overview_notification_item"
+                tools:visibility="visible" />
+
             <app.aaps.plugins.main.general.dashboard.views.StatusCardView
                 android:id="@+id/status_card"
                 android:layout_width="match_parent"

@@ -45,6 +45,11 @@ import app.aaps.plugins.main.databinding.FragmentDashboardBinding
 import app.aaps.plugins.main.general.dashboard.viewmodel.AdjustmentCardState
 import app.aaps.plugins.main.general.dashboard.viewmodel.OverviewViewModel
 import app.aaps.plugins.main.general.overview.graphData.GraphData
+import app.aaps.plugins.main.general.overview.notifications.NotificationStore
+import app.aaps.plugins.main.general.overview.notifications.events.EventUpdateOverviewNotification
+import androidx.recyclerview.widget.LinearLayoutManager
+import io.reactivex.rxjava3.disposables.CompositeDisposable
+import io.reactivex.rxjava3.kotlin.plusAssign
 import dagger.android.support.DaggerFragment
 import javax.inject.Inject
 import javax.inject.Provider
@@ -79,7 +84,9 @@ class DashboardFragment : DaggerFragment() {
     @Inject lateinit var xDripSource: XDripSource
     @Inject lateinit var dexcomBoyda: DexcomBoyda
     @Inject lateinit var calculationWorkflow: app.aaps.core.interfaces.workflow.CalculationWorkflow
+    @Inject lateinit var notificationStore: NotificationStore
 
+    private val disposables = CompositeDisposable()
     private var _binding: FragmentDashboardBinding? = null
     private val binding get() = _binding!!
     private fun sensor(): Boolean {
@@ -174,6 +181,9 @@ class DashboardFragment : DaggerFragment() {
             }
         }
 
+        binding.overviewNotifications.layoutManager = LinearLayoutManager(context)
+        notificationStore.updateNotifications(binding.overviewNotifications)
+
         viewModel.statusCardState.observe(viewLifecycleOwner) { binding.statusCard.update(it) }
         viewModel.adjustmentState.observe(viewLifecycleOwner) { state ->
             state?.let {
@@ -241,11 +251,20 @@ class DashboardFragment : DaggerFragment() {
     override fun onResume() {
         super.onResume()
         viewModel.start()
+        disposables += activePlugin.activeOverview.overviewBus
+            .toObservable(EventUpdateOverviewNotification::class.java)
+            .observeOn(aapsSchedulers.mainThread)
+            .subscribe({
+                notificationStore.updateNotifications(binding.overviewNotifications)
+            }, {
+                aapsLogger.error(LTag.OVERVIEW, "Error updating notifications", it)
+            })
     }
 
     override fun onPause() {
         super.onPause()
         viewModel.stop()
+        disposables.clear()
     }
 
     override fun onDestroyView() {
