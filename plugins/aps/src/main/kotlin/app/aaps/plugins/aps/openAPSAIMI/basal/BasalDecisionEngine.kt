@@ -396,7 +396,7 @@ class BasalDecisionEngine @Inject constructor(
                     chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, 10.0)
                     rT.reason.append(context.getString(R.string.meal_snack_under_30m_basal_10))
                     break
-                } else if (runtimeMin in 31..60 && input.delta > 0) {
+                } else if (runtimeMin > 30 && input.delta > 0) {
                     chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, input.delta)
                     rT.reason.append(context.getString(R.string.meal_snack_30_60m_rising_basal_delta))
                     break
