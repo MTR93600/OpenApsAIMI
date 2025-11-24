@@ -1890,12 +1890,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         if (honeymoon && bg < 170 && delta < 5) return smbAmount / 2
 
-        if (preferences.get(BooleanKey.OApsAIMInight) && currentHour == 23 && delta < 10 && iob < maxSMB) {
-            return smbAmount * 0.8f
-        }
-        if (currentHour in 0..7 && delta < 10 && iob < maxSMB) {
-            return smbAmount * 0.8f
-        }
+        //if (preferences.get(BooleanKey.OApsAIMInight) && currentHour == 23 && delta < 10 && iob < maxSMB) {
+        //    return smbAmount * 0.8f
+        //}
+        //if (currentHour in 0..7 && delta < 10 && iob < maxSMB) {
+        //    return smbAmount * 0.8f
+        //}
 
         return smbAmount
     }
@@ -2224,7 +2224,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bgAdjustment *= 1.2f
 
         val dynamicCorrection = when {
-            hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22 -> 0.7f
+            //hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22 -> 0.7f
             combinedDelta > 11f  -> 2.5f   // Très forte montée, on augmente très agressivement
             combinedDelta > 8f  -> 2.0f   // Montée forte
             combinedDelta > 4f  -> 1.5f   // Montée modérée à forte
@@ -2822,9 +2822,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
 // ⚠ Réduction nocturne pour éviter une surcorrection pendant le sommeil (0h - 6h)
-        if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) {
-            DynMaxSmb *= 0.6f
-        }
+        //if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) {
+        //    DynMaxSmb *= 0.6f
+        //}
 
 // ⚠ Alignement avec `maxSMB` et `profile.peakTime`
         DynMaxSmb = DynMaxSmb.coerceAtMost(maxSMBHB.toFloat() * (tp / 60.0).toFloat())
