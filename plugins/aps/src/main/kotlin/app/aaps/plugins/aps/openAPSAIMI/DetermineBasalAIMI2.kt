@@ -53,6 +53,7 @@ import app.aaps.plugins.aps.openAPSAIMI.smb.SmbDampingUsecase
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbInstructionExecutor
 import app.aaps.plugins.aps.openAPSAIMI.smb.computeMealHighIobDecision
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleFacade
+import app.aaps.plugins.aps.openAPSAIMI.comparison.AimiSmbComparator
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleInfo
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
@@ -115,6 +116,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var activePlugin: ActivePlugin
     @Inject lateinit var basalDecisionEngine: BasalDecisionEngine
     @Inject lateinit var glucoseStatusCalculatorAimi: GlucoseStatusCalculatorAimi
+    @Inject lateinit var comparator: AimiSmbComparator
     init {
         // Branche l’historique basal (TBR) sur la persistence réelle
         BasalHistoryUtils.installHistoryProvider(
@@ -4200,7 +4202,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 round = { value, digits -> round(value, digits) }
             )
             val basalDecision = basalDecisionEngine.decide(basalInput, rT, helpers)
-            return setTempBasal(
+            val finalResult = setTempBasal(
                 _rate = basalDecision.rate,
                 duration = basalDecision.duration,
                 profile = profile,
@@ -4208,6 +4210,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 currenttemp = currenttemp,
                 overrideSafetyLimits = basalDecision.overrideSafety
             )
+            comparator.compare(
+                aimiResult = finalResult,
+                glucoseStatus = glucose_status,
+                currentTemp = currenttemp,
+                iobData = iob_data_array,
+                profileAimi = profile,
+                autosens = autosens_data,
+                mealData = mealData,
+                microBolusAllowed = microBolusAllowed,
+                currentTime = currentTime,
+                flatBGsDetected = flatBGsDetected,
+                dynIsfMode = dynIsfMode
+            )
+            return finalResult
         }
     }
 }
