@@ -253,11 +253,11 @@ class DashboardFragment : DaggerFragment() {
         viewModel.start()
         disposables += activePlugin.activeOverview.overviewBus
             .toObservable(EventUpdateOverviewNotification::class.java)
-            .observeOn(aapsSchedulers.mainThread)
+            .observeOn(aapsSchedulers.main)
             .subscribe({
                 notificationStore.updateNotifications(binding.overviewNotifications)
             }, {
-                aapsLogger.error(LTag.OVERVIEW, "Error updating notifications", it)
+                aapsLogger.error(LTag.UI, "Error updating notifications", it)
             })
     }
 
