@@ -227,12 +227,12 @@ class BasalDecisionEngine @Inject constructor(
 
         if (helpers.detectMealOnset(
                 input.delta.toFloat(),
-                input.predictedBg.toFloat(),
+                input.delta.toFloat(), // Fix: was predictedBg, causing false positives
                 input.bgAcceleration.toFloat()
             ) &&
-            !input.nightMode &&
             input.modesCondition &&
             input.bg > 100 &&
+            input.predictedBg > 110 && // Added safety check
             input.autodrive
         ) {
             chosenRate = input.forcedBasal
