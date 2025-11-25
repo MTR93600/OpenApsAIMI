@@ -4142,6 +4142,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 tdd7P = tdd7P,
                 tdd7Days = tdd7Days,
                 variableSensitivity = variableSensitivity.toDouble(),
+                profileSens = profile.sens,
                 predictedBg = predictedBg.toDouble(),
                 eventualBg = eventualBG,
                 iob = iob.toDouble(),

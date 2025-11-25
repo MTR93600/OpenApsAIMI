@@ -29,6 +29,7 @@ class BasalDecisionEngine @Inject constructor(
         val tdd7P: Double,
         val tdd7Days: Double,
         val variableSensitivity: Double,
+        val profileSens: Double,
         val predictedBg: Double,
         val eventualBg: Double,
         val iob: Double,
@@ -397,8 +398,16 @@ class BasalDecisionEngine @Inject constructor(
                     rT.reason.append(context.getString(R.string.meal_snack_under_30m_basal_10))
                     break
                 } else if (runtimeMin > 30 && input.delta > 0) {
-                    chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, input.delta)
+                    val sensitivityRatio = if (input.variableSensitivity > 0.1) {
+                        input.profileSens / input.variableSensitivity
+                    } else 1.0
+                    val boost = max(1.0, sensitivityRatio)
+                    val multiplier = input.delta * boost
+                    chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, multiplier)
                     rT.reason.append(context.getString(R.string.meal_snack_30_60m_rising_basal_delta))
+                    if (boost > 1.05) {
+                        rT.reason.append(" (boost x${helpers.round(boost, 2)} due to PKPD)")
+                    }
                     break
                 }
             }
