@@ -35,4 +35,20 @@
     <string name="select">Select</string>
     <string name="set">Set</string>
 
+    <!-- Comparator -->
+    <string name="menu_comparator">Comparateur Plugin AIMI-SMB</string>
+    <string name="comparator_title">Analyse de Performance</string>
+    <string name="comparator_no_data">Aucune donnée disponible. Le fichier CSV sera créé après la première comparaison.</string>
+    <string name="comparator_summary">Résumé</string>
+    <string name="comparator_total_entries">Nombre d\'entrées</string>
+    <string name="comparator_avg_rate_diff">Diff. basale moyenne</string>
+    <string name="comparator_avg_smb_diff">Diff. SMB moyenne</string>
+    <string name="comparator_agreement">Taux d\'accord</string>
+    <string name="comparator_aimi_win_rate">AIMI plus agressif</string>
+    <string name="comparator_smb_win_rate">SMB plus agressif</string>
+    <string name="comparator_rate_chart_title">Débits Basaux Comparés</string>
+    <string name="comparator_rate_chart_desc">AIMI vs SMB - Débits Basaux (U/h)</string>
+    <string name="comparator_smb_chart_title">SMB Comparés</string>
+    <string name="comparator_smb_chart_desc">AIMI vs SMB - Super Micro Bolus (U)</string>
+
 </resources>
