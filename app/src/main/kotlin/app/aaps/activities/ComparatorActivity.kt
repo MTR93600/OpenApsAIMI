@@ -4,24 +4,16 @@ import android.os.Bundle
 import android.os.Environment
 import android.view.MenuItem
 import android.view.View
-import android.widget.TextView
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import app.aaps.R
 import app.aaps.databinding.ActivityComparatorBinding
 import app.aaps.plugins.configuration.activities.DaggerAppCompatActivityWithResult
 import app.aaps.plugins.aps.openAPSAIMI.comparison.ComparisonCsvParser
 import app.aaps.plugins.aps.openAPSAIMI.comparison.ComparisonEntry
-import app.aaps.plugins.aps.openAPSAIMI.comparison.ComparisonStats
-import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.components.XAxis
 import com.github.mikephil.charting.data.Entry
 import com.github.mikephil.charting.data.LineData
 import com.github.mikephil.charting.data.LineDataSet
-import com.github.mikephil.charting.formatter.ValueFormatter
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 class ComparatorActivity : DaggerAppCompatActivityWithResult() {
