@@ -74,7 +74,7 @@ class AimiSmbComparator @Inject constructor(
     }
 
     private fun logComparison(aimi: RT, smb: RT, gs: GlucoseStatus, iob: Double, cob: Double) {
-        val date = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(aimi.timestamp))
+        val date = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(aimi.timestamp!!))
         
         val aimiRate = aimi.rate
         // In AIMI, if duration is 0, it might be an SMB. But let's check insulinReq.
@@ -84,8 +84,8 @@ class AimiSmbComparator @Inject constructor(
         val smbRate = smb.rate
         val smbSmb = smb.insulinReq
 
-        val diffRate = aimiRate - smbRate
-        val diffSmb = aimiSmb - smbSmb
+        val diffRate = aimiRate?.minus(smbRate!!)
+        val diffSmb = aimiSmb?.minus(smbSmb!!)
 
         // Escape quotes in reasons
         val rAimi = aimi.reason.toString().replace("\"", "'")
