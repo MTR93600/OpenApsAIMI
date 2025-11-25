@@ -79,6 +79,11 @@
             android:name="app.aaps.activities.DashboardPreviewActivity"
             android:exported="false"
             android:theme="@style/AppTheme" />
+        <activity
+            android:name="app.aaps.activities.ComparatorActivity"
+            android:label="@string/comparator_title"
+            android:parentActivityName="app.aaps.MainActivity"
+            android:theme="@style/AppTheme" />
         <!-- Receive new BG readings from other local apps -->
         <receiver
             android:name="app.aaps.receivers.DataReceiver"
