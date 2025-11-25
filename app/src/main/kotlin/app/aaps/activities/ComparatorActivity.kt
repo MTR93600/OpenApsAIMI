@@ -92,17 +92,20 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
             entry.smbRate?.let { smbEntries.add(Entry(index.toFloat(), it.toFloat())) }
         }
 
+        val aimiColor = androidx.core.content.ContextCompat.getColor(this, app.aaps.core.ui.R.color.aimi_color)
+        val smbColor = androidx.core.content.ContextCompat.getColor(this, app.aaps.core.ui.R.color.smb_color)
+
         val aimiDataSet = LineDataSet(aimiEntries, "AIMI").apply {
-            color = getColor(app.aaps.core.ui.R.color.aimi_color)
-            setCircleColor(getColor(app.aaps.core.ui.R.color.aimi_color))
+            color = aimiColor
+            setCircleColor(aimiColor)
             lineWidth = 2f
             circleRadius = 1f
             setDrawValues(false)
         }
 
         val smbDataSet = LineDataSet(smbEntries, "SMB").apply {
-            color = getColor(app.aaps.core.ui.R.color.smb_color)
-            setCircleColor(getColor(app.aaps.core.ui.R.color.smb_color))
+            color = smbColor
+            setCircleColor(smbColor)
             lineWidth = 2f
             circleRadius = 1f
             setDrawValues(false)
@@ -127,17 +130,20 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
             entry.smbSmb?.let { smbEntries.add(Entry(index.toFloat(), it.toFloat())) }
         }
 
+        val aimiColor = androidx.core.content.ContextCompat.getColor(this, app.aaps.core.ui.R.color.aimi_color)
+        val smbColor = androidx.core.content.ContextCompat.getColor(this, app.aaps.core.ui.R.color.smb_color)
+
         val aimiDataSet = LineDataSet(aimiEntries, "AIMI SMB").apply {
-            color = getColor(app.aaps.core.ui.R.color.aimi_color)
-            setCircleColor(getColor(app.aaps.core.ui.R.color.aimi_color))
+            color = aimiColor
+            setCircleColor(aimiColor)
             lineWidth = 2f
             circleRadius = 1f
             setDrawValues(false)
         }
 
         val smbDataSet = LineDataSet(smbEntries, "SMB SMB").apply {
-            color = getColor(app.aaps.core.ui.R.color.smb_color)
-            setCircleColor(getColor(app.aaps.core.ui.R.color.smb_color))
+            color = smbColor
+            setCircleColor(smbColor)
             lineWidth = 2f
             circleRadius = 1f
             setDrawValues(false)
