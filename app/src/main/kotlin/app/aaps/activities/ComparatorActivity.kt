@@ -9,6 +9,11 @@ import app.aaps.databinding.ActivityComparatorBinding
 import app.aaps.plugins.configuration.activities.DaggerAppCompatActivityWithResult
 import app.aaps.plugins.aps.openAPSAIMI.comparison.ComparisonCsvParser
 import app.aaps.plugins.aps.openAPSAIMI.comparison.ComparisonEntry
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import android.widget.Toast
 import com.github.mikephil.charting.components.XAxis
 import com.github.mikephil.charting.data.Entry
 import com.github.mikephil.charting.data.LineData
@@ -36,6 +41,14 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
     }
 
     private fun loadData() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+            Toast.makeText(this, "Please allow access to all files to read the comparison data", Toast.LENGTH_LONG).show()
+            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+            intent.data = Uri.parse("package:$packageName")
+            startActivity(intent)
+            return
+        }
+
         val csvFile = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS/comparison_aimi_smb.csv")
         
         if (!csvFile.exists()) {
