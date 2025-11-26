@@ -91,7 +91,7 @@ class AimiSmbComparator @Inject constructor(
         val rAimi = aimi.reason.toString().replace("\"", "'")
         val rSmb = smb.reason.toString().replace("\"", "'")
 
-        val row = "$aimi.timestamp,$date,${gs.glucose},$iob,$cob,$aimiRate,$aimiSmb,${aimi.duration},$smbRate,$smbSmb,${smb.duration},$diffRate,$diffSmb,\"$rAimi\",\"$rSmb\"\n"
+        val row = "${aimi.timestamp},$date,${gs.glucose},$iob,$cob,$aimiRate,$aimiSmb,${aimi.duration},$smbRate,$smbSmb,${smb.duration},$diffRate,$diffSmb,\"$rAimi\",\"$rSmb\"\n"
         
         try {
             FileWriter(logFile, true).use { it.write(row) }
