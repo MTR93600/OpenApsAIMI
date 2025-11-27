@@ -1,51 +1,32 @@
 package app.aaps.plugins.insulin
 
-import android.content.Context
 import app.aaps.core.interfaces.configuration.Config
-import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.insulin.Insulin
-import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.resources.ResourceHelper
-import app.aaps.core.interfaces.rx.AapsSchedulers
-import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.HardLimits
-import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
-import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mock
-import org.mockito.Mockito.`when`
-import org.mockito.junit.jupiter.MockitoExtension
-import org.mockito.junit.jupiter.MockitoSettings
-import org.mockito.quality.Strictness
+import org.mockito.kotlin.whenever
 
-@ExtendWith(MockitoExtension::class)
-@MockitoSettings(strictness = Strictness.LENIENT)
-class InsulinLyumjevPluginTest {
+class InsulinLyumjevPluginTest : TestBase() {
 
     private lateinit var sut: InsulinLyumjevPlugin
 
     @Mock lateinit var rh: ResourceHelper
-    @Mock lateinit var preferences: Preferences
-    @Mock lateinit var aapsSchedulers: AapsSchedulers
-    @Mock lateinit var fabricPrivacy: FabricPrivacy
-    @Mock lateinit var persistenceLayer: PersistenceLayer
-    @Mock lateinit var rxBus: RxBus
     @Mock lateinit var profileFunction: ProfileFunction
-    @Mock lateinit var aapsLogger: AAPSLogger
     @Mock lateinit var config: Config
     @Mock lateinit var hardLimits: HardLimits
     @Mock lateinit var uiInteraction: UiInteraction
-    @Mock lateinit var context: Context
 
     @BeforeEach
     fun setup() {
-        sut = InsulinLyumjevPlugin(rh, preferences, aapsSchedulers, fabricPrivacy, persistenceLayer, profileFunction, rxBus, aapsLogger, config, hardLimits, uiInteraction, context)
+        sut = InsulinLyumjevPlugin(rh, profileFunction, rxBus, aapsLogger, config, hardLimits, uiInteraction)
     }
 
     @Test
@@ -60,13 +41,13 @@ class InsulinLyumjevPluginTest {
 
     @Test
     fun commentStandardTextTest() {
-        `when`(rh.gs(eq(R.string.lyumjev))).thenReturn("Lyumjev")
+        whenever(rh.gs(eq(R.string.lyumjev))).thenReturn("Lyumjev")
         assertThat(sut.commentStandardText()).isEqualTo("Lyumjev")
     }
 
     @Test
     fun getFriendlyNameTest() {
-        `when`(rh.gs(eq(R.string.lyumjev))).thenReturn("Lyumjev")
+        whenever(rh.gs(eq(R.string.lyumjev))).thenReturn("Lyumjev")
         assertThat(sut.friendlyName).isEqualTo("Lyumjev")
     }
 

@@ -15,8 +15,8 @@ import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.StringNonPreferenceKey
 import app.aaps.core.keys.interfaces.StringPreferenceKey
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
+import io.reactivex.rxjava3.core.Completable
+import io.reactivex.rxjava3.disposables.Disposable
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -29,8 +29,7 @@ open class SWItem @Inject constructor(
 ) {
 
 
-    private val eventWorker = Executors.newSingleThreadScheduledExecutor()
-    private var scheduledEventPost: ScheduledFuture<*>? = null
+    private var scheduledEventPost: Disposable? = null
 
     var label: Int? = null
     var comment: Int? = null
@@ -64,18 +63,14 @@ open class SWItem @Inject constructor(
     open fun processVisibility(activity: AppCompatActivity) {}
 
     fun scheduleChange(updateDelay: Long) {
-        class PostRunnable : Runnable {
-
-            override fun run() {
+        // cancel waiting task to prevent sending multiple posts
+        scheduledEventPost?.dispose()
+        scheduledEventPost = Completable
+            .timer(updateDelay, TimeUnit.SECONDS)
+            .subscribe {
                 aapsLogger.debug(LTag.CORE, "Firing EventPreferenceChange")
                 rxBus.send(EventPreferenceChange(preference?.key ?: ""))
                 rxBus.send(EventSWUpdate(false))
-                scheduledEventPost = null
             }
-        }
-        // cancel waiting task to prevent sending multiple posts
-        scheduledEventPost?.cancel(false)
-        val task: Runnable = PostRunnable()
-        scheduledEventPost = eventWorker.schedule(task, updateDelay, TimeUnit.SECONDS)
     }
 }

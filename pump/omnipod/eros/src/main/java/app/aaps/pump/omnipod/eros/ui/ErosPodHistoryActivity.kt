@@ -126,6 +126,12 @@ class ErosPodHistoryActivity : TranslatedDaggerAppCompatActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        recyclerView?.adapter = null
+        historyTypeSpinner?.onItemSelectedListener = null
+    }
+
     private fun getTypeList(list: List<PumpHistoryEntryGroup>): List<TypeList> {
         val typeList = ArrayList<TypeList>()
         for (pumpHistoryEntryGroup in list) {

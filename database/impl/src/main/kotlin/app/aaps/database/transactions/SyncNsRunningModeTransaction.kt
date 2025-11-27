@@ -23,6 +23,12 @@ class SyncNsRunningModeTransaction(private val runningModes: List<RunningMode>) 
                     database.runningModeDao.updateExistingEntry(current)
                     result.invalidated.add(current)
                 }
+                // Allow update duration
+                if (current.duration != runningMode.duration) {
+                    current.duration = runningMode.duration
+                    database.runningModeDao.updateExistingEntry(current)
+                    result.updatedDuration.add(current)
+                }
                 continue
             }
 
@@ -47,5 +53,6 @@ class SyncNsRunningModeTransaction(private val runningModes: List<RunningMode>) 
         val updatedNsId = mutableListOf<RunningMode>()
         val inserted = mutableListOf<RunningMode>()
         val invalidated = mutableListOf<RunningMode>()
+        val updatedDuration = mutableListOf<RunningMode>()
     }
 }

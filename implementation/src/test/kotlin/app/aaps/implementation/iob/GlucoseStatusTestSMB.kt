@@ -15,7 +15,7 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
-import org.mockito.Mockito
+import org.mockito.kotlin.whenever
 
 /**
  * Created by mike on 26.03.2018.
@@ -26,8 +26,8 @@ class GlucoseStatusTestSMB : TestBaseWithProfile() {
 
     @BeforeEach
     fun prepare() {
-        Mockito.`when`(dateUtil.now()).thenReturn(1514766900000L + T.mins(1).msecs())
-        Mockito.`when`(iobCobCalculator.ads).thenReturn(autosensDataStore)
+        whenever(dateUtil.now()).thenReturn(1514766900000L + T.mins(1).msecs())
+        whenever(iobCobCalculator.ads).thenReturn(autosensDataStore)
     }
 
     @Test fun toStringShouldBeOverloaded() {
@@ -41,7 +41,7 @@ class GlucoseStatusTestSMB : TestBaseWithProfile() {
     }
 
     @Test fun calculateValidGlucoseStatusAutoIsf() {
-        Mockito.`when`(autosensDataStore.getBucketedDataTableCopy()).thenReturn(generateValidBgData())
+        whenever(autosensDataStore.getBucketedDataTableCopy()).thenReturn(generateValidBgData())
         val glucoseStatus = GlucoseStatusCalculatorSMB(aapsLogger, iobCobCalculator, dateUtil, decimalFormatter, deltaCalculator).getGlucoseStatusData(false)!!
         assertThat(glucoseStatus.glucose).isWithin(0.001).of(214.0)
         assertThat(glucoseStatus.delta).isWithin(0.001).of(-2.0)
@@ -51,7 +51,7 @@ class GlucoseStatusTestSMB : TestBaseWithProfile() {
     }
 
     @Test fun oneRecordShouldProduceZeroDeltas() {
-        Mockito.`when`(autosensDataStore.getBucketedDataTableCopy()).thenReturn(generateOneCurrentRecordBgData())
+        whenever(autosensDataStore.getBucketedDataTableCopy()).thenReturn(generateOneCurrentRecordBgData())
         val glucoseStatus = GlucoseStatusCalculatorSMB(aapsLogger, iobCobCalculator, dateUtil, decimalFormatter, deltaCalculator).getGlucoseStatusData(false)!!
         assertThat(glucoseStatus.glucose).isWithin(0.001).of(214.0)
         assertThat(glucoseStatus.delta).isWithin(0.001).of(0.0)
@@ -61,19 +61,19 @@ class GlucoseStatusTestSMB : TestBaseWithProfile() {
     }
 
     @Test fun insufficientDataShouldReturnNull() {
-        Mockito.`when`(autosensDataStore.getBucketedDataTableCopy()).thenReturn(generateInsufficientBgData())
+        whenever(autosensDataStore.getBucketedDataTableCopy()).thenReturn(generateInsufficientBgData())
         val glucoseStatus = GlucoseStatusCalculatorSMB(aapsLogger, iobCobCalculator, dateUtil, decimalFormatter, deltaCalculator).getGlucoseStatusData(false)
         assertThat(glucoseStatus).isNull()
     }
 
     @Test fun oldDataShouldReturnNull() {
-        Mockito.`when`(autosensDataStore.getBucketedDataTableCopy()).thenReturn(generateOldBgData())
+        whenever(autosensDataStore.getBucketedDataTableCopy()).thenReturn(generateOldBgData())
         val glucoseStatus = GlucoseStatusCalculatorSMB(aapsLogger, iobCobCalculator, dateUtil, decimalFormatter, deltaCalculator).getGlucoseStatusData(false)
         assertThat(glucoseStatus).isNull()
     }
 
     @Test fun returnOldDataIfAllowed() {
-        Mockito.`when`(autosensDataStore.getBucketedDataTableCopy()).thenReturn(generateOldBgData())
+        whenever(autosensDataStore.getBucketedDataTableCopy()).thenReturn(generateOldBgData())
         val glucoseStatus = GlucoseStatusCalculatorSMB(aapsLogger, iobCobCalculator, dateUtil, decimalFormatter, deltaCalculator).getGlucoseStatusData(true)
         assertThat(glucoseStatus).isNotNull()
     }

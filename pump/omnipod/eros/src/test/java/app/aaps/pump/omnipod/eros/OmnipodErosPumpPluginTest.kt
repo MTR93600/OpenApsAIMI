@@ -24,9 +24,9 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers
 import org.mockito.Mock
-import org.mockito.Mockito
-import org.mockito.Mockito.`when`
 import org.mockito.invocation.InvocationOnMock
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 
 class OmnipodErosPumpPluginTest : TestBaseWithProfile() {
 
@@ -43,7 +43,7 @@ class OmnipodErosPumpPluginTest : TestBaseWithProfile() {
 
     @BeforeEach
     fun prepare() {
-        `when`(rh.gs(ArgumentMatchers.anyInt(), ArgumentMatchers.anyLong()))
+        whenever(rh.gs(ArgumentMatchers.anyInt(), ArgumentMatchers.anyLong()))
             .thenReturn("")
     }
 
@@ -54,28 +54,26 @@ class OmnipodErosPumpPluginTest : TestBaseWithProfile() {
         val plugin = OmnipodErosPumpPlugin(
             aapsLogger, rh, preferences, commandQueue, TestAapsSchedulers(), rxBus, context,
             erosPodStateManager, aapsOmnipodErosManager, fabricPrivacy, rileyLinkServiceData, dateUtil, aapsOmnipodUtil,
-            rileyLinkUtil, omnipodAlertUtil, pumpSync, uiInteraction, erosHistoryDatabase, decimalFormatter, pumpEnactResultProvider, ch
+            rileyLinkUtil, omnipodAlertUtil, profileFunction, pumpSync, uiInteraction, erosHistoryDatabase, decimalFormatter, pumpEnactResultProvider
         )
         val pumpState = PumpSync.PumpState(null, null, null, null, "")
-        `when`(pumpSync.expectedPumpState()).thenReturn(pumpState)
-        `when`(rileyLinkUtil.rileyLinkHistory).thenReturn(ArrayList())
-        val profile = Mockito.mock(Profile::class.java)
+        whenever(pumpSync.expectedPumpState()).thenReturn(pumpState)
+        whenever(rileyLinkUtil.rileyLinkHistory).thenReturn(ArrayList())
+        val profile: Profile = mock()
 
         // always return a PumpEnactResult containing same rate and duration as input
-        `when`(
+        whenever(
             aapsOmnipodErosManager.setTemporaryBasal(ArgumentMatchers.any(TempBasalPair::class.java))
         ).thenAnswer { invocation: InvocationOnMock ->
             val pair = invocation.getArgument<TempBasalPair>(0)
-            val result = PumpEnactResultObject(rh, ch)
+            val result = PumpEnactResultObject(rh)
             result.absolute(pair.insulinRate)
             result.duration(pair.durationMinutes)
             result
         }
 
         // Given standard basal
-        `when`(profile.getBasal()).thenReturn(0.5)
-        `when`(ch.toPump(ArgumentMatchers.anyDouble())).thenAnswer { invocation -> invocation.getArgument<Double>(0) }
-        `when`(ch.fromPump(ArgumentMatchers.anyDouble())).thenAnswer { invocation -> invocation.getArgument<Double>(0) }
+        whenever(profile.getBasal()).thenReturn(0.5)
         // When
         var result1 = plugin.setTempBasalPercent(80, 30, profile, false, PumpSync.TemporaryBasalType.NORMAL)
         var result2 = plugin.setTempBasalPercent(5000, 30000, profile, false, PumpSync.TemporaryBasalType.NORMAL)
@@ -96,7 +94,7 @@ class OmnipodErosPumpPluginTest : TestBaseWithProfile() {
         assertThat(result5.duration).isEqualTo(60)
 
         // Given zero basal
-        `when`(profile.getBasal()).thenReturn(0.0)
+        whenever(profile.getBasal()).thenReturn(0.0)
         // When
         result1 = plugin.setTempBasalPercent(8000, 90, profile, false, PumpSync.TemporaryBasalType.NORMAL)
         result2 = plugin.setTempBasalPercent(0, 0, profile, false, PumpSync.TemporaryBasalType.NORMAL)
@@ -107,7 +105,7 @@ class OmnipodErosPumpPluginTest : TestBaseWithProfile() {
         assertThat(result2.duration).isEqualTo(-1)
 
         // Given unhealthy basal
-        `when`(profile.getBasal()).thenReturn(500.0)
+        whenever(profile.getBasal()).thenReturn(500.0)
         // When treatment
         result1 =
             plugin.setTempBasalPercent(80, 30, profile, false, PumpSync.TemporaryBasalType.NORMAL)
@@ -116,7 +114,7 @@ class OmnipodErosPumpPluginTest : TestBaseWithProfile() {
         assertThat(result1.duration).isEqualTo(30)
 
         // Given weird basal
-        `when`(profile.getBasal()).thenReturn(1.234567)
+        whenever(profile.getBasal()).thenReturn(1.234567)
         // When treatment
         result1 = plugin.setTempBasalPercent(280, 600, profile, false, PumpSync.TemporaryBasalType.NORMAL)
         // Then return sane values
@@ -124,7 +122,7 @@ class OmnipodErosPumpPluginTest : TestBaseWithProfile() {
         assertThat(result1.duration).isEqualTo(600)
 
         // Given negative basal
-        `when`(profile.getBasal()).thenReturn(-1.234567)
+        whenever(profile.getBasal()).thenReturn(-1.234567)
         // When treatment
         result1 = plugin.setTempBasalPercent(280, 510, profile, false, PumpSync.TemporaryBasalType.NORMAL)
         // Then return negative value (this is validated further downstream, see TempBasalExtraCommand)

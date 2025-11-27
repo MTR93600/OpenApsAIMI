@@ -32,25 +32,25 @@ class NotificationWithAction @Inject constructor(
 
     fun with (nsAlarm: NSAlarm) = this.also {
         date = System.currentTimeMillis()
-        when (nsAlarm.level()) {
+        when (nsAlarm.level) {
             0 -> {
                 id = NS_ANNOUNCEMENT
                 level = ANNOUNCEMENT
-                text = nsAlarm.message()
+                text = nsAlarm.message
                 validTo = System.currentTimeMillis() + T.mins(60).msecs()
             }
 
             1 -> {
                 id = NS_ALARM
                 level = NORMAL
-                text = nsAlarm.title()
+                text = nsAlarm.title
                 soundId = app.aaps.core.ui.R.raw.alarm
             }
 
             2 -> {
                 id = NS_URGENT_ALARM
                 level = URGENT
-                text = nsAlarm.title()
+                text = nsAlarm.title
                 soundId = R.raw.urgentalarm
             }
         }
@@ -61,7 +61,7 @@ class NotificationWithAction @Inject constructor(
             aapsLogger.debug(LTag.NOTIFICATION, "Notification text is: $text")
             val msToSnooze = preferences.get(IntKey.NsClientAlarmStaleData) * 60 * 1000L
             aapsLogger.debug(LTag.NOTIFICATION, "snooze nsalarm_staledatavalue in minutes is ${T.msecs(msToSnooze).mins()} currentTimeMillis is: ${System.currentTimeMillis()}")
-            preferences.put(LongComposedKey.NotificationSnoozedTo, nsAlarm.level().toString(), value = System.currentTimeMillis() + msToSnooze)
+            preferences.put(LongComposedKey.NotificationSnoozedTo, nsAlarm.level.toString(), value = System.currentTimeMillis() + msToSnooze)
         }
     }
 

@@ -9,7 +9,7 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
-import org.mockito.Mockito
+import org.mockito.kotlin.whenever
 
 class DetailedBolusInfoStorageTest : TestBase() {
 
@@ -33,7 +33,7 @@ class DetailedBolusInfoStorageTest : TestBase() {
 
     @BeforeEach
     fun prepare() {
-        Mockito.`when`(preferences.get(StringNonKey.BolusInfoStorage)).thenReturn("")
+        whenever(preferences.get(StringNonKey.BolusInfoStorage)).thenReturn("")
         detailedBolusInfoStorage = DetailedBolusInfoStorageImpl(aapsLogger, preferences, rh)
     }
 

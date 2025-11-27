@@ -167,7 +167,9 @@ class CalculationWorkflowImpl @Inject constructor(
                     .build()
             )
             .then(
-                OneTimeWorkRequest.Builder(UpdateGraphWorker::class.java).build()
+                OneTimeWorkRequest.Builder(UpdateGraphWorker::class.java)
+                    .setInputData(Data.Builder().putString(JOB, UPDATE_PREDICTIONS).putInt(PASS, CalculationWorkflow.ProgressData.DRAW_FINAL.pass).build())
+                    .build()
             )
             .enqueue()
     }

@@ -104,7 +104,7 @@ class ReceiverDelegate @Inject constructor(
         val newAllowedState = allowedChargingState == true && allowedNetworkState == true
         if (newAllowedState != allowed) {
             allowed = newAllowedState
-            if (allowed) blockingReason = ""
+            if (allowed) blockingReason = "Connected"
             rxBus.send(EventConnectivityOptionChanged(blockingReason, receiverStatusStore.isConnected))
         }
     }

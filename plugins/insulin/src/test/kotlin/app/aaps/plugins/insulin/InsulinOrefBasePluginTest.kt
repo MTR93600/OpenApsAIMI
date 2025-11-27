@@ -1,40 +1,24 @@
 package app.aaps.plugins.insulin
 
-import android.content.Context
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.model.BS
 import app.aaps.core.interfaces.configuration.Config
-import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.insulin.Insulin
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.resources.ResourceHelper
-import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.HardLimits
-import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
-import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
 import org.json.JSONObject
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.Mock
-import org.mockito.Mockito.`when`
-import org.mockito.junit.jupiter.MockitoExtension
-import org.mockito.junit.jupiter.MockitoSettings
-import org.mockito.quality.Strictness
+import org.mockito.kotlin.whenever
 
-@ExtendWith(MockitoExtension::class)
-@MockitoSettings(strictness = Strictness.LENIENT)
-class InsulinOrefBasePluginTest {
-
-    @Mock lateinit var preferences: Preferences
-    @Mock lateinit var aapsSchedulers: AapsSchedulers
-    @Mock lateinit var fabricPrivacy: FabricPrivacy
-    @Mock lateinit var persistenceLayer: PersistenceLayer
-    @Mock lateinit var context: Context
+class InsulinOrefBasePluginTest : TestBase() {
 
     var testPeak = 0
     var testUserDefinedDia = 0.0
@@ -47,7 +31,7 @@ class InsulinOrefBasePluginTest {
         aapsLogger: AAPSLogger,
         config: Config,
         hardLimits: HardLimits
-    ) : InsulinOrefBasePlugin(rh, preferences, aapsSchedulers, fabricPrivacy, persistenceLayer, profileFunction, rxBus, aapsLogger, config, hardLimits, uiInteraction, context) {
+    ) : InsulinOrefBasePlugin(rh, profileFunction, rxBus, aapsLogger, config, hardLimits, uiInteraction) {
 
         override fun sendShortDiaNotification(dia: Double) {
             shortDiaNotificationSend = true
@@ -70,8 +54,6 @@ class InsulinOrefBasePluginTest {
 
     @Mock lateinit var rh: ResourceHelper
     @Mock lateinit var profileFunction: ProfileFunction
-    @Mock lateinit var rxBus: RxBus
-    @Mock lateinit var aapsLogger: AAPSLogger
     @Mock lateinit var config: Config
     @Mock lateinit var hardLimits: HardLimits
     @Mock lateinit var uiInteraction: UiInteraction
@@ -79,7 +61,7 @@ class InsulinOrefBasePluginTest {
     @BeforeEach
     fun setUp() {
         sut = InsulinBaseTest(rh, profileFunction, rxBus, aapsLogger, config, hardLimits)
-        `when`(hardLimits.minDia()).thenReturn(5.0)
+        whenever(hardLimits.minDia()).thenReturn(5.0)
     }
 
     @Test

@@ -5,8 +5,6 @@ import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.pump.danar.comm.MsgBolusProgress
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
-import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.`when`
 
 class MsgBolusProgressTest : DanaRTestBase() {
 

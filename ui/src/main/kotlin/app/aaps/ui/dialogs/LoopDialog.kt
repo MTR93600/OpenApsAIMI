@@ -138,10 +138,17 @@ class LoopDialog : DaggerDialogFragment() {
     }
 
     @Synchronized
+    override fun onPause() {
+        super.onPause()
+        handler.removeCallbacksAndMessages(null)
+    }
+
+    @Synchronized
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
         handler.removeCallbacksAndMessages(null)
+        handler.looper.quitSafely()
         disposable.clear()
     }
 

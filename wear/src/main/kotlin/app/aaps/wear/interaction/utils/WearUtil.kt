@@ -32,12 +32,12 @@ open class WearUtil @OptIn(ExperimentalTime::class)
         return clock.now().toEpochMilliseconds()
     }
 
-    open fun msSince(`when`: Long): Long {
-        return timestamp() - `when`
+    open fun msSince(whenever: Long): Long {
+        return timestamp() - whenever
     }
 
-    open fun msTill(`when`: Long): Long {
-        return `when` - timestamp()
+    open fun msTill(whenever: Long): Long {
+        return whenever - timestamp()
     }
 
     //==============================================================================================

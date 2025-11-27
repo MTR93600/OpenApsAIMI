@@ -37,7 +37,6 @@ import app.aaps.core.interfaces.rx.events.EventAppInitialized
 import app.aaps.core.interfaces.rx.events.EventAutosensCalculationFinished
 import app.aaps.core.interfaces.rx.events.EventNewBG
 import app.aaps.core.interfaces.rx.events.EventNewHistoryData
-import app.aaps.core.interfaces.rx.events.EventXdripNewLog
 import app.aaps.core.interfaces.sync.DataSyncSelector
 import app.aaps.core.interfaces.sync.Sync
 import app.aaps.core.interfaces.sync.XDripBroadcast
@@ -57,6 +56,7 @@ import app.aaps.core.validators.preferences.AdaptiveIntentPreference
 import app.aaps.core.validators.preferences.AdaptiveSwitchPreference
 import app.aaps.plugins.sync.R
 import app.aaps.plugins.sync.nsclient.extensions.toJson
+import app.aaps.plugins.sync.xdrip.events.EventXdripNewLog
 import app.aaps.plugins.sync.xdrip.events.EventXdripUpdateGUI
 import app.aaps.plugins.sync.xdrip.extensions.toXdripJson
 import app.aaps.plugins.sync.xdrip.keys.XdripLongKey
@@ -70,6 +70,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -153,12 +154,16 @@ class XdripPlugin @Inject constructor(
         disposable += rxBus.toObservable(EventAppInitialized::class.java)
             .observeOn(aapsSchedulers.io)
             .subscribe({ sendStatusLine() }, fabricPrivacy::logException)
+        eventWorker = Executors.newSingleThreadScheduledExecutor()
     }
 
     override fun onStop() {
         super.onStop()
+        handler?.looper?.quitSafely()
         handler?.removeCallbacksAndMessages(null)
         handler = null
+        eventWorker?.shutdown()
+        eventWorker = null
         disposable.clear()
     }
 
@@ -228,7 +233,7 @@ class XdripPlugin @Inject constructor(
         return false
     }
 
-    private val eventWorker = Executors.newSingleThreadScheduledExecutor()
+    private var eventWorker: ScheduledExecutorService? = null
     private var scheduledEventPost: ScheduledFuture<*>? = null
     private fun delayAndScheduleExecution(origin: String) {
         class PostRunnable : Runnable {
@@ -241,7 +246,7 @@ class XdripPlugin @Inject constructor(
         // cancel waiting task to prevent sending multiple posts
         scheduledEventPost?.cancel(false)
         val task: Runnable = PostRunnable()
-        scheduledEventPost = eventWorker.schedule(task, 10, TimeUnit.SECONDS)
+        scheduledEventPost = eventWorker?.schedule(task, 10, TimeUnit.SECONDS)
     }
 
     private fun buildStatusLine(profile: Profile): String {

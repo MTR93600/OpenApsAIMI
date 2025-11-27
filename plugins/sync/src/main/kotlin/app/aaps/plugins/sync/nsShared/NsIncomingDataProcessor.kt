@@ -75,7 +75,7 @@ class NsIncomingDataProcessor @Inject constructor(
 ) {
 
     private fun toGv(jsonObject: JSONObject): GV? {
-        val sgv = NSSgvObject(jsonObject)
+        val sgv = NSSgv(jsonObject)
         return GV(
             timestamp = sgv.mills ?: return null,
             value = sgv.mgdl?.toDouble() ?: return null,
@@ -92,7 +92,6 @@ class NsIncomingDataProcessor @Inject constructor(
      *
      * @return true if there was an accepted SGV
      */
-    @Suppress("SpellCheckingInspection")
     fun processSgvs(sgvs: Any, doFullSync: Boolean): Boolean {
         // Objective0
         preferences.put(BooleanNonKey.ObjectivesBgIsAvailableInNs, true)
@@ -219,7 +218,7 @@ class NsIncomingDataProcessor @Inject constructor(
                             }
 
                     is NSOfflineEvent           ->
-                        if (preferences.get(BooleanKey.NsClientAcceptRunningMode) && config.isEngineeringMode() || config.AAPSCLIENT || doFullSync)
+                        if (preferences.get(BooleanKey.NsClientAcceptRunningMode) || config.AAPSCLIENT || doFullSync)
                             treatment.toRunningMode().let { runningMode ->
                                 storeDataForDb.addToRunningModes(runningMode)
                             }

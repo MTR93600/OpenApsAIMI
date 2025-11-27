@@ -14,7 +14,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mock
-import org.mockito.Mockito.`when`
+import org.mockito.kotlin.whenever
 
 /**
  * Created by adrian on 2019-12-25.
@@ -34,7 +34,7 @@ class InsulinOrefFreePeakPluginTest : TestBaseWithProfile() {
 
     @Test
     fun `simple peak test`() {
-        `when`(preferences.get(IntKey.InsulinOrefPeak)).thenReturn(90)
+        whenever(preferences.get(IntKey.InsulinOrefPeak)).thenReturn(90)
         assertThat(sut.peak).isEqualTo(90)
     }
 
@@ -45,14 +45,14 @@ class InsulinOrefFreePeakPluginTest : TestBaseWithProfile() {
 
     @Test
     fun commentStandardTextTest() {
-        `when`(preferences.get(IntKey.InsulinOrefPeak)).thenReturn(90)
-        `when`(rh.gs(eq(R.string.insulin_peak_time))).thenReturn("Peak Time [min]")
+        whenever(preferences.get(IntKey.InsulinOrefPeak)).thenReturn(90)
+        whenever(rh.gs(eq(R.string.insulin_peak_time))).thenReturn("Peak Time [min]")
         assertThat(sut.commentStandardText()).isEqualTo("Peak Time [min]: 90")
     }
 
     @Test
     fun getFriendlyNameTest() {
-        `when`(rh.gs(eq(R.string.free_peak_oref))).thenReturn("Free-Peak Oref")
+        whenever(rh.gs(eq(R.string.free_peak_oref))).thenReturn("Free-Peak Oref")
         assertThat(sut.friendlyName).isEqualTo("Free-Peak Oref")
     }
 

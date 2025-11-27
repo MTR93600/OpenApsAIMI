@@ -35,6 +35,12 @@ class RileyLinkStatusActivity : TranslatedDaggerAppCompatActivity() {
         }.attach()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        binding.pager.adapter = null
+        binding.tabLayout.clearOnTabSelectedListeners()
+    }
+
     class SectionsPagerAdapter(private val activity: AppCompatActivity) : FragmentStateAdapter(activity) {
 
         private val fragmentList: MutableList<String> = ArrayList()

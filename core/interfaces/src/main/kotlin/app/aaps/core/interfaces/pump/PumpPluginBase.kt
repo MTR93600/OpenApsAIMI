@@ -36,6 +36,7 @@ abstract class PumpPluginBase(
     override fun onStop() {
         super.onStop()
         handler?.removeCallbacksAndMessages(null)
+        handler?.looper?.quit()
         handler = null
     }
 }

@@ -33,7 +33,7 @@ class Inevitable @Inject internal constructor() {
         if (task != null) {
             // if it already exists then extend the time
             task.extendTime(idleFor)
-            if (debug) aapsLogger.debug(LTag.WEAR, "Extending time for: " + id + " to " + dateUtil.dateAndTimeAndSecondsString(task.`when`))
+            if (debug) aapsLogger.debug(LTag.WEAR, "Extending time for: " + id + " to " + dateUtil.dateAndTimeAndSecondsString(task.whenever))
         } else {
             // otherwise create new task
             if (runnable == null) return  // extension only if already exists
@@ -41,7 +41,7 @@ class Inevitable @Inject internal constructor() {
             if (debug) {
                 aapsLogger.debug(
                     LTag.WEAR,
-                    "Creating task: " + id + " due: " + dateUtil.dateAndTimeAndSecondsString(tasks.getValue(id).`when`)
+                    "Creating task: " + id + " due: " + dateUtil.dateAndTimeAndSecondsString(tasks.getValue(id).whenever)
                 )
             }
 
@@ -71,13 +71,13 @@ class Inevitable @Inject internal constructor() {
 
     private inner class Task(private val id: String, offset: Long, private val what: Runnable) {
 
-        var `when`: Long = 0
+        var whenever: Long = 0
         fun extendTime(offset: Long) {
-            `when` = wearUtil.timestamp() + offset
+            whenever = wearUtil.timestamp() + offset
         }
 
         fun poll(): Boolean {
-            val till = wearUtil.msTill(`when`)
+            val till = wearUtil.msTill(whenever)
             if (till < 1) {
                 if (debug) aapsLogger.debug(LTag.WEAR, "Executing task! $id")
                 tasks.remove(id) // early remove to allow overlapping scheduling

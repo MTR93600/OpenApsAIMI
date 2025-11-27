@@ -62,6 +62,7 @@ class DanaFragment : DaggerFragment() {
 
     private val handler = Handler(HandlerThread(this::class.simpleName + "Handler").also { it.start() }.looper)
     private var refreshLoop: Runnable
+
     private var pumpStatus = ""
     private var pumpStatusIcon = "{fa-bluetooth-b}"
 
@@ -180,9 +181,16 @@ class DanaFragment : DaggerFragment() {
     override fun onPause() {
         super.onPause()
         disposable.clear()
-        handler.removeCallbacks(refreshLoop)
+        handler.removeCallbacksAndMessages(null)
         pumpStatus = ""
         pumpStatusIcon = "{fa-bluetooth-b}"
+    }
+
+    @Synchronized
+    override fun onDestroy() {
+        super.onDestroy()
+        handler.removeCallbacksAndMessages(null)
+        handler.looper.quitSafely()
     }
 
     @Synchronized

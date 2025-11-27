@@ -56,7 +56,7 @@ class PlusMinusEditText @JvmOverloads constructor(
     private var value: Double
     private var mChangeCounter = 0
     private var mLastChange: Long = 0
-    private val mHandler: Handler
+    private val handler: Handler
     private var mUpdater: ScheduledExecutorService? = null
 
     private inner class UpdateCounterTask(private val mInc: Boolean, private val step: Double) : Runnable {
@@ -78,7 +78,7 @@ class PlusMinusEditText @JvmOverloads constructor(
             } else {
                 msg.what = MSG_DEC
             }
-            mHandler.sendMessage(msg)
+            handler.sendMessage(msg)
         }
     }
 
@@ -131,7 +131,7 @@ class PlusMinusEditText @JvmOverloads constructor(
         }
 
         mUpdater = Executors.newSingleThreadScheduledExecutor()
-        mUpdater?.scheduleAtFixedRate(
+        mUpdater?.scheduleWithFixedDelay(
             UpdateCounterTask(inc, step), 200, 200,
             TimeUnit.MILLISECONDS
         )
@@ -230,7 +230,7 @@ class PlusMinusEditText @JvmOverloads constructor(
         binding.plusButton3?.text = "+${format.format(stepValues[2]).replaceFirst("^0+(?!$)".toRegex(), "")}"
 
         value = initValue
-        mHandler = object : Handler(Looper.getMainLooper()) {
+        handler = object : Handler(Looper.getMainLooper()) {
             override fun handleMessage(msg: Message) {
                 val multiplier = msg.data.getInt(MULTIPLIER)
                 val step = msg.data.getDouble(STEP)

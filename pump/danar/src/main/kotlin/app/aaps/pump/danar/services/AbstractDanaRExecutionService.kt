@@ -189,7 +189,7 @@ abstract class AbstractDanaRExecutionService : DaggerService() {
         }).start()
     }
 
-    protected fun getBTSocketForSelectedPump() {
+    fun getBTSocketForSelectedPump() {
         val deviceName = preferences.get(DanaStringKey.RName)
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
             (context.getSystemService(BLUETOOTH_SERVICE) as BluetoothManager).adapter
@@ -250,7 +250,7 @@ abstract class AbstractDanaRExecutionService : DaggerService() {
         return result
     }
 
-    protected fun waitForWholeMinute() {
+    fun waitForWholeMinute() {
         while (true) {
             val time = dateUtil.now()
             val timeToWholeMinute = 60000 - time % 60000
@@ -260,7 +260,7 @@ abstract class AbstractDanaRExecutionService : DaggerService() {
         }
     }
 
-    protected fun doSanityCheck() {
+    fun doSanityCheck() {
         val (temporaryBasal, extendedBolus) = pumpSync.expectedPumpState()
 
         // Temporary basal

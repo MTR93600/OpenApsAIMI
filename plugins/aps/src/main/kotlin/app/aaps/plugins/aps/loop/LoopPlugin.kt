@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
+import androidx.annotation.VisibleForTesting
 import androidx.core.app.NotificationCompat
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceManager
@@ -205,6 +206,7 @@ class LoopPlugin @Inject constructor(
     override fun onStop() {
         disposable.clear()
         handler?.removeCallbacksAndMessages(null)
+        handler?.looper?.quit()
         handler = null
         super.onStop()
     }
@@ -350,7 +352,8 @@ class LoopPlugin @Inject constructor(
      * Check if running mode is corresponding to pump state and constraints
      * and force change mode if needed
      */
-    private fun runningModePreCheck() {
+    @VisibleForTesting
+    fun runningModePreCheck() {
         val runningMode = persistenceLayer.getRunningModeActiveAt(dateUtil.now())
         val closedLoopAllowed = constraintChecker.isClosedLoopAllowed()
         val loopInvocationAllowed = constraintChecker.isLoopInvocationAllowed()
@@ -718,6 +721,7 @@ class LoopPlugin @Inject constructor(
 
     override fun disableCarbSuggestions(durationMinutes: Int) {
         carbsSuggestionsSuspendedUntil = System.currentTimeMillis() + durationMinutes * 60 * 1000
+        aapsLogger.debug(LTag.CORE, "CarbSuggestion disabled until ${dateUtil.dateAndTimeAndSecondsString(carbsSuggestionsSuspendedUntil)}")
         dismissSuggestion()
     }
 

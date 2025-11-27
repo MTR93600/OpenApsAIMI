@@ -7,7 +7,7 @@ import app.aaps.wear.testing.mockers.RawDataMocker
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito
+import org.mockito.kotlin.whenever
 
 /**
  * This test covers DisplayFormat class (directly)
@@ -25,10 +25,10 @@ class DisplayFormatTest : WearTestBase() {
         displayFormat.wearUtil = wearUtil
         displayFormat.sp = sp
         displayFormat.context = context
-        Mockito.`when`(sp.getBoolean("complication_unicode", true)).thenReturn(true)
-        Mockito.`when`(context.getString(R.string.hour_short)).thenReturn("h")
-        Mockito.`when`(context.getString(R.string.day_short)).thenReturn("d")
-        Mockito.`when`(context.getString(R.string.week_short)).thenReturn("w")
+        whenever(sp.getBoolean("complication_unicode", true)).thenReturn(true)
+        whenever(context.getString(R.string.hour_short)).thenReturn("h")
+        whenever(context.getString(R.string.day_short)).thenReturn("d")
+        whenever(context.getString(R.string.week_short)).thenReturn("w")
     }
 
     @Test fun shortTimeSinceTest() {
@@ -85,7 +85,7 @@ class DisplayFormatTest : WearTestBase() {
         assertThat(displayFormat.shortTrend(raw, 0)).isEqualTo("-- Δ--")
         raw.singleBg[0].timeStamp = backInTime(0, 0, 2, 0)
         assertThat(displayFormat.shortTrend(raw, 0)).isEqualTo("2' Δ--")
-        Mockito.`when`(sp.getBoolean("complication_unicode", true)).thenReturn(true)
+        whenever(sp.getBoolean("complication_unicode", true)).thenReturn(true)
 
         // shortening
         assertThat(displayFormat.shortTrend(rawDataMocker.rawDelta(2, "1.2"), 0)).isEqualTo("2' Δ1.2")
@@ -106,7 +106,7 @@ class DisplayFormatTest : WearTestBase() {
         assertThat(displayFormat.shortTrend(rawDataMocker.rawDelta(1, "-1,563"), 0)).isEqualTo("1' -1,6")
 
         // UTF-off mode - without delta symbol
-        Mockito.`when`(sp.getBoolean("complication_unicode", true)).thenReturn(false)
+        whenever(sp.getBoolean("complication_unicode", true)).thenReturn(false)
         assertThat(displayFormat.shortTrend(rawDataMocker.rawDelta(2, "1.2"), 0)).isEqualTo("2' 1.2")
         assertThat(displayFormat.shortTrend(rawDataMocker.rawDelta(12, "0.7"), 0)).isEqualTo("12' 0.7")
         assertThat(displayFormat.shortTrend(rawDataMocker.rawDelta(10, "1.0"), 0)).isEqualTo("10' 1.0")
@@ -127,7 +127,7 @@ class DisplayFormatTest : WearTestBase() {
     }
 
     @Test fun longDetailsLineTest() {
-        Mockito.`when`(sp.getBoolean("complication_unicode", true)).thenReturn(true)
+        whenever(sp.getBoolean("complication_unicode", true)).thenReturn(true)
         assertThat(displayFormat.longDetailsLine(rawDataMocker.rawCobIobBr("0g", "0U", "3.5U/h"), 0)).isEqualTo("0g  ⁞  0U  ⁞  ⎍ 3.5U/h")
         assertThat(displayFormat.longDetailsLine(rawDataMocker.rawCobIobBr("50g", "7.56U", "0%"), 0)).isEqualTo("50g  ⁞  7.56U  ⁞  ⎍ 0%")
         assertThat(displayFormat.longDetailsLine(rawDataMocker.rawCobIobBr("12g", "3.23U", "120%"), 0)).isEqualTo("12g ⁞ 3.23U ⁞ 120%")
@@ -139,7 +139,7 @@ class DisplayFormatTest : WearTestBase() {
         assertThat(displayFormat.longDetailsLine(rawDataMocker.rawCobIobBr("7g", "0.54U", "30%"), 0)).isEqualTo("7g  ⁞  0.54U  ⁞  ⎍ 30%")
         assertThat(displayFormat.longDetailsLine(rawDataMocker.rawCobIobBr("19(38)g", "35.545U", "12.9U/h"), 0)).isEqualTo("19g ⁞ 36U ⁞ 12.9U/h")
         assertThat(displayFormat.longDetailsLine(rawDataMocker.rawCobIobBr("100(1)g", "12.345U", "6.98647U/h"), 0)).isEqualTo("100g 12U 6.98647U/h")
-        Mockito.`when`(sp.getBoolean("complication_unicode", true)).thenReturn(false)
+        whenever(sp.getBoolean("complication_unicode", true)).thenReturn(false)
         assertThat(displayFormat.longDetailsLine(rawDataMocker.rawCobIobBr("0g", "0U", "3.5U/h"), 0)).isEqualTo("0g  |  0U  |  3.5U/h")
         assertThat(displayFormat.longDetailsLine(rawDataMocker.rawCobIobBr("50g", "7.56U", "0%"), 0)).isEqualTo("50g  |  7.56U  |  0%")
         assertThat(displayFormat.longDetailsLine(rawDataMocker.rawCobIobBr("12g", "3.23U", "120%"), 0)).isEqualTo("12g  |  3.23U  |  120%")

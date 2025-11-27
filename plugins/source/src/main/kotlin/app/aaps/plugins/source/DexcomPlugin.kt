@@ -17,7 +17,6 @@ import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
-import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -77,7 +76,6 @@ class DexcomPlugin @Inject constructor(
         @Inject lateinit var dateUtil: DateUtil
         @Inject lateinit var dataWorkerStorage: DataWorkerStorage
         @Inject lateinit var persistenceLayer: PersistenceLayer
-        @Inject lateinit var uel: UserEntryLogger
         @Inject lateinit var profileUtil: ProfileUtil
 
         @SuppressLint("CheckResult")
@@ -89,7 +87,6 @@ class DexcomPlugin @Inject constructor(
                 ?: return Result.failure(workDataOf("Error" to "missing input data"))
             try {
                 val sourceSensor = when (bundle.getString("sensorType") ?: "") {
-                    "G5" -> SourceSensor.DEXCOM_G5_NATIVE
                     "G6" -> SourceSensor.DEXCOM_G6_NATIVE
                     "G7" -> SourceSensor.DEXCOM_G7_NATIVE
                     else -> SourceSensor.DEXCOM_NATIVE_UNKNOWN
@@ -122,8 +119,6 @@ class DexcomPlugin @Inject constructor(
                     val timestamp = glucoseValueBundle.getLong("timestamp") * 1000
                     // G5 calibration bug workaround (calibration is sent as glucoseValue too)
                     var valid = true
-                    if (sourceSensor == SourceSensor.DEXCOM_G5_NATIVE)
-                        calibrations.forEach { calibration -> if (calibration.timestamp == timestamp) valid = false }
                     // G6 is sending one 24h old changed value causing recalculation. Ignore
                     if (sourceSensor == SourceSensor.DEXCOM_G6_NATIVE)
                         if ((now - timestamp) > T.hours(20).msecs()) valid = false

@@ -19,10 +19,10 @@ import com.google.common.truth.Truth.assertThat
 import org.json.JSONObject
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers.anyInt
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mock
-import org.mockito.Mockito.anyInt
-import org.mockito.Mockito.anyString
-import org.mockito.Mockito.`when`
+import org.mockito.kotlin.whenever
 import java.util.Calendar
 
 /**
@@ -63,12 +63,12 @@ class ProfileSealedTest : TestBase() {
         testPumpPlugin = TestPumpPlugin(rh, ch)
         dateUtil = DateUtilImpl(context)
         hardLimits = HardLimitsMock(preferences, rh)
-        `when`(activePlugin.activePump).thenReturn(testPumpPlugin)
-        `when`(rh.gs(app.aaps.core.ui.R.string.profile_per_unit)).thenReturn("/U")
-        `when`(rh.gs(app.aaps.core.ui.R.string.profile_carbs_per_unit)).thenReturn("g/U")
-        `when`(rh.gs(app.aaps.core.ui.R.string.profile_ins_units_per_hour)).thenReturn("U/h")
-        `when`(rh.gs(anyInt(), anyString())).thenReturn("")
-        `when`(activePlugin.activeAPS).thenReturn(aps)
+        whenever(activePlugin.activePump).thenReturn(testPumpPlugin)
+        whenever(rh.gs(app.aaps.core.ui.R.string.profile_per_unit)).thenReturn("/U")
+        whenever(rh.gs(app.aaps.core.ui.R.string.profile_carbs_per_unit)).thenReturn("g/U")
+        whenever(rh.gs(app.aaps.core.ui.R.string.profile_ins_units_per_hour)).thenReturn("U/h")
+        whenever(rh.gs(anyInt(), anyString())).thenReturn("")
+        whenever(activePlugin.activeAPS).thenReturn(aps)
     }
 
     @Test

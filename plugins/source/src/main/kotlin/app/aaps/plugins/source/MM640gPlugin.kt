@@ -56,7 +56,7 @@ class MM640gPlugin @Inject constructor(
         override suspend fun doWorkAndLog(): Result {
             var ret = Result.success()
 
-            if (!mM640gPlugin.isEnabled()) return Result.success()
+            if (!mM640gPlugin.isEnabled()) return Result.success(workDataOf("Result" to "Plugin not enabled"))
             val collection = inputData.getString("collection") ?: return Result.failure(workDataOf("Error" to "missing collection"))
             if (collection == "entries") {
                 val data = inputData.getString("data")
@@ -72,7 +72,7 @@ class MM640gPlugin @Inject constructor(
                                     glucoseValues += GV(
                                         timestamp = jsonObject.getLong("date"),
                                         value = jsonObject.getDouble("sgv"),
-                                        raw = jsonObject.getDouble("sgv"),
+                                        raw = null,
                                         noise = null,
                                         trendArrow = TrendArrow.fromString(jsonObject.getString("direction")),
                                         sourceSensor = SourceSensor.MM_600_SERIES
@@ -89,6 +89,8 @@ class MM640gPlugin @Inject constructor(
                         ret = Result.failure(workDataOf("Error" to e.toString()))
                     }
                 }
+            } else {
+                ret = Result.failure(workDataOf("Error" to "missing input data"))
             }
             return ret
         }

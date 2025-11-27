@@ -214,13 +214,19 @@ class OmnipodErosOverviewFragment : DaggerFragment() {
     override fun onPause() {
         super.onPause()
         disposables.clear()
-        handler.removeCallbacks(refreshLoop)
+        handler.removeCallbacksAndMessages(null)
     }
 
     @Synchronized
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        handler.removeCallbacksAndMessages(null)
+        handler.looper.quitSafely()
     }
 
     private fun updateUi() {

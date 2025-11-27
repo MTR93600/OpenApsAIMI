@@ -15,9 +15,9 @@ import org.json.JSONObject
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.anyInt
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mock
-import org.mockito.Mockito.anyString
-import org.mockito.Mockito.`when`
+import org.mockito.kotlin.whenever
 
 @Suppress("SpellCheckingInspection")
 class VersionCheckerUtilsKtTest : TestBase() {
@@ -248,10 +248,10 @@ class VersionCheckerUtilsKtTest : TestBase() {
 
     @BeforeEach
     fun `set time`() {
-        `when`(dateUtil.now()).thenReturn(10000000000L)
+        whenever(dateUtil.now()).thenReturn(10000000000L)
         assertThat(dateUtil.now()).isEqualTo(10000000000L)
 
-        `when`(rh.gs(anyInt(), anyString())).thenReturn("")
+        whenever(rh.gs(anyInt(), anyString())).thenReturn("")
     }
 
 }

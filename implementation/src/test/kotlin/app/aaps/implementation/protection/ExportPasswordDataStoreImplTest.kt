@@ -2,9 +2,10 @@ package app.aaps.implementation.protection
 
 import app.aaps.core.keys.BooleanKey
 import app.aaps.shared.tests.TestBaseWithProfile
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.`when`
+import org.mockito.kotlin.whenever
 
 class ExportPasswordDataStoreImplTest : TestBaseWithProfile() {
 
@@ -17,11 +18,11 @@ class ExportPasswordDataStoreImplTest : TestBaseWithProfile() {
     @Test
     fun exportPasswordStoreEnabled() {
         // When disabled
-        `when`(preferences.get(BooleanKey.MaintenanceEnableExportSettingsAutomation)).thenReturn(false)
+        whenever(preferences.get(BooleanKey.MaintenanceEnableExportSettingsAutomation)).thenReturn(false)
         assertFalse(sut.exportPasswordStoreEnabled())
 
         // When enabled
-        `when`(preferences.get(BooleanKey.MaintenanceEnableExportSettingsAutomation)).thenReturn(true)
+        whenever(preferences.get(BooleanKey.MaintenanceEnableExportSettingsAutomation)).thenReturn(true)
         assertTrue(sut.exportPasswordStoreEnabled())
         assertTrue(sut.clearPasswordDataStore(context).isEmpty())
 
@@ -32,19 +33,19 @@ class ExportPasswordDataStoreImplTest : TestBaseWithProfile() {
 
     @Test
     fun clearPasswordDataStore() {
-        `when`(preferences.get(BooleanKey.MaintenanceEnableExportSettingsAutomation)).thenReturn(false)
+        whenever(preferences.get(BooleanKey.MaintenanceEnableExportSettingsAutomation)).thenReturn(false)
         assertTrue(sut.clearPasswordDataStore(context).isEmpty())
     }
 
     @Test
     fun putPasswordToDataStore() {
-        `when`(preferences.get(BooleanKey.MaintenanceEnableExportSettingsAutomation)).thenReturn(false)
+        whenever(preferences.get(BooleanKey.MaintenanceEnableExportSettingsAutomation)).thenReturn(false)
         assertTrue(sut.putPasswordToDataStore(context, somePassword) == somePassword)
     }
 
     @Test
     fun getPasswordFromDataStore() {
-        `when`(preferences.get(BooleanKey.MaintenanceEnableExportSettingsAutomation)).thenReturn(false)
+        whenever(preferences.get(BooleanKey.MaintenanceEnableExportSettingsAutomation)).thenReturn(false)
         assertTrue(sut.getPasswordFromDataStore(context) == Triple("", true, true))
     }
 }

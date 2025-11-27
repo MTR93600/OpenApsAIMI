@@ -38,12 +38,16 @@ object ToastUtils {
         graphicalToast(ctx, ctx?.getString(id), R.drawable.ic_toast_info, true)
     }
 
-    fun okToast(ctx: Context?, string: String?) {
-        graphicalToast(ctx, string, R.drawable.ic_toast_check, true)
+    fun okToast(ctx: Context?, string: String?, isShort: Boolean = true) {
+        graphicalToast(ctx, string, R.drawable.ic_toast_check, isShort)
     }
 
     fun errorToast(ctx: Context?, string: String?) {
         graphicalToast(ctx, string, R.drawable.ic_toast_error, true)
+    }
+
+    fun longErrorToast(ctx: Context?, string: String?) {
+        graphicalToast(ctx, string, R.drawable.ic_toast_error, false)
     }
 
     fun errorToast(ctx: Context?, @StringRes id: Int) {

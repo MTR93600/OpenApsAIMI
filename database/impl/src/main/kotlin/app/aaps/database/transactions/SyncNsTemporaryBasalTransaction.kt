@@ -33,6 +33,7 @@ class SyncNsTemporaryBasalTransaction(private val temporaryBasals: List<Temporar
                         database.temporaryBasalDao.updateExistingEntry(current)
                         result.invalidated.add(current)
                     }
+                    // Allow update duration
                     if (current.duration != temporaryBasal.duration && nsClientMode) {
                         current.duration = temporaryBasal.duration
                         database.temporaryBasalDao.updateExistingEntry(current)

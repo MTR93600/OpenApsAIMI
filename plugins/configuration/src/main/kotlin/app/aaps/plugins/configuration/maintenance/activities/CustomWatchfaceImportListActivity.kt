@@ -60,6 +60,11 @@ class CustomWatchfaceImportListActivity : TranslatedDaggerAppCompatActivity() {
         binding.recyclerview.adapter = RecyclerViewAdapter(fileListProvider.listCustomWatchfaceFiles().sortedBy { it.cwfData.metadata[CWF_NAME] })
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        binding.recyclerview.adapter = null
+    }
+
     inner class RecyclerViewAdapter internal constructor(private var customWatchfaceFileList: List<CwfFile>) : RecyclerView.Adapter<RecyclerViewAdapter.CwfFileViewHolder>() {
 
         inner class CwfFileViewHolder(val customWatchfaceImportListItemBinding: CustomWatchfaceImportListItemBinding) : RecyclerView.ViewHolder(customWatchfaceImportListItemBinding.root) {

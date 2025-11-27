@@ -19,7 +19,7 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
-import org.mockito.Mockito
+import org.mockito.kotlin.whenever
 import javax.inject.Provider
 
 @Suppress("SpellCheckingInspection")
@@ -42,7 +42,7 @@ internal class DeviceStatusExtensionKtTest : TestBase() {
     fun setup() {
         processedDeviceStatusData = ProcessedDeviceStatusDataImpl(rh, dateUtil, preferences, apsResultProvider)
         nsDeviceStatusHandler = NSDeviceStatusHandler(preferences, config, dateUtil, runningConfiguration, processedDeviceStatusData, aapsLogger, persistenceLayer, overviewData, calculationWorkflow)
-        Mockito.`when`(config.AAPSCLIENT).thenReturn(true)
+        whenever(config.AAPSCLIENT).thenReturn(true)
     }
 
     @Test

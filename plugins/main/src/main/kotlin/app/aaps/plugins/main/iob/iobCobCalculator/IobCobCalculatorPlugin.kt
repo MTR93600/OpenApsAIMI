@@ -33,8 +33,8 @@ import app.aaps.core.interfaces.rx.events.EventConfigBuilderChange
 import app.aaps.core.interfaces.rx.events.EventEffectiveProfileSwitchChanged
 import app.aaps.core.interfaces.rx.events.EventNewBG
 import app.aaps.core.interfaces.rx.events.EventNewHistoryData
-import app.aaps.core.interfaces.rx.events.EventRunningModeChange
 import app.aaps.core.interfaces.rx.events.EventPreferenceChange
+import app.aaps.core.interfaces.rx.events.EventRunningModeChange
 import app.aaps.core.interfaces.rx.events.EventTherapyEventChange
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
@@ -56,6 +56,7 @@ import app.aaps.plugins.main.iob.iobCobCalculator.data.AutosensDataStoreObject
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -172,11 +173,13 @@ class IobCobCalculatorPlugin @Inject constructor(
                 },
                 fabricPrivacy::logException
             )
-
+        historyWorker = Executors.newSingleThreadScheduledExecutor()
     }
 
     override fun onStop() {
         disposable.clear()
+        historyWorker?.shutdown()
+        historyWorker = null
         super.onStop()
     }
 
@@ -412,7 +415,7 @@ class IobCobCalculatorPlugin @Inject constructor(
     }
 
     // Limit rate of EventNewHistoryData
-    private val historyWorker = Executors.newSingleThreadScheduledExecutor()
+    private var historyWorker: ScheduledExecutorService? = null
     private var scheduledHistoryPost: ScheduledFuture<*>? = null
     private var scheduledEvent: EventNewHistoryData? = null
 
@@ -428,7 +431,7 @@ class IobCobCalculatorPlugin @Inject constructor(
                 event.reloadBgData = event.reloadBgData || it.reloadBgData
             }
             scheduledEvent = event
-            scheduledHistoryPost = historyWorker.schedule(
+            scheduledHistoryPost = historyWorker?.schedule(
                 {
                     synchronized(this) {
                         aapsLogger.debug(LTag.AUTOSENS, "Running newHistoryData")

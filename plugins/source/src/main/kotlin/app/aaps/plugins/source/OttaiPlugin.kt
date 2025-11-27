@@ -68,7 +68,7 @@ class OttaiPlugin @Inject constructor(
                                     glucoseValues += GV(
                                         timestamp = jsonObject.getLong("date"),
                                         value = jsonObject.getDouble("sgv"),
-                                        raw = jsonObject.getDouble("sgv"),
+                                        raw = null,
                                         noise = null,
                                         trendArrow = TrendArrow.fromString(jsonObject.getString("direction")),
                                         sourceSensor = SourceSensor.OTTAI
@@ -85,6 +85,8 @@ class OttaiPlugin @Inject constructor(
                         ret = Result.failure(workDataOf("Error" to e.toString()))
                     }
                 }
+            } else {
+                ret = Result.failure(workDataOf("Error" to "missing input data"))
             }
             return ret
         }

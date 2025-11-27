@@ -36,13 +36,15 @@ class EquilPairFillFragment : EquilPairFragmentBase() {
     }
 
     var auto: Boolean = false
-    var buttonFill: Button? = null
-    var lytAction: View? = null
+    private var buttonFill: Button? = null
+    private var buttonFinish: Button? = null
+    private var lytAction: View? = null
     var intStep = 0
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         buttonFill = view.findViewById(R.id.button_fill)
+        buttonFinish = view.findViewById(R.id.button_finish)
         lytAction = view.findViewById(R.id.lyt_action)
         view.findViewById<Button>(R.id.button_next)?.let { buttonNext ->
             buttonNext.alpha = 0.3f
@@ -55,7 +57,7 @@ class EquilPairFillFragment : EquilPairFragmentBase() {
                 setStep()
             }
         }
-        view.findViewById<Button>(R.id.button_finish).setOnClickListener {
+        buttonFinish?.setOnClickListener {
             context?.let {
                 val time = System.currentTimeMillis()
                 val equilHistoryRecord = EquilHistoryRecord(
@@ -75,10 +77,15 @@ class EquilPairFillFragment : EquilPairFragmentBase() {
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
+    override fun onDestroyView() {
+        super.onDestroyView()
+        // Remove listeners first (breaks View → Fragment reference)
+        buttonFill?.setOnClickListener(null)
+        buttonFinish?.setOnClickListener(null)
+        // Then null references (breaks Fragment → View reference)
         lytAction = null
         buttonFill = null
+        buttonFinish = null
     }
 
     private fun showAutoDlg() {

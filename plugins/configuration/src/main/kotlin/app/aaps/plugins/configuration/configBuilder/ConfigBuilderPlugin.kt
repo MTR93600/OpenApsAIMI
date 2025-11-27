@@ -5,8 +5,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.AnimationDrawable
-import android.os.Handler
-import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
@@ -45,6 +43,7 @@ import app.aaps.core.interfaces.sync.NsClient
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.dialogs.OKDialog
+import app.aaps.core.ui.extensions.runOnUiThreadDelayed
 import app.aaps.core.ui.extensions.scanForActivity
 import app.aaps.core.ui.extensions.toVisibility
 import app.aaps.plugins.configuration.R
@@ -87,13 +86,12 @@ class ConfigBuilderPlugin @Inject constructor(
 ), ConfigBuilder {
 
     private val scope = CoroutineScope(Dispatchers.Default + Job())
-    private var expandAnimation: AnimationDrawable? = null
 
     override fun initialize() {
         loadSettings()
         setAlwaysEnabledPluginsEnabled()
         // Wait for MainActivity start
-        Handler(Looper.getMainLooper()).postDelayed({ rxBus.send(EventAppInitialized()) }, 5000)
+        runOnUiThreadDelayed(5000) { rxBus.send(EventAppInitialized()) }
     }
 
     private fun setAlwaysEnabledPluginsEnabled() {
@@ -290,11 +288,11 @@ class ConfigBuilderPlugin @Inject constructor(
         }
         layout.categoryVisibility.visibility = preferences.simpleMode.not().toVisibility()
         layout.categoryDescription.text = rh.gs(description)
-        expandAnimation = layout.categoryExpandMore.background as AnimationDrawable?
-        expandAnimation?.setEnterFadeDuration(200)
-        expandAnimation?.setExitFadeDuration(200)
-        if (expandAnimation?.isRunning == false)
-            expandAnimation?.start()
+        (layout.categoryExpandMore.background as AnimationDrawable).let { expandAnimation ->
+            expandAnimation.setEnterFadeDuration(200)
+            expandAnimation.setExitFadeDuration(200)
+            if (!expandAnimation.isRunning) expandAnimation.start()
+        }
         layout.categoryExpandLess.setOnClickListener {
             layout.categoryExpandLess.visibility = false.toVisibility()
             layout.categoryExpandMore.visibility = (plugins.size > 1).toVisibility()

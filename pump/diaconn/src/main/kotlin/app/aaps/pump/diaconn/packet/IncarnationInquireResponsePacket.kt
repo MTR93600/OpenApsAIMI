@@ -17,8 +17,6 @@ open class IncarnationInquireResponsePacket(
     @Inject lateinit var diaconnG8Pump: DiaconnG8Pump
     @Inject lateinit var rh: ResourceHelper
 
-    var result = 0
-
     init {
         msgType = 0xBA.toByte()
         aapsLogger.debug(LTag.PUMPCOMM, "IncarnationInquireResponsePacket init")
@@ -33,7 +31,7 @@ open class IncarnationInquireResponsePacket(
         } else failed = false
 
         val bufferData = prefixDecode(data)
-        result = getByteToInt(bufferData)
+        val result = getByteToInt(bufferData)
         if (!isSuccInquireResponseResult(result)) {
             failed = true
             return

@@ -4,12 +4,11 @@ import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.pump.danar.comm.MsgBolusStop
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.`when`
 
 class MsgBolusStopTest : DanaRTestBase() {
 
     @Test fun runTest() {
-//        `when`(rh.gs(app.aaps.pump.dana.R.string.overview_bolusprogress_delivered)).thenReturn("Delivered")
+//        whenever(rh.gs(app.aaps.pump.dana.R.string.overview_bolusprogress_delivered)).thenReturn("Delivered")
         danaPump.bolusingDetailedBolusInfo = DetailedBolusInfo()
         val packet = MsgBolusStop(injector)
 

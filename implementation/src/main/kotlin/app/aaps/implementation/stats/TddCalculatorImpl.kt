@@ -2,13 +2,12 @@ package app.aaps.implementation.stats
 
 import android.content.Context
 import android.graphics.Typeface
-import android.util.LongSparseArray
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.TableLayout
 import android.widget.TableRow
 import android.widget.TextView
-import androidx.core.util.size
+import androidx.collection.LongSparseArray
 import app.aaps.core.data.aps.AverageTDD
 import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.TDD
@@ -80,7 +79,7 @@ class TddCalculatorImpl @Inject constructor(
                 aapsLogger.debug(LTag.APS, "Skipping storing TotalDailyDose for ${dateUtil.dateString(tdd.timestamp)}")
             }
         }
-        if (result.size.toLong() == days || allowMissingDays) return result
+        if (result.size().toLong() == days || allowMissingDays) return result
         return null
     }
 

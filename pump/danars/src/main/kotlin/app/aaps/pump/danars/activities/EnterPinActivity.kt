@@ -79,6 +79,12 @@ class EnterPinActivity : TranslatedDaggerAppCompatActivity() {
         disposable.clear()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        binding.okcancel.ok.setOnClickListener(null)
+        binding.okcancel.cancel.setOnClickListener(null)
+    }
+
     private fun checkPairingCheckSum(pairingKey: ByteArray, randomPairingKey: ByteArray, checksum: ByteArray): Boolean {
 
         // pairingKey ByteArray(6)

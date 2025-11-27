@@ -58,7 +58,7 @@ class GlimpPlugin @Inject constructor(
             glucoseValues += GV(
                 timestamp = inputData.getLong("myTimestamp", 0),
                 value = inputData.getDouble("mySGV", 0.0),
-                raw = inputData.getDouble("mySGV", 0.0),
+                raw = null,
                 noise = null,
                 trendArrow = TrendArrow.fromString(inputData.getString("myTrend")),
                 sourceSensor = SourceSensor.LIBRE_1_GLIMP

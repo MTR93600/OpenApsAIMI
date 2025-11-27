@@ -12,8 +12,6 @@ import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
@@ -82,6 +80,11 @@ class BLEScanActivity : TranslatedDaggerAppCompatActivity() {
         stopScan()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        binding.bleScannerListview.adapter = null
+    }
+
     @SuppressLint("MissingPermission")
     private fun startScan() =
         try {
@@ -106,7 +109,7 @@ class BLEScanActivity : TranslatedDaggerAppCompatActivity() {
             return
         }
         devices.add(item)
-        Handler(Looper.getMainLooper()).post { listAdapter?.notifyDataSetChanged() }
+        runOnUiThread { listAdapter?.notifyDataSetChanged() }
     }
 
     private val mBleScanCallback: ScanCallback = object : ScanCallback() {

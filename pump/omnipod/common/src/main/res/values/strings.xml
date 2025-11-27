@@ -126,7 +126,7 @@
     <string name="omnipod_common_preferences_notification_uncertain_tbr_sound_enabled">Sound for uncertain TBR notifications enabled</string>
     <string name="omnipod_common_preferences_notification_uncertain_smb_sound_enabled">Sound for uncertain SMB notifications enabled</string>
     <string name="omnipod_common_preferences_notification_uncertain_bolus_sound_enabled">Sound for uncertain bolus notifications enabled</string>
-    <string name="omnipod_dash_use_bonding">Bond BT device on Android 15+ (Pixel phones workaround)</string>
+    <string name="omnipod_dash_use_bonding">Bond BT device on Android 15</string>
 
     <!-- Omnipod - Pod Status -->
     <string name="omnipod_common_pod_status_no_active_pod">No Active Pod</string>

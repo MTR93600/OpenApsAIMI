@@ -148,8 +148,8 @@ class NSClientFragment : DaggerFragment(), MenuProvider, PluginFragment {
                 context?.let { context ->
                     OKDialog.showConfirmation(
                         context, rh.gs(R.string.ns_client), rh.gs(R.string.full_sync_comment),
-                        Runnable {
-                            OKDialog.showConfirmation(requireContext(), rh.gs(R.string.ns_client), rh.gs(app.aaps.core.ui.R.string.cleanup_db_confirm_sync), Runnable {
+                        {
+                            OKDialog.showConfirmation(requireContext(), rh.gs(R.string.ns_client), rh.gs(app.aaps.core.ui.R.string.cleanup_db_confirm_sync), {
                                 disposable += Completable.fromAction { result = persistenceLayer.cleanupDatabase(93, deleteTrackedChanges = true) }
                                     .subscribeOn(aapsSchedulers.io)
                                     .observeOn(aapsSchedulers.main)
@@ -160,8 +160,7 @@ class NSClientFragment : DaggerFragment(), MenuProvider, PluginFragment {
                                                 OKDialog.show(
                                                     requireContext(),
                                                     rh.gs(app.aaps.core.ui.R.string.result),
-                                                    HtmlHelper.fromHtml("<b>" + rh.gs(app.aaps.core.ui.R.string.cleared_entries) + "</b><br>" + result)
-                                                        .toSpanned()
+                                                    HtmlHelper.fromHtml("<b>" + rh.gs(app.aaps.core.ui.R.string.cleared_entries) + "</b><br>" + result).toSpanned()
                                                 )
                                             aapsLogger.info(LTag.CORE, "Cleaned up databases with result: $result")
                                             handler.post {
@@ -171,7 +170,7 @@ class NSClientFragment : DaggerFragment(), MenuProvider, PluginFragment {
                                         }
                                     )
                                 uel.log(action = Action.CLEANUP_DATABASES, source = Sources.NSClient)
-                            }, Runnable {
+                            }, {
                                 handler.post {
                                     nsClientPlugin?.resetToFullSync()
                                     nsClientPlugin?.resend("FULL_SYNC")
@@ -186,14 +185,12 @@ class NSClientFragment : DaggerFragment(), MenuProvider, PluginFragment {
             else              -> false
         }
 
-    @Synchronized
     override fun onDestroyView() {
         super.onDestroyView()
         binding.recyclerview.adapter = null // avoid leaks
         _binding = null
     }
 
-    @Synchronized
     override fun onResume() {
         super.onResume()
         disposable += rxBus
@@ -218,11 +215,16 @@ class NSClientFragment : DaggerFragment(), MenuProvider, PluginFragment {
         updateLog()
     }
 
-    @Synchronized
     override fun onPause() {
         super.onPause()
         disposable.clear()
         handler.removeCallbacksAndMessages(null)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        handler.removeCallbacksAndMessages(null)
+        handler.looper.quitSafely()
     }
 
     private fun updateQueue() {

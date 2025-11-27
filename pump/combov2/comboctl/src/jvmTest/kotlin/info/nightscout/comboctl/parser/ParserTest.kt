@@ -1,5 +1,6 @@
 package info.nightscout.comboctl.parser
 
+import app.aaps.shared.tests.TestBase
 import info.nightscout.comboctl.base.DisplayFrame
 import info.nightscout.comboctl.base.timeWithoutDate
 import kotlinx.datetime.LocalDate
@@ -9,8 +10,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.fail
 
-class ParserTest {
+class ParserTest : TestBase() {
     class TestContext(displayFrame: DisplayFrame, tokenOffset: Int, skipTitleString: Boolean = false, parseTopLeftTime: Boolean = false) {
+
         val tokens = findTokens(displayFrame)
         val parseContext = ParseContext(tokens, tokenOffset)
 
@@ -1686,11 +1688,12 @@ class ParserTest {
             assertNotNull(titleId)
 
             val result: ParseResult = when (titleId) {
-                TitleID.BOLUS_DATA -> MyDataBolusDataScreenParser().parse(testContext.parseContext)
-                TitleID.ERROR_DATA -> MyDataErrorDataScreenParser().parse(testContext.parseContext)
+                TitleID.BOLUS_DATA   -> MyDataBolusDataScreenParser().parse(testContext.parseContext)
+                TitleID.ERROR_DATA   -> MyDataErrorDataScreenParser().parse(testContext.parseContext)
                 TitleID.DAILY_TOTALS -> MyDataDailyTotalsScreenParser().parse(testContext.parseContext)
-                TitleID.TBR_DATA -> MyDataTbrDataScreenParser().parse(testContext.parseContext)
-                else -> {
+                TitleID.TBR_DATA     -> MyDataTbrDataScreenParser().parse(testContext.parseContext)
+
+                else                 -> {
                     fail("Unknown title string \"$titleString\"")
                 }
             }
@@ -1891,6 +1894,7 @@ class ParserTest {
             assertEquals(testScreen.second, alertScreen.content)
         }
     }
+
     @Test
     fun checkToplevelScreenParsing() {
         val testScreens = listOf(

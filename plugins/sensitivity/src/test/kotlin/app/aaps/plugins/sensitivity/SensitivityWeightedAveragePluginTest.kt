@@ -8,7 +8,7 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
-import org.mockito.Mockito
+import org.mockito.kotlin.whenever
 
 class SensitivityWeightedAveragePluginTest : TestBaseWithProfile() {
 
@@ -25,7 +25,7 @@ class SensitivityWeightedAveragePluginTest : TestBaseWithProfile() {
         sensitivityAAPSPlugin = SensitivityAAPSPlugin(
             aapsLogger, rh, preferences, profileFunction, dateUtil, persistenceLayer
         )
-        Mockito.`when`(activePlugin.getPluginsList()).thenReturn(arrayListOf(sensitivityAAPSPlugin))
+        whenever(activePlugin.getPluginsList()).thenReturn(arrayListOf(sensitivityAAPSPlugin))
     }
 
     @Test

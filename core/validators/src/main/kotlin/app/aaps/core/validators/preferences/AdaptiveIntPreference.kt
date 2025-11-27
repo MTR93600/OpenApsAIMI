@@ -69,7 +69,7 @@ class AdaptiveIntPreference(
             if (preferences.get(it))
                 isVisible = false
         }
-        validatorParameters = if (validatorParams != null) validatorParams else obtainValidatorParameters(attrs)
+        validatorParameters = validatorParams ?: obtainValidatorParameters(attrs)
         setOnBindEditTextListener { editText ->
             validator = DefaultEditTextValidator(editText, validatorParameters, context)
             if (preferenceKey.min < 0)

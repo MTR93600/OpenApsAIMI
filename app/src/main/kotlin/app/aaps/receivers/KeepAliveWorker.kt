@@ -1,6 +1,7 @@
 package app.aaps.receivers
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
@@ -62,6 +63,7 @@ class KeepAliveWorker(
     @Inject lateinit var preferences: Preferences
     @Inject lateinit var ch: ConcentrationHelper
     @Inject lateinit var dstHelperPlugin: DstHelperPlugin
+    @Inject lateinit var workManager: WorkManager
 
     companion object {
 
@@ -102,7 +104,7 @@ class KeepAliveWorker(
 
         // 15 min interval is WorkManager minimum so schedule another instances to have 5 min interval
         if (inputData.getString("schedule") == KA_0) {
-            WorkManager.getInstance(context).enqueueUniqueWork(
+            workManager.enqueueUniqueWork(
                 KA_5,
                 ExistingWorkPolicy.REPLACE,
                 OneTimeWorkRequest.Builder(KeepAliveWorker::class.java)
@@ -110,7 +112,7 @@ class KeepAliveWorker(
                     .setInitialDelay(5, TimeUnit.MINUTES)
                     .build()
             )
-            WorkManager.getInstance(context).enqueueUniqueWork(
+            workManager.enqueueUniqueWork(
                 KA_10,
                 ExistingWorkPolicy.REPLACE,
                 OneTimeWorkRequest.Builder(KeepAliveWorker::class.java)
@@ -161,10 +163,10 @@ class KeepAliveWorker(
             .fromStates(listOf(WorkInfo.State.FAILED, WorkInfo.State.SUCCEEDED))
             .build()
 
-        val workInfo: ListenableFuture<List<WorkInfo>> = WorkManager.getInstance(context).getWorkInfos(workQuery)
+        val workInfo: ListenableFuture<List<WorkInfo>> = workManager.getWorkInfos(workQuery)
         aapsLogger.debug(LTag.CORE, "WorkManager size is ${workInfo.get().size}")
         if (workInfo.get().size > 1000) {
-            WorkManager.getInstance(context).pruneWork()
+            workManager.pruneWork()
             aapsLogger.debug(LTag.CORE, "WorkManager pruning ....")
         }
     }
@@ -172,7 +174,8 @@ class KeepAliveWorker(
     // Usually deviceStatus is uploaded through LoopPlugin after every loop cycle.
     // if there is no BG available, we have to upload anyway to have correct
     // IOB displayed in NS
-    private fun checkAPS() {
+    @VisibleForTesting
+    fun checkAPS() {
         var shouldUploadStatus = false
         if (config.AAPSCLIENT) return
         if (config.PUMPCONTROL) shouldUploadStatus = true
@@ -184,7 +187,8 @@ class KeepAliveWorker(
         }
     }
 
-    private fun checkPump() {
+    @VisibleForTesting
+    fun checkPump() {
         val pump = activePlugin.activePump
         val ps = profileFunction.getRequestedProfile() ?: return
         val requestedProfile = ProfileSealed.PS(ps, activePlugin)

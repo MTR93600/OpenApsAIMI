@@ -19,6 +19,8 @@ class EquilPairActivity : TranslatedDaggerAppCompatActivity() {
 
     @Inject lateinit var rh: ResourceHelper
 
+    private var equilMenuProvider: MenuProvider? = null
+
     companion object {
 
         const val KEY_TYPE = "EquilType"
@@ -39,7 +41,7 @@ class EquilPairActivity : TranslatedDaggerAppCompatActivity() {
         setContentView(R.layout.equil_pair_activity)
 
         // Add menu items without overriding methods in the Activity
-        addMenuProvider(object : MenuProvider {
+        equilMenuProvider = object : MenuProvider {
             override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {}
 
             override fun onMenuItemSelected(menuItem: MenuItem): Boolean =
@@ -52,7 +54,8 @@ class EquilPairActivity : TranslatedDaggerAppCompatActivity() {
 
                     else              -> false
                 }
-        })
+        }
+        equilMenuProvider?.let { addMenuProvider(it) }
 
 
         startDestination = savedInstanceState?.getInt(KEY_START_DESTINATION, R.id.startEquilActivationFragment)
@@ -87,6 +90,11 @@ class EquilPairActivity : TranslatedDaggerAppCompatActivity() {
 
     private fun getNavController(): NavController =
         (supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment).navController
+
+    override fun onDestroy() {
+        super.onDestroy()
+        equilMenuProvider?.let { removeMenuProvider(it) }
+    }
 
     fun getTotalDefinedNumberOfSteps(): Int = 6
     fun getActualNumberOfSteps(): Int = 6

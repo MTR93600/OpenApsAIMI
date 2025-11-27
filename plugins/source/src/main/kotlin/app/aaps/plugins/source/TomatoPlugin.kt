@@ -57,7 +57,7 @@ class TomatoPlugin @Inject constructor(
             glucoseValues += GV(
                 timestamp = inputData.getLong("com.fanqies.tomatofn.Extras.Time", 0),
                 value = inputData.getDouble("com.fanqies.tomatofn.Extras.BgEstimate", 0.0),
-                raw = 0.0,
+                raw = null,
                 noise = null,
                 trendArrow = TrendArrow.NONE,
                 sourceSensor = SourceSensor.LIBRE_1_TOMATO

@@ -51,6 +51,17 @@ class DiaconnG8UserOptionsActivity : TranslatedDaggerAppCompatActivity() {
         super.onPause()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        binding.saveAlarm.setOnClickListener(null)
+        binding.saveLcdOnTime.setOnClickListener(null)
+        binding.saveLang.setOnClickListener(null)
+        binding.saveBolusSpeed.setOnClickListener(null)
+        binding.beepAndAlarm.adapter = null
+        binding.alarmIntesity.adapter = null
+        binding.beepAndAlarm.onItemSelectedListener = null
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = DiaconnG8UserOptionsActivityBinding.inflate(layoutInflater)

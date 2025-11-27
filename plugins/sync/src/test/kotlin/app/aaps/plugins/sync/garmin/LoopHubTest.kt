@@ -44,12 +44,12 @@ import org.mockito.ArgumentMatchers.anyString
 import org.mockito.ArgumentMatchers.argThat
 import org.mockito.ArgumentMatchers.isNull
 import org.mockito.Mock
-import org.mockito.Mockito.times
-import org.mockito.Mockito.verify
-import org.mockito.Mockito.verifyNoMoreInteractions
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyNoMoreInteractions
 import org.mockito.kotlin.whenever
 import java.time.Clock
 import java.time.Instant
@@ -270,7 +270,7 @@ class LoopHubTest : TestBase() {
             GV(
                 timestamp = 1_000_000L, raw = 90.0, value = 93.0,
                 trendArrow = TrendArrow.FLAT, noise = null,
-                sourceSensor = SourceSensor.DEXCOM_G5_XDRIP
+                sourceSensor = SourceSensor.DEXCOM_G6_NATIVE_XDRIP
             )
         )
         whenever(persistenceLayer.getBgReadingsDataFromTime(1001_000, false))

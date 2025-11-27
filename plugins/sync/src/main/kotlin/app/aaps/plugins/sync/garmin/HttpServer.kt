@@ -24,7 +24,6 @@ import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import java.util.concurrent.locks.ReentrantLock
 import java.util.regex.Pattern
@@ -34,7 +33,7 @@ import kotlin.concurrent.withLock
 class HttpServer internal constructor(private var aapsLogger: AAPSLogger, val port: Int) : Closeable {
 
     private val serverThread: Thread
-    private val workerExecutor: Executor = Executors.newCachedThreadPool()
+    private val workerExecutor = Executors.newCachedThreadPool()
     private val endpoints: MutableMap<String, (SocketAddress, URI, String?) -> Pair<Int, CharSequence>> =
         ConcurrentHashMap()
     private var serverSocket: ServerSocket? = null
@@ -54,6 +53,7 @@ class HttpServer internal constructor(private var aapsLogger: AAPSLogger, val po
     }
 
     override fun close() {
+        workerExecutor.shutdown()
         try {
             serverSocket?.close()
             serverSocket = null

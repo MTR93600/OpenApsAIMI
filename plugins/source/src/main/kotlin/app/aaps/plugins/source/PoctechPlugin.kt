@@ -61,7 +61,7 @@ class PoctechPlugin @Inject constructor(
             aapsLogger.debug(LTag.BGSOURCE, "Received Poctech Data $inputData")
             try {
                 val glucoseValues = mutableListOf<GV>()
-                val jsonArray = JSONArray(inputData.getString("data"))
+                val jsonArray = JSONArray(inputData.getString("data") ?: return Result.failure(workDataOf("Error" to "missing data")))
                 aapsLogger.debug(LTag.BGSOURCE, "Received Poctech Data size:" + jsonArray.length())
                 for (i in 0 until jsonArray.length()) {
                     val json = jsonArray.getJSONObject(i)
@@ -69,7 +69,7 @@ class PoctechPlugin @Inject constructor(
                         timestamp = json.getLong("date"),
                         value = if (safeGetString(json, "units", GlucoseUnit.MGDL.asText) == "mmol/L") json.getDouble("current") * Constants.MMOLL_TO_MGDL
                         else json.getDouble("current"),
-                        raw = json.getDouble("raw"),
+                        raw = null,
                         noise = null,
                         trendArrow = TrendArrow.fromString(json.getString("direction")),
                         sourceSensor = SourceSensor.POCTECH_NATIVE

@@ -444,6 +444,9 @@
     <string name="uel_loop_change">LOOP CHANGED</string>
     <string name="uel_loop_removed">LOOP REMOVED</string>
     <string name="uel_other">OTHER</string>
+    <string name="uel_running_mode">RUNNING MODE</string>
+    <string name="uel_running_mode_removed">RUNNING MODE REMOVED</string>
+    <string name="uel_running_mode_updarted">RUNNING MODE UPDATED</string>
 
     <!-- HardLimits -->
     <string name="profile_low_target">Profile low target</string>

@@ -26,7 +26,6 @@ import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.core.interfaces.rx.bus.RxBus
-import app.aaps.core.interfaces.rx.events.EventDanaRSyncStatus
 import app.aaps.core.interfaces.rx.events.EventPumpStatusChanged
 import app.aaps.core.interfaces.utils.SafeParse
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
@@ -209,20 +208,18 @@ class TDDStatsActivity : TranslatedDaggerAppCompatActivity() {
                 .observeOn(aapsSchedulers.main)
                 .subscribe({ event -> binding.connectionStatus.text = event.getStatus(this@TDDStatsActivity) }, fabricPrivacy::logException)
         )
-        disposable.add(
-            rxBus
-                .toObservable(EventDanaRSyncStatus::class.java)
-                .observeOn(aapsSchedulers.main)
-                .subscribe({ event ->
-                               aapsLogger.debug("EventDanaRSyncStatus: " + event.message)
-                               binding.connectionStatus.text = event.message
-                           }, fabricPrivacy::logException)
-        )
     }
 
     override fun onPause() {
         super.onPause()
         disposable.clear()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        binding.totalBaseBasal.onFocusChangeListener = null
+        binding.totalBaseBasal.setOnEditorActionListener(null)
+        binding.reload.setOnClickListener(null)
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {

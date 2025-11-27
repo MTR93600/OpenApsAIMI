@@ -85,8 +85,9 @@ class SimpleUi @Inject constructor(
     }
 
     fun onDestroy() {
-        if (batteryReceiver != null) {
-            context.unregisterReceiver(batteryReceiver)
+        batteryReceiver?.let {
+            context.unregisterReceiver(it)
+            batteryReceiver = null
         }
     }
 
@@ -133,6 +134,11 @@ class SimpleUi @Inject constructor(
                 }
             }
             context.registerReceiver(batteryReceiver, intentBatteryFilter)
+        } else {
+            batteryReceiver?.let {
+                context.unregisterReceiver(it)
+                batteryReceiver = null
+            }
         }
     }
 

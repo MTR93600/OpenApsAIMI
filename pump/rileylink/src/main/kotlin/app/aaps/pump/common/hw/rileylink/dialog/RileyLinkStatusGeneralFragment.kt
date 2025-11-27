@@ -43,6 +43,11 @@ class RileyLinkStatusGeneralFragment : DaggerFragment() {
         binding.refresh.setOnClickListener { refreshData() }
     }
 
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
+    }
+
     private fun refreshData() {
         val targetDevice = rileyLinkServiceData.targetDevice
         binding.connectionStatus.text = rh.gs(rileyLinkServiceData.rileyLinkServiceState.resourceId)

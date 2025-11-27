@@ -7,12 +7,12 @@ import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.TextView
 import app.aaps.core.data.time.T
+import app.aaps.core.graph.data.GraphViewWithCleanup
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.overview.OverviewMenus
 import app.aaps.core.interfaces.plugin.ActivePlugin
-import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.core.interfaces.rx.bus.RxBus
@@ -33,7 +33,6 @@ import app.aaps.core.ui.extensions.toVisibilityKeepSpace
 import app.aaps.databinding.ActivityHistorybrowseBinding
 import app.aaps.plugins.main.general.overview.graphData.GraphData
 import com.google.android.material.datepicker.MaterialDatePicker
-import com.jjoe64.graphview.GraphView
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
 import java.util.Calendar
@@ -56,12 +55,11 @@ class HistoryBrowseActivity : TranslatedDaggerAppCompatActivity() {
     @Inject lateinit var rxBus: RxBus
     @Inject lateinit var rh: ResourceHelper
     @Inject lateinit var aapsLogger: AAPSLogger
-    @Inject lateinit var profileUtil: ProfileUtil
     @Inject lateinit var graphDataProvider: Provider<GraphData>
 
     private val disposable = CompositeDisposable()
 
-    private val secondaryGraphs = ArrayList<GraphView>()
+    private val secondaryGraphs = ArrayList<GraphViewWithCleanup>()
     private val secondaryGraphsLabel = ArrayList<TextView>()
 
     private var axisWidth: Int = 0
@@ -113,7 +111,7 @@ class HistoryBrowseActivity : TranslatedDaggerAppCompatActivity() {
 
         binding.date.setOnClickListener {
             MaterialDatePicker.Builder.datePicker()
-                .setSelection(dateUtil.timeStampToUtcDateMillis(historyBrowserData.overviewData.fromTime))
+                .setSelection(dateUtil.getTimestampWithCurrentTimeOfDay(historyBrowserData.overviewData.fromTime))
                 .setTheme(app.aaps.core.ui.R.style.DatePicker)
                 .build()
                 .apply {
@@ -158,8 +156,15 @@ class HistoryBrowseActivity : TranslatedDaggerAppCompatActivity() {
     @Synchronized
     override fun onDestroy() {
         destroyed = true
+        binding.left.setOnClickListener(null)
+        binding.right.setOnClickListener(null)
+        binding.end.setOnClickListener(null)
+        binding.zoom.setOnClickListener(null)
+        binding.zoom.setOnLongClickListener(null)
+        binding.date.setOnClickListener(null)
         secondaryGraphs.clear()
         secondaryGraphsLabel.clear()
+        historyBrowserData.onDestroy()
         super.onDestroy()
     }
 
@@ -221,7 +226,7 @@ class HistoryBrowseActivity : TranslatedDaggerAppCompatActivity() {
                 val relativeLayout = RelativeLayout(this)
                 relativeLayout.layoutParams = RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
 
-                val graph = GraphView(this)
+                val graph = GraphViewWithCleanup(this)
                 graph.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, rh.dpToPx(100)).also { it.setMargins(0, rh.dpToPx(15), 0, rh.dpToPx(10)) }
                 graph.gridLabelRenderer?.gridColor = rh.gac(app.aaps.core.ui.R.attr.graphGrid)
                 graph.gridLabelRenderer?.reloadStyles()

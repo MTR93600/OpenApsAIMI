@@ -4,30 +4,30 @@ gradlePlugin = "8.13.1"
 googleServices = "4.4.4"
 kotlin = "2.2.21"
 wearable = "2.9.0"
-room = "2.8.3"
+room = "2.8.4"
 dagger = "2.57.2"
 mockito = "5.20.0"
 junit = "6.0.1"
-okhttp = "5.3.0"
+okhttp = "5.3.2"
 retrofit = "3.0.0"
 kotlinx-serialization = "1.9.0"
 kotlinx-coroutines = "1.10.2"
 work = "2.11.0"
-datastorePreferences = "1.1.7"
+datastorePreferences = "1.2.0"
 annotation = "1.9.1"
 
 # Compose
-activityCompose = "1.11.0"
-composeBom = "2025.11.00"
+activityCompose = "1.12.0"
+composeBom = "2025.11.01"
 navigationCompose = "2.9.6"
-lifecycleRuntimeKtx = "2.9.4"
+lifecycleRuntimeKtx = "2.10.0"
 materialPullRefresh = "1.2.0"
 
 [plugins]
 android-library = { id = "com.android.library" }
 klint = { id = "org.jlleitschuh.gradle.ktlint", version = "14.0.1" }
 moduleDependencyGraph = { id = "com.savvasdalkitsis.module-dependency-graph", version = "0.12" }
-ksp = { id = "com.google.devtools.ksp", version = "2.3.2" }
+ksp = { id = "com.google.devtools.ksp", version = "2.3.3" }
 android-test = { id = "com.android.test", version.ref = "gradlePlugin" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
@@ -42,7 +42,7 @@ com-google-dagger-android-processor = { group = "com.google.dagger", name = "dag
 com-google-dagger-android-support = { group = "com.google.dagger", name = "dagger-android-support", version.ref = "dagger" }
 
 com-google-firebase-gradle = { group = "com.google.firebase", name = "firebase-crashlytics-gradle", version = "3.0.6" }
-com-google-firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version = "34.5.0" }
+com-google-firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version = "34.6.0" }
 com-google-firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 com-google-firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics" }
 com-google-firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
@@ -89,7 +89,7 @@ kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version = "0.7.1" }
 
 
-androidx-activity = { group = "androidx.activity", name = "activity-ktx", version = "1.11.0" }
+androidx-activity = { group = "androidx.activity", name = "activity-ktx", version = "1.12.0" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version = "1.7.1" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version = "1.1.0" }
 androidx-browser = { group = "androidx.browser", name = "browser", version = "1.9.0" }
@@ -100,7 +100,7 @@ androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-co
 androidx-fragment = { group = "androidx.fragment", name = "fragment-ktx", version = "1.8.9" }
 androidx-gridlayout = { group = "androidx.gridlayout", name = "gridlayout", version = "1.1.0" }
 androidx-legacy-support = { group = "androidx.legacy", name = "legacy-support-v13", version = "1.0.0" }
-androidx-lifecycle-viewmodel = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-ktx", version = "2.9.4" }
+androidx-lifecycle-viewmodel = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-ktx", version = "2.10.0" }
 androidx-media3-common = { group = "androidx.media3", name = "media3-common", version = "1.8.0" }
 androidx-navigation-fragment = { group = "androidx.navigation", name = "navigation-fragment-ktx", version = "2.9.6" }
 androidx-preference = { group = "androidx.preference", name = "preference-ktx", version = "1.2.1" }
@@ -130,11 +130,10 @@ com-squareup-retrofit2-retrofit = { group = "com.squareup.retrofit2", name = "re
 com-squareup-retrofit2-adapter-rxjava3 = { group = "com.squareup.retrofit2", name = "adapter-rxjava3", version.ref = "retrofit" }
 com-squareup-retrofit2-converter-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version.ref = "retrofit" }
 
-org-apache-commons-lang3 = { group = "org.apache.commons", name = "commons-lang3", version = "3.19.0" }
+org-apache-commons-lang3 = { group = "org.apache.commons", name = "commons-lang3", version = "3.20.0" }
 org-mozilla-rhino = { group = "org.mozilla", name = "rhino", version = "1.8.0" }
 
 org-mockito-android = { group = "org.mockito", name = "mockito-android", version.ref = "mockito" }
-org-mockito-core = { group = "org.mockito", name = "mockito-core", version.ref = "mockito" }
 org-mockito-junit-jupiter = { group = "org.mockito", name = "mockito-junit-jupiter", version.ref = "mockito" }
 org-mockito-kotlin = { group = "org.mockito.kotlin", name = "mockito-kotlin", version = "6.1.0" }
 org-slf4j-api = { group = "org.slf4j", name = "slf4j-api", version = "2.0.17" }

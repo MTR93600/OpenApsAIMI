@@ -73,7 +73,7 @@ class StoreDataForDbImpl @Inject constructor(
     @VisibleForTesting val nsIdDeviceStatuses: MutableList<DS> = mutableListOf()
     @VisibleForTesting val nsIdFoods: MutableList<FD> = mutableListOf()
 
-    private val deleteTreatment: MutableList<String> = mutableListOf()
+    @VisibleForTesting val deleteTreatment: MutableList<String> = mutableListOf()
     private val deleteGlucoseValue: MutableList<String> = mutableListOf()
 
     private val inserted = HashMap<String, Int>()
@@ -317,7 +317,7 @@ class StoreDataForDbImpl @Inject constructor(
     }
 
     private val eventWorker = Executors.newSingleThreadScheduledExecutor()
-    private var scheduledEventPost: ScheduledFuture<*>? = null
+    @VisibleForTesting var scheduledEventPost: ScheduledFuture<*>? = null
 
     @Synchronized
     override fun scheduleNsIdUpdate() {
@@ -338,94 +338,107 @@ class StoreDataForDbImpl @Inject constructor(
     @Synchronized
     override fun updateNsIds() {
         synchronized(nsIdTemporaryTargets) {
-            persistenceLayer.updateTemporaryTargetsNsIds(nsIdTemporaryTargets).blockingGet().also { result ->
-                nsIdTemporaryTargets.clear()
-                nsIdUpdated.add(TT::class.java.simpleName, result.updatedNsId.size)
-            }
+            if (nsIdTemporaryTargets.isNotEmpty())
+                persistenceLayer.updateTemporaryTargetsNsIds(nsIdTemporaryTargets).blockingGet().also { result ->
+                    nsIdTemporaryTargets.clear()
+                    nsIdUpdated.add(TT::class.java.simpleName, result.updatedNsId.size)
+                }
         }
 
         synchronized(nsIdGlucoseValues) {
-            persistenceLayer.updateGlucoseValuesNsIds(nsIdGlucoseValues).blockingGet().also { result ->
-                nsIdGlucoseValues.clear()
-                nsIdUpdated.add(GV::class.java.simpleName, result.updatedNsId.size)
-            }
+            if (nsIdGlucoseValues.isNotEmpty())
+                persistenceLayer.updateGlucoseValuesNsIds(nsIdGlucoseValues).blockingGet().also { result ->
+                    nsIdGlucoseValues.clear()
+                    nsIdUpdated.add(GV::class.java.simpleName, result.updatedNsId.size)
+                }
         }
 
         synchronized(nsIdFoods) {
-            persistenceLayer.updateFoodsNsIds(nsIdFoods).blockingGet().also { result ->
-                nsIdFoods.clear()
-                nsIdUpdated.add(FD::class.java.simpleName, result.updatedNsId.size)
-            }
+            if (nsIdFoods.isNotEmpty())
+                persistenceLayer.updateFoodsNsIds(nsIdFoods).blockingGet().also { result ->
+                    nsIdFoods.clear()
+                    nsIdUpdated.add(FD::class.java.simpleName, result.updatedNsId.size)
+                }
         }
 
         synchronized(nsIdTherapyEvents) {
-            persistenceLayer.updateTherapyEventsNsIds(nsIdTherapyEvents).blockingGet().also { result ->
-                nsIdTherapyEvents.clear()
-                nsIdUpdated.add(TE::class.java.simpleName, result.updatedNsId.size)
-            }
+            if (nsIdTherapyEvents.isNotEmpty())
+                persistenceLayer.updateTherapyEventsNsIds(nsIdTherapyEvents).blockingGet().also { result ->
+                    nsIdTherapyEvents.clear()
+                    nsIdUpdated.add(TE::class.java.simpleName, result.updatedNsId.size)
+                }
         }
 
         synchronized(nsIdBoluses) {
-            persistenceLayer.updateBolusesNsIds(nsIdBoluses).blockingGet().also { result ->
-                nsIdBoluses.clear()
-                nsIdUpdated.add(BS::class.java.simpleName, result.updatedNsId.size)
-            }
+            if (nsIdBoluses.isNotEmpty())
+                persistenceLayer.updateBolusesNsIds(nsIdBoluses).blockingGet().also { result ->
+                    nsIdBoluses.clear()
+                    nsIdUpdated.add(BS::class.java.simpleName, result.updatedNsId.size)
+                }
         }
 
         synchronized(nsIdCarbs) {
-            persistenceLayer.updateCarbsNsIds(nsIdCarbs).blockingGet().also { result ->
-                nsIdCarbs.clear()
-                nsIdUpdated.add(CA::class.java.simpleName, result.updatedNsId.size)
-            }
+            if (nsIdCarbs.isNotEmpty())
+                persistenceLayer.updateCarbsNsIds(nsIdCarbs).blockingGet().also { result ->
+                    nsIdCarbs.clear()
+                    nsIdUpdated.add(CA::class.java.simpleName, result.updatedNsId.size)
+                }
         }
 
         synchronized(nsIdBolusCalculatorResults) {
-            persistenceLayer.updateBolusCalculatorResultsNsIds(nsIdBolusCalculatorResults).blockingGet().also { result ->
-                nsIdBolusCalculatorResults.clear()
-                nsIdUpdated.add(BCR::class.java.simpleName, result.updatedNsId.size)
-            }
+            if (nsIdBolusCalculatorResults.isNotEmpty())
+                persistenceLayer.updateBolusCalculatorResultsNsIds(nsIdBolusCalculatorResults).blockingGet().also { result ->
+                    nsIdBolusCalculatorResults.clear()
+                    nsIdUpdated.add(BCR::class.java.simpleName, result.updatedNsId.size)
+                }
         }
 
         synchronized(nsIdTemporaryBasals) {
-            persistenceLayer.updateTemporaryBasalsNsIds(nsIdTemporaryBasals).blockingGet().also { result ->
-                nsIdTemporaryBasals.clear()
-                nsIdUpdated.add(TB::class.java.simpleName, result.updatedNsId.size)
-            }
+            if (nsIdTemporaryBasals.isNotEmpty())
+                persistenceLayer.updateTemporaryBasalsNsIds(nsIdTemporaryBasals).blockingGet().also { result ->
+                    nsIdTemporaryBasals.clear()
+                    nsIdUpdated.add(TB::class.java.simpleName, result.updatedNsId.size)
+                }
         }
 
         synchronized(nsIdExtendedBoluses) {
-            persistenceLayer.updateExtendedBolusesNsIds(nsIdExtendedBoluses).blockingGet().also { result ->
-                nsIdExtendedBoluses.clear()
-                nsIdUpdated.add(EB::class.java.simpleName, result.updatedNsId.size)
-            }
+            if (nsIdExtendedBoluses.isNotEmpty())
+                persistenceLayer.updateExtendedBolusesNsIds(nsIdExtendedBoluses).blockingGet().also { result ->
+                    nsIdExtendedBoluses.clear()
+                    nsIdUpdated.add(EB::class.java.simpleName, result.updatedNsId.size)
+                }
         }
 
         synchronized(nsIdProfileSwitches) {
-            persistenceLayer.updateProfileSwitchesNsIds(nsIdProfileSwitches).blockingGet().also { result ->
-                nsIdProfileSwitches.clear()
-                nsIdUpdated.add(PS::class.java.simpleName, result.updatedNsId.size)
-            }
+            if (nsIdProfileSwitches.isNotEmpty())
+                persistenceLayer.updateProfileSwitchesNsIds(nsIdProfileSwitches).blockingGet().also { result ->
+                    nsIdProfileSwitches.clear()
+                    nsIdUpdated.add(PS::class.java.simpleName, result.updatedNsId.size)
+                }
         }
 
         synchronized(nsIdEffectiveProfileSwitches) {
-            persistenceLayer.updateEffectiveProfileSwitchesNsIds(nsIdEffectiveProfileSwitches).blockingGet().also { result ->
-                nsIdEffectiveProfileSwitches.clear()
-                nsIdUpdated.add(EPS::class.java.simpleName, result.updatedNsId.size)
-            }
+            if (nsIdEffectiveProfileSwitches.isNotEmpty())
+                persistenceLayer.updateEffectiveProfileSwitchesNsIds(nsIdEffectiveProfileSwitches).blockingGet().also { result ->
+                    nsIdEffectiveProfileSwitches.clear()
+                    nsIdUpdated.add(EPS::class.java.simpleName, result.updatedNsId.size)
+                }
         }
 
         synchronized(nsIdDeviceStatuses) {
-            persistenceLayer.updateDeviceStatusesNsIds(nsIdDeviceStatuses).blockingGet().also { result ->
-                nsIdDeviceStatuses.clear()
-                nsIdUpdated.add(DS::class.java.simpleName, result.updatedNsId.size)
-            }
+            if (nsIdDeviceStatuses.isNotEmpty())
+                persistenceLayer.updateDeviceStatusesNsIds(nsIdDeviceStatuses).blockingGet().also { result ->
+                    nsIdDeviceStatuses.clear()
+                    nsIdUpdated.add(DS::class.java.simpleName, result.updatedNsId.size)
+                }
         }
 
         synchronized(nsIdRunningModes) {
-            persistenceLayer.updateRunningModesNsIds(nsIdRunningModes).blockingGet().also { result ->
-                nsIdRunningModes.clear()
-                nsIdUpdated.add(RM::class.java.simpleName, result.updatedNsId.size)
-            }
+            if (nsIdRunningModes.isNotEmpty())
+                persistenceLayer.updateRunningModesNsIds(nsIdRunningModes).blockingGet().also { result ->
+                    nsIdRunningModes.clear()
+                    nsIdUpdated.add(RM::class.java.simpleName, result.updatedNsId.size)
+                }
         }
 
         sendLog("GlucoseValue", GV::class.java.simpleName)

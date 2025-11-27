@@ -107,10 +107,14 @@
                 <action android:name="com.microtechmd.cgms.aidex.action.BgEstimate" />
                 <!-- Receiver from patched Ottai app (International) -->
                 <action android:name="info.nightscout.androidaps.action.OTTAI_APP" />
-                <!-- Receiver from patched Ottai app (China) -->
-                <action android:name="cn.diyaps.sharing.OT_APP" />
                 <!-- Receiver from patched Syai Tag app -->
                 <action android:name="info.nightscout.androidaps.action.SYAI_TAG_APP" />
+                <!-- Receiver from patched Ottai app (China) -->
+                <action android:name="cn.diyaps.sharing.OT_APP" />
+                <!-- Receiver from patched SI app -->
+                <action android:name="cn.diyaps.sharing.SI_APP" />
+                <!-- Receiver from patched Sino app -->
+                <action android:name="cn.diyaps.sharing.SINO_APP" />
             </intent-filter>
         </receiver>
 

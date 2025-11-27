@@ -30,7 +30,7 @@ import dagger.Lazy
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
-import org.mockito.Mockito.`when`
+import org.mockito.kotlin.whenever
 
 class ObjectivesPluginTest : TestBaseWithProfile() {
 
@@ -64,8 +64,8 @@ class ObjectivesPluginTest : TestBaseWithProfile() {
         )
         objectivesPlugin = ObjectivesPlugin(aapsLogger, rh, emulatedPreferences, config, objectives)
         objectivesPlugin.onStart()
-        `when`(rh.gs(R.string.objectivenotstarted)).thenReturn("Objective %1\$d not started")
-        `when`(rh.gs(R.string.objectivenotfinished)).thenReturn("Objective %1\$d not finished")
+        whenever(rh.gs(R.string.objectivenotstarted)).thenReturn("Objective %1\$d not started")
+        whenever(rh.gs(R.string.objectivenotfinished)).thenReturn("Objective %1\$d not finished")
     }
 
     @Test fun notStartedObjectivesShouldLimitLoopInvocation() {

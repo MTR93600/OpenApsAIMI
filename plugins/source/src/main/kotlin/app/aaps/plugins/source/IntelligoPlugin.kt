@@ -5,6 +5,8 @@ import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.HandlerThread
+import androidx.annotation.VisibleForTesting
+import androidx.core.net.toUri
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
@@ -50,10 +52,13 @@ class IntelligoPlugin @Inject constructor(
     aapsLogger, resourceHelper, preferences
 ), BgSource {
 
-    private var handler: Handler? = null
-    private var refreshLoop: Runnable
+    @VisibleForTesting
+    var handler: Handler? = null
 
-    private val contentUri: Uri = Uri.parse("content://$AUTHORITY/$TABLE_NAME")
+    @VisibleForTesting
+    var refreshLoop: Runnable
+
+    private val contentUri: Uri = "content://$AUTHORITY/$TABLE_NAME".toUri()
 
     init {
         refreshLoop = Runnable {
@@ -79,13 +84,15 @@ class IntelligoPlugin @Inject constructor(
 
     override fun onStop() {
         super.onStop()
-        handler?.removeCallbacks(refreshLoop)
+        handler?.removeCallbacksAndMessages(null)
+        handler?.looper?.quit()
         handler = null
         disposable.clear()
     }
 
     @SuppressLint("CheckResult")
-    private fun handleNewData() {
+    @VisibleForTesting
+    fun handleNewData() {
         if (!isEnabled()) return
 
         context.contentResolver.query(contentUri, null, null, null, null)?.let { cr ->

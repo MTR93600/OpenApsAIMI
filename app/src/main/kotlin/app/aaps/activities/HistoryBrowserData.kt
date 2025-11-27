@@ -43,4 +43,8 @@ class HistoryBrowserData @Inject constructor(
             aapsLogger, aapsSchedulers, rxBus, preferences, rh, profileFunction, activePlugin,
             fabricPrivacy, dateUtil, persistenceLayer, overviewData, calculationWorkflow, decimalFormatter, processedTbrEbData
         )
+
+    fun onDestroy() {
+        overviewData.reset()
+    }
 }

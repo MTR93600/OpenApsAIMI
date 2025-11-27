@@ -6,6 +6,7 @@ import androidx.preference.PreferenceManager
 import app.aaps.core.data.model.EPS
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.ICfg
+import app.aaps.core.data.model.PS
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.aps.GlucoseStatus
 import app.aaps.core.interfaces.configuration.Config
@@ -55,15 +56,18 @@ import org.mockito.ArgumentMatchers.anyDouble
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mock
-import org.mockito.Mockito
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.spy
+import org.mockito.kotlin.whenever
 import javax.inject.Provider
 
 @Suppress("SpellCheckingInspection")
 open class TestBaseWithProfile : TestBase() {
 
-    @Mock open lateinit var activePlugin: ActivePlugin
+    @Mock lateinit var activePlugin: ActivePlugin
     @Mock lateinit var rh: ResourceHelper
     @Mock lateinit var iobCobCalculator: IobCobCalculator
     @Mock lateinit var processedTbrEbData: ProcessedTbrEbData
@@ -143,6 +147,7 @@ open class TestBaseWithProfile : TestBase() {
     lateinit var preferenceManager: PreferenceManager
     lateinit var validProfile: ProfileSealed.Pure
     lateinit var effectiveProfileSwitch: EPS
+    lateinit var profileSwitch: PS
     lateinit var testPumpPlugin: TestPumpPlugin
 
     var now = 1656358822000L
@@ -158,17 +163,17 @@ open class TestBaseWithProfile : TestBase() {
             "{\"time\":\"2:00\",\"value\":\"3.4\"}],\"timezone\":\"UTC\",\"basal\":[{\"time\":\"00:00\",\"value\":\"1\"}],\"target_low\":[{\"time\":\"00:00\",\"value\":\"4.5\"}]," +
             "\"target_high\":[{\"time\":\"00:00\",\"value\":\"7\"}],\"startDate\":\"1970-01-01T00:00:00.000Z\",\"units\":\"mmol\"}"
         preferenceManager = PreferenceManager(context)
-        dateUtil = Mockito.spy(DateUtilImpl(context))
+        dateUtil = spy(DateUtilImpl(context))
         decimalFormatter = DecimalFormatterImpl(rh)
         profileUtil = ProfileUtilImpl(preferences, decimalFormatter)
-        testPumpPlugin = TestPumpPlugin(rh, ch)
-        Mockito.`when`(context.applicationContext).thenReturn(context)
-        Mockito.`when`(context.androidInjector()).thenReturn(injector.androidInjector())
-        Mockito.`when`(context.theme).thenReturn(theme)
-        Mockito.`when`(context.obtainStyledAttributes(anyObject(), any(), any(), any())).thenReturn(typedArray)
-        Mockito.`when`(dateUtil.now()).thenReturn(now)
-        Mockito.`when`(activePlugin.activePump).thenReturn(testPumpPlugin)
-        Mockito.`when`(preferences.get(StringKey.GeneralUnits)).thenReturn(GlucoseUnit.MGDL.asText)
+        testPumpPlugin = TestPumpPlugin(rh,ch)
+        whenever(context.applicationContext).thenReturn(context)
+        whenever(context.androidInjector()).thenReturn(injector.androidInjector())
+        whenever(context.theme).thenReturn(theme)
+        whenever(context.obtainStyledAttributes(anyOrNull(), any(), any(), any())).thenReturn(typedArray)
+        whenever(dateUtil.now()).thenReturn(now)
+        whenever(activePlugin.activePump).thenReturn(testPumpPlugin)
+        whenever(preferences.get(StringKey.GeneralUnits)).thenReturn(GlucoseUnit.MGDL.asText)
         deltaCalculator = DeltaCalculator(aapsLogger)
         apsResultProvider = Provider { DetermineBasalResult(aapsLogger, constraintsChecker, preferences, activePlugin, processedTbrEbData, profileFunction, rh, decimalFormatter, dateUtil, apsResultProvider, ch) }
         hardLimits = HardLimitsMock(preferences, rh)
@@ -188,43 +193,56 @@ open class TestBaseWithProfile : TestBase() {
             originalEnd = 0,
             iCfg = ICfg("", 0, 0)
         )
+        profileSwitch = PS(
+            timestamp = dateUtil.now(),
+            basalBlocks = validProfile.basalBlocks,
+            isfBlocks = validProfile.isfBlocks,
+            icBlocks = validProfile.icBlocks,
+            targetBlocks = validProfile.targetBlocks,
+            glucoseUnit = GlucoseUnit.MMOL,
+            profileName = "",
+            timeshift = 0,
+            percentage = 100,
+            duration = 0,
+            iCfg = ICfg("", 0, 0)
+        )
 
-        Mockito.`when`(rh.gs(R.string.ok)).thenReturn("OK")
-        Mockito.`when`(rh.gs(R.string.error)).thenReturn("Error")
+        whenever(rh.gs(R.string.ok)).thenReturn("OK")
+        whenever(rh.gs(R.string.error)).thenReturn("Error")
 
-        Mockito.doAnswer { invocation: InvocationOnMock ->
+        doAnswer { invocation: InvocationOnMock ->
             val string = invocation.getArgument<Int>(0)
             val arg1 = invocation.getArgument<Int?>(1)
             String.format(rh.gs(string), arg1)
-        }.`when`(rh).gs(anyInt(), anyInt())
+        }.whenever(rh).gs(anyInt(), anyInt())
 
-        Mockito.doAnswer { invocation: InvocationOnMock ->
+        doAnswer { invocation: InvocationOnMock ->
             val string = invocation.getArgument<Int>(0)
             val arg1 = invocation.getArgument<Double?>(1)
             String.format(rh.gs(string), arg1)
-        }.`when`(rh).gs(anyInt(), anyDouble())
+        }.whenever(rh).gs(anyInt(), anyDouble())
 
-        Mockito.doAnswer { invocation: InvocationOnMock ->
+        doAnswer { invocation: InvocationOnMock ->
             val string = invocation.getArgument<Int>(0)
             val arg1 = invocation.getArgument<String?>(1)
             String.format(rh.gs(string), arg1)
-        }.`when`(rh).gs(anyInt(), anyString())
+        }.whenever(rh).gs(anyInt(), anyString())
 
-        Mockito.doAnswer { invocation: InvocationOnMock ->
+        doAnswer { invocation: InvocationOnMock ->
             val string = invocation.getArgument<Int>(0)
             val arg1 = invocation.getArgument<String?>(1)
             val arg2 = invocation.getArgument<String?>(2)
             String.format(rh.gs(string), arg1, arg2)
-        }.`when`(rh).gs(anyInt(), anyString(), anyString())
+        }.whenever(rh).gs(anyInt(), anyString(), anyString())
 
-        Mockito.doAnswer { invocation: InvocationOnMock ->
+        doAnswer { invocation: InvocationOnMock ->
             val string = invocation.getArgument<Int>(0)
             val arg1 = invocation.getArgument<String?>(1)
             val arg2 = invocation.getArgument<Int?>(2)
             String.format(rh.gs(string), arg1, arg2)
-        }.`when`(rh).gs(anyInt(), anyString(), anyInt())
+        }.whenever(rh).gs(anyInt(), anyString(), anyInt())
 
-        Mockito.doAnswer { invocation: InvocationOnMock ->
+        doAnswer { invocation: InvocationOnMock ->
             val string = invocation.getArgument<Int>(0)
             val arg1 = invocation.getArgument<Double?>(1)
             val arg2 = invocation.getArgument<String?>(2)
@@ -235,61 +253,61 @@ open class TestBaseWithProfile : TestBase() {
 
             // Use a default value or handle null appropriately
             String.format(formattedString, arg1, arg2)
-        }.`when`(rh).gs(anyInt(), anyDouble(), anyString())
+        }.whenever(rh).gs(anyInt(), anyDouble(), anyString())
 
-        Mockito.doAnswer { invocation: InvocationOnMock ->
+        doAnswer { invocation: InvocationOnMock ->
             val string = invocation.getArgument<Int>(0)
             val arg1 = invocation.getArgument<Double?>(1)
             val arg2 = invocation.getArgument<Int?>(2)
             String.format(rh.gs(string), arg1, arg2)
-        }.`when`(rh).gs(anyInt(), anyDouble(), anyInt())
+        }.whenever(rh).gs(anyInt(), anyDouble(), anyInt())
 
-        Mockito.doAnswer { invocation: InvocationOnMock ->
+        doAnswer { invocation: InvocationOnMock ->
             val string = invocation.getArgument<Int>(0)
             val arg1 = invocation.getArgument<Int?>(1)
             val arg2 = invocation.getArgument<Int?>(2)
             String.format(rh.gs(string), arg1, arg2)
-        }.`when`(rh).gs(anyInt(), anyInt(), anyInt())
+        }.whenever(rh).gs(anyInt(), anyInt(), anyInt())
 
-        Mockito.doAnswer { invocation: InvocationOnMock ->
+        doAnswer { invocation: InvocationOnMock ->
             val string = invocation.getArgument<Int>(0)
             val arg1 = invocation.getArgument<Int?>(1)
             val arg2 = invocation.getArgument<String?>(2)
             String.format(rh.gs(string), arg1, arg2)
-        }.`when`(rh).gs(anyInt(), anyInt(), anyString())
+        }.whenever(rh).gs(anyInt(), anyInt(), anyString())
 
-        Mockito.doAnswer { invocation: InvocationOnMock ->
+        doAnswer { invocation: InvocationOnMock ->
             val string = invocation.getArgument<Int>(0)
             val arg1 = invocation.getArgument<Int?>(1)
             val arg2 = invocation.getArgument<Int?>(2)
             val arg3 = invocation.getArgument<String?>(3)
             String.format(rh.gs(string), arg1, arg2, arg3)
-        }.`when`(rh).gs(anyInt(), anyInt(), anyInt(), anyString())
+        }.whenever(rh).gs(anyInt(), anyInt(), anyInt(), anyString())
 
-        Mockito.doAnswer { invocation: InvocationOnMock ->
+        doAnswer { invocation: InvocationOnMock ->
             val string = invocation.getArgument<Int>(0)
             val arg1 = invocation.getArgument<Int?>(1)
             val arg2 = invocation.getArgument<String?>(2)
             val arg3 = invocation.getArgument<String?>(3)
             String.format(rh.gs(string), arg1, arg2, arg3)
-        }.`when`(rh).gs(anyInt(), anyInt(), anyString(), anyString())
+        }.whenever(rh).gs(anyInt(), anyInt(), anyString(), anyString())
 
-        Mockito.doAnswer { invocation: InvocationOnMock ->
+        doAnswer { invocation: InvocationOnMock ->
             val string = invocation.getArgument<Int>(0)
             val arg1 = invocation.getArgument<Double?>(1)
             val arg2 = invocation.getArgument<Int?>(2)
             val arg3 = invocation.getArgument<String?>(3)
             String.format(rh.gs(string), arg1, arg2, arg3)
-        }.`when`(rh).gs(anyInt(), anyDouble(), anyInt(), anyString())
+        }.whenever(rh).gs(anyInt(), anyDouble(), anyInt(), anyString())
 
-        Mockito.doAnswer { invocation: InvocationOnMock ->
+        doAnswer { invocation: InvocationOnMock ->
             val string = invocation.getArgument<Int>(0)
             val arg1 = invocation.getArgument<String?>(1)
             val arg2 = invocation.getArgument<Int?>(2)
             val arg3 = invocation.getArgument<String?>(3)
             String.format(rh.gs(string), arg1, arg2, arg3)
-        }.`when`(rh).gs(anyInt(), anyString(), anyInt(), anyString())
-        pumpEnactResultProvider = Provider { PumpEnactResultObject(rh, ch) }
+        }.whenever(rh).gs(anyInt(), anyString(), anyInt(), anyString())
+        pumpEnactResultProvider = Provider { PumpEnactResultObject(rh,ch) }
         profileStoreProvider = Provider { ProfileStoreObject(aapsLogger, activePlugin, config, rh, rxBus, hardLimits, dateUtil) }
         glucoseStatusCalculatorSMB = GlucoseStatusCalculatorSMB(aapsLogger, iobCobCalculator, dateUtil, decimalFormatter, DeltaCalculator(aapsLogger))
     }

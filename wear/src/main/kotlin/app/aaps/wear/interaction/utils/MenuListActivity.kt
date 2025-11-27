@@ -55,6 +55,7 @@ abstract class MenuListActivity : DaggerActivity() {
     }
 
     override fun onDestroy() {
+        findViewById<WearableRecyclerView>(R.id.action_list)?.adapter = null
         disposable.clear()
         super.onDestroy()
     }

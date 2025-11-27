@@ -1,5 +1,6 @@
 package info.nightscout.comboctl.main
 
+import app.aaps.shared.tests.TestBase
 import info.nightscout.comboctl.base.LogLevel
 import info.nightscout.comboctl.base.Logger
 import info.nightscout.comboctl.base.NullDisplayFrame
@@ -31,7 +32,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-class RTNavigationTest {
+class RTNavigationTest : TestBase() {
     /* RTNavigationContext implementation for testing out RTNavigation functionality.
      * This simulates the activity of a Combo in RT mode by using a defined list
      * of ParsedScreen instances. This context runs a coroutine that keeps emitting

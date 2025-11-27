@@ -15,10 +15,10 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
-import org.mockito.Mockito.doAnswer
-import org.mockito.Mockito.`when`
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.whenever
 
 class AuthRequestTest : TestBase() {
 
@@ -32,11 +32,11 @@ class AuthRequestTest : TestBase() {
     private var actionCalled = false
 
     @BeforeEach fun prepareTests() {
-        `when`(rh.gs(R.string.sms_wrong_code)).thenReturn("Wrong code. Command cancelled.")
-        doAnswer(Answer { invocation: InvocationOnMock ->
+        whenever(rh.gs(R.string.sms_wrong_code)).thenReturn("Wrong code. Command cancelled.")
+        doAnswer { invocation: InvocationOnMock ->
             sentSms = invocation.getArgument(0)
             null
-        } as Answer<*>).`when`(smsCommunicator).sendSMS(anyObject())
+        }.whenever(smsCommunicator).sendSMS(anyOrNull())
     }
 
     @Test fun doTests() {
@@ -62,7 +62,7 @@ class AuthRequestTest : TestBase() {
         // correct reply
         authRequest = AuthRequest(aapsLogger, smsCommunicator, rh, otp, dateUtil, commandQueue).with(requester, "Request text", "ABC", action)
         actionCalled = false
-        `when`(otp.checkOTP(anyObject())).thenReturn(OneTimePasswordValidationResult.OK)
+        whenever(otp.checkOTP(anyOrNull())).thenReturn(OneTimePasswordValidationResult.OK)
         authRequest.action("ABC")
         assertThat(actionCalled).isTrue()
         // second time action should not be called
@@ -72,10 +72,10 @@ class AuthRequestTest : TestBase() {
 
         // test timed out message
         val now: Long = 10000
-        `when`(dateUtil.now()).thenReturn(now)
+        whenever(dateUtil.now()).thenReturn(now)
         authRequest = AuthRequest(aapsLogger, smsCommunicator, rh, otp, dateUtil, commandQueue).with(requester, "Request text", "ABC", action)
         actionCalled = false
-        `when`(dateUtil.now()).thenReturn(now + T.mins(Constants.SMS_CONFIRM_TIMEOUT).msecs() + 1)
+        whenever(dateUtil.now()).thenReturn(now + T.mins(Constants.SMS_CONFIRM_TIMEOUT).msecs() + 1)
         authRequest.action("ABC")
         assertThat(actionCalled).isFalse()
     }

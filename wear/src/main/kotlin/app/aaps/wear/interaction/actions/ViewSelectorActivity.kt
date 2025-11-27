@@ -57,6 +57,12 @@ open class ViewSelectorActivity : DaggerActivity() {
         pager?.adapter = adapter
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        pager?.adapter = null
+        pager?.setOnPageChangeListener(null)
+    }
+
     private fun setTitleBasedOnScreenShape() {
         // intents can inject dynamic titles, otherwise we'll use the default
         var title: String? = this.title.toString()

@@ -47,4 +47,9 @@ class ErrorHelperActivity : TranslatedDaggerAppCompatActivity() {
                 listValues = listOf(ValueWithUnit.TEType(TE.Type.ANNOUNCEMENT))
             ).subscribe()
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        disposable.clear()
+    }
 }

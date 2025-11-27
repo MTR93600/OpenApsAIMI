@@ -92,6 +92,8 @@ class DataLayerListenerServiceMobile : WearableListenerService() {
     override fun onDestroy() {
         super.onDestroy()
         disposable.clear()
+        handler.removeCallbacksAndMessages(null)
+        handler.looper.quitSafely()
         scope.cancel()
     }
 

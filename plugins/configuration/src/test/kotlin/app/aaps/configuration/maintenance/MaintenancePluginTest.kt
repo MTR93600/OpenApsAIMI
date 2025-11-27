@@ -10,7 +10,7 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
-import org.mockito.Mockito.`when`
+import org.mockito.kotlin.whenever
 
 class MaintenancePluginTest : TestBaseWithProfile() {
 
@@ -24,10 +24,10 @@ class MaintenancePluginTest : TestBaseWithProfile() {
     @BeforeEach
     fun mock() {
         sut = MaintenancePlugin(context, rh, preferences, nsSettingsStatus, aapsLogger, config, fileListProvider, loggerUtils, uel)
-        `when`(loggerUtils.suffix).thenReturn(".log.zip")
-        `when`(loggerUtils.logDirectory).thenReturn("src/test/assets/logger")
+        whenever(loggerUtils.suffix).thenReturn(".log.zip")
+        whenever(loggerUtils.logDirectory).thenReturn("src/test/assets/logger")
         // Unknown solution after scoped access
-        //`when`(fileListProvider.ensureTempDirExists()).thenReturn(File("src/test/assets/logger"))
+        //whenever(fileListProvider.ensureTempDirExists()).thenReturn(File("src/test/assets/logger"))
     }
 
     @Test fun logFilesTest() {

@@ -19,7 +19,7 @@ import org.json.JSONObject
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
-import org.mockito.Mockito.`when`
+import org.mockito.kotlin.whenever
 import java.io.File
 import java.util.TimeZone
 
@@ -45,9 +45,9 @@ class AutotuneCoreTest : TestBaseWithProfile() {
         val inputProfile = atProfileFromOapsJson(JSONObject(inputProfileJson), dateUtil)!!
         val prep = PreppedGlucose(JSONObject(prepJson), dateUtil)
 
-        `when`(preferences.get(DoubleKey.AutosensMax)).thenReturn(autotuneMax)
-        `when`(preferences.get(DoubleKey.AutosensMin)).thenReturn(autotuneMin)
-        `when`(preferences.get(DoubleKey.ApsSmbMin5MinCarbsImpact)).thenReturn(min5mCarbImpact)
+        whenever(preferences.get(DoubleKey.AutosensMax)).thenReturn(autotuneMax)
+        whenever(preferences.get(DoubleKey.AutosensMin)).thenReturn(autotuneMin)
+        whenever(preferences.get(DoubleKey.ApsSmbMin5MinCarbsImpact)).thenReturn(min5mCarbImpact)
         val oapsOutputProfileJson = File("src/test/res/autotune/test1/aapsorefprofile.json").readText()
         val oapsOutputProfile = atProfileFromOapsJson(JSONObject(oapsOutputProfileJson), dateUtil)!!
         val outProfile = autotuneCore.tuneAllTheThings(prep, inputProfile, inputProfile)
@@ -67,9 +67,9 @@ class AutotuneCoreTest : TestBaseWithProfile() {
         val pumpProfileJson = File("src/test/res/autotune/test4/profile.pump.json").readText()
         val pumpProfile = atProfileFromOapsJson(JSONObject(pumpProfileJson), dateUtil)!!
         val prep = PreppedGlucose(JSONObject(prepJson), dateUtil)
-        `when`(preferences.get(DoubleKey.AutosensMax)).thenReturn(autotuneMax)
-        `when`(preferences.get(DoubleKey.AutosensMin)).thenReturn(autotuneMin)
-        `when`(preferences.get(DoubleKey.ApsSmbMin5MinCarbsImpact)).thenReturn(min5mCarbImpact)
+        whenever(preferences.get(DoubleKey.AutosensMax)).thenReturn(autotuneMax)
+        whenever(preferences.get(DoubleKey.AutosensMin)).thenReturn(autotuneMin)
+        whenever(preferences.get(DoubleKey.ApsSmbMin5MinCarbsImpact)).thenReturn(min5mCarbImpact)
         val oapsOutputProfileJson = File("src/test/res/autotune/test4/newprofile.2022-05-30.json").readText()
         val oapsOutputProfile = atProfileFromOapsJson(JSONObject(oapsOutputProfileJson), dateUtil)!!
         val outProfile = autotuneCore.tuneAllTheThings(prep, inputProfile, pumpProfile)

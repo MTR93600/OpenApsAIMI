@@ -9,7 +9,7 @@ import dagger.android.HasAndroidInjector
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
-import org.mockito.Mockito
+import org.mockito.kotlin.whenever
 
 class SetTimeZonePacketTest : MedtrumTestBase() {
 
@@ -19,7 +19,7 @@ class SetTimeZonePacketTest : MedtrumTestBase() {
 
     @BeforeEach
     fun mock() {
-        Mockito.`when`(medtrumTimeUtil.getCurrentTimePumpSeconds()).thenReturn(1234567890)
+        whenever(medtrumTimeUtil.getCurrentTimePumpSeconds()).thenReturn(1234567890)
     }
 
     private val packetInjector = HasAndroidInjector {

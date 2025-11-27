@@ -21,9 +21,12 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
-import org.mockito.Mockito
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 
 class BolusWizardTest : TestBaseWithProfile() {
 
@@ -42,28 +45,28 @@ class BolusWizardTest : TestBaseWithProfile() {
     @Mock lateinit var persistenceLayer: PersistenceLayer
 
     @BeforeEach
-    fun prepareMocking() {
-        Mockito.`when`(activePlugin.activeAPS).thenReturn(openAPSSMBPlugin)
+    fun prepare() {
+        whenever(activePlugin.activeAPS).thenReturn(openAPSSMBPlugin)
     }
 
     @Suppress("SameParameterValue")
     private fun setupProfile(targetLow: Double, targetHigh: Double, insulinSensitivityFactor: Double, insulinToCarbRatio: Double): Profile {
-        val profile = Mockito.mock(Profile::class.java)
-        Mockito.`when`(profile.getTargetLowMgdl()).thenReturn(targetLow)
-        Mockito.`when`(profile.getTargetLowMgdl()).thenReturn(targetHigh)
-        Mockito.`when`(profile.getIsfMgdlForCarbs(any(), any(), any(), any())).thenReturn(insulinSensitivityFactor)
-        Mockito.`when`(profile.getIc()).thenReturn(insulinToCarbRatio)
+        val profile: Profile = mock()
+        whenever(profile.getTargetLowMgdl()).thenReturn(targetLow)
+        whenever(profile.getTargetLowMgdl()).thenReturn(targetHigh)
+        whenever(profile.getIsfMgdlForCarbs(any(), any(), any(), any())).thenReturn(insulinSensitivityFactor)
+        whenever(profile.getIc()).thenReturn(insulinToCarbRatio)
 
-        Mockito.`when`(iobCobCalculator.calculateIobFromBolus()).thenReturn(IobTotal(System.currentTimeMillis()))
-        Mockito.`when`(iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended()).thenReturn(IobTotal(System.currentTimeMillis()))
+        whenever(iobCobCalculator.calculateIobFromBolus()).thenReturn(IobTotal(System.currentTimeMillis()))
+        whenever(iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended()).thenReturn(IobTotal(System.currentTimeMillis()))
         testPumpPlugin.pumpDescription = PumpDescription().also {
             it.bolusStep = pumpBolusStep
         }
-        Mockito.`when`(iobCobCalculator.ads).thenReturn(autosensDataStore)
+        whenever(iobCobCalculator.ads).thenReturn(autosensDataStore)
 
-        Mockito.doAnswer { invocation: InvocationOnMock ->
+        doAnswer { invocation: InvocationOnMock ->
             invocation.getArgument<Constraint<Double>>(0)
-        }.`when`(constraintChecker).applyBolusConstraints(anyObject())
+        }.whenever(constraintChecker).applyBolusConstraints(anyOrNull())
         return profile
     }
 

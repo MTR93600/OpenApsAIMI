@@ -535,7 +535,7 @@ class MedtronicPumpPlugin @Inject constructor(
         return !invalid
     }
 
-    override val lastDataTime: Long = medtronicPumpStatus.lastConnection
+    override val lastDataTime: Long get() = medtronicPumpStatus.lastConnection
     override val lastBolusTime: Long? get() = null
     override val lastBolusAmount: Double? get() = null
     override val baseBasalRate: Double get() = medtronicPumpStatus.basalProfileForHour

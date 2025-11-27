@@ -173,8 +173,8 @@ class NSClientPlugin @Inject constructor(
         }
         nsClientService?.sendAlarmAck(
             AlarmAck().also { ack ->
-                ack.level = originalAlarm.level()
-                ack.group = originalAlarm.group()
+                ack.level = originalAlarm.level
+                ack.group = originalAlarm.group
                 ack.silenceTime = silenceTimeInMilliseconds
             })
     }
