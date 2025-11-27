@@ -142,7 +142,7 @@ class AimiSmbComparator @Inject constructor(
         val smbDuration = smb.duration
 
         // Diff
-        val diffRate = aimiRate - smbRate
+        val diffRate = aimiRate?.minus(smbRate!!)
         val diffSmb = aimiSmb - smbSmb
 
         // Sanitize Reasons (remove newlines and commas)
