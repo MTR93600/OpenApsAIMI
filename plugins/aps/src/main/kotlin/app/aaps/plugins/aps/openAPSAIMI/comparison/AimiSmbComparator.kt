@@ -69,6 +69,7 @@ class AimiSmbComparator @Inject constructor(
             logComparison(aimiResult, smbResult, glucoseStatus, iobData.firstOrNull()?.iob ?: 0.0, mealData.mealCOB)
 
         } catch (e: Exception) {
+            android.util.Log.e("AimiSmbComparator", "Error in compare", e)
             e.printStackTrace()
         }
     }
@@ -94,9 +95,14 @@ class AimiSmbComparator @Inject constructor(
         val row = "${aimi.timestamp},$date,${gs.glucose},$iob,$cob,$aimiRate,$aimiSmb,${aimi.duration},$smbRate,$smbSmb,${smb.duration},$diffRate,$diffSmb,\"$rAimi\",\"$rSmb\"\n"
         
         try {
+            if (!logFile.exists()) {
+                logFile.parentFile?.mkdirs()
+                logFile.createNewFile()
+                logFile.writeText("Timestamp,Date,BG,IOB,COB,AIMI_Rate,AIMI_SMB,AIMI_Duration,SMB_Rate,SMB_SMB,SMB_Duration,Diff_Rate,Diff_SMB,Reason_AIMI,Reason_SMB\n")
+            }
             FileWriter(logFile, true).use { it.write(row) }
         } catch (e: Exception) {
-            // Ignore log errors
+            android.util.Log.e("AimiSmbComparator", "Error writing to CSV", e)
         }
     }
 

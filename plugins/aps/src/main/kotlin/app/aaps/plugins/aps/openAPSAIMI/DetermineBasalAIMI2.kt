@@ -4047,12 +4047,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (iob_data.iob > maxIobLimit && !allowMealHighIob) {
             //rT.reason.append("IOB ${round(iob_data.iob, 2)} > maxIobLimit maxIobLimit")
             rT.reason.append(context.getString(R.string.reason_iob_max, round(iob_data.iob, 2), round(maxIobLimit, 2)))
-            if (delta < 0) {
+            val finalResult = if (delta < 0) {
                 //rT.reason.append(", BG is dropping (delta $delta), setting basal to 0. ")
                 rT.reason.append(context.getString(R.string.reason_bg_dropping, delta))
-                return setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false) // Basal à 0 pendant 30 minutes
-            }
-            return if (currenttemp.duration > 15 && (roundBasal(basal) == roundBasal(currenttemp.rate))) {
+                setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false) // Basal à 0 pendant 30 minutes
+            } else if (currenttemp.duration > 15 && (roundBasal(basal) == roundBasal(currenttemp.rate))) {
                 rT.reason.append(", temp ${currenttemp.rate} ~ req ${round(basal, 2).withoutZeros()}U/hr. ")
                 rT
             } else {
@@ -4060,6 +4059,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 rT.reason.append(context.getString(R.string.reason_set_temp_basal, round(basal, 2)))
                 setTempBasal(basal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
             }
+            comparator.compare(
+                aimiResult = finalResult,
+                glucoseStatus = glucose_status,
+                currentTemp = currenttemp,
+                iobData = iob_data_array,
+                profileAimi = profile,
+                autosens = autosens_data,
+                mealData = mealData,
+                microBolusAllowed = microBolusAllowed,
+                currentTime = currentTime,
+                flatBGsDetected = flatBGsDetected,
+                dynIsfMode = dynIsfMode
+            )
+            return finalResult
         } else {
             var insulinReq = smbToGive.toDouble()
             // 📝 SMB autorisés mais atténués lorsque le repas impose un IOB > max raisonnable.
