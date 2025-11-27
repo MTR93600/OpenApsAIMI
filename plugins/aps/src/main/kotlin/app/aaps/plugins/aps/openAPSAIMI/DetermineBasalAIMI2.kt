@@ -4247,17 +4247,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
 
             // --- Update Learners ---
+            val anyMealActive = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime
+            val isNight = currentHour >= 22 || currentHour <= 6
+            
             basalLearner.process(
                 currentBg = bg,
                 currentDelta = delta.toDouble(),
                 tdd7Days = tdd7Days,
                 tdd30Days = tdd7Days, // Placeholder as tdd30Days is not readily available in this scope yet
-                isFastingTime = fastingTime
+                isFastingTime = isNight && !anyMealActive
             )
 
             reactivityLearner.process(
                 currentBg = bg,
-                isMealActive = isMealActive,
+                isMealActive = anyMealActive,
                 time = LocalTime.now()
             )
 
