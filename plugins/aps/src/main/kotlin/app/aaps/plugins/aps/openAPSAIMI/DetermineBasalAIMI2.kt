@@ -4247,6 +4247,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
 
             // --- Update Learners ---
+            val currentHour = LocalTime.now().hour
             val anyMealActive = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime
             val isNight = currentHour >= 22 || currentHour <= 6
             
