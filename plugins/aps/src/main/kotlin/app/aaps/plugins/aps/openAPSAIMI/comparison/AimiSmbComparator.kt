@@ -69,47 +69,6 @@ class AimiSmbComparator @Inject constructor(
             logComparison(aimiResult, smbResult, glucoseStatus, iobData.firstOrNull()?.iob ?: 0.0, mealData.mealCOB)
 
         } catch (e: Exception) {
-            android.util.Log.e("AimiSmbComparator", "Error in compare", e)
-            e.printStackTrace()
-        }
-    }
-
-    private fun logComparison(aimi: RT, smb: RT, gs: GlucoseStatus, iob: Double, cob: Double) {
-        val date = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(aimi.timestamp!!))
-        
-        val aimiRate = aimi.rate
-        // In AIMI, if duration is 0, it might be an SMB. But let's check insulinReq.
-        // Usually insulinReq holds the SMB amount if it's an SMB decision.
-        val aimiSmb = aimi.insulinReq
-        
-        val smbRate = smb.rate
-        val smbSmb = smb.insulinReq
-
-        val diffRate = aimiRate?.minus(smbRate!!)
-        val diffSmb = aimiSmb?.minus(smbSmb!!)
-
-        // Escape quotes in reasons
-        val rAimi = aimi.reason.toString().replace("\"", "'")
-        val rSmb = smb.reason.toString().replace("\"", "'")
-
-        val row = "${aimi.timestamp},$date,${gs.glucose},$iob,$cob,$aimiRate,$aimiSmb,${aimi.duration},$smbRate,$smbSmb,${smb.duration},$diffRate,$diffSmb,\"$rAimi\",\"$rSmb\"\n"
-        
-        try {
-            if (!logFile.exists()) {
-                logFile.parentFile?.mkdirs()
-                logFile.createNewFile()
-                logFile.writeText("Timestamp,Date,BG,IOB,COB,AIMI_Rate,AIMI_SMB,AIMI_Duration,SMB_Rate,SMB_SMB,SMB_Duration,Diff_Rate,Diff_SMB,Reason_AIMI,Reason_SMB\n")
-            }
-            FileWriter(logFile, true).use { it.write(row) }
-        } catch (e: Exception) {
-            android.util.Log.e("AimiSmbComparator", "Error writing to CSV", e)
-        }
-    }
-
-    private fun mapProfile(p: OapsProfileAimi): OapsProfile {
-        return OapsProfile(
-            dia = p.dia,
-            min_5m_carbimpact = p.min_5m_carbimpact,
             max_iob = p.max_iob,
             max_daily_basal = p.max_daily_basal,
             max_basal = p.max_basal,
