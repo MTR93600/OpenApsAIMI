@@ -132,22 +132,22 @@ class AimiSmbComparator @Inject constructor(
         val timestamp = System.currentTimeMillis()
 
         // AIMI Data
-        val aimiRate = aimi.rate
-        val aimiSmb = aimi.units ?: 0.0 // Assuming units field holds SMB amount
-        val aimiDuration = aimi.duration
+        val aimiRate = aimi.rate ?: 0.0
+        val aimiSmb = aimi.units ?: 0.0
+        val aimiDuration = aimi.duration ?: 0
 
         // SMB Data
-        val smbRate = smb.rate
+        val smbRate = smb.rate ?: 0.0
         val smbSmb = smb.units ?: 0.0
-        val smbDuration = smb.duration
+        val smbDuration = smb.duration ?: 0
 
         // Diff
-        val diffRate = aimiRate?.minus(smbRate!!)
+        val diffRate = aimiRate - smbRate
         val diffSmb = aimiSmb - smbSmb
 
         // Sanitize Reasons (remove newlines and commas)
-        val aimiReason = aimi.reason.replace("\n", " | ").replace(",", ";")
-        val smbReason = smb.reason.replace("\n", " | ").replace(",", ";")
+        val aimiReason = aimi.reason.toString().replace("\n", " | ").replace(",", ";")
+        val smbReason = smb.reason.toString().replace("\n", " | ").replace(",", ";")
 
         val line = "$timestamp,$date,${glucoseStatus.glucose},$iob,$cob,$aimiRate,$aimiSmb,$aimiDuration,$smbRate,$smbSmb,$smbDuration,$diffRate,$diffSmb,\"$aimiReason\",\"$smbReason\"\n"
 
