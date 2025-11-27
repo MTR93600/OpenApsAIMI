@@ -117,6 +117,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var basalDecisionEngine: BasalDecisionEngine
     @Inject lateinit var glucoseStatusCalculatorAimi: GlucoseStatusCalculatorAimi
     @Inject lateinit var comparator: AimiSmbComparator
+    @Inject lateinit var basalLearner: app.aaps.plugins.aps.openAPSAIMI.learning.BasalLearner
+    @Inject lateinit var reactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.ReactivityLearner
     init {
         // Branche l’historique basal (TBR) sur la persistence réelle
         BasalHistoryUtils.installHistoryProvider(
@@ -3367,7 +3369,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add("ISF réduit de 10% (tendance FC anormale).")
         }
         if (tdd7Days.toFloat() != 0.0f) {
-            basalaimi = (tdd7Days / preferences.get(DoubleKey.OApsAIMIweight)).toFloat()
+            val learnedBasalMultiplier = basalLearner.getMultiplier()
+            basalaimi = ((tdd7Days / preferences.get(DoubleKey.OApsAIMIweight)) * learnedBasalMultiplier).toFloat()
+            if (learnedBasalMultiplier != 1.0) {
+                consoleLog.add("Basal adjusted by learner (x${"%.2f".format(learnedBasalMultiplier)})")
+            }
         }
         this.basalaimi = basalDecisionEngine.smoothBasalRate(tdd7P.toFloat(), tdd7Days.toFloat(), basalaimi)
         if (tdd7Days.toFloat() != 0.0f) {
@@ -3392,12 +3398,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
                 timenow < sixAMHour                               -> {
                     val multiplier = if (honeymoon) 1.2 else 1.4
-                    (basalaimi * multiplier).toFloat()
+                    val reactivity = reactivityLearner.getFactor(LocalTime.now())
+                    (basalaimi * multiplier * reactivity).toFloat()
                 }
 
                 timenow > sixAMHour                               -> {
                     val multiplier = if (honeymoon) 1.4 else 1.6
-                    (basalaimi * multiplier).toFloat()
+                    val reactivity = reactivityLearner.getFactor(LocalTime.now())
+                    (basalaimi * multiplier * reactivity).toFloat()
                 }
 
                 tirbasal3B <= 5 && tirbasal3IR in 70.0..80.0      -> (basalaimi * 1.1).toFloat()
@@ -4237,6 +4245,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 flatBGsDetected = flatBGsDetected,
                 dynIsfMode = dynIsfMode
             )
+
+            // --- Update Learners ---
+            basalLearner.process(
+                currentBg = bg,
+                currentDelta = delta.toDouble(),
+                tdd7Days = tdd7Days,
+                tdd30Days = tdd7Days, // Placeholder as tdd30Days is not readily available in this scope yet
+                isFastingTime = fastingTime
+            )
+
+            reactivityLearner.process(
+                currentBg = bg,
+                isMealActive = isMealActive,
+                time = LocalTime.now()
+            )
+
             return finalResult
         }
     }
