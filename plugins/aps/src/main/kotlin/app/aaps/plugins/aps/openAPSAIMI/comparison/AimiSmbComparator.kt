@@ -1,9 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.comparison
 
 import android.content.Context
+import android.os.Environment
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
-import app.aaps.core.interfaces.aps.GlucoseStatus
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.MealData
@@ -11,7 +11,6 @@ import app.aaps.core.interfaces.aps.OapsProfile
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.RT
 import app.aaps.plugins.aps.openAPSSMB.DetermineBasalSMB
-import android.os.Environment
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
@@ -69,6 +68,14 @@ class AimiSmbComparator @Inject constructor(
             logComparison(aimiResult, smbResult, glucoseStatus, iobData.firstOrNull()?.iob ?: 0.0, mealData.mealCOB)
 
         } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun mapProfile(p: OapsProfileAimi): OapsProfile {
+        return OapsProfile(
+            dia = p.dia,
+            min_5m_carbimpact = p.min_5m_carbimpact,
             max_iob = p.max_iob,
             max_daily_basal = p.max_daily_basal,
             max_basal = p.max_basal,
@@ -111,5 +118,43 @@ class AimiSmbComparator @Inject constructor(
             insulinDivisor = p.insulinDivisor,
             TDD = p.TDD
         )
+    }
+
+    private fun logComparison(
+        aimi: RT,
+        smb: RT,
+        glucoseStatus: GlucoseStatusAIMI,
+        iob: Double,
+        cob: Double
+    ) {
+        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val date = sdf.format(Date())
+        val timestamp = System.currentTimeMillis()
+
+        // AIMI Data
+        val aimiRate = aimi.rate
+        val aimiSmb = aimi.units ?: 0.0 // Assuming units field holds SMB amount
+        val aimiDuration = aimi.duration
+
+        // SMB Data
+        val smbRate = smb.rate
+        val smbSmb = smb.units ?: 0.0
+        val smbDuration = smb.duration
+
+        // Diff
+        val diffRate = aimiRate - smbRate
+        val diffSmb = aimiSmb - smbSmb
+
+        // Sanitize Reasons (remove newlines and commas)
+        val aimiReason = aimi.reason.replace("\n", " | ").replace(",", ";")
+        val smbReason = smb.reason.replace("\n", " | ").replace(",", ";")
+
+        val line = "$timestamp,$date,${glucoseStatus.glucose},$iob,$cob,$aimiRate,$aimiSmb,$aimiDuration,$smbRate,$smbSmb,$smbDuration,$diffRate,$diffSmb,\"$aimiReason\",\"$smbReason\"\n"
+
+        try {
+            FileWriter(logFile, true).use { it.append(line) }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }
