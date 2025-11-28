@@ -44,7 +44,6 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="@id/glucose_value" />
 
-
         <!-- Glucose Value (Center) -->
         <TextView
             android:id="@+id/glucose_value"

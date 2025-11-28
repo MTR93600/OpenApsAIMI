@@ -40,6 +40,7 @@ class StatusCardView @JvmOverloads constructor(
         binding.iobText.text = state.iobText
         binding.pumpStatusText.text = androidx.core.text.HtmlCompat.fromHtml(state.pumpStatusText, androidx.core.text.HtmlCompat.FROM_HTML_MODE_LEGACY)
         binding.predictionText.text = state.predictionText
+        binding.unicornIcon.setImageResource(state.unicornImageRes)  // 🦄 Update dynamic unicorn image
         contentDescription = state.contentDescription
     }
 }
