@@ -33,12 +33,23 @@ class AimiSmbComparator @Inject constructor(
     private val profileFunction: ProfileFunction,
     private val aapsLogger: AAPSLogger
 ) {
+    // 📊 Track cumulative insulin difference over time
+    private var cumulativeDiff = 0.0
+    
     private val logFile by lazy {
         val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
         File(externalDir, "comparison_aimi_smb.csv").apply {
             parentFile?.mkdirs()
             if (!exists()) {
-                writeText("Timestamp,Date,BG,IOB,COB,AIMI_Rate,AIMI_SMB,AIMI_Duration,SMB_Rate,SMB_SMB,SMB_Duration,Diff_Rate,Diff_SMB,SMB_MaxIOB_Constrained,SMB_MaxBasal_Constrained,SMB_MicroBolus_Allowed,Reason_AIMI,Reason_SMB\n")
+                // 📊 Enhanced CSV with comprehensive comparison data
+                writeText("Timestamp,Date,BG,Delta,ShortAvgDelta,LongAvgDelta,IOB,COB," +
+                    "AIMI_Rate,AIMI_SMB,AIMI_Duration,AIMI_EventualBG,AIMI_TargetBG," +
+                    "SMB_Rate,SMB_SMB,SMB_Duration,SMB_EventualBG,SMB_TargetBG," +
+                    "Diff_Rate,Diff_SMB,Diff_EventualBG," +
+                    "MaxIOB,MaxBasal,MicroBolus_Allowed," +
+                    "AIMI_Insulin_30min,SMB_Insulin_30min,Cumul_Diff," +
+                    "AIMI_Active,SMB_Active,Both_Active," +
+                    "Reason_AIMI,Reason_SMB\n")
             }
         }
     }
@@ -90,9 +101,10 @@ class AimiSmbComparator @Inject constructor(
                 glucoseStatus, 
                 iobData.firstOrNull()?.iob ?: 0.0, 
                 mealData.mealCOB,
-                profileAimi.max_iob,      // ✅ Log actual values used
-                profileAimi.max_basal,    // ✅ Log actual values used
-                microBolusAllowed         // ✅ Log actual value used
+                profileAimi.max_iob,
+                profileAimi.max_basal,
+                microBolusAllowed,
+                currentTime
             )
 
         } catch (e: Exception) {
@@ -161,35 +173,98 @@ class AimiSmbComparator @Inject constructor(
         glucoseStatus: GlucoseStatusAIMI,
         iob: Double,
         cob: Double,
-        constrainedMaxIOB: Double,
-        constrainedMaxBasal: Double,
-        constrainedMicroBolus: Boolean
+        maxIOB: Double,
+        maxBasal: Double,
+        microBolusAllowed: Boolean,
+        currentTime: Long
     ) {
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         val date = sdf.format(Date())
         val timestamp = System.currentTimeMillis()
 
-        // AIMI Data
+        // 📊 AIMI Data
         val aimiRate = aimi.rate ?: 0.0
         val aimiSmb = aimi.units ?: 0.0
         val aimiDuration = aimi.duration ?: 0
+        val aimiEventualBG = aimi.eventualBG ?: glucoseStatus.glucose
+        val aimiTargetBG = aimi.targetBG ?: 100.0
 
-        // SMB Data
+        // 📊 SMB Data
         val smbRate = smb.rate ?: 0.0
         val smbSmb = smb.units ?: 0.0
         val smbDuration = smb.duration ?: 0
+        val smbEventualBG = smb.eventualBG ?: glucoseStatus.glucose
+        val smbTargetBG = smb.targetBG ?: 100.0
 
-        // Diff
+        // 📊 Differences
         val diffRate = aimiRate - smbRate
         val diffSmb = aimiSmb - smbSmb
+        val diffEventualBG = aimiEventualBG - smbEventualBG
 
-        // Sanitize Reasons (remove newlines and commas)
-        val aimiReason = aimi.reason.toString().replace("\n", " | ").replace(",", ";")
-        val smbReason = smb.reason.toString().replace("\n", " | ").replace(",", ";")
+        // 📊 Calculate insulin delivered over 30min
+        val aimiInsulin30min = (aimiRate * 0.5) + aimiSmb // rate * 30min + SMB
+        val smbInsulin30min = (smbRate * 0.5) + smbSmb
+        
+        // 📊 Track cumulative difference
+        cumulativeDiff += (aimiInsulin30min - smbInsulin30min)
 
-        // Include constraint data in CSV for analysis
-        val microBolusFlag = if (constrainedMicroBolus) 1 else 0
-        val line = "$timestamp,$date,${glucoseStatus.glucose},$iob,$cob,$aimiRate,$aimiSmb,$aimiDuration,$smbRate,$smbSmb,$smbDuration,$diffRate,$diffSmb,$constrainedMaxIOB,$constrainedMaxBasal,$microBolusFlag,\"$aimiReason\",\"$smbReason\"\n"
+        // 📊 Determine if algorithms are active (not just neutral basal)
+        val aimiActive = (aimiRate != 0.0 && aimiDuration > 0) || aimiSmb > 0.0
+        val smbActive = (smbRate != 0.0 && smbDuration > 0) || smbSmb > 0.0
+        val bothActive = aimiActive && smbActive
+
+        // 📊 Sanitize Reasons (remove newlines and commas for CSV)
+        val aimiReason = aimi.reason.toString()
+            .replace("\n", " | ")
+            .replace(",", ";")
+            .replace("\"", "'")
+        val smbReason = smb.reason.toString()
+            .replace("\n", " | ")
+            .replace(",", ";")
+            .replace("\"", "'")
+
+        // 📊 Build comprehensive CSV line
+        val line = listOf(
+            timestamp,
+            date,
+            "%.1f".format(glucoseStatus.glucose),
+            "%.2f".format(glucoseStatus.delta),
+            "%.2f".format(glucoseStatus.shortAvgDelta),
+            "%.2f".format(glucoseStatus.longAvgDelta),
+            "%.2f".format(iob),
+            "%.1f".format(cob),
+            // AIMI columns
+            "%.2f".format(aimiRate),
+            "%.3f".format(aimiSmb),
+            aimiDuration,
+            "%.1f".format(aimiEventualBG),
+            "%.1f".format(aimiTargetBG),
+            // SMB columns
+            "%.2f".format(smbRate),
+            "%.3f".format(smbSmb),
+            smbDuration,
+            "%.1f".format(smbEventualBG),
+            "%.1f".format(smbTargetBG),
+            // Differences
+            "%.2f".format(diffRate),
+            "%.3f".format(diffSmb),
+            "%.1f".format(diffEventualBG),
+            // Constraints
+            "%.1f".format(maxIOB),
+            "%.2f".format(maxBasal),
+            if (microBolusAllowed) "1" else "0",
+            // Insulin metrics
+            "%.3f".format(aimiInsulin30min),
+            "%.3f".format(smbInsulin30min),
+            "%.3f".format(cumulativeDiff),
+            // Activity flags
+            if (aimiActive) "1" else "0",
+            if (smbActive) "1" else "0",
+            if (bothActive) "1" else "0",
+            // Reasons (quoted)
+            "\"$aimiReason\"",
+            "\"$smbReason\""
+        ).joinToString(",") + "\n"
 
         try {
             FileWriter(logFile, true).use { it.append(line) }
