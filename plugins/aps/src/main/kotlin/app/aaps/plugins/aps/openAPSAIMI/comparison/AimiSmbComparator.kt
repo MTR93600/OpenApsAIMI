@@ -57,32 +57,20 @@ class AimiSmbComparator @Inject constructor(
         dynIsfMode: Boolean
     ) {
         try {
-            // Get profile for constraint checking
-            val profile = profileFunction.getProfile()
-            if (profile == null) {
-                aapsLogger.error(LTag.APS, "SMB Comparator: No profile available, skipping comparison")
-                return
-            }
-
-            // Apply safety constraints like OpenAPSSMBPlugin does (lines 428-470)
-            val constrainedMaxIOB = constraintsChecker.getMaxIOBAllowed().value()
-            val constrainedMaxBasal = constraintsChecker.getMaxBasalAllowed(profile).value()
-            val constrainedMicroBolusAllowed = constraintsChecker
-                .isSMBModeEnabled(ConstraintObject(microBolusAllowed, aapsLogger))
-                .value()
-
-            // Log constraint application for transparency
+            // ✅ IMPORTANT: profileAimi already contains constrained values from AIMI plugin
+            // DO NOT re-apply constraints here to avoid double-constraint bias
+            // This ensures fair comparison: both plugins use the same constraint values
+            
             aapsLogger.debug(
                 LTag.APS,
-                "SMB Comparator Constraints: maxIOB=${profileAimi.max_iob} -> $constrainedMaxIOB, " +
-                "maxBasal=${profileAimi.max_basal} -> $constrainedMaxBasal, " +
-                "microBolus=$microBolusAllowed -> $constrainedMicroBolusAllowed"
+                "SMB Comparator using pre-constrained values: maxIOB=${profileAimi.max_iob}, " +
+                "maxBasal=${profileAimi.max_basal}, microBolus=$microBolusAllowed"
             )
 
-            // Map Profile with constrained values
-            val profileSmb = mapProfile(profileAimi, constrainedMaxIOB, constrainedMaxBasal)
+            // Map Profile directly (values are already constrained)
+            val profileSmb = mapProfile(profileAimi)
 
-            // Run SMB (Shadow Mode) with constrained microBolusAllowed
+            // Run SMB (Shadow Mode) with same parameters as AIMI
             val smbResult = determineBasalSMB.determine_basal(
                 glucose_status = glucoseStatus,
                 currenttemp = currentTemp,
@@ -90,7 +78,7 @@ class AimiSmbComparator @Inject constructor(
                 profile = profileSmb,
                 autosens_data = autosens,
                 meal_data = mealData,
-                microBolusAllowed = constrainedMicroBolusAllowed,
+                microBolusAllowed = microBolusAllowed,  // ✅ Use same value as AIMI
                 currentTime = currentTime,
                 flatBGsDetected = flatBGsDetected,
                 dynIsfMode = dynIsfMode
@@ -102,9 +90,9 @@ class AimiSmbComparator @Inject constructor(
                 glucoseStatus, 
                 iobData.firstOrNull()?.iob ?: 0.0, 
                 mealData.mealCOB,
-                constrainedMaxIOB,
-                constrainedMaxBasal,
-                constrainedMicroBolusAllowed
+                profileAimi.max_iob,      // ✅ Log actual values used
+                profileAimi.max_basal,    // ✅ Log actual values used
+                microBolusAllowed         // ✅ Log actual value used
             )
 
         } catch (e: Exception) {
@@ -113,18 +101,19 @@ class AimiSmbComparator @Inject constructor(
         }
     }
 
-    private fun mapProfile(
-        p: OapsProfileAimi,
-        constrainedMaxIOB: Double,
-        constrainedMaxBasal: Double
-    ): OapsProfile {
+    /**
+     * Maps OapsProfileAimi to OapsProfile for SMB plugin.
+     * ✅ Uses values directly from profileAimi (already constrained by AIMI plugin)
+     * ❌ Does NOT re-apply constraints to ensure fair comparison
+     */
+    private fun mapProfile(p: OapsProfileAimi): OapsProfile {
         return OapsProfile(
             dia = p.dia,
             min_5m_carbimpact = p.min_5m_carbimpact,
-            // Use constrained values to match OpenAPSSMBPlugin behavior
-            max_iob = constrainedMaxIOB,
+            // ✅ Use values from profileAimi directly (already constrained)
+            max_iob = p.max_iob,
             max_daily_basal = p.max_daily_basal,
-            max_basal = constrainedMaxBasal,
+            max_basal = p.max_basal,
             min_bg = p.min_bg,
             max_bg = p.max_bg,
             target_bg = p.target_bg,
