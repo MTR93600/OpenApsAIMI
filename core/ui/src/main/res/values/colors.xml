@@ -385,5 +385,6 @@
     <!--    Comparator-->
     <color name="aimi_color">#4CAF50</color>
     <color name="smb_color">#2196F3</color>
+    <color name="recommendation_bg">#1A2196F3</color>
 
 </resources>

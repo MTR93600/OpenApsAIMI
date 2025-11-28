@@ -50,5 +50,27 @@
     <string name="comparator_rate_chart_desc">AIMI vs SMB - Débits Basaux (U/h)</string>
     <string name="comparator_smb_chart_title">SMB Comparés</string>
     <string name="comparator_smb_chart_desc">AIMI vs SMB - Super Micro Bolus (U)</string>
+    
+    <!-- Safety Analysis -->
+    <string name="comparator_safety_title">Analyse de Sécurité</string>
+    <string name="comparator_variability_score">Score de variabilité</string>
+    <string name="comparator_hypo_risk">Risque d\'hypo estimé</string>
+    
+    <!-- Clinical Impact -->
+    <string name="comparator_clinical_impact_title">Impact Clinique</string>
+    <string name="comparator_total_insulin_aimi">Insuline totale AIMI</string>
+    <string name="comparator_total_insulin_smb">Insuline totale SMB</string>
+    <string name="comparator_cumulative_diff">Différence cumulée</string>
+    
+    <!-- Critical Moments -->
+    <string name="comparator_critical_moments_title">Moments Critiques</string>
+    <string name="comparator_critical_moment_entry">Entrée #%1$d - BG: %2$.0f mg/dL, IOB: %3$.1f U</string>
+    <string name="comparator_critical_moment_divergence">Divergence: Basal %1$s U/h, SMB %2$s U</string>
+    
+    <!-- Recommendation -->
+    <string name="comparator_recommendation_title">Recommandation</string>
+    <string name="comparator_recommended_algorithm">Algorithme recommandé: %1$s</string>
+    <string name="comparator_confidence">Confiance: %1$s</string>
+
 
 </resources>

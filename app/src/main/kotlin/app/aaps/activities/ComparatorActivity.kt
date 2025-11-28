@@ -4,11 +4,12 @@ import android.os.Bundle
 import android.os.Environment
 import android.view.MenuItem
 import android.view.View
+import android.widget.LinearLayout
+import android.widget.TextView
 import app.aaps.R
 import app.aaps.databinding.ActivityComparatorBinding
 import app.aaps.plugins.configuration.activities.DaggerAppCompatActivityWithResult
-import app.aaps.plugins.aps.openAPSAIMI.comparison.ComparisonCsvParser
-import app.aaps.plugins.aps.openAPSAIMI.comparison.ComparisonEntry
+import app.aaps.plugins.aps.openAPSAIMI.comparison.*
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -69,6 +70,7 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
         binding.contentLayout.visibility = View.VISIBLE
 
         displayStats()
+        displayAnalytics()
         setupCharts()
     }
 
@@ -81,6 +83,82 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
         binding.agreementRateValue.text = String.format(Locale.US, "%.1f%%", stats.agreementRate)
         binding.aimiWinRateValue.text = String.format(Locale.US, "%.1f%%", stats.aimiWinRate)
         binding.smbWinRateValue.text = String.format(Locale.US, "%.1f%%", stats.smbWinRate)
+    }
+
+    private fun displayAnalytics() {
+        val stats = parser.calculateStats(entries)
+        val safetyMetrics = parser.calculateSafetyMetrics(entries)
+        val clinicalImpact = parser.calculateClinicalImpact(entries)
+        val criticalMoments = parser.findCriticalMoments(entries)
+        val recommendation = parser.generateRecommendation(stats, safetyMetrics, clinicalImpact)
+
+        displaySafetyAnalysis(safetyMetrics)
+        displayClinicalImpact(clinicalImpact)
+        displayCriticalMoments(criticalMoments)
+        displayRecommendation(recommendation)
+    }
+
+    private fun displaySafetyAnalysis(safety: SafetyMetrics) {
+        binding.variabilityScoreValue.text = "${safety.variabilityLabel} (SMB)"
+        binding.hypoRiskValue.text = safety.estimatedHypoRisk
+    }
+
+    private fun displayClinicalImpact(impact: ClinicalImpact) {
+        binding.totalInsulinAimiValue.text = String.format(Locale.US, "%.1f U", impact.totalInsulinAimi)
+        binding.totalInsulinSmbValue.text = String.format(Locale.US, "%.1f U", impact.totalInsulinSmb)
+        
+        val diffText = if (impact.cumulativeDiff > 0) {
+            String.format(Locale.US, "+%.1f U (AIMI plus agressif)", impact.cumulativeDiff)
+        } else {
+            String.format(Locale.US, "%.1f U (SMB plus agressif)", impact.cumulativeDiff)
+        }
+        binding.cumulativeDiffValue.text = diffText
+    }
+
+    private fun displayCriticalMoments(moments: List<CriticalMoment>) {
+        binding.criticalMomentsContainer.removeAllViews()
+        
+        moments.forEach { moment ->
+            val momentView = TextView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    setMargins(0, 0, 0, 16)
+                }
+                setPadding(0, 8, 0, 8)
+                
+                val entryText = getString(
+                    R.string.comparator_critical_moment_entry,
+                    moment.index,
+                    moment.bg,
+                    moment.iob
+                )
+                
+                val divergenceText = getString(
+                    R.string.comparator_critical_moment_divergence,
+                    moment.divergenceRate?.let { String.format(Locale.US, "%+.2f", it) } ?: "--",
+                    moment.divergenceSmb?.let { String.format(Locale.US, "%+.2f", it) } ?: "--"
+                )
+                
+                text = "$entryText\n$divergenceText"
+                textSize = 13f
+            }
+            binding.criticalMomentsContainer.addView(momentView)
+        }
+    }
+
+    private fun displayRecommendation(rec: Recommendation) {
+        binding.recommendationAlgorithm.text = getString(
+            R.string.comparator_recommended_algorithm,
+            rec.preferredAlgorithm
+        )
+        binding.recommendationReason.text = rec.reason
+        binding.recommendationSafetyNote.text = rec.safetyNote
+        binding.recommendationConfidence.text = getString(
+            R.string.comparator_confidence,
+            rec.confidenceLevel
+        )
     }
 
     private fun setupCharts() {
