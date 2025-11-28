@@ -30,11 +30,11 @@
             app:layout_constraintTop_toTopOf="@id/loop_indicator"
             app:layout_constraintBottom_toBottomOf="@id/loop_indicator" />
 
-        <!-- Unicorn Icon (Left of Glucose) -->
+        <!-- Unicorn Icon (Left of Glucose) - Slightly larger -->
         <ImageView
             android:id="@+id/unicorn_icon"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:layout_marginEnd="8dp"
             android:contentDescription="@string/app_name"
             android:src="@drawable/unicorn"
@@ -43,6 +43,7 @@
             app:layout_constraintEnd_toStartOf="@id/glucose_value"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="@id/glucose_value" />
+
 
         <!-- Glucose Value (Center) -->
         <TextView

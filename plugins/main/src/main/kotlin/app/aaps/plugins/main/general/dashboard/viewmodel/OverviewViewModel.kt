@@ -188,7 +188,11 @@ class OverviewViewModel(
             isGlucoseActual = lastBgData.isActualBg(),
             contentDescription = contentDescription,
             pumpStatusText = buildPumpLine(dateUtil.now()),
-            predictionText = buildPredictionLine(dateUtil.now())
+            predictionText = buildPredictionLine(dateUtil.now()),
+            unicornImageRes = selectUnicornImage(  // 🦄 Select dynamic unicorn image
+                bg = lastBg?.recalculated,
+                delta = glucoseStatusProvider.glucoseStatusData?.delta
+            )
         )
         _statusCardState.postValue(state)
     }
@@ -413,6 +417,35 @@ class OverviewViewModel(
         else -> "→"
     }
 
+    /**
+     * 🦄 Selects the appropriate AIMICO unicorn image based on BG and delta.
+     * Matches AIMICO watchface behavior:
+     * - Normal: Blue unicorn with sunglasses and "AIMI" logo
+     * - Alert: Worried expression with stress notes  
+     * - Hypo: Holding orange juice box
+     */
+    private fun selectUnicornImage(bg: Double?, delta: Double?): Int {
+        if (bg == null) return R.drawable.unicorn_normal_stable
+
+        return when {
+            // Hypo State (BG < 70 mg/dL) - Shows juice box
+            bg < 70.0 -> R.drawable.unicorn_hypo_juice
+            
+            // Alert State (BG 70-90 or > 250 mg/dL) - Worried expression with stress notes
+            bg < 90.0 || bg > 250.0 -> {
+                if (delta != null && delta > 2.0) R.drawable.unicorn_alert_up
+                else R.drawable.unicorn_alert_stable
+            }
+            
+            // Normal State (90-250 mg/dL) - Happy with sunglasses
+            else -> {
+                if (delta != null && delta > 3.0) R.drawable.unicorn_normal_up
+                else R.drawable.unicorn_normal_stable
+            }
+        }
+    }
+
+
     class Factory(
         private val context: Context,
         private val lastBgData: LastBgData,
@@ -496,7 +529,8 @@ data class StatusCardState(
     val isGlucoseActual: Boolean,
     val contentDescription: String,
     val pumpStatusText: String = "",
-    val predictionText: String = ""
+    val predictionText: String = "",
+    val unicornImageRes: Int = R.drawable.unicorn_normal_stable  // 🦄 Dynamic unicorn image
 )
 
 data class AdjustmentCardState(
