@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Environment
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
+import app.aaps.core.interfaces.aps.GlucoseStatus
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.MealData
@@ -11,6 +12,7 @@ import app.aaps.core.interfaces.aps.OapsProfile
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
+import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.profile.Profile
@@ -28,6 +30,7 @@ import javax.inject.Singleton
 @Singleton
 class AimiSmbComparator @Inject constructor(
     private val determineBasalSMB: DetermineBasalSMB,
+    private val iobCobCalculator: IobCobCalculator,  // ⭐ NOUVEAU - Pour calculer IOB comme SMB
     private val context: Context,
     private val constraintsChecker: ConstraintsChecker,
     private val profileFunction: ProfileFunction,
@@ -68,28 +71,37 @@ class AimiSmbComparator @Inject constructor(
         dynIsfMode: Boolean
     ) {
         try {
-            // ✅ IMPORTANT: profileAimi already contains constrained values from AIMI plugin
-            // DO NOT re-apply constraints here to avoid double-constraint bias
-            // This ensures fair comparison: both plugins use the same constraint values
+            // 🔧 FIX: Calculate IOB array specifically for SMB (not AIMI's IOB)
+            // This is CRITICAL - SMB uses different IOB calculation that affects all decisions
+            val smbIobArray = iobCobCalculator.calculateIobArrayForSMB(
+                autosens,
+                profileAimi.exercise_mode,
+                profileAimi.half_basal_exercise_target,
+                profileAimi.temptargetSet
+            )
             
             aapsLogger.debug(
                 LTag.APS,
-                "SMB Comparator using pre-constrained values: maxIOB=${profileAimi.max_iob}, " +
-                "maxBasal=${profileAimi.max_basal}, microBolus=$microBolusAllowed"
+                "SMB Comparator - AIMI IOB: ${iobData.firstOrNull()?.iob}, " +
+                "SMB IOB: ${smbIobArray.firstOrNull()?.iob}, " +
+                "maxIOB=${profileAimi.max_iob}, maxBasal=${profileAimi.max_basal}"
             )
+
+            // 🔧 FIX: Convert GlucoseStatusAIMI to GlucoseStatus (different types)
+            val smbGlucoseStatus = convertToSMBGlucoseStatus(glucoseStatus)
 
             // Map Profile directly (values are already constrained)
             val profileSmb = mapProfile(profileAimi)
 
-            // Run SMB (Shadow Mode) with same parameters as AIMI
+            // ✅ Run SMB with SMB-specific parameters (not AIMI's)
             val smbResult = determineBasalSMB.determine_basal(
-                glucose_status = glucoseStatus,
+                glucose_status = smbGlucoseStatus,  // ✅ Correct type
                 currenttemp = currentTemp,
-                iob_data_array = iobData,
+                iob_data_array = smbIobArray,  // ✅ SMB-specific IOB calculation
                 profile = profileSmb,
                 autosens_data = autosens,
                 meal_data = mealData,
-                microBolusAllowed = microBolusAllowed,  // ✅ Use same value as AIMI
+                microBolusAllowed = microBolusAllowed,
                 currentTime = currentTime,
                 flatBGsDetected = flatBGsDetected,
                 dynIsfMode = dynIsfMode
@@ -165,6 +177,22 @@ class AimiSmbComparator @Inject constructor(
             insulinDivisor = p.insulinDivisor,
             TDD = p.TDD
         )
+    }
+
+    /**
+     * Converts GlucoseStatusAIMI to GlucoseStatus for SMB plugin.
+     * SMB expects standard GlucoseStatus type, not AIMI-specific type.
+     */
+    private fun convertToSMBGlucoseStatus(aimiStatus: GlucoseStatusAIMI): GlucoseStatus {
+        // Create anonymous object implementing GlucoseStatus interface
+        return object : GlucoseStatus {
+            override val glucose = aimiStatus.glucose
+            override val noise = aimiStatus.noise
+            override val delta = aimiStatus.delta
+            override val shortAvgDelta = aimiStatus.shortAvgDelta
+            override val longAvgDelta = aimiStatus.longAvgDelta
+            override val date = aimiStatus.date
+        }
     }
 
     private fun logComparison(
