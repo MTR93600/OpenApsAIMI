@@ -38,21 +38,26 @@ class AimiSmbComparator @Inject constructor(
 ) {
     // 📊 Track cumulative insulin difference over time
     private var cumulativeDiff = 0.0
-    
+
     private val logFile by lazy {
-        val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
+        val externalDir = File(
+            Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS"
+        )
         File(externalDir, "comparison_aimi_smb.csv").apply {
             parentFile?.mkdirs()
             if (!exists()) {
-                // 📊 Enhanced CSV with comprehensive comparison data
-                writeText("Timestamp,Date,BG,Delta,ShortAvgDelta,LongAvgDelta,IOB,COB," +
-                    "AIMI_Rate,AIMI_SMB,AIMI_Duration,AIMI_EventualBG,AIMI_TargetBG," +
-                    "SMB_Rate,SMB_SMB,SMB_Duration,SMB_EventualBG,SMB_TargetBG," +
-                    "Diff_Rate,Diff_SMB,Diff_EventualBG," +
-                    "MaxIOB,MaxBasal,MicroBolus_Allowed," +
-                    "AIMI_Insulin_30min,SMB_Insulin_30min,Cumul_Diff," +
-                    "AIMI_Active,SMB_Active,Both_Active," +
-                    "Reason_AIMI,Reason_SMB\n")
+                // Ajout des colonnes UAM
+                writeText(
+                    "Timestamp,Date,BG,Delta,ShortAvgDelta,LongAvgDelta,IOB,COB," +
+                        "AIMI_Rate,AIMI_SMB,AIMI_Duration,AIMI_EventualBG,AIMI_TargetBG," +
+                        "SMB_Rate,SMB_SMB,SMB_Duration,SMB_EventualBG,SMB_TargetBG," +
+                        "Diff_Rate,Diff_SMB,Diff_EventualBG," +
+                        "MaxIOB,MaxBasal,MicroBolus_Allowed," +
+                        "AIMI_Insulin_30min,SMB_Insulin_30min,Cumul_Diff," +
+                        "AIMI_Active,SMB_Active,Both_Active," +
+                        "AIMI_UAM_Last,SMB_UAM_Last," +
+                        "Reason_AIMI,Reason_SMB\n"
+                )
             }
         }
     }
@@ -207,8 +212,9 @@ class AimiSmbComparator @Inject constructor(
         currentTime: Long
     ) {
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        val date = sdf.format(Date())
-        val timestamp = System.currentTimeMillis()
+        // On loggue la vraie date de la décision
+        val date = sdf.format(Date(currentTime))
+        val timestamp = currentTime
 
         // 📊 AIMI Data
         val aimiRate = aimi.rate ?: 0.0
@@ -224,24 +230,26 @@ class AimiSmbComparator @Inject constructor(
         val smbEventualBG = smb.eventualBG ?: glucoseStatus.glucose
         val smbTargetBG = smb.targetBG ?: 100.0
 
+        // 📊 UAM predictions (dernier point)
+        val aimiUamLast = aimi.predBGs?.UAM?.lastOrNull()?.toDouble()
+        val smbUamLast = smb.predBGs?.UAM?.lastOrNull()?.toDouble()
+
         // 📊 Differences
         val diffRate = aimiRate - smbRate
         val diffSmb = aimiSmb - smbSmb
         val diffEventualBG = aimiEventualBG - smbEventualBG
 
-        // 📊 Calculate insulin delivered over 30min
-        val aimiInsulin30min = (aimiRate * 0.5) + aimiSmb // rate * 30min + SMB
+        // 📊 Insuline 30 min
+        val aimiInsulin30min = (aimiRate * 0.5) + aimiSmb
         val smbInsulin30min = (smbRate * 0.5) + smbSmb
-        
-        // 📊 Track cumulative difference
         cumulativeDiff += (aimiInsulin30min - smbInsulin30min)
 
-        // 📊 Determine if algorithms are active (not just neutral basal)
+        // Flags d’activité
         val aimiActive = (aimiRate != 0.0 && aimiDuration > 0) || aimiSmb > 0.0
         val smbActive = (smbRate != 0.0 && smbDuration > 0) || smbSmb > 0.0
         val bothActive = aimiActive && smbActive
 
-        // 📊 Sanitize Reasons (remove newlines and commas for CSV)
+        // Sanitize raisons
         val aimiReason = aimi.reason.toString()
             .replace("\n", " | ")
             .replace(",", ";")
@@ -251,7 +259,6 @@ class AimiSmbComparator @Inject constructor(
             .replace(",", ";")
             .replace("\"", "'")
 
-        // 📊 Build comprehensive CSV line
         val line = listOf(
             timestamp,
             date,
@@ -261,27 +268,27 @@ class AimiSmbComparator @Inject constructor(
             "%.2f".format(glucoseStatus.longAvgDelta),
             "%.2f".format(iob),
             "%.1f".format(cob),
-            // AIMI columns
+            // AIMI
             "%.2f".format(aimiRate),
             "%.3f".format(aimiSmb),
             aimiDuration,
             "%.1f".format(aimiEventualBG),
             "%.1f".format(aimiTargetBG),
-            // SMB columns
+            // SMB
             "%.2f".format(smbRate),
             "%.3f".format(smbSmb),
             smbDuration,
             "%.1f".format(smbEventualBG),
             "%.1f".format(smbTargetBG),
-            // Differences
+            // Diff
             "%.2f".format(diffRate),
             "%.3f".format(diffSmb),
             "%.1f".format(diffEventualBG),
-            // Constraints
+            // Contraintes
             "%.1f".format(maxIOB),
             "%.2f".format(maxBasal),
             if (microBolusAllowed) "1" else "0",
-            // Insulin metrics
+            // Insuline
             "%.3f".format(aimiInsulin30min),
             "%.3f".format(smbInsulin30min),
             "%.3f".format(cumulativeDiff),
@@ -289,7 +296,10 @@ class AimiSmbComparator @Inject constructor(
             if (aimiActive) "1" else "0",
             if (smbActive) "1" else "0",
             if (bothActive) "1" else "0",
-            // Reasons (quoted)
+            // UAM
+            aimiUamLast?.let { "%.1f".format(it) } ?: "",
+            smbUamLast?.let { "%.1f".format(it) } ?: "",
+            // Raisons
             "\"$aimiReason\"",
             "\"$smbReason\""
         ).joinToString(",") + "\n"

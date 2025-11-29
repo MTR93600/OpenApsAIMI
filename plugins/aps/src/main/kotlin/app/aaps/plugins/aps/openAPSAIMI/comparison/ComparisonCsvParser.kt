@@ -30,31 +30,94 @@ class ComparisonCsvParser {
 
     private fun parseLine(line: String): ComparisonEntry? {
         return try {
-            // CSV format: Timestamp,Date,BG,IOB,COB,AIMI_Rate,AIMI_SMB,AIMI_Duration,SMB_Rate,SMB_SMB,SMB_Duration,Diff_Rate,Diff_SMB,Reason_AIMI,Reason_SMB
-            val parts = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex()) // Handle quoted strings with commas
-            
-            if (parts.size < 15) return null
-            
+            // Nouveau format CSV (voir header dans AimiSmbComparator)
+            // Timestamp,Date,BG,Delta,ShortAvgDelta,LongAvgDelta,IOB,COB,
+            // AIMI_Rate,AIMI_SMB,AIMI_Duration,AIMI_EventualBG,AIMI_TargetBG,
+            // SMB_Rate,SMB_SMB,SMB_Duration,SMB_EventualBG,SMB_TargetBG,
+            // Diff_Rate,Diff_SMB,Diff_EventualBG,
+            // MaxIOB,MaxBasal,MicroBolus_Allowed,
+            // AIMI_Insulin_30min,SMB_Insulin_30min,Cumul_Diff,
+            // AIMI_Active,SMB_Active,Both_Active,
+            // AIMI_UAM_Last,SMB_UAM_Last,
+            // Reason_AIMI,Reason_SMB
+
+            val parts = line.split(
+                ",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex()
+            )
+
+            if (parts.size < 34) return null
+
             ComparisonEntry(
                 timestamp = parts[0].toLongOrNull() ?: return null,
                 date = parts[1],
                 bg = parts[2].toDoubleOrNull() ?: return null,
-                iob = parts[3].toDoubleOrNull() ?: return null,
-                cob = parts[4].toDoubleOrNull() ?: return null,
-                aimiRate = parts[5].toDoubleOrNull(),
-                aimiSmb = parts[6].toDoubleOrNull(),
-                aimiDuration = parts[7].toIntOrNull() ?: 0,
-                smbRate = parts[8].toDoubleOrNull(),
-                smbSmb = parts[9].toDoubleOrNull(),
-                smbDuration = parts[10].toIntOrNull() ?: 0,
-                diffRate = parts[11].toDoubleOrNull(),
-                diffSmb = parts[12].toDoubleOrNull(),
-                reasonAimi = parts.getOrNull(13)?.trim('"') ?: "",
-                reasonSmb = parts.getOrNull(14)?.trim('"') ?: ""
+                delta = parts[3].toDoubleOrNull(),
+                shortAvgDelta = parts[4].toDoubleOrNull(),
+                longAvgDelta = parts[5].toDoubleOrNull(),
+                iob = parts[6].toDoubleOrNull() ?: 0.0,
+                cob = parts[7].toDoubleOrNull() ?: 0.0,
+                aimiRate = parts[8].toDoubleOrNull(),
+                aimiSmb = parts[9].toDoubleOrNull(),
+                aimiDuration = parts[10].toIntOrNull() ?: 0,
+                aimiEventualBg = parts[11].toDoubleOrNull(),
+                aimiTargetBg = parts[12].toDoubleOrNull(),
+                smbRate = parts[13].toDoubleOrNull(),
+                smbSmb = parts[14].toDoubleOrNull(),
+                smbDuration = parts[15].toIntOrNull() ?: 0,
+                smbEventualBg = parts[16].toDoubleOrNull(),
+                smbTargetBg = parts[17].toDoubleOrNull(),
+                diffRate = parts[18].toDoubleOrNull(),
+                diffSmb = parts[19].toDoubleOrNull(),
+                diffEventualBg = parts[20].toDoubleOrNull(),
+                maxIob = parts[21].toDoubleOrNull(),
+                maxBasal = parts[22].toDoubleOrNull(),
+                microBolusAllowed = parts[23] == "1",
+                aimiInsulin30 = parts[24].toDoubleOrNull(),
+                smbInsulin30 = parts[25].toDoubleOrNull(),
+                cumulativeDiff = parts[26].toDoubleOrNull(),
+                aimiActive = parts[27] == "1",
+                smbActive = parts[28] == "1",
+                bothActive = parts[29] == "1",
+                aimiUamLast = parts[30].toDoubleOrNull(),
+                smbUamLast = parts[31].toDoubleOrNull(),
+                reasonAimi = parts.getOrNull(32)?.trim('"') ?: "",
+                reasonSmb = parts.getOrNull(33)?.trim('"') ?: ""
             )
         } catch (e: Exception) {
             null
         }
+    }
+    // TIR réel basé sur BG
+    fun calculateTimeInRange(
+        entries: List<ComparisonEntry>,
+        lower: Double,
+        upper: Double
+    ): Double {
+        if (entries.isEmpty()) return 0.0
+        val inRange = entries.count { it.bg in lower..upper }
+        return inRange.toDouble() / entries.size * 100.0
+    }
+
+    // TIR prédit basé sur eventualBG de chaque algo
+    fun calculatePredictedTimeInRange(
+        entries: List<ComparisonEntry>,
+        lower: Double,
+        upper: Double
+    ): Pair<Double, Double> {
+        if (entries.isEmpty()) return 0.0 to 0.0
+
+        val aimiValid = entries.filter { it.aimiEventualBg != null }
+        val smbValid = entries.filter { it.smbEventualBg != null }
+
+        val aimiInRange = aimiValid.count { it.aimiEventualBg!! in lower..upper }
+        val smbInRange = smbValid.count { it.smbEventualBg!! in lower..upper }
+
+        val aimiTir = if (aimiValid.isNotEmpty())
+            aimiInRange.toDouble() / aimiValid.size * 100.0 else 0.0
+        val smbTir = if (smbValid.isNotEmpty())
+            smbInRange.toDouble() / smbValid.size * 100.0 else 0.0
+
+        return aimiTir to smbTir
     }
 
     fun calculateStats(entries: List<ComparisonEntry>): ComparisonStats {
