@@ -319,5 +319,31 @@ class ComparisonCsvParser {
             safetyNote = safetyNote
         )
     }
+    fun analyze(entries: List<ComparisonEntry>): FullComparisonReport {
+        val stats = calculateStats(entries)
+        val safety = calculateSafetyMetrics(entries)
+        val impact = calculateClinicalImpact(entries)
+        val criticalMoments = findCriticalMoments(entries)
+        val recommendation = generateRecommendation(stats, safety, impact)
+
+        // Calculate TIR
+        val actualTir = calculateTimeInRange(entries, 70.0, 180.0)
+        val (aimiPredTir, smbPredTir) = calculatePredictedTimeInRange(entries, 70.0, 180.0)
+        
+        val tir = ComparisonTir(
+            actualTir = actualTir,
+            aimiPredictedTir = aimiPredTir,
+            smbPredictedTir = smbPredTir
+        )
+
+        return FullComparisonReport(
+            stats = stats,
+            safety = safety,
+            impact = impact,
+            tir = tir,
+            criticalMoments = criticalMoments,
+            recommendation = recommendation
+        )
+    }
 }
 

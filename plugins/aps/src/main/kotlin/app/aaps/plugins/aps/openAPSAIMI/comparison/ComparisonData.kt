@@ -81,3 +81,18 @@ data class Recommendation(
     val confidenceLevel: String, // "Faible", "Modérée", "Élevée"
     val safetyNote: String
 )
+
+data class ComparisonTir(
+    val actualTir: Double, // % in range (70-180)
+    val aimiPredictedTir: Double, // % predicted in range
+    val smbPredictedTir: Double // % predicted in range
+)
+
+data class FullComparisonReport(
+    val stats: ComparisonStats,
+    val safety: SafetyMetrics,
+    val impact: ClinicalImpact,
+    val tir: ComparisonTir,
+    val criticalMoments: List<CriticalMoment>,
+    val recommendation: Recommendation
+)
