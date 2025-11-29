@@ -214,6 +214,7 @@
     <string name="dashboard_cob_label">COB</string>
     <string name="dashboard_loop_label">Loop</string>
     <string name="dashboard_trend">Trend</string>
+    <string name="dashboard_unicorn_status">AIMI status indicator</string>
     <string name="a11y_delete_current_profile">delete current profile</string>
     <string name="dia_short">DIA</string>
     <string name="target_short">TARG</string>
