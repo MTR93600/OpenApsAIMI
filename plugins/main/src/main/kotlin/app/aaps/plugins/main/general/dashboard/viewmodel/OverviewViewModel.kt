@@ -424,23 +424,43 @@ class OverviewViewModel(
      * - Alert: Worried expression with stress notes  
      * - Hypo: Holding orange juice box
      */
+    /**
+     * 🦄 Selects the appropriate AIMICO unicorn image based on BG and delta.
+     * Logic:
+     * - Hypo (< 70): Down/Up trends or Stable
+     * - Normal (70-180): Down/Up trends or Stable
+     * - Hyper (180-250): Alert Up or Hyper Stable
+     * - Alert (> 250): Alert Up or Alert Stable
+     */
     private fun selectUnicornImage(bg: Double?, delta: Double?): Int {
         if (bg == null) return R.drawable.unicorn_normal_stable
+        val d = delta ?: 0.0
 
         return when {
-            // Hypo State (BG < 70 mg/dL) - Shows juice box
-            bg < 70.0 -> R.drawable.unicorn_hypo_juice
-            
-            // Alert State (BG 70-90 or > 250 mg/dL) - Worried expression with stress notes
-            bg < 90.0 || bg > 250.0 -> {
-                if (delta != null && delta > 2.0) R.drawable.unicorn_alert_up
-                else R.drawable.unicorn_alert_stable
+            // Hypo State (< 70)
+            bg < 70.0 -> when {
+                d < -2.0 -> R.drawable.unicorn_hypo_down
+                d > 2.0 -> R.drawable.unicorn_hypo_up
+                else -> R.drawable.unicorn_hypo_stable // Or unicorn_hypo_juice if preferred
             }
-            
-            // Normal State (90-250 mg/dL) - Happy with sunglasses
-            else -> {
-                if (delta != null && delta > 3.0) R.drawable.unicorn_normal_up
-                else R.drawable.unicorn_normal_stable
+
+            // Normal State (70 - 180)
+            bg < 180.0 -> when {
+                d < -2.0 -> R.drawable.unicorn_normal_down
+                d > 2.0 -> R.drawable.unicorn_normal_up
+                else -> R.drawable.unicorn_normal_stable
+            }
+
+            // Hyper State (180 - 250)
+            bg < 250.0 -> when {
+                d > 2.0 -> R.drawable.unicorn_alert_up // Rising in hyper -> Alert
+                else -> R.drawable.unicorn_hyper_stable
+            }
+
+            // Alert State (> 250)
+            else -> when {
+                d > 2.0 -> R.drawable.unicorn_alert_up
+                else -> R.drawable.unicorn_alert_stable
             }
         }
     }
