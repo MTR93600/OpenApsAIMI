@@ -28,11 +28,30 @@ import kotlin.math.sqrt
  */
 @Singleton
 class UnifiedReactivityLearner @Inject constructor(
-    private val context: Context,
     private val persistenceLayer: PersistenceLayer,
     private val dateUtil: DateUtil,
+    private val preferences: Preferences,
     private val log: AAPSLogger
 ) {
+    
+    companion object {
+        private const val ANALYSIS_INTERVAL_MS = 6 * 60 * 60 * 1000L  // 6 heures
+    }
+    
+    // 📊 Expose last analysis for rT display
+    data class AnalysisSnapshot(
+        val timestamp: Long,
+        val tir70_180: Double,
+        val cv_percent: Double,
+        val hypo_count: Int,
+        val globalFactor: Double,
+        val previousFactor: Double,
+        val adjustmentReason: String
+    )
+    
+    var lastAnalysis: AnalysisSnapshot? = null
+        private set
+
     // 📁 JSON stocké dans Documents/AAPS comme les autres fichiers AIMI
     private val fileName = "aimi_unified_reactivity.json"
     private val csvFileName = "aimi_reactivity_analysis.csv"
@@ -253,17 +272,28 @@ class UnifiedReactivityLearner @Inject constructor(
             globalFactor = (globalFactor * (1 - alpha)) + (globalFactor * adjustment * alpha)
         }
         
-        // Bornes de sécurité (augmentées pour hyper prolongée)
-        globalFactor = globalFactor.coerceIn(0.6, 1.5)  // Max 1.5 pour hyper sévère
+        // 🎯 Calcul du nouveau facteur avec EMA smoothing
+        val previousFactor = globalFactor
+        val rawTarget = adjustment
+        val alpha = 0.15  // Smooth adaptation
+        globalFactor = (alpha * rawTarget + (1 - alpha) * globalFactor).coerceIn(0.6, 1.5)
         
         val reasonsStr = reasons.joinToString(", ")
         log.info(LTag.APS, "UnifiedReactivityLearner: Nouveau globalFactor = ${"%.3f".format(globalFactor)} | $reasonsStr")
         
-        // 📊 Export vers CSV pour analyse
-        exportToCSV(perf, reasonsStr)
+        // 📊 Capture snapshot for rT display
+        lastAnalysis = AnalysisSnapshot(
+            timestamp = now,
+            tir70_180 = tir70_180,
+            cv_percent = cv,
+            hypo_count = hypoCount,
+            globalFactor = globalFactor,
+            previousFactor = previousFactor,
+            adjustmentReason = reasonsStr
+        )
         
-        return globalFactor
-    }
+        saveState()
+        exportToCSV(now, tir70_180, tir70_140, tir140_180, tir180_250, tir_above_250, hypoCount, cv, crossingCount, meanBg, globalFactor, reasonsStr)   }
     
     /**
      * Appeler toutes les 6h depuis DetermineBasalAIMI2
