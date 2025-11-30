@@ -3407,7 +3407,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     } else {
                         1.0  // Fallback to neutral if disabled
                     }
-                    log.debug(LTag.APS, "Reactivity (< 6AM): enabled=$useUnified, factor=$reactivity")
+                    consoleLog.add("Reactivity (< 6AM): enabled=$useUnified, factor=${"%.3f".format(reactivity)}")
                     (basalaimi * multiplier * reactivity).toFloat()
                 }
 
@@ -3418,7 +3418,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     } else {
                         1.0  // Fallback to neutral if disabled
                     }
-                    log.debug(LTag.APS, "Reactivity (> 6AM): enabled=$useUnified, factor=$reactivity")
+                    consoleLog.add("Reactivity (> 6AM): enabled=$useUnified, factor=${"%.3f".format(reactivity)}")
                     (basalaimi * multiplier * reactivity).toFloat()
                 }
 
@@ -3744,7 +3744,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val beforeReactivity = smbToGive
             smbToGive = (smbToGive * unifiedReactivityLearner.globalFactor).toFloat()
             if (smbToGive != beforeReactivity) {
-                log.debug(LTag.APS, "UnifiedReactivityLearner: SMB ${"%.2f".format(beforeReactivity)}U → ${"%.2f".format(smbToGive)}U (factor=${"%.3f".format(unifiedReactivityLearner.globalFactor)})")
+                consoleLog.add("UnifiedReactivityLearner: SMB ${"%.2f".format(beforeReactivity)}U → ${"%.2f".format(smbToGive)}U (factor=${"%.3f".format(unifiedReactivityLearner.globalFactor)})")
                 rT.reason.append(" | Reactivity factor ${"%.2f".format(unifiedReactivityLearner.globalFactor)}")
             }
         }
