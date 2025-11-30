@@ -3737,6 +3737,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         highBgOverrideUsed = smbExecution.highBgOverrideUsed
         smbExecution.newSmbInterval?.let { intervalsmb = it }
         var smbToGive = smbExecution.finalSmb
+        
+        // 🎯 Appliquer le globalFactor du UnifiedReactivityLearner au SMB
+        // Cela permet de couvrir les hyperglyc\u00e9mies prolongées >180
+        if (preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled)) {
+            val beforeReactivity = smbToGive
+            smbToGive = (smbToGive * unifiedReactivityLearner.globalFactor).toFloat()
+            if (smbToGive != beforeReactivity) {
+                aapsLogger.debug(LTag.APS, \"UnifiedReactivityLearner: SMB ${\"%.2f\".format(beforeReactivity)}U → ${\"%.2f\".format(smbToGive)}U (factor=${\"%.3f\".format(unifiedReactivityLearner.globalFactor)})\")
+                rT.reason.append(\" | Reactivity factor ${\"%.2f\".format(unifiedReactivityLearner.globalFactor)}\")
+            }
+        }
         val savedReason = rT.reason.toString()
         rT = RT(
             algorithm = APSResult.Algorithm.AIMI,

@@ -1,12 +1,17 @@
 package app.aaps.plugins.aps.openAPSAIMI.learning
 
 import android.content.Context
+import android.os.Environment
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.utils.DateUtil
 import org.json.JSONObject
 import java.io.File
+import java.io.FileWriter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.pow
@@ -28,8 +33,23 @@ class UnifiedReactivityLearner @Inject constructor(
     private val dateUtil: DateUtil,
     private val log: AAPSLogger
 ) {
+    // 📁 JSON stocké dans Documents/AAPS comme les autres fichiers AIMI
     private val fileName = "aimi_unified_reactivity.json"
-    private val file by lazy { File(context.filesDir, fileName) }
+    private val csvFileName = "aimi_reactivity_analysis.csv"
+    private val file by lazy { 
+        val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
+        externalDir.mkdirs()
+        File(externalDir, fileName)
+    }
+    private val csvFile by lazy {
+        val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
+        File(externalDir, csvFileName).apply {
+            if (!exists()) {
+                writeText("Timestamp,Date,TIR_70_180,TIR_70_140,TIR_140_180,TIR_180_250,TIR_Above_250," +
+                    "Hypo_Count,CV_Percent,Crossing_Count,Mean_BG,GlobalFactor,Adjustment_Reason\n")
+            }
+        }
+    }
     
     /**
      * Facteur de réactivité global
@@ -48,11 +68,15 @@ class UnifiedReactivityLearner @Inject constructor(
     }
     
     /**
-     * Métriques de performance glycémique
+     * Métriques de performance glycémique détaillées
      */
     data class GlycemicPerformance(
         val tir70_180: Double,        // % Time In Range 70-180 mg/dL
-        val tir_above_180: Double,    // % temps en hyperglycémie
+        val tir70_140: Double,        // % Time In optimal Range 70-140 mg/dL  
+        val tir140_180: Double,       // % Time In acceptable Range 140-180 mg/dL
+        val tir180_250: Double,       // % Time In moderate hyper 180-250 mg/dL
+        val tir_above_250: Double,    // % Time In severe hyper > 250 mg/dL
+        val tir_above_180: Double,    // % temps en hyperglycémie totale (>180)
         val hypo_count: Int,          // Nombre d'épisodes hypo < 70
         val cv_percent: Double,       // Coefficient de Variation (%)
         val crossing_count: Int,      // Oscillations (crossings de seuil 120)
@@ -78,10 +102,18 @@ class UnifiedReactivityLearner @Inject constructor(
                 return null
             }
             
-            // 1. TIR (Time In Range)
-            val inRange = bgReadings.count { it in 70.0..180.0 }
+            // 1. TIR (Time In Range) - Breakdown détaillé
+            val inRange70_140 = bgReadings.count { it in 70.0..140.0 }
+            val inRange140_180 = bgReadings.count { it in 140.0..180.0 }
+            val inRange180_250 = bgReadings.count { it in 180.0..250.0 }
+            val above250 = bgReadings.count { it > 250 }
             val above180 = bgReadings.count { it > 180 }
-            val tir70_180 = (inRange.toDouble() / bgReadings.size) * 100.0
+            
+            val tir70_140 = (inRange70_140.toDouble() / bgReadings.size) * 100.0
+            val tir140_180 = (inRange140_180.toDouble() / bgReadings.size) * 100.0
+            val tir70_180 = tir70_140 + tir140_180
+            val tir180_250 = (inRange180_250.toDouble() / bgReadings.size) * 100.0
+            val tir_above_250 = (above250.toDouble() / bgReadings.size) * 100.0
             val tir_above_180 = (above180.toDouble() / bgReadings.size) * 100.0
             
             // 2. Détection épisodes hypo (groupements contigus < 70)
@@ -114,6 +146,10 @@ class UnifiedReactivityLearner @Inject constructor(
             
             val performance = GlycemicPerformance(
                 tir70_180 = tir70_180,
+                tir70_140 = tir70_140,
+                tir140_180 = tir140_180,
+                tir180_250 = tir180_250,
+                tir_above_250 = tir_above_250,
                 tir_above_180 = tir_above_180,
                 hypo_count = hypo_count,
                 cv_percent = cv_percent,
@@ -164,16 +200,24 @@ class UnifiedReactivityLearner @Inject constructor(
         // 🟡 PRIORITÉ 2 : Hyperglycémie prolongée (si pas d'hypo)
         if (perf.hypo_count == 0) {
             when {
+                perf.tir_above_250 > 20 -> {  // Hyper sévère prolongée
+                    adjustment *= 1.30
+                    reasons.add("Hyper sévère >250: ${perf.tir_above_250.toInt()}% → factor × 1.30")
+                }
+                perf.tir_above_180 > 50 -> {  // Plus de la moitié en hyper
+                    adjustment *= 1.25
+                    reasons.add("Hyper ${perf.tir_above_180.toInt()}% → factor × 1.25")
+                }
                 perf.tir_above_180 > 40 -> {
-                    adjustment *= 1.20  // Augmentation importante
+                    adjustment *= 1.20
                     reasons.add("Hyper ${perf.tir_above_180.toInt()}% → factor × 1.20")
                 }
                 perf.tir_above_180 > 30 -> {
-                    adjustment *= 1.15  // Augmentation modérée
+                    adjustment *= 1.15
                     reasons.add("Hyper ${perf.tir_above_180.toInt()}% → factor × 1.15")
                 }
                 perf.tir_above_180 > 20 -> {
-                    adjustment *= 1.08  // Augmentation légère
+                    adjustment *= 1.08
                     reasons.add("Hyper ${perf.tir_above_180.toInt()}% → factor × 1.08")
                 }
             }
@@ -201,10 +245,14 @@ class UnifiedReactivityLearner @Inject constructor(
             globalFactor = (globalFactor * (1 - alpha)) + (globalFactor * adjustment * alpha)
         }
         
-        // Bornes de sécurité
-        globalFactor = globalFactor.coerceIn(0.6, 1.4)
+        // Bornes de sécurité (augmentées pour hyper prolongée)
+        globalFactor = globalFactor.coerceIn(0.6, 1.5)  // Max 1.5 pour hyper sévère
         
-        log.info(LTag.APS, "UnifiedReactivityLearner: Nouveau globalFactor = ${"%.3f".format(globalFactor)} | ${reasons.joinToString(", ")}")
+        val reasonsStr = reasons.joinToString(", ")
+        log.info(LTag.APS, "UnifiedReactivityLearner: Nouveau globalFactor = ${"%.3f".format(globalFactor)} | $reasonsStr")
+        
+        // 📊 Export vers CSV pour analyse
+        exportToCSV(perf, reasonsStr)
         
         return globalFactor
     }
@@ -224,6 +272,38 @@ class UnifiedReactivityLearner @Inject constructor(
         save()
         
         lastAnalysisTime = now
+    }
+    
+    /**
+     * Exporte les métriques et le facteur vers CSV pour analyse post-traitement
+     */
+    private fun exportToCSV(perf: GlycemicPerformance, reasonsStr: String) {
+        try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            val timestamp = System.currentTimeMillis()
+            val date = sdf.format(Date(timestamp))
+            
+            val line = listOf(
+                timestamp,
+                date,
+                "%.1f".format(Locale.US, perf.tir70_180),
+                "%.1f".format(Locale.US, perf.tir70_140),
+                "%.1f".format(Locale.US, perf.tir140_180),
+                "%.1f".format(Locale.US, perf.tir180_250),
+                "%.1f".format(Locale.US, perf.tir_above_250),
+                perf.hypo_count,
+                "%.1f".format(Locale.US, perf.cv_percent),
+                perf.crossing_count,
+                "%.1f".format(Locale.US, perf.mean_bg),
+                "%.3f".format(Locale.US, globalFactor),
+                "\"${reasonsStr.replace("\"", "'")}\""
+            ).joinToString(",") + "\n"
+            
+            FileWriter(csvFile, true).use { it.append(line) }
+            log.debug(LTag.APS, "UnifiedReactivityLearner: Exported analysis to CSV")
+        } catch (e: Exception) {
+            log.error(LTag.APS, "UnifiedReactivityLearner: CSV export error", e)
+        }
     }
     
     private fun load() {
