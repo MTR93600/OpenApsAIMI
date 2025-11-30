@@ -172,10 +172,12 @@ object SmbInstructionExecutor {
             smbToGive *= 0.8f
         }
 
-        val morningFactor = input.preferences.get(DoubleKey.OApsAIMIMorningFactor) / 100.0
-        val afternoonFactor = input.preferences.get(DoubleKey.OApsAIMIAfternoonFactor) / 100.0
-        val eveningFactor = input.preferences.get(DoubleKey.OApsAIMIEveningFactor) / 100.0
-        val hyperfactor = input.preferences.get(DoubleKey.OApsAIMIHyperFactor) / 100.0
+        // ❌ TIME-BASED REACTIVITY REMOVED (replaced by UnifiedReactivityLearner in DetermineBasalAIMI2)
+        // Previously: morningFactor, afternoonFactor, eveningFactor, hyperFactor
+        // Now: UnifiedReactivityLearner.globalFactor is applied BEFORE this executor
+
+        // ✅ MEAL-CONTEXT FACTORS (complementary to UnifiedLearner)
+        // These adjust SMB for specific meal types (breakfast vs dinner etc.)
         val highcarbfactor = input.preferences.get(DoubleKey.OApsAIMIHCFactor) / 100.0
         val mealfactor = input.preferences.get(DoubleKey.OApsAIMIMealFactor) / 100.0
         val bfastfactor = input.preferences.get(DoubleKey.OApsAIMIBFFactor) / 100.0
@@ -184,30 +186,19 @@ object SmbInstructionExecutor {
         val snackfactor = input.preferences.get(DoubleKey.OApsAIMISnackFactor) / 100.0
         val sleepfactor = input.preferences.get(DoubleKey.OApsAIMIsleepFactor) / 100.0
 
-        val (adjustedMorningFactor, adjustedAfternoonFactor, adjustedEveningFactor) = hooks.adjustFactors(
-            morningFactor.toFloat(),
-            afternoonFactor.toFloat(),
-            eveningFactor.toFloat()
-        )
-
         fun Float.atLeast(min: Float) = if (this < min) min else this
 
         val base = smbToGive
-        val hour = input.hourOfDay
 
+        // Apply meal-context factors (NO time-based factors)
         smbToGive = when {
-            input.honeymoon && input.bg > 160 && input.delta > 4 && input.iob < 0.7 && (hour == 23 || hour in 0..10) ->
+            input.honeymoon && input.bg > 160 && input.delta > 4 && input.iob < 0.7 && (input.hourOfDay == 23 || input.hourOfDay in 0..10) ->
                 base.atLeast(0.15f)
 
             !input.honeymoon && input.bg > 120 && input.delta > 8 && input.iob < 1.0 && base < 0.05f ->
                 input.profileCurrentBasal.toFloat()
 
-            input.bg > 120 && input.delta > 7 && !input.honeymoon ->
-                (base * hyperfactor.toFloat())
-
-            input.bg > 180 && input.delta > 5 && input.iob < 1.2 && input.honeymoon ->
-                (base * hyperfactor.toFloat())
-
+            // ❌ hyperfactor removed - handled by UnifiedLearner
             input.highCarbTime -> base * highcarbfactor.toFloat()
             input.mealTime -> base * mealfactor.toFloat()
             input.bfastTime -> base * bfastfactor.toFloat()
@@ -215,10 +206,8 @@ object SmbInstructionExecutor {
             input.dinnerTime -> base * dinnerfactor.toFloat()
             input.snackTime -> base * snackfactor.toFloat()
             input.sleepTime -> base * sleepfactor.toFloat()
-            hour in 0..11 -> base * adjustedMorningFactor
-            hour in 12..18 -> base * adjustedAfternoonFactor
-            hour in 19..23 -> base * adjustedEveningFactor
-            else -> 0.5f
+            // ❌ time-based factors (hour 0-11, 12-18, 19-23) removed
+            else -> base  // No time-based adjustment
         }.coerceAtLeast(0f)
 
         val factors = when {
@@ -229,10 +218,8 @@ object SmbInstructionExecutor {
             input.dinnerTime -> dinnerfactor
             input.snackTime -> snackfactor
             input.sleepTime -> sleepfactor
-            hour in 0..11 -> adjustedMorningFactor
-            hour in 12..18 -> adjustedAfternoonFactor
-            hour in 19..23 -> adjustedEveningFactor
-            else -> 0.5
+            // ❌ time-based factors removed
+            else -> 1.0  // Neutral when no meal mode
         }
 
         val currentHour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]

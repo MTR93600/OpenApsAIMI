@@ -85,9 +85,9 @@ enum class DoubleKey(
     OApsAIMISmbTailDamping("aimi_smb_tail_damping", 0.5, 0.0, 1.0),
     OApsAIMISmbExerciseDamping("aimi_smb_exercise_damping", 0.6, 0.0, 1.0),
     OApsAIMISmbLateFatDamping("aimi_smb_late_fat_damping", 0.7, 0.0, 1.0),
-    OApsAIMIMorningFactor("key_oaps_aimi_morning_factor", 50.0, 1.0, 150.0),
-    OApsAIMIAfternoonFactor("key_oaps_aimi_afternoon_factor", 50.0, 1.0, 150.0),
-    OApsAIMIEveningFactor("key_oaps_aimi_evening_factor", 50.0, 1.0, 150.0),
+    // ❌ TIME-BASED REACTIVITY REMOVED - replaced by UnifiedReactivityLearner.globalFactor
+    // Previously: OApsAIMIMorningFactor, OApsAIMIAfternoonFactor, OApsAIMIEveningFactor
+    
     OApsAIMIMealFactor("key_oaps_aimi_meal_factor", 50.0, 1.0, 150.0),
     OApsAIMIFCLFactor("key_oaps_aimi_FCL_factor", 50.0, 1.0, 150.0),
     OApsAIMIBFFactor("key_oaps_aimi_BF_factor", 50.0, 1.0, 150.0),
@@ -99,7 +99,9 @@ enum class DoubleKey(
     OApsAIMIDinnerFactor("key_oaps_aimi_dinner_factor", 50.0, 1.0, 150.0),
     OApsAIMIHCFactor("key_oaps_aimi_HC_factor", 50.0, 1.0, 150.0),
     OApsAIMISnackFactor("key_oaps_aimi_snack_factor", 50.0, 1.0, 150.0),
-    OApsAIMIHyperFactor("key_oaps_aimi_hyper_factor", 60.0, 1.0, 150.0),
+    // ❌ HYPER REACTIVITY REMOVED - replaced by UnifiedReactivityLearner.globalFactor
+    // Previously: OApsAIMIHyperFactor
+    
     OApsAIMIsleepFactor("key_oaps_aimi_sleep_factor", 60.0, 1.0, 150.0),
 
     OApsAIMIMealPrebolus("key_prebolus_meal_mode", 2.0, 0.1, 10.0),
