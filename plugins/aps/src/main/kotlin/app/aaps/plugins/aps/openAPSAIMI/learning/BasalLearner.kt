@@ -32,6 +32,7 @@ class BasalLearner @Inject constructor(
 
     private var fastingSamples = 0
     private var fastingSlopeSum = 0.0
+    private var fastingBgSum = 0.0 // Track average BG
     private var lastUpdateTimestamp = 0L
 
     /**
@@ -45,18 +46,23 @@ class BasalLearner @Inject constructor(
         if (now - lastUpdateTimestamp > 24 * 60 * 60 * 1000) {
             // Calculate scores and update
             val fastingScore = if (fastingSamples > 10) fastingSlopeSum / fastingSamples else 0.0
-            update(tdd7Days, tdd30Days, fastingScore)
+            val avgFastingBg = if (fastingSamples > 10) fastingBgSum / fastingSamples else 100.0
+            
+            update(tdd7Days, tdd30Days, fastingScore, avgFastingBg)
             
             // Reset daily accumulators
             fastingSamples = 0
             fastingSlopeSum = 0.0
+            fastingBgSum = 0.0
             lastUpdateTimestamp = now
             save()
         }
 
-        if (isFastingTime && currentBg in 80.0..140.0) {
+        // Collect data if fasting and BG is valid (removed upper limit of 140)
+        if (isFastingTime && currentBg > 70.0) {
             fastingSamples++
             fastingSlopeSum += currentDelta
+            fastingBgSum += currentBg
         }
     }
 
@@ -65,8 +71,9 @@ class BasalLearner @Inject constructor(
      * @param tdd7Days Average TDD over 7 days
      * @param tdd30Days Average TDD over 30 days (if available, else use tdd7Days)
      * @param fastingStabilityScore -1.0 (dropping) to 1.0 (rising), 0.0 is stable.
+     * @param avgFastingBg Average BG during fasting periods
      */
-    private fun update(tdd7Days: Double, tdd30Days: Double, fastingStabilityScore: Double) {
+    private fun update(tdd7Days: Double, tdd30Days: Double, fastingStabilityScore: Double, avgFastingBg: Double) {
         var newMultiplier = basalMultiplier
 
         // 1. TDD Trend Analysis
@@ -74,10 +81,10 @@ class BasalLearner @Inject constructor(
         if (tdd30Days > 0) {
             val tddRatio = tdd7Days / tdd30Days
             if (tddRatio > 1.1) {
-                newMultiplier *= 1.01 // Increase by 1%
+                newMultiplier *= 1.02 // Increase by 2% (was 1%)
                 log.debug(LTag.APS, "BasalLearner: TDD rising (Ratio $tddRatio), increasing basal.")
             } else if (tddRatio < 0.9) {
-                newMultiplier *= 0.99 // Decrease by 1%
+                newMultiplier *= 0.98 // Decrease by 2% (was 1%)
                 log.debug(LTag.APS, "BasalLearner: TDD falling (Ratio $tddRatio), decreasing basal.")
             }
         }
@@ -86,16 +93,29 @@ class BasalLearner @Inject constructor(
         // If fasting BG is consistently rising (score > 0.5), increase basal.
         // If fasting BG is consistently dropping (score < -0.5), decrease basal.
         // Score is average delta per 5 min.
-        if (fastingStabilityScore > 0.5) {
-            newMultiplier *= 1.02 // Increase by 2%
+        
+        // NEW: Handle High & Stable (Plateau)
+        // If Avg BG > 150 and not dropping (slope > -0.5), we need more basal
+        if (avgFastingBg > 150.0 && fastingStabilityScore > -0.5) {
+            newMultiplier *= 1.10 // Increase by 10%
+            log.debug(LTag.APS, "BasalLearner: High & Stable (Avg $avgFastingBg, Slope $fastingStabilityScore), increasing basal significantly.")
+        }
+        // NEW: Handle Low & Stable
+        else if (avgFastingBg < 80.0 && fastingStabilityScore < 0.5) {
+            newMultiplier *= 0.90 // Decrease by 10%
+            log.debug(LTag.APS, "BasalLearner: Low & Stable (Avg $avgFastingBg, Slope $fastingStabilityScore), decreasing basal significantly.")
+        }
+        // Standard Slope Analysis
+        else if (fastingStabilityScore > 0.5) {
+            newMultiplier *= 1.10 // Increase by 10% (was 2%)
             log.debug(LTag.APS, "BasalLearner: Fasting rise (AvgDelta $fastingStabilityScore), increasing basal.")
         } else if (fastingStabilityScore < -0.5) {
-            newMultiplier *= 0.98 // Decrease by 2%
+            newMultiplier *= 0.90 // Decrease by 10% (was 2%)
             log.debug(LTag.APS, "BasalLearner: Fasting drop (AvgDelta $fastingStabilityScore), decreasing basal.")
         }
 
-        // Safety Clamp (0.8x to 1.3x)
-        newMultiplier = max(0.8, min(1.3, newMultiplier))
+        // Safety Clamp (0.7x to 1.5x) - Widened slightly
+        newMultiplier = max(0.7, min(1.5, newMultiplier))
 
         if (newMultiplier != basalMultiplier) {
             log.debug(LTag.APS, "BasalLearner: Updating multiplier from $basalMultiplier to $newMultiplier")
