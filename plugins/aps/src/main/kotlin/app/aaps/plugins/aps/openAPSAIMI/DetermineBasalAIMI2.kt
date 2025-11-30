@@ -3407,7 +3407,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     } else {
                         1.0  // Fallback to neutral if disabled
                     }
-                    aapsLogger.debug(LTag.APS, "Reactivity (< 6AM): enabled=$useUnified, factor=$reactivity")
+                    log.debug(LTag.APS, "Reactivity (< 6AM): enabled=$useUnified, factor=$reactivity")
                     (basalaimi * multiplier * reactivity).toFloat()
                 }
 
@@ -3418,7 +3418,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     } else {
                         1.0  // Fallback to neutral if disabled
                     }
-                    aapsLogger.debug(LTag.APS, "Reactivity (> 6AM): enabled=$useUnified, factor=$reactivity")
+                    log.debug(LTag.APS, "Reactivity (> 6AM): enabled=$useUnified, factor=$reactivity")
                     (basalaimi * multiplier * reactivity).toFloat()
                 }
 
@@ -3744,8 +3744,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val beforeReactivity = smbToGive
             smbToGive = (smbToGive * unifiedReactivityLearner.globalFactor).toFloat()
             if (smbToGive != beforeReactivity) {
-                aapsLogger.debug(LTag.APS, \"UnifiedReactivityLearner: SMB ${\"%.2f\".format(beforeReactivity)}U → ${\"%.2f\".format(smbToGive)}U (factor=${\"%.3f\".format(unifiedReactivityLearner.globalFactor)})\")
-                rT.reason.append(\" | Reactivity factor ${\"%.2f\".format(unifiedReactivityLearner.globalFactor)}\")
+                log.debug(LTag.APS, "UnifiedReactivityLearner: SMB ${"%.2f".format(beforeReactivity)}U → ${"%.2f".format(smbToGive)}U (factor=${"%.3f".format(unifiedReactivityLearner.globalFactor)})")
+                rT.reason.append(" | Reactivity factor ${"%.2f".format(unifiedReactivityLearner.globalFactor)}")
             }
         }
         val savedReason = rT.reason.toString()
@@ -4286,12 +4286,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             // 🎯 Process UnifiedReactivityLearner (old learner removed)
             unifiedReactivityLearner.processIfNeeded()  // Analyze & adjust every 6h
-
-            basalLearner.process(
-                currentBg = bg,
-                isMealActive = anyMealActive,
-                time = LocalTime.now()
-            )
 
             return finalResult
         }
