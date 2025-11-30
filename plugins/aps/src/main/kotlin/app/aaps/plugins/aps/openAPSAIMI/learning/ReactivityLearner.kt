@@ -103,13 +103,13 @@ class ReactivityLearner @Inject constructor(
         // 1. Hypo Safety Check
         // If we went too low (< 70), we were too aggressive.
         if (minBg < 70) {
-            newFactor *= 0.95 // Decrease by 5%
+            newFactor *= 0.90 // Decrease by 10% (was 5%)
             log.debug(LTag.APS, "ReactivityLearner: Hypo detected ($minBg), decreasing $bucket factor.")
         } 
         // 2. Hyper / Slow Recovery Check
         // If peak was high (> 160) OR recovery took too long (> 180 min), we were too passive.
         else if (peakBg > 160 || recoveryTimeMinutes > 180) {
-            newFactor *= 1.02 // Increase by 2%
+            newFactor *= 1.10 // Increase by 10% (was 2%)
             log.debug(LTag.APS, "ReactivityLearner: Hyper/Slow recovery (Peak:$peakBg, Time:$recoveryTimeMinutes), increasing $bucket factor.")
         }
         // 3. Good Performance
