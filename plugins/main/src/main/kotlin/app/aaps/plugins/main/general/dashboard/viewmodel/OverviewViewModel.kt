@@ -358,7 +358,7 @@ class OverviewViewModel(
         val isUnreachable = preferences.get(app.aaps.core.keys.BooleanKey.AlertPumpUnreachable) && (lastConnection + threshold < now)
 
         val statusText = if (isUnreachable) {
-            val unreachableText = resourceHelper.gs(R.string.pump_unreachable)
+            val unreachableText = resourceHelper.gs(app.aaps.core.ui.R.string.pump_unreachable)
             "$reservoirText <font color='#FF0000'>$unreachableText</font>"
         } else {
             reservoirText
