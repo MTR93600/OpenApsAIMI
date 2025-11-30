@@ -1158,6 +1158,20 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIpregnancy, title = R.string.OApsAIMI_Enable_pregnancy))
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIhoneymoon, title = R.string.OApsAIMI_Enable_honeymoon))
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMInight, title = R.string.OApsAIMI_Enable_night_title))
+                
+                // 🎯 Learners Section
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.oaps_aimi_learners_title)
+                })
+                addPreference(
+                    AdaptiveSwitchPreference(
+                        ctx = context,
+                        booleanKey = BooleanKey.OApsAIMIUnifiedReactivityEnabled,
+                        title = R.string.unified_reactivity_title,
+                        summary = R.string.unified_reactivity_summary
+                    )
+                )
+                
                 addPreference(PreferenceCategory(context).apply {
                     title = rh.gs(R.string.oaps_aimi_ngr_title)
                 })

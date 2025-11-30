@@ -378,6 +378,13 @@
     <string name="openapsaimi_highBG_maxsmb_summary">Max SMB value when BG is above 120</string>
     <string name="openapsaimi_highBG_maxsmb_title">Max SMB High BG</string>
     <string name="OApsAIMI_Enable_night_title">Night Mode (SMB/2)</string>
+    
+    <!-- Learners Section -->
+    <string name="oaps_aimi_learners_title">🎓 Learners</string>
+    <string name="unified_reactivity_title">Unified Reactivity Learner</string>
+    <string name="unified_reactivity_summary">Analyzes TIR/CV%/Hypo every 6h to adapt reactivity (0.6-1.5). Replaces time-bucket reactivity. Exports to CSV in Documents/AAPS.</string>
+    
+    <!-- Night Growth Restriction -->
     <string name="prebolus_lunch_mode_summary">Lunch Mode Prebolus 1/2</string>
     <string name="prebolus2_lunch_mode_summary">Lunch Mode Prebolus 2/2</string>
     <string name="prebolus_lunch_mode_title">Prebolus 1/2</string>
