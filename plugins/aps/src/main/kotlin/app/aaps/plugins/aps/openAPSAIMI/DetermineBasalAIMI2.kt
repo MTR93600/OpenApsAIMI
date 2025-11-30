@@ -118,8 +118,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var glucoseStatusCalculatorAimi: GlucoseStatusCalculatorAimi
     @Inject lateinit var comparator: AimiSmbComparator
     @Inject lateinit var basalLearner: app.aaps.plugins.aps.openAPSAIMI.learning.BasalLearner
-    @Inject lateinit var reactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.ReactivityLearner
     @Inject lateinit var unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner  // 🎯 NEW
+    // ❌ OLD reactivityLearner removed - UnifiedReactivityLearner is now the only one
     init {
         // Branche l’historique basal (TBR) sur la persistence réelle
         BasalHistoryUtils.installHistoryProvider(
@@ -3393,7 +3393,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val pregnancyEnable = preferences.get(BooleanKey.OApsAIMIpregnancy)
 
         if (tirbasal3B != null && pregnancyEnable && tirbasal3IR != null) {
-            // 🎯 Hybrid Mode: Use UnifiedReactivityLearner if enabled, else old ReactivityLearner
+            // 🎯 UnifiedReactivityLearner is now used exclusively
             val useUnified = preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled)
             
             this.basalaimi = when {
@@ -3405,9 +3405,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     val reactivity = if (useUnified) {
                         unifiedReactivityLearner.globalFactor
                     } else {
-                        reactivityLearner.getFactor(LocalTime.now())
+                        1.0  // Fallback to neutral if disabled
                     }
-                    aapsLogger.debug(LTag.APS, "Reactivity (< 6AM): unified=$useUnified, factor=$reactivity")
+                    aapsLogger.debug(LTag.APS, "Reactivity (< 6AM): enabled=$useUnified, factor=$reactivity")
                     (basalaimi * multiplier * reactivity).toFloat()
                 }
 
@@ -3416,9 +3416,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     val reactivity = if (useUnified) {
                         unifiedReactivityLearner.globalFactor
                     } else {
-                        reactivityLearner.getFactor(LocalTime.now())
+                        1.0  // Fallback to neutral if disabled
                     }
-                    aapsLogger.debug(LTag.APS, "Reactivity (> 6AM): unified=$useUnified, factor=$reactivity")
+                    aapsLogger.debug(LTag.APS, "Reactivity (> 6AM): enabled=$useUnified, factor=$reactivity")
                     (basalaimi * multiplier * reactivity).toFloat()
                 }
 
@@ -4284,9 +4284,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 isFastingTime = isNight && !anyMealActive
             )
 
-            // 🎯 Process both learners for comparison during hybrid mode
-            reactivityLearner.process(
+            // 🎯 Process UnifiedReactivityLearner (old learner removed)
             unifiedReactivityLearner.processIfNeeded()  // Analyze & adjust every 6h
+
+            basalLearner.process(
                 currentBg = bg,
                 isMealActive = anyMealActive,
                 time = LocalTime.now()
