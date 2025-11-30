@@ -93,11 +93,19 @@ class UnifiedReactivityLearner @Inject constructor(
         
         try {
             // Récupérer toutes les valeurs BG des 24 dernières heures
-            val bgReadings = persistenceLayer.getBgReadingsDataFromTime(start, now, false)
-                .map { it.value }
-                .filter { it > 39 }  // Exclure valeurs invalides
+            // getBgReadingsDataFromTime retourne Single<List<GV>>, donc on utilise blockingGet()
+            val bgReadingsList = persistenceLayer.getBgReadingsDataFromTime(start, false)
+                .blockingGet()
             
-            if (bgReadings.size < 12) {  // Minimum 12 lectures (au moins 1h de données si CGM 5min)
+            // Extraire les valeurs et filtrer
+            val bgReadings = bgReadingsList
+                .mapNotNull { gv ->
+                    // GV type a la propriété 'value' de type Double
+                    val value = gv.value
+                    if (value > 39.0) value else null
+                }
+            
+            if (bgReadings.isEmpty() || bgReadings.size < 12) {
                 log.warn(LTag.APS, "UnifiedReactivityLearner: Pas assez de données BG (${bgReadings.size})")
                 return null
             }
@@ -106,24 +114,24 @@ class UnifiedReactivityLearner @Inject constructor(
             val inRange70_140 = bgReadings.count { it in 70.0..140.0 }
             val inRange140_180 = bgReadings.count { it in 140.0..180.0 }
             val inRange180_250 = bgReadings.count { it in 180.0..250.0 }
-            val above250 = bgReadings.count { it > 250 }
-            val above180 = bgReadings.count { it > 180 }
+            val above250 = bgReadings.count { it > 250.0 }
+            val above180 = bgReadings.count { it > 180.0 }
             
-            val tir70_140 = (inRange70_140.toDouble() / bgReadings.size) * 100.0
-            val tir140_180 = (inRange140_180.toDouble() / bgReadings.size) * 100.0
+            val tir70_140 = (inRange70_140.toDouble() / bgReadings.size.toDouble()) * 100.0
+            val tir140_180 = (inRange140_180.toDouble() / bgReadings.size.toDouble()) * 100.0
             val tir70_180 = tir70_140 + tir140_180
-            val tir180_250 = (inRange180_250.toDouble() / bgReadings.size) * 100.0
-            val tir_above_250 = (above250.toDouble() / bgReadings.size) * 100.0
-            val tir_above_180 = (above180.toDouble() / bgReadings.size) * 100.0
+            val tir180_250 = (inRange180_250.toDouble() / bgReadings.size.toDouble()) * 100.0
+            val tir_above_250 = (above250.toDouble() / bgReadings.size.toDouble()) * 100.0
+            val tir_above_180 = (above180.toDouble() / bgReadings.size.toDouble()) * 100.0
             
             // 2. Détection épisodes hypo (groupements contigus < 70)
             var hypo_count = 0
             var inHypo = false
             for (bg in bgReadings) {
-                if (bg < 70 && !inHypo) {
+                if (bg < 70.0 && !inHypo) {
                     hypo_count++
                     inHypo = true
-                } else if (bg >= 70) {
+                } else if (bg >= 70.0) {
                     inHypo = false
                 }
             }
@@ -139,7 +147,7 @@ class UnifiedReactivityLearner @Inject constructor(
             for (i in 1 until bgReadings.size) {
                 val prev = bgReadings[i - 1]
                 val curr = bgReadings[i]
-                if ((prev < 120 && curr > 120) || (prev > 120 && curr < 120)) {
+                if ((prev < 120.0 && curr > 120.0) || (prev > 120.0 && curr < 120.0)) {
                     crossing_count++
                 }
             }
