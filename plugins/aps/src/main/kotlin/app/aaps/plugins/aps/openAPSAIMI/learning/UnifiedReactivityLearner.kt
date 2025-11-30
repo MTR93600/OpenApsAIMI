@@ -6,6 +6,7 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.interfaces.Preferences
 import org.json.JSONObject
 import java.io.File
 import java.io.FileWriter
@@ -80,7 +81,6 @@ class UnifiedReactivityLearner @Inject constructor(
         private set
     
     private var lastAnalysisTime = 0L
-    private val ANALYSIS_INTERVAL_MS = 6 * 60 * 60 * 1000L  // 6 heures
     
     init {
         load()
@@ -282,18 +282,22 @@ class UnifiedReactivityLearner @Inject constructor(
         log.info(LTag.APS, "UnifiedReactivityLearner: Nouveau globalFactor = ${"%.3f".format(globalFactor)} | $reasonsStr")
         
         // 📊 Capture snapshot for rT display
+        val now = dateUtil.now()
         lastAnalysis = AnalysisSnapshot(
             timestamp = now,
-            tir70_180 = tir70_180,
-            cv_percent = cv,
-            hypo_count = hypoCount,
+            tir70_180 = perf.tir70_180,
+            cv_percent = perf.cv_percent,
+            hypo_count = perf.hypo_count,
             globalFactor = globalFactor,
             previousFactor = previousFactor,
             adjustmentReason = reasonsStr
         )
         
-        saveState()
-        exportToCSV(now, tir70_180, tir70_140, tir140_180, tir180_250, tir_above_250, hypoCount, cv, crossingCount, meanBg, globalFactor, reasonsStr)   }
+        save()
+        exportToCSV(perf, reasonsStr)
+        
+        return globalFactor
+    }
     
     /**
      * Appeler toutes les 6h depuis DetermineBasalAIMI2
