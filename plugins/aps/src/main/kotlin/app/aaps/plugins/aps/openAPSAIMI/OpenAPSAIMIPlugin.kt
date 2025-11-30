@@ -1226,19 +1226,19 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
             })
 
-            addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                key = "AIMI_Manual_Modes"
-                title = rh.gs(R.string.training_ml_modes_preferences)
-                
-                // ❌ TIME-BASED REACTIVITY REMOVED (replaced by UnifiedReactivityLearner)
-                // Previously: morning/afternoon/evening/hyper factors
-                // Now: UnifiedReactivityLearner.globalFactor handles all reactivity adaptation
-                
-                addPreference(PreferenceCategory(context).apply {
-                    title = rh.gs(R.string.high_BG_preferences)
-                })
-
-            })
+            // addPreference(preferenceManager.createPreferenceScreen(context).apply {
+            //     key = "AIMI_Manual_Modes"
+            //     title = rh.gs(R.string.training_ml_modes_preferences)
+            //
+            //     // ❌ TIME-BASED REACTIVITY REMOVED (replaced by UnifiedReactivityLearner)
+            //     // Previously: morning/afternoon/evening/hyper factors
+            //     // Now: UnifiedReactivityLearner.globalFactor handles all reactivity adaptation
+            //
+            //     addPreference(PreferenceCategory(context).apply {
+            //         title = rh.gs(R.string.high_BG_preferences)
+            //     })
+            //
+            // })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "high_BG_settings"
                 //title = "High BG Preferences (BG > 120)"
