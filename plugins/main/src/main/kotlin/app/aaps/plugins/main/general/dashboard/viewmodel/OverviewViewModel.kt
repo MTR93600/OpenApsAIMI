@@ -37,7 +37,11 @@ import app.aaps.core.interfaces.rx.events.EventUpdateOverviewIobCob
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.TrendCalculator
+import app.aaps.core.interfaces.utils.TrendCalculator
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
+import app.aaps.core.keys.IntKey
+import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.data.time.T
 import app.aaps.core.objects.extensions.directionToIcon
 import app.aaps.core.objects.extensions.displayText
 import java.io.Serializable
@@ -73,7 +77,8 @@ class OverviewViewModel(
     private val activePlugin: ActivePlugin,
     private val rxBus: RxBus,
     private val aapsSchedulers: AapsSchedulers,
-    private val fabricPrivacy: FabricPrivacy
+    private val fabricPrivacy: FabricPrivacy,
+    private val preferences: Preferences
 ) : ViewModel() {
 
     private val disposables = CompositeDisposable()
@@ -349,7 +354,18 @@ class OverviewViewModel(
             }
         }
 
-        return resourceHelper.gs(R.string.dashboard_adjustment_pump, reservoirText, siteAge, sensorAge)
+        val lastConnection = activePlugin.activePump.lastDataTime
+        val threshold = T.mins(preferences.get(IntKey.AlertsPumpUnreachableThreshold).toLong()).msecs()
+        val isUnreachable = lastConnection + threshold < now
+
+        val statusText = if (isUnreachable) {
+            val unreachableText = resourceHelper.gs(R.string.pump_unreachable)
+            "$reservoirText <font color='#FF0000'>$unreachableText</font>"
+        } else {
+            reservoirText
+        }
+
+        return resourceHelper.gs(R.string.dashboard_adjustment_pump, statusText, siteAge, sensorAge)
     }
 
     private fun buildSafetyLine(lastBg: InMemoryGlucoseValue?, glucoseStatus: GlucoseStatus?): String {
@@ -377,7 +393,16 @@ class OverviewViewModel(
             reasons += resourceHelper.gs(R.string.dashboard_adjustment_reason_trend, resourceHelper.gs(trendRes))
         }
         if (reasons.isEmpty()) reasons += resourceHelper.gs(R.string.dashboard_adjustment_reason_unknown)
-        return resourceHelper.gs(R.string.dashboard_adjustment_safety, level, reasons.joinToString(", "))
+        if (reasons.isEmpty()) reasons += resourceHelper.gs(R.string.dashboard_adjustment_reason_unknown)
+        
+        val safetyText = reasons.joinToString(", ")
+        val finalSafetyText = if (loop.lastRun?.request?.isHypoRisk == true) {
+            "<font color='#FF0000'>Hypo Risk!</font> $safetyText"
+        } else {
+            safetyText
+        }
+        
+        return resourceHelper.gs(R.string.dashboard_adjustment_safety, level, finalSafetyText)
     }
 
     private fun resolveModeLine(now: Long): String? {
@@ -483,7 +508,8 @@ class OverviewViewModel(
         private val activePlugin: ActivePlugin,
         private val rxBus: RxBus,
         private val aapsSchedulers: AapsSchedulers,
-        private val fabricPrivacy: FabricPrivacy
+        private val fabricPrivacy: FabricPrivacy,
+        private val preferences: Preferences
     ) : ViewModelProvider.Factory {
 
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -506,7 +532,8 @@ class OverviewViewModel(
                     activePlugin,
                     rxBus,
                     aapsSchedulers,
-                    fabricPrivacy
+                    fabricPrivacy,
+                    preferences
                 ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class $modelClass")
