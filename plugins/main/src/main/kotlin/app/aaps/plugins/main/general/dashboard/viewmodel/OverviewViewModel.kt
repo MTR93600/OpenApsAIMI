@@ -37,7 +37,6 @@ import app.aaps.core.interfaces.rx.events.EventUpdateOverviewIobCob
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.TrendCalculator
-import app.aaps.core.interfaces.utils.TrendCalculator
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
@@ -356,7 +355,7 @@ class OverviewViewModel(
 
         val lastConnection = activePlugin.activePump.lastDataTime
         val threshold = T.mins(preferences.get(IntKey.AlertsPumpUnreachableThreshold).toLong()).msecs()
-        val isUnreachable = lastConnection + threshold < now
+        val isUnreachable = preferences.get(app.aaps.core.keys.BooleanKey.AlertPumpUnreachable) && (lastConnection + threshold < now)
 
         val statusText = if (isUnreachable) {
             val unreachableText = resourceHelper.gs(R.string.pump_unreachable)
