@@ -159,13 +159,11 @@ class BLEComm @Inject internal constructor(
     private fun connectGatt(device: BluetoothDevice) {
         // Reset sequence counter
         mWriteSequenceNumber = 0
-        if (mBluetoothGatt == null) {
-            mBluetoothGatt = device.connectGatt(context, false, mGattCallback, BluetoothDevice.TRANSPORT_LE)
-        } else {
-            // Already connected?, this should not happen force disconnect
-            aapsLogger.error(LTag.PUMPBTCOMM, "connectGatt, mBluetoothGatt is not null")
-            disconnect("connectGatt, mBluetoothGatt is not null")
+        if (mBluetoothGatt != null) {
+            aapsLogger.warn(LTag.PUMPBTCOMM, "connectGatt: mBluetoothGatt is not null, closing previous connection")
+            close()
         }
+        mBluetoothGatt = device.connectGatt(context, false, mGattCallback, BluetoothDevice.TRANSPORT_LE)
     }
 
     @SuppressLint("MissingPermission")
@@ -176,16 +174,30 @@ class BLEComm @Inject internal constructor(
             return
         }
         aapsLogger.debug(LTag.PUMPBTCOMM, "disconnect from: $from")
+        
+        // Stop scanning if we were connecting
         if (isConnecting) {
             isConnecting = false
             stopScan()
-            SystemClock.sleep(100)
         }
-        if (isConnected) {
-            aapsLogger.debug(LTag.PUMPBTCOMM, "Connected, disconnecting")
+
+        if (mBluetoothGatt != null) {
+            aapsLogger.debug(LTag.PUMPBTCOMM, "Connected/Connecting, disconnecting gatt")
             mBluetoothGatt?.disconnect()
+            
+            // Post a timeout to force close if onConnectionStateChange doesn't fire
+            handler.postDelayed({
+                synchronized(this) {
+                    if (mBluetoothGatt != null) {
+                        aapsLogger.warn(LTag.PUMPBTCOMM, "Disconnect timeout reached, forcing close")
+                        close()
+                        isConnected = false
+                        mCallback?.onBLEDisconnected()
+                    }
+                }
+            }, 2000) // 2 seconds timeout
         } else {
-            aapsLogger.debug(LTag.PUMPBTCOMM, "Not connected, closing gatt")
+            aapsLogger.debug(LTag.PUMPBTCOMM, "Gatt is null, ensuring closed state")
             close()
             isConnected = false
             mCallback?.onBLEDisconnected()
@@ -195,8 +207,11 @@ class BLEComm @Inject internal constructor(
     @SuppressLint("MissingPermission")
     @Synchronized fun close() {
         aapsLogger.debug(LTag.PUMPBTCOMM, "BluetoothAdapter close")
-        mBluetoothGatt?.close()
-        SystemClock.sleep(100)
+        try {
+            mBluetoothGatt?.close()
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.PUMPBTCOMM, "Error closing gatt: " + e.message)
+        }
         mBluetoothGatt = null
     }
 
@@ -372,6 +387,16 @@ class BLEComm @Inject internal constructor(
     @Synchronized
     private fun onConnectionStateChangeSynchronized(gatt: BluetoothGatt, status: Int, newState: Int) {
         aapsLogger.debug(LTag.PUMPBTCOMM, "onConnectionStateChange newState: $newState status: $status")
+        
+        if (status != BluetoothGatt.GATT_SUCCESS) {
+            aapsLogger.warn(LTag.PUMPBTCOMM, "onConnectionStateChange error status: $status")
+            close()
+            isConnected = false
+            isConnecting = false
+            mCallback?.onBLEDisconnected()
+            return
+        }
+
         if (newState == BluetoothProfile.STATE_CONNECTED) {
             isConnected = true
             isConnecting = false
@@ -384,14 +409,12 @@ class BLEComm @Inject internal constructor(
                     aapsLogger.warn(LTag.PUMPBTCOMM, "Disconnected while connecting! Reset device address")
                     mDeviceAddress = null
                 }
-                // Wait a bit before retrying
-                SystemClock.sleep(2000)
             }
-            close()
+            close() // Always close gatt on disconnect
             isConnected = false
             isConnecting = false
             mCallback?.onBLEDisconnected()
-            aapsLogger.debug(LTag.PUMPBTCOMM, "Device was disconnected " + gatt.device.name) //Device was disconnected
+            aapsLogger.debug(LTag.PUMPBTCOMM, "Device was disconnected " + gatt.device.name)
         }
     }
 
