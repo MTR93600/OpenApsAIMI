@@ -135,4 +135,5 @@ enum class BooleanKey(
     OApsAIMIWCycleRequireConfirm("key_use_Aimi_wcycle_require_confirm", false),
     OApsAIMINightGrowthEnabled("key_oaps_aimi_ngr_enabled", true),
     OApsAIMIPkpdEnabled("key_aimi_pkpd_enabled", false),
+    OApsAIMIUnifiedReactivityEnabled("key_use_unified_reactivity", true),  // 🎯 NEW: Enable UnifiedReactivityLearner
 }

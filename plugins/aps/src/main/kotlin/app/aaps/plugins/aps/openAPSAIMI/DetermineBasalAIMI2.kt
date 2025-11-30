@@ -119,6 +119,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var comparator: AimiSmbComparator
     @Inject lateinit var basalLearner: app.aaps.plugins.aps.openAPSAIMI.learning.BasalLearner
     @Inject lateinit var reactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.ReactivityLearner
+    @Inject lateinit var unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner  // 🎯 NEW
     init {
         // Branche l’historique basal (TBR) sur la persistence réelle
         BasalHistoryUtils.installHistoryProvider(
@@ -3392,19 +3393,32 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val pregnancyEnable = preferences.get(BooleanKey.OApsAIMIpregnancy)
 
         if (tirbasal3B != null && pregnancyEnable && tirbasal3IR != null) {
+            // 🎯 Hybrid Mode: Use UnifiedReactivityLearner if enabled, else old ReactivityLearner
+            val useUnified = preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled)
+            
             this.basalaimi = when {
                 tirbasalhAP != null && tirbasalhAP >= 5           -> (basalaimi * 2.0).toFloat()
                 lastHourTIRAbove != null && lastHourTIRAbove >= 2 -> (basalaimi * 1.8).toFloat()
 
                 timenow < sixAMHour                               -> {
                     val multiplier = if (honeymoon) 1.2 else 1.4
-                    val reactivity = reactivityLearner.getFactor(LocalTime.now())
+                    val reactivity = if (useUnified) {
+                        unifiedReactivityLearner.globalFactor
+                    } else {
+                        reactivityLearner.getFactor(LocalTime.now())
+                    }
+                    aapsLogger.debug(LTag.APS, "Reactivity (< 6AM): unified=$useUnified, factor=$reactivity")
                     (basalaimi * multiplier * reactivity).toFloat()
                 }
 
                 timenow > sixAMHour                               -> {
                     val multiplier = if (honeymoon) 1.4 else 1.6
-                    val reactivity = reactivityLearner.getFactor(LocalTime.now())
+                    val reactivity = if (useUnified) {
+                        unifiedReactivityLearner.globalFactor
+                    } else {
+                        reactivityLearner.getFactor(LocalTime.now())
+                    }
+                    aapsLogger.debug(LTag.APS, "Reactivity (> 6AM): unified=$useUnified, factor=$reactivity")
                     (basalaimi * multiplier * reactivity).toFloat()
                 }
 
@@ -4259,7 +4273,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 isFastingTime = isNight && !anyMealActive
             )
 
+            // 🎯 Process both learners for comparison during hybrid mode
             reactivityLearner.process(
+            unifiedReactivityLearner.processIfNeeded()  // Analyze & adjust every 6h
                 currentBg = bg,
                 isMealActive = anyMealActive,
                 time = LocalTime.now()
