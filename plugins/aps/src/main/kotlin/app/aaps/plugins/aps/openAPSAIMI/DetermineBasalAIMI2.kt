@@ -3744,7 +3744,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val beforeReactivity = smbToGive
             smbToGive = (smbToGive * unifiedReactivityLearner.globalFactor).toFloat()
             
-            if (smbToGive != beforeReactivity) {
+            if (unifiedReactivityLearner.globalFactor != 1.0 || smbToGive != beforeReactivity) {
                 // 📊 Enriched log with evolution and metrics
                 val snapshot = unifiedReactivityLearner.lastAnalysis
                 val factorStr = "%.3f".format(unifiedReactivityLearner.globalFactor)
@@ -3757,14 +3757,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         else -> "→"
                     }
                     
-                    consoleLog.add(
-                        "UnifiedLearner: SMB ${"%.2f".format(beforeReactivity)}U → ${"%.2f".format(smbToGive)}U " +
-                        "(factor=$factorStr $trend, analyzed ${hoursSince}h ago)"
-                    )
-                    consoleLog.add(
-                        "  ├─ TIR=${"%.0f".format(snapshot.tir70_180)}%, CV=${"%.0f".format(snapshot.cv_percent)}%, Hypos=${snapshot.hypo_count}"
-                    )
-                    consoleLog.add("  └─ ${snapshot.adjustmentReason}")
+                    if (smbToGive != beforeReactivity) {
+                         consoleLog.add(
+                            "UnifiedLearner: SMB ${"%.2f".format(beforeReactivity)}U → ${"%.2f".format(smbToGive)}U " +
+                            "(factor=$factorStr $trend, analyzed ${hoursSince}h ago)"
+                        )
+                    }
                     
                     rT.reason.append(
                         " | Reactivity $factorStr $trend (TIR=${"%.0f".format(snapshot.tir70_180)}%, " +
@@ -3772,7 +3770,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     )
                 } else {
                     // Fallback if no analysis yet
-                    consoleLog.add("UnifiedLearner: SMB ${"%.2f".format(beforeReactivity)}U → ${"%.2f".format(smbToGive)}U (factor=$factorStr)")
+                    if (smbToGive != beforeReactivity) {
+                        consoleLog.add("UnifiedLearner: SMB ${"%.2f".format(beforeReactivity)}U → ${"%.2f".format(smbToGive)}U (factor=$factorStr)")
+                    }
                     rT.reason.append(" | Reactivity factor $factorStr")
                 }
             }
