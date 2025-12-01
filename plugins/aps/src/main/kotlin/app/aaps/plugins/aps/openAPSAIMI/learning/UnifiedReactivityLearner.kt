@@ -264,12 +264,6 @@ class UnifiedReactivityLearner @Inject constructor(
                        perf.cv_percent < 36 &&
                        perf.tir_above_180 < 15
         
-        // 🎯 Convergence vers 1.0 si performance optimale
-        val isOptimal = perf.tir70_180 > 70 && 
-                       perf.hypo_count == 0 && 
-                       perf.cv_percent < 36 &&
-                       perf.tir_above_180 < 15
-        
         val previousFactor = globalFactor
         var targetFactor = globalFactor * adjustment
 
