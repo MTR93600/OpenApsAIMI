@@ -305,7 +305,7 @@ private object QuadraticFit {
                 val r2 = if (ssTot != 0.0) 1 - ssRes / ssTot else 0.0
 
                 val dt = 5 * 60 / SCALE_TIME
-                val accelCurrent = 2 * a * SCALE_BG / 60.0  // mg/dL/min²
+                val accelCurrent = 2 * a * SCALE_BG // mg/dL/5min² (Delta of deltas equivalent)
 
 // --- Nouveau : filtrage exponentiel léger pour stabiliser ---
                 accelFiltered = 0.6 * accelFiltered + 0.4 * accelCurrent
