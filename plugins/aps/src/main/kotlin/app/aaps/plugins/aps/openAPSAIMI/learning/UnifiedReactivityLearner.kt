@@ -36,8 +36,23 @@ class UnifiedReactivityLearner @Inject constructor(
 ) {
     
     companion object {
-        private const val ANALYSIS_INTERVAL_MS = 6 * 60 * 60 * 1000L  // 6 heures
+        private const val ANALYSIS_INTERVAL_MS = 30 * 60 * 1000L  // 30 minutes
     }
+    
+    // ... (rest of file)
+
+    // ... inside computeAdjustment ...
+        
+        // 🎯 Calcul du nouveau facteur avec EMA smoothing
+        // FIX: Logic was pulling towards adjustment multiplier instead of multiplying by it.
+        // New Logic: Target = Current * Adjustment
+        val previousFactor = globalFactor
+        val targetFactor = globalFactor * adjustment
+        
+        val alpha = 0.25  // Faster adaptation (was 0.15)
+        
+        // Apply EMA: New = (Target * alpha) + (Old * (1-alpha))
+        globalFactor = (targetFactor * alpha + globalFactor * (1 - alpha)).coerceIn(0.6, 1.8) // Increased max cap slightly to 1.8
     
     // 📊 Expose last analysis for rT display
     data class AnalysisSnapshot(
@@ -262,21 +277,32 @@ class UnifiedReactivityLearner @Inject constructor(
                        perf.cv_percent < 36 &&
                        perf.tir_above_180 < 15
         
+        // 🎯 Convergence vers 1.0 si performance optimale
+        val isOptimal = perf.tir70_180 > 70 && 
+                       perf.hypo_count == 0 && 
+                       perf.cv_percent < 36 &&
+                       perf.tir_above_180 < 15
+        
+        val previousFactor = globalFactor
+        var targetFactor = globalFactor * adjustment
+
         if (isOptimal) {
             // EMA douce vers 1.0 (decay de 5% par analyse)
-            globalFactor += 0.05 * (1.0 - globalFactor)
+            // Si tout va bien, on relaxe doucement vers la neutralité
+            targetFactor = 1.0
+            val decayAlpha = 0.05
+            globalFactor = (targetFactor * decayAlpha + globalFactor * (1 - decayAlpha))
             reasons.add("Performance optimale → convergence vers 1.0")
         } else {
-            // EMA entre ancien facteur et nouvel ajustement
-            val alpha = 0.15  // Poids du nouvel ajustement
-            globalFactor = (globalFactor * (1 - alpha)) + (globalFactor * adjustment * alpha)
+            // 🎯 Calcul du nouveau facteur avec EMA smoothing
+            // FIX: Logic was pulling towards adjustment multiplier instead of multiplying by it.
+            // New Logic: Target = Current * Adjustment
+            
+            val alpha = 0.25  // Faster adaptation (was 0.15)
+            
+            // Apply EMA: New = (Target * alpha) + (Old * (1-alpha))
+            globalFactor = (targetFactor * alpha + globalFactor * (1 - alpha)).coerceIn(0.6, 1.8)
         }
-        
-        // 🎯 Calcul du nouveau facteur avec EMA smoothing
-        val previousFactor = globalFactor
-        val rawTarget = adjustment
-        val alpha = 0.15  // Smooth adaptation
-        globalFactor = (alpha * rawTarget + (1 - alpha) * globalFactor).coerceIn(0.6, 1.5)
         
         val reasonsStr = reasons.joinToString(", ")
         log.info(LTag.APS, "UnifiedReactivityLearner: Nouveau globalFactor = ${"%.3f".format(globalFactor)} | $reasonsStr")
