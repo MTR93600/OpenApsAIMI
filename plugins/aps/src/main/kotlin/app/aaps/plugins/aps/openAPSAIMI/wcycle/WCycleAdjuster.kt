@@ -29,8 +29,8 @@ class WCycleAdjuster(
 
         val ampContraceptive = WCycleDefaults.amplitudeScale(profile.contraceptive)
         val ampMode = when (profile.trackingMode) {
-            CycleTrackingMode.PERIMENOPAUSE -> 0.7
-            CycleTrackingMode.NO_MENSES_LARC -> 0.4
+            CycleTrackingMode.PERIMENOPAUSE -> 0.8
+            CycleTrackingMode.NO_MENSES_LARC -> 0.6
             else -> 1.0
         }
         val amp = ampContraceptive * ampMode
@@ -39,11 +39,9 @@ class WCycleAdjuster(
         val (vb, vs) = WCycleDefaults.verneuilBump(profile.verneuil)
         basal *= vb; smb *= vs
 
-        val thyroidDamp = when (profile.thyroid) {
-            ThyroidStatus.HASHIMOTO, ThyroidStatus.THYROIDECTOMY -> 0.8
-            ThyroidStatus.HYPOTHYROID_TREATED -> 0.9
-            else -> 1.0
-        }
+        // Thyroid dampening removed as per user request and research alignment
+        // Treated thyroid conditions should not penalize the cycle adjustment
+        val thyroidDamp = 1.0 
         basal = 1.0 + (basal - 1.0) * thyroidDamp
         smb   = 1.0 + (smb   - 1.0) * thyroidDamp
 

@@ -38,7 +38,7 @@ object WCycleDefaults {
         CyclePhase.MENSTRUATION -> 1.0 - 0.08 to 1.0
         CyclePhase.FOLLICULAR   -> 1.0 to 1.0
         CyclePhase.OVULATION    -> 1.0 to 1.0 - 0.025
-        CyclePhase.LUTEAL       -> 1.0 + 0.12 to 1.0 + 0.05
+        CyclePhase.LUTEAL       -> 1.0 + 0.20 to 1.0 + 0.08
         else                    -> 1.0 to 1.0
     }
     fun amplitudeScale(c: ContraceptiveType): Double = when (c) {
