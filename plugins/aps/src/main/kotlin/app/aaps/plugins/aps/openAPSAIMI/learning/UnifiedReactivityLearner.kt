@@ -279,10 +279,10 @@ class UnifiedReactivityLearner @Inject constructor(
             // FIX: Logic was pulling towards adjustment multiplier instead of multiplying by it.
             // New Logic: Target = Current * Adjustment
             
-            val alpha = 0.25  // Faster adaptation (was 0.15)
+            val alpha = 0.40  // Faster adaptation (was 0.15)
             
             // Apply EMA: New = (Target * alpha) + (Old * (1-alpha))
-            globalFactor = (targetFactor * alpha + globalFactor * (1 - alpha)).coerceIn(0.6, 1.8)
+            globalFactor = (targetFactor * alpha + globalFactor * (1 - alpha)).coerceIn(0.6, 2.5)
         }
         
         val reasonsStr = reasons.joinToString(", ")
