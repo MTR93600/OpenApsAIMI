@@ -222,14 +222,17 @@ class DashboardFragment : DaggerFragment() {
 
         val gestureDetector = android.view.GestureDetector(context, object : android.view.GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: android.view.MotionEvent): Boolean {
-                var currentRange = overviewData.rangeToDisplay
-                currentRange += 3
-                if (currentRange > 24) currentRange = 3
-                overviewData.rangeToDisplay = currentRange
+                overviewData.rangeToDisplay = when (overviewData.rangeToDisplay) {
+                    6    -> 9
+                    9    -> 12
+                    12   -> 18
+                    18   -> 24
+                    else -> 6
+                }
                 overviewData.initRange()
                 calculationWorkflow.runOnScaleChanged(iobCobCalculator, overviewData)
                 // Removed manual updateGraph() to avoid showing empty data before worker completes.
-                app.aaps.core.ui.toast.ToastUtils.infoToast(context, getString(R.string.graph_range_updated, currentRange))
+                app.aaps.core.ui.toast.ToastUtils.infoToast(context, getString(R.string.graph_range_updated, overviewData.rangeToDisplay))
                 return true
             }
 
