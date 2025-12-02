@@ -1,8 +1,6 @@
 package app.aaps.plugins.main.general.dashboard.viewmodel
 
 import android.content.Context
-import android.graphics.Paint
-import android.view.View
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -48,10 +46,6 @@ import app.aaps.core.objects.extensions.round
 import app.aaps.core.objects.extensions.isInProgress
 import app.aaps.core.objects.extensions.toStringFull
 import app.aaps.core.objects.extensions.toStringShort
-import app.aaps.core.ui.dialogs.OKDialog
-import app.aaps.core.ui.extensions.runOnUiThread
-import app.aaps.core.ui.extensions.toVisibility
-import app.aaps.core.ui.extensions.toVisibilityKeepSpace
 import app.aaps.plugins.main.R
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
@@ -457,13 +451,13 @@ class OverviewViewModel(
      * - Alert (> 250): Alert Up or Alert Stable
      */
     private fun selectUnicornImage(bg: Double?, delta: Double?): Int {
-        if (bg == null) return R.drawable.unicorn_normal_stable
+        if (bg == null) return R.drawable.unicorn_normal_up
         val d = delta ?: 0.0
 
         return when {
             // Hypo State (< 70)
             bg < 70.0 -> when {
-                d < -2.0 -> R.drawable.unicorn_hypo_down
+                d < -2.0 -> R.drawable.unicorn_hypo_juice
                 d > 2.0 -> R.drawable.unicorn_hypo_up
                 else -> R.drawable.unicorn_hypo_stable // Or unicorn_hypo_juice if preferred
             }
@@ -471,20 +465,20 @@ class OverviewViewModel(
             // Normal State (70 - 180)
             bg < 180.0 -> when {
                 d < -2.0 -> R.drawable.unicorn_normal_down
-                d > 2.0 -> R.drawable.unicorn_normal_up
-                else -> R.drawable.unicorn_normal_stable
+                d > 2.0 -> R.drawable.unicorn_normal_stable
+                else -> R.drawable.unicorn_normal_up
             }
 
             // Hyper State (180 - 250)
             bg < 250.0 -> when {
                 d > 2.0 -> R.drawable.unicorn_alert_up // Rising in hyper -> Alert
-                else -> R.drawable.unicorn_hyper_stable
+                else -> R.drawable.unicorn_hyper_stable2
             }
 
             // Alert State (> 250)
             else -> when {
                 d > 2.0 -> R.drawable.unicorn_alert_up
-                else -> R.drawable.unicorn_alert_stable
+                else -> R.drawable.unicorn_hyper_stable2
             }
         }
     }
