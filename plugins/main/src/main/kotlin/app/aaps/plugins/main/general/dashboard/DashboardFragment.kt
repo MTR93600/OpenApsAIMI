@@ -250,6 +250,26 @@ class DashboardFragment : DaggerFragment() {
             false
         }
         binding.glucoseGraph.graph.gridLabelRenderer?.reloadStyles()
+
+        // Setup range selection button
+        binding.glucoseGraph.rangeButton.text = overviewMenus.scaleString(overviewData.rangeToDisplay)
+        binding.glucoseGraph.rangeButton.setOnClickListener {
+            val popup = androidx.appcompat.widget.PopupMenu(requireContext(), it)
+            popup.menu.add(android.view.Menu.NONE, 6, android.view.Menu.NONE, getString(R.string.graph_long_scale_6h))
+            popup.menu.add(android.view.Menu.NONE, 9, android.view.Menu.NONE, getString(R.string.graph_long_scale_9h))
+            popup.menu.add(android.view.Menu.NONE, 12, android.view.Menu.NONE, getString(R.string.graph_long_scale_12h))
+            popup.menu.add(android.view.Menu.NONE, 18, android.view.Menu.NONE, getString(R.string.graph_long_scale_18h))
+            popup.menu.add(android.view.Menu.NONE, 24, android.view.Menu.NONE, getString(R.string.graph_long_scale_24h))
+            popup.setOnMenuItemClickListener { item ->
+                overviewData.rangeToDisplay = item.itemId
+                overviewData.initRange()
+                calculationWorkflow.runOnScaleChanged(iobCobCalculator, overviewData)
+                binding.glucoseGraph.rangeButton.text = overviewMenus.scaleString(overviewData.rangeToDisplay)
+                app.aaps.core.ui.toast.ToastUtils.infoToast(context, getString(R.string.graph_range_updated, overviewData.rangeToDisplay))
+                true
+            }
+            popup.show()
+        }
     }
 
     override fun onResume() {

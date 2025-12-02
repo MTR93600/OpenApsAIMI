@@ -17,6 +17,7 @@ class GlucoseGraphView @JvmOverloads constructor(
     private val binding = ViewGlucoseGraphPlaceholderBinding.inflate(LayoutInflater.from(context), this, true)
 
     val graph: GraphView get() = binding.graphView
+    val rangeButton: android.widget.Button get() = binding.graphRangeButton
 
     fun setUpdateMessage(message: String) {
         binding.graphUpdatedAt.text = message
