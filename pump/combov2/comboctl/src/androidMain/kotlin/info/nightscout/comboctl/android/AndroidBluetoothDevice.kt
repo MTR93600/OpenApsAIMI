@@ -1,5 +1,7 @@
 package info.nightscout.comboctl.android
 
+import kotlin.concurrent.thread
+
 import android.content.Context
 import info.nightscout.comboctl.base.BluetoothAddress
 import info.nightscout.comboctl.base.BluetoothDevice
@@ -38,6 +40,12 @@ class AndroidBluetoothDevice(
     private var outputStream: OutputStream? = null
     private var canDoIO: Boolean = false
     private var abortConnectAttempt: Boolean = false
+
+    // Watchdog members
+    @Volatile
+    private var lastTrafficTime: Long = 0
+    private var watchdogThread: Thread? = null
+    private val watchdogTimeoutMs = 20000L // 20 seconds
 
     // Use toUpperCase() since Android expects the A-F hex digits in the
     // Bluetooth address string to be uppercase (lowercase ones are considered
@@ -142,6 +150,8 @@ class AndroidBluetoothDevice(
 
         canDoIO = true
 
+        startWatchdog()
+
         logger(LogLevel.INFO) { "RFCOMM connection with device with address $address established" }
     }
 
@@ -181,7 +191,9 @@ class AndroidBluetoothDevice(
         check(outputStream != null) { "Device is not connected - cannot send data" }
 
         try {
+            lastTrafficTime = System.currentTimeMillis()
             outputStream!!.write(dataToSend.toByteArray())
+            lastTrafficTime = System.currentTimeMillis()
         } catch (e: IOException) {
             // If we are disconnecting, don't bother re-throwing the exception;
             // one is always thrown when the stream is closed while write() blocks,
@@ -207,6 +219,7 @@ class AndroidBluetoothDevice(
         try {
             val buffer = ByteArray(512)
             val numReadBytes = inputStream!!.read(buffer)
+            lastTrafficTime = System.currentTimeMillis()
             return if (numReadBytes > 0) buffer.toList().subList(0, numReadBytes) else listOf()
         } catch (e: IOException) {
             // If we are disconnecting, don't bother re-throwing the exception;
@@ -223,6 +236,8 @@ class AndroidBluetoothDevice(
     }
 
     private fun disconnectImpl() {
+        stopWatchdog()
+
         canDoIO = false
         abortConnectAttempt = true
 
@@ -260,5 +275,35 @@ class AndroidBluetoothDevice(
         }
 
         logger(LogLevel.DEBUG) { "Device disconnected" }
+    }
+
+    private fun startWatchdog() {
+        if (watchdogThread != null) return
+
+        lastTrafficTime = System.currentTimeMillis()
+        watchdogThread = thread(start = true, name = "ComboBluetoothWatchdog") {
+            logger(LogLevel.DEBUG) { "Watchdog thread started" }
+            try {
+                while (!Thread.interrupted()) {
+                    val timeSinceLastTraffic = System.currentTimeMillis() - lastTrafficTime
+                    if (timeSinceLastTraffic > watchdogTimeoutMs) {
+                        logger(LogLevel.WARN) { "Watchdog triggered: No traffic for ${timeSinceLastTraffic}ms. Forcing disconnect." }
+                        // Call disconnect() to clean up resources and notify listeners.
+                        // We use the public disconnect() method which calls disconnectImpl().
+                        disconnect()
+                        break
+                    }
+                    Thread.sleep(1000)
+                }
+            } catch (e: InterruptedException) {
+                // Thread interrupted, exit gracefully
+            }
+            logger(LogLevel.DEBUG) { "Watchdog thread stopped" }
+        }
+    }
+
+    private fun stopWatchdog() {
+        watchdogThread?.interrupt()
+        watchdogThread = null
     }
 }
