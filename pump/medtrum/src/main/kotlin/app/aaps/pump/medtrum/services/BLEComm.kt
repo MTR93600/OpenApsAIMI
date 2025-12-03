@@ -67,6 +67,7 @@ class BLEComm @Inject internal constructor(
 
     private val handler =
         Handler(HandlerThread(this::class.simpleName + "Handler").also { it.start() }.looper)
+    private val pendingRunnables = mutableListOf<Runnable>()
     private val mBluetoothAdapter: BluetoothAdapter? get() = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager?)?.adapter
     private var mBluetoothGatt: BluetoothGatt? = null
 
@@ -133,10 +134,10 @@ class BLEComm @Inject internal constructor(
             return false
         }
 
+        resetConnection("initialize")
+
         isConnected = false
         isConnecting = true
-        mWritePackets = null
-        mReadPacket = null
 
         if (mDeviceAddress != null && mDeviceSN == deviceSN) {
             // Skip scanning and directly connect to gatt
@@ -161,7 +162,7 @@ class BLEComm @Inject internal constructor(
         mWriteSequenceNumber = 0
         if (mBluetoothGatt != null) {
             aapsLogger.warn(LTag.PUMPBTCOMM, "connectGatt: mBluetoothGatt is not null, closing previous connection")
-            close()
+            resetConnection("connectGatt")
         }
         mBluetoothGatt = device.connectGatt(context, false, mGattCallback, BluetoothDevice.TRANSPORT_LE)
     }
@@ -181,24 +182,29 @@ class BLEComm @Inject internal constructor(
             stopScan()
         }
 
+        pendingRunnables.forEach { handler.removeCallbacks(it) }
+        pendingRunnables.clear()
+
         if (mBluetoothGatt != null) {
             aapsLogger.debug(LTag.PUMPBTCOMM, "Connected/Connecting, disconnecting gatt")
             mBluetoothGatt?.disconnect()
-            
+
             // Post a timeout to force close if onConnectionStateChange doesn't fire
-            handler.postDelayed({
+            val timeoutRunnable = Runnable {
                 synchronized(this) {
                     if (mBluetoothGatt != null) {
                         aapsLogger.warn(LTag.PUMPBTCOMM, "Disconnect timeout reached, forcing close")
-                        close()
+                        resetConnection("disconnect timeout")
                         isConnected = false
                         mCallback?.onBLEDisconnected()
                     }
                 }
-            }, 2000) // 2 seconds timeout
+            }
+            pendingRunnables.add(timeoutRunnable)
+            handler.postDelayed(timeoutRunnable, 2000) // 2 seconds timeout
         } else {
             aapsLogger.debug(LTag.PUMPBTCOMM, "Gatt is null, ensuring closed state")
-            close()
+            resetConnection("disconnect null gatt")
             isConnected = false
             mCallback?.onBLEDisconnected()
         }
@@ -213,6 +219,31 @@ class BLEComm @Inject internal constructor(
             aapsLogger.error(LTag.PUMPBTCOMM, "Error closing gatt: " + e.message)
         }
         mBluetoothGatt = null
+    }
+
+    /**
+     * Forcefully tear down any ongoing BLE activity and clear internal state so a fresh
+     * connection attempt cannot reuse stale Bluetooth resources.
+     */
+    @SuppressLint("MissingPermission")
+    @Synchronized
+    fun resetConnection(reason: String) {
+        aapsLogger.warn(LTag.PUMPBTCOMM, "Resetting BLE connection: $reason")
+        pendingRunnables.forEach { handler.removeCallbacks(it) }
+        pendingRunnables.clear()
+        stopScan()
+        try {
+            mBluetoothGatt?.disconnect()
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.PUMPBTCOMM, "Error disconnecting gatt: ${e.message}")
+        }
+        close()
+        mWritePackets = null
+        mReadPacket = null
+        uartWrite = null
+        uartRead = null
+        isConnected = false
+        isConnecting = false
     }
 
     /** Scan callback  */
@@ -387,12 +418,10 @@ class BLEComm @Inject internal constructor(
     @Synchronized
     private fun onConnectionStateChangeSynchronized(gatt: BluetoothGatt, status: Int, newState: Int) {
         aapsLogger.debug(LTag.PUMPBTCOMM, "onConnectionStateChange newState: $newState status: $status")
-        
+
         if (status != BluetoothGatt.GATT_SUCCESS) {
             aapsLogger.warn(LTag.PUMPBTCOMM, "onConnectionStateChange error status: $status")
-            close()
-            isConnected = false
-            isConnecting = false
+            resetConnection("stateChange error $status")
             mCallback?.onBLEDisconnected()
             return
         }
@@ -410,9 +439,7 @@ class BLEComm @Inject internal constructor(
                     mDeviceAddress = null
                 }
             }
-            close() // Always close gatt on disconnect
-            isConnected = false
-            isConnecting = false
+            resetConnection("stateChange disconnected")
             mCallback?.onBLEDisconnected()
             aapsLogger.debug(LTag.PUMPBTCOMM, "Device was disconnected " + gatt.device.name)
         }
