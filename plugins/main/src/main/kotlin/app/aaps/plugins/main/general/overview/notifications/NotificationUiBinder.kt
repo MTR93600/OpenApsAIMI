@@ -3,8 +3,8 @@ package app.aaps.plugins.main.general.overview.notifications
 import androidx.recyclerview.widget.RecyclerView
 import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.core.interfaces.rx.bus.RxBus
-import app.aaps.core.interfaces.rx.events.EventUpdateOverviewNotification
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
+import app.aaps.plugins.main.general.overview.notifications.events.EventUpdateOverviewNotification
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
 import javax.inject.Inject
