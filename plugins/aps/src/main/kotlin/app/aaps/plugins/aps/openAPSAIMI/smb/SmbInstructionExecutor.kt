@@ -343,7 +343,7 @@ object SmbInstructionExecutor {
 
         val mealModeRun =
             input.mealTime || input.bfastTime || input.lunchTime || input.dinnerTime || input.highCarbTime
-        val hyperPlateauActive = (input.bg >= 160.0 && input.predictedBg.toDouble() >= 180.0) &&
+        val hyperPlateauActive = (input.bg >= 160.0 && input.predictedBg.toDouble() >= 160.0) &&
             (input.delta < 1.0 && input.combinedDelta < 3.0) &&
             (input.iob < input.maxSmb)
 
