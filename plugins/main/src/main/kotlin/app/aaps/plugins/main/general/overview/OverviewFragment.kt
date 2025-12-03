@@ -107,7 +107,7 @@ import app.aaps.plugins.main.R
 import app.aaps.plugins.main.databinding.OverviewFragmentBinding
 import app.aaps.plugins.main.general.overview.graphData.GraphData
 import app.aaps.plugins.main.general.overview.notifications.NotificationStore
-import app.aaps.plugins.main.general.overview.notifications.events.EventUpdateOverviewNotification
+import app.aaps.plugins.main.general.overview.notifications.NotificationUiBinder
 import app.aaps.plugins.main.general.overview.ui.StatusLightHandler
 import app.aaps.plugins.main.skins.SkinProvider
 import com.jjoe64.graphview.GraphView
@@ -160,6 +160,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
     @Inject lateinit var decimalFormatter: DecimalFormatter
     @Inject lateinit var graphDataProvider: Provider<GraphData>
     @Inject lateinit var commandQueue: CommandQueue
+    @Inject lateinit var notificationUiBinder: NotificationUiBinder
 
     private val disposable = CompositeDisposable()
 
@@ -293,10 +294,11 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             .debounce(1L, TimeUnit.SECONDS)
             .observeOn(aapsSchedulers.main)
             .subscribe({ updateGraph() }, fabricPrivacy::logException)
-        disposable += activePlugin.activeOverview.overviewBus
-            .toObservable(EventUpdateOverviewNotification::class.java)
-            .observeOn(aapsSchedulers.main)
-            .subscribe({ updateNotification() }, fabricPrivacy::logException)
+        notificationUiBinder.bind(
+            overviewBus = activePlugin.activeOverview.overviewBus,
+            notificationsView = binding.notifications,
+            disposable = disposable,
+        )
         disposable += rxBus
             .toObservable(EventScale::class.java)
             .observeOn(aapsSchedulers.main)

@@ -48,8 +48,7 @@ import app.aaps.plugins.main.databinding.FragmentDashboardBinding
 import app.aaps.plugins.main.general.dashboard.viewmodel.AdjustmentCardState
 import app.aaps.plugins.main.general.dashboard.viewmodel.OverviewViewModel
 import app.aaps.plugins.main.general.overview.graphData.GraphData
-import app.aaps.plugins.main.general.overview.notifications.NotificationStore
-import app.aaps.plugins.main.general.overview.notifications.events.EventUpdateOverviewNotification
+import app.aaps.plugins.main.general.overview.notifications.NotificationUiBinder
 import androidx.recyclerview.widget.LinearLayoutManager
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
@@ -86,7 +85,7 @@ class DashboardFragment : DaggerFragment() {
     @Inject lateinit var automation: Automation
     @Inject lateinit var xDripSource: XDripSource
     @Inject lateinit var dexcomBoyda: DexcomBoyda
-    @Inject lateinit var notificationStore: NotificationStore
+    @Inject lateinit var notificationUiBinder: NotificationUiBinder
 
     private val disposables = CompositeDisposable()
     private var _binding: FragmentDashboardBinding? = null
@@ -186,7 +185,6 @@ class DashboardFragment : DaggerFragment() {
         }
 
         binding.overviewNotifications.layoutManager = LinearLayoutManager(context)
-        notificationStore.updateNotifications(binding.overviewNotifications)
 
         syncGraphRange(preferences.get(IntNonKey.RangeToDisplay), false)
 
@@ -269,14 +267,11 @@ class DashboardFragment : DaggerFragment() {
     override fun onResume() {
         super.onResume()
         viewModel.start()
-        disposables += activePlugin.activeOverview.overviewBus
-            .toObservable(EventUpdateOverviewNotification::class.java)
-            .observeOn(aapsSchedulers.main)
-            .subscribe({
-                notificationStore.updateNotifications(binding.overviewNotifications)
-            }, {
-                aapsLogger.error(LTag.UI, "Error updating notifications", it)
-            })
+        notificationUiBinder.bind(
+            overviewBus = activePlugin.activeOverview.overviewBus,
+            notificationsView = binding.overviewNotifications,
+            disposable = disposables,
+        )
         disposables += rxBus
             .toObservable(EventPreferenceChange::class.java)
             .observeOn(aapsSchedulers.main)
