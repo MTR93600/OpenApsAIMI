@@ -798,6 +798,37 @@ class PumpIO(
     }
 
     /**
+     * Forcefully resets the connection.
+     *
+     * This stops all internal loops and forces the Bluetooth device to reset its connection,
+     * ensuring all resources are released. Unlike [disconnect], this does not attempt
+     * to send a disconnect packet to the pump.
+     */
+    suspend fun resetConnection() {
+        rtButtonConfirmationBarrier.trySend(false)
+        stopCMDPingHeartbeat()
+        stopRTKeepAliveHeartbeat()
+
+        transportLayerIO.stop(null) {
+            try {
+                withContext(bluetoothDevice.ioDispatcher + NonCancellable) {
+                    bluetoothDevice.resetConnection()
+                }
+            } catch (t: Throwable) {
+                logger(LogLevel.ERROR) { "Error during resetConnection: $t" }
+            }
+        }
+
+        internalScope = null
+        internalScopeJob?.cancelAndJoin()
+        internalScopeJob = null
+        _currentModeFlow.value = null
+        onNewDisplayFrame(null)
+        
+        logger(LogLevel.DEBUG) { "Pump IO connection reset" }
+    }
+
+    /**
      * Reads the current datetime of the pump in COMMAND (CMD) mode.
      *
      * The current datetime is always given in localtime.

@@ -248,6 +248,11 @@ class MedtrumService : DaggerService(), BLECommCallback {
         bleComm.disconnect(from)
     }
 
+    fun resetConnection(reason: String) {
+        medtrumPump.connectionState = ConnectionState.DISCONNECTING
+        bleComm.resetConnection(reason)
+    }
+
     fun readPumpStatus() {
         rxBus.send(EventPumpStatusChanged(rh.gs(R.string.getting_pump_status)))
         updateTimeIfNeeded(false)

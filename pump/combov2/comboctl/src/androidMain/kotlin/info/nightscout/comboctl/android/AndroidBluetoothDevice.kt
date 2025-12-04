@@ -178,7 +178,7 @@ class AndroidBluetoothDevice(
      * Abort any ongoing connection attempt and fully release Bluetooth resources so that
      * a follow-up connect() call starts from a clean slate.
      */
-    fun resetConnection() {
+    override fun resetConnection() {
         logger(LogLevel.DEBUG) { "Resetting connection to device with address $address" }
         disconnectImpl()
     }
@@ -258,6 +258,7 @@ class AndroidBluetoothDevice(
         canDoIO = false
         abortConnectAttempt = true
 
+        // Close streams first
         if (inputStream != null) {
             try {
                 logger(LogLevel.DEBUG) { "Closing input stream" }
@@ -280,6 +281,7 @@ class AndroidBluetoothDevice(
             }
         }
 
+        // Then close the socket
         if (systemBluetoothSocket != null) {
             try {
                 logger(LogLevel.DEBUG) { "Closing Bluetooth socket" }

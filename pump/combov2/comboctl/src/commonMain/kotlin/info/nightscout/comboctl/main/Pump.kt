@@ -1016,6 +1016,20 @@ class Pump(
     }
 
     /**
+     * Forcefully resets the connection.
+     *
+     * This stops all internal loops and forces the Bluetooth device to reset its connection,
+     * ensuring all resources are released.
+     */
+    suspend fun resetConnection() {
+        pumpIO.resetConnection()
+        _statusFlow.value = null
+        parsedDisplayFrameStream.resetAll()
+        reconnectAttemptsEnabled = false
+        setState(State.Disconnected)
+    }
+
+    /**
      * [ProgressReporter] flow for keeping track of the progress of [setBasalProfile].
      */
     val setBasalProfileFlow = setBasalProfileReporter.progressFlow
