@@ -764,7 +764,7 @@ class ComboV2Plugin @Inject constructor(
                     // coroutine suspension happening anymore, so there's
                     // no point in a such cancelAndJoin() call by now.
                     connectionSetupJob = null
-                    disconnectInternal(forceDisconnect = true, reset = true)
+                    disconnectInternal(forceDisconnect = true)
 
                     ToastUtils.showToastInUiThread(context, rh.gs(R.string.combov2_could_not_connect))
                 } else {
@@ -786,7 +786,7 @@ class ComboV2Plugin @Inject constructor(
         } catch (e: Exception) {
             aapsLogger.error(LTag.PUMP, "Connection failure: $e")
             ToastUtils.showToastInUiThread(context, rh.gs(R.string.combov2_could_not_connect))
-            disconnectInternal(forceDisconnect = true, reset = true)
+            disconnectInternal(forceDisconnect = true)
         }
     }
 
@@ -1966,7 +1966,7 @@ class ComboV2Plugin @Inject constructor(
 
     // Marked as synchronized since this may get called by a finishing
     // connect operation and by the command queue at the same time.
-    @Synchronized private fun disconnectInternal(forceDisconnect: Boolean, reset: Boolean = false) {
+    @Synchronized private fun disconnectInternal(forceDisconnect: Boolean) {
         // Sometimes, the CommandQueue may decide to call disconnect while the
         // driver is still busy with something, for example because some checks
         // are being performed. Ignore disconnect requests in that case, unless
@@ -2030,23 +2030,13 @@ class ComboV2Plugin @Inject constructor(
                 // Case #1 from above
                 aapsLogger.debug(LTag.PUMP, "Cancelling ongoing connect attempt")
                 connectionSetupJob?.cancel()
-                if (reset) {
-                    aapsLogger.debug(LTag.PUMP, "Resetting connection")
-                    pumpToDisconnect.resetConnection()
-                } else {
-                    pumpToDisconnect.disconnect()
-                }
+                pumpToDisconnect.disconnect()
                 connectionSetupJob?.join()
             } else {
                 // Case #2 from above
                 aapsLogger.debug(LTag.PUMP, "Disconnecting Combo (if not disconnected already by a cancelling request)")
                 connectionSetupJob?.cancelAndJoin()
-                if (reset) {
-                    aapsLogger.debug(LTag.PUMP, "Resetting connection")
-                    pumpToDisconnect.resetConnection()
-                } else {
-                    pumpToDisconnect.disconnect()
-                }
+                pumpToDisconnect.disconnect()
             }
 
             aapsLogger.debug(LTag.PUMP, "Combo disconnected; cancelling UI flows coroutine")
@@ -2159,7 +2149,7 @@ class ComboV2Plugin @Inject constructor(
     }
 
     private fun unpairDueToPumpDataError() {
-        disconnectInternal(forceDisconnect = true, reset = true)
+        disconnectInternal(forceDisconnect = true)
         uiInteraction.addNotificationValidTo(
             id = Notification.PUMP_ERROR,
             date = dateUtil.now(),
@@ -2195,12 +2185,12 @@ class ComboV2Plugin @Inject constructor(
             notifyAboutComboAlert(e.alertScreenContent)
 
             // Disconnect since we are now in the Error state.
-            disconnectInternal(forceDisconnect = true, reset = true)
+            disconnectInternal(forceDisconnect = true)
 
             throw e
         } catch (t: Throwable) {
             // Disconnect since we are now in the Error state.
-            disconnectInternal(forceDisconnect = true, reset = true)
+            disconnectInternal(forceDisconnect = true)
             throw t
         }
     }

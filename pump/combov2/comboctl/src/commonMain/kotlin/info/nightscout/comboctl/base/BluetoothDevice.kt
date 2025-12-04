@@ -48,15 +48,6 @@ abstract class BluetoothDevice(ioDispatcher: CoroutineDispatcher) : BlockingComb
     abstract fun disconnect()
 
     /**
-     * Forcefully reset the connection, ensuring all resources are released.
-     * This is intended to be used when a standard disconnect might not be sufficient
-     * or when recovering from a bad state.
-     */
-    open fun resetConnection() {
-        disconnect()
-    }
-
-    /**
      * Unpairs this device.
      *
      * Once this was called, this [BluetoothDevice] instance must not be used anymore.
