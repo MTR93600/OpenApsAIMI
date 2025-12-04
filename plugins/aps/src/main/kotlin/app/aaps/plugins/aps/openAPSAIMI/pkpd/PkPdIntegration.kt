@@ -22,6 +22,7 @@ class PkPdIntegration(private val preferences: Preferences) {
         val tailPolicy: TailAwareSmbPolicy
     )
 
+    private var cachedConfig: Config? = null
     private var estimator: AdaptivePkPdEstimator? = null
     private var lastBounds: PkPdBounds? = null
     private var fusion: IsfFusion? = null
@@ -43,13 +44,25 @@ class PkPdIntegration(private val preferences: Preferences) {
         mealContext: MealAggressionContext? = null
     ): PkPdRuntime? {
         val config = readConfig()
-        if (!config.enabled) {
+        // If the configuration changed, clear cached objects so they are rebuilt
+        if (cachedConfig == null || cachedConfig != config) {
+            cachedConfig = config
             estimator = null
             fusion = null
             damping = null
             lastBounds = null
             lastFusionBounds = null
             lastTailPolicy = null
+        }
+        if (!config.enabled) {
+            // When disabled we also clear caches
+            estimator = null
+            fusion = null
+            damping = null
+            lastBounds = null
+            lastFusionBounds = null
+            lastTailPolicy = null
+            cachedConfig = null
             return null
         }
 
@@ -57,6 +70,7 @@ class PkPdIntegration(private val preferences: Preferences) {
             lastPersisted = clampParams(config.initial, config.bounds)
         }
 
+        // Objects are created lazily; ensure* will reuse existing instances when possible
         val estimator = ensureEstimator(config)
         val fusion = ensureFusion(config.isfBounds)
         val damping = ensureDamping(config.tailPolicy)
@@ -135,8 +149,8 @@ class PkPdIntegration(private val preferences: Preferences) {
 
     private fun ensureEstimator(config: Config): AdaptivePkPdEstimator {
         val learningCfg = PkPdLearningConfig(bounds = config.bounds)
-        val needNew = estimator == null || lastBounds != config.bounds
-        if (needNew) {
+        // Re‑create estimator only when we have never created one or the bounds changed
+        if (estimator == null || lastBounds != config.bounds) {
             val start = estimator?.params()?.let { clampParams(it, config.bounds) }
                 ?: clampParams(lastPersisted ?: config.initial, config.bounds)
             estimator = AdaptivePkPdEstimator(LogNormalKernel(), learningCfg, start)
