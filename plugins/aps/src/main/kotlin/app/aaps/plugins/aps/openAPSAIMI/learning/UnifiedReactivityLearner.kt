@@ -282,7 +282,7 @@ class UnifiedReactivityLearner @Inject constructor(
             val alpha = 0.80  // Faster adaptation (was 0.15)
             
             // Apply EMA: New = (Target * alpha) + (Old * (1-alpha))
-            globalFactor = (targetFactor * alpha + globalFactor * (1 - alpha)).coerceIn(0.6, 6.0)
+            globalFactor = (targetFactor * alpha + globalFactor * (1 - alpha)).coerceIn(0.9, 6.0)
         }
         
         val reasonsStr = reasons.joinToString(", ")
