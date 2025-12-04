@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<merge xmlns:android="http://schemas.android.com/apk/res/android"
+<merge xmlns:tools="http://schemas.android.com/tools"
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -14,50 +15,53 @@
             android:layout_width="12dp"
             android:layout_height="12dp"
             android:background="@drawable/dashboard_loop_indicator"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
         <TextView
             android:id="@+id/loop_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="8dp"
-            android:textColor="@color/dashboard_on_surface"
             android:alpha="0.7"
             android:text="Closed Loop"
+            android:textColor="@color/dashboard_on_surface"
             android:textSize="12sp"
+            app:layout_constraintBottom_toBottomOf="@id/loop_indicator"
             app:layout_constraintEnd_toStartOf="@id/loop_indicator"
-            app:layout_constraintTop_toTopOf="@id/loop_indicator"
-            app:layout_constraintBottom_toBottomOf="@id/loop_indicator" />
+            app:layout_constraintTop_toTopOf="@id/loop_indicator" />
 
         <!-- Unicorn Icon (Left of Glucose) - Slightly larger -->
-        <ImageView
-            android:id="@+id/unicorn_icon"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
-            android:layout_marginEnd="8dp"
-            android:contentDescription="@string/dashboard_unicorn_status"
-            android:src="@drawable/unicorn"
-            app:layout_constraintHorizontal_chainStyle="packed"
-            app:layout_constraintBottom_toBottomOf="@id/glucose_value"
-            app:layout_constraintEnd_toStartOf="@id/glucose_value"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="@id/glucose_value" />
 
 
         <!-- Glucose Value (Center) -->
+
+        <ImageView
+            android:id="@+id/unicorn_icon"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_marginEnd="8dp"
+            android:contentDescription="@string/dashboard_unicorn_status"
+            android:src="@drawable/unicorn"
+            app:layout_constraintBottom_toBottomOf="@id/glucose_value"
+            app:layout_constraintEnd_toStartOf="@id/glucose_value"
+            app:layout_constraintHorizontal_chainStyle="packed"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@id/glucose_value"
+            app:layout_constraintVertical_bias="0.0" />
+
         <TextView
             android:id="@+id/glucose_value"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:textColor="@color/dashboard_on_surface"
-            android:textAppearance="@style/TextAppearance.MaterialComponents.Headline3"
-            android:textStyle="bold"
             android:text="--"
-            app:layout_constraintTop_toBottomOf="@id/loop_status"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Headline3"
+            android:textColor="@color/dashboard_on_surface"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toStartOf="@id/trend_arrow"
             app:layout_constraintStart_toEndOf="@id/unicorn_icon"
-            app:layout_constraintEnd_toStartOf="@id/trend_arrow" />
+            app:layout_constraintTop_toBottomOf="@id/loop_status" />
 
         <!-- Trend Arrow (Right of Glucose) -->
         <ImageView
@@ -66,9 +70,9 @@
             android:layout_height="40dp"
             android:layout_marginStart="8dp"
             android:contentDescription="@string/dashboard_trend"
-            app:layout_constraintStart_toEndOf="@id/glucose_value"
-            app:layout_constraintEnd_toStartOf="@id/delta_value"
             app:layout_constraintBottom_toBottomOf="@id/glucose_value"
+            app:layout_constraintEnd_toStartOf="@id/delta_value"
+            app:layout_constraintStart_toEndOf="@id/glucose_value"
             app:layout_constraintTop_toTopOf="@id/glucose_value" />
 
         <!-- Delta (Bottom Center) -->
@@ -77,13 +81,13 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
-            android:textColor="@color/dashboard_on_surface"
             android:alpha="0.8"
-            android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
             android:text="--"
-            app:layout_constraintStart_toEndOf="@id/trend_arrow"
-            app:layout_constraintEnd_toEndOf="parent"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
+            android:textColor="@color/dashboard_on_surface"
             app:layout_constraintBottom_toBottomOf="@id/glucose_value"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/trend_arrow"
             app:layout_constraintTop_toTopOf="@id/glucose_value" />
 
         <!-- IOB (Below Glucose) -->
@@ -94,8 +98,8 @@
             android:layout_marginTop="16dp"
             android:textColor="@color/dashboard_on_surface"
             android:textSize="14sp"
-            app:layout_constraintTop_toBottomOf="@id/glucose_value"
-            app:layout_constraintStart_toStartOf="parent" />
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/glucose_value" />
 
         <!-- Pump Status (Below IOB) -->
         <TextView
@@ -103,11 +107,11 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
+            android:alpha="0.8"
             android:textColor="@color/dashboard_on_surface"
             android:textSize="12sp"
-            android:alpha="0.8"
-            app:layout_constraintTop_toBottomOf="@id/iob_text"
-            app:layout_constraintStart_toStartOf="parent" />
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/iob_text" />
 
         <!-- Prediction (Below Pump) -->
         <TextView
@@ -115,11 +119,11 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
+            android:alpha="0.8"
             android:textColor="@color/dashboard_on_surface"
             android:textSize="12sp"
-            android:alpha="0.8"
-            app:layout_constraintTop_toBottomOf="@id/pump_status_text"
-            app:layout_constraintStart_toStartOf="parent" />
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/pump_status_text" />
 
         <!-- Time Ago (Bottom Right) -->
         <TextView
@@ -127,10 +131,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:textColor="@color/dashboard_on_surface"
             android:alpha="0.5"
-            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
             android:text="--"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+            android:textColor="@color/dashboard_on_surface"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/prediction_text" />
