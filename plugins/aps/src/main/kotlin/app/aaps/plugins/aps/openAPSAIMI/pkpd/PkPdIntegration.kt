@@ -30,7 +30,7 @@ class PkPdIntegration(private val preferences: Preferences) {
     private var damping: SmbDamping? = null
     private var lastTailPolicy: TailAwareSmbPolicy? = null
     private var lastPersisted: PkPdParams? = null
-
+@Synchronized
     fun computeRuntime(
         epochMillis: Long,
         bg: Double,
