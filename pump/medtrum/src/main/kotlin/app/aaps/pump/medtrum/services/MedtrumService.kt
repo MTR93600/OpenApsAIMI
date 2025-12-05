@@ -353,6 +353,7 @@ class MedtrumService : DaggerService(), BLECommCallback {
         medtrumPump.bolusDone = false
         medtrumPump.bolusStopped = false
         medtrumPump.bolusErrorReason = null
+        BolusProgressData.delivered = 0.0
 
         if (!sendBolusCommand(insulin)) {
             medtrumPump.bolusErrorReason = rh.gs(R.string.bolus_error_reason_unable_to_send_command)
