@@ -29,7 +29,9 @@ class SmbDampingUsecaseTest {
             original = 1.0,
             out = 0.8,
             factor = 0.8,
-            reason = "test"
+            reason = "test",
+            lateFatMult = 1.0,
+            mealBypass = false
         )
         every { pkpdRuntime.dampSmbWithAudit(any(), any(), any(), any()) } returns audit
 

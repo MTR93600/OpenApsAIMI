@@ -41,6 +41,7 @@ import app.aaps.plugins.aps.openAPSAIMI.extensions.asRounded
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
 import app.aaps.plugins.aps.openAPSAIMI.model.LoopContext
+import app.aaps.plugins.aps.openAPSAIMI.model.PumpCaps
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.MealAggressionContext
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
@@ -105,6 +106,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val wCycleFacade: WCycleFacade,
     private val wCyclePreferences: WCyclePreferences,
     private val wCycleLearner: WCycleLearner,
+    private val pumpCapabilityValidator: app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator,
     context: Context
 ) {
     @Inject lateinit var persistenceLayer: PersistenceLayer
@@ -960,7 +962,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val predDelta = predictedDelta(getRecentDeltas()).toFloat()
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
         val isEarlyAutodrive = !night && !isMealMode && autodrive &&
-            bgNow > hypoGuard && bgNow > 110 && detectMealOnset(delta, predDelta, bgacc.toFloat(), predictedBg.toFloat(), targetBg)
+            bgNow > hypoGuard && bgNow > 110 && detectMealOnset(delta, predDelta, bgacc.toFloat(), predictedBg.toFloat(), profile.target_bg.toFloat())
 
         // 3) Tendance & ajustement
         val bgTrend = calculateBgTrend(getRecentBGs(), StringBuilder())
@@ -2931,7 +2933,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val recentBGs = getRecentBGs()
         val bgTrend = calculateBgTrend(recentBGs, reason)
         val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(),reason)
-        if (bg > 100 && predictedBg > 140 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition) {
+        if (bg > 100 && predictedBg > 140 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, profile.target_bg.toFloat()) && modesCondition) {
             rT.units = pbolusAS
             //rT.reason.append("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
             rT.reason.append(context.getString(R.string.reason_autodrive_early_meal, pbolusAS, combinedDelta, predicted, bgAcceleration.toDouble()))
@@ -3049,7 +3051,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val deliverAt = currentTime
 
         // TODO eliminate
-        val profile_current_basal = roundBasal(profile.current_basal)
+        // TODO eliminate
+        val pumpCaps = PumpCaps(
+            basalStep = 0.05,
+            bolusStep = 0.05,
+            minDurationMin = 30,
+            maxBasal = profile.max_basal,
+            maxSmb = 3.0
+        )
+        val profile_current_basal = pumpCapabilityValidator.validateBasal(profile.current_basal, pumpCaps)
         var basal: Double
 
         // TODO eliminate
