@@ -114,7 +114,7 @@ object SmbInstructionExecutor {
         val trainingEnabled = input.preferences.get(BooleanKey.OApsAIMIMLtraining)
         if (trainingEnabled && input.csvFile.exists()) {
             val allLines = input.csvFile.readLines()
-            val minutesToConsider = 2500.0
+            val minutesToConsider = 10000.0
             val linesToConsider = (minutesToConsider / 5).toInt()
             if (allLines.size > linesToConsider) {
                 val refined = hooks.refineSmb(
@@ -133,7 +133,7 @@ object SmbInstructionExecutor {
                 )
                 predictedSmb = refined
                 val maxIobPref = input.preferences.get(DoubleKey.ApsSmbMaxIob)
-                if (input.bg > 200 && input.delta > 4 && input.iob < maxIobPref) {
+                if (input.bg > 170 && input.delta > 4 && input.iob < maxIobPref) {
                     input.rT.reason.appendLine(
                         input.context.getString(
                             R.string.reason_boost_hyper,
@@ -142,7 +142,7 @@ object SmbInstructionExecutor {
                         )
                     )
                     predictedSmb *= 1.7f
-                } else if (input.bg > 180 && input.delta > 3 && input.iob < maxIobPref) {
+                } else if (input.bg > 150 && input.delta > 3 && input.iob < maxIobPref) {
                     input.rT.reason.appendLine(
                         input.context.getString(
                             R.string.reason_boost_hyper_2,
@@ -154,7 +154,7 @@ object SmbInstructionExecutor {
                 }
 
                 basal = when {
-                    input.honeymoon && input.bg < 170 -> input.basalaimi * 0.65
+                    input.honeymoon && input.bg < 170 -> input.basalaimi * 1.0
                     else -> input.basalaimi.toDouble()
                 }
                 basal = hooks.roundBasal(basal)
