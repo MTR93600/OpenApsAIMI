@@ -39,5 +39,6 @@ dependencies {
     //Logger
     api(libs.org.slf4j.api)
 
+    testImplementation("io.mockk:mockk:1.13.8")
     ksp(libs.com.google.dagger.android.processor)
 }
