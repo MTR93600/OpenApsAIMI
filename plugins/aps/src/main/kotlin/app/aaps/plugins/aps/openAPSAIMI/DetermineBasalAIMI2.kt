@@ -960,7 +960,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val predDelta = predictedDelta(getRecentDeltas()).toFloat()
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
         val isEarlyAutodrive = !night && !isMealMode && autodrive &&
-            bgNow > hypoGuard && bgNow > 110 && detectMealOnset(delta, predDelta, bgacc.toFloat(), predictedBg.toFloat(), profile.targetMgdl.toFloat())
+            bgNow > hypoGuard && bgNow > 110 && detectMealOnset(delta, predDelta, bgacc.toFloat(), predictedBg.toFloat(), targetBg)
 
         // 3) Tendance & ajustement
         val bgTrend = calculateBgTrend(getRecentBGs(), StringBuilder())
@@ -2931,7 +2931,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val recentBGs = getRecentBGs()
         val bgTrend = calculateBgTrend(recentBGs, reason)
         val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(),reason)
-        if (bg > 100 && predictedBg > 140 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, profile.targetMgdl.toFloat()) && modesCondition) {
+        if (bg > 100 && predictedBg > 140 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition) {
             rT.units = pbolusAS
             //rT.reason.append("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
             rT.reason.append(context.getString(R.string.reason_autodrive_early_meal, pbolusAS, combinedDelta, predicted, bgAcceleration.toDouble()))
