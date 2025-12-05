@@ -31,6 +31,7 @@ class BasalDecisionEngine @Inject constructor(
         val variableSensitivity: Double,
         val profileSens: Double,
         val predictedBg: Double,
+        val targetBg: Double, // Added targetBg
         val eventualBg: Double,
         val iob: Double,
         val maxIob: Double,
@@ -81,7 +82,7 @@ class BasalDecisionEngine @Inject constructor(
     data class Helpers(
         val calculateRate: (Double, Double, Double, String) -> Double,
         val calculateBasalRate: (Double, Double, Double) -> Double,
-        val detectMealOnset: (Float, Float, Float) -> Boolean,
+        val detectMealOnset: (Float, Float, Float, Float, Float) -> Boolean,
         val round: (Double, Int) -> Double
     )
 
@@ -228,14 +229,17 @@ class BasalDecisionEngine @Inject constructor(
 
         if (helpers.detectMealOnset(
                 input.delta.toFloat(),
-                input.delta.toFloat(), // Fix: was predictedBg, causing false positives
-                input.bgAcceleration.toFloat()
+                input.delta.toFloat(), // predictedDelta placeholder
+                input.bgAcceleration.toFloat(),
+                input.predictedBg.toFloat(),
+                input.targetBg.toFloat()
             ) &&
             input.modesCondition &&
             input.bg > 100 &&
             input.predictedBg > 110 && // Added safety check
             input.autodrive
         ) {
+
             chosenRate = input.forcedBasal
             overrideSafety = true
             rT.reason.append(context.getString(R.string.reason_early_meal, input.forcedBasal))

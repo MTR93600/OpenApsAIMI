@@ -75,6 +75,7 @@ class BasalDecisionEngineTest {
                         variableSensitivity = 20.0, // High sensitivity (aggressive PKPD)
                         profileSens = 40.0, // Base sensitivity
                         predictedBg = 160.0,
+                        targetBg = 100.0,
                         eventualBg = 160.0,
                         iob = 2.0,
                         maxIob = 5.0,
@@ -131,7 +132,7 @@ class BasalDecisionEngineTest {
                         calculateBasalRate = { basal, current, mult ->
                             if (basal == 0.0) current * mult else basal * mult
                         },
-                        detectMealOnset = { _, _, _ -> false },
+                        detectMealOnset = { _, _, _, _, _ -> false },
                         round = { v, _ -> v }
                 )
 

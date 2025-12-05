@@ -2631,9 +2631,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return finalPeak
     }
 
-    fun detectMealOnset(delta: Float, predictedDelta: Float, acceleration: Float): Boolean {
+    fun detectMealOnset(delta: Float, predictedDelta: Float, acceleration: Float, predictedBg: Float, targetBg: Float): Boolean {
         val combinedDelta = (delta + predictedDelta) / 2.0f
-        return combinedDelta > 3.0f && acceleration > 1.2f
+        
+        // 1. Existing strict check
+        if (combinedDelta > 3.0f && acceleration > 1.2f) return true
+
+        // 2. Harmonized check (normalized rise)
+        val normalizedRise = ((predictedBg - targetBg) / 70.0f).coerceIn(0.0f, 1.0f)
+        if (normalizedRise > 0.3f && combinedDelta > 2.0f && acceleration > 0.5f) return true
+
+        return false
     }
 
     private fun parseNotes(startMinAgo: Int, endMinAgo: Int): String {
@@ -4219,6 +4227,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 variableSensitivity = variableSensitivity.toDouble(),
                 profileSens = profile.sens,
                 predictedBg = predictedBg.toDouble(),
+                targetBg = targetBg.toDouble(),
                 eventualBg = eventualBG,
                 iob = iob.toDouble(),
                 maxIob = maxIob,
