@@ -61,14 +61,6 @@ class AndroidBluetoothDevice(
 
         abortConnectAttempt = false
 
-        // Discovery interferes with RFCOMM connections; cancel any ongoing discovery before connecting.
-        checkForConnectPermission(androidContext) {
-            if (systemBluetoothAdapter.isDiscovering) {
-                logger(LogLevel.DEBUG) { "Cancelling discovery before attempting to connect" }
-                systemBluetoothAdapter.cancelDiscovery()
-            }
-        }
-
         lateinit var device: SystemBluetoothDevice
 
         try {
@@ -172,15 +164,6 @@ class AndroidBluetoothDevice(
         disconnectImpl()
 
         logger(LogLevel.INFO) { "RFCOMM connection with device with address $address terminated" }
-    }
-
-    /**
-     * Abort any ongoing connection attempt and fully release Bluetooth resources so that
-     * a follow-up connect() call starts from a clean slate.
-     */
-    fun resetConnection() {
-        logger(LogLevel.DEBUG) { "Resetting connection to device with address $address" }
-        disconnectImpl()
     }
 
     override fun unpair() {
