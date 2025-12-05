@@ -38,8 +38,8 @@
 
         <ImageView
             android:id="@+id/unicorn_icon"
-            android:layout_width="80dp"
-            android:layout_height="80dp"
+            android:layout_width="70dp"
+            android:layout_height="70dp"
             android:layout_marginEnd="8dp"
             android:contentDescription="@string/dashboard_unicorn_status"
             android:src="@drawable/unicorn"
