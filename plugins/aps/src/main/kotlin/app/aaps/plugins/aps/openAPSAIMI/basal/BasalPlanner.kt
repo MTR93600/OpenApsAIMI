@@ -21,7 +21,8 @@ class BasalPlanner @Inject constructor(
     private val log: AAPSLogger
 ) {
     // ===== Paramètres par défaut (prudence) =====
-    private val HYPO_SUSPEND_MGDL = 75.0      // seuil direct suspend
+    private val HYPO_HARD_LIMIT = 60.0    // seuil sécurité absolue
+    private val HYPO_SUSPEND_MGDL = 75.0      // seuil conditionnel (trend)
     private val HYPO_SUSPEND_SOFT = 85.0      // seuil "soft" si Δ négatif
     private val HYPO_SUSPEND_MIN = 30
 
@@ -62,12 +63,35 @@ class BasalPlanner @Inject constructor(
         if (profileBasal <= 0.0) return null
 
         // 1) Hypo guard / suspend
-        if (mgdl <= HYPO_SUSPEND_MGDL || (mgdl <= HYPO_SUSPEND_SOFT && d5 < 0.0)) {
+        // A) Hard limit : BG <= 60 -> Suspend immédiat
+        if (mgdl <= HYPO_HARD_LIMIT) {
             return BasalPlan(
                 rateUph = 0.0,
                 durationMin = HYPO_SUSPEND_MIN,
-                reason = "Hypo guard: BG=$mgdl, Δ=${fmt1(d5)} → suspend ${HYPO_SUSPEND_MIN}m"
+                reason = "Hard Hypo guard: BG=$mgdl <= $HYPO_HARD_LIMIT"
             )
+        }
+
+        // B) Soft limit : BG <= 75
+        //    - Si chute (d5 < 0) -> Suspend
+        //    - Si stable/hausse (d5 >= 0) -> Micro-resume (50%) pour éviter le rebond
+        if (mgdl <= HYPO_SUSPEND_MGDL) {
+            if (d5 < 0.0) {
+                return BasalPlan(
+                    rateUph = 0.0,
+                    durationMin = HYPO_SUSPEND_MIN,
+                    reason = "Soft Hypo guard: BG=$mgdl, Δ=${fmt1(d5)} < 0 -> suspend"
+                )
+            } else {
+                // Trend positif ou plat -> on maintient un filet de basal
+                val safeRate = max(0.05, profileBasal * 0.5)
+                val rate = clampAndQuantize(safeRate, profileBasal, maxBasal, step)
+                return BasalPlan(
+                    rateUph = rate,
+                    durationMin = HYPO_SUSPEND_MIN,
+                    reason = "Soft Hypo guard (rising): BG=$mgdl, Δ=${fmt1(d5)} >= 0 -> safe basal ${fmt2(rate)}U/h"
+                )
+            }
         }
 
         // 2) Micro-resume après 0 basal prolongé

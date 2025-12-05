@@ -33,13 +33,34 @@ class BasalPlannerTest {
     }
 
     @Test
-    fun `test plan hypo guard`() {
-        val ctx = createLoopContext(bg = 70.0)
+    fun `test plan hard limit`() {
+        // BG = 55 <= 60 -> Suspend
+        val ctx = createLoopContext(bg = 55.0, delta = 0.0)
         val plan = planner.plan(ctx)
         assertNotNull(plan)
         assertEquals(0.0, plan!!.rateUph, 0.01)
-        assertEquals(30, plan.durationMin)
-        assert(plan.reason.startsWith("Hypo guard"))
+        assert(plan.reason.startsWith("Hard Hypo guard"))
+    }
+
+    @Test
+    fun `test plan soft limit dropping`() {
+        // BG = 70 <= 75, Delta = -2.0 -> Suspend
+        val ctx = createLoopContext(bg = 70.0, delta = -2.0)
+        val plan = planner.plan(ctx)
+        assertNotNull(plan)
+        assertEquals(0.0, plan!!.rateUph, 0.01)
+        assert(plan.reason.startsWith("Soft Hypo guard"))
+    }
+
+    @Test
+    fun `test plan soft limit rising`() {
+        // BG = 70 <= 75, Delta = +2.0 -> Micro-resume (50%)
+        // Profile basal = 1.0 -> 0.5 U/h
+        val ctx = createLoopContext(bg = 70.0, delta = 2.0, profileBasal = 1.0)
+        val plan = planner.plan(ctx)
+        assertNotNull(plan)
+        assertEquals(0.5, plan!!.rateUph, 0.01)
+        assert(plan.reason.startsWith("Soft Hypo guard (rising)"))
     }
 
     @Test
