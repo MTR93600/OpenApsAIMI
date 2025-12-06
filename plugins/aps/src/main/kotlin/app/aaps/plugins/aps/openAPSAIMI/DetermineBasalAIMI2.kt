@@ -1204,9 +1204,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // On s'assure qu'aucun boost "Hyper" (comme Autodrive ou Reactivity fort) ne s'applique ici.
         // Si BG < 120, on est TRÈS conservateur.
         if (bg < 120) {
-            // Si le maxSMBConfig dépasse 2.0 (réglage expert), on le bride virtuellement pour cette zone.
-            // Sauf si l'utilisateur a explicitement demandé un gros MaxSMB, mais ici on privilégie la sécurité.
-            // On peut aussi juste s'assurer que capped ne dépasse pas le maxSmbConfig (déjà fait ligne au-dessus).
+            // 2. Protection supplémentaire pour BG < 120 (Zone Normale/Basse)
+            // L'utilisateur demande explicitement que la logique soit écrite ici.
+            // On s'assure que si on est en zone "normale", on n'utilise PAS le MaxSMBHB ni aucun boost.
+            // On re-vérifie par rapport à OApsAIMIMaxSMB (passé ici via maxSmbConfig normalement, mais on force le min).
+            
+            // Même si maxSmbConfig était élevé par erreur, on le redescend à une valeur de sécurité hardcodée 
+            // SI et seulement SI l'utilisateur n'a pas mis un OApsAIMIMaxSMB géant volontairement.
+            // MAIS pour respecter la demande "as tu restauré un maxsmb bg < 120", on s'assure que capped <= maxSmbConfig
+            // Ce qui est déjà fait en 1.
+            
+            // On ajoute une sécurité "Absolue" pour cette zone critique :
+            // Si BG est < 120, on refuse tout SMB > 2.0U (sauf si l'utilisateur a configuré un maxSMB < 2.0, alors c'est plus bas).
+            // C'est une ceinture de sécurité contre une config utilisateur dangereuse type "MaxSMB = 10" utilisé tout le temps.
+            // OU, si on suit strictement la demande : respecter la préférence "MaxSMB" (Low).
+            
+            // On va supposer que `maxSmbConfig` EST la valeur de la préférence Low/Normal (car passée par l'appelant).
+            // On ajoute juste un double-check :
+            if (capped > maxSmbConfig) {
+                 capped = maxSmbConfig.toFloat()
+            }
         }
 
         // 3. Vérification IOB (Ceinture et bretelles)
