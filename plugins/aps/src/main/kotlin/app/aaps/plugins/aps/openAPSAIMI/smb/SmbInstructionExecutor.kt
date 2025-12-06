@@ -267,6 +267,8 @@ object SmbInstructionExecutor {
         var aimiInsReq = actMissing / (s / (tau * tau) * tpD * (1 - tpD / tdD) * kotlin.math.exp(-tpD / tau))
 
         aimiInsReq = if (aimiInsReq < smbToGive) aimiInsReq else smbToGive.toDouble()
+        // 🔒 SAFETY: Cap strict ici aussi pour éviter qu'une heuristique interne ne dépasse le maxSMB
+        aimiInsReq = kotlin.math.min(aimiInsReq, input.maxSmb)
         val finalInsulinDose = hooks.roundDouble(aimiInsReq, 2)
 
         val doseMin = 0.0

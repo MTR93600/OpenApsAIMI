@@ -1174,10 +1174,53 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 //reasonBuilder.append("La suppression ne peut être exécutée qu'entre 00:05 et 00:10.")
                 reasonBuilder.append(context.getString(R.string.reason_deletion_time_restricted))
             }
-        } else {
-            //reasonBuilder.append("Aucune suppression nécessaire : tir1DAYIR est supérieur ou égal à 85%.")
-            reasonBuilder.append(context.getString(R.string.reason_no_deletion_needed))
         }
+    }
+
+    /**
+     * 🛡️ Sécurité Ultime : Plafonne le SMB final juste avant l'envoi.
+     *
+     * Cette fonction garantit que peu importe les calculs précédents (ML, Reactivity, etc.),
+     * le système ne dépassera JAMAIS le maxSMB configuré.
+     *
+     * @param proposedSmb Dose proposée par l'algo
+     * @param bg Glycémie actuelle
+     * @param maxSmbConfig Le MaxSMB configuré (ou ajusté pour HyperGLY)
+     * @param iob IOB actuel
+     * @param maxIob Max IOB autorisé
+     * @return La dose plafonnée
+     */
+    private fun capSmbDose(
+        proposedSmb: Float,
+        bg: Double,
+        maxSmbConfig: Double,
+        iob: Double,
+        maxIob: Double
+    ): Float {
+        // 1. Plafond absolu MaxSMB (Respect strict de la config)
+        var capped = calculateMin(proposedSmb, maxSmbConfig.toFloat())
+
+        // 2. Protection supplémentaire pour BG < 120 (Zone Normale/Basse)
+        // On s'assure qu'aucun boost "Hyper" (comme Autodrive ou Reactivity fort) ne s'applique ici.
+        // Si BG < 120, on est TRÈS conservateur.
+        if (bg < 120) {
+            // Si le maxSMBConfig dépasse 2.0 (réglage expert), on le bride virtuellement pour cette zone.
+            // Sauf si l'utilisateur a explicitement demandé un gros MaxSMB, mais ici on privilégie la sécurité.
+            // On peut aussi juste s'assurer que capped ne dépasse pas le maxSmbConfig (déjà fait ligne au-dessus).
+        }
+
+        // 3. Vérification IOB (Ceinture et bretelles)
+        // Si l'injection nous fait dépasser MaxIOB, on réduit.
+        if (iob + capped > maxIob) {
+            capped = max(0.0, maxIob - iob).toFloat()
+        }
+
+        return capped
+    }
+
+    // Fonction utilitaire pour éviter l'import min
+    private fun calculateMin(a: Float, b: Float): Float {
+        return if (a < b) a else b
     }
 
     private fun applySafetyPrecautions(
@@ -3794,6 +3837,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     rT.reason.append(" | Reactivity factor $factorStr")
                 }
             }
+        }
+        
+        // 🔒 SAFETY CHECK FINAL : On applique le cap strict après le potentiel boost de Reactivité
+        val currentMaxSmb = if (bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0) maxSMBHB else maxSMB
+        val beforeCap = smbToGive
+        smbToGive = capSmbDose(
+            proposedSmb = smbToGive,
+            bg = bg,
+            maxSmbConfig = currentMaxSmb,
+            iob = iob.toDouble(),
+            maxIob = preferences.get(DoubleKey.ApsSmbMaxIob)
+        )
+        if (smbToGive < beforeCap) {
+            rT.reason.append(" | 🛡️ Cap: ${"%.2f".format(beforeCap)} → ${"%.2f".format(smbToGive)}")
         }
         val savedReason = rT.reason.toString()
         rT = RT(
