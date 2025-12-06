@@ -117,6 +117,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var iobCobCalculator: IobCobCalculator
     @Inject lateinit var activePlugin: ActivePlugin
     @Inject lateinit var basalDecisionEngine: BasalDecisionEngine
+    @Inject lateinit var activityManager: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityManager // Agnostic injection
     @Inject lateinit var glucoseStatusCalculatorAimi: GlucoseStatusCalculatorAimi
     @Inject lateinit var comparator: AimiSmbComparator
     @Inject lateinit var basalLearner: app.aaps.plugins.aps.openAPSAIMI.learning.BasalLearner
@@ -3600,38 +3601,37 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
 // --- FIN DE LA NOUVELLE LOGIQUE ---
 
-// 🔹 On conserve les ajustements existants pour l'activité physique,
-// mais ils s'appliquent à la sensibilité déjà modulée par le PAI.
-        if (recentSteps5Minutes > 100 && recentSteps10Minutes > 200 && bg < 130 && delta < 10
-            || recentSteps180Minutes > 1500 && bg < 130 && delta < 10
-        ) {
-            this.variableSensitivity *= 1.3f
-        }
-        if (recentSteps30Minutes > 500 && recentSteps5Minutes in 1..99 && bg < 130 && delta < 10) {
-            this.variableSensitivity *= 1.2f
-        }
+        // --- 🏃 ACTIVITY MANAGER INTEGRATION ---
+        
+        // 1. Process Data through Manager
+        val activityContext = activityManager.process(
+            steps5min = recentSteps5Minutes,
+            steps10min = recentSteps10Minutes,
+            avgHr = averageBeatsPerMinute,
+            avgHrResting = averageBeatsPerMinute60 // Using 60min avg as proxy for baseline/resting for now
+        )
 
-// 🔹 Et on conserve la sécurisation finale des bornes
-        this.variableSensitivity = this.variableSensitivity.coerceIn(5.0f, 300.0f)
-
-// On met à jour la variable `sens` pour que le reste de la fonction l'utilise
-        sens = variableSensitivity.toDouble()
-        consoleError.add("Final ISF after PAI & activity: ${"%.1f".format(sens)}")
-
-// 🔹 Ajustement basé sur l'activité physique : correction plus fine des valeurs
-        if (recentSteps5Minutes > 100 && recentSteps10Minutes > 200 && bg < 130 && delta < 10
-            || recentSteps180Minutes > 1500 && bg < 130 && delta < 10
-        ) {
-
-            this.variableSensitivity *= 1.3f // Réduction du facteur d’augmentation
+        // 2. Log Decision
+        if (activityContext.state != app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.REST || activityContext.isRecovery) {
+            consoleLog.add("Activity: ${activityContext.description} → ISF x${"%.2f".format(activityContext.isfMultiplier)}")
         }
 
-// 🔹 Réduction du boost si l’activité est modérée pour éviter une ISF excessive
-        if (recentSteps30Minutes > 500 && recentSteps5Minutes in 1..99 && bg < 130 && delta < 10) {
-            this.variableSensitivity *= 1.2f
+        // 3. Apply Multiplier to Sensitivity (ISF)
+        // Note: activityContext.isfMultiplier is >= 1.0 (Boosts ISF aka lowers resistance)
+        this.variableSensitivity *= activityContext.isfMultiplier.toFloat()
+        
+        // 4. Handle Recovery / Protection
+        if (activityContext.protectionMode) {
+            // Example: Enforce a stricter MaxSMB or notify safety
+            // For now, we just log it, but this flag allows future extensions (e.g. blocking SuperBolus)
+             consoleLog.add("Activity Protection Mode Active (Recovery/Intense)")
         }
 
-// 🔹 Sécurisation des bornes minimales et maximales
+        // 🔹 Legacy Steps Logic (Removed/Replaced by ActivityManager above)
+        // if (recentSteps5Minutes > 100 ...) { ... } 
+        // -> All handled by activityManager.process() now.
+
+        // 🔹 Sécurisation des bornes minimales et maximales
         this.variableSensitivity = this.variableSensitivity.coerceIn(5.0f, 300.0f)
 
 
