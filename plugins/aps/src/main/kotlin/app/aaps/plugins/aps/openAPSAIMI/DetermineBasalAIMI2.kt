@@ -687,11 +687,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     fun calculateAdjustedDIA(
         baseDIAHours: Float,
         currentHour: Int,
-        recentSteps5Minutes: Int,
-        currentHR: Float,
-        averageHR60: Float,
         pumpAgeDays: Float,
-        iob: Double = 0.0 // Ajout du paramètre IOB
+        iob: Double = 0.0,
+        activityContext: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext
     ): Double {
         val reasonBuilder = StringBuilder()
 
@@ -714,26 +712,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             reasonBuilder.append(context.getString(R.string.night_adjustment))
         }
 
-        // 3. Ajustement en fonction de l'activité physique
-        if (recentSteps5Minutes > 200 && currentHR > averageHR60) {
-            // Exercice : absorption accélérée, réduction du DIA de 30%
-            diaMinutes *= 0.7f
-            //reasonBuilder.append("Physical activity detected: reduced by 30%\n")
-            reasonBuilder.append(context.getString(R.string.physical_activity_detected))
-        } else if (recentSteps5Minutes == 0 && currentHR > averageHR60) {
-            // Aucune activité mais HR élevée (stress) : absorption potentiellement plus lente, augmentation du DIA de 30%
-            diaMinutes *= 1.3f
-            //reasonBuilder.append("High HR without activity (stress): increased by 30%\n")
-            reasonBuilder.append(context.getString(R.string.high_hr_no_activity))
+    
+    // 3. Ajustement en fonction de l'activité physique (Via ActivityContext)
+    when (activityContext.state) {
+        app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE -> {
+             diaMinutes *= 0.7f
+             reasonBuilder.append(context.getString(R.string.reason_high_activity))
         }
-
-        // 4. Ajustement en fonction du niveau absolu de fréquence cardiaque
-        if (currentHR > 130f) {
-            // HR très élevée : circulation rapide, réduction du DIA de 30%
-            diaMinutes *= 0.7f
-            //reasonBuilder.append("High HR (>130bpm): reduced by 30%\n")
-            reasonBuilder.append(context.getString(R.string.high_hr_over_130))
+        app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.MODERATE -> {
+             diaMinutes *= 0.8f
+             reasonBuilder.append(" • Moderate Activity ➝ x0.8\n")
         }
+        app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.LIGHT -> {
+             diaMinutes *= 0.9f
+        }
+        else -> {
+            // REST
+            if (activityContext.isRecovery) {
+                // Recovery might imply lasting effects? For now, keep normal.
+            }
+        }
+    }    
 
         // 5. Ajustement en fonction de l'IOB (Insulin on Board)
         // Si le patient a déjà beaucoup d'insuline active, il faut réduire le DIA pour éviter l'hypoglycémie
@@ -3622,9 +3621,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         // 4. Handle Recovery / Protection
         if (activityContext.protectionMode) {
-            // Example: Enforce a stricter MaxSMB or notify safety
-            // For now, we just log it, but this flag allows future extensions (e.g. blocking SuperBolus)
              consoleLog.add("Activity Protection Mode Active (Recovery/Intense)")
+        }
+
+        // 5. Basal Modulation (Physiological Protection)
+        // Reduire la basale SI activité significative (évite accumulation IOB)
+        // Light: 100%, Moderate: 80%, Intense: 60%
+        val basalFactor = when (activityContext.state) {
+            app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.REST -> 1.0f
+            app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.LIGHT -> 1.0f 
+            app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.MODERATE -> 0.8f
+            app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE -> 0.6f
+        }
+        if (basalFactor < 1.0f) {
+            this.basalaimi *= basalFactor
+            consoleLog.add("Basal Activity Redux: x${"%.2f".format(basalFactor)} -> ${"%.2f".format(this.basalaimi)}U/h")
         }
 
         // 🔹 Legacy Steps Logic (Removed/Replaced by ActivityManager above)
@@ -3800,13 +3811,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     } else {
                         // 🔙 Sinon on garde toute ta logique dynamique legacy
                         calculateAdjustedDIA(
-                            baseDia,
-                            currentHour,
-                            steps5,
-                            currentHr,
-                            avgHr60,
-                            pumpAge,
-                            iobValue
+                            baseDIAHours = baseDia,
+                            currentHour = currentHour,
+                            pumpAgeDays = pumpAge,
+                            iob = iobValue,
+                            activityContext = activityContext
                         )
                     }
                 },
@@ -4247,6 +4256,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return finalResult
         } else {
             var insulinReq = smbToGive.toDouble()
+
+            // ⚡ ACTIVITY SAFETY CLAMP
+            // Si mode protection (Recovery ou Intense), on bride les SMB pour éviter l'hypo tardive
+            if (activityContext.protectionMode || activityContext.state == app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE) {
+                val safetyMax = maxSMB * 0.5 // 50% du MaxSMB autorisé
+                if (insulinReq > safetyMax) {
+                    insulinReq = safetyMax
+                    rT.reason.append(context.getString(R.string.reason_activity_cap, safetyMax)) // Ensure string exists or use plain text if risky
+                    consoleLog.add("SMB capped by Activity/Recovery (Limit: ${"%.2f".format(safetyMax)})")
+                }
+            }
+
             // 📝 SMB autorisés mais atténués lorsque le repas impose un IOB > max raisonnable.
             if (allowMealHighIob) {
                 insulinReq *= mealHighIobDamping

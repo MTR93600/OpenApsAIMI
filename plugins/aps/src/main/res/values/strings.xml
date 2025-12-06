@@ -895,6 +895,7 @@
     <string name="reason_prebolus_snack">&#160;Microbolusing Snack Mode %.2fU.</string>
     <string name="reason_maxsmb">&#160;| MaxSMB %.1f U&#160;\n</string>
     <string name="reason_cgm_calibrating">CGM is calibrating, in ??? state, or noise is high</string>
+    <string name="reason_activity_cap">Activity SMB Cap (%.2f)</string>
     <string name="reason_bg_data_old">If current system time %1$d is correct, then BG data is too old. The last BG data was read %2$.0f minutes ago at %3$d</string>
     <string name="reason_cgm_flat">Error: CGM data is unchanged for the past ~45m</string>
     <string name="cycle_day">♀️ Day %d/28 • </string>
