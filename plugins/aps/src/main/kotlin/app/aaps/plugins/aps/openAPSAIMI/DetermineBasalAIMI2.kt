@@ -3516,6 +3516,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val boostFactor = 1.2f // Boost de 20%
             this.basalaimi = (this.basalaimi * boostFactor).coerceAtMost(profile.max_basal.toFloat())
             consoleLog.add("Basal boosté (+20%) pour accélération BG.")
+        } else if (bg in 80.0..115.0 && glucoseStatus.delta > 1.0) {
+            // 🚀 EARLY BASAL: Réactivité précoce pour les montées douces (80-115 mg/dL)
+            // L'objectif est de ne pas attendre 130 mg/dL pour réagir.
+            
+            var earlyFactor = 1.0f
+            if (deltaAcceleration > 0.5) { 
+                // Accélération détectée (même faible)
+                earlyFactor = 1.25f // +25%
+                consoleLog.add("Early Basal: Accélération détectée en zone basse (+25%)")
+            } else { 
+                // Montée linéaire simple
+                earlyFactor = 1.15f // +15%
+                consoleLog.add("Early Basal: Montée progressive (+15%)")
+            }
+
+            // Application sécurisée : Max 1.5x le profil (restons modérés en zone basse)
+            val safeCap = (profile_current_basal * 1.5).toFloat()
+            this.basalaimi = (this.basalaimi * earlyFactor).coerceAtMost(safeCap)
         }
         // this.variableSensitivity = if (honeymoon) {
         //     if (bg < 150) {
