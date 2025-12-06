@@ -272,9 +272,12 @@ class BasalDecisionEngine @Inject constructor(
                     rT.reason.append("PredLow 65-80: 25% basal")
                 }
             } else if (highIobStop) {
-                chosenRate = input.profileCurrentBasal * 0.5
+                // High IOB but safe -> Floor instead of 50% fixed? (50% is actually good floor).
+                // Ensure it doesn't go to 0 if falling.
+                val safeFloor = if (input.delta < -2) 0.0 else input.profileCurrentBasal * 0.5
+                chosenRate = safeFloor
                 overrideSafety = false
-                rT.reason.append("HighIOB: 50% basal")
+                rT.reason.append("HighIOB: ${if(safeFloor>0) "50%" else "0% (dropping)"} basal")
             } else if (input.iob > input.maxIob && input.allowMealHighIob) {
                 chosenRate = max(input.profileCurrentBasal, input.currentTemp.rate)
                 rT.reason.append(context.getString(R.string.reason_meal_hold_profile_basal,
@@ -291,8 +294,14 @@ class BasalDecisionEngine @Inject constructor(
                 input.bg in 80.0..90.0 &&
                     input.slopeFromMaxDeviation <= 0 && input.iob > 0.1 && !input.sportTime -> {
                     if (input.delta < -2.0) {
-                        chosenRate = 0.0
-                        rT.reason.append(context.getString(R.string.bg_80_90_fall))
+                        // Was 0.0, now check if we can hold a floor
+                        if (input.bg > 85 && input.predictedBg > 80 && input.safetyDecision.isHypoRisk == false) {
+                             chosenRate = input.profileCurrentBasal * 0.2
+                             rT.reason.append("BG 80-90 fall safe: 20%")
+                        } else {
+                             chosenRate = 0.0
+                             rT.reason.append(context.getString(R.string.bg_80_90_fall))
+                        }
                     } else {
                         chosenRate = input.profileCurrentBasal * 0.25
                         rT.reason.append("BG 80-90 falling slow: 25%")

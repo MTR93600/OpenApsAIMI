@@ -4230,16 +4230,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             //rT.reason.append("IOB ${round(iob_data.iob, 2)} > maxIobLimit maxIobLimit")
             rT.reason.append(context.getString(R.string.reason_iob_max, round(iob_data.iob, 2), round(maxIobLimit, 2)))
             val finalResult = if (delta < 0) {
-                //rT.reason.append(", BG is dropping (delta $delta), setting basal to 0. ")
-                rT.reason.append(context.getString(R.string.reason_bg_dropping, delta))
-                setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false) // Basal à 0 pendant 30 minutes
+                // BG is dropping, usually we cut to 0. BUT check floor first.
+                val floorRate = applyBasalFloor(0.0, profile.current_basal, safetyDecision, activityContext, bg, delta.toDouble(), eventualBG.toDouble(), mealModeActive)
+                
+                if (floorRate > 0.0) {
+                     rT.reason.append(context.getString(R.string.reason_bg_dropping_floor, delta, floorRate))
+                     setTempBasal(floorRate, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                } else {
+                     rT.reason.append(context.getString(R.string.reason_bg_dropping, delta))
+                     setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                }
             } else if (currenttemp.duration > 15 && (roundBasal(basal) == roundBasal(currenttemp.rate))) {
                 rT.reason.append(", temp ${currenttemp.rate} ~ req ${round(basal, 2).withoutZeros()}U/hr. ")
                 rT
             } else {
                 //rT.reason.append("; setting current basal of ${round(basal, 2)} as temp. ")
-                rT.reason.append(context.getString(R.string.reason_set_temp_basal, round(basal, 2)))
-                setTempBasal(basal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                // Apply floor here too just in case 'basal' itself is super low? (Unlikely if it came from profile, but possible)
+                val safeBasal = applyBasalFloor(basal, profile.current_basal, safetyDecision, activityContext, bg, delta.toDouble(), eventualBG.toDouble(), mealModeActive)
+                rT.reason.append(context.getString(R.string.reason_set_temp_basal, round(safeBasal, 2)))
+                setTempBasal(safeBasal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
             }
             comparator.compare(
                 aimiResult = finalResult,
@@ -4451,5 +4460,57 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             return finalResult
         }
+    }
+
+    /**
+     * Applies a safety floor to the basal rate to prevent unnecessary cutoffs (0 U/h)
+     * during "cruise mode" or moderate activity, unless critical safety conditions are met.
+     */
+    private fun applyBasalFloor(
+        suggestedRate: Double,
+        profileBasal: Double,
+        safetyDecision: SafetyDecision,
+        activityContext: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext,
+        bg: Double,
+        delta: Double,
+        predictedBg: Double,
+        isMealActive: Boolean
+    ): Double {
+        // 1. Critical Safety: Always obey forced zero if true hypo risk
+        // If SafetyDecision says stopBasal, it's usually handled before this, but checked here too.
+        if (safetyDecision.stopBasal || bg < 70 || predictedBg < 65) {
+            return suggestedRate // Allow 0.0
+        }
+
+        // 2. Activity Context
+        val isActivity = activityContext.state != app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.REST
+        if (isActivity) {
+            // If dropping fast during activity, allow low basal/zero
+            if (delta < -3 || bg < 90) {
+                return suggestedRate
+            }
+            // Recovery: If rising/stable during activity, avoid ZERO.
+            // Enforce small floor e.g. 20% profile
+            val activityFloor = profileBasal * 0.2
+            if (suggestedRate < activityFloor) {
+                // If rising, push higher
+                if (delta > 0) return profileBasal * 0.5
+                return activityFloor
+            }
+            return suggestedRate
+        }
+
+        // 3. Cruise Mode (No Activity, No Critical Low)
+        // If system wants to cut to 0 (or very low) due to IOB/Delta rules:
+        val cruiseFloor = profileBasal * 0.45 // 45% floor
+        if (suggestedRate < cruiseFloor) {
+            // Only enforce floor if strictly safe
+            if (bg > 100 && delta > -2 && predictedBg > 80) {
+                // Return floor
+                return cruiseFloor
+            }
+        }
+
+        return suggestedRate
     }
 }

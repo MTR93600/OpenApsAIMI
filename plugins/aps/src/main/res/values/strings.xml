@@ -1019,4 +1019,5 @@
 
     <string name="hypo_risk_notification_text">Hypo risk detected: Rapid drop!</string>
     <string name="meal_dinner_maintain">Dinner mode maintain (%.1f floor)</string>
+    <string name="reason_bg_dropping_floor">Drop (Δ%.1f), safety floor (%.2f)</string>
 </resources>
