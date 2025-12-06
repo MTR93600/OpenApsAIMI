@@ -413,6 +413,16 @@ class BasalDecisionEngine @Inject constructor(
                         rT.reason.append(" (boost x${helpers.round(boost, 2)} due to PKPD)")
                     }
                     break
+                } else if (active && runtimeMin > 30 && runtimeMin <= 90 && active == input.dinnerTime) {
+                    // DINNER FIX: 30-90 min window
+                    // Maintain basal floor even if delta <= 0 (unless Safety override handled later or implicitly by 0 choice)
+                    // We only apply this if we didn't match the "Rising" condition above.
+                    if (input.bg > input.targetBg && input.predictedBg > 80) {
+                        val floorFactor = if (input.delta < -2) 0.5 else 0.8
+                        chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, floorFactor)
+                        rT.reason.append(context.getString(R.string.meal_dinner_maintain, floorFactor))
+                        break
+                    }
                 }
             }
         }

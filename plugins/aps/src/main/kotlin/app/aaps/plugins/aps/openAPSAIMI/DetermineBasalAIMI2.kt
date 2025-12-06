@@ -3627,11 +3627,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 5. Basal Modulation (Physiological Protection)
         // Reduire la basale SI activité significative (évite accumulation IOB)
         // Light: 100%, Moderate: 80%, Intense: 60%
+        val anyMealModeActive = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime
         val basalFactor = when (activityContext.state) {
             app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.REST -> 1.0f
-            app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.LIGHT -> 1.0f 
-            app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.MODERATE -> 0.8f
-            app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE -> 0.6f
+            app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.LIGHT -> 1.0f
+            app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.MODERATE -> if (anyMealModeActive) 0.9f else 0.8f
+            app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE -> if (anyMealModeActive) 0.8f else 0.6f
         }
         if (basalFactor < 1.0f) {
             this.basalaimi *= basalFactor

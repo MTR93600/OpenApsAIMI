@@ -1018,4 +1018,5 @@
     <string name="oaps_aimi_delta_pos_release_summary">If Δ exceeds this value, reduce/relax the intensification.</string>
 
     <string name="hypo_risk_notification_text">Hypo risk detected: Rapid drop!</string>
+    <string name="meal_dinner_maintain">Dinner mode maintain (%.1f floor)</string>
 </resources>
