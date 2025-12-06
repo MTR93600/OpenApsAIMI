@@ -25,7 +25,39 @@ data class SimulationInput(
     val mealData: MealData,
     val microscopicBolusAllowed: Boolean,
     val dynIsfMode: Boolean = true
-)
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as SimulationInput
+
+        if (timestamp != other.timestamp) return false
+        if (glucoseStatus != other.glucoseStatus) return false
+        if (currentTemp != other.currentTemp) return false
+        if (!iobData.contentEquals(other.iobData)) return false
+        if (profile != other.profile) return false
+        if (autosens != other.autosens) return false
+        if (mealData != other.mealData) return false
+        if (microscopicBolusAllowed != other.microscopicBolusAllowed) return false
+        if (dynIsfMode != other.dynIsfMode) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = timestamp.hashCode()
+        result = 31 * result + glucoseStatus.hashCode()
+        result = 31 * result + currentTemp.hashCode()
+        result = 31 * result + iobData.contentHashCode()
+        result = 31 * result + profile.hashCode()
+        result = 31 * result + autosens.hashCode()
+        result = 31 * result + mealData.hashCode()
+        result = 31 * result + microscopicBolusAllowed.hashCode()
+        result = 31 * result + dynIsfMode.hashCode()
+        return result
+    }
+}
 
 /**
  * Simulator to run AIMI vs SMB on historical data.
@@ -49,7 +81,7 @@ class AimiSmbSimulator @Inject constructor(
                     iob_data_array = input.iobData,
                     profile = input.profile,
                     autosens_data = input.autosens,
-                    meal_data = input.mealData,
+                    mealData = input.mealData, // Corrected parameter name
                     microBolusAllowed = input.microscopicBolusAllowed,
                     currentTime = input.timestamp,
                     flatBGsDetected = false, // Assuming detection logic handles this upstream or we can pass it
@@ -57,23 +89,13 @@ class AimiSmbSimulator @Inject constructor(
                     uiInteraction = uiInteraction
                 )
 
-                // Run SMB (using comparator's helper to map inputs)
-                // Note: In a real simulation, we might need to "mock" the SMB logic invocation 
-                // effectively duplicating what AimiSmbComparator.compare does but returning the object instead of logging.
-                
-                // For this implementation, we will simulate the entry creation manually 
-                // since AimiSmbComparator.compare is void and logs directly to CSV.
-                // Ideally we refactor AimiSmbComparator to return a Result, but for now we essentially duplicate the run logic here clearly.
-                
-                // TODO: Properly map inputs to SMB (requires access to private conversion methods or exposing them)
-                // Assuming we can access or duplicate the mapping logic:
+                // Mock SMB Result for now (in real scenario, mapped inputs would run smbLogic)
                 // val smbResult = smbLogic.determine_basal(...)
-                
-                // Construct ComparisonEntry manually or parse from the logs if we used the comparator.
-                // To keep it clean, we should likely refactor AimiSmbComparator to expose "getComparisonEntry" 
-                // but since I cannot easily change public APIs of simple comparators without breaking injection, 
-                // I will stub the simulation execution flow.
-                
+
+                // Convert to ComparisonEntry
+                val entry = createEntryFromAimi(input, aimiResult)
+                entries.add(entry)
+
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -81,5 +103,49 @@ class AimiSmbSimulator @Inject constructor(
 
         // Parse metrics from the collected entries (in a real implementation, we'd collect them)
         return ComparisonCsvParser().analyze(entries)
+    }
+
+    private fun createEntryFromAimi(input: SimulationInput, aimiResult: RT): ComparisonEntry {
+        // Essential fields
+        val aimiRate = aimiResult.rate ?: 0.0
+        val aimiSmb = aimiResult.units ?: 0.0
+
+        // Note: Missing SMB side data in this stub
+        return ComparisonEntry(
+            timestamp = input.timestamp,
+            date = java.time.Instant.ofEpochMilli(input.timestamp).toString(),
+            bg = input.glucoseStatus.glucose,
+            delta = input.glucoseStatus.delta,
+            shortAvgDelta = input.glucoseStatus.shortAvgDelta,
+            longAvgDelta = input.glucoseStatus.longAvgDelta,
+            iob = input.iobData.firstOrNull()?.iob ?: 0.0,
+            cob = input.mealData.mealCOB,
+            aimiRate = aimiRate,
+            aimiSmb = aimiSmb,
+            aimiDuration = aimiResult.duration ?: 0,
+            aimiEventualBg = aimiResult.eventualBG,
+            aimiTargetBg = aimiResult.targetBG,
+            smbRate = 0.0, // Placeholder
+            smbSmb = 0.0, // Placeholder
+            smbDuration = 0,
+            smbEventualBg = 0.0,
+            smbTargetBg = 0.0,
+            diffRate = 0.0,
+            diffSmb = 0.0,
+            diffEventualBg = 0.0,
+            maxIob = input.profile.max_iob,
+            maxBasal = input.profile.max_basal,
+            microBolusAllowed = input.microscopicBolusAllowed,
+            aimiInsulin30 = null,
+            smbInsulin30 = null,
+            cumulativeDiff = 0.0,
+            aimiActive = false,
+            smbActive = false,
+            bothActive = false,
+            aimiUamLast = null,
+            smbUamLast = null,
+            reasonAimi = aimiResult.reason ?: "",
+            reasonSmb = "Not Simulated"
+        )
     }
 }
