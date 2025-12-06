@@ -217,25 +217,47 @@ class ComparisonCsvParser {
             return ClinicalImpact(0.0, 0.0, 0.0, 0.0, 0.0)
         }
 
-        // Estimate total insulin = (basal rate * duration/60) + SMB
-        val totalInsulinAimi = entries.sumOf { entry ->
-            val basalInsulin = (entry.aimiRate ?: 0.0) * (entry.aimiDuration / 60.0)
-            val smbInsulin = entry.aimiSmb ?: 0.0
-            basalInsulin + smbInsulin
-        }
+        var totalInsulinAimi = 0.0
+        var totalInsulinSmb = 0.0
+        
+        // Iterate with index to calculate deltas
+        for (i in entries.indices) {
+            val entry = entries[i]
+            val nextEntry = entries.getOrNull(i + 1)
+            
+            // Calculate duration until next entry (default 5 min if last or gap > 10 min)
+            val durationMin = if (nextEntry != null) {
+                val diff = (nextEntry.timestamp - entry.timestamp) / 60000.0 // ms to min
+                if (diff in 1.0..15.0) diff else 5.0 // Cap holes at 5 min assumption or use 5 min if gap is huge
+            } else {
+                5.0
+            }
+            val durationHours = durationMin / 60.0
 
-        val totalInsulinSmb = entries.sumOf { entry ->
-            val basalInsulin = (entry.smbRate ?: 0.0) * (entry.smbDuration / 60.0)
-            val smbInsulin = entry.smbSmb ?: 0.0
-            basalInsulin + smbInsulin
+            // AIMI
+            val aimiBasal = (entry.aimiRate ?: 0.0) * durationHours
+            val aimiSmb = entry.aimiSmb ?: 0.0
+            totalInsulinAimi += (aimiBasal + aimiSmb)
+
+            // SMB
+            val smbBasal = (entry.smbRate ?: 0.0) * durationHours
+            val smbSmb = entry.smbSmb ?: 0.0
+            totalInsulinSmb += (smbBasal + smbSmb)
         }
 
         val cumulativeDiff = totalInsulinAimi - totalInsulinSmb
 
-        // Calculate average per hour (assuming 5-minute cycles)
-        val totalHours = (entries.size * 5.0) / 60.0
-        val avgInsulinPerHourAimi = if (totalHours > 0) totalInsulinAimi / totalHours else 0.0
-        val avgInsulinPerHourSmb = if (totalHours > 0) totalInsulinSmb / totalHours else 0.0
+        // Calculate average per hour
+        // Total duration is roughly (last - first) or entries * 5min
+        val totalHours = if (entries.isNotEmpty()) {
+             (entries.last().timestamp - entries.first().timestamp) / 3600000.0 
+        } else 0.0
+        
+        // Avoid division by zero
+        val safeHours = if (totalHours > 0.1) totalHours else (entries.size * 5.0 / 60.0)
+
+        val avgInsulinPerHourAimi = if (safeHours > 0) totalInsulinAimi / safeHours else 0.0
+        val avgInsulinPerHourSmb = if (safeHours > 0) totalInsulinSmb / safeHours else 0.0
 
         return ClinicalImpact(
             totalInsulinAimi = totalInsulinAimi,
@@ -243,6 +265,40 @@ class ComparisonCsvParser {
             cumulativeDiff = cumulativeDiff,
             avgInsulinPerHourAimi = avgInsulinPerHourAimi,
             avgInsulinPerHourSmb = avgInsulinPerHourSmb
+        )
+    }
+
+    fun calculateExpandedGlycemicMetrics(entries: List<ComparisonEntry>): GlycemicMetrics {
+        if (entries.isEmpty()) return GlycemicMetrics()
+        
+        val bgs = entries.map { it.bg }
+        val meanBg = bgs.average()
+        val stdDev = kotlin.math.sqrt(bgs.map { (it - meanBg) * (it - meanBg) }.average())
+        val cv = if (meanBg > 0) (stdDev / meanBg) * 100.0 else 0.0
+        
+        // GMI Formula: 3.31 + 0.02392 * meanBG_mg/dL
+        val gmi = 3.31 + 0.02392 * meanBg
+
+        val sortedBgs = bgs.sorted()
+        val medianBg = if (sortedBgs.isNotEmpty()) sortedBgs[sortedBgs.size / 2] else 0.0
+
+        // Time calculations (assuming 5 min per entry for simplicity, or we could use deltas like above)
+        // Here we use % of entries to match typical TIR calc
+        fun percentIn(range: ClosedFloatingPointRange<Double>) = 
+            (bgs.count { it in range }.toDouble() / bgs.size) * 100.0
+
+        return GlycemicMetrics(
+            meanBg = meanBg,
+            medianBg = medianBg,
+            stdDev = stdDev,
+            cv = cv,
+            gmi = gmi,
+            tir70_180 = percentIn(70.0..180.0),
+            tir70_140 = percentIn(70.0..140.0),
+            timeBelow70 = percentIn(0.0..69.9),
+            timeBelow54 = percentIn(0.0..53.9),
+            timeAbove180 = percentIn(180.1..1000.0),
+            timeAbove250 = percentIn(250.1..1000.0)
         )
     }
 
@@ -340,6 +396,7 @@ class ComparisonCsvParser {
             stats = stats,
             safety = safety,
             impact = impact,
+            glycemic = calculateExpandedGlycemicMetrics(entries),
             tir = tir,
             criticalMoments = criticalMoments,
             recommendation = recommendation

@@ -239,10 +239,13 @@ class AimiSmbComparator @Inject constructor(
         val diffSmb = aimiSmb - smbSmb
         val diffEventualBG = aimiEventualBG - smbEventualBG
 
-        // 📊 Insuline 30 min
-        val aimiInsulin30min = (aimiRate * 0.5) + aimiSmb
-        val smbInsulin30min = (smbRate * 0.5) + smbSmb
-        cumulativeDiff += (aimiInsulin30min - smbInsulin30min)
+        // 📊 Insuline "instant" (step 5 min = 1/12 h)
+        // Correction: On assume que ce rate s'applique pour les 5 prochaines minutes
+        // C'est une approximation, mais c'est mieux que d'ajouter "30 min de basal" toutes les 5 min
+        val stepHourFraction = 5.0 / 60.0 
+        val aimiInsulinStep = (aimiRate * stepHourFraction) + aimiSmb
+        val smbInsulinStep = (smbRate * stepHourFraction) + smbSmb
+        cumulativeDiff += (aimiInsulinStep - smbInsulinStep)
 
         // Flags d’activité
         val aimiActive = (aimiRate != 0.0 && aimiDuration > 0) || aimiSmb > 0.0
@@ -289,8 +292,8 @@ class AimiSmbComparator @Inject constructor(
             "%.2f".format(Locale.US, maxBasal),
             if (microBolusAllowed) "1" else "0",
             // Insuline
-            "%.3f".format(Locale.US, aimiInsulin30min),
-            "%.3f".format(Locale.US, smbInsulin30min),
+            "%.3f".format(Locale.US, aimiInsulinStep),
+            "%.3f".format(Locale.US, smbInsulinStep),
             "%.3f".format(Locale.US, cumulativeDiff),
             // Activity flags
             if (aimiActive) "1" else "0",
