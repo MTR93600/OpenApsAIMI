@@ -81,10 +81,10 @@ class BasalLearner @Inject constructor(
         if (tdd30Days > 0) {
             val tddRatio = tdd7Days / tdd30Days
             if (tddRatio > 1.1) {
-                newMultiplier *= 1.02 // Increase by 2% (was 1%)
+                newMultiplier *= 1.30 // Increase by 2% (was 1%)
                 log.debug(LTag.APS, "BasalLearner: TDD rising (Ratio $tddRatio), increasing basal.")
             } else if (tddRatio < 0.9) {
-                newMultiplier *= 0.98 // Decrease by 2% (was 1%)
+                newMultiplier *= 0.9 // Decrease by 2% (was 1%)
                 log.debug(LTag.APS, "BasalLearner: TDD falling (Ratio $tddRatio), decreasing basal.")
             }
         }
@@ -96,8 +96,8 @@ class BasalLearner @Inject constructor(
         
         // NEW: Handle High & Stable (Plateau)
         // If Avg BG > 150 and not dropping (slope > -0.5), we need more basal
-        if (avgFastingBg > 150.0 && fastingStabilityScore > -0.5) {
-            newMultiplier *= 1.10 // Increase by 10%
+        if (avgFastingBg > 130.0 && fastingStabilityScore > -0.5) {
+            newMultiplier *= 1.30 // Increase by 10%
             log.debug(LTag.APS, "BasalLearner: High & Stable (Avg $avgFastingBg, Slope $fastingStabilityScore), increasing basal significantly.")
         }
         // NEW: Handle Low & Stable
@@ -115,7 +115,7 @@ class BasalLearner @Inject constructor(
         }
 
         // Safety Clamp (0.7x to 1.5x) - Widened slightly
-        newMultiplier = max(0.7, min(1.5, newMultiplier))
+        newMultiplier = max(0.7, min(5.0, newMultiplier))
 
         if (newMultiplier != basalMultiplier) {
             log.debug(LTag.APS, "BasalLearner: Updating multiplier from $basalMultiplier to $newMultiplier")
