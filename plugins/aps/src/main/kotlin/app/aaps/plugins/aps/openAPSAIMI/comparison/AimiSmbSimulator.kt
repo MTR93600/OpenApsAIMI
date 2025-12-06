@@ -7,6 +7,7 @@ import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.OapsProfileAimi
+import app.aaps.core.interfaces.aps.RT
 import app.aaps.plugins.aps.openAPSSMB.DetermineBasalSMB
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalaimiSMB2
 import app.aaps.core.interfaces.ui.UiInteraction
