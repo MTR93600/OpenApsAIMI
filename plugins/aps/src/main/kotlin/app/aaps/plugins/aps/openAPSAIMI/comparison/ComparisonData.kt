@@ -60,8 +60,6 @@ data class ClinicalImpact(
     val cumulativeDiff: Double, // Positive = AIMI more aggressive
     val avgInsulinPerHourAimi: Double,
     val avgInsulinPerHourSmb: Double
-    val avgInsulinPerHourAimi: Double,
-    val avgInsulinPerHourSmb: Double
 )
 
 data class GlycemicMetrics(
@@ -108,14 +106,8 @@ data class FullComparisonReport(
     val stats: ComparisonStats,
     val safety: SafetyMetrics,
     val impact: ClinicalImpact,
-    val stats: ComparisonStats,
-    val safety: SafetyMetrics,
-    val impact: ClinicalImpact,
     val glycemic: GlycemicMetrics, // New Field
     val tir: ComparisonTir,
-    val criticalMoments: List<CriticalMoment>,
-    val recommendation: Recommendation
-)
     val criticalMoments: List<CriticalMoment>,
     val recommendation: Recommendation
 )
