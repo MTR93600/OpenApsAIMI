@@ -145,7 +145,7 @@ class AimiSmbSimulator @Inject constructor(
             bothActive = false,
             aimiUamLast = null,
             smbUamLast = null,
-            reasonAimi = aimiResult.reason ?: "",
+            reasonAimi = aimiResult.reason.toString(),
             reasonSmb = "Not Simulated"
         )
     }
