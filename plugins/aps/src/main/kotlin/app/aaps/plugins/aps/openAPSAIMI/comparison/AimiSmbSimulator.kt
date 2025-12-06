@@ -8,7 +8,8 @@ import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.plugins.aps.openAPSSMB.DetermineBasalSMB
-import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalAIMI2
+import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalaimiSMB2
+import app.aaps.core.interfaces.ui.UiInteraction
 import javax.inject.Inject
 
 /**
@@ -30,9 +31,10 @@ data class SimulationInput(
  * Simulator to run AIMI vs SMB on historical data.
  */
 class AimiSmbSimulator @Inject constructor(
-    private val aimiLogic: DetermineBasalAIMI2,
+    private val aimiLogic: DetermineBasalaimiSMB2,
     private val smbLogic: DetermineBasalSMB,
-    private val comparator: AimiSmbComparator // Used for converting profiles/Logging if needed
+    private val comparator: AimiSmbComparator, // Used for converting profiles/Logging if needed
+    private val uiInteraction: UiInteraction
 ) {
 
     fun runSimulation(inputs: List<SimulationInput>): FullComparisonReport {
@@ -51,7 +53,8 @@ class AimiSmbSimulator @Inject constructor(
                     microBolusAllowed = input.microscopicBolusAllowed,
                     currentTime = input.timestamp,
                     flatBGsDetected = false, // Assuming detection logic handles this upstream or we can pass it
-                    dynIsfMode = input.dynIsfMode
+                    dynIsfMode = input.dynIsfMode,
+                    uiInteraction = uiInteraction
                 )
 
                 // Run SMB (using comparator's helper to map inputs)
