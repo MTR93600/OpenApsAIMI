@@ -23,8 +23,8 @@ class SyncNsRunningModeTransaction(private val runningModes: List<RunningMode>) 
                     database.runningModeDao.updateExistingEntry(current)
                     result.invalidated.add(current)
                 }
-                // Allow update duration
-                if (current.duration != runningMode.duration) {
+                // Allow update duration to shorter only
+                if (current.duration != runningMode.duration && runningMode.duration < current.duration) {
                     current.duration = runningMode.duration
                     database.runningModeDao.updateExistingEntry(current)
                     result.updatedDuration.add(current)

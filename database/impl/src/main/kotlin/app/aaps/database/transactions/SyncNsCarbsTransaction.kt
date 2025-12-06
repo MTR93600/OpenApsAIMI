@@ -24,8 +24,8 @@ class SyncNsCarbsTransaction(private val carbs: List<Carbs>, private val nsClien
                     database.carbsDao.updateExistingEntry(current)
                     result.invalidated.add(current)
                 }
-                // and change duration
-                if (current.duration != carb.duration && nsClientMode) {
+                // and change duration to shorter only
+                if (current.duration != carb.duration && nsClientMode && carb.duration < current.duration) {
                     current.amount = carb.amount
                     current.duration = carb.duration
                     database.carbsDao.updateExistingEntry(current)

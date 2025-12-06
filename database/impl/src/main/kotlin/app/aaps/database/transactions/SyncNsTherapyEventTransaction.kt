@@ -24,7 +24,8 @@ class SyncNsTherapyEventTransaction(private val therapyEvents: List<TherapyEvent
                     database.therapyEventDao.updateExistingEntry(current)
                     result.invalidated.add(current)
                 }
-                if (current.duration != therapyEvent.duration && nsClientMode) {
+                // Allow update duration to shorter only
+                if (current.duration != therapyEvent.duration && nsClientMode && therapyEvent.duration < current.duration) {
                     current.duration = therapyEvent.duration
                     database.therapyEventDao.updateExistingEntry(current)
                     result.updatedDuration.add(current)

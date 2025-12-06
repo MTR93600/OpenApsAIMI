@@ -28,7 +28,8 @@ class SyncNsExtendedBolusTransaction(private val extendedBoluses: List<ExtendedB
                         database.extendedBolusDao.updateExistingEntry(current)
                         result.invalidated.add(current)
                     }
-                    if (current.duration != extendedBolus.duration && nsClientMode) {
+                    // Allow update duration to shorter only
+                    if (current.duration != extendedBolus.duration && nsClientMode && extendedBolus.duration < current.duration) {
                         current.duration = extendedBolus.duration
                         current.amount = extendedBolus.amount
                         database.extendedBolusDao.updateExistingEntry(current)
