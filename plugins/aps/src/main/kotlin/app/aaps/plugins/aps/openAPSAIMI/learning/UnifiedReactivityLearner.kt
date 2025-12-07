@@ -37,6 +37,7 @@ class UnifiedReactivityLearner @Inject constructor(
     
     companion object {
         private const val ANALYSIS_INTERVAL_MS = 30 * 60 * 1000L  // 30 minutes
+        private const val SHORT_ANALYSIS_INTERVAL_MS = 10 * 60 * 1000L  // 10 minutes for short-term
     }
     
 
@@ -48,6 +49,7 @@ class UnifiedReactivityLearner @Inject constructor(
         val cv_percent: Double,
         val hypo_count: Int,
         val globalFactor: Double,
+        val shortTermFactor: Double,
         val previousFactor: Double,
         val adjustmentReason: String
     )
@@ -82,10 +84,25 @@ class UnifiedReactivityLearner @Inject constructor(
     var globalFactor = 1.0
         private set
     
+    /**
+     * Facteur court terme (2h) pour réaction rapide aux événements aigus.
+     * S'adapte plus vite que globalFactor.
+     */
+    var shortTermFactor = 1.0
+        private set
+    
     private var lastAnalysisTime = 0L
+    private var lastShortAnalysisTime = 0L
     
     init {
         load()
+    }
+    
+    /**
+     * Retourne le facteur combiné (60% long terme, 40% court terme)
+     */
+    fun getCombinedFactor(): Double {
+        return (globalFactor * 0.60 + shortTermFactor * 0.40).coerceIn(0.7, 2.5)
     }
     
     /**
@@ -296,6 +313,7 @@ class UnifiedReactivityLearner @Inject constructor(
             cv_percent = perf.cv_percent,
             hypo_count = perf.hypo_count,
             globalFactor = globalFactor,
+            shortTermFactor = shortTermFactor,
             previousFactor = previousFactor,
             adjustmentReason = reasonsStr
         )
@@ -307,20 +325,117 @@ class UnifiedReactivityLearner @Inject constructor(
     }
     
     /**
-     * Appeler toutes les 6h depuis DetermineBasalAIMI2
+     * Appeler toutes les 5 min depuis DetermineBasalAIMI2.
+     * Gère deux échelles de temps: court terme (10 min) et long terme (30 min).
      */
     fun processIfNeeded() {
         val now = dateUtil.now()
         
-        if (now - lastAnalysisTime < ANALYSIS_INTERVAL_MS) {
-            return  // Pas encore le moment
+        // === SHORT-TERM ANALYSIS (every 10 min on last 2h) ===
+        if (now - lastShortAnalysisTime >= SHORT_ANALYSIS_INTERVAL_MS) {
+            val shortPerf = analyzeLast2h()
+            if (shortPerf != null) {
+                computeShortTermAdjustment(shortPerf)
+            }
+            lastShortAnalysisTime = now
         }
         
-        val perf = analyzeLast24h() ?: return
-        computeAdjustment(perf)
-        save()
+        // === LONG-TERM ANALYSIS (every 30 min on last 24h) ===
+        if (now - lastAnalysisTime >= ANALYSIS_INTERVAL_MS) {
+            val perf = analyzeLast24h() ?: return
+            computeAdjustment(perf)
+            lastAnalysisTime = now
+        }
         
-        lastAnalysisTime = now
+        save()
+    }
+    
+    /**
+     * Analyse les dernières 2h pour réaction rapide
+     */
+    fun analyzeLast2h(): GlycemicPerformance? {
+        val now = dateUtil.now()
+        val start = now - (2 * 60 * 60 * 1000L)  // 2 hours
+        
+        try {
+            val bgReadingsList = persistenceLayer.getBgReadingsDataFromTime(start, false)
+                .blockingGet()
+            
+            val bgReadings = bgReadingsList
+                .mapNotNull { gv -> if (gv.value > 39.0) gv.value else null }
+            
+            if (bgReadings.isEmpty() || bgReadings.size < 6) {
+                return null  // Need at least 30 min of data
+            }
+            
+            val inRange70_140 = bgReadings.count { it in 70.0..140.0 }
+            val inRange140_180 = bgReadings.count { it in 140.0..180.0 }
+            val inRange180_250 = bgReadings.count { it in 180.0..250.0 }
+            val above250 = bgReadings.count { it > 250.0 }
+            val above180 = bgReadings.count { it > 180.0 }
+            
+            val tir70_140 = (inRange70_140.toDouble() / bgReadings.size) * 100.0
+            val tir140_180 = (inRange140_180.toDouble() / bgReadings.size) * 100.0
+            val tir70_180 = tir70_140 + tir140_180
+            val tir180_250 = (inRange180_250.toDouble() / bgReadings.size) * 100.0
+            val tir_above_250 = (above250.toDouble() / bgReadings.size) * 100.0
+            val tir_above_180 = (above180.toDouble() / bgReadings.size) * 100.0
+            
+            var hypo_count = 0
+            var inHypo = false
+            for (bg in bgReadings) {
+                if (bg < 70.0 && !inHypo) { hypo_count++; inHypo = true }
+                else if (bg >= 70.0) { inHypo = false }
+            }
+            
+            val mean = bgReadings.average()
+            val variance = bgReadings.map { (it - mean).pow(2) }.average()
+            val cv_percent = (sqrt(variance) / mean) * 100.0
+            
+            var crossing_count = 0
+            for (i in 1 until bgReadings.size) {
+                if ((bgReadings[i-1] < 120 && bgReadings[i] > 120) || 
+                    (bgReadings[i-1] > 120 && bgReadings[i] < 120)) crossing_count++
+            }
+            
+            return GlycemicPerformance(
+                tir70_180, tir70_140, tir140_180, tir180_250, tir_above_250,
+                tir_above_180, hypo_count, cv_percent, crossing_count, mean, bgReadings.size
+            )
+        } catch (e: Exception) {
+            log.error(LTag.APS, "UnifiedReactivityLearner: Error in 2h analysis", e)
+            return null
+        }
+    }
+    
+    /**
+     * Ajustement court terme plus agressif
+     */
+    private fun computeShortTermAdjustment(perf: GlycemicPerformance) {
+        var adjustment = 1.0
+        
+        // Hypo in last 2h: Strong reduction
+        if (perf.hypo_count >= 1) {
+            adjustment *= 0.85
+            log.info(LTag.APS, "UnifiedReactivityLearner: Short-term hypo detected, reducing factor")
+        }
+        
+        // Persistent hyper in last 2h
+        if (perf.tir_above_180 > 60 && perf.hypo_count == 0) {  // More than 60% of 2h in hyper
+            adjustment *= 1.20
+            log.info(LTag.APS, "UnifiedReactivityLearner: Short-term hyper (${perf.tir_above_180.toInt()}%), increasing factor")
+        } else if (perf.tir_above_180 > 40 && perf.hypo_count == 0) {
+            adjustment *= 1.10
+        }
+        
+        // High variability
+        if (perf.cv_percent > 35) {
+            adjustment *= 0.95
+        }
+        
+        val target = shortTermFactor * adjustment
+        val alpha = 0.40  // Fast EMA
+        shortTermFactor = (target * alpha + shortTermFactor * (1 - alpha)).coerceIn(0.7, 2.0)
     }
     
     /**
@@ -360,8 +475,10 @@ class UnifiedReactivityLearner @Inject constructor(
             if (file.exists()) {
                 val json = JSONObject(file.readText())
                 globalFactor = json.optDouble("globalFactor", 1.0)
+                shortTermFactor = json.optDouble("shortTermFactor", 1.0)
                 lastAnalysisTime = json.optLong("lastAnalysisTime", 0L)
-                log.info(LTag.APS, "UnifiedReactivityLearner: Loaded globalFactor=$globalFactor")
+                lastShortAnalysisTime = json.optLong("lastShortAnalysisTime", 0L)
+                log.info(LTag.APS, "UnifiedReactivityLearner: Loaded globalFactor=$globalFactor, shortTerm=$shortTermFactor")
             }
         } catch (e: Exception) {
             log.error(LTag.APS, "UnifiedReactivityLearner: Erreur chargement", e)
@@ -372,9 +489,11 @@ class UnifiedReactivityLearner @Inject constructor(
         try {
             val json = JSONObject()
             json.put("globalFactor", globalFactor)
+            json.put("shortTermFactor", shortTermFactor)
             json.put("lastAnalysisTime", lastAnalysisTime)
+            json.put("lastShortAnalysisTime", lastShortAnalysisTime)
             file.writeText(json.toString())
-            log.debug(LTag.APS, "UnifiedReactivityLearner: Saved globalFactor=$globalFactor")
+            log.debug(LTag.APS, "UnifiedReactivityLearner: Saved globalFactor=$globalFactor, shortTerm=$shortTermFactor")
         } catch (e: Exception) {
             log.error(LTag.APS, "UnifiedReactivityLearner: Erreur sauvegarde", e)
         }

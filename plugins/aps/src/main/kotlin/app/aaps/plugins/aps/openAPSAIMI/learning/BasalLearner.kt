@@ -7,9 +7,20 @@ import org.json.JSONObject
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 
+/**
+ * Multi-Scale Basal Learner
+ * 
+ * Replaces the old single-scale (1x/day) learner with a 3-tier approach:
+ * - Short-term (30 min): Reacts to acute changes (stress, illness onset)
+ * - Medium-term (6 hours): Captures intra-day patterns
+ * - Long-term (24 hours): Structural adjustments based on TDD
+ * 
+ * Each tier uses exponentially weighted observations to prioritize recent data.
+ */
 @Singleton
 class BasalLearner @Inject constructor(
     private val context: Context,
@@ -17,119 +28,284 @@ class BasalLearner @Inject constructor(
 ) {
     private val fileName = "aimi_basal_learner.json"
     private val file by lazy { File(context.filesDir, fileName) }
-    
-    // Learned multiplier (default 1.0)
-    var basalMultiplier: Double = 1.0
-        private set
+
+    // === Multi-Scale Multipliers ===
+    private var shortTermMultiplier = 1.0   // Updated every 30 min
+    private var mediumTermMultiplier = 1.0  // Updated every 6 hours
+    private var longTermMultiplier = 1.0    // Updated every 24 hours
+
+    // === Timestamps for update scheduling ===
+    private var lastShortUpdate = 0L
+    private var lastMediumUpdate = 0L
+    private var lastLongUpdate = 0L
+
+    // === Accumulators for each scale ===
+    private val shortTermBuffer = mutableListOf<TimestampedBg>()
+    private val mediumTermBuffer = mutableListOf<TimestampedBg>()
+
+    // === Legacy accumulators (for long-term, fasting-based) ===
+    private var fastingSamples = 0
+    private var fastingSlopeSum = 0.0
+    private var fastingBgSum = 0.0
+
+    // === Configuration ===
+    companion object {
+        private const val SHORT_INTERVAL_MS = 30 * 60 * 1000L       // 30 minutes
+        private const val MEDIUM_INTERVAL_MS = 6 * 60 * 60 * 1000L  // 6 hours
+        private const val LONG_INTERVAL_MS = 24 * 60 * 60 * 1000L   // 24 hours
+
+        private const val SHORT_WINDOW_MS = 2 * 60 * 60 * 1000L     // 2 hours of data
+        private const val MEDIUM_WINDOW_MS = 24 * 60 * 60 * 1000L   // 24 hours of data
+
+        private const val TAU_SHORT_MS = 30 * 60 * 1000.0           // 30 min half-life
+        private const val TAU_MEDIUM_MS = 3 * 60 * 60 * 1000.0      // 3 hour half-life
+
+        private const val ALPHA_SHORT = 0.25   // Fast EMA
+        private const val ALPHA_MEDIUM = 0.15  // Moderate EMA
+        private const val ALPHA_LONG = 0.10    // Slow EMA
+
+        private const val CLAMP_MIN = 0.70
+        private const val CLAMP_MAX = 2.50
+    }
+
+    data class TimestampedBg(val timestamp: Long, val bg: Double, val delta: Double)
 
     init {
         load()
     }
 
+    /**
+     * Returns the combined multiplier from all three scales.
+     * Weights: Short 40%, Medium 35%, Long 25%
+     */
     fun getMultiplier(): Double {
-        return basalMultiplier
+        val combined = shortTermMultiplier * 0.40 +
+                       mediumTermMultiplier * 0.35 +
+                       longTermMultiplier * 0.25
+        return combined.coerceIn(CLAMP_MIN, CLAMP_MAX)
     }
 
-    private var fastingSamples = 0
-    private var fastingSlopeSum = 0.0
-    private var fastingBgSum = 0.0 // Track average BG
-    private var lastUpdateTimestamp = 0L
-
     /**
-     * Processes new data to update the learner.
-     * Should be called periodically (e.g. every 5 minutes).
+     * Main processing function. Called every 5 minutes from DetermineBasalAIMI2.
      */
-    fun process(currentBg: Double, currentDelta: Double, tdd7Days: Double, tdd30Days: Double, isFastingTime: Boolean) {
+    fun process(
+        currentBg: Double,
+        currentDelta: Double,
+        tdd7Days: Double,
+        tdd30Days: Double,
+        isFastingTime: Boolean
+    ) {
         val now = System.currentTimeMillis()
-        
-        // Only update once per day (approx) or when enough data is gathered
-        if (now - lastUpdateTimestamp > 24 * 60 * 60 * 1000) {
-            // Calculate scores and update
-            val fastingScore = if (fastingSamples > 10) fastingSlopeSum / fastingSamples else 0.0
-            val avgFastingBg = if (fastingSamples > 10) fastingBgSum / fastingSamples else 100.0
-            
-            update(tdd7Days, tdd30Days, fastingScore, avgFastingBg)
-            
-            // Reset daily accumulators
-            fastingSamples = 0
-            fastingSlopeSum = 0.0
-            fastingBgSum = 0.0
-            lastUpdateTimestamp = now
-            save()
+        val observation = TimestampedBg(now, currentBg, currentDelta)
+
+        // Add to buffers
+        shortTermBuffer.add(observation)
+        mediumTermBuffer.add(observation)
+
+        // Prune old data
+        pruneBuffer(shortTermBuffer, SHORT_WINDOW_MS, now)
+        pruneBuffer(mediumTermBuffer, MEDIUM_WINDOW_MS, now)
+
+        // === SHORT-TERM UPDATE (every 30 min) ===
+        if (now - lastShortUpdate >= SHORT_INTERVAL_MS && shortTermBuffer.size >= 3) {
+            updateShortTerm(now)
+            lastShortUpdate = now
         }
 
-        // Collect data if fasting and BG is valid (removed upper limit of 140)
+        // === MEDIUM-TERM UPDATE (every 6 hours) ===
+        if (now - lastMediumUpdate >= MEDIUM_INTERVAL_MS && mediumTermBuffer.size >= 12) {
+            updateMediumTerm(now)
+            lastMediumUpdate = now
+        }
+
+        // === LONG-TERM UPDATE (every 24 hours, fasting-based) ===
         if (isFastingTime && currentBg > 70.0) {
             fastingSamples++
             fastingSlopeSum += currentDelta
             fastingBgSum += currentBg
         }
+
+        if (now - lastLongUpdate >= LONG_INTERVAL_MS) {
+            updateLongTerm(tdd7Days, tdd30Days)
+            lastLongUpdate = now
+            // Reset fasting accumulators
+            fastingSamples = 0
+            fastingSlopeSum = 0.0
+            fastingBgSum = 0.0
+        }
+
+        save()
     }
 
     /**
-     * Updates the basal multiplier based on TDD trends and fasting stability.
-     * @param tdd7Days Average TDD over 7 days
-     * @param tdd30Days Average TDD over 30 days (if available, else use tdd7Days)
-     * @param fastingStabilityScore -1.0 (dropping) to 1.0 (rising), 0.0 is stable.
-     * @param avgFastingBg Average BG during fasting periods
+     * Event-driven update: Force recalculation after hypo events.
+     * Called externally when hypo is detected.
      */
-    private fun update(tdd7Days: Double, tdd30Days: Double, fastingStabilityScore: Double, avgFastingBg: Double) {
-        var newMultiplier = basalMultiplier
+    fun onHypoDetected() {
+        log.info(LTag.APS, "BasalLearner: Hypo detected, reducing short-term multiplier")
+        shortTermMultiplier = (shortTermMultiplier * 0.90).coerceIn(CLAMP_MIN, CLAMP_MAX)
+        save()
+    }
 
-        // 1. TDD Trend Analysis
-        // If 7-day TDD is significantly higher than 30-day, we might need more basal.
+    /**
+     * Event-driven update: Force recalculation after persistent hyper.
+     * Called externally when hyper > 180 for > 60 min.
+     */
+    fun onPersistentHyper() {
+        log.info(LTag.APS, "BasalLearner: Persistent hyper detected, increasing short-term multiplier")
+        shortTermMultiplier = (shortTermMultiplier * 1.10).coerceIn(CLAMP_MIN, CLAMP_MAX)
+        save()
+    }
+
+    // === Private Update Functions ===
+
+    private fun updateShortTerm(now: Long) {
+        if (shortTermBuffer.isEmpty()) return
+
+        // Compute weighted average delta (temporal decay)
+        val weightedError = computeWeightedError(shortTermBuffer, now, TAU_SHORT_MS)
+
+        // Adjust multiplier based on error
+        // Positive error (rising) → need more basal → increase multiplier
+        // Negative error (dropping) → need less basal → decrease multiplier
+        val adjustment = when {
+            weightedError > 1.0 -> 1.05   // Rising → +5%
+            weightedError > 0.5 -> 1.02   // Slightly rising → +2%
+            weightedError < -1.0 -> 0.95  // Dropping → -5%
+            weightedError < -0.5 -> 0.98  // Slightly dropping → -2%
+            else -> 1.0                   // Stable
+        }
+
+        val newValue = shortTermMultiplier * adjustment
+        shortTermMultiplier = ema(shortTermMultiplier, newValue, ALPHA_SHORT).coerceIn(CLAMP_MIN, CLAMP_MAX)
+
+        log.debug(LTag.APS, "BasalLearner: Short-term update. WeightedError=${"%.2f".format(weightedError)}, " +
+            "Adjustment=$adjustment, NewMultiplier=${"%.3f".format(shortTermMultiplier)}")
+    }
+
+    private fun updateMediumTerm(now: Long) {
+        if (mediumTermBuffer.isEmpty()) return
+
+        val weightedError = computeWeightedError(mediumTermBuffer, now, TAU_MEDIUM_MS)
+        val avgBg = computeWeightedAvgBg(mediumTermBuffer, now, TAU_MEDIUM_MS)
+
+        // More nuanced adjustment based on both trend and level
+        val adjustment = when {
+            // High & Stable/Rising → Need significantly more
+            avgBg > 150 && weightedError >= -0.5 -> 1.12
+            // High & Dropping → Slight increase (still elevated)
+            avgBg > 150 && weightedError < -0.5 -> 1.05
+            // Low & Stable/Dropping → Need less
+            avgBg < 85 && weightedError <= 0.5 -> 0.90
+            // Low & Rising → Slight decrease
+            avgBg < 85 && weightedError > 0.5 -> 0.95
+            // Normal range, adjust based on trend
+            weightedError > 1.0 -> 1.06
+            weightedError > 0.5 -> 1.03
+            weightedError < -1.0 -> 0.94
+            weightedError < -0.5 -> 0.97
+            else -> 1.0
+        }
+
+        val newValue = mediumTermMultiplier * adjustment
+        mediumTermMultiplier = ema(mediumTermMultiplier, newValue, ALPHA_MEDIUM).coerceIn(CLAMP_MIN, CLAMP_MAX)
+
+        log.debug(LTag.APS, "BasalLearner: Medium-term update. AvgBG=${"%.0f".format(avgBg)}, " +
+            "WeightedError=${"%.2f".format(weightedError)}, NewMultiplier=${"%.3f".format(mediumTermMultiplier)}")
+    }
+
+    private fun updateLongTerm(tdd7Days: Double, tdd30Days: Double) {
+        val fastingScore = if (fastingSamples > 10) fastingSlopeSum / fastingSamples else 0.0
+        val avgFastingBg = if (fastingSamples > 10) fastingBgSum / fastingSamples else 100.0
+
+        var adjustment = 1.0
+
+        // TDD Trend Analysis
         if (tdd30Days > 0) {
             val tddRatio = tdd7Days / tdd30Days
-            if (tddRatio > 1.1) {
-                newMultiplier *= 1.30 // Increase by 2% (was 1%)
-                log.debug(LTag.APS, "BasalLearner: TDD rising (Ratio $tddRatio), increasing basal.")
-            } else if (tddRatio < 0.9) {
-                newMultiplier *= 0.9 // Decrease by 2% (was 1%)
-                log.debug(LTag.APS, "BasalLearner: TDD falling (Ratio $tddRatio), decreasing basal.")
+            adjustment *= when {
+                tddRatio > 1.15 -> 1.10  // Significant increase in insulin needs
+                tddRatio > 1.05 -> 1.05
+                tddRatio < 0.85 -> 0.90  // Significant decrease
+                tddRatio < 0.95 -> 0.95
+                else -> 1.0
             }
         }
 
-        // 2. Fasting Stability Analysis
-        // If fasting BG is consistently rising (score > 0.5), increase basal.
-        // If fasting BG is consistently dropping (score < -0.5), decrease basal.
-        // Score is average delta per 5 min.
-        
-        // NEW: Handle High & Stable (Plateau)
-        // If Avg BG > 150 and not dropping (slope > -0.5), we need more basal
-        if (avgFastingBg > 130.0 && fastingStabilityScore > -0.5) {
-            newMultiplier *= 1.30 // Increase by 10%
-            log.debug(LTag.APS, "BasalLearner: High & Stable (Avg $avgFastingBg, Slope $fastingStabilityScore), increasing basal significantly.")
-        }
-        // NEW: Handle Low & Stable
-        else if (avgFastingBg < 80.0 && fastingStabilityScore < 0.5) {
-            newMultiplier *= 0.90 // Decrease by 10%
-            log.debug(LTag.APS, "BasalLearner: Low & Stable (Avg $avgFastingBg, Slope $fastingStabilityScore), decreasing basal significantly.")
-        }
-        // Standard Slope Analysis
-        else if (fastingStabilityScore > 0.5) {
-            newMultiplier *= 1.10 // Increase by 10% (was 2%)
-            log.debug(LTag.APS, "BasalLearner: Fasting rise (AvgDelta $fastingStabilityScore), increasing basal.")
-        } else if (fastingStabilityScore < -0.5) {
-            newMultiplier *= 0.90 // Decrease by 10% (was 2%)
-            log.debug(LTag.APS, "BasalLearner: Fasting drop (AvgDelta $fastingStabilityScore), decreasing basal.")
+        // Fasting Analysis
+        adjustment *= when {
+            avgFastingBg > 140 && fastingScore > -0.5 -> 1.10  // High & stable/rising
+            avgFastingBg > 120 && fastingScore > 0.5 -> 1.08   // Elevated & rising
+            avgFastingBg < 80 && fastingScore < 0.5 -> 0.90    // Low & stable/dropping
+            fastingScore > 1.0 -> 1.06                         // Rising
+            fastingScore < -1.0 -> 0.94                        // Dropping
+            else -> 1.0
         }
 
-        // Safety Clamp (0.7x to 1.5x) - Widened slightly
-        newMultiplier = max(0.7, min(5.0, newMultiplier))
+        val newValue = longTermMultiplier * adjustment
+        longTermMultiplier = ema(longTermMultiplier, newValue, ALPHA_LONG).coerceIn(CLAMP_MIN, CLAMP_MAX)
 
-        if (newMultiplier != basalMultiplier) {
-            log.debug(LTag.APS, "BasalLearner: Updating multiplier from $basalMultiplier to $newMultiplier")
-            basalMultiplier = newMultiplier
-            save()
-        }
+        log.info(LTag.APS, "BasalLearner: Long-term update. TDD7/30=${"%.2f".format(tdd7Days/max(1.0, tdd30Days))}, " +
+            "AvgFastingBG=${"%.0f".format(avgFastingBg)}, FastingSlope=${"%.2f".format(fastingScore)}, " +
+            "NewMultiplier=${"%.3f".format(longTermMultiplier)}")
     }
+
+    // === Helper Functions ===
+
+    private fun computeWeightedError(buffer: List<TimestampedBg>, now: Long, tau: Double): Double {
+        if (buffer.isEmpty()) return 0.0
+
+        var weightedSum = 0.0
+        var weightSum = 0.0
+
+        for (obs in buffer) {
+            val ageMs = (now - obs.timestamp).toDouble()
+            val weight = exp(-ageMs / tau)
+            weightedSum += obs.delta * weight
+            weightSum += weight
+        }
+
+        return if (weightSum > 0) weightedSum / weightSum else 0.0
+    }
+
+    private fun computeWeightedAvgBg(buffer: List<TimestampedBg>, now: Long, tau: Double): Double {
+        if (buffer.isEmpty()) return 100.0
+
+        var weightedSum = 0.0
+        var weightSum = 0.0
+
+        for (obs in buffer) {
+            val ageMs = (now - obs.timestamp).toDouble()
+            val weight = exp(-ageMs / tau)
+            weightedSum += obs.bg * weight
+            weightSum += weight
+        }
+
+        return if (weightSum > 0) weightedSum / weightSum else 100.0
+    }
+
+    private fun pruneBuffer(buffer: MutableList<TimestampedBg>, windowMs: Long, now: Long) {
+        buffer.removeAll { now - it.timestamp > windowMs }
+    }
+
+    private fun ema(prev: Double, obs: Double, alpha: Double): Double {
+        return (1 - alpha) * prev + alpha * obs
+    }
+
+    // === Persistence ===
 
     private fun load() {
         try {
             if (file.exists()) {
                 val json = JSONObject(file.readText())
-                basalMultiplier = json.optDouble("basalMultiplier", 1.0)
-                lastUpdateTimestamp = json.optLong("lastUpdateTimestamp", 0L)
+                shortTermMultiplier = json.optDouble("shortTermMultiplier", 1.0)
+                mediumTermMultiplier = json.optDouble("mediumTermMultiplier", 1.0)
+                longTermMultiplier = json.optDouble("longTermMultiplier", 1.0)
+                lastShortUpdate = json.optLong("lastShortUpdate", 0L)
+                lastMediumUpdate = json.optLong("lastMediumUpdate", 0L)
+                lastLongUpdate = json.optLong("lastLongUpdate", 0L)
+                log.info(LTag.APS, "BasalLearner: Loaded multipliers S=${"%.3f".format(shortTermMultiplier)} " +
+                    "M=${"%.3f".format(mediumTermMultiplier)} L=${"%.3f".format(longTermMultiplier)}")
             }
         } catch (e: Exception) {
             log.error(LTag.APS, "Error loading BasalLearner data", e)
@@ -139,11 +315,20 @@ class BasalLearner @Inject constructor(
     private fun save() {
         try {
             val json = JSONObject()
-            json.put("basalMultiplier", basalMultiplier)
-            json.put("lastUpdateTimestamp", lastUpdateTimestamp)
+            json.put("shortTermMultiplier", shortTermMultiplier)
+            json.put("mediumTermMultiplier", mediumTermMultiplier)
+            json.put("longTermMultiplier", longTermMultiplier)
+            json.put("lastShortUpdate", lastShortUpdate)
+            json.put("lastMediumUpdate", lastMediumUpdate)
+            json.put("lastLongUpdate", lastLongUpdate)
             file.writeText(json.toString())
         } catch (e: Exception) {
             log.error(LTag.APS, "Error saving BasalLearner data", e)
         }
     }
+
+    // === Legacy API compatibility ===
+    @Deprecated("Use getMultiplier() instead", ReplaceWith("getMultiplier()"))
+    val basalMultiplier: Double
+        get() = getMultiplier()
 }

@@ -39,9 +39,11 @@ class AdaptivePkPdEstimator(
     ) {
         if (windowMin < cfg.minWindowMin || windowMin > cfg.maxWindowMin) return
         if (iobU < cfg.minIOBForLearningU) return
-        if (carbsActiveG > 5.0) return
+        // RELAXED: Allow learning with moderate carbs (was 5g, now 15g)
+        if (carbsActiveG > 15.0) return
         if (exerciseFlag) return
-        if (deltaMgDlPer5 > 3.0) return
+        // RELAXED: Allow learning during slower rises (was 3.0, now 5.0)
+        if (deltaMgDlPer5 > 5.0) return
 
         val p0 = state.get()
         val isfTddMgDlPerU = IsfTddProvider.isfTdd()
