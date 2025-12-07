@@ -1173,6 +1173,22 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     )
                 )
                 
+                // 🔧 Tools & Analysis Section
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.aimi_advisor_section)
+                })
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "AIMI_Advisor"
+                    title = rh.gs(R.string.aimi_advisor_title)
+                    summary = rh.gs(R.string.aimi_advisor_summary)
+                    setOnPreferenceClickListener {
+                        context.startActivity(
+                            Intent(context, app.aaps.plugins.aps.openAPSAIMI.advisor.AimiProfileAdvisorActivity::class.java)
+                        )
+                        true
+                    }
+                })
+                
                 addPreference(PreferenceCategory(context).apply {
                     title = rh.gs(R.string.oaps_aimi_ngr_title)
                 })
