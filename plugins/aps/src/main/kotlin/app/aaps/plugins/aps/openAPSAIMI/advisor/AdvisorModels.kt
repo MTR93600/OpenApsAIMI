@@ -53,14 +53,24 @@ enum class RecommendationPriority {
 }
 
 /**
+ * Severity classification for the overall score.
+ */
+enum class AdvisorSeverity {
+    GOOD,       // Score >= 7.0
+    WARNING,    // 4.0 <= Score < 7.0
+    CRITICAL    // Score < 4.0
+}
+
+/**
  * A single recommendation from the advisor.
+ * Uses Resource IDs for localization.
  */
 data class AimiRecommendation(
     val domain: RecommendationDomain,
     val priority: RecommendationPriority,
-    val title: String,
-    val description: String,
-    val suggestedChanges: List<String> = emptyList()
+    val titleResId: Int,
+    val descriptionResId: Int,
+    val actionsResIds: List<Int> = emptyList()
 )
 
 /**
@@ -70,7 +80,6 @@ data class AdvisorReport(
     val generatedAt: Long,
     val metrics: AdvisorMetrics,
     val overallScore: Double,           // 0-10 score
-    val overallAssessment: String,      // "Good", "Needs attention", etc.
-    val recommendations: List<AimiRecommendation>,
-    val summary: String
+    val overallSeverity: AdvisorSeverity,
+    val recommendations: List<AimiRecommendation>
 )

@@ -1026,4 +1026,57 @@
     <string name="aimi_advisor_title">AIMI Advisor</string>
     <string name="aimi_advisor_summary">Analyse les performances glycémiques et propose des ajustements de profil</string>
     <string name="aimi_advisor_section">Outils et Analyses</string>
+
+    <!-- AIMI ADVISOR SECTION -->
+    <string name="aimi_advisor_title">AIMI Advisor</string>
+
+    <string name="aimi_advisor_score_label_excellent">Excellent</string>
+    <string name="aimi_advisor_score_label_good">Bon</string>
+    <string name="aimi_advisor_score_label_warning">À améliorer</string>
+    <string name="aimi_advisor_score_label_attention">Attention requise</string>
+    <string name="aimi_advisor_score_label_critical">Action urgente</string>
+
+    <string name="aimi_advisor_period_label">Période : %1$s</string>
+    <string name="aimi_advisor_metric_tir_70_180">TIR 70–180 : %1$d %%</string>
+    <string name="aimi_advisor_metric_tir_70_140">TIR 70–140 : %1$d %%</string>
+    <string name="aimi_advisor_metric_time_below_70">Temps &lt;70 : %1$d %%</string>
+    <string name="aimi_advisor_metric_time_above_180">Temps &gt;180 : %1$d %%</string>
+    <string name="aimi_advisor_metric_mean_bg">Glycémie moyenne : %1$d mg/dL</string>
+    <string name="aimi_advisor_metric_tdd">TDD : %1$.1f U (basal %2$d %%)</string>
+
+    <string name="aimi_advisor_recommendations_title">Recommandations</string>
+
+    <!-- Hypos -->
+    <string name="aimi_adv_rec_hypos_title">Hypos sévères détectées</string>
+    <string name="aimi_adv_rec_hypos_desc">%1$d%% du temps sous 54 mg/dL, %2$d épisodes sévères. Priorité : réduire l\'agressivité.</string>
+    <string name="aimi_adv_rec_hypos_action_isf">Réduire MaxSMB de 10-20%</string>
+    <string name="aimi_adv_rec_hypos_action_modes">Réduire les facteurs des modes repas</string>
+    <string name="aimi_adv_rec_hypos_action_basal">Vérifier les basales nocturnes</string>
+
+    <!-- Poor Control -->
+    <string name="aimi_adv_rec_control_title">Contrôle insuffisant</string>
+    <string name="aimi_adv_rec_control_desc">TIR 70-180 = %1$d%% avec peu d\'hypos. Le profil est trop conservateur.</string>
+    <string name="aimi_adv_rec_control_action_basal">Augmenter la basale de 5-10%</string>
+    <string name="aimi_adv_rec_control_action_isf">Réduire l\'ISF (plus d\'insuline)</string>
+    <string name="aimi_adv_rec_control_action_modes">Utiliser les modes repas systématiquement</string>
+
+    <!-- Hypers -->
+    <string name="aimi_adv_rec_hypers_title">Temps élevé au-dessus de 180</string>
+    <string name="aimi_adv_rec_hypers_desc">%1$d%% du temps &gt; 180 mg/dL.</string>
+    <string name="aimi_adv_rec_hypers_action_ratios">Vérifier les ratios glucides/insuline</string>
+    <string name="aimi_adv_rec_hypers_action_autodrive">Activer/ajuster AutoDrive</string>
+    <string name="aimi_adv_rec_hypers_action_factors">Augmenter les facteurs des modes repas</string>
+
+    <!-- Basal Dominance -->
+    <string name="aimi_adv_rec_basal_title">Basale dominante</string>
+    <string name="aimi_adv_rec_basal_desc">Basale = %1$d%% de TDD. Peut indiquer des basales trop élevées ou des bolus insuffisants.</string>
+    <string name="aimi_adv_rec_basal_action_night">Revoir les basales nocturnes</string>
+    <string name="aimi_adv_rec_basal_action_carbs">Améliorer le comptage des glucides</string>
+
+    <!-- Good Profile -->
+    <string name="aimi_adv_rec_profile_ok_title">Profil bien équilibré ✓</string>
+    <string name="aimi_adv_rec_profile_ok_desc">Les indicateurs sont cohérents. Continuez ainsi !</string>
+    <string name="aimi_adv_rec_profile_ok_action_doc">Documenter cette configuration</string>
+    <string name="aimi_adv_rec_profile_ok_action_tune">Ajuster uniquement les tranches problématiques</string>
 </resources>
+
