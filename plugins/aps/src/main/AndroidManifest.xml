@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <application>
+        <activity
+            android:name=".openAPSAIMI.advisor.AimiProfileAdvisorActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:label="@string/aimi_advisor_title" />
+    </application>
+
 </manifest>

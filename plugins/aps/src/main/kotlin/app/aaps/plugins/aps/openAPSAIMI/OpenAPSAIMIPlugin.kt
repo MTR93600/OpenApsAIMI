@@ -1183,7 +1183,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     summary = rh.gs(R.string.aimi_advisor_summary)
                     setOnPreferenceClickListener {
                         context.startActivity(
-                            Intent(context, app.aaps.plugins.aps.openAPSAIMI.advisor.AimiProfileAdvisorActivity::class.java)
+                            Intent(context, app.aaps.plugins.aps.openAPSAIMI.advisor.AimiProfileAdvisorActivity::class.java).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
                         )
                         true
                     }
