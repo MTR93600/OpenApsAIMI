@@ -16,20 +16,28 @@ import javax.inject.Inject
 
 /**
  * =============================================================================
- * AIMI PROFILE ADVISOR ACTIVITY
+ * AIMI PROFILE ADVISOR ACTIVITY - ROBUST VERSION
  * =============================================================================
  * 
  * Displays advisor recommendations based on glycemic performance analysis.
  * Uses programmatic UI to avoid additional layout XML.
+ * 
+ * IMPORTANT: advisorService is created manually, NOT injected via Dagger.
+ * This eliminates any injection-related crash risk.
  * =============================================================================
  */
 class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     
     @Inject lateinit var rh: ResourceHelper
-    @Inject lateinit var advisorService: AimiAdvisorService
+    
+    // NOT injected - created manually to avoid Dagger issues
+    private lateinit var advisorService: AimiAdvisorService
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Create service manually - zero injection risk
+        advisorService = AimiAdvisorService()
         
         title = rh.gs(R.string.aimi_advisor_title)
         
@@ -49,7 +57,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         }
         setContentView(scrollView)
         
-        // Generate report
+        // Generate report (safe - no external dependencies)
         val report = advisorService.generateReport(periodDays = 7)
         
         // Header with score
