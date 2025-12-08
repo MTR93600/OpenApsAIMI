@@ -37,13 +37,13 @@ object AdvancedPredictionEngine {
         val csf = finalSensitivity / carbRatio
 
         // Innovation: Dynamic IOB Damping during active meal rise
-        // If BG is rising while COB exists, the "effective" insulin pulling down is dampened by the inflow of glucose.
+        // If BG is rising while COB exists OR during unannounced meals (UAM), the "effective" insulin pulling down is dampened by the inflow of glucose.
         // We reduce the impact of IOB in the prediction to avoid false hypo alarms.
-        val iobDampingFactor = if (cobG > 0) {
+        val iobDampingFactor = if (cobG > 0 || delta > 2.0) {
             when {
                 delta > 5.0 -> 0.50 // Intense rise: IOB 50% effective in prediction
                 delta > 2.0 -> 0.70 // Moderate rise
-                delta > 0.0 -> 0.85 // Slight rise
+                delta > 0.0 -> if (cobG > 0) 0.85 else 1.0 // Slight rise: damp only if explicit COB
                 else -> 1.0
             }
         } else {
