@@ -905,6 +905,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 key = "Global User Preferences"
                 //title = "Global User Preferences"
                 title = rh.gs(R.string.user_preferences)
+                addPreference(
+                    AdaptiveStringPreference(
+                        context,
+                        null,
+                        StringKey.AimiAdvisorOpenAIKey,
+                        null,
+                        R.string.aimi_pref_openai_key_summary,
+                        R.string.aimi_pref_openai_key_title
+                    )
+                )
                 addPreference(PreferenceCategory(context).apply {
                     title = rh.gs(R.string.user_preferences_title_menu)
                 })

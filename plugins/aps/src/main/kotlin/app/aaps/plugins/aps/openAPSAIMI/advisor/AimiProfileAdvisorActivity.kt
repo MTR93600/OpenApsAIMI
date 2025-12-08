@@ -301,7 +301,6 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         })
 
         val contentText = TextView(this).apply {
-            text = rh.gs(R.string.aimi_coach_loading)
             textSize = 14f
             setTextColor(Color.LTGRAY)
             setLineSpacing(4f, 1.2f)
@@ -310,14 +309,18 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
 
         card.addView(layout)
 
-        // Trigger AI loading
-        // In a real app, use ViewModel/LifecycleScope. Here we use GlobalScope for simplicity in this file-based context
-        // or recreate a scope since we are in Activity.
-        val apiKey = "" // TODO: Load from prefs
+        // Read API Key from SharedPrefs
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val apiKey = prefs.getString(app.aaps.core.keys.StringKey.AimiAdvisorOpenAIKey.key, "") ?: ""
         
         if (apiKey.isBlank()) {
-            contentText.text = rh.gs(R.string.aimi_coach_placeholder)
+            // FALLBACK TO BASIC ANALYSIS
+            val basicAnalysis = advisorService.generatePlainTextAnalysis(context, report)
+            val placeholder = rh.gs(R.string.aimi_coach_placeholder)
+            contentText.text = "$basicAnalysis\n\n🔹 $placeholder"
         } else {
+             // AI MODE
+             contentText.text = rh.gs(R.string.aimi_coach_loading)
              kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                 try {
                     val advice = AiCoachingService().fetchAdvice(context, report, apiKey)

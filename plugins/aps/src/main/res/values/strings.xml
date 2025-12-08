@@ -1087,5 +1087,9 @@
     <string name="aimi_coach_loading">Analyse approfondie en cours...</string>
     <string name="aimi_coach_error">Le coach est indisponible.</string>
     <string name="aimi_coach_placeholder">Configurez votre clé API OpenAI pour activer le coach.</string>
+
+    <!-- AI Prefs -->
+    <string name="aimi_pref_openai_key_title">Clé API OpenAI</string>
+    <string name="aimi_pref_openai_key_summary">Saisissez votre clé (sk-...) pour activer le Coach AIMI.</string>
 </resources>
 

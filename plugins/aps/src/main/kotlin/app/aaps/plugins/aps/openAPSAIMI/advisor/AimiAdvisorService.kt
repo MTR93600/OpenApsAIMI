@@ -259,5 +259,43 @@ class AimiAdvisorService {
     }
 
     private fun percent(value: Double): Int = (value * 100.0).roundToInt()
+
+    /**
+     * Level 1 Analysis: Generates a deterministic text summary of the recommendations.
+     * This acts as a basic explanation when the AI Coach is disabled.
+     */
+    fun generatePlainTextAnalysis(context: AdvisorContext, report: AdvisorReport): String {
+        val sb = StringBuilder()
+        
+        // Introduction based on score
+        if (report.overallScore >= 8.5) {
+            sb.append("L'analyse indique d'excellents résultats. Votre profil semble bien adapté.\n\n")
+        } else if (report.overallScore >= 5.5) {
+            sb.append("L'analyse montre une bonne maîtrise globale, mais quelques ajustements pourraient améliorer la stabilité.\n\n")
+        } else {
+            sb.append("L'analyse détecte plusieurs zones d'instabilité. Des ajustements sont recommandés pour réduire la variabilité.\n\n")
+        }
+
+        // Summary of Issues
+        if (report.recommendations.isNotEmpty()) {
+            sb.append("Points d'attention identifiés :\n")
+            report.recommendations.forEach { rec ->
+                when (rec.domain) {
+                    RecommendationDomain.SAFETY -> sb.append("- Risque d'hypoglycémie détecté (MaxSMB potentiellement trop agressif).\n")
+                    RecommendationDomain.ISF, RecommendationDomain.TARGET -> sb.append("- Hyperglycémies persistantes (ISF ou Cible à revoir).\n")
+                    RecommendationDomain.MODES, RecommendationDomain.SMB -> sb.append("- Gestion des repas perfectible (Modes ou SMB).\n")
+                    RecommendationDomain.BASAL -> sb.append("- Le poids de la basale est déséquilibré par rapport au TDD.\n")
+                    RecommendationDomain.PROFILE_QUALITY -> sb.append("- Qualité du profil à optimiser.\n")
+                    // Default case if added later
+                    else -> {}
+                }
+            }
+            sb.append("\nLes actions suggérées ci-dessous visent à corriger ces déséquilibres de manière ciblée.")
+        } else {
+            sb.append("Aucun problème majeur détecté. Continuez ainsi !")
+        }
+
+        return sb.toString()
+    }
 }
 

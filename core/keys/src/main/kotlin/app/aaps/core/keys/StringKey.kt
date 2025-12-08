@@ -58,5 +58,6 @@ enum class StringKey(
     OApsAIMIWCycleThyroid("key_oaps_aimi_wcycle_thyroid", "EUTHYROID"),
     OApsAIMIWCycleVerneuil("key_oaps_aimi_wcycle_verneuil", "NONE"),
     OApsAIMINightGrowthStart("key_oaps_aimi_ngr_night_start", "22:00"),
-    OApsAIMINightGrowthEnd("key_oaps_aimi_ngr_night_end", "06:00")
+    OApsAIMINightGrowthEnd("key_oaps_aimi_ngr_night_end", "06:00"),
+    AimiAdvisorOpenAIKey("aimi_advisor_openai_key", "", isPassword = true)
 }
