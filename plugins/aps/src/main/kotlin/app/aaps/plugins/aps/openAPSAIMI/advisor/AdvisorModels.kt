@@ -22,6 +22,7 @@ data class AdvisorMetrics(
     val timeAbove180: Double,
     val timeAbove250: Double,
     val meanBg: Double,             // mg/dL
+    val gmi: Double,                // % (derived)
     val tdd: Double,                // U/day
     val basalPercent: Double,       // Basal as fraction of TDD
     val hypoEvents: Int,

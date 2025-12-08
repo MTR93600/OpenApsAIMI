@@ -7,6 +7,7 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Space
 import android.widget.TextView
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
@@ -37,113 +38,174 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         super.onCreate(savedInstanceState)
         
         advisorService = AimiAdvisorService()
-        
         title = rh.gs(R.string.aimi_advisor_title)
         
+        // Dark Navy Background
+        val bgColor = Color.parseColor("#10141C") 
+        val cardColor = Color.parseColor("#1E293B")
+
         val rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(24, 24, 24, 24)
-            setBackgroundColor(Color.parseColor("#1A1A1A"))
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
+            setPadding(32, 32, 32, 32)
+            setBackgroundColor(bgColor)
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
         
         val scrollView = ScrollView(this).apply {
             addView(rootLayout)
-            setBackgroundColor(Color.parseColor("#1A1A1A"))
+            setBackgroundColor(bgColor)
         }
         setContentView(scrollView)
         
         val report = advisorService.generateReport(periodDays = 7)
-        
-        // Header with score
-        rootLayout.addView(createScoreHeader(report))
-        
-        // Summary section
-        rootLayout.addView(createSummaryCard(report))
+        val context = advisorService.collectContext(7)
 
-        // AI Coach section
-        val context = advisorService.collectContext(7) // TODO: refactor to collect once
-        rootLayout.addView(createCoachCard(context, report))
+        // 1. Header (Title + Score Pill)
+        rootLayout.addView(createDashboardHeader(report))
+
+        // 2. Metrics Grid (2x2)
+        rootLayout.addView(createMetricsGrid(report.metrics, cardColor))
         
-        // Recommendations
-        rootLayout.addView(createSectionTitle(rh.gs(R.string.aimi_advisor_recommendations_title)))
-        
-        report.recommendations.forEach { rec ->
-            rootLayout.addView(createRecommendationCard(rec, report.metrics))
+        // 3. Section: Observations (Kotlin Rules)
+        rootLayout.addView(createSectionHeader("OBSERVATIONS"))
+        if (report.recommendations.isEmpty()) {
+            // Show "All good" card
+        } else {
+             report.recommendations.forEach { rec ->
+                rootLayout.addView(createObservationCard(rec, report.metrics, cardColor))
+            }
         }
-        
+
+        // 4. Section: AI Coach (ChatGPT)
+        rootLayout.addView(createSectionHeader("COACH IA"))
+        rootLayout.addView(createCoachCard(context, report, cardColor))
+
         // Footer
         rootLayout.addView(createFooter(report))
     }
-    
-    private fun createScoreHeader(report: AdvisorReport): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(0, 16, 0, 32)
-            
-            // Score circle
-            addView(TextView(this@AimiProfileAdvisorActivity).apply {
-                text = "${"%.1f".format(report.overallScore)}/10"
-                textSize = 48f
-                setTypeface(null, Typeface.BOLD)
-                setTextColor(getScoreColor(report.overallSeverity))
-                gravity = Gravity.CENTER
-            })
-            
-            // Assessment label
-            val labelRes = when (report.overallSeverity) {
-                 AdvisorSeverity.GOOD -> if (report.overallScore >= 8.5) R.string.aimi_advisor_score_label_excellent else R.string.aimi_advisor_score_label_good
-                 AdvisorSeverity.WARNING -> if (report.overallScore >= 5.5) R.string.aimi_advisor_score_label_warning else R.string.aimi_advisor_score_label_attention
-                 AdvisorSeverity.CRITICAL -> R.string.aimi_advisor_score_label_critical
-            }
 
-            addView(TextView(this@AimiProfileAdvisorActivity).apply {
-                text = rh.gs(labelRes)
-                textSize = 20f
-                setTextColor(getScoreColor(report.overallSeverity))
-                gravity = Gravity.CENTER
+    private fun createDashboardHeader(report: AdvisorReport): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, 48)
+            
+            val infoLayout = LinearLayout(this@AimiProfileAdvisorActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            
+            infoLayout.addView(TextView(this@AimiProfileAdvisorActivity).apply {
+                text = "Rapport Hebdo"
+                textSize = 22f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(Color.WHITE)
             })
+            
+            infoLayout.addView(TextView(this@AimiProfileAdvisorActivity).apply {
+                text = report.metrics.periodLabel
+                textSize = 14f
+                setTextColor(Color.parseColor("#94A3B8")) // Slate 400
+                setPadding(0, 4, 0, 0)
+            })
+            
+            addView(infoLayout)
+            
+            // Score Pill
+            // Score Pill (CardView handles background)
+            val pill = CardView(this@AimiProfileAdvisorActivity).apply {
+                radius = 50f
+                setCardBackgroundColor(Color.parseColor("#0F392B")) // Dark Green bg
+                cardElevation = 0f
+            }
+            
+            val scoreText = TextView(this@AimiProfileAdvisorActivity).apply {
+                text = "Score: ${"%.1f".format(report.overallScore)}/10"
+                setTextColor(Color.parseColor("#4ADE80")) // Bright Green
+                setTypeface(null, Typeface.BOLD)
+                textSize = 14f
+                setPadding(32, 12, 32, 12)
+            }
+            pill.addView(scoreText)
+            addView(pill)
         }
     }
-    
-    private fun createSummaryCard(report: AdvisorReport): CardView {
-        val card = CardView(this).apply {
-            radius = 16f
-            setCardBackgroundColor(Color.parseColor("#2D2D2D"))
-            cardElevation = 8f
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                setMargins(0, 0, 0, 24)
-            }
-        }
-        
-        val metrics = report.metrics
-        val summaryText = buildString {
-            append(rh.gs(R.string.aimi_advisor_period_label, metrics.periodLabel)).append("\n\n")
-            append(rh.gs(R.string.aimi_advisor_metric_tir_70_180, (metrics.tir70_180 * 100).roundToInt())).append("\n")
-            append(rh.gs(R.string.aimi_advisor_metric_tir_70_140, (metrics.tir70_140 * 100).roundToInt())).append("\n")
-            append(rh.gs(R.string.aimi_advisor_metric_time_below_70, (metrics.timeBelow70 * 100).roundToInt())).append("\n")
-            append(rh.gs(R.string.aimi_advisor_metric_time_above_180, (metrics.timeAbove180 * 100).roundToInt())).append("\n")
-            append(rh.gs(R.string.aimi_advisor_metric_mean_bg, metrics.meanBg.roundToInt())).append("\n")
-            append(rh.gs(R.string.aimi_advisor_metric_tdd, metrics.tdd, (metrics.basalPercent * 100).roundToInt()))
+
+    private fun createMetricsGrid(metrics: AdvisorMetrics, cardColor: Int): LinearLayout {
+        val grid = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, 32)
         }
 
-        val content = TextView(this).apply {
-            text = summaryText
-            textSize = 14f
-            setTextColor(Color.WHITE)
-            setPadding(24, 24, 24, 24)
-            setLineSpacing(4f, 1.2f)
+        // Row 1
+        val row1 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 2f
+            setPadding(0, 0, 0, 24)
         }
+        row1.addView(createMetricCard("TIR (70-180)", "${(metrics.tir70_180 * 100).roundToInt()}%", Color.parseColor("#4ADE80"), cardColor), paramHalf())
+        row1.addView(Space(this).apply { layoutParams = LinearLayout.LayoutParams(24, 0) })
+        row1.addView(createMetricCard("TDD MOYEN", "${metrics.tdd.roundToInt()} U", Color.parseColor("#60A5FA"), cardColor), paramHalf())
+        
+        // Row 2
+        val row2 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 2f
+        }
+        row2.addView(createMetricCard("GMI", "${metrics.gmi}%", Color.parseColor("#FACC15"), cardColor), paramHalf())
+        row2.addView(Space(this).apply { layoutParams = LinearLayout.LayoutParams(24, 0) })
+        row2.addView(createMetricCard("HYPO < 54", "${(metrics.timeBelow54 * 100).roundToInt()}%", Color.parseColor("#F87171"), cardColor), paramHalf())
+
+        grid.addView(row1)
+        grid.addView(row2)
+        return grid
+    }
+
+    private fun createMetricCard(label: String, value: String, valueColor: Int, cardBg: Int): CardView {
+        val card = CardView(this).apply {
+            radius = 24f
+            setCardBackgroundColor(cardBg)
+            cardElevation = 0f
+        }
+        
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(16, 48, 16, 48)
+        }
+        
+        content.addView(TextView(this).apply {
+            text = value
+            textSize = 28f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(valueColor)
+        })
+        
+        content.addView(TextView(this).apply {
+            text = label
+            textSize = 12f
+            setTextColor(Color.parseColor("#94A3B8")) // Slate 400
+            isAllCaps = true
+            setPadding(0, 8, 0, 0)
+        })
         
         card.addView(content)
         return card
+    }
+
+    private fun paramHalf(): LinearLayout.LayoutParams {
+        return LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+    }
+
+    private fun createSectionHeader(title: String): TextView {
+        return TextView(this).apply {
+            text = title
+            textSize = 13f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#64748B")) // Slate 500
+            setPadding(4, 0, 0, 24)
+            isAllCaps = true
+        }
     }
     
     private fun createSectionTitle(title: String): TextView {
@@ -156,133 +218,83 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         }
     }
     
-    private fun createRecommendationCard(rec: AimiRecommendation, metrics: AdvisorMetrics): CardView {
+    private fun createObservationCard(rec: AimiRecommendation, metrics: AdvisorMetrics, cardBg: Int): CardView {
         val card = CardView(this).apply {
-            radius = 12f
-            setCardBackgroundColor(getCardColor(rec.priority))
-            cardElevation = 4f
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
+            radius = 16f
+            setCardBackgroundColor(cardBg)
+            cardElevation = 0f
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 setMargins(0, 0, 0, 16)
             }
         }
         
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(20, 20, 20, 20)
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(24, 24, 24, 24)
         }
         
-        // Priority badge + Title
-        layout.addView(TextView(this).apply {
-            text = "${getPriorityEmoji(rec.priority)} ${rh.gs(rec.titleResId)}"
+        // Icon Circle
+        val iconBg = CardView(this).apply {
+            radius = 50f
+            cardElevation = 0f
+            setCardBackgroundColor(Color.parseColor("#334155")) // Slate 700ish
+            layoutParams = LinearLayout.LayoutParams(48.dpToPx(), 48.dpToPx())
+        }
+        val iconText = TextView(this).apply {
+            text = getPriorityEmoji(rec.priority)
+            textSize = 20f
+            gravity = Gravity.CENTER
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+        iconBg.addView(iconText)
+        row.addView(iconBg)
+        
+        // Text Content
+        val textLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 0, 0, 0)
+        }
+        
+        textLayout.addView(TextView(this).apply {
+            text = rh.gs(rec.titleResId)
             textSize = 16f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.WHITE)
         })
         
-        // Domain tag
-        layout.addView(TextView(this).apply {
-            text = rec.domain.name
-            textSize = 11f
-            setTextColor(Color.parseColor("#AAAAAA"))
-            setPadding(0, 4, 0, 8)
-        })
-        
-        // Description - Format with metrics if needed
-        val description = when(rec.descriptionResId) {
+        val desc = when(rec.descriptionResId) {
              R.string.aimi_adv_rec_hypos_desc -> rh.gs(rec.descriptionResId, (metrics.timeBelow54 * 100).roundToInt(), metrics.severeHypoEvents)
              R.string.aimi_adv_rec_control_desc -> rh.gs(rec.descriptionResId, (metrics.tir70_180 * 100).roundToInt())
              R.string.aimi_adv_rec_hypers_desc -> rh.gs(rec.descriptionResId, (metrics.timeAbove180 * 100).roundToInt())
              R.string.aimi_adv_rec_basal_desc -> rh.gs(rec.descriptionResId, (metrics.basalPercent * 100).roundToInt())
              else -> rh.gs(rec.descriptionResId)
         }
-
-        layout.addView(TextView(this).apply {
-            text = description
+        
+        textLayout.addView(TextView(this).apply {
+            text = desc
             textSize = 14f
-            setTextColor(Color.parseColor("#E0E0E0"))
-            setLineSpacing(2f, 1.1f)
-            setPadding(0, 0, 0, 12)
+            setTextColor(Color.parseColor("#94A3B8")) // Slate 400
+            setLineSpacing(4f, 1.1f)
+            setPadding(0, 4, 0, 0)
         })
         
-        // Suggested changes (Static)
-        if (rec.actionsResIds.isNotEmpty()) {
-            layout.addView(TextView(this).apply {
-                text = "Actions suggérées :"
-                textSize = 13f
-                setTypeface(null, Typeface.BOLD)
-                setTextColor(Color.parseColor("#90CAF9"))
-                setPadding(0, 8, 0, 4)
-            })
-            
-            rec.actionsResIds.forEach { actionId ->
-                layout.addView(TextView(this).apply {
-                    text = "• ${rh.gs(actionId)}"
-                    textSize = 13f
-                    setTextColor(Color.parseColor("#B0BEC5"))
-                    setPadding(16, 2, 0, 2)
-                })
-            }
-        }
-
-        // Suggested changes (Dynamic Rules Engine)
-        if (rec.advisorActions.isNotEmpty()) {
-            // Re-add header if not already added by static actions
-            if (rec.actionsResIds.isEmpty()) {
-                layout.addView(TextView(this).apply {
-                    text = "Actions suggérées :"
-                    textSize = 13f
-                    setTypeface(null, Typeface.BOLD)
-                    setTextColor(Color.parseColor("#90CAF9"))
-                    setPadding(0, 8, 0, 4)
-                })
-            }
-
-            rec.advisorActions.forEach { action ->
-                layout.addView(TextView(this).apply {
-                    text = "• ${formatAction(action)}"
-                    textSize = 13f
-                    setTextColor(Color.parseColor("#B0BEC5"))
-                    setPadding(16, 2, 0, 2)
-                })
-            }
-        }
+        // Add dynamic actions overview if present? 
+        // For UI simplicity, we keep it clean as requested (Observations style) or append brief action text.
+        // Let's hide detailed actions inside the observation text or keep it simple.
         
-        card.addView(layout)
+        row.addView(textLayout)
+        card.addView(row)
         return card
     }
 
-    private fun formatAction(action: AdvisorAction): String {
-        return when (action.actionCode) {
-            AdvisorActionCode.INCREASE_NIGHT_BASAL -> rh.gs(
-                R.string.aimi_action_increase_night_basal,
-                action.params["from"] as Double,
-                action.params["to"] as Double
-            )
-            AdvisorActionCode.REDUCE_MAX_SMB -> rh.gs(
-                R.string.aimi_action_reduce_max_smb,
-                action.params["from"] as Double,
-                action.params["to"] as Double
-            )
-            AdvisorActionCode.INCREASE_LUNCH_FACTOR -> rh.gs(
-                R.string.aimi_action_increase_lunch_factor,
-                action.params["from"] as Double,
-                action.params["to"] as Double
-            )
-        }
-    }
-    private fun createCoachCard(context: AdvisorContext, report: AdvisorReport): CardView {
+    private fun createCoachCard(context: AdvisorContext, report: AdvisorReport, cardBg: Int): CardView {
         val card = CardView(this).apply {
             radius = 16f
-            setCardBackgroundColor(Color.parseColor("#121212")) // Blackish
-            cardElevation = 4f
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                setMargins(0, 0, 0, 24)
+            setCardBackgroundColor(cardBg)
+            cardElevation = 0f
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, 48)
             }
         }
 
@@ -291,36 +303,34 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             setPadding(24, 24, 24, 24)
         }
 
-        // Title
-        layout.addView(TextView(this).apply {
+        // Header with sparkles
+        val title = TextView(this).apply {
             text = "✨ ${rh.gs(R.string.aimi_coach_title)}"
-            textSize = 18f
+            textSize = 16f
             setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.parseColor("#BB86FC")) // Material Purple
+            setTextColor(Color.parseColor("#C084FC")) // Purple
             setPadding(0, 0, 0, 16)
-        })
+        }
+        layout.addView(title)
 
         val contentText = TextView(this).apply {
+            text = rh.gs(R.string.aimi_coach_loading)
             textSize = 14f
-            setTextColor(Color.LTGRAY)
-            setLineSpacing(4f, 1.2f)
+            setTextColor(Color.parseColor("#CBD5E1")) // Slate 300
+            setLineSpacing(6f, 1.2f)
         }
         layout.addView(contentText)
 
         card.addView(layout)
 
-        // Read API Key from SharedPrefs
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
         val apiKey = prefs.getString(app.aaps.core.keys.StringKey.AimiAdvisorOpenAIKey.key, "") ?: ""
         
         if (apiKey.isBlank()) {
-            // FALLBACK TO BASIC ANALYSIS
             val basicAnalysis = advisorService.generatePlainTextAnalysis(context, report)
             val placeholder = rh.gs(R.string.aimi_coach_placeholder)
-            contentText.text = "$basicAnalysis\n\n🔹 $placeholder"
+            contentText.text = "$basicAnalysis\n\n⚙️ $placeholder"
         } else {
-             // AI MODE
-             contentText.text = rh.gs(R.string.aimi_coach_loading)
              kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                 try {
                     val advice = AiCoachingService().fetchAdvice(context, report, apiKey)
@@ -330,40 +340,35 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                 }
             }
         }
-
         return card
     }
 
     private fun createFooter(report: AdvisorReport): TextView {
-        val time = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+        val time = java.text.SimpleDateFormat("dd MMM HH:mm", java.util.Locale.getDefault())
             .format(java.util.Date(report.generatedAt))
         
         return TextView(this).apply {
-            text = "Généré le $time"
+            text = "Généré le $time • OpenAPS AIMI"
             textSize = 12f
-            setTextColor(Color.parseColor("#666666"))
+            setTextColor(Color.parseColor("#475569")) // Slate 600
             gravity = Gravity.CENTER
-            setPadding(0, 32, 0, 16)
+            setPadding(0, 8, 0, 32)
         }
     }
     
     private fun getScoreColor(severity: AdvisorSeverity): Int = when (severity) {
-        AdvisorSeverity.GOOD -> Color.parseColor("#4CAF50")  // Green
-        AdvisorSeverity.WARNING -> Color.parseColor("#FFC107")  // Amber
-        AdvisorSeverity.CRITICAL -> Color.parseColor("#FF5722") // Deep orange
-    }
-    
-    private fun getCardColor(priority: RecommendationPriority): Int = when (priority) {
-        RecommendationPriority.CRITICAL -> Color.parseColor("#4A1A1A")  // Dark red
-        RecommendationPriority.HIGH -> Color.parseColor("#4A3A1A")      // Dark orange
-        RecommendationPriority.MEDIUM -> Color.parseColor("#2D3A4A")    // Dark blue
-        RecommendationPriority.LOW -> Color.parseColor("#2D2D2D")       // Dark gray
+        AdvisorSeverity.GOOD -> Color.parseColor("#4ADE80")  // Green
+        AdvisorSeverity.WARNING -> Color.parseColor("#FACC15")  // Warning
+        AdvisorSeverity.CRITICAL -> Color.parseColor("#F87171") // Red
     }
     
     private fun getPriorityEmoji(priority: RecommendationPriority): String = when (priority) {
-        RecommendationPriority.CRITICAL -> "🔴"
-        RecommendationPriority.HIGH -> "🟠"
-        RecommendationPriority.MEDIUM -> "🟡"
-        RecommendationPriority.LOW -> "🟢"
+        RecommendationPriority.CRITICAL -> "⚠️"
+        RecommendationPriority.HIGH -> "📈"
+        RecommendationPriority.MEDIUM -> "ℹ️"
+        RecommendationPriority.LOW -> "✅"
     }
+    
+    // Extension for dp to px
+    private fun Int.dpToPx(): Int = (this * resources.displayMetrics.density).toInt()
 }

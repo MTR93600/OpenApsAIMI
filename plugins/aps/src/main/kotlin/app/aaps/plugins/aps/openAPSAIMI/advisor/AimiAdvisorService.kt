@@ -40,41 +40,8 @@ class AimiAdvisorService {
      * Collect Context - DUMMY DATA for now.
      * TODO: Replace with real data from persistenceLayer
      */
-    fun collectContext(periodDays: Int = 7): AdvisorContext {
-        val metrics = AdvisorMetrics(
-            periodLabel = "$periodDays derniers jours",
-            tir70_180 = 0.78,
-            tir70_140 = 0.55,
-            timeBelow70 = 0.04,
-            timeBelow54 = 0.00,
-            timeAbove180 = 0.18,
-            timeAbove250 = 0.05,
-            meanBg = 135.0,
-            tdd = 35.0,
-            basalPercent = 0.48,
-            hypoEvents = 0,
-            severeHypoEvents = 0,
-            hyperEvents = 4
-        )
+    // Old collectContext removed
 
-        // Dummy profile snapshot
-        val profile = AimiProfileSnapshot(
-            nightBasal = 0.80,    // U/h
-            icRatio = 10.0,       // g/U
-            isf = 45.0,           // mg/dL/U
-            targetBg = 100.0      // mg/dL
-        )
-
-        // Dummy prefs snapshot
-        val prefs = AimiPrefsSnapshot(
-            maxSmb = 2.0,                  // U
-            lunchFactor = 1.0,             // x
-            unifiedReactivityFactor = 1.2, // x
-            autodriveMaxBasal = 3.0        // U/h
-        )
-
-        return AdvisorContext(metrics, profile, prefs)
-    }
 
     /**
      * Score global 0–10. 10 = perfect, 0 = critical.
@@ -120,23 +87,44 @@ class AimiAdvisorService {
         return (score * 10.0).roundToInt() / 10.0
     }
 
+    fun collectContext(periodDays: Int = 7): AdvisorContext {
+        // Dummy data (unchanged for now)
+        val meanBg = 135.0
+        val gmi = 3.31 + (0.02392 * meanBg) // GMI Formula
+
+        val metrics = AdvisorMetrics(
+            periodLabel = "$periodDays derniers jours",
+            tir70_180 = 0.78,
+            tir70_140 = 0.55,
+            timeBelow70 = 0.04,
+            timeBelow54 = 0.00,
+            timeAbove180 = 0.18,
+            timeAbove250 = 0.05,
+            meanBg = meanBg,
+            gmi = (gmi * 10.0).roundToInt() / 10.0, // Rounded 1 decimal
+            tdd = 35.0,
+            basalPercent = 0.48,
+            hypoEvents = 0,
+            severeHypoEvents = 0,
+            hyperEvents = 4
+        )
+        // ... (Profile/Prefs unchanged)
+        val profile = AimiProfileSnapshot(0.80, 10.0, 45.0, 100.0)
+        val prefs = AimiPrefsSnapshot(2.0, 1.0, 1.2, 3.0)
+        return AdvisorContext(metrics, profile, prefs)
+    }
+
     private fun getAssessmentLabel(score: Double): String = when {
         score >= 8.5 -> "Excellent"
         score >= 7.0 -> "Bon"
         score >= 5.5 -> "À améliorer"
-        score >= 4.0 -> "Attention requise"
-        else -> "Action urgente"
+        score >= 4.0 -> "Attention"
+        else -> "Critique"
     }
     
-    fun formatSummary(metrics: AdvisorMetrics): String = buildString {
-        append("Période : ${metrics.periodLabel}\n\n")
-        append("TIR 70-180 : ${percent(metrics.tir70_180)}%\n")
-        append("TIR 70-140 : ${percent(metrics.tir70_140)}%\n")
-        append("Temps <70 : ${percent(metrics.timeBelow70)}%\n")
-        append("Temps >180 : ${percent(metrics.timeAbove180)}%\n")
-        append("Glycémie moyenne : ${metrics.meanBg.roundToInt()} mg/dL\n")
-        append("TDD : ${metrics.tdd} U (basal ${percent(metrics.basalPercent)}%)")
-    }
+    // formatSummary function removed or kept mostly for debug, UI uses individual metrics now
+    fun formatSummary(metrics: AdvisorMetrics): String = "" // Deprecated by new UI
+
 
     private fun classifySeverity(score: Double): AdvisorSeverity =
         when {
