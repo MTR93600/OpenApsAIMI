@@ -26,10 +26,14 @@ class SmbDampingUsecaseTest {
     fun `test run with pkpdRuntime`() {
         val pkpdRuntime = mockk<PkPdRuntime>()
         val audit = SmbDampingAudit(
-            original = 1.0,
             out = 0.8,
-            factor = 0.8,
-            reason = "test",
+            tailApplied = false,
+            tailMult = 1.0,
+            activityRelief = 0.0,
+            activityStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.PEAK,
+            exerciseApplied = false,
+            exerciseMult = 1.0,
+            lateFatApplied = false,
             lateFatMult = 1.0,
             mealBypass = false
         )

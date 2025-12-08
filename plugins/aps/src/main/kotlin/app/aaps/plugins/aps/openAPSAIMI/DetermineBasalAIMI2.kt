@@ -505,6 +505,33 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
 
+    /**
+     * Détecte une montée glycémique significative basée sur les deltas réels.
+     * Utilisé pour éviter que les prédictions optimistes bloquent l'action.
+     *
+     * @param deltaVal Delta 5min actuel (mg/dL/5min)
+     * @param shortAvgDeltaVal Moyenne courte des deltas
+     * @param bgNow Glycémie actuelle
+     * @param targetBgVal Objectif glycémique
+     * @param mealModeActive Mode repas actif (seuils plus sensibles)
+     * @return true si une montée significative est détectée
+     */
+    private fun isRisingFast(
+        deltaVal: Double,
+        shortAvgDeltaVal: Double,
+        bgNow: Double,
+        targetBgVal: Double,
+        mealModeActive: Boolean
+    ): Boolean {
+        // Seuils ajustés selon le contexte repas
+        val deltaThreshold = if (mealModeActive) 2.0 else 4.0
+        val shortAvgThreshold = if (mealModeActive) 1.5 else 3.0
+        val bgMargin = if (mealModeActive) 0.0 else 10.0
+
+        return (deltaVal >= deltaThreshold || shortAvgDeltaVal >= shortAvgThreshold)
+            && bgNow >= targetBgVal - bgMargin
+    }
+
     private fun roundBasal(value: Double): Double = value
 
 
@@ -613,11 +640,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 reasonBuilder.append(context.getString(R.string.tir_high, tirInhypo))
             }
 
-            // 8. BG prédit proche de la cible
-            if (predictedBG < targetBG + 10) {
+            // 8. BG prédit proche de la cible - SAUF si montée significative
+            val risingFast = delta >= 3f || combinedDelta >= 2f
+            if (predictedBG < targetBG + 10 && !risingFast) {
                 factors.add(0.5f)
                 //reasonBuilder.append("BG prédit ($predictedBG) proche de la cible ($targetBG), réduction x0.5; ")
                 reasonBuilder.append(context.getString(R.string.bg_near_target, predictedBG, targetBG))
+            } else if (predictedBG < targetBG + 10 && risingFast) {
+                // Log pour traçabilité mais pas de réduction
+                reasonBuilder.append(context.getString(R.string.bg_near_target_but_rising, 
+                    predictedBG, targetBG, delta, combinedDelta))
             }
         }
 
@@ -886,10 +918,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return true
         }
 
-        // 4) Enfin, l’exception meal-rise si elle est vraie
+        // 4) Enfin, l'exception meal-rise si elle est vraie
         if (mealModeActive) {
             val safeFloor = max(100.0, targetbg - 5)
-            if (currentBg > safeFloor && delta > 0.5 && eventualBg > safeFloor) {
+            val risingFast = delta >= 2.0 || (delta > 0 && currentBg > 120)
+            
+            // Condition assouplie: eventualBg ignoré si montée confirmée
+            if (currentBg > safeFloor && delta > 0.5 && (eventualBg > safeFloor || risingFast)) {
                 mealModeSmbReason = context.getString(
                     R.string.smb_enabled_meal_mode,
                     convertBG(currentBg),

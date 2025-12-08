@@ -772,6 +772,7 @@
     <string name="tdd_per_hour_high">High TDD/h (%1$.2f U/h), reduction x0.8; </string>
     <string name="tir_high">High TIR (%1$.1f%%), reduction x0.5;</string>
     <string name="bg_near_target">Predicted BG (%1$.1f) near target (%2$.1f), reduction x0.5; </string>
+    <string name="bg_near_target_but_rising">Predicted BG (%1$.1f) near target (%2$.1f) but rising detected (Δ=%3$.1f, combined=%4$.1f) → no reduction; </string>
     <string name="zero_basal_forced">Zero basal duration (%1$d min) exceeded, forcing minimal basal; </string>
     <string name="dia_base_info">Base DIA: %1$f h = %2$f min\n</string>
     <string name="morning_adjustment">Morning adjustment (6&#8211;10h): DIA reduced by 20%</string>
