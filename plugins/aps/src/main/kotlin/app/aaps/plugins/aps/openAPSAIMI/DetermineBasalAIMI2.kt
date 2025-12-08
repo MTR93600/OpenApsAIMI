@@ -1982,6 +1982,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return fastFall
     }
     // Hystérèse : on ne débloque qu’après avoir été > (seuil+margin) pendant X minutes
+    private fun canFallbackSmbWithoutPrediction(
+        bg: Double,
+        delta: Double,
+        targetBg: Double,
+        iob: Double,
+        profile: OapsProfileAimi
+    ): Boolean {
+        // Fallback SMB allowed if clearly high and rising, even if prediction is missing
+        val clearlyHigh = bg > targetBg + 30.0
+        val stronglyRising = delta >= 2.0 // mg/dl/5min
+        // Ensure IOB is not already saturating safety
+        val iobSafe = iob < profile.max_iob * 0.8
+
+        return clearlyHigh && stronglyRising && iobSafe
+    }
+
     private fun shouldBlockHypoWithHysteresis(
         bg: Double,
         predictedBg: Double,
@@ -3812,14 +3828,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val minBg = minOf(safe(bg), safe(predictedBg.toDouble()), safe(eventualBG))
         val threshold = computeHypoThreshold(minBg, profile.lgsThreshold)
 
-        if (shouldBlockHypoWithHysteresis(
+        val isHypoBlocked = shouldBlockHypoWithHysteresis(
                 bg = bg,
                 predictedBg = predictedBg.toDouble(),
                 eventualBg = eventualBG,
                 threshold = threshold,
                 deltaMgdlPer5min = delta.toDouble()
             )
-        ) {
+
+        var fallbackActive = false
+        if (isHypoBlocked) {
+             if (canFallbackSmbWithoutPrediction(bg, delta.toDouble(), target_bg, iob.toDouble(), profile)) {
+                 fallbackActive = true
+            }
+        }
+
+        if (isHypoBlocked && !fallbackActive) {
             //rT.reason.appendLine(
             //    "🛑 Hypo guard+hystérèse: minBG=${convertBG(minBg)} " +
             //        "≤ Th=${convertBG(threshold)} (BG=${convertBG(bg)}, pred=${convertBG(predictedBg.toDouble())}, ev=${convertBG(eventualBG)}) → SMB=0"
@@ -3827,9 +3851,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
             this.predictedSMB = 0f
         } else {
-            rT.reason.appendLine("💉 SMB (UAM): ${"%.2f".format(modelcal)} U")
-            this.predictedSMB = modelcal
+            var finalModelSmb = modelcal
+             
+             if (fallbackActive) {
+                 // Damping for fallback (Hyper Kicker replacement)
+                 // User suggested 50% dampening when relying on raw UAM without global prediction
+                 finalModelSmb = modelcal * 0.5f 
+                 rT.reason.appendLine("Hyper fallback active: SMB unblocked (50% damped) despite missing prediction. UAM: ${"%.2f".format(modelcal)} -> ${"%.2f".format(finalModelSmb)}")
+             } else {
+                 rT.reason.appendLine("💉 SMB (UAM): ${"%.2f".format(modelcal)} U")
+             }
+             
+             this.predictedSMB = finalModelSmb
         }
+
+        // Detailed logging as requested
+        val hasPred = predictedBg > 20
+        val hyperKicker = (bg > target_bg + 30 && (delta >= 0.3 || shortAvgDelta >= 0.2))
+        consoleLog.add("SMB Decision: BG=${"%.0f".format(bg)}, Delta=${"%.1f".format(delta)}, IOB=${"%.2f".format(iob)}, HasPred=$hasPred, HyperKicker=$hyperKicker, UAM=${"%.2f".format(modelcal)}, Proposed=${"%.2f".format(this.predictedSMB)}")
         val pkpdDiaMinutesOverride: Double? = pkpdRuntime?.params?.diaHrs?.let { it * 60.0 } // PKPD donne des heures → on passe en minutes
         val useLegacyDynamicsdia = pkpdDiaMinutesOverride == null
         val smbExecution = SmbInstructionExecutor.execute(
