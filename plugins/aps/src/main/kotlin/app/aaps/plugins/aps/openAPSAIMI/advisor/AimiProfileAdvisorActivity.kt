@@ -15,6 +15,9 @@ import app.aaps.core.ui.activities.TranslatedDaggerAppCompatActivity
 import app.aaps.plugins.aps.R
 import javax.inject.Inject
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 
 /**
  * =============================================================================
@@ -60,6 +63,10 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         
         // Summary section
         rootLayout.addView(createSummaryCard(report))
+
+        // AI Coach section
+        val context = advisorService.collectContext(7) // TODO: refactor to collect once
+        rootLayout.addView(createCoachCard(context, report))
         
         // Recommendations
         rootLayout.addView(createSectionTitle(rh.gs(R.string.aimi_advisor_recommendations_title)))
@@ -266,7 +273,64 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             )
         }
     }
-    
+    private fun createCoachCard(context: AdvisorContext, report: AdvisorReport): CardView {
+        val card = CardView(this).apply {
+            radius = 16f
+            setCardBackgroundColor(Color.parseColor("#121212")) // Blackish
+            cardElevation = 4f
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(0, 0, 0, 24)
+            }
+        }
+
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 24, 24, 24)
+        }
+
+        // Title
+        layout.addView(TextView(this).apply {
+            text = "✨ ${rh.gs(R.string.aimi_coach_title)}"
+            textSize = 18f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#BB86FC")) // Material Purple
+            setPadding(0, 0, 0, 16)
+        })
+
+        val contentText = TextView(this).apply {
+            text = rh.gs(R.string.aimi_coach_loading)
+            textSize = 14f
+            setTextColor(Color.LTGRAY)
+            setLineSpacing(4f, 1.2f)
+        }
+        layout.addView(contentText)
+
+        card.addView(layout)
+
+        // Trigger AI loading
+        // In a real app, use ViewModel/LifecycleScope. Here we use GlobalScope for simplicity in this file-based context
+        // or recreate a scope since we are in Activity.
+        val apiKey = "" // TODO: Load from prefs
+        
+        if (apiKey.isBlank()) {
+            contentText.text = rh.gs(R.string.aimi_coach_placeholder)
+        } else {
+             kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                try {
+                    val advice = AiCoachingService().fetchAdvice(context, report, apiKey)
+                    contentText.text = advice
+                } catch (e: Exception) {
+                    contentText.text = rh.gs(R.string.aimi_coach_error)
+                }
+            }
+        }
+
+        return card
+    }
+
     private fun createFooter(report: AdvisorReport): TextView {
         val time = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
             .format(java.util.Date(report.generatedAt))
