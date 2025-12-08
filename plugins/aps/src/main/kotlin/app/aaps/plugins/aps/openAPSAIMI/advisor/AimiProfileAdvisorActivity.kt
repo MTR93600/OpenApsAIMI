@@ -9,21 +9,18 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.cardview.widget.CardView
+import androidx.core.content.ContextCompat
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.ui.activities.TranslatedDaggerAppCompatActivity
 import app.aaps.plugins.aps.R
 import javax.inject.Inject
+import kotlin.math.roundToInt
 
 /**
  * =============================================================================
- * AIMI PROFILE ADVISOR ACTIVITY - ROBUST VERSION
+ * AIMI PROFILE ADVISOR ACTIVITY
  * =============================================================================
- * 
- * Displays advisor recommendations based on glycemic performance analysis.
- * Uses programmatic UI to avoid additional layout XML.
- * 
- * IMPORTANT: advisorService is created manually, NOT injected via Dagger.
- * This eliminates any injection-related crash risk.
+ * Displays advisor recommendations using localized resources.
  * =============================================================================
  */
 class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
@@ -36,7 +33,6 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Create service manually - zero injection risk
         advisorService = AimiAdvisorService()
         
         title = rh.gs(R.string.aimi_advisor_title)
@@ -57,7 +53,6 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         }
         setContentView(scrollView)
         
-        // Generate report (safe - no external dependencies)
         val report = advisorService.generateReport(periodDays = 7)
         
         // Header with score
@@ -67,10 +62,10 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         rootLayout.addView(createSummaryCard(report))
         
         // Recommendations
-        rootLayout.addView(createSectionTitle("Recommandations"))
+        rootLayout.addView(createSectionTitle(rh.gs(R.string.aimi_advisor_recommendations_title)))
         
         report.recommendations.forEach { rec ->
-            rootLayout.addView(createRecommendationCard(rec))
+            rootLayout.addView(createRecommendationCard(rec, report.metrics))
         }
         
         // Footer
@@ -83,20 +78,26 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(0, 16, 0, 32)
             
-            // Score circle (simulated with text)
+            // Score circle
             addView(TextView(this@AimiProfileAdvisorActivity).apply {
                 text = "${"%.1f".format(report.overallScore)}/10"
                 textSize = 48f
                 setTypeface(null, Typeface.BOLD)
-                setTextColor(getScoreColor(report.overallScore))
+                setTextColor(getScoreColor(report.overallSeverity))
                 gravity = Gravity.CENTER
             })
             
             // Assessment label
+            val labelRes = when (report.overallSeverity) {
+                 AdvisorSeverity.GOOD -> if (report.overallScore >= 8.5) R.string.aimi_advisor_score_label_excellent else R.string.aimi_advisor_score_label_good
+                 AdvisorSeverity.WARNING -> if (report.overallScore >= 5.5) R.string.aimi_advisor_score_label_warning else R.string.aimi_advisor_score_label_attention
+                 AdvisorSeverity.CRITICAL -> R.string.aimi_advisor_score_label_critical
+            }
+
             addView(TextView(this@AimiProfileAdvisorActivity).apply {
-                text = report.overallAssessment
+                text = rh.gs(labelRes)
                 textSize = 20f
-                setTextColor(getScoreColor(report.overallScore))
+                setTextColor(getScoreColor(report.overallSeverity))
                 gravity = Gravity.CENTER
             })
         }
@@ -115,8 +116,19 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             }
         }
         
+        val metrics = report.metrics
+        val summaryText = buildString {
+            append(rh.gs(R.string.aimi_advisor_period_label, metrics.periodLabel)).append("\n\n")
+            append(rh.gs(R.string.aimi_advisor_metric_tir_70_180, (metrics.tir70_180 * 100).roundToInt())).append("\n")
+            append(rh.gs(R.string.aimi_advisor_metric_tir_70_140, (metrics.tir70_140 * 100).roundToInt())).append("\n")
+            append(rh.gs(R.string.aimi_advisor_metric_time_below_70, (metrics.timeBelow70 * 100).roundToInt())).append("\n")
+            append(rh.gs(R.string.aimi_advisor_metric_time_above_180, (metrics.timeAbove180 * 100).roundToInt())).append("\n")
+            append(rh.gs(R.string.aimi_advisor_metric_mean_bg, metrics.meanBg.roundToInt())).append("\n")
+            append(rh.gs(R.string.aimi_advisor_metric_tdd, metrics.tdd, (metrics.basalPercent * 100).roundToInt()))
+        }
+
         val content = TextView(this).apply {
-            text = report.summary
+            text = summaryText
             textSize = 14f
             setTextColor(Color.WHITE)
             setPadding(24, 24, 24, 24)
@@ -137,7 +149,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         }
     }
     
-    private fun createRecommendationCard(rec: AimiRecommendation): CardView {
+    private fun createRecommendationCard(rec: AimiRecommendation, metrics: AdvisorMetrics): CardView {
         val card = CardView(this).apply {
             radius = 12f
             setCardBackgroundColor(getCardColor(rec.priority))
@@ -157,7 +169,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         
         // Priority badge + Title
         layout.addView(TextView(this).apply {
-            text = "${getPriorityEmoji(rec.priority)} ${rec.title}"
+            text = "${getPriorityEmoji(rec.priority)} ${rh.gs(rec.titleResId)}"
             textSize = 16f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.WHITE)
@@ -171,9 +183,17 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             setPadding(0, 4, 0, 8)
         })
         
-        // Description
+        // Description - Format with metrics if needed
+        val description = when(rec.descriptionResId) {
+             R.string.aimi_adv_rec_hypos_desc -> rh.gs(rec.descriptionResId, (metrics.timeBelow54 * 100).roundToInt(), metrics.severeHypoEvents)
+             R.string.aimi_adv_rec_control_desc -> rh.gs(rec.descriptionResId, (metrics.tir70_180 * 100).roundToInt())
+             R.string.aimi_adv_rec_hypers_desc -> rh.gs(rec.descriptionResId, (metrics.timeAbove180 * 100).roundToInt())
+             R.string.aimi_adv_rec_basal_desc -> rh.gs(rec.descriptionResId, (metrics.basalPercent * 100).roundToInt())
+             else -> rh.gs(rec.descriptionResId)
+        }
+
         layout.addView(TextView(this).apply {
-            text = rec.description
+            text = description
             textSize = 14f
             setTextColor(Color.parseColor("#E0E0E0"))
             setLineSpacing(2f, 1.1f)
@@ -181,7 +201,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         })
         
         // Suggested changes
-        if (rec.suggestedChanges.isNotEmpty()) {
+        if (rec.actionsResIds.isNotEmpty()) {
             layout.addView(TextView(this).apply {
                 text = "Actions suggérées :"
                 textSize = 13f
@@ -190,9 +210,9 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                 setPadding(0, 8, 0, 4)
             })
             
-            rec.suggestedChanges.forEach { change ->
+            rec.actionsResIds.forEach { actionId ->
                 layout.addView(TextView(this).apply {
-                    text = "• $change"
+                    text = "• ${rh.gs(actionId)}"
                     textSize = 13f
                     setTextColor(Color.parseColor("#B0BEC5"))
                     setPadding(16, 2, 0, 2)
@@ -217,11 +237,10 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         }
     }
     
-    private fun getScoreColor(score: Double): Int = when {
-        score >= 8.0 -> Color.parseColor("#4CAF50")  // Green
-        score >= 6.5 -> Color.parseColor("#8BC34A")  // Light green
-        score >= 5.0 -> Color.parseColor("#FFC107")  // Amber
-        else -> Color.parseColor("#FF5722")          // Deep orange
+    private fun getScoreColor(severity: AdvisorSeverity): Int = when (severity) {
+        AdvisorSeverity.GOOD -> Color.parseColor("#4CAF50")  // Green
+        AdvisorSeverity.WARNING -> Color.parseColor("#FFC107")  // Amber
+        AdvisorSeverity.CRITICAL -> Color.parseColor("#FF5722") // Deep orange
     }
     
     private fun getCardColor(priority: RecommendationPriority): Int = when (priority) {
