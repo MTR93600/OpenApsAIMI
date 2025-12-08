@@ -30,6 +30,9 @@ import kotlinx.coroutines.GlobalScope
 class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     
     @Inject lateinit var rh: ResourceHelper
+    @Inject lateinit var profileFunction: app.aaps.core.interfaces.profile.ProfileFunction
+    @Inject lateinit var persistenceLayer: app.aaps.core.interfaces.db.PersistenceLayer
+    @Inject lateinit var preferences: app.aaps.core.keys.interfaces.Preferences
     
     // NOT injected - created manually to avoid Dagger issues
     private lateinit var advisorService: AimiAdvisorService
@@ -37,7 +40,8 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        advisorService = AimiAdvisorService()
+        // Pass dependencies to service
+        advisorService = AimiAdvisorService(profileFunction, persistenceLayer, preferences)
         title = rh.gs(R.string.aimi_advisor_title)
         
         // Dark Navy Background
