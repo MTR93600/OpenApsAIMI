@@ -853,6 +853,37 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val scale = 10.0.pow(2.0)
         return (Math.round(value * scale) / scale).toInt()
     }
+    // Helper for Post-Meal Basal Boost (AIMI 2.0)
+    private fun adjustBasalForMealHyper(
+        suggestedBasalUph: Double,
+        bg: Double,
+        targetBg: Double,
+        delta: Double,
+        shortAvgDelta: Double,
+        isMealModeActive: Boolean,
+        minutesSinceMealStart: Int,
+        mealMaxBasalUph: Double
+    ): Double {
+        val mealPhase = isMealModeActive && minutesSinceMealStart in 0..120
+        if (!mealPhase) return suggestedBasalUph
+
+        val risingOrFlat = delta >= 0.3 || shortAvgDelta >= 0.2
+        val moderatelyHigh = bg > targetBg + 30.0
+        val veryHigh = bg > targetBg + 90.0   // ex. cible 100 → 190+
+
+        if (!risingOrFlat || !moderatelyHigh) return suggestedBasalUph
+
+        val boostFactor = when {
+            veryHigh -> 10    // ex : 250+ → +50 %
+            else -> 8       // ex : 180–250 → +25 %
+        }
+
+        val boosted = suggestedBasalUph * boostFactor
+
+        // Plafond sécurisé : on ne dépasse pas mealMaxBasalUph
+        return if (boosted > mealMaxBasalUph) mealMaxBasalUph else boosted
+    }
+
     private fun calculateRate(basal: Double, currentBasal: Double, multiplier: Double, reason: String, currenttemp: CurrentTemp, rT: RT): Double {
         rT.reason.append("${currenttemp.duration}m@${(currenttemp.rate).toFixed2()} $reason")
         return if (basal == 0.0) currentBasal * multiplier else roundBasal(basal * multiplier)
@@ -3979,6 +4010,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             lunchTime && lunchruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because lunchTime $lunchruntime.", currenttemp, rT)
             dinnerTime && dinnerruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because dinnerTime $dinnerruntime.", currenttemp, rT)
             highCarbTime && highCarbrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because highcarb $highCarbrunTime.", currenttemp, rT)
+            
+            // 🔥 Patch Post-Meal Hyper Boost (AIMI 2.0)
+            (mealTime || lunchTime || dinnerTime || highCarbTime) -> {
+                val runTime = listOf(mealruntime, lunchruntime, dinnerruntime, highCarbrunTime).maxOrNull() ?: 0
+                val target = target_bg // simplification
+                val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal) // limit from prefs
+                val safeMax = if (maxBasalPref > 0) maxBasalPref else profile_current_basal * 2.0 
+                
+                val boostedRate = adjustBasalForMealHyper(
+                    suggestedBasalUph = profile_current_basal, // Start with profile basal
+                    bg = bg,
+                    targetBg = target,
+                    delta = delta.toDouble(),
+                    shortAvgDelta = shortAvgDelta.toDouble(),
+                    isMealModeActive = true,
+                    minutesSinceMealStart = runTime.toInt(),
+                    mealMaxBasalUph = safeMax
+                )
+                
+                if (boostedRate > profile_current_basal * 1.05) { // Only if significantly boosted
+                     calculateRate(basal, profile_current_basal, boostedRate/profile_current_basal, "Post-Meal Boost active ($runTime m)", currenttemp, rT)
+                } else null
+            }
+
             fastingTime -> calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "AI Force basal because fastingTime", currenttemp, rT)
             else -> null
         }
