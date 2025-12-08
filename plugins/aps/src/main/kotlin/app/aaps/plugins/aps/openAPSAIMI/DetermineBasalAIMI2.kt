@@ -4033,6 +4033,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                      calculateRate(basal, profile_current_basal, boostedRate/profile_current_basal, "Post-Meal Boost active ($runTime m)", currenttemp, rT)
                 } else null
             }
+            
+            // 🔥 General Hyper Kicker (Non-Meal)
+            // Catch-all for late rises outside specific meal windows
+            (bg > target_bg + 30 && (delta >= 0.3 || shortAvgDelta >= 0.2)) -> {
+                val maxBasalPref = preferences.get(DoubleKey.autodriveMaxBasal) // Absolute max
+                val safeMax = if (maxBasalPref > 0) maxBasalPref else profile_current_basal * 3.0
+                
+                val boostedRate = adjustBasalForGeneralHyper(
+                    suggestedBasalUph = profile_current_basal, 
+                    bg = bg,
+                    targetBg = target_bg,
+                    delta = delta.toDouble(),
+                    shortAvgDelta = shortAvgDelta.toDouble(),
+                    maxBasalConfig = safeMax
+                )
+                
+                if (boostedRate > profile_current_basal * 1.1) {
+                    calculateRate(basal, profile_current_basal, boostedRate/profile_current_basal, "Global Hyper Kicker (Active)", currenttemp, rT)
+                } else null
+            }
 
             fastingTime -> calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "AI Force basal because fastingTime", currenttemp, rT)
             else -> null
@@ -4640,5 +4660,47 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         return suggestedRate
+    }
+
+
+    // Helper for General Hyper Kicker (Non-Meal) (AIMI 2.0)
+    private fun adjustBasalForGeneralHyper(
+        suggestedBasalUph: Double,
+        bg: Double,
+        targetBg: Double,
+        delta: Double,
+        shortAvgDelta: Double,
+        maxBasalConfig: Double
+    ): Double {
+        // "Progressivement rapidement" logic requested by user
+        
+        // Risque montée franche ou plateau haut persistant
+        val rising = delta >= 0.5 || shortAvgDelta >= 0.3
+        val plateauHigh = delta >= -0.1 && bg > targetBg + 50
+        
+        if (!rising && !plateauHigh) return suggestedBasalUph
+        
+        val deviation = bg - targetBg
+        
+        // Progressive scaling based on deviation severity
+        // 30mg au dessus: x2
+        // 60mg au dessus: x5
+        // 90mg au dessus: x8
+        // 120mg+        : x10 (Authorized by user)
+        
+        val scaleFactor = when {
+            deviation >= 120 -> 10.0
+            deviation >= 90  -> 8.0
+            deviation >= 60  -> 5.0
+            deviation >= 30  -> 2.0
+            else -> 1.0
+        }
+        
+        if (scaleFactor == 1.0) return suggestedBasalUph
+        
+        val boosted = suggestedBasalUph * scaleFactor
+        
+        // Cap only by absolute max config (safety)
+        return if (boosted > maxBasalConfig) maxBasalConfig else boosted
     }
 }
