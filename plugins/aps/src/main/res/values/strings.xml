@@ -1076,5 +1076,10 @@
     <string name="aimi_adv_rec_profile_ok_desc">Les indicateurs sont cohérents. Continuez ainsi !</string>
     <string name="aimi_adv_rec_profile_ok_action_doc">Documenter cette configuration</string>
     <string name="aimi_adv_rec_profile_ok_action_tune">Ajuster uniquement les tranches problématiques</string>
+
+    <!-- Advisor Actions (Dynamic) -->
+    <string name="aimi_action_increase_night_basal">Augmenter la basale de 00h-06h : %.2f → %.2f U/h (+10%%)</string>
+    <string name="aimi_action_reduce_max_smb">Réduire MaxSMB : %.1f → %.1f U</string>
+    <string name="aimi_action_increase_lunch_factor">Augmenter facteur Déjeuner : %.1f → %.1f</string>
 </resources>
 

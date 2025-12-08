@@ -20,26 +20,28 @@ class AimiAdvisorService {
      * Generate a full advisor report for the specified period.
      */
     fun generateReport(periodDays: Int = 7): AdvisorReport {
-        val metrics = collectMetrics(periodDays)
-        val score = computeGlobalScore(metrics)
+        val context = collectContext(periodDays)
+        val score = computeGlobalScore(context.metrics)
         val severity = classifySeverity(score)
-        val recommendations = generateRecommendations(metrics)
+        val recommendations = generateRecommendations(context)
         
         return AdvisorReport(
             generatedAt = System.currentTimeMillis(),
-            metrics = metrics,
+            metrics = context.metrics,
             overallScore = score,
             overallSeverity = severity,
-            recommendations = recommendations
+            overallAssessment = getAssessmentLabel(score),
+            recommendations = recommendations,
+            summary = formatSummary(context.metrics)
         )
     }
 
     /**
-     * Collect metrics - DUMMY DATA for now.
+     * Collect Context - DUMMY DATA for now.
      * TODO: Replace with real data from persistenceLayer
      */
-    fun collectMetrics(periodDays: Int = 7): AdvisorMetrics {
-        return AdvisorMetrics(
+    fun collectContext(periodDays: Int = 7): AdvisorContext {
+        val metrics = AdvisorMetrics(
             periodLabel = "$periodDays derniers jours",
             tir70_180 = 0.78,
             tir70_140 = 0.55,
@@ -54,6 +56,24 @@ class AimiAdvisorService {
             severeHypoEvents = 0,
             hyperEvents = 4
         )
+
+        // Dummy profile snapshot
+        val profile = AimiProfileSnapshot(
+            nightBasal = 0.80,    // U/h
+            icRatio = 10.0,       // g/U
+            isf = 45.0,           // mg/dL/U
+            targetBg = 100.0      // mg/dL
+        )
+
+        // Dummy prefs snapshot
+        val prefs = AimiPrefsSnapshot(
+            maxSmb = 2.0,                  // U
+            lunchFactor = 1.0,             // x
+            unifiedReactivityFactor = 1.2, // x
+            autodriveMaxBasal = 3.0        // U/h
+        )
+
+        return AdvisorContext(metrics, profile, prefs)
     }
 
     /**
@@ -100,6 +120,24 @@ class AimiAdvisorService {
         return (score * 10.0).roundToInt() / 10.0
     }
 
+    private fun getAssessmentLabel(score: Double): String = when {
+        score >= 8.5 -> "Excellent"
+        score >= 7.0 -> "Bon"
+        score >= 5.5 -> "À améliorer"
+        score >= 4.0 -> "Attention requise"
+        else -> "Action urgente"
+    }
+    
+    fun formatSummary(metrics: AdvisorMetrics): String = buildString {
+        append("Période : ${metrics.periodLabel}\n\n")
+        append("TIR 70-180 : ${percent(metrics.tir70_180)}%\n")
+        append("TIR 70-140 : ${percent(metrics.tir70_140)}%\n")
+        append("Temps <70 : ${percent(metrics.timeBelow70)}%\n")
+        append("Temps >180 : ${percent(metrics.timeAbove180)}%\n")
+        append("Glycémie moyenne : ${metrics.meanBg.roundToInt()} mg/dL\n")
+        append("TDD : ${metrics.tdd} U (basal ${percent(metrics.basalPercent)}%)")
+    }
+
     private fun classifySeverity(score: Double): AdvisorSeverity =
         when {
             score < 4.0 -> AdvisorSeverity.CRITICAL
@@ -108,38 +146,71 @@ class AimiAdvisorService {
         }
 
     /**
-     * Generate recommendations based on metrics using Resource IDs.
+     * Generate recommendations based on Context (Rules Engine).
      */
-    fun generateRecommendations(metrics: AdvisorMetrics): List<AimiRecommendation> {
+    fun generateRecommendations(ctx: AdvisorContext): List<AimiRecommendation> {
         val recs = mutableListOf<AimiRecommendation>()
+        val metrics = ctx.metrics
+        val profile = ctx.profile
+        val prefs = ctx.prefs
 
-        // 1) CRITICAL: Hypos
-        if (metrics.timeBelow70 > 0.04 || metrics.severeHypoEvents > 0) {
+        // 1) CRITICAL: Hypos / Safety Aggression
+        // If hypos > 4% and MaxSMB is high -> suggest reduction
+        if (metrics.timeBelow70 > 0.04) {
+            val actions = mutableListOf<AdvisorAction>()
+            
+            // Rule: Reduce MaxSMB if > 1.5U
+            if (prefs.maxSmb > 1.5) {
+                actions += AdvisorAction(
+                    actionCode = AdvisorActionCode.REDUCE_MAX_SMB,
+                    params = mapOf(
+                        "from" to prefs.maxSmb,
+                        "to" to prefs.maxSmb * 0.8 // -20%
+                    )
+                )
+            }
+
             recs += AimiRecommendation(
                 domain = RecommendationDomain.SAFETY,
                 priority = RecommendationPriority.CRITICAL,
                 titleResId = R.string.aimi_adv_rec_hypos_title,
-                descriptionResId = R.string.aimi_adv_rec_hypos_desc, // Format with % args in Activity
-                actionsResIds = listOf(
-                    R.string.aimi_adv_rec_hypos_action_isf,
-                    R.string.aimi_adv_rec_hypos_action_modes,
-                    R.string.aimi_adv_rec_hypos_action_basal
-                )
+                descriptionResId = R.string.aimi_adv_rec_hypos_desc,
+                actionsResIds = listOf(R.string.aimi_adv_rec_hypos_action_isf),
+                advisorActions = actions
             )
         }
 
-        // 2) HIGH: Poor Control (Low TIR but safe)
+        // 2) HIGH: Poor Control (Low TIR but safe) -> Increase Basal
         if (metrics.tir70_180 < 0.70 && metrics.timeBelow70 <= 0.03) {
+            val actions = mutableListOf<AdvisorAction>()
+            
+            // Rule: Increase Night Basal
+            actions += AdvisorAction(
+                actionCode = AdvisorActionCode.INCREASE_NIGHT_BASAL,
+                params = mapOf(
+                    "from" to profile.nightBasal,
+                    "to" to profile.nightBasal * 1.10 // +10%
+                )
+            )
+
+            // Rule: Increase Lunch Factor if seemingly underdosed (placeholder logic)
+            if (prefs.lunchFactor < 1.2) {
+                actions += AdvisorAction(
+                     actionCode = AdvisorActionCode.INCREASE_LUNCH_FACTOR,
+                     params = mapOf(
+                         "from" to prefs.lunchFactor,
+                         "to" to prefs.lunchFactor + 0.1
+                     )
+                )
+            }
+
             recs += AimiRecommendation(
                 domain = RecommendationDomain.BASAL,
                 priority = RecommendationPriority.HIGH,
                 titleResId = R.string.aimi_adv_rec_control_title,
                 descriptionResId = R.string.aimi_adv_rec_control_desc,
-                actionsResIds = listOf(
-                    R.string.aimi_adv_rec_control_action_basal,
-                    R.string.aimi_adv_rec_control_action_isf,
-                    R.string.aimi_adv_rec_control_action_modes
-                )
+                actionsResIds = emptyList(), // Use dynamic actions primarily
+                advisorActions = actions
             )
         }
 
@@ -152,8 +223,7 @@ class AimiAdvisorService {
                 descriptionResId = R.string.aimi_adv_rec_hypers_desc,
                 actionsResIds = listOf(
                     R.string.aimi_adv_rec_hypers_action_ratios,
-                    R.string.aimi_adv_rec_hypers_action_autodrive,
-                    R.string.aimi_adv_rec_hypers_action_factors
+                    R.string.aimi_adv_rec_hypers_action_autodrive
                 )
             )
         }
@@ -166,8 +236,7 @@ class AimiAdvisorService {
                 titleResId = R.string.aimi_adv_rec_basal_title,
                 descriptionResId = R.string.aimi_adv_rec_basal_desc,
                 actionsResIds = listOf(
-                    R.string.aimi_adv_rec_basal_action_night,
-                    R.string.aimi_adv_rec_basal_action_carbs
+                    R.string.aimi_adv_rec_basal_action_night
                 )
             )
         }

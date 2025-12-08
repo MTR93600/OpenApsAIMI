@@ -200,7 +200,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             setPadding(0, 0, 0, 12)
         })
         
-        // Suggested changes
+        // Suggested changes (Static)
         if (rec.actionsResIds.isNotEmpty()) {
             layout.addView(TextView(this).apply {
                 text = "Actions suggérées :"
@@ -219,9 +219,52 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                 })
             }
         }
+
+        // Suggested changes (Dynamic Rules Engine)
+        if (rec.advisorActions.isNotEmpty()) {
+            // Re-add header if not already added by static actions
+            if (rec.actionsResIds.isEmpty()) {
+                layout.addView(TextView(this).apply {
+                    text = "Actions suggérées :"
+                    textSize = 13f
+                    setTypeface(null, Typeface.BOLD)
+                    setTextColor(Color.parseColor("#90CAF9"))
+                    setPadding(0, 8, 0, 4)
+                })
+            }
+
+            rec.advisorActions.forEach { action ->
+                layout.addView(TextView(this).apply {
+                    text = "• ${formatAction(action)}"
+                    textSize = 13f
+                    setTextColor(Color.parseColor("#B0BEC5"))
+                    setPadding(16, 2, 0, 2)
+                })
+            }
+        }
         
         card.addView(layout)
         return card
+    }
+
+    private fun formatAction(action: AdvisorAction): String {
+        return when (action.actionCode) {
+            AdvisorActionCode.INCREASE_NIGHT_BASAL -> rh.gs(
+                R.string.aimi_action_increase_night_basal,
+                action.params["from"] as Double,
+                action.params["to"] as Double
+            )
+            AdvisorActionCode.REDUCE_MAX_SMB -> rh.gs(
+                R.string.aimi_action_reduce_max_smb,
+                action.params["from"] as Double,
+                action.params["to"] as Double
+            )
+            AdvisorActionCode.INCREASE_LUNCH_FACTOR -> rh.gs(
+                R.string.aimi_action_increase_lunch_factor,
+                action.params["from"] as Double,
+                action.params["to"] as Double
+            )
+        }
     }
     
     private fun createFooter(report: AdvisorReport): TextView {

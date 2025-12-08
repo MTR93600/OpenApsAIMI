@@ -70,7 +70,9 @@ data class AimiRecommendation(
     val priority: RecommendationPriority,
     val titleResId: Int,
     val descriptionResId: Int,
-    val actionsResIds: List<Int> = emptyList()
+    val actionsResIds: List<Int> = emptyList(),
+    // New: Specific actions for the Rules Engine
+    val advisorActions: List<AdvisorAction> = emptyList()
 )
 
 /**
@@ -81,5 +83,49 @@ data class AdvisorReport(
     val metrics: AdvisorMetrics,
     val overallScore: Double,           // 0-10 score
     val overallSeverity: AdvisorSeverity,
-    val recommendations: List<AimiRecommendation>
+    val overallAssessment: String,
+    val recommendations: List<AimiRecommendation>,
+    val summary: String
 )
+
+/**
+ * =============================================================================
+ * RULES ENGINE MODELS
+ * =============================================================================
+ */
+
+data class AdvisorContext(
+    val metrics: AdvisorMetrics,
+    val profile: AimiProfileSnapshot,
+    val prefs: AimiPrefsSnapshot
+)
+
+data class AimiProfileSnapshot(
+    val nightBasal: Double,      // U/h (average or specific block)
+    val icRatio: Double,         // g/U
+    val isf: Double,             // mg/dL/U
+    val targetBg: Double         // mg/dL
+)
+
+data class AimiPrefsSnapshot(
+    val maxSmb: Double,                     // U
+    val lunchFactor: Double,                // multiplier
+    val unifiedReactivityFactor: Double,    // multiplier
+    val autodriveMaxBasal: Double           // U/h
+)
+
+data class AdvisorFlag(
+    val code: String,
+    val severity: AdvisorSeverity
+)
+
+data class AdvisorAction(
+    val actionCode: AdvisorActionCode,
+    val params: Map<String, Any> = emptyMap()
+)
+
+enum class AdvisorActionCode {
+    INCREASE_NIGHT_BASAL,
+    REDUCE_MAX_SMB,
+    INCREASE_LUNCH_FACTOR
+}
