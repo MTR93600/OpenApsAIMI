@@ -213,6 +213,11 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
                         true
                     }
 
+                    R.id.nav_aimi_advisor       -> {
+                        startActivity(Intent(this@MainActivity, app.aaps.plugins.aps.openAPSAIMI.advisor.AimiProfileAdvisorActivity::class.java))
+                        true
+                    }
+
                     R.id.nav_about              -> {
                         var message = "Build: ${config.BUILD_VERSION}\n"
                         message += "Flavor: ${BuildConfig.FLAVOR}${BuildConfig.BUILD_TYPE}\n"
