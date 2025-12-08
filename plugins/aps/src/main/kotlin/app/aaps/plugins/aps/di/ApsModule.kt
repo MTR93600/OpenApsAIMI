@@ -6,6 +6,7 @@ import app.aaps.plugins.aps.OpenAPSFragment
 import app.aaps.plugins.aps.autotune.AutotunePlugin
 import app.aaps.plugins.aps.loop.LoopPlugin
 import app.aaps.plugins.aps.openAPSAIMI.di.WCycleModule
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiProfileAdvisorActivity
 import dagger.Binds
 import dagger.Module
 import dagger.android.ContributesAndroidInjector
@@ -23,6 +24,7 @@ import dagger.android.ContributesAndroidInjector
 abstract class ApsModule {
 
     @ContributesAndroidInjector abstract fun contributesOpenAPSFragment(): OpenAPSFragment
+    @ContributesAndroidInjector abstract fun contributesAimiProfileAdvisorActivity(): AimiProfileAdvisorActivity
 
     @Module
     interface Bindings {
