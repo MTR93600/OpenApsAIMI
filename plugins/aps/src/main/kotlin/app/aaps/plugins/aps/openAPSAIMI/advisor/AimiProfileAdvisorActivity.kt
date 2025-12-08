@@ -19,6 +19,8 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineScope
 
 /**
  * =============================================================================
@@ -60,32 +62,57 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             setBackgroundColor(bgColor)
         }
         setContentView(scrollView)
-        
-        val report = advisorService.generateReport(periodDays = 7)
-        val context = advisorService.collectContext(7)
 
-        // 1. Header (Title + Score Pill)
-        rootLayout.addView(createDashboardHeader(report))
-
-        // 2. Metrics Grid (2x2)
-        rootLayout.addView(createMetricsGrid(report.metrics, cardColor))
+        // Loading Indicator
+        val loadingText = TextView(this).apply {
+            text = "Analyse des données en cours..."
+            textSize = 16f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(0, 64, 0, 0)
+        }
+        rootLayout.addView(loadingText)
         
-        // 3. Section: Observations (Kotlin Rules)
-        rootLayout.addView(createSectionHeader("OBSERVATIONS"))
-        if (report.recommendations.isEmpty()) {
-            // Show "All good" card
-        } else {
-             report.recommendations.forEach { rec ->
-                rootLayout.addView(createObservationCard(rec, report.metrics, cardColor))
+        // CRITICAL FIX: Load data on IO thread to prevent crash
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val report = advisorService.generateReport(periodDays = 7)
+                val context = advisorService.collectContext(7)
+
+                withContext(Dispatchers.Main) {
+                    rootLayout.removeView(loadingText)
+
+                    // 1. Header (Title + Score Pill)
+                    rootLayout.addView(createDashboardHeader(report))
+            
+                    // 2. Metrics Grid (2x2)
+                    rootLayout.addView(createMetricsGrid(report.metrics, cardColor))
+                    
+                    // 3. Section: Observations (Kotlin Rules)
+                    rootLayout.addView(createSectionHeader("OBSERVATIONS"))
+                    if (report.recommendations.isEmpty()) {
+                        // Show "All good" card if needed, or just skip
+                    } else {
+                         report.recommendations.forEach { rec ->
+                            rootLayout.addView(createObservationCard(rec, report.metrics, cardColor))
+                        }
+                    }
+            
+                    // 4. Section: AI Coach (ChatGPT)
+                    rootLayout.addView(createSectionHeader("COACH IA"))
+                    rootLayout.addView(createCoachCard(context, report, cardColor))
+            
+                    // Footer
+                    rootLayout.addView(createFooter(report))
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    loadingText.text = "Erreur lors de l'analyse :\n${e.localizedMessage}"
+                    loadingText.setTextColor(Color.parseColor("#F87171")) // Red
+                }
+                e.printStackTrace()
             }
         }
-
-        // 4. Section: AI Coach (ChatGPT)
-        rootLayout.addView(createSectionHeader("COACH IA"))
-        rootLayout.addView(createCoachCard(context, report, cardColor))
-
-        // Footer
-        rootLayout.addView(createFooter(report))
     }
 
     private fun createDashboardHeader(report: AdvisorReport): LinearLayout {
