@@ -3280,7 +3280,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             exerciseFlag = sportTime,
             profileIsf = profile.sens,
             tdd24h = tdd24Hrs.toDouble(),
-            mealContext = pkpdMealContext
+            mealContext = pkpdMealContext,
+            consoleLog = consoleLog
         )
         if (pkpdRuntimeTemp != null) {
             pkpdRuntime = pkpdRuntimeTemp

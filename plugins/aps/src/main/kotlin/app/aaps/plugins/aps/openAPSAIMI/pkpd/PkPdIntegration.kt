@@ -41,7 +41,8 @@ class PkPdIntegration(private val preferences: Preferences) {
         exerciseFlag: Boolean,
         profileIsf: Double,
         tdd24h: Double,
-        mealContext: MealAggressionContext? = null
+        mealContext: MealAggressionContext? = null,
+        consoleLog: MutableList<String>? = null
     ): PkPdRuntime? {
         val config = readConfig()
         // If the configuration changed, clear cached objects so they are rebuilt
@@ -55,7 +56,9 @@ class PkPdIntegration(private val preferences: Preferences) {
             lastTailPolicy = null
         }
         if (!config.enabled) {
+            consoleLog?.add("PKPD Debug: Config ENABLED is FALSE. Check OApsAIMIPkpdEnabled preference.")
             // When disabled we also clear caches
+
             estimator = null
             fusion = null
             damping = null
