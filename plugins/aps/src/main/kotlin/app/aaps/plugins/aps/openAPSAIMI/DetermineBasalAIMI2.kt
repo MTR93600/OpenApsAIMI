@@ -1921,10 +1921,34 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): Boolean {
         val tol = 5.0
         val floor = hypo - tol
+        
+        // 1. Hypo actuelle = TOUJOURS bloquer (sécurité absolue)
         val strongNow = bgNow <= floor
+        if (strongNow) return true
+        
+        // 2. ⚡ NOUVEAU: Bypass progressif si BG monte clairement
+        //    - delta >= 4 : bypass total des prédictions (montée forte)
+        //    - delta >= 2 && bg > hypo : bypass strongFuture seulement
+        val risingFast = delta >= 4.0
+        val risingModerate = delta >= 2.0 && bgNow > hypo
+        
+        if (risingFast) {
+            // Montée forte: ignorer complètement les prédictions
+            return false
+        }
+        
+        // 3. Prédictions futures (seulement si pas en montée modérée)
         val strongFuture = (predicted <= floor && eventual <= floor)
+        if (strongFuture && risingModerate) {
+            // Montée modérée: ignorer strongFuture mais pas fastFall
+            // Continue to check fastFall only
+        } else if (strongFuture) {
+            return true
+        }
+        
+        // 4. Chute rapide avec prédiction basse
         val fastFall = (delta <= -2.0 && predicted <= hypo)
-        return strongNow || strongFuture || fastFall
+        return fastFall
     }
     // Hystérèse : on ne débloque qu’après avoir été > (seuil+margin) pendant X minutes
     private fun shouldBlockHypoWithHysteresis(
@@ -4511,13 +4535,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         predictedBg: Double,
         isMealActive: Boolean
     ): Double {
-        // 1. Critical Safety: Always obey forced zero if true hypo risk
-        // If SafetyDecision says stopBasal, it's usually handled before this, but checked here too.
-        if (safetyDecision.stopBasal || bg < 70 || predictedBg < 65) {
-            return suggestedRate // Allow 0.0
+        // 1. Critical Safety: Hypo REELLE seulement permet 0 U/h
+        if (safetyDecision.stopBasal || bg < 70) {
+            return suggestedRate // Allow 0.0 pour hypo réelle
+        }
+        
+        // 2. ⚡ Prediction basse MAIS montée → ne pas bypasser le floor
+        if (predictedBg < 65) {
+            if (delta > 0 && bg > 90) {
+                // Prédiction pessimiste, BG monte → appliquer floor quand même
+                // Note: logging handled at caller level
+            } else {
+                return suggestedRate // Allow 0.0 si vraiment en baisse
+            }
         }
 
-        // 2. Activity Context
+        // 3. ⚡ Mode Repas Actif : Floor plus élevé (60% profil)
+        if (isMealActive && suggestedRate < profileBasal * 0.6) {
+            val mealFloor = profileBasal * 0.6
+            if (bg > 90 && delta > -1) {
+                return mealFloor
+            }
+        }
+
+        // 4. Activity Context
         val isActivity = activityContext.state != app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.REST
         if (isActivity) {
             // If dropping fast during activity, allow low basal/zero
@@ -4525,23 +4566,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 return suggestedRate
             }
             // Recovery: If rising/stable during activity, avoid ZERO.
-            // Enforce small floor e.g. 20% profile
-            val activityFloor = profileBasal * 0.2
+            val activityFloor = profileBasal * 0.3  // 30% floor en activité
             if (suggestedRate < activityFloor) {
                 // If rising, push higher
-                if (delta > 0) return profileBasal * 0.5
+                if (delta > 0) {
+                    val risingFloor = profileBasal * 0.6  // 60% si montée
+                    return risingFloor
+                }
                 return activityFloor
             }
             return suggestedRate
         }
 
-        // 3. Cruise Mode (No Activity, No Critical Low)
-        // If system wants to cut to 0 (or very low) due to IOB/Delta rules:
-        val cruiseFloor = profileBasal * 0.45 // 45% floor
+        // 5. Cruise Mode (No Activity, No Critical Low)
+        val cruiseFloor = profileBasal * 0.55 // 55% floor (augmenté de 45%)
         if (suggestedRate < cruiseFloor) {
             // Only enforce floor if strictly safe
             if (bg > 100 && delta > -2 && predictedBg > 80) {
-                // Return floor
                 return cruiseFloor
             }
         }
