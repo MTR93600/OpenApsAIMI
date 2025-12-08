@@ -87,36 +87,57 @@ class AiCoachingService {
      * Construct the prompt for the LLM.
      */
     private fun buildPrompt(ctx: AdvisorContext, report: AdvisorReport): String {
-        // Summarize metrics
-        val summary = StringBuilder()
-        summary.append("Données patient (7 jours) :\n")
-        summary.append("- TIR 70-180: ${(ctx.metrics.tir70_180 * 100).roundToInt()}%\n")
-        summary.append("- Hypo (<70): ${(ctx.metrics.timeBelow70 * 100).roundToInt()}%\n")
-        summary.append("- Hyper (>180): ${(ctx.metrics.timeAbove180 * 100).roundToInt()}%\n")
-        summary.append("- Score global: ${report.overallScore}/10 (${report.overallAssessment})\n\n")
+        val sb = StringBuilder()
+        
+        // 1. Context: Metrics
+        sb.append("CONTEXTE PATIENT (7 derniers jours) :\n")
+        sb.append("- TIR 70-180: ${(ctx.metrics.tir70_180 * 100).roundToInt()}%\n")
+        sb.append("- Hypo (<70): ${(ctx.metrics.timeBelow70 * 100).roundToInt()}%\n")
+        sb.append("- Hyper (>180): ${(ctx.metrics.timeAbove180 * 100).roundToInt()}%\n")
+        sb.append("- Moyenne BG: ${ctx.metrics.meanBg.roundToInt()} mg/dL (GMI: ${ctx.metrics.gmi}%)\n")
+        sb.append("- TDD Moyen: ${ctx.metrics.tdd.roundToInt()} U (Basale: ${(ctx.metrics.basalPercent * 100).roundToInt()}%, Bolus: ${(100 - (ctx.metrics.basalPercent * 100).roundToInt())}%)\n")
+        sb.append("- Score AIMI: ${report.overallScore}/10\n\n")
 
-        // Summarize actions proposed by the Rules Engine
-        summary.append("Actions techniques proposées par le système :\n")
+        // 2. Context: Profile Settings
+        sb.append("PARAMÈTRES DU PROFIL ACTUEL :\n")
+        sb.append("- Basale Nuit: ${ctx.profile.nightBasal} U/h\n")
+        sb.append("- Ratio Glucides (IC): ${ctx.profile.icRatio} g/U\n")
+        sb.append("- Sensibilité (ISF): ${ctx.profile.isf} mg/dL/U\n")
+        sb.append("- Cible (Target): ${ctx.profile.targetBg} mg/dL\n\n")
+
+        // 3. Context: Algorithm Preferences
+        sb.append("PRÉFÉRENCES AIMI :\n")
+        sb.append("- Max SMB: ${ctx.prefs.maxSmb} U\n")
+        sb.append("- Facteur Déjeuner: ${ctx.prefs.lunchFactor}x\n")
+        sb.append("- Autodrive Max: ${ctx.prefs.autodriveMaxBasal} U\n\n")
+
+        // 4. Observations (Rules Engine)
+        sb.append("OBSERVATIONS DU SYSTÈME :\n")
         if (report.recommendations.isEmpty()) {
-            summary.append("- Aucune action urgente. Profil stable.\n")
+            sb.append("- Aucune alerte système majeure.\n")
         } else {
             report.recommendations.forEach { rec ->
-                rec.advisorActions.forEach { action ->
-                    // Convert action code to readable string representation for the LLM via internal map
-                    // (Real implementation would use the localized strings, but here we just need semantics)
-                    summary.append("- ${action.actionCode} : ${action.params}\n")
-                }
+                 // Use resource ID mapping simulation or just generic description for context
+                 val type = rec.domain.name
+                 val prio = rec.priority.name
+                 sb.append("- $type ($prio): Voir actions suggérées.\n")
             }
         }
+        sb.append("\n")
 
-        // Instructions
-        summary.append("\n")
-        summary.append("Tu es le Coach AIMI, un expert bienveillant en diabète.\n")
-        summary.append("Analyse ces données et explique SIMPLEMENT pourquoi ces actions sont proposées.\n")
-        summary.append("Sois encourageant. Ne propose PAS de nouvelles actions techniques (bolus, etc.), contente-toi d'expliquer celles listées.\n")
-        summary.append("Réponds en Français, format court (max 3 phrases par point clé).")
+        // 5. Instruction / Persona
+        sb.append("CONSIDNE :\n")
+        sb.append("Tu es un Expert Médical spécialiste des boucles fermées (OpenAPS).\n")
+        sb.append("Ton objectif est d'optimiser le réglage du profil pour améliorer le TIR et réduire les Hypos/Hypers.\n")
+        sb.append("Analyse la corrélation entre les paramètres (ISF, IC, Basale) et les résultats.\n")
+        sb.append("SI les résultats sont sous-optimaux (TIR < 80% ou Hypos > 3%), TU DOIS RECOMMANDER UNE MODIFICATION PRÉCISE D'UN PARAMÈTRE.\n")
+        sb.append("Exemples :\n")
+        sb.append("- 'Hypo fréquentes => Baisse ta Basale Nuit de 10% (passage de 0.8 à 0.72) ou Réduis ton ISF (passage de 100 à 110).'\n")
+        sb.append("- 'Hyper après repas => Renforce ton Ratio Glucides (passage de 10 à 9).'\n")
+        sb.append("Ne te contente pas de dire 'Bravo'. Sois technique, direct et bienveillant.\n")
+        sb.append("Réponds en Français. Format : 'Analyse courte' puis 'Recommandation ' (liste à puces concrète).")
 
-        return summary.toString()
+        return sb.toString()
     }
 
     /**
