@@ -2594,12 +2594,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT: RT,
         delta: Double
     ): PredictionResult {
+        consoleLog.add("Debug: computePkpdPredictions called with delta=$delta")
         val advancedPredictions = AdvancedPredictionEngine.predict(
             currentBG = currentBg,
             iobArray = iobArray,
             finalSensitivity = finalSensitivity,
             cobG = cobG,
-            profile = profile
+            profile = profile,
+            delta = delta
         )
 
         val sanitizedPredictions = advancedPredictions.map { round(min(401.0, max(39.0, it)), 0) }
