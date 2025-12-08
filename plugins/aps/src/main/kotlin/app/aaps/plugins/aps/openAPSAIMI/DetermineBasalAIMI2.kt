@@ -3865,19 +3865,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     adjustFactorsBasedOnBgAndHypo(morning, afternoon, evening)
                 },
                 calculateAdjustedDia = { baseDia, currentHour, steps5, currentHr, avgHr60, pumpAge, iobValue ->
-                    // 🔀 Si PKPD est actif → on impose son DIA (en minutes)
-                    if (!useLegacyDynamicsdia && pkpdDiaMinutesOverride != null) {
-                        pkpdDiaMinutesOverride
-                    } else {
-                        // 🔙 Sinon on garde toute ta logique dynamique legacy
-                        calculateAdjustedDIA(
-                            baseDIAHours = baseDia,
-                            currentHour = currentHour,
-                            pumpAgeDays = pumpAge,
-                            iob = iobValue,
-                            activityContext = activityContext
-                        )
-                    }
+                    // 🔀 Si PKPD est actif, on l'utilise comme base, mais on permet l'ajustement dynamique (activités, heure, etc.)
+                    val effectiveBaseDia = pkpdDiaMinutesOverride?.let { (it / 60.0).toFloat() } ?: baseDia
+
+                    calculateAdjustedDIA(
+                        baseDIAHours = effectiveBaseDia,
+                        currentHour = currentHour,
+                        pumpAgeDays = pumpAge,
+                        iob = iobValue,
+                        activityContext = activityContext
+                    )
                 },
                 costFunction = { basalInput, bgInput, targetInput, horizon, sensitivity, candidate ->
                     costFunction(basalInput, bgInput, targetInput, horizon, sensitivity, candidate)
