@@ -61,6 +61,11 @@ object AdvancedPredictionEngine {
         val insulinPeak = profile.peakTime.toDouble().takeIf { it > 0 } ?: 60.0
         val maxActivity = getInsulinActivity(insulinPeak, insulinPeak)
 
+        // Innovation: Momentum (Delta Decay)
+        // If BG is rising, assume it continues to rise for a while (inertia).
+        // This is crucial for UAM where no COB is entered.
+        var momentum = if (delta > 0) delta else 0.0
+
         repeat(steps) { stepIndex ->
             val minutesInFuture = (stepIndex + 1) * 5
             var insulinEffectMgDl = 0.0
@@ -77,7 +82,14 @@ object AdvancedPredictionEngine {
             insulinEffectMgDl *= iobDampingFactor
 
             val insulinImpactPer5min = insulinEffectMgDl / 12.0
-            val nextBg = (lastBg - insulinImpactPer5min + carbImpactPer5Min).coerceIn(39.0, 401.0)
+            
+            // Apply Momentum
+            // We add the current 'inertia' to the BG change, then decay it.
+            val nextBg = (lastBg - insulinImpactPer5min + carbImpactPer5Min + momentum).coerceIn(39.0, 401.0)
+            
+            // Linear/Exp decay of momentum
+            momentum *= 0.85 // Decays to ~0 over 45-60 mins
+            
             lastBg = nextBg
             predictions.add(lastBg)
         }
