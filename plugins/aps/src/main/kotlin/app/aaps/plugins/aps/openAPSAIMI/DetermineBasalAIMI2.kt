@@ -2573,8 +2573,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         iobArray: Array<IobTotal>,
         finalSensitivity: Double,
         cobG: Double,
+
         profile: OapsProfileAimi,
-        rT: RT
+        rT: RT,
+        delta: Double
     ): PredictionResult {
         val advancedPredictions = AdvancedPredictionEngine.predict(
             currentBG = currentBg,
@@ -3743,8 +3745,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             iobArray = iob_data_array,
             finalSensitivity = sens,
             cobG = mealData.mealCOB,
+
             profile = profile,
-            rT = rT
+            rT = rT,
+            delta = delta.toDouble()
         )
         this.eventualBG = pkpdPredictions.eventual
         this.predictedBg = pkpdPredictions.eventual.toFloat()
@@ -4130,7 +4134,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             iobArray = iob_data_array,
             finalSensitivity = sens,
             cobG = mealData.mealCOB,
-            profile = profile
+
+            profile = profile,
+            delta = delta.toDouble()
         )
         val sanitizedPredictions = advancedPredictions.map { round(min(401.0, max(39.0, it)), 0) }
         val intsPredictions = sanitizedPredictions.map { it.toInt() }
