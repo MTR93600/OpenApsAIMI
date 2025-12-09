@@ -43,7 +43,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         super.onCreate(savedInstanceState)
         
         // Pass dependencies to service
-        advisorService = AimiAdvisorService(profileFunction, persistenceLayer, preferences)
+        advisorService = AimiAdvisorService(profileFunction, persistenceLayer, preferences, rh)
         title = rh.gs(R.string.aimi_advisor_title)
         
         // Dark Navy Background
@@ -65,7 +65,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
 
         // Loading Indicator
         val loadingText = TextView(this).apply {
-            text = "Analyse des données en cours..."
+            text = rh.gs(R.string.aimi_adv_loading)
             textSize = 16f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
@@ -107,7 +107,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    loadingText.text = "Erreur lors de l'analyse :\n${e.localizedMessage}"
+                    loadingText.text = "${rh.gs(R.string.aimi_adv_error_prefix)}${e.localizedMessage}"
                     loadingText.setTextColor(Color.parseColor("#F87171")) // Red
                 }
                 e.printStackTrace()

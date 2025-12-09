@@ -25,12 +25,16 @@ class AimiAdvisorService {
     constructor(
         profileFunction: app.aaps.core.interfaces.profile.ProfileFunction? = null,
         persistenceLayer: app.aaps.core.interfaces.db.PersistenceLayer? = null,
-        preferences: app.aaps.core.keys.interfaces.Preferences? = null
+        preferences: app.aaps.core.keys.interfaces.Preferences? = null,
+        rh: app.aaps.core.interfaces.resources.ResourceHelper? = null
     ) {
         this.profileFunction = profileFunction
         this.persistenceLayer = persistenceLayer
         this.preferences = preferences
+        this.rh = rh
     }
+
+    private val rh: app.aaps.core.interfaces.resources.ResourceHelper?
 
     /**
      * Generate a full advisor report for the specified period.
@@ -68,8 +72,9 @@ class AimiAdvisorService {
         
         // Fetch BGs via persistenceLayer (RxJava blocking for simplicity in this synchronous method, but optimally async)
         // If dependencies missing (testing), fallback to dummy
+        // If dependencies missing, return empty context (NO DUMMY DATA)
         if (persistenceLayer == null || profileFunction == null || preferences == null) {
-            return getDummyContext(periodDays)
+            return getEmptyContext(periodDays)
         }
 
         val history = try {
@@ -149,33 +154,31 @@ class AimiAdvisorService {
         return (score * 10.0).roundToInt() / 10.0
     }
 
-    private fun getDummyContext(periodDays: Int): AdvisorContext {
-        // Fallback for previews/testing
-        val meanBg = 135.0
-        val gmi = 3.31 + (0.02392 * meanBg)
+    private fun getEmptyContext(periodDays: Int): AdvisorContext {
         val metrics = AdvisorMetrics(
-            periodLabel = "$periodDays derniers jours (DÉMO)",
-            tir70_180 = 0.78,
-            tir70_140 = 0.55,
-            timeBelow70 = 0.04,
-            timeBelow54 = 0.00,
-            timeAbove180 = 0.18,
-            timeAbove250 = 0.05,
-            meanBg = meanBg,
-            gmi = (gmi * 10.0).roundToInt() / 10.0,
-            tdd = 35.0,
-            basalPercent = 0.48,
+            periodLabel = "$periodDays derniers jours",
+            tir70_180 = 0.0,
+            tir70_140 = 0.0,
+            timeBelow70 = 0.0,
+            timeBelow54 = 0.0,
+            timeAbove180 = 0.0,
+            timeAbove250 = 0.0,
+            meanBg = 0.0,
+            gmi = 0.0,
+            tdd = 0.0,
+            basalPercent = 0.0,
             hypoEvents = 0,
             severeHypoEvents = 0,
-            hyperEvents = 4
+            hyperEvents = 0
         )
-        val profile = AimiProfileSnapshot(0.80, 10.0, 45.0, 100.0)
-        val prefs = AimiPrefsSnapshot(2.0, 1.0, 1.2, 3.0)
+        // Return zeros for profile/prefs to indicate no data
+        val profile = AimiProfileSnapshot(0.0, 0.0, 0.0, 0.0)
+        val prefs = AimiPrefsSnapshot(0.0, 0.0, 0.0, 0.0)
         return AdvisorContext(metrics, profile, prefs)
     }
 
     private fun calculateMetrics(history: List<app.aaps.core.data.model.GV>, days: Int): AdvisorMetrics {
-        if (history.isEmpty()) return getDummyContext(days).metrics // Fallback if no data
+        if (history.isEmpty()) return getEmptyContext(days).metrics // Fallback if no data
 
         val total = history.size.toDouble()
         val low70 = history.count { it.value < 70 }.toDouble()
@@ -355,32 +358,41 @@ class AimiAdvisorService {
     fun generatePlainTextAnalysis(context: AdvisorContext, report: AdvisorReport): String {
         val sb = StringBuilder()
         
-        // Introduction based on score
-        if (report.overallScore >= 8.5) {
-            sb.append("L'analyse indique d'excellents résultats. Votre profil semble bien adapté.\n\n")
-        } else if (report.overallScore >= 5.5) {
-            sb.append("L'analyse montre une bonne maîtrise globale, mais quelques ajustements pourraient améliorer la stabilité.\n\n")
-        } else {
-            sb.append("L'analyse détecte plusieurs zones d'instabilité. Des ajustements sont recommandés pour réduire la variabilité.\n\n")
-        }
-
-        // Summary of Issues
-        if (report.recommendations.isNotEmpty()) {
-            sb.append("Points d'attention identifiés :\n")
-            report.recommendations.forEach { rec ->
-                when (rec.domain) {
-                    RecommendationDomain.SAFETY -> sb.append("- Risque d'hypoglycémie détecté (MaxSMB potentiellement trop agressif).\n")
-                    RecommendationDomain.ISF, RecommendationDomain.TARGET -> sb.append("- Hyperglycémies persistantes (ISF ou Cible à revoir).\n")
-                    RecommendationDomain.MODES, RecommendationDomain.SMB -> sb.append("- Gestion des repas perfectible (Modes ou SMB).\n")
-                    RecommendationDomain.BASAL -> sb.append("- Le poids de la basale est déséquilibré par rapport au TDD.\n")
-                    RecommendationDomain.PROFILE_QUALITY -> sb.append("- Qualité du profil à optimiser.\n")
-                    // Default case if added later
-                    else -> {}
-                }
+        // Use ResourceHelper if available, otherwise fallback to English or French default?
+        // Ideally we should have resources for these strings.
+        // For now, let's look up resources dynamically or allow fallback.
+        // Since the user wants phone language, we really need the resources.
+        
+        if (rh != null) {
+            // Introduction based on score
+            if (report.overallScore >= 8.5) {
+                sb.append(rh.gs(R.string.aimi_adv_analysis_intro_excellent) + "\n\n")
+            } else if (report.overallScore >= 5.5) {
+                sb.append(rh.gs(R.string.aimi_adv_analysis_intro_good) + "\n\n")
+            } else {
+                sb.append(rh.gs(R.string.aimi_adv_analysis_intro_poor) + "\n\n")
             }
-            sb.append("\nLes actions suggérées ci-dessous visent à corriger ces déséquilibres de manière ciblée.")
+            
+            // Summary of Issues
+            if (report.recommendations.isNotEmpty()) {
+                sb.append(rh.gs(R.string.aimi_adv_analysis_issues_header) + "\n")
+                report.recommendations.forEach { rec ->
+                    when (rec.domain) {
+                        RecommendationDomain.SAFETY -> sb.append("- ${rh.gs(R.string.aimi_adv_analysis_issue_safety)}\n")
+                        RecommendationDomain.ISF, RecommendationDomain.TARGET -> sb.append("- ${rh.gs(R.string.aimi_adv_analysis_issue_hyper)}\n")
+                        RecommendationDomain.MODES, RecommendationDomain.SMB -> sb.append("- ${rh.gs(R.string.aimi_adv_analysis_issue_smb)}\n")
+                        RecommendationDomain.BASAL -> sb.append("- ${rh.gs(R.string.aimi_adv_analysis_issue_basal)}\n")
+                        RecommendationDomain.PROFILE_QUALITY -> sb.append("- ${rh.gs(R.string.aimi_adv_analysis_issue_profile)}\n")
+                        else -> {}
+                    }
+                }
+                sb.append("\n" + rh.gs(R.string.aimi_adv_analysis_footer))
+            } else {
+                sb.append(rh.gs(R.string.aimi_adv_analysis_all_good))
+            }
         } else {
-            sb.append("Aucun problème majeur détecté. Continuez ainsi !")
+             // Fallback if RH missing (should not happen in real app)
+             sb.append("Analysis available in app.")
         }
 
         return sb.toString()

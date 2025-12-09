@@ -136,7 +136,9 @@ class AiCoachingService {
         sb.append("- Si hypers repas : vérifie Ratio Glucides (IC) et repas 'Moyen'/'Fort'.\n")
         sb.append("- Si SMB inefficace : vérifie 'MaxSMB' et 'Unified Reactivity'.\n")
         sb.append("\nIMPORTANT : Si tu recommandes une modification complexe, ajoute toujours : 'Pour plus de détails, consulte la documentation AIMI'.\n")
-        sb.append("Réponds en Français. Format : 'Analyse courte' puis 'Recommandation ' (liste à puces concrète).")
+        
+        val deviceLang = java.util.Locale.getDefault().displayLanguage
+        sb.append("Réponds en $deviceLang. Format : 'Analyse courte' puis 'Recommandation ' (liste à puces concrète).")
 
         return sb.toString()
     }

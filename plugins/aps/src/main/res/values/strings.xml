@@ -1091,5 +1091,19 @@
     <!-- AI Prefs -->
     <string name="aimi_pref_openai_key_title">Clé API OpenAI</string>
     <string name="aimi_pref_openai_key_summary">Saisissez votre clé (sk-...) pour activer le Coach AIMI.</string>
+    <!-- AIMI ADVISOR ANALYSIS -->
+    <string name="aimi_adv_analysis_intro_excellent">The analysis indicates excellent results. Your profile seems well adapted.</string>
+    <string name="aimi_adv_analysis_intro_good">The analysis shows good overall control, but some adjustments could improve stability.</string>
+    <string name="aimi_adv_analysis_intro_poor">The analysis detects several areas of instability. Adjustments are recommended to reduce variability.</string>
+    <string name="aimi_adv_analysis_issues_header">Identified areas of attention:</string>
+    <string name="aimi_adv_analysis_issue_safety">Hypoglycemia risk detected (MaxSMB potentially too aggressive).</string>
+    <string name="aimi_adv_analysis_issue_hyper">Persistent hyperglycemia (ISF or Target to review).</string>
+    <string name="aimi_adv_analysis_issue_smb">Meal management could be improved (Modes or SMB).</string>
+    <string name="aimi_adv_analysis_issue_basal">Basal weight is unbalanced relative to TDD.</string>
+    <string name="aimi_adv_analysis_issue_profile">Profile quality to optimize.</string>
+    <string name="aimi_adv_analysis_footer">The actions suggested below aim to correct these imbalances in a targeted manner.</string>
+    <string name="aimi_adv_analysis_all_good">No major issues detected. Keep it up!</string>
+    <string name="aimi_adv_loading">Analyzing data...</string>
+    <string name="aimi_adv_error_prefix">Analysis error:\n</string>
 </resources>
 

@@ -897,5 +897,19 @@
     <string name="honeymoon_meal_slope">Lune de miel pente repas.</string>
     <string name="pregnancy_delta_over_0_adjustment">Grossesse &amp; Δ&gt;0 → ajustement.</string>
 
+    <!-- AIMI ADVISOR ANALYSIS -->
+    <string name="aimi_adv_analysis_intro_excellent">L\'analyse indique d\'excellents résultats. Votre profil semble bien adapté.</string>
+    <string name="aimi_adv_analysis_intro_good">L\'analyse montre une bonne maîtrise globale, mais quelques ajustements pourraient améliorer la stabilité.</string>
+    <string name="aimi_adv_analysis_intro_poor">L\'analyse détecte plusieurs zones d\'instabilité. Des ajustements sont recommandés pour réduire la variabilité.</string>
+    <string name="aimi_adv_analysis_issues_header">Points d\'attention identifiés :</string>
+    <string name="aimi_adv_analysis_issue_safety">Risque d\'hypoglycémie détecté (MaxSMB potentiellement trop agressif).</string>
+    <string name="aimi_adv_analysis_issue_hyper">Hyperglycémies persistantes (ISF ou Cible à revoir).</string>
+    <string name="aimi_adv_analysis_issue_smb">Gestion des repas perfectible (Modes ou SMB).</string>
+    <string name="aimi_adv_analysis_issue_basal">Le poids de la basale est déséquilibré par rapport au TDD.</string>
+    <string name="aimi_adv_analysis_issue_profile">Qualité du profil à optimiser.</string>
+    <string name="aimi_adv_analysis_footer">Les actions suggérées ci-dessous visent à corriger ces déséquilibres de manière ciblée.</string>
+    <string name="aimi_adv_analysis_all_good">Aucun problème majeur détecté. Continuez ainsi !</string>
+    <string name="aimi_adv_loading">Analyse des données en cours...</string>
+    <string name="aimi_adv_error_prefix">Erreur lors de l\'analyse :\n</string>
 </resources>
 
