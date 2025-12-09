@@ -19,11 +19,16 @@ import androidx.core.widget.addTextChangedListener
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.ui.activities.TranslatedDaggerAppCompatActivity
-import app.aaps.plugins.aps.R
+import android.content.Context
+import androidx.appcompat.app.AppCompatActivity
 import androidx.preference.PreferenceManager
+import app.aaps.core.ui.locale.LocaleHelper
 
-class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
+class AimiModeSettingsActivity : AppCompatActivity() {
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.wrap(newBase))
+    }
 
     // Removed Inject to avoid Dagger graph issues with new Activity
     private val prefs by lazy { PreferenceManager.getDefaultSharedPreferences(this) }
