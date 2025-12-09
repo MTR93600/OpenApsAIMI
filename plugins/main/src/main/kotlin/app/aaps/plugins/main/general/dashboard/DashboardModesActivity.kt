@@ -5,6 +5,8 @@ import android.os.Handler
 import android.os.Looper
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.content.Intent
+import android.view.MenuItem
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.view.isVisible
 import app.aaps.core.interfaces.automation.Automation
@@ -31,6 +33,25 @@ class DashboardModesActivity : TranslatedDaggerAppCompatActivity() {
 
         binding.toolbar.title = resourceHelper.gs(R.string.dashboard_nav_modes)
         binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
+
+        // Add AIMI Modes Settings button
+        val settingsItem = binding.toolbar.menu.add(0, 1, 0, "Settings")
+        settingsItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        settingsItem.setIcon(app.aaps.core.ui.R.drawable.ic_settings_white_24dp)
+        
+        binding.toolbar.setOnMenuItemClickListener { item ->
+            if (item.itemId == 1) {
+                try {
+                    val intent = Intent().setClassName(this, "app.aaps.plugins.aps.openAPSAIMI.advisor.AimiModeSettingsActivity")
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+                true
+            } else {
+                false
+            }
+        }
     }
 
     override fun onResume() {

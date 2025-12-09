@@ -5,12 +5,10 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Space
 import android.widget.TextView
-import android.content.Intent
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -143,27 +141,6 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             })
             
             addView(infoLayout)
-            
-            // Modes Button
-            val modesBtn = Button(this@AimiProfileAdvisorActivity).apply {
-                text = "⚙️ MODES"
-                textSize = 12f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-                // Minimalist button style
-                background = android.graphics.drawable.GradientDrawable().apply {
-                     setColor(Color.parseColor("#334155"))
-                     cornerRadius = 16f
-                }
-                setPadding(24, 0, 24, 0)
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 80).apply {
-                    setMargins(0, 0, 24, 0)
-                }
-                setOnClickListener {
-                    startActivity(Intent(this@AimiProfileAdvisorActivity, AimiModeSettingsActivity::class.java))
-                }
-            }
-            addView(modesBtn)
             
             // Score Pill
             // Score Pill (CardView handles background)
