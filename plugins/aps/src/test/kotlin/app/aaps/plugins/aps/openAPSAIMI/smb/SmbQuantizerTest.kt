@@ -14,6 +14,16 @@ class SmbQuantizerTest {
     }
 
     @Test
+    fun `test quantize with 0_1 step`() {
+        // 0.13 -> 0.1 (step 0.1)
+        assertEquals(0.10, SmbQuantizer.quantize(0.13, 0.1), 0.01)
+        // 0.16 -> 0.2
+        assertEquals(0.20, SmbQuantizer.quantize(0.16, 0.1), 0.01)
+        // 0.03 -> 0.1 (safety floor with quantizeToPumpStep)
+        assertEquals(0.1f, SmbQuantizer.quantizeToPumpStep(0.03f, 0.1f), 0.001f)
+    }
+
+    @Test
     fun `test quantizeToPumpStep safety floor`() {
         // 0.024 -> quantizes to 0.0 normally (0.024 < 0.025)
         // But safety floor logic: if quantized == 0 and units > 0.02 -> return step

@@ -12,7 +12,7 @@ class InsulinActionProfilerTest {
     @Test
     fun `test calculate empty`() {
         val profile = mockk<OapsProfileAimi>(relaxed = true)
-        every { profile.peakTime } returns 75
+        every { profile.peakTime } returns 75.0
         
         val result = InsulinActionProfiler.calculate(emptyArray(), profile)
         assertEquals(0.0, result.iobTotal, 0.0)
@@ -21,7 +21,7 @@ class InsulinActionProfilerTest {
     @Test
     fun `test calculate single bolus`() {
         val profile = mockk<OapsProfileAimi>(relaxed = true)
-        every { profile.peakTime } returns 75
+        every { profile.peakTime } returns 75.0
         
         val iobEntry = mockk<IobTotal>()
         every { iobEntry.iob } returns 1.0

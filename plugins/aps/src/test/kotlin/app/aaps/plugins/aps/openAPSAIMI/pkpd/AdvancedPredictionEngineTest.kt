@@ -29,7 +29,7 @@ class AdvancedPredictionEngineTest {
     fun `test predict flat with no IOB or COB`() {
         val profile = mockk<OapsProfileAimi>(relaxed = true)
         every { profile.carb_ratio } returns 10.0
-        every { profile.peakTime } returns 75
+        every { profile.peakTime } returns 75.0
 
         val result = AdvancedPredictionEngine.predict(
             currentBG = 100.0,
@@ -47,7 +47,7 @@ class AdvancedPredictionEngineTest {
     fun `test predict drop with IOB`() {
         val profile = mockk<OapsProfileAimi>(relaxed = true)
         every { profile.carb_ratio } returns 10.0
-        every { profile.peakTime } returns 75
+        every { profile.peakTime } returns 75.0
 
         val iobEntry = mockk<IobTotal>()
         every { iobEntry.iob } returns 1.0

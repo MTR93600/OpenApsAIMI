@@ -76,7 +76,8 @@ class BasalDecisionEngine @Inject constructor(
         val featuresCombinedDelta: Double?,
         val smbToGive: Double,
         val zeroSinceMin: Int,
-        val minutesSinceLastChange: Int
+        val minutesSinceLastChange: Int,
+        val pumpCaps: PumpCaps
     )
 
     data class Helpers(
@@ -112,14 +113,8 @@ class BasalDecisionEngine @Inject constructor(
                 epochMillis = System.currentTimeMillis()
             )
 
-            // Capacités pompe prudentes par défaut (tu peux passer les vraies depuis DetermineBasalAIMI2 plus tard)
-            val pumpCaps = PumpCaps(
-                basalStep = 0.05,
-                bolusStep = 0.05,
-                minDurationMin = 30,
-                maxBasal = max(input.profileCurrentBasal * 1.6, input.profileCurrentBasal),
-                maxSmb = 3.0
-            )
+            // Capacités pompe passées via Input (dynamique)
+            // val pumpCaps = PumpCaps(...) -> now using input.pumpCaps
 
             val modes = ModeState(
                 autodrive = input.autodrive,
@@ -143,7 +138,7 @@ class BasalDecisionEngine @Inject constructor(
                 iobU = input.iob,
                 cobG = 0.0, // (non utilisé ici)
                 profile = profile,
-                pump = pumpCaps,
+                pump = input.pumpCaps,
                 modes = modes,
                 settings = AimiSettings(
                     smbIntervalMin = 5,

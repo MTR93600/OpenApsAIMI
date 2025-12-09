@@ -120,7 +120,14 @@ class BasalDecisionEngineTest {
                         featuresCombinedDelta = null,
                         smbToGive = 0.0,
                         zeroSinceMin = 0,
-                        minutesSinceLastChange = 10
+                        minutesSinceLastChange = 10,
+                        pumpCaps = app.aaps.plugins.aps.openAPSAIMI.model.PumpCaps(
+                            basalStep = 0.05,
+                            bolusStep = 0.05,
+                            minDurationMin = 30,
+                            maxBasal = 3.0,
+                            maxSmb = 3.0
+                        )
                 )
 
         val rT = RT()

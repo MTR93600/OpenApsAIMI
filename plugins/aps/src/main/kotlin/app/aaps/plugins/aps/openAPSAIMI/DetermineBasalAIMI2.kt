@@ -20,6 +20,8 @@ import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.plugin.ActivePlugin
+import app.aaps.core.interfaces.pump.Pump
+import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.stats.TddCalculator
@@ -3226,11 +3228,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // TODO eliminate
         val deliverAt = currentTime
 
-        // TODO eliminate
-        // TODO eliminate
+        // Dynamic Pump Capabilities
+        val pumpDesc = activePlugin.activePump.pumpDescription
         val pumpCaps = PumpCaps(
-            basalStep = 0.05,
-            bolusStep = 0.05,
+            basalStep = if (pumpDesc.basalStep > 0) pumpDesc.basalStep else 0.05,
+            bolusStep = if (pumpDesc.bolusStep > 0) pumpDesc.bolusStep else 0.05,
             minDurationMin = 30,
             maxBasal = profile.max_basal,
             maxSmb = 3.0
@@ -3935,7 +3937,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 currentTime = currentTime,
                 windowSinceDoseInt = windowSinceDoseInt,
                 currentInterval = intervalsmb,
-                insulinStep = INSULIN_STEP,
+                insulinStep = pumpCaps.bolusStep.toFloat(),
                 highBgOverrideUsed = highBgOverrideUsed,
                 profileCurrentBasal = profile_current_basal,
                 cob = cob
@@ -4590,7 +4592,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 featuresCombinedDelta = f?.combinedDelta,
                 smbToGive = smbToGive.toDouble(),
                 zeroSinceMin = zeroSinceMin,
-                minutesSinceLastChange = minutesSinceLastChange
+                minutesSinceLastChange = minutesSinceLastChange,
+                pumpCaps = pumpCaps
             )
             val helpers = BasalDecisionEngine.Helpers(
                 calculateRate = { basalValue, currentBasalValue, multiplier, label ->
