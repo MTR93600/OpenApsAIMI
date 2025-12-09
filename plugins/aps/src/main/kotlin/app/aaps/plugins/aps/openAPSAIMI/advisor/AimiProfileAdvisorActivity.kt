@@ -18,9 +18,9 @@ import javax.inject.Inject
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
+import androidx.lifecycle.lifecycleScope
 
 /**
  * =============================================================================
@@ -362,7 +362,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             val placeholder = rh.gs(R.string.aimi_coach_placeholder)
             contentText.text = "$basicAnalysis\n\n⚙️ $placeholder"
         } else {
-             kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+             lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                 try {
                     val advice = AiCoachingService().fetchAdvice(context, report, apiKey)
                     contentText.text = advice

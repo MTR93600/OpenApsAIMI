@@ -383,7 +383,6 @@ class AimiAdvisorService {
                         RecommendationDomain.MODES, RecommendationDomain.SMB -> sb.append("- ${rh.gs(R.string.aimi_adv_analysis_issue_smb)}\n")
                         RecommendationDomain.BASAL -> sb.append("- ${rh.gs(R.string.aimi_adv_analysis_issue_basal)}\n")
                         RecommendationDomain.PROFILE_QUALITY -> sb.append("- ${rh.gs(R.string.aimi_adv_analysis_issue_profile)}\n")
-                        else -> {}
                     }
                 }
                 sb.append("\n" + rh.gs(R.string.aimi_adv_analysis_footer))
