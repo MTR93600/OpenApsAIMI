@@ -20,18 +20,23 @@ import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
 import android.content.Context
-import androidx.appcompat.app.AppCompatActivity
 import androidx.preference.PreferenceManager
-import app.aaps.core.ui.locale.LocaleHelper
+import app.aaps.core.ui.activities.TranslatedDaggerAppCompatActivity
+import app.aaps.core.interfaces.automation.Automation
+import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.ui.dialogs.OKDialog
+import javax.inject.Inject
+import android.os.Handler
+import android.os.Looper
 
-class AimiModeSettingsActivity : AppCompatActivity() {
+class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
 
-    override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(LocaleHelper.wrap(newBase))
-    }
+    @Inject lateinit var automation: Automation
+    @Inject lateinit var rh: ResourceHelper
 
-    // Removed Inject to avoid Dagger graph issues with new Activity
-    private val prefs by lazy { PreferenceManager.getDefaultSharedPreferences(this) }
+    // Removed Inject to avoid Dagger graph issues with new Activity - REVERTED: Now we use Dagger
+    // private val prefs by lazy { PreferenceManager.getDefaultSharedPreferences(this) }
+    @Inject lateinit var preferences: Preferences
 
     private var selectedMode = ModeType.LUNCH
 
@@ -133,14 +138,51 @@ class AimiModeSettingsActivity : AppCompatActivity() {
                 topMargin = 64
             }
             setOnClickListener { saveValues() }
+            setOnClickListener { saveValues() }
         }
         container.addView(saveBtn)
+
+        // Activate Button
+        val activateBtn = Button(this).apply {
+            text = "⚡ ACTIVATE ${if (selectedMode == ModeType.LUNCH) "LUNCH" else "DINNER"}" // Initial text
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#4ADE80")) // Green text
+            // Outlined style simulation
+            background = android.graphics.drawable.GradientDrawable().apply {
+                 setStroke(4, Color.parseColor("#4ADE80"))
+                 cornerRadius = 12f
+                 setColor(Color.TRANSPARENT)
+            }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 120).apply {
+                topMargin = 32
+                bottomMargin = 64
+            }
+            setOnClickListener { activateMode() }
+        }
+        container.addView(activateBtn)
+        
+        // Helper to update button text on switch
+        lunchButton.setOnClickListener { 
+            switchMode(ModeType.LUNCH) 
+            activateBtn.text = "⚡ ACTIVATE LUNCH"
+        }
+        dinnerButton.setOnClickListener { 
+            switchMode(ModeType.DINNER) 
+            activateBtn.text = "⚡ ACTIVATE DINNER"
+        }
 
         setContentView(mainScroll)
 
         // Functionality
-        lunchButton.setOnClickListener { switchMode(ModeType.LUNCH) }
-        dinnerButton.setOnClickListener { switchMode(ModeType.DINNER) }
+        lunchButton.setOnClickListener { 
+            switchMode(ModeType.LUNCH) 
+            activateBtn.text = "⚡ ACTIVATE LUNCH"
+        }
+        dinnerButton.setOnClickListener { 
+            switchMode(ModeType.DINNER) 
+            activateBtn.text = "⚡ ACTIVATE DINNER"
+        }
 
         // Initial Load
         loadValues(ModeType.LUNCH)
@@ -224,32 +266,50 @@ class AimiModeSettingsActivity : AppCompatActivity() {
     }
 
     private fun saveValues() {
-        val p1 = inputPrebolus1.text.toString()
-        val p2 = inputPrebolus2.text.toString()
-        val react = inputReactivity.text.toString()
-        val interv = inputInterval.text.toString()
-
-        val editor = prefs.edit()
+        val p1 = inputPrebolus1.text.toString().toDoubleOrNull() ?: 0.0
+        val p2 = inputPrebolus2.text.toString().toDoubleOrNull() ?: 0.0
+        val react = inputReactivity.text.toString().toDoubleOrNull() ?: 100.0
+        val interv = inputInterval.text.toString().toIntOrNull() ?: 5
 
         if (selectedMode == ModeType.LUNCH) {
-            editor.putString(DoubleKey.OApsAIMILunchPrebolus.key, p1)
-            editor.putString(DoubleKey.OApsAIMILunchPrebolus2.key, p2)
-            editor.putString(DoubleKey.OApsAIMILunchFactor.key, react)
-            editor.putString(IntKey.OApsAIMILunchinterval.key, interv)
+            preferences.put(DoubleKey.OApsAIMILunchPrebolus, p1)
+            preferences.put(DoubleKey.OApsAIMILunchPrebolus2, p2)
+            preferences.put(DoubleKey.OApsAIMILunchFactor, react)
+            preferences.put(IntKey.OApsAIMILunchinterval, interv)
         } else {
-            editor.putString(DoubleKey.OApsAIMIDinnerPrebolus.key, p1)
-            editor.putString(DoubleKey.OApsAIMIDinnerPrebolus2.key, p2)
-            editor.putString(DoubleKey.OApsAIMIDinnerFactor.key, react)
-            editor.putString(IntKey.OApsAIMIDinnerinterval.key, interv)
+            preferences.put(DoubleKey.OApsAIMIDinnerPrebolus, p1)
+            preferences.put(DoubleKey.OApsAIMIDinnerPrebolus2, p2)
+            preferences.put(DoubleKey.OApsAIMIDinnerFactor, react)
+            preferences.put(IntKey.OApsAIMIDinnerinterval, interv)
         }
-        editor.apply()
         
         finish()
     }
 
+    private fun activateMode() {
+        // Find the automation event
+        val eventTitle = if (selectedMode == ModeType.LUNCH) "Lunch" else "Dinner"
+        val event = automation.userEvents().find { it.title.equals(eventTitle, ignoreCase = true) }
+        
+        if (event != null) {
+            OKDialog.showConfirmation(
+                this,
+                "Activate $eventTitle mode?"
+            ) {
+                 Handler(Looper.getMainLooper()).post { 
+                     automation.processEvent(event) 
+                     finish()
+                 }
+            }
+        } else {
+            // Fallback warning if not found
+            OKDialog.show(this, "Error", "Mode '$eventTitle' not found in Automation list.")
+        }
+    }
+
     private fun getStringPref(key: DoubleKey): String {
         return try {
-            prefs.getString(key.key, key.defaultValue.toString()) ?: key.defaultValue.toString()
+            preferences.get(key).toString()
         } catch (e: Exception) {
             key.defaultValue.toString()
         }
@@ -257,7 +317,7 @@ class AimiModeSettingsActivity : AppCompatActivity() {
 
     private fun getStringPref(key: IntKey): String {
          return try {
-            prefs.getString(key.key, key.defaultValue.toString()) ?: key.defaultValue.toString()
+            preferences.get(key).toString()
         } catch (e: Exception) {
             key.defaultValue.toString()
         }
