@@ -7,6 +7,12 @@
             android:exported="false"
             android:theme="@style/AppTheme"
             android:label="@string/aimi_advisor_title" />
+
+        <activity
+            android:name=".openAPSAIMI.advisor.AimiModeSettingsActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:label="AIMI Modes" />
     </application>
 
 </manifest>
