@@ -28,6 +28,8 @@ import app.aaps.core.ui.dialogs.OKDialog
 import javax.inject.Inject
 import android.os.Handler
 import android.os.Looper
+import android.widget.Switch
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AiKeys
 
 class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
 
@@ -37,6 +39,7 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
     // Removed Inject to avoid Dagger graph issues with new Activity - REVERTED: Now we use Dagger
     // private val prefs by lazy { PreferenceManager.getDefaultSharedPreferences(this) }
     @Inject lateinit var preferences: Preferences
+    private val sp by lazy { androidx.preference.PreferenceManager.getDefaultSharedPreferences(this) }
 
     private var selectedMode = ModeType.LUNCH
 
@@ -47,6 +50,11 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
     private lateinit var inputPrebolus2: EditText
     private lateinit var inputReactivity: EditText
     private lateinit var inputInterval: EditText
+
+    // AI Settings Inputs
+    private lateinit var inputOpenAiKey: EditText
+    private lateinit var inputGeminiKey: EditText
+    private lateinit var switchProvider: Switch
 
     private val darkNavy = Color.parseColor("#0F172A")
     private val cardDark = Color.parseColor("#1E293B")
@@ -127,6 +135,77 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
 
         formCard.addView(formLayout)
         container.addView(formCard)
+
+        // --- AI Settings Section ---
+        val aiTitle = TextView(this).apply {
+            text = "🧠 Assistant AI"
+            textSize = 20f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = 48
+                bottomMargin = 24
+            }
+        }
+        container.addView(aiTitle)
+
+        // Provider Switch
+        switchProvider = Switch(this).apply {
+            text = "Utiliser Gemini (Google)"
+            setTextColor(textPrimary)
+            textSize = 16f
+            // thumbTintList = androidx.core.content.ContextCompat.getColorStateList(context, app.aaps.core.ui.R.color.primary) // Fix color or remove
+            isChecked = sp.getString(AiKeys.AI_PROVIDER, "OPENAI") == "GEMINI"
+        }
+        container.addView(switchProvider)
+
+        container.addView(Space(this).apply { minimumHeight = 24 })
+
+        // Gemini Key
+        container.addView(TextView(this).apply {
+            text = "Gemini API Key"
+            setTextColor(textSecondary)
+        })
+        inputGeminiKey = EditText(this).apply {
+            background = getInputBackground()
+            setTextColor(Color.WHITE)
+            setPadding(32, 32, 32, 32)
+            hint = "AIzaSy..."
+            setHintTextColor(Color.DKGRAY)
+             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setText(sp.getString(AiKeys.GEMINI_KEY, ""))
+        }
+        container.addView(inputGeminiKey)
+
+        container.addView(Space(this).apply { minimumHeight = 24 })
+
+        // OpenAI Key
+        container.addView(TextView(this).apply {
+            text = "OpenAI API Key"
+            setTextColor(textSecondary)
+        })
+        inputOpenAiKey = EditText(this).apply {
+            background = getInputBackground()
+            setTextColor(Color.WHITE)
+            setPadding(32, 32, 32, 32)
+            hint = "sk-..."
+            setHintTextColor(Color.DKGRAY)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setText(sp.getString(AiKeys.OPENAI_KEY, ""))
+        }
+        container.addView(inputOpenAiKey)
+
+        // --- Buttons ---
+        val buttonPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 2f
+            // Custom simplified background logic
+            setBackgroundColor(cardDark)
+            setPadding(16, 16, 16, 16)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = 64
+            }
+        }
 
         // Save Button
         val saveBtn = Button(this).apply {
@@ -231,6 +310,13 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
         return input
     }
 
+    private fun getInputBackground(): android.graphics.drawable.Drawable {
+        return android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = 12f
+            setColor(Color.parseColor("#334155")) // Slightly lighter input bg
+        }
+    }
+
     private fun switchMode(mode: ModeType) {
         if (selectedMode == mode) return
         selectedMode = mode
@@ -266,11 +352,7 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
     }
 
     private fun saveValues() {
-        saveToPreferences()
-        finish()
-    }
-
-    private fun saveToPreferences() {
+        // 1. Save Mode Settings
         val p1 = inputPrebolus1.text.toString().toDoubleOrNull() ?: 0.0
         val p2 = inputPrebolus2.text.toString().toDoubleOrNull() ?: 0.0
         val react = inputReactivity.text.toString().toDoubleOrNull() ?: 100.0
@@ -287,14 +369,28 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
             preferences.put(DoubleKey.OApsAIMIDinnerFactor, react)
             preferences.put(IntKey.OApsAIMIDinnerinterval, interv)
         }
+
+        // 2. Save AI Settings
+        try {
+            val geminiKey = inputGeminiKey.text.toString().trim()
+            val openAiKey = inputOpenAiKey.text.toString().trim()
+            val provider = if (switchProvider.isChecked) "GEMINI" else "OPENAI"
+
+            sp.edit().putString(AiKeys.GEMINI_KEY, geminiKey)
+                       .putString(AiKeys.OPENAI_KEY, openAiKey)
+                       .putString(AiKeys.AI_PROVIDER, provider)
+                       .apply()
+        } catch (e: Exception) {
+             e.printStackTrace()
+        }
+
+        finish()
     }
 
     private fun activateMode() {
-        // Auto-save before activation
-        saveToPreferences()
+        saveValues() // saveValues handles saving. Logic merged.
 
         // Find the automation event
-        // Use simpler matching
         val eventTitle = if (selectedMode == ModeType.LUNCH) "Lunch" else "Dinner"
         val events = automation.userEvents()
         val event = events.find { it.title.trim().equals(eventTitle, ignoreCase = true) }

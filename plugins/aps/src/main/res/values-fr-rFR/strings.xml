@@ -911,5 +911,13 @@
     <string name="aimi_adv_analysis_all_good">Aucun problème majeur détecté. Continuez ainsi !</string>
     <string name="aimi_adv_loading">Analyse des données en cours...</string>
     <string name="aimi_adv_error_prefix">Erreur lors de l\'analyse :\n</string>
+    <!-- AIMI PKPD Advisor -->
+    <string name="aimi_pkpd_advisor_disabled">Le module PKPD adaptatif est désactivé. L\'activer permettrait d\'ajuster automatiquement votre DIA et pic d\'action pour améliorer le TIR.</string>
+    <string name="aimi_pkpd_hyper_dia">Vos hypers sont fréquentes. Réduire la Durée d\'Action (DIA) de %1$s à %2$s h pourrait rendre l\'insuline active plus \'rapide\' dans les calculs et augmenter les corrections.</string>
+    <string name="aimi_pkpd_hyper_peak">Un pic d\'action plus tôt (%1$s min) peut aider à être plus agressif sur les montées post-prandiales.</string>
+    <string name="aimi_pkpd_hyper_isf">Augmenter le facteur max de fusion ISF permettrait de renforcer l\'insuline quand la glycémie est résistante.</string>
+    <string name="aimi_pkpd_hypo_dia">Hypos fréquentes détectées. Allonger la DIA de %1$s à %2$s h permettrait de mieux prendre en compte l\'insuline restante (IOB) et d\'éviter les cumuls.</string>
+    <string name="aimi_pkpd_hypo_peak">Retarder le pic d\'action (%1$s min) adoucirait la courbe d\'activité de l\'insuline.</string>
+    <string name="aimi_pkpd_hypo_damping">Augmenter l\'amortissement (damping) en fin de DIA (Tail) réduirait les SMB risqués avec de l\'IOB tardive.</string>
 </resources>
 

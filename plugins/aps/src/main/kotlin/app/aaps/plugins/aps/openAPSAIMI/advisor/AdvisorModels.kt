@@ -96,6 +96,12 @@ data class AdvisorReport(
  * =============================================================================
  */
 
+object AiKeys {
+    const val OPENAI_KEY = "aimi_openai_api_key"
+    const val GEMINI_KEY = "aimi_gemini_api_key"
+    const val AI_PROVIDER = "aimi_ai_provider"
+}
+
 data class AdvisorContext(
     val metrics: AdvisorMetrics,
     val profile: AimiProfileSnapshot,

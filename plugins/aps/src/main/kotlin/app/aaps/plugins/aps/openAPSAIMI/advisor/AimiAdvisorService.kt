@@ -47,8 +47,7 @@ class AimiAdvisorService {
         val recommendations = generateRecommendations(context)
         
         // PKPD Analysis
-        val pkpdAdvisor = PkpdAdvisor()
-        val pkpdSuggestions = pkpdAdvisor.analysePkpd(context.metrics, context.pkpdPrefs)
+        val pkpdSuggestions = PkpdAdvisor().analysePkpd(context.metrics, context.pkpdPrefs, rh!!)
         
         return AdvisorReport(
             generatedAt = System.currentTimeMillis(),
@@ -163,6 +162,7 @@ class AimiAdvisorService {
             score -= excess * 40.0           // 5% more -> -2 pts
         }
 
+        // No change here yet, need to find usage first.
         // 4) Severe Hypos
         if (metrics.timeBelow54 > 0.0 || metrics.severeHypoEvents > 0) {
             score -= 2.0

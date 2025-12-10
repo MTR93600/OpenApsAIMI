@@ -423,19 +423,28 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         card.addView(layout)
 
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
-        val apiKey = prefs.getString(app.aaps.core.keys.StringKey.AimiAdvisorOpenAIKey.key, "") ?: ""
         
-        if (apiKey.isBlank()) {
+        // Fetch keys using definitions from AiKeys (assuming .key property or name)
+        // If .key is not available, I will use the string literals I defined: "aimi_openai_api_key", etc.
+        // To be safe, I've checked standard AAPS keys usually have .key
+        val providerStr = prefs.getString("aimi_ai_provider", "OPENAI") ?: "OPENAI"
+        val openAiKey = prefs.getString("aimi_openai_api_key", "") ?: ""
+        val geminiKey = prefs.getString("aimi_gemini_api_key", "") ?: ""
+
+        val provider = if (providerStr == "GEMINI") AiCoachingService.Provider.GEMINI else AiCoachingService.Provider.OPENAI
+        val activeKey = if (provider == AiCoachingService.Provider.GEMINI) geminiKey else openAiKey
+        
+        if (activeKey.isBlank()) {
             val basicAnalysis = advisorService.generatePlainTextAnalysis(context, report)
-            val placeholder = rh.gs(R.string.aimi_coach_placeholder)
+            val placeholder = rh.gs(R.string.aimi_coach_placeholder) + " (${provider.name})"
             contentText.text = "$basicAnalysis\n\n⚙️ $placeholder"
         } else {
              lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                 try {
-                    val advice = AiCoachingService().fetchAdvice(context, report, apiKey)
+                    val advice = AiCoachingService().fetchAdvice(context, report, activeKey, provider)
                     contentText.text = advice
                 } catch (e: Exception) {
-                    contentText.text = rh.gs(R.string.aimi_coach_error)
+                    contentText.text = rh.gs(R.string.aimi_coach_error) + "\n" + e.localizedMessage
                 }
             }
         }
