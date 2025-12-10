@@ -107,8 +107,8 @@ class AiCoachingService {
         val jsonBody = JSONObject()
         val parts = JSONArray()
         val part = JSONObject()
-        val textWithSystem = "Role: Expert Diabetes Coach.\n$prompt" // Simple prepend for system context
-        part.put("text", textWithSystem)
+        // STRICT PARITY: Sending exact same prompt as OpenAI (which includes Persona)
+        part.put("text", prompt)
         parts.put(part)
         
         val content = JSONObject()
@@ -124,7 +124,7 @@ class AiCoachingService {
         // Generation Config
         val config = JSONObject()
         config.put("temperature", 0.7)
-        config.put("maxOutputTokens", 700) // Increased for structured response
+        config.put("maxOutputTokens", 800) 
         root.put("generationConfig", config)
 
         connection.apply {
@@ -215,9 +215,9 @@ class AiCoachingService {
         val root = JSONObject()
         root.put("model", OPENAI_MODEL)
         val messages = JSONArray()
-        val sys = JSONObject().put("role", "system").put("content", "You are AIMI, a helpful diabetes coach.")
+        // Unified: Prompt contains the full persona and instructions.
         val usr = JSONObject().put("role", "user").put("content", prompt)
-        messages.put(sys).put(usr)
+        messages.put(usr)
         root.put("messages", messages)
         root.put("temperature", 0.7)
         
