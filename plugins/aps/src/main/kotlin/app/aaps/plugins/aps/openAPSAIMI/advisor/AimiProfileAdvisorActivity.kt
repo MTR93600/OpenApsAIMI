@@ -366,8 +366,15 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         }
         
         textLayout.addView(TextView(this).apply {
-            val keyLabel = rec.technicalKey.substringAfterLast("AIMIPkpd").replace("Initial", "").replace("Bounds", "")
-            text = keyLabel // Simple technical display or verify if we can match nice name.
+            val keyLabel = when {
+                rec.technicalKey.contains("PkpdEnabled") -> rh.gs(R.string.aimi_pkpd_title_enable)
+                rec.technicalKey.contains("InitialDiaH") -> rh.gs(R.string.aimi_pkpd_title_dia)
+                rec.technicalKey.contains("InitialPeakMin") -> rh.gs(R.string.aimi_pkpd_title_peak)
+                rec.technicalKey.contains("IsfFusionMaxFactor") -> rh.gs(R.string.aimi_pkpd_title_isf)
+                rec.technicalKey.contains("SmbTailDamping") -> rh.gs(R.string.aimi_pkpd_title_damping)
+                else -> rec.technicalKey.substringAfterLast("AIMIPkpd").replace("Initial", "") // Fallback
+            }
+            text = keyLabel
             textSize = 16f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.WHITE)

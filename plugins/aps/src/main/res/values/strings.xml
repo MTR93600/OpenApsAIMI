@@ -1112,6 +1112,12 @@
     <string name="aimi_pkpd_hyper_isf">Increasing max ISF fusion factor would strengthen insulin when BG is resistant.</string>
     <string name="aimi_pkpd_hypo_dia">Frequent hypos detected. Extending DIA from %1$s to %2$s hours would better account for remaining insulin (IOB) and avoid stacking.</string>
     <string name="aimi_pkpd_hypo_peak">Delaying action peak (%1$s min) would soften the insulin activity curve.</string>
+    <!-- AIMI PKPD Titles -->
+    <string name="aimi_pkpd_title_enable">Activation PKPD</string>
+    <string name="aimi_pkpd_title_dia">Durée d\'Action (DIA)</string>
+    <string name="aimi_pkpd_title_peak">Pic d\'Action</string>
+    <string name="aimi_pkpd_title_isf">Sensibilité (ISF)</string>
+    <string name="aimi_pkpd_title_damping">Amortissement (Damping)</string>
     <string name="aimi_pkpd_hypo_damping">Increasing tail damping would reduce risky SMBs with late IOB.</string>
 
     <!-- AIMI AI Preferences -->
