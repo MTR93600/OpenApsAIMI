@@ -26,10 +26,11 @@ class AiCoachingService {
 
     companion object {
         private const val OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-        // Updated to v1 and gemini-1.5-flash
-        private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent"
-        
         private const val OPENAI_MODEL = "gpt-4o"
+        
+        // Gemini 2.5 Flash (Dec 2025 standard)
+        private const val GEMINI_MODEL = "gemini-2.5-flash"
+        private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:generateContent"
     }
 
     /**
