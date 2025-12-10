@@ -142,14 +142,14 @@ class AiCoachingService {
 
         val responseCode = connection.responseCode
         if (responseCode == 200) {
-            val reader = BufferedReader(InputStreamReader(connection.inputStream))
+            val reader = BufferedReader(InputStreamReader(connection.inputStream, java.nio.charset.StandardCharsets.UTF_8))
             val response = StringBuilder()
             var line: String?
             while (reader.readLine().also { line = it } != null) response.append(line)
             reader.close()
             return parseGeminiResponse(response.toString())
         } else {
-            val reader = BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream))
+            val reader = BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream, java.nio.charset.StandardCharsets.UTF_8))
             val err = StringBuilder()
             var line: String?
             while (reader.readLine().also { line = it } != null) err.append(line)
