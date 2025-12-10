@@ -86,6 +86,7 @@ data class AdvisorReport(
     val overallSeverity: AdvisorSeverity,
     val overallAssessment: String,
     val recommendations: List<AimiRecommendation>,
+    val pkpdSuggestions: List<PkpdTuningSuggestion>,
     val summary: String
 )
 
@@ -98,7 +99,8 @@ data class AdvisorReport(
 data class AdvisorContext(
     val metrics: AdvisorMetrics,
     val profile: AimiProfileSnapshot,
-    val prefs: AimiPrefsSnapshot
+    val prefs: AimiPrefsSnapshot,
+    val pkpdPrefs: PkpdPrefsSnapshot
 )
 
 data class AimiProfileSnapshot(
@@ -130,3 +132,35 @@ enum class AdvisorActionCode {
     REDUCE_MAX_SMB,
     INCREASE_LUNCH_FACTOR
 }
+
+/**
+ * =============================================================================
+ * PKPD MODELS
+ * =============================================================================
+ */
+
+data class PkpdPrefsSnapshot(
+    val pkpdEnabled: Boolean,
+    val initialDiaH: Double,
+    val initialPeakMin: Double,
+    val boundsDiaMinH: Double,
+    val boundsDiaMaxH: Double,
+    val boundsPeakMinMin: Double,
+    val boundsPeakMinMax: Double,
+    val maxDiaChangePerDayH: Double,
+    val maxPeakChangePerDayMin: Double,
+    val isfFusionMinFactor: Double,
+    val isfFusionMaxFactor: Double,
+    val isfFusionMaxChangePerTick: Double,
+    val smbTailThreshold: Double,
+    val smbTailDamping: Double,
+    val smbExerciseDamping: Double,
+    val smbLateFatDamping: Double
+)
+
+data class PkpdTuningSuggestion(
+    val technicalKey: String,
+    val fromValue: Double?,
+    val toValue: Double?,
+    val explanation: String
+)

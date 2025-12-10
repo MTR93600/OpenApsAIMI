@@ -5,6 +5,7 @@ import app.aaps.plugins.aps.R
 import kotlin.math.max
 import kotlin.math.min
 import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.BooleanKey
 
 /**
  * =============================================================================
@@ -45,6 +46,10 @@ class AimiAdvisorService {
         val severity = classifySeverity(score)
         val recommendations = generateRecommendations(context)
         
+        // PKPD Analysis
+        val pkpdAdvisor = PkpdAdvisor()
+        val pkpdSuggestions = pkpdAdvisor.analysePkpd(context.metrics, context.pkpdPrefs)
+        
         return AdvisorReport(
             generatedAt = System.currentTimeMillis(),
             metrics = context.metrics,
@@ -52,6 +57,7 @@ class AimiAdvisorService {
             overallSeverity = severity,
             overallAssessment = getAssessmentLabel(score),
             recommendations = recommendations,
+            pkpdSuggestions = pkpdSuggestions,
             summary = formatSummary(context.metrics)
         )
     }
@@ -99,15 +105,35 @@ class AimiAdvisorService {
             AimiProfileSnapshot(0.0, 0.0, 0.0, 0.0)
         }
 
-        // 3. Fetch Prefs
+        // 3. Fetch Prefs (General)
         val aimiPrefs = AimiPrefsSnapshot(
             maxSmb = preferences.get(DoubleKey.OApsAIMIMaxSMB).toDouble(),
             lunchFactor = preferences.get(DoubleKey.OApsAIMILunchFactor).toDouble(),
-            unifiedReactivityFactor = 1.0, // Not a simple preference anymore
+            unifiedReactivityFactor = 1.0,
             autodriveMaxBasal = preferences.get(DoubleKey.autodriveMaxBasal).toDouble()
         )
 
-        return AdvisorContext(metrics, aimiProfile, aimiPrefs)
+        // 4. Fetch PKPD Prefs
+        val pkpdPrefs = PkpdPrefsSnapshot(
+            pkpdEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEnabled),
+            initialDiaH = preferences.get(DoubleKey.OApsAIMIPkpdInitialDiaH).toDouble(),
+            initialPeakMin = preferences.get(DoubleKey.OApsAIMIPkpdInitialPeakMin).toDouble(),
+            boundsDiaMinH = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMinH).toDouble(),
+            boundsDiaMaxH = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH).toDouble(),
+            boundsPeakMinMin = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMin).toDouble(),
+            boundsPeakMinMax = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax).toDouble(),
+            maxDiaChangePerDayH = preferences.get(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH).toDouble(),
+            maxPeakChangePerDayMin = preferences.get(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin).toDouble(),
+            isfFusionMinFactor = preferences.get(DoubleKey.OApsAIMIIsfFusionMinFactor).toDouble(),
+            isfFusionMaxFactor = preferences.get(DoubleKey.OApsAIMIIsfFusionMaxFactor).toDouble(),
+            isfFusionMaxChangePerTick = preferences.get(DoubleKey.OApsAIMIIsfFusionMaxChangePerTick).toDouble(),
+            smbTailThreshold = preferences.get(DoubleKey.OApsAIMISmbTailThreshold).toDouble(),
+            smbTailDamping = preferences.get(DoubleKey.OApsAIMISmbTailDamping).toDouble(),
+            smbExerciseDamping = preferences.get(DoubleKey.OApsAIMISmbExerciseDamping).toDouble(),
+            smbLateFatDamping = preferences.get(DoubleKey.OApsAIMISmbLateFatDamping).toDouble()
+        )
+
+        return AdvisorContext(metrics, aimiProfile, aimiPrefs, pkpdPrefs)
     }
 
     /**
@@ -173,8 +199,9 @@ class AimiAdvisorService {
         )
         // Return zeros for profile/prefs to indicate no data
         val profile = AimiProfileSnapshot(0.0, 0.0, 0.0, 0.0)
-        val prefs = AimiPrefsSnapshot(0.0, 0.0, 0.0, 0.0)
-        return AdvisorContext(metrics, profile, prefs)
+        val prefs = AimiPrefsSnapshot(0.0, 0.0, 1.0, 0.0)
+        val pkpdPrefs = PkpdPrefsSnapshot(false, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        return AdvisorContext(metrics, profile, prefs, pkpdPrefs)
     }
 
     private fun calculateMetrics(history: List<app.aaps.core.data.model.GV>, days: Int): AdvisorMetrics {
@@ -385,16 +412,54 @@ class AimiAdvisorService {
                         RecommendationDomain.PROFILE_QUALITY -> sb.append("- ${rh.gs(R.string.aimi_adv_analysis_issue_profile)}\n")
                     }
                 }
-                sb.append("\n" + rh.gs(R.string.aimi_adv_analysis_footer))
             } else {
                 sb.append(rh.gs(R.string.aimi_adv_analysis_all_good))
             }
+
+            // PKPD Summary
+            if (report.pkpdSuggestions.isNotEmpty()) {
+                sb.append("\n\nSUGGESTIONS PKPD :\n")
+                report.pkpdSuggestions.forEach { 
+                    sb.append("- ${it.explanation}\n")
+                }
+            }
+            
+            sb.append("\n" + rh.gs(R.string.aimi_adv_analysis_footer))
+
         } else {
              // Fallback if RH missing (should not happen in real app)
              sb.append("Analysis available in app.")
         }
 
         return sb.toString()
+    }
+
+    /**
+     * Payload generator for future AI (LLM).
+     */
+    fun generatePayloadForAI(report: AdvisorReport, context: AdvisorContext): String {
+        return """
+            {
+              "score": ${report.overallScore},
+              "metrics": {
+                "tir": ${context.metrics.tir70_180},
+                "hypos": ${context.metrics.timeBelow70},
+                "hypers": ${context.metrics.timeAbove180},
+                "meanBg": ${context.metrics.meanBg},
+                "tdd": ${context.metrics.tdd}
+              },
+              "pkpd": {
+                "enabled": ${context.pkpdPrefs.pkpdEnabled},
+                "dia": ${context.pkpdPrefs.initialDiaH},
+                "peak": ${context.pkpdPrefs.initialPeakMin},
+                "isfFusionMax": ${context.pkpdPrefs.isfFusionMaxFactor},
+                "smbTailDamping": ${context.pkpdPrefs.smbTailDamping}
+              },
+              "suggestions": [
+                ${report.pkpdSuggestions.joinToString(",") { "\"${it.explanation}\"" }}
+              ]
+            }
+        """.trimIndent()
     }
 }
 

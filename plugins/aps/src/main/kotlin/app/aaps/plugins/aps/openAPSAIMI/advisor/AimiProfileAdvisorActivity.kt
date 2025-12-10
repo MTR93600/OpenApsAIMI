@@ -91,13 +91,21 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                     // 3. Section: Observations (Kotlin Rules)
                     rootLayout.addView(createSectionHeader("OBSERVATIONS"))
                     if (report.recommendations.isEmpty()) {
-                        // Show "All good" card if needed, or just skip
+                        // All good
                     } else {
                          report.recommendations.forEach { rec ->
                             rootLayout.addView(createObservationCard(rec, report.metrics, cardColor))
                         }
                     }
-            
+
+                    // 3b. PKPD TUNING
+                    if (report.pkpdSuggestions.isNotEmpty()) {
+                        rootLayout.addView(createSectionHeader("AJUSTEMENTS PKPD"))
+                        report.pkpdSuggestions.forEach { rec ->
+                            rootLayout.addView(createPkpdCard(rec, cardColor))
+                        }
+                    }
+
                     // 4. Section: AI Coach (ChatGPT)
                     rootLayout.addView(createSectionHeader("COACH IA"))
                     rootLayout.addView(createCoachCard(context, report, cardColor))
@@ -313,6 +321,66 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         // Add dynamic actions overview if present? 
         // For UI simplicity, we keep it clean as requested (Observations style) or append brief action text.
         // Let's hide detailed actions inside the observation text or keep it simple.
+        
+        row.addView(textLayout)
+        card.addView(row)
+        return card
+    }
+
+    private fun createPkpdCard(rec: PkpdTuningSuggestion, cardBg: Int): CardView {
+        val card = CardView(this).apply {
+            radius = 16f
+            setCardBackgroundColor(cardBg)
+            cardElevation = 0f
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, 16)
+            }
+        }
+        
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(24, 24, 24, 24)
+        }
+        
+        // Icon Circle
+        val iconBg = CardView(this).apply {
+            radius = 50f
+            cardElevation = 0f
+            setCardBackgroundColor(Color.parseColor("#334155"))
+            layoutParams = LinearLayout.LayoutParams(48.dpToPx(), 48.dpToPx())
+        }
+        val iconText = TextView(this).apply {
+            text = "⚙️"
+            textSize = 20f
+            gravity = Gravity.CENTER
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+        iconBg.addView(iconText)
+        row.addView(iconBg)
+        
+        // Text Content
+        val textLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 0, 0, 0)
+        }
+        
+        textLayout.addView(TextView(this).apply {
+            val keyLabel = rec.technicalKey.substringAfterLast("AIMIPkpd").replace("Initial", "").replace("Bounds", "")
+            text = keyLabel // Simple technical display or verify if we can match nice name.
+            textSize = 16f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+        })
+        
+        textLayout.addView(TextView(this).apply {
+            val msg = rec.explanation
+            text = msg
+            textSize = 14f
+            setTextColor(Color.parseColor("#94A3B8")) // Slate 400
+            setLineSpacing(4f, 1.1f)
+            setPadding(0, 4, 0, 0)
+        })
         
         row.addView(textLayout)
         card.addView(row)
