@@ -266,6 +266,11 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
     }
 
     private fun saveValues() {
+        saveToPreferences()
+        finish()
+    }
+
+    private fun saveToPreferences() {
         val p1 = inputPrebolus1.text.toString().toDoubleOrNull() ?: 0.0
         val p2 = inputPrebolus2.text.toString().toDoubleOrNull() ?: 0.0
         val react = inputReactivity.text.toString().toDoubleOrNull() ?: 100.0
@@ -282,14 +287,17 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
             preferences.put(DoubleKey.OApsAIMIDinnerFactor, react)
             preferences.put(IntKey.OApsAIMIDinnerinterval, interv)
         }
-        
-        finish()
     }
 
     private fun activateMode() {
+        // Auto-save before activation
+        saveToPreferences()
+
         // Find the automation event
+        // Use simpler matching
         val eventTitle = if (selectedMode == ModeType.LUNCH) "Lunch" else "Dinner"
-        val event = automation.userEvents().find { it.title.equals(eventTitle, ignoreCase = true) }
+        val events = automation.userEvents()
+        val event = events.find { it.title.trim().equals(eventTitle, ignoreCase = true) }
         
         if (event != null) {
             OKDialog.showConfirmation(
@@ -302,8 +310,10 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
                  }
             }
         } else {
-            // Fallback warning if not found
-            OKDialog.show(this, "Error", "Mode '$eventTitle' not found in Automation list.")
+            // Debug info for user
+            val available = events.joinToString(", ") { it.title }
+            val msg = if (available.isEmpty()) "No automations found." else "Available: $available"
+            OKDialog.show(this, "Error: '$eventTitle' not found", msg)
         }
     }
 
