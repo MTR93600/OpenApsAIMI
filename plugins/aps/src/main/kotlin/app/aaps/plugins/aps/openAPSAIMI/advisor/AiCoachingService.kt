@@ -124,7 +124,7 @@ class AiCoachingService {
         // Generation Config
         val config = JSONObject()
         config.put("temperature", 0.7)
-        config.put("maxOutputTokens", 800) 
+        config.put("maxOutputTokens", 4096) // Significantly increased to prevent ANY truncation
         root.put("generationConfig", config)
 
         connection.apply {
@@ -132,7 +132,7 @@ class AiCoachingService {
             setRequestProperty("Content-Type", "application/json")
             doOutput = true
             connectTimeout = 15000
-            readTimeout = 30000
+            readTimeout = 60000 // Increased read timeout
         }
 
         val writer = OutputStreamWriter(connection.outputStream)
