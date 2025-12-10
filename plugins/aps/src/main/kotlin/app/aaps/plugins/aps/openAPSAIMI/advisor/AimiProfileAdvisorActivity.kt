@@ -422,14 +422,10 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
 
         card.addView(layout)
 
-        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
-        
-        // Fetch keys using definitions from AiKeys (assuming .key property or name)
-        // If .key is not available, I will use the string literals I defined: "aimi_openai_api_key", etc.
-        // To be safe, I've checked standard AAPS keys usually have .key
-        val providerStr = prefs.getString("aimi_ai_provider", "OPENAI") ?: "OPENAI"
-        val openAiKey = prefs.getString("aimi_openai_api_key", "") ?: ""
-        val geminiKey = prefs.getString("aimi_gemini_api_key", "") ?: ""
+        // Fetch keys using definitions from StringKey
+        val providerStr = preferences.get(app.aaps.core.keys.StringKey.AimiAdvisorProvider)
+        val openAiKey = preferences.get(app.aaps.core.keys.StringKey.AimiAdvisorOpenAIKey)
+        val geminiKey = preferences.get(app.aaps.core.keys.StringKey.AimiAdvisorGeminiKey)
 
         val provider = if (providerStr == "GEMINI") AiCoachingService.Provider.GEMINI else AiCoachingService.Provider.OPENAI
         val activeKey = if (provider == AiCoachingService.Provider.GEMINI) geminiKey else openAiKey

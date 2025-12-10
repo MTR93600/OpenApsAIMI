@@ -59,5 +59,7 @@ enum class StringKey(
     OApsAIMIWCycleVerneuil("key_oaps_aimi_wcycle_verneuil", "NONE"),
     OApsAIMINightGrowthStart("key_oaps_aimi_ngr_night_start", "22:00"),
     OApsAIMINightGrowthEnd("key_oaps_aimi_ngr_night_end", "06:00"),
-    AimiAdvisorOpenAIKey("aimi_advisor_openai_key", "", isPassword = true)
+    AimiAdvisorOpenAIKey("aimi_advisor_openai_key", "", isPassword = true),
+    AimiAdvisorGeminiKey("aimi_advisor_gemini_key", "", isPassword = true),
+    AimiAdvisorProvider("aimi_advisor_provider", "OPENAI")
 }

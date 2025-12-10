@@ -29,7 +29,7 @@ import javax.inject.Inject
 import android.os.Handler
 import android.os.Looper
 import android.widget.Switch
-import app.aaps.plugins.aps.openAPSAIMI.advisor.AiKeys
+
 
 class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
 
@@ -136,66 +136,6 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
         formCard.addView(formLayout)
         container.addView(formCard)
 
-        // --- AI Settings Section --- REMOVED
-        /*
-        val aiTitle = TextView(this).apply {
-            text = "🧠 Assistant AI"
-            textSize = 20f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = 48
-                bottomMargin = 24
-            }
-        }
-        container.addView(aiTitle)
-
-        // Provider Switch
-        switchProvider = Switch(this).apply {
-            text = "Utiliser Gemini (Google)"
-            setTextColor(textPrimary)
-            textSize = 16f
-            // thumbTintList = androidx.core.content.ContextCompat.getColorStateList(context, app.aaps.core.ui.R.color.primary) // Fix color or remove
-            isChecked = sp.getString(AiKeys.AI_PROVIDER, "OPENAI") == "GEMINI"
-        }
-        container.addView(switchProvider)
-
-        container.addView(Space(this).apply { minimumHeight = 24 })
-
-        // Gemini Key
-        container.addView(TextView(this).apply {
-            text = "Gemini API Key"
-            setTextColor(textSecondary)
-        })
-        inputGeminiKey = EditText(this).apply {
-            background = getInputBackground()
-            setTextColor(Color.WHITE)
-            setPadding(32, 32, 32, 32)
-            hint = "AIzaSy..."
-            setHintTextColor(Color.DKGRAY)
-             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setText(sp.getString(AiKeys.GEMINI_KEY, ""))
-        }
-        container.addView(inputGeminiKey)
-
-        container.addView(Space(this).apply { minimumHeight = 24 })
-
-        // OpenAI Key
-        container.addView(TextView(this).apply {
-            text = "OpenAI API Key"
-            setTextColor(textSecondary)
-        })
-        inputOpenAiKey = EditText(this).apply {
-            background = getInputBackground()
-            setTextColor(Color.WHITE)
-            setPadding(32, 32, 32, 32)
-            hint = "sk-..."
-            setHintTextColor(Color.DKGRAY)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setText(sp.getString(AiKeys.OPENAI_KEY, ""))
-        }
-        container.addView(inputOpenAiKey)
-        */
 
         // --- Buttons ---
         val buttonPanel = LinearLayout(this).apply {
@@ -372,21 +312,6 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
             preferences.put(IntKey.OApsAIMIDinnerinterval, interv)
         }
 
-        // 2. Save AI Settings - REMOVED
-        /*
-        try {
-            val geminiKey = inputGeminiKey.text.toString().trim()
-            val openAiKey = inputOpenAiKey.text.toString().trim()
-            val provider = if (switchProvider.isChecked) "GEMINI" else "OPENAI"
-
-            sp.edit().putString(AiKeys.GEMINI_KEY, geminiKey)
-                       .putString(AiKeys.OPENAI_KEY, openAiKey)
-                       .putString(AiKeys.AI_PROVIDER, provider)
-                       .apply()
-        } catch (e: Exception) {
-             e.printStackTrace()
-        }
-        */
 
         finish()
     }
