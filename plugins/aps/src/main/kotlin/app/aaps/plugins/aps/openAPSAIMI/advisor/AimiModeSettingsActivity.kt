@@ -136,7 +136,8 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
         formCard.addView(formLayout)
         container.addView(formCard)
 
-        // --- AI Settings Section ---
+        // --- AI Settings Section --- REMOVED
+        /*
         val aiTitle = TextView(this).apply {
             text = "🧠 Assistant AI"
             textSize = 20f
@@ -194,6 +195,7 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
             setText(sp.getString(AiKeys.OPENAI_KEY, ""))
         }
         container.addView(inputOpenAiKey)
+        */
 
         // --- Buttons ---
         val buttonPanel = LinearLayout(this).apply {
@@ -370,7 +372,8 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
             preferences.put(IntKey.OApsAIMIDinnerinterval, interv)
         }
 
-        // 2. Save AI Settings
+        // 2. Save AI Settings - REMOVED
+        /*
         try {
             val geminiKey = inputGeminiKey.text.toString().trim()
             val openAiKey = inputOpenAiKey.text.toString().trim()
@@ -383,12 +386,13 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
         } catch (e: Exception) {
              e.printStackTrace()
         }
+        */
 
         finish()
     }
 
     private fun activateMode() {
-        saveValues() // saveValues handles saving. Logic merged.
+        saveValues() // saveValues handles saving. Logic merged. // No longer needed for AI keys
 
         // Find the automation event
         val eventTitle = if (selectedMode == ModeType.LUNCH) "Lunch" else "Dinner"

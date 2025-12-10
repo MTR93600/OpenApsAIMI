@@ -1113,5 +1113,16 @@
     <string name="aimi_pkpd_hypo_dia">Frequent hypos detected. Extending DIA from %1$s to %2$s hours would better account for remaining insulin (IOB) and avoid stacking.</string>
     <string name="aimi_pkpd_hypo_peak">Delaying action peak (%1$s min) would soften the insulin activity curve.</string>
     <string name="aimi_pkpd_hypo_damping">Increasing tail damping would reduce risky SMBs with late IOB.</string>
+
+    <!-- AIMI AI Preferences -->
+    <string name="aimi_prefs_ai_title">🤖 Assistant AI</string>
+    <string name="aimi_prefs_provider_title">AI Provider</string>
+    <string name="aimi_prefs_provider_dialog_title">Select AI Provider</string>
+    <string name="aimi_prefs_provider_openai">OpenAI (GPT-4o)</string>
+    <string name="aimi_prefs_provider_gemini">Google Gemini (1.5 Flash)</string>
+    <string name="aimi_prefs_openai_key_title">OpenAI API Key</string>
+    <string name="aimi_prefs_openai_key_summary">Enter your OpenAI API Key (sk-...)</string>
+    <string name="aimi_prefs_gemini_key_title">Gemini API Key</string>
+    <string name="aimi_prefs_gemini_key_summary">Enter your Google Gemini API Key (AIza...)</string>
 </resources>
 
