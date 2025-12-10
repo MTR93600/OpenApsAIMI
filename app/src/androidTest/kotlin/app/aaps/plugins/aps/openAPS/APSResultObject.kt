@@ -93,6 +93,8 @@ open class APSResultObject(protected val injector: HasAndroidInjector) : APSResu
     override var oapsProfileAutoIsf: OapsProfileAutoIsf? = null
     override var mealData: MealData? = null
     override var autosensResult: AutosensResult? = null
+    override var isHypoRisk: Boolean = false
+    override var oapsProfileAimi: app.aaps.core.interfaces.aps.OapsProfileAimi? = null
 
     override fun predictions(): Predictions? = null
     override fun rawData(): Any = Object()
@@ -194,6 +196,8 @@ open class APSResultObject(protected val injector: HasAndroidInjector) : APSResu
         newResult.carbsReq = carbsReq
         newResult.carbsReqWithin = carbsReqWithin
         newResult.targetBG = targetBG
+        newResult.isHypoRisk = isHypoRisk
+        newResult.oapsProfileAimi = oapsProfileAimi
     }
 
     override fun json(): JSONObject? {
