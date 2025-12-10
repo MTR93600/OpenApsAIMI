@@ -444,7 +444,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         } else {
              lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                 try {
-                    val advice = AiCoachingService().fetchAdvice(context, report, activeKey, provider)
+                    val advice = AiCoachingService().fetchAdvice(this@AimiProfileAdvisorActivity, context, report, activeKey, provider)
                     contentText.text = advice
                 } catch (e: Exception) {
                     contentText.text = rh.gs(R.string.aimi_coach_error) + "\n" + e.localizedMessage

@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor
 
+import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -37,6 +38,7 @@ class AiCoachingService {
      * Fetch advice asynchronously.
      */
     suspend fun fetchAdvice(
+        androidContext: Context,
         context: AdvisorContext, 
         report: AdvisorReport, 
         apiKey: String,
@@ -45,7 +47,7 @@ class AiCoachingService {
         if (apiKey.isBlank()) return@withContext "Clé API manquante. Veuillez configurer votre clé ${provider.name}."
 
         try {
-            val prompt = buildPrompt(context, report)
+            val prompt = buildPrompt(androidContext, context, report)
             
             if (provider == Provider.GEMINI) {
                 return@withContext callGemini(apiKey, prompt)
@@ -105,29 +107,24 @@ class AiCoachingService {
         val jsonBody = JSONObject()
         val parts = JSONArray()
         val part = JSONObject()
-        part.put("text", prompt)
+        val textWithSystem = "Role: Expert Diabetes Coach.\n$prompt" // Simple prepend for system context
+        part.put("text", textWithSystem)
         parts.put(part)
         
         val content = JSONObject()
         content.put("parts", parts)
-        content.put("role", "user") // or 'user' by default
+        content.put("role", "user")
         
         val contents = JSONArray()
         contents.put(content)
         
-        // System instruction (Gemini 1.5 supports system_instruction, checking if json structure allows)
-        // Simple prompt approach: put system instruction IN the text if needed, 
-        // but 'system_instruction' field exists in 1.5. 
-        // Let's stick to simple user prompt concat for robustness.
-        
-        // Final JSON
         val root = JSONObject()
         root.put("contents", contents)
         
         // Generation Config
         val config = JSONObject()
         config.put("temperature", 0.7)
-        config.put("maxOutputTokens", 500)
+        config.put("maxOutputTokens", 700) // Increased for structured response
         root.put("generationConfig", config)
 
         connection.apply {
@@ -160,45 +157,56 @@ class AiCoachingService {
         }
     }
 
-    private fun buildPrompt(ctx: AdvisorContext, report: AdvisorReport): String {
+    private fun buildPrompt(androidContext: Context, ctx: AdvisorContext, report: AdvisorReport): String {
         val sb = StringBuilder()
         val deviceLang = java.util.Locale.getDefault().displayLanguage
         
-        // Persona & Tone
-        sb.append("Tu es AIMI, un assistant intelligent et empathique expert en gestion du diabète (OpenAPS/Loop).\n")
-        sb.append("Ton but : aider l'utilisateur à comprendre ses résultats ('$deviceLang') et proposer des ajustements concrets.\n")
-        sb.append("Ton ton : Encourangeant, professionnel mais accessible, comme un coach personnel.\n\n")
+        // Persona
+        sb.append("You are AIMI, an expert 'Certified Diabetes Educator' specializing in Automated Insulin Delivery (AID).\n")
+        sb.append("Your Goal: Analyze the patient's 7-day glucose & insulin data to identify patterns and suggest specific algorithm tuning.\n")
+        sb.append("Tone: Professional, encouraging, precise, and safety-first.\n\n")
 
         // 1. Context: Metrics
-        sb.append("--- ANALYSE 7 JOURS ---\n")
-        sb.append("Score Global: ${report.overallScore}/10\n")
+        sb.append("--- PATIENT METRICS (7 Days) ---\n")
+        sb.append("Score: ${report.overallScore}/10 | GMI: ${ctx.metrics.gmi}%\n")
         sb.append("TIR (70-180): ${(ctx.metrics.tir70_180 * 100).roundToInt()}%\n")
-        sb.append("Hypo (<70): ${(ctx.metrics.timeBelow70 * 100).roundToInt()}%\n")
+        sb.append("Hypo (<70): ${(ctx.metrics.timeBelow70 * 100).roundToInt()}% | Severe (<54): ${(ctx.metrics.timeBelow54 * 100).roundToInt()}%\n")
         sb.append("Hyper (>180): ${(ctx.metrics.timeAbove180 * 100).roundToInt()}%\n")
-        sb.append("Moyenne: ${ctx.metrics.meanBg.roundToInt()} mg/dL\n")
-        sb.append("GMI: ${ctx.metrics.gmi}%\n\n")
+        sb.append("Mean Glucose: ${ctx.metrics.meanBg.roundToInt()} mg/dL\n")
+        sb.append("Total Daily Dose (TDD): ${ctx.metrics.tdd.roundToInt()} U\n")
+        sb.append("Basal/Bolus Split: ${(ctx.metrics.basalPercent * 100).roundToInt()}% Basal | ${(100 - (ctx.metrics.basalPercent * 100).roundToInt())}% Bolus\n\n")
 
         // 2. PKPD Context
         if (ctx.pkpdPrefs.pkpdEnabled) {
-             sb.append("--- PARAMETRES PKPD (Adaptatif) ---\n")
+             sb.append("--- ACTIVE SETTINGS (PKPD) ---\n")
              sb.append("DIA: ${ctx.pkpdPrefs.initialDiaH}h\n")
-             sb.append("Pic: ${ctx.pkpdPrefs.initialPeakMin}min\n")
-             sb.append("Fusion ISF Max: x${ctx.pkpdPrefs.isfFusionMaxFactor}\n\n")
+             sb.append("Peak Time: ${ctx.pkpdPrefs.initialPeakMin}min\n")
+             sb.append("IsfFusionMax: x${ctx.pkpdPrefs.isfFusionMaxFactor}\n\n")
         }
 
-        // 3. System Observations
-        if (report.pkpdSuggestions.isNotEmpty() || report.recommendations.isNotEmpty()) {
-            sb.append("--- SUGGESTIONS DU SYSTEME ---\n")
-            report.pkpdSuggestions.forEach { sb.append("- (PKPD) ${it.explanation}\n") }
+        // 3. System Observations (Recommendations + PKPD)
+        sb.append("--- SYSTEM OBSERVATIONS ---\n")
+        if (report.recommendations.isNotEmpty()) {
+            report.recommendations.forEach { 
+                val title = try { androidContext.getString(it.titleResId) } catch(e:Exception) { "Issue" }
+                sb.append("- [Priority ${it.priority}] $title\n") 
+            }
         }
+        if (report.pkpdSuggestions.isNotEmpty()) {
+            report.pkpdSuggestions.forEach { sb.append("- [Software Suggestion] ${it.explanation}\n") }
+        }
+        if (report.recommendations.isEmpty() && report.pkpdSuggestions.isEmpty()) {
+            sb.append("- No specific algorithmic issues detected.\n")
+        }
+        sb.append("\n")
 
         // 4. Instructions
-        sb.append("\n--- TACHE ---\n")
-        sb.append("1. Fais une analyse synthétique : Bravo pour les points positifs, attention aux points négatifs.\n")
-        sb.append("2. Si le TIR < 80% ou Hypos > 4%, propose 1 ou 2 actions prioritaires (ex: ajuster Basale, ISF, ou paramètres AIMI).\n")
-        sb.append("3. Si les suggestions systèmes ci-dessus te semblent pertinentes, explique-les simplement.\n")
-        sb.append("4. Réponds impérativement en '$deviceLang'.\n")
-        sb.append("5. Sois court (max 100 mots) et structuré avec des emojis.\n")
+        sb.append("--- COACHING TASK ---\n")
+        sb.append("Respond in '$deviceLang'. Structure your answer exactly as follows:\n")
+        sb.append("1. 🔍 **Diagnostics**: Summarize the main glycemic patterns (e.g., 'Post-prandial spikes', 'Nighttime hypos', 'Basal heavy').\n")
+        sb.append("2. 📉 **Root Cause**: Hypothesize the 'Why' (e.g., 'DIA too short', 'ISF too aggressive', 'Carb ratio needs checking').\n")
+        sb.append("3. 🛠️ **Action Plan**: Propose 2-3 concrete, actionable steps. If Hypo > 4%, prioritize safety (reduce aggressiveness). If suggestions above exist, evaluate them.\n")
+        sb.append("\nConstraint: Keep it under 150 words. Use emojis.")
 
         return sb.toString()
     }
