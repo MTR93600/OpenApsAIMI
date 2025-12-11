@@ -167,6 +167,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var mealModeSmbReason: String? = null
     private val consoleError = mutableListOf<String>()
     private val consoleLog = mutableListOf<String>()
+    private var lastResistanceHammerTime: Long = 0L // FCL 6.0 State
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
     //private val modelFile = File(externalDir, "ml/model.tflite")
     //private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
@@ -1511,16 +1512,41 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return true
     }
 
+    private fun isPostHypoProtectionCondition(
+        recentBGs: List<Float>,
+        reason: StringBuilder
+    ): Boolean {
+        // Check last 2 hours (approx 24 points)
+        // If any BG < 70, we are in "Safety Zone"
+        val recentHypo = recentBGs.take(24).any { it < 70 }
+        if (recentHypo) {
+            reason.append("🛡️ Safety Net: Post-Hypo Rebound Brake ENGAGED (BG < 70 in last 2h)\n")
+            return true
+        }
+        return false
+    }
+
     private fun calculateResistanceHammer(
         regularBolus: Double,
         bolusLastHour: Double,
         delta: Float,
         reason: StringBuilder
     ): Double {
+        // 1. Cool-down check (45 min = 45 * 60 * 1000 ms)
+        val cooldown = 45 * 60 * 1000L
+        if (System.currentTimeMillis() - lastResistanceHammerTime < cooldown) {
+             // reason.append("  • Hammer Cooling down...\n")
+             return regularBolus
+        }
+
         // Trigger: Significant bolus history (> 1.0U) AND still rising fast (> 2.0)
         if (bolusLastHour > 1.0 && delta > 2.0) {
             val boosted = regularBolus * 1.5
             reason.append("🔨 Resistance Hammer: History ${"%.2f".format(bolusLastHour)}U & Delta ${delta} -> Boost x1.5 -> ${"%.2f".format(boosted)}U\n")
+            
+            // Update state
+            lastResistanceHammerTime = System.currentTimeMillis()
+            
             return boosted
         }
         return regularBolus
@@ -3266,8 +3292,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(context.getString(R.string.manual_meal_prebolus, pbolusM))
             return rT
         }
-        // 🧹 Innovation: FCL 5.0 Drift Terminator
-        if (!nightbis && autodrive && isDriftTerminatorCondition(bg.toFloat(), targetBg.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
+        // 🛡️ Innovation: FCL 6.0 Safety Net
+        val isPostHypo = isPostHypoProtectionCondition(recentBGs, reason)
+        
+        // 🧹 Innovation: FCL 5.0 Drift Terminator (Blocked by Post-Hypo)
+        if (!nightbis && autodrive && !isPostHypo && isDriftTerminatorCondition(bg.toFloat(), targetBg.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
             val terminatortap = 0.4
             rT.units = terminatortap
             reason.append("→ Drift Terminator: Micro-Tap ${terminatortap}U\n")
@@ -3279,10 +3308,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
             
             // 📈 Innovation: Adaptive Prebolus & Resistance Hammer
-            var adaptiveUnits = calculateAdaptivePrebolus(pbolusA, delta, reason)
+            // 🛡️ Disabled if Post-Hypo
+            var adaptiveUnits = if (isPostHypo) pbolusA else calculateAdaptivePrebolus(pbolusA, delta, reason)
             
             // 🔨 FCL 5.0 Resistance Hammer
-            adaptiveUnits = calculateResistanceHammer(adaptiveUnits, totalBolusLastHour, delta, reason)
+            // 🛡️ Disabled if Post-Hypo
+            if (!isPostHypo) {
+                adaptiveUnits = calculateResistanceHammer(adaptiveUnits, totalBolusLastHour, delta, reason)
+            }
             
             rT.units = adaptiveUnits
             
