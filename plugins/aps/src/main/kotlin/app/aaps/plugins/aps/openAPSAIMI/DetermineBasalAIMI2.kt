@@ -1450,6 +1450,47 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return false
     }
 
+    private fun calculateAdaptivePrebolus(
+        baseBolus: Double,
+        delta: Float,
+        reason: StringBuilder
+    ): Double {
+        // Base factor 1.0
+        // If delta > 5, we add boost. Example: Delta 15 -> (15-5)/20 = 0.5 boost -> 1.5x
+        val boost = ((delta - 5f).coerceAtLeast(0f) / 20f).toDouble()
+        val factor = 1.0 + boost
+        
+        val adaptiveBolus = baseBolus * factor
+        val cappedBolus = Math.min(adaptiveBolus, baseBolus * 2.0)
+        
+        if (factor > 1.0) {
+            reason.append(String.format("📈 Adaptive Prebolus: Base %.2fU x %.2f (Delta %.1f) -> %.2fU\n", baseBolus, factor, delta, cappedBolus))
+        }
+        return cappedBolus
+    }
+
+    private fun isHighPlateauBreakerCondition(
+        bg: Float,
+        targetBg: Float,
+        stable: Boolean,
+        iob: Double,
+        maxSMB: Double,
+        reason: StringBuilder
+    ): Boolean {
+        // 1. High enough (Target + 40)
+        if (bg <= targetBg + 40) return false
+        
+        // 2. Stable (Stagnation)
+        if (!stable) return false
+        
+        // 3. Low IOB (Room to act) - strict safety
+        val safeIOB = maxSMB / 3.0
+        if (iob > safeIOB) return false
+        
+        reason.append("🔨 High Plateau Breaker: BG High & Stable & Low IOB -> ENGAGED\n")
+        return true
+    }
+
     private fun isAutodriveModeCondition(
         delta: Float,
         autodrive: Boolean,
@@ -3167,6 +3208,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return rT
         }
 
+        // 🔨 Innovation: High Plateau Breaker
+        if (!nightbis && autodrive && isHighPlateauBreakerCondition(bg.toFloat(), targetBg.toFloat(), stable == 1, iob.toDouble(), maxSMB, reason) && modesCondition) {
+             val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+             val adaptiveUnits = calculateAdaptivePrebolus(pbolusA, delta, reason)
+             rT.units = adaptiveUnits
+             reason.append("→ Plateau Breaker engaged: Force Bolus ${adaptiveUnits}U\n")
+             rT.reason.append(reason.toString())
+             return rT
+        }
+
         if (isMealModeCondition()) {
             val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
             rT.units = pbolusM
@@ -3176,9 +3227,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason, targetBg) && modesCondition) {
             val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
-            rT.units = pbolusA
+            
+            // 📈 Innovation: Adaptive Prebolus
+            val adaptiveUnits = calculateAdaptivePrebolus(pbolusA, delta, reason)
+            rT.units = adaptiveUnits
+            
             //reason.append("→ Microbolusing Autodrive Mode ${pbolusA}U\n")
-            reason.append(context.getString(R.string.autodrive_meal_prebolus, pbolusA))
+            reason.append(context.getString(R.string.autodrive_meal_prebolus, adaptiveUnits))
             //reason.append("  • Target BG: $targetBg\n")
             reason.append(context.getString(R.string.target_bg, targetBg))
             //reason.append("  • Slope from min deviation: ${mealData.slopeFromMinDeviation}\n")
