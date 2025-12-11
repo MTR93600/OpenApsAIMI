@@ -176,9 +176,17 @@ class AiCoachingService {
         sb.append("Total Daily Dose (TDD): ${ctx.metrics.tdd.roundToInt()} U\n")
         sb.append("Basal/Bolus Split: ${(ctx.metrics.basalPercent * 100).roundToInt()}% Basal | ${(100 - (ctx.metrics.basalPercent * 100).roundToInt())}% Bolus\n\n")
 
+        // 1.5 Context: Active Profile & Preferences
+        sb.append("--- ACTIVE PROFILE & SETTINGS ---\n")
+        sb.append("Max SMB: ${ctx.prefs.maxSmb} U\n")
+        sb.append("ISF: ${ctx.profile.isf} mg/dL/U\n")
+        sb.append("IC Ratio: ${ctx.profile.icRatio} g/U\n")
+        sb.append("Basal (Night): ${ctx.profile.nightBasal} U/h\n")
+        sb.append("Target BG: ${ctx.profile.targetBg} mg/dL\n\n")
+
         // 2. PKPD Context
         if (ctx.pkpdPrefs.pkpdEnabled) {
-             sb.append("--- ACTIVE SETTINGS (PKPD) ---\n")
+             sb.append("--- PARAMETRES PKPD (Adaptatif) ---\n")
              sb.append("DIA: ${ctx.pkpdPrefs.initialDiaH}h\n")
              sb.append("Peak Time: ${ctx.pkpdPrefs.initialPeakMin}min\n")
              sb.append("IsfFusionMax: x${ctx.pkpdPrefs.isfFusionMaxFactor}\n\n")
