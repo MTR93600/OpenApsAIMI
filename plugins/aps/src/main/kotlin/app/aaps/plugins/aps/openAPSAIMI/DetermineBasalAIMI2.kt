@@ -1439,28 +1439,41 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         slopeFromMinDeviation: Double,
         bg: Float,
         predictedBg: Float,
-        reason: StringBuilder // ← on utilise CE builder-là
+        reason: StringBuilder,
+        targetBg: Float
     ): Boolean {
         // ⚙️ Prefs
         val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
         val autodriveDelta: Float = preferences.get(DoubleKey.OApsAIMIcombinedDelta).toFloat()
         val autodriveMinDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
-        val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG)
+        // val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG) // Old static threshold
+
+        // 🛡️ Noise Filter (Anti-Jump)
+        if (delta > 15f && shortAvgDelta < 5f) {
+             reason.append("🚫 Noise detected (Delta > 15 & Avg < 5) -> Autodrive OFF")
+             return false
+        }
 
         // 📈 Deltas récents & delta combiné
         val recentDeltas = getRecentDeltas()
         val predicted = predictedDelta(recentDeltas).toFloat()
         val combinedDelta = (delta + predicted) / 2f
+        
+        // 🎯 Dynamic Thresholds
+        val dynamicBgThreshold = targetBg + 10f
+        val dynamicPredictedThreshold = targetBg + 30f
 
         // 🔍 Tendance BG
         val recentBGs = getRecentBGs()
         var autodriveCondition = true
+        var currentState = AutodriveState.IDLE
+
         if (recentBGs.isNotEmpty()) {
             val bgTrend = calculateBgTrend(recentBGs, reason)
             reason.appendLine(
                 "📈 BGTrend=${"%.2f".format(bgTrend)} | Δcomb=${"%.2f".format(combinedDelta)} | predBG=${"%.0f".format(predictedBg)}"
             )
-            autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta, reason)
+            autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta, reason, dynamicPredictedThreshold)
         } else {
             //reason.appendLine("⚠️ Aucune BG récente — conditions par défaut conservées")
             reason.appendLine(context.getString(R.string.no_recent_bg))
@@ -1472,29 +1485,38 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return false
         }
 
+        // Determine State (Watching vs Engaged vs Idle)
+        if (autodriveCondition && combinedDelta >= 1.0f && slopeFromMinDeviation >= 1.0) {
+            currentState = AutodriveState.WATCHING
+        }
+
         // ✅ Décision finale
         val ok =
             autodriveCondition &&
                 combinedDelta >= autodriveDelta &&
                 autodrive &&
-                predictedBg > 140 &&
+                predictedBg > dynamicPredictedThreshold &&
                 slopeFromMinDeviation >= autodriveMinDeviation &&
-                bg >= autodriveBG.toFloat()
+                bg >= dynamicBgThreshold
+
+        if (ok) currentState = AutodriveState.ENGAGED
 
         reason.appendLine(
-            "🚗 Autodrive: ${if (ok) "✅ ON" else "❌ OFF"} | " +
+            "🚗 Autodrive: ${if (ok) "✅ ON" else "❌ OFF"} [$currentState] | " +
                 "cond=$autodriveCondition, Δc≥${"%.2f".format(autodriveDelta)}, " +
-                "predBG>140, slope≥${"%.2f".format(autodriveMinDeviation)}, bg≥${autodriveBG}"
+                "predBG>${dynamicPredictedThreshold.toInt()}, slope≥${"%.2f".format(autodriveMinDeviation)}, bg≥${dynamicBgThreshold.toInt()}"
         )
 
         return ok
     }
 
+
     private fun adjustAutodriveCondition(
         bgTrend: Float,
         predictedBg: Float,
         combinedDelta: Float,
-        reason: StringBuilder
+        reason: StringBuilder,
+        predictedThreshold: Float
     ): Boolean {
         val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
 
@@ -1517,7 +1539,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // Cas 2 : glycémie monte ou conditions fortes
-        if ((bgTrend >= 0f && combinedDelta >= autodriveDelta) || (predictedBg > 140 && combinedDelta >= autodriveDelta)) {
+        if ((bgTrend >= 0f && combinedDelta >= autodriveDelta) || (predictedBg > predictedThreshold && combinedDelta >= autodriveDelta)) {
             //reason.append("  ✔ Autodrive activé : conditions favorables\n")
             reason.append(context.getString(R.string.autodrive_enabled_conditions))
             return true
@@ -3111,8 +3133,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val reason = StringBuilder()
         val recentBGs = getRecentBGs()
         val bgTrend = calculateBgTrend(recentBGs, reason)
-        val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(),reason)
-        if (bg > 100 && predictedBg > 140 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition) {
+        val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason, targetBg + 30f)
+        if (bg > targetBg + 10 && predictedBg > targetBg + 30 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition) {
             rT.units = pbolusAS
             //rT.reason.append("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
             rT.reason.append(context.getString(R.string.reason_autodrive_early_meal, pbolusAS, combinedDelta, predicted, bgAcceleration.toDouble()))
@@ -3125,7 +3147,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(context.getString(R.string.manual_meal_prebolus, pbolusM))
             return rT
         }
-        if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason) && modesCondition) {
+        if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason, targetBg) && modesCondition) {
             val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
             rT.units = pbolusA
             //reason.append("→ Microbolusing Autodrive Mode ${pbolusA}U\n")
@@ -4121,7 +4143,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         rT.reason.appendLine( //"🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
-            context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", if (isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)) "✔" else "✘") +
+            context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", if (isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason, target_bg.toFloat())) "✔" else "✘") +
 //"AutodriveCondition: $autodriveCondition"
                 context.getString(R.string.autodrive_condition, if (autodriveCondition) "✔" else "✘")
         )
@@ -4761,4 +4783,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Cap only by absolute max config (safety)
         return if (boosted > maxBasalConfig) maxBasalConfig else boosted
     }
+}
+
+enum class AutodriveState {
+    IDLE,
+    WATCHING,
+    ENGAGED
 }
