@@ -63,17 +63,27 @@ enum class AdvisorSeverity {
 }
 
 /**
+ * Smart Actions
+ */
+sealed class AdvisorAction {
+    data class UpdatePreference(
+        val key: Any, /* Using Any to avoid complex generics */
+        val value: Any,
+        val description: String
+    ) : AdvisorAction()
+    // Future: data class UpdateProfile(...)
+}
+
+/**
  * A single recommendation from the advisor.
  * Uses Resource IDs for localization.
  */
+// Enhance Recommendations to include optional action
 data class AimiRecommendation(
-    val domain: RecommendationDomain,
-    val priority: RecommendationPriority,
     val titleResId: Int,
     val descriptionResId: Int,
-    val actionsResIds: List<Int> = emptyList(),
-    // New: Specific actions for the Rules Engine
-    val advisorActions: List<AdvisorAction> = emptyList()
+    val priority: RecommendationPriority,
+    val action: AdvisorAction? = null
 )
 
 /**
@@ -123,12 +133,12 @@ data class AdvisorFlag(
     val severity: AdvisorSeverity
 )
 
-data class AdvisorAction(
-    val actionCode: AdvisorActionCode,
+data class LegacyAdvisorAction(
+    val actionCode: LegacyAdvisorActionCode,
     val params: Map<String, Any> = emptyMap()
 )
 
-enum class AdvisorActionCode {
+enum class LegacyAdvisorActionCode {
     INCREASE_NIGHT_BASAL,
     REDUCE_MAX_SMB,
     INCREASE_LUNCH_FACTOR

@@ -42,12 +42,13 @@ class AiCoachingService {
         context: AdvisorContext, 
         report: AdvisorReport, 
         apiKey: String,
-        provider: Provider
+        provider: Provider,
+        history: List<app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.AdvisorActionLog> = emptyList()
     ): String = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) return@withContext "Clé API manquante. Veuillez configurer votre clé ${provider.name}."
 
         try {
-            val prompt = buildPrompt(androidContext, context, report)
+            val prompt = buildPrompt(androidContext, context, report, history)
             
             if (provider == Provider.GEMINI) {
                 return@withContext callGemini(apiKey, prompt)
@@ -60,6 +61,9 @@ class AiCoachingService {
             return@withContext "Erreur de connexion (${provider.name}) : ${e.localizedMessage}"
         }
     }
+
+    // ... (keep private methods)
+
 
     private fun callOpenAI(apiKey: String, prompt: String): String {
         val jsonBody = buildOpenAiJson(prompt)
@@ -157,7 +161,12 @@ class AiCoachingService {
         }
     }
 
-    private fun buildPrompt(androidContext: Context, ctx: AdvisorContext, report: AdvisorReport): String {
+    private fun buildPrompt(
+        androidContext: Context, 
+        ctx: AdvisorContext, 
+        report: AdvisorReport,
+        history: List<app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.AdvisorActionLog>
+    ): String {
         val sb = StringBuilder()
         val deviceLang = java.util.Locale.getDefault().displayLanguage
         
@@ -165,6 +174,19 @@ class AiCoachingService {
         sb.append("You are AIMI, an expert 'Certified Diabetes Educator' specializing in Automated Insulin Delivery (AID).\n")
         sb.append("Your Goal: Analyze the patient's 7-day glucose & insulin data to identify patterns and suggest specific algorithm tuning.\n")
         sb.append("Tone: Professional, encouraging, precise, and safety-first.\n\n")
+
+        // 0.5 STABILITY CONTEXT (History)
+        sb.append("--- HISTORY & STABILITY CONTEXT ---\n")
+        if (history.isNotEmpty()) {
+            sb.append("Recent changes made by the user:\n")
+            history.take(5).forEach { 
+                val date = java.text.SimpleDateFormat("dd/MM", java.util.Locale.US).format(java.util.Date(it.timestamp))
+                sb.append("- [$date] ${it.description} (${it.oldValue} -> ${it.newValue})\n")
+            }
+            sb.append("CRITICAL: If a structured parameter was recently changed (last 3-5 days), AVOID suggesting further contradictory changes to it unless safety is at risk. Allow time for the change to work.\n\n")
+        } else {
+            sb.append("No recent changes recorded. You may suggest bold adjustments if necessary.\n\n")
+        }
 
         // 1. Context: Metrics
         sb.append("--- PATIENT METRICS (7 Days) ---\n")
@@ -212,7 +234,7 @@ class AiCoachingService {
         sb.append("--- COACHING TASK ---\n")
         sb.append("Respond in '$deviceLang'. Structure your answer exactly as follows:\n")
         sb.append("1. 🔍 **Diagnostics**: Summarize the main glycemic patterns (e.g., 'Post-prandial spikes', 'Nighttime hypos', 'Basal heavy').\n")
-        sb.append("2. 📉 **Root Cause**: Hypothesize the 'Why' (e.g., 'DIA too short', 'ISF too aggressive', 'Carb ratio needs checking').\n")
+        sb.append("2. 📉 **Root Cause**: Hypothesize the 'Why' (e.g., 'DIA too short', 'ISF too aggressive', 'Carb ratio needs checking'). Consider the History context.\n")
         sb.append("3. 🛠️ **Action Plan**: Propose 2-3 concrete, actionable steps. If Hypo > 4%, prioritize safety (reduce aggressiveness). If suggestions above exist, evaluate them.\n")
         sb.append("\nConstraint: Keep it under 150 words. Use emojis.")
 

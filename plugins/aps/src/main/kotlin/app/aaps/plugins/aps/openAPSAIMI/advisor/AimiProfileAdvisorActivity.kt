@@ -21,6 +21,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import androidx.lifecycle.lifecycleScope
+import app.aaps.core.keys.interfaces.DoublePreferenceKey
+import app.aaps.core.keys.interfaces.IntPreferenceKey
+import app.aaps.core.keys.interfaces.BooleanPreferenceKey
+import app.aaps.core.keys.interfaces.PreferenceKey
+import app.aaps.core.keys.interfaces.StringPreferenceKey
 
 /**
  * =============================================================================
@@ -38,12 +43,15 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     
     // NOT injected - created manually to avoid Dagger issues
     private lateinit var advisorService: AimiAdvisorService
+    private lateinit var historyRepo: app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
+
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
         // Pass dependencies to service
         advisorService = AimiAdvisorService(profileFunction, persistenceLayer, preferences, rh)
+        historyRepo = app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository(this)
         title = rh.gs(R.string.aimi_advisor_title)
         
         // Dark Navy Background
@@ -345,13 +353,83 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             setPadding(0, 4, 0, 0)
         })
         
-        // Add dynamic actions overview if present? 
-        // For UI simplicity, we keep it clean as requested (Observations style) or append brief action text.
-        // Let's hide detailed actions inside the observation text or keep it simple.
+        // Add dynamic actions overview if present
+        if (rec.action != null && rec.action is AdvisorAction.UpdatePreference) {
+            val actionBtn = TextView(this).apply {
+                text = "APPLIQUER"
+                textSize = 14f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(Color.parseColor("#38BDF8")) // Sky Blue
+                gravity = Gravity.END
+                setPadding(0, 16, 0, 0)
+                setOnClickListener {
+                    showApplyActionDialog(rec.action as AdvisorAction.UpdatePreference)
+                }
+            }
+            textLayout.addView(actionBtn)
+        }
         
         row.addView(textLayout)
         card.addView(row)
         return card
+    }
+
+    private fun showApplyActionDialog(action: AdvisorAction.UpdatePreference) {
+        val keyName = (action.key as? PreferenceKey)?.key ?: action.key.toString()
+        val msg = "Voulez-vous appliquer ce changement ?\n\n$keyName: ${action.description}"
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Confirmation")
+            .setMessage(msg)
+            .setPositiveButton("Appliquer") { _, _ ->
+                applyAction(action)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun applyAction(action: AdvisorAction.UpdatePreference) {
+        try {
+            var applied = false
+            
+            if (action.value is Double && action.key is DoublePreferenceKey) {
+                 val key = action.key as DoublePreferenceKey
+                 val oldValue = preferences.get(key)
+                 preferences.put(key, action.value as Double)
+                 logAndToast(key.key, action.description, oldValue, action.value)
+                 applied = true
+            } else if (action.value is Int && action.key is IntPreferenceKey) {
+                 val key = action.key as IntPreferenceKey
+                 val oldValue = preferences.get(key)
+                 preferences.put(key, action.value as Int)
+                 logAndToast(key.key, action.description, oldValue, action.value)
+                 applied = true
+            } else if (action.value is Boolean && action.key is BooleanPreferenceKey) {
+                 val key = action.key as BooleanPreferenceKey
+                 val oldValue = preferences.get(key)
+                 preferences.put(key, action.value as Boolean)
+                 logAndToast(key.key, action.description, oldValue, action.value)
+                 applied = true
+            }
+
+            if (!applied) {
+                 android.widget.Toast.makeText(this, "Type de clé non supporté pour application auto.", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(this, "Erreur : ${e.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
+            e.printStackTrace()
+        }
+    }
+
+    private fun logAndToast(keyName: String, desc: String, oldVal: Any, newVal: Any) {
+         historyRepo.logAction(
+                app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.ActionType.PREFERENCE_CHANGE,
+                keyName,
+                desc,
+                oldVal.toString(),
+                newVal.toString()
+            )
+         android.widget.Toast.makeText(this, "Changement appliqué !", android.widget.Toast.LENGTH_SHORT).show()
+         recreate()
     }
 
     private fun createPkpdCard(rec: PkpdTuningSuggestion, cardBg: Int): CardView {
@@ -469,9 +547,12 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             val placeholder = rh.gs(R.string.aimi_coach_placeholder) + " (${provider.name})"
             contentText.text = "$basicAnalysis\n\n⚙️ $placeholder"
         } else {
-             lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+            lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                 try {
-                    val advice = AiCoachingService().fetchAdvice(this@AimiProfileAdvisorActivity, context, report, activeKey, provider)
+                    val history = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        historyRepo.getRecentActions(7)
+                    }
+                    val advice = AiCoachingService().fetchAdvice(this@AimiProfileAdvisorActivity, context, report, activeKey, provider, history)
                     contentText.text = advice
                 } catch (e: Exception) {
                     contentText.text = rh.gs(R.string.aimi_coach_error) + "\n" + e.localizedMessage
