@@ -84,7 +84,8 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         // CRITICAL FIX: Load data on IO thread to prevent crash
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val report = advisorService.generateReport(periodDays = 7)
+                val history = historyRepo.getRecentActions(7)
+                val report = advisorService.generateReport(periodDays = 7, history = history)
                 val context = advisorService.collectContext(7)
 
                 withContext(Dispatchers.Main) {
@@ -375,12 +376,20 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     }
 
     private fun showApplyActionDialog(action: AdvisorAction.UpdatePreference) {
-        val keyName = (action.key as? PreferenceKey)?.key ?: action.key.toString()
-        val msg = "Voulez-vous appliquer ce changement ?\n\n$keyName: ${action.description}"
+        val sb = StringBuilder()
+        sb.append("L'Advisor propose les ajustements suivants :\n\n")
+        
+        action.changes.forEach { change ->
+             sb.append("• ${change.keyName}: ${change.oldValue} ➔ ${change.newValue}\n")
+             sb.append("  ${change.explanation}\n\n")
+        }
+
+        sb.append("Voulez-vous appliquer ces changements ?")
+
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Confirmation")
-            .setMessage(msg)
-            .setPositiveButton("Appliquer") { _, _ ->
+            .setTitle("Confirmation des Ajustements")
+            .setMessage(sb.toString())
+            .setPositiveButton("TOUT APPLIQUER") { _, _ ->
                 applyAction(action)
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -389,30 +398,35 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
 
     private fun applyAction(action: AdvisorAction.UpdatePreference) {
         try {
-            var applied = false
+            var appliedCount = 0
             
-            if (action.value is Double && action.key is DoublePreferenceKey) {
-                 val key = action.key as DoublePreferenceKey
-                 val oldValue = preferences.get(key)
-                 preferences.put(key, action.value as Double)
-                 logAndToast(key.key, action.description, oldValue, action.value)
-                 applied = true
-            } else if (action.value is Int && action.key is IntPreferenceKey) {
-                 val key = action.key as IntPreferenceKey
-                 val oldValue = preferences.get(key)
-                 preferences.put(key, action.value as Int)
-                 logAndToast(key.key, action.description, oldValue, action.value)
-                 applied = true
-            } else if (action.value is Boolean && action.key is BooleanPreferenceKey) {
-                 val key = action.key as BooleanPreferenceKey
-                 val oldValue = preferences.get(key)
-                 preferences.put(key, action.value as Boolean)
-                 logAndToast(key.key, action.description, oldValue, action.value)
-                 applied = true
+            action.changes.forEach { change ->
+                var applied = false
+                if (change.newValue is Double && change.key is DoublePreferenceKey) {
+                     val key = change.key as DoublePreferenceKey
+                     preferences.put(key, change.newValue as Double)
+                     logAction(change)
+                     applied = true
+                } else if (change.newValue is Int && change.key is IntPreferenceKey) {
+                     val key = change.key as IntPreferenceKey
+                     preferences.put(key, change.newValue as Int)
+                     logAction(change)
+                     applied = true
+                } else if (change.newValue is Boolean && change.key is BooleanPreferenceKey) {
+                     val key = change.key as BooleanPreferenceKey
+                     preferences.put(key, change.newValue as Boolean)
+                     logAction(change)
+                     applied = true
+                }
+                
+                if (applied) appliedCount++
             }
 
-            if (!applied) {
-                 android.widget.Toast.makeText(this, "Type de clé non supporté pour application auto.", android.widget.Toast.LENGTH_SHORT).show()
+            if (appliedCount > 0) {
+                 android.widget.Toast.makeText(this, "$appliedCount changements appliqués !", android.widget.Toast.LENGTH_SHORT).show()
+                 recreate()
+            } else {
+                 android.widget.Toast.makeText(this, "Aucun changement compatible appliqué.", android.widget.Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
             android.widget.Toast.makeText(this, "Erreur : ${e.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
@@ -420,17 +434,17 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         }
     }
 
-    private fun logAndToast(keyName: String, desc: String, oldVal: Any, newVal: Any) {
+    private fun logAction(change: AdvisorAction.Prediction) {
          historyRepo.logAction(
                 app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.ActionType.PREFERENCE_CHANGE,
-                keyName,
-                desc,
-                oldVal.toString(),
-                newVal.toString()
+                change.keyName,
+                change.explanation,
+                change.oldValue.toString(),
+                change.newValue.toString()
             )
-         android.widget.Toast.makeText(this, "Changement appliqué !", android.widget.Toast.LENGTH_SHORT).show()
-         recreate()
     }
+
+
 
     private fun createPkpdCard(rec: PkpdTuningSuggestion, cardBg: Int): CardView {
         val card = CardView(this).apply {

@@ -40,11 +40,11 @@ class AimiAdvisorService {
     /**
      * Generate a full advisor report for the specified period.
      */
-    fun generateReport(periodDays: Int = 7): AdvisorReport {
+    fun generateReport(periodDays: Int = 7, history: List<app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.AdvisorActionLog> = emptyList()): AdvisorReport {
         val context = collectContext(periodDays)
         val score = computeGlobalScore(context.metrics)
         val severity = classifySeverity(score)
-        val recommendations = generateRecommendations(context)
+        val recommendations = generateRecommendations(context, history)
         
         // PKPD Analysis
         val pkpdSuggestions = PkpdAdvisor().analysePkpd(context.metrics, context.pkpdPrefs, rh!!)
@@ -279,11 +279,12 @@ class AimiAdvisorService {
     /**
      * Generate recommendations based on Context (Rules Engine).
      */
-    fun generateRecommendations(ctx: AdvisorContext): List<AimiRecommendation> {
+    fun generateRecommendations(ctx: AdvisorContext, history: List<app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.AdvisorActionLog>): List<AimiRecommendation> {
         val recs = mutableListOf<AimiRecommendation>()
         val metrics = ctx.metrics
         val profile = ctx.profile
         val prefs = ctx.prefs
+
 
         // 1) CRITICAL: Hypos / Safety Aggression
         // If hypos > 4% and MaxSMB is high -> suggest reduction
@@ -292,12 +293,21 @@ class AimiAdvisorService {
             
             // Rule: Reduce MaxSMB if > 1.5U
             if (prefs.maxSmb > 1.5) {
-                val newValue = (prefs.maxSmb * 0.8 * 10.0).roundToInt() / 10.0 // -20%, rounded
-                action = AdvisorAction.UpdatePreference(
-                    key = DoubleKey.OApsAIMIMaxSMB,
-                    value = newValue,
-                    description = "-20% MaxSMB"
-                )
+                // History Check: Don't lower if recently raised/lowered to avoid ping-pong
+                if (!wasRecentlyChanged(history, DoubleKey.OApsAIMIMaxSMB)) {
+                    val newValue = (prefs.maxSmb * 0.8 * 10.0).roundToInt() / 10.0 // -20%, rounded
+                    action = AdvisorAction.UpdatePreference(
+                        changes = listOf(
+                            AdvisorAction.Prediction(
+                                key = DoubleKey.OApsAIMIMaxSMB,
+                                keyName = "Max SMB",
+                                oldValue = prefs.maxSmb,
+                                newValue = newValue,
+                                explanation = "Réduire le plafond SMB pour limiter les hypoglycémies (-20%)"
+                            )
+                        )
+                    )
+                }
             }
 
             recs += AimiRecommendation(
@@ -318,12 +328,20 @@ class AimiAdvisorService {
 
             // Rule: Increase Lunch Factor if seemingly underdosed
             if (prefs.lunchFactor < 1.2) {
-                 val newValue = (prefs.lunchFactor + 0.1 * 10.0).roundToInt() / 10.0
-                 action = AdvisorAction.UpdatePreference(
-                     key = DoubleKey.OApsAIMILunchFactor,
-                     value = newValue,
-                     description = "+0.1 Lunch Factor"
-                 )
+                 if (!wasRecentlyChanged(history, DoubleKey.OApsAIMILunchFactor)) {
+                     val newValue = (prefs.lunchFactor + 0.1 * 10.0).roundToInt() / 10.0
+                     action = AdvisorAction.UpdatePreference(
+                        changes = listOf(
+                            AdvisorAction.Prediction(
+                                key = DoubleKey.OApsAIMILunchFactor,
+                                keyName = "Lunch Factor",
+                                oldValue = prefs.lunchFactor,
+                                newValue = newValue,
+                                explanation = "Augmenter l'agressivité au déjeuner (+0.1)"
+                            )
+                        )
+                     )
+                 }
             }
             // Fallback: Autodrive max basal?
             else if (prefs.autodriveMaxBasal < 5.0) {
@@ -451,6 +469,17 @@ class AimiAdvisorService {
               ]
             }
         """.trimIndent()
+    }
+    private fun wasRecentlyChanged(
+        history: List<app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.AdvisorActionLog>,
+        key: app.aaps.core.keys.interfaces.PreferenceKey
+    ): Boolean {
+        // Check last 48h
+        val threshold = System.currentTimeMillis() - (48 * 3600 * 1000L)
+        return history.any { 
+            it.timestamp > threshold && 
+            it.key == key.key 
+        }
     }
 }
 

@@ -66,10 +66,18 @@ enum class AdvisorSeverity {
  * Smart Actions
  */
 sealed class AdvisorAction {
+    // A single atomic change
+    data class Prediction(
+        val key: Any,
+        val keyName: String, // User friendly name or resource ID
+        val oldValue: Any,
+        val newValue: Any,
+        val explanation: String
+    )
+
+    // Action can now be a single update or a batch
     data class UpdatePreference(
-        val key: Any, /* Using Any to avoid complex generics */
-        val value: Any,
-        val description: String
+        val changes: List<Prediction>
     ) : AdvisorAction()
     // Future: data class UpdateProfile(...)
 }
