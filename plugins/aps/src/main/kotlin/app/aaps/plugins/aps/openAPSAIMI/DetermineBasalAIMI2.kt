@@ -1716,7 +1716,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         //if (isHypoBlocked(context)) conditions.add("hypoGuard")
         if (isHypoBlocked(context)) conditions.add(ctx.getString(R.string.condition_hypoguard))
         //if (isNosmbHm(context)) conditions.add("nosmbHM")
-        if (isNosmbHm(context)) conditions.add(ctx.getString(R.string.condition_nosmbhm))
+        // REMOVED: Caused strict SMB block in Honeymoon mode (IOB > 0.7).
+        // if (isNosmbHm(context)) conditions.add(ctx.getString(R.string.condition_nosmbhm))
         //if (isHoneysmb(context)) conditions.add("honeysmb")
         if (isHoneysmb(context)) conditions.add(ctx.getString(R.string.condition_honeysmb))
         //if (isNegDelta(context)) conditions.add("negdelta")
