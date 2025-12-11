@@ -32,11 +32,10 @@ object SmbQuantizer {
         )
 
         // --- Nouveau : plancher sécurité ---
-        if (quantized == 0.0 && units > 0.02) {
-            // si tout est OK, injecte le pas mini (ex: 0.05U)
-            quantized = step.toDouble()
-        }
-
+        // REMOVED: Caused overdosing on pumps with large steps (e.g. Combo 0.1U).
+        // A 0.03U request became 0.1U (3x overdose).
+        // We revert to standard rounding (nearest step).
+        
         return quantized.toFloat()
     }
 
