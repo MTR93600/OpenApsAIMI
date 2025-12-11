@@ -1433,6 +1433,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return bolusesLastHour.any { Math.abs(it.amount - pbolusA) < epsilon }
     }
 
+    private fun isZeroIOBPrimingCondition(
+        iob: Double,
+        delta: Float,
+        acceleration: Float,
+        reason: StringBuilder
+    ): Boolean {
+        // Condition 1: Empty Tank
+        if (iob > 0.2) return false
+
+        // Condition 2: Early Rise
+        if (delta > 0 && acceleration > 0) {
+             reason.append("🚀 Zero-IOB Priming: IOB < 0.2 & acceleration > 0 -> ENGAGED\n")
+             return true
+        }
+        return false
+    }
+
     private fun isAutodriveModeCondition(
         delta: Float,
         autodrive: Boolean,
@@ -3140,6 +3157,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(context.getString(R.string.reason_autodrive_early_meal, pbolusAS, combinedDelta, predicted, bgAcceleration.toDouble()))
             return rT
         }
+        
+        // 🚀 Innovation: Zero-IOB Priming
+        if (!nightbis && autodrive && isZeroIOBPrimingCondition(iob.toDouble(), delta, bgAcceleration.toFloat(), reason) && modesCondition) {
+            val primeBolus = 0.3 // Safety Cap
+            rT.units = primeBolus
+            reason.append("→ Zero-IOB Priming with ${primeBolus}U\n")
+            rT.reason.append(reason.toString())
+            return rT
+        }
+
         if (isMealModeCondition()) {
             val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
             rT.units = pbolusM
