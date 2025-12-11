@@ -1512,15 +1512,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return true
     }
 
+    private fun isCompressionProtectionCondition(
+        delta: Float,
+        reason: StringBuilder
+    ): Boolean {
+         // Impossible rise (e.g. +30 mg/dL in 5 mins) = Compression Low Recovery
+         if (delta > 25.0f) {
+             reason.append("🛡️ Safety Net: Compression Rebound Block (Delta > 25) -> Autodrive OFF\n")
+             return true
+         }
+         return false
+    }
+
     private fun isPostHypoProtectionCondition(
         recentBGs: List<Float>,
         reason: StringBuilder
     ): Boolean {
-        // Check last 2 hours (approx 24 points)
+        // Check last 60 mins (approx 12 points)
         // If any BG < 70, we are in "Safety Zone"
-        val recentHypo = recentBGs.take(24).any { it < 70 }
+        val recentHypo = recentBGs.take(12).any { it < 70 }
         if (recentHypo) {
-            reason.append("🛡️ Safety Net: Post-Hypo Rebound Brake ENGAGED (BG < 70 in last 2h)\n")
+            reason.append("🛡️ Safety Net: Post-Hypo Rebound Brake ENGAGED (BG < 70 in last 60m)\n")
             return true
         }
         return false
@@ -3294,6 +3306,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         // 🛡️ Innovation: FCL 6.0 Safety Net
         val isPostHypo = isPostHypoProtectionCondition(recentBGs, reason)
+        val isCompression = isCompressionProtectionCondition(delta.toFloat(), reason)
+        
+        if (isCompression) {
+             // Hard Stop on Sensor Error
+             return rT
+        }
         
         // 🧹 Innovation: FCL 5.0 Drift Terminator (Blocked by Post-Hypo)
         if (!nightbis && autodrive && !isPostHypo && isDriftTerminatorCondition(bg.toFloat(), targetBg.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
