@@ -1491,6 +1491,41 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return true
     }
 
+    private fun isDriftTerminatorCondition(
+        bg: Float,
+        targetBg: Float,
+        delta: Float,
+        lastBolusVolume: Double,
+        reason: StringBuilder
+    ): Boolean {
+        // 1. Slow Creep (Target + 15)
+        if (bg <= targetBg + 15) return false
+        
+        // 2. Rising
+        if (delta <= 0) return false
+        
+        // 3. No recent bolus activity (Clean slate)
+        if (lastBolusVolume > 0.1) return false
+        
+        reason.append("🧹 Drift Terminator: Slow creep detected without recent bolus -> ENGAGED\n")
+        return true
+    }
+
+    private fun calculateResistanceHammer(
+        regularBolus: Double,
+        bolusLastHour: Double,
+        delta: Float,
+        reason: StringBuilder
+    ): Double {
+        // Trigger: Significant bolus history (> 1.0U) AND still rising fast (> 2.0)
+        if (bolusLastHour > 1.0 && delta > 2.0) {
+            val boosted = regularBolus * 1.5
+            reason.append("🔨 Resistance Hammer: History ${"%.2f".format(bolusLastHour)}U & Delta ${delta} -> Boost x1.5 -> ${"%.2f".format(boosted)}U\n")
+            return boosted
+        }
+        return regularBolus
+    }
+
     private fun isAutodriveModeCondition(
         delta: Float,
         autodrive: Boolean,
@@ -3190,6 +3225,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
         val reason = StringBuilder()
         val recentBGs = getRecentBGs()
+
+        // 🕒 FCL 5.0 Pre-calc: Total Bolus Volume Last Hour
+        val oneHourAgo = now - (60 * 60 * 1000L)
+        val bolusesHistory = persistenceLayer.getBolusesFromTime(oneHourAgo, true).blockingGet()
+        val totalBolusLastHour = bolusesHistory.sumOf { it.amount }
+
         val bgTrend = calculateBgTrend(recentBGs, reason)
         val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason, targetBg + 30f)
         if (bg > targetBg + 10 && predictedBg > targetBg + 30 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition) {
@@ -3225,11 +3266,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(context.getString(R.string.manual_meal_prebolus, pbolusM))
             return rT
         }
+        // 🧹 Innovation: FCL 5.0 Drift Terminator
+        if (!nightbis && autodrive && isDriftTerminatorCondition(bg.toFloat(), targetBg.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
+            val terminatortap = 0.4
+            rT.units = terminatortap
+            reason.append("→ Drift Terminator: Micro-Tap ${terminatortap}U\n")
+            rT.reason.append(reason.toString())
+            return rT
+        }
+        
         if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason, targetBg) && modesCondition) {
             val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
             
-            // 📈 Innovation: Adaptive Prebolus
-            val adaptiveUnits = calculateAdaptivePrebolus(pbolusA, delta, reason)
+            // 📈 Innovation: Adaptive Prebolus & Resistance Hammer
+            var adaptiveUnits = calculateAdaptivePrebolus(pbolusA, delta, reason)
+            
+            // 🔨 FCL 5.0 Resistance Hammer
+            adaptiveUnits = calculateResistanceHammer(adaptiveUnits, totalBolusLastHour, delta, reason)
+            
             rT.units = adaptiveUnits
             
             //reason.append("→ Microbolusing Autodrive Mode ${pbolusA}U\n")
