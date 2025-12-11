@@ -65,19 +65,10 @@ class AimiAdvisorService {
      * Collect Context from REAL DATA.
      */
     fun collectContext(periodDays: Int = 7): AdvisorContext {
-        // 1. Fetch Glucose History (Sync or blocking if on background thread)
-        // Since this is called from Coroutine scope in Activity? No, currently generateReport is main thread blocking in onCreate.
-        // We should fix this later but for now let's use blockingGet if possible or assume it's fast.
-        // Actually, ProfileAdvisorActivity calls generatedReport on Main Thread? No, it should be async.
-        // For now, we will do a best effort Main Thread fetch if permissible, or fix architecture.
-        // But to respect the request "Fix connection", we implement logic.
-        
+        // 1. Fetch Glucose History
         val end = System.currentTimeMillis()
         val start = end - (periodDays * 24 * 3600 * 1000L)
         
-        // Fetch BGs via persistenceLayer (RxJava blocking for simplicity in this synchronous method, but optimally async)
-        // If dependencies missing (testing), fallback to dummy
-        // If dependencies missing, return empty context (NO DUMMY DATA)
         if (persistenceLayer == null || profileFunction == null || preferences == null) {
             return getEmptyContext(periodDays)
         }
@@ -88,10 +79,36 @@ class AimiAdvisorService {
             emptyList<app.aaps.core.data.model.GV>()
         }
 
-        // Calculate Metrics
-        val metrics = calculateMetrics(history, periodDays)
+        // 2. Fetch TDD & Basal% Real Data
+        val tddList = try {
+            persistenceLayer.getLastTotalDailyDoses(periodDays, false) // false = descending (newest first)
+        } catch (e: Exception) {
+            emptyList<app.aaps.core.data.model.TDD>()
+        }
 
-        // 2. Fetch Profile
+        var avgTdd = 0.0
+        var avgBasalPct = 0.50
+
+        if (tddList.isNotEmpty()) {
+            // Filter out zero entries if any, to avoid skewing
+            val validTdds = tddList.filter { it.totalAmount > 0.1 }
+            if (validTdds.isNotEmpty()) {
+                 avgTdd = validTdds.map { it.totalAmount }.average()
+                 avgBasalPct = validTdds.map { it.basalAmount / it.totalAmount }.average()
+            }
+        }
+        
+        // Fallback to Prefs if TDD is missing (e.g. new user)
+        if (avgTdd == 0.0) {
+            // Try to guess from profile? No, just keep 0 or use MaxSMB * 20? 
+            // Better to show 0/Unknown than fake data.
+            // But user might want a stub? Let's stick to 0.0 if no data.
+        }
+
+        // Calculate Metrics
+        val metrics = calculateMetrics(history, periodDays, avgTdd, avgBasalPct)
+
+        // 3. Fetch Profile
         val profile = profileFunction.getProfile()
         val aimiProfile = if (profile != null) {
             AimiProfileSnapshot(
@@ -104,7 +121,7 @@ class AimiAdvisorService {
             AimiProfileSnapshot(0.0, 0.0, 0.0, 0.0)
         }
 
-        // 3. Fetch Prefs (General)
+        // 4. Fetch Prefs (General)
         val aimiPrefs = AimiPrefsSnapshot(
             maxSmb = preferences.get(DoubleKey.OApsAIMIMaxSMB).toDouble(),
             lunchFactor = preferences.get(DoubleKey.OApsAIMILunchFactor).toDouble(),
@@ -112,7 +129,7 @@ class AimiAdvisorService {
             autodriveMaxBasal = preferences.get(DoubleKey.autodriveMaxBasal).toDouble()
         )
 
-        // 4. Fetch PKPD Prefs
+        // 5. Fetch PKPD Prefs
         val pkpdPrefs = PkpdPrefsSnapshot(
             pkpdEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEnabled),
             initialDiaH = preferences.get(DoubleKey.OApsAIMIPkpdInitialDiaH).toDouble(),
@@ -162,7 +179,6 @@ class AimiAdvisorService {
             score -= excess * 40.0           // 5% more -> -2 pts
         }
 
-        // No change here yet, need to find usage first.
         // 4) Severe Hypos
         if (metrics.timeBelow54 > 0.0 || metrics.severeHypoEvents > 0) {
             score -= 2.0
@@ -204,8 +220,13 @@ class AimiAdvisorService {
         return AdvisorContext(metrics, profile, prefs, pkpdPrefs)
     }
 
-    private fun calculateMetrics(history: List<app.aaps.core.data.model.GV>, days: Int): AdvisorMetrics {
-        if (history.isEmpty()) return getEmptyContext(days).metrics // Fallback if no data
+    private fun calculateMetrics(
+        history: List<app.aaps.core.data.model.GV>, 
+        days: Int,
+        avgTdd: Double, 
+        avgBasalPct: Double
+    ): AdvisorMetrics {
+        if (history.isEmpty()) return getEmptyContext(days).metrics // Fallback
 
         val total = history.size.toDouble()
         val low70 = history.count { it.value < 70 }.toDouble()
@@ -218,14 +239,6 @@ class AimiAdvisorService {
         val meanBg = history.map { it.value }.average()
         val gmi = 3.31 + (0.02392 * meanBg)
 
-        // TDD & Basal% - Hard to get from just BGs.
-        // We need TDD history. PersistenceLayer has getTDDs?
-        // For simplicity now, we'll estimate or use 0 if not available, OR use preferences if available.
-        // Let's assume 50/50 for now if we can't fetch it easily without heavy DB query inside this function.
-        // TODO: Fetch real TDD via persistenceLayer.getBoluses...
-        val tddStub = 40.0 
-        val basalPctStub = 0.50
-
         return AdvisorMetrics(
             periodLabel = "$days derniers jours",
             tir70_180 = inRange / total,
@@ -236,9 +249,9 @@ class AimiAdvisorService {
             timeAbove250 = high250 / total,
             meanBg = meanBg,
             gmi = (gmi * 10.0).roundToInt() / 10.0,
-            tdd = tddStub,
-            basalPercent = basalPctStub,
-            hypoEvents = 0, // Need complex event detection logic
+            tdd = (avgTdd * 10.0).roundToInt() / 10.0, // Round for UI
+            basalPercent = avgBasalPct,
+            hypoEvents = 0, 
             severeHypoEvents = 0,
             hyperEvents = 0
         )
