@@ -3329,14 +3329,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val bgTrend = calculateBgTrend(recentBGs, reason)
         
-        // 🧠 FCL 7.0: Update State
+        // 🧠 FCL 7.0: Update Watchdog State
         updateWatchdogState(delta.toFloat())
         
-        // 🧠 FCL 7.0 Dynamic Sizing
-        // Hardcoded ISF fallback: 50 (Result: 0.4U)
-        val profileISF = if (profile != null && profile.sens > 10) profile.sens else 50.0
-        val dynamicPbolusSmall = calculateDynamicMicroBolus(profileISF, 20.0, reason)
-        val dynamicPbolusLarge = calculateDynamicMicroBolus(profileISF, 25.0, reason) // Slightly larger base for "Autodrive Mode"
+        // 🧠 FCL 8.0: Autosens Synergy
+        var autosensRatio = autosens_data.ratio
+        if (autosensRatio <= 0.1) autosensRatio = 1.0 // Safety fallback
+        
+        // Effective ISF = Profile ISF * Ratio
+        // Case: Resistant (Ratio 0.7) -> ISF 100 * 0.7 = 70 (Stronger bolus)
+        // Case: Sensitive (Ratio 1.2) -> ISF 100 * 1.2 = 120 (Weaker bolus)
+        val profileISF_raw = if (profile != null && profile.sens > 10) profile.sens else 50.0
+        val effectiveISF = profileISF_raw * autosensRatio
+        
+        val dynamicPbolusSmall = calculateDynamicMicroBolus(effectiveISF, 20.0, reason)
+        val dynamicPbolusLarge = calculateDynamicMicroBolus(effectiveISF, 25.0, reason)
         
         val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason, targetBg + 30f)
         if (bg > targetBg + 10 && predictedBg > targetBg + 30 && !nightbis && !hasReceivedPbolusMInLastHour(dynamicPbolusSmall) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition) {
@@ -3348,7 +3355,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         // 🚀 Innovation: Zero-IOB Priming
         if (!nightbis && autodrive && isZeroIOBPrimingCondition(iob.toDouble(), delta, bgAcceleration.toFloat(), reason) && modesCondition) {
-            val primeBolus = calculateDynamicMicroBolus(profileISF, 15.0, reason) // ~0.3U for ISF 50
+            val primeBolus = calculateDynamicMicroBolus(effectiveISF, 15.0, reason) // Safe priming scaled to context
             rT.units = primeBolus
             reason.append("→ Zero-IOB Priming with ${primeBolus}U\n")
             rT.reason.append(reason.toString())
@@ -3380,11 +3387,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              return rT
         }
         
+        // 🧠 FCL 8.0: Context-Aware Trigger for Drift Terminator
+        // Resistant (<0.8): Tighten to +10. Sensitive (>1.2): Relax to +30. Normal: +15
+        val terminatorThresholdAdd = when {
+            autosensRatio < 0.8 -> 10.0 // Aggressive
+            autosensRatio > 1.2 -> 30.0 // Safe
+            else -> 15.0
+        }
+        val terminatorTarget = targetBg + terminatorThresholdAdd
+
         // 🧹 Innovation: FCL 5.0 Drift Terminator (Blocked by Post-Hypo)
-        if (!nightbis && autodrive && !isPostHypo && isDriftTerminatorCondition(bg.toFloat(), targetBg.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
+        if (!nightbis && autodrive && !isPostHypo && isDriftTerminatorCondition(bg.toFloat(), terminatorTarget.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
             val terminatortap = dynamicPbolusSmall
             rT.units = terminatortap
-            reason.append("→ Drift Terminator: Micro-Tap ${terminatortap}U\n")
+            reason.append("→ Drift Terminator (Trigger +${terminatorThresholdAdd}): Micro-Tap ${terminatortap}U\n")
             rT.reason.append(reason.toString())
             return rT
         }
