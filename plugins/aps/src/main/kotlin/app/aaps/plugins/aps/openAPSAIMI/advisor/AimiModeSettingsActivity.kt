@@ -158,8 +158,7 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 120).apply {
                 topMargin = 64
             }
-            setOnClickListener { saveValues() }
-            setOnClickListener { saveValues() }
+            setOnClickListener { saveValues(true) }
         }
         container.addView(saveBtn)
 
@@ -293,7 +292,7 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
         }
     }
 
-    private fun saveValues() {
+    private fun saveValues(finishAfterSave: Boolean) {
         // 1. Save Mode Settings
         val p1 = inputPrebolus1.text.toString().toDoubleOrNull() ?: 0.0
         val p2 = inputPrebolus2.text.toString().toDoubleOrNull() ?: 0.0
@@ -312,12 +311,13 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
             preferences.put(IntKey.OApsAIMIDinnerinterval, interv)
         }
 
-
-        finish()
+        if (finishAfterSave) {
+            finish()
+        }
     }
 
     private fun activateMode() {
-        saveValues() // saveValues handles saving. Logic merged. // No longer needed for AI keys
+        saveValues(false) // Save without closing logic merged.
 
         // Find the automation event
         val eventTitle = if (selectedMode == ModeType.LUNCH) "Lunch" else "Dinner"
