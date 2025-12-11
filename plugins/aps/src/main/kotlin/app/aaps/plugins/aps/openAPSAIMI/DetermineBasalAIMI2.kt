@@ -168,6 +168,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val consoleError = mutableListOf<String>()
     private val consoleLog = mutableListOf<String>()
     private var lastResistanceHammerTime: Long = 0L // FCL 6.0 State
+    private var hammerFailureCount: Int = 0 // FCL 7.0 State
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
     //private val modelFile = File(externalDir, "ml/model.tflite")
     //private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
@@ -1510,6 +1511,63 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         reason.append("🧹 Drift Terminator: Slow creep detected without recent bolus -> ENGAGED\n")
         return true
+    }
+
+    private fun calculateDynamicMicroBolus(
+        isf: Double,
+        baseFactor: Double = 20.0,
+        reason: StringBuilder
+    ): Double {
+        // Formula: MicroBolus = 20 / ISF
+        // Example: ISF 50 -> 0.4U. ISF 100 -> 0.2U.
+        // Safety: ISF is rarely < 10 or > 500.
+        // Cap max bolus to 0.5U for safety by default (unless baseFactor changes)
+        if (isf <= 0) return 0.0 // Should not happen
+        
+        var bolus = baseFactor / isf
+        
+        // Safety Caps
+        bolus = bolus.coerceIn(0.05, 0.5) 
+        
+        return bolus
+    }
+
+    private fun checkIneffectivenessWatchdog(
+         success: Boolean,
+         reason: StringBuilder
+    ): Boolean {
+         // This is called when Resistance Hammer attempts to fire
+         if (hammerFailureCount >= 3) {
+             reason.append("⛔ Ineffectiveness Watchdog: FCL ABORTED. >3 Resistance Hammer failures. Check site/cannula!\n")
+             return true // ABORT signal
+         }
+         return false
+    }
+
+    private fun updateWatchdogState(
+        delta: Float
+    ) {
+        // Called periodically to update success/failure
+        // If Resistance Hammer was active (tracked via lastResistanceHammerTime being recent)
+        // AND delta is now negative -> Success! Reset count.
+        val cooldown = 45 * 60 * 1000L
+        val recentlyHammered = (System.currentTimeMillis() - lastResistanceHammerTime) < cooldown
+        
+        if (recentlyHammered) {
+             if (delta < -2.0) {
+                 // Success drop
+                 hammerFailureCount = 0
+             } else if (delta > 0) {
+                 // Failure, still rising. Count increments are handled at FIRE time or here?
+                 // Simpler: Increment when we FIRE the hammer again. 
+                 // Here we just reset on success.
+             }
+        } else {
+             // Reset if long time passed
+             if (hammerFailureCount > 0 && (System.currentTimeMillis() - lastResistanceHammerTime) > cooldown * 2) {
+                 hammerFailureCount = 0
+             }
+        }
     }
 
     private fun isCompressionProtectionCondition(
@@ -3270,17 +3328,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val totalBolusLastHour = bolusesHistory.sumOf { it.amount }
 
         val bgTrend = calculateBgTrend(recentBGs, reason)
+        
+        // 🧠 FCL 7.0: Update State
+        updateWatchdogState(delta.toFloat())
+        
+        // 🧠 FCL 7.0 Dynamic Sizing
+        // Hardcoded ISF fallback: 50 (Result: 0.4U)
+        val profileISF = if (profile != null && profile.sens > 10) profile.sens else 50.0
+        val dynamicPbolusSmall = calculateDynamicMicroBolus(profileISF, 20.0, reason)
+        val dynamicPbolusLarge = calculateDynamicMicroBolus(profileISF, 25.0, reason) // Slightly larger base for "Autodrive Mode"
+        
         val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason, targetBg + 30f)
-        if (bg > targetBg + 10 && predictedBg > targetBg + 30 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition) {
-            rT.units = pbolusAS
+        if (bg > targetBg + 10 && predictedBg > targetBg + 30 && !nightbis && !hasReceivedPbolusMInLastHour(dynamicPbolusSmall) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition) {
+            rT.units = dynamicPbolusSmall
             //rT.reason.append("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
-            rT.reason.append(context.getString(R.string.reason_autodrive_early_meal, pbolusAS, combinedDelta, predicted, bgAcceleration.toDouble()))
+            rT.reason.append(context.getString(R.string.reason_autodrive_early_meal, dynamicPbolusSmall, combinedDelta, predicted, bgAcceleration.toDouble()))
             return rT
         }
         
         // 🚀 Innovation: Zero-IOB Priming
         if (!nightbis && autodrive && isZeroIOBPrimingCondition(iob.toDouble(), delta, bgAcceleration.toFloat(), reason) && modesCondition) {
-            val primeBolus = 0.3 // Safety Cap
+            val primeBolus = calculateDynamicMicroBolus(profileISF, 15.0, reason) // ~0.3U for ISF 50
             rT.units = primeBolus
             reason.append("→ Zero-IOB Priming with ${primeBolus}U\n")
             rT.reason.append(reason.toString())
@@ -3289,8 +3357,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 🔨 Innovation: High Plateau Breaker
         if (!nightbis && autodrive && isHighPlateauBreakerCondition(bg.toFloat(), targetBg.toFloat(), stable == 1, iob.toDouble(), maxSMB, reason) && modesCondition) {
-             val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
-             val adaptiveUnits = calculateAdaptivePrebolus(pbolusA, delta, reason)
+             val adaptiveUnits = calculateAdaptivePrebolus(dynamicPbolusLarge, delta, reason)
              rT.units = adaptiveUnits
              reason.append("→ Plateau Breaker engaged: Force Bolus ${adaptiveUnits}U\n")
              rT.reason.append(reason.toString())
@@ -3315,7 +3382,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         // 🧹 Innovation: FCL 5.0 Drift Terminator (Blocked by Post-Hypo)
         if (!nightbis && autodrive && !isPostHypo && isDriftTerminatorCondition(bg.toFloat(), targetBg.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
-            val terminatortap = 0.4
+            val terminatortap = dynamicPbolusSmall
             rT.units = terminatortap
             reason.append("→ Drift Terminator: Micro-Tap ${terminatortap}U\n")
             rT.reason.append(reason.toString())
@@ -3323,7 +3390,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         
         if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason, targetBg) && modesCondition) {
-            val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+            // 🧠 FCL 7.0: Use Dynamic Large Base
+            val pbolusA = dynamicPbolusLarge
             
             // 📈 Innovation: Adaptive Prebolus & Resistance Hammer
             // 🛡️ Disabled if Post-Hypo
@@ -3332,7 +3400,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // 🔨 FCL 5.0 Resistance Hammer
             // 🛡️ Disabled if Post-Hypo
             if (!isPostHypo) {
+                // 🧠 FCL 7.0 Ineffectiveness Watchdog
+                if (checkIneffectivenessWatchdog(false, reason)) {
+                    // Abort!
+                    return rT 
+                }
+                
+                val originalUnits = adaptiveUnits
                 adaptiveUnits = calculateResistanceHammer(adaptiveUnits, totalBolusLastHour, delta, reason)
+                if (adaptiveUnits > originalUnits) {
+                    // Hammer fired (Wait for calculateResistanceHammer to update state? Yes applied inside)
+                    hammerFailureCount++ // Increment count (Simpler logic here vs inside helper?)
+                    // Helper already tracks *time*, we track *count*
+                }
             }
             
             rT.units = adaptiveUnits
