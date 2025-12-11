@@ -1026,8 +1026,9 @@
     <string name="aimi_advisor_summary">Analyse les performances glycémiques et propose des ajustements de profil</string>
     <string name="aimi_advisor_section">Outils et Analyses</string>
     <!-- AIMI ADVISOR SECTION -->
-    <string name="aimi_advisor_title">AIMI Advisor</string>
-
+    <string name="aimi_advisor_title">AIMI Profile Advisor</string>
+    <string name="aimi_advisor_model_title">Select AI Model</string>
+    <string name="aimi_adv_loading">Analyzing your data…</string>
     <string name="aimi_advisor_score_label_excellent">Excellent</string>
     <string name="aimi_advisor_score_label_good">Bon</string>
     <string name="aimi_advisor_score_label_warning">À améliorer</string>
@@ -1103,7 +1104,7 @@
     <string name="aimi_adv_analysis_issue_profile">Profile quality to optimize.</string>
     <string name="aimi_adv_analysis_footer">The actions suggested below aim to correct these imbalances in a targeted manner.</string>
     <string name="aimi_adv_analysis_all_good">No major issues detected. Keep it up!</string>
-    <string name="aimi_adv_loading">Analyzing data...</string>
+
     <string name="aimi_adv_error_prefix">Analysis error:\n</string>
     <!-- AIMI PKPD Advisor -->
     <string name="aimi_pkpd_advisor_disabled">Adaptive PKPD is disabled. Enabling it would allow automatic adjustment of DIA and peak time to improve TIR.</string>

@@ -151,7 +151,6 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             addView(infoLayout)
             
             // Score Pill
-            // Score Pill (CardView handles background)
             val pill = CardView(this@AimiProfileAdvisorActivity).apply {
                 radius = 50f
                 setCardBackgroundColor(Color.parseColor("#0F392B")) // Dark Green bg
@@ -167,8 +166,36 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             }
             pill.addView(scoreText)
             addView(pill)
+
+            // Settings Button (Gear)
+            val settingsBtn = TextView(this@AimiProfileAdvisorActivity).apply {
+                text = "⚙️"
+                textSize = 22f
+                setPadding(24, 0, 0, 0)
+                setOnClickListener {
+                    showModelSelectorDialog()
+                }
+            }
+            addView(settingsBtn)
         }
     }
+
+    private fun showModelSelectorDialog() {
+        val current = preferences.get(app.aaps.core.keys.StringKey.AimiAdvisorProvider)
+        val idx = if (current == "GEMINI") 1 else 0
+        
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(rh.gs(R.string.aimi_advisor_model_title)) // "Select Model"
+            .setSingleChoiceItems(arrayOf("ChatGPT", "Gemini"), idx) { dialog, which ->
+                val newValue = if (which == 1) "GEMINI" else "OPENAI"
+                preferences.put(app.aaps.core.keys.StringKey.AimiAdvisorProvider, newValue)
+                dialog.dismiss()
+                recreate() // Reload activity to apply change
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
 
     private fun createMetricsGrid(metrics: AdvisorMetrics, cardColor: Int): LinearLayout {
         val grid = LinearLayout(this).apply {
