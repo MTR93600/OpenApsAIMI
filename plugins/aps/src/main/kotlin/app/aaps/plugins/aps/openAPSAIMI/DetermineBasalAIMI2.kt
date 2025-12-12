@@ -3358,11 +3358,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var autosensRatio = autosens_data.ratio
         if (autosensRatio <= 0.1) autosensRatio = 1.0 // Safety fallback
         
-        // Effective ISF = Profile ISF * Ratio
-        // Case: Resistant (Ratio 0.7) -> ISF 100 * 0.7 = 70 (Stronger bolus)
-        // Case: Sensitive (Ratio 1.2) -> ISF 100 * 1.2 = 120 (Weaker bolus)
+        // Effective ISF = Profile ISF / Ratio
+        // Case: Resistant (Ratio 1.2) -> ISF 100 / 1.2 = 83 (Harder to move -> Stronger bolus needed)
+        // Case: Sensitive (Ratio 0.7) -> ISF 100 / 0.7 = 142 (Easier to move -> Weaker bolus needed)
+        
+        // [FIX] Critical Math Inversion found during Deep Dive:
+        // Previous: ISF * Ratio. 
+        // 100 * 1.2 = 120 (Weaker). WRONG for Resistance.
+        // 100 * 0.7 = 70 (Stronger). WRONG for Sensitivity.
+        
         val profileISF_raw = if (profile != null && profile.sens > 10) profile.sens else 50.0
-        val effectiveISF = profileISF_raw * autosensRatio
+        val effectiveISF = profileISF_raw / autosensRatio
         
         val dynamicPbolusSmall = calculateDynamicMicroBolus(effectiveISF, 20.0, reason)
         val dynamicPbolusLarge = calculateDynamicMicroBolus(effectiveISF, 25.0, reason)
@@ -3428,11 +3434,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         
         if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason, targetBg) && modesCondition) {
-            // 🧠 FCL 7.0: Use Dynamic Large Base
-            val pbolusA = dynamicPbolusLarge
+            // 🧠 FCL 7.0: Use Dynamic Large Base, BUT respect Post-Hypo Safety
+            // 🛡️ [FIX] Blind Spot: If Post-Hypo, forced to Small Bolus to avoid rebound ping-pong.
+            val pbolusA = if (isPostHypo) dynamicPbolusSmall else dynamicPbolusLarge
             
             // 📈 Innovation: Adaptive Prebolus & Resistance Hammer
-            // 🛡️ Disabled if Post-Hypo
+            // 🛡️ Disabled if Post-Hypo (Already handled by logic below, but pbolusA is now safer too)
             var adaptiveUnits = if (isPostHypo) pbolusA else calculateAdaptivePrebolus(pbolusA, delta, reason)
             
             // 🔨 FCL 5.0 Resistance Hammer

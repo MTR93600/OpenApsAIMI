@@ -563,15 +563,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 unifiedReactivityLearner.processIfNeeded()
                 var brainFactor = unifiedReactivityLearner.getCombinedFactor()
                 
-                // 🚨 SAFETY OVERRIDE (FCL 10.3):
+                // 🚨 SAFETY OVERRIDE (FCL 10.3) - Refined for "Blind Spot" Removal:
                 // If we are in Hyper (>150) AND Rising/Stable, we MUST NOT be protective (<1.0).
-                // The Brain might be "scared" from a previous hypo, but we cannot let that paralyze the loop during a rise.
-                // However, if we are Dropping fast, protection is fine.
+                // FIX: "Rising" defined strictly as Delta > -0.5 (Stable or Up). 
+                // Previously > -2.0 allowed drops, which was risky to un-protect.
                 val isHyper = glucoseStatus.glucose > 150
-                val isRising = (glucoseStatus.delta ?: 0.0) > -2.0 // Rising or stable/slow drop. Not crashing.
+                val isRising = (glucoseStatus.delta ?: 0.0) > -0.5 
                 
                 if (isHyper && isRising && brainFactor < 1.0) {
-                    aapsLogger.debug(LTag.APS, "🧠 Brain Override: IGNORING protective factor ${"%.2f".format(brainFactor)} because BG ${glucoseStatus.glucose} is high/stable.")
+                    aapsLogger.debug(LTag.APS, "🧠 Brain Override: IGNORING protective factor ${"%.2f".format(brainFactor)} because BG ${glucoseStatus.glucose} is high & stable/rising.")
                     brainFactor = 1.0
                 }
 
