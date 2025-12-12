@@ -4432,6 +4432,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(" | 🛡️ Cap: ${"%.2f".format(beforeCap)} → ${"%.2f".format(smbToGive)}")
         }
         val savedReason = rT.reason.toString()
+        // 🔮 FCL 11.0: Preserve Predictions across reset
+        val savedPredBGs = rT.predBGs
+        
         rT = RT(
             algorithm = APSResult.Algorithm.AIMI,
             runningDynamicIsf = dynIsfMode,
@@ -4450,6 +4453,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             //variable_sens = variableSensitivity.toDouble()
             variable_sens = "%.0f".format(variableSensitivity.toDouble()).toDouble()
         )
+        // 🔮 FCL 11.0: Restore preserved Predictions
+        rT.predBGs = savedPredBGs
+        
         rT.reason.append(savedReason)
         var rate = when {
             snackTime && snackrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 4.0, "AI Force basal because mealTime $snackrunTime.", currenttemp, rT)
