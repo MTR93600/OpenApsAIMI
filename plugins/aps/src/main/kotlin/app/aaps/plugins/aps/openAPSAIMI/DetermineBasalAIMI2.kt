@@ -3479,7 +3479,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🔮 FCL 11.0: Generate Predictions NOW so they are visible even if Autodrive returns early
         // 🔮 FCL 11.0: Generate Predictions NOW so they are visible even if Autodrive returns early
         try {
-            consoleLog.add("🔮 PREDICT INIT: BG=$bg Delta=$delta Sens=${"%.1f".format(sens)} IOB=${iob_data_array[0].iob}")
+            // Using consoleError to ensure visibility in UI Debug Panel
+            consoleError.add("🔮 PREDICT INIT: BG=$bg Delta=$delta Sens=${"%.1f".format(sens)} IOB=${iob_data_array.firstOrNull()?.iob}")
+            
             val advancedPredictions = AdvancedPredictionEngine.predict(
                 currentBG = bg,
                 iobArray = iob_data_array,
@@ -3488,7 +3490,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 profile = profile,
                 delta = delta.toDouble()
             )
-            val sanitizedPredictions = advancedPredictions.map { round(min(401.0, max(39.0, it)), 0) }
+            
+            val sanitizedPredictions = advancedPredictions.mapNotNull { 
+                 if (it.isNaN()) null else round(min(401.0, max(39.0, it)), 0) 
+            }
             val intsPredictions = sanitizedPredictions.map { it.toInt() }
             
             if (intsPredictions.isNotEmpty()) {
@@ -3498,9 +3503,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     ZT  = intsPredictions
                     UAM = intsPredictions
                 }
-                 consoleLog.add("🔮 PREDICT SUCCESS: ${intsPredictions.size} points. Eventual: ${intsPredictions.last()}")
+                 consoleError.add("🔮 PREDICT SUCCESS: ${intsPredictions.size} points. Eventual: ${intsPredictions.last()}")
             } else {
-                 consoleError.add("🔮 PREDICT WARNING: Empty prediction list returned.")
+                 consoleError.add("🔮 PREDICT WARNING: Empty prediction list returned (Input Size: ${advancedPredictions.size})")
             }
         } catch (e: Exception) {
             consoleError.add("🔮 PREDICT ERROR: ${e.message}")
