@@ -772,17 +772,26 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             ).also {
                 val determineBasalResult = apsResultProvider.get().with(it)
                 
-                // 🔮 FCL 11.0: Debug Logging for Predictions
-                aapsLogger.error(LTag.APS, "DEBUG: RT.predBGs IOB Size: ${it.predBGs?.IOB?.size}")
-                try {
-                     aapsLogger.error(LTag.APS, "DEBUG: APSResult.predictions() object: ${determineBasalResult.predictions()}")
-                     if (determineBasalResult.predictions() == null && it.predBGs != null) {
-                         aapsLogger.error(LTag.APS, "CRITICAL: APSResult missed the predictions copy!")
-                     }
-                } catch (e: Exception) {
-                    aapsLogger.error(LTag.APS, "DEBUG: Failed to inspect predictions: $e")
+                // 🔮 FCL 11.0: Force Copy Predictions via JSON (Manual Construction)
+                if (it.predBGs != null) {
+                    val count = it.predBGs?.IOB?.size ?: 0
+                    aapsLogger.debug(LTag.APS, "Plugin: Injecting predictions via JSON manually (Size: $count)")
+                    try {
+                        val predJson = org.json.JSONObject()
+                        // Manual array copy to ensure data transfer
+                        // Note: Using JSONArray constructor or equivalent
+                        predJson.put("IOB", org.json.JSONArray(it.predBGs?.IOB))
+                        predJson.put("COB", org.json.JSONArray(it.predBGs?.COB))
+                        predJson.put("ZT",  org.json.JSONArray(it.predBGs?.ZT))
+                        predJson.put("UAM", org.json.JSONArray(it.predBGs?.UAM))
+                        
+                        // Inject into the main result JSON
+                        determineBasalResult.json()?.put("predBGs", predJson)
+                    } catch (e: Exception) {
+                        aapsLogger.error(LTag.APS, "Failed to inject JSON predictions: $e")
+                    }
                 }
-                
+
                 // Preserve input data
                 determineBasalResult.inputConstraints = inputConstraints
                 determineBasalResult.autosensResult = autosensResult
