@@ -771,6 +771,18 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 uiInteraction = uiInteraction
             ).also {
                 val determineBasalResult = apsResultProvider.get().with(it)
+                
+                // 🔮 FCL 11.0: Debug Logging for Predictions
+                aapsLogger.error(LTag.APS, "DEBUG: RT.predBGs IOB Size: ${it.predBGs?.IOB?.size}")
+                try {
+                     aapsLogger.error(LTag.APS, "DEBUG: APSResult.predictions() object: ${determineBasalResult.predictions()}")
+                     if (determineBasalResult.predictions() == null && it.predBGs != null) {
+                         aapsLogger.error(LTag.APS, "CRITICAL: APSResult missed the predictions copy!")
+                     }
+                } catch (e: Exception) {
+                    aapsLogger.error(LTag.APS, "DEBUG: Failed to inspect predictions: $e")
+                }
+                
                 // Preserve input data
                 determineBasalResult.inputConstraints = inputConstraints
                 determineBasalResult.autosensResult = autosensResult
