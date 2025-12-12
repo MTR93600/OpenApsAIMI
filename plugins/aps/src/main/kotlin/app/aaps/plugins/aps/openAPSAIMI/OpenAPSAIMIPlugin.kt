@@ -558,20 +558,29 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             )
 
             // 🧠 AIMI BRAIN INTEGRATION (UnifiedReactivityLearner)
-            // "The missing link": Adjust Autosens based on long-term clinical metrics.
+            // "The Cognitive Bridge": Adjusts BOTH Sensitivity (ISF) and Resistance (Autosens Ratio)
             try {
                 unifiedReactivityLearner.processIfNeeded()
                 val brainFactor = unifiedReactivityLearner.getCombinedFactor()
                 
-                // Autosens Ratio > 1.0 = Resistant (More Aggressive).
-                // Learner Factor > 1.0 = More Aggressive (Hyper).
-                // Learner Factor < 1.0 = Less Aggressive (Hypo/Safety).
-                // So we MULTIPLY the ratio.
-                
                 if (brainFactor != 1.0) {
                     val originalRatio = autosensResult.ratio
+                    val originalISF = variableSensitivity
+                    
+                    // 1. Modulate Autosens Ratio (Basal/Targets)
+                    // Factor > 1 (Aggressive) -> Ratio Increases (Higher Basal)
+                    // Factor < 1 (Protective) -> Ratio Decreases (Lower Basal)
                     autosensResult.ratio = originalRatio * brainFactor
-                    aapsLogger.debug(LTag.APS, "🧠 AIMI Brain Override: Autosens Ratio $originalRatio * $brainFactor -> ${autosensResult.ratio}")
+                    
+                    // 2. Modulate Dynamic ISF (SMB)
+                    // Factor > 1 (Aggressive) -> ISF Decreases (Larger Bolus) -> ISF / Factor
+                    // Factor < 1 (Protective) -> ISF Increases (Smaller Bolus) -> ISF / Factor
+                    variableSensitivity = variableSensitivity / brainFactor
+                    
+                    aapsLogger.debug(LTag.APS, "🧠 AIMI Brain Override: " +
+                        "Autosens ${"%.2f".format(originalRatio)}->${"%.2f".format(autosensResult.ratio)} | " +
+                        "ISF ${"%.0f".format(originalISF)}->${"%.0f".format(variableSensitivity)} " +
+                        "(Factor ${"%.2f".format(brainFactor)})")
                 }
             } catch (e: Exception) {
                 aapsLogger.error(LTag.APS, "Failed to apply AIMI Brain factor", e)
