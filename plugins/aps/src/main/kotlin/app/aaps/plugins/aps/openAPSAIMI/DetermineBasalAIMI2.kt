@@ -3387,22 +3387,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val dynamicPbolusSmall = calculateDynamicMicroBolus(effectiveISF, 20.0, reason)
         val dynamicPbolusLarge = calculateDynamicMicroBolus(effectiveISF, 25.0, reason)
         
-        val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason, targetBg + 30f)
-        if (bg > targetBg + 10 && predictedBg > targetBg + 30 && !nightbis && !hasReceivedPbolusMInLastHour(dynamicPbolusSmall) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition) {
-            rT.units = dynamicPbolusSmall
-            //rT.reason.append("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
-            rT.reason.append(context.getString(R.string.reason_autodrive_early_meal, dynamicPbolusSmall, combinedDelta, predicted, bgAcceleration.toDouble()))
-            return rT
-        }
-        
-        // 🚀 Innovation: Zero-IOB Priming
-        if (!nightbis && autodrive && isZeroIOBPrimingCondition(iob.toDouble(), delta, bgAcceleration.toFloat(), reason) && modesCondition) {
-            val primeBolus = calculateDynamicMicroBolus(effectiveISF, 15.0, reason) // Safe priming scaled to context
-            rT.units = primeBolus
-            reason.append("→ Zero-IOB Priming with ${primeBolus}U\n")
-            rT.reason.append(reason.toString())
-            return rT
-        }
+        // MOVED: Early Meal Detection and Zero-IOB Priming are now FALLBACKS after Main Autodrive.
+        // See Lines 3489+.
+            // MOVED to after Main Autodrive.
 
         // 🔨 Innovation: High Plateau Breaker
         if (!nightbis && autodrive && isHighPlateauBreakerCondition(bg.toFloat(), targetBg.toFloat(), stable == 1, iob.toDouble(), maxSMB, reason) && modesCondition) {
@@ -3488,6 +3475,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return rT
             // rT.reason.append("Microbolusing Autodrive Mode ${pbolusA}U. TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}. ")
             // return rT
+        }
+
+        // 🥞 FCL 10.8: Early Meal Detection / Snack (Fallback)
+        // Only fires if Main Autodrive (Heavy) logic above fell through (e.g. slope too gentle).
+        val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason, targetBg + 30f)
+        if (bg > targetBg + 10 && predictedBg > targetBg + 30 && !nightbis && !hasReceivedPbolusMInLastHour(dynamicPbolusSmall) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition) {
+            rT.units = dynamicPbolusSmall
+            rT.reason.append(context.getString(R.string.reason_autodrive_early_meal, dynamicPbolusSmall, combinedDelta, predicted, bgAcceleration.toDouble()))
+            return rT
+        }
+
+        // 🚀 Innovation: Zero-IOB Priming (Fallback)
+        if (!nightbis && autodrive && isZeroIOBPrimingCondition(iob.toDouble(), delta, bgAcceleration.toFloat(), reason) && modesCondition) {
+            val primeBolus = calculateDynamicMicroBolus(effectiveISF, 15.0, reason) // Safe priming scaled to context
+            rT.units = primeBolus
+            reason.append("→ Zero-IOB Priming with ${primeBolus}U\n")
+            rT.reason.append(reason.toString())
+            return rT
         }
         if (isbfastModeCondition()) {
             val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
