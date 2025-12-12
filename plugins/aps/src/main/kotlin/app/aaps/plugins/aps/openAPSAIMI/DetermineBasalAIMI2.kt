@@ -3381,11 +3381,122 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 100 * 1.2 = 120 (Weaker). WRONG for Resistance.
         // 100 * 0.7 = 70 (Stronger). WRONG for Sensitivity.
         
+        val systemTime = currentTime
         val profileISF_raw = if (profile != null && profile.sens > 10) profile.sens else 50.0
-        val effectiveISF = profileISF_raw / autosensRatio
-        
+        val effectiveISF = profileISF_raw / autosens_data.ratio
+
         val dynamicPbolusSmall = calculateDynamicMicroBolus(effectiveISF, 20.0, reason)
         val dynamicPbolusLarge = calculateDynamicMicroBolus(effectiveISF, 25.0, reason)
+        val iobArray = iob_data_array
+        val iob_data = iobArray[0]
+        val mealFlags = MealFlags(mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime)
+
+        // Heure du dernier bolus : iob_data est bien disponible ici
+        val lastBolusTimeMs: Long? = iob_data.lastBolusTime.takeIf { it > 0L }
+
+        val lateFatRiseFlag  = isLateFatProteinRise(
+            bg = bg,
+            predictedBg = predictedBg.toDouble(),
+            delta = delta.toDouble(),
+            shortAvgDelta = shortAvgDelta.toDouble(),
+            longAvgDelta = longAvgDelta.toDouble(),
+            iob = iob.toDouble(),
+            cob = cob.toDouble(),
+            maxSMB = maxSMB,
+            lastBolusTimeMs = lastBolusTimeMs,
+            mealFlags = mealFlags
+        )
+        val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
+        var tdd24Hrs = tddCalculator.calculateDaily(-24, 0)?.totalAmount?.toFloat() ?: 0.0f
+        if (tdd24Hrs == 0.0f) tdd24Hrs = tdd7P.toFloat()
+        // TODO eliminate
+        val bgTime = glucoseStatus.date
+        val minAgo = round((systemTime - bgTime) / 60.0 / 1000.0, 1)
+        val windowSinceDoseMin = if (iob_data.lastBolusTime > 0) {
+            ((systemTime - iob_data.lastBolusTime) / 60000.0).coerceAtLeast(0.0)
+        } else 0.0
+        windowSinceDoseInt = windowSinceDoseMin.toInt()
+        val carbsActiveG = mealData.mealCOB.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+        carbsActiveForPkpd = carbsActiveG
+        val mealModeActiveNow = isMealContextActive(mealData)
+        val pkpdMealContext = MealAggressionContext(
+            mealModeActive = mealModeActiveNow,
+            predictedBgMgdl = predictedBg.toDouble(),
+            targetBgMgdl = targetBg.toDouble()
+        )
+        val pkpdRuntimeTemp = pkpdIntegration.computeRuntime(
+            epochMillis = currentTime,
+            bg = bg,
+            deltaMgDlPer5 = delta.toDouble(),
+            iobU = iob.toDouble(),
+            carbsActiveG = carbsActiveG,
+            windowMin = windowSinceDoseInt,
+            exerciseFlag = sportTime,
+            profileIsf = profile.sens,
+            tdd24h = tdd24Hrs.toDouble(),
+            mealContext = pkpdMealContext,
+            consoleLog = consoleLog
+        )
+        if (pkpdRuntimeTemp != null) {
+            pkpdRuntime = pkpdRuntimeTemp
+        }
+        // End FCL 11.0 Hoist. Next block uses the results.
+        var tdd7Days = profile.TDD
+        if (tdd7Days == 0.0 || tdd7Days < tdd7P) tdd7Days = tdd7P
+        this.tdd7DaysPerHour = (tdd7Days / 24).toFloat()
+
+        var tdd2Days = tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))?.data?.totalAmount?.toFloat() ?: 0.0f
+        if (tdd2Days == 0.0f || tdd2Days < tdd7P) tdd2Days = tdd7P.toFloat()
+        this.tdd2DaysPerHour = tdd2Days / 24
+
+        var tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount?.toFloat() ?: 0.0f
+        if (tddDaily == 0.0f || tddDaily < tdd7P / 2) tddDaily = tdd7P.toFloat()
+        this.tddPerHour = tddDaily / 24
+
+        this.tdd24HrsPerHour = tdd24Hrs / 24
+        val fusedSensitivity = pkpdRuntime?.fusedIsf
+        val dynSensitivity = profile.variable_sens.takeIf { it > 0.0 } ?: profile.sens
+        val baseSensitivity = fusedSensitivity ?: profile.sens
+
+        var sens = when {
+            fusedSensitivity == null -> dynSensitivity
+            dynSensitivity <= 0.0 -> fusedSensitivity
+            else -> min(fusedSensitivity, dynSensitivity)
+        }
+        if (sens <= 0.0) sens = baseSensitivity
+        this.variableSensitivity = sens.toFloat()
+
+        if (fusedSensitivity != null) {
+            consoleError.add("ISF fusionné=${"%.1f".format(fusedSensitivity)} dynISF=${"%.1f".format(dynSensitivity)} → appliqué=${"%.1f".format(sens)}")
+            try {
+                app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfTddProvider.set(fusedSensitivity)
+            } catch (e: Exception) {
+                consoleError.add("Impossible de mettre à jour IsfTddProvider: ${e.message}")
+            }
+        }
+        
+        // 🔮 FCL 11.0: Generate Predictions NOW so they are visible even if Autodrive returns early
+        val advancedPredictions = AdvancedPredictionEngine.predict(
+            currentBG = bg,
+            iobArray = iob_data_array,
+            finalSensitivity = sens,
+            cobG = mealData.mealCOB,
+            profile = profile,
+            delta = delta.toDouble()
+        )
+        val sanitizedPredictions = advancedPredictions.map { round(min(401.0, max(39.0, it)), 0) }
+        val intsPredictions = sanitizedPredictions.map { it.toInt() }
+        rT.predBGs = Predictions().apply {
+            IOB = intsPredictions
+            COB = intsPredictions
+            ZT  = intsPredictions
+            UAM = intsPredictions
+        }
+        consoleLog.add("Prédiction avancée avec ISF final de ${"%.1f".format(sens)} (Avancé)")
+
+        // FIX: Use the calculated 'sens' (Dynamic) instead of 'profileISF_raw' (Static) if desired?
+        // User wants BEST logic. 'sens' includes DynISF.
+        // Let's use 'sens' for effectiveISF calculation.
         
         // MOVED: Early Meal Detection and Zero-IOB Priming are now FALLBACKS after Main Autodrive.
         // See Lines 3489+.
@@ -3594,67 +3705,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val profile_current_basal = pumpCapabilityValidator.validateBasal(profile.current_basal, pumpCaps)
         var basal: Double
 
-        // TODO eliminate
-        val systemTime = currentTime
-        val iobArray = iob_data_array
-        val iob_data = iobArray[0]
-        val mealFlags = MealFlags(mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime)
 
-// Heure du dernier bolus : iob_data est bien disponible ici (voir initialisation iob_data plus haut).
-// Tu as déjà iob_data.lastBolusTime et windowSinceDoseInt calculés dans ce bloc. :contentReference[oaicite:0]{index=0}
-        val lastBolusTimeMs: Long? = iob_data.lastBolusTime.takeIf { it > 0L }
-
-        val lateFatRiseFlag  = isLateFatProteinRise(
-            bg = bg,
-            predictedBg = predictedBg.toDouble(),
-            delta = delta.toDouble(),
-            shortAvgDelta = shortAvgDelta.toDouble(),
-            longAvgDelta = longAvgDelta.toDouble(),
-            iob = iob.toDouble(),
-            cob = cob.toDouble(),
-            maxSMB = maxSMB,
-            lastBolusTimeMs = lastBolusTimeMs,
-            mealFlags = mealFlags
-        )
-        val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
-        var tdd24Hrs = tddCalculator.calculateDaily(-24, 0)?.totalAmount?.toFloat() ?: 0.0f
-        if (tdd24Hrs == 0.0f) tdd24Hrs = tdd7P.toFloat()
-        // TODO eliminate
-        val bgTime = glucoseStatus.date
-        val minAgo = round((systemTime - bgTime) / 60.0 / 1000.0, 1)
-        val windowSinceDoseMin = if (iob_data.lastBolusTime > 0) {
-            ((systemTime - iob_data.lastBolusTime) / 60000.0).coerceAtLeast(0.0)
-        } else 0.0
-        windowSinceDoseInt = windowSinceDoseMin.toInt()
-        val carbsActiveG = mealData.mealCOB.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
-        carbsActiveForPkpd = carbsActiveG
-        val mealModeActiveNow = isMealContextActive(mealData)
-        val pkpdMealContext = MealAggressionContext(
-            mealModeActive = mealModeActiveNow,
-            predictedBgMgdl = predictedBg.toDouble(),
-            targetBgMgdl = targetBg.toDouble()
-        )
-        val pkpdRuntimeTemp = pkpdIntegration.computeRuntime(
-            epochMillis = currentTime,
-            bg = bg,
-            deltaMgDlPer5 = delta.toDouble(),
-            iobU = iob.toDouble(),
-            carbsActiveG = carbsActiveG,
-            windowMin = windowSinceDoseInt,
-            exerciseFlag = sportTime,
-            profileIsf = profile.sens,
-            tdd24h = tdd24Hrs.toDouble(),
-            mealContext = pkpdMealContext,
-            consoleLog = consoleLog
-        )
-        if (pkpdRuntimeTemp != null) {
-            pkpdRuntime = pkpdRuntimeTemp
-        }
-
-        // TODO eliminate
-        //bg = glucoseStatus.glucose.toFloat()
-        //this.bg = bg.toFloat()
-        // TODO eliminate
         val noise = glucoseStatus.noise
         // 38 is an xDrip error state that usually indicates sensor failure
         // all other BG values between 11 and 37 mg/dL reflect non-error-code BG values, so we should zero temp for those
@@ -3686,6 +3737,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val normalTarget = if (honeymoon) 130 else 100
 
         val halfBasalTarget = profile.half_basal_exercise_target
+
 
         when {
             !profile.temptargetSet && recentSteps5Minutes >= 0 && (recentSteps30Minutes >= 500 || recentSteps180Minutes > 1500) && recentSteps10Minutes > 0 && predictedBg < 140 -> {
@@ -3797,44 +3849,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val minDelta = min(glucoseStatus.delta, glucoseStatus.shortAvgDelta)
         val minAvgDelta = min(glucoseStatus.shortAvgDelta, glucoseStatus.longAvgDelta)
         // val maxDelta = max(glucoseStatus.delta, max(glucoseStatus.shortAvgDelta, glucoseStatus.longAvgDelta))
-        var tdd7Days = profile.TDD
-        if (tdd7Days == 0.0 || tdd7Days < tdd7P) tdd7Days = tdd7P
-        this.tdd7DaysPerHour = (tdd7Days / 24).toFloat()
-
-        var tdd2Days = tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))?.data?.totalAmount?.toFloat() ?: 0.0f
-        if (tdd2Days == 0.0f || tdd2Days < tdd7P) tdd2Days = tdd7P.toFloat()
-        this.tdd2DaysPerHour = tdd2Days / 24
-
-        var tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount?.toFloat() ?: 0.0f
-        if (tddDaily == 0.0f || tddDaily < tdd7P / 2) tddDaily = tdd7P.toFloat()
-        this.tddPerHour = tddDaily / 24
-
-        this.tdd24HrsPerHour = tdd24Hrs / 24
-        val fusedSensitivity = pkpdRuntime?.fusedIsf
-        val dynSensitivity = profile.variable_sens.takeIf { it > 0.0 } ?: profile.sens
-        val baseSensitivity = fusedSensitivity ?: profile.sens
-
-        var sens = when {
-            fusedSensitivity == null -> dynSensitivity
-            dynSensitivity <= 0.0 -> fusedSensitivity
-            else -> min(fusedSensitivity, dynSensitivity)
-        }
-        if (sens <= 0.0) sens = baseSensitivity
-        this.variableSensitivity = sens.toFloat()
-
-        if (fusedSensitivity != null) {
-            // --- LOG ---
-            consoleError.add(
-                "ISF fusionné=${"%.1f".format(fusedSensitivity)} dynISF=${"%.1f".format(dynSensitivity)} → appliqué=${"%.1f".format(sens)}"
-            )
-
-            // --- 🔥 NOUVEAU : synchroniser l’ISF dans le provider PKPD ---
-            try {
-                app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfTddProvider.set(fusedSensitivity)
-            } catch (e: Exception) {
-                consoleError.add("Impossible de mettre à jour IsfTddProvider: ${e.message}")
-            }
-        }
+        // MOVED (FCL 11.0): Logic hoisted to top of determine_basal
+        // See Lines 3381+
+        // (Deleted duplicate block)
 
         consoleError.add("CR:${profile.carb_ratio}")
         //val insulinEffect = calculateInsulinEffect(bg.toFloat(),iob,variableSensitivity,cob,normalBgThreshold,recentSteps180Minutes,averageBeatsPerMinute.toFloat(),averageBeatsPerMinute10.toFloat(),profile.insulinDivisor.toFloat())
@@ -4435,6 +4452,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             else -> null
         }
 
+
         rate?.let {
             rT.rate = it
             rT.deliverAt = deliverAt
@@ -4502,24 +4520,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // duration (hours) = duration (5m) * 5 / 60 * 2 (to account for linear decay)
         //consoleError.add("Carb Impact: ${ci} mg/dL per 5m; CI Duration: ${round(cid * 5 / 60 * 2, 1)} hours; remaining CI (~2h peak): ${round(remainingCIpeak, 1)} mg/dL per 5m")
         consoleError.add(context.getString(R.string.console_carb_impact, ci, round(cid * 5 / 60 * 2, 1), round(remainingCIpeak, 1)))
-        val advancedPredictions = AdvancedPredictionEngine.predict(
-            currentBG = bg,
-            iobArray = iob_data_array,
-            finalSensitivity = sens,
-            cobG = mealData.mealCOB,
-
-            profile = profile,
-            delta = delta.toDouble()
-        )
-        val sanitizedPredictions = advancedPredictions.map { round(min(401.0, max(39.0, it)), 0) }
-        val intsPredictions = sanitizedPredictions.map { it.toInt() }
-        rT.predBGs = Predictions().apply {
-            IOB = intsPredictions
-            COB = intsPredictions
-            ZT  = intsPredictions
-            UAM = intsPredictions
-        }
-        consoleLog.add("Prédiction avancée avec ISF final de ${"%.1f".format(sens)} (PKPD cache reused)")
+        // MOVED (FCL 11.0): Logic hoisted to top of determine_basal
+        // (Deleted duplicate block)
 //fin predictions
 ////////////////////////////////////////////
 //estimation des glucides nécessaires si risque hypo
