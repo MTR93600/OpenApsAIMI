@@ -3477,21 +3477,34 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val dynamicPbolusLarge = calculateDynamicMicroBolus(effectiveISF, 25.0, reason)
         
         // 🔮 FCL 11.0: Generate Predictions NOW so they are visible even if Autodrive returns early
-        val advancedPredictions = AdvancedPredictionEngine.predict(
-            currentBG = bg,
-            iobArray = iob_data_array,
-            finalSensitivity = sens,
-            cobG = mealData.mealCOB,
-            profile = profile,
-            delta = delta.toDouble()
-        )
-        val sanitizedPredictions = advancedPredictions.map { round(min(401.0, max(39.0, it)), 0) }
-        val intsPredictions = sanitizedPredictions.map { it.toInt() }
-        rT.predBGs = Predictions().apply {
-            IOB = intsPredictions
-            COB = intsPredictions
-            ZT  = intsPredictions
-            UAM = intsPredictions
+        // 🔮 FCL 11.0: Generate Predictions NOW so they are visible even if Autodrive returns early
+        try {
+            consoleLog.add("🔮 PREDICT INIT: BG=$bg Delta=$delta Sens=${"%.1f".format(sens)} IOB=${iob_data_array[0].iob}")
+            val advancedPredictions = AdvancedPredictionEngine.predict(
+                currentBG = bg,
+                iobArray = iob_data_array,
+                finalSensitivity = sens,
+                cobG = mealData.mealCOB,
+                profile = profile,
+                delta = delta.toDouble()
+            )
+            val sanitizedPredictions = advancedPredictions.map { round(min(401.0, max(39.0, it)), 0) }
+            val intsPredictions = sanitizedPredictions.map { it.toInt() }
+            
+            if (intsPredictions.isNotEmpty()) {
+                rT.predBGs = Predictions().apply {
+                    IOB = intsPredictions
+                    COB = intsPredictions
+                    ZT  = intsPredictions
+                    UAM = intsPredictions
+                }
+                 consoleLog.add("🔮 PREDICT SUCCESS: ${intsPredictions.size} points. Eventual: ${intsPredictions.last()}")
+            } else {
+                 consoleError.add("🔮 PREDICT WARNING: Empty prediction list returned.")
+            }
+        } catch (e: Exception) {
+            consoleError.add("🔮 PREDICT ERROR: ${e.message}")
+            e.printStackTrace()
         }
         consoleLog.add("Prédiction avancée avec ISF final de ${"%.1f".format(sens)} (Avancé)")
 
