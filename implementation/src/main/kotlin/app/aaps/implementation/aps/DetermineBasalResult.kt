@@ -179,6 +179,44 @@ class DetermineBasalResult @Inject constructor(
             val startTime = date
 
             val predictions = predictions()
+            
+            // 🔮 FCL 11.0: Debug & JSON Fallback
+            if (predictions?.IOB.isNullOrEmpty()) {
+                aapsLogger.debug(LTag.APS, "DEBUG GV: predBGs object is empty/null. Checking JSON...")
+                try {
+                    val jsonPreds = json().optJSONObject("predBGs")
+                    if (jsonPreds != null) {
+                         aapsLogger.debug(LTag.APS, "DEBUG GV: Found predictions in JSON fallback!")
+                         val iob = ArrayList<Int>()
+                         jsonPreds.optJSONArray("IOB")?.let { ja -> for(i in 0 until ja.length()) iob.add(ja.getInt(i)) }
+                         // We could reconstruct the full object, but for now let's just populate the array from JSON if needed
+                         // Or better: Create a temporary Predictions object from JSON and use it
+                         val fallbackPreds = Predictions(IOB = iob) 
+                         // Note: This is a hack for debugging. 
+                         // Just proceeding with standard logic if possible, or manual parse here.
+                         
+                         // Manual parse loop for JSON fallback IOB
+                         for (i in 1 until iob.size) {
+                             array.add(
+                                 GV(
+                                     raw = 0.0,
+                                     noise = 0.0,
+                                     value = iob[i].toDouble(),
+                                     timestamp = startTime + i * 5 * 60 * 1000L,
+                                     sourceSensor = SourceSensor.IOB_PREDICTION,
+                                     trendArrow = TrendArrow.NONE
+                                 )
+                             )
+                         }
+                         // Also assume other fields might exist in JSON but prioritizing IOB for visibility
+                    }
+                } catch (e: Exception) {
+                    aapsLogger.error(LTag.APS, "DEBUG GV: JSON fallback failed: $e")
+                }
+            } else {
+                 aapsLogger.debug(LTag.APS, "DEBUG GV: Found predBGs object (IOB size: ${predictions?.IOB?.size})")
+            }
+            
             predictions?.IOB?.let { iob ->
                 for (i in 1 until iob.size) {
                     array.add(
