@@ -787,6 +787,11 @@
     <string name="steps">&#160;| Steps=%1$d</string>
     <string name="heart_rate">&#160;| HR=%1$s bpm</string>
     <string name="smb_disabled">SMB disabled (!microBolusAllowed)</string>
+    <!-- New Bio-Sync strings -->
+    <string name="reason_iob_adjustment_inverted">  • IOB Activity Acceleration: -%1$.1f min\n</string>
+    <string name="reason_bio_sync_stress">  • 🔴 Bio-Sync STRESS (HR %1$d, Steps %2$d) ➝ Peak slowed x1.25\n</string>
+    <string name="reason_bio_sync_flow">  • 🟢 Bio-Sync FLOW (Steps %1$d, HR %2$d) ➝ Peak faster x%3$.2f\n</string>
+    
     <string name="smb_disabled_high_target">SMB disabled due to high temptarget of %1$.0f</string>
     <string name="smb_enabled_always">SMB enabled due to enableSMB_always</string>
     <string name="smb_enabled_for_cob">SMB enabled for COB of %1$.1f</string>

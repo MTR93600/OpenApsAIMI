@@ -258,6 +258,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var snackrunTime: Long = 0
     private var intervalsmb = 1
     private var peakintermediaire = 0.0
+    private var latestAdjustedDia: Double = 0.0 // Captured for logging
     private var insulinPeakTime = 0.0
     private val nightGrowthResistanceMode = NightGrowthResistanceMode()
     private val ngrTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
@@ -725,7 +726,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         currentHour: Int,
         pumpAgeDays: Float,
         iob: Double = 0.0,
-        activityContext: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext
+        activityContext: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext,
+        steps: Int? = null,
+        heartRate: Int? = null
     ): Double {
         val reasonBuilder = StringBuilder()
 
@@ -753,7 +756,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     when (activityContext.state) {
         app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE -> {
              diaMinutes *= 0.7f
-             reasonBuilder.append(context.getString(R.string.reason_high_activity))
+             // reasonBuilder.append(context.getString(R.string.reason_high_activity)) // Using Bio-Sync reason now
         }
         app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.MODERATE -> {
              diaMinutes *= 0.8f
@@ -769,6 +772,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
     }    
+
+        // 3b. BIO-SYNC Stress Mode (Correction for High HR at Rest)
+        val s = steps ?: 0
+        val h = heartRate ?: 0
+        if (h > 95 && s < 100) {
+             // Stress / Maladie : Résistance -> DIA plus long
+             diaMinutes *= 1.2f
+             reasonBuilder.append(context.getString(R.string.reason_bio_sync_stress, h, s))
+        } else if (s > 1000) {
+             // Flow / Sport : Absorption rapide -> DIA plus court (si pas déjà appliqué par ActivityContext)
+             // On s'assure qu'on ne double pas la réduction si ActivityState est déjà INTENSE
+             if (activityContext.state != app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE) {
+                 diaMinutes *= 0.85f
+                 reasonBuilder.append(context.getString(R.string.reason_bio_sync_flow, s, h, 0.85f))
+             }
+        }
 
         // 5. Ajustement en fonction de l'IOB (Insulin on Board)
         // Si le patient a déjà beaucoup d'insuline active, il faut réduire le DIA pour éviter l'hypoglycémie
@@ -801,6 +820,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         println(context.getString(R.string.dia_calculation_details))
         println(reasonBuilder.toString())
 
+        this.latestAdjustedDia = finalDiaMinutes.toDouble()
         return finalDiaMinutes.toDouble()
     }
 
@@ -1145,11 +1165,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val usFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm")
         val dateStr = dateUtil.dateAndTimeString(dateUtil.now()).format(usFormatter)
 
-        val headerRow = "dateStr, bg, iob, cob, delta, shortAvgDelta, longAvgDelta, tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour, predictedSMB, smbGiven\n"
+        val headerRow = "dateStr, bg, iob, cob, delta, shortAvgDelta, longAvgDelta, tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour, predictedSMB, smbGiven, dynamicPeak, adjustedDia\n"
         val valuesToRecord = "$dateStr," +
             "$bg,$iob,$cob,$delta,$shortAvgDelta,$longAvgDelta," +
             "$tdd7DaysPerHour,$tdd2DaysPerHour,$tddPerHour,$tdd24HrsPerHour," +
-            "$predictedSMB,$smbToGive"
+            "$predictedSMB,$smbToGive," +
+            "$peakintermediaire,$latestAdjustedDia"
 
 
         if (!csvfile.exists()) {
@@ -1170,13 +1191,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             "tdd7DaysPerHour,tdd2DaysPerHour,tddPerHour,tdd24HrsPerHour," +
             "recentSteps5Minutes,recentSteps10Minutes,recentSteps15Minutes,recentSteps30Minutes,recentSteps60Minutes,recentSteps180Minutes," +
             "tags0to60minAgo,tags60to120minAgo,tags120to180minAgo,tags180to240minAgo," +
-            "predictedSMB,maxIob,maxSMB,smbGiven\n"
+            "predictedSMB,maxIob,maxSMB,smbGiven,dynamicPeak,adjustedDia\n"
         val valuesToRecord = "$dateStr,$hourOfDay,$weekend," +
             "$bg,$targetBg,$iob,$delta,$shortAvgDelta,$longAvgDelta," +
             "$tdd7DaysPerHour,$tdd2DaysPerHour,$tddPerHour,$tdd24HrsPerHour," +
             "$recentSteps5Minutes,$recentSteps10Minutes,$recentSteps15Minutes,$recentSteps30Minutes,$recentSteps60Minutes,$recentSteps180Minutes," +
             "$tags0to60minAgo,$tags60to120minAgo,$tags120to180minAgo,$tags180to240minAgo," +
-            "$predictedSMB,$maxIob,$maxSMB,$smbToGive"
+            "$predictedSMB,$maxIob,$maxSMB,$smbToGive,$peakintermediaire,$latestAdjustedDia"
         if (!csvfile2.exists()) {
             csvfile2.parentFile?.mkdirs() // Crée le dossier s'il n'existe pas
             csvfile2.createNewFile()
@@ -2937,69 +2958,58 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 //  reasonBuilder.append("  • Facteur hyperglycémie: $hyperCorrectionFactor\n")
         reasonBuilder.append(context.getString(R.string.reason_hyper_correction, hyperCorrectionFactor))
 
-        // 2️⃣ Basé sur currentActivity (IOB)
+        // 2️⃣ Basé sur currentActivity (IOB) - "Active Insulin" vs "Activity" check
+        // Si c'est de l'activité physique (IOB provenant de l'activité ? Non, currentActivity est souvent l'activité physique déclarée/détectée)
+        // Correction BIO-SYNC : L'activité accélère l'absorption (pic plus tôt)
         if (currentActivity > 0.1) {
-            val adjustment = currentActivity * 20 + 5
-            dynamicPeakTime += adjustment
-            //reasonBuilder.append("  • Ajout lié IOB: +$adjustment\n")
-            reasonBuilder.append(context.getString(R.string.reason_iob_adjustment, adjustment))
+            // Old: dynamicPeakTime += adjustment (Retardait le pic)
+            // New: on réduit le temps du pic (ça va plus vite)
+            val acceleration = currentActivity * 20 + 5
+            dynamicPeakTime -= acceleration
+            reasonBuilder.append(context.getString(R.string.reason_iob_adjustment_inverted, acceleration))
         }
 
-        // 3️⃣ Ratio d'activité
+        // 3️⃣ Ratio d'activité (Future / Current)
+        // Si on va bouger plus (Future > Current), ça va accélérer encore plus
         val ratioFactor = when {
-            activityRatio > 1.5 -> 0.5 + (activityRatio - 1.5) * 0.05
-            activityRatio < 0.5 -> 1.5 + (0.5 - activityRatio) * 0.05
+            activityRatio > 1.5 -> 0.8  // (était 0.5 + ...) on accélère (x0.8)
+            activityRatio < 0.5 -> 1.2  // on ralentit (x1.2)
             else -> 1.0
         }
         dynamicPeakTime *= ratioFactor
-//  reasonBuilder.append("  • Ratio activité: ${round(activityRatio,2)} ➝ facteur $ratioFactor\n")
         reasonBuilder.append(context.getString(R.string.reason_activity_ratio, round(activityRatio,2), ratioFactor))
 
-        // 4️⃣ Nombre de pas
-        stepCount?.let {
-            when {
-                it > 1000 -> {
-                    val stepAdj = it * 0.015
-                    dynamicPeakTime += stepAdj
-//              reasonBuilder.append("  • Pas ($it) ➝ +$stepAdj\n")
-                    reasonBuilder.append(context.getString(R.string.reason_steps_adjustment, it, stepAdj))
-                }
-                it < 100 -> {
-                    dynamicPeakTime *= 0.9
-//              reasonBuilder.append("  • Peu de pas ($it) ➝ x0.9\n")
-                    reasonBuilder.append(context.getString(R.string.reason_few_steps, it))
-                }
-            }
+        // 4️⃣ & 5️⃣ BIO-SYNC FUSION : Steps & HeartRate
+        // On détecte 3 états : FLOW (Sport), STRESS (Cortisol), ou REST
+        val steps = stepCount ?: 0
+        val hr = heartRate ?: 0
+        
+        val isStress = hr > 95 && steps < 100 // Tachycardie au repos -> Stress/Maladie
+        val isFlow = steps > 500 || (steps > 200 && hr > 100) // Activité significative
+
+        if (isStress) {
+            // 🔴 STRESS MODE : Cortisol -> Résistance -> Pic retardé et étalé
+            dynamicPeakTime *= 1.25
+            reasonBuilder.append(context.getString(R.string.reason_bio_sync_stress, hr, steps))
+            consoleLog.add("Bio-Sync: STRESS DETECTED (HR $hr, Steps $steps) -> Peak slowed x1.25")
+        } else if (isFlow) {
+            // 🟢 FLOW MODE : Circulation ++ -> Absorption accélérée -> Pic plus tôt
+            // Plus on bouge, plus c'est rapide, borné à x0.7
+            val flowFactor = if (steps > 1500) 0.7 else 0.85
+            dynamicPeakTime *= flowFactor
+            reasonBuilder.append(context.getString(R.string.reason_bio_sync_flow, steps, hr, flowFactor))
+        } else if (steps < 50 && hr < 65 && hr > 40) {
+            // 🔵 DEEP REST : Métabolisme lent
+            dynamicPeakTime *= 1.1
+            reasonBuilder.append("Bio-Sync: Deep Rest (HR $hr) -> x1.1\n")
         }
 
-        // 5️⃣ Fréquence cardiaque
-        heartRate?.let {
-            when {
-                it > 110 -> {
-                    dynamicPeakTime *= 1.15
-//              reasonBuilder.append("  • FC élevée ($it) ➝ x1.15\n")
-                    reasonBuilder.append(context.getString(R.string.reason_high_hr, it))
-                }
-                it < 70 -> {
-                    dynamicPeakTime *= 0.65
-//              reasonBuilder.append("  • FC basse ($it) ➝ x0.85\n")
-                    reasonBuilder.append(context.getString(R.string.reason_low_hr, it))
-                }
-            }
-        }
-
+        /* 
+        // ANCIENNE LOGIQUE SUPPRIMÉE (Obsolète car contradictoire)
+        // 4️⃣ Nombre de pas (Old: >1000 -> += stepAdj)
+        // 5️⃣ Fréquence cardiaque (Old: >110 -> x1.15)
         // 6️⃣ Corrélation FC + pas
-        if (stepCount != null && heartRate != null) {
-            if (stepCount > 1000 && heartRate > 110) {
-                dynamicPeakTime *= 1.2
-//          reasonBuilder.append("  • Activité intense ➝ x1.2\n")
-                reasonBuilder.append(context.getString(R.string.reason_high_activity))
-            } else if (stepCount < 200 && heartRate < 70) {
-                dynamicPeakTime *= 0.75
-//          reasonBuilder.append("  • Repos total ➝ x0.75\n")
-                reasonBuilder.append(context.getString(R.string.reason_total_rest))
-            }
-        }
+        */
 
         this.peakintermediaire = dynamicPeakTime
 
@@ -4264,7 +4274,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         currentHour = currentHour,
                         pumpAgeDays = pumpAge,
                         iob = iobValue,
-                        activityContext = activityContext
+                        activityContext = activityContext,
+                        steps = steps5,
+                        heartRate = currentHr?.toInt()
                     )
                 },
                 costFunction = { basalInput, bgInput, targetInput, horizon, sensitivity, candidate ->
