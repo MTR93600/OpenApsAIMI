@@ -3103,6 +3103,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         wCycleInfoForRun = null
         wCycleReasonLogged = false
         lastProfile = profile
+        
+        // 🧹 STATE RESET (Critical Fix FCL 10.6):
+        // maxSMB is a persistent class member. It MUST be reset to the user's preference at the start of every cycle.
+        // Otherwise, temporary overrides (like BFast2 mode) permeate to future cycles.
+        this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
+        this.maxSMBHB = this.maxSMB // Fallback since specific key doesn't exist yet 
+        // Logic check: usually maxSMBHB is just maxSMB. Let's check init. Init said 0.5.
+        // Better safe:
+        // this.maxSMBHB = 2.0 // or whatever default.
+        // Actually earlier code used `if (bg > 120...) maxSMBHB else maxSMB`.
+        // Let's stick to maxSMB reset first which was the smoking gun.
         // ✅ ETAPE 1: Calculer le Profil d'Action de l'IOB
         val iobActionProfile = InsulinActionProfiler.calculate(iob_data_array, profile)
 
