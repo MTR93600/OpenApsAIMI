@@ -40,6 +40,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     @Inject lateinit var profileFunction: app.aaps.core.interfaces.profile.ProfileFunction
     @Inject lateinit var persistenceLayer: app.aaps.core.interfaces.db.PersistenceLayer
     @Inject lateinit var preferences: app.aaps.core.keys.interfaces.Preferences
+    @Inject lateinit var unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner
     
     // NOT injected - created manually to avoid Dagger issues
     private lateinit var advisorService: AimiAdvisorService
@@ -50,7 +51,13 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         super.onCreate(savedInstanceState)
         
         // Pass dependencies to service
-        advisorService = AimiAdvisorService(profileFunction, persistenceLayer, preferences, rh)
+        advisorService = AimiAdvisorService(
+            profileFunction = profileFunction, 
+            persistenceLayer = persistenceLayer, 
+            preferences = preferences, 
+            rh = rh, 
+            unifiedReactivityLearner = unifiedReactivityLearner
+        )
         historyRepo = app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository(this)
         title = rh.gs(R.string.aimi_advisor_title)
         
@@ -115,7 +122,11 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                         }
                     }
 
-                    // 4. Section: AI Coach (ChatGPT)
+                    // 4. Section: COGNITIVE BRIDGE (BRAIN)
+                    rootLayout.addView(createSectionHeader("ÉTAT COGNITIF"))
+                    rootLayout.addView(createCognitiveCard(context.prefs.unifiedReactivityFactor, cardColor))
+
+                    // 5. Section: AI Coach (ChatGPT/Gemini)
                     rootLayout.addView(createSectionHeader("COACH IA"))
                     rootLayout.addView(createCoachCard(context, report, cardColor))
             
@@ -502,6 +513,87 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         textLayout.addView(TextView(this).apply {
             val msg = rec.explanation
             text = msg
+            textSize = 14f
+            setTextColor(Color.parseColor("#94A3B8")) // Slate 400
+            setLineSpacing(4f, 1.1f)
+            setPadding(0, 4, 0, 0)
+        })
+        
+        row.addView(textLayout)
+        card.addView(row)
+        return card
+    }
+
+    private fun createCognitiveCard(factor: Double, cardBg: Int): CardView {
+        val card = CardView(this).apply {
+            radius = 16f
+            setCardBackgroundColor(cardBg)
+            cardElevation = 0f
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, 16)
+            }
+        }
+        
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(24, 24, 24, 24)
+        }
+        
+        // Brain Icon
+        val iconBg = CardView(this).apply {
+            radius = 50f
+            cardElevation = 0f
+            setCardBackgroundColor(Color.parseColor("#334155"))
+            layoutParams = LinearLayout.LayoutParams(48.dpToPx(), 48.dpToPx())
+        }
+        val iconText = TextView(this).apply {
+            text = "🧠"
+            textSize = 20f
+            gravity = Gravity.CENTER
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+        iconBg.addView(iconText)
+        row.addView(iconBg)
+        
+        // Text Content
+        val textLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 0, 0, 0)
+        }
+        
+        // Determine State
+        val stateText: String
+        val stateColor: Int
+        val explanation: String
+        
+        when {
+            factor < 0.95 -> {
+                stateText = "PROTECTEUR (x${"%.2f".format(factor)})"
+                stateColor = Color.parseColor("#F87171") // Red/Orange - Reducing aggression
+                explanation = "Le système a détecté une instabilité/hypo récente et a réduit l'agressivité globale."
+            }
+            factor > 1.05 -> {
+                stateText = "OFFENSIF (x${"%.2f".format(factor)})"
+                stateColor = Color.parseColor("#EF4444") // Red - Increasing aggression
+                explanation = "Le système combat une hyperglycémie persistante ou une résistance détectée."
+            }
+            else -> {
+                stateText = "NEUTRE (x${"%.2f".format(factor)})"
+                stateColor = Color.parseColor("#4ADE80") // Green
+                explanation = "Le système fonctionne avec ses paramètres de base. Aucune anomalie détectée."
+            }
+        }
+
+        textLayout.addView(TextView(this).apply {
+            text = stateText
+            textSize = 16f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(stateColor)
+        })
+        
+        textLayout.addView(TextView(this).apply {
+            text = explanation
             textSize = 14f
             setTextColor(Color.parseColor("#94A3B8")) // Slate 400
             setLineSpacing(4f, 1.1f)

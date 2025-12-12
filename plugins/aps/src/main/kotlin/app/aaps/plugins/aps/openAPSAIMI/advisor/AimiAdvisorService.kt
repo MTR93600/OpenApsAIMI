@@ -21,18 +21,21 @@ class AimiAdvisorService {
     private val profileFunction: app.aaps.core.interfaces.profile.ProfileFunction?
     private val persistenceLayer: app.aaps.core.interfaces.db.PersistenceLayer?
     private val preferences: app.aaps.core.keys.interfaces.Preferences?
+    private val unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner?
 
     // Constructor injection for dependencies
     constructor(
         profileFunction: app.aaps.core.interfaces.profile.ProfileFunction? = null,
         persistenceLayer: app.aaps.core.interfaces.db.PersistenceLayer? = null,
         preferences: app.aaps.core.keys.interfaces.Preferences? = null,
-        rh: app.aaps.core.interfaces.resources.ResourceHelper? = null
+        rh: app.aaps.core.interfaces.resources.ResourceHelper? = null,
+        unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner? = null
     ) {
         this.profileFunction = profileFunction
         this.persistenceLayer = persistenceLayer
         this.preferences = preferences
         this.rh = rh
+        this.unifiedReactivityLearner = unifiedReactivityLearner
     }
 
     private val rh: app.aaps.core.interfaces.resources.ResourceHelper?
@@ -125,7 +128,7 @@ class AimiAdvisorService {
         val aimiPrefs = AimiPrefsSnapshot(
             maxSmb = preferences.get(DoubleKey.OApsAIMIMaxSMB).toDouble(),
             lunchFactor = preferences.get(DoubleKey.OApsAIMILunchFactor).toDouble(),
-            unifiedReactivityFactor = 1.0,
+            unifiedReactivityFactor = unifiedReactivityLearner?.getCombinedFactor() ?: 1.0,
             autodriveMaxBasal = preferences.get(DoubleKey.autodriveMaxBasal).toDouble()
         )
 

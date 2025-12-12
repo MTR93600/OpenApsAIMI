@@ -119,7 +119,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val determineBasalaimiSMB2: DetermineBasalaimiSMB2,
     private val profiler: Profiler,
     private val context: Context,
-    private val apsResultProvider: Provider<APSResult>
+    private val apsResultProvider: Provider<APSResult>,
+    private val unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner // 🧠 Brain Injection
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -555,6 +556,26 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 ratioFromTdd = tdd24Hrs / tdd2Days,
                 ratioFromCarbs = 1.0 // Peut être ajusté si nécessaire
             )
+
+            // 🧠 AIMI BRAIN INTEGRATION (UnifiedReactivityLearner)
+            // "The missing link": Adjust Autosens based on long-term clinical metrics.
+            try {
+                unifiedReactivityLearner.processIfNeeded()
+                val brainFactor = unifiedReactivityLearner.getCombinedFactor()
+                
+                // Autosens Ratio > 1.0 = Resistant (More Aggressive).
+                // Learner Factor > 1.0 = More Aggressive (Hyper).
+                // Learner Factor < 1.0 = Less Aggressive (Hypo/Safety).
+                // So we MULTIPLY the ratio.
+                
+                if (brainFactor != 1.0) {
+                    val originalRatio = autosensResult.ratio
+                    autosensResult.ratio = originalRatio * brainFactor
+                    aapsLogger.debug(LTag.APS, "🧠 AIMI Brain Override: Autosens Ratio $originalRatio * $brainFactor -> ${autosensResult.ratio}")
+                }
+            } catch (e: Exception) {
+                aapsLogger.error(LTag.APS, "Failed to apply AIMI Brain factor", e)
+            }
 
             val iobArray = iobCobCalculator.calculateIobArrayForSMB(autosensResult, SMBDefaults.exercise_mode, SMBDefaults.half_basal_exercise_target, isTempTarget)
             val mealData = iobCobCalculator.getMealDataWithWaitingForCalculationFinish()
