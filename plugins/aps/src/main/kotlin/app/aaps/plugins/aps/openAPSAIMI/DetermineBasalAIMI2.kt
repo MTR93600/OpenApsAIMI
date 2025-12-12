@@ -3043,12 +3043,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     fun detectMealOnset(delta: Float, predictedDelta: Float, acceleration: Float, predictedBg: Float, targetBg: Float): Boolean {
         val combinedDelta = (delta + predictedDelta) / 2.0f
         
-        // 1. Existing strict check
+        // 1. Existing strict check (Explosive Rise)
         if (combinedDelta > 3.0f && acceleration > 1.2f) return true
 
-        // 2. Harmonized check (normalized rise)
+        // 2. Harmonized check (Steady Meal Rise)
+        // Relaxed acceleration req if rise is clearly above noise
         val normalizedRise = ((predictedBg - targetBg) / 70.0f).coerceIn(0.0f, 1.0f)
-        if (normalizedRise > 0.3f && combinedDelta > 2.0f && acceleration > 0.5f) return true
+        if (normalizedRise > 0.3f && combinedDelta > 2.0f && acceleration > 0.3f) return true
+        
+        // 3. [FIX] Brute Force Rise (No Acceleration needed if Delta is huge)
+        // If BG is rising +5 mg/dL/min, it IS a meal/carb impact, even if linear.
+        if (combinedDelta > 5.0f || delta > 5.0f) return true
 
         return false
     }
