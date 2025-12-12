@@ -3497,13 +3497,47 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val intsPredictions = sanitizedPredictions.map { it.toInt() }
             
             if (intsPredictions.isNotEmpty()) {
-                rT.predBGs = Predictions().apply {
-                    IOB = intsPredictions
-                    COB = intsPredictions
-                    ZT  = intsPredictions
-                    UAM = intsPredictions
+                // 🔮 FCL 11.0: Populate Oref0 standard variables for safety & compatibility
+                var IOBpredBGs = mutableListOf<Double>()
+                var COBpredBGs = mutableListOf<Double>()
+                var UAMpredBGs = mutableListOf<Double>()
+                var ZTpredBGs = mutableListOf<Double>()
+                
+                // Initialize with current BG
+                IOBpredBGs.add(bg)
+                COBpredBGs.add(bg)
+                UAMpredBGs.add(bg)
+                ZTpredBGs.add(bg)
+                
+                // Populate all arrays with AIMI predictions (Unified Model)
+                // We use the same prediction for all because AIMI is an end-to-end model
+                intsPredictions.forEach { pred -> 
+                    val valDouble = pred.toDouble()
+                    IOBpredBGs.add(valDouble)
+                    COBpredBGs.add(valDouble)
+                    UAMpredBGs.add(valDouble)
+                    ZTpredBGs.add(valDouble)
                 }
-                 consoleError.add("🔮 PREDICT SUCCESS: ${intsPredictions.size} points. Eventual: ${intsPredictions.last()}")
+                
+                // Calculate Min/Max/Eventual for Guard/Safety Logic
+                val lastPred = intsPredictions.last().toDouble()
+                val minPred = intsPredictions.minOrNull()?.toDouble() ?: bg
+                
+                // Set Eventual BG
+                rT.eventualBG = lastPred
+                
+                // Populate rT.predBGs for UI Graph
+                rT.predBGs = Predictions().apply {
+                    IOB = IOBpredBGs.map { it.toInt() }
+                    COB = COBpredBGs.map { it.toInt() }
+                    ZT  = ZTpredBGs.map { it.toInt() }
+                    UAM = UAMpredBGs.map { it.toInt() }
+                }
+                
+                // Debug logging mimicking SMB for consistency
+                consoleError.add("🔮 PREDICT SUCCESS: ${intsPredictions.size} points. Eventual: $lastPred Min: $minPred")
+                consoleError.add("minGuardBG ${minPred.toInt()} IOBpredBG ${lastPred.toInt()}")
+                
             } else {
                  consoleError.add("🔮 PREDICT WARNING: Empty prediction list returned (Input Size: ${advancedPredictions.size})")
             }
