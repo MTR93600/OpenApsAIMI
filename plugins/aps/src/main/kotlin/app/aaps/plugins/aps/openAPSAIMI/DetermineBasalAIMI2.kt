@@ -3382,11 +3382,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 100 * 0.7 = 70 (Stronger). WRONG for Sensitivity.
         
         val systemTime = currentTime
-        val profileISF_raw = if (profile != null && profile.sens > 10) profile.sens else 50.0
-        val effectiveISF = profileISF_raw / autosens_data.ratio
-
-        val dynamicPbolusSmall = calculateDynamicMicroBolus(effectiveISF, 20.0, reason)
-        val dynamicPbolusLarge = calculateDynamicMicroBolus(effectiveISF, 25.0, reason)
         val iobArray = iob_data_array
         val iob_data = iobArray[0]
         val mealFlags = MealFlags(mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime)
@@ -3474,6 +3469,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleError.add("Impossible de mettre à jour IsfTddProvider: ${e.message}")
             }
         }
+        
+        val profileISF_raw = if (profile != null && profile.sens > 10) profile.sens else 50.0
+        // 🔮 FCL 11.0 Fix: Use Dynamic 'sens' for Effective ISF to capture Resistance/Sensitivity
+        val effectiveISF = sens / autosens_data.ratio 
+        val dynamicPbolusSmall = calculateDynamicMicroBolus(effectiveISF, 20.0, reason)
+        val dynamicPbolusLarge = calculateDynamicMicroBolus(effectiveISF, 25.0, reason)
         
         // 🔮 FCL 11.0: Generate Predictions NOW so they are visible even if Autodrive returns early
         val advancedPredictions = AdvancedPredictionEngine.predict(
