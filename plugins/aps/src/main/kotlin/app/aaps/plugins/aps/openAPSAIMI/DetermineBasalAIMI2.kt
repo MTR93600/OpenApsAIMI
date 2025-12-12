@@ -1513,8 +1513,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 2. Stable (Stagnation)
         if (!stable) return false
         
-        // 3. Low IOB (Room to act) - strict safety
-        val safeIOB = maxSMB / 3.0
+        // 3. Low IOB (Room to act)
+        // FIX: Relaxed from maxSMB/3 to maxSMB.
+        // If we are stagnating at 273, current IOB is clearly ineffective.
+        // We rely on standard MaxIOB safety later.
+        val safeIOB = maxSMB // Was maxSMB / 3.0
         if (iob > safeIOB) return false
         
         reason.append("🔨 High Plateau Breaker: BG High & Stable & Low IOB -> ENGAGED\n")
@@ -3348,7 +3351,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.decceleratingUp = if (delta > 0 && (delta < shortAvgDelta || delta < longAvgDelta)) 1 else 0
         this.acceleratingDown = if (delta < -2 && delta - longAvgDelta < -2) 1 else 0
         this.decceleratingDown = if (delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta)) 1 else 0
-        this.stable = if (delta > -3 && delta < 3 && shortAvgDelta > -3 && shortAvgDelta < 3 && longAvgDelta > -3 && longAvgDelta < 3 && bg < 180) 1 else 0
+        this.stable = if (delta > -3 && delta < 3 && shortAvgDelta > -3 && shortAvgDelta < 3 && longAvgDelta > -3 && longAvgDelta < 3) 1 else 0
         val nightbis = hourOfDay <= 7
         val modesCondition = (!mealTime || mealruntime > 30) && (!lunchTime || lunchruntime > 30) && (!bfastTime || bfastruntime > 30) && (!dinnerTime || dinnerruntime > 30) && !sportTime && (!snackTime || snackrunTime > 30) && (!highCarbTime || highCarbrunTime > 30) && !sleepTime && !lowCarbTime
         val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
