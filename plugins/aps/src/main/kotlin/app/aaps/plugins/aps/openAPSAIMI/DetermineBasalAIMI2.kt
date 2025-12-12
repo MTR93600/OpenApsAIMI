@@ -4398,7 +4398,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Catch-all for late rises outside specific meal windows
             (bg > target_bg + 30 && (delta >= 0.3 || shortAvgDelta >= 0.2)) -> {
                 val maxBasalPref = preferences.get(DoubleKey.autodriveMaxBasal) // Absolute max
-                val safeMax = if (maxBasalPref > 0) maxBasalPref else profile_current_basal * 3.0
+                val safeMax = if (maxBasalPref > 0.1) maxBasalPref else profile.max_basal // Fallback if 0
                 
                 val boostedRate = adjustBasalForGeneralHyper(
                     suggestedBasalUph = profile_current_basal, 
@@ -4724,7 +4724,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(context.getString(R.string.reason_iob_max, round(iob_data.iob, 2), round(maxIobLimit, 2)))
             val finalResult = if (delta < 0) {
                 // BG is dropping, usually we cut to 0. BUT check floor first.
-                val floorRate = applyBasalFloor(0.0, profile.current_basal, safetyDecision, activityContext, bg, delta.toDouble(), eventualBG.toDouble(), mealModeActive)
+                val floorRate = applyBasalFloor(0.0, profile.current_basal, safetyDecision, activityContext, bg, delta.toDouble(), ((glucose_status as? GlucoseStatusAIMI)?.shortAvgDelta ?: 0.0).toDouble(), eventualBG.toDouble(), mealModeActive)
                 
                 if (floorRate > 0.0) {
                      rT.reason.append(context.getString(R.string.reason_bg_dropping_floor, delta, floorRate))
@@ -4739,7 +4739,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             } else {
                 //rT.reason.append("; setting current basal of ${round(basal, 2)} as temp. ")
                 // Apply floor here too just in case 'basal' itself is super low? (Unlikely if it came from profile, but possible)
-                val safeBasal = applyBasalFloor(basal, profile.current_basal, safetyDecision, activityContext, bg, delta.toDouble(), eventualBG.toDouble(), mealModeActive)
+                val safeBasal = applyBasalFloor(basal, profile.current_basal, safetyDecision, activityContext, bg, delta.toDouble(), ((glucose_status as? GlucoseStatusAIMI)?.shortAvgDelta ?: 0.0).toDouble(), eventualBG.toDouble(), mealModeActive)
                 rT.reason.append(context.getString(R.string.reason_set_temp_basal, round(safeBasal, 2)))
                 setTempBasal(safeBasal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
             }
@@ -4967,6 +4967,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         activityContext: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext,
         bg: Double,
         delta: Double,
+        shortAvgDelta: Double,
         predictedBg: Double,
         isMealActive: Boolean
     ): Double {
@@ -5013,7 +5014,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return suggestedRate
         }
 
-        // 5. Cruise Mode (No Activity, No Critical Low)
+        // 5. Persistent Rise (Standard Mode Boost)
+        // Si ça monte de façon persistante (AvgDelta > 0.5) et Delta > 0, on ne laisse pas chuter en dessous de 80%
+        if (delta > 0 && shortAvgDelta > 0.5 && bg > 100) {
+             val persistentFloor = profileBasal * 0.8
+             if (suggestedRate < persistentFloor) {
+                 return persistentFloor
+             }
+        }
+
+        // 6. Cruise Mode (No Activity, No Critical Low)
         val cruiseFloor = profileBasal * 0.55 // 55% floor (augmenté de 45%)
         if (suggestedRate < cruiseFloor) {
             // Only enforce floor if strictly safe
