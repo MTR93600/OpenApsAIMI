@@ -85,14 +85,18 @@ class AimiAdvisorService {
         // 2. Snapshot Profile
         val profile = profileFunction.getProfile()
         val profileSnapshot = if (profile != null) {
+            val totalBasalCalc = (0 until 24).sumOf { h -> profile.getBasal((h * 3600).toLong()) }
+            
             AimiProfileSnapshot(
                 nightBasal = profile.getBasal(0), // 00:00 basal
-                icRatio = profile.getIc(),
-                isf = profile.getIsfMgdl("AimiAdvisor"),
-                targetBg = profile.getTargetMgdl()
+                icRatio = calculateWeightedAverage(profile.getIcsValues()),
+                isf = calculateWeightedAverage(profile.getIsfsMgdlValues()),
+                targetBg = calculateWeightedAverage(profile.getSingleTargetsMgdl()),
+                dia = profile.dia,
+                totalBasal = totalBasalCalc
             )
         } else {
-            AimiProfileSnapshot(0.5, 10.0, 40.0, 100.0) // Fallback
+            AimiProfileSnapshot(0.5, 10.0, 40.0, 100.0, 5.0, 12.0) // Fallback
         }
 
         // 3. Snapshot Preferences
@@ -124,6 +128,27 @@ class AimiAdvisorService {
         )
 
         return AdvisorContext(metrics, profileSnapshot, prefsSnapshot, pkpdSnapshot)
+    }
+
+    private fun calculateWeightedAverage(values: Array<app.aaps.core.interfaces.profile.Profile.ProfileValue>): Double {
+        if (values.isEmpty()) return 0.0
+        
+        var totalWeightedValue = 0.0
+        var totalDuration = 0
+        
+        // Sort by time just in case
+        val sorted = values.sortedBy { it.timeAsSeconds }
+        
+        for (i in sorted.indices) {
+            val start = sorted[i].timeAsSeconds
+            val end = if (i < sorted.size - 1) sorted[i + 1].timeAsSeconds else 24 * 3600
+            val duration = end - start
+            
+            totalWeightedValue += sorted[i].value * duration
+            totalDuration += duration
+        }
+        
+        return if (totalDuration > 0) totalWeightedValue / totalDuration else 0.0
     }
 
     private fun calculateMetrics(days: Int): AdvisorMetrics {
@@ -192,7 +217,7 @@ class AimiAdvisorService {
     private fun getEmptyContext(): AdvisorContext {
         return AdvisorContext(
             metrics = AdvisorMetrics("N/A",0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0,0,0),
-            profile = AimiProfileSnapshot(0.0,0.0,0.0,0.0),
+            profile = AimiProfileSnapshot(0.0,0.0,0.0,0.0, 5.0, 12.0),
             prefs = AimiPrefsSnapshot(0.0,0.0,0.0,0.0),
             pkpdPrefs = PkpdPrefsSnapshot(false,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
         )

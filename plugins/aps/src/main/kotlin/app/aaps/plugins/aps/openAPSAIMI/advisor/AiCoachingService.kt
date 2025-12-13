@@ -204,6 +204,8 @@ class AiCoachingService {
         sb.append("ISF: ${ctx.profile.isf} mg/dL/U\n")
         sb.append("IC Ratio: ${ctx.profile.icRatio} g/U\n")
         sb.append("Basal (Night): ${ctx.profile.nightBasal} U/h\n")
+        sb.append("Total Basal (Profile): ${ctx.profile.totalBasal} U/day\n")
+        sb.append("DIA (Profile): ${ctx.profile.dia} h\n")
         sb.append("Target BG: ${ctx.profile.targetBg} mg/dL\n\n")
 
         // 2. PKPD Context
@@ -219,7 +221,13 @@ class AiCoachingService {
         if (report.recommendations.isNotEmpty()) {
             report.recommendations.forEach { 
                 val title = try { androidContext.getString(it.titleResId) } catch(e:Exception) { "Issue" }
-                val desc = try { androidContext.getString(it.descriptionResId, it.extraData ?: "") } catch (e: Exception) { "" }
+                val desc = try { 
+                    if (it.descriptionArgs.isNotEmpty()) {
+                        androidContext.getString(it.descriptionResId, *it.descriptionArgs.toTypedArray())
+                    } else {
+                        androidContext.getString(it.descriptionResId)
+                    }
+                } catch (e: Exception) { "" }
                 sb.append("- [Priority ${it.priority}] $title: $desc\n") 
             }
         } else {

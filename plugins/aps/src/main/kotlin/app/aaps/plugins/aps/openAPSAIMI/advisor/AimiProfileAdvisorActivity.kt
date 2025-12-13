@@ -357,16 +357,16 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
              R.string.aimi_adv_rec_hypers_desc -> rh.gs(rec.descriptionResId, (metrics.timeAbove180 * 100).roundToInt())
              R.string.aimi_adv_rec_basal_desc -> rh.gs(rec.descriptionResId, (metrics.basalPercent * 100).roundToInt())
              else -> {
-                 if (rec.extraData != null) {
-                     try {
-                         rh.gs(rec.descriptionResId, rec.extraData)
-                     } catch(e: Exception) {
-                         rh.gs(rec.descriptionResId) + " " + rec.extraData
-                     }
-                 } else {
-                     rh.gs(rec.descriptionResId)
-                 }
-             }
+                  if (rec.descriptionArgs.isNotEmpty()) {
+                      try {
+                          rh.gs(rec.descriptionResId, *rec.descriptionArgs.toTypedArray())
+                      } catch(e: Exception) {
+                          rh.gs(rec.descriptionResId) + " " + rec.descriptionArgs.joinToString(" ")
+                      }
+                  } else {
+                      rh.gs(rec.descriptionResId)
+                  }
+              }
         }
         
         textLayout.addView(TextView(this).apply {

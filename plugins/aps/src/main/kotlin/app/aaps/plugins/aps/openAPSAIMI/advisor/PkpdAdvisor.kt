@@ -80,7 +80,7 @@ class PkpdAdvisor {
                      priority = RecommendationPriority.MEDIUM,
                      domain = RecommendationDomain.PKPD,
                      action = action,
-                     extraData = "$newDia h"
+                     descriptionArgs = listOf(pkpd.initialDiaH.toString(), newDia.toString())
                 )
             }
 
@@ -107,7 +107,7 @@ class PkpdAdvisor {
                     priority = RecommendationPriority.MEDIUM,
                     domain = RecommendationDomain.PKPD,
                     action = action,
-                    extraData = "$newPeak min"
+                    descriptionArgs = listOf(newPeak.toString())
                 )
             }
 
@@ -134,7 +134,7 @@ class PkpdAdvisor {
                     priority = RecommendationPriority.MEDIUM,
                     domain = RecommendationDomain.PKPD,
                     action = action,
-                    extraData = "x$newFactor"
+                    descriptionArgs = listOf(newFactor.toString())
                  )
             }
         }
@@ -165,7 +165,7 @@ class PkpdAdvisor {
                     priority = RecommendationPriority.CRITICAL, // Safety
                     domain = RecommendationDomain.PKPD,
                     action = action,
-                    extraData = "$newDia h"
+                    descriptionArgs = listOf(pkpd.initialDiaH.toString(), newDia.toString())
                 )
             }
 
@@ -192,7 +192,7 @@ class PkpdAdvisor {
                     priority = RecommendationPriority.CRITICAL,
                     domain = RecommendationDomain.PKPD,
                     action = action,
-                    extraData = "$newPeak min"
+                    descriptionArgs = listOf(newPeak.toString())
                 )
             }
             
@@ -219,7 +219,7 @@ class PkpdAdvisor {
                     priority = RecommendationPriority.CRITICAL,
                     domain = RecommendationDomain.PKPD,
                     action = action,
-                    extraData = "x$newDamping"
+                    descriptionArgs = listOf(newDamping.toString())
                 )
             }
         }

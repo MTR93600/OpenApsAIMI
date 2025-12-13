@@ -92,7 +92,7 @@ data class AimiRecommendation(
     val priority: RecommendationPriority,
     val domain: RecommendationDomain,
     val action: AdvisorAction? = null,
-    val extraData: String? = null // For dynamic description formatting
+    val descriptionArgs: List<String> = emptyList() // For dynamic description formatting
 )
 
 /**
@@ -125,9 +125,11 @@ data class AdvisorContext(
 
 data class AimiProfileSnapshot(
     val nightBasal: Double,      // U/h (average or specific block)
-    val icRatio: Double,         // g/U
-    val isf: Double,             // mg/dL/U
-    val targetBg: Double         // mg/dL
+    val icRatio: Double,         // g/U (weighted average)
+    val isf: Double,             // mg/dL/U (weighted average)
+    val targetBg: Double,        // mg/dL (weighted average)
+    val dia: Double,             // hours
+    val totalBasal: Double       // U/day (sum of profile basal)
 )
 
 data class AimiPrefsSnapshot(
