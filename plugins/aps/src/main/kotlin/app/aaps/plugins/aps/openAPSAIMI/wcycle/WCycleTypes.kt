@@ -37,8 +37,10 @@ object WCycleDefaults {
     fun baseMultipliers(phase: CyclePhase): Pair<Double, Double> = when (phase) {
         CyclePhase.MENSTRUATION -> 1.0 - 0.08 to 1.0
         CyclePhase.FOLLICULAR   -> 1.0 to 1.0
-        CyclePhase.OVULATION    -> 1.0 to 1.0 - 0.025
-        CyclePhase.LUTEAL       -> 1.0 + 0.20 to 1.0 + 0.08
+        // 🔮 FCL 11.0: Endoc. Update - LH Surge Resistance
+        CyclePhase.OVULATION    -> 1.0 + 0.05 to 1.0 + 0.05 
+        // 🔮 FCL 11.0: Endoc. Update - Progesterone Resistance (Stronger)
+        CyclePhase.LUTEAL       -> 1.0 + 0.25 to 1.0 + 0.12
         else                    -> 1.0 to 1.0
     }
     fun amplitudeScale(c: ContraceptiveType): Double = when (c) {

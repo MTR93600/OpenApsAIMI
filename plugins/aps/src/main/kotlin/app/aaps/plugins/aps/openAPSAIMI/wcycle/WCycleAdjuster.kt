@@ -77,4 +77,8 @@ class WCycleAdjuster(
         )
     }
     private fun fmt(x: Double) = String.format("%.2f", x)
+    
+    fun listenerUpdate(phase: CyclePhase, needBasal: Double?, needSmb: Double?) {
+        learner.update(phase, needBasal, needSmb)
+    }
 }

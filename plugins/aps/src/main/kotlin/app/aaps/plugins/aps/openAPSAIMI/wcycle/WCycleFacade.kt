@@ -25,4 +25,14 @@ class WCycleFacade(
         )
         return if (ok) info else info.copy(basalMultiplier = 1.0, smbMultiplier = 1.0, reason = info.reason + " | CSV FAIL")
     }
+    fun updateLearning(phase: CyclePhase, needScale: Double) {
+        // 🔮 FCL 11.0: Active Learning Loop
+        // We feed the same ratio to Basal and SMB for now (Simplification V1)
+        // In V2 we could differentiate if resistance is Basal-only or Meal-only
+        adjuster.listenerUpdate(phase, needScale, needScale)
+    }
+    
+    fun getPhase(): CyclePhase {
+        return adjuster.getInfo().phase
+    }
 }

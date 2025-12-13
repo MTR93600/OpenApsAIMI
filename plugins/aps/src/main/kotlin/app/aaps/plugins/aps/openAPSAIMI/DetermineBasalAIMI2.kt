@@ -5028,7 +5028,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
 
             // 🎯 Process UnifiedReactivityLearner (old learner removed)
+            // 🎯 Process UnifiedReactivityLearner (old learner removed)
             unifiedReactivityLearner.processIfNeeded()  // Analyze & adjust every 6h
+
+            // 🔮 FCL 11.0: WCycle Active Learning
+            if (wCyclePreferences.enabled()) {
+                val phase = wCycleFacade.getPhase()
+                if (phase != app.aaps.plugins.aps.openAPSAIMI.wcycle.CyclePhase.UNKNOWN) {
+                     // Feed real-time resistance (Autosens Ratio) back to the Cycle Learner
+                     wCycleFacade.updateLearning(phase, autosens_data.ratio)
+                }
+            }
 
             return finalResult
         }
