@@ -4530,7 +4530,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             // 🔥 General Hyper Kicker (Non-Meal)
             // Catch-all for late rises outside specific meal windows
-            (bg > target_bg + 30 && (delta >= 0.3 || shortAvgDelta >= 0.2)) -> {
+            // 🔥 General Hyper Kicker (Non-Meal)
+            // Catch-all for late rises outside specific meal windows
+            // 🚀 FCL 13.0: Add Rocket Start trigger (Delta > 10.0) to catch early explosions before BG > Target+30
+            ((bg > target_bg + 30 || delta > 10.0f) && (delta >= 0.3 || shortAvgDelta >= 0.2)) -> {
                 val maxBasalPref = preferences.get(DoubleKey.autodriveMaxBasal) // Absolute max
                 val safeMax = if (maxBasalPref > 0.1) maxBasalPref else profile.max_basal // Fallback if 0
                 
@@ -5187,24 +5190,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Risque montée franche ou plateau haut persistant
         val rising = delta >= 0.5 || shortAvgDelta >= 0.3
         val plateauHigh = delta >= -0.1 && bg > targetBg + 50
-        
-        if (!rising && !plateauHigh) return suggestedBasalUph
-        
+        val rocketStart = delta > 10.0 // 🚀 FCL 13.0
+    
+        if (!rising && !plateauHigh && !rocketStart) return suggestedBasalUph
+    
         val deviation = bg - targetBg
-        
+    
         // Progressive scaling based on deviation severity
         // 30mg au dessus: x2
         // 60mg au dessus: x5
         // 90mg au dessus: x8
         // 120mg+        : x10 (Authorized by user)
-        
+        // 🚀 Rocket Start : Auto Max (x10) if delta > 10.0
+    
         val scaleFactor = when {
-            deviation >= 120 -> 10.0
+            rocketStart || deviation >= 120 -> 10.0
             deviation >= 90  -> 8.0
             deviation >= 60  -> 5.0
             deviation >= 30  -> 2.0
             else -> 1.0
         }
+    
         
         if (scaleFactor == 1.0) return suggestedBasalUph
         
