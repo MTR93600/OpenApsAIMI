@@ -29,6 +29,8 @@ data class WCycleInfo(
     val learnedSmbMultiplier: Double,
     val basalMultiplier: Double,
     val smbMultiplier: Double,
+    // 🔮 FCL 11.0: Deep Endo - IC Multiplier
+    val icMultiplier: Double,
     val applied: Boolean,
     val reason: String
 )
@@ -42,6 +44,17 @@ object WCycleDefaults {
         // 🔮 FCL 11.0: Endoc. Update - Progesterone Resistance (Stronger)
         CyclePhase.LUTEAL       -> 1.0 + 0.25 to 1.0 + 0.12
         else                    -> 1.0 to 1.0
+    }
+    
+    // 🔮 FCL 11.0: Deep Endo - Carb Ratio (IC) Multiplier
+    // High Progesterone (Luteal) = Slower Gastric Emptying but MUCH higher Post-Prandial Resistance -> Stronger Bolus (Higher IC)
+    // High Estrogen (Follicular) = High sensitivity -> Weaker Bolus (Lower IC)
+    fun icMultiplier(phase: CyclePhase): Double = when(phase) {
+        CyclePhase.LUTEAL       -> 1.15 // +15% Aggression
+        CyclePhase.OVULATION    -> 1.05 // +5% Aggression
+        CyclePhase.FOLLICULAR   -> 0.95 // -5% (Safety)
+        CyclePhase.MENSTRUATION -> 0.95 // -5% (Safety)
+        else                    -> 1.0
     }
     fun amplitudeScale(c: ContraceptiveType): Double = when (c) {
         ContraceptiveType.NONE, ContraceptiveType.COPPER_IUD -> 1.0

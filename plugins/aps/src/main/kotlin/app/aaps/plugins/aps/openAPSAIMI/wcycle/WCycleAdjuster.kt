@@ -16,6 +16,7 @@ class WCycleAdjuster(
             learnedSmbMultiplier = 1.0,
             basalMultiplier = 1.0,
             smbMultiplier = 1.0,
+            icMultiplier = 1.0,
             applied = false,
             reason = ""
         )
@@ -44,6 +45,17 @@ class WCycleAdjuster(
         val thyroidDamp = 1.0 
         basal = 1.0 + (basal - 1.0) * thyroidDamp
         smb   = 1.0 + (smb   - 1.0) * thyroidDamp
+        
+        // 🔮 FCL 11.0: Deep Endo - Luteal Dawn Phenomenon
+        // Cortisol Awakening Response + Progesterone = High Resistance at 4am-8am
+        var dawnBoost = 1.0
+        if (phase0 == CyclePhase.LUTEAL) {
+             val hour = java.time.LocalTime.now().hour
+             if (hour in 4..7) {
+                 dawnBoost = 1.10 // +10% Basal
+                 basal *= dawnBoost
+             }
+        }
 
         val baseBasal = basal.coerceIn(profile.clampMin, profile.clampMax)
         val baseSmb = smb.coerceIn(profile.clampMin, profile.clampMax)
@@ -61,7 +73,14 @@ class WCycleAdjuster(
             else -> "apply"
         }
 
-        val reason = "♀️ ${phase0} J${day + 1} | amp=${fmt(amp)} thy=${fmt(thyroidDamp)} ver=${profile.verneuil} | base=(${fmt(baseBasal)},${fmt(baseSmb)}) learn=(${fmt(bLearn)},${fmt(sLearn)}) ${guardReason}"
+        // 🔮 FCL 11.0: Deep Endo - IC Multiplier logic
+        val ic0 = WCycleDefaults.icMultiplier(phase0)
+        var ic = 1.0 + (ic0 - 1.0) * amp
+        ic = ic.coerceIn(profile.clampMin, profile.clampMax)
+        
+        val finalIc = if (apply) ic else 1.0
+
+        val reason = "♀️ ${phase0} J${day + 1} | amp=${fmt(amp)} thy=${fmt(thyroidDamp)} ver=${profile.verneuil} | base=(${fmt(baseBasal)},${fmt(baseSmb)}) ic=${fmt(finalIc)} learn=(${fmt(bLearn)},${fmt(sLearn)}) dawn=${if(dawnBoost>1.0)"🌅" else "-"} ${guardReason}"
         return WCycleInfo(
             enabled = true,
             dayInCycle = day,
@@ -72,6 +91,7 @@ class WCycleAdjuster(
             learnedSmbMultiplier = sLearn,
             basalMultiplier = finalBasal,
             smbMultiplier = finalSmb,
+            icMultiplier = finalIc,
             applied = apply,
             reason = reason
         )

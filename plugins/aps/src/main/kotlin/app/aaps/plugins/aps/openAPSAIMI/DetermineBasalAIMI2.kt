@@ -4539,7 +4539,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         appendCompactLog(reasonAimi, tp, bg, delta, recentSteps5Minutes, averageBeatsPerMinute)
         rT.reason.append(reasonAimi.toString())
-        val csf = sens / profile.carb_ratio
+        
+        // 🔮 FCL 11.0: Deep Endo - Apply WCycle IC Multiplier
+        val icMult = wCycleFacade.getIcMultiplier()
+        // If multiplier > 1 (e.g. 1.15 Luteal), we want STRONGER insulin.
+        // Stronger insulin means LOWER Carb Ratio (e.g. 10g/U -> 8.7g/U).
+        // So we DIVIDE the profile CR by the multiplier.
+        val adjustedCR = profile.carb_ratio / icMult
+        
+        val csf = sens / adjustedCR
         //consoleError.add("profile.sens: ${profile.sens}, sens: $sens, CSF: $csf")
         consoleError.add(context.getString(R.string.console_profile_sens, baseSensitivity, sens, csf))
 

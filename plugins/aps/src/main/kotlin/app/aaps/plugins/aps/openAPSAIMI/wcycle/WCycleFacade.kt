@@ -16,6 +16,7 @@ class WCycleFacade(
                 "smbLearn" to info.learnedSmbMultiplier,
                 "basalApplied" to info.basalMultiplier,
                 "smbApplied" to info.smbMultiplier,
+                "ic" to info.icMultiplier,
                 // NEW: accepte si le contextRow les fournit (sinon vide)
                 "needBasalScale" to contextRow["needBasalScale"],
                 "needSmbScale" to contextRow["needSmbScale"],
@@ -34,5 +35,9 @@ class WCycleFacade(
     
     fun getPhase(): CyclePhase {
         return adjuster.getInfo().phase
+    }
+
+    fun getIcMultiplier(): Double {
+        return adjuster.getInfo().icMultiplier
     }
 }
