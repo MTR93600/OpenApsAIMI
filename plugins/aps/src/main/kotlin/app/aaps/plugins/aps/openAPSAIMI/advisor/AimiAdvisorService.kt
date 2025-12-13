@@ -22,6 +22,8 @@ class AimiAdvisorService {
     private val persistenceLayer: app.aaps.core.interfaces.db.PersistenceLayer?
     private val preferences: app.aaps.core.keys.interfaces.Preferences?
     private val unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner?
+    private val tddCalculator: app.aaps.core.interfaces.stats.TddCalculator?
+    private val tirCalculator: app.aaps.core.interfaces.stats.TirCalculator?
 
     // Constructor injection for dependencies
     constructor(
@@ -29,13 +31,17 @@ class AimiAdvisorService {
         persistenceLayer: app.aaps.core.interfaces.db.PersistenceLayer? = null,
         preferences: app.aaps.core.keys.interfaces.Preferences? = null,
         rh: app.aaps.core.interfaces.resources.ResourceHelper? = null,
-        unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner? = null
+        unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner? = null,
+        tddCalculator: app.aaps.core.interfaces.stats.TddCalculator? = null,
+        tirCalculator: app.aaps.core.interfaces.stats.TirCalculator? = null
     ) {
         this.profileFunction = profileFunction
         this.persistenceLayer = persistenceLayer
         this.preferences = preferences
         this.rh = rh
         this.unifiedReactivityLearner = unifiedReactivityLearner
+        this.tddCalculator = tddCalculator
+        this.tirCalculator = tirCalculator
     }
 
     private val rh: app.aaps.core.interfaces.resources.ResourceHelper?
@@ -152,37 +158,119 @@ class AimiAdvisorService {
     }
 
     private fun calculateMetrics(days: Int): AdvisorMetrics {
-        if (persistenceLayer == null) return getEmptyContext().metrics
-        
-        // Use PersistenceLayer or TddCalculator to get real stats
-        // Approximating for now or using dummy implementation if helper methods not available
-        // Ideally we query 'StatDao' or similar.
-        // For this task, assuming we fetch summary stats.
-        
-        // Pseudo-implementation:
-        // In a real scenario, we'd query standard AAPS stats for TIR.
-        // Let's assume we have a helper or we calculate it manually from history if feasible.
-        // Given complexity, we will return placeholders that trigger specific rules for TESTING.
-        
-        // Returning "Simulated" metrics for now to prove the flow works, 
-        // as implementing full DB query logic is out of scope for "fixing compilation".
-        // BUT we need it to be slightly dynamic to be useful.
-        
+        // Fallback defaults
+        var tir70_180 = 0.65
+        var tir70_140 = 0.40
+        var timeBelow70 = 0.05
+        var timeBelow54 = 0.01
+        var timeAbove180 = 0.30
+        var timeAbove250 = 0.05
+        var meanBg = 160.0
+        var tdd = 45.0
+        var basalPercent = 0.50
+        var todayTir: Double? = null
+        var todayTdd: Double? = null
+
+        // 1. Calculate Real TIR (70-180)
+        if (tirCalculator != null) {
+            try {
+                // Main Range (70-180)
+                val tirs = tirCalculator.calculate(days.toLong(), 70.0, 180.0)
+                val avgTir = tirCalculator.averageTIR(tirs)
+                
+                if (avgTir != null) {
+                    tir70_180 = (avgTir.inRangePct() ?: 0.0) / 100.0
+                    timeBelow70 = (avgTir.belowPct() ?: 0.0) / 100.0
+                    timeAbove180 = (avgTir.abovePct() ?: 0.0) / 100.0
+                }
+
+                // Very Low (<54) - Calculate with low=54
+                val tirs54 = tirCalculator.calculate(days.toLong(), 54.0, 180.0)
+                val avg54 = tirCalculator.averageTIR(tirs54)
+                if (avg54 != null) {
+                    timeBelow54 = (avg54.belowPct() ?: 0.0) / 100.0
+                }
+                
+                // Very High (>250) - Calculate with high=250
+                val tirs250 = tirCalculator.calculate(days.toLong(), 70.0, 250.0)
+                val avg250 = tirCalculator.averageTIR(tirs250)
+                if (avg250 != null) {
+                    timeAbove250 = (avg250.abovePct() ?: 0.0) / 100.0
+                }
+
+                // Tight Range (70-140)
+                val tirs140 = tirCalculator.calculate(days.toLong(), 70.0, 140.0)
+                val avg140 = tirCalculator.averageTIR(tirs140)
+                if (avg140 != null) {
+                    tir70_140 = (avg140.inRangePct() ?: 0.0) / 100.0
+                }
+                
+                // Today's TIR
+                val dailyTirs = tirCalculator.calculateDaily(70.0, 180.0)
+                if (dailyTirs != null && dailyTirs.size() > 0) {
+                     // Get the entry with the largest timestamp (latest)
+                     // LongSparseArray doesn't ensure order by key?
+                     // Usually appended. Let's iterate or assume logic.
+                     // Finding max key
+                     var maxDate = 0L
+                     var todayStat: app.aaps.core.interfaces.stats.TIR? = null
+                     for(i in 0 until dailyTirs.size()) {
+                         val key = dailyTirs.keyAt(i)
+                         if (key > maxDate) {
+                             maxDate = key
+                             todayStat = dailyTirs.valueAt(i)
+                         }
+                     }
+                     if (todayStat != null) {
+                        todayTir = (todayStat.inRangePct() ?: 0.0) / 100.0
+                     }
+                }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // 2. Calculate Real TDD
+        if (tddCalculator != null) {
+            try {
+                val tdds = tddCalculator.calculate(days.toLong(), true)
+                val avgTdd = tddCalculator.averageTDD(tdds)
+                
+                if (avgTdd != null) {
+                    tdd = avgTdd.data.totalAmount
+                    if (tdd > 0) {
+                        basalPercent = avgTdd.data.basalAmount / tdd
+                    }
+                }
+                
+                val today = tddCalculator.calculateToday()
+                if (today != null) {
+                    todayTdd = today.totalAmount
+                }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         return AdvisorMetrics(
             periodLabel = "Last $days days",
-            tir70_180 = 0.65, // Low TIR to trigger "Poor Control"
-            tir70_140 = 0.40,
-            timeBelow70 = 0.05, // High Hypos to trigger "Safety"
-            timeBelow54 = 0.01,
-            timeAbove180 = 0.30,
-            timeAbove250 = 0.05,
-            meanBg = 160.0,
-            gmi = 7.2,
-            tdd = 45.0,
-            basalPercent = 0.60, // High Basal to trigger "Basal Dominance"
-            hypoEvents = 4,
-            severeHypoEvents = 1,
-            hyperEvents = 8
+            tir70_180 = tir70_180,
+            tir70_140 = tir70_140,
+            timeBelow70 = timeBelow70, 
+            timeBelow54 = timeBelow54,
+            timeAbove180 = timeAbove180,
+            timeAbove250 = timeAbove250,
+            meanBg = meanBg, // TBD: Mean BG calculator
+            gmi = 3.31 + (0.02392 * meanBg), // Estimate GMI from Mean
+            tdd = tdd,
+            basalPercent = basalPercent,
+            hypoEvents = 0, // Need Notification/Treatment analysis
+            severeHypoEvents = 0,
+            hyperEvents = 0,
+            todayTir = todayTir,
+            todayTdd = todayTdd
         )
     }
 
@@ -216,7 +304,7 @@ class AimiAdvisorService {
 
     private fun getEmptyContext(): AdvisorContext {
         return AdvisorContext(
-            metrics = AdvisorMetrics("N/A",0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0,0,0),
+            metrics = AdvisorMetrics("N/A",0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0,0,0, null, null),
             profile = AimiProfileSnapshot(0.0,0.0,0.0,0.0, 5.0, 12.0),
             prefs = AimiPrefsSnapshot(0.0,0.0,0.0,0.0),
             pkpdPrefs = PkpdPrefsSnapshot(false,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)

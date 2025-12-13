@@ -27,7 +27,9 @@ data class AdvisorMetrics(
     val basalPercent: Double,       // Basal as fraction of TDD
     val hypoEvents: Int,
     val severeHypoEvents: Int,
-    val hyperEvents: Int
+    val hyperEvents: Int,
+    val todayTir: Double?,    // (0-1) or null
+    val todayTdd: Double?     // U or null
 )
 
 /**

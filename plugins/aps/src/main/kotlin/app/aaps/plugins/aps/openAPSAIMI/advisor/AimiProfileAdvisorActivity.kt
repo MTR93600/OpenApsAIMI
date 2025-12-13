@@ -41,6 +41,8 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     @Inject lateinit var persistenceLayer: app.aaps.core.interfaces.db.PersistenceLayer
     @Inject lateinit var preferences: app.aaps.core.keys.interfaces.Preferences
     @Inject lateinit var unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner
+    @Inject lateinit var tddCalculator: app.aaps.core.interfaces.stats.TddCalculator
+    @Inject lateinit var tirCalculator: app.aaps.core.interfaces.stats.TirCalculator
     
     // NOT injected - created manually to avoid Dagger issues
     private lateinit var advisorService: AimiAdvisorService
@@ -56,7 +58,9 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             persistenceLayer = persistenceLayer, 
             preferences = preferences, 
             rh = rh, 
-            unifiedReactivityLearner = unifiedReactivityLearner
+            unifiedReactivityLearner = unifiedReactivityLearner,
+            tddCalculator = tddCalculator,
+            tirCalculator = tirCalculator
         )
         historyRepo = app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository(this)
         title = rh.gs(R.string.aimi_advisor_title)
@@ -246,6 +250,27 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
 
         grid.addView(row1)
         grid.addView(row2)
+
+        // Row 3 (Today)
+        if (metrics.todayTir != null || metrics.todayTdd != null) {
+            val row3 = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                weightSum = 2f
+                setPadding(0, 24, 0, 0)
+            }
+            
+            val tirVal = metrics.todayTir?.let { "${(it * 100).roundToInt()}%" } ?: "-"
+            // Use slightly different color to distinguish? Or same green/blue scheme.
+            row3.addView(createMetricCard("AUJ. TIR", tirVal, Color.parseColor("#4ADE80"), cardColor), paramHalf())
+            
+            row3.addView(Space(this).apply { layoutParams = LinearLayout.LayoutParams(16, 0) })
+            
+            val tddVal = metrics.todayTdd?.let { "%.1f U".format(it) } ?: "-"
+            row3.addView(createMetricCard("AUJ. TDD", tddVal, Color.parseColor("#60A5FA"), cardColor), paramHalf())
+            
+            grid.addView(row3)
+        }
+
         return grid
     }
 
