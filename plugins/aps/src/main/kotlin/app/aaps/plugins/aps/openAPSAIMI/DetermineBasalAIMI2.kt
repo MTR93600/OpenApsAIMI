@@ -1608,8 +1608,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         reason: StringBuilder
     ): Boolean {
          // Impossible rise (e.g. +30 mg/dL in 5 mins) = Compression Low Recovery
-         if (delta > 25.0f) {
-             reason.append("🛡️ Safety Net: Compression Rebound Block (Delta > 25) -> Autodrive OFF\n")
+         // [User Request]: Relaxed to avoid blocking aggressive meal spikes (e.g. +22)
+         if (delta > 35.0f) {
+             reason.append("🛡️ Safety Net: Compression Rebound Block (Delta > 35) -> Autodrive OFF\n")
              return true
          }
          return false
@@ -1670,11 +1671,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val autodriveMinDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
         // val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG) // Old static threshold
 
-        // 🛡️ Noise Filter (Anti-Jump)
-        if (delta > 15f && shortAvgDelta < 5f) {
-             reason.append("🚫 Noise detected (Delta > 15 & Avg < 5) -> Autodrive OFF")
-             return false
-        }
+        // 🛡️ Noise Filter (Anti-Jump) -> [User Request]: Disabled.
+    // An aggressive rise (+22) is valid information for Autodrive.
+    // if (delta > 15f && shortAvgDelta < 5f) {
+    //      reason.append("🚫 Noise detected (Delta > 15 & Avg < 5) -> Autodrive OFF")
+    //      return false
+    // }
 
         // 📈 Deltas récents & delta combiné
         val recentDeltas = getRecentDeltas()
@@ -3497,8 +3499,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val profileISF_raw = if (profile != null && profile.sens > 10) profile.sens else 50.0
         // 🔮 FCL 11.0 Fix: Use Dynamic 'sens' for Effective ISF to capture Resistance/Sensitivity
         val effectiveISF = sens / autosens_data.ratio 
-        val dynamicPbolusSmall = calculateDynamicMicroBolus(effectiveISF, 20.0, reason)
+        // ⚡ FCL 12.0: Unified Learner Integration for Prebolus
+        // [User Request]: Disabled for now. Prebolus should be raw / standard.
+        // val useUnified = preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled)
+        // val reactivityFactor = if (useUnified) unifiedReactivityLearner.globalFactor else 1.0
+        
         val dynamicPbolusLarge = calculateDynamicMicroBolus(effectiveISF, 25.0, reason)
+        val dynamicPbolusSmall = calculateDynamicMicroBolus(effectiveISF, 15.0, reason)
         
         // 🔮 FCL 11.0: Generate Predictions NOW so they are visible even if Autodrive returns early
         // 🔮 FCL 11.0: Generate Predictions NOW so they are visible even if Autodrive returns early
@@ -3581,9 +3588,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 🥞 FCL 10.8: Early Meal Detection / Snack (Fallback)
         // Only fires if Main Autodrive (Heavy) logic above fell through (e.g. slope too gentle).
-        // 🥞 FCL 10.8: Early Meal Detection / Snack (Fallback)
-        // Only fires if Main Autodrive (Heavy) logic above fell through (e.g. slope too gentle).
-        // var autodriveCondition = false // (Used later)
         
         // 🔨 Innovation: High Plateau Breaker
         if (!nightbis && autodrive && bg >= 80 && isHighPlateauBreakerCondition(bg.toFloat(), targetBg.toFloat(), stable == 1, iob.toDouble(), maxSMB, reason) && modesCondition) {
@@ -3667,12 +3671,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             reason.append(context.getString(R.string.bg_acceleration, bgAcceleration))
             rT.reason.append(reason.toString()) // une seule fois à la fin
             return rT
-            // rT.reason.append("Microbolusing Autodrive Mode ${pbolusA}U. TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}. ")
-            // return rT
-            // return rT
         }
 
-        autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason, targetBg + 30f)
+        val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason, targetBg + 30f)
         if (bg > targetBg + 10 && predictedBg > targetBg + 30 && !nightbis && !hasReceivedPbolusMInLastHour(dynamicPbolusSmall) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition && bg >= 80) {
             rT.units = dynamicPbolusSmall
             rT.reason.append(context.getString(R.string.reason_autodrive_early_meal, dynamicPbolusSmall, combinedDelta, predicted, bgAcceleration.toDouble()))
