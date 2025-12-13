@@ -11,6 +11,7 @@ import info.nightscout.comboctl.base.ComboIOException
 import info.nightscout.comboctl.base.LogLevel
 import info.nightscout.comboctl.base.Logger
 import info.nightscout.comboctl.utils.retryBlocking
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import java.io.IOException
 import java.io.InputStream
@@ -184,8 +185,7 @@ class AndroidBluetoothDevice(
         // Handle corner case when disconnect() is called in a different coroutine
         // shortly before this function is run.
         if (!canDoIO) {
-            logger(LogLevel.DEBUG) { "We are disconnecting; ignoring attempt at sending data" }
-            return
+            throw ComboIOException("Device disconnected")
         }
 
         check(outputStream != null) { "Device is not connected - cannot send data" }
@@ -210,8 +210,7 @@ class AndroidBluetoothDevice(
         // Handle corner case when disconnect() is called in a different coroutine
         // shortly before this function is run.
         if (!canDoIO) {
-            logger(LogLevel.DEBUG) { "We are disconnecting; ignoring attempt at receiving data" }
-            return listOf()
+            throw ComboIOException("Device disconnected")
         }
 
         check(inputStream != null) { "Device is not connected - cannot receive data" }
@@ -229,8 +228,7 @@ class AndroidBluetoothDevice(
             if (canDoIO)
                 throw ComboIOException("Could not read data from device with address $address", e)
             else {
-                logger(LogLevel.DEBUG) { "Aborted read call because we are disconnecting" }
-                return listOf()
+                throw ComboIOException("Device disconnected")
             }
         }
     }
