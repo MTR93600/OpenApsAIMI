@@ -191,6 +191,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var predictedBg = 0.0f
     private var lastCarbAgeMin: Int = 0
     private var futureCarbs = 0.0f
+    private var lastCycleNotificationDay: Int = -1 // State for cycle notification spam prevention
     //private var enablebasal: Boolean = false
     private var recentNotes: List<UE>? = null
     private var tags0to60minAgo = ""
@@ -2921,10 +2922,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun checkCycleDayNotification(info: WCycleInfo) {
         val mode = wCyclePreferences.trackingMode()
-        val tracking = mode != CycleTrackingMode.MENOPAUSE && mode != CycleTrackingMode.NO_MENSES_LARC // Assuming NO_MENSES_LARC is equivalent to None or I should check all non-tracking
-        // Si phase LUTEAL et J > 32, on notifie (log)
-        if (tracking && info.phase.name == "LUTEAL" && info.dayInCycle > 32) {
-            consoleLog.add("⚠️ WCycle: J${info.dayInCycle} > 32. Pensez à mettre à jour le 1er jour des règles !")
+        val tracking = mode != CycleTrackingMode.MENOPAUSE && mode != CycleTrackingMode.NO_MENSES_LARC 
+        
+        // Trigger: Late Period (Day > Avg Length)
+        // Spam Prevention: Notify only once per day (if day index changed)
+        val limit = wCyclePreferences.avgLen()
+        if (tracking && info.dayInCycle > limit) {
+             if (info.dayInCycle != lastCycleNotificationDay) {
+                 val msg = "⚠️ WCycle: J${info.dayInCycle} > $limit. Retard détecté.\nMettre à jour le 1er jour des règles ?"
+                 consoleLog.add(msg)
+                 uiInteraction.addNotification(
+                    app.aaps.core.interfaces.notifications.Notification.HYPO_RISK_ALARM,
+                    msg,
+                    app.aaps.core.interfaces.notifications.Notification.URGENT
+                 )
+                 lastCycleNotificationDay = info.dayInCycle
+             }
         }
     }
 
