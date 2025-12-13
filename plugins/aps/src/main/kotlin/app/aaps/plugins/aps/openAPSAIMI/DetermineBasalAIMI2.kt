@@ -1714,27 +1714,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             currentState = AutodriveState.WATCHING
         }
 
-        // 🚀 FCL 13.0: Rocket Start Bypass
-        // If the rise is explosive (e.g. +15 or +22), we DO NOT wait for the "Slope" to establish.
-        // We engage immediately to arrest the spike.
-        // Threshold: 2x the standard Autodrive Delta (e.g. 6.0 if Pref is 3.0), or absolute > 10.0
-        val isRocketStart = combinedDelta > (autodriveDelta * 2.0f) || combinedDelta > 10.0f
+        // FCL 13.0: Rocket Start Bypass (CombinedDelta > 10 or > 2xPref)
         
-        // ✅ Décision finale
+        // Final Decision
         val ok =
             autodriveCondition &&
                 combinedDelta >= autodriveDelta &&
                 autodrive &&
                 predictedBg > dynamicPredictedThreshold &&
-                (slopeFromMinDeviation >= autodriveMinDeviation || isRocketStart) && // <--- BYPASS HERE
+                (slopeFromMinDeviation >= autodriveMinDeviation || combinedDelta > 10.0f || combinedDelta > autodriveDelta * 2.0f) &&
                 bg >= dynamicBgThreshold
 
         if (ok) currentState = AutodriveState.ENGAGED
 
         reason.appendLine(
-            "🚗 Autodrive: ${if (ok) "✅ ON" else "❌ OFF"} [$currentState] | " +
-                "cond=$autodriveCondition, Δc≥${"%.2f".format(autodriveDelta)}, " +
-                "predBG>${dynamicPredictedThreshold.toInt()}, slope≥${"%.2f".format(autodriveMinDeviation)}${if(isRocketStart) " (ROCKET BYPASS)" else ""}, bg≥${dynamicBgThreshold.toInt()}"
+            "Autodrive: ${if (ok) "ON" else "OFF"} [$currentState] | " +
+                "cond=$autodriveCondition, dC=${"%.2f".format(combinedDelta)}, " +
+                "predBG>${dynamicPredictedThreshold.toInt()}, slope>=${"%.2f".format(autodriveMinDeviation)}, bg>=${dynamicBgThreshold.toInt()}"
         )
 
         return ok
@@ -3639,9 +3635,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         
         if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason, targetBg) && modesCondition && bg >= 80) {
-            // 🧠 FCL 7.0: Use Dynamic Large Base, BUT respect Post-Hypo Safety
-            // 🛡️ [FIX] Blind Spot: If Post-Hypo, forced to Small Bolus to avoid rebound ping-pong.
-            val pbolusA = if (isPostHypo) dynamicPbolusSmall else dynamicPbolusLarge
+            // FCL 7.0: Use Dynamic Large Base, BUT respect Post-Hypo Safety
+            // FIX: If Post-Hypo OR Gentle Rise (delta < 5 and bg < Target+30), force Small Bolus.
+            val pbolusA = if (isPostHypo || (delta < 5.0f && bg < targetBg + 30.0f)) dynamicPbolusSmall else dynamicPbolusLarge
             
             // 📈 Innovation: Adaptive Prebolus & Resistance Hammer
             // 🛡️ Disabled if Post-Hypo (Already handled by logic below, but pbolusA is now safer too)
@@ -5190,7 +5186,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Risque montée franche ou plateau haut persistant
         val rising = delta >= 0.5 || shortAvgDelta >= 0.3
         val plateauHigh = delta >= -0.1 && bg > targetBg + 50
-        val rocketStart = delta > 10.0 // 🚀 FCL 13.0
+        val rocketStart = delta > 10.0 // FCL 13.0 Rocket Start
     
         if (!rising && !plateauHigh && !rocketStart) return suggestedBasalUph
     
@@ -5201,7 +5197,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 60mg au dessus: x5
         // 90mg au dessus: x8
         // 120mg+        : x10 (Authorized by user)
-        // 🚀 Rocket Start : Auto Max (x10) if delta > 10.0
+        // Rocket Start : Auto Max (x10) if delta > 10.0
     
         val scaleFactor = when {
             rocketStart || deviation >= 120 -> 10.0
@@ -5211,7 +5207,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             else -> 1.0
         }
     
-        
         if (scaleFactor == 1.0) return suggestedBasalUph
         
         val boosted = suggestedBasalUph * scaleFactor
