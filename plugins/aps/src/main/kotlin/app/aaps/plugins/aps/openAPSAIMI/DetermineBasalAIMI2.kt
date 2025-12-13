@@ -1714,13 +1714,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             currentState = AutodriveState.WATCHING
         }
 
+        // 🚀 FCL 13.0: Rocket Start Bypass
+        // If the rise is explosive (e.g. +15 or +22), we DO NOT wait for the "Slope" to establish.
+        // We engage immediately to arrest the spike.
+        // Threshold: 2x the standard Autodrive Delta (e.g. 6.0 if Pref is 3.0), or absolute > 10.0
+        val isRocketStart = combinedDelta > (autodriveDelta * 2.0f) || combinedDelta > 10.0f
+        
         // ✅ Décision finale
         val ok =
             autodriveCondition &&
                 combinedDelta >= autodriveDelta &&
                 autodrive &&
                 predictedBg > dynamicPredictedThreshold &&
-                slopeFromMinDeviation >= autodriveMinDeviation &&
+                (slopeFromMinDeviation >= autodriveMinDeviation || isRocketStart) && // <--- BYPASS HERE
                 bg >= dynamicBgThreshold
 
         if (ok) currentState = AutodriveState.ENGAGED
@@ -1728,7 +1734,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         reason.appendLine(
             "🚗 Autodrive: ${if (ok) "✅ ON" else "❌ OFF"} [$currentState] | " +
                 "cond=$autodriveCondition, Δc≥${"%.2f".format(autodriveDelta)}, " +
-                "predBG>${dynamicPredictedThreshold.toInt()}, slope≥${"%.2f".format(autodriveMinDeviation)}, bg≥${dynamicBgThreshold.toInt()}"
+                "predBG>${dynamicPredictedThreshold.toInt()}, slope≥${"%.2f".format(autodriveMinDeviation)}${if(isRocketStart) " (ROCKET BYPASS)" else ""}, bg≥${dynamicBgThreshold.toInt()}"
         )
 
         return ok
