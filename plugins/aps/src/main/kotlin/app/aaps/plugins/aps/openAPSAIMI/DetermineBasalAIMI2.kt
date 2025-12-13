@@ -60,6 +60,7 @@ import app.aaps.plugins.aps.openAPSAIMI.comparison.AimiSmbComparator
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleInfo
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.CycleTrackingMode
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionEngine
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionProfiler
 import java.io.File
@@ -2914,7 +2915,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         )
         wCycleInfoForRun = info
+        checkCycleDayNotification(info)
         return info
+    }
+
+    private fun checkCycleDayNotification(info: WCycleInfo) {
+        val mode = wCyclePreferences.trackingMode()
+        val tracking = mode != CycleTrackingMode.MENOPAUSE && mode != CycleTrackingMode.NO_MENSES_LARC // Assuming NO_MENSES_LARC is equivalent to None or I should check all non-tracking
+        // Si phase LUTEAL et J > 32, on notifie (log)
+        if (tracking && info.phase.name == "LUTEAL" && info.dayInCycle > 32) {
+            consoleLog.add("⚠️ WCycle: J${info.dayInCycle} > 32. Pensez à mettre à jour le 1er jour des règles !")
+        }
     }
 
     private fun appendWCycleReason(target: StringBuilder, info: WCycleInfo) {
@@ -3856,6 +3867,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add(context.getString(R.string.autosens_ratio_log, sensitivityRatio))
         }
         basal = profile.current_basal * sensitivityRatio
+        // WCycle Connectivity: Apply Basal Multiplier
+        val wCycle = wCycleInfoForRun
+        if (wCycle != null && wCycle.applied) {
+             basal *= wCycle.basalMultiplier.toDouble()
+        }
         basal = roundBasal(basal)
         if (basal != profile_current_basal)
         //consoleLog.add("Adjusting basal from $profile_current_basal to $basal; ")
