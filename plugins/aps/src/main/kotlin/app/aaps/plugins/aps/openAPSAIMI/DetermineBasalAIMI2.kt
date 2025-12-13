@@ -3579,6 +3579,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // See Lines 3489+.
             // MOVED to after Main Autodrive.
 
+        // 🥞 FCL 10.8: Early Meal Detection / Snack (Fallback)
+        // Only fires if Main Autodrive (Heavy) logic above fell through (e.g. slope too gentle).
+        var autodriveCondition = false
         if (bg >= 80) {
             // 🔨 Innovation: High Plateau Breaker
             if (!nightbis && autodrive && isHighPlateauBreakerCondition(bg.toFloat(), targetBg.toFloat(), stable == 1, iob.toDouble(), maxSMB, reason) && modesCondition) {
@@ -3666,9 +3669,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // return rT
             }
 
-            // 🥞 FCL 10.8: Early Meal Detection / Snack (Fallback)
-            // Only fires if Main Autodrive (Heavy) logic above fell through (e.g. slope too gentle).
-            val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason, targetBg + 30f)
+            autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason, targetBg + 30f)
             if (bg > targetBg + 10 && predictedBg > targetBg + 30 && !nightbis && !hasReceivedPbolusMInLastHour(dynamicPbolusSmall) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition) {
                 rT.units = dynamicPbolusSmall
                 rT.reason.append(context.getString(R.string.reason_autodrive_early_meal, dynamicPbolusSmall, combinedDelta, predicted, bgAcceleration.toDouble()))
