@@ -22,22 +22,34 @@ class PkpdAdvisor {
         metrics: AdvisorMetrics,
         pkpd: PkpdPrefsSnapshot,
         rh: ResourceHelper
-    ): List<PkpdTuningSuggestion> {
-        val suggestions = mutableListOf<PkpdTuningSuggestion>()
+    ): List<AimiRecommendation> {
+        val suggestions = mutableListOf<AimiRecommendation>()
 
         // 1. Check if Enabled
         if (!pkpd.pkpdEnabled) {
             // If control is poor, suggest enabling
             // TIR < 80%?
             if (metrics.tir70_180 < 0.80) {
-                suggestions += PkpdTuningSuggestion(
-                    technicalKey = BooleanKey.OApsAIMIPkpdEnabled.key,
-                    fromValue = 0.0, // False
-                    toValue = 1.0,   // True
-                    explanation = rh.gs(R.string.aimi_pkpd_advisor_disabled)
+                val action = AdvisorAction.UpdatePreference(
+                    changes = listOf(
+                        AdvisorAction.Prediction(
+                            key = BooleanKey.OApsAIMIPkpdEnabled,
+                            keyName = rh.gs(R.string.aimi_pkpd_title_enable),
+                            oldValue = false, // False
+                            newValue = true, // True
+                            explanation = rh.gs(R.string.aimi_pkpd_advisor_disabled)
+                        )
+                    )
+                )
+
+                suggestions += AimiRecommendation(
+                    titleResId = R.string.aimi_pkpd_title_enable,
+                    descriptionResId = R.string.aimi_pkpd_advisor_disabled,
+                    priority = RecommendationPriority.HIGH, // High priority if disabled and poorly controlled
+                    domain = RecommendationDomain.PKPD,
+                    action = action
                 )
             }
-            // If disabled, we probably shouldn't suggest tuning other params yet?
             return suggestions
         }
 
@@ -48,33 +60,81 @@ class PkpdAdvisor {
             // A) DIA too long? Suggest shortening slightly if above min
             if (pkpd.initialDiaH > pkpd.boundsDiaMinH + 0.5) {
                 val newDia = max(pkpd.boundsDiaMinH, pkpd.initialDiaH - 0.5)
-                suggestions += PkpdTuningSuggestion(
-                    technicalKey = DoubleKey.OApsAIMIPkpdInitialDiaH.key,
-                    fromValue = pkpd.initialDiaH,
-                    toValue = newDia,
-                    explanation = rh.gs(R.string.aimi_pkpd_hyper_dia, pkpd.initialDiaH.toString(), newDia.toString())
+                val explanation = rh.gs(R.string.aimi_pkpd_hyper_dia, pkpd.initialDiaH.toString(), newDia.toString())
+                
+                val action = AdvisorAction.UpdatePreference(
+                    changes = listOf(
+                        AdvisorAction.Prediction(
+                            key = DoubleKey.OApsAIMIPkpdInitialDiaH,
+                            keyName = rh.gs(R.string.aimi_pkpd_title_dia),
+                            oldValue = pkpd.initialDiaH,
+                            newValue = newDia,
+                            explanation = explanation
+                        )
+                    )
+                )
+                
+                suggestions += AimiRecommendation(
+                     titleResId = R.string.aimi_pkpd_title_dia,
+                     descriptionResId = R.string.aimi_pkpd_hyper_dia,
+                     priority = RecommendationPriority.MEDIUM,
+                     domain = RecommendationDomain.PKPD,
+                     action = action,
+                     extraData = "$newDia h"
                 )
             }
 
             // B) Peak too late? Suggest earlier peak
             if (pkpd.initialPeakMin > pkpd.boundsPeakMinMin + 5) {
                 val newPeak = max(pkpd.boundsPeakMinMin, pkpd.initialPeakMin - 5.0)
-                suggestions += PkpdTuningSuggestion(
-                    technicalKey = DoubleKey.OApsAIMIPkpdInitialPeakMin.key,
-                    fromValue = pkpd.initialPeakMin,
-                    toValue = newPeak,
-                    explanation = rh.gs(R.string.aimi_pkpd_hyper_peak, newPeak.toString())
+                val explanation = rh.gs(R.string.aimi_pkpd_hyper_peak, newPeak.toString())
+
+                val action = AdvisorAction.UpdatePreference(
+                    changes = listOf(
+                        AdvisorAction.Prediction(
+                            key = DoubleKey.OApsAIMIPkpdInitialPeakMin,
+                            keyName = rh.gs(R.string.aimi_pkpd_title_peak),
+                            oldValue = pkpd.initialPeakMin,
+                            newValue = newPeak,
+                            explanation = explanation
+                        )
+                    )
+                )
+
+                suggestions += AimiRecommendation(
+                    titleResId = R.string.aimi_pkpd_title_peak,
+                    descriptionResId = R.string.aimi_pkpd_hyper_peak,
+                    priority = RecommendationPriority.MEDIUM,
+                    domain = RecommendationDomain.PKPD,
+                    action = action,
+                    extraData = "$newPeak min"
                 )
             }
 
             // C) ISF Fusion too restrictive?
             if (pkpd.isfFusionMaxFactor < 1.4) {
                  val newFactor = min(2.0, pkpd.isfFusionMaxFactor + 0.1)
-                 suggestions += PkpdTuningSuggestion(
-                    technicalKey = DoubleKey.OApsAIMIIsfFusionMaxFactor.key,
-                    fromValue = pkpd.isfFusionMaxFactor,
-                    toValue = newFactor,
-                    explanation = rh.gs(R.string.aimi_pkpd_hyper_isf)
+                 val explanation = rh.gs(R.string.aimi_pkpd_hyper_isf)
+
+                 val action = AdvisorAction.UpdatePreference(
+                    changes = listOf(
+                        AdvisorAction.Prediction(
+                            key = DoubleKey.OApsAIMIIsfFusionMaxFactor,
+                            keyName = rh.gs(R.string.aimi_pkpd_title_isf),
+                            oldValue = pkpd.isfFusionMaxFactor,
+                            newValue = newFactor,
+                            explanation = explanation
+                        )
+                    )
+                 )
+                 
+                 suggestions += AimiRecommendation(
+                    titleResId = R.string.aimi_pkpd_title_isf,
+                    descriptionResId = R.string.aimi_pkpd_hyper_isf,
+                    priority = RecommendationPriority.MEDIUM,
+                    domain = RecommendationDomain.PKPD,
+                    action = action,
+                    extraData = "x$newFactor"
                  )
             }
         }
@@ -85,33 +145,81 @@ class PkpdAdvisor {
             // A) DIA too short? Suggest increasing
             if (pkpd.initialDiaH < pkpd.boundsDiaMaxH - 0.5) {
                 val newDia = min(pkpd.boundsDiaMaxH, pkpd.initialDiaH + 0.5)
-                suggestions += PkpdTuningSuggestion(
-                    technicalKey = DoubleKey.OApsAIMIPkpdInitialDiaH.key,
-                    fromValue = pkpd.initialDiaH,
-                    toValue = newDia,
-                    explanation = rh.gs(R.string.aimi_pkpd_hypo_dia, pkpd.initialDiaH.toString(), newDia.toString())
+                val explanation = rh.gs(R.string.aimi_pkpd_hypo_dia, pkpd.initialDiaH.toString(), newDia.toString())
+                
+                val action = AdvisorAction.UpdatePreference(
+                    changes = listOf(
+                        AdvisorAction.Prediction(
+                            key = DoubleKey.OApsAIMIPkpdInitialDiaH,
+                            keyName = rh.gs(R.string.aimi_pkpd_title_dia),
+                            oldValue = pkpd.initialDiaH,
+                            newValue = newDia,
+                            explanation = explanation
+                        )
+                    )
+                )
+
+                suggestions += AimiRecommendation(
+                    titleResId = R.string.aimi_pkpd_title_dia,
+                    descriptionResId = R.string.aimi_pkpd_hypo_dia,
+                    priority = RecommendationPriority.CRITICAL, // Safety
+                    domain = RecommendationDomain.PKPD,
+                    action = action,
+                    extraData = "$newDia h"
                 )
             }
 
             // B) Peak too early?
              if (pkpd.initialPeakMin < pkpd.boundsPeakMinMax - 5) {
                 val newPeak = min(pkpd.boundsPeakMinMax, pkpd.initialPeakMin + 5.0)
-                suggestions += PkpdTuningSuggestion(
-                    technicalKey = DoubleKey.OApsAIMIPkpdInitialPeakMin.key,
-                    fromValue = pkpd.initialPeakMin,
-                    toValue = newPeak,
-                    explanation = rh.gs(R.string.aimi_pkpd_hypo_peak, newPeak.toString())
+                val explanation = rh.gs(R.string.aimi_pkpd_hypo_peak, newPeak.toString())
+
+                val action = AdvisorAction.UpdatePreference(
+                    changes = listOf(
+                        AdvisorAction.Prediction(
+                            key = DoubleKey.OApsAIMIPkpdInitialPeakMin,
+                            keyName = rh.gs(R.string.aimi_pkpd_title_peak),
+                            oldValue = pkpd.initialPeakMin,
+                            newValue = newPeak,
+                            explanation = explanation
+                        )
+                    )
+                )
+
+                suggestions += AimiRecommendation(
+                    titleResId = R.string.aimi_pkpd_title_peak,
+                    descriptionResId = R.string.aimi_pkpd_hypo_peak,
+                    priority = RecommendationPriority.CRITICAL,
+                    domain = RecommendationDomain.PKPD,
+                    action = action,
+                    extraData = "$newPeak min"
                 )
             }
             
             // C) SMB Damping too weak?
             if (pkpd.smbTailDamping < 0.8) { 
                 val newDamping = pkpd.smbTailDamping + 0.1
-                suggestions += PkpdTuningSuggestion(
-                    technicalKey = DoubleKey.OApsAIMISmbTailDamping.key,
-                    fromValue = pkpd.smbTailDamping,
-                    toValue = newDamping,
-                    explanation = rh.gs(R.string.aimi_pkpd_hypo_damping)
+                val explanation = rh.gs(R.string.aimi_pkpd_hypo_damping)
+                
+                val action = AdvisorAction.UpdatePreference(
+                    changes = listOf(
+                        AdvisorAction.Prediction(
+                            key = DoubleKey.OApsAIMISmbTailDamping,
+                            keyName = rh.gs(R.string.aimi_pkpd_title_damping),
+                            oldValue = pkpd.smbTailDamping,
+                            newValue = newDamping,
+                            explanation = explanation
+                        )
+                    )
+                )
+
+                suggestions += AimiRecommendation(
+                    titleResId = R.string.aimi_pkpd_title_damping,
+                    descriptionResId = R.string.aimi_pkpd_hypo_damping,
+                    priority = RecommendationPriority.CRITICAL,
+                    domain = RecommendationDomain.PKPD,
+                    action = action,
+                    extraData = "x$newDamping"
                 )
             }
         }

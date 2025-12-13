@@ -219,13 +219,10 @@ class AiCoachingService {
         if (report.recommendations.isNotEmpty()) {
             report.recommendations.forEach { 
                 val title = try { androidContext.getString(it.titleResId) } catch(e:Exception) { "Issue" }
-                sb.append("- [Priority ${it.priority}] $title\n") 
+                val desc = try { androidContext.getString(it.descriptionResId, it.extraData ?: "") } catch (e: Exception) { "" }
+                sb.append("- [Priority ${it.priority}] $title: $desc\n") 
             }
-        }
-        if (report.pkpdSuggestions.isNotEmpty()) {
-            report.pkpdSuggestions.forEach { sb.append("- [Software Suggestion] ${it.explanation}\n") }
-        }
-        if (report.recommendations.isEmpty() && report.pkpdSuggestions.isEmpty()) {
+        } else {
             sb.append("- No specific algorithmic issues detected.\n")
         }
         sb.append("\n")
