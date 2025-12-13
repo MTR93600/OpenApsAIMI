@@ -3579,174 +3579,178 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // See Lines 3489+.
             // MOVED to after Main Autodrive.
 
-        // 🔨 Innovation: High Plateau Breaker
-        if (!nightbis && autodrive && isHighPlateauBreakerCondition(bg.toFloat(), targetBg.toFloat(), stable == 1, iob.toDouble(), maxSMB, reason) && modesCondition) {
-             val adaptiveUnits = calculateAdaptivePrebolus(dynamicPbolusLarge, delta, reason)
-             rT.units = adaptiveUnits
-             reason.append("→ Plateau Breaker engaged: Force Bolus ${adaptiveUnits}U\n")
-             rT.reason.append(reason.toString())
-             return rT
-        }
+        if (bg >= 80) {
+            // 🔨 Innovation: High Plateau Breaker
+            if (!nightbis && autodrive && isHighPlateauBreakerCondition(bg.toFloat(), targetBg.toFloat(), stable == 1, iob.toDouble(), maxSMB, reason) && modesCondition) {
+                 val adaptiveUnits = calculateAdaptivePrebolus(dynamicPbolusLarge, delta, reason)
+                 rT.units = adaptiveUnits
+                 reason.append("→ Plateau Breaker engaged: Force Bolus ${adaptiveUnits}U\n")
+                 rT.reason.append(reason.toString())
+                 return rT
+            }
 
-        if (isMealModeCondition()) {
-            val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
-            rT.units = pbolusM
-            //rT.reason.append(" Microbolusing Meal Mode ${pbolusM}U.")
-            rT.reason.append(context.getString(R.string.manual_meal_prebolus, pbolusM))
-            return rT
-        }
-        // 🛡️ Innovation: FCL 6.0 Safety Net
-        val isPostHypo = isPostHypoProtectionCondition(recentBGs, reason)
-        val isCompression = isCompressionProtectionCondition(delta.toFloat(), reason)
-        
-        if (isCompression) {
-             // Hard Stop on Sensor Error
-             return rT
-        }
-        
-        // 🧠 FCL 8.0: Context-Aware Trigger for Drift Terminator
-        // Resistant (<0.8): Tighten to +10. Sensitive (>1.2): Relax to +30. Normal: +15
-        val terminatorThresholdAdd = when {
-            autosensRatio < 0.8 -> 10.0 // Aggressive
-            autosensRatio > 1.2 -> 30.0 // Safe
-            else -> 15.0
-        }
-        val terminatorTarget = targetBg + terminatorThresholdAdd
-
-        // 🧹 Innovation: FCL 5.0 Drift Terminator (Blocked by Post-Hypo)
-        if (!nightbis && autodrive && !isPostHypo && isDriftTerminatorCondition(bg.toFloat(), terminatorTarget.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
-            val terminatortap = dynamicPbolusSmall
-            rT.units = terminatortap
-            reason.append("→ Drift Terminator (Trigger +${terminatorThresholdAdd}): Micro-Tap ${terminatortap}U\n")
-            rT.reason.append(reason.toString())
-            return rT
-        }
-        
-        if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason, targetBg) && modesCondition) {
-            // 🧠 FCL 7.0: Use Dynamic Large Base, BUT respect Post-Hypo Safety
-            // 🛡️ [FIX] Blind Spot: If Post-Hypo, forced to Small Bolus to avoid rebound ping-pong.
-            val pbolusA = if (isPostHypo) dynamicPbolusSmall else dynamicPbolusLarge
+            if (isMealModeCondition()) {
+                val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
+                rT.units = pbolusM
+                //rT.reason.append(" Microbolusing Meal Mode ${pbolusM}U.")
+                rT.reason.append(context.getString(R.string.manual_meal_prebolus, pbolusM))
+                return rT
+            }
+            // 🛡️ Innovation: FCL 6.0 Safety Net
+            val isPostHypo = isPostHypoProtectionCondition(recentBGs, reason)
+            val isCompression = isCompressionProtectionCondition(delta.toFloat(), reason)
             
-            // 📈 Innovation: Adaptive Prebolus & Resistance Hammer
-            // 🛡️ Disabled if Post-Hypo (Already handled by logic below, but pbolusA is now safer too)
-            var adaptiveUnits = if (isPostHypo) pbolusA else calculateAdaptivePrebolus(pbolusA, delta, reason)
-            
-            // 🔨 FCL 5.0 Resistance Hammer
-            // 🛡️ Disabled if Post-Hypo
-            if (!isPostHypo) {
-                // 🧠 FCL 7.0 Ineffectiveness Watchdog
-                if (checkIneffectivenessWatchdog(false, reason)) {
-                    // Abort!
-                    return rT 
-                }
-                
-                val originalUnits = adaptiveUnits
-                adaptiveUnits = calculateResistanceHammer(adaptiveUnits, totalBolusLastHour, delta, reason)
-                if (adaptiveUnits > originalUnits) {
-                    // Hammer fired (Wait for calculateResistanceHammer to update state? Yes applied inside)
-                    hammerFailureCount++ // Increment count (Simpler logic here vs inside helper?)
-                    // Helper already tracks *time*, we track *count*
-                }
+            if (isCompression) {
+                 // Hard Stop on Sensor Error
+                 return rT
             }
             
-            rT.units = adaptiveUnits
+            // 🧠 FCL 8.0: Context-Aware Trigger for Drift Terminator
+            // Resistant (<0.8): Tighten to +10. Sensitive (>1.2): Relax to +30. Normal: +15
+            val terminatorThresholdAdd = when {
+                autosensRatio < 0.8 -> 10.0 // Aggressive
+                autosensRatio > 1.2 -> 30.0 // Safe
+                else -> 15.0
+            }
+            val terminatorTarget = targetBg + terminatorThresholdAdd
+
+            // 🧹 Innovation: FCL 5.0 Drift Terminator (Blocked by Post-Hypo)
+            if (!nightbis && autodrive && !isPostHypo && isDriftTerminatorCondition(bg.toFloat(), terminatorTarget.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
+                val terminatortap = dynamicPbolusSmall
+                rT.units = terminatortap
+                reason.append("→ Drift Terminator (Trigger +${terminatorThresholdAdd}): Micro-Tap ${terminatortap}U\n")
+                rT.reason.append(reason.toString())
+                return rT
+            }
             
-            //reason.append("→ Microbolusing Autodrive Mode ${pbolusA}U\n")
-            reason.append(context.getString(R.string.autodrive_meal_prebolus, adaptiveUnits))
-            //reason.append("  • Target BG: $targetBg\n")
-            reason.append(context.getString(R.string.target_bg, targetBg))
-            //reason.append("  • Slope from min deviation: ${mealData.slopeFromMinDeviation}\n")
-            reason.append(context.getString(R.string.slope_from_min_deviation, mealData.slopeFromMinDeviation))
-            //reason.append("  • BG acceleration: $bgAcceleration\n")
-            reason.append(context.getString(R.string.bg_acceleration, bgAcceleration))
-            rT.reason.append(reason.toString()) // une seule fois à la fin
-            return rT
-            // rT.reason.append("Microbolusing Autodrive Mode ${pbolusA}U. TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}. ")
-            // return rT
-        }
+            if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason, targetBg) && modesCondition) {
+                // 🧠 FCL 7.0: Use Dynamic Large Base, BUT respect Post-Hypo Safety
+                // 🛡️ [FIX] Blind Spot: If Post-Hypo, forced to Small Bolus to avoid rebound ping-pong.
+                val pbolusA = if (isPostHypo) dynamicPbolusSmall else dynamicPbolusLarge
+                
+                // 📈 Innovation: Adaptive Prebolus & Resistance Hammer
+                // 🛡️ Disabled if Post-Hypo (Already handled by logic below, but pbolusA is now safer too)
+                var adaptiveUnits = if (isPostHypo) pbolusA else calculateAdaptivePrebolus(pbolusA, delta, reason)
+                
+                // 🔨 FCL 5.0 Resistance Hammer
+                // 🛡️ Disabled if Post-Hypo
+                if (!isPostHypo) {
+                    // 🧠 FCL 7.0 Ineffectiveness Watchdog
+                    if (checkIneffectivenessWatchdog(false, reason)) {
+                        // Abort!
+                        return rT 
+                    }
+                    
+                    val originalUnits = adaptiveUnits
+                    adaptiveUnits = calculateResistanceHammer(adaptiveUnits, totalBolusLastHour, delta, reason)
+                    if (adaptiveUnits > originalUnits) {
+                        // Hammer fired (Wait for calculateResistanceHammer to update state? Yes applied inside)
+                        hammerFailureCount++ // Increment count (Simpler logic here vs inside helper?)
+                        // Helper already tracks *time*, we track *count*
+                    }
+                }
+                
+                rT.units = adaptiveUnits
+                
+                //reason.append("→ Microbolusing Autodrive Mode ${pbolusA}U\n")
+                reason.append(context.getString(R.string.autodrive_meal_prebolus, adaptiveUnits))
+                //reason.append("  • Target BG: $targetBg\n")
+                reason.append(context.getString(R.string.target_bg, targetBg))
+                //reason.append("  • Slope from min deviation: ${mealData.slopeFromMinDeviation}\n")
+                reason.append(context.getString(R.string.slope_from_min_deviation, mealData.slopeFromMinDeviation))
+                //reason.append("  • BG acceleration: $bgAcceleration\n")
+                reason.append(context.getString(R.string.bg_acceleration, bgAcceleration))
+                rT.reason.append(reason.toString()) // une seule fois à la fin
+                return rT
+                // rT.reason.append("Microbolusing Autodrive Mode ${pbolusA}U. TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}. ")
+                // return rT
+            }
 
-        // 🥞 FCL 10.8: Early Meal Detection / Snack (Fallback)
-        // Only fires if Main Autodrive (Heavy) logic above fell through (e.g. slope too gentle).
-        val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason, targetBg + 30f)
-        if (bg > targetBg + 10 && predictedBg > targetBg + 30 && !nightbis && !hasReceivedPbolusMInLastHour(dynamicPbolusSmall) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition) {
-            rT.units = dynamicPbolusSmall
-            rT.reason.append(context.getString(R.string.reason_autodrive_early_meal, dynamicPbolusSmall, combinedDelta, predicted, bgAcceleration.toDouble()))
-            return rT
-        }
+            // 🥞 FCL 10.8: Early Meal Detection / Snack (Fallback)
+            // Only fires if Main Autodrive (Heavy) logic above fell through (e.g. slope too gentle).
+            val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason, targetBg + 30f)
+            if (bg > targetBg + 10 && predictedBg > targetBg + 30 && !nightbis && !hasReceivedPbolusMInLastHour(dynamicPbolusSmall) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition) {
+                rT.units = dynamicPbolusSmall
+                rT.reason.append(context.getString(R.string.reason_autodrive_early_meal, dynamicPbolusSmall, combinedDelta, predicted, bgAcceleration.toDouble()))
+                return rT
+            }
 
-        // 🚀 Innovation: Zero-IOB Priming (Fallback)
-        if (!nightbis && autodrive && isZeroIOBPrimingCondition(iob.toDouble(), delta, bgAcceleration.toFloat(), reason) && modesCondition) {
-            val primeBolus = calculateDynamicMicroBolus(effectiveISF, 15.0, reason) // Safe priming scaled to context
-            rT.units = primeBolus
-            reason.append("→ Zero-IOB Priming with ${primeBolus}U\n")
-            rT.reason.append(reason.toString())
-            return rT
-        }
-        if (isbfastModeCondition()) {
-            val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
-            rT.units = pbolusbfast
-            //rT.reason.append(" Microbolusing 1/2 Breakfast Mode ${pbolusbfast}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_bfast1, pbolusbfast))
-            return rT
-        }
-        if (isbfast2ModeCondition()) {
-            val pbolusbfast2: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
-            this.maxSMB = pbolusbfast2
-            rT.units = pbolusbfast2
-            //rT.reason.append(" Microbolusing 2/2 Breakfast Mode ${pbolusbfast2}U. ")
-            rT.reason.append(context.getString(R.string.reason_prebolus_bfast2, pbolusbfast2))
-            return rT
-        }
-        if (isLunchModeCondition()) {
-            val pbolusLunch: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
-            rT.units = pbolusLunch
-            //rT.reason.append(" Microbolusing 1/2 Lunch Mode ${pbolusLunch}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_lunch1, pbolusLunch))
-            return rT
-        }
-        if (isLunch2ModeCondition()) {
-            val pbolusLunch2: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
-            this.maxSMB = pbolusLunch2
-            rT.units = pbolusLunch2
-            //rT.reason.append(" Microbolusing 2/2 Lunch Mode ${pbolusLunch2}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_lunch2, pbolusLunch2))
-            return rT
-        }
-        if (isDinnerModeCondition()) {
-            val pbolusDinner: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
-            rT.units = pbolusDinner
-            //rT.reason.append(" Microbolusing 1/2 Dinner Mode ${pbolusDinner}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_dinner1, pbolusDinner))
-            return rT
-        }
-        if (isDinner2ModeCondition()) {
-            val pbolusDinner2: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
-            this.maxSMB = pbolusDinner2
-            rT.units = pbolusDinner2
-            //rT.reason.append(" Microbolusing 2/2 Dinner Mode ${pbolusDinner2}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_dinner2, pbolusDinner2))
-            return rT
-        }
-        if (isHighCarbModeCondition()) {
-            val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
-            rT.units = pbolusHC
-            //rT.reason.append(" Microbolusing High Carb Mode ${pbolusHC}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, pbolusHC))
-            return rT
-        }
-        if (isHighCarb2ModeCondition()) {
-            val pbolusHC2: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
-            rT.units = pbolusHC2
-            //rT.reason.append(" Microbolusing High Carb Mode ${pbolusHC}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_highcarb2, pbolusHC2))
-            return rT
-        }
-        if (issnackModeCondition()) {
-            val pbolussnack: Double = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
-            rT.units = pbolussnack
-            //rT.reason.append(" Microbolusing snack Mode ${pbolussnack}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_snack, pbolussnack))
-            return rT
+            // 🚀 Innovation: Zero-IOB Priming (Fallback)
+            if (!nightbis && autodrive && isZeroIOBPrimingCondition(iob.toDouble(), delta, bgAcceleration.toFloat(), reason) && modesCondition) {
+                val primeBolus = calculateDynamicMicroBolus(effectiveISF, 15.0, reason) // Safe priming scaled to context
+                rT.units = primeBolus
+                reason.append("→ Zero-IOB Priming with ${primeBolus}U\n")
+                rT.reason.append(reason.toString())
+                return rT
+            }
+            if (isbfastModeCondition()) {
+                val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
+                rT.units = pbolusbfast
+                //rT.reason.append(" Microbolusing 1/2 Breakfast Mode ${pbolusbfast}U.")
+                rT.reason.append(context.getString(R.string.reason_prebolus_bfast1, pbolusbfast))
+                return rT
+            }
+            if (isbfast2ModeCondition()) {
+                val pbolusbfast2: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
+                this.maxSMB = pbolusbfast2
+                rT.units = pbolusbfast2
+                //rT.reason.append(" Microbolusing 2/2 Breakfast Mode ${pbolusbfast2}U. ")
+                rT.reason.append(context.getString(R.string.reason_prebolus_bfast2, pbolusbfast2))
+                return rT
+            }
+            if (isLunchModeCondition()) {
+                val pbolusLunch: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
+                rT.units = pbolusLunch
+                //rT.reason.append(" Microbolusing 1/2 Lunch Mode ${pbolusLunch}U.")
+                rT.reason.append(context.getString(R.string.reason_prebolus_lunch1, pbolusLunch))
+                return rT
+            }
+            if (isLunch2ModeCondition()) {
+                val pbolusLunch2: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
+                this.maxSMB = pbolusLunch2
+                rT.units = pbolusLunch2
+                //rT.reason.append(" Microbolusing 2/2 Lunch Mode ${pbolusLunch2}U.")
+                rT.reason.append(context.getString(R.string.reason_prebolus_lunch2, pbolusLunch2))
+                return rT
+            }
+            if (isDinnerModeCondition()) {
+                val pbolusDinner: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
+                rT.units = pbolusDinner
+                //rT.reason.append(" Microbolusing 1/2 Dinner Mode ${pbolusDinner}U.")
+                rT.reason.append(context.getString(R.string.reason_prebolus_dinner1, pbolusDinner))
+                return rT
+            }
+            if (isDinner2ModeCondition()) {
+                val pbolusDinner2: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
+                this.maxSMB = pbolusDinner2
+                rT.units = pbolusDinner2
+                //rT.reason.append(" Microbolusing 2/2 Dinner Mode ${pbolusDinner2}U.")
+                rT.reason.append(context.getString(R.string.reason_prebolus_dinner2, pbolusDinner2))
+                return rT
+            }
+            if (isHighCarbModeCondition()) {
+                val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
+                rT.units = pbolusHC
+                //rT.reason.append(" Microbolusing High Carb Mode ${pbolusHC}U.")
+                rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, pbolusHC))
+                return rT
+            }
+            if (isHighCarb2ModeCondition()) {
+                val pbolusHC2: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
+                rT.units = pbolusHC2
+                //rT.reason.append(" Microbolusing High Carb Mode ${pbolusHC}U.")
+                rT.reason.append(context.getString(R.string.reason_prebolus_highcarb2, pbolusHC2))
+                return rT
+            }
+            if (issnackModeCondition()) {
+                val pbolussnack: Double = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
+                rT.units = pbolussnack
+                //rT.reason.append(" Microbolusing snack Mode ${pbolussnack}U.")
+                rT.reason.append(context.getString(R.string.reason_prebolus_snack, pbolussnack))
+                return rT
+            }
+        } else {
+             reason.append("⛔ Safety: BG ${bg} < 80, skipping Meal Prebolus/Autodrive\n")
         }
         //rT.reason.append(", MaxSMB: $maxSMB")
         rT.reason.append(context.getString(R.string.reason_maxsmb, maxSMB))
