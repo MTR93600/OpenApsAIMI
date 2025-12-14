@@ -53,6 +53,55 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             gravity = Gravity.CENTER_HORIZONTAL
         }
 
+        // 0. Provider Selector
+        val providerLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = 16 }
+        }
+
+        val providerLabel = TextView(this).apply {
+            text = "AI Model: "
+            setTextColor(Color.WHITE)
+        }
+        providerLayout.addView(providerLabel)
+
+        val spinner = android.widget.Spinner(this).apply {
+            // Apply a simple white text style for spinner items if possible or use default
+            // For programmatic spinner with dark theme, we might need a custom adapter or accept default.
+            // Using default for now.
+            background.setColorFilter(Color.WHITE, android.graphics.PorterDuff.Mode.SRC_ATOP)
+        }
+        
+        val providers = arrayOf("OpenAI (GPT-4o)", "Gemini (1.5 Flash)")
+        val adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_item, providers)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        spinner.adapter = adapter
+
+        // Set initial selection
+        val currentProvider = preferences.get(app.aaps.core.keys.StringKey.AimiAdvisorProvider)
+        if (currentProvider == "GEMINI") {
+            spinner.setSelection(1)
+        } else {
+            spinner.setSelection(0)
+        }
+
+        spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                 val selected = if (position == 1) "GEMINI" else "OPENAI"
+                 preferences.put(app.aaps.core.keys.StringKey.AimiAdvisorProvider, selected)
+                 // Ensure text color is readable if default adapter is used
+                 (view as? TextView)?.setTextColor(Color.WHITE)
+             }
+             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+        }
+
+        providerLayout.addView(spinner)
+        layout.addView(providerLayout)
+
         // 1. Photo Area
         imageView = ImageView(this).apply {
             layoutParams = LinearLayout.LayoutParams(600, 600)

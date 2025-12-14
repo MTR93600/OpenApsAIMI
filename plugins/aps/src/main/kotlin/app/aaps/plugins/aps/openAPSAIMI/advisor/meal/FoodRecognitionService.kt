@@ -22,7 +22,7 @@ class FoodRecognitionService(private val context: Context, private val preferenc
     )
 
     data class VisionApiConfig(
-        val modelName: String = "gpt-4-vision-preview",
+        val modelName: String = "gpt-4o",
         val maxTokens: Int = 1000
     )
 
@@ -90,7 +90,7 @@ class FoodRecognitionService(private val context: Context, private val preferenc
         connection.doOutput = true
 
         val jsonBody = JSONObject().apply {
-            put("model", "gpt-4-vision-preview")
+            put("model", "gpt-4o")
             put("messages", org.json.JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "system")
