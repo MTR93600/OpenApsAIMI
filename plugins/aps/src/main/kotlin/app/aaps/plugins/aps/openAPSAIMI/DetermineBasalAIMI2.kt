@@ -3650,12 +3650,65 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
 
-        if (isMealModeCondition() && bg >= 80) {
-            val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
-            // rT.reason.append(" Microbolusing Meal Mode ${pbolusM}U.")
-            val msg = context.getString(R.string.manual_meal_prebolus, pbolusM)
-            finalizeAndCapSMB(rT, pbolusM, msg)
-            return rT
+        // 🍽️ FCL 14.0: Manual Meal Mode Enforcer
+        // Ensures explicit user intent (Notes: Snack, Meal, Bfast...) ALWAYS fires the configured prebolus.
+        // Priority: Excessive > HighCarb > Dinner > Lunch > Bfast > Meal > Snack
+        // Relaxed BG threshold to 60 as per user intent for prebolusing.
+        if (bg >= 60) {
+            var manualPrebolus: Double = 0.0
+            var manualModeName: String = ""
+
+            // 1. High Carb
+            if (isHighCarbModeCondition()) {
+                manualPrebolus = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
+                manualModeName = "HighCarb"
+            } else if (isHighCarb2ModeCondition()) {
+                manualPrebolus = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
+                manualModeName = "HighCarb 2"
+            }
+            // 2. Dinner
+            else if (isDinnerModeCondition()) {
+                manualPrebolus = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
+                manualModeName = "Dinner"
+            } else if (isDinner2ModeCondition()) {
+                manualPrebolus = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
+                manualModeName = "Dinner 2"
+            }
+            // 3. Lunch
+            else if (isLunchModeCondition()) {
+                manualPrebolus = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
+                manualModeName = "Lunch"
+            } else if (isLunch2ModeCondition()) {
+                manualPrebolus = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
+                manualModeName = "Lunch 2"
+            }
+            // 4. Breakfast
+            else if (isbfastModeCondition()) {
+                manualPrebolus = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
+                manualModeName = "Breakfast"
+            } else if (isbfast2ModeCondition()) {
+                manualPrebolus = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
+                manualModeName = "Breakfast 2"
+            }
+            // 5. Generic Meal
+            else if (isMealModeCondition()) {
+                manualPrebolus = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
+                manualModeName = "Meal"
+            }
+            // 6. Snack
+            else if (issnackModeCondition()) {
+                manualPrebolus = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
+                manualModeName = "Snack"
+            }
+
+            // Execute if a mode was found
+            if (manualPrebolus > 0.0) {
+                // val msg = context.getString(R.string.manual_meal_prebolus, manualPrebolus) 
+                // Using generic string construction to include Mode Name
+                val msg = "🍱 Manual Mode ($manualModeName): Force Prebolus ${manualPrebolus}U"
+                finalizeAndCapSMB(rT, manualPrebolus, msg)
+                return rT
+            }
         }
         // 🛡️ Innovation: FCL 6.0 Safety Net
         val isPostHypo = isPostHypoProtectionCondition(recentBGs, reason)
