@@ -1177,5 +1177,8 @@
     <string name="aimi_pkpd_hypo_peak">Hypoglycémies précoces : Retarder le pic (%1$s min) pour adoucir la courbe.</string>
     <string name="aimi_pkpd_hypo_damping">Risque hypo : Augmenter l\'amortissement (Damping) pour réduire les SMB en fin de DIA.</string>
     <string name="aimi_meal_advisor_title">AIMI Meal Advisor</string>
+    <string name="aimi_advisor_openai_key_title">OpenAI API Key</string>
+    <string name="aimi_advisor_openai_key_summary">Required for Meal Advisor analysis</string>
+    <string name="aimi_meal_advisor_settings">Meal Advisor Settings</string>
 </resources>
 

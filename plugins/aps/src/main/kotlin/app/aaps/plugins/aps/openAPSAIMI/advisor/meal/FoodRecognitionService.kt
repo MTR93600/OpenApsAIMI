@@ -1,15 +1,19 @@
+
 package app.aaps.plugins.aps.openAPSAIMI.advisor.meal
 
 import android.content.Context
-import org.json.JSONObject
+import android.graphics.Bitmap
+import android.util.Base64
+import app.aaps.core.keys.StringKey
+import app.aaps.core.keys.interfaces.Preferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
-/**
- * Service responsible for analyzing food images and estimating carbohydrate content.
- * Uses an external Vision API (e.g. OpenAI/Gemini) to process the image.
- */
-class FoodRecognitionService(private val context: Context) {
+class FoodRecognitionService(private val context: Context, private val preferences: Preferences) {
 
     data class EstimationResult(
         val description: String,
@@ -19,39 +23,98 @@ class FoodRecognitionService(private val context: Context) {
 
     data class VisionApiConfig(
         val modelName: String = "gpt-4-vision-preview",
-        val maxTokens: Int = 1000, // Sufficient for detailed JSON + Reasoning
-        val temperature: Double = 0.5
+        val maxTokens: Int = 1000
     )
 
-    /**
-     * MOCK implementation for the prototype phase.
-     * In production, this would make an HTTPS call to the LLM endpoint.
-     * 
-     * @param imageUri URI of the image. 
-     * NOTE: For full resolution, store image in `context.cacheDir` using FileProvider.
-     * This avoids `WRITE_EXTERNAL_STORAGE` permission.
-     */
-    suspend fun estimateCarbsFromImage(imageUri: String, config: VisionApiConfig = VisionApiConfig()): EstimationResult = withContext(Dispatchers.IO) {
-        // Simulate network delay
-        kotlinx.coroutines.delay(2000)
+    suspend fun estimateCarbsFromImage(bitmap: Bitmap, config: VisionApiConfig = VisionApiConfig()): EstimationResult = withContext(Dispatchers.IO) {
+        val apiKey = preferences.get(StringKey.AimiAdvisorOpenAIKey)
+
+        if (apiKey.isBlank()) {
+            // MOCK Fallback
+            kotlinx.coroutines.delay(1000)
+            return@withContext EstimationResult(
+                description = "Simulation Mode (No API Key)",
+                carbsGrams = 0.0,
+                reasoning = "Please enter your OpenAI API Key in AIMI Preferences to enable real analysis."
+            )
+        }
+
+        try {
+            val base64Image = bitmapToBase64(bitmap)
+            val responseJson = callOpenAI(apiKey, base64Image)
+            parseOpenAIResponse(responseJson)
+        } catch (e: Exception) {
+            EstimationResult(
+                description = "Error",
+                carbsGrams = 0.0,
+                reasoning = "API Call Failed: ${e.message}"
+            )
+        }
+    }
+
+    private fun bitmapToBase64(bitmap: Bitmap): String {
+        val byteArrayOutputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, byteArrayOutputStream)
+        val byteArray = byteArrayOutputStream.toByteArray()
+        return Base64.encodeToString(byteArray, Base64.NO_WRAP)
+    }
+
+    private fun callOpenAI(apiKey: String, base64Image: String): String {
+        val url = URL("https://api.openai.com/v1/chat/completions")
+        val connection = url.openConnection() as HttpURLConnection
+        connection.requestMethod = "POST"
+        connection.setRequestProperty("Content-Type", "application/json")
+        connection.setRequestProperty("Authorization", "Bearer $apiKey")
+        connection.doOutput = true
+
+        val jsonBody = JSONObject().apply {
+            put("model", "gpt-4-vision-preview")
+            put("messages", org.json.JSONArray().apply {
+                put(JSONObject().apply {
+                    put("role", "system")
+                    put("content", "You are a carb-counting expert for Type 1 Diabetics. Analyze the food image. Output JSON ONLY: { \"food_name\": string, \"total_carbs\": number (grams), \"reasoning\": string }. Be concise.")
+                })
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("content", org.json.JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("type", "text")
+                            put("text", "Estimate total carbs in this meal.")
+                        })
+                        put(JSONObject().apply {
+                            put("type", "image_url")
+                            put("image_url", JSONObject().apply {
+                                put("url", "data:image/jpeg;base64,$base64Image")
+                            })
+                        })
+                    })
+                })
+            })
+            put("max_tokens", 500)
+        }
+
+        connection.outputStream.use { it.write(jsonBody.toString().toByteArray()) }
+
+        val responseCode = connection.responseCode
+        if (responseCode == HttpURLConnection.HTTP_OK) {
+            return connection.inputStream.bufferedReader().use { it.readText() }
+        } else {
+            throw Exception("HTTP $responseCode: ${connection.errorStream.bufferedReader().use { it.readText() }}")
+        }
+    }
+
+    private fun parseOpenAIResponse(jsonStr: String): EstimationResult {
+        val root = JSONObject(jsonStr)
+        val content = root.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
         
-        // TODO: Use OpenAPSAIMIPlugin preference for API Key.
-        // If Key exists -> Call OpenAI.
-        // Else -> Return Mock.
-        
-        // Mock Logic: Return a static result for demonstration
-        // "Pasta Carbonara"
-        EstimationResult(
-            description = "Pasta Carbonara (Creamy sauce, Bacon) [MOCK]",
-            carbsGrams = 65.0,
-            reasoning = "Simulation Mode: Real analysis requires OpenAI API Key."
+        // Cleanup Markdown if present (```json ... ```)
+        val cleanedJson = content.replace("```json", "").replace("```", "").trim()
+        val result = JSONObject(cleanedJson)
+
+        return EstimationResult(
+            description = result.getString("food_name"),
+            carbsGrams = result.getDouble("total_carbs"),
+            reasoning = result.getString("reasoning")
         )
     }
-    
-    // TODO: Implement actual API Client here
-    /*
-    private fun callVisionApi(base64Image: String): String {
-        // ... implementation ...
-    }
-    */
 }

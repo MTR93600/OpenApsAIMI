@@ -41,7 +41,7 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        recognitionService = FoodRecognitionService(this)
+        recognitionService = FoodRecognitionService(this, preferences)
         title = "AIMI Meal Advisor"
 
         // UI Setup (Code Layout)
@@ -156,8 +156,8 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                // Call Service (Pass bitmap in future implementation)
-                val result = recognitionService.estimateCarbsFromImage("mock_uri") // TODO: Pass Bitmap
+                // Call Service
+                val result = recognitionService.estimateCarbsFromImage(bitmap)
                 currentEstimate = result
 
                 // Update UI

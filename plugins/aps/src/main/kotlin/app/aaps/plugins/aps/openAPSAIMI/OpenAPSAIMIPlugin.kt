@@ -1297,6 +1297,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 )
 
                 addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.aimi_meal_advisor_settings)
+                })
+                addPreference(AdaptiveStringPreference(
+                    ctx = context,
+                    stringKey = StringKey.AimiAdvisorOpenAIKey,
+                    title = R.string.aimi_advisor_openai_key_title,
+                    summary = R.string.aimi_advisor_openai_key_summary
+                ))
+
+                addPreference(PreferenceCategory(context).apply {
                     title = rh.gs(R.string.oaps_aimi_ngr_title)
                 })
                 addPreference(
