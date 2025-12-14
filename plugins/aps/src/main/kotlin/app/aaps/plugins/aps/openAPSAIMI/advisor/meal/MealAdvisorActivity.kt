@@ -209,18 +209,20 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                 val result = recognitionService.estimateCarbsFromImage(bitmap)
                 currentEstimate = result
 
-                // Update UI
+                // Calculate Total Effective (Carbs + FPU)
+                val totalEffective = result.carbsGrams + result.fpuEquivalent
+
+                // Update UI: Show breakdown but emphasize Total
                 resultText.text = """
-                    ${result.carbsGrams.toInt()}g Carbs
-                    ${result.proteinGrams.toInt()}g Protein | ${result.fatGrams.toInt()}g Fat
-                    (FPU Equiv: ${result.fpuEquivalent.toInt()}g)
+                    Total Effective: ${totalEffective.toInt()}g
+                    (Carbs: ${result.carbsGrams.toInt()}g + FPU: ${result.fpuEquivalent.toInt()}g)
                     
                     ${result.description}
                 """.trimIndent()
                 
                 reasoningText.text = result.reasoning
                 confirmButton.visibility = android.view.View.VISIBLE
-                confirmButton.text = "✅ Confirm ${result.carbsGrams.toInt()}g Carbs" // Only confirmed carbs injected for now
+                confirmButton.text = "✅ Confirm ${totalEffective.toInt()}g (Carbs + FPU)" // Verify explicit sum
 
             } catch (e: Exception) {
                 resultText.text = "Error: ${e.message}"
@@ -231,10 +233,13 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     private fun confirmEstimate() {
         val estimate = currentEstimate ?: return
         
-        preferences.put(DoubleKey.OApsAIMILastEstimatedCarbs, estimate.carbsGrams)
+        // Inject SUM into Preferences for FCL logic
+        val totalToInject = estimate.carbsGrams + estimate.fpuEquivalent
+        
+        preferences.put(DoubleKey.OApsAIMILastEstimatedCarbs, totalToInject)
         preferences.put(DoubleKey.OApsAIMILastEstimatedCarbTime, System.currentTimeMillis().toDouble())
         
-        Toast.makeText(this, "Injected! FCL targeting ${estimate.carbsGrams.toInt()}g (+${estimate.fpuEquivalent.toInt()}g FPU effect)", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Injected ${totalToInject.toInt()}g (Carbs + FPU) into AIMI.", Toast.LENGTH_LONG).show()
         finish()
     }
 }
