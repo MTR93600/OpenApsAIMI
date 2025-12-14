@@ -539,7 +539,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             && bgNow >= targetBgVal - bgMargin
     }
 
-    private fun roundBasal(value: Double): Double = value
+    private fun roundBasal(value: Double): Double {
+        val safeValue = if (value < 0.0) 0.0 else value
+        // Standard rounding to 2 decimals (OpenAPS style 0.00)
+        return Math.round(safeValue * 100.0) / 100.0
+    }
 
 
     /**
@@ -910,9 +914,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return if (boosted > mealMaxBasalUph) mealMaxBasalUph else boosted
     }
 
-    private fun calculateRate(basal: Double, currentBasal: Double, multiplier: Double, reason: String, currenttemp: CurrentTemp, rT: RT): Double {
+    private fun calculateRate(basal: Double, currentBasal: Double, multiplier: Double, reason: String, currenttemp: CurrentTemp, rT: RT, overrideSafety: Boolean = false): Double {
         rT.reason.append("${currenttemp.duration}m@${(currenttemp.rate).toFixed2()} $reason")
-        return if (basal == 0.0) currentBasal * multiplier else roundBasal(basal * multiplier)
+        return if (overrideSafety || basal == 0.0) currentBasal * multiplier else roundBasal(basal * multiplier)
     }
     private fun calculateBasalRate(basal: Double, currentBasal: Double, multiplier: Double): Double =
         if (basal == 0.0) currentBasal * multiplier else roundBasal(basal * multiplier)
@@ -4407,9 +4411,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         
         // 🚀 ROCKET OVERRIDE (AIMI Neural Logic)
-        // If BG is skyrocketing (Delta > 10) or very high (> Target+60), the "Eventual BG" prediction (based on naked IOB) 
+        // If BG is skyrocketing (Delta > 5) or high (> Target+40), the "Eventual BG" prediction (based on naked IOB) 
         // is likely a false flag (panic). We MUST unblock the system to allow aggression.
-        if (isHypoBlocked && (delta > 10.0 || bg > target_bg + 60)) {
+        if (isHypoBlocked && (delta > 5.0 || bg > target_bg + 40)) {
              isHypoBlocked = false
              lastHypoBlockAt = 0L // Reset hysteresis state to prevent "sticky" blocking
              rT.reason.append("🚀 Rocket Override: Hypo Block IGNORED due to massive rise. ") 
@@ -4491,7 +4495,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 targetBg = target_bg,
                 predictedBg = predictedBg,
                 eventualBg = eventualBG,
-                maxSmb = maxSMB,
+                // Pass Dynamic MaxSMB (High vs Low logic) so Solver knows real limit
+                maxSmb = if (bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0) maxSMBHB else maxSMB,
                 maxIob = preferences.get(DoubleKey.ApsSmbMaxIob),
                 predictedSmb = predictedSMB,
                 modelValue = modelcal,
@@ -4602,18 +4607,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         rT.reason.append(savedReason)
         var rate = when {
-            snackTime && snackrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 4.0, "AI Force basal because mealTime $snackrunTime.", currenttemp, rT)
-            mealTime && mealruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because mealTime $mealruntime.", currenttemp, rT)
-            lunchTime && lunchruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because lunchTime $lunchruntime.", currenttemp, rT)
-            dinnerTime && dinnerruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because dinnerTime $dinnerruntime.", currenttemp, rT)
-            highCarbTime && highCarbrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because highcarb $highCarbrunTime.", currenttemp, rT)
+            snackTime && snackrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 4.0, "AI Force basal because mealTime $snackrunTime.", currenttemp, rT, overrideSafety = true)
+            mealTime && mealruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because mealTime $mealruntime.", currenttemp, rT, overrideSafety = true)
+            lunchTime && lunchruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because lunchTime $lunchruntime.", currenttemp, rT, overrideSafety = true)
+            dinnerTime && dinnerruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because dinnerTime $dinnerruntime.", currenttemp, rT, overrideSafety = true)
+            highCarbTime && highCarbrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because highcarb $highCarbrunTime.", currenttemp, rT, overrideSafety = true)
             
             // 🔥 Patch Post-Meal Hyper Boost (AIMI 2.0)
             (mealTime || lunchTime || dinnerTime || highCarbTime) -> {
                 val runTime = listOf(mealruntime, lunchruntime, dinnerruntime, highCarbrunTime).maxOrNull() ?: 0
                 val target = target_bg // simplification
                 val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal) // limit from prefs
-                val rocketStart = delta > 10.0f || bg > target_bg + 60
+                val rocketStart = delta > 5.0f || bg > target_bg + 40
                 // If Rocket Start (Delta > 10 or Very High BG), use global Max Basal (Aggressive).
                 // Otherwise use the Meal Mode preference (often conservative, default profile*2).
                 val safeMax = if (rocketStart) profile.max_basal else if (maxBasalPref > 0) maxBasalPref else profile_current_basal * 2.0 
@@ -4636,24 +4641,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             // 🔥 General Hyper Kicker (Non-Meal)
             // Catch-all for late rises outside specific meal windows
-            // 🔥 General Hyper Kicker (Non-Meal)
-            // Catch-all for late rises outside specific meal windows
-            // 🚀 FCL 13.0: Add Rocket Start trigger (Delta > 10.0) to catch early explosions before BG > Target+30
-            ((bg > target_bg + 30 || delta > 10.0f) && (delta >= 0.3 || shortAvgDelta >= 0.2)) -> {
+            // 🚀 FCL 13.0: Harmonized Rocket Start (Delta > 5.0) to match Meal/Hypo logic.
+            ((bg > target_bg + 40 || delta > 5.0f) && (delta >= 0.3 || shortAvgDelta >= 0.2)) -> {
                 val maxBasalPref = preferences.get(DoubleKey.autodriveMaxBasal) // Absolute max
                 val safeMax = if (maxBasalPref > 0.1) maxBasalPref else profile.max_basal // Fallback if 0
                 
                 val boostedRate = adjustBasalForGeneralHyper(
                     suggestedBasalUph = profile_current_basal, 
-                    bg = bg,
-                    targetBg = target_bg,
-                    delta = delta.toDouble(),
-                    shortAvgDelta = shortAvgDelta.toDouble(),
+                    bg = bg, 
+                    targetBg = target_bg, 
+                    delta = delta.toDouble(), 
+                    shortAvgDelta = shortAvgDelta.toDouble(), 
                     maxBasalConfig = safeMax
                 )
                 
                 if (boostedRate > profile_current_basal * 1.1) {
-                    calculateRate(basal, profile_current_basal, boostedRate/profile_current_basal, "Global Hyper Kicker (Active)", currenttemp, rT)
+                    calculateRate(basal, profile_current_basal, boostedRate/profile_current_basal, "Global Hyper Kicker (Active)", currenttemp, rT, overrideSafety = true)
                 } else null
             }
 
