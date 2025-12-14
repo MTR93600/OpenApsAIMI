@@ -210,10 +210,17 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                 currentEstimate = result
 
                 // Update UI
-                resultText.text = "${result.carbsGrams.toInt()}g Carbs\n${result.description}"
+                resultText.text = """
+                    ${result.carbsGrams.toInt()}g Carbs
+                    ${result.proteinGrams.toInt()}g Protein | ${result.fatGrams.toInt()}g Fat
+                    (FPU Equiv: ${result.fpuEquivalent.toInt()}g)
+                    
+                    ${result.description}
+                """.trimIndent()
+                
                 reasoningText.text = result.reasoning
                 confirmButton.visibility = android.view.View.VISIBLE
-                confirmButton.text = "✅ Confirm ${result.carbsGrams.toInt()}g"
+                confirmButton.text = "✅ Confirm ${result.carbsGrams.toInt()}g Carbs" // Only confirmed carbs injected for now
 
             } catch (e: Exception) {
                 resultText.text = "Error: ${e.message}"
@@ -224,18 +231,10 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     private fun confirmEstimate() {
         val estimate = currentEstimate ?: return
         
-        // Inject into Preferences for FCL
-        // We need to define these keys in DoubleKey/LongKey.
-        // Assuming keys will be added: OApsAIMILastEstimatedCarbs, OApsAIMILastEstimatedCarbTime
-        
-        // Using safe fallback if keys not yet compiled, but plan requires adding them first.
-        // I will trust the keys will be added in the next step.
-        // Writing code knowing keys are:
-        
         preferences.put(DoubleKey.OApsAIMILastEstimatedCarbs, estimate.carbsGrams)
         preferences.put(DoubleKey.OApsAIMILastEstimatedCarbTime, System.currentTimeMillis().toDouble())
         
-        Toast.makeText(this, "Injected! FCL will now target this rise.", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Injected! FCL targeting ${estimate.carbsGrams.toInt()}g (+${estimate.fpuEquivalent.toInt()}g FPU effect)", Toast.LENGTH_LONG).show()
         finish()
     }
 }
