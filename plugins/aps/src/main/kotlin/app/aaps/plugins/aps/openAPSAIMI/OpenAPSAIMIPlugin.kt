@@ -1290,6 +1290,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 })
                 addPreference(AdaptiveIntentPreference(
                         ctx = context,
+                        intentKey = IntentKey.OApsAIMIMealAdvisor,
+                        intent = Intent(context, app.aaps.plugins.aps.openAPSAIMI.advisor.meal.MealAdvisorActivity::class.java),
+                        title = R.string.aimi_meal_advisor_title
+                    )
+                )
+                addPreference(AdaptiveIntentPreference(
+                        ctx = context,
                         intentKey = IntentKey.OApsAIMIProfileAdvisor,
                         intent = Intent(context, app.aaps.plugins.aps.openAPSAIMI.advisor.AimiProfileAdvisorActivity::class.java),
                         summary = R.string.aimi_advisor_summary

@@ -327,6 +327,9 @@
     <string name="oaps_aimi_cho_summary">Average carbohydrates per meal. Estimated value, not exact</string>
     <string name="oaps_aimi_cho_title">Average carbohydrate amount lunch/dinner</string>
     <string name="aimi_preferences">AIMI Settings</string>
+    <string name="aimi_advisor_section_settings">AIMI Settings</string>
+
+
     <string name="user_preferences">Preferences user</string>
     <string name="user_modes_preferences_title_menu">Preferences user - Modes</string>
     <string name="reactivity_preferences"><![CDATA[BG < 120]]></string>
