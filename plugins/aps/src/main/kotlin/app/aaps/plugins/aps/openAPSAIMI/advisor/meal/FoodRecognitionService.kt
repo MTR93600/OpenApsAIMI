@@ -125,9 +125,9 @@ class FoodRecognitionService(private val context: Context, private val preferenc
         }
     }
     
-    // Gemini 1.5 Flash (Vision capable)
+    // Gemini 2.5 Flash (Vision capable) - Updated Dec 2025
     private fun callGemini(apiKey: String, base64Image: String): String {
-        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey")
+        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey")
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
         connection.setRequestProperty("Content-Type", "application/json")

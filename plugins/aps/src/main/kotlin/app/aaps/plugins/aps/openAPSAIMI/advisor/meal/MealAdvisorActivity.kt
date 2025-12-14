@@ -76,7 +76,7 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             background.setColorFilter(Color.WHITE, android.graphics.PorterDuff.Mode.SRC_ATOP)
         }
         
-        val providers = arrayOf("OpenAI (GPT-4o)", "Gemini (1.5 Flash)")
+        val providers = arrayOf("OpenAI (GPT-4o)", "Gemini (2.5 Flash)")
         val adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_item, providers)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinner.adapter = adapter
