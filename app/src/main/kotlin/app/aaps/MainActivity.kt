@@ -213,6 +213,11 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
                         true
                     }
 
+                    R.id.nav_meal_advisor       -> {
+                        startActivity(Intent(this@MainActivity, app.aaps.plugins.aps.openAPSAIMI.advisor.meal.MealAdvisorActivity::class.java))
+                        true
+                    }
+
                     R.id.nav_aimi_advisor       -> {
                         startActivity(Intent(this@MainActivity, app.aaps.plugins.aps.openAPSAIMI.advisor.AimiProfileAdvisorActivity::class.java))
                         true
