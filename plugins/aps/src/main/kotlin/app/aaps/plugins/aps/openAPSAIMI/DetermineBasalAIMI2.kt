@@ -1286,13 +1286,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         // Use maxSMB (Preferences) as the hard limit.
         // We use 'maxSMB' instead of 'maxSMBHB' to ensure strict safety unless explicitly handled otherwise.
+        // 1. Determine dynamic baseline limit (Normal vs High BG)
+        // If BG > 120, use the High BG Max SMB preference (MaxSMBHB).
+        val baseLimit = if (this.bg > 120) this.maxSMBHB else this.maxSMB
+        
         val safeCap = capSmbDose(
             proposedSmb = proposedFloat,
             bg = this.bg,
-            // Allow manual/forced boluses to exceed the loop's maxSMB setting, up to the MaxIOB limit.
-            // We pass the proposed amount itself (or maxSMB if higher) as the cap here, effectively bypassing the maxSMB variable
-            // but relying on capSmbDose's stricter MaxIOB and BG<120 checks.
-            maxSmbConfig = kotlin.math.max(this.maxSMB, proposedUnits), 
+            // 2. Allow manual/forced boluses to exceed this baseline, up to MaxIOB.
+            // We pass the larger of (Dynamic Limit, Proposed Amount) as the config cap.
+            maxSmbConfig = kotlin.math.max(baseLimit, proposedUnits), 
             iob = this.iob.toDouble(),
             maxIob = this.maxIob
         )
