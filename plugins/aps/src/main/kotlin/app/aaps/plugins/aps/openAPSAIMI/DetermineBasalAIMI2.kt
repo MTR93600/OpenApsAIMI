@@ -1289,7 +1289,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val safeCap = capSmbDose(
             proposedSmb = proposedFloat,
             bg = this.bg,
-            maxSmbConfig = this.maxSMB, 
+            // Allow manual/forced boluses to exceed the loop's maxSMB setting, up to the MaxIOB limit.
+            // We pass the proposed amount itself (or maxSMB if higher) as the cap here, effectively bypassing the maxSMB variable
+            // but relying on capSmbDose's stricter MaxIOB and BG<120 checks.
+            maxSmbConfig = kotlin.math.max(this.maxSMB, proposedUnits), 
             iob = this.iob.toDouble(),
             maxIob = this.maxIob
         )
