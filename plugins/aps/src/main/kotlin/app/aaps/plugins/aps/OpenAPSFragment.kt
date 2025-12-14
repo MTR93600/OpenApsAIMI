@@ -46,6 +46,7 @@ class OpenAPSFragment : DaggerFragment(), MenuProvider {
 
     @Suppress("PrivatePropertyName")
     private val ID_MENU_RUN = 503
+    private val ID_MENU_MEAL_ADVISOR = 504
 
     private var _binding: OpenapsFragmentBinding? = null
     private var handler = Handler(HandlerThread(this::class.simpleName + "Handler").also { it.start() }.looper)
@@ -76,6 +77,7 @@ class OpenAPSFragment : DaggerFragment(), MenuProvider {
 
     override fun onCreateMenu(menu: Menu, inflater: MenuInflater) {
         menu.add(Menu.FIRST, ID_MENU_RUN, 0, rh.gs(R.string.openapsma_run)).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.FIRST, ID_MENU_MEAL_ADVISOR, 0, "Meal Advisor").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
         MenuCompat.setGroupDividerEnabled(menu, true)
     }
 
@@ -85,6 +87,10 @@ class OpenAPSFragment : DaggerFragment(), MenuProvider {
                 binding.lastrun.text = rh.gs(R.string.executing)
                 handler.post { activePlugin.activeAPS.invoke("OpenAPS menu", false) }
                 true
+            }
+            ID_MENU_MEAL_ADVISOR -> {
+                 startActivity(android.content.Intent(requireContext(), app.aaps.plugins.aps.openAPSAIMI.advisor.meal.MealAdvisorActivity::class.java))
+                 true
             }
 
             else        -> false

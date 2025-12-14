@@ -12,6 +12,7 @@
         <activity
             android:name=".openAPSAIMI.advisor.meal.MealAdvisorActivity"
             android:label="AIMI Meal Advisor"
+            android:exported="false"
             android:theme="@style/AppTheme.NoActionBar" />
 
         <activity
