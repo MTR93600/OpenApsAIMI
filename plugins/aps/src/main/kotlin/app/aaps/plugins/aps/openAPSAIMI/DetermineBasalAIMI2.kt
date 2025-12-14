@@ -3744,6 +3744,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // val msg = context.getString(R.string.manual_meal_prebolus, manualPrebolus) 
                 // Using generic string construction to include Mode Name
                 val msg = "🍱 Manual Mode ($manualModeName): Force Prebolus ${manualPrebolus}U"
+                consoleLog.add("MODE_PREBOLUS_TRIGGER name=$manualModeName amount=$manualPrebolus reason=ManualOverrides")
                 finalizeAndCapSMB(rT, manualPrebolus, msg)
                 return rT
             }
@@ -3770,6 +3771,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (!nightbis && autodrive && bg >= 80 && !isPostHypo && isDriftTerminatorCondition(bg.toFloat(), terminatorTarget.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
             val terminatortap = dynamicPbolusSmall
             reason.append("→ Drift Terminator (Trigger +${terminatorThresholdAdd}): Micro-Tap ${terminatortap}U\n")
+            consoleLog.add("AD_EARLY_TBR_TRIGGER rate=0.0 duration=0 reason=DriftTerminator_Tap") // Actually a bolus tap, not TBR, but fits "Early Action" category
+            consoleLog.add("AD_SMALL_PREBOLUS_TRIGGER amount=$terminatortap reason=DriftTerminator")
             finalizeAndCapSMB(rT, terminatortap, reason.toString())
             return rT
         }
@@ -3779,6 +3782,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // FIX: If Post-Hypo OR Gentle Rise (delta < 5 and bg < Target+30), force Small Bolus.
             val pbolusA = if (isPostHypo || (delta < 5.0f && bg < targetBg + 30.0f)) dynamicPbolusSmall else dynamicPbolusLarge
             
+            val logTag = if (pbolusA == dynamicPbolusSmall) "AD_SMALL_PREBOLUS_TRIGGER" else "AD_BIG_PREBOLUS_TRIGGER"
+            consoleLog.add("$logTag amount=$pbolusA reason=AutodriveMain")
+
             // 📈 Innovation: Adaptive Prebolus & Resistance Hammer
             // 🛡️ Disabled if Post-Hypo (Already handled by logic below, but pbolusA is now safer too)
             var adaptiveUnits = if (isPostHypo) pbolusA else calculateAdaptivePrebolus(pbolusA, delta, reason)

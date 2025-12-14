@@ -238,6 +238,9 @@ class BasalDecisionEngine @Inject constructor(
             chosenRate = input.forcedBasal
             overrideSafety = true
             rT.reason.append(context.getString(R.string.reason_early_meal, input.forcedBasal))
+            if (input.forcedBasal > 0) {
+                 rT.reason.append(" [AD_EARLY_TBR_TRIGGER rate=${input.forcedBasal}]")
+            }
         } else {
             chosenRate = when {
                 input.snackTime && input.snackRuntimeMin in 0..30 && input.delta < 10 -> {
@@ -413,6 +416,7 @@ class BasalDecisionEngine @Inject constructor(
                 if (runtimeMin in 0..30) {
                     chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, 10.0)
                     rT.reason.append(context.getString(R.string.meal_snack_under_30m_basal_10))
+                    rT.reason.append(" [MODE_TBR_TRIGGER rate=${chosenRate} reason=ModeActiveFirst30min]")
                     break
                 } else if (runtimeMin > 30 && input.delta > 0) {
                     val sensitivityRatio = if (input.variableSensitivity > 0.1) {
