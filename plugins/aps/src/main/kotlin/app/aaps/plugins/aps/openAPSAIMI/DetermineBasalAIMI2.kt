@@ -1317,6 +1317,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         if (safeCap < proposedFloat) {
              rT.reason.appendLine(context.getString(R.string.limits_smb, proposedFloat, safeCap))
+             consoleLog.add("SMB_CAP: Proposed=$proposedFloat Allowed=$safeCap Reason=$reasonHeader")
+             consoleLog.add("  -> Limits: MaxSMB=$baseLimit MaxIOB=${this.maxIob} IOB=${this.iob}")
+             if (safeCap == 0f && this.iob >= this.maxIob) {
+                 consoleLog.add("  -> BLOCK: IOB_SATURATION (IOB ${this.iob} >= MaxIOB ${this.maxIob})")
+             }
         }
     }
 
@@ -1492,7 +1497,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         // Ensuite, vérifiez si la somme de iob et smbToGive dépasse maxIob
         if (iob + result > maxIob) {
-            result = maxIob.toFloat() - iob
+            val room = maxIob.toFloat() - iob
+            if (room < 0) {
+                 // Debug pour tracking
+                 // consoleLog.add("DEBUG: Negative Room detected in applyMaxLimits ($room). Clamped to 0.") 
+            }
+            result = max(0.0f, room)
         }
 
         return result
@@ -3336,10 +3346,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (hourOfDay in 0..5 && bg < 160) {
             DinMaxIob = DinMaxIob.coerceAtMost(maxIob.toFloat())
         }
+        
+        // [FIX] Autodrive Safety: Ensure Dynamic MaxIOB never completely blocks a necessary action 
+        // due to previous IOB being momentarily equal/higher. 
+        // We force a minimal "breathing room" of 0.05U above current IOB if Autodrive is engaged.
+        if (autodrive) {
+            val minSafetyRoom = iob + 0.05f
+            if (DinMaxIob < minSafetyRoom) {
+                consoleLog.add("DinMaxIOB ($DinMaxIob) < IOB+0.05 ($minSafetyRoom) -> Forced Expansion for Autodrive")
+                DinMaxIob = minSafetyRoom
+            }
+        }
 
-        this.maxIob = if (autodrive) DinMaxIob.toDouble() else maxIob
+        // [FIX] User fallback: If Dynamic logic clamps too hard (e.g. close to 0 or 1), 
+        // trust the User Preference (Variable) as the baseline. 
+        // Logic: Dynamic should EXTEND capabilities, not restrict below user config.
+        val finalDinMaxIob = max(DinMaxIob.toDouble(), maxIob)
+        this.maxIob = if (autodrive) finalDinMaxIob else maxIob
         //rT.reason.append(", MaxIob: $maxIob")
         rT.reason.append(context.getString(R.string.reason_max_iob, maxIob))
+        consoleLog.add("MAX_IOB_CALC: Pref=$maxIob Effective=${this.maxIob} (Autodrive=$autodrive)")
         this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
         this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
         // Calcul initial avec ajustement basé sur la glycémie et le delta
@@ -3364,7 +3390,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         //val DynMaxSmb = (bg / 200) * (bg / 100) + (delta / 2)
         val enableUAM = profile.enableUAM
 
-        this.maxSMBHB = if (autodrive && !honeymoon) DynMaxSmb.toDouble() else preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
+        val prefHighBgMaxSmb = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
+        // [FIX] User fallback: Ensure DynMaxSmb doesn't drop to 0.0 if calculations go weird. 
+        // Use Preference as floor if Autodrive is on.
+        val finalDynMaxSmb = max(DynMaxSmb.toDouble(), prefHighBgMaxSmb)
+        
+        this.maxSMBHB = if (autodrive && !honeymoon) finalDynMaxSmb else prefHighBgMaxSmb
         this.maxSMB = if (bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0 || bg > 180 && honeymoon && mealData.slopeFromMinDeviation >= 1.4) maxSMBHB else maxSMB
         val ngrConfig = buildNightGrowthResistanceConfig(profile, autosens_data, glucoseStatus, targetBg.toDouble())
         this.tir1DAYabove = tirCalculator.averageTIR(tirCalculator.calculate(1, 65.0, 180.0))?.abovePct()!!
