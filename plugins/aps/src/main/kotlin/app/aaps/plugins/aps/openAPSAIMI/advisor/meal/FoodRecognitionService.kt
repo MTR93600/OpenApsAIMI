@@ -205,6 +205,6 @@ class FoodRecognitionService(private val context: Context, private val preferenc
             fatGrams = result.optDouble("fat", 0.0),
             fpuEquivalent = result.optDouble("fpu", 0.0),
             reasoning = result.getString("reasoning")
-        )   
+        )
     }
 }
