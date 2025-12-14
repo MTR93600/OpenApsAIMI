@@ -3340,7 +3340,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         DinMaxIob = ((bg / 100.0) * (bg / 55.0) + (combinedDelta / 2.0)).toFloat()
 
 // Sécurisation : imposer une borne minimale et une borne maximale
-        DinMaxIob = DinMaxIob.coerceAtLeast(1.0f).coerceAtMost(maxIob.toFloat() * 1.3f)
+        // [FIX] Relax clamp for Autodrive to handle aggressive rises (e.g. 176 +10 -> Need room > 1.3x)
+        val clampFactor = if (autodrive && combinedDelta > 3.0) 3.0f else 1.3f
+        DinMaxIob = DinMaxIob.coerceAtLeast(1.0f).coerceAtMost(maxIob.toFloat() * clampFactor)
 
 // Réduction de l'augmentation si on est la nuit (0h-6h)
         if (hourOfDay in 0..5 && bg < 160) {
