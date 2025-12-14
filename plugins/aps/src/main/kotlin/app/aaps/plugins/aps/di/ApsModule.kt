@@ -26,6 +26,7 @@ abstract class ApsModule {
     @ContributesAndroidInjector abstract fun contributesOpenAPSFragment(): OpenAPSFragment
     @ContributesAndroidInjector abstract fun contributesAimiProfileAdvisorActivity(): AimiProfileAdvisorActivity
     @ContributesAndroidInjector abstract fun contributesAimiModeSettingsActivity(): app.aaps.plugins.aps.openAPSAIMI.advisor.AimiModeSettingsActivity
+    @ContributesAndroidInjector abstract fun contributesMealAdvisorActivity(): app.aaps.plugins.aps.openAPSAIMI.advisor.meal.MealAdvisorActivity
 
     @Module
     interface Bindings {
