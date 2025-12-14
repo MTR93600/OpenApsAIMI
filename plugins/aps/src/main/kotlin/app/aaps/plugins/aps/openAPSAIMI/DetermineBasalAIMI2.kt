@@ -4604,7 +4604,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val runTime = listOf(mealruntime, lunchruntime, dinnerruntime, highCarbrunTime).maxOrNull() ?: 0
                 val target = target_bg // simplification
                 val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal) // limit from prefs
-                val safeMax = if (maxBasalPref > 0) maxBasalPref else profile_current_basal * 2.0 
+                val rocketStart = delta > 10.0f || bg > target_bg + 60
+                // If Rocket Start (Delta > 10 or Very High BG), use global Max Basal (Aggressive).
+                // Otherwise use the Meal Mode preference (often conservative, default profile*2).
+                val safeMax = if (rocketStart) profile.max_basal else if (maxBasalPref > 0) maxBasalPref else profile_current_basal * 2.0 
                 
                 val boostedRate = adjustBasalForMealHyper(
                     suggestedBasalUph = profile_current_basal, // Start with profile basal
