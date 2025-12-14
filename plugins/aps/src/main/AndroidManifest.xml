@@ -1,12 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <application>
         <activity
             android:name=".openAPSAIMI.advisor.AimiProfileAdvisorActivity"
-            android:exported="false"
-            android:theme="@style/AppTheme"
+            android:theme="@style/AppTheme.NoActionBar"
             android:label="@string/aimi_advisor_title" />
+        <activity
+            android:name=".openAPSAIMI.advisor.meal.MealAdvisorActivity"
+            android:label="AIMI Meal Advisor"
+            android:theme="@style/AppTheme.NoActionBar" />
 
         <activity
             android:name=".openAPSAIMI.advisor.AimiModeSettingsActivity"

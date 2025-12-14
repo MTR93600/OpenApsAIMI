@@ -20,5 +20,6 @@ enum class IntentKey(
     OverviewQuickWizardSettings(key = "overview_quickwizard_settings"),
     XdripInfo(key = "xdrip_info"),
     InsulinConcentrationRequest("InsulinConcentrationRequest"),
-    OApsAIMIProfileAdvisor("OApsAIMIProfileAdvisor")
+    OApsAIMIProfileAdvisor("OApsAIMIProfileAdvisor"),
+    OApsAIMIMealAdvisor("OApsAIMIMealAdvisor")
 }

@@ -1173,5 +1173,6 @@
     <string name="aimi_pkpd_hypo_dia">Hypoglycémies détectées : Allonger la DIA (%1$s -> %2$sh) pour réduire l\'empilement (stacking).</string>
     <string name="aimi_pkpd_hypo_peak">Hypoglycémies précoces : Retarder le pic (%1$s min) pour adoucir la courbe.</string>
     <string name="aimi_pkpd_hypo_damping">Risque hypo : Augmenter l\'amortissement (Damping) pour réduire les SMB en fin de DIA.</string>
+    <string name="aimi_meal_advisor_title">AIMI Meal Advisor</string>
 </resources>
 

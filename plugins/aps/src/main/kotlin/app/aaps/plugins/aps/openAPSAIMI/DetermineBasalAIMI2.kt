@@ -1809,40 +1809,40 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
     private fun isbfastModeCondition(): Boolean {
         val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
-        return bfastruntime in 0..7 && lastBolusSMBUnit != pbolusbfast.toFloat() && bfastTime
+        return bfastruntime in 0..7 && lastBolusSMBUnit != pbolusbfast.toFloat()
     }
     private fun isbfast2ModeCondition(): Boolean {
         val pbolusbfast2: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
-        return bfastruntime in 15..30 && lastBolusSMBUnit != pbolusbfast2.toFloat() && bfastTime
+        return bfastruntime in 15..30 && lastBolusSMBUnit != pbolusbfast2.toFloat()
     }
     private fun isLunchModeCondition(): Boolean {
         val pbolusLunch: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
-        return lunchruntime in 0..7 && lastBolusSMBUnit != pbolusLunch.toFloat() && lunchTime
+        return lunchruntime in 0..10 && lastBolusSMBUnit != pbolusLunch.toFloat()
     }
     private fun isLunch2ModeCondition(): Boolean {
         val pbolusLunch2: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
-        return lunchruntime in 15..24 && lastBolusSMBUnit != pbolusLunch2.toFloat() && lunchTime
+        return lunchruntime in 11..20 && lastBolusSMBUnit != pbolusLunch2.toFloat()
     }
     private fun isDinnerModeCondition(): Boolean {
         val pbolusDinner: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
-        return dinnerruntime in 0..7 && lastBolusSMBUnit != pbolusDinner.toFloat() && dinnerTime
+        return dinnerruntime in 0..10 && lastBolusSMBUnit != pbolusDinner.toFloat()
     }
     private fun isDinner2ModeCondition(): Boolean {
         val pbolusDinner2: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
-        return dinnerruntime in 15..24 && lastBolusSMBUnit != pbolusDinner2.toFloat() && dinnerTime
+        return dinnerruntime in 11..20 && lastBolusSMBUnit != pbolusDinner2.toFloat()
     }
     private fun isHighCarbModeCondition(): Boolean {
         val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
-        return highCarbrunTime in 0..7 && lastBolusSMBUnit != pbolusHC.toFloat() && highCarbTime
+        return highCarbrunTime in 0..15 && lastBolusSMBUnit != pbolusHC.toFloat()
     }
     private fun isHighCarb2ModeCondition(): Boolean {
         val pbolusHC2: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
-        return highCarbrunTime in 15..24 && lastBolusSMBUnit != pbolusHC2.toFloat() && highCarbTime
+        return highCarbrunTime in 16..30 && lastBolusSMBUnit != pbolusHC2.toFloat()
     }
 
     private fun issnackModeCondition(): Boolean {
         val pbolussnack: Double = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
-        return snackrunTime in 0..7 && lastBolusSMBUnit != pbolussnack.toFloat() && snackTime
+        return snackrunTime in 0..20 && lastBolusSMBUnit != pbolussnack.toFloat()
     }
     // --- Helpers "fenêtre repas 30 min" ---
     private fun runtimeToMinutes(rt: Long): Int {
@@ -3624,6 +3624,32 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              return rT
         }
 
+        // 📸 Meal Advisor Integration (AIMI "Snap & Go")
+        val estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
+        val estimatedCarbsTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong() // Stored as Double, cast to Long
+        val timeSinceEstimateMin = (System.currentTimeMillis() - estimatedCarbsTime) / 60000.0
+        
+        if (estimatedCarbs > 10.0 && timeSinceEstimateMin in 0.0..120.0 && bg >= 60) {
+            // We have a recent photo estimate!
+            // If delta is rising fast (> 5) or we are high (> target + 30), treat as unbolused meal.
+            if ((delta > 5.0 || bg > targetBg + 30) && modesCondition) {
+                // Determine aggression based on estimated load:
+                // Small (< 30g) -> Standard
+                // Medium (30-60g) -> Large
+                // Large (> 60g) -> Extra Large (Simulated by scaling Dynamic Pbolus)
+                
+                // Base calculation
+                val urgencyFactor = if (estimatedCarbs > 60) 1.5 else 1.0
+                val targetUnits = calculateAdaptivePrebolus(dynamicPbolusLarge * urgencyFactor, delta, reason)
+                
+                val msg = "📸 Meal Advisor: Targeting ~${estimatedCarbs.toInt()}g (Est. ${timeSinceEstimateMin.toInt()}m ago) -> Force ${targetUnits}U"
+                reason.append(msg + "\n")
+                
+                finalizeAndCapSMB(rT, targetUnits, reason.toString())
+                return rT
+            }
+        }
+
         if (isMealModeCondition() && bg >= 80) {
             val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
             // rT.reason.append(" Microbolusing Meal Mode ${pbolusM}U.")
@@ -3711,13 +3737,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             finalizeAndCapSMB(rT, primeBolus, reason.toString())
             return rT
         }
-        if (isbfastModeCondition() && bg >= 80) {
+        if (isbfastModeCondition() && bg >= 60) {
             val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
             val msg = context.getString(R.string.reason_prebolus_bfast1, pbolusbfast)
             finalizeAndCapSMB(rT, pbolusbfast, msg)
             return rT
         }
-        if (isbfast2ModeCondition() && bg >= 80) {
+        if (isbfast2ModeCondition() && bg >= 60) {
             val pbolusbfast2: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
             this.maxSMB = pbolusbfast2
             rT.units = pbolusbfast2
@@ -3725,45 +3751,45 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(context.getString(R.string.reason_prebolus_bfast2, pbolusbfast2))
             return rT
         }
-        if (isLunchModeCondition() && bg >= 80) {
+        if (isLunchModeCondition() && bg >= 60) {
             val pbolusLunch: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
             val msg = context.getString(R.string.reason_prebolus_lunch1, pbolusLunch)
             finalizeAndCapSMB(rT, pbolusLunch, msg)
             return rT
         }
-        if (isLunch2ModeCondition() && bg >= 80) {
+        if (isLunch2ModeCondition() && bg >= 60) {
             val pbolusLunch2: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
             this.maxSMB = pbolusLunch2
             val msg = context.getString(R.string.reason_prebolus_lunch2, pbolusLunch2)
             finalizeAndCapSMB(rT, pbolusLunch2, msg)
             return rT
         }
-        if (isDinnerModeCondition() && bg >= 80) {
+        if (isDinnerModeCondition() && bg >= 60) {
             val pbolusDinner: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
             val msg = context.getString(R.string.reason_prebolus_dinner1, pbolusDinner)
             finalizeAndCapSMB(rT, pbolusDinner, msg)
             return rT
         }
-        if (isDinner2ModeCondition() && bg >= 80) {
+        if (isDinner2ModeCondition() && bg >= 60) {
             val pbolusDinner2: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
             this.maxSMB = pbolusDinner2
             val msg = context.getString(R.string.reason_prebolus_dinner2, pbolusDinner2)
             finalizeAndCapSMB(rT, pbolusDinner2, msg)
             return rT
         }
-        if (isHighCarbModeCondition() && bg >= 80) {
+        if (isHighCarbModeCondition() && bg >= 60) {
             val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
             val msg = context.getString(R.string.reason_prebolus_highcarb, pbolusHC)
             finalizeAndCapSMB(rT, pbolusHC, msg)
             return rT
         }
-        if (isHighCarb2ModeCondition() && bg >= 80) {
+        if (isHighCarb2ModeCondition() && bg >= 60) {
             val pbolusHC2: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
             val msg = context.getString(R.string.reason_prebolus_highcarb2, pbolusHC2)
             finalizeAndCapSMB(rT, pbolusHC2, msg)
             return rT
         }
-        if (issnackModeCondition() && bg >= 80) {
+        if (issnackModeCondition() && bg >= 60) {
             val pbolussnack: Double = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
             val msg = context.getString(R.string.reason_prebolus_snack, pbolussnack)
             finalizeAndCapSMB(rT, pbolussnack, msg)

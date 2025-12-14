@@ -143,6 +143,8 @@ enum class DoubleKey(
     OApsAIMIZeroResumeFrac(key = "OApsAIMIZeroResumeFrac", 0.25, 0.05, 0.8), // fraction du basal profil pour la micro-reprise
     OApsAIMIAntiStallBias(key = "OApsAIMIAntiStallBias", 0.10, 0.0, 0.5), // biais de “décollage” anti-stagnation (+%)
     OApsAIMIDeltaPosRelease(key = "OApsAIMIDeltaPosRelease", 1.0, 0.5, 3.0), // seuil Δ positif au-delà duquel on arrête l’intensification
-    AimiUamConfidence (key = "AIMI_UAM_CONFIDENCE", 0.5, 0.0, 1.0)
+    AimiUamConfidence (key = "AIMI_UAM_CONFIDENCE", 0.5, 0.0, 1.0),
+    OApsAIMILastEstimatedCarbs(key = "OApsAIMILastEstimatedCarbs", 0.0, 0.0, 300.0), // Meal Advisor Estimate
+    OApsAIMILastEstimatedCarbTime(key = "OApsAIMILastEstimatedCarbTime", 0.0, 0.0, 20000000000000.0) // Timestamp as Double
 
 }
