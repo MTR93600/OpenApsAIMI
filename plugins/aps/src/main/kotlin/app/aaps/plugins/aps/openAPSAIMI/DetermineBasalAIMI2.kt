@@ -4502,7 +4502,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bg = bg,
             maxSmbConfig = currentMaxSmb,
             iob = iob.toDouble(),
-            maxIob = preferences.get(DoubleKey.ApsSmbMaxIob)
+            maxIob = this.maxIob
         )
         if (smbToGive < beforeCap) {
             rT.reason.append(" | 🛡️ Cap: ${"%.2f".format(beforeCap)} → ${"%.2f".format(smbToGive)}")
