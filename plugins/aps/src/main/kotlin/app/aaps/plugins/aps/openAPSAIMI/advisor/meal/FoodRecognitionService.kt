@@ -35,12 +35,16 @@ class FoodRecognitionService(private val context: Context) {
         // Simulate network delay
         kotlinx.coroutines.delay(2000)
         
+        // TODO: Use OpenAPSAIMIPlugin preference for API Key.
+        // If Key exists -> Call OpenAI.
+        // Else -> Return Mock.
+        
         // Mock Logic: Return a static result for demonstration
         // "Pasta Carbonara"
         EstimationResult(
-            description = "Pasta Carbonara (Creamy sauce, Bacon)",
+            description = "Pasta Carbonara (Creamy sauce, Bacon) [MOCK]",
             carbsGrams = 65.0,
-            reasoning = "Based on standard portion size (~300g) of pasta with cream sauce."
+            reasoning = "Simulation Mode: Real analysis requires OpenAI API Key."
         )
     }
     

@@ -121,54 +121,56 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.CAMERA), 100)
         } else {
-             // MOCK: Simplify for prototype -> Directly run generic analysis simulation
-            simulateAnalysis() 
+            val takePictureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+            if (takePictureIntent.resolveActivity(packageManager) != null) {
+                startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE)
+            } else {
+                Toast.makeText(this, "No Camera App found", Toast.LENGTH_SHORT).show()
+            }
         }
     }
-    
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 100) {
             if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                simulateAnalysis()
+                dispatchTakePictureIntent()
             } else {
                 Toast.makeText(this, "Camera permission required.", Toast.LENGTH_SHORT).show()
             }
         }
     }
-    
-    // Mock simulation for prototype consistency without camera hardware
-    private fun simulateAnalysis() {
-        Toast.makeText(this, "Analyzing image (AI Vision)...", Toast.LENGTH_SHORT).show()
-        
-        lifecycleScope.launch {
-            try {
-                // Call Service
-                val result = recognitionService.estimateCarbsFromImage("mock_uri")
-                currentEstimate = result
-                
-                // Update UI
-                resultText.text = "${result.carbsGrams.toInt()}g Carbs\n${result.description}"
-                reasoningText.text = result.reasoning
-                confirmButton.visibility = android.view.View.VISIBLE
-                confirmButton.text = "✅ Confirm ${result.carbsGrams.toInt()}g"
-                
-            } catch (e: Exception) {
-                resultText.text = "Error: ${e.message}"
-            }
-        }
-    }
 
-    /*
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK) {
             val imageBitmap = data?.extras?.get("data") as Bitmap
             imageView.setImageBitmap(imageBitmap)
-            simulateAnalysis()
+            simulateAnalysis(imageBitmap)
         }
     }
-    */
+
+    // Mock simulation for prototype consistency without camera hardware
+    private fun simulateAnalysis(bitmap: Bitmap) {
+        Toast.makeText(this, "Analyzing image (AI Vision)...", Toast.LENGTH_SHORT).show()
+
+        lifecycleScope.launch {
+            try {
+                // Call Service (Pass bitmap in future implementation)
+                val result = recognitionService.estimateCarbsFromImage("mock_uri") // TODO: Pass Bitmap
+                currentEstimate = result
+
+                // Update UI
+                resultText.text = "${result.carbsGrams.toInt()}g Carbs\n${result.description}"
+                reasoningText.text = result.reasoning
+                confirmButton.visibility = android.view.View.VISIBLE
+                confirmButton.text = "✅ Confirm ${result.carbsGrams.toInt()}g"
+
+            } catch (e: Exception) {
+                resultText.text = "Error: ${e.message}"
+            }
+        }
+    }
 
     private fun confirmEstimate() {
         val estimate = currentEstimate ?: return
