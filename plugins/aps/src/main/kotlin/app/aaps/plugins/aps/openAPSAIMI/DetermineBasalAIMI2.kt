@@ -1278,6 +1278,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     /**
+     * 🛡️ Centralized Safety Enforcement for "Innovation" Modes
+     * Ensures consistent application of MaxIOB and MaxSMB limits using capSmbDose.
+     */
+    private fun finalizeAndCapSMB(rT: RT, proposedUnits: Double, reasonHeader: String) {
+        val proposedFloat = proposedUnits.toFloat()
+        
+        // Use maxSMB (Preferences) as the hard limit.
+        // We use 'maxSMB' instead of 'maxSMBHB' to ensure strict safety unless explicitly handled otherwise.
+        val safeCap = capSmbDose(
+            proposedSmb = proposedFloat,
+            bg = this.bg,
+            maxSmbConfig = this.maxSMB, 
+            iob = this.iob.toDouble(),
+            maxIob = this.maxIob
+        )
+        
+        rT.units = safeCap.toDouble()
+        rT.reason.append(reasonHeader)
+        
+        if (safeCap < proposedFloat) {
+             rT.reason.appendLine(context.getString(R.string.limits_smb, proposedFloat, safeCap))
+        }
+    }
+
+    /**
      * 🛡️ Sécurité Ultime : Plafonne le SMB final juste avant l'envoi.
      *
      * Cette fonction garantit que peu importe les calculs précédents (ML, Reactivity, etc.),
@@ -3594,17 +3619,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🔨 Innovation: High Plateau Breaker
         if (!nightbis && autodrive && bg >= 80 && isHighPlateauBreakerCondition(bg.toFloat(), targetBg.toFloat(), stable == 1, iob.toDouble(), maxSMB, reason) && modesCondition) {
              val adaptiveUnits = calculateAdaptivePrebolus(dynamicPbolusLarge, delta, reason)
-             rT.units = adaptiveUnits
              reason.append("→ Plateau Breaker engaged: Force Bolus ${adaptiveUnits}U\n")
-             rT.reason.append(reason.toString())
+             finalizeAndCapSMB(rT, adaptiveUnits, reason.toString())
              return rT
         }
 
         if (isMealModeCondition() && bg >= 80) {
             val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
-            rT.units = pbolusM
-            //rT.reason.append(" Microbolusing Meal Mode ${pbolusM}U.")
-            rT.reason.append(context.getString(R.string.manual_meal_prebolus, pbolusM))
+            // rT.reason.append(" Microbolusing Meal Mode ${pbolusM}U.")
+            val msg = context.getString(R.string.manual_meal_prebolus, pbolusM)
+            finalizeAndCapSMB(rT, pbolusM, msg)
             return rT
         }
         // 🛡️ Innovation: FCL 6.0 Safety Net
@@ -3628,9 +3652,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🧹 Innovation: FCL 5.0 Drift Terminator (Blocked by Post-Hypo)
         if (!nightbis && autodrive && bg >= 80 && !isPostHypo && isDriftTerminatorCondition(bg.toFloat(), terminatorTarget.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
             val terminatortap = dynamicPbolusSmall
-            rT.units = terminatortap
             reason.append("→ Drift Terminator (Trigger +${terminatorThresholdAdd}): Micro-Tap ${terminatortap}U\n")
-            rT.reason.append(reason.toString())
+            finalizeAndCapSMB(rT, terminatortap, reason.toString())
             return rT
         }
         
@@ -3661,8 +3684,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
             }
             
-            rT.units = adaptiveUnits
-            
             //reason.append("→ Microbolusing Autodrive Mode ${pbolusA}U\n")
             reason.append(context.getString(R.string.autodrive_meal_prebolus, adaptiveUnits))
             //reason.append("  • Target BG: $targetBg\n")
@@ -3671,30 +3692,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             reason.append(context.getString(R.string.slope_from_min_deviation, mealData.slopeFromMinDeviation))
             //reason.append("  • BG acceleration: $bgAcceleration\n")
             reason.append(context.getString(R.string.bg_acceleration, bgAcceleration))
-            rT.reason.append(reason.toString()) // une seule fois à la fin
+            
+            finalizeAndCapSMB(rT, adaptiveUnits, reason.toString())
             return rT
         }
 
         val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason, targetBg + 30f)
         if (bg > targetBg + 10 && predictedBg > targetBg + 30 && !nightbis && !hasReceivedPbolusMInLastHour(dynamicPbolusSmall) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition && bg >= 80) {
-            rT.units = dynamicPbolusSmall
-            rT.reason.append(context.getString(R.string.reason_autodrive_early_meal, dynamicPbolusSmall, combinedDelta, predicted, bgAcceleration.toDouble()))
+            val msg = context.getString(R.string.reason_autodrive_early_meal, dynamicPbolusSmall, combinedDelta, predicted, bgAcceleration.toDouble())
+            finalizeAndCapSMB(rT, dynamicPbolusSmall, msg)
             return rT
         }
 
         // 🚀 Innovation: Zero-IOB Priming (Fallback)
         if (!nightbis && autodrive && bg >= 80 && isZeroIOBPrimingCondition(iob.toDouble(), delta, bgAcceleration.toFloat(), reason) && modesCondition) {
             val primeBolus = calculateDynamicMicroBolus(effectiveISF, 15.0, reason) // Safe priming scaled to context
-            rT.units = primeBolus
             reason.append("→ Zero-IOB Priming with ${primeBolus}U\n")
-            rT.reason.append(reason.toString())
+            finalizeAndCapSMB(rT, primeBolus, reason.toString())
             return rT
         }
         if (isbfastModeCondition() && bg >= 80) {
             val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
-            rT.units = pbolusbfast
-            //rT.reason.append(" Microbolusing 1/2 Breakfast Mode ${pbolusbfast}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_bfast1, pbolusbfast))
+            val msg = context.getString(R.string.reason_prebolus_bfast1, pbolusbfast)
+            finalizeAndCapSMB(rT, pbolusbfast, msg)
             return rT
         }
         if (isbfast2ModeCondition() && bg >= 80) {
@@ -3707,53 +3727,46 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         if (isLunchModeCondition() && bg >= 80) {
             val pbolusLunch: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
-            rT.units = pbolusLunch
-            //rT.reason.append(" Microbolusing 1/2 Lunch Mode ${pbolusLunch}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_lunch1, pbolusLunch))
+            val msg = context.getString(R.string.reason_prebolus_lunch1, pbolusLunch)
+            finalizeAndCapSMB(rT, pbolusLunch, msg)
             return rT
         }
         if (isLunch2ModeCondition() && bg >= 80) {
             val pbolusLunch2: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
             this.maxSMB = pbolusLunch2
-            rT.units = pbolusLunch2
-            //rT.reason.append(" Microbolusing 2/2 Lunch Mode ${pbolusLunch2}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_lunch2, pbolusLunch2))
+            val msg = context.getString(R.string.reason_prebolus_lunch2, pbolusLunch2)
+            finalizeAndCapSMB(rT, pbolusLunch2, msg)
             return rT
         }
         if (isDinnerModeCondition() && bg >= 80) {
             val pbolusDinner: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
-            rT.units = pbolusDinner
-            //rT.reason.append(" Microbolusing 1/2 Dinner Mode ${pbolusDinner}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_dinner1, pbolusDinner))
+            val msg = context.getString(R.string.reason_prebolus_dinner1, pbolusDinner)
+            finalizeAndCapSMB(rT, pbolusDinner, msg)
             return rT
         }
         if (isDinner2ModeCondition() && bg >= 80) {
             val pbolusDinner2: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
             this.maxSMB = pbolusDinner2
-            rT.units = pbolusDinner2
-            //rT.reason.append(" Microbolusing 2/2 Dinner Mode ${pbolusDinner2}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_dinner2, pbolusDinner2))
+            val msg = context.getString(R.string.reason_prebolus_dinner2, pbolusDinner2)
+            finalizeAndCapSMB(rT, pbolusDinner2, msg)
             return rT
         }
         if (isHighCarbModeCondition() && bg >= 80) {
             val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
-            rT.units = pbolusHC
-            //rT.reason.append(" Microbolusing High Carb Mode ${pbolusHC}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, pbolusHC))
+            val msg = context.getString(R.string.reason_prebolus_highcarb, pbolusHC)
+            finalizeAndCapSMB(rT, pbolusHC, msg)
             return rT
         }
         if (isHighCarb2ModeCondition() && bg >= 80) {
             val pbolusHC2: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
-            rT.units = pbolusHC2
-            //rT.reason.append(" Microbolusing High Carb Mode ${pbolusHC}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_highcarb2, pbolusHC2))
+            val msg = context.getString(R.string.reason_prebolus_highcarb2, pbolusHC2)
+            finalizeAndCapSMB(rT, pbolusHC2, msg)
             return rT
         }
         if (issnackModeCondition() && bg >= 80) {
             val pbolussnack: Double = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
-            rT.units = pbolussnack
-            //rT.reason.append(" Microbolusing snack Mode ${pbolussnack}U.")
-            rT.reason.append(context.getString(R.string.reason_prebolus_snack, pbolussnack))
+            val msg = context.getString(R.string.reason_prebolus_snack, pbolussnack)
+            finalizeAndCapSMB(rT, pbolussnack, msg)
             return rT
         }
         //rT.reason.append(", MaxSMB: $maxSMB")
