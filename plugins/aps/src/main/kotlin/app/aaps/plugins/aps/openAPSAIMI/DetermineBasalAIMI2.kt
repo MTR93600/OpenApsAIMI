@@ -4398,13 +4398,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val minBg = minOf(safe(bg), safe(predictedBg.toDouble()), safe(eventualBG))
         val threshold = computeHypoThreshold(minBg, profile.lgsThreshold)
 
-        val isHypoBlocked = shouldBlockHypoWithHysteresis(
+        var isHypoBlocked = shouldBlockHypoWithHysteresis(
                 bg = bg,
                 predictedBg = predictedBg.toDouble(),
                 eventualBg = eventualBG,
                 threshold = threshold,
                 deltaMgdlPer5min = delta.toDouble()
             )
+        
+        // 🚀 ROCKET OVERRIDE (AIMI Neural Logic)
+        // If BG is skyrocketing (Delta > 10) or very high (> Target+60), the "Eventual BG" prediction (based on naked IOB) 
+        // is likely a false flag (panic). We MUST unblock the system to allow aggression.
+        if (isHypoBlocked && (delta > 10.0 || bg > target_bg + 60)) {
+             isHypoBlocked = false
+             lastHypoBlockAt = 0L // Reset hysteresis state to prevent "sticky" blocking
+             rT.reason.append("🚀 Rocket Override: Hypo Block IGNORED due to massive rise. ") 
+        }
 
         var fallbackActive = false
         if (isHypoBlocked) {
