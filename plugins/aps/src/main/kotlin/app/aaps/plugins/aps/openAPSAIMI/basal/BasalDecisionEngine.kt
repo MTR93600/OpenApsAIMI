@@ -282,9 +282,18 @@ class BasalDecisionEngine @Inject constructor(
 
         if (chosenRate == null) {
             when {
-                input.bg < 80.0 -> {
+                input.bg < 70.0 -> {
                     chosenRate = 0.0
-                    rT.reason.append(context.getString(R.string.bg_below_80))
+                    rT.reason.append("BG < 70")
+                }
+                input.bg in 70.0..80.0 -> {
+                    if (input.delta > 1.0) {
+                        chosenRate = input.profileCurrentBasal * 0.5
+                        rT.reason.append("BG 70-80 rising: 50% basal")
+                    } else {
+                        chosenRate = 0.0
+                        rT.reason.append("BG 70-80 not rising: 0% basal")
+                    }
                 }
                 input.bg in 80.0..90.0 &&
                     input.slopeFromMaxDeviation <= 0 && input.iob > 0.1 && !input.sportTime -> {

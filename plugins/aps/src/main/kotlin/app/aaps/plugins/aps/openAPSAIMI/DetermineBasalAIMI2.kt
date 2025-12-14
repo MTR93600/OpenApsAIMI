@@ -1033,6 +1033,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.rate = 0.0
             return rT
         }
+        val isLgsEnabled = profile.lgsThreshold != null && profile.lgsThreshold!! > 0
 
         val bgNow = bg
 
@@ -1086,6 +1087,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Même en bypass, on ne dépasse JAMAIS max_basal (hard cap)
         var rate = when {
             bgNow <= hypoGuard -> 0.0
+            // [BASAL FLOOR] Rising & > 85 mg/dL -> Maintain floor (50%) instead of 0.0
+            // Only if prediction would otherwise set it to 0.0 (e.g. safety logic)
+            // We check this floor *inside* the safe zone (> hypoGuard).
+            rateAdjustment == 0.0 && bgNow > 85.0 && delta > 1.0 && !isMealMode && !isLgsEnabled -> {
+                 rT.reason.append(" [BASAL_FLOOR] ")
+                 profile.current_basal * 0.5
+            }
             bypassSafety       -> rateAdjustment.coerceIn(0.0, profile.max_basal)
             else               -> rateAdjustment.coerceIn(0.0, maxSafe)
         }
@@ -1995,9 +2003,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun determineCriticalConditions(ctx:Context,context: SafetyContext): List<String> {
         val conditions = mutableListOf<String>()
 
+        // Fallback Logic usage
+        // Note: SafetyContext does not have profile objects, but it has maxIob, targetBg.
+        // We reconstruct the fallback check locally.
+        val fallback = (context.bg > context.targetBg + 30.0) &&
+                       (context.delta >= 2.0) &&
+                       (context.iob < context.maxIob * 0.8)
+
+        if (fallback) {
+             // Log fallback active in logs? context object doesn't have logger, 
+             // but caller checks conditions. We can rely on emptiness or specific code.
+             // We just skip adding the BLOCKING condition.
+        }
+
         // Vérification des conditions critiques avec des noms explicites
         //if (isHypoBlocked(context)) conditions.add("hypoGuard")
-        if (isHypoBlocked(context)) conditions.add(ctx.getString(R.string.condition_hypoguard))
+        if (isHypoBlocked(context) && !fallback) conditions.add(ctx.getString(R.string.condition_hypoguard))
+        else if (fallback && isHypoBlocked(context)) {
+             // If it WAS blocked but we bypassed it:
+             // Maybe we want a trace?
+        }
+
         //if (isNosmbHm(context)) conditions.add("nosmbHM")
         // REMOVED: Caused strict SMB block in Honeymoon mode (IOB > 0.7).
         // if (isNosmbHm(context)) conditions.add(ctx.getString(R.string.condition_nosmbhm))
@@ -2012,6 +2038,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         //if (isBelowMinThreshold(context)) conditions.add("belowMinThreshold")
         if (isBelowMinThreshold(context)) conditions.add(ctx.getString(R.string.condition_belowminthreshold))
         //if (isNewCalibration(context)) conditions.add("isNewCalibration")
+        // Calibration shouldn't block SMB if we are high and rising? Maybe risky if calibration is wrong by 100pts?
+        // Let's keep calibration block safe.
         if (isNewCalibration(context)) conditions.add(ctx.getString(R.string.condition_newcalibration))
         //if (isBelowTargetAndDropping(context)) conditions.add("belowTargetAndDropping")
         if (isBelowTargetAndDropping(context)) conditions.add(ctx.getString(R.string.condition_belowtarget_dropping))
@@ -2024,7 +2052,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         //if (isDroppingVeryFast(context)) conditions.add("droppingVeryFast")
         if (isDroppingVeryFast(context)) conditions.add(ctx.getString(R.string.condition_droppingveryfast))
         //if (isPrediction(context)) conditions.add("prediction")
-        if (isPrediction(context)) conditions.add(ctx.getString(R.string.condition_prediction))
+        if (isPrediction(context) && !fallback) conditions.add(ctx.getString(R.string.condition_prediction))
         //if (isBg90(context)) conditions.add("bg90")
         if (isBg90(context)) conditions.add(ctx.getString(R.string.condition_bg90))
         //if (isAcceleratingDown(context)) conditions.add("acceleratingDown")

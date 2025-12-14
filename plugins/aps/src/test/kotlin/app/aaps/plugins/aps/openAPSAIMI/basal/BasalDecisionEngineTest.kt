@@ -170,7 +170,7 @@ class BasalDecisionEngineTest {
         // Ah, calculateBasalRate logic in test helper is simple multiplication
         // The real helper uses roundBasal
 
-        // Let's just assert it's > 0 and reason is correct
+        // Let's just check if it's > 0 and reason is correct
         assertTrue(decision.rate > 0)
     }
 }
