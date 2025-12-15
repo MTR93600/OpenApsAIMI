@@ -1542,16 +1542,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): Double {
         // Base factor 1.0
         // If delta > 5, we add boost. Example: Delta 15 -> (15-5)/20 = 0.5 boost -> 1.5x
-        val boost = ((delta - 5f).coerceAtLeast(0f) / 20f).toDouble()
-        val factor = 1.0 + boost
+        // [FIX] User Request: Disable Adaptive Scaling. Return Base Bolus strictly.
+        // "pour l'utilisateur il est augmenté à 5.18U... faille de sécurité"
         
-        val adaptiveBolus = baseBolus * factor
-        val cappedBolus = Math.min(adaptiveBolus, baseBolus * 2.0)
-        
-        if (factor > 1.0) {
-            reason.append(String.format("📈 Adaptive Prebolus: Base %.2fU x %.2f (Delta %.1f) -> %.2fU\n", baseBolus, factor, delta, cappedBolus))
-        }
-        return cappedBolus
+        reason.append(String.format("🛑 Prebolus Fixed: %.2fU (Adaptive Scaling Disabled)\n", baseBolus))
+        return baseBolus
     }
 
     private fun isHighPlateauBreakerCondition(
@@ -3341,40 +3336,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.lastsmbtime = (diff / (60 * 1000)).toInt()
         this.maxIob = preferences.get(DoubleKey.ApsSmbMaxIob)
 // Tarciso Dynamic Max IOB
-        var DinMaxIob = ((bg / 100.0) * (bg / 55.0) + (combinedDelta / 2.0)).toFloat()
-
-// Calcul initial avec un ajustement dynamique basé sur bg et delta
-        DinMaxIob = ((bg / 100.0) * (bg / 55.0) + (combinedDelta / 2.0)).toFloat()
-
-// Sécurisation : imposer une borne minimale et une borne maximale
-        // [FIX] Relax clamp for Autodrive to handle aggressive rises (e.g. 176 +10 -> Need room > 1.3x)
-        val clampFactor = if (autodrive && combinedDelta > 3.0) 3.0f else 1.3f
-        DinMaxIob = DinMaxIob.coerceAtLeast(1.0f).coerceAtMost(maxIob.toFloat() * clampFactor)
-
-// Réduction de l'augmentation si on est la nuit (0h-6h)
-        if (hourOfDay in 0..5 && bg < 160) {
-            DinMaxIob = DinMaxIob.coerceAtMost(maxIob.toFloat())
-        }
-        
-        // [FIX] Autodrive Safety: Ensure Dynamic MaxIOB never completely blocks a necessary action 
-        // due to previous IOB being momentarily equal/higher. 
-        // We force a minimal "breathing room" of 0.05U above current IOB if Autodrive is engaged.
-        if (autodrive) {
-            val minSafetyRoom = iob + 0.05f
-            if (DinMaxIob < minSafetyRoom) {
-                consoleLog.add("DinMaxIOB ($DinMaxIob) < IOB+0.05 ($minSafetyRoom) -> Forced Expansion for Autodrive")
-                DinMaxIob = minSafetyRoom
-            }
-        }
-
-        // [FIX] User fallback: If Dynamic logic clamps too hard (e.g. close to 0 or 1), 
-        // trust the User Preference (Variable) as the baseline. 
-        // Logic: Dynamic should EXTEND capabilities, not restrict below user config.
-        val finalDinMaxIob = max(DinMaxIob.toDouble(), maxIob)
-        this.maxIob = if (autodrive) finalDinMaxIob else maxIob
-        //rT.reason.append(", MaxIob: $maxIob")
+        // [FIX] User Request: Strict MaxIOB Limit (Preference Only).
+        // Dynamic calculations removed to prevent "dangerous variations".
+        this.maxIob = maxIob
         rT.reason.append(context.getString(R.string.reason_max_iob, maxIob))
-        consoleLog.add("MAX_IOB_CALC: Pref=$maxIob Effective=${this.maxIob} (Autodrive=$autodrive)")
+        consoleLog.add("MAX_IOB_STATIC: Pref=$maxIob (Dynamic disabled by request)")
         this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
         this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
         // Calcul initial avec ajustement basé sur la glycémie et le delta
