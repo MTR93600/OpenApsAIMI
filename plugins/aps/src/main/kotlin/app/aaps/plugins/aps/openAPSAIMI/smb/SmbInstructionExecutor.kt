@@ -114,7 +114,7 @@ object SmbInstructionExecutor {
         val trainingEnabled = input.preferences.get(BooleanKey.OApsAIMIMLtraining)
         if (trainingEnabled && input.csvFile.exists()) {
             val allLines = input.csvFile.readLines()
-            val minutesToConsider = 10000.0
+            val minutesToConsider = 1000.0
             val linesToConsider = (minutesToConsider / 5).toInt()
             if (allLines.size > linesToConsider) {
                 val refined = hooks.refineSmb(
