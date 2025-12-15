@@ -3486,6 +3486,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val nightbis = hourOfDay <= 7
         val modesCondition = (!mealTime || mealruntime > 30) && (!lunchTime || lunchruntime > 30) && (!bfastTime || bfastruntime > 30) && (!dinnerTime || dinnerruntime > 30) && !sportTime && (!snackTime || snackrunTime > 30) && (!highCarbTime || highCarbrunTime > 30) && !sleepTime && !lowCarbTime
         val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
+        val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
         val reason = StringBuilder()
         val recentBGs = getRecentBGs()
 
@@ -3609,7 +3610,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // val useUnified = preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled)
         // val reactivityFactor = if (useUnified) unifiedReactivityLearner.globalFactor else 1.0
         
-        val dynamicPbolusLarge = calculateDynamicMicroBolus(effectiveISF, 25.0, reason)
+        // [FIX] Use pbolusA (User Preference) if set, otherwise dynamic fallback (25.0 factor)
+        val dynamicPbolusLarge = if (pbolusA > 0.0) pbolusA else calculateDynamicMicroBolus(effectiveISF, 25.0, reason)
         // [FIX] Use pbolusAS (User Preference) if set, otherwise dynamic fallback
         val dynamicPbolusSmall = if (pbolusAS > 0.0) pbolusAS else calculateDynamicMicroBolus(effectiveISF, 15.0, reason)
         
