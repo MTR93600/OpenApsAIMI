@@ -3715,15 +3715,32 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Only fires if Main Autodrive (Heavy) logic above fell through (e.g. slope too gentle).
         // Refractory Check for Large:
         // Ensure no Large bolus in last 30m
-        if (hasReceivedRecentBolus(45, lastBolusTimeMs ?: 0L)) {
-             reason.append("⏳ Autodrive Refractory (Main): Recent Large -> Skip\n")
-             // Fallback to ML
         } else {
-             // Fire Large
-             val adaptiveUnits = calculateAdaptivePrebolus(dynamicPbolusLarge, delta, reason)
-             reason.append("🚀 Autodrive (Main) -> Force Bolus ${adaptiveUnits}U\n")
-             finalizeAndCapSMB(rT, adaptiveUnits, reason.toString(), mealData, threshold)
-             return rT
+             // [Refactor] Autodrive State Machine (Off, Early, Confirmed)
+             val decision = computeAutodriveDecision(
+                 delta = delta,
+                 shortAvgDelta = shortAvgDelta,
+                 bg = bg,
+                 candidateSmall = dynamicPbolusSmall,
+                 candidateLarge = dynamicPbolusLarge
+             )
+
+             when (decision) {
+                 is AutodriveDecision.Confirmed -> {
+                     reason.append("🚀 Autodrive [Confirmed]: ${decision.reason} -> Force ${decision.amount}U\n")
+                     finalizeAndCapSMB(rT, decision.amount, reason.toString(), mealData, threshold)
+                     return rT
+                 }
+                 is AutodriveDecision.Early -> {
+                     reason.append("🚀 Autodrive [Early]: ${decision.reason} -> Force ${decision.amount}U\n")
+                     finalizeAndCapSMB(rT, decision.amount, reason.toString(), mealData, threshold)
+                     return rT
+                 }
+                 is AutodriveDecision.Off -> {
+                     reason.append("🛑 Autodrive [Off]: Fallback to AIMI Global\n")
+                     // Fall through to standard logic (Meal Advisor or AIMI SMB)
+                 }
+             }
         }
 
         // 📸 Meal Advisor Integration (AIMI "Snap & Go")
@@ -5347,6 +5364,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
 
+    private fun computeAutodriveDecision(
+        delta: Float,
+        shortAvgDelta: Float,
+        bg: Double,
+        candidateSmall: Double,
+        candidateLarge: Double
+    ): AutodriveDecision {
+        if (delta <= 0.0) return AutodriveDecision.Off
+
+        // Confirmed (Large)
+        if (bg >= 100.0 && delta >= 5.0 && shortAvgDelta >= 3.0) {
+            return AutodriveDecision.Confirmed(candidateLarge, "Bg>100 & Delta>5 & Avg>3")
+        }
+
+        // Early (Small)
+        if (delta >= 2.0) {
+            return AutodriveDecision.Early(candidateSmall, "Delta>2")
+        }
+
+        return AutodriveDecision.Off
+    }
+
     // Helper for General Hyper Kicker (Non-Meal) (AIMI 2.0)
     private fun adjustBasalForGeneralHyper(
         suggestedBasalUph: Double,
@@ -5396,3 +5435,5 @@ enum class AutodriveState {
     WATCHING,
     ENGAGED
 }
+
+
