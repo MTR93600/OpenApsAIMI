@@ -916,7 +916,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun calculateRate(basal: Double, currentBasal: Double, multiplier: Double, reason: String, currenttemp: CurrentTemp, rT: RT, overrideSafety: Boolean = false): Double {
         rT.reason.append("${currenttemp.duration}m@${(currenttemp.rate).toFixed2()} $reason")
-        return if (overrideSafety || basal == 0.0) currentBasal * multiplier else roundBasal(basal * multiplier)
+        val rawRate = if (overrideSafety || basal == 0.0) currentBasal * multiplier else roundBasal(basal * multiplier)
+        return rawRate.coerceAtLeast(0.0)
     }
     private fun calculateBasalRate(basal: Double, currentBasal: Double, multiplier: Double): Double =
         if (basal == 0.0) currentBasal * multiplier else roundBasal(basal * multiplier)
@@ -4693,7 +4694,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 } else null
             }
 
-            fastingTime -> calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "AI Force basal because fastingTime", currenttemp, rT)
+            // Fix: Clamp delta multiplier to 0.0 to prevent negative basal (delta is Float)
+            fastingTime -> calculateRate(profile_current_basal, profile_current_basal, delta.coerceAtLeast(0.0f).toDouble(), "AI Force basal because fastingTime", currenttemp, rT)
             else -> null
         }
 
