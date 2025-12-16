@@ -4672,9 +4672,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT.reason.append(savedReason)
         val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal)
         val rate = when {
-            snackTime && snackrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 4.0, "AI Force basal because mealTime $snackrunTime.", currenttemp, rT, overrideSafety = true)
+            snackTime && snackrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 4.0, "AI Force basal because Snack Time $snackrunTime.", currenttemp, rT, overrideSafety = true)
             mealTime && mealruntime in 0..30 && delta < 15 -> calculateRate(maxBasalPref, profile_current_basal, 1.0, "AI Force basal because mealTime $mealruntime.", currenttemp, rT, overrideSafety = true)
-            bfastTime && bfastruntime in 0..30 && delta < 15 -> calculateRate(maxBasalPref, profile_current_basal, 1.0, "AI Force basal because mealTime $bfastruntime.", currenttemp, rT, overrideSafety = true)
+            bfastTime && bfastruntime in 0..30 && delta < 15 -> calculateRate(maxBasalPref, profile_current_basal, 1.0, "AI Force basal because Breakfast $bfastruntime.", currenttemp, rT, overrideSafety = true)
             lunchTime && lunchruntime in 0..30 && delta < 15 -> calculateRate(maxBasalPref, profile_current_basal, 1.0, "AI Force basal because lunchTime $lunchruntime.", currenttemp, rT, overrideSafety = true)
             dinnerTime && dinnerruntime in 0..30 && delta < 15 -> calculateRate(maxBasalPref, profile_current_basal, 1.0, "AI Force basal because dinnerTime $dinnerruntime.", currenttemp, rT, overrideSafety = true)
             highCarbTime && highCarbrunTime in 0..30 && delta < 15 -> calculateRate(maxBasalPref, profile_current_basal, 1.0, "AI Force basal because highcarb $highCarbrunTime.", currenttemp, rT, overrideSafety = true)
