@@ -3671,11 +3671,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 🥞 FCL 10.8: Early Meal Detection / Snack (Fallback)
         // Only fires if Main Autodrive (Heavy) logic above fell through (e.g. slope too gentle).
-        
-        // 🔨 Innovation: High Plateau Breaker
-        if (!nightbis && autodrive && bg >= 80 && isHighPlateauBreakerCondition(bg.toFloat(), targetBg.toFloat(), stable == 1, iob.toDouble(), maxSMB, reason) && modesCondition) {
+        // Refractory Check for Large:
+        // Ensure no Large bolus in last 30m
+        if (hasReceivedPbolusMatches(dynamicPbolusLarge, 0.0, 30)) {
+             reason.append("⏳ Autodrive Refractory (Main): Recent Large -> Skip\n")
+             // Fallback to ML
+        } else {
+             // Fire Large
              val adaptiveUnits = calculateAdaptivePrebolus(dynamicPbolusLarge, delta, reason)
-             reason.append("→ Plateau Breaker engaged: Force Bolus ${adaptiveUnits}U\n")
+             reason.append("🚀 Autodrive (Main) -> Force Bolus ${adaptiveUnits}U\n")
              finalizeAndCapSMB(rT, adaptiveUnits, reason.toString())
              return rT
         }
@@ -3797,58 +3801,32 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         
         if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason, targetBg) && modesCondition && bg >= 80) {
-            // FCL 7.0: Use Dynamic Large Base, BUT respect Post-Hypo Safety
-            // FIX: If Post-Hypo OR Gentle Rise (delta < 5 and bg < Target+30), force Small Bolus.
-            // FCL 7.0: Use Dynamic Large Base, BUT respect Post-Hypo Safety
-            // FIX: If Post-Hypo OR Gentle Rise (delta < 5 and bg < Target+30), force Small Bolus.
+            
+            // FCL 7.0: Dynamic Logic
             val pbolusA = if (isPostHypo || (delta < 5.0f && bg < targetBg + 30.0f)) dynamicPbolusSmall else dynamicPbolusLarge
-            
-            // 🛡️ Independent Refractory Check
             val isSmall = (pbolusA == dynamicPbolusSmall)
-            val refractory = if (isSmall) hasReceivedPbolusMatches(0.0, pbolusA, 45) else hasReceivedPbolusMatches(pbolusA, 0.0, 45)
-            
-            if (refractory) {
-                 reason.append("⏳ Autodrive Main Refractory (Recent $pbolusA U) -> Fallback to ML\n")
-                 // Fallthrough to ML (Do NOT return rT)
-            } else {
-                val logTag = if (isSmall) "AD_SMALL_PREBOLUS_TRIGGER" else "AD_BIG_PREBOLUS_TRIGGER"
-                consoleLog.add("$logTag amount=$pbolusA reason=AutodriveMain")
 
-            // 📈 Innovation: Adaptive Prebolus & Resistance Hammer
-            // 🛡️ Disabled if Post-Hypo (Already handled by logic below, but pbolusA is now safer too)
-            var adaptiveUnits = if (isPostHypo) pbolusA else calculateAdaptivePrebolus(pbolusA, delta, reason)
-            
-            // 🔨 FCL 5.0 Resistance Hammer
-            // 🛡️ Disabled if Post-Hypo
-            if (!isPostHypo) {
-                // 🧠 FCL 7.0 Ineffectiveness Watchdog
-                if (checkIneffectivenessWatchdog(false, reason)) {
-                    // Abort!
-                    return rT 
-                }
-                
-                val originalUnits = adaptiveUnits
-                adaptiveUnits = calculateResistanceHammer(adaptiveUnits, totalBolusLastHour, delta, reason)
-                if (adaptiveUnits > originalUnits) {
-                    // Hammer fired (Wait for calculateResistanceHammer to update state? Yes applied inside)
-                    hammerFailureCount++ // Increment count (Simpler logic here vs inside helper?)
-                    // Helper already tracks *time*, we track *count*
-                }
+            // 5. Refractory Period (Antidumping)
+            // [User Request]: Resume normal Autodrive 30 minutes after a large bolus (instead of 45).
+            // Check Main Autodrive (Large)
+            if (hasReceivedPbolusMatches(dynamicPbolusLarge, 0.0, 30)) {
+                rT.reason.append("⏳ Autodrive Refractory (Main): Recent Large Bolus -> Fallback ML\n")
+                // Fallthrough to ML logic (skips the else block below)
+            } else if (isSmall && hasReceivedPbolusMatches(0.0, dynamicPbolusSmall, 30)) {
+                 // Check Small
+                 rT.reason.append("⏳ Autodrive Refractory (Small): Recent Small Bolus -> Fallback ML\n")
+            } else {
+                 val logTag = if (isSmall) "AD_SMALL_PREBOLUS_TRIGGER" else "AD_BIG_PREBOLUS_TRIGGER"
+                 consoleLog.add("$logTag amount=$pbolusA reason=AutodriveMain")
+
+                 val adaptiveUnits = calculateAdaptivePrebolus(pbolusA, delta, reason)
+                 reason.append("🚀 Autodrive Main -> Force Bolus ${adaptiveUnits}U\n")
+                 
+                 finalizeAndCapSMB(rT, adaptiveUnits, reason.toString())
+                 return rT
             }
-            
-            //reason.append("→ Microbolusing Autodrive Mode ${pbolusA}U\n")
-            reason.append(context.getString(R.string.autodrive_meal_prebolus, adaptiveUnits))
-            //reason.append("  • Target BG: $targetBg\n")
-            reason.append(context.getString(R.string.target_bg, targetBg))
-            //reason.append("  • Slope from min deviation: ${mealData.slopeFromMinDeviation}\n")
-            reason.append(context.getString(R.string.slope_from_min_deviation, mealData.slopeFromMinDeviation))
-            //reason.append("  • BG acceleration: $bgAcceleration\n")
-            reason.append(context.getString(R.string.bg_acceleration, bgAcceleration))
-            
-            finalizeAndCapSMB(rT, adaptiveUnits, reason.toString())
-            return rT
-            } // End else (Non-Refractory)
         }
+
 
         val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason, targetBg + 30f)
         if (bg > targetBg + 10 && predictedBg > targetBg + 30 && !nightbis && !hasReceivedPbolusMatches(0.0, dynamicPbolusSmall, 60) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition && bg >= 80) {
@@ -4678,10 +4656,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             lunchTime && lunchruntime in 0..30 && delta < 15 -> calculateRate(maxBasalPref, profile_current_basal, 1.0, "AI Force basal because lunchTime $lunchruntime.", currenttemp, rT, overrideSafety = true)
             dinnerTime && dinnerruntime in 0..30 && delta < 15 -> calculateRate(maxBasalPref, profile_current_basal, 1.0, "AI Force basal because dinnerTime $dinnerruntime.", currenttemp, rT, overrideSafety = true)
             highCarbTime && highCarbrunTime in 0..30 && delta < 15 -> calculateRate(maxBasalPref, profile_current_basal, 1.0, "AI Force basal because highcarb $highCarbrunTime.", currenttemp, rT, overrideSafety = true)
+            // 📸 Meal Advisor Forced Basal (0-30m)
+            (timeSinceEstimateMin <= 30 && estimatedCarbs > 10) -> calculateRate(maxBasalPref, profile_current_basal, 1.0, "📸 AI Force High Basal (Meal Advisor) ${timeSinceEstimateMin.toInt()}m", currenttemp, rT, overrideSafety = true)
             
             // 🔥 Patch Post-Meal Hyper Boost (AIMI 2.0)
-            (mealTime || lunchTime || dinnerTime || highCarbTime || bfastTime || snackTime) -> {
-                val runTime = listOf(mealruntime, lunchruntime, dinnerruntime, highCarbrunTime, bfastruntime, snackrunTime).maxOrNull() ?: 0
+            // Added: Treat Recent Meal Advisor (< 120m) as implicit Meal Mode
+            (mealTime || lunchTime || dinnerTime || highCarbTime || bfastTime || snackTime || (timeSinceEstimateMin <= 120 && estimatedCarbs > 10)) -> {
+                val runTime = listOf(mealruntime, lunchruntime, dinnerruntime, highCarbrunTime, bfastruntime, snackrunTime).maxOrNull() ?: timeSinceEstimateMin.toInt()
                 val target = target_bg // simplification
                 val rocketStart = delta > 5.0f || bg > target_bg + 40
                 // If Rocket Start (Delta > 10 or Very High BG), use global Max Basal (Aggressive).
