@@ -3807,6 +3807,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add("MODE_PREBOLUS_TRIGGER name=$manualModeName amount=$manualPrebolus reason=ManualOverrides")
                 finalizeAndCapSMB(rT, manualPrebolus, msg, mealData, threshold, true)
                 return rT
+            } else if (manualModeName.isNotEmpty()) {
+                // Mode detected but Amount is 0.
+                reason.append("⚠️ Manual Mode ($manualModeName) detected but Prebolus config is 0.0U\n")
             }
         }
         // 🛡️ Innovation: FCL 6.0 Safety Net
@@ -3878,64 +3881,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             finalizeAndCapSMB(rT, primeBolus, reason.toString(), mealData, threshold)
             return rT
         }
-        if (isbfastModeCondition() && bg >= 60) {
-            val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
-            val msg = context.getString(R.string.reason_prebolus_bfast1, pbolusbfast)
-            finalizeAndCapSMB(rT, pbolusbfast, msg, mealData, threshold, true)
-            return rT
-        }
-        if (isbfast2ModeCondition() && bg >= 60) {
-            val pbolusbfast2: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
-            this.maxSMB = pbolusbfast2
-            rT.units = pbolusbfast2
-            //rT.reason.append(" Microbolusing 2/2 Breakfast Mode ${pbolusbfast2}U. ")
-            rT.reason.append(context.getString(R.string.reason_prebolus_bfast2, pbolusbfast2))
-            return rT
-        }
-        if (isLunchModeCondition() && bg >= 60) {
-            val pbolusLunch: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
-            val msg = context.getString(R.string.reason_prebolus_lunch1, pbolusLunch)
-            finalizeAndCapSMB(rT, pbolusLunch, msg, mealData, threshold, true)
-            return rT
-        }
-        if (isLunch2ModeCondition() && bg >= 60) {
-            val pbolusLunch2: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
-            this.maxSMB = pbolusLunch2
-            val msg = context.getString(R.string.reason_prebolus_lunch2, pbolusLunch2)
-            finalizeAndCapSMB(rT, pbolusLunch2, msg, mealData, threshold, true)
-            return rT
-        }
-        if (isDinnerModeCondition() && bg >= 60) {
-            val pbolusDinner: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
-            val msg = context.getString(R.string.reason_prebolus_dinner1, pbolusDinner)
-            finalizeAndCapSMB(rT, pbolusDinner, msg, mealData, threshold, true)
-            return rT
-        }
-        if (isDinner2ModeCondition() && bg >= 60) {
-            val pbolusDinner2: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
-            this.maxSMB = pbolusDinner2
-            val msg = context.getString(R.string.reason_prebolus_dinner2, pbolusDinner2)
-            finalizeAndCapSMB(rT, pbolusDinner2, msg, mealData, threshold, true)
-            return rT
-        }
-        if (isHighCarbModeCondition() && bg >= 60) {
-            val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
-            val msg = context.getString(R.string.reason_prebolus_highcarb, pbolusHC)
-            finalizeAndCapSMB(rT, pbolusHC, msg, mealData, threshold, true)
-            return rT
-        }
-        if (isHighCarb2ModeCondition() && bg >= 60) {
-            val pbolusHC2: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
-            val msg = context.getString(R.string.reason_prebolus_highcarb2, pbolusHC2)
-            finalizeAndCapSMB(rT, pbolusHC2, msg, mealData, threshold, true)
-            return rT
-        }
-        if (issnackModeCondition() && bg >= 60) {
-            val pbolussnack: Double = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
-            val msg = context.getString(R.string.reason_prebolus_snack, pbolussnack)
-            finalizeAndCapSMB(rT, pbolussnack, msg, mealData, threshold, true)
-            return rT
-        }
+        // Legacy Manual Mode Blocks Removed (Consolidated above in FCL 14.0 Enforcer)
+        // Check lines ~3750 for active logic.
         //rT.reason.append(", MaxSMB: $maxSMB")
         rT.reason.append(context.getString(R.string.reason_maxsmb, maxSMB))
         var nowMinutes = calendarInstance[Calendar.HOUR_OF_DAY] + calendarInstance[Calendar.MINUTE] / 60.0 + calendarInstance[Calendar.SECOND] / 3600.0
