@@ -316,7 +316,7 @@ class OverviewViewModel(
     private fun buildDecisionLine(): String {
         val request = loop.lastRun?.request ?: return resourceHelper.gs(R.string.dashboard_adjustment_decision_unavailable)
         val smbText = decimalFormatter.to2Decimal(request.smb)
-        val basalText = decimalFormatter.to2Decimal(request.rate)
+        val basalText = if (request.rate == -1.0) "---" else decimalFormatter.to2Decimal(request.rate)
         return resourceHelper.gs(R.string.dashboard_adjustment_decision, smbText, basalText)
     }
 

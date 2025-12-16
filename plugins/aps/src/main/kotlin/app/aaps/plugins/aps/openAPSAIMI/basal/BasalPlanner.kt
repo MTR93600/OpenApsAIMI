@@ -21,9 +21,6 @@ class BasalPlanner @Inject constructor(
     private val log: AAPSLogger
 ) {
     // ===== Paramètres par défaut (prudence) =====
-    private val HYPO_HARD_LIMIT = 60.0    // seuil sécurité absolue
-    private val HYPO_SUSPEND_MGDL = 75.0      // seuil conditionnel (trend)
-    private val HYPO_SUSPEND_SOFT = 85.0      // seuil "soft" si Δ négatif
     private val HYPO_SUSPEND_MIN = 30
 
     private val ZERO_RESUME_MIN = 5          // reprise si >=5 min à 0U/h
@@ -59,6 +56,13 @@ class BasalPlanner @Inject constructor(
         val zeroSinceMin = hist.zeroBasalDurationMinutes(lookBackHours = 6)
         val lastTempIsZero = hist.lastTempIsZero()
         val minutesSinceLastChange = hist.minutesSinceLastChange()
+
+        // Dynamic limits based on LoopContext Profile (User Settings)
+        // Fallback to 70 if LGS is not set or invalid
+        val lgs = if (ctx.profile.lgsThreshold > 40.0) ctx.profile.lgsThreshold else 70.0
+        val HYPO_HARD_LIMIT = max(50.0, lgs - 15.0)
+        val HYPO_SUSPEND_MGDL = lgs
+        val HYPO_SUSPEND_SOFT = lgs + 10.0
 
         if (profileBasal <= 0.0) return null
 

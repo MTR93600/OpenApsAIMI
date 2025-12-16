@@ -32,6 +32,7 @@ class BasalDecisionEngine @Inject constructor(
         val profileSens: Double,
         val predictedBg: Double,
         val targetBg: Double, // Added targetBg
+        val lgsThreshold: Double, // Added for Hypo safety
         val eventualBg: Double,
         val iob: Double,
         val maxIob: Double,
@@ -130,7 +131,8 @@ class BasalDecisionEngine @Inject constructor(
             val profile = LoopProfile(
                 targetMgdl = input.predictedBg,              // non critique ici
                 isfMgdlPerU = input.variableSensitivity,    // dispo si tu veux exploiter plus tard
-                basalProfileUph = input.profileCurrentBasal
+                basalProfileUph = input.profileCurrentBasal,
+                lgsThreshold = input.lgsThreshold
             )
 
             val ctx = LoopContext(

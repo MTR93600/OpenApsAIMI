@@ -34,7 +34,8 @@ data class PumpCaps(
 data class LoopProfile(
     val targetMgdl: Double,
     val isfMgdlPerU: Double,
-    val basalProfileUph: Double
+    val basalProfileUph: Double,
+    val lgsThreshold: Double // Added for Hypo safety respecting user prefs
 )
 
 data class AimiSettings(
