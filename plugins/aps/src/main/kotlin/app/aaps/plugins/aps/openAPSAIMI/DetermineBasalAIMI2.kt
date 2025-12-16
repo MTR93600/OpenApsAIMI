@@ -38,7 +38,7 @@ import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
-import app.aaps.plugins.aps.openAPSAIMI.model.BasalPlan
+
 import app.aaps.plugins.aps.openAPSAIMI.extensions.asRounded
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
@@ -3715,29 +3715,46 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Only fires if Main Autodrive (Heavy) logic above fell through (e.g. slope too gentle).
         // Refractory Check for Large:
         // Ensure no Large bolus in last 30m
+        if (hasReceivedRecentBolus(45, lastBolusTimeMs ?: 0L)) {
+             reason.append("⏳ Autodrive Refractory (Main): Recent Large -> Skip\n")
+             // Fallback to ML
         } else {
              // [Refactor] Autodrive State Machine (Off, Early, Confirmed)
-             val decision = computeAutodriveDecision(
-                 delta = delta,
-                 shortAvgDelta = shortAvgDelta,
-                 bg = bg,
-                 candidateSmall = dynamicPbolusSmall,
-                 candidateLarge = dynamicPbolusLarge
-             )
+             // Implemented inline to avoid KSP/Build fragility with sealed classes
+             // 0 = Off, 1 = Early (Small), 2 = Confirmed (Large)
+             var state = 0 
+             var amount = 0.0
+             var stateReason = ""
 
-             when (decision) {
-                 is AutodriveDecision.Confirmed -> {
-                     reason.append("🚀 Autodrive [Confirmed]: ${decision.reason} -> Force ${decision.amount}U\n")
-                     finalizeAndCapSMB(rT, decision.amount, reason.toString(), mealData, threshold)
+             if (delta <= 0.0) {
+                 state = 0
+                 stateReason = "Off: Delta <= 0"
+             } else if (bg >= 100.0 && delta >= 5.0 && shortAvgDelta >= 3.0) {
+                 state = 2 // Confirmed
+                 amount = dynamicPbolusLarge
+                 stateReason = "Confirmed: Bg>100 & Delta>5 & Avg>3"
+             } else if (delta >= 2.0) {
+                 state = 1 // Early
+                 amount = dynamicPbolusSmall
+                 stateReason = "Early: Delta>2"
+             } else {
+                 state = 0
+                 stateReason = "Off: Conditions not met"
+             }
+
+             when (state) {
+                 2 -> {
+                     reason.append("🚀 Autodrive [Confirmed]: $stateReason -> Force ${amount}U\n")
+                     finalizeAndCapSMB(rT, amount, reason.toString(), mealData, threshold)
                      return rT
                  }
-                 is AutodriveDecision.Early -> {
-                     reason.append("🚀 Autodrive [Early]: ${decision.reason} -> Force ${decision.amount}U\n")
-                     finalizeAndCapSMB(rT, decision.amount, reason.toString(), mealData, threshold)
+                 1 -> {
+                     reason.append("🚀 Autodrive [Early]: $stateReason -> Force ${amount}U\n")
+                     finalizeAndCapSMB(rT, amount, reason.toString(), mealData, threshold)
                      return rT
                  }
-                 is AutodriveDecision.Off -> {
-                     reason.append("🛑 Autodrive [Off]: Fallback to AIMI Global\n")
+                 else -> {
+                     reason.append("🛑 Autodrive [Off]: Fallback to AIMI Global ($stateReason)\n")
                      // Fall through to standard logic (Meal Advisor or AIMI SMB)
                  }
              }
@@ -5364,27 +5381,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
 
-    private fun computeAutodriveDecision(
-        delta: Float,
-        shortAvgDelta: Float,
-        bg: Double,
-        candidateSmall: Double,
-        candidateLarge: Double
-    ): AutodriveDecision {
-        if (delta <= 0.0) return AutodriveDecision.Off
 
-        // Confirmed (Large)
-        if (bg >= 100.0 && delta >= 5.0 && shortAvgDelta >= 3.0) {
-            return AutodriveDecision.Confirmed(candidateLarge, "Bg>100 & Delta>5 & Avg>3")
-        }
-
-        // Early (Small)
-        if (delta >= 2.0) {
-            return AutodriveDecision.Early(candidateSmall, "Delta>2")
-        }
-
-        return AutodriveDecision.Off
-    }
 
     // Helper for General Hyper Kicker (Non-Meal) (AIMI 2.0)
     private fun adjustBasalForGeneralHyper(

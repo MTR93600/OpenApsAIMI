@@ -61,3 +61,5 @@ data class SmbPlan(val units: Double, val deliverAtMillis: Long, val reason: Str
 
 data class SafetyReport(val hypoBlocked: Boolean, val notes: List<String> = emptyList())
 data class Decision(val basal: BasalPlan?, val smb: SmbPlan?, val safety: SafetyReport)
+
+
