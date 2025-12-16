@@ -1507,16 +1507,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         return result
     }
-    private fun hasReceivedPbolusMInLastHour(pbolusA: Double): Boolean {
-        val epsilon = 0.01
-        val oneHourAgo = dateUtil.now() - T.hours(1).msecs()
 
-        val bolusesLastHour = persistenceLayer
-            .getBolusesFromTime(oneHourAgo, true)
-            .blockingGet()
-
-        return bolusesLastHour.any { Math.abs(it.amount - pbolusA) < epsilon }
+    // Helper to check for recent Autodrive boluses (A or AS)
+    private fun hasReceivedPbolusMatches(big: Double, small: Double, minutes: Int): Boolean {
+        if (big <= 0.0 && small <= 0.0) return false // No strict matching if prefs not set
+        
+        val lookbackTime = dateUtil.now() - minutes * 60 * 1000L
+        val boluses = persistenceLayer.getBolusesFromTime(lookbackTime, true).blockingGet()
+        val epsilon = 0.02
+        
+        // Check if ANY recent bolus matches our Autodrive amounts
+        return boluses.any { 
+            (big > 0 && Math.abs(it.amount - big) < epsilon) || 
+            (small > 0 && Math.abs(it.amount - small) < epsilon)
+        }
     }
+
 
     private fun isZeroIOBPrimingCondition(
         iob: Double,
@@ -1719,8 +1725,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val autodriveMinDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
         // val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG) // Old static threshold
 
-        // 🛡️ Noise Filter (Anti-Jump) -> [User Request]: Disabled.
-    // An aggressive rise (+22) is valid information for Autodrive.
+        // 🛡️ Noise Filter (Anti-Jump) -> [User Request]: Disabled. information for Autodrive.
     // if (delta > 15f && shortAvgDelta < 5f) {
     //      reason.append("🚫 Noise detected (Delta > 15 & Avg < 5) -> Autodrive OFF")
     //      return false
@@ -3777,7 +3782,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val terminatorTarget = targetBg + terminatorThresholdAdd
 
         // 🧹 Innovation: FCL 5.0 Drift Terminator (Blocked by Post-Hypo)
-        if (!nightbis && autodrive && bg >= 80 && !isPostHypo && isDriftTerminatorCondition(bg.toFloat(), terminatorTarget.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
+        // Independent Refractory: Only block if 'Small' was given recently.
+        if (!nightbis && autodrive && bg >= 80 && !isPostHypo && !hasReceivedPbolusMatches(0.0, dynamicPbolusSmall, 45) && isDriftTerminatorCondition(bg.toFloat(), terminatorTarget.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
             val terminatortap = dynamicPbolusSmall
             reason.append("→ Drift Terminator (Trigger +${terminatorThresholdAdd}): Micro-Tap ${terminatortap}U\n")
             consoleLog.add("AD_EARLY_TBR_TRIGGER rate=0.0 duration=0 reason=DriftTerminator_Tap") // Actually a bolus tap, not TBR, but fits "Early Action" category
@@ -3789,10 +3795,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason, targetBg) && modesCondition && bg >= 80) {
             // FCL 7.0: Use Dynamic Large Base, BUT respect Post-Hypo Safety
             // FIX: If Post-Hypo OR Gentle Rise (delta < 5 and bg < Target+30), force Small Bolus.
+            // FCL 7.0: Use Dynamic Large Base, BUT respect Post-Hypo Safety
+            // FIX: If Post-Hypo OR Gentle Rise (delta < 5 and bg < Target+30), force Small Bolus.
             val pbolusA = if (isPostHypo || (delta < 5.0f && bg < targetBg + 30.0f)) dynamicPbolusSmall else dynamicPbolusLarge
             
-            val logTag = if (pbolusA == dynamicPbolusSmall) "AD_SMALL_PREBOLUS_TRIGGER" else "AD_BIG_PREBOLUS_TRIGGER"
-            consoleLog.add("$logTag amount=$pbolusA reason=AutodriveMain")
+            // 🛡️ Independent Refractory Check
+            val isSmall = (pbolusA == dynamicPbolusSmall)
+            val refractory = if (isSmall) hasReceivedPbolusMatches(0.0, pbolusA, 45) else hasReceivedPbolusMatches(pbolusA, 0.0, 45)
+            
+            if (refractory) {
+                 reason.append("⏳ Autodrive Main Refractory (Recent $pbolusA U) -> Fallback to ML\n")
+                 // Fallthrough to ML (Do NOT return rT)
+            } else {
+                val logTag = if (isSmall) "AD_SMALL_PREBOLUS_TRIGGER" else "AD_BIG_PREBOLUS_TRIGGER"
+                consoleLog.add("$logTag amount=$pbolusA reason=AutodriveMain")
 
             // 📈 Innovation: Adaptive Prebolus & Resistance Hammer
             // 🛡️ Disabled if Post-Hypo (Already handled by logic below, but pbolusA is now safer too)
@@ -3827,10 +3843,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             finalizeAndCapSMB(rT, adaptiveUnits, reason.toString())
             return rT
+            } // End else (Non-Refractory)
         }
 
         val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason, targetBg + 30f)
-        if (bg > targetBg + 10 && predictedBg > targetBg + 30 && !nightbis && !hasReceivedPbolusMInLastHour(dynamicPbolusSmall) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition && bg >= 80) {
+        if (bg > targetBg + 10 && predictedBg > targetBg + 30 && !nightbis && !hasReceivedPbolusMatches(0.0, dynamicPbolusSmall, 60) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat(), predictedBg, targetBg) && modesCondition && bg >= 80) {
             val msg = context.getString(R.string.reason_autodrive_early_meal, dynamicPbolusSmall, combinedDelta, predicted, bgAcceleration.toDouble())
             finalizeAndCapSMB(rT, dynamicPbolusSmall, msg)
             return rT
