@@ -4670,19 +4670,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT.predBGs = savedPredBGs
         
         rT.reason.append(savedReason)
-        var rate = when {
+        val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal)
+        val rate = when {
             snackTime && snackrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 4.0, "AI Force basal because mealTime $snackrunTime.", currenttemp, rT, overrideSafety = true)
-            mealTime && mealruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because mealTime $mealruntime.", currenttemp, rT, overrideSafety = true)
-            bfastTime && bfastruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because mealTime $bfastruntime.", currenttemp, rT, overrideSafety = true)
-            lunchTime && lunchruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because lunchTime $lunchruntime.", currenttemp, rT, overrideSafety = true)
-            dinnerTime && dinnerruntime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because dinnerTime $dinnerruntime.", currenttemp, rT, overrideSafety = true)
-            highCarbTime && highCarbrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because highcarb $highCarbrunTime.", currenttemp, rT, overrideSafety = true)
+            mealTime && mealruntime in 0..30 && delta < 15 -> calculateRate(maxBasalPref, profile_current_basal, 1.0, "AI Force basal because mealTime $mealruntime.", currenttemp, rT, overrideSafety = true)
+            bfastTime && bfastruntime in 0..30 && delta < 15 -> calculateRate(maxBasalPref, profile_current_basal, 1.0, "AI Force basal because mealTime $bfastruntime.", currenttemp, rT, overrideSafety = true)
+            lunchTime && lunchruntime in 0..30 && delta < 15 -> calculateRate(maxBasalPref, profile_current_basal, 1.0, "AI Force basal because lunchTime $lunchruntime.", currenttemp, rT, overrideSafety = true)
+            dinnerTime && dinnerruntime in 0..30 && delta < 15 -> calculateRate(maxBasalPref, profile_current_basal, 1.0, "AI Force basal because dinnerTime $dinnerruntime.", currenttemp, rT, overrideSafety = true)
+            highCarbTime && highCarbrunTime in 0..30 && delta < 15 -> calculateRate(maxBasalPref, profile_current_basal, 1.0, "AI Force basal because highcarb $highCarbrunTime.", currenttemp, rT, overrideSafety = true)
             
             // 🔥 Patch Post-Meal Hyper Boost (AIMI 2.0)
             (mealTime || lunchTime || dinnerTime || highCarbTime || bfastTime || snackTime) -> {
                 val runTime = listOf(mealruntime, lunchruntime, dinnerruntime, highCarbrunTime, bfastruntime, snackrunTime).maxOrNull() ?: 0
                 val target = target_bg // simplification
-                val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal) // limit from prefs
                 val rocketStart = delta > 5.0f || bg > target_bg + 40
                 // If Rocket Start (Delta > 10 or Very High BG), use global Max Basal (Aggressive).
                 // Otherwise use the Meal Mode preference (often conservative, default profile*2).
