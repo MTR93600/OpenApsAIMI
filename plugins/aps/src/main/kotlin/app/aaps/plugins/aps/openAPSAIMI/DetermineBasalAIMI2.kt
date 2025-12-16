@@ -3728,11 +3728,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 rT.rate = safeMax
                 rT.duration = 30
                 
-                // 2. Force Bolus
-                val urgencyFactor = if (estimatedCarbs > 60) 1.5 else 1.0
-                val targetUnits = calculateAdaptivePrebolus(dynamicPbolusLarge * urgencyFactor, delta, reason)
+                // 2. Force Bolus (Proportional Logic)
+                // Formula: (Carbs / IC) - NetIOB - (HighBasal * 0.5h)
+                val insulinForCarbs = estimatedCarbs / profile.carb_ratio
+                val coveredByBasal = safeMax * 0.5 // 30 mins of High Basal
+                val netNeeded = insulinForCarbs - iob_data.iob - coveredByBasal
                 
-                val msg = "📸 Meal Advisor: Targeting ~${estimatedCarbs.toInt()}g (Est. ${timeSinceEstimateMin.toInt()}m ago) -> Force ${targetUnits}U + Basal ${safeMax}U/h"
+                // Ensure non-negative
+                val targetUnits = netNeeded.coerceAtLeast(0.0)
+                
+                val msg = "📸 Meal Advisor: ${estimatedCarbs.toInt()}g / IC ${"%.1f".format(profile.carb_ratio)} - IOB ${"%.2f".format(iob_data.iob)} - Basal ${"%.2f".format(coveredByBasal)} = ${"%.2f".format(targetUnits)}U"
                 reason.append(msg + "\n")
                 
                 // Explicit User Action = true
