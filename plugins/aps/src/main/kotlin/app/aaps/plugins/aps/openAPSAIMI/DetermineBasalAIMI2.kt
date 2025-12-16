@@ -3239,7 +3239,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val iobActivityIn30Min = iobActionProfile.activityIn30Min
 
 // On met à jour la variable `iob` globale de la classe avec la valeur de notre profiler pour la cohérence
-        this.iob = iobTotal.toFloat()
+        // this.iob = iobTotal.toFloat() // FIX: Do NOT overwrite official IOB with Gross IOB. Use iob_data.iob.
 
 // On ajoute les nouvelles informations au log pour le débogage
         consoleLog.add(
@@ -4069,7 +4069,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // var iob2 = 0.0f
-        // this.iob = iob_data.iob.toFloat()
+        // Check IOB mismatch
+         if (abs(this.iob - iob_data.iob.toFloat()) > 1.0) {
+              consoleLog.add("⚠️ IOB Mismatch: Profiler=${this.iob} vs System=${iob_data.iob}")
+         }
+         this.iob = iob_data.iob.toFloat() // FIX: Restore Official Net IOB for Safety Checks
         // if (iob_data.basaliob < 0) {
         //     iob2 = -iob_data.basaliob.toFloat() + iob
         //     this.iob = iob2
