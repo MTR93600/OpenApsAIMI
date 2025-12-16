@@ -1854,28 +1854,32 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 2 < 5 -> True. (Bolus happened inside Phase 2).
         if (bfastruntime !in 15..23) return false
         val runtimeMin = runtimeToMinutes(bfastruntime)
-        return this.lastsmbtime < (runtimeMin - 15)
+        // Fix: Return TRUE if last bolus is OLDER than the start of Phase 2 logic (i.e. NO bolus yet in this phase)
+        // lastsmbtime (minutes ago) > (runtimeMin - 15)
+        // e.g. T=16 (Diff=1). LastSMB=20 (Prebolus 1). 20 > 1 -> True. Fire.
+        // e.g. T=20 (Diff=5). LastSMB=4 (Prebolus 2 given at T=16). 4 > 5 -> False. Don't Fire.
+        return this.lastsmbtime > (runtimeMin - 15)
     }
     
     private fun isLunchModeCondition(): Boolean = lunchruntime in 0..7 && !isFreshBolusWithin(lunchruntime)
     private fun isLunch2ModeCondition(): Boolean {
         if (lunchruntime !in 15..23) return false
         val runtimeMin = runtimeToMinutes(lunchruntime)
-        return this.lastsmbtime < (runtimeMin - 15)
+        return this.lastsmbtime > (runtimeMin - 15)
     }
     
     private fun isDinnerModeCondition(): Boolean = dinnerruntime in 0..7 && !isFreshBolusWithin(dinnerruntime)
     private fun isDinner2ModeCondition(): Boolean {
         if (dinnerruntime !in 15..23) return false
         val runtimeMin = runtimeToMinutes(dinnerruntime)
-        return this.lastsmbtime < (runtimeMin - 15)
+        return this.lastsmbtime > (runtimeMin - 15)
     }
     
     private fun isHighCarbModeCondition(): Boolean = highCarbrunTime in 0..7 && !isFreshBolusWithin(highCarbrunTime)
     private fun isHighCarb2ModeCondition(): Boolean {
         if (highCarbrunTime !in 15..23) return false
         val runtimeMin = runtimeToMinutes(highCarbrunTime)
-        return this.lastsmbtime < (runtimeMin - 15)
+        return this.lastsmbtime > (runtimeMin - 15)
     }
 
     private fun issnackModeCondition(): Boolean = snackrunTime in 0..20 && !isFreshBolusWithin(snackrunTime)
