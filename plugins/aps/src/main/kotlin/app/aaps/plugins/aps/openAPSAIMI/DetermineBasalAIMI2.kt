@@ -90,7 +90,58 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
+internal data class PredictionSanityResult(
+    val predBg: Double,
+    val eventualBg: Double,
+    val label: String
+)
 
+internal fun sanitizePredictionValues(
+    bg: Double,
+    delta: Float,
+    predBgRaw: Double?,
+    eventualBgRaw: Double?,
+    series: Predictions?,
+    log: MutableList<String>? = null
+): PredictionSanityResult {
+    val baseBg = bg.coerceIn(25.0, 600.0)
+    var predBg = (predBgRaw ?: baseBg).coerceIn(25.0, 600.0)
+    var eventualBg = (eventualBgRaw ?: predBg).coerceIn(25.0, 600.0)
+    val anomalies = mutableListOf<String>()
+
+    val lengths = listOfNotNull(series?.IOB, series?.COB, series?.ZT, series?.UAM)
+    val minSize = lengths.minOfOrNull { it.size } ?: 0
+    if (minSize in 1..5) {
+        anomalies.add("series<$minSize")
+    }
+
+    if (!predBg.isFinite() || !eventualBg.isFinite()) {
+        anomalies.add("nonFinite")
+        predBg = baseBg
+        eventualBg = baseBg
+    }
+
+    val largeDrop = baseBg - predBg
+    val rising = delta >= 0f
+    if (rising && baseBg > 140 && largeDrop > 80) {
+        predBg = (baseBg + delta * 6).coerceIn(25.0, 600.0)
+        anomalies.add("jumpClamp")
+    }
+
+    if (eventualBg < 25 || eventualBg > 600) {
+        anomalies.add("eventualRange")
+        eventualBg = predBg
+    }
+
+    val label = if (anomalies.isEmpty()) "ok" else anomalies.joinToString("+")
+    if (anomalies.isNotEmpty()) {
+        log?.add(
+            "PRED_SANITY_FAIL: $label bg=${baseBg.roundToInt()} pred=${predBg.roundToInt()} ev=${eventualBg.roundToInt()} delta=${"%.1f".format(delta)}"
+        )
+    }
+
+    return PredictionSanityResult(predBg, eventualBg, label)
+}
 /**
  * Main orchestrator for the AIMI loop.
  *
@@ -3533,6 +3584,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (minAgo > 12.0) {
             reason.append("⚠️ Data Stale (${minAgo.toInt()}m) -> Logic Paused\n")
             consoleError.add("Data Stale (${minAgo}m) -> Logic Paused")
+            logDecisionFinal("STALE_DATA", rT, bg, delta)
             return rT
         }
         val windowSinceDoseMin = if (iob_data.lastBolusTime > 0) {
@@ -3598,7 +3650,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
         
-        val profileISF_raw = if (profile != null && profile.sens > 10) profile.sens else 50.0
+        val profileISF_raw = if (profile.sens > 10) profile.sens else 50.0
         // 🔮 FCL 11.0 Fix: Use Dynamic 'sens' for Effective ISF to capture Resistance/Sensitivity
         val effectiveISF = sens / autosens_data.ratio 
         // ⚡ FCL 12.0: Unified Learner Integration for Prebolus
@@ -3719,8 +3771,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 🛡️ Hoisted Safety Variables for Autodrive & Early Terminators
         fun safe(v: Double) = if (v.isFinite()) v else Double.POSITIVE_INFINITY
-        val minBg = minOf(safe(bg), safe(predictedBg.toDouble()), safe(rT.eventualBG?: bg))
+        val sanity = sanitizePredictionValues(bg, delta, predictedBg.toDouble(), rT.eventualBG, rT.predBGs, consoleLog)
+        val minBg = minOf(safe(bg), safe(sanity.predBg), safe(sanity.eventualBg))
         val threshold = computeHypoThreshold(minBg, profile.lgsThreshold)
+        val pumpReachable = try {
+            activePlugin.activePump.isInitialized() && activePlugin.activePump.isConnected()
+        } catch (e: Exception) { false }
+        consoleLog.add(
+            "PRED_PIPE: bg=${bg.roundToInt()} delta=${"%.1f".format(delta)} predBg=${sanity.predBg.roundToInt()} " +
+                "eventualBg=${sanity.eventualBg.roundToInt()} min=${minBg.roundToInt()} th=${threshold.toInt()} " +
+                "noise=${glucoseStatus.noise} dataAge=${minAgo}m pumpReachable=$pumpReachable sanity=${sanity.label}"
+        )
 
         // -----------------------------------------------------
         // ⚔️ DECISION PIPELINE EXECUTION (Refactor v2.2 Strict)
@@ -3732,7 +3793,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Evaluated FIRST. Can apply TBR=0.0. Terminate if Applied.
         // PRIORITY 1: SAFETY (LGS / HYPO / STALE)
         // Evaluated FIRST. Can apply TBR=0.0. Terminate if Applied.
-        val safetyRes = trySafetyStart(bg, delta, profile, iob_data, glucoseStatus.noise.toInt(), predictedBg.toDouble(), (rT.eventualBG ?: bg).toDouble())
+        val safetyRes = trySafetyStart(bg, delta, profile, iob_data, glucoseStatus.noise.toInt(), sanity.predBg, sanity.eventualBg)
         if (safetyRes is DecisionResult.Applied) {
             consoleLog.add("SAFETY_APPLIED_TBR_ZERO intent=${safetyRes.tbrUph}")
             if (safetyRes.tbrUph != null) {
@@ -3741,6 +3802,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Block all boluses
             rT.insulinReq = 0.0
             rT.reason.append(" | ⚠ Safety Halt: ${safetyRes.reason}")
+            logDecisionFinal("SAFETY", rT, bg, delta)
             return rT
         }
 
@@ -3756,6 +3818,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
             // Add Status Log (User Request)
             rT.reason.appendLine(context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", activeModeName))
+            logDecisionFinal("MANUAL_MODE", rT, bg, delta)
             return rT
         }
 
@@ -3771,6 +3834,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              }
              // Add Status Log (User Request)
              rT.reason.appendLine(context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", "Meal Advisor"))
+             logDecisionFinal("MEAL_ADVISOR", rT, bg, delta)
              return rT
         }
 
@@ -3803,10 +3867,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              if (effectiveBolus > 0.05 || effectiveDuration > 0) {
                  lastAutodriveActionTime = System.currentTimeMillis() // 🟢 Update Strict Cooldown
                  consoleLog.add("AUTODRIVE_APPLIED intent=${intentBolus} actual=$effectiveBolus")
+                 logDecisionFinal("AUTODRIVE", rT, bg, delta)
                  return rT
              } else {
                  consoleLog.add("AUTODRIVE_NOOP_FALLBACK reason=CappedToZero")
-                 // Reset rT to clean state for Global Fallback? 
+                 // Reset rT to clean state for Global Fallback?
                  // Actually rT might have some partial strings. 
                  // We should proceed to Global AIMI.
                  rT.insulinReq = 0.0 // Ensure 0
@@ -3822,6 +3887,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         if (isCompression) {
              // Hard Stop on Sensor Error
+             logDecisionFinal("COMPRESSION", rT, bg, delta)
              return rT
         }
         
@@ -3842,6 +3908,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add("AD_EARLY_TBR_TRIGGER rate=0.0 duration=0 reason=DriftTerminator_Tap") // Actually a bolus tap, not TBR, but fits "Early Action" category
             consoleLog.add("AD_SMALL_PREBOLUS_TRIGGER amount=$terminatortap reason=DriftTerminator")
             finalizeAndCapSMB(rT, terminatortap, reason.toString(), mealData, threshold)
+            logDecisionFinal("DRIFT_TERMINATOR", rT, bg, delta)
             return rT
         }
         
@@ -4671,6 +4738,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.rate = it.coerceAtLeast(0.0)
             rT.deliverAt = deliverAt
             rT.duration = 30
+            logDecisionFinal("BASAL_RATE", rT, bg, delta)
             return rT
         }
 
@@ -4987,6 +5055,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 flatBGsDetected = flatBGsDetected,
                 dynIsfMode = dynIsfMode
             )
+            logDecisionFinal("MAX_IOB", finalResult, bg, delta)
             return finalResult
         } else {
             var insulinReq = smbToGive.toDouble()
@@ -5350,6 +5419,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  } catch (e: Exception) { ModeState() }
              }
          }
+    }
+
+    private fun logDecisionFinal(tag: String, rT: RT, bg: Double? = null, delta: Float? = null) {
+        val smb = rT.insulinReq ?: 0.0
+        val tbr = rT.rate ?: 0.0
+        val dur = rT.duration ?: 0
+        val builder = StringBuilder("DECISION_FINAL[$tag]: smb=${"%.2f".format(smb)}U tbr=${"%.2f".format(tbr)}U/h dur=${dur}m")
+        if (bg != null) builder.append(" bg=${bg.roundToInt()}")
+        if (delta != null) builder.append(" Δ=${"%.1f".format(delta)}")
+        val reasonText = rT.reason.toString().replace("\n", " | ")
+        builder.append(" reason=${reasonText.take(180)}")
+        consoleLog.add(builder.toString())
     }
 
     // ==========================================
