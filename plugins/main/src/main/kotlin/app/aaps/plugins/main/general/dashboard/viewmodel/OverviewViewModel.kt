@@ -297,7 +297,10 @@ class OverviewViewModel(
     private fun buildPredictionLine(now: Long): String {
         val request = loop.lastRun?.request ?: return resourceHelper.gs(R.string.dashboard_adjustment_prediction_unavailable)
         val predictions = request.predictionsAsGv
-        if (predictions.isEmpty()) return resourceHelper.gs(R.string.dashboard_adjustment_prediction_unavailable)
+        if (predictions.isEmpty()) {
+            fabricPrivacy.logMessage("PRED_UNAVAILABLE: predictions empty (eventual=${request.eventualBG} predBGs=${request.predBGs})")
+            return resourceHelper.gs(R.string.dashboard_adjustment_prediction_unavailable)
+        }
         val targetTime = now + TimeUnit.MINUTES.toMillis(PREDICTION_LOOKAHEAD_MINUTES)
         val closest = predictions.minByOrNull { abs(it.timestamp - targetTime) }
             ?: return resourceHelper.gs(R.string.dashboard_adjustment_prediction_unavailable)

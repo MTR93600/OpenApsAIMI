@@ -3025,6 +3025,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return PredictionResult(eventual, intsPredictions)
     }
 
+    private fun ensurePredictionFallback(rt: RT, bgNow: Double) {
+        if (rt.predBGs == null) {
+            val safeBg = bgNow.roundToInt()
+            rt.predBGs = Predictions().apply {
+                IOB = listOf(safeBg)
+                COB = listOf(safeBg)
+                ZT = listOf(safeBg)
+                UAM = listOf(safeBg)
+            }
+            consoleLog.add("GATE_PKPD_MISSING: injected fallback prediction @${safeBg}mg/dL")
+        }
+        if (rt.eventualBG == null) {
+            rt.eventualBG = bgNow
+        }
+    }
+
 
     private fun determineNoteBasedOnBg(bg: Double): String {
         return when {
@@ -3323,7 +3339,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         if (pack == null || pack.gs == null) {
             consoleError.add("❌ No glucose data (AIMI pack empty)")
-            return rT.also { it.reason.append("no GS") } // ou ton handling habituel
+            return rT.also {
+                it.reason.append("no GS")
+                ensurePredictionFallback(it, bg)
+            } // ou ton handling habituel
         }
 
         val gs = pack.gs!!
@@ -3350,6 +3369,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             a2 = f?.a2 ?: 0.0,
             corrSqu = f?.corrR2 ?: 0.0
         )
+        ensurePredictionFallback(rT, glucoseStatus.glucose)
         val reasonAimi = StringBuilder()
         var pkpdRuntime: PkPdRuntime? = null
         var windowSinceDoseInt = 0
@@ -3585,7 +3605,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             reason.append("⚠️ Data Stale (${minAgo.toInt()}m) -> Logic Paused\n")
             consoleError.add("Data Stale (${minAgo}m) -> Logic Paused")
             logDecisionFinal("STALE_DATA", rT, bg, delta)
-            return rT
+            return rT.also { ensurePredictionFallback(it, bg) }
         }
         val windowSinceDoseMin = if (iob_data.lastBolusTime > 0) {
             ((systemTime - iob_data.lastBolusTime) / 60000.0).coerceAtLeast(0.0)
@@ -4647,6 +4667,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         // 🔒 SAFETY CHECK FINAL : On applique le cap strict après le potentiel boost de Reactivité
         val currentMaxSmb = if (bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0) maxSMBHB else maxSMB
+        val absGuard = if (windowSinceDoseInt in 0..20 && iobActivityNow > 0.25) {
+            val highBgEscape = bg > target_bg + 60 && delta > 0
+            if (highBgEscape) 1.0 else 0.6 + (eventualBG.coerceAtLeast(bg) / max(bg, 1.0)) * 0.2
+        } else 1.0
+        if (absGuard < 0.99) {
+            val before = smbToGive
+            smbToGive = (smbToGive * absGuard.toFloat()).coerceAtLeast(0f)
+            val guardMsg = "ABS_GUARD factor=${"%.2f".format(absGuard)} since=${windowSinceDoseInt}m iobAct=${"%.2f".format(iobActivityNow)} ev=${"%.0f".format(eventualBG)}"
+            consoleError.add(guardMsg)
+            rT.reason.append(" | $guardMsg")
+        }
         val beforeCap = smbToGive
         smbToGive = capSmbDose(
             proposedSmb = smbToGive,
@@ -4661,7 +4692,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val savedReason = rT.reason.toString()
         // 🔮 FCL 11.0: Preserve Predictions across reset
         val savedPredBGs = rT.predBGs
-        
+
         rT = RT(
             algorithm = APSResult.Algorithm.AIMI,
             runningDynamicIsf = dynIsfMode,
@@ -4681,7 +4712,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             variable_sens = "%.0f".format(variableSensitivity.toDouble()).toDouble()
         )
         // 🔮 FCL 11.0: Restore preserved Predictions
-        
+        rT.predBGs = savedPredBGs ?: rT.predBGs
+        ensurePredictionFallback(rT, bg)
         rT.reason.append(savedReason)
         // Re-define for Global Logic
         val estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
