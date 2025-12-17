@@ -1,0 +1,41 @@
+flowchart TD
+    subgraph Initialization
+        Prefs[Preferences] --> Estimator[WCycleEstimator]
+        Estimator -->|Day, Phase| Adjuster[WCycleAdjuster]
+        Learner[WCycleLearner] -->|Learned Factors| Adjuster
+        Profile[Profile Settings] --> Adjuster
+    end
+
+    subgraph "Cycle Phase Logic"
+        Adjuster -->|Phase: FOLLICULAR| LogicF[Base x0.9 / x0.9]
+        Adjuster -->|Phase: OVULATION| LogicO[Base x1.1 / x1.1]
+        Adjuster -->|Phase: LUTEAL| LogicL[Base x1.2 / x1.3]
+        Adjuster -->|Phase: MENSES| LogicM[Base x1.0 / x1.0]
+    end
+
+    subgraph "Modifiers (Deep Endo)"
+        LogicF & LogicO & LogicL & LogicM --> Modifiers
+        Modifiers -->|PCOS/Endo| Amp[Amplitude Scaling]
+        Modifiers -->|Thyroid| Damp[Dampening (Removed)]
+        Modifiers -->|Luteal Dawn| Dawn[04:00-08:00 Boost]
+    end
+
+    subgraph "Application"
+        Modifiers --> FinalFactors[Final Multipliers (Basal/SMB)]
+        FinalFactors -->|Clamp| SafeFactors[Clamped Factors]
+    end
+
+    subgraph "DetermineBasal Integration"
+        DB[DetermineBasalAIMI2] -->|ensureWCycleInfo| Adjuster
+        SafeFactors -->|Return info| DB
+        
+        DB -->|Basal Path| ApplyBasal{Apply Basal?}
+        ApplyBasal -->|Yes| ScaleBasal[Rate * basalMultiplier]
+        
+        DB -->|SMB Path| ApplySMB{Apply SMB?}
+        ApplySMB -->|Yes| ScaleSMB[SMB * smbMultiplier]
+        
+        ScaleBasal & ScaleSMB -->|Feed| Log[WCycleFacade.infoAndLog]
+        Log --> CSV[wcycle.csv]
+        Log --> SQLite[Learner DB Update]
+    end

@@ -1,0 +1,40 @@
+sequenceDiagram
+    participant DB as DetermineBasalAIMI2
+    participant Est as WCycleEstimator
+    participant Adj as WCycleAdjuster
+    participant Lrn as WCycleLearner
+    participant Log as WCycleFacade
+
+    Note over DB: Start of Tick
+    
+    DB->>Adj: ensureWCycleInfo()
+    Adj->>Est: estimate()
+    Est-->>Adj: (Day, Phase)
+    Adj->>Lrn: learnedMultipliers(Phase)
+    Lrn-->>Adj: (BasalLearn, SmbLearn)
+    Adj->>Adj: Apply Modifiers (Dawn, Profile)
+    Adj-->>DB: WCycleInfo(basalMult, smbMult, applied)
+
+    Note over DB: Decision Pipeline
+
+    rect rgb(200, 150, 150)
+    Note over DB: Safety / Manual Check
+    DB->>DB: finalizeAndCapSMB(ignoreSafety=true)
+    Note right of DB: PATCH: WCycle Skipped for Manual
+    end
+
+    rect rgb(150, 200, 150)
+    Note over DB: Autodrive / SMB Fallback
+    DB->>DB: finalizeAndCapSMB(ignoreSafety=false)
+    DB->>DB: applySafetyPrecautions()
+    DB->>DB: Apply smbMultiplier
+    DB->>Log: infoAndLog(Row + Multipliers)
+    Log->>Lrn: update(Phase, Need)
+    end
+    
+    rect rgb(150, 150, 200)
+    Note over DB: Basal Path
+    DB->>DB: calculateTempBasal
+    DB->>DB: Apply basalMultiplier
+    DB->>Log: infoAndLog(Row + Multipliers)
+    end
