@@ -3617,11 +3617,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Using consoleError to ensure visibility in UI Debug Panel
             consoleError.add("🔮 PREDICT INIT: BG=$bg Delta=$delta Sens=${"%.1f".format(sens)} IOB=${iob_data_array.firstOrNull()?.iob}")
             
+            // [FIX] User Request: Inject Advisor COB into Predictions details
+            // MealAdvisor (Snap&Go) saves carbs in Prefs but doesn't create Carb Treatment entry immediately.
+            val advisorTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
+            val advisorCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
+            val isFreshAdvisor = (dateUtil.now() - advisorTime) < 60 * 60000 // 60 min validity
+            
+            val effectiveCOB = if (mealData.mealCOB > 0) mealData.mealCOB else if (isFreshAdvisor) advisorCarbs else 0.0
+
             val advancedPredictions = AdvancedPredictionEngine.predict(
                 currentBG = bg,
                 iobArray = iob_data_array,
                 finalSensitivity = sens,
-                cobG = mealData.mealCOB,
+                cobG = effectiveCOB,
                 profile = profile,
                 delta = delta.toDouble()
             )
