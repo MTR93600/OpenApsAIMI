@@ -329,6 +329,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastSmbCapped: Double = 0.0
     private var lastSmbFinal: Double = 0.0
     private var lastAutodriveState: AutodriveState = AutodriveState.IDLE
+    private var internalLastSmbMillis: Long = 0L // Local Atomic Timestamp for Safety
     private val nightGrowthResistanceMode = NightGrowthResistanceMode()
     private val ngrTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     private var zeroBasalAccumulatedMinutes: Int = 0
@@ -1439,6 +1440,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         lastSmbCapped = safeCap.toDouble()
         lastSmbFinal = safeCap.toDouble()
+
+        if (safeCap > 0f) {
+            internalLastSmbMillis = dateUtil.now()
+        }
 
         rT.units = safeCap.toDouble().coerceAtLeast(0.0)
         rT.reason.append(reasonHeader)
@@ -3692,8 +3697,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             logDecisionFinal("STALE_DATA", rT, bg, delta)
             return rT.also { ensurePredictionFallback(it, bg) }
         }
-        val windowSinceDoseMin = if (iob_data.lastBolusTime > 0) {
-            ((systemTime - iob_data.lastBolusTime) / 60000.0).coerceAtLeast(0.0)
+        val windowSinceDoseMin = if (iob_data.lastBolusTime > 0 || internalLastSmbMillis > 0) {
+            val effectiveLastBolusTime = kotlin.math.max(iob_data.lastBolusTime, internalLastSmbMillis)
+            ((systemTime - effectiveLastBolusTime) / 60000.0).coerceAtLeast(0.0)
         } else 0.0
         windowSinceDoseInt = windowSinceDoseMin.toInt()
         lastBolusAgeMinutes = windowSinceDoseMin
