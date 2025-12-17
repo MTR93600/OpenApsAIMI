@@ -41,7 +41,9 @@ object AdvancedPredictionEngine {
         // We reduce the impact of IOB in the prediction to avoid false hypo alarms.
         val iobDampingFactor = if (cobG > 0 || delta > 2.0) {
             when {
-                delta > 5.0 -> 0.50 // Intense rise: IOB 50% effective in prediction
+                delta > 12.0 -> 0.20 // Rocket rise: IOB 20% effective (Assume massive UAM)
+                delta > 8.0 -> 0.30 // Strong rise: IOB 30% effective
+                delta > 5.0 -> 0.50 // Intense rise: IOB 50% effective
                 delta > 2.0 -> 0.70 // Moderate rise
                 delta > 0.0 -> if (cobG > 0) 0.85 else 1.0 // Slight rise: damp only if explicit COB
                 else -> 1.0
