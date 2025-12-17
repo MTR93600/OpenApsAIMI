@@ -3706,6 +3706,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 
                 // Populate all arrays with AIMI predictions (Unified Model)
                 // We use the same prediction for all because AIMI is an end-to-end model
+                // Populate all arrays with AIMI predictions (Unified Model)
+                // We use the same prediction for all because AIMI is an end-to-end model
                 intsPredictions.forEach { pred -> 
                     val valDouble = pred.toDouble()
                     IOBpredBGs.add(valDouble)
@@ -3739,8 +3741,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleError.add("minGuardBG ${minPred.toInt()} IOBpredBG ${lastPred.toInt()}")
                 if (UAMpredBGs.size < 6) consoleError.add("⚠ WARNING: UAM Series too short (<6) for Graph!")
                 
+                consoleLog.add("PRED_SET size=${intsPredictions.size} eventual=${lastPred.toInt()} min=${minPred.toInt()} source=Advanced")
+                
             } else {
-                 consoleError.add("🔮 PREDICT WARNING: Empty prediction list returned (Input Size: ${advancedPredictions.size})")
+                 consoleError.add("🔮 PREDICT WARNING: Empty prediction list returned. Using Fallback.")
+                 
+                 // FAILSAFE: Always populate rT with current BG to avoid "Unavailable" graph
+                 val fallbackList = listOf(bg.toInt(), bg.toInt(), bg.toInt()) // Small series
+                 rT.predBGs = Predictions().apply {
+                     IOB = fallbackList
+                     COB = fallbackList
+                     ZT  = fallbackList
+                     UAM = fallbackList
+                 }
+                 rT.eventualBG = bg
+                 this.predictedBg = bg.toFloat()
+                 
+                 consoleLog.add("PRED_SET size=3 eventual=${bg.toInt()} min=${bg.toInt()} source=FallbackBG")
             }
         } catch (e: Exception) {
             consoleError.add("🔮 PREDICT ERROR: ${e.message}")
@@ -5460,7 +5477,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val lgsTh = computeHypoThreshold(lgsMin, profile.lgsThreshold) // Uses member function
 
         if (lgsMin < lgsTh || (bg < 70 && delta < 0)) {
-            val reasonStr = "Hypo guard+hystérèse: minBG=${lgsMin.toInt()} <= Th=${lgsTh.toInt()} (BG=$bgNow, pred=${predNow.toInt()}, ev=${eventualNow.toInt()})"
+            val reasonStr = "LGS_TRIGGER: min=${lgsMin.toInt()} <= Th=${lgsTh.toInt()} (BG=${bgNow.toInt()} pred=${predNow.toInt()} ev=${eventualNow.toInt()})"
             consoleLog.add("SAFETY_APPLIED_TBR_ZERO reason=$reasonStr")
             return DecisionResult.Applied(
                 source = "SafetyLGS",
