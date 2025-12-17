@@ -62,4 +62,24 @@ data class SmbPlan(val units: Double, val deliverAtMillis: Long, val reason: Str
 data class SafetyReport(val hypoBlocked: Boolean, val notes: List<String> = emptyList())
 data class Decision(val basal: BasalPlan?, val smb: SmbPlan?, val safety: SafetyReport)
 
+enum class ActionKind {
+    MANUAL_MODE,
+    MEAL_ADVISOR,
+    AUTODRIVE,
+    GLOBAL_AIMI,
+    SAFETY_HALT
+}
 
+sealed class DecisionResult {
+    data class Applied(
+        val source: String,
+        val bolusU: Double? = null,
+        val tbrUph: Double? = null,
+        val tbrMin: Int? = null,
+        val reason: String
+    ) : DecisionResult()
+
+    data class Fallthrough(
+        val reason: String
+    ) : DecisionResult()
+}
