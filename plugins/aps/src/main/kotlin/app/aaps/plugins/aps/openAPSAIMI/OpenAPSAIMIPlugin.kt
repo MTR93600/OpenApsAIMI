@@ -15,6 +15,9 @@ import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import app.aaps.core.data.aps.SMBDefaults
 import app.aaps.core.data.model.GlucoseUnit
+import app.aaps.core.data.model.GV
+import app.aaps.core.data.model.TrendArrow
+import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.APS
@@ -773,6 +776,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 val determineBasalResult = apsResultProvider.get().with(it)
                 
                 // 🔮 FCL 11.0: Force Copy Predictions via JSON (Manual Construction)
+                // 🔮 FCL 11.0: Force Copy Predictions via JSON (Manual Construction)
                 if (it.predBGs != null) {
                     val count = it.predBGs?.IOB?.size ?: 0
                     aapsLogger.debug(LTag.APS, "Plugin: Injecting predictions via JSON manually (Size: $count)")
@@ -789,6 +793,24 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         determineBasalResult.json()?.put("predBGs", predJson)
                     } catch (e: Exception) {
                         aapsLogger.error(LTag.APS, "Failed to inject JSON predictions: $e")
+                    }
+
+                    // 🔮 FCL 11.1: Force Populate predictionsAsGv for UI (OverviewViewModel)
+                    // If 'with(RT)' failed to populate the list, we do it manually here.
+                    if (determineBasalResult.predictionsAsGv.isEmpty()) {
+                         val start = now
+                         it.predBGs?.IOB?.forEachIndexed { index, value ->
+                             val time = start + index * 300000L // 5 mins
+                             val gv = GV(
+                                 timestamp = time,
+                                 value = value.toDouble(),
+                                 raw = value.toDouble(),
+                                 trendArrow = TrendArrow.NONE,
+                                 noise = 0.0,
+                                 sourceSensor = SourceSensor.IOB_PREDICTION
+                             )
+                             determineBasalResult.predictionsAsGv.add(gv)
+                         }
                     }
                 }
 
