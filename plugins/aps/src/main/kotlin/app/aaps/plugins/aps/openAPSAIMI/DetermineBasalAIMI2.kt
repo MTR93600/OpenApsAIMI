@@ -5600,16 +5600,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          var name: String = "",
          var startMs: Long = 0L,
          var pre1: Boolean = false,
-         var pre2: Boolean = false
+         var pre2: Boolean = false,
+         var pre1SentMs: Long = 0L, // ✅ NEW: Timestamp for P1
+         var pre2SentMs: Long = 0L  // ✅ NEW: Timestamp for P2
     ) {
-         fun serialize(): String = "$name|$startMs|$pre1|$pre2"
+         fun serialize(): String = "$name|$startMs|$pre1|$pre2|$pre1SentMs|$pre2SentMs"
          companion object {
              fun deserialize(s: String): ModeState {
                  if (s.isBlank()) return ModeState()
                  val p = s.split("|")
                  if (p.size < 4) return ModeState()
                  return try {
-                     ModeState(p[0], p[1].toLong(), p[2].toBoolean(), p[3].toBoolean())
+                     ModeState(
+                         p[0], 
+                         p[1].toLong(), 
+                         p[2].toBoolean(), 
+                         p[3].toBoolean(),
+                         p.getOrNull(4)?.toLongOrNull() ?: 0L,
+                         p.getOrNull(5)?.toLongOrNull() ?: 0L
+                     )
                  } catch (e: Exception) { ModeState() }
              }
          }
@@ -5715,7 +5724,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private fun tryManualModes(bg: Double, delta: Float, profile: OapsProfileAimi): DecisionResult {
-        if (bg < 60) return DecisionResult.Fallthrough("BG too low (<60)")
+        // 🛡️ HARD SAFETY: BG too low
+        if (bg < 60) {
+            consoleLog.add("MODE_BLOCK reason=BG_TOO_LOW bg=$bg")
+            return DecisionResult.Fallthrough("BG too low (<60)")
+        }
 
         // 1. Detect Active Mode & Configs
         var activeName = ""
@@ -5775,25 +5788,67 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              consoleLog.add("MODE_STATE_RESET new=$activeName runtime=$activeRuntimeMin")
         }
 
-        // 4. Decision Logic (State-Based)
+        // 🛡️ HARD SAFETY CHECK: LGS / Hypo Guard
+        val lgsThreshold = profile.lgsThreshold?.toDouble() ?: 65.0
+        val minBg = minOf(bg, predictedBg.toDouble(), eventualBG)
+        if (minBg < lgsThreshold) {
+            consoleLog.add("MODE_BLOCK mode=$activeName reason=LGS minBG=${minBg.roundToInt()} th=${lgsThreshold.roundToInt()}")
+            // Don't update state (allow retry next tick if BG rises)
+            return DecisionResult.Applied(
+                source = "SafetyLGS",
+                bolusU = 0.0,
+                tbrUph = 0.0,
+                tbrMin = 30,
+                reason = "🛑 LGS: minBG ${minBg.roundToInt()} < ${lgsThreshold.roundToInt()}"
+            )
+        }
+
+        // 🛡️ COOLDOWN: Anti-double-bolus
+        val MIN_COOLDOWN_MIN = 10.0 // 10 minutes minimum between boluses
+        val sinceLast = lastBolusAgeMinutes
+        if (!sinceLast.isNaN() && sinceLast < MIN_COOLDOWN_MIN) {
+            consoleLog.add("MODE_BLOCK mode=$activeName reason=Cooldown sinceLastBolus=${"%.1f".format(sinceLast)}m")
+            return DecisionResult.Fallthrough("Cooldown active (${"%.1f".format(sinceLast)}m)")
+        }
+
+        // 4. ✅ CATCH-UP LOGIC: P1 Decision
+        val MIN_GAP_P1_P2_MIN = 15.0 // Minimum 15 min between P1 and P2
         var actionBolus = 0.0
         var actionPhase = ""
         var newState = state
+        var isCatchup = false
 
-        // Phase 1: 0..7 min
-        if (activeRuntimeMin in 0..7 && !state.pre1) {
-             if (pre1Config > 0) {
-                 actionBolus = pre1Config
-                 actionPhase = "Pre1"
-                 newState = state.copy(pre1 = true)
-             }
+        // P1 Catch-Up: Send if not sent yet (regardless of runtime)
+        if (!state.pre1 && pre1Config > 0.0) {
+            actionBolus = pre1Config
+            actionPhase = "Pre1"
+            isCatchup = activeRuntimeMin > 7 // Mark as catch-up if after ideal window
+            newState = state.copy(pre1 = true, pre1SentMs = now)
+            
+            val catchupLabel = if (isCatchup) "CATCHUP_P1" else "P1"
+            consoleLog.add("MODE_$catchupLabel mode=$activeName rt=${activeRuntimeMin}m send=${"%.2f".format(actionBolus)}U")
         }
 
-        // Phase 2: 15..23 min
-        if (activeRuntimeMin in 15..23 && !state.pre2 && pre2Config > 0) {
-             actionBolus = pre2Config
-             actionPhase = "Pre2"
-             newState = state.copy(pre2 = true)
+        // P2 Catch-Up: Send if P1 sent and gap ≥ MIN_GAP
+        if (state.pre1 && !state.pre2 && pre2Config > 0.0 && actionBolus == 0.0) {
+            val gapSinceP1Min = if (state.pre1SentMs > 0) {
+                (now - state.pre1SentMs) / 60000.0
+            } else {
+                // Fallback if timestamp missing (old state format)
+                activeRuntimeMin.toDouble()
+            }
+            
+            if (gapSinceP1Min >= MIN_GAP_P1_P2_MIN) {
+                actionBolus = pre2Config
+                actionPhase = "Pre2"
+                isCatchup = activeRuntimeMin > 23 // Mark as catch-up if after ideal window
+                newState = state.copy(pre2 = true, pre2SentMs = now)
+                
+                val catchupLabel = if (isCatchup) "CATCHUP_P2" else "P2"
+                consoleLog.add("MODE_$catchupLabel mode=$activeName rt=${activeRuntimeMin}m gapSinceP1=${"%.1f".format(gapSinceP1Min)}m send=${"%.2f".format(actionBolus)}U")
+            } else {
+                consoleLog.add("MODE_WAIT_P2 mode=$activeName gapSinceP1=${"%.1f".format(gapSinceP1Min)}m minGap=${MIN_GAP_P1_P2_MIN}m")
+            }
         }
 
         // 5. Update Persistence & Return
@@ -5803,21 +5858,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         if (actionBolus > 0.0) {
             val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal)
-            // If < 0.1, use profile.max_basal.
-            // Requirement D4: "Vérifie que TBR pendant modes utilise bien la préférence TBRmaxMode"
             val modeTbr = if (maxBasalPref > 0.1) maxBasalPref else profile.max_basal
             
-            consoleLog.add("MODE_DECISION mode=$activeName phase=$actionPhase amount=$actionBolus tbr=$modeTbr")
+            val statusIcon = if (isCatchup) "⏰" else "🍱"
+            consoleLog.add("MODE_DECISION mode=$activeName phase=$actionPhase amount=$actionBolus tbr=$modeTbr catchup=$isCatchup")
+            
             return DecisionResult.Applied(
                 source = "ManualMode_$activeName",
                 bolusU = actionBolus,
                 tbrUph = modeTbr, 
-                tbrMin = 30, // 30 min fixed
-                reason = "🍱 Manual Mode ($activeName $actionPhase): Force ${actionBolus}U + TBR ${modeTbr}U/h"
+                tbrMin = 30,
+                reason = "$statusIcon Manual Mode ($activeName $actionPhase): ${actionBolus}U + TBR ${modeTbr}U/h"
             )
         }
         
-        return DecisionResult.Fallthrough("Mode Active but No Phase Trigger (Runtime $activeRuntimeMin)")
+        // 6. Fallthrough if all sent or waiting
+        val pre1Status = if (state.pre1) "✅" else "⏳"
+        val pre2Status = if (pre2Config > 0) { if (state.pre2) "✅" else "⏳" } else "N/A"
+        consoleLog.add("MODE_PROGRESS mode=$activeName rt=${activeRuntimeMin}m pre1=$pre1Status pre2=$pre2Status")
+        
+        return DecisionResult.Fallthrough("Mode Active (pre1=$pre1Status, pre2=$pre2Status)")
     }
 
     private fun tryMealAdvisor(bg: Double, delta: Float, iobData: IobTotal, profile: OapsProfileAimi, lastBolusTime: Long, modesCondition: Boolean): DecisionResult {
