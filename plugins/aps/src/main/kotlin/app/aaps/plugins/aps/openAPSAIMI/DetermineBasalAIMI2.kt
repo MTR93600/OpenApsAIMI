@@ -3693,6 +3693,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // See Lines 3489+.
             // MOVED to after Main Autodrive.
 
+        // -----------------------------------------------------
+        // ACTIVE MODE NAME CALCULATION (Visual)
+        // -----------------------------------------------------
+        val activeModeName = when {
+            lunchTime -> "Lunch"
+            dinnerTime -> "Dinner"
+            bfastTime -> "Breakfast"
+            snackTime -> "Snack"
+            highCarbTime -> "HighCarb"
+            mealTime -> "Meal"
+            else -> "N/A"
+        }
+
         // 🛡️ Hoisted Safety Variables for Autodrive & Early Terminators
         fun safe(v: Double) = if (v.isFinite()) v else Double.POSITIVE_INFINITY
         val minBg = minOf(safe(bg), safe(predictedBg.toDouble()), safe(rT.eventualBG?: bg))
@@ -3730,6 +3743,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (manualRes.bolusU != null && manualRes.bolusU > 0) {
                  finalizeAndCapSMB(rT, manualRes.bolusU, manualRes.reason, mealData, threshold, true)
             }
+            // Add Status Log (User Request)
+            rT.reason.appendLine(context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", activeModeName))
             return rT
         }
 
@@ -3743,6 +3758,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              if (advisorRes.bolusU != null && advisorRes.bolusU > 0) {
                   finalizeAndCapSMB(rT, advisorRes.bolusU, advisorRes.reason, mealData, threshold, true)
              }
+             // Add Status Log (User Request)
+             rT.reason.appendLine(context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", "Meal Advisor"))
              return rT
         }
 
@@ -4647,7 +4664,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         rT.reason.appendLine(
-             context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", "N/A")
+             context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", activeModeName)
         )
         // Cleaned up Logging
 
