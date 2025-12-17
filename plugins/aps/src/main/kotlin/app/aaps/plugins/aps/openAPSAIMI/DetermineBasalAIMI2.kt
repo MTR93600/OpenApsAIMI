@@ -3661,6 +3661,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // Set Eventual BG
                 rT.eventualBG = lastPred
                 
+                // FIX CRITICAL LGS HALT: Update member variable 'predictedBg' from this prediction
+                this.predictedBg = lastPred.toFloat()
+                
                 // Populate rT.predBGs for UI Graph (Modern)
                 rT.predBGs = Predictions().apply {
                     IOB = IOBpredBGs.map { it.toInt() }
