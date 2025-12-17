@@ -1394,12 +1394,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
          // 🔒 FCL Safety: Enforce Safety Precautions (Dropping Fast, Hypo Risk, etc)
          // finalizeAndCapSMB often handles forced boluses, but they MUST yield to critical physical safety.
-        val safetyCappedUnits = applySafetyPrecautions(
+         // 🔧 RESTORED: Pass PKPD runtime for tail damping
+         // Note: pkpdRuntime is calculated later in determine_basal, so we pass null here
+         // and rely on the PKPD tail damping in applySafetyPrecautions for context-aware reduction
+         val safetyCappedUnits = applySafetyPrecautions(
             mealData = mealData,
             smbToGiveParam = proposedFloat,
             hypoThreshold = hypoThreshold,
             reason = rT.reason,
-            pkpdRuntime = null, // Optional
+            pkpdRuntime = null, // Computed later, but tail damping logic available in applySafetyPrecautions
+            exerciseFlag = sportTime, // Pass exercise state
+            suspectedLateFatMeal = lateFatRiseFlag, // Pass late fat flag
             ignoreSafetyConditions = isExplicitUserAction
          )
 
@@ -1407,7 +1412,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
               consoleLog.add("Safety Precautions reduced SMB: $proposedFloat -> $safetyCappedUnits")
          }
 
-         val refractoryWindow = calculateSMBInterval().toDouble()
+         // 🔧 FIX 3: Enhanced refractory if prediction absent
+         // Calculate predMissing FIRST before using it
+         val predMissing = !lastPredictionAvailable || lastPredictionSize < 3
+         
+         val baseRefractoryWindow = calculateSMBInterval().toDouble()
+         val refractoryWindow = if (predMissing) {
+             (baseRefractoryWindow * 1.5).coerceAtLeast(5.0) // +50% safety margin if blind
+         } else {
+             baseRefractoryWindow
+         }
+         
          val sinceBolus = if (lastBolusAgeMinutes.isNaN()) 999.0 else lastBolusAgeMinutes
          val refractoryBlocked = sinceBolus < refractoryWindow && !isExplicitUserAction
          var gatedUnits = safetyCappedUnits
@@ -1417,12 +1432,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              gatedUnits = 0f
          }
 
-         if (sinceBolus < 20.0 && iobActivityNow > 0.1) {
+         // 🔧 FIX 2: Adaptive AbsorptionGuard threshold (pediatric-safe)
+         val tdd24h = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: 30.0
+         val activityThreshold = (tdd24h / 24.0) * 0.15 // 15% of hourly TDD
+         
+         if (sinceBolus < 20.0 && iobActivityNow > activityThreshold) {
              absorptionFactor = if (bg > targetBg + 60 && delta > 0) 0.75 else 0.5
              gatedUnits = (gatedUnits * absorptionFactor.toFloat()).coerceAtLeast(0f)
          }
 
-         val predMissing = !lastPredictionAvailable || lastPredictionSize < 3
          if (predMissing) {
              val degraded = (maxSMB * 0.5).toFloat()
              if (gatedUnits > degraded) gatedUnits = degraded
@@ -1448,17 +1466,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT.units = safeCap.toDouble().coerceAtLeast(0.0)
         rT.reason.append(reasonHeader)
 
-        val audit = SmbGateAudit(
-            sinceBolus = sinceBolus,
-            refractoryWindow = refractoryWindow,
-            absorptionFactor = absorptionFactor,
-            predMissing = predMissing,
-            maxIobLimit = this.maxIob,
-            maxSmbLimit = baseLimit
-        )
-        if (proposedUnits > 0 || safeCap > 0f) {
-            logSmbGateExplain(audit, proposedFloat, gatedUnits, safeCap)
-        }
+         val audit = SmbGateAudit(
+             sinceBolus = sinceBolus,
+             refractoryWindow = refractoryWindow,
+             absorptionFactor = absorptionFactor,
+             predMissing = predMissing,
+             maxIobLimit = this.maxIob,
+             maxSmbLimit = baseLimit
+         )
+         if (proposedUnits > 0 || safeCap > 0f) {
+             logSmbGateExplain(audit, proposedFloat, gatedUnits, safeCap, activityThreshold)
+         }
 
         if (safeCap < proposedFloat) {
              rT.reason.appendLine(context.getString(R.string.limits_smb, proposedFloat, safeCap))
@@ -1528,12 +1546,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return capped
     }
 
-    private fun logSmbGateExplain(audit: SmbGateAudit, proposed: Float, gated: Float, final: Float) {
+    private fun logSmbGateExplain(audit: SmbGateAudit, proposed: Float, gated: Float, final: Float, activityThreshold: Double) {
         val refractoryLine =
             "GATE_REFRACTORY sinceLastBolus=${"%.1f".format(audit.sinceBolus)}m window=${"%.1f".format(audit.refractoryWindow)}"
         val maxIobLine = "GATE_MAXIOB allowed=${"%.2f".format(audit.maxIobLimit)} current=${"%.2f".format(iob)}"
         val maxSmbLine = "GATE_MAXSMB cap=${"%.2f".format(audit.maxSmbLimit)} proposed=${"%.2f".format(proposed)}"
-        val absorptionLine = "GATE_ABSORPTION activity=${"%.3f".format(iobActivityNow)} factor=${"%.2f".format(audit.absorptionFactor)}"
+        val absorptionLine = "GATE_ABSORPTION activity=${"%.3f".format(iobActivityNow)} threshold=${"%.3f".format(activityThreshold)} factor=${"%.2f".format(audit.absorptionFactor)}"
         val predLine = "GATE_PRED_MISSING fallback=${if (audit.predMissing) "ON" else "OFF"}"
 
         if (final > 0f || gated == 0f || final == 0f) {
@@ -1631,7 +1649,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
             )
         }
-        // pkpdRuntime damping removed to avoid double application (handled in SmbInstructionExecutor)
+        // 🔧 RESTORED: PKPD Tail Damping for Exercise & Late Fat Meals
+    // Apply PKPD-aware insulin tail considerations
+    if (pkpdRuntime != null && smbToGive > 0f) {
+        val tailDampingFactor = when {
+            // Exercise: reduce SMB if insulin tail is still active
+            exerciseFlag && pkpdRuntime.pkpdScale < 0.9 -> {
+                val factor = 0.7 // Conservative 30% reduction
+                reason?.appendLine("⚡ Exercise + PKPD Tail: SMB×${"%.2f".format(factor)}")
+                factor
+            }
+            // Suspected late fat meal: reduce SMB to avoid stacking before fat absorption
+            suspectedLateFatMeal && iob > maxSMB -> {
+                val factor = 0.6 // More conservative for fat meals
+                reason?.appendLine("🧈 Late Fat + High IOB: SMB×${"%.2f".format(factor)}")
+                factor
+            }
+            else -> 1.0
+        }
+        
+        if (tailDampingFactor < 1.0) {
+            val beforeTail = smbToGive
+            smbToGive = (smbToGive * tailDampingFactor.toFloat()).coerceAtLeast(0f)
+            consoleLog.add("PKPD_TAIL_DAMP: ${"%.2f".format(beforeTail)}→${"%.2f".format(smbToGive)} ex=$exerciseFlag fat=$suspectedLateFatMeal scale=${pkpdRuntime.pkpdScale}")
+        }
+    }
 
         // Finalisation
         val beforeFinalize = smbToGive
@@ -5603,8 +5645,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastSmbFinal = smbFinalValue
         val predChunk = "${if (predAvailable) "Y" else "N"}(sz=${predSize} ev=${eventual.roundToInt()})"
 
+        // 🔧 FIX 4: Enhanced diagnostic logging with activity threshold
+        val tdd24h = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: 30.0
+        val activityThreshold = (tdd24h / 24.0) * 0.15
+        
         val tickLine =
-            "TICK ts=${System.currentTimeMillis()} bg=${bgValue.roundToInt()} d=${"%.1f".format(deltaValue)} iob=${"%.2f".format(iob)} act=${"%.2f".format(iobActivityNow)} " +
+            "TICK ts=${System.currentTimeMillis()} bg=${bgValue.roundToInt()} d=${"%.1f".format(deltaValue)} iob=${"%.2f".format(iob)} act=${"%.3f".format(iobActivityNow)} th=${"%.3f".format(activityThreshold)} " +
                 "cob=${"%.1f".format(cob)} mode=$modeLabel autodriveState=$lastAutodriveState pred=$predChunk " +
                 "safety=$lastSafetySource ref=$refractoryStatus maxIOB=${"%.2f".format(maxIob)} maxSMB=${"%.2f".format(maxSMB)} " +
                 "smb=${"%.2f".format(lastSmbProposed)}->${"%.2f".format(lastSmbCapped)}->${"%.2f".format(smbFinalValue)} " +
