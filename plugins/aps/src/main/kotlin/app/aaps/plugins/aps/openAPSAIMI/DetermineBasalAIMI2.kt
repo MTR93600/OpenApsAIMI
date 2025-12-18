@@ -4073,6 +4073,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // -----------------------------------------------------
         // ACTIVE MODE NAME CALCULATION (Visual)
         // -----------------------------------------------------
+        
+        // 🍱 LEGACY MEAL MODES: Calculate TBR limit for all modes
+        val maxBasalmodePref = preferences.get(DoubleKey.meal_modes_MaxBasal)
+        val modeTbrLimit = if (maxBasalmodePref > 0.1) maxBasalmodePref else profile.max_basal
+        
         val activeModeName = when {
             lunchTime -> "Lunch"
             dinnerTime -> "Dinner"
@@ -4084,6 +4089,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         if (isMealModeCondition()) {
             val pbolusM = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
+            
+            // 🚀 TBR: Apply if runtime < 30 min
+            if (mealruntime < 30 * 60) {
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                consoleLog.add("🍱 LEGACY_TBR_MEAL rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
+            }
+            
             rT.units = pbolusM
             rT.reason.append(context.getString(R.string.manual_meal_prebolus, pbolusM))
             consoleLog.add("🍱 LEGACY_MODE_MEAL P1=${"%.2f".format(pbolusM)}U (DIRECT SEND)")
@@ -4092,6 +4104,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         if (isbfastModeCondition()) {
             val pbolusbfast = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
+            
+            // 🚀 TBR: Apply if runtime < 30 min
+            if (bfastruntime < 30 * 60) {
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+ consoleLog.add("🍱 LEGACY_TBR_BFAST rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
+            }
+            
             rT.units = pbolusbfast
             rT.reason.append(context.getString(R.string.reason_prebolus_bfast1, pbolusbfast))
             consoleLog.add("🍱 LEGACY_MODE_BFAST P1=${"%.2f".format(pbolusbfast)}U (DIRECT SEND)")
@@ -4100,6 +4119,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         if (isbfast2ModeCondition()) {
             val pbolusbfast2 = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
+            
+            // 🚀 TBR: Apply if runtime < 30 min
+            if (bfastruntime < 30 * 60) {
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                consoleLog.add("🍱 LEGACY_TBR_BFAST rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
+            }
+            
             rT.units = pbolusbfast2
             rT.reason.append(context.getString(R.string.reason_prebolus_bfast2, pbolusbfast2))
             consoleLog.add("🍱 LEGACY_MODE_BFAST P2=${"%.2f".format(pbolusbfast2)}U (DIRECT SEND)")
@@ -4108,6 +4134,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         if (isLunchModeCondition()) {
             val pbolusLunch = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
+            
+            // 🚀 TBR: Apply if runtime < 30 min
+            if (lunchruntime < 30 * 60) {
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                consoleLog.add("🍱 LEGACY_TBR_LUNCH rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
+            }
+            
             rT.units = pbolusLunch
             rT.reason.append(context.getString(R.string.reason_prebolus_lunch1, pbolusLunch))
             consoleLog.add("🍱 LEGACY_MODE_LUNCH P1=${"%.2f".format(pbolusLunch)}U (DIRECT SEND)")
@@ -4116,6 +4149,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         if (isLunch2ModeCondition()) {
             val pbolusLunch2 = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
+            
+            // 🚀 TBR: Apply if runtime < 30 min
+            if (lunchruntime < 30 * 60) {
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                consoleLog.add("🍱 LEGACY_TBR_LUNCH rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
+            }
+            
             rT.units = pbolusLunch2
             rT.reason.append(context.getString(R.string.reason_prebolus_lunch2, pbolusLunch2))
             consoleLog.add("🍱 LEGACY_MODE_LUNCH P2=${"%.2f".format(pbolusLunch2)}U (DIRECT SEND)")
@@ -4124,6 +4164,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         if (isDinnerModeCondition()) {
             val pbolusDinner = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
+            
+            // 🚀 TBR: Apply if runtime < 30 min
+            if (dinnerruntime < 30 * 60) {
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                consoleLog.add("🍱 LEGACY_TBR_DINNER rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
+            }
+            
             rT.units = pbolusDinner
             rT.reason.append(context.getString(R.string.reason_prebolus_dinner1, pbolusDinner))
             consoleLog.add("🍱 LEGACY_MODE_DINNER P1=${"%.2f".format(pbolusDinner)}U (DIRECT SEND)")
@@ -4132,6 +4179,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         if (isDinner2ModeCondition()) {
             val pbolusDinner2 = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
+            
+            // 🚀 TBR: Apply if runtime < 30 min
+            if (dinnerruntime < 30 * 60) {
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                consoleLog.add("🍱 LEGACY_TBR_DINNER rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
+            }
+            
             rT.units = pbolusDinner2
             rT.reason.append(context.getString(R.string.reason_prebolus_dinner2, pbolusDinner2))
             consoleLog.add("🍱 LEGACY_MODE_DINNER P2=${"%.2f".format(pbolusDinner2)}U (DIRECT SEND)")
@@ -4140,6 +4194,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         if (isHighCarbModeCondition()) {
             val pbolusHC = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
+            
+            // 🚀 TBR: Apply if runtime < 30 min
+            if (highCarbrunTime < 30 * 60) {
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                consoleLog.add("🍱 LEGACY_TBR_HIGHCARB rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
+            }
+            
             rT.units = pbolusHC
             rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, pbolusHC))
             consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P1=${"%.2f".format(pbolusHC)}U (DIRECT SEND)")
@@ -4155,6 +4216,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         if (issnackModeCondition()) {
             val pbolussnack = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
+            
+            // 🚀 TBR: Apply if runtime < 30 min
+            if (snackrunTime < 30 * 60) {
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                consoleLog.add("🍱 LEGACY_TBR_SNACK rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
+            }
+            
             rT.units = pbolussnack
             rT.reason.append(context.getString(R.string.reason_prebolus_snack, pbolussnack))
             consoleLog.add("🍱 LEGACY_MODE_SNACK P1=${"%.2f".format(pbolussnack)}U (DIRECT SEND)")
@@ -4178,24 +4246,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // -----------------------------------------------------
         // ⚔️ DECISION PIPELINE EXECUTION (Refactor v2.3 Strict)
         // -----------------------------------------------------
-        // Priority: 1. Manual -> 2. Safety (Fallback) -> 3. Advisor -> 4. Autodrive
-
-        // PRIORITY 1: MANUAL MODES (Stateful & Priority)
-        val manualRes = tryManualModes(bg, delta, profile, glucose_status.date)
-        if (manualRes is DecisionResult.Applied) {
-            consoleLog.add("MODE_ACTIVE source=${manualRes.source} bolus=${manualRes.bolusU}")
-            if (manualRes.tbrUph != null) {
-                setTempBasal(manualRes.tbrUph, manualRes.tbrMin ?: 30, profile, rT, currenttemp, overrideSafetyLimits = false)
-            }
-            if (manualRes.bolusU != null && manualRes.bolusU > 0) {
-                 finalizeAndCapSMB(rT, manualRes.bolusU, manualRes.reason, mealData, threshold, true, manualRes.source)
-            }
-            // Add Status Log (User Request)
-            rT.reason.appendLine(context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", activeModeName))
-            logDecisionFinal("MANUAL_MODE", rT, bg, delta)
-            return rT
-        }
-
         // PRIORITY 2: SAFETY FALLBACK (LGS / HYPO / STALE)
         // Evaluated only if no manual mode is active.
         val safetyRes = trySafetyStart(bg, delta, profile, iob_data, glucoseStatus.noise.toInt(), sanity.predBg, sanity.eventualBg)
@@ -5858,35 +5908,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          }
     }
 
-    private fun modeSafetyDegrade(bg: Double, delta: Float, minBg: Double, lgsTh: Double, glucoseAge: Double): DegradePlan {
-        // ⚠️ MEAL MODE SAFETY PHILOSOPHY:
-        // Quand un mode repas est activé, l'utilisateur signale qu'il a ingéré ou va ingérer des glucides.
-        // Le BG peut être temporairement bas, MAIS la montée glycémique du repas sera en avance sur l'insuline.
-        // → Le LGS classique est un FALSE POSITIVE dans ce contexte.
-        // → On ne bloque JAMAIS P1/P2 à cause d'un BG bas si le mode est actif.
-        
-        // 1. CRITICAL: Uniquement pour des problèmes de données réels (pas de LGS physiologique)
-        // On bloque UNIQUEMENT si données incohérentes ou CGM complètement stale
-        if (bg < 39.0 || bg > 600.0 || bg.isNaN() || bg.isInfinite()) {
-            return DegradePlan(ModeDegradeLevel.CRITICAL, "Data Incoherent (BG invalid)", 0.0, 0.0, "⚠️ Mode Meal: HALTED (Data Error)")
-        }
-        
-        if (glucoseAge > 20.0) { // CGM stale >20min (pas 15min, plus tolérant)
-            return DegradePlan(ModeDegradeLevel.CRITICAL, "CGM Stale (>20min)", 0.0, 0.0, "⚠️ Mode Meal: HALTED (CGM Stale)")
-        }
-
-        // 2. CAUTION: BG très bas (<70) mais ON NE BLOQUE PAS
-        // → On réduit légèrement (70%) au lieu de bloquer complètement
-        // Rationale: Le repas va faire monter le BG, c'est safe
-        if (bg < 70.0) {
-            return DegradePlan(ModeDegradeLevel.CAUTION, "BG Low (meal will raise)", 0.7, 1.0, null)
-        }
-
-        // 3. NORMAL: Pour tout le reste (y compris LGS threshold)
-        // → On ignore complètement minBg < lgsTh pour les modes repas
-        return DegradePlan(ModeDegradeLevel.NORMAL, "Normal (meal mode active)", 1.0, 1.0, null)
-    }
-
     private fun logDecisionFinal(tag: String, rT: RT, bg: Double? = null, delta: Float? = null) {
         val smb = rT.insulinReq ?: 0.0
         val smbUnits = rT.units ?: 0.0
@@ -5984,149 +6005,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         lastSafetySource = "SafetyPass"
         return DecisionResult.Fallthrough("Safety OK")
-    }
-
-    private fun tryManualModes(bg: Double, delta: Float, profile: OapsProfileAimi, glucoseTime: Long): DecisionResult {
-        // 🔍 DIAGNOSTIC: Log runtimes de TOUS les modes
-        consoleLog.add("🔍 MODES_DETECT dinner=${dinnerruntime} lunch=${lunchruntime} bfast=${bfastruntime} meal=${mealruntime} snack=${snackrunTime} hc=${highCarbrunTime}")
-        
-        // 1. Detect Active Mode & Configs
-        var activeName = ""
-        var activeRuntimeMin = -1
-        var pre1Config = 0.0
-        var pre2Config = 0.0
-        
-        // Priority check
-        if (highCarbrunTime in 0..120) {
-            if (highCarbrunTime in 0..30) { 
-                 activeName = "HighCarb"; activeRuntimeMin = runtimeToMinutes(highCarbrunTime)
-                 pre1Config = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
-                 pre2Config = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
-            }
-        } 
-        if (activeName.isEmpty() && dinnerruntime in 0..30) {
-             activeName = "Dinner"; activeRuntimeMin = runtimeToMinutes(dinnerruntime)
-             pre1Config = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
-             pre2Config = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
-        }
-        if (activeName.isEmpty() && lunchruntime in 0..30) {
-             activeName = "Lunch"; activeRuntimeMin = runtimeToMinutes(lunchruntime)
-             pre1Config = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
-             pre2Config = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
-        }
-        if (activeName.isEmpty() && bfastruntime in 0..30) {
-             activeName = "Breakfast"; activeRuntimeMin = runtimeToMinutes(bfastruntime)
-             pre1Config = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
-             pre2Config = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
-        }
-        if (activeName.isEmpty() && mealruntime in 0..30) {
-             activeName = "Meal"; activeRuntimeMin = runtimeToMinutes(mealruntime)
-             pre1Config = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
-        }
-        if (activeName.isEmpty() && snackrunTime in 0..30) {
-             activeName = "Snack"; activeRuntimeMin = runtimeToMinutes(snackrunTime)
-             pre1Config = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
-        }
-
-        if (activeName.isEmpty()) {
-            consoleLog.add("❌ MODES_DETECT No active mode detected → Fallthrough")
-            return DecisionResult.Fallthrough("No Active Mode")
-        } else {
-            consoleLog.add("✅ MODES_DETECT Active: $activeName runtime=${activeRuntimeMin}m pre1=${pre1Config} pre2=${pre2Config}")
-        }
-
-        val now = System.currentTimeMillis()
-        val rawState = preferences.get(StringKey.OApsAIMIUnstableModeState)
-        var state = ModeState.deserialize(rawState)
-        val approxStart = now - (activeRuntimeMin * 60000L)
-        val timeDiff = kotlin.math.abs(state.startMs - approxStart)
-        
-        if (state.name != activeName || timeDiff > 300000L) {
-             state = ModeState(name = activeName, startMs = approxStart)
-             consoleLog.add("MODE_INIT name=$activeName rt=$activeRuntimeMin")
-        }
-
-        // 2. Perform Safety Degradation Calculation
-        val glucoseAge = (now - glucoseTime) / 60000.0
-        val lgsThreshold = profile.lgsThreshold?.toDouble() ?: 65.0
-        val minBg = minOf(bg, predictedBg.toDouble(), eventualBG)
-        val plan = modeSafetyDegrade(bg, delta, minBg, lgsThreshold, glucoseAge)
-
-        // 3. TBR Activation Logic
-        var appliedTbr = 0.0
-        val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal)
-        val modeTbrLimit = if (maxBasalPref > 0.1) maxBasalPref else profile.max_basal
-        
-        // Mantain TBR for first 30 mins
-        if (activeRuntimeMin < 30) {
-            appliedTbr = modeTbrLimit * plan.tbrFactor
-            if (state.tbrStartedMs == 0L) state.tbrStartedMs = now
-        }
-
-
-        var actionBolus = 0.0
-        var actionPhase = ""
-        var isCatchup = false
-
-        // 🔍 DIAGNOSTIC: Log State & Configs BEFORE Decision
-        consoleLog.add("MODE_DEBUG mode=$activeName rt=$activeRuntimeMin state.pre1=${state.pre1} state.pre2=${state.pre2} p1Cfg=$pre1Config p2Cfg=$pre2Config")
-
-        // 4. Bolus Sequence (P1 -> P2)
-        // P1 Decision Window [0..7] + Catchup up to 30
-        if (!state.pre1 && activeRuntimeMin <= 30) {
-            val basePre1 = pre1Config
-            consoleLog.add("MODE_DEBUG_P1 entered=true basePre1=$basePre1")
-            if (basePre1 > 0) {
-                actionBolus = (basePre1 * plan.bolusFactor).coerceAtLeast(if (plan.level == ModeDegradeLevel.HIGH_RISK) 0.05 else 0.0)
-                actionPhase = "P1"
-                isCatchup = activeRuntimeMin > 7
-                state.pre1 = true
-                state.pre1SentMs = now
-                state.degradeLevel = plan.level.value
-                consoleLog.add("MODE_DEBUG_P1 decision=SEND bolus=$actionBolus factor=${plan.bolusFactor}")
-            } else {
-                consoleLog.add("MODE_DEBUG_P1 decision=SKIP reason=basePre1_is_zero")
-            }
-        } else {
-            consoleLog.add("MODE_DEBUG_P1 entered=false pre1=${state.pre1} rt=$activeRuntimeMin")
-        }
-        // P2 Decision Window [15..23] + Catchup up to 30
-        if (state.pre1 && !state.pre2 && pre2Config > 0.0 && activeRuntimeMin <= 30) {
-            val gapSinceP1 = (now - state.pre1SentMs) / 60000.0
-            if (gapSinceP1 >= 12.0) { // Safety gap 12 min
-                actionBolus = (pre2Config * plan.bolusFactor).coerceAtLeast(if (plan.level == ModeDegradeLevel.HIGH_RISK) 0.05 else 0.0)
-                actionPhase = "P2"
-                isCatchup = activeRuntimeMin > 23
-                state.pre2 = true
-                state.pre2SentMs = now
-                state.degradeLevel = plan.level.value
-            }
-        }
-
-        // 5. Update State & Persistence
-        preferences.put(StringKey.OApsAIMIUnstableModeState, state.serialize())
-        
-        // 6. Final Decision: ALWAYS Return Applied if Mode Active to block Autodrive
-        val statusLabel = if (plan.level.value > 0) "MODE_DEGRADED_${plan.level.value}" else "MODE_ACTIVE"
-        val statusIcon = if (isCatchup) "⏰" else "🍱"
-        
-        if (plan.banner != null) consoleLog.add("UI_BANNER msg=${plan.banner}")
-        consoleLog.add("$statusIcon $statusLabel mode=$activeName phase=$actionPhase bolus=${"%.2f".format(actionBolus)} tbr=${"%.2f".format(appliedTbr)} reason=${plan.reason}")
-
-        // Check if handoff to ML is needed (after 23 mins and both sent)
-        val handoffReady = activeRuntimeMin > 23 && state.pre1 && (pre2Config <= 0.0 || state.pre2)
-        if (handoffReady && actionBolus == 0.0) {
-             consoleLog.add("MODE_HANDOFF_TO_ML mode=$activeName rt=$activeRuntimeMin")
-             return DecisionResult.Fallthrough("Handoff to ML after meal sequence")
-        }
-
-        return DecisionResult.Applied(
-            source = "ManualMode_$activeName",
-            bolusU = actionBolus,
-            tbrUph = appliedTbr,
-            tbrMin = 30,
-            reason = "$statusIcon Mode $activeName ($actionPhase) [Plan: ${plan.level.label}]"
-        )
     }
 
     private fun tryMealAdvisor(bg: Double, delta: Float, iobData: IobTotal, profile: OapsProfileAimi, lastBolusTime: Long, modesCondition: Boolean): DecisionResult {
