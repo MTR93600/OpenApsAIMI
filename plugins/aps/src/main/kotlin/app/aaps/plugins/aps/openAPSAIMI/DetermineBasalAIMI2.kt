@@ -5871,14 +5871,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (state.tbrStartedMs == 0L) state.tbrStartedMs = now
         }
 
+
         var actionBolus = 0.0
         var actionPhase = ""
         var isCatchup = false
+
+        // 🔍 DIAGNOSTIC: Log State & Configs BEFORE Decision
+        consoleLog.add("MODE_DEBUG mode=$activeName rt=$activeRuntimeMin state.pre1=${state.pre1} state.pre2=${state.pre2} p1Cfg=$pre1Config p2Cfg=$pre2Config")
 
         // 4. Bolus Sequence (P1 -> P2)
         // P1 Decision Window [0..7] + Catchup up to 30
         if (!state.pre1 && activeRuntimeMin <= 30) {
             val basePre1 = pre1Config
+            consoleLog.add("MODE_DEBUG_P1 entered=true basePre1=$basePre1")
             if (basePre1 > 0) {
                 actionBolus = (basePre1 * plan.bolusFactor).coerceAtLeast(if (plan.level == ModeDegradeLevel.HIGH_RISK) 0.05 else 0.0)
                 actionPhase = "P1"
@@ -5886,10 +5891,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 state.pre1 = true
                 state.pre1SentMs = now
                 state.degradeLevel = plan.level.value
+                consoleLog.add("MODE_DEBUG_P1 decision=SEND bolus=$actionBolus factor=${plan.bolusFactor}")
+            } else {
+                consoleLog.add("MODE_DEBUG_P1 decision=SKIP reason=basePre1_is_zero")
             }
-        } 
+        } else {
+            consoleLog.add("MODE_DEBUG_P1 entered=false pre1=${state.pre1} rt=$activeRuntimeMin")
+        }
         // P2 Decision Window [15..23] + Catchup up to 30
-        else if (state.pre1 && !state.pre2 && pre2Config > 0.0 && activeRuntimeMin <= 30) {
+        if (state.pre1 && !state.pre2 && pre2Config > 0.0 && activeRuntimeMin <= 30) {
             val gapSinceP1 = (now - state.pre1SentMs) / 60000.0
             if (gapSinceP1 >= 12.0) { // Safety gap 12 min
                 actionBolus = (pre2Config * plan.bolusFactor).coerceAtLeast(if (plan.level == ModeDegradeLevel.HIGH_RISK) 0.05 else 0.0)
