@@ -1382,9 +1382,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         isExplicitUserAction: Boolean = false,
         decisionSource: String = "AIMI"
     ) {
-        val proposedFloat = proposedUnits.toFloat()
+        // 🛡️ FIX NC3: REACTIVITY CLAMP for Low BG (Safety-Critical)
+        // Prevent learner amplification at low BG
+        var effectiveProposed = proposedUnits
+        
+        if (bg < 120.0 && !isExplicitUserAction) {
+            val lowBgReactivityMax = 1.05 // Maximum 5% amplification below 120
+            val currentReactivity = try {
+                unifiedReactivityLearner.globalFactor
+            } catch (e: Exception) {
+                1.0 // Fallback if learner not initialized
+            }
+            
+            if (currentReactivity > lowBgReactivityMax) {
+                val clampedFactor = lowBgReactivityMax
+                effectiveProposed = (proposedUnits / currentReactivity * clampedFactor).coerceAtLeast(0.0)
+                consoleLog.add("REACTIVITY_CLAMP bg=${bg.roundToInt()} react=${"%.2f".format(currentReactivity)} max=${"%.2f".format(clampedFactor)} proposed=${"%.2f".format(proposedUnits)}->${"%.2f".format(effectiveProposed)}")
+            }
+        }
+        
+        val proposedFloat = effectiveProposed.toFloat()
         lastDecisionSource = decisionSource
-        lastSmbProposed = proposedUnits
+        lastSmbProposed = effectiveProposed
         
         // Use maxSMB (Preferences) as the hard limit.
         // We use 'maxSMB' instead of 'maxSMBHB' to ensure strict safety unless explicitly handled otherwise.
@@ -1397,7 +1416,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          // 🔧 RESTORED: Pass PKPD runtime for tail damping
          // Note: pkpdRuntime is calculated later in determine_basal, so we pass null here
          // and rely on the PKPD tail damping in applySafetyPrecautions for context-aware reduction
-         val safetyCappedUnits = applySafetyPrecautions(
+         var safetyCappedUnits = applySafetyPrecautions(
             mealData = mealData,
             smbToGiveParam = proposedFloat,
             hypoThreshold = hypoThreshold,
@@ -1410,6 +1429,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
          if (safetyCappedUnits < proposedFloat) {
               consoleLog.add("Safety Precautions reduced SMB: $proposedFloat -> $safetyCappedUnits")
+         }
+
+         // 🛡️ FIX NC2: LOW BG SMB GUARD (Safety-Critical)
+         // Reduce maxSMB significantly under 120 mg/dL to prevent hypo
+         val lowBgThreshold = 120.0
+         val lowBgSmbFactor = 0.4 // 60% reduction (configurable via preferences later)
+         
+         if (bg < lowBgThreshold && !isExplicitUserAction) {
+             val lowBgLimit = (baseLimit * lowBgSmbFactor).toFloat()
+             if (safetyCappedUnits > lowBgLimit) {
+                 consoleLog.add("LOW_BG_GUARD bg=${bg.roundToInt()} cap=${"%.2f".format(lowBgLimit)} factor=${"%.0f".format(lowBgSmbFactor*100)}%")
+                 safetyCappedUnits = lowBgLimit
+             }
          }
 
          // 🔧 FIX 3: Enhanced refractory if prediction absent
@@ -2453,7 +2485,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // 9) Clamp final : mécanique SMB entre 1 et 10 min
-        return interval.coerceIn(1, 10)
+        // Clamp final + Low BG boost
+        var finalInterval = interval.coerceIn(1, 10)
+        
+        // 🛡️ FIX NC4: LOW BG INTERVAL BOOST (Safety-Critical)
+        val lowBgIntervalMin = 5
+        if (bg < 120f && finalInterval < lowBgIntervalMin) {
+            finalInterval = lowBgIntervalMin
+            consoleLog.add("LOW_BG_INTERVAL_BOOST bg=${bg.roundToInt()} interval=${finalInterval}m")
+        }
+        
+        return finalInterval
     }
 
     // Structure simple, inchangée
