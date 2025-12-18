@@ -5683,22 +5683,32 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private fun modeSafetyDegrade(bg: Double, delta: Float, minBg: Double, lgsTh: Double, glucoseAge: Double): DegradePlan {
-        // 1. CRITICAL: Data issues or extreme hypo risk
-        if (bg < 55.0 || glucoseAge > 15.0 || bg.isNaN() || bg.isInfinite()) {
-            return DegradePlan(ModeDegradeLevel.CRITICAL, "Safety Halt (LGS/Stale/Data)", 0.0, 0.0, "⚠️ Mode Meal: HALTED (Safety)")
+        // ⚠️ MEAL MODE SAFETY PHILOSOPHY:
+        // Quand un mode repas est activé, l'utilisateur signale qu'il a ingéré ou va ingérer des glucides.
+        // Le BG peut être temporairement bas, MAIS la montée glycémique du repas sera en avance sur l'insuline.
+        // → Le LGS classique est un FALSE POSITIVE dans ce contexte.
+        // → On ne bloque JAMAIS P1/P2 à cause d'un BG bas si le mode est actif.
+        
+        // 1. CRITICAL: Uniquement pour des problèmes de données réels (pas de LGS physiologique)
+        // On bloque UNIQUEMENT si données incohérentes ou CGM complètement stale
+        if (bg < 39.0 || bg > 600.0 || bg.isNaN() || bg.isInfinite()) {
+            return DegradePlan(ModeDegradeLevel.CRITICAL, "Data Incoherent (BG invalid)", 0.0, 0.0, "⚠️ Mode Meal: HALTED (Data Error)")
+        }
+        
+        if (glucoseAge > 20.0) { // CGM stale >20min (pas 15min, plus tolérant)
+            return DegradePlan(ModeDegradeLevel.CRITICAL, "CGM Stale (>20min)", 0.0, 0.0, "⚠️ Mode Meal: HALTED (CGM Stale)")
         }
 
-        // 2. HIGH RISK: Below LGS threshold or dropping into it
-        if (minBg < lgsTh || (bg < 85.0 && delta < 0)) {
-            return DegradePlan(ModeDegradeLevel.HIGH_RISK, "Low BG / Dropping", 0.05, 0.5, "⚠️ Mode Meal: REDUCED (Low BG)")
+        // 2. CAUTION: BG très bas (<70) mais ON NE BLOQUE PAS
+        // → On réduit légèrement (70%) au lieu de bloquer complètement
+        // Rationale: Le repas va faire monter le BG, c'est safe
+        if (bg < 70.0) {
+            return DegradePlan(ModeDegradeLevel.CAUTION, "BG Low (meal will raise)", 0.7, 1.0, null)
         }
 
-        // 3. CAUTION: Approaching range from below
-        if (bg < 105.0) {
-            return DegradePlan(ModeDegradeLevel.CAUTION, "Entering Range", 0.6, 1.0, null)
-        }
-
-        return DegradePlan(ModeDegradeLevel.NORMAL, "Normal", 1.0, 1.0, null)
+        // 3. NORMAL: Pour tout le reste (y compris LGS threshold)
+        // → On ignore complètement minBg < lgsTh pour les modes repas
+        return DegradePlan(ModeDegradeLevel.NORMAL, "Normal (meal mode active)", 1.0, 1.0, null)
     }
 
     private fun logDecisionFinal(tag: String, rT: RT, bg: Double? = null, delta: Float? = null) {
