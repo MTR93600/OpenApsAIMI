@@ -4000,31 +4000,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
 
         // -----------------------------------------------------
-        // ⚔️ DECISION PIPELINE EXECUTION (Refactor v2.2 Strict)
+        // ⚔️ DECISION PIPELINE EXECUTION (Refactor v2.3 Strict)
         // -----------------------------------------------------
-        // Priority: 1. Manual -> 2. Advisor -> 3. Autodrive -> Fallback (Global)
+        // Priority: 1. Manual -> 2. Safety (Fallback) -> 3. Advisor -> 4. Autodrive
 
-        // 1. Manual Mode Check
-        // PRIORITY 1: SAFETY (LGS / HYPO / STALE)
-        // Evaluated FIRST. Can apply TBR=0.0. Terminate if Applied.
-        // PRIORITY 1: SAFETY (LGS / HYPO / STALE)
-        // Evaluated FIRST. Can apply TBR=0.0. Terminate if Applied.
-        val safetyRes = trySafetyStart(bg, delta, profile, iob_data, glucoseStatus.noise.toInt(), sanity.predBg, sanity.eventualBg)
-        if (safetyRes is DecisionResult.Applied) {
-            consoleLog.add("SAFETY_APPLIED_TBR_ZERO intent=${safetyRes.tbrUph}")
-            if (safetyRes.tbrUph != null) {
-                setTempBasal(safetyRes.tbrUph, safetyRes.tbrMin ?: 30, profile, rT, currenttemp, overrideSafetyLimits = true)
-            }
-            // Block all boluses
-            rT.insulinReq = 0.0
-            rT.reason.append(" | ⚠ Safety Halt: ${safetyRes.reason}")
-            lastDecisionSource = safetyRes.source
-            logDecisionFinal("SAFETY", rT, bg, delta)
-            return rT
-        }
-
-        // PRIORITY 2: MANUAL MODES (Stateful)
-        val manualRes = tryManualModes(bg, delta, profile)
+        // PRIORITY 1: MANUAL MODES (Stateful & Priority)
+        val manualRes = tryManualModes(bg, delta, profile, glucose_status.date)
         if (manualRes is DecisionResult.Applied) {
             consoleLog.add("MODE_ACTIVE source=${manualRes.source} bolus=${manualRes.bolusU}")
             if (manualRes.tbrUph != null) {
@@ -4036,6 +4017,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Add Status Log (User Request)
             rT.reason.appendLine(context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", activeModeName))
             logDecisionFinal("MANUAL_MODE", rT, bg, delta)
+            return rT
+        }
+
+        // PRIORITY 2: SAFETY FALLBACK (LGS / HYPO / STALE)
+        // Evaluated only if no manual mode is active.
+        val safetyRes = trySafetyStart(bg, delta, profile, iob_data, glucoseStatus.noise.toInt(), sanity.predBg, sanity.eventualBg)
+        if (safetyRes is DecisionResult.Applied) {
+            consoleLog.add("SAFETY_APPLIED_TBR_ZERO intent=${safetyRes.tbrUph}")
+            if (safetyRes.tbrUph != null) {
+                setTempBasal(safetyRes.tbrUph, safetyRes.tbrMin ?: 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+            }
+            // Block all boluses
+            rT.insulinReq = 0.0
+            rT.reason.append(" | ⚠ Safety Halt: ${safetyRes.reason}")
+            lastDecisionSource = safetyRes.source
+            logDecisionFinal("SAFETY", rT, bg, delta)
             return rT
         }
 
@@ -5638,15 +5635,32 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // ⚔️ DECISION PIPELINE HELPERS (AIMI 2.0 Refactor)
     // -----------------------------------------------------
 
+    private enum class ModeDegradeLevel(val value: Int, val label: String) {
+        NORMAL(0, "Normal"),
+        CAUTION(1, "Caution"),
+        HIGH_RISK(2, "High Risk"),
+        CRITICAL(3, "Critical")
+    }
+
+    private data class DegradePlan(
+        val level: ModeDegradeLevel,
+        val reason: String,
+        val bolusFactor: Double,
+        val tbrFactor: Double,
+        val banner: String?
+    )
+
     private data class ModeState(
          var name: String = "",
          var startMs: Long = 0L,
          var pre1: Boolean = false,
          var pre2: Boolean = false,
-         var pre1SentMs: Long = 0L, // ✅ NEW: Timestamp for P1
-         var pre2SentMs: Long = 0L  // ✅ NEW: Timestamp for P2
+         var pre1SentMs: Long = 0L,
+         var pre2SentMs: Long = 0L,
+         var tbrStartedMs: Long = 0L,      // 🆕 Track TBR activation
+         var degradeLevel: Int = 0          // 🆕 Track safety state
     ) {
-         fun serialize(): String = "$name|$startMs|$pre1|$pre2|$pre1SentMs|$pre2SentMs"
+         fun serialize(): String = "$name|$startMs|$pre1|$pre2|$pre1SentMs|$pre2SentMs|$tbrStartedMs|$degradeLevel"
          companion object {
              fun deserialize(s: String): ModeState {
                  if (s.isBlank()) return ModeState()
@@ -5659,11 +5673,32 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                          p[2].toBoolean(), 
                          p[3].toBoolean(),
                          p.getOrNull(4)?.toLongOrNull() ?: 0L,
-                         p.getOrNull(5)?.toLongOrNull() ?: 0L
+                         p.getOrNull(5)?.toLongOrNull() ?: 0L,
+                         p.getOrNull(6)?.toLongOrNull() ?: 0L,
+                         p.getOrNull(7)?.toIntOrNull() ?: 0
                      )
                  } catch (e: Exception) { ModeState() }
              }
          }
+    }
+
+    private fun modeSafetyDegrade(bg: Double, delta: Float, minBg: Double, lgsTh: Double, glucoseAge: Double): DegradePlan {
+        // 1. CRITICAL: Data issues or extreme hypo risk
+        if (bg < 55.0 || glucoseAge > 15.0 || bg.isNaN() || bg.isInfinite()) {
+            return DegradePlan(ModeDegradeLevel.CRITICAL, "Safety Halt (LGS/Stale/Data)", 0.0, 0.0, "⚠️ Mode Meal: HALTED (Safety)")
+        }
+
+        // 2. HIGH RISK: Below LGS threshold or dropping into it
+        if (minBg < lgsTh || (bg < 85.0 && delta < 0)) {
+            return DegradePlan(ModeDegradeLevel.HIGH_RISK, "Low BG / Dropping", 0.05, 0.5, "⚠️ Mode Meal: REDUCED (Low BG)")
+        }
+
+        // 3. CAUTION: Approaching range from below
+        if (bg < 105.0) {
+            return DegradePlan(ModeDegradeLevel.CAUTION, "Entering Range", 0.6, 1.0, null)
+        }
+
+        return DegradePlan(ModeDegradeLevel.NORMAL, "Normal", 1.0, 1.0, null)
     }
 
     private fun logDecisionFinal(tag: String, rT: RT, bg: Double? = null, delta: Float? = null) {
@@ -5765,20 +5800,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return DecisionResult.Fallthrough("Safety OK")
     }
 
-    private fun tryManualModes(bg: Double, delta: Float, profile: OapsProfileAimi): DecisionResult {
-        // 🛡️ HARD SAFETY: BG too low
-        if (bg < 60) {
-            consoleLog.add("MODE_BLOCK reason=BG_TOO_LOW bg=$bg")
-            return DecisionResult.Fallthrough("BG too low (<60)")
-        }
-
+    private fun tryManualModes(bg: Double, delta: Float, profile: OapsProfileAimi, glucoseTime: Long): DecisionResult {
         // 1. Detect Active Mode & Configs
         var activeName = ""
         var activeRuntimeMin = -1
         var pre1Config = 0.0
         var pre2Config = 0.0
         
-        // Priority check (same order as original)
+        // Priority check
         if (highCarbrunTime in 0..120) {
             if (highCarbrunTime in 0..30) { 
                  activeName = "HighCarb"; activeRuntimeMin = runtimeToMinutes(highCarbrunTime)
@@ -5814,112 +5843,88 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return DecisionResult.Fallthrough("No Active Mode")
         }
 
-        // 2. Load State (Persisted)
-        val stateKey = StringKey.OApsAIMIUnstableModeState
-        val rawState = preferences.get(stateKey)
         val now = System.currentTimeMillis()
+        val rawState = preferences.get(StringKey.OApsAIMIUnstableModeState)
         var state = ModeState.deserialize(rawState)
-
-        // 3. Sync State with Reality
         val approxStart = now - (activeRuntimeMin * 60000L)
         val timeDiff = kotlin.math.abs(state.startMs - approxStart)
         
         if (state.name != activeName || timeDiff > 300000L) {
-             // New Mode Activation detected
-             state = ModeState(name = activeName, startMs = approxStart, pre1 = false, pre2 = false)
-             consoleLog.add("MODE_STATE_RESET new=$activeName runtime=$activeRuntimeMin")
+             state = ModeState(name = activeName, startMs = approxStart)
+             consoleLog.add("MODE_INIT name=$activeName rt=$activeRuntimeMin")
         }
 
-        // 🛡️ HARD SAFETY CHECK: LGS / Hypo Guard
+        // 2. Perform Safety Degradation Calculation
+        val glucoseAge = (now - glucoseTime) / 60000.0
         val lgsThreshold = profile.lgsThreshold?.toDouble() ?: 65.0
         val minBg = minOf(bg, predictedBg.toDouble(), eventualBG)
-        if (minBg < lgsThreshold) {
-            consoleLog.add("MODE_BLOCK mode=$activeName reason=LGS minBG=${minBg.roundToInt()} th=${lgsThreshold.roundToInt()}")
-            // Don't update state (allow retry next tick if BG rises)
-            return DecisionResult.Applied(
-                source = "SafetyLGS",
-                bolusU = 0.0,
-                tbrUph = 0.0,
-                tbrMin = 30,
-                reason = "🛑 LGS: minBG ${minBg.roundToInt()} < ${lgsThreshold.roundToInt()}"
-            )
+        val plan = modeSafetyDegrade(bg, delta, minBg, lgsThreshold, glucoseAge)
+
+        // 3. TBR Activation Logic
+        var appliedTbr = 0.0
+        val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal)
+        val modeTbrLimit = if (maxBasalPref > 0.1) maxBasalPref else profile.max_basal
+        
+        // Mantain TBR for first 30 mins
+        if (activeRuntimeMin < 30) {
+            appliedTbr = modeTbrLimit * plan.tbrFactor
+            if (state.tbrStartedMs == 0L) state.tbrStartedMs = now
         }
 
-        // 🛡️ COOLDOWN: Anti-double-bolus
-        val MIN_COOLDOWN_MIN = 10.0 // 10 minutes minimum between boluses
-        val sinceLast = lastBolusAgeMinutes
-        if (!sinceLast.isNaN() && sinceLast < MIN_COOLDOWN_MIN) {
-            consoleLog.add("MODE_BLOCK mode=$activeName reason=Cooldown sinceLastBolus=${"%.1f".format(sinceLast)}m")
-            return DecisionResult.Fallthrough("Cooldown active (${"%.1f".format(sinceLast)}m)")
-        }
-
-        // 4. ✅ CATCH-UP LOGIC: P1 Decision
-        val MIN_GAP_P1_P2_MIN = 15.0 // Minimum 15 min between P1 and P2
         var actionBolus = 0.0
         var actionPhase = ""
-        var newState = state
         var isCatchup = false
 
-        // P1 Catch-Up: Send if not sent yet (regardless of runtime)
-        if (!state.pre1 && pre1Config > 0.0) {
-            actionBolus = pre1Config
-            actionPhase = "Pre1"
-            isCatchup = activeRuntimeMin > 7 // Mark as catch-up if after ideal window
-            newState = state.copy(pre1 = true, pre1SentMs = now)
-            
-            val catchupLabel = if (isCatchup) "CATCHUP_P1" else "P1"
-            consoleLog.add("MODE_$catchupLabel mode=$activeName rt=${activeRuntimeMin}m send=${"%.2f".format(actionBolus)}U")
-        }
-
-        // P2 Catch-Up: Send if P1 sent and gap ≥ MIN_GAP
-        if (state.pre1 && !state.pre2 && pre2Config > 0.0 && actionBolus == 0.0) {
-            val gapSinceP1Min = if (state.pre1SentMs > 0) {
-                (now - state.pre1SentMs) / 60000.0
-            } else {
-                // Fallback if timestamp missing (old state format)
-                activeRuntimeMin.toDouble()
+        // 4. Bolus Sequence (P1 -> P2)
+        // P1 Decision Window [0..7] + Catchup up to 30
+        if (!state.pre1 && activeRuntimeMin <= 30) {
+            val basePre1 = pre1Config
+            if (basePre1 > 0) {
+                actionBolus = (basePre1 * plan.bolusFactor).coerceAtLeast(if (plan.level == ModeDegradeLevel.HIGH_RISK) 0.05 else 0.0)
+                actionPhase = "P1"
+                isCatchup = activeRuntimeMin > 7
+                state.pre1 = true
+                state.pre1SentMs = now
+                state.degradeLevel = plan.level.value
             }
-            
-            if (gapSinceP1Min >= MIN_GAP_P1_P2_MIN) {
-                actionBolus = pre2Config
-                actionPhase = "Pre2"
-                isCatchup = activeRuntimeMin > 23 // Mark as catch-up if after ideal window
-                newState = state.copy(pre2 = true, pre2SentMs = now)
-                
-                val catchupLabel = if (isCatchup) "CATCHUP_P2" else "P2"
-                consoleLog.add("MODE_$catchupLabel mode=$activeName rt=${activeRuntimeMin}m gapSinceP1=${"%.1f".format(gapSinceP1Min)}m send=${"%.2f".format(actionBolus)}U")
-            } else {
-                consoleLog.add("MODE_WAIT_P2 mode=$activeName gapSinceP1=${"%.1f".format(gapSinceP1Min)}m minGap=${MIN_GAP_P1_P2_MIN}m")
+        } 
+        // P2 Decision Window [15..23] + Catchup up to 30
+        else if (state.pre1 && !state.pre2 && pre2Config > 0.0 && activeRuntimeMin <= 30) {
+            val gapSinceP1 = (now - state.pre1SentMs) / 60000.0
+            if (gapSinceP1 >= 12.0) { // Safety gap 12 min
+                actionBolus = (pre2Config * plan.bolusFactor).coerceAtLeast(if (plan.level == ModeDegradeLevel.HIGH_RISK) 0.05 else 0.0)
+                actionPhase = "P2"
+                isCatchup = activeRuntimeMin > 23
+                state.pre2 = true
+                state.pre2SentMs = now
+                state.degradeLevel = plan.level.value
             }
         }
 
-        // 5. Update Persistence & Return
-        if (newState != state) {
-             preferences.put(StringKey.OApsAIMIUnstableModeState, newState.serialize())
+        // 5. Update State & Persistence
+        preferences.put(StringKey.OApsAIMIUnstableModeState, state.serialize())
+        
+        // 6. Final Decision: ALWAYS Return Applied if Mode Active to block Autodrive
+        val statusLabel = if (plan.level.value > 0) "MODE_DEGRADED_${plan.level.value}" else "MODE_ACTIVE"
+        val statusIcon = if (isCatchup) "⏰" else "🍱"
+        
+        if (plan.banner != null) consoleLog.add("UI_BANNER msg=${plan.banner}")
+        consoleLog.add("$statusIcon $statusLabel mode=$activeName phase=$actionPhase bolus=${"%.2f".format(actionBolus)} tbr=${"%.2f".format(appliedTbr)} reason=${plan.reason}")
+
+        // Check if handoff to ML is needed (after 23 mins and both sent)
+        val handoffReady = activeRuntimeMin > 23 && state.pre1 && (pre2Config <= 0.0 || state.pre2)
+        if (handoffReady && actionBolus == 0.0) {
+             consoleLog.add("MODE_HANDOFF_TO_ML mode=$activeName rt=$activeRuntimeMin")
+             return DecisionResult.Fallthrough("Handoff to ML after meal sequence")
         }
-        
-        if (actionBolus > 0.0) {
-            val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal)
-            val modeTbr = if (maxBasalPref > 0.1) maxBasalPref else profile.max_basal
-            
-            val statusIcon = if (isCatchup) "⏰" else "🍱"
-            consoleLog.add("MODE_DECISION mode=$activeName phase=$actionPhase amount=$actionBolus tbr=$modeTbr catchup=$isCatchup")
-            
-            return DecisionResult.Applied(
-                source = "ManualMode_$activeName",
-                bolusU = actionBolus,
-                tbrUph = modeTbr, 
-                tbrMin = 30,
-                reason = "$statusIcon Manual Mode ($activeName $actionPhase): ${actionBolus}U + TBR ${modeTbr}U/h"
-            )
-        }
-        
-        // 6. Fallthrough if all sent or waiting
-        val pre1Status = if (state.pre1) "✅" else "⏳"
-        val pre2Status = if (pre2Config > 0) { if (state.pre2) "✅" else "⏳" } else "N/A"
-        consoleLog.add("MODE_PROGRESS mode=$activeName rt=${activeRuntimeMin}m pre1=$pre1Status pre2=$pre2Status")
-        
-        return DecisionResult.Fallthrough("Mode Active (pre1=$pre1Status, pre2=$pre2Status)")
+
+        return DecisionResult.Applied(
+            source = "ManualMode_$activeName",
+            bolusU = actionBolus,
+            tbrUph = appliedTbr,
+            tbrMin = 30,
+            reason = "$statusIcon Mode $activeName ($actionPhase) [Plan: ${plan.level.label}]"
+        )
     }
 
     private fun tryMealAdvisor(bg: Double, delta: Float, iobData: IobTotal, profile: OapsProfileAimi, lastBolusTime: Long, modesCondition: Boolean): DecisionResult {
