@@ -334,6 +334,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val ngrTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     private var zeroBasalAccumulatedMinutes: Int = 0
     private val MAX_ZERO_BASAL_DURATION = 60  // Durée maximale autorisée en minutes à 0 basal
+    private val insulinObserver = app.aaps.plugins.aps.openAPSAIMI.pkpd.RealTimeInsulinObserver()  // 🚀 Real-Time Insulin Observer
+    private var pkpdThrottleIntervalAdd: Int = 0       // 🚀 PKPD interval boost (0 si normal/modes repas)
+    private var pkpdPreferTbrBoost: Double = 1.0       // 🚀 PKPD TBR boost factor (1.0 si normal/modes repas)
 
     private fun Double.toFixed2(): String = DecimalFormat("0.00#").format(round(this, 2))
     private fun parseNgrTime(value: String, fallback: LocalTime): LocalTime =
@@ -1142,6 +1145,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 3) Tendance & ajustement
         val bgTrend = calculateBgTrend(getRecentBGs(), StringBuilder())
         var rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend).coerceAtLeast(0.0)
+        
+        // 🚀 PKPD TBR Boost: Augmenter TBR si preferTbr (sauf modes repas)
+        // Note: pkpdPreferTbrBoost est déjà à 1.0 pour les modes repas (via reset dans finalizeAndCapSMB)
+        if (pkpdPreferTbrBoost > 1.0 && !isMealMode) {
+            val originalRate = rateAdjustment
+            rateAdjustment = (rateAdjustment * pkpdPreferTbrBoost).coerceAtLeast(0.0)
+            consoleLog.add("PKPD_TBR_BOOST original=${"%.2f".format(originalRate)} boost=${"%.2f".format(pkpdPreferTbrBoost)} → ${"%.2f".format(rateAdjustment)}U/h")
+        }
 
         // 4) Limites de sécurité
         val maxSafe = min(
@@ -1476,6 +1487,54 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          if (predMissing && !isExplicitUserAction) {
              val degraded = (maxSMB * 0.5).toFloat()
              if (gatedUnits > degraded) gatedUnits = degraded
+         }
+         
+         // 🚀 NOUVEAUTÉ: Real-Time Insulin Observer Throttle
+         if (!isExplicitUserAction) {
+             val actionState = insulinObserver.update(
+                 currentBg = this.bg,
+                 bgDelta = this.delta.toDouble(),
+                 iobTotal = this.iob.toDouble(),
+                 iobActivityNow = this.iobActivityNow,
+                 iobActivityIn30 = 0.0,  // Not critical for throttle
+                 peakMinutesAbs = 0,     // Not critical for throttle
+                 diaHours = 4.0,         // Approximation
+                 carbsActiveG = this.cob.toDouble(),
+                 now = dateUtil.now()
+             )
+             
+             val throttle = app.aaps.plugins.aps.openAPSAIMI.pkpd.SmbTbrThrottleLogic.computeThrottle(
+                 actionState = actionState,
+                 bgDelta = this.delta.toDouble(),
+                 bgRising = this.bg > this.targetBg,
+                 targetBg = this.targetBg.toDouble(),
+                 currentBg = this.bg
+             )
+             
+             // Apply throttle
+             val originalGated = gatedUnits
+             gatedUnits = (gatedUnits * throttle.smbFactor.toFloat()).coerceAtLeast(0f)
+             
+             // Log
+             if (throttle.smbFactor < 1.0 || throttle.preferTbr) {
+                 consoleLog.add("PKPD_THROTTLE smbFactor=${"%.2f".format(throttle.smbFactor)} intervalAdd=${throttle.intervalAddMin} preferTbr=${throttle.preferTbr} reason=${throttle.reason}")
+                 if (originalGated > 0f && gatedUnits < originalGated * 0.6f) {
+                     consoleLog.add("  ⚠️ SMB reduced ${"%2f".format(originalGated)} → ${"%.2f".format(gatedUnits)}U (PKPD throttle)")
+                 }
+             }
+             
+             // Si preferTbr, suggérer TBR dans reason (pas bloquer SMB)
+             if (throttle.preferTbr && gatedUnits < proposedFloat * 0.5) {
+                 rT.reason.append(" | 💡 TBR recommended (${throttle.reason})")
+             }
+             
+             // 🚀 Stocker les valeurs pour interval SMB et TBR boost
+             pkpdThrottleIntervalAdd = throttle.intervalAddMin
+             pkpdPreferTbrBoost = if (throttle.preferTbr) 1.15 else 1.0  // +15% TBR si preferTbr
+         } else {
+             // Reset si explicit user action (modes repas)
+             pkpdThrottleIntervalAdd = 0
+             pkpdPreferTbrBoost = 1.0
          }
 
          val safeCap = capSmbDose(
@@ -2495,6 +2554,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add("LOW_BG_INTERVAL_BOOST bg=${bg.roundToInt()} interval=${finalInterval}m")
         }
         
+        // 🚀 PKPD Throttle: Add interval boost if near peak/onset unconfirmed
+        // Note: pkpdThrottleIntervalAdd est déjà à 0 pour les modes repas (via reset dans finalizeAndCapSMB)
+        val pkpdBoost = pkpdThrottleIntervalAdd
+        if (pkpdBoost > 0) {
+            val baseInterval = finalInterval
+            finalInterval = (finalInterval + pkpdBoost).coerceAtMost(10)
+            consoleLog.add("PKPD_INTERVAL_BOOST base=${baseInterval}m +${pkpdBoost}m → ${finalInterval}m")
+        }
+        
         return finalInterval
     }
 
@@ -3501,6 +3569,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 "Activity Now=${"%.0f".format(iobActivityNow * 100)}%, " +
                 "in 30m=${"%.0f".format(iobActivityIn30Min * 100)}%"
         )
+        
+        // 🚀 NOUAUTÉ: Update Real-Time Insulin Observer
+        val insulinActionState = insulinObserver.update(
+            currentBg = bg,
+            bgDelta = delta.toDouble(),
+            iobTotal = iobTotal,
+            iobActivityNow = iobActivityNow,
+            iobActivityIn30 = iobActivityIn30Min,
+            peakMinutesAbs = iobPeakMinutes.toInt(),
+            diaHours = profile.dia,
+            carbsActiveG = cob.toDouble(),
+            now = dateUtil.now()
+        )
+        
+        // Log état observateur
+        consoleLog.add("PKPD_OBS ${insulinActionState.reason}")
+        
         // 👇 Force la création du CSV (premier snapshot WCycle “pré-décision”)
         ensureWCycleInfo()
         // --- GS + features AIMI -----------------------------------------------------
