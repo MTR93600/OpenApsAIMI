@@ -1468,12 +1468,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          val tdd24h = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: 30.0
          val activityThreshold = (tdd24h / 24.0) * 0.15 // 15% of hourly TDD
          
-         if (sinceBolus < 20.0 && iobActivityNow > activityThreshold) {
+         if (sinceBolus < 20.0 && iobActivityNow > activityThreshold && !isExplicitUserAction) {
              absorptionFactor = if (bg > targetBg + 60 && delta > 0) 0.75 else 0.5
              gatedUnits = (gatedUnits * absorptionFactor.toFloat()).coerceAtLeast(0f)
          }
 
-         if (predMissing) {
+         if (predMissing && !isExplicitUserAction) {
              val degraded = (maxSMB * 0.5).toFloat()
              if (gatedUnits > degraded) gatedUnits = degraded
          }
