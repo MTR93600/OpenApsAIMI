@@ -81,6 +81,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.collections.asSequence
+import kotlin.collections.get
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln
@@ -1473,6 +1474,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
          if (refractoryBlocked) {
              gatedUnits = 0f
+             consoleLog.add("⏸️ REFRACTORY_BLOCK sinceBolus=${"%.1f".format(sinceBolus)}m window=${"%.1f".format(refractoryWindow)}m (SMB blocked)")
+         } else if (sinceBolus < refractoryWindow && isExplicitUserAction) {
+             // Modes repas bypassent explicitement le refractory
+             consoleLog.add("✅ REFRACTORY_BYPASS sinceBolus=${"%.1f".format(sinceBolus)}m window=${"%.1f".format(refractoryWindow)}m (Meal mode override)")
          }
 
          // 🔧 FIX 2: Adaptive AbsorptionGuard threshold (pediatric-safe)
@@ -1546,15 +1551,36 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             iob = this.iob.toDouble(),
             maxIob = this.maxIob
         )
+        
+        // 🚀 MEAL MODES FORCE SEND: Garantir l'envoi P1/P2 (Bypass maxIOB si nécessaire)
+        var finalUnits = safeCap.toDouble()
+        
+        if (isExplicitUserAction && gatedUnits > 0f) {
+            // Pour les modes repas, on utilise directement gatedUnits (déjà réduit par dégradation si nécessaire)
+            // On bypass capSmbDose qui plafonne à maxIOB
+            // Seule limite : 30U hard cap (sécurité absolue contre config erronée)
+            val mealModeCap = gatedUnits.toDouble().coerceAtMost(30.0)
+            
+            if (mealModeCap > safeCap.toDouble()) {
+                consoleLog.add("🍱 MEAL_MODE_FORCE_SEND bypassing maxIOB: proposed=${"%.2f".format(proposedUnits)} gated=${"%.2f".format(gatedUnits)} safeCap=${"%.2f".format(safeCap)} → FORCED=${"%.2f".format(mealModeCap)}")
+                consoleLog.add("  ⚠️ IOB will be: current=${"%.2f".format(this.iob)} + bolus=${"%.2f".format(mealModeCap)} = ${"%.2f".format(this.iob + mealModeCap)} (maxIOB=${"%.2f".format(this.maxIob)})")
+                finalUnits = mealModeCap
+            } else {
+                // safeCap déjà OK, pas besoin de forcer
+                finalUnits = safeCap.toDouble()
+            }
+        } else {
+            finalUnits = safeCap.toDouble()
+        }
+        
+        lastSmbCapped = finalUnits
+        lastSmbFinal = finalUnits
 
-        lastSmbCapped = safeCap.toDouble()
-        lastSmbFinal = safeCap.toDouble()
-
-        if (safeCap > 0f) {
+        if (finalUnits > 0) {
             internalLastSmbMillis = dateUtil.now()
         }
 
-        rT.units = safeCap.toDouble().coerceAtLeast(0.0)
+        rT.units = finalUnits.coerceAtLeast(0.0)
         rT.reason.append(reasonHeader)
 
          val audit = SmbGateAudit(
@@ -2117,59 +2143,47 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return false
     }
 
-
-    // [FIX] Smart Latch: Check if a bolus happened *within* the current meal window
-    // Uses `lastsmbtime` (minutes since last SMB) vs `minutesSinceStart`.
-    
-    private fun isFreshBolusWithin(modeRuntime: Long): Boolean {
-        // lastsmbtime is Int (minutes). modeRuntime is Long (likely minutes, handled by helper).
-        val runtimeMin = runtimeToMinutes(modeRuntime)
-        // If last SMB was e.g. 2 mins ago, and meal started 5 mins ago. 2 < 5 -> True (Fresh).
-        // If last SMB was 50 mins ago, and meal started 5 mins ago. 50 < 5 -> False (Not Fresh).
-        return this.lastsmbtime < runtimeMin
+    private fun isMealModeCondition(): Boolean {
+        val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
+        return mealruntime in 0..7 && lastBolusSMBUnit != pbolusM.toFloat() && mealTime
     }
-
-    private fun isMealModeCondition(): Boolean = mealruntime in 0..7 && !isFreshBolusWithin(mealruntime)
-    
-    private fun isbfastModeCondition(): Boolean = bfastruntime in 0..7 && !isFreshBolusWithin(bfastruntime)
+    private fun isbfastModeCondition(): Boolean {
+        val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
+        return bfastruntime in 0..7 && lastBolusSMBUnit != pbolusbfast.toFloat() && bfastTime
+    }
     private fun isbfast2ModeCondition(): Boolean {
-        // Phase 2: Runtime 15..23.
-        // We want to know if a bolus happened AFTER min 15.
-        // i.e. "Time since last SMB" < "Time since Phase 2 started".
-        // Time since Phase 2 started = (runtime - 15).
-        // e.g. runtime=20 (5 min into Phase 2). lastSMB=2 (2 min ago).
-        // 2 < 5 -> True. (Bolus happened inside Phase 2).
-        if (bfastruntime !in 15..23) return false
-        val runtimeMin = runtimeToMinutes(bfastruntime)
-        // Fix: Return TRUE if last bolus is OLDER than the start of Phase 2 logic (i.e. NO bolus yet in this phase)
-        // lastsmbtime (minutes ago) > (runtimeMin - 15)
-        // e.g. T=16 (Diff=1). LastSMB=20 (Prebolus 1). 20 > 1 -> True. Fire.
-        // e.g. T=20 (Diff=5). LastSMB=4 (Prebolus 2 given at T=16). 4 > 5 -> False. Don't Fire.
-        return this.lastsmbtime > (runtimeMin - 15)
+        val pbolusbfast2: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
+        return bfastruntime in 15..30 && lastBolusSMBUnit != pbolusbfast2.toFloat() && bfastTime
     }
-    
-    private fun isLunchModeCondition(): Boolean = lunchruntime in 0..7 && !isFreshBolusWithin(lunchruntime)
+    private fun isLunchModeCondition(): Boolean {
+        val pbolusLunch: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
+        return lunchruntime in 0..7 && lastBolusSMBUnit != pbolusLunch.toFloat() && lunchTime
+    }
     private fun isLunch2ModeCondition(): Boolean {
-        if (lunchruntime !in 15..23) return false
-        val runtimeMin = runtimeToMinutes(lunchruntime)
-        return this.lastsmbtime > (runtimeMin - 15)
+        val pbolusLunch2: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
+        return lunchruntime in 15..24 && lastBolusSMBUnit != pbolusLunch2.toFloat() && lunchTime
     }
-    
-    private fun isDinnerModeCondition(): Boolean = dinnerruntime in 0..7 && !isFreshBolusWithin(dinnerruntime)
+    private fun isDinnerModeCondition(): Boolean {
+        val pbolusDinner: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
+        return dinnerruntime in 0..7 && lastBolusSMBUnit != pbolusDinner.toFloat() && dinnerTime
+    }
     private fun isDinner2ModeCondition(): Boolean {
-        if (dinnerruntime !in 15..23) return false
-        val runtimeMin = runtimeToMinutes(dinnerruntime)
-        return this.lastsmbtime > (runtimeMin - 15)
+        val pbolusDinner2: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
+        return dinnerruntime in 15..24 && lastBolusSMBUnit != pbolusDinner2.toFloat() && dinnerTime
     }
-    
-    private fun isHighCarbModeCondition(): Boolean = highCarbrunTime in 0..7 && !isFreshBolusWithin(highCarbrunTime)
+    private fun isHighCarbModeCondition(): Boolean {
+        val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
+        return highCarbrunTime in 0..7 && lastBolusSMBUnit != pbolusHC.toFloat() && highCarbTime
+    }
     private fun isHighCarb2ModeCondition(): Boolean {
-        if (highCarbrunTime !in 15..23) return false
-        val runtimeMin = runtimeToMinutes(highCarbrunTime)
-        return this.lastsmbtime > (runtimeMin - 15)
+        val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
+        return highCarbrunTime in 15..23 && lastBolusSMBUnit != pbolusHC.toFloat() && highCarbTime
     }
 
-    private fun issnackModeCondition(): Boolean = snackrunTime in 0..20 && !isFreshBolusWithin(snackrunTime)
+    private fun issnackModeCondition(): Boolean {
+        val pbolussnack: Double = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
+        return snackrunTime in 0..7 && lastBolusSMBUnit != pbolussnack.toFloat() && snackTime
+    }
     // --- Helpers "fenêtre repas 30 min" ---
     private fun runtimeToMinutes(rt: Long): Int {
         return if (rt > 180) { // heuristique : si >180, on suppose secondes
@@ -2345,10 +2359,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (isFasting(context)) conditions.add(ctx.getString(R.string.condition_fasting))
         //if (isBelowMinThreshold(context)) conditions.add("belowMinThreshold")
         if (isBelowMinThreshold(context)) conditions.add(ctx.getString(R.string.condition_belowminthreshold))
-        //if (isNewCalibration(context)) conditions.add("isNewCalibration")
-        // Calibration shouldn't block SMB if we are high and rising? Maybe risky if calibration is wrong by 100pts?
-        // Let's keep calibration block safe.
-        if (isNewCalibration(context)) conditions.add(ctx.getString(R.string.condition_newcalibration))
+        if (isNewCalibration(context)) conditions.add("isNewCalibration")
+        //if (isNewCalibration(context)) conditions.add(ctx.getString(R.string.condition_newcalibration))
         //if (isBelowTargetAndDropping(context)) conditions.add("belowTargetAndDropping")
         if (isBelowTargetAndDropping(context)) conditions.add(ctx.getString(R.string.condition_belowtarget_dropping))
         //if (isBelowTargetAndStableButNoCob(context)) conditions.add("belowTargetAndStableButNoCob")
@@ -3298,6 +3310,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             else -> context.getString(R.string.bg_note_normal)
         }
     }
+
     private fun processNotesAndCleanUp(notes: String): String {
         return notes.lowercase()
             .replace(",", " ")
@@ -4068,6 +4081,84 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             highCarbTime -> "HighCarb"
             mealTime -> "Meal"
             else -> "N/A"
+        }
+        if (isMealModeCondition()) {
+            val pbolusM = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
+            rT.units = pbolusM
+            rT.reason.append(context.getString(R.string.manual_meal_prebolus, pbolusM))
+            consoleLog.add("🍱 LEGACY_MODE_MEAL P1=${"%.2f".format(pbolusM)}U (DIRECT SEND)")
+            return rT
+        }
+
+        if (isbfastModeCondition()) {
+            val pbolusbfast = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
+            rT.units = pbolusbfast
+            rT.reason.append(context.getString(R.string.reason_prebolus_bfast1, pbolusbfast))
+            consoleLog.add("🍱 LEGACY_MODE_BFAST P1=${"%.2f".format(pbolusbfast)}U (DIRECT SEND)")
+            return rT
+        }
+
+        if (isbfast2ModeCondition()) {
+            val pbolusbfast2 = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
+            rT.units = pbolusbfast2
+            rT.reason.append(context.getString(R.string.reason_prebolus_bfast2, pbolusbfast2))
+            consoleLog.add("🍱 LEGACY_MODE_BFAST P2=${"%.2f".format(pbolusbfast2)}U (DIRECT SEND)")
+            return rT
+        }
+
+        if (isLunchModeCondition()) {
+            val pbolusLunch = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
+            rT.units = pbolusLunch
+            rT.reason.append(context.getString(R.string.reason_prebolus_lunch1, pbolusLunch))
+            consoleLog.add("🍱 LEGACY_MODE_LUNCH P1=${"%.2f".format(pbolusLunch)}U (DIRECT SEND)")
+            return rT
+        }
+
+        if (isLunch2ModeCondition()) {
+            val pbolusLunch2 = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
+            rT.units = pbolusLunch2
+            rT.reason.append(context.getString(R.string.reason_prebolus_lunch2, pbolusLunch2))
+            consoleLog.add("🍱 LEGACY_MODE_LUNCH P2=${"%.2f".format(pbolusLunch2)}U (DIRECT SEND)")
+            return rT
+        }
+
+        if (isDinnerModeCondition()) {
+            val pbolusDinner = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
+            rT.units = pbolusDinner
+            rT.reason.append(context.getString(R.string.reason_prebolus_dinner1, pbolusDinner))
+            consoleLog.add("🍱 LEGACY_MODE_DINNER P1=${"%.2f".format(pbolusDinner)}U (DIRECT SEND)")
+            return rT
+        }
+
+        if (isDinner2ModeCondition()) {
+            val pbolusDinner2 = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
+            rT.units = pbolusDinner2
+            rT.reason.append(context.getString(R.string.reason_prebolus_dinner2, pbolusDinner2))
+            consoleLog.add("🍱 LEGACY_MODE_DINNER P2=${"%.2f".format(pbolusDinner2)}U (DIRECT SEND)")
+            return rT
+        }
+
+        if (isHighCarbModeCondition()) {
+            val pbolusHC = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
+            rT.units = pbolusHC
+            rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, pbolusHC))
+            consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P1=${"%.2f".format(pbolusHC)}U (DIRECT SEND)")
+            return rT
+        }
+        if (isHighCarb2ModeCondition()) {
+            val pbolusHC = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
+            rT.units = pbolusHC
+            rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, pbolusHC))
+            consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P1=${"%.2f".format(pbolusHC)}U (DIRECT SEND)")
+            return rT
+        }
+
+        if (issnackModeCondition()) {
+            val pbolussnack = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
+            rT.units = pbolussnack
+            rT.reason.append(context.getString(R.string.reason_prebolus_snack, pbolussnack))
+            consoleLog.add("🍱 LEGACY_MODE_SNACK P1=${"%.2f".format(pbolussnack)}U (DIRECT SEND)")
+            return rT
         }
 
         // 🛡️ Hoisted Safety Variables for Autodrive & Early Terminators
@@ -5896,6 +5987,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private fun tryManualModes(bg: Double, delta: Float, profile: OapsProfileAimi, glucoseTime: Long): DecisionResult {
+        // 🔍 DIAGNOSTIC: Log runtimes de TOUS les modes
+        consoleLog.add("🔍 MODES_DETECT dinner=${dinnerruntime} lunch=${lunchruntime} bfast=${bfastruntime} meal=${mealruntime} snack=${snackrunTime} hc=${highCarbrunTime}")
+        
         // 1. Detect Active Mode & Configs
         var activeName = ""
         var activeRuntimeMin = -1
@@ -5935,7 +6029,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         if (activeName.isEmpty()) {
+            consoleLog.add("❌ MODES_DETECT No active mode detected → Fallthrough")
             return DecisionResult.Fallthrough("No Active Mode")
+        } else {
+            consoleLog.add("✅ MODES_DETECT Active: $activeName runtime=${activeRuntimeMin}m pre1=${pre1Config} pre2=${pre2Config}")
         }
 
         val now = System.currentTimeMillis()
