@@ -4092,7 +4092,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             // 🚀 TBR: Apply if runtime < 30 min
             if (mealruntime < 30 * 60) {
-                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true    )
                 consoleLog.add("🍱 LEGACY_TBR_MEAL rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
             }
             
@@ -4107,7 +4107,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             // 🚀 TBR: Apply if runtime < 30 min
             if (bfastruntime < 30 * 60) {
-                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
  consoleLog.add("🍱 LEGACY_TBR_BFAST rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
             }
             
@@ -4122,7 +4122,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             // 🚀 TBR: Apply if runtime < 30 min
             if (bfastruntime < 30 * 60) {
-                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
                 consoleLog.add("🍱 LEGACY_TBR_BFAST rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
             }
             
@@ -4137,7 +4137,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             // 🚀 TBR: Apply if runtime < 30 min
             if (lunchruntime < 30 * 60) {
-                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
                 consoleLog.add("🍱 LEGACY_TBR_LUNCH rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
             }
             
@@ -4152,7 +4152,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             // 🚀 TBR: Apply if runtime < 30 min
             if (lunchruntime < 30 * 60) {
-                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
                 consoleLog.add("🍱 LEGACY_TBR_LUNCH rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
             }
             
@@ -4167,7 +4167,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             // 🚀 TBR: Apply if runtime < 30 min
             if (dinnerruntime < 30 * 60) {
-                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
                 consoleLog.add("🍱 LEGACY_TBR_DINNER rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
             }
             
@@ -4182,7 +4182,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             // 🚀 TBR: Apply if runtime < 30 min
             if (dinnerruntime < 30 * 60) {
-                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
                 consoleLog.add("🍱 LEGACY_TBR_DINNER rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
             }
             
@@ -4197,7 +4197,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             // 🚀 TBR: Apply if runtime < 30 min
             if (highCarbrunTime < 30 * 60) {
-                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
                 consoleLog.add("🍱 LEGACY_TBR_HIGHCARB rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
             }
             
@@ -4208,6 +4208,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         if (isHighCarb2ModeCondition()) {
             val pbolusHC = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
+            if (highCarbrunTime < 30 * 60) {
+                setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+                consoleLog.add("🍱 LEGACY_TBR_HIGHCARB rate=${"%.2f".format(modeTbrLimit)}U/h duration=30m")
+            }
             rT.units = pbolusHC
             rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, pbolusHC))
             consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P1=${"%.2f".format(pbolusHC)}U (DIRECT SEND)")
