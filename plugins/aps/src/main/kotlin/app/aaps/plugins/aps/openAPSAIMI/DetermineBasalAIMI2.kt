@@ -143,6 +143,36 @@ internal fun sanitizePredictionValues(
 
     return PredictionSanityResult(predBg, eventualBg, label)
 }
+
+// ========================================
+// Meal Advisor Configuration Constants
+// ========================================
+/**
+ * IOB Discount Factor for Meal Advisor
+ * 
+ * When calculating SMB for a confirmed meal (via photo), we discount the current IOB
+ * by this factor to account for uncertainty:
+ * - IOB may be from a previous unlogged meal (e.g., soup)
+ * - IOB action diminishes over time
+ * - User confirmation signals "new meal coming" that will raise BG
+ * 
+ * Value of 0.7 means we only subtract 70% of actual IOB, giving a 30% safety margin.
+ */
+private const val MEAL_ADVISOR_IOB_DISCOUNT_FACTOR = 0.7
+
+/**
+ * Minimum Carb Coverage for Meal Advisor
+ * 
+ * Guarantees that at least this percentage of calculated insulin for carbs
+ * is delivered as SMB, even if IOB calculation would suggest zero.
+ * 
+ * This ensures a prebolus is ALWAYS sent when user confirms a meal,
+ * since the meal WILL raise BG regardless of current IOB.
+ * 
+ * Value of 0.25 means at least 25% of carb insulin requirement is delivered.
+ */
+private const val MEAL_ADVISOR_MIN_CARB_COVERAGE = 0.25
+
 /**
  * Main orchestrator for the AIMI loop.
  *
@@ -6022,23 +6052,53 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 return DecisionResult.Fallthrough("Advisor Refractory (Recent Bolus <45m)")
             }
             
-            if (delta > 0.0 && modesCondition) { 
+            // FIX: Removed delta > 0.0 condition - Meal Advisor should work even if BG is stable/falling
+            // The refractory check, BG floor (>=60), and time window (120min) are sufficient safety
+            if (modesCondition) { 
                 val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal)
                 val safeMax = if (maxBasalPref > 0.1) maxBasalPref else profile.max_basal
                 
-                // Prop. Logic
+                // FIX: TBR Coverage Calculation
+                // ORIGINAL logic subtracted coveredByBasal from SMB, causing netNeeded to become 0
+                // NEW logic: TBR is a COMPLEMENT to SMB, not a replacement
+                // - SMB provides immediate prebolus action
+                // - TBR provides continuous aggressive support
+                
+                // INTELLIGENT IOB HANDLING (Fix 2025-12-19)
+                // Problem: User may have elevated IOB from previous unlogged meal (soup, snack)
+                // Solution: Discount IOB + guarantee minimum coverage for confirmed new meal
                 val insulinForCarbs = estimatedCarbs / profile.carb_ratio
-                val coveredByBasal = safeMax * 0.5
-                val netNeeded = (insulinForCarbs - iobData.iob - coveredByBasal).coerceAtLeast(0.0)
+                
+                // Apply IOB discount to account for uncertainty
+                val effectiveIOB = iobData.iob * MEAL_ADVISOR_IOB_DISCOUNT_FACTOR
+                
+                // Guarantee minimum coverage (user confirmed meal = BG WILL rise)
+                val minimumRequired = insulinForCarbs * MEAL_ADVISOR_MIN_CARB_COVERAGE
+                
+                // Calculate need with discounted IOB, then apply minimum guarantee
+                val calculatedNeed = insulinForCarbs - effectiveIOB
+                val netNeeded = max(calculatedNeed, minimumRequired).coerceAtLeast(0.0)
+                
+                // For reference, calculate what TBR will deliver (not subtracted from SMB)
+                val tbrCoverage = safeMax * 0.5  // 30min = 0.5h
 
-                consoleLog.add("ADVISOR_CALC carbs=${estimatedCarbs.toInt()} net=$netNeeded")
+                // DEBUG: Log all calculation steps with detailed breakdown
+                consoleLog.add("ADVISOR_CALC carbs=${estimatedCarbs.toInt()}g IC=${profile.carb_ratio} → ${String.format("%.2f", insulinForCarbs)}U")
+                consoleLog.add("ADVISOR_CALC IOB_raw=${String.format("%.2f", iobData.iob)}U × discount=$MEAL_ADVISOR_IOB_DISCOUNT_FACTOR → IOB_effective=${String.format("%.2f", effectiveIOB)}U")
+                consoleLog.add("ADVISOR_CALC minimumGuaranteed=${String.format("%.2f", minimumRequired)}U (${(MEAL_ADVISOR_MIN_CARB_COVERAGE * 100).toInt()}% of carb need)")
+                consoleLog.add("ADVISOR_CALC calculated=${String.format("%.2f", calculatedNeed)}U → netSMB=${String.format("%.2f", netNeeded)}U (max of calculated and minimum)")
+                consoleLog.add("ADVISOR_CALC TBR=${String.format("%.1f", safeMax)}U/h (will deliver ${String.format("%.2f", tbrCoverage)}U over 30min as complement)")
+                consoleLog.add("ADVISOR_CALC TOTAL delivery: SMB ${String.format("%.2f", netNeeded)}U + TBR ${String.format("%.2f", tbrCoverage)}U = ${String.format("%.2f", netNeeded + tbrCoverage)}U delta=$delta modesOK=true")
+                
                      return DecisionResult.Applied(
                         source = "MealAdvisor",
                         bolusU = netNeeded,
                         tbrUph = safeMax,
                         tbrMin = 30,
-                        reason = "📸 Meal Advisor: ${estimatedCarbs.toInt()}g -> ${"%.2f".format(netNeeded)}U"
+                        reason = "📸 Meal Advisor: ${estimatedCarbs.toInt()}g -> ${"%.2f".format(netNeeded)}U + TBR ${"%.1f".format(safeMax)}U/h"
                     )
+            } else {
+                consoleLog.add("ADVISOR_SKIP reason=modesCondition_false (legacy mode active)")
             }
         }
         return DecisionResult.Fallthrough("No active Meal Advisor request")

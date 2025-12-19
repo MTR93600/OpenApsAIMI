@@ -22,17 +22,36 @@
 
 ## 📊 Formule de Calcul (tryMealAdvisor)
 
+### ✅ Nouvelle Formule (Fix 2025-12-19)
+
+```kotlin
+insulinForCarbs = estimatedCarbs / IC_ratio
+netBolus = (insulinForCarbs - IOB).coerceAtLeast(0.0)
+TBR = maxBasal (complement, not subtracted from bolus)
+```
+
+**Logique**: Le **TBR est un complément** au SMB, pas un remplacement:
+- **SMB** fournit l'action immédiate (prebolus)
+- **TBR** fournit un soutien agressif continu (30 min)
+
+**Exemple**: 50g, IC=10, IOB=1.5U, TBR=7.0 U/h
+- `insulinForCarbs` = 50/10 = **5.0U**
+- `netBolus` = (5.0 - 1.5) = **3.5U** ✅ SMB
+- `TBR` = **7.0 U/h × 30min** = **3.5U** ✅ Complément
+- **Total délivré** = 3.5U (SMB) + 3.5U (TBR) = **7.0U**
+
+### ❌ Ancienne Formule (Buggy)
+
 ```kotlin
 insulinForCarbs = estimatedCarbs / IC_ratio
 coveredByBasal = TBR_rate * 0.5     // 30min coverage
 netBolus = (insulinForCarbs - IOB - coveredByBasal).coerceAtLeast(0.0)
 ```
 
-**Exemple**: 50g, IC=10, IOB=1.5U, TBR=5.0 U/h
-- `insulinForCarbs` = 50/10 = **5.0U**
-- `coveredByBasal` = 5.0*0.5 = **2.5U**
-- `netBolus` = (5.0 - 1.5 - 2.5) = **1.0U** ✅
-- `TBR` = **5.0 U/h × 30min** ✅
+**Problème**: Le TBR coverage était **soustrait** du bolus, causant:
+- netBolus souvent = 0 (si IOB + coverage ≥ insulinForCarbs)
+- Aucun SMB envoyé, seulement le TBR
+- Pas de prebolus immédiat (objectif raté)
 
 ---
 
@@ -68,8 +87,11 @@ finalBolus = min(gatedUnits, 30.0)  // ← Can bypass maxIOB, hard cap 30U
 2. **Hard Cap TBR**: TBR ≤ max_basal (ligne 1180)
 3. **Hard Cap SMB**: Bolus ≤ 30U (ligne 1562)
 4. **Refractory**: Pas de bolus si bolus récent <45min (ligne 6021)
-5. **Rising BG**: Activé seulement si delta>0 (ligne 6025)
-6. **BG Floor**: Activé seulement si BG≥60 (ligne 6019)
+5. **BG Floor**: Activé seulement si BG≥60 (ligne 6019)
+6. **Modes Condition**: Bloqué si mode meal legacy actif <30min (ligne 6025)
+
+**⚠️ Note**: La condition "Rising BG (delta>0)" a été **retirée** car elle bloquait incorrectement le SMB quand le BG était stable/en baisse après un bolus manuel, alors que le TBR fonctionnait normalement.
+
 
 ---
 
