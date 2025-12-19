@@ -292,11 +292,16 @@ class UnifiedReactivityLearner @Inject constructor(
             globalFactor = (targetFactor * decayAlpha + globalFactor * (1 - decayAlpha))
             reasons.add("Performance optimale → convergence vers 1.0")
         } else {
-            // 🎯 Calcul du nouveau facteur avec EMA smoothing
-            // FIX: Logic was pulling towards adjustment multiplier instead of multiplying by it.
-            // New Logic: Target = Current * Adjustment
+            // 🎯 Adaptive Learning Rate based on glycemic context
+            // IMPROVEMENT: Adjust learning speed based on situation severity
+            val alpha = when {
+                perf.hypo_count > 0 -> 0.80      // Very fast: Safety critical
+                perf.cv_percent > 40 -> 0.50     // Moderate: High variability
+                perf.tir_above_180 > 40 -> 0.60  // Fast: Persistent hyper
+                else -> 0.70                      // Standard: Normal conditions
+            }
             
-            val alpha = 0.70  // Faster adaptation (was 0.15)
+            log.debug(LTag.APS, "UnifiedReactivityLearner: Adaptive α=$alpha (hypo=${perf.hypo_count}, CV=${perf.cv_percent.toInt()}%, hyper=${perf.tir_above_180.toInt()}%)")
             
             // Apply EMA: New = (Target * alpha) + (Old * (1-alpha))
             globalFactor = (targetFactor * alpha + globalFactor * (1 - alpha)).coerceIn(0.7, 6.0)
@@ -434,7 +439,15 @@ class UnifiedReactivityLearner @Inject constructor(
         }
         
         val target = shortTermFactor * adjustment
-        val alpha = 0.40  // Fast EMA
+        
+        // Adaptive learning rate for short-term (faster than long-term)
+        val alpha = when {
+            perf.hypo_count >= 1 -> 0.70        // Ultra-fast: Hypo is urgent
+            perf.tir_above_180 > 60 -> 0.50      // Fast: Severe hyper
+            perf.cv_percent > 35 -> 0.45         // Moderate-fast: High variability
+            else -> 0.40                         // Standard short-term rate
+        }
+        
         shortTermFactor = (target * alpha + shortTermFactor * (1 - alpha)).coerceIn(0.7, 2.0)
     }
     

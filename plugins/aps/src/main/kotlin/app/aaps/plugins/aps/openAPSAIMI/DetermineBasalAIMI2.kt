@@ -1877,7 +1877,71 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return false
     }
 
-
+    /**
+     * Detects rapid IOB increase which may indicate receptor saturation
+     * and potentially slower insulin absorption.
+     * 
+     * @param currentIOB Current insulin on board
+     * @param lookbackMinutes Time window to check (default 15 min)
+     * @return IOB increase amount if rapid, 0.0 otherwise
+     */
+    private fun detectRapidIOBIncrease(currentIOB: Double, lookbackMinutes: Int = 15): Double {
+        val lookbackTime = dateUtil.now() - lookbackMinutes * 60 * 1000L
+        
+        try {
+            // Get boluses in the last N minutes
+            val recentBoluses = persistenceLayer.getBolusesFromTime(lookbackTime, true).blockingGet()
+            val totalRecentBolus = recentBoluses.sumOf { it.amount }
+            
+            // If >2U delivered in lookback window, consider it "rapid"
+            // This suggests a large bolus that may saturate receptors
+            return if (totalRecentBolus >= 2.0) {
+                totalRecentBolus
+            } else {
+                0.0
+            }
+        } catch (e: Exception) {
+            return 0.0
+        }
+    }
+    
+    /**
+     * Calculates dynamic DIA and peak time adjustments based on rapid IOB increase.
+     * Large boluses may slow absorption due to receptor saturation.
+     * 
+     * @param profile Base profile with standard DIA/peak
+     * @param rapidIOBAmount Amount of rapid IOB increase
+     * @return Pair of (adjustedDIA, adjustedPeak)
+     */
+    private fun calculateDynamicDIA(profile: OapsProfileAimi, rapidIOBAmount: Double): Pair<Double, Double> {
+        if (rapidIOBAmount < 2.0) {
+            // No significant rapid bolus, use standard values
+            return Pair(profile.dia, profile.peakTime.toDouble())
+        }
+        
+        // Adjustment factors based on bolus size
+        // Larger bolus → more potential for saturation → longer DIA/peak
+        val diaMultiplier = when {
+            rapidIOBAmount >= 5.0 -> 1.25  // Very large bolus: +25% DIA
+            rapidIOBAmount >= 3.5 -> 1.20  // Large bolus: +20% DIA
+            rapidIOBAmount >= 2.0 -> 1.15  // Medium bolus: +15% DIA
+            else -> 1.0
+        }
+        
+        val peakMultiplier = when {
+            rapidIOBAmount >= 5.0 -> 1.15  // Very large: +15% peak delay
+            rapidIOBAmount >= 3.5 -> 1.12  // Large: +12% peak delay
+            rapidIOBAmount >= 2.0 -> 1.08  // Medium: +8% peak delay
+            else -> 1.0
+        }
+        
+        val adjustedDIA = profile.dia * diaMultiplier
+        val adjustedPeak = profile.peakTime * peakMultiplier
+        
+        consoleLog.add("DIA_DYNAMIC rapidIOB=${String.format("%.1f", rapidIOBAmount)}U → DIA=${String.format("%.1f", profile.dia)}→${String.format("%.1f", adjustedDIA)} Peak=${String.format("%.0f", profile.peakTime)}→${String.format("%.0f", adjustedPeak)}min")
+        
+        return Pair(adjustedDIA, adjustedPeak)
+    }
 
     private fun calculateAdaptivePrebolus(
         baseBolus: Double,
@@ -2069,10 +2133,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //      return false
     // }
 
-        // 📈 Deltas récents & delta combiné
+        // 📈 Deltas récents & delta combiné (IMPROVED: 15-min history)
         val recentDeltas = getRecentDeltas()
         val predicted = predictedDelta(recentDeltas).toFloat()
-        val combinedDelta = (delta + predicted) / 2f
+        
+        // FIX: Extended delta history (3 periods: 0, -5, -10 min) for better noise filtering
+        val avgRecentDelta = if (recentDeltas.size >= 2) {
+            recentDeltas.take(2).average().toFloat()  // Average of 2 most recent deltas (~10 min)
+        } else {
+            delta  // Fallback to current delta if insufficient history
+        }
+        
+        // Combine: current + predicted + recent average + trend
+        // Weighted: 40% current, 30% predicted, 30% recent average
+        val combinedDelta = (delta * 0.4f + predicted * 0.3f + avgRecentDelta * 0.3f)
+        
+        consoleLog.add("DELTA_CALC current=${String.format("%.1f", delta)} predicted=${String.format("%.1f", predicted)} avgRecent=${String.format("%.1f", avgRecentDelta)} → combined=${String.format("%.1f", combinedDelta)}")
         
         // 🎯 Dynamic Thresholds
     // Respect User Static Threshold AND Safety Margin (Target + 10)
