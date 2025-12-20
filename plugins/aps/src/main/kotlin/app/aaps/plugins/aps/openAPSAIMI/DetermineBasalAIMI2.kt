@@ -3854,7 +3854,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Absolute emergency if BG catastrophic, even with low delta
             // Protection: Don't apply if rapid fall (delta <= -5)
             bg >= 250 && combinedDelta > -5.0 -> {
-                consoleLog.add("MAXSMB_PLATEAU_CRITICAL BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} slope=${String.format("%.2f", mealData.slopeFromMinDeviation)} → maxSMBHB=${String.format("%.2f", maxSMBHB)}U (plateau)")
+                consoleLog.add("MAXSMB_PLATEAU_CRITICAL BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} slope=${String.format("%.2f", mealData.slopeFromMinDeviation)} -> maxSMBHB=${String.format("%.2f", maxSMBHB)}U (plateau)")
                 maxSMBHB
             }
             
@@ -3862,7 +3862,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Full maxSMBHB for confirmed meal/resistance in elevated range
             bg >= 140 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0 ||
             bg >= 180 && honeymoon && mealData.slopeFromMinDeviation >= 1.4 -> {
-                consoleLog.add("MAXSMB_SLOPE_HIGH BG=${bg.roundToInt()} slope=${String.format("%.2f", mealData.slopeFromMinDeviation)} → maxSMBHB=${String.format("%.2f", maxSMBHB)}U (rise)")
+                consoleLog.add("MAXSMB_SLOPE_HIGH BG=${bg.roundToInt()} slope=${String.format("%.2f", mealData.slopeFromMinDeviation)} -> maxSMBHB=${String.format("%.2f", maxSMBHB)}U (rise)")
                 maxSMBHB
             }
             
@@ -3871,7 +3871,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Prevents over-correction on natural fluctuations while still allowing meal interception
             bg >= 120 && bg < 140 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0 -> {
                 val partial = max(maxSMB, maxSMBHB * 0.85)
-                consoleLog.add("MAXSMB_SLOPE_SENSITIVE BG=${bg.roundToInt()} slope=${String.format("%.2f", mealData.slopeFromMinDeviation)} → ${String.format("%.2f", partial)}U (85% maxSMBHB)")
+                consoleLog.add("MAXSMB_SLOPE_SENSITIVE BG=${bg.roundToInt()} slope=${String.format("%.2f", mealData.slopeFromMinDeviation)} -> ${String.format("%.2f", partial)}U (85% maxSMBHB)")
                 partial
             }
             
@@ -3879,7 +3879,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Compromise: 75% of maxSMBHB for elevated but not critical BG
             bg >= 200 && bg < 250 && combinedDelta > -3.0 && combinedDelta < 3.0 -> {
                 val partial = max(maxSMB, maxSMBHB * 0.75)
-                consoleLog.add("MAXSMB_PLATEAU_MODERATE BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} → ${String.format("%.2f", partial)}U (75% maxSMBHB)")
+                consoleLog.add("MAXSMB_PLATEAU_MODERATE BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} -> ${String.format("%.2f", partial)}U (75% maxSMBHB)")
                 partial
             }
             
@@ -3887,13 +3887,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Partial limit to avoid over-correction while still allowing some action
             bg > 180 && combinedDelta <= -3.0 && combinedDelta > -8.0 -> {
                 val partial = max(maxSMB, maxSMBHB * 0.6)
-                consoleLog.add("MAXSMB_FALLING BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} → ${String.format("%.2f", partial)}U (60% maxSMBHB)")
+                consoleLog.add("MAXSMB_FALLING BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} -> ${String.format("%.2f", partial)}U (60% maxSMBHB)")
                 partial
             }
             
             // ⚪ STANDARD: Normal/low BG conditions
             else -> {
-                consoleLog.add("MAXSMB_STANDARD BG=${bg.roundToInt()} → ${String.format("%.2f", maxSMB)}U")
+                consoleLog.add("MAXSMB_STANDARD BG=${bg.roundToInt()} -> ${String.format("%.2f", maxSMB)}U")
                 maxSMB
             }
         }
