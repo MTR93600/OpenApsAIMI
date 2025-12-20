@@ -36,7 +36,7 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     private lateinit var confirmButton: Button
     private lateinit var imageView: ImageView
 
-    private var currentEstimate: FoodRecognitionService.EstimationResult? = null
+    private var currentEstimate: EstimationResult? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,30 +70,42 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         providerLayout.addView(providerLabel)
 
         val spinner = android.widget.Spinner(this).apply {
-            // Apply a simple white text style for spinner items if possible or use default
-            // For programmatic spinner with dark theme, we might need a custom adapter or accept default.
-            // Using default for now.
             background.setColorFilter(Color.WHITE, android.graphics.PorterDuff.Mode.SRC_ATOP)
         }
         
-        val providers = arrayOf("OpenAI (GPT-4o)", "Gemini (2.5 Flash)")
+        // All supported vision providers
+        val providers = arrayOf(
+            "OpenAI (GPT-4o)", 
+            "Gemini (2.0 Flash Exp)", 
+            "DeepSeek (Chat)",
+            "Claude (3.5 Sonnet)"
+        )
         val adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_item, providers)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinner.adapter = adapter
 
-        // Set initial selection
+        // Set initial selection based on saved preference
         val currentProvider = preferences.get(app.aaps.core.keys.StringKey.AimiAdvisorProvider)
-        if (currentProvider == "GEMINI") {
-            spinner.setSelection(1)
-        } else {
-            spinner.setSelection(0)
+        val initialPosition = when (currentProvider.uppercase()) {
+            "OPENAI" -> 0
+            "GEMINI" -> 1
+            "DEEPSEEK" -> 2
+            "CLAUDE" -> 3
+            else -> 0  // Default to OpenAI
         }
+        spinner.setSelection(initialPosition)
 
         spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
              override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                 val selected = if (position == 1) "GEMINI" else "OPENAI"
+                 val selected = when (position) {
+                     0 -> "OPENAI"
+                     1 -> "GEMINI"
+                     2 -> "DEEPSEEK"
+                     3 -> "CLAUDE"
+                     else -> "OPENAI"
+                 }
                  preferences.put(app.aaps.core.keys.StringKey.AimiAdvisorProvider, selected)
-                 // Ensure text color is readable if default adapter is used
+                 // Ensure text color is readable
                  (view as? TextView)?.setTextColor(Color.WHITE)
              }
              override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}

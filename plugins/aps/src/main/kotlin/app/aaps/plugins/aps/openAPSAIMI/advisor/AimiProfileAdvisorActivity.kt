@@ -208,12 +208,27 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
 
     private fun showModelSelectorDialog() {
         val current = preferences.get(app.aaps.core.keys.StringKey.AimiAdvisorProvider)
-        val idx = if (current == "GEMINI") 1 else 0
+        val idx = when (current.uppercase()) {
+            "OPENAI" -> 0
+            "GEMINI" -> 1
+            "DEEPSEEK" -> 2
+            "CLAUDE" -> 3
+            else -> 0
+        }
         
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(rh.gs(R.string.aimi_advisor_model_title)) // "Select Model"
-            .setSingleChoiceItems(arrayOf("ChatGPT", "Gemini"), idx) { dialog, which ->
-                val newValue = if (which == 1) "GEMINI" else "OPENAI"
+            .setSingleChoiceItems(
+                arrayOf("ChatGPT (GPT-4o)", "Gemini (2.5 Flash)", "DeepSeek (Chat)", "Claude (3.5 Sonnet)"), 
+                idx
+            ) { dialog, which ->
+                val newValue = when (which) {
+                    0 -> "OPENAI"
+                    1 -> "GEMINI"
+                    2 -> "DEEPSEEK"
+                    3 -> "CLAUDE"
+                    else -> "OPENAI"
+                }
                 preferences.put(app.aaps.core.keys.StringKey.AimiAdvisorProvider, newValue)
                 dialog.dismiss()
                 recreate() // Reload activity to apply change
@@ -613,9 +628,22 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         val providerStr = preferences.get(app.aaps.core.keys.StringKey.AimiAdvisorProvider)
         val openAiKey = preferences.get(app.aaps.core.keys.StringKey.AimiAdvisorOpenAIKey)
         val geminiKey = preferences.get(app.aaps.core.keys.StringKey.AimiAdvisorGeminiKey)
+        val deepSeekKey = preferences.get(app.aaps.core.keys.StringKey.AimiAdvisorDeepSeekKey)
+        val claudeKey = preferences.get(app.aaps.core.keys.StringKey.AimiAdvisorClaudeKey)
 
-        val provider = if (providerStr == "GEMINI") AiCoachingService.Provider.GEMINI else AiCoachingService.Provider.OPENAI
-        val activeKey = if (provider == AiCoachingService.Provider.GEMINI) geminiKey else openAiKey
+        val provider = when (providerStr.uppercase()) {
+            "GEMINI" -> AiCoachingService.Provider.GEMINI
+            "DEEPSEEK" -> AiCoachingService.Provider.DEEPSEEK
+            "CLAUDE" -> AiCoachingService.Provider.CLAUDE
+            else -> AiCoachingService.Provider.OPENAI
+        }
+        
+        val activeKey = when (provider) {
+            AiCoachingService.Provider.GEMINI -> geminiKey
+            AiCoachingService.Provider.DEEPSEEK -> deepSeekKey
+            AiCoachingService.Provider.CLAUDE -> claudeKey
+            else -> openAiKey
+        }
         
         if (activeKey.isBlank()) {
             val basicAnalysis = advisorService.generatePlainTextAnalysis(context, report)

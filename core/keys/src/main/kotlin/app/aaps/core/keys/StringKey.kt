@@ -61,6 +61,8 @@ enum class StringKey(
     OApsAIMINightGrowthEnd("key_oaps_aimi_ngr_night_end", "06:00"),
     AimiAdvisorOpenAIKey("aimi_advisor_openai_key", "", isPassword = true),
     AimiAdvisorGeminiKey("aimi_advisor_gemini_key", "", isPassword = true),
+    AimiAdvisorDeepSeekKey("aimi_advisor_deepseek_key", "", isPassword = true),
+    AimiAdvisorClaudeKey("aimi_advisor_claude_key", "", isPassword = true),
     AimiAdvisorProvider("aimi_advisor_provider", "OPENAI"),
     OApsAIMIUnstableModeState("key_oaps_aimi_mode_state", "")
 }

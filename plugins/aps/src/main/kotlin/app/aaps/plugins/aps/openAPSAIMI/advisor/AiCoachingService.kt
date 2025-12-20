@@ -23,7 +23,7 @@ import kotlinx.coroutines.withContext
  */
 class AiCoachingService {
 
-    enum class Provider { OPENAI, GEMINI }
+    enum class Provider { OPENAI, GEMINI, DEEPSEEK, CLAUDE }
 
     companion object {
         private const val OPENAI_URL = "https://api.openai.com/v1/chat/completions"
@@ -32,6 +32,14 @@ class AiCoachingService {
         // Gemini 2.5 Flash (Dec 2025 standard)
         private const val GEMINI_MODEL = "gemini-2.5-flash"
         private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:generateContent"
+        
+        // DeepSeek Chat (OpenAI-compatible)
+        private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
+        private const val DEEPSEEK_MODEL = "deepseek-chat"
+        
+        // Claude 3.5 Sonnet
+        private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
+        private const val CLAUDE_MODEL = "claude-3-5-sonnet-20241022"
     }
 
     /**
@@ -50,10 +58,11 @@ class AiCoachingService {
         try {
             val prompt = buildPrompt(androidContext, context, report, history)
             
-            if (provider == Provider.GEMINI) {
-                return@withContext callGemini(apiKey, prompt)
-            } else {
-                return@withContext callOpenAI(apiKey, prompt)
+            return@withContext when (provider) {
+                Provider.GEMINI -> callGemini(apiKey, prompt)
+                Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
+                Provider.CLAUDE -> callClaude(apiKey, prompt)
+                else -> callOpenAI(apiKey, prompt)
             }
 
         } catch (e: Exception) {
@@ -277,6 +286,103 @@ class AiCoachingService {
         } catch (e: Exception) {
              // Fallback for safety blocked
              if (jsonStr.contains("finishReason")) "Contenu bloqué par sécurité Gemini." else "Erreur lecture Gemini."
+        }
+    }
+    
+    private fun callDeepSeek(apiKey: String, prompt: String): String {
+        val jsonBody = buildOpenAiJson(prompt) // DeepSeek uses OpenAI-compatible format
+        jsonBody.put("model", DEEPSEEK_MODEL) // Override model
+        
+        val url = URL(DEEPSEEK_URL)
+        val connection = url.openConnection() as HttpURLConnection
+        
+        connection.apply {
+            requestMethod = "POST"
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Authorization", "Bearer $apiKey")
+            doOutput = true
+            connectTimeout = 15000
+            readTimeout = 30000
+        }
+
+        val writer = OutputStreamWriter(connection.outputStream)
+        writer.write(jsonBody.toString())
+        writer.flush()
+        writer.close()
+
+        val responseCode = connection.responseCode
+        if (responseCode == 200) {
+            val reader = BufferedReader(InputStreamReader(connection.inputStream))
+            val response = StringBuilder()
+            var line: String?
+            while (reader.readLine().also { line = it } != null) response.append(line)
+            reader.close()
+            return parseOpenAiResponse(response.toString()) // Same format
+        } else {
+            val reader = BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream))
+            val err = StringBuilder()
+            var line: String?
+            while (reader.readLine().also { line = it } != null) err.append(line)
+            return "Erreur DeepSeek ($responseCode): $err"
+        }
+    }
+    
+    private fun callClaude(apiKey: String, prompt: String): String {
+        val url = URL(CLAUDE_URL)
+        val connection = url.openConnection() as HttpURLConnection
+        
+        val jsonBody = JSONObject()
+        jsonBody.put("model", CLAUDE_MODEL)
+        jsonBody.put("max_tokens", 4096)
+        jsonBody.put("temperature", 0.7)
+        
+        // Claude expects messages array with role/content
+        val messages = JSONArray()
+        val userMessage = JSONObject()
+        userMessage.put("role", "user")
+        userMessage.put("content", prompt)
+        messages.put(userMessage)
+        jsonBody.put("messages", messages)
+        
+        connection.apply {
+            requestMethod = "POST"
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("x-api-key", apiKey)
+            setRequestProperty("anthropic-version", "2023-06-01")
+            doOutput = true
+            connectTimeout = 15000
+            readTimeout = 60000
+        }
+
+        val writer = OutputStreamWriter(connection.outputStream)
+        writer.write(jsonBody.toString())
+        writer.flush()
+        writer.close()
+
+        val responseCode = connection.responseCode
+        if (responseCode == 200) {
+            val reader = BufferedReader(InputStreamReader(connection.inputStream, java.nio.charset.StandardCharsets.UTF_8))
+            val response = StringBuilder()
+            var line: String?
+            while (reader.readLine().also { line = it } != null) response.append(line)
+            reader.close()
+            return parseClaudeResponse(response.toString())
+        } else {
+            val reader = BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream, java.nio.charset.StandardCharsets.UTF_8))
+            val err = StringBuilder()
+            var line: String?
+            while (reader.readLine().also { line = it } != null) err.append(line)
+            return "Erreur Claude ($responseCode): $err"
+        }
+    }
+    
+    private fun parseClaudeResponse(jsonStr: String): String {
+        return try {
+            val root = JSONObject(jsonStr)
+            val content = root.getJSONArray("content")
+            content.getJSONObject(0).getString("text").trim()
+        } catch (e: Exception) {
+            "Erreur lecture Claude."
         }
     }
 }
