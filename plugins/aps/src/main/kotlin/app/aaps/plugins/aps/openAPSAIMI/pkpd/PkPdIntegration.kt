@@ -198,7 +198,17 @@ class PkPdIntegration(private val preferences: Preferences) {
     private fun computeTddIsf(tdd24h: Double, fallback: Double): Double {
         if (tdd24h <= 0.1) return fallback
         val anchored = 1800.0 / tdd24h
-        return anchored.coerceIn(5.0, 400.0)
+        
+        // 🛡️ CLAMP: Prevent TDD-ISF from deviating more than ±50% from profile
+        // Protects against temporary TDD anomalies (new site, atypical day, etc.)
+        // Example: Profile ISF = 147, TDD-ISF raw = 57 → clamped to 73.5
+        val maxDeviation = fallback * 0.5
+        val clamped = anchored.coerceIn(
+            fallback - maxDeviation,  // Min: profile × 0.5
+            fallback + maxDeviation   // Max: profile × 1.5
+        )
+        
+        return clamped.coerceIn(5.0, 400.0)
     }
 }
 

@@ -3836,13 +3836,67 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         //val DynMaxSmb = (bg / 200) * (bg / 100) + (delta / 2)
         val enableUAM = profile.enableUAM
 
+
         val prefHighBgMaxSmb = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
         // [FIX] User fallback: Ensure DynMaxSmb doesn't drop to 0.0 if calculations go weird. 
         // Use Preference as floor if Autodrive is on.
         val finalDynMaxSmb = max(DynMaxSmb.toDouble(), prefHighBgMaxSmb)
         
         this.maxSMBHB = if (autodrive && !honeymoon) finalDynMaxSmb else prefHighBgMaxSmb
-        this.maxSMB = if (bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0 || bg > 180 && honeymoon && mealData.slopeFromMinDeviation >= 1.4) maxSMBHB else maxSMB
+        
+        // 🔧 ENHANCED MaxSMB Selection: Plateau OR Slope logic
+        // Addresses critical edge case: BG stuck high (270-300) with small deltas → slope < 1.0
+        // Solution: Use maxSMBHB if EITHER:
+        //   1. Active rise detected (slope >= 1.0) - Original logic
+        //   2. High plateau (BG >= 250) - NEW, regardless of slope
+        this.maxSMB = when {
+            // 🚨 CRITICAL PLATEAU: BG >= 250, regardless of slope
+            // Absolute emergency if BG catastrophic, even with low delta
+            // Protection: Don't apply if rapid fall (delta <= -5)
+            bg >= 250 && combinedDelta > -5.0 -> {
+                consoleLog.add("MAXSMB_PLATEAU_CRITICAL BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} slope=${String.format("%.2f", mealData.slopeFromMinDeviation)} → maxSMBHB=${String.format("%.2f", maxSMBHB)}U (plateau)")
+                maxSMBHB
+            }
+            
+            // 🔴 ACTIVE RISE HIGH: BG >= 140 (meal interception zone)
+            // Full maxSMBHB for confirmed meal/resistance in elevated range
+            bg >= 140 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0 ||
+            bg >= 180 && honeymoon && mealData.slopeFromMinDeviation >= 1.4 -> {
+                consoleLog.add("MAXSMB_SLOPE_HIGH BG=${bg.roundToInt()} slope=${String.format("%.2f", mealData.slopeFromMinDeviation)} → maxSMBHB=${String.format("%.2f", maxSMBHB)}U (rise)")
+                maxSMBHB
+            }
+            
+            // 🟡 ACTIVE RISE SENSITIVE: BG 120-140 (near target zone)
+            // 85% maxSMBHB for extra caution close to target
+            // Prevents over-correction on natural fluctuations while still allowing meal interception
+            bg >= 120 && bg < 140 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0 -> {
+                val partial = max(maxSMB, maxSMBHB * 0.85)
+                consoleLog.add("MAXSMB_SLOPE_SENSITIVE BG=${bg.roundToInt()} slope=${String.format("%.2f", mealData.slopeFromMinDeviation)} → ${String.format("%.2f", partial)}U (85% maxSMBHB)")
+                partial
+            }
+            
+            // 🟠 MODERATE PLATEAU: BG 200-250, stable delta
+            // Compromise: 75% of maxSMBHB for elevated but not critical BG
+            bg >= 200 && bg < 250 && combinedDelta > -3.0 && combinedDelta < 3.0 -> {
+                val partial = max(maxSMB, maxSMBHB * 0.75)
+                consoleLog.add("MAXSMB_PLATEAU_MODERATE BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} → ${String.format("%.2f", partial)}U (75% maxSMBHB)")
+                partial
+            }
+            
+            // 🔵 FALLING PROTECTION: BG elevated but falling moderately
+            // Partial limit to avoid over-correction while still allowing some action
+            bg > 180 && combinedDelta <= -3.0 && combinedDelta > -8.0 -> {
+                val partial = max(maxSMB, maxSMBHB * 0.6)
+                consoleLog.add("MAXSMB_FALLING BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} → ${String.format("%.2f", partial)}U (60% maxSMBHB)")
+                partial
+            }
+            
+            // ⚪ STANDARD: Normal/low BG conditions
+            else -> {
+                consoleLog.add("MAXSMB_STANDARD BG=${bg.roundToInt()} → ${String.format("%.2f", maxSMB)}U")
+                maxSMB
+            }
+        }
         val ngrConfig = buildNightGrowthResistanceConfig(profile, autosens_data, glucoseStatus, targetBg.toDouble())
         this.tir1DAYabove = tirCalculator.averageTIR(tirCalculator.calculate(1, 65.0, 180.0))?.abovePct()!!
         val tir1DAYIR = tirCalculator.averageTIR(tirCalculator.calculate(1, 65.0, 180.0))?.inRangePct()!!
