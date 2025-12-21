@@ -228,22 +228,58 @@ class BLEComm @Inject internal constructor(
     @SuppressLint("MissingPermission")
     @Synchronized
     fun resetConnection(reason: String) {
-        aapsLogger.warn(LTag.PUMPBTCOMM, "Resetting BLE connection: $reason")
+        aapsLogger.warn(LTag.PUMPBTCOMM, "=== Resetting BLE connection: $reason ===")
         pendingRunnables.forEach { handler.removeCallbacks(it) }
         pendingRunnables.clear()
         stopScan()
+        
+        // Save gatt reference before clearing
+        val gattToReset = mBluetoothGatt
+        mBluetoothGatt = null
+        
         try {
-            mBluetoothGatt?.disconnect()
-        } catch (e: Exception) {
-            aapsLogger.error(LTag.PUMPBTCOMM, "Error disconnecting gatt: ${e.message}")
+            gattToReset?.let { gatt ->
+                // Step 1: Disconnect
+                try {
+                    gatt.disconnect()
+                } catch (e: Exception) {
+                    aapsLogger.error(LTag.PUMPBTCOMM, "Error disconnecting gatt", e)
+                }
+                
+                // Step 2: Wait for disconnect to propagate (Android BLE quirk)
+                Thread.sleep(150)
+                
+                // Step 3: CRITICAL FIX - Refresh GATT cache using reflection
+                // This clears Android's internal BLE cache which can get corrupted
+                // and cause zombie states. Used by all pro BLE apps (nRF Connect, etc.)
+                try {
+                    val refreshMethod = gatt.javaClass.getMethod("refresh")
+                    val refreshResult = refreshMethod.invoke(gatt) as? Boolean
+                    aapsLogger.debug(LTag.PUMPBTCOMM, "GATT cache refresh result: $refreshResult")
+                    Thread.sleep(150)
+                } catch (e: Exception) {
+                    aapsLogger.warn(LTag.PUMPBTCOMM, "Failed to refresh GATT cache (non-fatal)", e)
+                    // Continue anyway - close() might still help
+                }
+                
+                // Step 4: Close
+                try {
+                    gatt.close()
+                } catch (e: Exception) {
+                    aapsLogger.error(LTag.PUMPBTCOMM, "Error closing gatt", e)
+                }
+            }
+        } finally {
+            // Clear all internal state
+            mWritePackets = null
+            mReadPacket = null
+            uartWrite = null
+            uartRead = null
+            isConnected = false
+            isConnecting = false
+            
+            aapsLogger.debug(LTag.PUMPBTCOMM, "=== BLE connection reset complete ===")
         }
-        close()
-        mWritePackets = null
-        mReadPacket = null
-        uartWrite = null
-        uartRead = null
-        isConnected = false
-        isConnecting = false
     }
 
     /** Scan callback  */
