@@ -17,6 +17,31 @@ import kotlinx.serialization.builtins.ArraySerializer
 import kotlinx.serialization.json.Json
 import javax.inject.Provider
 
+/**
+ * Sanitize JSON strings to remove problematic Unicode characters
+ * that can cause deserialization crashes (especially arrows and math symbols).
+ * 
+ * This is critical for backward compatibility with old database records
+ * that may contain Unicode characters in consoleLog arrays.
+ */
+private fun sanitizeJson(json: String): String {
+    return json
+        // Replace all arrow characters with ASCII equivalents
+        .replace("→", "->")      // U+2192 RIGHTWARDS ARROW
+        .replace("←", "<-")      // U+2190 LEFTWARDS ARROW
+        .replace("↑", "^")       // U+2191 UPWARDS ARROW
+        .replace("↓", "v")       // U+2193 DOWNWARDS ARROW
+        .replace("🠢", "->")      // U+1F822 NORTH EAST ARROW TO BAR (the culprit!)
+        .replace("🠠", "->")      // U+1F820 LEFTWARDS TRIANGLE-HEADED ARROW
+        .replace("🠡", "->")      // U+1F821 UPWARDS TRIANGLE-HEADED ARROW
+        .replace("🠣", "->")      // U+1F823 DOWNWARDS TRIANGLE-HEADED ARROW
+       // Replace math symbols
+        .replace("×", "x")       // U+00D7 MULTIPLICATION SIGN
+        .replace("÷", "/")       // U+00F7 DIVISION SIGN
+        .replace("±", "+/-")     // U+00B1 PLUS-MINUS SIGN
+        // Note: We keep emojis like 🍱, ⚠️, ✅ as they are generally safe when at start of strings
+}
+
 fun app.aaps.database.entities.APSResult.fromDb(apsResultProvider: Provider<APSResult>): APSResult =
     when (algorithm) {
         app.aaps.database.entities.APSResult.Algorithm.AMA,
@@ -54,7 +79,7 @@ fun app.aaps.database.entities.APSResult.fromDb(apsResultProvider: Provider<APSR
         }
 
         app.aaps.database.entities.APSResult.Algorithm.AIMI -> {
-            apsResultProvider.get().with(Json.decodeFromString(this.resultJson)).also { result ->
+            apsResultProvider.get().with(Json.decodeFromString(sanitizeJson(this.resultJson))).also { result ->
                 result.date = this.timestamp
                 result.glucoseStatus = try {
                     // Si AIMI a un GlucoseStatus spécifique, remplace par Json.decodeFromString<GlucoseStatusAimi>(it)
