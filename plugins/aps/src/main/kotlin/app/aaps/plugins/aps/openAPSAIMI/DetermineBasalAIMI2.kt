@@ -369,6 +369,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var pkpdThrottleIntervalAdd: Int = 0       // 🚀 PKPD interval boost (0 si normal/modes repas)
     private var pkpdPreferTbrBoost: Double = 1.0       // 🚀 PKPD TBR boost factor (1.0 si normal/modes repas)
 
+    /**
+     * 🛡️ Sanitize strings before adding to consoleLog to prevent JSON deserialization crashes.
+     * Escapes quotes, backslashes, and removes control characters that could break JSON parsing.
+     * 
+     * Critical for backward compatibility with database records containing special characters.
+     */
+    private fun sanitizeForJson(input: String): String {
+        return input
+            .replace("\\", "\\\\")     // Escape backslashes first!
+            .replace("\"", "\\\"")     // Escape quotes
+            .replace("\n", "\\n")      // Escape newlines
+            .replace("\r", "\\r")      // Escape carriage returns
+            .replace("\t", "\\t")      // Escape tabs
+            .filter { it.code >= 32 || it in "\n\r\t" }  // Remove other control chars
+    }
+
     private fun Double.toFixed2(): String = DecimalFormat("0.00#").format(round(this, 2))
     private fun parseNgrTime(value: String, fallback: LocalTime): LocalTime =
         runCatching { LocalTime.parse(value, ngrTimeFormatter) }.getOrElse { fallback }
@@ -6288,14 +6304,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val scalarAuto: Double = if (rawAutoMax > 0.1) rawAutoMax.toDouble() else profile.max_basal.toDouble()
         val safeAutoMax = minOf(scalarAuto, profile.max_basal.toDouble())
         
-        consoleLog.add("AD_INTENT amount=$amount tbr=$safeAutoMax")
-             return DecisionResult.Applied(
-                source = "Autodrive",
-                bolusU = amount,
-                tbrUph = safeAutoMax,
-                tbrMin = 30,
-                reason = "🚀 Autodrive [$stateReason] -> Force ${amount}U"
-            )
+        // 🛡️ Sanitize stateReason to prevent JSON crashes
+        val safeStateReason = sanitizeForJson(stateReason)
+        consoleLog.add(sanitizeForJson("AD_INTENT amount=$amount tbr=$safeAutoMax reason=$safeStateReason"))
+        
+        return DecisionResult.Applied(
+            source = "Autodrive",
+            bolusU = amount,
+            tbrUph = safeAutoMax,
+            tbrMin = 30,
+            reason = "🚀 Autodrive [$safeStateReason] -> Force ${amount}U"
+        )
     }
 
 }
