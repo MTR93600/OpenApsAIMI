@@ -10,40 +10,22 @@ import java.util.*
 class WCycleCsvLogger(private val ctx: Context) {
     private val TAG = "WCycleCsvLogger"
 
-    // 1) Chemin public (même principe que PkPdCsvLogger)
-    private val publicDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
-    private val publicFile = File(publicDir, "oapsaimi_wcycle.csv")
-
-    // 2) Fallback app-specific (aucune permission, toujours accessible par l’app)
-    private val appDir = File(ctx.getExternalFilesDir(null), "Documents/AAPS")
-    private val appFile = File(appDir, "oapsaimi_wcycle.csv")
+    // 🔧 FIX: Use ONLY standard /Documents/AAPS path (no app-specific fallback)
+    private val dir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
+    private val file = File(dir, "oapsaimi_wcycle.csv")
 
     private val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
 
     fun append(row: Map<String, Any?>): Boolean {
-        val headerNeededPublic = !publicFile.exists()
-        val headerNeededApp = !appFile.exists()
-        val line = build(row, headerNeededPublic || headerNeededApp)
+        val headerNeeded = !file.exists()
+        val line = build(row, headerNeeded)
 
-        // Essai en public
-        val publicOk = runCatching {
-            ensureDir(publicDir)
-            publicFile.appendText(line)
+        return runCatching {
+            ensureDir(dir)
+            file.appendText(line)
         }.onFailure { t ->
-            Log.w(TAG, "Public write failed at ${publicFile.absolutePath}", t)
+            Log.w(TAG, "Write failed at ${file.absolutePath}", t)
         }.isSuccess
-
-        if (publicOk) return true
-
-        // Fallback en app-specific
-        val appOk = runCatching {
-            ensureDir(appDir)
-            appFile.appendText(line)
-        }.onFailure { t ->
-            Log.w(TAG, "App-specific write failed at ${appFile.absolutePath}", t)
-        }.isSuccess
-
-        return appOk
     }
 
     private fun ensureDir(dir: File) {
@@ -53,14 +35,12 @@ class WCycleCsvLogger(private val ctx: Context) {
     }
 
     private fun build(row: Map<String, Any?>, header: Boolean): String {
-        // ⚠️ Si tu as déjà ajouté les colonnes needBasalScale/needSmbScale, garde-les.
-        // Sinon, tu peux revenir à l’en-tête plus simple (mais je recommande de les garder).
         val keys = listOf(
             "ts","trackingMode","cycleDay","phase","contraceptive","thyroid","verneuil",
             "bg","delta5","iob","tdd24h","isfProfile","dynIsf",
             "basalBase","smbBase","basalLearn","smbLearn",
             "basalApplied","smbApplied",
-            "needBasalScale","needSmbScale",   // ← colonnes utiles pour l’apprentissage offline
+            "needBasalScale","needSmbScale",   // ← colonnes utiles pour l'apprentissage offline
             "applied","reason"
         )
         val sb = StringBuilder()

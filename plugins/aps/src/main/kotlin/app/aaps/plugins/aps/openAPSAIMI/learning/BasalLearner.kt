@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.learning
 
 import android.content.Context
+import android.os.Environment
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import org.json.JSONObject
@@ -27,7 +28,10 @@ class BasalLearner @Inject constructor(
     private val log: AAPSLogger
 ) {
     private val fileName = "aimi_basal_learner.json"
-    private val file by lazy { File(context.filesDir, fileName) }
+    // 🔧 FIX: Use standard /Documents/AAPS path like all other AIMI learners
+    private val file by lazy { 
+        File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS", fileName) 
+    }
 
     // === Multi-Scale Multipliers ===
     private var shortTermMultiplier = 1.0   // Updated every 30 min
