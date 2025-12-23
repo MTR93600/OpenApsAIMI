@@ -1,8 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.learning
 
 import android.content.Context
-import android.os.Environment
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.utils.DateUtil
@@ -29,10 +29,12 @@ import kotlin.math.sqrt
  */
 @Singleton
 class UnifiedReactivityLearner @Inject constructor(
+    private val context: Context,
     private val persistenceLayer: PersistenceLayer,
     private val dateUtil: DateUtil,
     private val preferences: Preferences,
-    private val log: AAPSLogger
+    private val log: AAPSLogger,
+    private val storageHelper: AimiStorageHelper
 ) {
     
     companion object {
@@ -57,19 +59,17 @@ class UnifiedReactivityLearner @Inject constructor(
     var lastAnalysis: AnalysisSnapshot? = null
         private set
 
-    // 📁 JSON stocké dans Documents/AAPS comme les autres fichiers AIMI
+    // 📁 Utilise AimiStorageHelper pour stockage robuste
     private val fileName = "aimi_unified_reactivity.json"
     private val csvFileName = "aimi_reactivity_analysis.csv"
-    private val file by lazy { 
-        val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
-        externalDir.mkdirs()
-        File(externalDir, fileName)
-    }
+    
+    private val file by lazy { storageHelper.getAimiFile(fileName) }
+    
     private val csvFile by lazy {
-        val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
-        File(externalDir, csvFileName).apply {
+        storageHelper.getAimiFile(csvFileName).apply {
             if (!exists()) {
-                writeText("Timestamp,Date,TIR_70_180,TIR_70_140,TIR_140_180,TIR_180_250,TIR_Above_250," +
+                storageHelper.saveFileSafe(this, 
+                    "Timestamp,Date,TIR_70_180,TIR_70_140,TIR_140_180,TIR_180_250,TIR_Above_250," +
                     "Hypo_Count,CV_Percent,Crossing_Count,Mean_BG,GlobalFactor,Adjustment_Reason\n")
             }
         }
@@ -483,32 +483,46 @@ class UnifiedReactivityLearner @Inject constructor(
         }
     }
     
+    /**
+     * Chargement robuste avec fallback complet.
+     * ⚠️ CRITIQUE: Ne doit JAMAIS crasher au démarrage!
+     * En cas d'erreur (permissions, fichier corrompu, etc.), utilise les valeurs par défaut.
+     */
     private fun load() {
-        try {
-            if (file.exists()) {
-                val json = JSONObject(file.readText())
-                globalFactor = json.optDouble("globalFactor", 1.0)
-                shortTermFactor = json.optDouble("shortTermFactor", 1.0)
+        storageHelper.loadFileSafe(file, 
+            onSuccess = { content ->
+                val json = JSONObject(content)
+                globalFactor = json.optDouble("globalFactor", 1.0).coerceIn(0.7, 6.0)
+                shortTermFactor = json.optDouble("shortTermFactor", 1.0).coerceIn(0.7, 2.0)
                 lastAnalysisTime = json.optLong("lastAnalysisTime", 0L)
                 lastShortAnalysisTime = json.optLong("lastShortAnalysisTime", 0L)
-                log.info(LTag.APS, "UnifiedReactivityLearner: Loaded globalFactor=$globalFactor, shortTerm=$shortTermFactor")
+                log.info(LTag.APS, "UnifiedReactivityLearner: ✅ Loaded state")
+                log.info(LTag.APS, "  → globalFactor=$globalFactor, shortTerm=$shortTermFactor")
+            },
+            onError = { e ->
+                log.warn(LTag.APS, "UnifiedReactivityLearner: Load failed, using defaults (factor=1.0)")
+                globalFactor = 1.0
+                shortTermFactor = 1.0
+                lastAnalysisTime = 0L
+                lastShortAnalysisTime = 0L
             }
-        } catch (e: Exception) {
-            log.error(LTag.APS, "UnifiedReactivityLearner: Erreur chargement", e)
-        }
+        )
     }
     
+    /**
+     * Sauvegarde robuste avec gestion d'erreurs.
+     * Si la sauvegarde échoue, l'app continue de fonctionner (perte de l'état seulement).
+     */
     private fun save() {
-        try {
-            val json = JSONObject()
-            json.put("globalFactor", globalFactor)
-            json.put("shortTermFactor", shortTermFactor)
-            json.put("lastAnalysisTime", lastAnalysisTime)
-            json.put("lastShortAnalysisTime", lastShortAnalysisTime)
-            file.writeText(json.toString())
-            log.debug(LTag.APS, "UnifiedReactivityLearner: Saved globalFactor=$globalFactor, shortTerm=$shortTermFactor")
-        } catch (e: Exception) {
-            log.error(LTag.APS, "UnifiedReactivityLearner: Erreur sauvegarde", e)
+        val json = JSONObject()
+        json.put("globalFactor", globalFactor)
+        json.put("shortTermFactor", shortTermFactor)
+        json.put("lastAnalysisTime", lastAnalysisTime)
+        json.put("lastShortAnalysisTime", lastShortAnalysisTime)
+        
+        if (storageHelper.saveFileSafe(file, json.toString())) {
+            log.debug(LTag.APS, "UnifiedReactivityLearner: ✅ Saved state")
+            log.debug(LTag.APS, "  → globalFactor=$globalFactor, shortTerm=$shortTermFactor")
         }
     }
 }

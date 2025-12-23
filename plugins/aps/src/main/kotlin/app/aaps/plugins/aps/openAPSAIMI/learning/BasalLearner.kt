@@ -1,9 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.learning
 
 import android.content.Context
-import android.os.Environment
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import org.json.JSONObject
 import java.io.File
 import javax.inject.Inject
@@ -25,13 +25,11 @@ import kotlin.math.min
 @Singleton
 class BasalLearner @Inject constructor(
     private val context: Context,
-    private val log: AAPSLogger
+    private val log: AAPSLogger,
+    private val storageHelper: AimiStorageHelper
 ) {
     private val fileName = "aimi_basal_learner.json"
-    // 🔧 FIX: Use standard /Documents/AAPS path like all other AIMI learners
-    private val file by lazy { 
-        File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS", fileName) 
-    }
+    private val file by lazy { storageHelper.getAimiFile(fileName) }
 
     // === Multi-Scale Multipliers ===
     private var shortTermMultiplier = 1.0   // Updated every 30 min
@@ -299,36 +297,33 @@ class BasalLearner @Inject constructor(
     // === Persistence ===
 
     private fun load() {
-        try {
-            if (file.exists()) {
-                val json = JSONObject(file.readText())
+        storageHelper.loadFileSafe(file,
+            onSuccess = { content ->
+                val json = JSONObject(content)
                 shortTermMultiplier = json.optDouble("shortTermMultiplier", 1.0)
                 mediumTermMultiplier = json.optDouble("mediumTermMultiplier", 1.0)
                 longTermMultiplier = json.optDouble("longTermMultiplier", 1.0)
                 lastShortUpdate = json.optLong("lastShortUpdate", 0L)
                 lastMediumUpdate = json.optLong("lastMediumUpdate", 0L)
                 lastLongUpdate = json.optLong("lastLongUpdate", 0L)
-                log.info(LTag.APS, "BasalLearner: Loaded multipliers S=${"%.3f".format(shortTermMultiplier)} " +
+                log.info(LTag.APS, "BasalLearner: ✅ Loaded multipliers S=${"%.3f".format(shortTermMultiplier)} " +
                     "M=${"%.3f".format(mediumTermMultiplier)} L=${"%.3f".format(longTermMultiplier)}")
+            },
+            onError = { e ->
+                log.warn(LTag.APS, "BasalLearner: Load failed, using defaults (multiplier=1.0)")
             }
-        } catch (e: Exception) {
-            log.error(LTag.APS, "Error loading BasalLearner data", e)
-        }
+        )
     }
 
     private fun save() {
-        try {
-            val json = JSONObject()
-            json.put("shortTermMultiplier", shortTermMultiplier)
-            json.put("mediumTermMultiplier", mediumTermMultiplier)
-            json.put("longTermMultiplier", longTermMultiplier)
-            json.put("lastShortUpdate", lastShortUpdate)
-            json.put("lastMediumUpdate", lastMediumUpdate)
-            json.put("lastLongUpdate", lastLongUpdate)
-            file.writeText(json.toString())
-        } catch (e: Exception) {
-            log.error(LTag.APS, "Error saving BasalLearner data", e)
-        }
+        val json = JSONObject()
+        json.put("shortTermMultiplier", shortTermMultiplier)
+        json.put("mediumTermMultiplier", mediumTermMultiplier)
+        json.put("longTermMultiplier", longTermMultiplier)
+        json.put("lastShortUpdate", lastShortUpdate)
+        json.put("lastMediumUpdate", lastMediumUpdate)
+        json.put("lastLongUpdate", lastLongUpdate)
+        storageHelper.saveFileSafe(file, json.toString())
     }
 
     // === Legacy API compatibility ===

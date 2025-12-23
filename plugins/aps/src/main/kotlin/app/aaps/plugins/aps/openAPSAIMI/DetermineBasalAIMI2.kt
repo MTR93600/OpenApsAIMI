@@ -28,6 +28,8 @@ import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.interfaces.stats.TirCalculator
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
+import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
@@ -41,6 +43,7 @@ import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
 
 import app.aaps.plugins.aps.openAPSAIMI.extensions.asRounded
 import app.aaps.core.interfaces.ui.UiInteraction
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
 import app.aaps.plugins.aps.openAPSAIMI.model.SmbPlan
 // Imports updated for strict patch
@@ -211,6 +214,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var comparator: AimiSmbComparator
     @Inject lateinit var basalLearner: app.aaps.plugins.aps.openAPSAIMI.learning.BasalLearner
     @Inject lateinit var unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner  // 🎯 NEW
+    @Inject lateinit var storageHelper: AimiStorageHelper  // 🛡️ Storage health monitoring
+    @Inject lateinit var aapsLogger: AAPSLogger  // 📊 Logger for health monitoring
     // ❌ OLD reactivityLearner removed - UnifiedReactivityLearner is now the only one
     init {
         // Branche l’historique basal (TBR) sur la persistence réelle
@@ -3659,12 +3664,38 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return notes
     }
 
+    /**
+     * 🛡️ Log de santé du stockage et des learners AIMI.
+     * Affiche l'état du système pour monitoring et debug.
+     */
+    private fun logLearnersHealth(log: AAPSLogger) {
+        val storageReport = storageHelper.getHealthReport()
+        val reactivityFactor = unifiedReactivityLearner.getCombinedFactor()
+        val basalMultiplier = basalLearner.getMultiplier()
+        
+        // PkPd n'a pas de learner persisté, juste runtime
+        val pkpdInfo = "runtime-only (no persistence)"
+        
+        log.info(LTag.APS, "╔═══════════════════════════════════════════════╗")
+        log.info(LTag.APS, "║ 📦 AIMI SYSTEM HEALTH                          ║")
+        log.info(LTag.APS, "╠═══════════════════════════════════════════════╣")
+        log.info(LTag.APS, "║ Storage: $storageReport")
+        log.info(LTag.APS, "║ UnifiedReactivity: ✅ factor=${"%.3f".format(reactivityFactor)}")
+        log.info(LTag.APS, "║ BasalLearner: ✅ multiplier=${"%.3f".format(basalMultiplier)}")
+        log.info(LTag.APS, "║ PkPdEstimator: ℹ️ $pkpdInfo")
+        log.info(LTag.APS, "╚═══════════════════════════════════════════════╝")
+    }
+
     @SuppressLint("NewApi", "DefaultLocale") fun determine_basal(
         glucose_status: GlucoseStatusAIMI, currenttemp: CurrentTemp, iob_data_array: Array<IobTotal>, profile: OapsProfileAimi, autosens_data: AutosensResult, mealData: MealData,
         microBolusAllowed: Boolean, currentTime: Long, flatBGsDetected: Boolean, dynIsfMode: Boolean, uiInteraction: UiInteraction
     ): RT {
         consoleError.clear()
         consoleLog.clear()
+        
+        // 🛡️ Log health status of storage and learners
+        logLearnersHealth(aapsLogger)
+        
         var rT = RT(
             algorithm = APSResult.Algorithm.AIMI,
             runningDynamicIsf = dynIsfMode,
