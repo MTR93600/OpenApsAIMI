@@ -3666,24 +3666,38 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     /**
      * 🛡️ Log de santé du stockage et des learners AIMI.
-     * Affiche l'état du système pour monitoring et debug.
+     * Affiche l'état du système dans l'UI (Reasoning) ET dans les logs système.
      */
-    private fun logLearnersHealth(log: AAPSLogger) {
+    private fun logLearnersHealth() {
         val storageReport = storageHelper.getHealthReport()
         val reactivityFactor = unifiedReactivityLearner.getCombinedFactor()
         val basalMultiplier = basalLearner.getMultiplier()
         
-        // PkPd n'a pas de learner persisté, juste runtime
-        val pkpdInfo = "runtime-only (no persistence)"
+        // Construire le rapport de santé
+        val healthLines = listOf(
+            "═══════════════════════════════",
+            "🛡️ AIMI LEARNERS HEALTH",
+            "Storage: $storageReport",
+            "UnifiedReactivity: factor=${"%.3f".format(reactivityFactor)}",
+            "BasalLearner: multiplier=${"%.3f".format(basalMultiplier)}",
+            "PkPdEstimator: runtime-only",
+            "═══════════════════════════════"
+        )
         
-        log.info(LTag.APS, "╔═══════════════════════════════════════════════╗")
-        log.info(LTag.APS, "║ 📦 AIMI SYSTEM HEALTH                          ║")
-        log.info(LTag.APS, "╠═══════════════════════════════════════════════╣")
-        log.info(LTag.APS, "║ Storage: $storageReport")
-        log.info(LTag.APS, "║ UnifiedReactivity: ✅ factor=${"%.3f".format(reactivityFactor)}")
-        log.info(LTag.APS, "║ BasalLearner: ✅ multiplier=${"%.3f".format(basalMultiplier)}")
-        log.info(LTag.APS, "║ PkPdEstimator: ℹ️ $pkpdInfo")
-        log.info(LTag.APS, "╚═══════════════════════════════════════════════╝")
+        // Ajouter dans consoleLog pour affichage UI (Reasoning)
+        healthLines.forEach { line ->
+            consoleLog.add(line)
+        }
+        
+        // Logger aussi dans logcat pour debug
+        aapsLogger.info(LTag.APS, "╔═══════════════════════════════════════════════╗")
+        aapsLogger.info(LTag.APS, "║ 📦 AIMI SYSTEM HEALTH                          ║")
+        aapsLogger.info(LTag.APS, "╠═══════════════════════════════════════════════╣")
+        aapsLogger.info(LTag.APS, "║ Storage: $storageReport")
+        aapsLogger.info(LTag.APS, "║ UnifiedReactivity: ✅ factor=${"%.3f".format(reactivityFactor)}")
+        aapsLogger.info(LTag.APS, "║ BasalLearner: ✅ multiplier=${"%.3f".format(basalMultiplier)}")
+        aapsLogger.info(LTag.APS, "║ PkPdEstimator: ℹ️ runtime-only")
+        aapsLogger.info(LTag.APS, "╚═══════════════════════════════════════════════╝")
     }
 
     @SuppressLint("NewApi", "DefaultLocale") fun determine_basal(
@@ -3694,7 +3708,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleLog.clear()
         
         // 🛡️ Log health status of storage and learners
-        logLearnersHealth(aapsLogger)
+        logLearnersHealth()
         
         var rT = RT(
             algorithm = APSResult.Algorithm.AIMI,
