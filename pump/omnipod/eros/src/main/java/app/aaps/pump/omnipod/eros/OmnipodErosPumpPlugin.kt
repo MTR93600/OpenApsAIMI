@@ -532,10 +532,8 @@ class OmnipodErosPumpPlugin @Inject constructor(
             // When it's over 50 units, we don't know, so return some default over 50 units
             else podStateManager.reservoirLevel ?: RESERVOIR_OVER_50_UNITS_DEFAULT
 
-    override val batteryLevel: Int
-        get() =
-            if (aapsOmnipodErosManager.isShowRileyLinkBatteryLevel) Optional.ofNullable<Int?>(rileyLinkServiceData.batteryLevel).orElse(0)
-            else 0
+    override val batteryLevel: Int?
+        get() = if (aapsOmnipodErosManager.isShowRileyLinkBatteryLevel) rileyLinkServiceData.batteryLevel else null
 
     override fun deliverTreatment(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult {
         if (detailedBolusInfo.insulin == 0.0 || detailedBolusInfo.carbs > 0) {

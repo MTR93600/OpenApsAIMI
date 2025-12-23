@@ -118,7 +118,7 @@
     <string name="omnipod_common_preferences_notification_uncertain_tbr_sound_enabled">Đã bật âm thanh thông báo TBR không chắc chắn</string>
     <string name="omnipod_common_preferences_notification_uncertain_smb_sound_enabled">Đã bật âm thanh thông báo SMB không chắc chắn</string>
     <string name="omnipod_common_preferences_notification_uncertain_bolus_sound_enabled">Đã bật âm thanh thông báo Bolus không chắc chắn</string>
-    <string name="omnipod_dash_use_bonding">Ghép nối thiết bị Bluetooth trên Android 15+ (giải pháp cho điện thoại Pixel)</string>
+    <string name="omnipod_dash_use_bonding">Thiết bị Bond BT trên Android 15</string>
     <!-- Omnipod - Pod Status -->
     <string name="omnipod_common_pod_status_no_active_pod">Không có Pod hoạt động</string>
     <string name="omnipod_common_pod_status_waiting_for_activation">Đang thiết lập (đang chờ kích hoạt Pod)</string>

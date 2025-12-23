@@ -335,12 +335,14 @@ class MedtronicFragment : DaggerFragment() {
 
         // battery
         if (medtronicPumpStatus.batteryType == BatteryType.None || medtronicPumpStatus.batteryVoltage == null) {
-            binding.pumpStateBattery.text = "{fa-battery-" + medtronicPumpStatus.batteryRemaining / 25 + "}  "
+            binding.pumpStateBattery.text = medtronicPumpStatus.batteryRemaining?.let { "{fa-battery-" + it / 25 + "}" } ?: rh.gs(app.aaps.core.ui.R.string.unknown)
         } else {
             binding.pumpStateBattery.text =
-                "{fa-battery-" + medtronicPumpStatus.batteryRemaining / 25 + "}  " + medtronicPumpStatus.batteryRemaining + "%" + String.format(Locale.getDefault(), "  (%.2f V)", medtronicPumpStatus.batteryVoltage)
+                (medtronicPumpStatus.batteryRemaining?.let { "{fa-battery-" + it / 25 + "}  " + it + "%" } ?: "") +
+                    String.format(Locale.getDefault(), "  (%.2f V)", medtronicPumpStatus.batteryVoltage)
+
         }
-        warnColors.setColorInverse(binding.pumpStateBattery, medtronicPumpStatus.batteryRemaining.toDouble(), 25, 10)
+        warnColors.setColorInverse(binding.pumpStateBattery, (medtronicPumpStatus.batteryRemaining?.toDouble() ?: 100.0), 25, 10)
 
         // reservoir
         binding.reservoir.text = rh.gs(app.aaps.core.ui.R.string.reservoir_value, medtronicPumpStatus.reservoirRemainingUnits, medtronicPumpStatus.reservoirFullUnits)

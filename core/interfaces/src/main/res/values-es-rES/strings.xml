@@ -12,6 +12,19 @@
     <string name="hoursago">Hace %1$.1fh</string>
     <string name="days_ago">Hace %1$.1f día</string>
     <string name="days_ago_round">Hace %1$.0f días</string>
+    <plurals name="plurals_day_hour_ago">
+        <item quantity="one">hace %1$s día %2$s horas</item>
+        <item quantity="other">hace %1$s días %2$s horas</item>
+    </plurals>
+    <plurals name="plurals_hour_ago">
+        <item quantity="one">hace %1$s hora</item>
+        <item quantity="other">hace %1$s horas</item>
+    </plurals>
+    <plurals name="plurals_minute_ago">
+        <item quantity="one">hace un momento</item>
+        <item quantity="other">hace %1$s minutos</item>
+    </plurals>
+    <string name="seconds_ago">hace unos segundos</string>
     <string name="in_days">en %1$.0f días</string>
     <string name="in_days_round">en %1$.0f días</string>
     <string name="shorthour">h</string>
@@ -37,6 +50,7 @@
     <string name="connecting_for">Conectando durante %1$d s</string>
     <string name="handshaking">Estableciendo comunicación</string>
     <string name="connected">Conectado</string>
+    <string name="authorized">Autorizado</string>
     <string name="disconnecting">Desconectando</string>
     <string name="waiting_for_disconnection">Esperando para desconectarse</string>
     <!-- Custom Watchface -->

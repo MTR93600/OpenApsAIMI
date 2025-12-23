@@ -15,6 +15,7 @@ import android.widget.PopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import app.aaps.core.data.model.IDs
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.time.T
 import app.aaps.core.data.ue.Action
@@ -271,6 +272,7 @@ class SiteRotationDialog : DialogFragmentWithDate() {
                     if (actions.isNotEmpty())
                         activity?.let { activity ->
                             OKDialog.showConfirmation(activity, rh.gs(R.string.record_site_change), HtmlHelper.fromHtml(Joiner.on("<br/>").join(actions)), {
+                                te.ids = IDs()  // Force Upload in NS
                                 uel.log(
                                     action = action,
                                     source = Sources.SiteRotationDialog,

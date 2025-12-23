@@ -12,6 +12,19 @@
     <string name="hoursago">%1$.1fh fa</string>
     <string name="days_ago">%1$.1f giorni fa</string>
     <string name="days_ago_round">%1$.0f giorni fa</string>
+    <plurals name="plurals_day_hour_ago">
+        <item quantity="one">%1$s giorno %2$s ore fa</item>
+        <item quantity="other">%1$s giorni %2$s ore fa</item>
+    </plurals>
+    <plurals name="plurals_hour_ago">
+        <item quantity="one">%1$s ora fa</item>
+        <item quantity="other">%1$s ore fa</item>
+    </plurals>
+    <plurals name="plurals_minute_ago">
+        <item quantity="one">un momento fa</item>
+        <item quantity="other">%1$s minuti fa</item>
+    </plurals>
+    <string name="seconds_ago">secondi fa</string>
     <string name="in_days">in %1$.0f giorni</string>
     <string name="in_days_round">in %1$.0f giorni</string>
     <string name="shorthour">h</string>
@@ -37,6 +50,7 @@
     <string name="connecting_for">In connessione per %1$d s</string>
     <string name="handshaking">Connessione</string>
     <string name="connected">Connesso</string>
+    <string name="authorized">Autorizzato</string>
     <string name="disconnecting">Disconnessione</string>
     <string name="waiting_for_disconnection">In attesa della disconnessione</string>
     <!-- Custom Watchface -->

@@ -219,7 +219,7 @@ class EquilPumpPlugin @Inject constructor(
 
     override val baseBasalRate: Double get() = if (isSuspended()) 0.0 else equilManager.equilState?.basalSchedule?.rateAt(toDuration(DateTime.now())) ?: 0.0
     override val reservoirLevel: Double get() = equilManager.equilState?.currentInsulin?.toDouble() ?: 0.0
-    override val batteryLevel: Int get() = equilManager.equilState?.battery ?: 0
+    override val batteryLevel: Int? get() = equilManager.equilState?.battery
 
     override fun deliverTreatment(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult {
         if (detailedBolusInfo.insulin == 0.0) {

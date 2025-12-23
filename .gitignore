@@ -33,3 +33,4 @@ wear/full/
 *.preferences_pb
 /buildSrc/.kotlin
 .claude/settings.local.json
+/CLAUDE.md

@@ -18,7 +18,7 @@
     <string name="activity_monitor">Màn hình hoạt động</string>
     <string name="do_you_want_reset_stats">Bạn có muốn đặt lại thống kê hoạt động không?</string>
     <string name="do_you_want_recalculate_tdd_stats">Bạn có muốn tính toán lại thống kê TDD không?</string>
-    <string name="statistics">Số liệu thống kê</string>
+    <string name="statistics">Thống kê</string>
     <string name="calculation_in_progress">Đang tiến hành tính toán</string>
     <string name="invalid_age">Tuổi không hợp lệ</string>
     <string name="invalid_weight">Cân nặng không hợp lệ</string>

@@ -111,7 +111,7 @@ class DanaPump @Inject constructor(
     var basalStep = 0.1
     var iob = 0.0
     var reservoirRemainingUnits = 0.0
-    var batteryRemaining = 0
+    var batteryRemaining: Int? = null
     var bolusBlocked = false
     var lastBolusTime: Long = 0
     var lastBolusAmount = 0.0

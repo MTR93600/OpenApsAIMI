@@ -416,6 +416,9 @@
     <string name="uel_loop_change">循環已更改</string>
     <string name="uel_loop_removed">循環已移除</string>
     <string name="uel_other">其他</string>
+    <string name="uel_running_mode">運行模式</string>
+    <string name="uel_running_mode_removed">已移除運行模式</string>
+    <string name="uel_running_mode_updarted">已更新運模式</string>
     <!-- HardLimits -->
     <string name="profile_low_target">設定檔低目標</string>
     <string name="profile_high_target">設定檔高目標</string>
@@ -637,4 +640,5 @@
     <string name="percent_rate_duration_formatted"><![CDATA[<b>速率</b>：%1$.2f%%（%2$.2f U/h）<br><b>持續時間</b>：%3$d 分鐘<br>]]></string>
     <string name="rate_percent_duration_formatted"><![CDATA[<b>速率</b>：%1$.2f U/h（%2$.2f%%）<br><b>持續時間</b>：%3$d 分鐘<br>]]></string>
     <!--    Playback-->
+    <string name="audio_playback_attribution">"AAPS 播放音檔"</string>
 </resources>

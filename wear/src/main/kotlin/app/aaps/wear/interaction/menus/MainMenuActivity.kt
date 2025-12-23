@@ -42,15 +42,15 @@ class MainMenuActivity : MenuListActivity() {
 
     override fun doAction(position: String) {
         when (position) {
-            getString(R.string.menu_settings)         -> startActivity(Intent(this, PreferenceMenuActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+            getString(R.string.menu_settings)         -> startActivity(Intent(this, PreferenceMenuActivity::class.java))
             getString(R.string.menu_resync)           -> rxBus.send(EventWearToMobile(ActionResendData("Re-Sync")))
             getString(R.string.status_profile_switch) -> rxBus.send(EventWearToMobile(EventData.ActionProfileSwitchSendInitialData(System.currentTimeMillis())))
-            getString(R.string.menu_tempt)            -> startActivity(Intent(this, TempTargetActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
-            getString(R.string.menu_treatment)        -> startActivity(Intent(this, TreatmentActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
-            getString(R.string.menu_wizard)           -> startActivity(Intent(this, WizardActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
-            getString(R.string.menu_status)           -> startActivity(Intent(this, StatusMenuActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
-            getString(R.string.menu_prime_fill)       -> startActivity(Intent(this, FillMenuActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
-            getString(R.string.menu_ecarb)            -> startActivity(Intent(this, ECarbActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+            getString(R.string.menu_tempt)            -> startActivity(Intent(this, TempTargetActivity::class.java))
+            getString(R.string.menu_treatment)        -> startActivity(Intent(this, TreatmentActivity::class.java))
+            getString(R.string.menu_wizard)           -> startActivity(Intent(this, WizardActivity::class.java))
+            getString(R.string.menu_status)           -> startActivity(Intent(this, StatusMenuActivity::class.java))
+            getString(R.string.menu_prime_fill)       -> startActivity(Intent(this, FillMenuActivity::class.java))
+            getString(R.string.menu_ecarb)            -> startActivity(Intent(this, ECarbActivity::class.java))
         }
     }
 }

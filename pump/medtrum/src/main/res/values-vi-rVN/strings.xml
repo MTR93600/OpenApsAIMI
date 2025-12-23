@@ -28,6 +28,7 @@
     <string name="fw_version_label">Phiên bản FW</string>
     <string name="patch_no_label">Patch no</string>
     <string name="patch_expiry_label">Patch hết hạn</string>
+    <string name="patch_activation_time_label">Kích hoạt</string>
     <string name="refresh_label">Làm tươi</string>
     <string name="reset_alarms_label">Đặt lại cảnh báo</string>
     <string name="change_patch_label">Thay Patch</string>

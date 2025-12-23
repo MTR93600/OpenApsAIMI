@@ -12,6 +12,25 @@
     <string name="hoursago">před %1$.1fh</string>
     <string name="days_ago">Před %1$.1f dny</string>
     <string name="days_ago_round">Před %1$.0f dny</string>
+    <plurals name="plurals_day_hour_ago">
+        <item quantity="one">před %1$s dnem %2$s hodinami</item>
+        <item quantity="few">před %1$s dny %2$s hodinami</item>
+        <item quantity="many">před %1$s dny %2$s hodinami</item>
+        <item quantity="other">před %1$s dny %2$s hodinami</item>
+    </plurals>
+    <plurals name="plurals_hour_ago">
+        <item quantity="one">před %1$s hodinou</item>
+        <item quantity="few">před %1$s hodinami</item>
+        <item quantity="many">Před %1$s hodinami</item>
+        <item quantity="other">před %1$s hodinami</item>
+    </plurals>
+    <plurals name="plurals_minute_ago">
+        <item quantity="one">před pár okamžiky</item>
+        <item quantity="few">před %1$s minutami</item>
+        <item quantity="many">před %1$s minutami</item>
+        <item quantity="other">před %1$s minutami</item>
+    </plurals>
+    <string name="seconds_ago">před několika sekundami</string>
     <string name="in_days">za %1$.0f dní</string>
     <string name="in_days_round">za %1$.0f dní</string>
     <string name="shorthour">h</string>

@@ -1,18 +1,26 @@
-@file:Suppress("DEPRECATION")
-
 package app.aaps.wear.complications
 
 import android.app.PendingIntent
-import android.support.wearable.complications.ComplicationData
-import android.support.wearable.complications.ComplicationText
+import androidx.wear.watchface.complications.data.ComplicationData
+import androidx.wear.watchface.complications.data.ComplicationType
+import androidx.wear.watchface.complications.data.CountUpTimeReference
+import androidx.wear.watchface.complications.data.PlainComplicationText
+import androidx.wear.watchface.complications.data.ShortTextComplicationData
+import androidx.wear.watchface.complications.data.TimeDifferenceComplicationText
+import androidx.wear.watchface.complications.data.TimeDifferenceStyle
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.wear.data.RawDisplayData
 import dagger.android.AndroidInjection
+import java.time.Instant
+import java.util.concurrent.TimeUnit
 
-/*
- * Created by dlvoy on 2019-11-12
+/**
+ * SGV Extended Complication 1
+ *
+ * Shows glucose data from AAPSClient1 (dataset 1)
+ * Used in follower/caregiver mode to monitor a second patient
+ *
  */
-class SgvComplicationExt1 : BaseComplicationProviderService() {
+class SgvComplicationExt1 : ModernBaseComplicationProviderService() {
 
     // Not derived from DaggerService, do injection here
     override fun onCreate() {
@@ -20,22 +28,41 @@ class SgvComplicationExt1 : BaseComplicationProviderService() {
         super.onCreate()
     }
 
-    override fun buildComplicationData(dataType: Int, raw: RawDisplayData, complicationPendingIntent: PendingIntent): ComplicationData? {
-        var complicationData: ComplicationData? = null
-        when (dataType) {
-            ComplicationData.TYPE_SHORT_TEXT -> {
-                val builder = ComplicationData.Builder(ComplicationData.TYPE_SHORT_TEXT)
-                    .setShortText(ComplicationText.plainText(raw.singleBg[1].sgvString + raw.singleBg[1].slopeArrow + "\uFE0E"))
-                    .setShortTitle(ComplicationText.plainText(displayFormat.shortTrend(raw, 1)))
+    override fun buildComplicationData(
+        type: ComplicationType,
+        data: app.aaps.wear.data.ComplicationData,
+        complicationPendingIntent: PendingIntent
+    ): ComplicationData? {
+        // Use dataset 1 (AAPSClient1)
+        val bgData1 = data.bgData1
+        aapsLogger.debug(LTag.WEAR, "SgvComplicationExt1 building: dataset=1 sgv=${bgData1.sgvString} arrow=${bgData1.slopeArrow}")
+
+        return when (type) {
+            ComplicationType.SHORT_TEXT      -> {
+                val shortText = bgData1.sgvString + bgData1.slopeArrow + "\uFE0E"
+
+                val shortTitle = TimeDifferenceComplicationText.Builder(
+                    style = TimeDifferenceStyle.STOPWATCH,
+                    countUpTimeReference = CountUpTimeReference(Instant.ofEpochMilli(bgData1.timeStamp))
+                )
+                    .setMinimumTimeUnit(TimeUnit.MINUTES)
+                    .build()
+
+                ShortTextComplicationData.Builder(
+                    text = PlainComplicationText.Builder(text = shortText).build(),
+                    contentDescription = PlainComplicationText.Builder(text = "Glucose $shortText").build()
+                )
+                    .setTitle(shortTitle)
                     .setTapAction(complicationPendingIntent)
-                complicationData = builder.build()
+                    .build()
             }
 
-            else                             -> aapsLogger.warn(LTag.WEAR, "Unexpected complication type $dataType")
+            else                             -> {
+                aapsLogger.warn(LTag.WEAR, "SgvComplicationExt1 unexpected type: $type")
+                null
+            }
         }
-        return complicationData
     }
 
     override fun getProviderCanonicalName(): String = SgvComplicationExt1::class.java.canonicalName!!
-    override fun usesSinceField(): Boolean = true
 }

@@ -314,7 +314,7 @@ class MedtrumPlugin @Inject constructor(
     override val lastBolusAmount: Double? get() = medtrumPump.lastBolusAmount
     override val baseBasalRate: Double get() = medtrumPump.baseBasalRate
     override val reservoirLevel: Double get() = medtrumPump.reservoir
-    override val batteryLevel: Int get() = 0 // We cannot determine battery level (yet)
+    override val batteryLevel: Int? = null // We cannot determine battery level (yet)
 
     @Synchronized
     override fun deliverTreatment(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult {

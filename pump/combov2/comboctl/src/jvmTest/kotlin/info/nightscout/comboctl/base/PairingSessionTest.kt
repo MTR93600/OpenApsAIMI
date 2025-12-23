@@ -3,9 +3,13 @@ package info.nightscout.comboctl.base
 import app.aaps.shared.tests.TestBase
 import info.nightscout.comboctl.base.testUtils.TestBluetoothDevice
 import info.nightscout.comboctl.base.testUtils.TestPumpStateStore
+import info.nightscout.comboctl.base.testUtils.newConditionVariable
 import info.nightscout.comboctl.base.testUtils.runBlockingWithWatchdog
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.fail
@@ -39,7 +43,8 @@ class PairingSessionTest : TestBase() {
     private class PairingTestComboIO(val pairingTestSequence: List<PairingTestSequenceEntry>) : ComboIO {
 
         private var curSequenceIndex = 0
-        private val barrier = Channel<Unit>(capacity = Channel.CONFLATED)
+        private val mutex = Mutex()
+        private val conditionVariable = mutex.newConditionVariable()
 
         var expectedEndOfSequenceReached: Boolean = false
             private set
@@ -69,8 +74,14 @@ class PairingSessionTest : TestBase() {
             while (true) {
                 // Suspend indefinitely if we reached the expected
                 // end of sequence. See send() below for details.
-                if (expectedEndOfSequenceReached)
-                    barrier.receive()
+                if (expectedEndOfSequenceReached) {
+                    mutex.unlock()
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        mutex.lock()
+                    }
+                }
 
                 if (curSequenceIndex >= pairingTestSequence.size) {
                     testErrorOccurred = true
@@ -81,7 +92,7 @@ class PairingSessionTest : TestBase() {
                 if (sequenceEntry.direction != expectedPacketDirection) {
                     // Wait until we get the signal from a send() or receive()
                     // call that we can resume here.
-                    barrier.receive()
+                    conditionVariable.await()
                     continue
                 }
 
@@ -91,7 +102,7 @@ class PairingSessionTest : TestBase() {
             }
         }
 
-        override suspend fun send(dataToSend: List<Byte>) {
+        override suspend fun send(dataToSend: List<Byte>) = mutex.withLock {
             try {
                 val sequenceEntry = getNextSequenceEntry(PacketDirection.SEND)
                 println("Next sequence entry: $sequenceEntry")
@@ -120,7 +131,7 @@ class PairingSessionTest : TestBase() {
                 }
 
                 // Signal to the other, suspended coroutine that it can resume now.
-                barrier.trySend(Unit)
+                conditionVariable.signal()
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {
@@ -129,14 +140,14 @@ class PairingSessionTest : TestBase() {
             }
         }
 
-        override suspend fun receive(): List<Byte> {
+        override suspend fun receive(): List<Byte> = mutex.withLock {
             try {
                 val sequenceEntry = getNextSequenceEntry(PacketDirection.RECEIVE)
                 println("Next sequence entry: $sequenceEntry")
 
                 // Signal to the other, suspended coroutine that it can resume now.
-                barrier.trySend(Unit)
-                return sequenceEntry.packet.toByteList()
+                conditionVariable.signal()
+                return@withLock sequenceEntry.packet.toByteList()
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {

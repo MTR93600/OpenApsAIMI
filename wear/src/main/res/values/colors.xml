@@ -178,6 +178,7 @@
     <color name="gray_850">#313131</color>
     <color name="gray_900">#212121</color>
     <color name="grey_steampunk">#333333</color>
+    <color name="light_grey">#CCCCCC</color>
 
     <!-- Blue Gray -->
     <color name="bluegray_100">#CFD8DC</color>
@@ -189,4 +190,11 @@
     <color name="black">#000000</color>
     <color name="white">#FFFFFF</color>
 
+    <!-- Wizard Result Colors -->
+    <color name="insulin_positive">#66BB6A</color>
+    <color name="insulin_negative">#EF5350</color>
+    <color name="primary_dark">#0D47A1</color>
+    <color name="background_dark">#263238</color>
+    <color name="secondary_text">#B0BEC5</color>
+    <color name="divider">#37474F</color>
 </resources>

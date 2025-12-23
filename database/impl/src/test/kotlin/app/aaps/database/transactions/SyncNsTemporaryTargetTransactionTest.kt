@@ -112,8 +112,8 @@ class SyncNsTemporaryTargetTransactionTest {
     }
 
     @Test
-    fun `updates duration when duration changes`() {
-        val tempTarget = createTemporaryTarget(id = 0, nsId = "ns-123", duration = 120_000L)
+    fun `updates duration to shorter when duration changes`() {
+        val tempTarget = createTemporaryTarget(id = 0, nsId = "ns-123", duration = 30_000L)
         val existing = createTemporaryTarget(id = 1, nsId = "ns-123", duration = 60_000L)
 
         whenever(temporaryTargetDao.findByNSId("ns-123")).thenReturn(existing)
@@ -124,10 +124,28 @@ class SyncNsTemporaryTargetTransactionTest {
 
         assertThat(result.updatedDuration).hasSize(1)
         assertThat(result.updatedDuration[0]).isEqualTo(existing)
-        assertThat(existing.duration).isEqualTo(120_000L)
+        assertThat(existing.duration).isEqualTo(30_000L)
         assertThat(result.inserted).isEmpty()
 
         verify(temporaryTargetDao).updateExistingEntry(existing)
+    }
+
+    @Test
+    fun `does not update duration to longer`() {
+        val tempTarget = createTemporaryTarget(id = 0, nsId = "ns-123", duration = 120_000L)
+        val existing = createTemporaryTarget(id = 1, nsId = "ns-123", duration = 60_000L)
+
+        whenever(temporaryTargetDao.findByNSId("ns-123")).thenReturn(existing)
+
+        val transaction = SyncNsTemporaryTargetTransaction(listOf(tempTarget))
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(result.updatedDuration).isEmpty()
+        assertThat(existing.duration).isEqualTo(60_000L)
+        assertThat(result.inserted).isEmpty()
+
+        verify(temporaryTargetDao, never()).updateExistingEntry(any())
     }
 
     @Test

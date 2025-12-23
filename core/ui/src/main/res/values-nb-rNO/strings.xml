@@ -416,6 +416,9 @@
     <string name="uel_loop_change">LOOP ENDRET</string>
     <string name="uel_loop_removed">LOOP FJERNET</string>
     <string name="uel_other">ANNET</string>
+    <string name="uel_running_mode">KJØREMODUS</string>
+    <string name="uel_running_mode_removed">KJØREMODUS SLETTET</string>
+    <string name="uel_running_mode_updarted">KJØREMODUS OPPDATERT</string>
     <!-- HardLimits -->
     <string name="profile_low_target">Profil lavt mål</string>
     <string name="profile_high_target">Profil høyt mål</string>

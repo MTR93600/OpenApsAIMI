@@ -416,6 +416,9 @@
     <string name="uel_loop_change">LAZO CAMBIADO</string>
     <string name="uel_loop_removed">LAZO ELIMINADO</string>
     <string name="uel_other">OTROS</string>
+    <string name="uel_running_mode">MODO DE EJECUCIÓN</string>
+    <string name="uel_running_mode_removed">MODO DE EJECUCIÓN ELIMINADO</string>
+    <string name="uel_running_mode_updarted">MODO DE EJECUCIÓN ACTUALIZADO</string>
     <!-- HardLimits -->
     <string name="profile_low_target">Perfil de objetivo bajo</string>
     <string name="profile_high_target">Perfil de objetivo alto</string>

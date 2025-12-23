@@ -272,7 +272,7 @@ class DiaconnG8Plugin @Inject constructor(
     override val lastDataTime: Long get() = diaconnG8Pump.lastConnection
     override val baseBasalRate: Double get() = diaconnG8Pump.baseAmount
     override val reservoirLevel: Double get() = diaconnG8Pump.systemRemainInsulin
-    override val batteryLevel: Int get() = diaconnG8Pump.systemRemainBattery
+    override val batteryLevel: Int? get() = diaconnG8Pump.systemRemainBattery
 
     @Synchronized
     override fun deliverTreatment(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult {

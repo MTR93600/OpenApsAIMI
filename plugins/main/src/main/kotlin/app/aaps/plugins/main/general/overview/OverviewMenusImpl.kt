@@ -84,7 +84,7 @@ class OverviewMenusImpl @Inject constructor(
             }
         }
         CharTypeData.DEVSLOPE.visibility = { config.isDev() }
-        CharTypeData.VAR_SENS.visibility = { preferences.get(BooleanKey.ApsUseDynamicSensitivity) }
+        CharTypeData.VAR_SENS.visibility = { preferences.get(BooleanKey.ApsUseDynamicSensitivity) || (preferences.get(BooleanKey.ApsUseAutoIsfWeights) && config.isDev()) }
     }
 
     companion object {

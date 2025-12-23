@@ -28,7 +28,7 @@ class WearApp : DaggerApplication() {
         super.onCreate()
         exceptionHandlerWear.register()
         aapsLogger.debug(LTag.WEAR, "onCreate")
-        PreferenceManager.getDefaultSharedPreferences(this).registerOnSharedPreferenceChangeListener { sharedPreferences, key ->
+        PreferenceManager.getDefaultSharedPreferences(this).registerOnSharedPreferenceChangeListener { _, key ->
             key ?: return@registerOnSharedPreferenceChangeListener
             // We trigger update on Complications
             LocalBroadcastManager.getInstance(this).sendBroadcast(Intent(DataLayerListenerServiceWear.INTENT_NEW_DATA))

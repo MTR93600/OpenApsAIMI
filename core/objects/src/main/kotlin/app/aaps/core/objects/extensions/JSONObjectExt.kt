@@ -57,6 +57,9 @@ fun JSONObject.store(key: BooleanNonPreferenceKey, preferences: Preferences): JS
     return this
 }
 
+fun JSONObject.putIfThereIsValue(key: String, value: Int?): JSONObject =
+    this.also { if (value != null && value != 0) it.put(key, value) }
+
 fun JSONObject.putIfThereIsValue(key: String, value: Long?): JSONObject =
     this.also { if (value != null && value != 0L) it.put(key, value) }
 

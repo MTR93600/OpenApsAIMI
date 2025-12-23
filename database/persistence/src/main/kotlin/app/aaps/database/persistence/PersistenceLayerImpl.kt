@@ -1702,6 +1702,10 @@ class PersistenceLayerImpl @Inject constructor(
                     aapsLogger.debug(LTag.DATABASE, "Updated duration TherapyEvent from ${Sources.NSClient.name} $therapyEvent")
                     transactionResult.updatedDuration.add(therapyEvent.fromDb())
                 }
+                result.updatedSite.forEach { therapyEvent ->
+                    aapsLogger.debug(LTag.DATABASE, "Updated Site Rotation TherapyEvent from ${Sources.NSClient.name} $therapyEvent")
+                    transactionResult.updated.add(therapyEvent.fromDb())
+                }
                 log(ueValues)
                 transactionResult
             }

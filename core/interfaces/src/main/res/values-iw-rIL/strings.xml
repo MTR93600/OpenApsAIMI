@@ -34,6 +34,7 @@
     <string name="connecting_for">מתחבר במשך %1$d שניות</string>
     <string name="handshaking">לוחץ יד</string>
     <string name="connected">מחובר</string>
+    <string name="authorized">מורשה</string>
     <string name="disconnecting">מתנתק</string>
     <string name="waiting_for_disconnection">ממתין לניתוק</string>
     <!-- Custom Watchface -->

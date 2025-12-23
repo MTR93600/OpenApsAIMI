@@ -416,6 +416,9 @@
     <string name="uel_loop_change">КОНТУР ИЗМЕНЕН</string>
     <string name="uel_loop_removed">КОНТУР УДАЛЕН</string>
     <string name="uel_other">ДРУГОЕ</string>
+    <string name="uel_running_mode">РАБОЧИЙ РЕЖИМ</string>
+    <string name="uel_running_mode_removed">РАБОЧИЙ РЕЖИМ УДАЛЕН</string>
+    <string name="uel_running_mode_updarted">РАБОЧИЙ РЕЖИМ ОБНОВЛЕН</string>
     <!-- HardLimits -->
     <string name="profile_low_target">Нижнее целевое значение профиля</string>
     <string name="profile_high_target">Верхнее целевое значение профиля</string>
@@ -646,4 +649,5 @@
     <string name="percent_rate_duration_formatted"><![CDATA[<b>Скорость</b>:%1$.2f %% (%2$.2f ед/ч)<br><b> Продолжительность</b> %3$d мин<br>]]></string>
     <string name="rate_percent_duration_formatted"><![CDATA[<b>Скорость</b>: %1$.2f ед/ч (%2$.2f%%) <br><b>Продолжительность</b>: %3$d мин<br>]]></string>
     <!--    Playback-->
+    <string name="audio_playback_attribution">"AAPS воспроизводит аудио"</string>
 </resources>

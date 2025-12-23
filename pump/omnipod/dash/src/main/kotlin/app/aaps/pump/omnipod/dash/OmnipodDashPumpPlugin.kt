@@ -606,9 +606,8 @@ class OmnipodDashPumpPlugin @Inject constructor(
             } ?: RESERVOIR_OVER_50_UNITS_DEFAULT
         }
 
-    override val batteryLevel: Int
-        // Omnipod Dash doesn't report it's battery level. We return 0 here and hide related fields in the UI
-        get() = 0
+    // Omnipod Dash doesn't report it's battery level. We return 0 here and hide related fields in the UI
+    override val batteryLevel: Int? = null
 
     override fun deliverTreatment(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult {
         // Insulin value must be greater than 0

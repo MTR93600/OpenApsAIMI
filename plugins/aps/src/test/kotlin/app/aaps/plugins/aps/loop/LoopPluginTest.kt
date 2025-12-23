@@ -282,8 +282,7 @@ class LoopPluginTest : TestBaseWithProfile() {
         mockCurrentMode(RM.Mode.SUSPENDED_BY_USER)
         val expectedModes = listOf(
             RM.Mode.DISCONNECTED_PUMP,
-            RM.Mode.RESUME,
-            RM.Mode.SUSPENDED_BY_USER // Can re-suspend to change duration
+            RM.Mode.RESUME
         )
 
         // Act

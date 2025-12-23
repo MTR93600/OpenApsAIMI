@@ -215,7 +215,7 @@ class DiaconnG8Pump @Inject constructor(
 
     // 1. pump setting info
     var systemRemainInsulin = 0.0 // 인슐린 잔량
-    var systemRemainBattery = 0 // 배터리 잔량(0~100%)
+    var systemRemainBattery: Int? = null // 배터리 잔량(0~100%)
     var systemBasePattern = 0 // 기저주입 패턴(0=없음, 1=기본, 2=생활1, 3=생활2, 4=생활3, 5=닥터1, 6=닥터2)
     var systemTbStatus = 0 // 임시기저 상태(1=임시기저 중, 2=임시기저 해제)
     var systemInjectionMealStatus = 0 // 식사주입 상태(1=주입중, 2=주입상태아님)

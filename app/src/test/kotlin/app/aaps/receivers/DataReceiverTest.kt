@@ -12,7 +12,6 @@ import app.aaps.plugins.main.general.smsCommunicator.SmsCommunicatorPlugin
 import app.aaps.plugins.source.DexcomPlugin
 import app.aaps.plugins.source.GlimpPlugin
 import app.aaps.plugins.source.MM640gPlugin
-import app.aaps.plugins.source.OttaiPlugin
 import app.aaps.plugins.source.PatchedSiAppPlugin
 import app.aaps.plugins.source.PatchedSinoAppPlugin
 import app.aaps.plugins.source.PoctechPlugin
@@ -138,7 +137,7 @@ class DataReceiverTest : TestBase() {
         dataReceiver.processIntent(context, intent)
 
         // Assert
-        assertWorkerEnqueued(OttaiPlugin.OttaiWorker::class)
+        assertWorkerEnqueued(SyaiPlugin.SyaiWorker::class)
     }
 
     @Test

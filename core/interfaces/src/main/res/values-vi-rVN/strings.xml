@@ -12,6 +12,16 @@
     <string name="hoursago">%1$.1f giờ trước</string>
     <string name="days_ago">%1$.1f ngày trước</string>
     <string name="days_ago_round">%1$.0f ngày trước</string>
+    <plurals name="plurals_day_hour_ago">
+        <item quantity="other">%1$s ngày %2$s giờ trước</item>
+    </plurals>
+    <plurals name="plurals_hour_ago">
+        <item quantity="other">%1$s giờ trước</item>
+    </plurals>
+    <plurals name="plurals_minute_ago">
+        <item quantity="other">%1$s phút trước</item>
+    </plurals>
+    <string name="seconds_ago">cách đây vài giây</string>
     <string name="in_days">trong %1$.0f ngày</string>
     <string name="in_days_round">trong %1$.0f ngày</string>
     <string name="shorthour">h</string>
@@ -37,6 +47,7 @@
     <string name="connecting_for">Đang kết nối trong %1$d giây</string>
     <string name="handshaking">Đang bắt tay</string>
     <string name="connected">Đã kết nối</string>
+    <string name="authorized">Đã ủy quyền</string>
     <string name="disconnecting">Ngắt kết nối</string>
     <string name="waiting_for_disconnection">Đang chờ ngắt kết nối</string>
     <!-- Custom Watchface -->

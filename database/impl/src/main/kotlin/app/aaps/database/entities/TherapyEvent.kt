@@ -45,8 +45,8 @@ data class TherapyEvent(
     var glucose: Double? = null,
     var glucoseType: MeterType? = null,
     var glucoseUnit: GlucoseUnit,
-    val location: Location? = null,
-    val arrow: Arrow? = null
+    var location: Location? = null,
+    var arrow: Arrow? = null
 ) : TraceableDBEntry, DBEntryWithTimeAndDuration {
 
     enum class MeterType {

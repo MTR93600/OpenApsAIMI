@@ -540,7 +540,7 @@ class MedtronicPumpPlugin @Inject constructor(
     override val lastBolusAmount: Double? get() = null
     override val baseBasalRate: Double get() = medtronicPumpStatus.basalProfileForHour
     override val reservoirLevel: Double get() = medtronicPumpStatus.reservoirRemainingUnits
-    override val batteryLevel: Int get() = medtronicPumpStatus.batteryRemaining
+    override val batteryLevel: Int? get() = medtronicPumpStatus.batteryRemaining
 
     override fun triggerUIChange() {
         rxBus.send(EventMedtronicPumpValuesChanged())

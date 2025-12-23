@@ -82,7 +82,7 @@
     <string name="expand_category">Mở rộng danh mục</string>
     <string name="collapse_category">Thu gọn danh mục</string>
     <!--ImportExport-->
-    <string name="nav_preferences">Cài đặt tùy chọn</string>
+    <string name="nav_preferences">Tùy chọn</string>
     <string name="password_preferences_encrypt_prompt">Hệ thống sẽ yêu cầu mật khẩu chính để mã hóa các thiết lập bạn xuất ra.</string>
     <string name="preferences_export_canceled">Xuất dữ liệu đã bị hủy! Tùy chọn KHÔNG được xuất dữ liệu!</string>
     <string name="preferences_import_canceled">Nhập dữ liệu đã bị hủy! Tùy chọn KHÔNG được nhập dữ liệu!</string>

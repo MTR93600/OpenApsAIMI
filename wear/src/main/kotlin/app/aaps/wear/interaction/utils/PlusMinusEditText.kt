@@ -114,8 +114,7 @@ class PlusMinusEditText @JvmOverloads constructor(
         val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             (binding.root.context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
         } else {
-            @Suppress("DEPRECATION")
-            binding.root.context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            binding.root.context.getSystemService(Vibrator::class.java)
         }
 
         vibrator.vibrate(VibrationEffect.createOneShot(10, VibrationEffect.DEFAULT_AMPLITUDE))
@@ -252,6 +251,15 @@ class PlusMinusEditText @JvmOverloads constructor(
 
         editText.showSoftInputOnFocus = false
         editText.setTextIsSelectable(false)
+
+        // Prevent editText clicks from propagating to ViewPager
+        editText.isClickable = true
+        editText.isFocusable = false
+        editText.setOnClickListener {
+            // Consume the click event without doing anything
+            // This prevents the ViewPager from receiving the touch event
+        }
+
         binding.minButton.setOnTouchListener(this)
         binding.minButton.setOnKeyListener(this)
         binding.minButton.setOnClickListener(this)

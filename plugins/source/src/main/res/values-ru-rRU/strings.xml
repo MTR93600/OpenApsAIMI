@@ -35,5 +35,11 @@
     <string name="description_source_patched_ottai_app">Получать данные о ГК от приложения Ottai.</string>
     <!-- Patched Syai Tag App -->
     <string name="syai_tag_app">Syai</string>
-    <string name="description_source_patched_syai_tag_app">Получать уровень ГК из приложения Syai.</string>
+    <string name="description_source_patched_syai_tag_app">Получать данные о ГК от приложения Syai.</string>
+    <!-- Patched SI App -->
+    <string name="patched_si_app">SI App</string>
+    <string name="description_source_patched_si_app">Получать данные из патч приложения Sibionic SI.</string>
+    <!-- Patched Sino App -->
+    <string name="patched_sino_app">Sino App</string>
+    <string name="description_source_patched_sino_app">Получать данные от патч-приложения Sino App.</string>
 </resources>

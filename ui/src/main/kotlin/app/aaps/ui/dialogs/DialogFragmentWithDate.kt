@@ -78,7 +78,7 @@ abstract class DialogFragmentWithDate : DaggerDialogFragment() {
         eventTimeOriginal = savedInstanceState?.getLong("eventTimeOriginal") ?: dateUtil.nowWithoutMilliseconds()
         eventTime = savedInstanceState?.getLong("eventTime") ?: eventTimeOriginal
 
-        eventDateView = view.findViewById<TextView>(app.aaps.core.ui.R.id.eventdate)
+        eventDateView = view.findViewById(app.aaps.core.ui.R.id.eventdate)
         eventDateView?.text = dateUtil.dateString(eventTime)
         eventDateView?.setOnClickListener {
             val selection = dateUtil.timeStampToUtcDateMillis(eventTime)
@@ -97,7 +97,7 @@ abstract class DialogFragmentWithDate : DaggerDialogFragment() {
                 .show(parentFragmentManager, "event_time_date_picker")
         }
 
-        eventTimeView = view.findViewById<TextView>(app.aaps.core.ui.R.id.eventtime)
+        eventTimeView = view.findViewById(app.aaps.core.ui.R.id.eventtime)
         eventTimeView?.text = dateUtil.timeString(eventTime)
         eventTimeView?.setOnClickListener {
             val clockFormat = if (DateFormat.is24HourFormat(context)) TimeFormat.CLOCK_24H else TimeFormat.CLOCK_12H

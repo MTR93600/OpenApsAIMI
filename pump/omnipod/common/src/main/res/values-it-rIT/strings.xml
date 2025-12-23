@@ -118,7 +118,7 @@
     <string name="omnipod_common_preferences_notification_uncertain_tbr_sound_enabled">Suono notifiche TBR incerto abilitato</string>
     <string name="omnipod_common_preferences_notification_uncertain_smb_sound_enabled">Suono notifiche TBR incerto abilitato</string>
     <string name="omnipod_common_preferences_notification_uncertain_bolus_sound_enabled">Suono notifiche bolo incerto abilitato</string>
-    <string name="omnipod_dash_use_bonding">Bond dispositivo BT su Android 15+ (workaround per telefoni Pixel)</string>
+    <string name="omnipod_dash_use_bonding">Associa dispositivo BT su Android 15</string>
     <!-- Omnipod - Pod Status -->
     <string name="omnipod_common_pod_status_no_active_pod">Nessun pod attivo</string>
     <string name="omnipod_common_pod_status_waiting_for_activation">Configurazione in corso (attesa attivazione pod)</string>

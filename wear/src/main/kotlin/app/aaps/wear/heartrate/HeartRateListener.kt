@@ -50,7 +50,7 @@ class HeartRateListener(
 ) : SensorEventListener, Disposable {
 
     /** How often we send values to the phone. */
-    private val samplingIntervalMillis = 30_000L
+    private val samplingIntervalMillis = 60_000L
     private val sampler = Sampler(now, sp)
     private var schedule: Disposable? = null
 
@@ -138,7 +138,7 @@ class HeartRateListener(
 
     private class Sampler(timestampMillis: Long, val sp: SP) {
 
-        private val actionHeartRatehistory: MutableList<EventData.ActionHeartRate> = ArrayList()
+        private val actionHeartRateHistory: MutableList<EventData.ActionHeartRate> = ArrayList()
         private val averageHistory
             get() = sp.getInt(R.string.key_heart_rate_smoothing, 1)
         private val maxAverage = 15
@@ -174,8 +174,8 @@ class HeartRateListener(
                 fix(timestampMillis)
                 return if (10 * activeMillis > lastEventMillis - startMillis) {
                     val bpm = beats / activeMillis.toMinute()
-                    actionHeartRatehistory.add(EventData.ActionHeartRate(timestampMillis - startMillis, timestampMillis, bpm, device))
-                    averageHeartrate(timestampMillis - startMillis, timestampMillis, device)
+                    actionHeartRateHistory.add(EventData.ActionHeartRate(timestampMillis - startMillis, timestampMillis, bpm, device))
+                    averageHeartRate(timestampMillis - startMillis, timestampMillis, device)
                     //EventData.ActionHeartRate(timestampMillis - startMillis, timestampMillis, bpm, device)
                 } else {
                     null
@@ -195,13 +195,14 @@ class HeartRateListener(
                 currentBpm = heartRate
             }
         }
-        fun averageHeartrate(duration: Long, timestamp: Long, device: String): EventData.ActionHeartRate? {
+
+        fun averageHeartRate(duration: Long, timestamp: Long, device: String): EventData.ActionHeartRate? {
             lock.withLock {
-                cleanActionHeartRatehistory(timestamp)  // clean oldest values from memory
+                cleanActionHeartRateHistory(timestamp)  // clean oldest values from memory
                 var bpm = 0.0
                 var avgNb = 0
                 var allDuration = 0L
-                actionHeartRatehistory.forEach { hr ->
+                actionHeartRateHistory.forEach { hr ->
                     if (hr.timestamp >= timestamp - (averageHistory - 1) * 62000L) {    // If smoothing disabled, only last BPM is sent
                         bpm += hr.beatsPerMinute
                         avgNb++
@@ -215,11 +216,11 @@ class HeartRateListener(
             }
         }
 
-        fun cleanActionHeartRatehistory(timestamp: Long) {
-            val iterator = actionHeartRatehistory.iterator()
+        fun cleanActionHeartRateHistory(timestamp: Long) {
+            val iterator = actionHeartRateHistory.iterator()
             while (iterator.hasNext()) {
                 val hr = iterator.next()
-                if (hr.timestamp < timestamp - (maxAverage - 1) * 62000L) {   // keep in memory the max duration + 2s marging for each min
+                if (hr.timestamp < timestamp - (maxAverage - 1) * 62000L) {   // keep in memory the max duration + 2s margin for each min
                     iterator.remove()
                 }
             }

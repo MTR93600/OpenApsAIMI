@@ -84,8 +84,8 @@
     <string name="set_neutral_temps_summary">Nếu được bật, tính năng này sẽ hủy liều nền tạm thời trước khi kết thúc mỗi giờ. Phương pháp này có thể giúp ngăn một số pump phát tiếng bíp hoặc rung vào đầu giờ.</string>
     <string name="mdt_tbr_remaining">%1$.1f U/giờ (%2$d phút còn lại)</string>
     <string name="invalid_history_data">Phát hiện dữ liệu lịch sử bơm không hợp lệ. Hãy tạo báo cáo mới và cung cấp nhật ký.</string>
-    <string name="riley_statistics">Thống kê RileyLink</string>
+    <string name="riley_statistics">Thống kê RL</string>
     <string name="medtronic_history_type">Loại:</string>
     <string name="clicked_refresh" comment="26 characters max for translation">Đã nhấn làm mới</string>
-    <string name="scheduled_status_refresh" comment="26 characters max for translation">Làm mới trạng thái theo định kỳ</string>
+    <string name="scheduled_status_refresh" comment="26 characters max for translation">Cập nhật trạng thái theo lịch</string>
 </resources>

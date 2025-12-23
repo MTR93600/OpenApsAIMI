@@ -101,7 +101,7 @@ class PreferencesImpl @Inject constructor(
         error("Not implemented")
         //profileUtil.valueInCurrentUnitsDetect(sp.getDouble(key.key, key.defaultValue))
 
-    override fun getIfExists(key: UnitDoublePreferenceKey): Double? =
+    override fun getIfExists(key: UnitDoublePreferenceKey): Double =
         error("Not implemented")
         //if (sp.contains(key.key)) sp.getDouble(key.key, key.defaultValue) else null
 

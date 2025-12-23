@@ -1,16 +1,14 @@
 package app.aaps.wear.di
 
 import app.aaps.wear.comm.DataLayerListenerServiceWear
-import app.aaps.wear.complications.BaseComplicationProviderService
-import app.aaps.wear.complications.BrIobComplication
-import app.aaps.wear.complications.BrComplication
 import app.aaps.wear.complications.BrCobIobComplication
 import app.aaps.wear.complications.BrCobIobComplicationExt1
 import app.aaps.wear.complications.BrCobIobComplicationExt2
+import app.aaps.wear.complications.BrComplication
+import app.aaps.wear.complications.BrIobComplication
 import app.aaps.wear.complications.CobDetailedComplication
 import app.aaps.wear.complications.CobIconComplication
 import app.aaps.wear.complications.CobIobComplication
-import app.aaps.wear.complications.ComplicationTapBroadcastReceiver
 import app.aaps.wear.complications.IobDetailedComplication
 import app.aaps.wear.complications.IobIconComplication
 import app.aaps.wear.complications.LongStatusComplication
@@ -42,7 +40,6 @@ abstract class WearServicesModule {
     @ContributesAndroidInjector abstract fun contributesDataLayerListenerService(): DataLayerListenerServiceWear
     @ContributesAndroidInjector abstract fun contributesHeartRateListenerService(): HeartRateListener
     @ContributesAndroidInjector abstract fun contributesStepsCountListenerService(): StepCountListener
-    @ContributesAndroidInjector abstract fun contributesBaseComplicationProviderService(): BaseComplicationProviderService
     @ContributesAndroidInjector abstract fun contributesBrCobIobComplication(): BrCobIobComplication
     @ContributesAndroidInjector abstract fun contributesBrCobIobComplicationExt1(): BrCobIobComplicationExt1
     @ContributesAndroidInjector abstract fun contributesBrCobIobComplicationExt2(): BrCobIobComplicationExt2
@@ -51,7 +48,6 @@ abstract class WearServicesModule {
     @ContributesAndroidInjector abstract fun contributesCobDetailedComplication(): CobDetailedComplication
     @ContributesAndroidInjector abstract fun contributesCobIconComplication(): CobIconComplication
     @ContributesAndroidInjector abstract fun contributesCobIobComplication(): CobIobComplication
-    @ContributesAndroidInjector abstract fun contributesComplicationTapBroadcastReceiver(): ComplicationTapBroadcastReceiver
     @ContributesAndroidInjector abstract fun contributesIobDetailedComplication(): IobDetailedComplication
     @ContributesAndroidInjector abstract fun contributesIobIconComplication(): IobIconComplication
     @ContributesAndroidInjector abstract fun contributesLongStatusComplication(): LongStatusComplication

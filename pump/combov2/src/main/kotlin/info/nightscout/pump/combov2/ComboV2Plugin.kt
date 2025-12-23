@@ -947,8 +947,8 @@ class ComboV2Plugin @Inject constructor(
         get() = _reservoirLevel ?: 0.0
 
     private var _batteryLevel: Int? = null
-    override val batteryLevel: Int
-        get() = _batteryLevel ?: 0
+    override val batteryLevel: Int?
+        get() = _batteryLevel
 
     private fun updateLevels() {
         pumpStatus?.availableUnitsInReservoir?.let { newLevel ->

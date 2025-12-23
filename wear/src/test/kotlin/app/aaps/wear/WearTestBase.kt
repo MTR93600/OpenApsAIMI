@@ -5,8 +5,6 @@ import android.content.SharedPreferences
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.wear.interaction.utils.Constants
-import app.aaps.wear.interaction.utils.Persistence
-import app.aaps.wear.interaction.utils.WearUtil
 import app.aaps.wear.testing.mocks.SharedPreferencesMock
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.extension.ExtendWith
@@ -16,7 +14,6 @@ import org.mockito.MockitoAnnotations
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.kotlin.doAnswer
-import org.mockito.kotlin.spy
 import org.mockito.kotlin.whenever
 import org.mockito.quality.Strictness
 import kotlin.time.Clock
@@ -34,9 +31,6 @@ open class WearTestBase {
     @Mock lateinit var dateUtil: DateUtil
     @OptIn(ExperimentalTime::class)
     @Mock lateinit var clock: Clock
-    lateinit var wearUtil: WearUtil
-
-    lateinit var persistence: Persistence
 
     private val mockedSharedPrefs: HashMap<String, SharedPreferences> = HashMap()
 
@@ -44,7 +38,6 @@ open class WearTestBase {
     @BeforeEach
     fun setup() {
         MockitoAnnotations.openMocks(this)
-        wearUtil = WearUtil(context, aapsLogger, clock)
         doAnswer { invocation ->
             val key = invocation.getArgument<String>(0)
             if (mockedSharedPrefs.containsKey(key)) {
@@ -56,8 +49,6 @@ open class WearTestBase {
             }
         }.whenever(context).getSharedPreferences(ArgumentMatchers.anyString(), ArgumentMatchers.anyInt())
         setClockNow()
-
-        persistence = spy(Persistence(aapsLogger, dateUtil, sp))
     }
 
     fun progressClock(byMilliseconds: Long) {

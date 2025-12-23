@@ -173,8 +173,7 @@ open class VirtualPumpPlugin @Inject constructor(
             if (config.AAPSCLIENT) processedDeviceStatusData.pumpData?.reservoir ?: -1.0
             else reservoirInUnits.toDouble()
 
-    override val batteryLevel: Int
-        get() = batteryPercent
+    override val batteryLevel: Int? get() = batteryPercent
 
     override fun deliverTreatment(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult {
         // Insulin value must be greater than 0

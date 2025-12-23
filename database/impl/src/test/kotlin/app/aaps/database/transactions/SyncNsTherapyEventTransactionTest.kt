@@ -129,8 +129,8 @@ class SyncNsTherapyEventTransactionTest {
     }
 
     @Test
-    fun `updates duration in NS client mode when duration changes`() {
-        val therapyEvent = createTherapyEvent(id = 0, nsId = "ns-123", duration = 120_000L)
+    fun `updates duration to shorter in NS client mode when duration changes`() {
+        val therapyEvent = createTherapyEvent(id = 0, nsId = "ns-123", duration = 30_000L)
         val existing = createTherapyEvent(id = 1, nsId = "ns-123", duration = 60_000L)
 
         whenever(therapyEventDao.findByNSId("ns-123")).thenReturn(existing)
@@ -141,11 +141,30 @@ class SyncNsTherapyEventTransactionTest {
 
         assertThat(result.updatedDuration).hasSize(1)
         assertThat(result.updatedDuration[0]).isEqualTo(existing)
-        assertThat(existing.duration).isEqualTo(120_000L)
+        assertThat(existing.duration).isEqualTo(30_000L)
         assertThat(result.inserted).isEmpty()
         assertThat(result.invalidated).isEmpty()
 
         verify(therapyEventDao).updateExistingEntry(existing)
+    }
+
+    @Test
+    fun `does not update duration to longer in NS client mode`() {
+        val therapyEvent = createTherapyEvent(id = 0, nsId = "ns-123", duration = 120_000L)
+        val existing = createTherapyEvent(id = 1, nsId = "ns-123", duration = 60_000L)
+
+        whenever(therapyEventDao.findByNSId("ns-123")).thenReturn(existing)
+
+        val transaction = SyncNsTherapyEventTransaction(listOf(therapyEvent), nsClientMode = true)
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(result.updatedDuration).isEmpty()
+        assertThat(existing.duration).isEqualTo(60_000L)
+        assertThat(result.inserted).isEmpty()
+        assertThat(result.invalidated).isEmpty()
+
+        verify(therapyEventDao, never()).updateExistingEntry(any())
     }
 
     @Test

@@ -48,7 +48,7 @@ abstract class MenuListActivity : DaggerActivity() {
         disposable += rxBus
             .toObservable(EventUpdateSelectedWatchface::class.java)
             .observeOn(aapsSchedulers.main)
-            .subscribe { event: EventUpdateSelectedWatchface ->
+            .subscribe { _: EventUpdateSelectedWatchface ->
                 updateMenu()
             }
         updateMenu()

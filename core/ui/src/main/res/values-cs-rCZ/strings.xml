@@ -416,6 +416,9 @@
     <string name="uel_loop_change">SMYČKA ZMĚNĚNA</string>
     <string name="uel_loop_removed">SMYČKA ODEBRÁNA</string>
     <string name="uel_other">JINÉ</string>
+    <string name="uel_running_mode">REŽIM SMYČKY</string>
+    <string name="uel_running_mode_removed">REŽIM SMYČKY ODSTRANĚN</string>
+    <string name="uel_running_mode_updarted">REŽIM SMYČKY AKTUALIZOVÁN</string>
     <!-- HardLimits -->
     <string name="profile_low_target">Dolní cíl profilu</string>
     <string name="profile_high_target">Horní cíl profilu</string>

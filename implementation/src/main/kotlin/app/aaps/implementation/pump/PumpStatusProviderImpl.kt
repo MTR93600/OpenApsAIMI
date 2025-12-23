@@ -86,7 +86,7 @@ class PumpStatusProviderImpl @Inject constructor(
         val pumpJson = JSONObject()
             .put("reservoir", pump.reservoirLevel.toInt())
             .put("clock", dateUtil.toISOString(now))
-        val battery = JSONObject().put("percent", pump.batteryLevel)
+        val battery = JSONObject().putIfThereIsValue("percent", pump.batteryLevel)
         val status = JSONObject()
             .put("status", translator.translate(runningMode.mode))
             .put("timestamp", dateUtil.toISOString(pump.lastDataTime))

@@ -126,7 +126,7 @@ interface Pump {
     /**
      * Battery level at time of last connection [%]
      */
-    val batteryLevel: Int
+    val batteryLevel: Int?
 
     /**
      * Request a bolus to be delivered, carbs to be stored on pump or both.
