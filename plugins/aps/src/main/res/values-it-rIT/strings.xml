@@ -734,7 +734,7 @@
     <string name="original_file_missing">Il file originale non esiste.</string>
     <string name="file_too_short">Il file contiene meno di 200 righe, nessuna eliminazione effettuata.</string>
     <string name="last_200_deleted">Le ultime 200 righe sono state eliminate. Il file originale è stato salvato come \'%1$s\'.</string>
-    <string name="reason_data_removed">I valori per la data %1$s sono stati eliminati perché TIR1DAIIR è inferiore all\'85%%%.</string>
+    <string name="reason_data_removed">I valori per la data %1$s sono stati eliminati perché TIR1DAIIR è inferiore all\'85%%.</string>
     <string name="reason_deletion_time_restricted">L\'eliminazione può essere eseguita solo tra le 00:05 e le 00:10.</string>
     <string name="reason_no_deletion_needed">Nessuna eliminazione necessaria: tir1DAYIR è maggiore o uguale all\'85%.</string>
     <string name="safety_sport_smb_zero">🏃‍♂️ Sicurezza sport → SMB=0</string>

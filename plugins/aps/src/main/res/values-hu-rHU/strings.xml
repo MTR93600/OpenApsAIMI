@@ -702,7 +702,7 @@
     <string name="original_file_missing">The original file does not exist.</string>
     <string name="file_too_short">The file contains 200 lines or fewer, no deletion performed.</string>
     <string name="last_200_deleted">The last 200 lines have been deleted. The original file was saved as \'%1$s\'.</string>
-    <string name="reason_data_removed">The values for date %1$s have been deleted because TIR1DAYIR is lower than 85%%%.</string>
+    <string name="reason_data_removed">The values for date %1$s have been deleted because TIR1DAYIR is lower than 85%%.</string>
     <string name="reason_deletion_time_restricted">The deletion can only be executed between 00:05 and 00:10.</string>
     <string name="reason_no_deletion_needed">No deletion needed: tir1DAYIR is greater than or equal to 85%.</string>
     <string name="safety_sport_smb_zero">🏃‍♂️ Safety sport → SMB=0</string>

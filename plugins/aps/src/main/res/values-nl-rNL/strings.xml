@@ -689,7 +689,7 @@
     <string name="original_file_missing">Het originele bestand bestaat niet.</string>
     <string name="file_too_short">Het bestand bevat 200 regels of minder, er is geen verwijdering uitgevoerd.</string>
     <string name="last_200_deleted">De laatste 200 regels zijn verwijderd. Het originele bestand is opgeslagen als \'%1$s\'.</string>
-    <string name="reason_data_removed">De waarden voor datum %1$s zijn verwijderd omdat TIR1DAIIR lager is dan 85%%%.</string>
+    <string name="reason_data_removed">De waarden voor datum %1$s zijn verwijderd omdat TIR1DAIIR lager is dan 85%%.</string>
     <string name="reason_deletion_time_restricted">De verwijdering kan alleen worden uitgevoerd tussen 00:05 en 00:10.</string>
     <string name="reason_no_deletion_needed">Geen verwijdering nodig: tir1DAYIR is groter dan of gelijk aan 85%.</string>
     <string name="safety_sport_smb_zero">🏃‍♂️ Veiligheid sport → SMB=0</string>
