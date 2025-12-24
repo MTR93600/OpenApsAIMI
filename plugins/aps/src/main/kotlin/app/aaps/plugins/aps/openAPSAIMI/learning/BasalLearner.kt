@@ -32,9 +32,12 @@ class BasalLearner @Inject constructor(
     private val file by lazy { storageHelper.getAimiFile(fileName) }
 
     // === Multi-Scale Multipliers ===
-    private var shortTermMultiplier = 1.0   // Updated every 30 min
-    private var mediumTermMultiplier = 1.0  // Updated every 6 hours
-    private var longTermMultiplier = 1.0    // Updated every 24 hours
+    var shortTermMultiplier = 1.0   // Updated every 30 min
+        private set
+    var mediumTermMultiplier = 1.0  // Updated every 6 hours
+        private set
+    var longTermMultiplier = 1.0    // Updated every 24 hours
+        private set
 
     // === Timestamps for update scheduling ===
     private var lastShortUpdate = 0L

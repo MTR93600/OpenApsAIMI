@@ -4129,6 +4129,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         if (pkpdRuntimeTemp != null) {
             pkpdRuntime = pkpdRuntimeTemp
+            
+            // 📊 Expose PkPd Learner state in rT for visibility
+            consoleLog.add("📊 PKPD_LEARNER:")
+            consoleLog.add("  │ DIA (learned): ${"%.2f".format(pkpdRuntime.params.diaHrs)}h")
+            consoleLog.add("  │ Peak (learned): ${"%.0f".format(pkpdRuntime.params.peakMin)}min")
+            consoleLog.add("  │ fusedISF: ${"%.1f".format(pkpdRuntime.fusedIsf)} mg/dL/U")
+            consoleLog.add("  │ pkpdScale: ${"%.3f".format(pkpdRuntime.pkpdScale)}")
+            consoleLog.add("  └ adaptiveMode: ${if (pkpdRuntime.params.diaHrs != 4.0 || pkpdRuntime.params.peakMin != 75.0) "ACTIVE" else "DEFAULT"}")
         }
         // End FCL 11.0 Hoist. Next block uses the results.
         var tdd7Days = profile.TDD
@@ -5933,10 +5941,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 tdd30Days = tdd7Days, // Placeholder as tdd30Days is not readily available in this scope yet
                 isFastingTime = isNight && !anyMealActive
             )
+            
+            // 📊 Expose BasalLearner state in rT for visibility
+            consoleLog.add("📊 BASAL_LEARNER:")
+            consoleLog.add("  │ shortTerm: ${"%.3f".format(basalLearner.shortTermMultiplier)}")
+            consoleLog.add("  │ mediumTerm: ${"%.3f".format(basalLearner.mediumTermMultiplier)}")
+            consoleLog.add("  │ longTerm: ${"%.3f".format(basalLearner.longTermMultiplier)}")
+            consoleLog.add("  └ combined: ${"%.3f".format(basalLearner.getMultiplier())}")
 
             // 🎯 Process UnifiedReactivityLearner (old learner removed)
             // 🎯 Process UnifiedReactivityLearner (old learner removed)
             unifiedReactivityLearner.processIfNeeded()  // Analyze & adjust every 6h
+            
+            // 📊 Expose UnifiedReactivityLearner state in rT for visibility
+            unifiedReactivityLearner.lastAnalysis?.let { analysis ->
+                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                consoleLog.add("📊 REACTIVITY_LEARNER:")
+                consoleLog.add("  │ globalFactor: ${"%.3f".format(analysis.globalFactor)}")
+                consoleLog.add("  │ shortTermFactor: ${"%.3f".format(analysis.shortTermFactor)}")
+                consoleLog.add("  │ combinedFactor: ${"%.3f".format(unifiedReactivityLearner.getCombinedFactor())}")
+                consoleLog.add("  │ TIR 70-180: ${analysis.tir70_180.toInt()}%")
+                consoleLog.add("  │ CV%: ${analysis.cv_percent.toInt()}%")
+                consoleLog.add("  │ Hypo count (24h): ${analysis.hypo_count}")
+                consoleLog.add("  │ Reason: ${analysis.adjustmentReason}")
+                consoleLog.add("  └ Analyzed at: ${sdf.format(Date(analysis.timestamp))}")
+            }
 
             // 🔮 FCL 11.0: WCycle Active Learning
             if (wCyclePreferences.enabled()) {
