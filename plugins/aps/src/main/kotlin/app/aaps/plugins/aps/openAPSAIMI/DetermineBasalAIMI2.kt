@@ -5907,6 +5907,52 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 round = { value, digits -> round(value, digits) }
             )
             val basalDecision = basalDecisionEngine.decide(basalInput, rT, helpers)
+            
+            // --- Update Learners BEFORE building final result ---
+            val currentHour = LocalTime.now().hour
+            val anyMealActive = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime
+            val isNight = currentHour >= 22 || currentHour <= 6
+            
+            basalLearner.process(
+                currentBg = bg,
+                currentDelta = delta.toDouble(),
+                tdd7Days = tdd7Days,
+                tdd30Days = tdd7Days,
+                isFastingTime = isNight && !anyMealActive
+            )
+            
+            // 📊 Expose BasalLearner state in rT for visibility
+            consoleLog.add("📊 BASAL_LEARNER:")
+            consoleLog.add("  │ shortTerm: ${"%.3f".format(Locale.US, basalLearner.shortTermMultiplier)}")
+            consoleLog.add("  │ mediumTerm: ${"%.3f".format(Locale.US, basalLearner.mediumTermMultiplier)}")
+            consoleLog.add("  │ longTerm: ${"%.3f".format(Locale.US, basalLearner.longTermMultiplier)}")
+            consoleLog.add("  └ combined: ${"%.3f".format(Locale.US, basalLearner.getMultiplier())}")
+
+            // 🎯 Process UnifiedReactivityLearner
+            unifiedReactivityLearner.processIfNeeded()
+            
+            // 📊 Expose UnifiedReactivityLearner state in rT for visibility
+            unifiedReactivityLearner.lastAnalysis?.let { analysis ->
+                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+                consoleLog.add("📊 REACTIVITY_LEARNER:")
+                consoleLog.add("  │ globalFactor: ${"%.3f".format(Locale.US, analysis.globalFactor)}")
+                consoleLog.add("  │ shortTermFactor: ${"%.3f".format(Locale.US, analysis.shortTermFactor)}")
+                consoleLog.add("  │ combinedFactor: ${"%.3f".format(Locale.US, unifiedReactivityLearner.getCombinedFactor())}")
+                consoleLog.add("  │ TIR 70-180: ${analysis.tir70_180.toInt()}%")
+                consoleLog.add("  │ CV%: ${analysis.cv_percent.toInt()}%")
+                consoleLog.add("  │ Hypo count (24h): ${analysis.hypo_count}")
+                consoleLog.add("  │ Reason: ${analysis.adjustmentReason}")
+                consoleLog.add("  └ Analyzed at: ${sdf.format(Date(analysis.timestamp))}")
+            }
+
+            // 🔮 WCycle Active Learning
+            if (wCyclePreferences.enabled()) {
+                val phase = wCycleFacade.getPhase()
+                if (phase != app.aaps.plugins.aps.openAPSAIMI.wcycle.CyclePhase.UNKNOWN) {
+                     wCycleFacade.updateLearning(phase, autosens_data.ratio)
+                }
+            }
+            
             val finalResult = setTempBasal(
                 _rate = basalDecision.rate,
                 duration = basalDecision.duration,
@@ -5928,53 +5974,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 flatBGsDetected = flatBGsDetected,
                 dynIsfMode = dynIsfMode
             )
-
-            // --- Update Learners ---
-            val currentHour = LocalTime.now().hour
-            val anyMealActive = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime
-            val isNight = currentHour >= 22 || currentHour <= 6
-            
-            basalLearner.process(
-                currentBg = bg,
-                currentDelta = delta.toDouble(),
-                tdd7Days = tdd7Days,
-                tdd30Days = tdd7Days, // Placeholder as tdd30Days is not readily available in this scope yet
-                isFastingTime = isNight && !anyMealActive
-            )
-            
-            // 📊 Expose BasalLearner state in rT for visibility
-            consoleLog.add("📊 BASAL_LEARNER:")
-            consoleLog.add("  │ shortTerm: ${"%.3f".format(Locale.US, basalLearner.shortTermMultiplier)}")
-            consoleLog.add("  │ mediumTerm: ${"%.3f".format(Locale.US, basalLearner.mediumTermMultiplier)}")
-            consoleLog.add("  │ longTerm: ${"%.3f".format(Locale.US, basalLearner.longTermMultiplier)}")
-            consoleLog.add("  └ combined: ${"%.3f".format(Locale.US, basalLearner.getMultiplier())}")
-
-            // 🎯 Process UnifiedReactivityLearner (old learner removed)
-            // 🎯 Process UnifiedReactivityLearner (old learner removed)
-            unifiedReactivityLearner.processIfNeeded()  // Analyze & adjust every 6h
-            
-            // 📊 Expose UnifiedReactivityLearner state in rT for visibility
-            unifiedReactivityLearner.lastAnalysis?.let { analysis ->
-                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-                consoleLog.add("📊 REACTIVITY_LEARNER:")
-                consoleLog.add("  │ globalFactor: ${"%.3f".format(Locale.US, analysis.globalFactor)}")
-                consoleLog.add("  │ shortTermFactor: ${"%.3f".format(Locale.US, analysis.shortTermFactor)}")
-                consoleLog.add("  │ combinedFactor: ${"%.3f".format(Locale.US, unifiedReactivityLearner.getCombinedFactor())}")
-                consoleLog.add("  │ TIR 70-180: ${analysis.tir70_180.toInt()}%")
-                consoleLog.add("  │ CV%: ${analysis.cv_percent.toInt()}%")
-                consoleLog.add("  │ Hypo count (24h): ${analysis.hypo_count}")
-                consoleLog.add("  │ Reason: ${analysis.adjustmentReason}")
-                consoleLog.add("  └ Analyzed at: ${sdf.format(Date(analysis.timestamp))}")
-            }
-
-            // 🔮 FCL 11.0: WCycle Active Learning
-            if (wCyclePreferences.enabled()) {
-                val phase = wCycleFacade.getPhase()
-                if (phase != app.aaps.plugins.aps.openAPSAIMI.wcycle.CyclePhase.UNKNOWN) {
-                     // Feed real-time resistance (Autosens Ratio) back to the Cycle Learner
-                     wCycleFacade.updateLearning(phase, autosens_data.ratio)
-                }
-            }
 
             // 🛡️ Safety: Strictly Clamp Basal to >= 0.0 to prevent negative display/command
             finalResult.rate = finalResult.rate?.coerceAtLeast(0.0) ?: 0.0
