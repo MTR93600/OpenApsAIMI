@@ -4132,10 +4132,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             // 📊 Expose PkPd Learner state in rT for visibility
             consoleLog.add("📊 PKPD_LEARNER:")
-            consoleLog.add("  │ DIA (learned): ${"%.2f".format(pkpdRuntime.params.diaHrs)}h")
-            consoleLog.add("  │ Peak (learned): ${"%.0f".format(pkpdRuntime.params.peakMin)}min")
-            consoleLog.add("  │ fusedISF: ${"%.1f".format(pkpdRuntime.fusedIsf)} mg/dL/U")
-            consoleLog.add("  │ pkpdScale: ${"%.3f".format(pkpdRuntime.pkpdScale)}")
+            consoleLog.add("  │ DIA (learned): ${"%.2f".format(Locale.US, pkpdRuntime.params.diaHrs)}h")
+            consoleLog.add("  │ Peak (learned): ${"%.0f".format(Locale.US, pkpdRuntime.params.peakMin)}min")
+            consoleLog.add("  │ fusedISF: ${"%.1f".format(Locale.US, pkpdRuntime.fusedIsf)} mg/dL/U")
+            consoleLog.add("  │ pkpdScale: ${"%.3f".format(Locale.US, pkpdRuntime.pkpdScale)}")
             consoleLog.add("  └ adaptiveMode: ${if (pkpdRuntime.params.diaHrs != 4.0 || pkpdRuntime.params.peakMin != 75.0) "ACTIVE" else "DEFAULT"}")
         }
         // End FCL 11.0 Hoist. Next block uses the results.
@@ -5944,10 +5944,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             // 📊 Expose BasalLearner state in rT for visibility
             consoleLog.add("📊 BASAL_LEARNER:")
-            consoleLog.add("  │ shortTerm: ${"%.3f".format(basalLearner.shortTermMultiplier)}")
-            consoleLog.add("  │ mediumTerm: ${"%.3f".format(basalLearner.mediumTermMultiplier)}")
-            consoleLog.add("  │ longTerm: ${"%.3f".format(basalLearner.longTermMultiplier)}")
-            consoleLog.add("  └ combined: ${"%.3f".format(basalLearner.getMultiplier())}")
+            consoleLog.add("  │ shortTerm: ${"%.3f".format(Locale.US, basalLearner.shortTermMultiplier)}")
+            consoleLog.add("  │ mediumTerm: ${"%.3f".format(Locale.US, basalLearner.mediumTermMultiplier)}")
+            consoleLog.add("  │ longTerm: ${"%.3f".format(Locale.US, basalLearner.longTermMultiplier)}")
+            consoleLog.add("  └ combined: ${"%.3f".format(Locale.US, basalLearner.getMultiplier())}")
 
             // 🎯 Process UnifiedReactivityLearner (old learner removed)
             // 🎯 Process UnifiedReactivityLearner (old learner removed)
@@ -5955,11 +5955,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             // 📊 Expose UnifiedReactivityLearner state in rT for visibility
             unifiedReactivityLearner.lastAnalysis?.let { analysis ->
-                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
                 consoleLog.add("📊 REACTIVITY_LEARNER:")
-                consoleLog.add("  │ globalFactor: ${"%.3f".format(analysis.globalFactor)}")
-                consoleLog.add("  │ shortTermFactor: ${"%.3f".format(analysis.shortTermFactor)}")
-                consoleLog.add("  │ combinedFactor: ${"%.3f".format(unifiedReactivityLearner.getCombinedFactor())}")
+                consoleLog.add("  │ globalFactor: ${"%.3f".format(Locale.US, analysis.globalFactor)}")
+                consoleLog.add("  │ shortTermFactor: ${"%.3f".format(Locale.US, analysis.shortTermFactor)}")
+                consoleLog.add("  │ combinedFactor: ${"%.3f".format(Locale.US, unifiedReactivityLearner.getCombinedFactor())}")
                 consoleLog.add("  │ TIR 70-180: ${analysis.tir70_180.toInt()}%")
                 consoleLog.add("  │ CV%: ${analysis.cv_percent.toInt()}%")
                 consoleLog.add("  │ Hypo count (24h): ${analysis.hypo_count}")
