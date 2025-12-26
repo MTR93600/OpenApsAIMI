@@ -216,6 +216,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner  // 🎯 NEW
     @Inject lateinit var storageHelper: AimiStorageHelper  // 🛡️ Storage health monitoring
     @Inject lateinit var aapsLogger: AAPSLogger  // 📊 Logger for health monitoring
+    @Inject lateinit var auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator  // 🧠 AI Decision Auditor
     // ❌ OLD reactivityLearner removed - UnifiedReactivityLearner is now the only one
     init {
         // Branche l’historique basal (TBR) sur la persistence réelle
@@ -992,6 +993,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         heartRate?.let { reason.append(context.getString(R.string.heart_rate, if (it.isNaN()) "--" else "%.0f".format(it))) }
         reason.append("\n")
     }
+    
+    /**
+     * 🧠 AI Auditor Helper: Calculate cumulative SMB delivered in last 30 minutes
+     * Used for intelligent audit triggering
+     */
+    private fun calculateSmbLast30Min(): Double {
+        val now = dateUtil.now()
+        val lookback30min = now - 30 * 60 * 1000L
+        
+        return try {
+            val boluses = persistenceLayer
+                .getBolusesFromTime(lookback30min, ascending = false)
+                .blockingGet()
+                .filter { it.type == app.aaps.core.data.model.BS.Type.SMB }
+            
+            boluses.sumOf { it.amount }
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "Failed to calculate SMB last 30min", e)
+            0.0
+        }
+    }
+    
     // Rounds value to 'digits' decimal places
     // different for negative numbers fun round(value: Double, digits: Int): Double = BigDecimal(value).setScale(digits, RoundingMode.HALF_EVEN).toDouble()
     fun round(value: Double, digits: Int): Double {
@@ -5977,6 +6000,179 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             // 🛡️ Safety: Strictly Clamp Basal to >= 0.0 to prevent negative display/command
             finalResult.rate = finalResult.rate?.coerceAtLeast(0.0) ?: 0.0
+            
+            // 🧠 ================================================================
+            // AI DECISION AUDITOR INTEGRATION (Second Brain)
+            // ================================================================
+            val auditorEnabled = preferences.get(BooleanKey.AimiAuditorEnabled)
+            if (auditorEnabled) {
+                try {
+                    // Collect all data for auditor
+                    val smbProposed = finalResult.units ?: 0.0
+                    val tbrRate = finalResult.rate
+                    val tbrDuration = finalResult.duration
+                    val intervalMin = intervalsmb  // Current interval
+                    val smb30min = calculateSmbLast30Min()
+                    val predictionAvailable = (finalResult.predBGs?.IOB?.size ?: 0) > 0
+                    
+                    // Check if in prebolus window (P1/P2)
+                    // Note: Therapy doesn't expose P1/P2 directly, we infer from mode start time
+                    val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
+                    val now = dateUtil.now()
+                    
+                    // P1 = first 15 min, P2 = 15-30 min of meal mode
+                    val inPrebolusWindow = when {
+                        therapy.bfastTime -> {
+                            val runtimeMin = therapy.getTimeElapsedSinceLastEvent("bfast") / 60000
+                            runtimeMin in 0..30
+                        }
+                        therapy.lunchTime -> {
+                            val runtimeMin = therapy.getTimeElapsedSinceLastEvent("lunch") / 60000
+                            runtimeMin in 0..30
+                        }
+                        therapy.dinnerTime -> {
+                            val runtimeMin = therapy.getTimeElapsedSinceLastEvent("dinner") / 60000
+                            runtimeMin in 0..30
+                        }
+                        therapy.highCarbTime -> {
+                            val runtimeMin = therapy.getTimeElapsedSinceLastEvent("highcarb") / 60000
+                            runtimeMin in 0..30
+                        }
+                        else -> false
+                    }
+                    
+                    // Detect mode type
+                    val modeType = when {
+                        therapy.bfastTime -> "breakfast"
+                        therapy.lunchTime -> "lunch"
+                        therapy.dinnerTime -> "dinner"
+                        therapy.highCarbTime -> "highCarb"
+                        therapy.snackTime -> "snack"
+                        therapy.mealTime -> "meal"
+                        else -> null
+                    }
+                    
+                    // Calculate mode runtime using Therapy.getTimeElapsedSinceLastEvent
+                    val modeRuntimeMin = when {
+                        therapy.bfastTime -> (therapy.getTimeElapsedSinceLastEvent("bfast") / 60000).toInt()
+                        therapy.lunchTime -> (therapy.getTimeElapsedSinceLastEvent("lunch") / 60000).toInt()
+                        therapy.dinnerTime -> (therapy.getTimeElapsedSinceLastEvent("dinner") / 60000).toInt()
+                        therapy.highCarbTime -> (therapy.getTimeElapsedSinceLastEvent("highcarb") / 60000).toInt()
+                        therapy.snackTime -> (therapy.getTimeElapsedSinceLastEvent("snack") / 60000).toInt()
+                        therapy.mealTime -> (therapy.getTimeElapsedSinceLastEvent("meal") / 60000).toInt()
+                        else -> null
+                    }
+                    
+                    // Autodrive state
+                    val autodriveState = lastAutodriveState.toString()
+                    
+                    // WCycle info
+                    val wcyclePhase = wCycleFacade.getPhase()?.name
+                    val wcycleFactor = wCycleFacade.getIcMultiplier()  // Use IC multiplier as factor
+                    
+                    // Extract reason tags from finalResult.reason
+                    val reasonTags = finalResult.reason.toString().split(". ").map { it.trim() }
+                    
+                    // Call auditor (async)
+                    auditorOrchestrator.auditDecision(
+                        bg = bg,
+                        delta = delta.toDouble(),
+                        shortAvgDelta = shortAvgDelta.toDouble(),
+                        longAvgDelta = longAvgDelta.toDouble(),
+                        glucoseStatus = glucose_status,
+                        iob = iob_data_array.firstOrNull() ?: IobTotal(dateUtil.now()).apply { iob = 0.0; activity = 0.0 },
+                        cob = cob.toDouble(),  // Convert Float to Double
+                        profile = profile,
+                        pkpdRuntime = pkpdRuntime,
+                        isfUsed = profile.variable_sens,
+                        smbProposed = smbProposed,
+                        tbrRate = tbrRate,
+                        tbrDuration = tbrDuration,
+                        intervalMin = intervalMin.toDouble(),
+                        maxSMB = maxSMB,
+                        maxSMBHB = maxSMBHB,
+                        maxIOB = maxIob,
+                        maxBasal = profile.max_basal,
+                        reasonTags = reasonTags,
+                        modeType = modeType,
+                        modeRuntimeMin = modeRuntimeMin,
+                        autodriveState = autodriveState,
+                        wcyclePhase = wcyclePhase,
+                        wcycleFactor = wcycleFactor,
+                        tbrMaxMode = null,  // TODO: if you track max TBR for modes
+                        tbrMaxAutoDrive = null,  // TODO: if you track max TBR for autodrive
+                        smb30min = smb30min,
+                        predictionAvailable = predictionAvailable,
+                        inPrebolusWindow = inPrebolusWindow
+                    ) { verdict, modulated ->
+                        // Callback executed when audit completes
+                        
+                        if (modulated.appliedModulation) {
+                            // ✅ Modulation applied
+                            consoleLog.add(sanitizeForJson("🧠 AI Auditor: ${modulated.modulationReason}"))
+                            
+                            if (verdict != null) {
+                                consoleLog.add(sanitizeForJson("   Verdict: ${verdict.verdict}, Confidence: ${"%.2f".format(verdict.confidence)}"))
+                                
+                                // Log first 2 evidence items
+                                verdict.evidence.take(2).forEach { evidence ->
+                                    consoleLog.add(sanitizeForJson("   Evidence: $evidence"))
+                                }
+                                
+                                if (verdict.riskFlags.isNotEmpty()) {
+                                    consoleLog.add(sanitizeForJson("   ⚠️ Risk Flags: ${verdict.riskFlags.joinToString(", ")}"))
+                                }
+                            }
+                            
+                            // Apply modulated decision
+                            finalResult.units = modulated.smbU
+                            if (modulated.tbrRate != null) {
+                                finalResult.rate = modulated.tbrRate
+                            }
+                            if (modulated.tbrMin != null) {
+                                finalResult.duration = modulated.tbrMin
+                            }
+                            
+                            // Log changes
+                            if (kotlin.math.abs((modulated.smbU ?: 0.0) - smbProposed) > 0.01) {
+                                consoleLog.add(sanitizeForJson("   SMB modulated: ${"%.2f".format(smbProposed)} → ${"%.2f".format(modulated.smbU)} U"))
+                            }
+                            if (kotlin.math.abs(modulated.intervalMin - intervalMin) > 0.1) {
+                                consoleLog.add(sanitizeForJson("   Interval modulated: ${intervalMin.toInt()} → ${modulated.intervalMin.toInt()} min"))
+                            }
+                            if (modulated.preferTbr) {
+                                consoleLog.add(sanitizeForJson("   Prefer TBR enabled"))
+                            }
+                            
+                            // 🎨 Populate RT fields for dashboard display
+                            finalResult.aiAuditorEnabled = true
+                            finalResult.aiAuditorVerdict = verdict?.verdict?.name
+                            finalResult.aiAuditorConfidence = verdict?.confidence
+                            finalResult.aiAuditorModulation = modulated.modulationReason
+                            finalResult.aiAuditorRiskFlags = verdict?.riskFlags?.joinToString(", ")
+                            
+                        } else {
+                            // ℹ️ No modulation (audit only, confidence too low, etc.)
+                            if (verdict != null) {
+                                consoleLog.add(sanitizeForJson("🧠 AI Auditor: ${modulated.modulationReason}"))
+                                consoleLog.add(sanitizeForJson("   AIMI decision confirmed (Verdict: ${verdict.verdict}, Conf: ${"%.2f".format(verdict.confidence)})"))
+                                
+                                // Still populate RT fields for audit tracking
+                                finalResult.aiAuditorEnabled = true
+                                finalResult.aiAuditorVerdict = verdict.verdict.name
+                                finalResult.aiAuditorConfidence = verdict.confidence
+                                finalResult.aiAuditorModulation = "Audit only (no modulation)"
+                                finalResult.aiAuditorRiskFlags = verdict.riskFlags.joinToString(", ")
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    consoleLog.add(sanitizeForJson("⚠️ AI Auditor error: ${e.message}"))
+                    aapsLogger.error(LTag.APS, "AI Auditor exception", e)
+                    // Continue with original decision on error
+                }
+            }
+            
             return finalResult
         }
     }

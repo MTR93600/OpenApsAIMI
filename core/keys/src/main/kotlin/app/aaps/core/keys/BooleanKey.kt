@@ -136,4 +136,5 @@ enum class BooleanKey(
     OApsAIMINightGrowthEnabled("key_oaps_aimi_ngr_enabled", true),
     OApsAIMIPkpdEnabled("key_aimi_pkpd_enabled", false),
     OApsAIMIUnifiedReactivityEnabled("key_use_unified_reactivity", true),  // 🎯 NEW: Enable UnifiedReactivityLearner
+    AimiAuditorEnabled("aimi_auditor_enabled", false),  // 🧠 AI Decision Auditor
 }

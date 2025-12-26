@@ -95,5 +95,9 @@ enum class IntKey(
     OApsAIMIKickerMaxMin(key = "OApsAIMIKickerMaxMin", 30, 10, 60), // durée max du “kick” plateau (min)
     OApsAIMIZeroResumeMin(key = "OApsAIMIZeroResumeMin", 10,  5, 30), // délai avant micro-reprise (minutes à 0)
     OApsAIMIZeroResumeMax(key = "OApsAIMIZeroResumeMax", 30, 10, 60), // durée max de la micro-reprise
+    // --- AI Decision Auditor ---
+    AimiAuditorMaxPerHour("aimi_auditor_max_per_hour", 12, 1, 30),  // Max audits per hour
+    AimiAuditorTimeoutSeconds("aimi_auditor_timeout_seconds", 120, 30, 300),  // API timeout (seconds)
+    AimiAuditorMinConfidence("aimi_auditor_min_confidence", 65, 50, 95),  // Min confidence % to apply modulation
 
 }

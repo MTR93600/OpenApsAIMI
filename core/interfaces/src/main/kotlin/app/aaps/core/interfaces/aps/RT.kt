@@ -49,7 +49,14 @@ data class RT(
     @Serializable(with = ConsoleLogSerializer::class)
     var consoleLog: MutableList<String>? = null,
     var consoleError: MutableList<String>? = null,
-    var isHypoRisk: Boolean = false
+    var isHypoRisk: Boolean = false,
+    
+    // 🧠 AI Decision Auditor fields
+    var aiAuditorEnabled: Boolean = false,
+    var aiAuditorVerdict: String? = null,       // CONFIRM, SOFTEN, SHIFT_TO_TBR
+    var aiAuditorConfidence: Double? = null,    // 0.0-1.0
+    var aiAuditorModulation: String? = null,    // Description of modulation applied
+    var aiAuditorRiskFlags: String? = null      // Comma-separated risk flags
 ) {
 
     fun serialize() = Json.encodeToString(serializer(), this)
