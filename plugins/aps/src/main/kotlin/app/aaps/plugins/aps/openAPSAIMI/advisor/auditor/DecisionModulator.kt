@@ -184,6 +184,11 @@ object DecisionModulator {
      * 
      * This implements the "intelligent trigger" logic to avoid unnecessary API calls
      * 
+     * Philosophy: When the Second Brain is enabled, it should audit MOST decisions,
+     * not just extreme cases. We only skip:
+     * - Prebolus windows (P1/P2) where AIMI has special logic
+     * - Completely flat/stable scenarios with no action
+     * 
      * @param bg Current BG (mg/dL)
      * @param delta Delta (mg/dL/5min)
      * @param shortAvgDelta Short average delta
@@ -208,38 +213,39 @@ object DecisionModulator {
     ): Boolean {
         
         // NEVER trigger during prebolus window (P1/P2)
+        // AIMI has specific logic there that shouldn't be challenged
         if (inPrebolusWindow) {
             return false
         }
         
-        // Trigger conditions (any of these):
+        // ================================================================
+        // NEW PHILOSOPHY: Audit MOST decisions by default
+        // ================================================================
         
-        // 1. High delta or shortAvgDelta
-        if (delta > 2.0 || shortAvgDelta > 1.5) {
-            return true
+        // Only SKIP audit if ALL of these are true:
+        // 1. BG is stable (delta close to 0)
+        // 2. No SMB proposed
+        // 3. IOB is low
+        // 4. No recent SMB activity
+        
+        val isStable = kotlin.math.abs(delta) < 0.5 && kotlin.math.abs(shortAvgDelta) < 0.5
+        val noAction = smbProposed < 0.05
+        val lowIob = iob < 0.5
+        val noRecentSmb = smb30min < 0.1
+        
+        // If completely flat and no action, skip audit (save API calls)
+        if (isStable && noAction && lowIob && noRecentSmb) {
+            return false
         }
         
-        // 2. Low BG + SMB proposed
-        if (bg < 120.0 && smbProposed > 0.0) {
-            return true
-        }
+        // Otherwise: AUDIT!
+        // This means the Second Brain will see:
+        // - Any significant BG movement
+        // - Any SMB being proposed
+        // - Any existing IOB
+        // - Any meal mode
+        // - Any unstable glucose
         
-        // 3. High cumulative SMB in 30min
-        val smbThreshold = if (inMealMode) 2.5 else 1.5
-        if (smb30min > smbThreshold) {
-            return true
-        }
-        
-        // 4. Prediction absent but SMB proposed
-        if (!predictionAvailable && smbProposed > 0.0) {
-            return true
-        }
-        
-        // 5. Very high IOB + more SMB proposed
-        if (iob > 3.0 && smbProposed > 0.3) {
-            return true
-        }
-        
-        return false
+        return true
     }
 }

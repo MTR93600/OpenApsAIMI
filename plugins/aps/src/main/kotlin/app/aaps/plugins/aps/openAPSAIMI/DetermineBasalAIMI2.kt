@@ -6005,6 +6005,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // AI DECISION AUDITOR INTEGRATION (Second Brain)
             // ================================================================
             val auditorEnabled = preferences.get(BooleanKey.AimiAuditorEnabled)
+            
+            // DEBUG: Log the preference value
+            aapsLogger.debug(LTag.APS, "🧠 AI Auditor: Preference value = $auditorEnabled")
+            
+            // Set flag immediately for RT display (before async operations)
+            finalResult.aiAuditorEnabled = auditorEnabled
+            
             if (auditorEnabled) {
                 try {
                     // Collect all data for auditor

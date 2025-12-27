@@ -1317,6 +1317,80 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         summary = R.string.aimi_advisor_summary
                     )
                 )
+                
+                // 🧠 AI Decision Auditor Section
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "AIMI_AI_Auditor"
+                    title = "🧠 AI Decision Auditor"  // TODO: Add string resource
+                    
+                    addPreference(PreferenceCategory(context).apply {
+                        title = "Second Brain Settings"  // TODO: Add string resource
+                    })
+                    
+                    // Enable/Disable AI Auditor
+                    addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.AimiAuditorEnabled,
+                            title = R.string.aimi_auditor_enabled_title,
+                            summary = R.string.aimi_auditor_enabled_summary
+                        )
+                    )
+                    
+                    // Auditor Mode Selection
+                    addPreference(AdaptiveListPreference(
+                        ctx = context,
+                        stringKey = StringKey.AimiAuditorMode,
+                        title = R.string.aimi_auditor_mode_title,
+                        entries = arrayOf(
+                            "Audit Only (Log verdicts)",
+                            "Soft Modulation (Apply if confident)",
+                            "High Risk Only (Apply only with risk flags)"
+                        ),  // TODO: Add string resources
+                        entryValues = arrayOf("AUDIT_ONLY", "SOFT_MODULATION", "HIGH_RISK_ONLY")
+                    ).apply {
+                        dialogTitle = "AI Auditor Mode"  // TODO: Add string resource
+                        summary = "How the AI auditor should affect decisions"  // TODO: Add string resource
+                    })
+                    
+                    addPreference(PreferenceCategory(context).apply {
+                        title = "Rate Limiting & Performance"  // TODO: Add string resource
+                    })
+                    
+                    // Max Audits Per Hour
+                    addPreference(
+                        AdaptiveIntPreference(
+                            ctx = context,
+                            intKey = IntKey.AimiAuditorMaxPerHour,
+                            dialogMessage = R.string.aimi_auditor_max_per_hour_summary,
+                            title = R.string.aimi_auditor_max_per_hour_title
+                        )
+                    )
+                    
+                    // API Timeout
+                    addPreference(
+                        AdaptiveIntPreference(
+                            ctx = context,
+                            intKey = IntKey.AimiAuditorTimeoutSeconds,
+                            dialogMessage = R.string.aimi_auditor_timeout_summary,
+                            title = R.string.aimi_auditor_timeout_title
+                        )
+                    )
+                    
+                    addPreference(PreferenceCategory(context).apply {
+                        title = "Decision Criteria"  // TODO: Add string resource
+                    })
+                    
+                    // Minimum Confidence
+                    addPreference(
+                        AdaptiveIntPreference(
+                            ctx = context,
+                            intKey = IntKey.AimiAuditorMinConfidence,
+                            dialogMessage = R.string.aimi_auditor_min_confidence_summary,
+                            title = R.string.aimi_auditor_min_confidence_title
+                        )
+                    )
+                })
 
                 addPreference(PreferenceCategory(context).apply {
                     title = rh.gs(R.string.oaps_aimi_ngr_title)

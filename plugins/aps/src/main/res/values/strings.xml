@@ -1178,5 +1178,17 @@
     <string name="aimi_pkpd_hypo_damping">Risque hypo : Augmenter l\'amortissement (Damping) pour réduire les SMB en fin de DIA.</string>
     <string name="aimi_meal_advisor_title">AIMI Meal Advisor</string>
 
+
+    <!-- AI Decision Auditor -->
+    <string name="aimi_auditor_enabled_title">Enable AI Decision Auditor</string>
+    <string name="aimi_auditor_enabled_summary">Activate the Second Brain to challenge and modulate AIMI decisions</string>
+    <string name="aimi_auditor_mode_title">Auditor Mode</string>
+    <string name="aimi_auditor_max_per_hour_title">Max Audits Per Hour</string>
+    <string name="aimi_auditor_max_per_hour_summary">Maximum number of AI audit calls per hour (default: 12)</string>
+    <string name="aimi_auditor_timeout_title">API Timeout (seconds)</string>
+    <string name="aimi_auditor_timeout_summary">Maximum wait time for AI provider response (default: 10s)</string>
+    <string name="aimi_auditor_min_confidence_title">Minimum Confidence (%)</string>
+    <string name="aimi_auditor_min_confidence_summary">Only apply modulations if AI confidence is above this threshold (default: 70%)</string>
+
 </resources>
 
