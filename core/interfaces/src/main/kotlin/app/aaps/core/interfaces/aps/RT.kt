@@ -58,7 +58,10 @@ data class RT(
     var aiAuditorVerdict: String? = null,       // CONFIRM, SOFTEN, SHIFT_TO_TBR
     var aiAuditorConfidence: Double? = null,    // 0.0-1.0
     var aiAuditorModulation: String? = null,    // Description of modulation applied
-    var aiAuditorRiskFlags: String? = null      // Comma-separated risk flags
+    var aiAuditorRiskFlags: String? = null,     // Comma-separated risk flags
+    
+    // 📊 Learners state (for RT visibility)
+    var learnersInfo: String? = null            // Summary: "Basal×1.05, ISF:42, React:0.95x"
 ) {
 
     fun serialize() = Json.encodeToString(serializer(), this)

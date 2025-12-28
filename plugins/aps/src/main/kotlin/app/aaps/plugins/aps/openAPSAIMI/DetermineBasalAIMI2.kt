@@ -5975,6 +5975,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                      wCycleFacade.updateLearning(phase, autosens_data.ratio)
                 }
             }
+
+            // 📊 Build learners summary for RT visibility (finalResult.learnersInfo)
+            val learnersParts = mutableListOf<String>()
+            
+            // Basal Learner
+            val basalMult = basalLearner.getMultiplier()
+            if (kotlin.math.abs(basalMult - 1.0) > 0.01) {
+                learnersParts.add("Basal×" + String.format(Locale.US, "%.2f", basalMult))
+            }
+            
+            // PKPD Learner (fusedISF) - handle nullable
+            pkpdRuntime?.let { runtime ->
+                val profileIsf = profile.sens
+                if (kotlin.math.abs(runtime.fusedIsf - profileIsf) > 0.5) {
+                    learnersParts.add("ISF:" + runtime.fusedIsf.toInt())
+                }
+            }
+            
+            // Unified Reactivity Learner
+            val reactivityFactor = unifiedReactivityLearner.getCombinedFactor()
+            if (kotlin.math.abs(reactivityFactor - 1.0) > 0.01) {
+                learnersParts.add("React×" + String.format(Locale.US, "%.2f", reactivityFactor))
+            }
+            
+            val learnersSummary = learnersParts.joinToString(", ")
             
             val finalResult = setTempBasal(
                 _rate = basalDecision.rate,
@@ -6000,6 +6025,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             // 🛡️ Safety: Strictly Clamp Basal to >= 0.0 to prevent negative display/command
             finalResult.rate = finalResult.rate?.coerceAtLeast(0.0) ?: 0.0
+
+            // 📊 ================================================================
+            // LEARNERS INFO: Populate finalResult for RT visibility
+            // ================================================================
+            if (learnersSummary.isNotEmpty()) {
+                // 1. Set dedicated field
+                finalResult.learnersInfo = learnersSummary
+                
+                // 2. Append to reason (visible in RT's main "reason" field)
+                finalResult.reason.append("; [").append(learnersSummary).append("]")
+                
+                // 3. Log for debugging
+                consoleLog.add("📊 Learners applied to finalResult.reason: [" + learnersSummary + "]")
+            }
             
             // 🧠 ================================================================
             // AI DECISION AUDITOR INTEGRATION (Second Brain)
