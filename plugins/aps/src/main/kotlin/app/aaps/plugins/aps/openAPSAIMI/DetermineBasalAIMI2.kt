@@ -5442,13 +5442,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
 
-        rate?.let {
-            rT.rate = it.coerceAtLeast(0.0)
+        // 🔧 FIX: Basal Boost Overlay Pattern (No Early Return)
+        // ================================================================
+        // Track basal boost source for logging and modulation
+        val basalBoostApplied = rate != null
+        val basalBoostSource: String? = when {
+            rate != null && rT.reason.contains("Global Hyper Kicker") -> "HyperKicker"
+            rate != null && rT.reason.contains("Post-Meal Boost") -> "PostMealBoost"  
+            rate != null && rT.reason.contains("Meal") -> "MealMode"
+            rate != null && rT.reason.contains("fasting") -> "Fasting"
+            else -> null
+        }
+        
+        // Apply basal boost if calculated (OVERLAY - don't block SMB)
+        if (basalBoostApplied && rate != null) {
+            rT.rate = rate.coerceAtLeast(0.0)
             rT.deliverAt = deliverAt
             rT.duration = 30
-            logDecisionFinal("BASAL_RATE", rT, bg, delta)
-            return rT
+            consoleLog.add("BOOST_BASAL_APPLIED source=${basalBoostSource ?: "Unknown"} rate=${"%.2f".format(Locale.US, rate)}U/h")
+            rT.reason.append("BasalBoost: ${basalBoostSource ?: "?"} ${"%.2f".format(Locale.US, rate)}U/h. ")
+            // REMOVED: return rT (continue to SMB calculation)
         }
+        // ================================================================
+
 
         rT.reason.appendLine(
              context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", activeModeName)
@@ -5803,6 +5819,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             //console.error(lastBolusAge);
             //console.error(profile.temptargetSet, target_bg, rT.COB);
             // only allow microboluses with COB or low temp targets, or within DIA hours of a bolus
+            
+            // 🔧 FIX: Log SMB flow continuation after basal boost
+            if (basalBoostApplied) {
+                consoleLog.add("SMB_FLOW_CONTINUES afterBasalBoost=true source=${basalBoostSource ?: "?"}")
+            }
 
             if (microBolusAllowed && enableSMB) {
                 val microBolus = insulinReq
