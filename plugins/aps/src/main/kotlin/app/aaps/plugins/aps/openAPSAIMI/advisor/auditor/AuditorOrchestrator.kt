@@ -228,9 +228,12 @@ class AuditorOrchestrator @Inject constructor(
                     
                     aapsLogger.info(LTag.APS, "AI Auditor: Modulation=${modulated.modulationReason}")
                     
-                    // Cache verdict
+                    // Cache verdict (internal)
                     lastVerdict = verdict
                     lastVerdictTime = now
+                    
+                    // Update global cache for RT instrumentation
+                    AuditorVerdictCache.update(verdict, modulated)
                     
                     callback?.invoke(verdict, modulated)
                 } else {

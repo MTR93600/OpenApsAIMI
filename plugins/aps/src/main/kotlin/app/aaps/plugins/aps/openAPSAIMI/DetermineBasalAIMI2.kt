@@ -6040,6 +6040,55 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add("📊 Learners applied to finalResult.reason: [" + learnersSummary + "]")
             }
             
+
+            // 📊 ================================================================
+            // RT INSTRUMENTATION: Production Debug Lines
+            // ================================================================
+            
+            // Collect data for detailed learners line
+            val urFactor = unifiedReactivityLearner.getCombinedFactor()
+            val profileIsf = profile.sens  // From profile
+            val fusedIsf = pkpdRuntime?.fusedIsf
+            val pkpdDiaMin = pkpdRuntime?.params?.diaHrs?.let { (it * 60).toInt() }
+            val pkpdPeakMin = pkpdRuntime?.params?.peakMin?.toInt()
+            val pkpdTailPct = pkpdRuntime?.tailFraction?.let { (it * 100).toInt() }
+            
+            // Build concise learners line
+            val learnersDebugLine = app.aaps.plugins.aps.openAPSAIMI.utils.RtInstrumentationHelpers.buildLearnersLine(
+                unifiedReactivityFactor = urFactor,
+                profileIsf = profileIsf,
+                fusedIsf = fusedIsf,
+                pkpdDiaMin = pkpdDiaMin,
+                pkpdPeakMin = pkpdPeakMin,
+                pkpdTailPct = pkpdTailPct
+            )
+            
+            // Append learners line to reason (newline for readability)
+            finalResult.reason.append("\n").append(learnersDebugLine)
+            
+            // WCycle line (if applicable)
+            if (wCyclePreferences.enabled()) {
+                val wcyclePhase = wCycleFacade.getPhase()?.name
+                val wcycleFactor = wCycleFacade.getIcMultiplier()
+                val wcycleLine = app.aaps.plugins.aps.openAPSAIMI.utils.RtInstrumentationHelpers.buildWCycleLine(
+                    enabled = true,
+                    phase = wcyclePhase,
+                    factor = wcycleFactor
+                )
+                if (wcycleLine != null) {
+                    finalResult.reason.append("\n").append(wcycleLine)
+                }
+            }
+            
+            // Auditor line (always present, shows OFF/STALE/verdict)
+            val auditorDebugLine = app.aaps.plugins.aps.openAPSAIMI.utils.RtInstrumentationHelpers.buildAuditorLine(
+                enabled = preferences.get(BooleanKey.AimiAuditorEnabled)
+            )
+            finalResult.reason.append("\n").append(auditorDebugLine)
+            
+            // Log instrumentation applied
+            consoleLog.add("📊 RT instrumentation: 2-3 debug lines added to reason")
+            
             // 🧠 ================================================================
             // AI DECISION AUDITOR INTEGRATION (Second Brain)
             // ================================================================
