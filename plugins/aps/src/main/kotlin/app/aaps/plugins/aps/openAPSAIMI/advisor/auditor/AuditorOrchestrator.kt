@@ -159,12 +159,72 @@ class AuditorOrchestrator @Inject constructor(
             return
         }
         
-        // Check rate limiting
         val now = System.currentTimeMillis()
+        
+        // ================================================================
+        // DUAL-BRAIN TIER 1: LOCAL SENTINEL (Offline, Always Active)
+        // ================================================================
+        
+        // Calculate Sentinel inputs
+        val smbCount30 = DualBrainHelpers.calculateSmbCount30min(iob, now)
+        val smbTotal60 = DualBrainHelpers.calculateSmbTotal60min(iob, now)
+        val lastBolusAge = if (iob.lastBolusTime > 0) (now - iob.lastBolusTime) / 60000.0 else 999.0
+        val bgHistory = DualBrainHelpers.extractBgHistory(glucoseStatus)
+        
+        // Compute Sentinel advice (always runs, even if External disabled/rate-limited)
+        val sentinelAdvice = LocalSentinel.computeAdvice(
+            bg = bg,
+            target = profile.target_bg,
+            delta = delta,
+            shortAvgDelta = shortAvgDelta,
+            longAvgDelta = longAvgDelta,
+            predictedBg = null,  // TODO Phase 3
+            eventualBg = null,  // TODO Phase 3
+            predBgsAvailable = predictionAvailable,
+            iobTotal = iob.iob,
+            iobActivity = iob.activity,
+            pkpdStage = pkpdRuntime?.activity?.stage?.name,
+            lastBolusAgeMin = lastBolusAge,
+            smbCount30min = smbCount30,
+            smbTotal60min = smbTotal60,
+            smbProposed = smbProposed,
+            noise = (glucoseStatus?.noise ?: 0.0).toInt(),
+            isStale = false,  // TODO Phase 3
+            pumpUnreachable = false,
+            autodriveActive = autodriveState.contains("ACTIVE"),
+            modeActive = modeType != null,
+            bgHistory = bgHistory
+        )
+        
+        aapsLogger.info(LTag.APS, "🔍 Sentinel: tier=${sentinelAdvice.tier} score=${sentinelAdvice.score} reason=${sentinelAdvice.reason}")
+        sentinelAdvice.details.take(3).forEach { aapsLogger.debug(LTag.APS, "  └─ $it") }
+        
+        // ================================================================
+        // DUAL-BRAIN TIER 2: EXTERNAL AUDITOR (Conditional, API)
+        // ================================================================
+        
+        // Determine if External should be called (only if Sentinel tier >= HIGH)
+        val shouldCallExternal = sentinelAdvice.tier == LocalSentinel.Tier.HIGH
+        
+        if (!shouldCallExternal) {
+            // Sentinel tier < HIGH: Apply Sentinel advice only, no External call
+            aapsLogger.info(LTag.APS, "🌐 External: Skipped (Sentinel tier=${sentinelAdvice.tier})")
+            val combined = DualBrainHelpers.combineAdvice(sentinelAdvice, null)
+            val modulated = combined.toModulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin)
+            aapsLogger.info(LTag.APS, "✅ ${combined.toLogString()}")
+            callback?.invoke(null, modulated)
+            return
+        }
+        
+        // Sentinel tier HIGH: Check rate limiting for External Auditor
         if (!checkRateLimit(now)) {
-            aapsLogger.debug(LTag.APS, "AI Auditor: Rate limited")
+            // External rate limited: Apply Sentinel advice only
+            aapsLogger.info(LTag.APS, "🌐 External: Rate limited, using Sentinel only")
             AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.SKIPPED_RATE_LIMITED)
-            callback?.invoke(null, createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "Rate limited"))
+            val combined = DualBrainHelpers.combineAdvice(sentinelAdvice, null)
+            val modulated = combined.toModulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin)
+            aapsLogger.info(LTag.APS, "✅ ${combined.toLogString()}")
+            callback?.invoke(null, modulated)
             return
         }
         
