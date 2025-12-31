@@ -30,12 +30,9 @@
     <string name="bgsource_log_sensor_change_summary">Automaticky vytvoriť udalosť „Výmena senzora“ v časti Starostlivosť pri spustení senzora zo zdroja glykémie pomocou lokálneho odosielania dát</string>
     <string name="direction">smer</string>
     <string name="bg_generation_interval_minutes">Interval generovania glykémie v minútach</string>
-    <!-- Patched Ottai App -->
-    <string name="ottai_app">Ottai</string>
-    <string name="description_source_patched_ottai_app">Prijímanie glykémií z aplikácie Ottai.</string>
     <!-- Patched Syai Tag App -->
     <string name="syai_tag_app">Syai</string>
-    <string name="description_source_patched_syai_tag_app">Prijímanie glykémií z aplikácie Syai.</string>
+    <string name="description_source_patched_syai_tag_app">Prijímať glykémie z aplikáce Syai/Ottai.</string>
     <!-- Patched SI App -->
     <string name="patched_si_app">Aplikácia SI</string>
     <string name="description_source_patched_si_app">Prijímať glykémie z upravenej aplikácie Sibionic SI.</string>

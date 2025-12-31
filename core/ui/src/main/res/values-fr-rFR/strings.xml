@@ -416,6 +416,9 @@
     <string name="uel_loop_change">BOUCLE CHANGÉE</string>
     <string name="uel_loop_removed">BOUCLE SUPPRIMÉE</string>
     <string name="uel_other">AUTRE</string>
+    <string name="uel_running_mode">MODE EN COURS</string>
+    <string name="uel_running_mode_removed">MODE EN COURS SUPPRIMÉ</string>
+    <string name="uel_running_mode_updarted">MODE EN COURS MISE À JOUR</string>
     <!-- HardLimits -->
     <string name="profile_low_target">Cible basse du profil</string>
     <string name="profile_high_target">Cible haute du profil</string>
@@ -640,4 +643,5 @@
     <string name="percent_rate_duration_formatted"><![CDATA[<b>Débit</b>: %1$.2f%% (%2$.2f U/h)<br><b>Durée</b>: %3$d min<br>]]></string>
     <string name="rate_percent_duration_formatted"><![CDATA[<b>Débit</b>: %1$.2f U/h (%2$.2f%%) <br><b>Durée</b>: %3$d min<br>]]></string>
     <!--    Playback-->
+    <string name="audio_playback_attribution">"AAPS joue l'audio"</string>
 </resources>

@@ -26,9 +26,6 @@
     <string name="random_bg_short">BG</string>
     <string name="direction">kierunek</string>
     <string name="bg_generation_interval_minutes">Interwał generowania glikemii w minutach</string>
-    <!-- Patched Ottai App -->
-    <string name="ottai_app">Ottai</string>
-    <string name="description_source_patched_ottai_app">Otrzymuj dane glikemii z aplikacji Ottai.</string>
     <!-- Patched Syai Tag App -->
     <!-- Patched SI App -->
     <!-- Patched Sino App -->

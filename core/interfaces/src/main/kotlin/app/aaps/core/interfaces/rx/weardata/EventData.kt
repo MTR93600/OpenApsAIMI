@@ -77,6 +77,17 @@ sealed class EventData : Event() {
     data class ActionLoopStatus(val timeStamp: Long) : EventData()
 
     @Serializable
+    data class ActionLoopStatusDetailed(
+        val timeStamp: Long
+    ) : EventData()
+
+    @Serializable
+    data class LoopStatusResponse(
+        val timeStamp: Long,
+        val data: LoopStatusData
+    ) : EventData()
+
+    @Serializable
     data class ActionTddStatus(val timeStamp: Long) : EventData()
 
     @Serializable

@@ -268,11 +268,10 @@ class HistoryBrowseActivity : TranslatedDaggerAppCompatActivity() {
     }
 
     private fun adjustTimeRange(start: Long) {
-        historyBrowserData.overviewData.fromTime = start
+        historyBrowserData.overviewData.fromTime = start + 100000 // little bit more to avoid wrong rounding - GraphView specific
         historyBrowserData.overviewData.toTime =
             historyBrowserData.overviewData.fromTime +
-            T.hours(rangeToDisplay.toLong()).msecs() +
-            100000 // little bit more to avoid wrong rounding - GraphView specific
+            T.hours(rangeToDisplay.toLong()).msecs()
         historyBrowserData.overviewData.endTime = historyBrowserData.overviewData.toTime
     }
 

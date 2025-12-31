@@ -416,6 +416,9 @@
     <string name="uel_loop_change">UZAVRETÝ OKRUH ZMENENÝ</string>
     <string name="uel_loop_removed">UZAVRETÝ OKRUH ODSTRÁNENÝ</string>
     <string name="uel_other">INÉ</string>
+    <string name="uel_running_mode">REŽIM UZAVRETÉHO OKRUHU</string>
+    <string name="uel_running_mode_removed">REŽIM UZAVRETÉHO OKRUHU ODSTRÁNENÝ</string>
+    <string name="uel_running_mode_updarted">REŽIM UZAVRETÉHO OKRUHU AKTUALIZOVANÝ</string>
     <!-- HardLimits -->
     <string name="profile_low_target">Dolný cieľ profilu</string>
     <string name="profile_high_target">Horný cieľ profilu</string>

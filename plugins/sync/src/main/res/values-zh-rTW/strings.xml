@@ -115,7 +115,7 @@
     <string name="pump_status">幫浦狀態</string>
     <string name="loop_status">循環狀態</string>
     <string name="wizard_result">計算嚮導:\n胰島素: %1$.2fU\n碳水化合物: %2$dg</string>
-    <string name="quick_wizard_not_available">所選的快速嚮導不再可用，請重新整理您的磁磚</string>
+    <string name="quick_wizard_not_available">所選的快速嚮導不再可用，請重新整理您的資訊方塊</string>
     <string name="quick_wizard_message">快速嚮導: %1$s\n胰島素: %2$.2fU\n碳水化合物: %3$dg</string>
     <string name="user_action_not_available">選定的用戶操作 %1$s 已不再可用，請重新整理您的面版</string>
     <string name="wear_action_tempt_cancel_message">取消執行中的臨時目標？</string>

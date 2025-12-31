@@ -54,6 +54,10 @@ import app.aaps.core.interfaces.rx.events.EventWearUpdateGui
 import app.aaps.core.interfaces.rx.weardata.CwfMetadataKey
 import app.aaps.core.interfaces.rx.weardata.EventData
 import app.aaps.core.interfaces.rx.weardata.EventData.LoopStatesList.AvailableLoopState
+import app.aaps.core.interfaces.rx.weardata.LoopStatusData
+import app.aaps.core.interfaces.rx.weardata.TempTargetInfo
+import app.aaps.core.interfaces.rx.weardata.TargetRange
+import app.aaps.core.interfaces.rx.weardata.OapsResultInfo
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
@@ -196,6 +200,22 @@ class DataHandlerMobile @Inject constructor(
                                )
                            )
                        }, fabricPrivacy::logException)
+        disposable += rxBus
+            .toObservable(EventData.ActionLoopStatusDetailed::class.java)
+            .observeOn(aapsSchedulers.io)
+            .subscribe({
+                           aapsLogger.debug(LTag.WEAR, "ActionLoopStatusDetailed received from ${it.sourceNodeId}")
+                           val statusData = buildLoopStatusData()
+                           rxBus.send(
+                               EventMobileToWear(
+                                   EventData.LoopStatusResponse(
+                                       timeStamp = System.currentTimeMillis(),
+                                       data = statusData
+                                   )
+                               )
+                           )
+                       }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventData.LoopStatesRequest::class.java)
             .observeOn(aapsSchedulers.io)
@@ -411,6 +431,177 @@ class DataHandlerMobile @Inject constructor(
                            aapsLogger.debug(LTag.WEAR, "Custom Watch face ${it.customWatchface} received from ${it.sourceNodeId}")
                            handleGetCustomWatchface(it)
                        }, fabricPrivacy::logException)
+    }
+    private fun maxOfNullable(vararg values: Long?): Long? {
+        return values.filterNotNull().maxOrNull()
+    }
+
+    private fun buildLoopStatusData(): LoopStatusData {
+        val tempTarget = persistenceLayer.getTemporaryTargetActiveAt(dateUtil.now())
+        val profile = profileFunction.getProfile()
+        val usedAPS = activePlugin.activeAPS
+
+        // Get data based on app type
+        val (lastRunTimestamp, lastEnactTimestamp, apsResult) = if (config.APS) {
+            // AAPS - use local loop data
+            val lastRun = loop.lastRun
+
+            // For enacted timestamp, use the LATEST of TBR or SMB
+            val lastTbrEnact = lastRun?.lastTBREnact?.takeIf { it != 0L }
+            val lastSmbEnact = lastRun?.lastSMBEnact?.takeIf { it != 0L }
+            val lastEnact = maxOfNullable(lastTbrEnact, lastSmbEnact)
+
+            Triple(
+                lastRun?.lastAPSRun,
+                lastEnact,
+                lastRun?.constraintsProcessed
+            )
+        } else {
+            // AAPSClient - use data from NS/device status
+            val apsData = processedDeviceStatusData.openAPSData
+
+            // Use clockEnacted only if it's within 30s of clockSuggested or newer
+            val timeWindowMs = 30_000L
+            val apsDataLastEnact = if (apsData.clockEnacted >= apsData.clockSuggested - timeWindowMs) {
+                apsData.clockEnacted
+            } else {
+                null
+            }
+            Triple(
+                apsData.clockSuggested,
+                apsDataLastEnact,
+                processedDeviceStatusData.getAPSResult()
+            )
+        }
+
+        // Map loop mode
+        val loopMode = when (loop.runningMode) {
+            RM.Mode.CLOSED_LOOP -> LoopStatusData.LoopMode.CLOSED
+            RM.Mode.OPEN_LOOP -> LoopStatusData.LoopMode.OPEN
+            RM.Mode.CLOSED_LOOP_LGS -> LoopStatusData.LoopMode.LGS
+            RM.Mode.DISABLED_LOOP -> LoopStatusData.LoopMode.DISABLED
+            RM.Mode.SUSPENDED_BY_USER -> LoopStatusData.LoopMode.SUSPENDED
+            RM.Mode.DISCONNECTED_PUMP -> LoopStatusData.LoopMode.DISCONNECTED
+            RM.Mode.SUPER_BOLUS -> LoopStatusData.LoopMode.SUPERBOLUS
+            else -> LoopStatusData.LoopMode.UNKNOWN
+        }
+
+        // Build temp target info
+        val tempTargetInfo = tempTarget?.let {
+            val units = if (profileUtil.units == GlucoseUnit.MGDL) "mg/dL" else "mmol/L"
+            val targetString = profileUtil.toTargetRangeString(
+                it.lowTarget,
+                it.highTarget,
+                GlucoseUnit.MGDL
+            )
+            val durationMin = ((it.end - dateUtil.now()) / 60000).toInt()
+
+            TempTargetInfo(
+                targetDisplay = targetString,
+                endTime = it.end,
+                durationMinutes = durationMin,
+                units = units
+            )
+        }
+
+        // Build default range
+        val defaultRange = if (profile != null) {
+            val units = if (profileUtil.units == GlucoseUnit.MGDL) "mg/dL" else "mmol/L"
+            TargetRange(
+                lowDisplay = profileUtil.fromMgdlToStringInUnits(profile.getTargetLowMgdl()),
+                highDisplay = profileUtil.fromMgdlToStringInUnits(profile.getTargetHighMgdl()),
+                targetDisplay = profileUtil.fromMgdlToStringInUnits(profile.getTargetMgdl()),
+                units = units
+            )
+        } else {
+            TargetRange("--", "--", "--", "")
+        }
+
+        // Build OAPS result info
+        val oapsResultInfo = apsResult?.let { result ->
+            val constrainedRate = result.rate
+            val constrainedDuration = result.duration
+
+            // Check if this is "let temp basal run" scenario
+            // AAPS: rate=0.0 and duration=-1
+            // AAPSClient: rate=-1.0 and duration=-1
+            val isLetTempRun = if (config.APS) {
+                constrainedRate == 0.0 && constrainedDuration == -1
+            } else {
+                constrainedRate == -1.0 && constrainedDuration == -1
+            }
+
+            // Determine what to display
+            val (displayRate, displayDuration, displayPercent) = if (isLetTempRun) {
+                // Get currently running temp basal from database
+                val currentTbr = persistenceLayer.getTemporaryBasalActiveAt(dateUtil.now())
+
+                if (currentTbr != null) {
+                    // Calculate absolute rate
+                    val rate = if (currentTbr.isAbsolute) {
+                        currentTbr.rate
+                    } else if (profile != null) {
+                        // Percent-based TBR - convert to absolute
+                        profile.getBasal(dateUtil.now()) * currentTbr.rate / 100.0
+                    } else {
+                        currentTbr.rate
+                    }
+
+                    // Calculate remaining duration
+                    val remainingMin = ((currentTbr.end - dateUtil.now()) / 60000).toInt()
+
+                    val percentValue = if (activePlugin.activePump.baseBasalRate > 0) {
+                        ((rate / activePlugin.activePump.baseBasalRate) * 100).toInt()
+                    } else 0
+
+                    aapsLogger.debug(LTag.WEAR, "Let temp run - rate: $rate U/h ($percentValue%), remaining: $remainingMin min")
+
+                    Triple(rate, remainingMin, percentValue)
+                } else {
+                    aapsLogger.debug(LTag.WEAR, "Let temp run requested but no active TBR found")
+                    Triple(null, null, null)
+                }
+            } else {
+                // Normal case - show the new requested values
+                val percentValue = if (result.usePercent) {
+                    result.percent
+                } else if (activePlugin.activePump.baseBasalRate > 0) {
+                    ((constrainedRate / activePlugin.activePump.baseBasalRate) * 100).toInt()
+                } else null
+
+                // For AAPSClient, use current TBR rate if available, otherwise use constrained rate
+                val finalRate = if (!config.APS) {
+                    val currentTbr = persistenceLayer.getTemporaryBasalActiveAt(dateUtil.now())
+                    currentTbr?.rate ?: constrainedRate
+                } else {
+                    constrainedRate
+                }
+
+                Triple(finalRate, constrainedDuration, percentValue)
+            }
+
+            OapsResultInfo(
+                changeRequested = result.isChangeRequested && !isLetTempRun,
+                isLetTempRun = isLetTempRun,
+                rate = displayRate,
+                ratePercent = displayPercent,
+                duration = displayDuration,
+                reason = result.reason,
+                smbAmount = result.smb
+            )
+        }
+
+        return LoopStatusData(
+            timestamp = System.currentTimeMillis(),
+            loopMode = loopMode,
+            apsName = if (loop.runningMode.isLoopRunning())
+                (usedAPS as PluginBase).name else null,
+            lastRun = lastRunTimestamp,
+            lastEnact = lastEnactTimestamp,
+            tempTarget = tempTargetInfo,
+            defaultRange = defaultRange,
+            oapsResult = oapsResultInfo
+        )
     }
 
     private fun handleTddStatus() {

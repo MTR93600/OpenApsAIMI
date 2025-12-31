@@ -119,7 +119,7 @@
     <string name="short_fat">Chất béo</string>
     <string name="category">Danh mục</string>
     <string name="subcategory">Danh mục con</string>
-    <string name="calculator_label">Máy tính</string>
+    <string name="calculator_label">Calculator</string>
     <!-- Theme switcher dark and light mode-->
     <string name="theme_switcher_summary">Chọn chế độ tối, sáng hoặc theo giao diện hệ thống</string>
     <string name="app_color_scheme">Bảng màu ứng dụng</string>

@@ -286,8 +286,6 @@ class ActionsFragment : DaggerFragment() {
             val imageResource = if (isPatchPump) app.aaps.core.objects.R.drawable.ic_patch_pump_outline else R.drawable.ic_cp_age_cannula
             cannulaOrPatch.setCompoundDrawablesWithIntrinsicBounds(imageResource, 0, 0, 0)
             batteryLayout.visibility = (!isPatchPump || pump.pumpDescription.useHardwareLink).toVisibility()
-            cannulaUsageLabel.visibility = isPatchPump.not().toVisibility()
-            cannulaUsage.visibility = isPatchPump.not().toVisibility()
 
             if (!config.AAPSCLIENT) {
                 statusLightHandler.updateStatusLights(

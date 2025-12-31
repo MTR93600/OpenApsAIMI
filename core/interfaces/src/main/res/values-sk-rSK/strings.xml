@@ -56,6 +56,7 @@
     <string name="connecting_for">Pripájanie %1$d sek</string>
     <string name="handshaking">Overovanie</string>
     <string name="connected">Pripojené</string>
+    <string name="authorized">Autorizované</string>
     <string name="disconnecting">Odpájanie</string>
     <string name="waiting_for_disconnection">Čakám na odpojenie</string>
     <!-- Custom Watchface -->

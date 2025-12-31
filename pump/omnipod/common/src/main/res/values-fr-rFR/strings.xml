@@ -118,6 +118,7 @@
     <string name="omnipod_common_preferences_notification_uncertain_tbr_sound_enabled">Son pour les notifications DBT incertains activé</string>
     <string name="omnipod_common_preferences_notification_uncertain_smb_sound_enabled">Son pour les notifications SMB incertains activé</string>
     <string name="omnipod_common_preferences_notification_uncertain_bolus_sound_enabled">Son pour les notifications bolus incertains activé</string>
+    <string name="omnipod_dash_use_bonding">Appairer BT pour Android 15</string>
     <!-- Omnipod - Pod Status -->
     <string name="omnipod_common_pod_status_no_active_pod">Pas de Pod actif</string>
     <string name="omnipod_common_pod_status_waiting_for_activation">Configuration en cours (en attente d\'activation du Pod)</string>

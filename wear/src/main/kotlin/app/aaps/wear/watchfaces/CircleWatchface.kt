@@ -459,8 +459,9 @@ class CircleWatchface : WatchFace() {
                 if (eventTime - sgvTapTime < 800 && sgvTapTime != 0L) {
                     if (eventTime - lastMenuOpenTime > 2000) {
                         lastMenuOpenTime = eventTime
-                        val intent = Intent(this, MainMenuActivity::class.java)
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        val intent = Intent(this, MainMenuActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        }
                         startActivity(intent)
                     }
                     sgvTapTime = 0

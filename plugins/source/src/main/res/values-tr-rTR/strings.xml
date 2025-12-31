@@ -29,9 +29,6 @@
     <string name="bgsource_log_sensor_change_summary">Sensör KŞ kaynağından yerel yayına başladığında Careportal\'da otomatik olarak \"CGM Sensör Ekleme\" etkinliği oluşur</string>
     <string name="direction">yön</string>
     <string name="bg_generation_interval_minutes">KŞ belirleme aralıkları (dk.)</string>
-    <!-- Patched Ottai App -->
-    <string name="ottai_app">Ottai</string>
-    <string name="description_source_patched_ottai_app">Ottai Uygulamasından glikoz verilerini alın.</string>
     <!-- Patched Syai Tag App -->
     <!-- Patched SI App -->
     <!-- Patched Sino App -->

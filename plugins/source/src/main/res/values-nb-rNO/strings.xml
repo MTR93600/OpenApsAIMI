@@ -30,12 +30,9 @@
     <string name="bgsource_log_sensor_change_summary">Opprett hendelsen \"Bytte av CGM-sensor\" i helseportal automatisk ved mottak av sensorstart fra BS-kildens lokal kringkasting</string>
     <string name="direction">retning</string>
     <string name="bg_generation_interval_minutes">BS-genereringsintervall i minutter</string>
-    <!-- Patched Ottai App -->
-    <string name="ottai_app">Ottai</string>
-    <string name="description_source_patched_ottai_app">Motta BS-verdier fra appen Ottai.</string>
     <!-- Patched Syai Tag App -->
     <string name="syai_tag_app">Syai</string>
-    <string name="description_source_patched_syai_tag_app">Motta BS-verdier fra appen Syai.</string>
+    <string name="description_source_patched_syai_tag_app">Motta blodsukkerverdier fra Syai/Ottai App.</string>
     <!-- Patched SI App -->
     <string name="patched_si_app">SI app</string>
     <string name="description_source_patched_si_app">Motta BS-verdier fra den patchede appen Sibionic SI.</string>

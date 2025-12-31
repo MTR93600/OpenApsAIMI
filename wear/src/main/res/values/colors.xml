@@ -197,4 +197,21 @@
     <color name="background_dark">#263238</color>
     <color name="secondary_text">#B0BEC5</color>
     <color name="divider">#37474F</color>
+
+    <!-- Loop Status Colors -->
+    <color name="loopClosed">#00C03E</color>
+    <color name="loopOpen">#4983D7</color>
+    <color name="loopLGS">#800080</color>
+    <color name="loopSuspended">#FFFF13</color>
+    <color name="loopDisabled">#FF1313</color>
+    <color name="loopDisconnected">#939393</color>
+    <color name="loopUnknown">#9E9E9E</color>
+    <color name="loopSuperbolus">#FFAE01</color>
+    <color name="tempBasal">#FF9800</color>
+    <color name="tempTargetDisabled">#9E9E9E</color>
+    <color name="tempTargetActive">#f4d700</color>
+    <color name="tempTargetActiveDark">#1Af4d700</color>  <!-- 10% opacity for background -->
+    <color name="white_20percent">#33FFFFFF</color>
+    <color name="white_50percent">#80FFFFFF</color>
+    <color name="white_70percent">#B3FFFFFF</color>
 </resources>

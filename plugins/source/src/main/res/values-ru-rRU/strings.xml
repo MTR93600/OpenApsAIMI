@@ -30,12 +30,9 @@
     <string name="bgsource_log_sensor_change_summary">Автоматически создавать событие \"Установка сенсора\" в Портале терапии при локальном оповещении о запуске датчика от источника ГК</string>
     <string name="direction">направление</string>
     <string name="bg_generation_interval_minutes">Интервал генерации ГК в мин</string>
-    <!-- Patched Ottai App -->
-    <string name="ottai_app">Ottai</string>
-    <string name="description_source_patched_ottai_app">Получать данные о ГК от приложения Ottai.</string>
     <!-- Patched Syai Tag App -->
     <string name="syai_tag_app">Syai</string>
-    <string name="description_source_patched_syai_tag_app">Получать данные о ГК от приложения Syai.</string>
+    <string name="description_source_patched_syai_tag_app">Получать данные гликемии от приложения Syai/Ottai.</string>
     <!-- Patched SI App -->
     <string name="patched_si_app">SI App</string>
     <string name="description_source_patched_si_app">Получать данные из патч приложения Sibionic SI.</string>

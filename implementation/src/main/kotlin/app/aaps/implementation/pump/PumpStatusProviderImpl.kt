@@ -62,7 +62,7 @@ class PumpStatusProviderImpl @Inject constructor(
                 lines += rh.gs(R.string.short_status_temp_basal, extendedBolus.toStringFull(dateUtil, rh))
             }
 
-            if (pump.batteryLevel != 0) lines += rh.gs(R.string.short_status_battery, pump.batteryLevel)
+            if (pump.batteryLevel != null && pump.batteryLevel != 0) lines += rh.gs(R.string.short_status_battery, pump.batteryLevel)
             val additionalStatus = pump.pumpSpecificShortStatus(veryShort)
             if (additionalStatus.isNotEmpty()) lines += additionalStatus
         }

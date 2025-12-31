@@ -29,9 +29,6 @@
     <string name="bgsource_log_sensor_change_summary">Maak automatisch een gebeurtenis \"CGM Sensor Insert\" aan in de Careportal bij het ontvangen van een sensor start bericht van een lokale BG bron</string>
     <string name="direction">richting</string>
     <string name="bg_generation_interval_minutes">Interval BG generatie minuten</string>
-    <!-- Patched Ottai App -->
-    <string name="ottai_app">Ottai</string>
-    <string name="description_source_patched_ottai_app">Ontvang glucose-gegevens van de Ottai App.</string>
     <!-- Patched Syai Tag App -->
     <!-- Patched SI App -->
     <!-- Patched Sino App -->

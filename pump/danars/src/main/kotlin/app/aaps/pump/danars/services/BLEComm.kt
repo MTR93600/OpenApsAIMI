@@ -103,6 +103,7 @@ class BLEComm @Inject internal constructor(
     var isConnecting = false
     private var encryptedDataRead = false
     private var encryptedCommandSent = false
+    private var pumpCheckSent = false  // Guard against duplicate ENCRYPTION__PUMP_CHECK
     private var uartRead: BluetoothGattCharacteristic? = null
     private var uartWrite: BluetoothGattCharacteristic? = null
 
@@ -136,10 +137,24 @@ class BLEComm @Inject internal constructor(
             }
             return false
         }
+        // Close any existing connection before starting a new one to prevent overlapping states
+        if (bluetoothGatt != null) {
+            aapsLogger.warn(LTag.PUMPBTCOMM, "Closing existing bluetoothGatt before new connection from: $from")
+            try {
+                bluetoothGatt?.disconnect()
+                SystemClock.sleep(200)  // Brief delay to allow cleanup
+                bluetoothGatt?.close()
+                bluetoothGatt = null
+            } catch (e: Exception) {
+                aapsLogger.error(LTag.PUMPBTCOMM, "Error closing existing connection: ${e.message}")
+            }
+        }
+
         isConnected = false
         encryption = EncryptionType.ENCRYPTION_DEFAULT
         encryptedDataRead = false
         encryptedCommandSent = false
+        pumpCheckSent = false  // Reset the guard flag for new connection
         isConnecting = true
         bufferLength = 0
         aapsLogger.debug(LTag.PUMPBTCOMM, "Trying to create a new connection from: $from")
@@ -210,6 +225,7 @@ class BLEComm @Inject internal constructor(
         isConnected = false
         encryptedDataRead = false
         encryptedCommandSent = false
+        pumpCheckSent = false  // Reset for next connection attempt
         SystemClock.sleep(2000)
     }
 
@@ -284,13 +300,19 @@ class BLEComm @Inject internal constructor(
     @SuppressLint("MissingPermission")
     @Synchronized
     private fun setCharacteristicNotification(characteristic: BluetoothGattCharacteristic?, enabled: Boolean) {
-        aapsLogger.debug(LTag.PUMPBTCOMM, "setCharacteristicNotification")
+        aapsLogger.debug(LTag.PUMPBTCOMM, "setCharacteristicNotification enabled=$enabled")
         if (bluetoothAdapter == null || bluetoothGatt == null) {
             aapsLogger.error(LTag.PUMPBTCOMM, "BluetoothAdapter not initialized_ERROR")
             isConnecting = false
             isConnected = false
             encryptedDataRead = false
             encryptedCommandSent = false
+            pumpCheckSent = false
+            return
+        }
+        // Don't proceed if we're not in the right state (prevents late callbacks from old connections)
+        if (enabled && !isConnecting) {
+            aapsLogger.warn(LTag.PUMPBTCOMM, "Ignoring setCharacteristicNotification - not in connecting state")
             return
         }
         bluetoothGatt?.setCharacteristicNotification(characteristic, enabled)
@@ -375,6 +397,7 @@ class BLEComm @Inject internal constructor(
             encryption = EncryptionType.ENCRYPTION_DEFAULT
             encryptedDataRead = false
             encryptedCommandSent = false
+            pumpCheckSent = false  // Reset for next connection attempt
             rxBus.send(EventPumpStatusChanged(EventPumpStatusChanged.Status.DISCONNECTED))
             aapsLogger.debug(LTag.PUMPBTCOMM, "Device was disconnected " + gatt.device.name) //Device was disconnected
         }
@@ -516,12 +539,21 @@ class BLEComm @Inject internal constructor(
     }
 
     // 1st packet v1 v3 message sent to pump after connect
+    @Synchronized
     private fun sendConnect() {
+        // Guard against duplicate ENCRYPTION__PUMP_CHECK packets during rapid reconnection
+        if (pumpCheckSent) {
+            aapsLogger.warn(LTag.PUMPBTCOMM, "ENCRYPTION__PUMP_CHECK already sent for this connection, ignoring duplicate call")
+            return
+        }
+
         val deviceName = connectDeviceName
         if (deviceName == null || deviceName == "") {
             uiInteraction.addNotification(Notification.DEVICE_NOT_PAIRED, rh.gs(R.string.pairfirst), Notification.URGENT)
             return
         }
+
+        pumpCheckSent = true  // Mark that we've sent the PUMP_CHECK for this connection attempt
         val bytes = bleEncryption.getEncryptedPacket(BleEncryption.DANAR_PACKET__OPCODE_ENCRYPTION__PUMP_CHECK, null, deviceName)
         aapsLogger.debug(LTag.PUMPBTCOMM, ">>>>> " + "ENCRYPTION__PUMP_CHECK (0x00)" + " " + DanaRSPacket.toHexString(bytes))
         writeCharacteristicNoResponse(uartWriteBTGattChar, bytes)

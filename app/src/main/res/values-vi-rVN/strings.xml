@@ -14,8 +14,8 @@
     <string name="enable_pump_unreachable_alert">Cảnh báo khi bơm mất kết nối</string>
     <string name="pump_unreachable_threshold">Ngưỡng mất kết nối bơm [phút]</string>
     <string name="enable_carbs_req_alert">Cảnh báo khi cần carb</string>
-    <string name="open_navigation">Mở menu</string>
-    <string name="close_navigation">Đóng menu</string>
+    <string name="open_navigation">Mở điều hướng</string>
+    <string name="close_navigation">Đóng điều hướng</string>
     <string name="remove_items">Xóa mục</string>
     <string name="sort_items">Sắp xếp các mục</string>
     <string name="unitsnosemicolon">Đơn vị</string>

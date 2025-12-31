@@ -157,7 +157,7 @@ class RFSpy @Inject constructor(
     }
 
     private fun writeToDataRaw(bytes: ByteArray, responseTimeoutMs: Int): ByteArray? {
-        SystemClock.sleep(100)
+        SystemClock.sleep(1)
         // FIXME drain read queue?
         var junkInBuffer = reader.poll(0)
 
@@ -182,8 +182,6 @@ class RFSpy @Inject constructor(
             aapsLogger.error(LTag.PUMPBTCOMM, "BLE Write operation failed, code=" + writeCheck.resultCode)
             return null // will be a null (invalid) response
         }
-
-        SystemClock.sleep(100)
 
         return reader.poll(responseTimeoutMs)
     }

@@ -63,6 +63,7 @@ class StatusLightHandler @Inject constructor(
         }
 
         val insulinUnit = rh.gs(app.aaps.core.ui.R.string.insulin_unit_shortname)
+        if (cannulaUsage != null) scope.launch { handleUsage(cannulaUsage, insulinUnit) }
         if (pump.pumpDescription.isPatchPump) {
             handlePatchReservoirLevel(
                 reservoirLevel,
@@ -74,6 +75,7 @@ class StatusLightHandler @Inject constructor(
         } else {
             if (cannulaUsage != null) scope.launch { handleUsage(cannulaUsage, insulinUnit) }
             handleLevel(reservoirLevel, IntKey.OverviewResCritical, IntKey.OverviewResWarning, ch.fromPump(pump.reservoirLevel), insulinUnit)
+            handleLevel(reservoirLevel, IntKey.OverviewResCritical, IntKey.OverviewResWarning, pump.reservoirLevel, insulinUnit)
         }
         if (!config.AAPSCLIENT) {
             if (bgSource.sensorBatteryLevel != -1)
