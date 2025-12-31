@@ -70,6 +70,7 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.CycleTrackingMode
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionEngine
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionProfiler
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdAbsorptionGuard
 import java.io.File
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -5324,18 +5325,43 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         //
         // if (preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled)) { ... }
         
-        // 🔒 SAFETY CHECK FINAL : On applique le cap strict après le potentiel boost de Reactivité
+        // 🛡️ PKPD ABSORPTION GUARD (FIX 2025-12-30)
+        // Soft guard basé sur physiologie insuline : "Injecter → Laisser agir → Réévaluer"
+        // Empêche surcorrection UAM sans bloquer vraies urgences
         val currentMaxSmb = if (bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0) maxSMBHB else maxSMB
-        val absGuard = if (windowSinceDoseInt in 0..20 && iobActivityNow > 0.25) {
-            val highBgEscape = bg > target_bg + 60 && delta > 0
-            if (highBgEscape) 1.0 else 0.6 + (eventualBG.coerceAtLeast(bg) / max(bg, 1.0)) * 0.2
-        } else 1.0
-        if (absGuard < 0.99) {
-            val before = smbToGive
-            smbToGive = (smbToGive * absGuard.toFloat()).coerceAtLeast(0f)
-            val guardMsg = "ABS_GUARD factor=${"%.2f".format(absGuard)} since=${windowSinceDoseInt}m iobAct=${"%.2f".format(iobActivityNow)} ev=${"%.0f".format(eventualBG)}"
-            consoleError.add(guardMsg)
-            rT.reason.append(" | $guardMsg")
+        
+        // Détecter si mode repas actif (ne pas freiner prebolus/TBR modes)
+        val anyMealModeForGuard = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime
+        
+        // Calculer guard
+        val pkpdGuard = PkpdAbsorptionGuard.compute(
+            pkpdRuntime = pkpdRuntime,
+            windowSinceLastDoseMin = windowSinceDoseInt.toDouble(),
+            bg = bg,
+            delta = delta.toDouble(),
+            shortAvgDelta = shortAvgDelta.toDouble(),
+            targetBg = target_bg,
+            predBg = predictedBg.toDouble().takeIf { it > 20 },
+            isMealMode = anyMealModeForGuard
+        )
+        
+        // Appliquer guard sur SMB
+        if (pkpdGuard.isActive()) {
+            val beforeGuard = smbToGive
+            smbToGive = (smbToGive * pkpdGuard.factor.toFloat()).coerceAtLeast(0f)
+            
+            // Logs détaillés
+            consoleError.add(pkpdGuard.toLogString())
+            consoleLog.add("SMB_GUARDED: ${"%.2f".format(beforeGuard)}U → ${"%.2f".format(smbToGive)}U")
+            
+            // Ajouter au reason (visible utilisateur)
+            rT.reason.append(" | ${pkpdGuard.reason} x${"%.2f".format(pkpdGuard.factor)}")
+            
+            // Augmenter intervalle si nécessaire
+            if (pkpdGuard.intervalAddMin > 0) {
+                intervalsmb = (intervalsmb + pkpdGuard.intervalAddMin).coerceAtMost(10)
+                consoleLog.add("INTERVAL_ADJUSTED: +${pkpdGuard.intervalAddMin}m → ${intervalsmb}m total")
+            }
         }
         val beforeCap = smbToGive
         smbToGive = capSmbDose(
