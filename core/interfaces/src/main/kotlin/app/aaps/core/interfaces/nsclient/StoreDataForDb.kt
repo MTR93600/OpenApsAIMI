@@ -47,7 +47,7 @@ interface StoreDataForDb {
     fun addToDeleteGlucoseValue(payload: String): Boolean
 
     fun updateDeletedGlucoseValuesInDb()
-    fun storeTreatmentsToDb()
+    fun storeTreatmentsToDb(fullSync: Boolean)
     fun updateDeletedTreatmentsInDb()
     fun storeGlucoseValuesToDb()
     fun storeFoodsToDb()

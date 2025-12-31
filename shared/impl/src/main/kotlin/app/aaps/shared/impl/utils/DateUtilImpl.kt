@@ -311,6 +311,9 @@ class DateUtilImpl @Inject constructor(private val context: Context) : DateUtil 
 
     override fun isSameDay(timestamp1: Long, timestamp2: Long) = isSameDay(Date(timestamp1), Date(timestamp2))
 
+    override fun isAfterNoon(): Boolean =
+        Instant.now().atZone(ZoneId.systemDefault()).hour >= 12
+
     override fun isSameDayGroup(timestamp1: Long, timestamp2: Long): Boolean {
         val now = now()
         if (now in (timestamp1 + 1) until timestamp2 || now in (timestamp2 + 1) until timestamp1)
@@ -441,7 +444,10 @@ class DateUtilImpl @Inject constructor(private val context: Context) : DateUtil 
     }
 
     override fun mergeUtcDateToTimestamp(timestamp: Long, dateUtcMillis: Long): Long {
-        val selected = Calendar.getInstance().apply { timeInMillis = dateUtcMillis }
+        // - TimeZone.getDefault().rawOffset is only workaround for MaterialDatePicket bug
+        // Remove after lib fix
+        // https://github.com/material-components/material-components-android/issues/4373
+        val selected = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = dateUtcMillis }
         return Calendar.getInstance().apply {
             timeInMillis = timestamp
             set(Calendar.YEAR, selected[Calendar.YEAR])

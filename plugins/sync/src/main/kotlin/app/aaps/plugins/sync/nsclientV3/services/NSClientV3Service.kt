@@ -13,7 +13,8 @@ import app.aaps.core.interfaces.nsclient.NSAlarm
 import app.aaps.core.interfaces.nsclient.StoreDataForDb
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
-import app.aaps.core.interfaces.rx.events.*
+import app.aaps.core.interfaces.rx.events.EventDismissNotification
+import app.aaps.core.interfaces.rx.events.EventNSClientNewLog
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
@@ -233,7 +234,7 @@ class NSClientV3Service : DaggerService() {
 
             "treatments"   -> docString.toNSTreatment()?.let {
                 nsIncomingDataProcessor.processTreatments(listOf(it), doFullSync = false)
-                storeDataForDb.storeTreatmentsToDb()
+                storeDataForDb.storeTreatmentsToDb(fullSync = false)
             }
 
             "foods"        -> docString.toNSFood()?.let {
