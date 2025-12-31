@@ -55,7 +55,7 @@ class AuditorOrchestrator @Inject constructor(
     
     // Rate limiting
     private var lastAuditTime: Long = 0L
-    private val MIN_AUDIT_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes minimum
+    private val MIN_AUDIT_INTERVAL_MS = 3 * 60 * 1000L // 3 minutes minimum (was 5, reduced for better reactivity)
     
     // Audit count tracking
     private var auditsThisHour: Int = 0
@@ -134,6 +134,7 @@ class AuditorOrchestrator @Inject constructor(
         // Check if auditor is enabled
         if (!isAuditorEnabled()) {
             aapsLogger.debug(LTag.APS, "AI Auditor: Disabled")
+            AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OFF)
             callback?.invoke(null, createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "Auditor disabled"))
             return
         }
@@ -153,6 +154,7 @@ class AuditorOrchestrator @Inject constructor(
         
         if (!shouldTrigger) {
             aapsLogger.debug(LTag.APS, "AI Auditor: No trigger conditions met")
+            AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.SKIPPED_NO_TRIGGER)
             callback?.invoke(null, createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "No trigger"))
             return
         }
@@ -161,6 +163,7 @@ class AuditorOrchestrator @Inject constructor(
         val now = System.currentTimeMillis()
         if (!checkRateLimit(now)) {
             aapsLogger.debug(LTag.APS, "AI Auditor: Rate limited")
+            AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.SKIPPED_RATE_LIMITED)
             callback?.invoke(null, createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "Rate limited"))
             return
         }
@@ -215,6 +218,14 @@ class AuditorOrchestrator @Inject constructor(
                     aapsLogger.info(LTag.APS, "AI Auditor: Evidence=${verdict.evidence}")
                     aapsLogger.info(LTag.APS, "AI Auditor: RiskFlags=${verdict.riskFlags}")
                     
+                    // Update status based on verdict type
+                    val status = when (verdict.verdict) {
+                        VerdictType.CONFIRM -> AuditorStatusTracker.Status.OK_CONFIRM
+                        VerdictType.SOFTEN -> AuditorStatusTracker.Status.OK_SOFTEN
+                        VerdictType.SHIFT_TO_TBR -> AuditorStatusTracker.Status.OK_PREFER_TBR
+                    }
+                    AuditorStatusTracker.updateStatus(status)
+                    
                     // Apply modulation
                     val modulated = DecisionModulator.applyModulation(
                         originalSmb = smbProposed,
@@ -238,11 +249,13 @@ class AuditorOrchestrator @Inject constructor(
                     callback?.invoke(verdict, modulated)
                 } else {
                     aapsLogger.warn(LTag.APS, "AI Auditor: No verdict received (timeout or error)")
+                    AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_TIMEOUT)
                     callback?.invoke(null, createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "No verdict"))
                 }
                 
             } catch (e: Exception) {
                 aapsLogger.error(LTag.APS, "AI Auditor: Exception", e)
+                AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_EXCEPTION)
                 callback?.invoke(null, createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "Exception: ${e.message}"))
             }
         }

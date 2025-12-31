@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.utils
 
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorStatusTracker
 import java.util.Locale
 
 /**
@@ -92,10 +93,13 @@ object RtInstrumentationHelpers {
     /**
      * Build auditor debug line (1 line)
      * 
-     * Formats:
+     * Formats (NEW - explicit status):
      * - OFF: "Auditor: OFF"
-     * - STALE: "Auditor: STALE (5m old)"
-     * - ACTIVE: "Auditor: SOFTEN conf=0.78 smb×0.65 +3m preferTBR [stacking]"
+     * - OFFLINE_NO_APIKEY: "Auditor: OFFLINE_NO_APIKEY"
+     * - SKIPPED_RATE_LIMITED: "Auditor: SKIPPED_RATE_LIMITED"  
+     * - ERROR_TIMEOUT: "Auditor: ERROR_TIMEOUT"
+     * - STALE: "Auditor: STALE (5m old, last=OK_SOFTEN)"
+     * - OK (active): "Auditor: SOFTEN conf=0.78 smb×0.65 +3m preferTBR [stacking]"
      * 
      * @return Auditor line (never null)
      */
@@ -104,59 +108,78 @@ object RtInstrumentationHelpers {
     ): String {
         if (!enabled) return "Auditor: OFF"
         
-        val cached = AuditorVerdictCache.get(maxAgeMs = 300_000) // 5min
+        // Get detailed status from tracker (FIX 2025-12-31)
+        val (status, ageMs) = AuditorStatusTracker.getStatus(maxAgeMs = 300_000)
         
-        if (cached == null) {
-            // Check if there's a stale verdict
-            val ageMs = AuditorVerdictCache.getAgeMs()
-            return if (ageMs != null) {
+        return when {
+            // Disabled
+            status == AuditorStatusTracker.Status.OFF -> 
+                "Auditor: OFF"
+            
+            // Offline (can't reach AI - explicit reason)
+            status.isOffline() -> 
+                "Auditor: ${status.message}"
+            
+            // Error (attempted but failed - explicit reason)
+            status.isError() -> 
+                "Auditor: ${status.message}"
+            
+            // Skipped (eligible but deliberately not calling - explicit reason)
+            status.isSkipped() -> 
+                "Auditor: ${status.message}"
+            
+            // Stale (verdict too old)
+            status == AuditorStatusTracker.Status.STALE && ageMs != null -> {
                 val ageMin = (ageMs / 60_000).toInt()
                 "Auditor: STALE (${ageMin}m old)"
-            } else {
-                "Auditor: OFFLINE"
             }
-        }
-        
-        val verdict = cached.verdict
-        val modulation = cached.modulation
-        
-        val parts = mutableListOf<String>()
-        
-        // Verdict type
-        parts.add(verdict.verdict.name)
-        
-        // Confidence
-        parts.add("conf=${safeFmt(verdict.confidence, "%.2f")}")
-        
-        // SMB factor
-        if (modulation.appliedModulation) {
-            val smbFactor = verdict.boundedAdjustments.smbFactorClamp
-            if (smbFactor < 1.0) {
-                parts.add("smb×${safeFmt(smbFactor, "%.2f")}")
+            
+            // Active (verdict received and applied)
+            status.isActive() -> {
+                val cached = AuditorVerdictCache.get(maxAgeMs = 300_000)
+                    ?: return "Auditor: ${status.message}"  // Fallback if cache empty
+                
+                val verdict = cached.verdict
+                val modulation = cached.modulation
+                val parts = mutableListOf<String>()
+                
+                // Verdict type
+                parts.add(verdict.verdict.name)
+                
+                // Confidence
+                parts.add("conf=${safeFmt(verdict.confidence, "%.2f")}")
+                
+                // SMB factor (if modulation applied)
+                if (modulation.appliedModulation) {
+                    val smbFactor = verdict.boundedAdjustments.smbFactorClamp
+                    if (smbFactor < 1.0) {
+                        parts.add("smb×${safeFmt(smbFactor, "%.2f")}")
+                    }
+                    
+                    val intervalAdd = verdict.boundedAdjustments.intervalAddMin
+                    if (intervalAdd > 0) {
+                        parts.add("+${intervalAdd}m")
+                    }
+                }
+                
+                // Prefer TBR
+                if (modulation.preferTbr) {
+                    parts.add("preferTBR")
+                }
+                
+                // Risk flags (max 2)
+                if (verdict.riskFlags.isNotEmpty()) {
+                    val flags = verdict.riskFlags.take(2).joinToString(",")
+                    parts.add("[$flags]")
+                }
+                
+                val line = "Auditor: " + parts.joinToString(" ")
+                if (line.length > 80) line.substring(0, 77) + "..." else line
             }
+            
+            // Unknown status (shouldn't happen)
+            else -> "Auditor: UNKNOWN"
         }
-        
-        // Interval add
-        if (modulation.appliedModulation) {
-            val intervalAdd = verdict.boundedAdjustments.intervalAddMin
-            if (intervalAdd > 0) {
-                parts.add("+${intervalAdd}m")
-            }
-        }
-        
-        // Prefer TBR
-        if (modulation.preferTbr) {
-            parts.add("preferTBR")
-        }
-        
-        // Risk flags (max 2)
-        if (verdict.riskFlags.isNotEmpty()) {
-            val flags = verdict.riskFlags.take(2).joinToString(",")
-            parts.add("[$flags]")
-        }
-        
-        val line = "Auditor: " + parts.joinToString(" ")
-        return if (line.length > 80) line.substring(0, 77) + "..." else line
     }
     
     /**

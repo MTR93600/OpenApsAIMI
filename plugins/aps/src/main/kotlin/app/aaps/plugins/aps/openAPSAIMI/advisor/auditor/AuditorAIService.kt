@@ -64,6 +64,7 @@ class AuditorAIService @Inject constructor(
         // Get API key
         val apiKey = getApiKey(provider)
         if (apiKey.isBlank()) {
+            AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OFFLINE_NO_APIKEY)
             return@withContext null
         }
         
@@ -79,19 +80,47 @@ class AuditorAIService @Inject constructor(
                     Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
                     Provider.CLAUDE -> callClaude(apiKey, prompt)
                 }
+            } catch (e: java.net.UnknownHostException) {
+                // DNS resolution failed or no network
+                AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OFFLINE_NO_NETWORK)
+                null
+            } catch (e: java.net.SocketTimeoutException) {
+                // Connection timeout
+                AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_TIMEOUT)
+                null
+            } catch (e: java.io.IOException) {
+                // General network I/O error
+                AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OFFLINE_NO_NETWORK)
+                null
+            } catch (e: org.json.JSONException) {
+                // JSON parse error
+                AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_PARSE)
+                null
             } catch (e: Exception) {
+                // Other exception
+                AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_EXCEPTION)
                 null
             }
         }
         
-        // Parse response
-        if (responseJson != null) {
-            try {
-                parseVerdict(responseJson, provider)
-            } catch (e: Exception) {
-                null
+        // Check if timed out (withTimeoutOrNull returned null)
+        if (responseJson == null) {
+            // Only set timeout status if not already set by exception
+            val (currentStatus, _) = AuditorStatusTracker.getStatus(maxAgeMs = 5000)
+            if (!currentStatus.isError() && !currentStatus.isOffline()) {
+                AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_TIMEOUT)
             }
-        } else {
+            return@withContext null
+        }
+        
+        // Parse response
+        try {
+            parseVerdict(responseJson, provider)
+        } catch (e: org.json.JSONException) {
+            AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_PARSE)
+            null
+        } catch (e: Exception) {
+            AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_EXCEPTION)
             null
         }
     }
