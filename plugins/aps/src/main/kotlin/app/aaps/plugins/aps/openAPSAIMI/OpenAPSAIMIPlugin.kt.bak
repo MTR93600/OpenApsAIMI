@@ -1015,13 +1015,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         ctx = context,
                         stringKey = StringKey.AimiAdvisorProvider,
                         title = R.string.aimi_prefs_provider_title,
-                        entries = arrayOf(
-                            rh.gs(R.string.aimi_prefs_provider_openai),
-                            rh.gs(R.string.aimi_prefs_provider_gemini),
-                            rh.gs(R.string.aimi_prefs_provider_deepseek),
-                            rh.gs(R.string.aimi_prefs_provider_claude)
-                        ),
-                        entryValues = arrayOf("OPENAI", "GEMINI", "DEEPSEEK", "CLAUDE")
+                        entries = arrayOf(rh.gs(R.string.aimi_prefs_provider_openai), rh.gs(R.string.aimi_prefs_provider_gemini)),
+                        entryValues = arrayOf("OPENAI", "GEMINI")
                     ).apply {
                         dialogTitle = rh.gs(R.string.aimi_prefs_provider_dialog_title)
                     })
@@ -1043,26 +1038,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             stringKey = StringKey.AimiAdvisorGeminiKey,
                             summary = R.string.aimi_prefs_gemini_key_summary,
                             title = R.string.aimi_prefs_gemini_key_title
-                        )
-                    )
-                    
-                    // DeepSeek Key
-                    addPreference(
-                        AdaptiveStringPreference(
-                            ctx = context,
-                            stringKey = StringKey.AimiAdvisorDeepSeekKey,
-                            summary = R.string.aimi_prefs_deepseek_key_summary,
-                            title = R.string.aimi_prefs_deepseek_key_title
-                        )
-                    )
-                    
-                    // Claude Key
-                    addPreference(
-                        AdaptiveStringPreference(
-                            ctx = context,
-                            stringKey = StringKey.AimiAdvisorClaudeKey,
-                            summary = R.string.aimi_prefs_claude_key_summary,
-                            title = R.string.aimi_prefs_claude_key_title
                         )
                     )
                 })

@@ -1109,10 +1109,16 @@
     <string name="aimi_prefs_provider_dialog_title">Select AI Provider</string>
     <string name="aimi_prefs_provider_openai">OpenAI (GPT-4o)</string>
     <string name="aimi_prefs_provider_gemini">Google Gemini (1.5 Flash)</string>
+    <string name="aimi_prefs_provider_deepseek">DeepSeek (V3)</string>
+    <string name="aimi_prefs_provider_claude">Claude (Sonnet)</string>
     <string name="aimi_prefs_openai_key_title">OpenAI API Key</string>
     <string name="aimi_prefs_openai_key_summary">Enter your OpenAI API Key (sk-...)</string>
     <string name="aimi_prefs_gemini_key_title">Gemini API Key</string>
     <string name="aimi_prefs_gemini_key_summary">Enter your Google Gemini API Key (AIza...)</string>
+    <string name="aimi_prefs_deepseek_key_title">DeepSeek API Key</string>
+    <string name="aimi_prefs_deepseek_key_summary">Enter your DeepSeek API Key</string>
+    <string name="aimi_prefs_claude_key_title">Claude API Key</string>
+    <string name="aimi_prefs_claude_key_summary">Enter your Anthropic Claude API Key</string>
     <!-- AIMI ADVISOR STRINGS -->
     <string name="aimi_advisor_title">AIMI Advisor</string>
     <string name="aimi_adv_loading">Analyse en cours...</string>
