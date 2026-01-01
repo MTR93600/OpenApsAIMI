@@ -4224,11 +4224,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             try { uiInteraction.addNotification(w.type.hashCode(), w.message, 2) } catch (e: Exception) {}
                         }
                     }
+                    
+                    // 📊 Store trajectory metrics in rT for graphing/trending
+                    rT.trajectoryEnabled = true
+                    rT.trajectoryType = analysis.classification.name
+                    rT.trajectoryCurvature = analysis.metrics.curvature
+                    rT.trajectoryConvergence = analysis.metrics.convergenceVelocity
+                    rT.trajectoryCoherence = analysis.metrics.coherence
+                    rT.trajectoryEnergy = analysis.metrics.energyBalance
+                    rT.trajectoryOpenness = analysis.metrics.openness
+                    rT.trajectoryHealth = (analysis.metrics.healthScore * 100).toInt()
+                    rT.trajectoryModulationActive = analysis.modulation.isSignificant()
+                    rT.trajectoryWarningsCount = analysis.warnings.size
+                    rT.trajectoryConvergenceETA = analysis.predictedConvergenceTime
                 }
             } catch (e: Exception) {
                 consoleLog.add("⚠️ Trajectory error: ${e.message}")
                 aapsLogger.error(LTag.APS, "Trajectory Guard failed", e)
+                rT.trajectoryEnabled = false  // Mark as failed
             }
+        } else {
+            // Feature flag OFF: mark as disabled in rT
+            rT.trajectoryEnabled = false
         }
         
         // End FCL 11.0 Hoist. Next block uses the results.
