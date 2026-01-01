@@ -4170,8 +4170,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // ═══════════════════════════════════════════════════════════════════
         // 🌀 PHASE-SPACE TRAJECTORY ANALYSIS (Feature Flag)
         // ═══════════════════════════════════════════════════════════════════
-        if (preferences.get(BooleanKey.OApsAIMITrajectoryGuardEnabled)) {
+        val trajectoryFlagEnabled = preferences.get(BooleanKey.OApsAIMITrajectoryGuardEnabled)
+        consoleLog.add("🔍 TrajectoryGuard flag read = $trajectoryFlagEnabled")
+        
+        if (trajectoryFlagEnabled) {
             try {
+                consoleLog.add("🌀 Trajectory Guard: ENABLED")
                 val trajectoryHistory = trajectoryHistoryProvider.buildHistory(
                     nowMillis = currentTime, historyMinutes = 90, currentBg = bg,
                     currentDelta = delta.toDouble(), currentAccel = bgacc,
@@ -4185,9 +4189,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     timeSinceLastBolus = if (lastBolusAgeMinutes.isFinite()) lastBolusAgeMinutes.toInt() else 120,
                     cobNow = cob.toDouble()
                 )
+                consoleLog.add("🌀 History: ${trajectoryHistory.size} states")
                 
                 val stableOrbit = StableOrbit.fromProfile(targetBg.toDouble(), profile.current_basal)
                 val traj = trajectoryGuard.analyzeTrajectory(trajectoryHistory, stableOrbit)
+                
+                if (traj == null) {
+                    consoleLog.add("⚠️ Analysis returned NULL")
+                    rT.trajectoryEnabled = false
+                } else {
+                    consoleLog.add("✓ Analysis SUCCESS")
+                }
                 
                 traj?.let { analysis ->
                     consoleLog.add("═══════════════════════════════════════════════════")
