@@ -1203,6 +1203,26 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         )
                     )
                 })
+                
+                // 🌀 Phase-Space Trajectory Control
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "AIMI_Trajectory"
+                    title = "🌀 Trajectory Guard"  // TODO: Add string resource
+                    
+                    addPreference(PreferenceCategory(context).apply {
+                        title = "Phase-Space Control Settings"  // TODO: Add string resource
+                    })
+                    
+                    addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.OApsAIMITrajectoryGuardEnabled,
+                            title = R.string.oaps_aimi_trajectory_enabled_title,
+                            summary = R.string.oaps_aimi_trajectory_enabled_summary
+                        )
+                    )
+                })
+                
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIEnableStepsFromWatch, title = R.string.countsteps_watch_title))
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsxdriponeminute, title = R.string.Enable_xdripOM_title))
                 addPreference(PreferenceCategory(context).apply {

@@ -324,6 +324,8 @@
     <string name="oaps_aimi_smb_exercise_damping_summary">Multiplier applied to SMB after recent exercise.</string>
     <string name="oaps_aimi_smb_late_fat_damping_title">Late meal damping factor</string>
     <string name="oaps_aimi_smb_late_fat_damping_summary">Multiplier applied to SMB when a late fatty meal is suspected.</string>
+    <string name="oaps_aimi_trajectory_enabled_title">Enable Trajectory Guard</string>
+    <string name="oaps_aimi_trajectory_enabled_summary">Phase-space control system that analyzes glucose trajectory geometry to prevent over/under-correction and improve convergence to target.</string>
     <string name="oaps_aimi_cho_summary">Average carbohydrates per meal. Estimated value, not exact</string>
     <string name="oaps_aimi_cho_title">Average carbohydrate amount lunch/dinner</string>
     <string name="aimi_preferences">AIMI Settings</string>
