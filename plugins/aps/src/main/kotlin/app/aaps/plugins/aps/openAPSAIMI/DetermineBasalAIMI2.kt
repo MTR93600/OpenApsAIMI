@@ -71,6 +71,8 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.CycleTrackingMode
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionEngine
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionProfiler
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdAbsorptionGuard
+import app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit  // 🌀 Trajectory Control
+import app.aaps.plugins.aps.openAPSAIMI.trajectory.WarningSeverity  // 🌀 Trajectory Warnings
 import java.io.File
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -218,6 +220,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var storageHelper: AimiStorageHelper  // 🛡️ Storage health monitoring
     @Inject lateinit var aapsLogger: AAPSLogger  // 📊 Logger for health monitoring
     @Inject lateinit var auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator  // 🧠 AI Decision Auditor
+    @Inject lateinit var trajectoryGuard: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard  // 🌀 Phase-Space Trajectory Controller
+    @Inject lateinit var trajectoryHistoryProvider: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryHistoryProvider  // 🌀 Trajectory History
     // ❌ OLD reactivityLearner removed - UnifiedReactivityLearner is now the only one
     init {
         // Branche l’historique basal (TBR) sur la persistence réelle
@@ -4162,6 +4166,71 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add("  │ pkpdScale: ${"%.3f".format(Locale.US, pkpdRuntime.pkpdScale)}")
             consoleLog.add("  └ adaptiveMode: ${if (pkpdRuntime.params.diaHrs != 4.0 || pkpdRuntime.params.peakMin != 75.0) "ACTIVE" else "DEFAULT"}")
         }
+        
+        // ═══════════════════════════════════════════════════════════════════
+        // 🌀 PHASE-SPACE TRAJECTORY ANALYSIS (Feature Flag)
+        // ═══════════════════════════════════════════════════════════════════
+        if (preferences.get(BooleanKey.OApsAIMITrajectoryGuardEnabled)) {
+            try {
+                val trajectoryHistory = trajectoryHistoryProvider.buildHistory(
+                    nowMillis = currentTime, historyMinutes = 90, currentBg = bg,
+                    currentDelta = delta.toDouble(), currentAccel = bgacc,
+                    insulinActivityNow = iobActivityNow, iobNow = iob.toDouble(),
+                    pkpdStage = when (insulinActionState.activityStage) {
+                        app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.RISING -> app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.RISING
+                        app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.PEAK -> app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.PEAK
+                        app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.FALLING -> app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.TAIL
+                        app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.TAIL -> app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.EXHAUSTED
+                    },
+                    timeSinceLastBolus = if (lastBolusAgeMinutes.isFinite()) lastBolusAgeMinutes.toInt() else 120,
+                    cobNow = cob.toDouble()
+                )
+                
+                val stableOrbit = StableOrbit.fromProfile(targetBg.toDouble(), profile.current_basal)
+                val traj = trajectoryGuard.analyzeTrajectory(trajectoryHistory, stableOrbit)
+                
+                traj?.let { analysis ->
+                    consoleLog.add("═══════════════════════════════════════════════════")
+                    analysis.toConsoleLog().forEach { consoleLog.add(sanitizeForJson(it)) }
+                    consoleLog.add("═══════════════════════════════════════════════════")
+                    
+                    val mod = analysis.modulation
+                    if (mod.isSignificant()) {
+                        consoleLog.add("🌀 TRAJECTORY MODULATION:")
+                        if (abs(mod.smbDamping - 1.0) > 0.05) {
+                            val orig = maxSMB
+                            maxSMB *= mod.smbDamping; maxSMBHB *= mod.smbDamping
+                            consoleLog.add("  SMB: %.2f→%.2fU (×%.2f)".format(Locale.US, orig, maxSMB, mod.smbDamping))
+                        }
+                        if (abs(mod.intervalStretch - 1.0) > 0.05) {
+                            val orig = intervalsmb
+                            intervalsmb = (intervalsmb * mod.intervalStretch).toInt().coerceIn(1, 20)
+                            consoleLog.add("  Interval: %d→%dmin".format(orig, intervalsmb))
+                        }
+                        if (abs(mod.safetyMarginExpand - 1.0) > 0.05) {
+                            val orig = maxIob
+                            maxIob *= mod.safetyMarginExpand
+                            consoleLog.add("  MaxIOB: %.2f→%.2fU".format(Locale.US, orig, maxIob))
+                        }
+                        if (mod.basalPreference > 0.7) {
+                            consoleLog.add("  ⚠️ Prefers TEMP BASAL (%.0f%%)".format(Locale.US, mod.basalPreference*100))
+                        }
+                        consoleLog.add("  → ${mod.reason}")
+                    }
+                    
+                    analysis.warnings.filter { it.severity >= WarningSeverity.HIGH }.forEach { w ->
+                        consoleLog.add("🚨 ${w.severity.emoji()} ${w.message}")
+                        if (w.severity == WarningSeverity.CRITICAL) {
+                            try { uiInteraction.addNotification(w.type.hashCode(), w.message, 2) } catch (e: Exception) {}
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                consoleLog.add("⚠️ Trajectory error: ${e.message}")
+                aapsLogger.error(LTag.APS, "Trajectory Guard failed", e)
+            }
+        }
+        
         // End FCL 11.0 Hoist. Next block uses the results.
         var tdd7Days = profile.TDD
         if (tdd7Days == 0.0 || tdd7Days < tdd7P) tdd7Days = tdd7P

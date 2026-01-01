@@ -137,4 +137,5 @@ enum class BooleanKey(
     OApsAIMIPkpdEnabled("key_aimi_pkpd_enabled", false),
     OApsAIMIUnifiedReactivityEnabled("key_use_unified_reactivity", true),  // 🎯 NEW: Enable UnifiedReactivityLearner
     AimiAuditorEnabled("aimi_auditor_enabled", false),  // 🧠 AI Decision Auditor
+    OApsAIMITrajectoryGuardEnabled("key_aimi_trajectory_guard_enabled", false),  // 🌀 Phase-Space Trajectory Control
 }
