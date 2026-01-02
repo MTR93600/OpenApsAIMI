@@ -49,7 +49,7 @@ class AndroidBluetoothDevice(
     // Increased from 20s to 120s to tolerate Android Doze mode delays (especially at night)
     // This prevents false-positive disconnections when the system delays Bluetooth operations.
     // Ref: Issue with nightly disconnections - Dec 2025
-    private val watchdogTimeoutMs = 240000L // 240 seconds (4 min - forensic analysis Jan 2026)
+    private val watchdogTimeoutMs = 240000L // 120 seconds (was 120s)
 
     // Use toUpperCase() since Android expects the A-F hex digits in the
     // Bluetooth address string to be uppercase (lowercase ones are considered
