@@ -37,8 +37,8 @@ class TrajectoryGuard @Inject constructor(
         const val ENERGY_STACKING = 2.0         // Accumulation risk
         const val OPENNESS_DIVERGING = 0.7      // Wide open trajectory
         
-        // Minimum history requirements
-        const val MIN_HISTORY_STATES = 6        // 30 minutes minimum
+        // Minimum history requirements (reduced for faster activation)
+        const val MIN_HISTORY_STATES = 4        // 20 minutes minimum (was 6/30min)
         const val IDEAL_HISTORY_STATES = 18     // 90 minutes ideal
     }
     

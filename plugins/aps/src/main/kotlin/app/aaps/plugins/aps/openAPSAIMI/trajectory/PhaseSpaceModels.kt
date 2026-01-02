@@ -207,12 +207,18 @@ data class TrajectoryModulation(
     
     /**
      * Check if this modulation is significant (deviates from neutral)
+     * 
+     * Thresholds reduced for higher sensitivity:
+     * - SMB damping: ±2% (was ±5%)
+     * - Interval stretch: ±2% (was ±5%)
+     * - Basal preference: ±5% (was ±10%)
+     * - Safety margin: ±2% (was ±5%)
      */
     fun isSignificant(): Boolean {
-        return abs(smbDamping - 1.0) > 0.05 ||
-               abs(intervalStretch - 1.0) > 0.05 ||
-               abs(basalPreference - 0.5) > 0.1 ||
-               abs(safetyMarginExpand - 1.0) > 0.05
+        return abs(smbDamping - 1.0) > 0.02 ||           // ±2% SMB modulation
+               abs(intervalStretch - 1.0) > 0.02 ||       // ±2% interval modulation
+               abs(basalPreference - 0.5) > 0.05 ||       // ±5% basal preference shift
+               abs(safetyMarginExpand - 1.0) > 0.02       // ±2% safety margin adjustment
     }
 }
 
