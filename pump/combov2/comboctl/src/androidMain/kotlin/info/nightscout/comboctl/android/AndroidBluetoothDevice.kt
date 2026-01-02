@@ -46,7 +46,10 @@ class AndroidBluetoothDevice(
     @Volatile
     private var lastTrafficTime: Long = 0
     private var watchdogThread: Thread? = null
-    private val watchdogTimeoutMs = 20000L // 20 seconds
+    // Increased from 20s to 120s to tolerate Android Doze mode delays (especially at night)
+    // This prevents false-positive disconnections when the system delays Bluetooth operations.
+    // Ref: Issue with nightly disconnections - Dec 2025
+    private val watchdogTimeoutMs = 120000L // 120 seconds (was 20s)
 
     // Use toUpperCase() since Android expects the A-F hex digits in the
     // Bluetooth address string to be uppercase (lowercase ones are considered
@@ -59,6 +62,10 @@ class AndroidBluetoothDevice(
         check(systemBluetoothSocket == null) { "Connection already established" }
 
         logger(LogLevel.DEBUG) { "Attempting to get object representing device with address $address" }
+        
+        // Log power state to help debug BT issues related to Doze mode
+        DozeMonitor.logPowerState(androidContext, "BT connect to $address")
+
 
         abortConnectAttempt = false
 

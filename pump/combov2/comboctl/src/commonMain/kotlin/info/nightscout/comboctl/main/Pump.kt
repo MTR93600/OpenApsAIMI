@@ -1209,6 +1209,82 @@ class Pump(
     }
 
     /**
+     * Sets TBR with intelligent retry logic.
+     * 
+     * This wrapper around [setTbr] implements:
+     * - Retry on recoverable failures (up to [maxRetries] attempts)
+     * - Tolerance for "close enough" TBR values (within [tolerancePercent])
+     * - Exponential backoff between retries
+     * 
+     * @param percentage TBR percentage to set.
+     * @param durationInMinutes TBR duration in minutes.
+     * @param type Type of the TBR.
+     * @param force100Percent Whether to force 100% TBR.
+     * @param maxRetries Maximum number of retry attempts (default: 2).
+     * @param tolerancePercent Tolerance for TBR percentage mismatch (default: 10%).
+     * @return The specific outcome if setting the TBR succeeds.
+     * @throws UnexpectedTbrStateException if TBR mismatch exceeds tolerance after all retries.
+     * @throws IllegalStateException if the pump is not in ReadyForCommands state.
+     */
+    suspend fun setTbrWithRetry(
+        percentage: Int,
+        durationInMinutes: Int,
+        type: Tbr.Type,
+        force100Percent: Boolean = false,
+        maxRetries: Int = 2,
+        tolerancePercent: Int = 10
+    ): SetTbrOutcome {
+        var lastException: UnexpectedTbrStateException? = null
+        
+        for (attempt in 0..maxRetries) {
+            try {
+                return setTbr(percentage, durationInMinutes, type, force100Percent)
+            } catch (e: UnexpectedTbrStateException) {
+                lastException = e
+                
+                // Only consider tolerance if actualTbrPercentage is not null
+                val actualPercentage = e.actualTbrPercentage
+                if (actualPercentage != null) {
+                    val percentageDiff = kotlin.math.abs(actualPercentage - e.expectedTbrPercentage)
+                    
+                    // Check if actual TBR is "close enough"
+                    if (percentageDiff <= tolerancePercent) {
+                        logger(LogLevel.WARN) {
+                            "TBR percentage $actualPercentage% is within tolerance of target " +
+                            "${e.expectedTbrPercentage}% (diff: $percentageDiff%, tolerance: $tolerancePercent%) - accepting"
+                        }
+                        // Consider this a success
+                        return SetTbrOutcome.SET_NORMAL_TBR
+                    }
+                }
+                
+                // If not last attempt, retry with exponential backoff
+                if (attempt < maxRetries) {
+                    val backoffMs = 2000L * (attempt + 1)  // 2s, 4s, 6s...
+                    logger(LogLevel.WARN) {
+                        "setTbr attempt ${attempt + 1}/$maxRetries failed" +
+                        (actualPercentage?.let { " with percentage mismatch (expected: ${e.expectedTbrPercentage}%, actual: $it%)" } ?: "") +
+                        "; retrying in ${backoffMs}ms"
+                    }
+                    kotlinx.coroutines.delay(backoffMs)
+                } else {
+                    logger(LogLevel.ERROR) {
+                        "setTbr failed after $maxRetries retries" +
+                        (actualPercentage?.let { 
+                            val diff = kotlin.math.abs(it - e.expectedTbrPercentage)
+                            "; TBR mismatch exceeds tolerance: expected ${e.expectedTbrPercentage}%, actual $it%, diff $diff% > $tolerancePercent%"
+                        } ?: "; TBR state unexpected")
+                    }
+                }
+            }
+        }
+        
+        // All retries exhausted
+        throw lastException!!
+    }
+
+
+    /**
      * Sets the Combo's current temporary basal rate (TBR) via the remote terminal (RT) mode.
      *
      * This function suspends until the TBR is fully set. The [tbrProgressFlow]
@@ -1284,7 +1360,16 @@ class Pump(
         // the timestamp property of that class is not useful here. The Tbr
         // class is rather meant for TBR events.
 
+        val startTime = kotlin.time.Clock.System.now()
         val currentStatus = statusFlow.value ?: throw IllegalStateException("Cannot start TBR without a known pump status")
+        
+        // Enhanced logging for debugging and monitoring
+        logger(LogLevel.INFO) {
+            "setTbr START: target=${percentage}%/${durationInMinutes}min, " +
+            "current=${currentStatus.tbrPercentage}%/${currentStatus.remainingTbrDurationInMinutes}min, " +
+            "type=$type, force100=$force100Percent"
+        }
+        
         var expectedTbrPercentage: Int
         var expectedTbrDuration: Int
         val result: SetTbrOutcome
@@ -1433,6 +1518,14 @@ class Pump(
                 actualTbrPercentage = actualTbrPercentage,
                 actualTbrDuration = actualTbrDuration
             )
+        }
+
+        val endTime = kotlin.time.Clock.System.now()
+        val duration = endTime - startTime
+        logger(LogLevel.INFO) {
+            "setTbr COMPLETE: outcome=$result, " +
+            "final=${actualTbrPercentage}%/${actualTbrDuration}min, " +
+            "duration=${duration.inWholeMilliseconds}ms"
         }
 
         return@executeCommand result
