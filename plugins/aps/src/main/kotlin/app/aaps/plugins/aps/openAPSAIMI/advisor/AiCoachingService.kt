@@ -30,19 +30,19 @@ class AiCoachingService @Inject constructor() {
 
     companion object {
         private const val OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-        private const val OPENAI_MODEL = "gpt-5.2"
+        private const val OPENAI_MODEL = "gpt-5.2"  // O-series reasoning model
         
-        // Gemini 3.0 Pro (Jan 2026 standard)
-        private const val GEMINI_MODEL = "gemini-3.0-pro"
+        // Gemini 2.5 Flash (Latest - Dec 2024)
+        private const val GEMINI_MODEL = "gemini-2.5-flash"
         private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:generateContent"
         
         // DeepSeek Chat (OpenAI-compatible)
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
         private const val DEEPSEEK_MODEL = "deepseek-chat"
         
-        // Claude 4.5 Sonnet
+        // Claude 3.5 Sonnet
         private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
-        private const val CLAUDE_MODEL = "claude-4-5-sonnet-20251210"
+        private const val CLAUDE_MODEL = "claude-3-5-sonnet-20241022"
     }
 
     /**
@@ -295,7 +295,9 @@ class AiCoachingService @Inject constructor() {
         val usr = JSONObject().put("role", "user").put("content", prompt)
         messages.put(usr)
         root.put("messages", messages)
-        root.put("temperature", 0.7)
+        // GPT-5 series (o-series) uses max_completion_tokens instead of max_tokens
+        // and doesn't support temperature (uses reasoning.effort instead)
+        root.put("max_completion_tokens", 4096)
         
         return root
     }

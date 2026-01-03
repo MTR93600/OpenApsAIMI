@@ -15,7 +15,7 @@ import java.net.URL
  * Uses Claude's Messages API with vision capabilities
  */
 class ClaudeVisionProvider : AIVisionProvider {
-    override val displayName = "Claude (4.5 Sonnet)"
+    override val displayName = "Claude (3.5 Sonnet)"
     override val providerId = "CLAUDE"
     
     override suspend fun estimateFromImage(bitmap: Bitmap, apiKey: String): EstimationResult = withContext(Dispatchers.IO) {
@@ -41,7 +41,7 @@ class ClaudeVisionProvider : AIVisionProvider {
         connection.doOutput = true
         
         val jsonBody = JSONObject().apply {
-            put("model", "claude-4-5-sonnet-20251210")  // Claude 4.5 Sonnet (Dec 2025)
+            put("model", "claude-3-5-sonnet-20241022")  // Claude 3.5 Sonnet (Oct 2024)
             put("max_tokens", 800)
             put("temperature", 0.3)
             put("system", FoodAnalysisPrompt.SYSTEM_PROMPT)

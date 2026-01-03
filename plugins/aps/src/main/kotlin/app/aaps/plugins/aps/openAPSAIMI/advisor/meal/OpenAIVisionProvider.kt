@@ -13,9 +13,10 @@ import java.net.URL
 /**
  * OpenAI GPT-4o Vision Provider
  * Uses gpt-4o model with vision capabilities
+ * Note: GPT-5.2 doesn't support vision yet, so we use GPT-4o for image analysis
  */
 class OpenAIVisionProvider : AIVisionProvider {
-    override val displayName = "OpenAI (GPT-5.2)"
+    override val displayName = "OpenAI (GPT-4o Vision)"
     override val providerId = "OPENAI"
     
     override suspend fun estimateFromImage(bitmap: Bitmap, apiKey: String): EstimationResult = withContext(Dispatchers.IO) {
@@ -40,7 +41,7 @@ class OpenAIVisionProvider : AIVisionProvider {
         connection.doOutput = true
         
         val jsonBody = JSONObject().apply {
-            put("model", "gpt-5.2")
+            put("model", "gpt-4o")
             put("messages", JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "system")

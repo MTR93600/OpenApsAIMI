@@ -32,7 +32,7 @@ class AuditorAIService @Inject constructor(
     
     companion object {
         private const val OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-        private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro:generateContent"
+        private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
         private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
         
@@ -42,9 +42,9 @@ class AuditorAIService @Inject constructor(
     
     enum class Provider(val id: String, val displayName: String) {
         OPENAI("openai", "ChatGPT (GPT-5.2)"),
-        GEMINI("gemini", "Gemini (3.0 Pro)"),
+        GEMINI("gemini", "Gemini (2.5 Flash)"),
         DEEPSEEK("deepseek", "DeepSeek (Chat)"),
-        CLAUDE("claude", "Claude (4.5 Sonnet)")
+        CLAUDE("claude", "Claude (3.5 Sonnet)")
     }
     
     /**
@@ -152,14 +152,15 @@ class AuditorAIService @Inject constructor(
         }
         
         val requestBody = JSONObject().apply {
-            put("model", "gpt-5.2")
+            put("model", "gpt-5.2")  // O-series reasoning model
             put("messages", JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "user")
                     put("content", prompt)
                 })
             })
-            put("temperature", 0.3)
+            // GPT-5 uses max_completion_tokens instead of max_tokens
+            put("max_completion_tokens", 2048)
             put("response_format", JSONObject().put("type", "json_object"))
         }
         

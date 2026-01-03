@@ -1109,10 +1109,10 @@
     <string name="aimi_prefs_ai_title">🤖 Assistant AI</string>
     <string name="aimi_prefs_provider_title">AI Provider</string>
     <string name="aimi_prefs_provider_dialog_title">Select AI Provider</string>
-    <string name="aimi_prefs_provider_openai">OpenAI (GPT-4o)</string>
-    <string name="aimi_prefs_provider_gemini">Google Gemini (1.5 Flash)</string>
-    <string name="aimi_prefs_provider_deepseek">DeepSeek (V3)</string>
-    <string name="aimi_prefs_provider_claude">Claude (Sonnet)</string>
+    <string name="aimi_prefs_provider_openai">OpenAI (GPT-5.2)</string>
+    <string name="aimi_prefs_provider_gemini">Gemini (2.5 Flash)</string>
+    <string name="aimi_prefs_provider_deepseek">DeepSeek (Chat)</string>
+    <string name="aimi_prefs_provider_claude">Claude (3.5 Sonnet)</string>
     <string name="aimi_prefs_openai_key_title">OpenAI API Key</string>
     <string name="aimi_prefs_openai_key_summary">Enter your OpenAI API Key (sk-...)</string>
     <string name="aimi_prefs_gemini_key_title">Gemini API Key</string>

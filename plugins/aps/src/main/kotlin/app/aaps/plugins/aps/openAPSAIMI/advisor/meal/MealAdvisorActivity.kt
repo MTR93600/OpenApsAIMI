@@ -74,9 +74,10 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         }
         
         // All supported vision providers
+        // Note: GPT-4o has vision, GPT-5.2 is text-only (used in Advisor/Auditor)
         val providers = arrayOf(
-            "OpenAI (GPT-4o)", 
-            "Gemini (2.0 Flash Exp)", 
+            "OpenAI (GPT-4o Vision)", 
+            "Gemini (2.5 Flash)", 
             "DeepSeek (Chat)",
             "Claude (3.5 Sonnet)"
         )
