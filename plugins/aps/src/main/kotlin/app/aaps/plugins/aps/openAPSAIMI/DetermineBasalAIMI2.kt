@@ -1628,9 +1628,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          val safeCap = capSmbDose(
              proposedSmb = gatedUnits, // Use the safety-reduced amount as base
             bg = this.bg,
-            // 2. Allow manual/forced boluses to exceed this baseline, up to MaxIOB.
-            // We pass the larger of (Dynamic Limit, Proposed Amount) as the config cap.
-            maxSmbConfig = kotlin.math.max(baseLimit, proposedUnits),
+            // 🔒 CRITICAL FIX: Always respect user preference (no bypass)
+            // Previous code used max(baseLimit, proposedUnits) which IGNORED user limits
+            // This caused hypos for users who set conservative maxSMB
+            maxSmbConfig = baseLimit, // ✅ ALWAYS respect user preference
             iob = this.iob.toDouble(),
             maxIob = this.maxIob
         )
