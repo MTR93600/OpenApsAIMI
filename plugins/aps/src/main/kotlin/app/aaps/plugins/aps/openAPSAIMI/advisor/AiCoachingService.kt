@@ -30,19 +30,19 @@ class AiCoachingService @Inject constructor() {
 
     companion object {
         private const val OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-        private const val OPENAI_MODEL = "gpt-4o"
+        private const val OPENAI_MODEL = "gpt-5.2"
         
-        // Gemini 2.5 Flash (Dec 2025 standard)
-        private const val GEMINI_MODEL = "gemini-2.5-flash"
+        // Gemini 3.0 Pro (Jan 2026 standard)
+        private const val GEMINI_MODEL = "gemini-3.0-pro"
         private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:generateContent"
         
         // DeepSeek Chat (OpenAI-compatible)
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
         private const val DEEPSEEK_MODEL = "deepseek-chat"
         
-        // Claude 3.5 Sonnet
+        // Claude 4.5 Sonnet
         private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
-        private const val CLAUDE_MODEL = "claude-3-5-sonnet-20241022"
+        private const val CLAUDE_MODEL = "claude-4-5-sonnet-20251210"
     }
 
     /**

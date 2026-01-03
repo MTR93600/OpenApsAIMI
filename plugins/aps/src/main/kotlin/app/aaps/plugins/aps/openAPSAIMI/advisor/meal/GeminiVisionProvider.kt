@@ -15,7 +15,7 @@ import java.net.URL
  * Uses gemini-2.0-flash-exp model with enhanced JSON mode
  */
 class GeminiVisionProvider : AIVisionProvider {
-    override val displayName = "Gemini (2.0 Flash Exp)"
+    override val displayName = "Gemini (3.0 Pro)"
     override val providerId = "GEMINI"
     
     override suspend fun estimateFromImage(bitmap: Bitmap, apiKey: String): EstimationResult = withContext(Dispatchers.IO) {
@@ -32,8 +32,8 @@ class GeminiVisionProvider : AIVisionProvider {
     }
     
     private fun callGeminiAPI(apiKey: String, base64Image: String): String {
-        // Gemini 2.0 Flash Experimental endpoint
-        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=$apiKey")
+        // Gemini 3.0 Pro endpoint
+        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro:generateContent?key=$apiKey")
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
         connection.setRequestProperty("Content-Type", "application/json")
