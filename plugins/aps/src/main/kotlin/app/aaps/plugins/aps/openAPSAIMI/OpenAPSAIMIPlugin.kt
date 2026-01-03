@@ -1363,6 +1363,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     )
                 )
                 
+                // 🎯 Context Module
+                addPreference(AdaptiveIntentPreference(
+                        ctx = context,
+                        intentKey = IntentKey.OApsAIMIContext,
+                        intent = Intent(context, app.aaps.plugins.aps.openAPSAIMI.context.ui.ContextActivity::class.java),
+                        summary = R.string.context_description
+                    )
+                )
+                
                 // 🧠 AI Decision Auditor Section
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "AIMI_AI_Auditor"

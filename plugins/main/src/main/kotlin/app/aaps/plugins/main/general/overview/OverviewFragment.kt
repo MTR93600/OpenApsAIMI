@@ -266,6 +266,15 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
         binding.buttonsLayout.quickWizardButton.setOnLongClickListener(this)
         binding.infoLayout.apsMode.setOnClickListener(this)
         binding.infoLayout.apsMode.setOnLongClickListener(this)
+
+        binding.root.findViewById<View>(R.id.aimi_context_indicator).setOnClickListener {
+            try {
+                val intent = Intent().setClassName(requireContext(), "app.aaps.plugins.aps.openAPSAIMI.context.ui.ContextActivity")
+                startActivity(intent)
+            } catch (e: Exception) {
+                aapsLogger.error(LTag.CORE, "Failed to launch ContextActivity: ${e.message}")
+            }
+        }
     }
 
     override fun onPause() {
@@ -387,6 +396,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             updateSensitivity()
             updateGraph()
             updateNotification()
+            updateAimiContextIndicator()
         }
         updateBg()
         updateTemporaryBasal()
@@ -396,6 +406,19 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
         processAps()
         updateProfile()
         updateTemporaryTarget()
+    }
+
+    private fun updateAimiContextIndicator() {
+        try {
+            val jsonStr = preferences.get(app.aaps.core.keys.StringKey.OApsAIMIContextStorage)
+            val hasContext = jsonStr.length > 5 // "[]" length is 2
+            
+            runOnUiThread {
+                _binding?.root?.findViewById<View>(R.id.aimi_context_indicator)?.visibility = hasContext.toVisibility()
+            }
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.CORE, "Failed to update context indicator: ${e.message}")
+        }
     }
 
     @Synchronized

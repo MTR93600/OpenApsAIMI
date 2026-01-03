@@ -75,6 +75,11 @@ data class RT(
     var trajectoryModulationActive: Boolean = false,   // Was modulation applied?
     var trajectoryWarningsCount: Int? = null,          // Number of warnings generated
     var trajectoryConvergenceETA: Int? = null          // Predicted minutes to stable orbit
+,
+    // 🎯 Context Module fields
+    var contextEnabled: Boolean = false,               // Context Module feature flag
+    var contextIntentCount: Int = 0,                   // Number of active context intents
+    var contextModulation: Double = 1.0                // SMB modulation factor (0.5-1.1)
 ) {
 
     fun serialize() = Json.encodeToString(serializer(), this)

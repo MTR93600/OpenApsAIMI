@@ -219,6 +219,14 @@ class DashboardFragment : DaggerFragment() {
         binding.statusCard.isClickable = true
         binding.statusCard.isFocusable = true
         binding.statusCard.setOnClickListener { openLoopDialog() }
+        binding.statusCard.setOnAimiIconClickListener {
+            try {
+                val intent = Intent().setClassName(requireContext(), "app.aaps.plugins.aps.openAPSAIMI.context.ui.ContextActivity")
+                startActivity(intent)
+            } catch (e: Exception) {
+                aapsLogger.error(LTag.CORE, "Failed to launch ContextActivity: ${e.message}")
+            }
+        }
         binding.glucoseGraph.graph.gridLabelRenderer?.gridColor = resourceHelper.gac(requireContext(), app.aaps.core.ui.R.attr.graphGrid)
         binding.glucoseGraph.graph.viewport.isScrollable = true
         binding.glucoseGraph.graph.viewport.isScalable = true

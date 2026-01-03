@@ -1197,6 +1197,33 @@
     <string name="aimi_auditor_timeout_summary">Maximum wait time for AI provider response (default: 10s)</string>
     <string name="aimi_auditor_min_confidence_title">Minimum Confidence (%)</string>
     <string name="aimi_auditor_min_confidence_summary">Only apply modulations if AI confidence is above this threshold (default: 70%)</string>
+    
+    <!-- Context Module -->
+    <string name="context_title">AIMI Context</string>
+    <string name="context_description">Describe your current situation to help AIMI adapt insulin delivery</string>
+    <string name="context_chat_hint">Type here... (e.g., "heavy cardio 1h", "sick with flu")</string>
+    <string name="context_btn_ai_parse">🤖 AI Parse</string>
+    <string name="context_btn_manual">📝 Manual</string>
+    <string name="context_btn_clear">Clear</string>
+    <string name="context_btn_clear_all">Clear All</string>
+    <string name="context_preset_cardio">🏃 Cardio</string>
+    <string name="context_preset_strength">💪 Strength</string>
+    <string name="context_preset_yoga">🧘 Yoga</string>
+    <string name="context_preset_sport">⚽ Sport</string>
+    <string name="context_preset_walking">🚶 Walking</string>
+    <string name="context_preset_sick">🤒 Sick</string>
+    <string name="context_preset_stress">😰 Stress</string>
+    <string name="context_preset_meal_risk">🍕 Meal Risk</string>
+    <string name="context_preset_alcohol">🍷 Alcohol</string>
+    <string name="context_preset_travel">✈️ Travel</string>
+    <string name="context_active_intents">📋 Active Contexts</string>
+    <string name="context_empty_state">No active contexts.\n\nUse quick presets or describe your situation.</string>
+    <string name="context_settings_title">Settings</string>
+    <string name="context_module_enabled">Enable Context Module</string>
+    <string name="context_llm_enabled">Enable AI Parsing (LLM)</string>
+    <string name="context_mode_title">Context Mode</string>
+    <string name="context_mode_conservative">Conservative</string>
+    <string name="context_mode_balanced">Balanced</string>
+    <string name="context_mode_aggressive">Aggressive</string>
 
 </resources>
-

@@ -20,6 +20,12 @@
             android:exported="false"
             android:theme="@style/AppTheme"
             android:label="AIMI Modes" />
+        
+        <activity
+            android:name=".openAPSAIMI.context.ui.ContextActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:label="@string/context_title" />
     </application>
 
 </manifest>

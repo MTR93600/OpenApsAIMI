@@ -135,9 +135,22 @@
             android:text="--"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
             android:textColor="@color/dashboard_on_surface"
-            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/prediction_text" />
+
+        <ImageView
+            android:id="@+id/aimi_context_indicator"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_margin="8dp"
+            android:padding="2dp"
+            android:elevation="20dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            android:contentDescription="AIMI Context Active"
+            app:srcCompat="@drawable/ic_graduation"
+            android:visibility="gone"
+            app:tint="?android:attr/textColorPrimary" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </merge>

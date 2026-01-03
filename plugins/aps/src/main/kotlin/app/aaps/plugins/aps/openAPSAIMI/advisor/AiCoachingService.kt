@@ -8,6 +8,8 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,7 +23,8 @@ import kotlinx.coroutines.withContext
  * Uses robust HttpURLConnection (zero dependency).
  * =============================================================================
  */
-class AiCoachingService {
+@Singleton
+class AiCoachingService @Inject constructor() {
 
     enum class Provider { OPENAI, GEMINI, DEEPSEEK, CLAUDE }
 
@@ -68,6 +71,35 @@ class AiCoachingService {
         } catch (e: Exception) {
             e.printStackTrace()
             return@withContext "Erreur de connexion (${provider.name}) : ${e.localizedMessage}"
+        }
+    }
+    
+    /**
+     * Simple text generation for Context Module.
+     * 
+     * @param prompt Complete prompt (system + user message)
+     * @param apiKey API key for the provider
+     * @param provider Which LLM provider to use
+     * @return Generated text or error message
+     */
+    suspend fun fetchText(
+        prompt: String,
+        apiKey: String,
+        provider: Provider
+    ): String = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank()) return@withContext "Clé API manquante."
+        if (prompt.isBlank()) return@withContext "Prompt vide."
+        
+        try {
+            return@withContext when (provider) {
+                Provider.GEMINI -> callGemini(apiKey, prompt)
+                Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
+                Provider.CLAUDE -> callClaude(apiKey, prompt)
+                else -> callOpenAI(apiKey, prompt)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return@withContext "Erreur: ${e.localizedMessage}"
         }
     }
 

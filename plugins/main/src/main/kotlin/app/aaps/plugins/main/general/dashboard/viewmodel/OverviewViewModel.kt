@@ -143,6 +143,15 @@ class OverviewViewModel(
             .toObservable(EventUpdateOverviewIobCob::class.java)
             .observeOn(aapsSchedulers.io)
             .subscribe({ updateStatus() }, fabricPrivacy::logException)
+
+        disposables += rxBus
+            .toObservable(app.aaps.core.interfaces.rx.events.EventPreferenceChange::class.java)
+            .observeOn(aapsSchedulers.io)
+            .subscribe({ 
+                if (it.isChanged(app.aaps.core.keys.StringKey.OApsAIMIContextStorage.key)) {
+                    updateStatus() 
+                }
+            }, fabricPrivacy::logException)
     }
 
     private fun refreshAll() {
@@ -187,10 +196,11 @@ class OverviewViewModel(
             contentDescription = contentDescription,
             pumpStatusText = buildPumpLine(dateUtil.now()),
             predictionText = buildPredictionLine(dateUtil.now()),
-            unicornImageRes = selectUnicornImage(  // 🦄 Select dynamic unicorn image
+            unicornImageRes = selectUnicornImage(  // 🦄 Dynamic unicorn image
                 bg = lastBg?.recalculated,
                 delta = glucoseStatusProvider.glucoseStatusData?.delta
-            )
+            ),
+            isAimiContextActive = preferences.get(app.aaps.core.keys.StringKey.OApsAIMIContextStorage).length > 5
         )
         _statusCardState.postValue(state)
     }
@@ -573,7 +583,8 @@ data class StatusCardState(
     val contentDescription: String,
     val pumpStatusText: String = "",
     val predictionText: String = "",
-    val unicornImageRes: Int = R.drawable.unicorn_normal_stable  // 🦄 Dynamic unicorn image
+    val unicornImageRes: Int = R.drawable.unicorn_normal_stable,  // 🦄 Dynamic unicorn image
+    val isAimiContextActive: Boolean = false
 )
 
 data class AdjustmentCardState(

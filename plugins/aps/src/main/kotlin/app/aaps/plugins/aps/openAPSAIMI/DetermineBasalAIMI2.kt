@@ -73,6 +73,8 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionProfiler
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdAbsorptionGuard
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit  // 🌀 Trajectory Control
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.WarningSeverity  // 🌀 Trajectory Warnings
+import app.aaps.plugins.aps.openAPSAIMI.context.ContextMode  // 🎯 Context Mode
+import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot  // 🎯 Context Snapshot
 import java.io.File
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -222,6 +224,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator  // 🧠 AI Decision Auditor
     @Inject lateinit var trajectoryGuard: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard  // 🌀 Phase-Space Trajectory Controller
     @Inject lateinit var trajectoryHistoryProvider: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryHistoryProvider  // 🌀 Trajectory History
+    @Inject lateinit var contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager  // 🎯 Context Module
+    @Inject lateinit var contextInfluenceEngine: app.aaps.plugins.aps.openAPSAIMI.context.ContextInfluenceEngine  // 🎯 Context Influence
     // ❌ OLD reactivityLearner removed - UnifiedReactivityLearner is now the only one
     init {
         // Branche l’historique basal (TBR) sur la persistence réelle
@@ -4259,6 +4263,89 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Feature flag OFF: mark as disabled in rT
             rT.trajectoryEnabled = false
         }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // 🎯 CONTEXT MODULE INTEGRATION
+        // ═══════════════════════════════════════════════════════════════════
+        
+        val contextEnabled = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIContextEnabled)
+        
+        if (contextEnabled) {
+            try {
+                consoleLog.add("═══ CONTEXT MODULE ═══")
+                
+                // Get context snapshot
+                val contextSnapshot = contextManager.getSnapshot(System.currentTimeMillis())
+                
+                if (contextSnapshot.intentCount > 0) {
+                    // Get context mode from preferences
+                    val modeStr = preferences.get(app.aaps.core.keys.StringKey.ContextMode)
+                    val contextMode = when (modeStr) {
+                        "CONSERVATIVE" -> ContextMode.CONSERVATIVE
+                        "AGGRESSIVE" -> ContextMode.AGGRESSIVE
+                        else -> ContextMode.BALANCED
+                    }
+                    
+                    // Compute context influence
+                    val contextInfluence = contextInfluenceEngine.computeInfluence(
+                        snapshot = contextSnapshot,
+                        currentBG = bg,
+                        iob = iob_data.iob,
+                        cob = cob.toDouble(),
+                        mode = contextMode
+                    )
+                    
+                    // Log active intents
+                    consoleLog.add("🎯 Active Contexts: ${contextSnapshot.intentCount}")
+                    contextSnapshot.activeIntents.take(3).forEach { intent ->
+                        val typeStr = intent::class.simpleName ?: "Unknown"
+                        consoleLog.add("  • $typeStr")
+                    }
+                    
+                    // Apply context influence
+                    if (abs(contextInfluence.smbFactorClamp - 1.0f) > 0.05f) {
+                        val origMaxSMB = maxSMB
+                        maxSMB *= contextInfluence.smbFactorClamp
+                        maxSMBHB *= contextInfluence.smbFactorClamp
+                        consoleLog.add("  SMB: %.2f→%.2fU (×%.2f)".format(Locale.US, origMaxSMB, maxSMB, contextInfluence.smbFactorClamp))
+                    }
+                    
+                    if (contextInfluence.extraIntervalMin > 0) {
+                        val origInterval = intervalsmb
+                        intervalsmb = (intervalsmb + contextInfluence.extraIntervalMin).coerceIn(1, 20)
+                        consoleLog.add("  Interval: %d→%dmin (+%d)".format(origInterval, intervalsmb, contextInfluence.extraIntervalMin))
+                    }
+                    
+                    if (contextInfluence.preferBasal) {
+                        consoleLog.add("  ⚠️ Prefers TEMP BASAL over SMB")
+                    }
+                    
+                    // Log reasoning
+                    contextInfluence.reasoningSteps.take(3).forEach { reason ->
+                        consoleLog.add("  → $reason")
+                    }
+                    
+                    // Store in rT for logging
+                    rT.contextEnabled = true
+                    rT.contextIntentCount = contextSnapshot.intentCount
+                    rT.contextModulation = contextInfluence.smbFactorClamp.toDouble()
+                    
+                } else {
+                    consoleLog.add("🎯 Context: No active intents")
+                    rT.contextEnabled = true
+                    rT.contextIntentCount = 0
+                }
+                
+            } catch (e: Exception) {
+                consoleLog.add("⚠️ Context error: ${e.message}")
+                aapsLogger.error(LTag.APS, "Context Module failed", e)
+                rT.contextEnabled = false
+            }
+        } else {
+            rT.contextEnabled = false
+        }
+        consoleLog.add("═══════════════════════════════════")
+        
         
         // End FCL 11.0 Hoist. Next block uses the results.
         var tdd7Days = profile.TDD

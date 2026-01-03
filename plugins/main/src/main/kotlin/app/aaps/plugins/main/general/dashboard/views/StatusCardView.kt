@@ -8,6 +8,7 @@ import android.view.View
 import com.google.android.material.card.MaterialCardView
 import app.aaps.plugins.main.databinding.ComponentStatusCardBinding
 import app.aaps.plugins.main.general.dashboard.viewmodel.StatusCardState
+import app.aaps.plugins.main.R
 
 class StatusCardView @JvmOverloads constructor(
     context: Context,
@@ -20,6 +21,10 @@ class StatusCardView @JvmOverloads constructor(
     init {
         isClickable = true
         isFocusable = true
+    }
+
+    fun setOnAimiIconClickListener(listener: OnClickListener) {
+        findViewById<View>(R.id.aimi_context_indicator)?.setOnClickListener(listener)
     }
 
     fun update(state: StatusCardState) {
@@ -41,6 +46,10 @@ class StatusCardView @JvmOverloads constructor(
         binding.pumpStatusText.text = androidx.core.text.HtmlCompat.fromHtml(state.pumpStatusText, androidx.core.text.HtmlCompat.FROM_HTML_MODE_LEGACY)
         binding.predictionText.text = state.predictionText
         binding.unicornIcon.setImageResource(state.unicornImageRes)  // 🦄 Update dynamic unicorn image
+        
+        findViewById<View>(R.id.aimi_context_indicator)?.visibility = 
+            if (state.isAimiContextActive) View.VISIBLE else View.GONE
+            
         contentDescription = state.contentDescription
     }
 }
