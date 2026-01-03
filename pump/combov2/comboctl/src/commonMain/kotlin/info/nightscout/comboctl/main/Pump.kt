@@ -971,7 +971,9 @@ class Pump(
                 }
                 if (connectionAttemptNr < actualMaxNumAttempts) {
                     logger(LogLevel.DEBUG) { "Got exception while connecting; will try again; exception was: $e" }
-                    delay(DELAY_IN_MS_BETWEEN_COMMAND_DISPATCH_ATTEMPTS)
+                    // Exponential backoff for retries (capped at ~30s)
+                    val backoffFactor = 1 shl (connectionAttemptNr.coerceAtMost(4))
+                    delay(DELAY_IN_MS_BETWEEN_COMMAND_DISPATCH_ATTEMPTS * backoffFactor)
                     continue
                 } else {
                     logger(LogLevel.ERROR) {
@@ -2234,7 +2236,9 @@ class Pump(
                         // it is useful to wait a bit to give the pump and/or the
                         // Bluetooth stack some time to recover. This also
                         // prevents busy loops that use 100% CPU.
-                        delay(DELAY_IN_MS_BETWEEN_COMMAND_DISPATCH_ATTEMPTS)
+                        // Exponential backoff for retries (capped at ~30s)
+                        val backoffFactor = 1 shl (attemptNr.coerceAtMost(4))
+                        delay(DELAY_IN_MS_BETWEEN_COMMAND_DISPATCH_ATTEMPTS * backoffFactor)
                         reconnect()
                         // Check for alerts right after reconnect since the earlier
                         // disconnect may have produced an alert. For example, if
@@ -2347,7 +2351,10 @@ class Pump(
                 setState(previousState)
                 // retval is non-null precisely when the command succeeded.
                 return retval!!
-            } else throw CommandExecutionAttemptsFailedException()
+            } else {
+                setState(State.Error(null, "Max command execution attempts reached"))
+                throw CommandExecutionAttemptsFailedException()
+            }
         } catch (e: CancellationException) {
             // Command was cancelled. Revert to the previous state (since cancellation
             // is not an error), then rethrow the CancellationException to maintain
