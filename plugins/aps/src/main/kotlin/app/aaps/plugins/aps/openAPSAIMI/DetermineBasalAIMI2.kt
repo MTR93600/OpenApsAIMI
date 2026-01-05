@@ -2630,13 +2630,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun isSportSafetyCondition(): Boolean {
         val manualSport = sportTime
-        val recentBurst = recentSteps5Minutes >= 200 && recentSteps10Minutes >= 500
+        
+        // Assouplissement des seuils : ne détecter que des VRAIS sports intenses
+        // Anciens seuils : 200 pas/5min, 500 pas/10min → Trop sensible (marche normale)
+        // Nouveaux seuils : 400 pas/5min, 800 pas/10min → Sports réels seulement
+        val recentBurst = recentSteps5Minutes >= 400 && recentSteps10Minutes >= 800
+        
+        // Activité soutenue : relevé significativement pour éviter faux positifs
+        // Une marche de 20 min = ~2000 pas → NE DOIT PAS déclencher sécurité sport
+        // Seuil 60 min : 3000 pas = ~30 min de marche soutenue ou 45+ min de marche normale
         val sustainedActivity =
-            recentSteps30Minutes >= 800 || recentSteps60Minutes >= 1500 || recentSteps180Minutes >= 2500
+            recentSteps30Minutes >= 1200 || recentSteps60Minutes >= 3000 || recentSteps180Minutes >= 4500
 
         val baselineHr = if (averageBeatsPerMinute10 > 0.0) averageBeatsPerMinute10 else averageBeatsPerMinute
-        val elevatedHeartRate = baselineHr > 0 && averageBeatsPerMinute > baselineHr * 1.1
-        val shortActivityWithHr = (recentSteps5Minutes >= 200 || recentSteps10Minutes >= 400) && elevatedHeartRate
+        val elevatedHeartRate = baselineHr > 0 && averageBeatsPerMinute > baselineHr * 1.15 // +15% au lieu de +10%
+        val shortActivityWithHr = (recentSteps5Minutes >= 400 || recentSteps10Minutes >= 600) && elevatedHeartRate
 
         val highTargetExercise = targetBg >= 140 && (shortActivityWithHr || sustainedActivity)
 

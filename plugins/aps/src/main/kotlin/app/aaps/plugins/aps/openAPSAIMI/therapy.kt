@@ -125,7 +125,14 @@ class Therapy (private val persistenceLayer: PersistenceLayer){
             .map { events ->
                 events.filter { it.type == TE.Type.NOTE } // Filtrer les événements par type
                     .any { event ->
-                        event.note?.contains("sport", ignoreCase = true) == true &&
+                        val note = event.note?.lowercase() ?: ""
+                        // ✅ FIX: Exclure "marche" de la détection sport
+                        // Une simple marche ne devrait pas bloquer SMB pendant 1h+
+                        // Seuls les VRAIS sports (cardio, vélo, course, natation) déclenchent la sécurité
+                        val containsSport = note.contains("sport", ignoreCase = true)
+                        val isWalking = note.contains("marche") || note.contains("walk")
+                        
+                        (containsSport && !isWalking) &&
                             System.currentTimeMillis() <= (event.timestamp + event.duration)
                     }
             }
