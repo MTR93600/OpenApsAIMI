@@ -266,7 +266,7 @@ class AuditorAIService @Inject constructor(
         }
         
         val requestBody = JSONObject().apply {
-            put("model", "claude-3-5-sonnet-20241022")
+            put("model", "claude-3-5-sonnet-20240620")
             put("max_tokens", 2048)
             put("temperature", 0.3)
             put("messages", JSONArray().apply {
