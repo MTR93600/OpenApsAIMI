@@ -86,7 +86,7 @@ object SmbInstructionExecutor {
 
     data class Hooks(
         val refineSmb: (Float, Float, Float, Float, OapsProfileAimi) -> Float,
-        val adjustFactors: (Float, Float, Float) -> Triple<Float, Float, Float>,
+        // ❌ adjustFactors REMOVED: UnifiedReactivityLearner replaces time-based factors
         val calculateAdjustedDia: (Float, Int, Int, Float, Float, Float, Double) -> Double,
         val costFunction: (Double, Double, Double, Int, Double, Double) -> Double,
         val applySafety: (MealData, Float, Double?, StringBuilder?, PkPdRuntime?, Boolean, Boolean) -> Float,

@@ -3188,67 +3188,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return weightedSum / weights.sum()
     }
 
-    private fun adjustFactorsBasedOnBgAndHypo(
-        morningFactor: Float,
-        afternoonFactor: Float,
-        eveningFactor: Float
-    ): Triple<Float, Float, Float> {
-        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-        val hypoAdjustment = if (bg < 120 || (iob > 3 * maxSMB)) 0.3f else 0.9f
-        // Récupération des deltas récents et calcul du delta prédit
-        val recentDeltas = getRecentDeltas()
-        val predicted = predictedDelta(recentDeltas)
-        // Calcul du delta combiné : combine le delta mesuré et le delta prédit
-        val combinedDelta = (delta + predicted) / 2.0f
-        // s'assurer que combinedDelta est positif pour le calcul logarithmique
-        val safeCombinedDelta = if (combinedDelta <= 0) 0.0001f else combinedDelta
-        val deltaAdjustment = ln(safeCombinedDelta.toDouble() + 1).coerceAtLeast(0.0)
-
-
-        // Interpolation de base pour factorAdjustment selon la glycémie (bg)
-        var factorAdjustment = when {
-            bg < 110 -> interpolateFactor(bg.toFloat(), 70f, 110f, 0.1f, 0.3f)
-            else -> interpolateFactor(bg.toFloat(), 110f, 280f, 0.75f, 2.5f)
-        }
-        if (honeymoon) factorAdjustment = when {
-            bg < 160 -> interpolateFactor(bg.toFloat(), 70f, 160f, 0.2f, 0.4f)
-            else -> interpolateFactor(bg.toFloat(), 160f, 250f, 0.4f, 0.65f)
-        }
-        var bgAdjustment = 1.0f + (deltaAdjustment - 1) * factorAdjustment
-        bgAdjustment *= 1.2f
-
-        val dynamicCorrection = when {
-            //hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22 -> 0.7f
-            combinedDelta > 11f  -> 2.5f   // Très forte montée, on augmente très agressivement
-            combinedDelta > 8f  -> 2.0f   // Montée forte
-            combinedDelta > 4f  -> 1.5f   // Montée modérée à forte
-            combinedDelta > 2f  -> 1.0f   // Montée légère
-            combinedDelta in -2f..2f -> 0.8f  // Stable
-            combinedDelta < -2f && combinedDelta >= -4f -> 0.7f  // Baisse légère
-            combinedDelta < -4f && combinedDelta >= -6f -> 0.5f  // Baisse modérée
-            combinedDelta < -6f -> 0.4f   // Baisse forte, on diminue considérablement pour éviter l'hypo
-            else -> 1.0f
-        }
-        // On applique ce facteur sur bgAdjustment pour intégrer l'anticipation
-        bgAdjustment *= dynamicCorrection
-
-        // // Interpolation pour scalingFactor basée sur la cible (targetBg)
-        // val scalingFactor = interpolateFactor(bg.toFloat(), targetBg, 110f, 09f, 0.5f).coerceAtLeast(0.1f)
-
-        val maxIncreaseFactor = 12.5f
-        val maxDecreaseFactor = 0.2f
-
-        val adjustFactor = { factor: Float ->
-            val adjustedFactor = factor * bgAdjustment * hypoAdjustment //* scalingFactor
-            adjustedFactor.coerceIn(((factor * maxDecreaseFactor).toDouble()), ((factor * maxIncreaseFactor).toDouble()))
-        }
-
-        return Triple(
-            adjustFactor(morningFactor).takeIf { !it.isNaN() } ?: morningFactor,
-            adjustFactor(afternoonFactor).takeIf { !it.isNaN() } ?: afternoonFactor,
-            adjustFactor(eveningFactor).takeIf { !it.isNaN() } ?: eveningFactor
-        ) as Triple<Float, Float, Float>
-    }
+    // ❌ adjustFactorsBasedOnBgAndHypo() REMOVED (was lines 3191-3251)
+    // Legacy function for time-based reactivity (morning/afternoon/evening factors)
+    // Replaced by UnifiedReactivityLearner.globalFactor which learns optimal reactivity
+    // from actual glycemic outcomes (hypos, hypers, variability)
 
 
 
@@ -5471,9 +5414,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 refineSmb = { combined, short, long, predicted, profileInput ->
                     neuralnetwork5(combined, short, long, predicted, profileInput)
                 },
-                adjustFactors = { morning, afternoon, evening ->
-                    adjustFactorsBasedOnBgAndHypo(morning, afternoon, evening)
-                },
+                // ❌ adjustFactors removed - UnifiedReactivityLearner handles reactivity
                 calculateAdjustedDia = { baseDia, currentHour, steps5, currentHr, avgHr60, pumpAge, iobValue ->
                     // 🔀 Si PKPD est actif, on l'utilise comme base, mais on permet l'ajustement dynamique (activités, heure, etc.)
                     val effectiveBaseDia = pkpdDiaMinutesOverride?.let { (it / 60.0).toFloat() } ?: baseDia
