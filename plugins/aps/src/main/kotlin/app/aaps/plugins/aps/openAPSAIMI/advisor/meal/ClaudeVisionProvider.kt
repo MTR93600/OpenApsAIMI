@@ -41,7 +41,7 @@ class ClaudeVisionProvider : AIVisionProvider {
         connection.doOutput = true
         
         val jsonBody = JSONObject().apply {
-            put("model", "claude-3-5-sonnet-20241022")  // Claude 3.5 Sonnet (Oct 2024)
+            put("model", "claude-3-5-sonnet-20240620")  // Claude 3.5 Sonnet (Oct 2024)
             put("max_tokens", 800)
             put("temperature", 0.3)
             put("system", FoodAnalysisPrompt.SYSTEM_PROMPT)
