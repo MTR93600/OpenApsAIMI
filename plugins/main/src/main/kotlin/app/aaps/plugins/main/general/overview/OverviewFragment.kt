@@ -18,6 +18,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.View.OnLongClickListener
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.TextView
@@ -111,6 +112,10 @@ import app.aaps.plugins.main.general.overview.notifications.NotificationStore
 import app.aaps.plugins.main.general.overview.notifications.NotificationUiBinder
 import app.aaps.plugins.main.general.overview.ui.StatusLightHandler
 import app.aaps.plugins.main.skins.SkinProvider
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusIndicator
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorNotificationManager
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model.AuditorUIState
 import com.jjoe64.graphview.GraphView
 import dagger.android.support.DaggerFragment
 import io.reactivex.rxjava3.disposables.CompositeDisposable
@@ -162,6 +167,8 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
     @Inject lateinit var graphDataProvider: Provider<GraphData>
     @Inject lateinit var commandQueue: CommandQueue
     @Inject lateinit var notificationUiBinder: NotificationUiBinder
+    @Inject lateinit var auditorStatusLiveData: AuditorStatusLiveData
+    @Inject lateinit var auditorNotificationManager: AuditorNotificationManager
 
     private val disposable = CompositeDisposable()
 
@@ -176,6 +183,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
 
     private var carbAnimation: AnimationDrawable? = null
     private var lastUserAction = ""
+    private var auditorIndicator: AuditorStatusIndicator? = null
 
     private var _binding: OverviewFragmentBinding? = null
 
@@ -275,6 +283,9 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
                 aapsLogger.error(LTag.CORE, "Failed to launch ContextActivity: ${e.message}")
             }
         }
+        
+        // AIMI Auditor Indicator Setup
+        setupAuditorIndicator()
     }
 
     override fun onPause() {
@@ -420,6 +431,97 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             aapsLogger.error(LTag.CORE, "Failed to update context indicator: ${e.message}")
         }
     }
+    
+    private fun setupAuditorIndicator() {
+        try {
+            // Get container from layout
+            val container = binding.root.findViewById<FrameLayout>(
+                R.id.aimi_auditor_indicator_container
+            ) ?: run {
+                aapsLogger.warn(LTag.CORE, "Auditor indicator container not found in layout")
+                return
+            }
+            
+            // Create and add custom indicator
+            auditorIndicator = AuditorStatusIndicator(requireContext())
+            container.removeAllViews()
+            container.addView(auditorIndicator)
+            
+            // Setup click listener
+            auditorIndicator?.setOnClickListener {
+                handleAuditorClick()
+            }
+            
+            // Observe LiveData for state changes
+            auditorStatusLiveData.uiState.observe(viewLifecycleOwner) { uiState ->
+                auditorIndicator?.setState(uiState)
+                
+                // Show notification if needed
+                if (uiState.shouldNotify) {
+                    auditorNotificationManager.showInsightAvailable(uiState)
+                }
+                
+                // Update container visibility based on state
+                container.visibility = if (uiState.type == AuditorUIState.StateType.IDLE) {
+                    View.GONE
+                } else {
+                    View.VISIBLE
+                }
+            }
+            
+            // Initial update
+            auditorStatusLiveData.forceUpdate()
+            
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.CORE, "Failed to setup Auditor indicator: ${e.message}")
+        }
+    }
+    
+    private fun handleAuditorClick() {
+        val state = auditorIndicator?.getCurrentState() ?: return
+        
+        when (state.type) {
+            AuditorUIState.StateType.READY,
+            AuditorUIState.StateType.WARNING -> {
+                // Mark as read
+                auditorStatusLiveData.markAsRead()
+                auditorNotificationManager.cancelNotification()
+                
+                // TODO: Open AuditorVerdictActivity when implemented
+                // For now, show dialog with status
+                activity?.let { activity ->
+                    OKDialog.show(activity, 
+                        "Auditor Insight",
+                        state.statusMessage)
+                }
+            }
+            
+            AuditorUIState.StateType.PROCESSING -> {
+                activity?.let { activity ->
+                    OKDialog.show(activity,
+                        "Auditor",
+                        "Analysis in progress, please wait...")
+                }
+            }
+            
+            AuditorUIState.StateType.ERROR -> {
+                activity?.let { activity ->
+                    OKDialog.show(activity,
+                        rh.gs(app.aaps.core.ui.R.string.error),
+                        state.statusMessage)
+                }
+            }
+            
+            else -> {
+                // IDLE - show info
+                activity?.let { activity ->
+                    OKDialog.show(activity,
+                        "Auditor",
+                        "Auditor will activate at next trigger")
+                }
+            }
+        }
+    }
 
     @Synchronized
     override fun onDestroyView() {
@@ -433,6 +535,11 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             graph.setOnLongClickListener(null)
             graph.removeAllSeries()
         }
+        
+        // Cleanup Auditor indicator
+        auditorIndicator?.stopAnimations()
+        auditorIndicator = null
+        
         _binding = null
         carbAnimation?.stop()
         carbAnimation = null

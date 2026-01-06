@@ -152,5 +152,19 @@
             android:visibility="gone"
             app:tint="?android:attr/textColorPrimary" />
 
+        <!-- AIMI Auditor Status Indicator - Living Badge System -->
+        <FrameLayout
+            android:id="@+id/aimi_auditor_indicator_container"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_margin="8dp"
+            android:elevation="20dp"
+            app:layout_constraintStart_toEndOf="@+id/aimi_context_indicator"
+            app:layout_constraintTop_toTopOf="parent">
+            
+            <!-- Placeholder - will be replaced by AuditorStatusIndicator in code -->
+        </FrameLayout>
+
     </androidx.constraintlayout.widget.ConstraintLayout>
 </merge>
+

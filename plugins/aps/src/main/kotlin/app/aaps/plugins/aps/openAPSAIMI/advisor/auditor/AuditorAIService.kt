@@ -27,7 +27,8 @@ import javax.inject.Singleton
 @Singleton
 class AuditorAIService @Inject constructor(
     private val preferences: Preferences,
-    private val context: Context
+    private val context: Context,
+    private val auditorStatusLiveData: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
 ) {
     
     companion object {
@@ -65,6 +66,7 @@ class AuditorAIService @Inject constructor(
         val apiKey = getApiKey(provider)
         if (apiKey.isBlank()) {
             AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OFFLINE_NO_APIKEY)
+            auditorStatusLiveData.notifyUpdate()
             return@withContext null
         }
         
@@ -83,22 +85,27 @@ class AuditorAIService @Inject constructor(
             } catch (e: java.net.UnknownHostException) {
                 // DNS resolution failed or no network
                 AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OFFLINE_NO_NETWORK)
+                auditorStatusLiveData.notifyUpdate()
                 null
             } catch (e: java.net.SocketTimeoutException) {
                 // Connection timeout
                 AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_TIMEOUT)
+                auditorStatusLiveData.notifyUpdate()
                 null
             } catch (e: java.io.IOException) {
                 // General network I/O error
                 AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OFFLINE_NO_NETWORK)
+                auditorStatusLiveData.notifyUpdate()
                 null
             } catch (e: org.json.JSONException) {
                 // JSON parse error
                 AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_PARSE)
+                auditorStatusLiveData.notifyUpdate()
                 null
             } catch (e: Exception) {
                 // Other exception
                 AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_EXCEPTION)
+                auditorStatusLiveData.notifyUpdate()
                 null
             }
         }
@@ -109,6 +116,7 @@ class AuditorAIService @Inject constructor(
             val (currentStatus, _) = AuditorStatusTracker.getStatus(maxAgeMs = 5000)
             if (!currentStatus.isError() && !currentStatus.isOffline()) {
                 AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_TIMEOUT)
+                auditorStatusLiveData.notifyUpdate()
             }
             return@withContext null
         }
@@ -118,9 +126,11 @@ class AuditorAIService @Inject constructor(
             parseVerdict(responseJson, provider)
         } catch (e: org.json.JSONException) {
             AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_PARSE)
+            auditorStatusLiveData.notifyUpdate()
             null
         } catch (e: Exception) {
             AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_EXCEPTION)
+            auditorStatusLiveData.notifyUpdate()
             null
         }
     }
