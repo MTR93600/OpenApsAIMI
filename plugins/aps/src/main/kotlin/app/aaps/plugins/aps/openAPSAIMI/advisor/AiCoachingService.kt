@@ -40,9 +40,9 @@ class AiCoachingService @Inject constructor() {
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
         private const val DEEPSEEK_MODEL = "deepseek-chat"
         
-        // Claude 3.5 Sonnet (Stable version - universally accessible)
+        // Claude Sonnet 4.5 (Sept 2025 - replaces deprecated 3.5)
         private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
-        private const val CLAUDE_MODEL = "claude-3-5-sonnet-20240620"
+        private const val CLAUDE_MODEL = "claude-sonnet-4-5-20250929"  // Claude Sonnet 4.5 (Sept 2025)
     }
 
     /**
