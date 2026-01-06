@@ -2641,6 +2641,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return t
     }
 
+    /**
+     * Helper: Get LGS threshold with safe fallback using OpenAPS formula
+     * Use this instead of hardcoded fallbacks (70.0) throughout the code
+     * 
+     * @param profile Profile containing lgsThreshold and min_bg
+     * @return LGS threshold from profile, or calculated from min_bg if null
+     */
+    private fun getLgsThresholdSafe(profile: OapsProfileAimi): Double {
+        return if (profile.lgsThreshold != null && profile.lgsThreshold!! > 0) {
+            profile.lgsThreshold!!.toDouble()
+        } else {
+            // Use OpenAPS-like formula on min_bg as fallback
+            computeHypoThreshold(profile.min_bg, null)
+        }
+    }
+
+
     private fun isBelowHypoThreshold(
         bgNow: Double,
         predicted: Double,
@@ -5784,7 +5801,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(context.getString(R.string.reason_iob_max, round(iob_data.iob, 2), round(maxIobLimit, 2)))
             val finalResult = if (delta < 0) {
                 // BG is dropping, usually we cut to 0. BUT check floor first.
-                val floorRate = applyBasalFloor(0.0, profile.current_basal, safetyDecision, activityContext, bg, delta.toDouble(), ((glucose_status as? GlucoseStatusAIMI)?.shortAvgDelta ?: 0.0).toDouble(), eventualBG.toDouble(), mealModeActive, profile.lgsThreshold?.toDouble() ?: 70.0)
+                val floorRate = applyBasalFloor(0.0, profile.current_basal, safetyDecision, activityContext, bg, delta.toDouble(), ((glucose_status as? GlucoseStatusAIMI)?.shortAvgDelta ?: 0.0).toDouble(), eventualBG.toDouble(), mealModeActive, getLgsThresholdSafe(profile))
                 
                 if (floorRate > 0.0) {
                      rT.reason.append(context.getString(R.string.reason_bg_dropping_floor, delta, floorRate))
@@ -5799,7 +5816,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             } else {
                 //rT.reason.append("; setting current basal of ${round(basal, 2)} as temp. ")
                 // Apply floor here too just in case 'basal' itself is super low? (Unlikely if it came from profile, but possible)
-                val safeBasal = applyBasalFloor(basal, profile.current_basal, safetyDecision, activityContext, bg, delta.toDouble(), ((glucose_status as? GlucoseStatusAIMI)?.shortAvgDelta ?: 0.0).toDouble(), eventualBG.toDouble(), mealModeActive, profile.lgsThreshold?.toDouble() ?: 70.0)
+                val safeBasal = applyBasalFloor(basal, profile.current_basal, safetyDecision, activityContext, bg, delta.toDouble(), ((glucose_status as? GlucoseStatusAIMI)?.shortAvgDelta ?: 0.0).toDouble(), eventualBG.toDouble(), mealModeActive, getLgsThresholdSafe(profile))
                 rT.reason.append(context.getString(R.string.reason_set_temp_basal, round(safeBasal, 2)))
                 setTempBasal(safeBasal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
             }
@@ -5927,7 +5944,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 profileSens = profile.sens,
                 predictedBg = predictedBg.toDouble(),
                 targetBg = targetBg.toDouble(),
-                lgsThreshold = profile.lgsThreshold?.toDouble() ?: 70.0,
+                minBg = profile.min_bg,
+                lgsThreshold = getLgsThresholdSafe(profile),
                 eventualBg = eventualBG,
                 iob = iob.toDouble(),
                 maxIob = maxIob,

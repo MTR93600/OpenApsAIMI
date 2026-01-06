@@ -58,8 +58,15 @@ class BasalPlanner @Inject constructor(
         val minutesSinceLastChange = hist.minutesSinceLastChange()
 
         // Dynamic limits based on LoopContext Profile (User Settings)
-        // Fallback to 70 if LGS is not set or invalid
-        val lgs = if (ctx.profile.lgsThreshold > 40.0) ctx.profile.lgsThreshold else 70.0
+        // Use OpenAPS-like formula on minBg as fallback instead of hardcoded 70.0
+        val lgs = if (ctx.profile.lgsThreshold > 40.0) {
+            ctx.profile.lgsThreshold
+        } else {
+            // Fallback: OpenAPS formula min_bg - 0.5 * (min_bg - 40)
+            // Examples: 90→65, 100→70, 110→75
+            val minBg = ctx.profile.minBg ?: 90.0
+            minBg - 0.5 * (minBg - 40.0)
+        }
         val HYPO_HARD_LIMIT = max(50.0, lgs - 15.0)
         val HYPO_SUSPEND_MGDL = lgs
         val HYPO_SUSPEND_SOFT = lgs + 10.0

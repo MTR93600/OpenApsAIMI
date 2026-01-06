@@ -32,6 +32,7 @@ class BasalDecisionEngine @Inject constructor(
         val profileSens: Double,
         val predictedBg: Double,
         val targetBg: Double, // Added targetBg
+        val minBg: Double, // Min BG from profile for LGS fallback
         val lgsThreshold: Double, // Added for Hypo safety
         val eventualBg: Double,
         val iob: Double,
@@ -132,7 +133,8 @@ class BasalDecisionEngine @Inject constructor(
                 targetMgdl = input.predictedBg,              // non critique ici
                 isfMgdlPerU = input.variableSensitivity,    // dispo si tu veux exploiter plus tard
                 basalProfileUph = input.profileCurrentBasal,
-                lgsThreshold = input.lgsThreshold
+                lgsThreshold = input.lgsThreshold,
+                minBg = input.minBg
             )
 
             val ctx = LoopContext(
@@ -287,17 +289,17 @@ class BasalDecisionEngine @Inject constructor(
 
         if (chosenRate == null) {
             when {
-                input.bg < 70.0 -> {
+                input.bg < input.lgsThreshold -> {
                     chosenRate = 0.0
-                    rT.reason.append("BG < 70")
+                    rT.reason.append("BG < LGS threshold (${input.lgsThreshold.toInt()})")
                 }
-                input.bg in 70.0..80.0 -> {
+                input.bg in input.lgsThreshold..(input.lgsThreshold + 10.0) -> {
                     if (input.delta > 1.0) {
                         chosenRate = input.profileCurrentBasal * 0.5
-                        rT.reason.append("BG 70-80 rising: 50% basal")
+                        rT.reason.append("BG ${input.lgsThreshold.toInt()}-${(input.lgsThreshold + 10).toInt()} rising: 50% basal")
                     } else {
                         chosenRate = 0.0
-                        rT.reason.append("BG 70-80 not rising: 0% basal")
+                        rT.reason.append("BG ${input.lgsThreshold.toInt()}-${(input.lgsThreshold + 10).toInt()} not rising: 0% basal")
                     }
                 }
                 input.bg in 80.0..90.0 &&
