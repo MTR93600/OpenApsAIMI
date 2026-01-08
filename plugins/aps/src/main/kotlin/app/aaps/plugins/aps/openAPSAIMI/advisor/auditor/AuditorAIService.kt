@@ -181,7 +181,16 @@ class AuditorAIService @Inject constructor(
             throw Exception("HTTP $responseCode")
         }
         
-        return BufferedReader(InputStreamReader(connection.inputStream)).use { it.readText() }
+        // Robust stream reading (same as Vision Providers fix)
+        val response = StringBuilder()
+        connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+            val buffer = CharArray(8192)  // 8KB chunks
+            var charsRead: Int
+            while (reader.read(buffer).also { charsRead = it } != -1) {
+                response.append(buffer, 0, charsRead)
+            }
+        }
+        return response.toString()
     }
     
     /**
@@ -210,6 +219,7 @@ class AuditorAIService @Inject constructor(
             })
             put("generationConfig", JSONObject().apply {
                 put("temperature", 0.3)
+                put("maxOutputTokens", 2048)  // FIX: Same as Meal Advisor - prevent truncation
                 put("responseMimeType", "application/json")
             })
         }
@@ -221,7 +231,16 @@ class AuditorAIService @Inject constructor(
             throw Exception("HTTP $responseCode")
         }
         
-        return BufferedReader(InputStreamReader(connection.inputStream)).use { it.readText() }
+        // Robust stream reading (same as Vision Providers fix)
+        val response = StringBuilder()
+        connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+            val buffer = CharArray(8192)  // 8KB chunks
+            var charsRead: Int
+            while (reader.read(buffer).also { charsRead = it } != -1) {
+                response.append(buffer, 0, charsRead)
+            }
+        }
+        return response.toString()
     }
     
     /**
@@ -246,6 +265,7 @@ class AuditorAIService @Inject constructor(
                     put("content", prompt)
                 })
             })
+            put("max_tokens", 2048)  // FIX: Was missing - same as other providers
             put("temperature", 0.3)
             put("response_format", JSONObject().put("type", "json_object"))
         }
@@ -257,7 +277,16 @@ class AuditorAIService @Inject constructor(
             throw Exception("HTTP $responseCode")
         }
         
-        return BufferedReader(InputStreamReader(connection.inputStream)).use { it.readText() }
+        // Robust stream reading (same as Vision Providers fix)
+        val response = StringBuilder()
+        connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+            val buffer = CharArray(8192)  // 8KB chunks
+            var charsRead: Int
+            while (reader.read(buffer).also { charsRead = it } != -1) {
+                response.append(buffer, 0, charsRead)
+            }
+        }
+        return response.toString()
     }
     
     /**
@@ -294,7 +323,16 @@ class AuditorAIService @Inject constructor(
             throw Exception("HTTP $responseCode")
         }
         
-        return BufferedReader(InputStreamReader(connection.inputStream)).use { it.readText() }
+        // Robust stream reading (same as Vision Providers fix)
+        val response = StringBuilder()
+        connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+            val buffer = CharArray(8192)  // 8KB chunks
+            var charsRead: Int
+            while (reader.read(buffer).also { charsRead = it } != -1) {
+                response.append(buffer, 0, charsRead)
+            }
+        }
+        return response.toString()
     }
     
     /**
