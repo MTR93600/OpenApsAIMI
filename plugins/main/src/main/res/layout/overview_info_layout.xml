@@ -462,8 +462,8 @@
         android:layout_height="28dp"
         android:layout_margin="2dp"
         android:elevation="20dp"
-        app:layout_constraintStart_toStartOf="@id/bg"
-        app:layout_constraintTop_toTopOf="@id/bg">
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
         
         <!-- Placeholder - will be replaced by AuditorStatusIndicator in code -->
         <!-- The custom view will be added programmatically in OverviewFragment -->

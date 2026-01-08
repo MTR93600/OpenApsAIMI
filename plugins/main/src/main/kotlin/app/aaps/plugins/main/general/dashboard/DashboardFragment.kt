@@ -53,6 +53,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
 import dagger.android.support.DaggerFragment
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorNotificationManager
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusIndicator
 import javax.inject.Inject
 import javax.inject.Provider
 
@@ -86,11 +89,14 @@ class DashboardFragment : DaggerFragment() {
     @Inject lateinit var xDripSource: XDripSource
     @Inject lateinit var dexcomBoyda: DexcomBoyda
     @Inject lateinit var notificationUiBinder: NotificationUiBinder
+    @Inject lateinit var auditorStatusLiveData: AuditorStatusLiveData
+    @Inject lateinit var auditorNotificationManager: AuditorNotificationManager
 
     private val disposables = CompositeDisposable()
     private var _binding: FragmentDashboardBinding? = null
     private val binding get() = _binding!!
     private var currentRange = 0
+    private var auditorIndicator: AuditorStatusIndicator? = null
     private fun sensor(): Boolean {
         val ctx = context ?: return false
 
@@ -270,6 +276,9 @@ class DashboardFragment : DaggerFragment() {
             }
             popup.show()
         }
+        
+        // 🔍 Setup Auditor badge
+        setupAuditorIndicator()
     }
 
     override fun onResume() {
@@ -298,7 +307,46 @@ class DashboardFragment : DaggerFragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        auditorIndicator?.stopAnimations()
+        auditorIndicator = null
         _binding = null
+    }
+
+    private fun setupAuditorIndicator() {
+        try {
+            aapsLogger.debug(LTag.CORE, "🔍 [Dashboard] Searching for Auditor badge...")
+            
+            val container = binding.statusCard.findViewById<android.widget.FrameLayout>(
+                R.id.aimi_auditor_indicator_container
+            ) ?: run {
+                aapsLogger.warn(LTag.CORE, "❌ [Dashboard] Badge container NOT FOUND!")
+                return
+            }
+            
+            aapsLogger.debug(LTag.CORE, "✅ [Dashboard] Badge container found!")
+            
+            auditorIndicator = AuditorStatusIndicator(requireContext())
+            container.removeAllViews()
+            container.addView(auditorIndicator)
+            
+            auditorIndicator?.setOnClickListener {
+                aapsLogger.debug(LTag.CORE, "Auditor badge clicked")
+            }
+            
+            auditorStatusLiveData.uiState.observe(viewLifecycleOwner) { uiState ->
+                auditorIndicator?.setState(uiState)
+                if (uiState.shouldNotify) {
+                    auditorNotificationManager.showInsightAvailable(uiState)
+                }
+                container.visibility = android.view.View.VISIBLE
+                aapsLogger.debug(LTag.CORE, "[Dashboard] Badge state: ${uiState.type}")
+            }
+            
+            auditorStatusLiveData.forceUpdate()
+            
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.CORE, "[Dashboard] Badge setup error: ${e.message}", e)
+        }
     }
 
     private fun openHistory(): Boolean {

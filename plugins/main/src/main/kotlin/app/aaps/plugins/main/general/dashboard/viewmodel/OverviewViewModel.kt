@@ -200,7 +200,11 @@ class OverviewViewModel(
                 bg = lastBg?.recalculated,
                 delta = glucoseStatusProvider.glucoseStatusData?.delta
             ),
-            isAimiContextActive = preferences.get(app.aaps.core.keys.StringKey.OApsAIMIContextStorage).length > 5
+            isAimiContextActive = preferences.get(app.aaps.core.keys.StringKey.OApsAIMIContextStorage).length > 5,
+            // For GlucoseCircleView
+            glucoseValue = lastBg?.recalculated,
+            targetLow = profileFunction.getProfile()?.getTargetLowMgdl(),
+            targetHigh = profileFunction.getProfile()?.getTargetHighMgdl()
         )
         _statusCardState.postValue(state)
     }
@@ -608,7 +612,11 @@ data class StatusCardState(
     val pumpStatusText: String = "",
     val predictionText: String = "",
     val unicornImageRes: Int = R.drawable.unicorn_normal_stable,  // 🦄 Dynamic unicorn image
-    val isAimiContextActive: Boolean = false
+    val isAimiContextActive: Boolean = false,
+    // For GlucoseCircleView color update
+    val glucoseValue: Double? = null,
+    val targetLow: Double? = null,
+    val targetHigh: Double? = null
 )
 
 data class AdjustmentCardState(
