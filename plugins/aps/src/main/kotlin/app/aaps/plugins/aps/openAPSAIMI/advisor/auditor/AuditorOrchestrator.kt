@@ -209,9 +209,14 @@ class AuditorOrchestrator @Inject constructor(
         if (!shouldCallExternal) {
             // Sentinel tier < HIGH: Apply Sentinel advice only, no External call
             aapsLogger.info(LTag.APS, "🌐 External: Skipped (Sentinel tier=${sentinelAdvice.tier})")
+            
+            // 🔧 FIX: Update status tracker to reflect Sentinel-only operation
+            AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OK_CONFIRM)
+            
             val combined = DualBrainHelpers.combineAdvice(sentinelAdvice, null)
             val modulated = combined.toModulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin)
             aapsLogger.info(LTag.APS, "✅ ${combined.toLogString()}")
+            
             callback?.invoke(null, modulated)
             return
         }
