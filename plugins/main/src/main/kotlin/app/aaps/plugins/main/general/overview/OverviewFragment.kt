@@ -434,13 +434,21 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
     
     private fun setupAuditorIndicator() {
         try {
-            // Get container from layout
-            val container = binding.root.findViewById<FrameLayout>(
+            // UNIVERSAL FIX: Support ALL dashboard layouts (overview_info_layout, component_status_card, etc.)
+            // Strategy: Try multiple findViewById paths in fallback order
+            
+            // 1. Try binding.infoLayout.root (for overview_info_layout.xml - included via <include>)
+            // 2. Try binding.root (for direct layouts like component_status_card.xml)
+            val container = binding.infoLayout?.root?.findViewById<FrameLayout>(
+                R.id.aimi_auditor_indicator_container
+            ) ?: binding.root.findViewById<FrameLayout>(
                 R.id.aimi_auditor_indicator_container
             ) ?: run {
-                aapsLogger.warn(LTag.CORE, "Auditor indicator container not found in layout")
+                aapsLogger.warn(LTag.CORE, "Auditor indicator container not found in any layout hierarchy")
                 return
             }
+            
+            aapsLogger.debug(LTag.CORE, "Auditor indicator container found successfully")
             
             // Create and add custom indicator
             auditorIndicator = AuditorStatusIndicator(requireContext())
@@ -467,13 +475,15 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
                 } else {
                     View.VISIBLE
                 }
+                
+                aapsLogger.debug(LTag.CORE, "Auditor indicator state updated: ${uiState.type}, visible=${container.visibility == View.VISIBLE}")
             }
             
             // Initial update
             auditorStatusLiveData.forceUpdate()
             
         } catch (e: Exception) {
-            aapsLogger.error(LTag.CORE, "Failed to setup Auditor indicator: ${e.message}")
+            aapsLogger.error(LTag.CORE, "Failed to setup Auditor indicator: ${e.message}", e)
         }
     }
     
