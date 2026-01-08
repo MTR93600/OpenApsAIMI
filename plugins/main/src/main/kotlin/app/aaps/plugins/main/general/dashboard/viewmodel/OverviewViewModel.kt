@@ -205,11 +205,35 @@ class OverviewViewModel(
         _statusCardState.postValue(state)
     }
 
+    /**
+     * Calculates total IOB text for display.
+     * 
+     * CRITICAL FIX: Removed abs() that was causing IOB to appear increasing
+     * when basal IOB was negative (during low TBR).
+     * 
+     * Scenario that was broken:
+     * - T1: Bolus IOB = 1.0 U, Basal IOB = -1.0 U → total = abs(0.0) = 0.0 U ✓
+     * - T2: Bolus IOB = 0.5 U, Basal IOB = -1.5 U → total = abs(-1.0) = 1.0 U ✗ (INCREASED!)
+     * 
+     * Total IOB can be negative (insulin debt from low TBR), which is valid
+     * and important clinical information to display.
+     */
     private fun totalIobText(): String {
         val bolus = bolusIob()
         val basal = basalIob()
-        val total = abs(bolus.iob + basal.basaliob)
-        return "IOB: " + resourceHelper.gs(app.aaps.core.ui.R.string.format_insulin_units, total)
+        
+        // FIXED: No abs() - total can be negative (insulin debt)
+        val total = bolus.iob + basal.basaliob
+        
+        // Display with sign to show positive/negative IOB
+        val formattedTotal = if (total >= 0) {
+            resourceHelper.gs(app.aaps.core.ui.R.string.format_insulin_units, total)
+        } else {
+            // Negative IOB (insulin debt) - show with minus sign
+            "-" + resourceHelper.gs(app.aaps.core.ui.R.string.format_insulin_units, -total)
+        }
+        
+        return "IOB: $formattedTotal"
     }
 
     private fun bolusIob(): IobTotal = iobCobCalculator.calculateIobFromBolus().round()
