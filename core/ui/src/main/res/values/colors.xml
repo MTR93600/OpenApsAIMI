@@ -100,6 +100,12 @@
     <color name="blue">#0000FF</color>
     <color name="sens">#008585</color>
 
+    <!-- Modern Glucose Circle Colors (Dynamic based on BG range) -->
+    <color name="glucose_in_range">#FFD700</color>       <!-- Gold for in-range -->
+    <color name="critical_low">#FF0000</color>            <!-- Red for <54 mg/dL -->
+    <color name="critical_high">#FF4500</color>           <!-- Orange-red for >250 mg/dL -->
+
+
     <color name="ribbonDefault">#8C8C8C</color>
     <color name="daySelected">#D000FF00</color>
     <color name="weekdayOutline">#1ea3e5</color>
