@@ -39,6 +39,10 @@ class GeminiVisionProvider : AIVisionProvider {
         connection.setRequestProperty("Content-Type", "application/json")
         connection.doOutput = true
         
+        // CRITICAL FIX #1: Increase timeout to prevent premature connection closure
+        connection.connectTimeout = 30000  // 30 seconds
+        connection.readTimeout = 45000     // 45 seconds
+        
         val jsonBody = JSONObject().apply {
             put("contents", JSONArray().apply {
                 put(JSONObject().apply {
@@ -56,7 +60,10 @@ class GeminiVisionProvider : AIVisionProvider {
                 })
             })
             put("generationConfig", JSONObject().apply {
-                put("maxOutputTokens", 800)
+                // CRITICAL FIX #2: Increase token limit from 800 to 2048
+                // 800 tokens ≈ 600 chars, often truncated for complex meals
+                // 2048 tokens ≈ 1500-1800 chars, sufficient for detailed reasoning
+                put("maxOutputTokens", 2048)
                 put("temperature", 0.3)
                 put("responseMimeType", "application/json")  // Force JSON output
             })
@@ -66,7 +73,17 @@ class GeminiVisionProvider : AIVisionProvider {
         
         val responseCode = connection.responseCode
         if (responseCode == HttpURLConnection.HTTP_OK) {
-            return connection.inputStream.bufferedReader().use { it.readText() }
+            // CRITICAL FIX #3: Robust stream reading with buffer size control
+            // readText() can truncate if stream isn't fully consumed
+            val response = StringBuilder()
+            connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+                val buffer = CharArray(8192)  // 8KB chunks
+                var charsRead: Int
+                while (reader.read(buffer).also { charsRead = it } != -1) {
+                    response.append(buffer, 0, charsRead)
+                }
+            }
+            return response.toString()
         } else {
             val errorBody = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
             throw Exception("HTTP $responseCode: $errorBody")
@@ -83,11 +100,45 @@ class GeminiVisionProvider : AIVisionProvider {
                 .getJSONObject(0)
                 .getString("text")
             
+            // CRITICAL FIX #4: Validate JSON completion before parsing
+            // Check if response is truncated (unterminated string/object)
+            if (!isValidJsonStructure(content)) {
+                throw Exception("Response truncated - JSON incomplete. Try again or check API quota.")
+            }
+            
             // Gemini with responseMimeType should return clean JSON, but clean anyway
             val cleanedJson = FoodAnalysisPrompt.cleanJsonResponse(content)
             return FoodAnalysisPrompt.parseJsonToResult(cleanedJson)
+        } catch (e: org.json.JSONException) {
+            // Provide more specific error for JSON parsing failures
+            throw Exception("Gemini response parsing failed: ${e.message}. Response may be truncated - increase maxOutputTokens if issue persists.")
         } catch (e: Exception) {
             throw Exception("Gemini response parsing failed: ${e.message}")
         }
+    }
+    
+    /**
+     * Validate JSON structure is complete (not truncated)
+     * Checks for balanced braces and proper string termination
+     */
+    private fun isValidJsonStructure(json: String): Boolean {
+        var braceCount = 0
+        var inString = false
+        var escaped = false
+        
+        for (i in json.indices) {
+            val char = json[i]
+            
+            when {
+                escaped -> escaped = false
+                char == '\\' -> escaped = true
+                char == '"' -> inString = !inString
+                !inString && char == '{' -> braceCount++
+                !inString && char == '}' -> braceCount--
+            }
+        }
+        
+        // Valid JSON: balanced braces, no unterminated string
+        return braceCount == 0 && !inString
     }
 }
