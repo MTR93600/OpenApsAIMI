@@ -151,15 +151,27 @@ class ExponentialSmoothingPlugin @Inject constructor(
     aapsLogger, rh
 ), Smoothing {
 
+    /* REMOVED: DANGEROUS AUTO-CALIBRATION
+     * This function was blindly subtracting 20 mg/dL from all values > 220 mg/dL
+     * WITHOUT any validation against IOB, COB, or historical trends.
+     * This masked real hyperglycemia and prevented proper insulin dosing.
+     * 
+     * If sensor calibration is needed, it should be:
+     * 1. User-triggered, not automatic
+     * 2. Context-aware (IOB, COB, trends)
+     * 3. Validated against multiple data points
+     * 4. Logged and reversible
+     * 
     private fun autoCalibrate(sensorValue: Double): Double {
-        val threshold = 220.0 // Glycémie au-delà de laquelle l'auto-calibration s'applique
-        val offset = 20.0 // Écart moyen pour corriger l'imprécision
+        val threshold = 220.0
+        val offset = 20.0
         return if (sensorValue > threshold) {
-            sensorValue - offset // Appliquer la correction
+            sensorValue - offset
         } else {
-            sensorValue // Pas de correction si glycémie <= 220
+            sensorValue
         }
     }
+    */
 
     @Suppress("LocalVariableName")
     override fun smooth(data: MutableList<InMemoryGlucoseValue>): MutableList<InMemoryGlucoseValue> {
@@ -175,10 +187,10 @@ class ExponentialSmoothingPlugin @Inject constructor(
         val o2_b = 1.0
         var insufficientSmoothingData = false
 
-        // Appliquer l'auto-calibration avant tout lissage
-        for (i in data.indices) {
-            data[i].value = autoCalibrate(data[i].value)
-        }
+        // REMOVED: Auto-calibration no longer applied - was dangerous and non-contextual
+        // for (i in data.indices) {
+        //     data[i].value = autoCalibrate(data[i].value)
+        // }
 
         // Ajuster la fenêtre de lissage pour inclure uniquement les données valides
         if (sizeRecords <= windowSize) {
