@@ -78,7 +78,6 @@ class GlucoseCircleView @JvmOverloads constructor(
             else -> GlucoseRange.VERY_HIGH
         }
         
-        // Set color based on range
         val newColor = when (range) {
             GlucoseRange.VERY_LOW -> ContextCompat.getColor(context, R.color.critical_low)
             GlucoseRange.LOW -> ContextCompat.getColor(context, R.color.low)
@@ -87,18 +86,55 @@ class GlucoseCircleView @JvmOverloads constructor(
             GlucoseRange.VERY_HIGH -> ContextCompat.getColor(context, R.color.critical_high)
         }
         
-        // Calculate progress (0.0 = incomplete circle, 1.0 = full circle)
-        // Map BG to arc completion: higher BG = more complete circle
-        val normalizedBg = (glucoseMgDl - 40.0) / 360.0 // 40-400 mg/dL range
-        val newProgress = normalizedBg.coerceIn(0.25, 1.0).toFloat()
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // 🎯 HYBRID APPROACH - Arc adapts to BG context
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // 
+        // Arc Zones:
+        // - HYPO (< targetLow):    0% → 50% (decreasing = alarm visual)
+        // - IN RANGE (70-180):     50% → 100% (increasing = optimal)
+        // - HYPER (> targetHigh):  100% (full circle = alarm visual)
+        //
+        // Example (targetLow=70, targetHigh=180):
+        //   BG=40  → Arc=0%   (severe hypo - empty circle ALARM)
+        //   BG=70  → Arc=50%  (low threshold - half circle)
+        //   BG=125 → Arc=75%  (mid-range - 3/4 circle)
+        //   BG=180 → Arc=100% (high threshold - full circle)
+        //   BG=250 → Arc=100% (hyper - full circle ALARM)
+        // ═══════════════════════════════════════════════════════════════════════════════
         
-        if (animate && newColor != circleColor) {
-            // Animate color transition
-            animateColorChange(newColor)
-            animateProgressChange(newProgress)
+        val newProgress = when (range) {
+            GlucoseRange.VERY_LOW, GlucoseRange.LOW -> {
+                // HYPO ZONE: Arc decreases from 50% to 0% as BG drops from targetLow to 40
+                // Visual: Empty circle = severe alarm
+                val hypoFloor = 40.0  // Severe hypo threshold
+                val severity = (targetLow - glucoseMgDl) / (targetLow - hypoFloor)
+                val progress = 0.5 - (severity * 0.5)  // 0.5 to 0.0
+                progress.coerceIn(0.0, 0.5).toFloat()
+            }
+            
+            GlucoseRange.IN_RANGE -> {
+                // IN-RANGE ZONE: Arc increases from 50% to 100% as BG rises from targetLow to targetHigh
+                // Visual: Fuller circle = closer to upper target (still good)
+                val rangeSize = targetHigh - targetLow
+                val positionInRange = (glucoseMgDl - targetLow) / rangeSize
+                val progress = 0.5 + (positionInRange * 0.5)  // 0.5 to 1.0
+                progress.coerceIn(0.5, 1.0).toFloat()
+            }
+            
+            GlucoseRange.HIGH, GlucoseRange.VERY_HIGH -> {
+                // HYPER ZONE: Arc stays at 100% (full circle)
+                // Visual: Full circle + color change = alarm
+                1.0f
+            }
+        }
+        
+        if (animate) {
+            animateToProgress(newProgress)
+            animateToColor(newColor)
         } else {
-            circleColor = newColor
             progress = newProgress
+            circleColor = newColor
             invalidate()
         }
     }
@@ -106,7 +142,7 @@ class GlucoseCircleView @JvmOverloads constructor(
     /**
      * Animate circle color change
      */
-    private fun animateColorChange(targetColor: Int) {
+    private fun animateToColor(targetColor: Int) {
         // Simple approach: just set color (ValueAnimator for color is complex)
         // TODO: Implement ArgbEvaluator if smooth color transition needed
         circleColor = targetColor
@@ -116,7 +152,7 @@ class GlucoseCircleView @JvmOverloads constructor(
     /**
      * Animate progress change (arc completion)
      */
-    private fun animateProgressChange(targetProgress: Float) {
+    private fun animateToProgress(targetProgress: Float) {
         animator?.cancel()
         animator = ValueAnimator.ofFloat(progress, targetProgress).apply {
             duration = 500 // ms
