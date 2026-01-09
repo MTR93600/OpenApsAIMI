@@ -1,0 +1,491 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    tools:context=".ui.ApexFragment">
+
+    <ScrollView
+        android:id="@+id/scrollview"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1.1"
+        android:paddingTop="5dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:focusable="true"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:paddingEnd="5dp"
+                    android:text="@string/connection_status"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="5dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0"
+                    android:gravity="center_horizontal"
+                    android:paddingStart="2dp"
+                    android:paddingEnd="2dp"
+                    android:text=":"
+                    android:textSize="14sp"
+                    tools:ignore="HardcodedText" />
+
+                <com.joanzapata.iconify.widget.IconTextView
+                    android:id="@+id/connection_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.8"
+                    android:gravity="start"
+                    android:paddingStart="5dp"
+                    android:textSize="14sp"
+                    tools:text="Connected" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:focusable="true"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:paddingEnd="5dp"
+                    android:text="@string/status_label"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="5dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0"
+                    android:gravity="center_horizontal"
+                    android:paddingStart="2dp"
+                    android:paddingEnd="2dp"
+                    android:text=":"
+                    android:textSize="14sp"
+                    tools:ignore="HardcodedText" />
+
+                <com.joanzapata.iconify.widget.IconTextView
+                    android:id="@+id/pump_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.8"
+                    android:gravity="start"
+                    android:paddingStart="5dp"
+                    android:textSize="14sp"
+                    tools:text="Normal" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:focusable="true"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:paddingEnd="5dp"
+                    android:text="@string/updated_at"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="5dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0"
+                    android:gravity="center_horizontal"
+                    android:paddingStart="2dp"
+                    android:paddingEnd="2dp"
+                    android:text=":"
+                    android:textSize="14sp"
+                    tools:ignore="HardcodedText" />
+
+                <TextView
+                    android:id="@+id/last_update"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.8"
+                    android:gravity="start"
+                    android:paddingStart="5dp"
+                    android:textSize="14sp"
+                    tools:text="13:00" />
+
+            </LinearLayout>
+
+            <View
+                android:layout_width="fill_parent"
+                android:layout_height="2dip"
+                android:layout_marginStart="20dp"
+                android:layout_marginTop="5dp"
+                android:layout_marginEnd="20dp"
+                android:layout_marginBottom="5dp"
+                android:background="?android:attr/dividerHorizontal" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:focusable="true"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:paddingEnd="5dp"
+                    android:text="@string/battery_label"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="5dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0"
+                    android:gravity="center_horizontal"
+                    android:paddingStart="2dp"
+                    android:paddingEnd="2dp"
+                    android:text=":"
+                    android:textSize="14sp"
+                    tools:ignore="HardcodedText" />
+
+                <com.joanzapata.iconify.widget.IconTextView
+                    android:id="@+id/battery"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.8"
+                    android:gravity="start"
+                    android:paddingStart="5dp"
+                    android:textSize="14sp"
+                    tools:text="97%" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:focusable="true"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:paddingEnd="5dp"
+                    android:text="@string/reservoir_label"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="5dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0"
+                    android:gravity="center_horizontal"
+                    android:paddingStart="2dp"
+                    android:paddingEnd="2dp"
+                    android:text=":"
+                    android:textSize="14sp"
+                    tools:ignore="HardcodedText" />
+
+                <TextView
+                    android:id="@+id/reservoir"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.8"
+                    android:gravity="start"
+                    android:paddingStart="5dp"
+                    android:textSize="14sp"
+                    tools:text="123.566U" />
+
+            </LinearLayout>
+
+            <View
+                android:layout_width="fill_parent"
+                android:layout_height="2dip"
+                android:layout_marginStart="20dp"
+                android:layout_marginTop="5dp"
+                android:layout_marginEnd="20dp"
+                android:layout_marginBottom="5dp"
+                android:background="?android:attr/dividerHorizontal" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:focusable="true"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:paddingEnd="5dp"
+                    android:text="@string/last_bolus_label"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="5dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0"
+                    android:gravity="center_horizontal"
+                    android:paddingStart="2dp"
+                    android:paddingEnd="2dp"
+                    android:text=":"
+                    android:textSize="14sp"
+                    tools:ignore="HardcodedText" />
+
+                <TextView
+                    android:id="@+id/last_bolus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.8"
+                    android:gravity="start"
+                    android:paddingStart="5dp"
+                    android:textSize="14sp"
+                    tools:text="0.775U (3 min ago)" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:focusable="true"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:paddingEnd="5dp"
+                    android:text="@string/base_basal_rate_label"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="5dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0"
+                    android:gravity="center_horizontal"
+                    android:paddingStart="2dp"
+                    android:paddingEnd="2dp"
+                    android:text=":"
+                    android:textSize="14sp"
+                    tools:ignore="HardcodedText" />
+
+                <TextView
+                    android:id="@+id/base_basal_rate"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.8"
+                    android:gravity="start"
+                    android:paddingStart="5dp"
+                    android:textSize="14sp"
+                    tools:text="0.025U/h" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:focusable="true"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:paddingEnd="5dp"
+                    android:text="@string/tempbasal_label"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="5dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0"
+                    android:gravity="center_horizontal"
+                    android:paddingStart="2dp"
+                    android:paddingEnd="2dp"
+                    android:text=":"
+                    android:textSize="14sp"
+                    tools:ignore="HardcodedText" />
+
+                <TextView
+                    android:id="@+id/tempbasal"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.8"
+                    android:gravity="start"
+                    android:paddingStart="5dp"
+                    android:textSize="14sp"
+                    tools:text="0.225U/h (14 min left)" />
+
+            </LinearLayout>
+
+            <View
+                android:layout_width="fill_parent"
+                android:layout_height="2dip"
+                android:layout_marginStart="20dp"
+                android:layout_marginTop="5dp"
+                android:layout_marginEnd="20dp"
+                android:layout_marginBottom="5dp"
+                android:background="?android:attr/dividerHorizontal" />
+
+            <LinearLayout
+                android:id="@+id/serial"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:focusable="true"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:paddingEnd="5dp"
+                    android:text="@string/serial_number"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="5dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0"
+                    android:gravity="center_horizontal"
+                    android:paddingStart="2dp"
+                    android:paddingEnd="2dp"
+                    android:text=":"
+                    android:textSize="14sp"
+                    tools:ignore="HardcodedText" />
+
+                <TextView
+                    android:id="@+id/serial_number"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.8"
+                    android:gravity="start"
+                    android:paddingStart="5dp"
+                    android:textSize="14sp"
+                    tools:text="12345678" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:focusable="true"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:paddingEnd="5dp"
+                    android:text="@string/firmware_version"
+                    android:textAlignment="viewEnd"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="5dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0"
+                    android:gravity="center_horizontal"
+                    android:paddingStart="2dp"
+                    android:paddingEnd="2dp"
+                    android:text=":"
+                    android:textSize="14sp"
+                    tools:ignore="HardcodedText" />
+
+                <TextView
+                    android:id="@+id/firmware_version"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.8"
+                    android:gravity="start"
+                    android:paddingStart="5dp"
+                    android:textSize="14sp"
+                    tools:text="vX.XX (vX.XX)" />
+
+            </LinearLayout>
+
+            <View
+                android:layout_width="fill_parent"
+                android:layout_height="2dip"
+                android:layout_marginStart="20dp"
+                android:layout_marginTop="5dp"
+                android:layout_marginEnd="20dp"
+                android:layout_marginBottom="5dp"
+                android:background="?android:attr/dividerHorizontal" />
+
+            <TextView
+                android:id="@+id/curr_action"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_horizontal"
+                android:textAlignment="center"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:textSize="14sp"
+                tools:text="Fetching TDD"
+                tools:ignore="HardcodedText" />
+
+            <ImageView
+                android:layout_height="180dp"
+                android:layout_width="match_parent"
+                android:contentDescription="@string/apex_plugin_name"
+                android:paddingHorizontal="50dp"
+                android:paddingBottom="50dp"
+                android:paddingTop="25dp"
+                android:src="@drawable/ic_apex_detailed"/>
+
+        </LinearLayout>
+
+    </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/refresh"
+            style="@style/ButtonSmallFontStyle"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:drawableTop="@drawable/ic_actions_refill"
+            android:paddingStart="0dp"
+            android:paddingEnd="0dp"
+            android:text="@string/refresh" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/cancel_bolus"
+            style="@style/ButtonSmallFontStyle"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:drawableTop="@drawable/ic_bolus"
+            android:paddingStart="0dp"
+            android:paddingEnd="0dp"
+            android:visibility="gone"
+            android:text="@string/uel_cancel_bolus" />
+
+    </LinearLayout>
+
+</LinearLayout>
