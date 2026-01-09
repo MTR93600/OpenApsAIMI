@@ -58,6 +58,8 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorNotificationMa
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusIndicator
 import javax.inject.Inject
 import javax.inject.Provider
+import app.aaps.plugins.main.general.dashboard.views.CircleTopActionListener
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiProfileAdvisorActivity
 
 class DashboardFragment : DaggerFragment() {
 
@@ -194,7 +196,7 @@ class DashboardFragment : DaggerFragment() {
 
         syncGraphRange(preferences.get(IntNonKey.RangeToDisplay), false)
 
-        viewModel.statusCardState.observe(viewLifecycleOwner) { binding.statusCard.update(it) }
+        viewModel.statusCardState.observe(viewLifecycleOwner) { binding.statusCard.updateWithState(it) }
         viewModel.adjustmentState.observe(viewLifecycleOwner) { state ->
             state?.let {
                 binding.adjustmentStatus.update(it)
@@ -224,8 +226,42 @@ class DashboardFragment : DaggerFragment() {
 
         binding.statusCard.isClickable = true
         binding.statusCard.isFocusable = true
+        
+        // Setup Action Listeners (Advisor, Adjust, Prefs, Stats)
+        binding.statusCard.setActionListener(object : CircleTopActionListener {
+            override fun onAimiAdvisorClicked() {
+                try {
+                    val intent = Intent(requireContext(), AimiProfileAdvisorActivity::class.java)
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    aapsLogger.error(LTag.CORE, "Failed to launch Advisor: ${e.message}")
+                }
+            }
+            override fun onAdjustClicked() { openAdjustmentDetails() }
+            override fun onAimiPreferencesClicked() {
+                try {
+                    val intent = Intent(requireContext(), app.aaps.plugins.aps.openAPSAIMI.advisor.meal.MealAdvisorActivity::class.java)
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    aapsLogger.error(LTag.CORE, "Failed to launch Meal Advisor: ${e.message}")
+                }
+            }
+            override fun onStatsClicked() {
+                try {
+                    val intent = Intent().setClassName(requireContext(), "app.aaps.plugins.aps.openAPSAIMI.context.ui.ContextActivity")
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    aapsLogger.error(LTag.CORE, "Failed to launch ContextActivity: ${e.message}")
+                }
+            }
+        })
+
+        // Loop Dialog on general click or specific indicator
         binding.statusCard.setOnClickListener { openLoopDialog() }
-        binding.statusCard.setOnAimiIconClickListener {
+        binding.statusCard.getLoopIndicator().setOnClickListener { openLoopDialog() }
+
+        // Context Indicator Click
+        binding.statusCard.getContextIndicator().setOnClickListener {
             try {
                 val intent = Intent().setClassName(requireContext(), "app.aaps.plugins.aps.openAPSAIMI.context.ui.ContextActivity")
                 startActivity(intent)
@@ -316,12 +352,7 @@ class DashboardFragment : DaggerFragment() {
         try {
             aapsLogger.debug(LTag.CORE, "🔍 [Dashboard] Searching for Auditor badge...")
             
-            val container = binding.statusCard.findViewById<android.widget.FrameLayout>(
-                R.id.aimi_auditor_indicator_container
-            ) ?: run {
-                aapsLogger.warn(LTag.CORE, "❌ [Dashboard] Badge container NOT FOUND!")
-                return
-            }
+            val container = binding.statusCard.getAuditorContainer()
             
             aapsLogger.debug(LTag.CORE, "✅ [Dashboard] Badge container found!")
             

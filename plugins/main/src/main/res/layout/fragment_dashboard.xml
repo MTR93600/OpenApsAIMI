@@ -28,7 +28,7 @@
                 tools:listitem="@layout/overview_notification_item"
                 tools:visibility="visible" />
 
-            <app.aaps.plugins.main.general.dashboard.views.StatusCardView
+            <app.aaps.plugins.main.general.dashboard.views.CircleTopDashboardView
                 android:id="@+id/status_card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
