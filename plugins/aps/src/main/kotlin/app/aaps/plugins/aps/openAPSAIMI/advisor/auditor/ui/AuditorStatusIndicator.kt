@@ -65,6 +65,7 @@ class AuditorStatusIndicator @JvmOverloads constructor(
             layoutParams = LayoutParams(badgeSize, badgeSize).apply {
                 gravity = Gravity.TOP or Gravity.END
             }
+            translationX = 6f * resources.displayMetrics.density
             gravity = Gravity.CENTER
             textSize = 9f  // Small text
             setTextColor(Color.WHITE)

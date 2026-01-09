@@ -79,11 +79,11 @@ class GlucoseCircleView @JvmOverloads constructor(
         }
         
         val newColor = when (range) {
-            GlucoseRange.VERY_LOW -> ContextCompat.getColor(context, R.color.critical_low)
-            GlucoseRange.LOW -> ContextCompat.getColor(context, R.color.low)
-            GlucoseRange.IN_RANGE -> ContextCompat.getColor(context, R.color.glucose_in_range)
-            GlucoseRange.HIGH -> ContextCompat.getColor(context, R.color.high)
-            GlucoseRange.VERY_HIGH -> ContextCompat.getColor(context, R.color.critical_high)
+            GlucoseRange.VERY_LOW -> ContextCompat.getColor(context, R.color.glucose_in_range) // Gold
+            GlucoseRange.LOW -> ContextCompat.getColor(context, R.color.glucose_in_range) // Gold
+            GlucoseRange.IN_RANGE -> ContextCompat.getColor(context, R.color.inRange) // Green
+            GlucoseRange.HIGH -> ContextCompat.getColor(context, R.color.red) // Red
+            GlucoseRange.VERY_HIGH -> ContextCompat.getColor(context, R.color.red) // Red
         }
         
         // ═══════════════════════════════════════════════════════════════════════════════
