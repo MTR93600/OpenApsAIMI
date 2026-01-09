@@ -719,16 +719,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val factors = mutableListOf<Float>()
 
         // 1. Contrôle de la chute rapide
+        // 1. Contrôle de la chute rapide
         if (dropPerHour >= maxAllowedDropPerHour && delta < 0 && currentBG < 110f) {
-            // stopBasal = true // Désactivé pour éviter les coupures abusives
+            stopBasal = true 
             isHypoRisk = true
-            // factors.add(0.3f) // Désactivé pour ne pas impacter le calcul
+            factors.add(0.0f) 
             //reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction; ")
             reasonBuilder.append(context.getString(R.string.bg_drop_high, dropPerHour))
         }
 
         // 2. Mode montée très rapide : override de toutes les réductions
-        if (delta >= 20f && combinedDelta >= 15f && !honeymoon) {
+        // SÉCURISÉ : On ne bypass les sécurités que si on est AU-DESSUS de la cible
+        if (delta >= 20f && combinedDelta >= 15f && !honeymoon && currentBG > targetBG) {
             // on passe outre toutes les réductions ; bolusFactor sera 1.0
             //reasonBuilder.append("Montée rapide détectée (delta $delta mg/dL), application du mode d'urgence; ")
             reasonBuilder.append(context.getString(R.string.bg_rapid_rise, delta))
@@ -795,15 +797,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
 
-        // Calcul du bolusFactor : 1.0 si aucune réduction, sinon moyenne des facteurs collectés
+        // Calcul du bolusFactor : Prendre le MINIMUM (le plus sécuritaire) et non la moyenne
         var bolusFactor = if (factors.isNotEmpty()) {
-            factors.average().toFloat().toDouble()
+            factors.minOrNull()?.toDouble() ?: 1.0
         } else {
             1.0
         }
 
         // 9. Zéro basal prolongé : on force le bolusFactor à 1 et on désactive l'arrêt basale
-        if (zeroBasalDurationMinutes >= MAX_ZERO_BASAL_DURATION) {
+        // SÉCURISÉ : Seulement si PAS de risque hypo actuel
+        if (zeroBasalDurationMinutes >= MAX_ZERO_BASAL_DURATION && !isHypoRisk) {
             stopBasal = false
             basalLS = true
             bolusFactor = 1.0
