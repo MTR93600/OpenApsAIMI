@@ -138,7 +138,6 @@
                 android:layout_gravity="center">
 
                 <include
-                    android:id="@+id/status_card_layout"
                     layout="@layout/component_status_card" />
 
             </com.google.android.material.card.MaterialCardView>
