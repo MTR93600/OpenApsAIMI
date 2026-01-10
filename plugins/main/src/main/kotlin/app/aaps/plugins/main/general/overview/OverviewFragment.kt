@@ -442,12 +442,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             // 3. Try binding.root (last resort)
             val container = binding.infoLayout?.root?.findViewById<FrameLayout>(
                 R.id.aimi_auditor_indicator_container
-            ) ?: try {
-                binding.root.findViewById<View>(R.id.status_card_layout)
-                    ?.findViewById<FrameLayout>(R.id.aimi_auditor_indicator_container)
-            } catch (e: Exception) {
-                null
-            } ?: binding.root.findViewById<FrameLayout>(
+            ) ?: binding.root.findViewById<FrameLayout>(
                 R.id.aimi_auditor_indicator_container
             ) ?: run {
                 aapsLogger.warn(LTag.CORE, "Auditor indicator container not found in any layout hierarchy")
