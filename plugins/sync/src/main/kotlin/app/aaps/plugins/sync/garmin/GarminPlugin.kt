@@ -140,7 +140,7 @@ class GarminPlugin @Inject constructor(
                         @Suppress("UNCHECKED_CAST")
                         val map = msg as? Map<String, Any>
                         if (map != null) {
-                            aapsLogger.debug(LTag.GARMIN, "Received Native Message from ${app.appId}: $map")
+                            aapsLogger.debug(LTag.GARMIN, "Received Native Message from ${app.id}: $map")
                             receiveHeartRate(map, false)
                         }
                     } catch (e: Exception) {

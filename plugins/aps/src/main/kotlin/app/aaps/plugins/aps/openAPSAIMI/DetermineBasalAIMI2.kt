@@ -7,7 +7,7 @@ import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.TB
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.UE
-import app.aaps.core.data.time.T
+
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
@@ -47,6 +47,8 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
 import app.aaps.plugins.aps.openAPSAIMI.model.SmbPlan
 // Imports updated for strict patch
+import app.aaps.core.data.model.HR
+import app.aaps.core.data.model.SC
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
 
 import app.aaps.plugins.aps.openAPSAIMI.model.LoopContext
@@ -4854,19 +4856,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             if (allStepsCounts.isNotEmpty()) {
                 val lastSteps = allStepsCounts.maxByOrNull { it.timestamp }
-                aapsLogger.debug(LTag.APS, "Steps Data: Found ${allStepsCounts.size} records. Last: ${lastSteps?.steps5min} steps @ ${dateUtil.toTime(lastSteps?.timestamp ?: 0)}")
+                aapsLogger.debug(LTag.APS, "Steps Data: Found ${allStepsCounts.size} records. Last: ${lastSteps?.steps5min} steps @ ${java.util.Date(lastSteps?.timestamp ?: 0)}")
             } else {
                 aapsLogger.debug(LTag.APS, "Steps Data: No records found in last 210 mins")
             }
 
-            fun getStepsForWindow(windowMillis: Long): Int? {
-                val windowStart = now - windowMillis
-                // Find latest record that ends AFTER the window start
-                val validRecords = allStepsCounts.filter { (it.timestamp + it.duration) >= windowStart }
-                return validRecords.maxByOrNull { it.timestamp }?.steps5min // Note: Using steps5min for granular check, or should we use stepsXmin?
-                // Actually each SC object has steps5min, steps10min etc. populated by the device/plugin. 
-                // We should return the specific field from that SC object.
-            }
+
             
             // Re-implement correctly to extract specific fields
             val valid5 = allStepsCounts.filter { (it.timestamp + it.duration) >= timeMillis5 }.maxByOrNull { it.timestamp }
@@ -4910,7 +4905,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Debug info for the user/screenshot
             if (allHeartRates.isNotEmpty()) {
                 val lastHR = allHeartRates.maxByOrNull { it.timestamp }
-                aapsLogger.debug(LTag.APS, "HR Data: Found ${allHeartRates.size} records. Last: ${lastHR?.beatsPerMinute} @ ${dateUtil.toTime(lastHR?.timestamp ?: 0)}")
+                aapsLogger.debug(LTag.APS, "HR Data: Found ${allHeartRates.size} records. Last: ${lastHR?.beatsPerMinute} @ ${java.util.Date(lastHR?.timestamp ?: 0)}")
             } else {
                 aapsLogger.debug(LTag.APS, "HR Data: No records found in last 200 mins")
             }
