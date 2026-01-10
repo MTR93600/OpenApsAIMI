@@ -4879,42 +4879,74 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             this.recentSteps180Minutes = StepService.getRecentStepCount180Min()
         }
 
+        // Efficient robust Heart Rate retrieval (One query for all windows + fallback)
         try {
-            // Fix: Widen search by 15min to catch records starting before window but overlapping (e.g. Garmin)
-            val heartRates5 = persistenceLayer.getHeartRatesFromTimeToTime(timeMillis5 - 15 * 60 * 1000, now)
-                .filter { (it.timestamp + it.duration) >= timeMillis5 }
-            this.averageBeatsPerMinute = heartRates5.map { it.beatsPerMinute.toInt() }.average()
+            // Search window: 200 mins to cover the 180min avg + buffer for overlapping records
+            val searchStart = now - 200 * 60 * 1000
+            val allHeartRates = persistenceLayer.getHeartRatesFromTimeToTime(searchStart, now)
+
+            // Debug info for the user/screenshot
+            if (allHeartRates.isNotEmpty()) {
+                val lastHR = allHeartRates.maxByOrNull { it.timestamp }
+                aapsLogger.debug(LTag.APS, "HR Data: Found ${allHeartRates.size} records. Last: ${lastHR?.beatsPerMinute} @ ${dateUtil.toTime(lastHR?.timestamp ?: 0)}")
+            } else {
+                aapsLogger.debug(LTag.APS, "HR Data: No records found in last 200 mins")
+            }
+
+            // Helper to get average for a window (considering Overlap)
+            fun getRateForWindow(windowMillis: Long): List<HR> {
+                val windowStart = now - windowMillis
+                return allHeartRates.filter {
+                    val end = it.timestamp + it.duration
+                    end >= windowStart // Ends after start of window
+                }
+            }
+
+            // 1. Current HR (5 min window) - with Fallback
+            val hr5List = getRateForWindow(5 * 60 * 1000)
+            this.averageBeatsPerMinute = if (hr5List.isNotEmpty()) {
+                hr5List.map { it.beatsPerMinute.toInt() }.average()
+            } else {
+                // FALLBACK: Use the most recent value from the entire cache if available
+                val partialFallback = allHeartRates.filter { (it.timestamp + it.duration) >= (now - 30 * 60 * 1000) } // Look back 30 mins for fallback
+                val lastKnown = partialFallback.maxByOrNull { it.timestamp }
+                if (lastKnown != null) {
+                    // consoleLog.add("⚠️ HR Fallback: using data from ${((now - lastKnown.timestamp)/60000)} min ago")
+                    lastKnown.beatsPerMinute
+                } else {
+                    Double.NaN // Will display "--" if truly nothing in 30 mins
+                }
+            }
+
+            // 2. 10 Min Average
+            val hr10List = getRateForWindow(10 * 60 * 1000)
+            this.averageBeatsPerMinute10 = if (hr10List.isNotEmpty()) {
+                hr10List.map { it.beatsPerMinute.toInt() }.average()
+            } else {
+                this.averageBeatsPerMinute // fallback to current (which might be last known)
+            }
+
+            // 3. 60 Min Average
+            val hr60List = getRateForWindow(60 * 60 * 1000)
+            this.averageBeatsPerMinute60 = if (hr60List.isNotEmpty()) {
+                hr60List.map { it.beatsPerMinute.toInt() }.average()
+            } else {
+                80.0 // Default for long term avg
+            }
+
+            // 4. 180 Min Average
+            val hr180List = getRateForWindow(180 * 60 * 1000)
+            this.averageBeatsPerMinute180 = if (hr180List.isNotEmpty()) {
+                hr180List.map { it.beatsPerMinute.toInt() }.average()
+            } else {
+                80.0
+            }
 
         } catch (e: Exception) {
-
+            aapsLogger.error(LTag.APS, "Error processing Heart Rate data", e)
             averageBeatsPerMinute = 80.0
-        }
-        try {
-            val heartRates10 = persistenceLayer.getHeartRatesFromTimeToTime(timeMillis10 - 15 * 60 * 1000, now)
-                .filter { (it.timestamp + it.duration) >= timeMillis10 }
-            this.averageBeatsPerMinute10 = heartRates10.map { it.beatsPerMinute.toInt() }.average()
-
-        } catch (e: Exception) {
-
             averageBeatsPerMinute10 = 80.0
-        }
-        try {
-            val heartRates60 = persistenceLayer.getHeartRatesFromTimeToTime(timeMillis60 - 15 * 60 * 1000, now)
-                .filter { (it.timestamp + it.duration) >= timeMillis60 }
-            this.averageBeatsPerMinute60 = heartRates60.map { it.beatsPerMinute.toInt() }.average()
-
-        } catch (e: Exception) {
-
             averageBeatsPerMinute60 = 80.0
-        }
-        try {
-
-            val heartRates180 = persistenceLayer.getHeartRatesFromTimeToTime(timeMillis180 - 15 * 60 * 1000, now)
-                .filter { (it.timestamp + it.duration) >= timeMillis180 }
-            this.averageBeatsPerMinute180 = heartRates180.map { it.beatsPerMinute.toInt() }.average()
-
-        } catch (e: Exception) {
-
             averageBeatsPerMinute180 = 80.0
         }
         val heartRateTrend = averageBeatsPerMinute10 / averageBeatsPerMinute60
