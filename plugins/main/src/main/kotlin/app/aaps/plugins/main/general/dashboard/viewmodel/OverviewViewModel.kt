@@ -240,10 +240,12 @@ class OverviewViewModel(
         // 7. Pump Battery
         val pumpBatteryText = activePlugin.activePump.batteryLevel?.let { "$it%" }
         
-        // 8. Last Sensor Value (simplified)
-        val lastSensorValueText = lastBg?.recalculated?.let { bg ->
-            val units = profileFunction.getUnits() ?: GlucoseUnit.MGDL
-            profileUtil.fromMgdlToStringInUnits(bg, units)
+        // 8. IOB (replacing Last Sensor Value as per user request)
+        val lastSensorValueText = run {
+            val bolus = bolusIob()
+            val basal = basalIob()
+            val total = bolus.iob + basal.basaliob
+            decimalFormatter.to2Decimal(total) + " IE"
         }
         
         // 9. TBR Rate

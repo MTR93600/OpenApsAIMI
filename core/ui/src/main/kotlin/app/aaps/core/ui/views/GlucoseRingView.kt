@@ -108,7 +108,8 @@ class GlucoseRingView @JvmOverloads constructor(
         mainText: String,
         subLeftText: String,
         subRightText: String,
-        noseAngleDeg: Float?
+        noseAngleDeg: Float?,
+        overrideColor: Int? = null
     ) {
         this.bgMgdl = bgMgdl
         this.mainText = mainText
@@ -116,7 +117,7 @@ class GlucoseRingView @JvmOverloads constructor(
         this.subRightText = subRightText
         this.noseAngleDeg = noseAngleDeg
 
-        currentRingColor = computeRingColor(bgMgdl)
+        currentRingColor = overrideColor ?: computeRingColor(bgMgdl)
 
         invalidate()
     }
@@ -133,6 +134,8 @@ class GlucoseRingView @JvmOverloads constructor(
         }
 
         val vf = v.toFloat()
+        // WARNING: This logic paints <100 as Step1 (Color1). If Color1 is Green, Hypo is Green.
+        // The overrideColor (passed from AAPS logic) fixes this.
         return when {
             vf <= step1MaxMgdl -> stepColor1
             vf <= step2MaxMgdl -> stepColor2

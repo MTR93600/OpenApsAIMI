@@ -61,7 +61,8 @@ class CircleTopDashboardView @JvmOverloads constructor(
                     mainText = getProp<String>("glucoseText") ?: "--",
                     subLeftText = getProp<String>("timeAgo") ?: "",
                     subRightText = getProp<String>("deltaText") ?: "",
-                    noseAngleDeg = getProp<Float>("noseAngleDeg")
+                    noseAngleDeg = getProp<Float>("noseAngleDeg"),
+                    overrideColor = getProp<Int>("glucoseColor")
                 )
             }
 

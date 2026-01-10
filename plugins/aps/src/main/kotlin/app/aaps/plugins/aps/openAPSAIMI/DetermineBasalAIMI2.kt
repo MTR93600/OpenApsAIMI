@@ -997,9 +997,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
 //  reason.append("  → 🕒 PeakTime=$peakStr min | BG=$bgStr Δ$deltaStr")
         reason.append(context.getString(R.string.peak_time, peakStr, bgStr, deltaStr))
-//  stepCount?.let { reason.append(" | Steps=$it") }
         stepCount?.let { reason.append(context.getString(R.string.steps, it)) }
-//  heartRate?.let { reason.append(" | HR=$it bpm") }
+        //  heartRate?.let { reason.append(" | HR=$it bpm") }
         heartRate?.let { reason.append(context.getString(R.string.heart_rate, if (it.isNaN()) "--" else "%.0f".format(it))) }
         reason.append("\n")
     }
