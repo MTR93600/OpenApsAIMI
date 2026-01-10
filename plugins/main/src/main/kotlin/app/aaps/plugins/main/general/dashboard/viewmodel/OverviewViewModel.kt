@@ -264,19 +264,31 @@ class OverviewViewModel(
             val from = dateUtil.beginOfDay(now) // Start of today (Midnight)
 
             // Steps (Sum of steps in the last 15m)
-            val stepsList = persistenceLayer.getStepsCountFromTimeToTime(from, now)
-            var totalSteps = 0
-            stepsList.forEach { 
-                // data is usually stored as "steps in X min", so we just sum them up for the period
-                // However, steps are 5-min buckets.
-                totalSteps += it.steps5min
+            // Steps (Integration of rolling windows)
+            val stepsList = persistenceLayer.getStepsCountFromTimeToTime(from, now).sortedBy { it.timestamp }
+            var totalSteps = 0.0
+            var lastTimestamp = from
+
+            stepsList.forEach { sc ->
+                if (sc.duration > 0 && sc.steps5min > 0) {
+                    val dt = (sc.timestamp - lastTimestamp).coerceAtLeast(0)
+                    if (dt > 0) {
+                        // Calculate rate (steps per ms)
+                        val rate = sc.steps5min.toDouble() / sc.duration
+                        // Determine meaningful time window (handle overlaps vs gaps)
+                        // If dt < duration (overlap), we integrate over dt.
+                        // If dt >= duration (gap), we integrate over duration (full record) and assume 0 for the gap.
+                        val coveredDuration = java.lang.Math.min(dt, sc.duration)
+                        
+                        totalSteps += rate * coveredDuration
+                    }
+                }
+                lastTimestamp = java.lang.Math.max(lastTimestamp, sc.timestamp)
             }
-            if (totalSteps > 0) {
-                stepsText = totalSteps.toString()
+
+            if (totalSteps > 1) {
+                stepsText = "%.0f".format(totalSteps)
             } else {
-                 // Fallback: check if we have any data slightly older if current is 0?
-                 // Or maybe the user just hasn't walked. 0 is valid.
-                 // If list is empty, it means no data.
                  if (stepsList.isNotEmpty()) stepsText = "0"
             }
 
