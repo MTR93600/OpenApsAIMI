@@ -96,43 +96,7 @@
             </LinearLayout>
 
 
-            <!-- STEPS (Left of Circle) -->
-            <TextView
-                android:id="@+id/steps_text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:elevation="20dp"
-                android:text="--"
-                android:textColor="#AAFFFFFF"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:drawableStart="@drawable/ic_dashboard_wave"
-                android:drawablePadding="4dp"
-                android:gravity="center_vertical"
-                app:layout_constraintBottom_toBottomOf="@id/glucose_ring"
-                app:layout_constraintEnd_toStartOf="@id/glucose_ring"
-                app:layout_constraintHorizontal_bias="0.8"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="@id/glucose_ring" />
 
-            <!-- HEART RATE (Right of Circle) -->
-            <TextView
-                android:id="@+id/hr_text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:elevation="20dp"
-                android:text="--"
-                android:textColor="#AAFFFFFF"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:drawableStart="@drawable/ic_cp_heart_rate"
-                android:drawablePadding="4dp"
-                android:gravity="center_vertical"
-                app:layout_constraintBottom_toBottomOf="@id/glucose_ring"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintHorizontal_bias="0.2"
-                app:layout_constraintStart_toEndOf="@id/glucose_ring"
-                app:layout_constraintTop_toTopOf="@id/glucose_ring" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -154,6 +118,31 @@
                 android:layout_weight="1"
                 android:orientation="vertical"
                 android:layout_marginEnd="8dp">
+
+                <!-- STEPS (First Item) -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        app:srcCompat="@drawable/ic_dashboard_shoe"
+                        app:tint="#AAFFFFFF" />
+
+                    <TextView
+                        android:id="@+id/steps_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textColor="#AAFFFFFF"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
                 <!-- Reservoir -->
                 <LinearLayout
@@ -260,6 +249,31 @@
                 android:orientation="vertical"
                 android:gravity="end"
                 android:layout_marginStart="8dp">
+
+                <!-- HEART RATE (First Item) -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        app:srcCompat="@drawable/ic_cp_heart_rate"
+                        app:tint="#AAFFFFFF" />
+
+                    <TextView
+                        android:id="@+id/hr_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textColor="#AAFFFFFF"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
                 <!-- Last Update -->
                 <LinearLayout

@@ -260,35 +260,33 @@ class OverviewViewModel(
         var hrText: String = "--"
         
         try {
-             // Retrieve Steps (Last 15 min sum)
-            val now = System.currentTimeMillis().toDouble()
-            val from = now - (15 * 60 * 1000)
-            
-            // Steps
-            (overviewData.stepsCountGraphSeries as? app.aaps.core.graph.data.PointsWithLabelGraphSeries<*>)?.let { series ->
-                val iterator = series.getValues(from, now)
-                var stepsSum = 0.0
-                while (iterator.hasNext()) {
-                    val p = iterator.next()
-                    if (p != null) stepsSum = p.y // Usually steps are cumulative/rate per point or total? Assume point value is count
-                    // Wait, StepService returns "steps in last X min".
-                    // If graph plots that, we take the *latest*.
-                }
-                // Actually the graph plots whatever is in DB. StepService logic suggests points are added as "steps in 5 min".
-                // So the *latest* point value represents "steps in last 5 min".
-                // Let's take the latest non-zero value.
-                if (stepsSum > 0) stepsText = "%.0f".format(stepsSum)
+            val now = System.currentTimeMillis()
+            val from = now - (15 * 60 * 1000) // Last 15 minutes
+
+            // Steps (Sum of steps in the last 15m)
+            val stepsList = persistenceLayer.getStepsCountFromTimeToTime(from, now)
+            var totalSteps = 0
+            stepsList.forEach { 
+                // data is usually stored as "steps in X min", so we just sum them up for the period
+                // However, steps are 5-min buckets.
+                totalSteps += it.steps5min
             }
-            
-            // Heart Rate
-            (overviewData.heartRateGraphSeries as? app.aaps.core.graph.data.PointsWithLabelGraphSeries<*>)?.let { series ->
-                val iterator = series.getValues(from, now)
-                var lastHr = 0.0
-                while (iterator.hasNext()) {
-                    val p = iterator.next()
-                    if (p != null) lastHr = p.y
+            if (totalSteps > 0) {
+                stepsText = totalSteps.toString()
+            } else {
+                 // Fallback: check if we have any data slightly older if current is 0?
+                 // Or maybe the user just hasn't walked. 0 is valid.
+                 // If list is empty, it means no data.
+                 if (stepsList.isNotEmpty()) stepsText = "0"
+            }
+
+            // Heart Rate (Average or Last)
+            val hrList = persistenceLayer.getHeartRatesFromTimeToTime(from, now)
+            if (hrList.isNotEmpty()) {
+                val lastHr = hrList.lastOrNull()?.beatsPerMinute
+                if (lastHr != null && lastHr > 0) {
+                    hrText = "%.0f".format(lastHr)
                 }
-                if (lastHr > 0) hrText = "%.0f".format(lastHr)
             }
         
         } catch (e: Exception) {
