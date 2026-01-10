@@ -261,7 +261,7 @@ class OverviewViewModel(
         
         try {
             val now = System.currentTimeMillis()
-            val from = now - (15 * 60 * 1000) // Last 15 minutes
+            val from = dateUtil.beginOfDay(now) // Start of today (Midnight)
 
             // Steps (Sum of steps in the last 15m)
             val stepsList = persistenceLayer.getStepsCountFromTimeToTime(from, now)
