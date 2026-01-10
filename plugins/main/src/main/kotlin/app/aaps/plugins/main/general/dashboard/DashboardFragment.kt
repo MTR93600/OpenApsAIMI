@@ -159,7 +159,8 @@ class DashboardFragment : DaggerFragment() {
             rxBus,
             aapsSchedulers,
             fabricPrivacy,
-            preferences
+            preferences,
+            overviewData
         )
     }
 
