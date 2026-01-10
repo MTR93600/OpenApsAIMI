@@ -293,7 +293,12 @@ class OverviewViewModel(
             }
 
             // Heart Rate (Average or Last)
-            val hrList = persistenceLayer.getHeartRatesFromTimeToTime(from, now)
+            // Heart Rate (Average or Last)
+            // Fix: Use 3h window + 15min buffer for overlapped records (Garmin), and ensure sorting
+            val hrFrom = now - 3 * 60 * 60 * 1000
+            val hrList = persistenceLayer.getHeartRatesFromTimeToTime(hrFrom - 15 * 60 * 1000, now)
+                .sortedBy { it.timestamp }
+            
             if (hrList.isNotEmpty()) {
                 val lastHr = hrList.lastOrNull()?.beatsPerMinute
                 if (lastHr != null && lastHr > 0) {

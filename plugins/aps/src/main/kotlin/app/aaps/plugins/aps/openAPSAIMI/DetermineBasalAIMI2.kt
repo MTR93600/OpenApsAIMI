@@ -4880,7 +4880,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         try {
-            val heartRates5 = persistenceLayer.getHeartRatesFromTimeToTime(timeMillis5, now)
+            // Fix: Widen search by 15min to catch records starting before window but overlapping (e.g. Garmin)
+            val heartRates5 = persistenceLayer.getHeartRatesFromTimeToTime(timeMillis5 - 15 * 60 * 1000, now)
+                .filter { (it.timestamp + it.duration) >= timeMillis5 }
             this.averageBeatsPerMinute = heartRates5.map { it.beatsPerMinute.toInt() }.average()
 
         } catch (e: Exception) {
@@ -4888,7 +4890,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             averageBeatsPerMinute = 80.0
         }
         try {
-            val heartRates10 = persistenceLayer.getHeartRatesFromTimeToTime(timeMillis10, now)
+            val heartRates10 = persistenceLayer.getHeartRatesFromTimeToTime(timeMillis10 - 15 * 60 * 1000, now)
+                .filter { (it.timestamp + it.duration) >= timeMillis10 }
             this.averageBeatsPerMinute10 = heartRates10.map { it.beatsPerMinute.toInt() }.average()
 
         } catch (e: Exception) {
@@ -4896,7 +4899,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             averageBeatsPerMinute10 = 80.0
         }
         try {
-            val heartRates60 = persistenceLayer.getHeartRatesFromTimeToTime(timeMillis60, now)
+            val heartRates60 = persistenceLayer.getHeartRatesFromTimeToTime(timeMillis60 - 15 * 60 * 1000, now)
+                .filter { (it.timestamp + it.duration) >= timeMillis60 }
             this.averageBeatsPerMinute60 = heartRates60.map { it.beatsPerMinute.toInt() }.average()
 
         } catch (e: Exception) {
@@ -4905,7 +4909,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         try {
 
-            val heartRates180 = persistenceLayer.getHeartRatesFromTimeToTime(timeMillis180, now)
+            val heartRates180 = persistenceLayer.getHeartRatesFromTimeToTime(timeMillis180 - 15 * 60 * 1000, now)
+                .filter { (it.timestamp + it.duration) >= timeMillis180 }
             this.averageBeatsPerMinute180 = heartRates180.map { it.beatsPerMinute.toInt() }.average()
 
         } catch (e: Exception) {
