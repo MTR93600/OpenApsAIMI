@@ -37,8 +37,8 @@ class AuditorAIService @Inject constructor(
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
         private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
         
-        // Timeout for API calls (2 minutes max)
-        private const val DEFAULT_TIMEOUT_MS = 120_000L
+        // Timeout for API calls (3 minutes max for deep reasoning)
+        private const val DEFAULT_TIMEOUT_MS = 180_000L
     }
     
     enum class Provider(val id: String, val displayName: String) {
@@ -73,66 +73,65 @@ class AuditorAIService @Inject constructor(
         // Build prompt
         val prompt = AuditorPromptBuilder.buildPrompt(input)
         
-        // Call AI with timeout
-        val responseJson = withTimeoutOrNull(timeoutMs) {
+        // --- ROCKET SAUVAGE: RETRY LOGIC (3 attempts) ---
+        var lastException: Exception? = null
+        val maxRetries = 3
+        
+        for (attempt in 1..maxRetries) {
             try {
-                when (provider) {
-                    Provider.OPENAI -> callOpenAI(apiKey, prompt)
-                    Provider.GEMINI -> callGemini(apiKey, prompt)
-                    Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
-                    Provider.CLAUDE -> callClaude(apiKey, prompt)
+                // Call AI with timeout
+                val responseJson = withTimeoutOrNull(timeoutMs) {
+                    when (provider) {
+                        Provider.OPENAI -> callOpenAI(apiKey, prompt)
+                        Provider.GEMINI -> callGemini(apiKey, prompt)
+                        Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
+                        Provider.CLAUDE -> callClaude(apiKey, prompt)
+                    }
                 }
-            } catch (e: java.net.UnknownHostException) {
-                // DNS resolution failed or no network
-                AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OFFLINE_NO_NETWORK)
-                auditorStatusLiveData.notifyUpdate()
-                null
-            } catch (e: java.net.SocketTimeoutException) {
-                // Connection timeout
-                AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_TIMEOUT)
-                auditorStatusLiveData.notifyUpdate()
-                null
-            } catch (e: java.io.IOException) {
-                // General network I/O error
-                AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OFFLINE_NO_NETWORK)
-                auditorStatusLiveData.notifyUpdate()
-                null
-            } catch (e: org.json.JSONException) {
-                // JSON parse error
-                AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_PARSE)
-                auditorStatusLiveData.notifyUpdate()
-                null
+                
+                if (responseJson != null) {
+                    // Success!
+                    try {
+                        return@withContext parseVerdict(responseJson, provider)
+                    } catch (e: Exception) {
+                        // JSON parsing failed - unlikely to succeed on retry unless response was partial
+                        AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_PARSE)
+                        auditorStatusLiveData.notifyUpdate()
+                        return@withContext null
+                    }
+                } else {
+                    // Time out in coroutine
+                    throw java.net.SocketTimeoutException("Coroutine timeout after ${timeoutMs}ms")
+                }
+
             } catch (e: Exception) {
-                // Other exception
-                AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_EXCEPTION)
-                auditorStatusLiveData.notifyUpdate()
-                null
+                lastException = e
+                // Only retry on network/timeout/server errors
+                val isRetryable = e is java.net.SocketTimeoutException || 
+                                  e is java.io.IOException || 
+                                  e is java.net.UnknownHostException
+                                  
+                if (attempt < maxRetries && isRetryable) {
+                    val backoff = attempt * 2000L // 2s, 4s
+                    // Log retry
+                    println("⚠️ Auditor ${provider} attempt $attempt failed: ${e.message}. Retrying in ${backoff}ms...")
+                    Thread.sleep(backoff) // Blocking inside IO dispatcher is acceptable here
+                } else {
+                    // Final failure or non-retryable
+                    break
+                }
             }
         }
         
-        // Check if timed out (withTimeoutOrNull returned null)
-        if (responseJson == null) {
-            // Only set timeout status if not already set by exception
-            val (currentStatus, _) = AuditorStatusTracker.getStatus(maxAgeMs = 5000)
-            if (!currentStatus.isError() && !currentStatus.isOffline()) {
-                AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_TIMEOUT)
-                auditorStatusLiveData.notifyUpdate()
-            }
-            return@withContext null
+        // Identify final error
+        when (lastException) {
+            is java.net.UnknownHostException -> AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OFFLINE_NO_NETWORK)
+            is java.net.SocketTimeoutException -> AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_TIMEOUT)
+            is java.io.IOException -> AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OFFLINE_NO_NETWORK)
+            else -> AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_EXCEPTION)
         }
-        
-        // Parse response
-        try {
-            parseVerdict(responseJson, provider)
-        } catch (e: org.json.JSONException) {
-            AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_PARSE)
-            auditorStatusLiveData.notifyUpdate()
-            null
-        } catch (e: Exception) {
-            AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_EXCEPTION)
-            auditorStatusLiveData.notifyUpdate()
-            null
-        }
+        auditorStatusLiveData.notifyUpdate()
+        return@withContext null
     }
     
     /**
@@ -157,8 +156,8 @@ class AuditorAIService @Inject constructor(
             doOutput = true
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Authorization", "Bearer $apiKey")
-            connectTimeout = 30_000
-            readTimeout = 120_000
+            connectTimeout = 60_000 // Extended
+            readTimeout = 180_000   // Extended
         }
         
         val requestBody = JSONObject().apply {
@@ -203,13 +202,14 @@ class AuditorAIService @Inject constructor(
             requestMethod = "POST"
             doOutput = true
             setRequestProperty("Content-Type", "application/json")
-            connectTimeout = 30_000
-            readTimeout = 120_000
+            connectTimeout = 60_000 // Extended for stability
+            readTimeout = 180_000   // Extended for deep reasoning
         }
         
         val requestBody = JSONObject().apply {
             put("contents", JSONArray().apply {
                 put(JSONObject().apply {
+                    put("role", "user") // FIX: Explicit role required for stability
                     put("parts", JSONArray().apply {
                         put(JSONObject().apply {
                             put("text", prompt)
@@ -219,7 +219,7 @@ class AuditorAIService @Inject constructor(
             })
             put("generationConfig", JSONObject().apply {
                 put("temperature", 0.3)
-                put("maxOutputTokens", 2048)  // FIX: Same as Meal Advisor - prevent truncation
+                put("maxOutputTokens", 2048)
                 put("responseMimeType", "application/json")
             })
         }
@@ -228,10 +228,13 @@ class AuditorAIService @Inject constructor(
         
         val responseCode = connection.responseCode
         if (responseCode != HttpURLConnection.HTTP_OK) {
-            throw Exception("HTTP $responseCode")
+            // Read error stream for better debugging
+            val errorStream = connection.errorStream ?: connection.inputStream
+            val errorResponse = errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+            throw Exception("HTTP $responseCode: $errorResponse")
         }
         
-        // Robust stream reading (same as Vision Providers fix)
+        // Robust stream reading
         val response = StringBuilder()
         connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
             val buffer = CharArray(8192)  // 8KB chunks
@@ -253,8 +256,8 @@ class AuditorAIService @Inject constructor(
             doOutput = true
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Authorization", "Bearer $apiKey")
-            connectTimeout = 30_000
-            readTimeout = 120_000
+            connectTimeout = 60_000 // Extended
+            readTimeout = 180_000   // Extended
         }
         
         val requestBody = JSONObject().apply {
@@ -300,8 +303,8 @@ class AuditorAIService @Inject constructor(
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("x-api-key", apiKey)
             setRequestProperty("anthropic-version", "2023-06-01")
-            connectTimeout = 30_000
-            readTimeout = 120_000
+            connectTimeout = 60_000 // Extended
+            readTimeout = 180_000   // Extended
         }
         
         val requestBody = JSONObject().apply {
