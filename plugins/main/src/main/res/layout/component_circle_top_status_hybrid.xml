@@ -96,6 +96,38 @@
             </LinearLayout>
 
 
+            <!-- STEPS (Left of Circle) -->
+            <TextView
+                android:id="@+id/steps_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:elevation="20dp"
+                android:text="--"
+                android:textColor="#AAFFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                app:layout_constraintBottom_toBottomOf="@id/glucose_ring"
+                app:layout_constraintEnd_toStartOf="@id/glucose_ring"
+                app:layout_constraintHorizontal_bias="0.8"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="@id/glucose_ring" />
+
+            <!-- HEART RATE (Right of Circle) -->
+            <TextView
+                android:id="@+id/hr_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:elevation="20dp"
+                android:text="--"
+                android:textColor="#AAFFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                app:layout_constraintBottom_toBottomOf="@id/glucose_ring"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="0.2"
+                app:layout_constraintStart_toEndOf="@id/glucose_ring"
+                app:layout_constraintTop_toTopOf="@id/glucose_ring" />
+
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <!-- ═══════════════════════════════════════════════════ -->

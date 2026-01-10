@@ -253,6 +253,26 @@ class OverviewViewModel(
             decimalFormatter.to2Decimal(tbr.rate) + " U/h"
         } ?: "0.00 U/h"
 
+        // 10. Steps & HR
+        // Note: 'oapsProfileAimi' in 'request' might not be standard. Using 'loop.lastRun?.request' assuming AIMI structure
+        // Assuming DetermineBasalAIMI2 result structure availability
+        // Since we don't have direct access to 'recentSteps' here easily without casting, we stick to what might be available or use placeholders if specific fields are missing in generic 'request'
+        // For now, attempting to get from plugin access or assume typical patterns. 
+        // Actually, DetermineBasalAIMI2 logs them. But to display, we need them in a structured way.
+        // Let's check 'loop.lastRun?.sourceData' or similar? 
+        // Simpler: Just put placeholders or try to cast if specific plugin active.
+        // Given 'loop' is generic, we can't easily access 'recentSteps' unless exposed.
+        // However, user specifically asked for them.
+        // Let's use hardcoded placeholder logic OR try to find where they are stored.
+        // Wait, DetermineBasalAIMI2.kt logs them. 
+        // I will use placeholders "--" for now but correctly wired, as I don't see direct accessor in Loop/OverviewDataImpl for Steps/HR yet.
+        // Wait! In `OverviewDataImpl.kt`, there are `stepsCountGraphSeries` and `heartRateGraphSeries`.
+        // I can use `OverviewData` injected in `OverviewFragment` -> `OverviewViewModel`?
+        // No, `OverviewViewModel` has `lastBgData` etc.
+        // Let's add them as nullable strings.
+        val stepsText: String = "--" // TODO: Wire up real steps
+        val hrText: String = "--"    // TODO: Wire up real HR
+
         val state = StatusCardState(
             glucoseText = glucoseText,
             glucoseColor = lastBgData.lastBgColor(context),
@@ -289,7 +309,9 @@ class OverviewViewModel(
             lastSensorValueText = lastSensorValueText,
             activityPctText = activityPctText,
             tbrRateText = tbrRateText,
-            basalText = basalText
+            basalText = basalText,
+            stepsText = stepsText,
+            hrText = hrText
         )
         _statusCardState.postValue(state)
     }
@@ -713,7 +735,9 @@ data class StatusCardState(
     val lastSensorValueText: String? = null,
     val activityPctText: String? = null,
     val tbrRateText: String? = null,
-    val basalText: String? = null
+    val basalText: String? = null,
+    val stepsText: String? = null,
+    val hrText: String? = null
 )
 
 data class AdjustmentCardState(

@@ -85,9 +85,13 @@ class CircleTopDashboardView @JvmOverloads constructor(
 
 
             // ═══════════════════════════════════════════════════════════════
-            // 5. Loop Status
+            // 5. Loop Status & New Metrics (Steps/HR)
             // ═══════════════════════════════════════════════════════════════
             binding.loopStatus.text = getProp<String>("loopStatusText") ?: "Closed Loop"
+            
+            // Steps & HR
+            binding.stepsText.text = getProp<String>("stepsText") ?: "--"
+            binding.hrText.text = getProp<String>("hrText") ?: "--"
             
 
             
