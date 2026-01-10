@@ -4846,30 +4846,52 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val timeMillis60 = now - 60 * 60 * 1000 // 60 minutes en millisecondes
         val timeMillis180 = now - 180 * 60 * 1000 // 180 minutes en millisecondes
 
-        val allStepsCounts = persistenceLayer.getStepsCountFromTimeToTime(timeMillis180, now)
-
         if (preferences.get(BooleanKey.OApsAIMIEnableStepsFromWatch)) {
-            allStepsCounts.forEach { stepCount ->
-                val timestamp = stepCount.timestamp
-                if (timestamp >= timeMillis5) {
-                    this.recentSteps5Minutes = stepCount.steps5min
-                }
-                if (timestamp >= timeMillis10) {
-                    this.recentSteps10Minutes = stepCount.steps10min
-                }
-                if (timestamp >= timeMillis15) {
-                    this.recentSteps15Minutes = stepCount.steps15min
-                }
-                if (timestamp >= timeMillis30) {
-                    this.recentSteps30Minutes = stepCount.steps30min
-                }
-                if (timestamp >= timeMillis60) {
-                    this.recentSteps60Minutes = stepCount.steps60min
-                }
-                if (timestamp >= timeMillis180) {
-                    this.recentSteps180Minutes = stepCount.steps180min
-                }
+            // Robust Steps Retrieval (Matches HR logic)
+            // Search window: 210 mins to cover 180min + delays
+            val stepsSearchStart = now - 210 * 60 * 1000
+            val allStepsCounts = persistenceLayer.getStepsCountFromTimeToTime(stepsSearchStart, now)
+
+            if (allStepsCounts.isNotEmpty()) {
+                val lastSteps = allStepsCounts.maxByOrNull { it.timestamp }
+                aapsLogger.debug(LTag.APS, "Steps Data: Found ${allStepsCounts.size} records. Last: ${lastSteps?.steps5min} steps @ ${dateUtil.toTime(lastSteps?.timestamp ?: 0)}")
+            } else {
+                aapsLogger.debug(LTag.APS, "Steps Data: No records found in last 210 mins")
             }
+
+            fun getStepsForWindow(windowMillis: Long): Int? {
+                val windowStart = now - windowMillis
+                // Find latest record that ends AFTER the window start
+                val validRecords = allStepsCounts.filter { (it.timestamp + it.duration) >= windowStart }
+                return validRecords.maxByOrNull { it.timestamp }?.steps5min // Note: Using steps5min for granular check, or should we use stepsXmin?
+                // Actually each SC object has steps5min, steps10min etc. populated by the device/plugin. 
+                // We should return the specific field from that SC object.
+            }
+            
+            // Re-implement correctly to extract specific fields
+            val valid5 = allStepsCounts.filter { (it.timestamp + it.duration) >= timeMillis5 }.maxByOrNull { it.timestamp }
+            // Fallback for 5 min
+            val fallbackRecord = if (valid5 == null) {
+                 allStepsCounts.filter { (it.timestamp + it.duration) >= (now - 30 * 60 * 1000) }.maxByOrNull { it.timestamp }
+            } else null
+            
+            this.recentSteps5Minutes = valid5?.steps5min ?: fallbackRecord?.steps5min ?: 0
+            
+            this.recentSteps10Minutes = allStepsCounts.filter { (it.timestamp + it.duration) >= timeMillis10 }
+                .maxByOrNull { it.timestamp }?.steps10min ?: this.recentSteps5Minutes // Fallback to smaller window if needed? No, just 0 or current
+            
+            this.recentSteps15Minutes = allStepsCounts.filter { (it.timestamp + it.duration) >= timeMillis15 }
+                .maxByOrNull { it.timestamp }?.steps15min ?: 0
+                
+            this.recentSteps30Minutes = allStepsCounts.filter { (it.timestamp + it.duration) >= timeMillis30 }
+                .maxByOrNull { it.timestamp }?.steps30min ?: 0
+                
+            this.recentSteps60Minutes = allStepsCounts.filter { (it.timestamp + it.duration) >= timeMillis60 }
+                .maxByOrNull { it.timestamp }?.steps60min ?: 0
+                
+            this.recentSteps180Minutes = allStepsCounts.filter { (it.timestamp + it.duration) >= timeMillis180 }
+                .maxByOrNull { it.timestamp }?.steps180min ?: 0
+                
         } else {
             this.recentSteps5Minutes = StepService.getRecentStepCount5Min()
             this.recentSteps10Minutes = StepService.getRecentStepCount10Min()

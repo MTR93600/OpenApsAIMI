@@ -132,7 +132,23 @@ class GarminPlugin @Inject constructor(
         val enableDebug = false // sp.getBoolean("communication_ciq_debug_mode", false)
         aapsLogger.info(LTag.GARMIN, "initialize IQ messenger in debug=$enableDebug")
         return GarminMessenger(
-            aapsLogger, context, glucoseAppIds, { _, _ -> }, true, enableDebug
+            aapsLogger, context, glucoseAppIds, 
+            { app, msg -> 
+                // Native ConnectIQ Message Handling (Bluetooth Sync)
+                if (msg is Map<*, *>) {
+                    try {
+                        @Suppress("UNCHECKED_CAST")
+                        val map = msg as? Map<String, Any>
+                        if (map != null) {
+                            aapsLogger.debug(LTag.GARMIN, "Received Native Message from ${app.appId}: $map")
+                            receiveHeartRate(map, false)
+                        }
+                    } catch (e: Exception) {
+                        aapsLogger.error(LTag.GARMIN, "Error processing native message: ${e.message}")
+                    }
+                }
+            }, 
+            true, enableDebug
         ).also {
             disposable.add(it)
         }
@@ -430,54 +446,94 @@ class GarminPlugin @Inject constructor(
 
     @VisibleForTesting
     fun receiveSteps(msg: Map<String, Any>, test: Boolean) {
-        if (!msg.containsKey("stepsStart") || !msg.containsKey("stepsEnd")) return
+        // 1. Mandatory Timeframe
         val samplingStartSec = toLong(msg["stepsStart"])
         val samplingEndSec = toLong(msg["stepsEnd"])
-        val steps5 = toInt(msg["steps5"]) ?: return
-        val steps10 = toInt(msg["steps10"]) ?: return
-        val steps15 = toInt(msg["steps15"]) ?: return
-        val steps30 = toInt(msg["steps30"]) ?: return
-        val steps60 = toInt(msg["steps60"]) ?: return
-        val steps180 = toInt(msg["steps180"]) ?: return
+        
+        if (samplingStartSec == 0L || samplingEndSec == 0L) {
+             if (msg.keys.any { it.contains("steps") }) {
+                 val keys = msg.keys.filter { it.contains("steps") }.joinToString(",")
+                 aapsLogger.debug(LTag.GARMIN, "Investigation (Native): Msg has steps keys ($keys) but missing Start/End.")
+             }
+             return
+        }
+
+        // 2. Lenient Bucket Retrieval
+        val steps5 = toInt(msg["steps5"]) ?: 0
+        val steps10 = toInt(msg["steps10"]) ?: 0
+        val steps15 = toInt(msg["steps15"]) ?: 0
+        val steps30 = toInt(msg["steps30"]) ?: 0
+        val steps60 = toInt(msg["steps60"]) ?: 0
+        val steps180 = toInt(msg["steps180"]) ?: 0
         val device: String? = msg["device"] as String?
-        receiveSteps(
-            Instant.ofEpochSecond(samplingStartSec),
-            Instant.ofEpochSecond(samplingEndSec),
-            steps5,
-            steps10,
-            steps15,
-            steps30,
-            steps60,
-            steps180,
-            device,
-            test,
-        )
+        
+        // 3. Validation
+        val hasData = steps5 > 0 || steps10 > 0 || steps15 > 0 || steps30 > 0 || steps60 > 0 || steps180 > 0
+
+        if (hasData) {
+            receiveSteps(
+                Instant.ofEpochSecond(samplingStartSec),
+                Instant.ofEpochSecond(samplingEndSec),
+                steps5,
+                steps10,
+                steps15,
+                steps30,
+                steps60,
+                steps180,
+                device,
+                test,
+            )
+        }
     }
 
     @VisibleForTesting
     fun receiveSteps(uri: URI) {
-        val samplingStart = getQueryParameter(uri, "stepsStart")?.toLongOrNull() ?: return
-        val samplingEnd = getQueryParameter(uri, "stepsEnd")?.toLongOrNull() ?: return
-        val steps5 = getQueryParameter(uri, "steps5")?.toIntOrNull() ?: return
-        val steps10 = getQueryParameter(uri, "steps10")?.toIntOrNull() ?: return
-        val steps15 = getQueryParameter(uri, "steps15")?.toIntOrNull() ?: return
-        val steps30 = getQueryParameter(uri, "steps30")?.toIntOrNull() ?: return
-        val steps60 = getQueryParameter(uri, "steps60")?.toIntOrNull() ?: return
-        val steps180 = getQueryParameter(uri, "steps180")?.toIntOrNull() ?: return
+        // 1. Mandatory Timeframe
+        val stepsStartStr = getQueryParameter(uri, "stepsStart")
+        val stepsEndStr = getQueryParameter(uri, "stepsEnd")
+        
+        if (stepsStartStr == null || stepsEndStr == null) {
+            // Investigation Mode: checking for partial/malformed data
+            if ((uri.query ?: "").contains("steps")) {
+                 aapsLogger.debug(LTag.GARMIN, "Investigation: Request has 'steps' keyword but missing Start/End timestamps.")
+            }
+            return
+        }
+
+        val samplingStart = stepsStartStr.toLongOrNull() ?: return
+        val samplingEnd = stepsEndStr.toLongOrNull() ?: return
+        
+        // 2. Lenient Bucket Retrieval (Default to 0 if missing)
+        // This allows watchfaces to send only partial data (e.g. only steps5) without failing
+        val steps5 = getQueryParameter(uri, "steps5")?.toIntOrNull() ?: 0
+        val steps10 = getQueryParameter(uri, "steps10")?.toIntOrNull() ?: 0
+        val steps15 = getQueryParameter(uri, "steps15")?.toIntOrNull() ?: 0
+        val steps30 = getQueryParameter(uri, "steps30")?.toIntOrNull() ?: 0
+        val steps60 = getQueryParameter(uri, "steps60")?.toIntOrNull() ?: 0
+        val steps180 = getQueryParameter(uri, "steps180")?.toIntOrNull() ?: 0
         val device = getQueryParameter(uri, "device")
         val test = getQueryParameter(uri, "test", false)
-        receiveSteps(
-            Instant.ofEpochSecond(samplingStart),
-            Instant.ofEpochSecond(samplingEnd),
-            steps5,
-            steps10,
-            steps15,
-            steps30,
-            steps60,
-            steps180,
-            device,
-            test,
-        )
+
+        // 3. Validation: Do we have ANY data?
+        val hasData = steps5 > 0 || steps10 > 0 || steps15 > 0 || steps30 > 0 || steps60 > 0 || steps180 > 0
+        
+        if (hasData) {
+            receiveSteps(
+                Instant.ofEpochSecond(samplingStart),
+                Instant.ofEpochSecond(samplingEnd),
+                steps5,
+                steps10,
+                steps15,
+                steps30,
+                steps60,
+                steps180,
+                device,
+                test,
+            )
+        } else {
+             // Low-level debug only to avoid spamming if watchface sends empty heartbeat
+             // aapsLogger.debug(LTag.GARMIN, "Received steps timestamp but all buckets are 0/missing")
+        }
     }
 
     private fun receiveSteps(
