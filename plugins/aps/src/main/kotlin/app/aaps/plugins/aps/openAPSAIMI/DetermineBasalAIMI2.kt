@@ -4855,29 +4855,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
 
 
-            
-            // Re-implement correctly to extract specific fields
-            val valid5 = allStepsCounts.filter { (it.timestamp + it.duration) >= timeMillis5 }.maxByOrNull { it.timestamp }
+            // 🔧 FIX: timestamp est déjà l'END time (cf. SC.kt doc), pas besoin d'ajouter duration
+            val valid5 = allStepsCounts.filter { it.timestamp >= timeMillis5 }.maxByOrNull { it.timestamp }
             // Fallback for 5 min
             val fallbackRecord = if (valid5 == null) {
-                 allStepsCounts.filter { (it.timestamp + it.duration) >= (now - 30 * 60 * 1000) }.maxByOrNull { it.timestamp }
+                 allStepsCounts.filter { it.timestamp >= (now - 30 * 60 * 1000) }.maxByOrNull { it.timestamp }
             } else null
             
             this.recentSteps5Minutes = valid5?.steps5min ?: fallbackRecord?.steps5min ?: 0
             
-            this.recentSteps10Minutes = allStepsCounts.filter { (it.timestamp + it.duration) >= timeMillis10 }
-                .maxByOrNull { it.timestamp }?.steps10min ?: this.recentSteps5Minutes // Fallback to smaller window if needed? No, just 0 or current
+            this.recentSteps10Minutes = allStepsCounts.filter { it.timestamp >= timeMillis10 }
+                .maxByOrNull { it.timestamp }?.steps10min ?: 0
             
-            this.recentSteps15Minutes = allStepsCounts.filter { (it.timestamp + it.duration) >= timeMillis15 }
+            this.recentSteps15Minutes = allStepsCounts.filter { it.timestamp >= timeMillis15 }
                 .maxByOrNull { it.timestamp }?.steps15min ?: 0
                 
-            this.recentSteps30Minutes = allStepsCounts.filter { (it.timestamp + it.duration) >= timeMillis30 }
+            this.recentSteps30Minutes = allStepsCounts.filter { it.timestamp >= timeMillis30 }
                 .maxByOrNull { it.timestamp }?.steps30min ?: 0
                 
-            this.recentSteps60Minutes = allStepsCounts.filter { (it.timestamp + it.duration) >= timeMillis60 }
+            this.recentSteps60Minutes = allStepsCounts.filter { it.timestamp >= timeMillis60 }
                 .maxByOrNull { it.timestamp }?.steps60min ?: 0
                 
-            this.recentSteps180Minutes = allStepsCounts.filter { (it.timestamp + it.duration) >= timeMillis180 }
+            this.recentSteps180Minutes = allStepsCounts.filter { it.timestamp >= timeMillis180 }
                 .maxByOrNull { it.timestamp }?.steps180min ?: 0
                 
         } else {
