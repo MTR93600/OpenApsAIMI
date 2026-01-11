@@ -1907,7 +1907,17 @@ class DataHandlerMobile @Inject constructor(
             steps180min = actionStepsRate.steps180min,
             device = actionStepsRate.device
         )
-        disposable += persistenceLayer.insertOrUpdateStepsCount(stepsCount).subscribe()
+        disposable += persistenceLayer.insertOrUpdateStepsCount(stepsCount).subscribe(
+            { result ->
+                val id = result.inserted.firstOrNull()?.id ?: result.updated.firstOrNull()?.id
+                aapsLogger.info(LTag.WEAR,
+                    "✅ Wear Steps stored in DB: ID=$id, 5min=${actionStepsRate.steps5min}, timestamp=${java.util.Date(actionStepsRate.timestamp)}")
+            },
+            { error ->
+                aapsLogger.error(LTag.WEAR,
+                    "❌ Failed to store Wear steps: ${error.message}")
+            }
+        )
     }
 
     private fun handleGetCustomWatchface(command: EventData.ActionGetCustomWatchface) {
