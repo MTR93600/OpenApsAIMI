@@ -1,5 +1,9 @@
 package app.aaps.plugins.smoothing
 
+import app.aaps.core.interfaces.aps.IobTotal
+import app.aaps.core.interfaces.iob.IobCobCalculator
+import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.data.iob.InMemoryGlucoseValue
 import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.data.plugin.PluginType
@@ -151,8 +155,14 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         val sensorNoise = currentBg * 0.10
 
         // Contextes Injectés (Safety)
-        val iob = iobCobCalculator.lastIob // Supposons accès via getter ou last known calculation
-        val isNight = preferences.get(app.aaps.core.keys.BooleanKey.ObsrSleep) // Ou variable profile
+        // Calculate simplistic total IOB (Bolus + TBR) for safety check
+        val bolusIob = iobCobCalculator.calculateIobFromBolus().iob
+        val basalIob = iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended().iob
+        val iob = bolusIob + basalIob
+        
+        val now = java.util.Calendar.getInstance()
+        val hour = now.get(java.util.Calendar.HOUR_OF_DAY)
+        val isNight = preferences.get(BooleanKey.OApsAIMInight) == true || (hour < 7 || hour >= 23)
 
         return GlycemicContext(
             delta = avgDelta,
