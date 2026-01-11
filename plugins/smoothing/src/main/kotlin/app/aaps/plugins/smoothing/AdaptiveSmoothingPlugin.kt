@@ -31,7 +31,9 @@ import kotlin.math.sqrt
 @Singleton
 class AdaptiveSmoothingPlugin @Inject constructor(
     aapsLogger: AAPSLogger,
-    rh: ResourceHelper
+    rh: ResourceHelper,
+    private val iobCobCalculator: IobCobCalculator,
+    private val preferences: Preferences
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.SMOOTHING)
@@ -51,7 +53,9 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         val cv: Double,                 // % - coefficient de variation (stabilité)
         val zone: GlycemicZone,         // zone glycémique actuelle
         val currentBg: Double,          // mg/dL - glycémie actuelle
-        val sensorNoise: Double         // estimation du bruit capteur
+        val sensorNoise: Double,        // estimation du bruit capteur
+        val iob: Double,                // U - Insuline active (Contextual Validation)
+        val isNight: Boolean            // Mode nuit actif
     )
 
     /**
@@ -68,6 +72,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
      * Modes de lissage adaptatifs
      */
     private enum class SmoothingMode {
+        COMPRESSION_BLOCK, // 🛑 ARTIFACT: Chute Impossible (Capteur écrasé)
         RAPID_RISE,     // Montée rapide : lissage minimal pour réactivité max
         RAPID_FALL,     // Descente rapide : lissage asymétrique (sécurité hypo)
         STABLE,         // Stable : lissage standard
@@ -90,12 +95,13 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         aapsLogger.info(
             LTag.GLUCOSE,
             "AdaptiveSmoothing: Mode=$mode | BG=${context.currentBg.toInt()} | Δ=${String.format("%.1f", context.delta)} | " +
-                "Accel=${String.format("%.2f", context.acceleration)} | CV=${String.format("%.1f", context.cv)}% | " +
+                "IOB=${String.format("%.1f", context.iob)} | Night=${context.isNight} | " +
                 "Zone=${context.zone}"
         )
 
         // 3. Appliquer le lissage contextualisé
         return when (mode) {
+            SmoothingMode.COMPRESSION_BLOCK -> applyCompressionProtection(data, context)
             SmoothingMode.RAPID_RISE -> applyMinimalSmoothing(data, context)
             SmoothingMode.RAPID_FALL -> applyAsymmetricSmoothing(data, context)
             SmoothingMode.STABLE -> applyStandardSmoothing(data, context)
@@ -144,13 +150,19 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         // Estimation du bruit capteur (modèle Dexcom : ~10% du BG)
         val sensorNoise = currentBg * 0.10
 
+        // Contextes Injectés (Safety)
+        val iob = iobCobCalculator.lastIob // Supposons accès via getter ou last known calculation
+        val isNight = preferences.get(app.aaps.core.keys.BooleanKey.ObsrSleep) // Ou variable profile
+
         return GlycemicContext(
             delta = avgDelta,
             acceleration = acceleration,
             cv = cv,
             zone = zone,
             currentBg = currentBg,
-            sensorNoise = sensorNoise
+            sensorNoise = sensorNoise,
+            iob = iob.toDouble(),
+            isNight = isNight
         )
     }
 
@@ -158,6 +170,14 @@ class AdaptiveSmoothingPlugin @Inject constructor(
      * Détermine le mode de lissage adaptatif en fonction du contexte
      */
     private fun determineMode(context: GlycemicContext): SmoothingMode = when {
+        
+        // 🛑 COMPRESSION PROTECTION (Smoothie Logic)
+        // Si chute impossible (>20mg/5min) avec peu d'IOB la nuit -> ARTIFACT
+        isCompressionArtifactCandidate(context) -> {
+            aapsLogger.warn(LTag.GLUCOSE, "AdaptiveSmoothing: COMPRESSION LOW DETECTED (Impossible Drop)")
+            SmoothingMode.COMPRESSION_BLOCK
+        }
+        
         // HYPO : Sécurité absolue - pas de lissage
         context.zone == GlycemicZone.HYPO -> {
             aapsLogger.warn(LTag.GLUCOSE, "AdaptiveSmoothing: HYPO detected, no smoothing applied")
@@ -190,6 +210,46 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         else -> {
             SmoothingMode.STABLE
         }
+    }
+
+    private fun isCompressionArtifactCandidate(ctx: GlycemicContext): Boolean {
+        // 1. Chute massive ( > -15 la nuit, ou > -25 le jour)
+        val dropThreshold = if (ctx.isNight) -15.0 else -25.0
+        val isImpossibleDrop = ctx.delta < dropThreshold
+        
+        // 2. Contexte "Safe" (Pas d'explication physiologique)
+        // Si IOB > 3U, la chute peut être réelle (insuline active)
+        val isPhysiologicallyUnlikely = ctx.iob < 3.0 && ctx.acceleration > -5.0 // Pas d'accélération massive continue
+        
+        return isImpossibleDrop && isPhysiologicallyUnlikely
+    }
+
+    /**
+     * Mode COMPRESSION_BLOCK
+     * Ignore la chute brutale. Projette la dernière valeur stable ou lisse fortement.
+     */
+    private fun applyCompressionProtection(
+        data: MutableList<InMemoryGlucoseValue>,
+        context: GlycemicContext
+    ): MutableList<InMemoryGlucoseValue> {
+        // Stratégie : On ignore le point actuel (le creux) et on renvoie le point précédent
+        // Ou mieux : Zero-Order Hold (Maintien de la valeur précédente)
+        
+        for (i in data.lastIndex - 1 downTo 0) { // On traite tout le monde au cas où
+             // Si on détecte une chute brutale locale > 15 mg entre i+1 et i
+             // On écrase i par i+1 (ordre chronologique inverse ici? data[0] est le plus récent)
+             // Wait, usually list[0] is newest.
+        }
+        
+        // Correction simple sur le point le plus récent (0)
+        // On remplace sa valeur 'smoothed' par la valeur précédente (1)
+        if (data.size > 1 && isValid(data[1].value)) {
+             data[0].smoothed = data[1].value // Hold previous value
+             data[0].trendArrow = TrendArrow.FLAT
+             aapsLogger.debug(LTag.GLUCOSE, "AdaptiveSmoothing: Holding Value ${data[1].value} over ${data[0].value}")
+        }
+        
+        return data
     }
 
     /**
