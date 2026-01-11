@@ -1479,34 +1479,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         isExplicitUserAction: Boolean = false,
         decisionSource: String = "AIMI"
     ) {
-        // 🛡️ FIX NC3: REACTIVITY CLAMP for Low BG (Safety-Critical)
-        // Prevent learner amplification at low BG
-        var effectiveProposed = proposedUnits
+        // 🚀 REACTOR MODE: Full Speed (Safety delegated to applySafetyPrecautions)
+        // User Directive: "Garde le moteur à plein régime"
         
-        if (bg < 120.0 && !isExplicitUserAction) {
-            val lowBgReactivityMax = 1.05 // Maximum 5% amplification below 120
-            val currentReactivity = try {
-                unifiedReactivityLearner.globalFactor
-            } catch (e: Exception) {
-                1.0 // Fallback if learner not initialized
-            }
-            
-            if (currentReactivity > lowBgReactivityMax) {
-                val clampedFactor = lowBgReactivityMax
-                effectiveProposed = (proposedUnits / currentReactivity * clampedFactor).coerceAtLeast(0.0)
-                consoleLog.add("REACTIVITY_CLAMP bg=${bg.roundToInt()} react=${"%.2f".format(currentReactivity)} max=${"%.2f".format(clampedFactor)} proposed=${"%.2f".format(proposedUnits)}->${"%.2f".format(effectiveProposed)}")
-            }
-        }
+        var effectiveProposed = proposedUnits
+
+        // No inline clamping here. 
+        // We trust the UnifiedReactivityLearner to provide the correct amplification
+        // and the Safety Module to catch critical issues.
         
         val proposedFloat = effectiveProposed.toFloat()
         lastDecisionSource = decisionSource
         lastSmbProposed = effectiveProposed
         
-        // Use maxSMB (Preferences) as the hard limit.
-        // We use 'maxSMB' instead of 'maxSMBHB' to ensure strict safety unless explicitly handled otherwise.
-        // 1. Determine dynamic baseline limit (Normal vs High BG)
-        // If BG > 120, use the High BG Max SMB preference (MaxSMBHB).
-         val baseLimit = if (this.bg > 120) this.maxSMBHB else this.maxSMB
+        // 🛡️ SAFETY NET: Dynamic SMB Limit (Zones & Trajectory)
+        // Replaces simple "React Over 120" with a smart, amplified range logic.
+        // Handles: Strict Lows (<120), Buffer/Transition (120-160), and Full Reactor (>160).
+        val baseLimit = app.aaps.plugins.aps.openAPSAIMI.safety.SafetyNet.calculateSafeSmbLimit(
+            bg = this.bg,
+            eventualBg = this.eventualBG,
+            maxSmbLow = this.maxSMB,
+            maxSmbHigh = this.maxSMBHB,
+            isExplicitUserAction = isExplicitUserAction
+        )
 
          // 🔒 FCL Safety: Enforce Safety Precautions (Dropping Fast, Hypo Risk, etc)
          // finalizeAndCapSMB often handles forced boluses, but they MUST yield to critical physical safety.
@@ -1522,23 +1517,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             exerciseFlag = sportTime, // Pass exercise state
             suspectedLateFatMeal = lateFatRiseFlag, // Pass late fat flag
             ignoreSafetyConditions = isExplicitUserAction
-         )
+         ).coerceAtMost(baseLimit.toFloat()) // Apply the SafetyNet limit immediately
 
          if (safetyCappedUnits < proposedFloat) {
-              consoleLog.add("Safety Precautions reduced SMB: $proposedFloat -> $safetyCappedUnits")
-         }
-
-         // 🛡️ FIX NC2: LOW BG SMB GUARD (Safety-Critical)
-         // Reduce maxSMB significantly under 120 mg/dL to prevent hypo
-         val lowBgThreshold = 120.0
-         val lowBgSmbFactor = 0.4 // 60% reduction (configurable via preferences later)
-         
-         if (bg < lowBgThreshold && !isExplicitUserAction) {
-             val lowBgLimit = (baseLimit * lowBgSmbFactor).toFloat()
-             if (safetyCappedUnits > lowBgLimit) {
-                 consoleLog.add("LOW_BG_GUARD bg=${bg.roundToInt()} cap=${"%.2f".format(lowBgLimit)} factor=${"%.0f".format(lowBgSmbFactor*100)}%")
-                 safetyCappedUnits = lowBgLimit
-             }
+              consoleLog.add("Safety Precautions reduced SMB: $proposedFloat -> $safetyCappedUnits (BaseLimit=${"%.2f".format(baseLimit)})")
          }
 
          // 🔧 FIX 3: Enhanced refractory if prediction absent
