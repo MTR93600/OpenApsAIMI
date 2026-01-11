@@ -398,7 +398,13 @@ class GarminPlugin @Inject constructor(
     }
     // end mod
 
-    private fun toLong(v: Any?) = (v as? Number?)?.toLong() ?: 0L
+    private fun toLong(v: Any?): Long {
+        return when (v) {
+            is Number -> v.toLong()
+            is String -> v.toLongOrNull() ?: 0L
+            else -> 0L
+        }
+    }
     private fun toInt(v: Any?) = when (v) {
         is Number -> v.toInt()
         is String -> v.toDoubleOrNull()?.toInt()
@@ -446,16 +452,27 @@ class GarminPlugin @Inject constructor(
 
     @VisibleForTesting
     fun receiveSteps(msg: Map<String, Any>, test: Boolean) {
-        // 1. Mandatory Timeframe
-        val samplingStartSec = toLong(msg["stepsStart"])
-        val samplingEndSec = toLong(msg["stepsEnd"])
+        // 🔍 DIAGNOSTIC: Log what Garmin sends
+        aapsLogger.debug(LTag.GARMIN, "receiveSteps() - Keys received: ${msg.keys.joinToString(", ")}")
         
+        // 1. Extract timestamps (robust parsing - handles String and Number)
+        var samplingStartSec = toLong(msg["stepsStart"])
+        var samplingEndSec = toLong(msg["stepsEnd"])
+        
+        // 🔧 FALLBACK 1: Try case-insensitive variants
+        if (samplingStartSec == 0L) samplingStartSec = toLong(msg["stepsstart"])
+        if (samplingEndSec == 0L) samplingEndSec = toLong(msg["stepsend"])
+        
+        // 🔧 FALLBACK 2: If timestamps missing, use current time - 5min window
         if (samplingStartSec == 0L || samplingEndSec == 0L) {
-             if (msg.keys.any { it.contains("steps") }) {
-                 val keys = msg.keys.filter { it.contains("steps") }.joinToString(",")
-                 aapsLogger.debug(LTag.GARMIN, "Investigation (Native): Msg has steps keys ($keys) but missing Start/End.")
-             }
-             return
+            if (msg.keys.any { it.contains("steps", ignoreCase = true) && it !in listOf("stepsStart", "stepsEnd", "stepsstart", "stepsend") }) {
+                val now = clock.instant().epochSecond
+                aapsLogger.warn(LTag.GARMIN, "Steps data without timestamps. Using fallback: now-5min to now. Keys: ${msg.keys.joinToString(",")}")
+                samplingStartSec = now - 300
+                samplingEndSec = now
+            } else {
+                return // No steps data at all
+            }
         }
 
         // 2. Lenient Bucket Retrieval
@@ -467,9 +484,16 @@ class GarminPlugin @Inject constructor(
         val steps180 = toInt(msg["steps180"]) ?: 0
         val device: String? = msg["device"] as String?
         
-        // 3. Validation
+        // 3. Validation & Logging
         val hasData = steps5 > 0 || steps10 > 0 || steps15 > 0 || steps30 > 0 || steps60 > 0 || steps180 > 0
-
+        
+        if (!hasData) {
+            aapsLogger.debug(LTag.GARMIN, "Steps: All buckets are 0. Skipping.")
+            return
+        }
+        
+        aapsLogger.info(LTag.GARMIN, "Steps: 5=$steps5, 10=$steps10, 15=$steps15, 30=$steps30, 60=$steps60, 180=$steps180")
+        
         if (hasData) {
             receiveSteps(
                 Instant.ofEpochSecond(samplingStartSec),
@@ -488,20 +512,24 @@ class GarminPlugin @Inject constructor(
 
     @VisibleForTesting
     fun receiveSteps(uri: URI) {
-        // 1. Mandatory Timeframe
-        val stepsStartStr = getQueryParameter(uri, "stepsStart")
-        val stepsEndStr = getQueryParameter(uri, "stepsEnd")
+        // 🔍 DIAGNOSTIC
+        aapsLogger.debug(LTag.GARMIN, "receiveSteps(HTTP) - Query: ${uri.query ?: "<empty>"}")
         
-        if (stepsStartStr == null || stepsEndStr == null) {
-            // Investigation Mode: checking for partial/malformed data
-            if ((uri.query ?: "").contains("steps")) {
-                 aapsLogger.debug(LTag.GARMIN, "Investigation: Request has 'steps' keyword but missing Start/End timestamps.")
+        // 1. Extract timestamps with fallbacks
+        var samplingStart: Long? = getQueryParameter(uri, "stepsStart")?.toLongOrNull()
+        var samplingEnd: Long? = getQueryParameter(uri, "stepsEnd")?.toLongOrNull()
+        
+        // 🔧 FALLBACK: Use current time if missing
+        if (samplingStart == null || samplingEnd == null) {
+            if ((uri.query ?: "").contains("steps", ignoreCase = true)) {
+                val now = clock.instant().epochSecond
+                aapsLogger.warn(LTag.GARMIN, "HTTP steps without timestamps. Using fallback: now-5min to now")
+                samplingStart = now - 300
+                samplingEnd = now
+            } else {
+                return
             }
-            return
         }
-
-        val samplingStart = stepsStartStr.toLongOrNull() ?: return
-        val samplingEnd = stepsEndStr.toLongOrNull() ?: return
         
         // 2. Lenient Bucket Retrieval (Default to 0 if missing)
         // This allows watchfaces to send only partial data (e.g. only steps5) without failing
@@ -514,8 +542,15 @@ class GarminPlugin @Inject constructor(
         val device = getQueryParameter(uri, "device")
         val test = getQueryParameter(uri, "test", false)
 
-        // 3. Validation: Do we have ANY data?
+        // 3. Validation & Logging
         val hasData = steps5 > 0 || steps10 > 0 || steps15 > 0 || steps30 > 0 || steps60 > 0 || steps180 > 0
+        
+        if (!hasData) {
+            aapsLogger.debug(LTag.GARMIN, "HTTP Steps: All buckets are 0. Skipping.")
+            return
+        }
+        
+        aapsLogger.info(LTag.GARMIN, "HTTP Steps: 5=$steps5, 10=$steps10, 15=$steps15, 30=$steps30, 60=$steps60, 180=$steps180")
         
         if (hasData) {
             receiveSteps(
