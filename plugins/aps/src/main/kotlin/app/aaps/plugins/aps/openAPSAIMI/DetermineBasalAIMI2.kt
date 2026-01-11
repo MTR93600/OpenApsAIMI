@@ -1504,7 +1504,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         val baseLimit = app.aaps.plugins.aps.openAPSAIMI.safety.SafetyNet.calculateSafeSmbLimit(
             bg = this.bg,
-            targetBg = target_bg,
+            targetBg = targetBg.toDouble(),
             eventualBg = this.eventualBG,
             delta = this.delta.toDouble(),
             shortAvgDelta = this.shortAvgDelta.toDouble(),
