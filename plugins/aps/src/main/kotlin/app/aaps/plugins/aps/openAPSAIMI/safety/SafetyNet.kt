@@ -9,9 +9,11 @@ import kotlin.math.max
  * Implements the "Tiered Reaction" strategy to manage aggression levels
  * based on Glucose Zones and Predictive Trajectories.
  * 
- * Addresses the "React Over 120" amplification request:
- * - Introduces a Buffer Zone (120-160 mg/dL) to prevent binary aggression jumps.
- * - Enforces strict limits below 120 mg/dL to prevent "Deep Lows" (45-50 mg/dL).
+ * Zone Architecture:
+ * - Zone 0.5: Soft Landing (Target → Target+15) - Gentle convergence boost
+ * - Zone 1: Strict Guard (< 120) - Hypo prevention with UAM bypass
+ * - Zone 2: Buffer (120-160) - Progressive SMB scaling
+ * - Zone 3: Reactor (> 160) - Full aggression
  */
 object SafetyNet {
 
@@ -19,37 +21,66 @@ object SafetyNet {
      * Calculates the safe Maximum SMB allowed for the current context.
      * 
      * @param bg Current Blood Glucose
+     * @param targetBg Profile Target BG
      * @param eventualBg Predicted eventual BG (Trajectory)
+     * @param delta Instant trend
+     * @param shortAvgDelta 15min trend confirmation
      * @param maxSmbLow The user's standard "MaxSMB" setting (Conservative)
      * @param maxSmbHigh The user's "High BG MaxSMB" setting (Aggressive/Rage)
      * @param isExplicitUserAction True if this is a manual user override
+     * @param auditorConfidence AI Auditor confidence (0-1), null if unavailable
      * @return The safe SMB limit (U)
      */
     fun calculateSafeSmbLimit(
         bg: Double,
+        targetBg: Double,
         eventualBg: Double,
-        delta: Double,         // 🚀 NEW: Instant trend
-        shortAvgDelta: Double, // 🚀 NEW: 15min trend confirmation
+        delta: Double,
+        shortAvgDelta: Double,
         maxSmbLow: Double,
         maxSmbHigh: Double,
-        isExplicitUserAction: Boolean
+        isExplicitUserAction: Boolean,
+        auditorConfidence: Double? = null
     ): Double {
         // 1. Manual Override: Full Trust
         if (isExplicitUserAction) return maxSmbHigh
 
-        // 2. ZONE 1: STRICT GUARD (< 120 mg/dL)
+        // 2. ZONE 0.5: SOFT LANDING (Target → Target+15)
+        // Purpose: Prevent "plateau effect" 10-20 mg/dL above target
+        // Example: Target=100, Current=110 → Apply gentle boost to converge
+        val distanceAboveTarget = bg - targetBg
+        val inSoftLandingZone = distanceAboveTarget > 0 && distanceAboveTarget <= 15
+        
+        if (inSoftLandingZone) {
+            // Only boost if coasting stable (not rising fast)
+            val isCoasting = delta <= 1.0 && eventualBg > targetBg
+            
+            if (isCoasting) {
+                // Base boost: +10% SMB to gently push down
+                var boostFactor = 1.10
+                
+                // 🧠 AI AUDITOR SAFETY LAYER
+                // If Auditor doubts the situation, reduce or cancel boost
+                if (auditorConfidence != null) {
+                    boostFactor = when {
+                        auditorConfidence >= 0.7 -> 1.10  // High confidence: Full boost
+                        auditorConfidence >= 0.5 -> 1.05  // Medium: Half boost
+                        else -> 1.0                       // Low: No boost (safety)
+                    }
+                }
+                
+                return maxSmbLow * boostFactor
+            }
+        }
+
+        // 3. ZONE 1: STRICT GUARD (< 120 mg/dL)
         // Standard: Clamp to 50% to prevent deep hypos
         // Exception: UAM ROCKET BYPASS
-        // If BG is rising violently, waiting for 120 mg/dL is too late.
-        // We detect this via Delta > 6.0 OR AvgDelta > 6.0 (Confirmed Rise)
         val isUamRise = delta > 6.0 || shortAvgDelta > 6.0
 
         if (bg < 120.0) {
             if (isUamRise) {
-                // 🚀 ROCKET BYPASS ACTIVATE
-                // Situation: Meal detected early.
-                // Action: Unlock the full "Low" aggression immediately.
-                // We keep "Low" (not High) because we are still < 120.
+                // 🚀 ROCKET BYPASS: Meal detected early
                 return maxSmbLow
             }
             
@@ -58,26 +89,20 @@ object SafetyNet {
             return maxSmbLow * strictFactor
         }
 
-        // 3. ZONE 2: BUFFER / TRANSITION (120 - 160 mg/dL)
-        // User Request: "Amplifier the range of react over 120?"
-        // Strategy: Don't jump straight to MaxSMBHigh. 
-        // Use a progressive transition or "Predictive Clamp".
+        // 4. ZONE 2: BUFFER / TRANSITION (120 - 160 mg/dL)
         if (bg < 160.0) {
-            // Predictive Check:
-            // If the trajectory is falling (Eventual < 120), DO NOT use High Rage settings.
+            // Predictive Check
             if (eventualBg < 120.0) {
                 return maxSmbLow
             }
             
-            // If trajectory is stable/rising (Eventual > 120), allow linear interpolation.
-            // Result scales from maxSmbLow (at 120) to maxSmbHigh (at 160).
-            val progress = (bg - 120.0) / (160.0 - 120.0) // 0.0 to 1.0
+            // Linear interpolation
+            val progress = (bg - 120.0) / (160.0 - 120.0)
             val range = maxSmbHigh - maxSmbLow
             return maxSmbLow + (range * progress)
         }
 
-        // 4. ZONE 3: REACTOR MAX (> 160 mg/dL)
-        // Full Aggression allowed (bounded by MaxSMBHB)
+        // 5. ZONE 3: REACTOR MAX (> 160 mg/dL)
         return maxSmbHigh
     }
 }

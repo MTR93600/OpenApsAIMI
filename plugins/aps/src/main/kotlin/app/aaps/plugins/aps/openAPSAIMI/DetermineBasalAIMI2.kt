@@ -1495,14 +1495,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🛡️ SAFETY NET: Dynamic SMB Limit (Zones & Trajectory)
         // Replaces simple "React Over 120" with a smart, amplified range logic.
         // Handles: Strict Lows (<120), Buffer/Transition (120-160), and Full Reactor (>160).
+        // 🧠 AI Auditor Confidence (si disponible)
+        // Si l'Auditor a été interrogé récemment, utiliser sa confiance
+        // Sinon, passer null pour appliquer le boost par défaut
+        val auditorLastConfidence: Double? = try {
+            app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache.get(300_000)?.verdict?.confidence
+        } catch (e: Exception) { null }
+        
         val baseLimit = app.aaps.plugins.aps.openAPSAIMI.safety.SafetyNet.calculateSafeSmbLimit(
             bg = this.bg,
+            targetBg = target_bg,
             eventualBg = this.eventualBG,
             delta = this.delta.toDouble(),
             shortAvgDelta = this.shortAvgDelta.toDouble(),
             maxSmbLow = this.maxSMB,
             maxSmbHigh = this.maxSMBHB,
-            isExplicitUserAction = isExplicitUserAction
+            isExplicitUserAction = isExplicitUserAction,
+            auditorConfidence = auditorLastConfidence
         )
 
          // 🔒 FCL Safety: Enforce Safety Precautions (Dropping Fast, Hypo Risk, etc)
