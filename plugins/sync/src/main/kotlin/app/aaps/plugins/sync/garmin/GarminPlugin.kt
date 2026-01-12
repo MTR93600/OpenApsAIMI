@@ -142,6 +142,7 @@ class GarminPlugin @Inject constructor(
                         if (map != null) {
                             aapsLogger.debug(LTag.GARMIN, "Received Native Message from ${app.id}: $map")
                             receiveHeartRate(map, false)
+                            receiveSteps(map, false)  // ✅ CRITICAL FIX: Process steps from CIQ message
                         }
                     } catch (e: Exception) {
                         aapsLogger.error(LTag.GARMIN, "Error processing native message: ${e.message}")
