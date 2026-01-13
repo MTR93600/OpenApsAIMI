@@ -166,7 +166,12 @@ class GarminHealthSync @Inject constructor(
         val stepsCount = SC(
             timestamp = timestamp,
             duration = duration,
-            steps5min = steps,
+            steps5min = steps.toInt(),
+            steps10min = 0,
+            steps15min = 0,
+            steps30min = 0,
+            steps60min = 0,
+            steps180min = 0,
             device = device
         )
         
