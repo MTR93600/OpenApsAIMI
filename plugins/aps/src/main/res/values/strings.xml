@@ -1226,4 +1226,18 @@
     <string name="context_mode_balanced">Balanced</string>
     <string name="context_mode_aggressive">Aggressive</string>
 
+    <!-- Physiological Assistant Strings -->
+    <string name="aimi_physio_title">🏥 Physiological Assistant</string>
+    <string name="aimi_physio_enable_title">Enable Assistant</string>
+    <string name="aimi_physio_enable_summary">Adjusts insulin based on sleep, activity, and heart rate patterns.</string>
+    <string name="aimi_physio_data_sources_title">Data Sources</string>
+    <string name="aimi_physio_sleep_enable_title">Sync Sleep Data</string>
+    <string name="aimi_physio_sleep_enable_summary">Use Health Connect to fetch sleep stages and efficiency.</string>
+    <string name="aimi_physio_hrv_enable_title">Sync HRV &amp; RHR</string>
+    <string name="aimi_physio_hrv_enable_summary">Use heart rate variability to detect stress/fatigue.</string>
+    <string name="aimi_physio_advanced_title">Analysis &amp; Logs</string>
+    <string name="aimi_physio_llm_enable_title">LLM Narrative Analysis</string>
+    <string name="aimi_physio_llm_enable_summary">Send physio data to LLM for daily health summaries (Optional).</string>
+    <string name="aimi_physio_debug_title">Debug Logging</string>
+    <string name="aimi_physio_debug_summary">Log detailed physiological states to the console.</string>
 </resources>

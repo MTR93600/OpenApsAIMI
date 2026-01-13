@@ -1102,6 +1102,65 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         )
                     )
                 })
+
+                // 🏥 Physiological Assistant Section
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "AIMI_PHYSIO"
+                    title = rh.gs(R.string.aimi_physio_title)
+
+                    addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.AimiPhysioAssistantEnable,
+                            title = R.string.aimi_physio_enable_title,
+                            summary = R.string.aimi_physio_enable_summary
+                        )
+                    )
+
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.aimi_physio_data_sources_title)
+                    })
+
+                    addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.AimiPhysioSleepDataEnable,
+                            title = R.string.aimi_physio_sleep_enable_title,
+                            summary = R.string.aimi_physio_sleep_enable_summary
+                        )
+                    )
+
+                    addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.AimiPhysioHRVDataEnable,
+                            title = R.string.aimi_physio_hrv_enable_title,
+                            summary = R.string.aimi_physio_hrv_enable_summary
+                        )
+                    )
+
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.aimi_physio_advanced_title)
+                    })
+
+                    addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.AimiPhysioLLMAnalysisEnable,
+                            title = R.string.aimi_physio_llm_enable_title,
+                            summary = R.string.aimi_physio_llm_enable_summary
+                        )
+                    )
+
+                    addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.AimiPhysioDebugLogs,
+                            title = R.string.aimi_physio_debug_title,
+                            summary = R.string.aimi_physio_debug_summary
+                        )
+                    )
+                })
             addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIMLtraining, title = R.string.oaps_aimi_enableMlTraining_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMaxSMB, dialogMessage = R.string.openapsaimi_maxsmb_summary, title = R.string.openapsaimi_maxsmb_title))
             addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIweight, dialogMessage = R.string.oaps_aimi_weight_summary, title = R.string.oaps_aimi_weight_title))
