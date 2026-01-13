@@ -298,6 +298,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //private var enablebasal: Boolean = false
     private var recentNotes: List<UE>? = null
     private var tags0to60minAgo = ""
+    private var cachedPkpdRuntime: PkPdRuntime? = null // 🔧 FIX (MTR): Global cache for Safety methods
     private var tags60to120minAgo = ""
     private var tags120to180minAgo = ""
     private var tags180to240minAgo = ""
@@ -1525,7 +1526,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             smbToGiveParam = proposedFloat,
             hypoThreshold = hypoThreshold,
             reason = rT.reason,
-            pkpdRuntime = null, // Computed later, but tail damping logic available in applySafetyPrecautions
+            pkpdRuntime = cachedPkpdRuntime, // 🔧 FIX (MTR): Use cached runtime for Tail Damping
             exerciseFlag = sportTime, // Pass exercise state
             suspectedLateFatMeal = lateFatRiseFlag, // Pass late fat flag
             ignoreSafetyConditions = isExplicitUserAction
@@ -3715,8 +3716,69 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         // ═══════════════════════════════════════════════════════════════════════════
         
+        // ═══════════════════════════════════════════════════════════════════════════
+        // 🔧 FIX CRITIQUE (MTR): EARLY PKPD CALCULATION
+        // PkPd predictions must be available BEFORE SafetyNet, Meal Advisor, and Legacy logic run.
+        // ═══════════════════════════════════════════════════════════════════════════
+        
+        // 1. Prepare Sensitivity for PKPD
+        // Use default 1.0 if autosens not available yet (it is computed later usually)
+        // Accessing autosens_data might fail if it's a local var defined later.
+        val earlyAutosensRatio = 1.0 
+        val earlySens = profile.sens / earlyAutosensRatio 
+        
+        // 2. Compute PKPD Predictions Immediately
+        val earlyPkpdPredictions = computePkpdPredictions(
+            currentBg = glucoseStatus.glucose,
+            iobArray = iob_data_array,
+            finalSensitivity = earlySens,
+            cobG = mealData.mealCOB, // Use mealData which is initialized at start
+            profile = profile,
+            rT = rT,
+            delta = glucoseStatus.delta
+        )
+        
+        // 3. Initialize Variables & PkPdRuntime
+        this.eventualBG = earlyPkpdPredictions.eventual
+        this.predictedBg = earlyPkpdPredictions.eventual.toFloat()
+        rT.eventualBG = earlyPkpdPredictions.eventual
+        
+        // 4. Compute PkPdRuntime (Critical for Tail Damping)
+        this.cachedPkpdRuntime = try {
+             pkpdIntegration.computeRuntime(
+                epochMillis = dateUtil.now(),
+                bg = glucoseStatus.glucose,
+                deltaMgDlPer5 = glucoseStatus.delta,
+                iobU = iobTotal.toDouble(),  // FIX: Use iobTotal from iobActionProfile (line 3614)
+                carbsActiveG = mealData.mealCOB,
+                windowMin = 360, // 6h window
+                exerciseFlag = sportTime,
+                profileIsf = earlySens,
+                tdd24h = profile.max_daily_basal * 24.0, // Sort of
+                consoleLog = consoleLog
+            )
+        } catch (e: Exception) {
+            consoleError.add("❌ Early PKPD Runtime init failed: ${e.message}")
+            null
+        }
+        
+        // Local alias for compatibility with legacy code below
+        var pkpdRuntime = this.cachedPkpdRuntime
+        
+        // 5. 🏥 Apply Physiological Multipliers NOW
+        // This ensures Legacy modes and Meal Advisor respect fatigue/stress limits
+        if (!physioMultipliers.isNeutral()) {
+             // Apply to local sensitivity (will be refined later but good baseline)
+             this.variableSensitivity = (earlySens * physioMultipliers.isfFactor).toFloat()
+             
+             // Apply to limits
+             profile.max_daily_basal = profile.max_daily_basal * physioMultipliers.basalFactor
+             this.maxSMB = (this.maxSMB * physioMultipliers.smbFactor).coerceAtLeast(0.1)
+             
+             consoleLog.add("🏥 PHYSIO APPLIED: MaxSMB=${"%.2f".format(this.maxSMB)} MaxBasal=${"%.2f".format(profile.max_daily_basal)}")
+        }
+
         val reasonAimi = StringBuilder()
-        var pkpdRuntime: PkPdRuntime? = null
         var windowSinceDoseInt = 0
         var carbsActiveForPkpd = 0.0
         // On définit fromTime pour couvrir une longue période (par exemple, les 7 derniers jours)
