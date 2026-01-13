@@ -17,6 +17,7 @@ import dagger.android.ContributesAndroidInjector
         AutotuneModule::class,
         LoopModule::class,
         WCycleModule::class,
+        app.aaps.plugins.aps.openAPSAIMI.di.AIMIStepsProviderModuleMTR::class, // 🏥 MTR Steps Integration
         ApsModule.Bindings::class
     ]
 )

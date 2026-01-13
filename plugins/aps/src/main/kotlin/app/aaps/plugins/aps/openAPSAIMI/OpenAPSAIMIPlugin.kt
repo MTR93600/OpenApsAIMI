@@ -123,7 +123,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val profiler: Profiler,
     private val context: Context,
     private val apsResultProvider: Provider<APSResult>,
-    private val unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner // 🧠 Brain Injection
+    private val unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner, // 🧠 Brain Injection
+    private val stepsManager: app.aaps.plugins.aps.openAPSAIMI.steps.AIMIStepsManagerMTR // 🏃 Steps Manager MTR
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -141,6 +142,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
     override fun onStart() {
         super.onStart()
+        
+        // 🏃 Start AIMI Steps Manager (Health Connect + Phone Sensor sync)
+        try {
+            stepsManager.start()
+            aapsLogger.info(LTag.APS, "✅ AIMI Steps Manager started successfully")
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "❌ Failed to start AIMI Steps Manager", e)
+        }
+        
         AimiUamHandler.clearCache(context)
         AimiUamHandler.installConfidenceSupplier {
             // retourne null si tu veux "laisser la main" au runtime
@@ -162,6 +172,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         glucoseStatusCalculatorAimi.getGlucoseStatusData(allowOldData)
     override fun onStop() {
         super.onStop()
+        
+        // 🏃 Stop AIMI Steps Manager
+        try {
+            stepsManager.stop()
+            aapsLogger.info(LTag.APS, "🛑 AIMI Steps Manager stopped")
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "Error stopping AIMI Steps Manager", e)
+        }
+        
         AimiUamHandler.close(context)
     }
     // last values

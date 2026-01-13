@@ -30,6 +30,14 @@
     <!-- To receive data from Aidex -->
     <uses-permission android:name="com.microtechmd.cgms.aidex.permissions.RECEIVE_BG_ESTIMATE" />
 
+    <!-- 🏥 Health Connect - MTR Steps Integration (Android 14+) -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    
+    <!-- Health Connect availability query -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
+
     <application
         android:requestLegacyExternalStorage="true"
         android:name="app.aaps.MainApp"
