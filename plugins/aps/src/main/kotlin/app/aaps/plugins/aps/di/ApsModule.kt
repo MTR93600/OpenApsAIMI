@@ -18,6 +18,7 @@ import dagger.android.ContributesAndroidInjector
         LoopModule::class,
         WCycleModule::class,
         app.aaps.plugins.aps.openAPSAIMI.di.AIMIStepsProviderModuleMTR::class, // 🏥 MTR Steps Integration
+        AIMIPhysioModuleMTR::class, // 🏥 MTR Physiological Assistant
         ApsModule.Bindings::class
     ]
 )

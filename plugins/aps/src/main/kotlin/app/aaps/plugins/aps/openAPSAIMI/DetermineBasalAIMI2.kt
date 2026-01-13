@@ -228,6 +228,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var trajectoryHistoryProvider: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryHistoryProvider  // 🌀 Trajectory History
     @Inject lateinit var contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager  // 🎯 Context Module
     @Inject lateinit var contextInfluenceEngine: app.aaps.plugins.aps.openAPSAIMI.context.ContextInfluenceEngine  // 🎯 Context Influence
+    @Inject lateinit var physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR  // 🏥 Physiological Modulation
     // ❌ OLD reactivityLearner removed - UnifiedReactivityLearner is now the only one
     init {
         // Branche l’historique basal (TBR) sur la persistence réelle
@@ -3684,6 +3685,36 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             corrSqu = f?.corrR2 ?: 0.0
         )
         ensurePredictionFallback(rT, glucoseStatus.glucose)
+        
+        // ═══════════════════════════════════════════════════════════════════════════
+        // 🏥 PHYSIOLOGICAL ASSISTANT INTEGRATION (MTR)
+        // ═══════════════════════════════════════════════════════════════════════════
+        val physioMultipliers = if (preferences.get(app.aaps.core.keys.BooleanKey.AimiPhysioAssistantEnable)) {
+            try {
+                physioAdapter.getMultipliers(
+                    currentBG = glucoseStatus.glucose,
+                    currentDelta = glucoseStatus.delta
+                    // recentHypoTimestamp will be fetched internally by adapter
+                )
+            } catch (e: Exception) {
+                aapsLogger.error(app.aaps.core.interfaces.logging.LTag.APS, "Physio adapter error - using defaults", e)
+                app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR.NEUTRAL
+            }
+        } else {
+            app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR.NEUTRAL
+        }
+        
+        // Log physio modulation if active
+        if (!physioMultipliers.isNeutral()) {
+            consoleLog.add(
+                "🏥 PHYSIO: ISF×${String.format("%.3f", physioMultipliers.isfFactor)} " +
+                "Basal×${String.format("%.3f", physioMultipliers.basalFactor)} " +
+                "SMB×${String.format("%.3f", physioMultipliers.smbFactor)} " +
+                "Conf=${(physioMultipliers.confidence * 100).toInt()}%"
+            )
+        }
+        // ═══════════════════════════════════════════════════════════════════════════
+        
         val reasonAimi = StringBuilder()
         var pkpdRuntime: PkPdRuntime? = null
         var windowSinceDoseInt = 0
@@ -5164,6 +5195,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🔹 Sécurisation des bornes minimales et maximales
         this.variableSensitivity = this.variableSensitivity.coerceIn(5.0f, 300.0f)
 
+        // 🏥 Apply Physiological Multipliers (AFTER all other ISF/basal calculations)
+        this.variableSensitivity = (this.variableSensitivity * physioMultipliers.isfFactor).toFloat()
+        profile.max_daily_basal = profile.max_daily_basal * physioMultipliers.basalFactor
+        this.maxSMB = (this.maxSMB * physioMultipliers.smbFactor).coerceAtLeast(0.1)
 
         sens = variableSensitivity.toDouble()
         val pkpdPredictions = computePkpdPredictions(

@@ -124,7 +124,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val context: Context,
     private val apsResultProvider: Provider<APSResult>,
     private val unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner, // 🧠 Brain Injection
-    private val stepsManager: app.aaps.plugins.aps.openAPSAIMI.steps.AIMIStepsManagerMTR // 🏃 Steps Manager MTR
+    private val stepsManager: app.aaps.plugins.aps.openAPSAIMI.steps.AIMIStepsManagerMTR, // 🏃 Steps Manager MTR
+    private val physioManager: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioManagerMTR // 🏥 Physiological Manager MTR
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -149,6 +150,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             aapsLogger.info(LTag.APS, "✅ AIMI Steps Manager started successfully")
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "❌ Failed to start AIMI Steps Manager", e)
+        }
+        
+        // 🏥 Start AIMI Physiological Manager
+        try {
+            physioManager.start()
+            aapsLogger.info(LTag.APS, "✅ AIMI Physiological Manager started successfully")
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "❌ Failed to start AIMI Physiological Manager", e)
         }
         
         AimiUamHandler.clearCache(context)
@@ -179,6 +188,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             aapsLogger.info(LTag.APS, "🛑 AIMI Steps Manager stopped")
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "Error stopping AIMI Steps Manager", e)
+        }
+        
+        // 🏥 Stop AIMI Physiological Manager
+        try {
+            physioManager.stop()
+            aapsLogger.info(LTag.APS, "🛑 AIMI Physiological Manager stopped")
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "Error stopping AIMI Physiological Manager", e)
         }
         
         AimiUamHandler.close(context)
