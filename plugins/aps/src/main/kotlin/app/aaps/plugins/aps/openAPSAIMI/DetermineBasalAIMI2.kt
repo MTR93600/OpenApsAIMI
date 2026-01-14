@@ -3714,6 +3714,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 "Conf=${(physioMultipliers.confidence * 100).toInt()}%"
             )
         }
+        
+        // Log detailed physio status (Night Data) regardless of multipliers
+        // This gives visibility into sleep/HRV even if state is OPTIMAL
+        val physioLog = physioAdapter.getDetailedLogString()
+        if (physioLog != null) {
+             consoleLog.add(physioLog)
+        }
         // ═══════════════════════════════════════════════════════════════════════════
         
         // ═══════════════════════════════════════════════════════════════════════════

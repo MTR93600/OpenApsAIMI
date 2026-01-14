@@ -309,4 +309,37 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
             "isValid" to (context?.isValid() ?: false).toString()
         )
     }
+
+    /**
+     * Returns a detailed formatted log string for user visibility
+     * Shows raw metrics and state regardless of whether multipliers are applied
+     */
+    fun getDetailedLogString(): String? {
+        val context = contextStore.getCurrentContext() ?: return null
+        
+        // Only return log if data is relatively fresh (24h)
+        if (context.ageSeconds() > 24 * 3600) return null
+
+        val features = context.features
+        val sb = StringBuilder()
+        
+        sb.append("🏥 Physio Status: ${context.state} (Conf: ${(context.confidence * 100).toInt()}%)")
+        
+        if (features != null && features.hasValidData) {
+            sb.append("\n    • Sleep: %.1fh (Eff: %.0f%%)".format(features.sleepDurationHours, features.sleepEfficiency * 100))
+            if (features.sleepDurationHours > 0) sb.append(" Z=%.1f".format(context.sleepDeviationZ))
+            
+            sb.append("\n    • HRV: %.0fms".format(features.hrvMeanRMSSD))
+            if (features.hrvMeanRMSSD > 0) sb.append(" Z=%.1f".format(context.hrvDeviationZ))
+            
+            sb.append(" | RHR: %dbpm".format(features.rhrMorning))
+            if (features.rhrMorning > 0) sb.append(" Z=%.1f".format(context.rhrDeviationZ))
+        }
+        
+        if (context.narrative.isNotBlank()) {
+            sb.append("\n    • AI Insight: ${context.narrative.take(60)}...")
+        }
+        
+        return sb.toString()
+    }
 }
