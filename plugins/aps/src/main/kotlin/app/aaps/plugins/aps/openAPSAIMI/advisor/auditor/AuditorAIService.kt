@@ -33,7 +33,7 @@ class AuditorAIService @Inject constructor(
     
     companion object {
         private const val OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-        private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+        private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
         private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
         
@@ -43,7 +43,7 @@ class AuditorAIService @Inject constructor(
     
     enum class Provider(val id: String, val displayName: String) {
         OPENAI("openai", "ChatGPT (GPT-5.2)"),
-        GEMINI("gemini", "Gemini (2.5 Flash)"),
+        GEMINI("gemini", "Gemini (2.0 Flash)"),
         DEEPSEEK("deepseek", "DeepSeek (Chat)"),
         CLAUDE("claude", "Claude (3.5 Sonnet)")
     }
