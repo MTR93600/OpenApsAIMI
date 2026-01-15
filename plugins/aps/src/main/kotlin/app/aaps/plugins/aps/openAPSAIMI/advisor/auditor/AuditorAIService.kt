@@ -219,7 +219,7 @@ class AuditorAIService @Inject constructor(
             })
             put("generationConfig", JSONObject().apply {
                 put("temperature", 0.3)
-                put("maxOutputTokens", 2048)
+                put("maxOutputTokens", 8192)
                 put("responseMimeType", "application/json")
             })
         }
