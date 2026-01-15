@@ -3,8 +3,10 @@ package app.aaps.plugins.aps.openAPSAIMI.steps
 import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import app.aaps.core.data.model.HR
 import app.aaps.core.data.model.SC
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -12,6 +14,14 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.SP
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.schedulers.Schedulers
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequest
+import androidx.work.PeriodicWorkRequest
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -49,7 +59,15 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
     
+    init {
+        instance = this
+    }
+
     companion object {
+        @Volatile
+        var instance: AIMIHealthConnectSyncServiceMTR? = null
+            private set
+            
         private const val TAG = "HealthConnectSync"
         private const val SYNC_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
         private const val SOURCE_DEVICE = "HealthConnect"
@@ -58,7 +76,7 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
     }
     
     private val disposable = CompositeDisposable()
-    private var syncTimer: Timer? = null
+    // Timer removed in favor of WorkManager
     private var lastSyncTimestamp: Long = 0
     
     private val healthConnectClient: HealthConnectClient? by lazy {
@@ -76,119 +94,172 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
     fun start() {
         if (!isEnabled()) {
             aapsLogger.info(LTag.APS, "[$TAG] Health Connect sync disabled in preferences")
+            cancelWorkers()
             return
         }
         
-        if (syncTimer != null) {
-            aapsLogger.debug(LTag.APS, "[$TAG] Already running")
-            return
-        }
-        
-        aapsLogger.info(LTag.APS, "[$TAG] Starting Health Connect sync (every ${SYNC_INTERVAL_MS / 60000} min)")
+        aapsLogger.info(LTag.APS, "[$TAG] Scheduling Health Connect sync (every 4h)")
         
         // Restore last sync timestamp
         lastSyncTimestamp = sp.getLong(PREF_KEY_LAST_SYNC, 0L)
         
-        syncTimer = Timer("HealthConnectSync", true).apply {
-            // First sync after 10 seconds, then every 5 minutes
-            scheduleAtFixedRate(object : TimerTask() {
-                override fun run() {
-                    try {
-                        syncStepsToDatabase()
-                    } catch (e: Exception) {
-                        aapsLogger.error(LTag.APS, "[$TAG] Sync error", e)
-                    }
-                }
-            }, 10_000L, SYNC_INTERVAL_MS)
-        }
+        schedulePeriodicSync()
+    }
+    
+    private fun schedulePeriodicSync() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.NOT_REQUIRED) // Local data
+            .setRequiresBatteryNotLow(true)
+            .build()
+            
+        val workRequest = PeriodicWorkRequest.Builder(
+            AIMIHealthConnectWorkerMTR::class.java,
+            4, TimeUnit.HOURS // 4h Interval
+        )
+            .setConstraints(constraints)
+            .build()
+            
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            AIMIHealthConnectWorkerMTR.WORK_NAME,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            workRequest
+        )
+    }
+
+    private fun cancelWorkers() {
+         WorkManager.getInstance(context).cancelUniqueWork(AIMIHealthConnectWorkerMTR.WORK_NAME)
     }
     
     /**
      * Stops synchronization
      */
     fun stop() {
-        syncTimer?.cancel()
-        syncTimer = null
+        // We do not cancel WorkManager on stop(), as we want background sync to persist
+        // only cancel if explicitly disabled
         disposable.clear()
-        aapsLogger.info(LTag.APS, "[$TAG] Stopped")
+        aapsLogger.info(LTag.APS, "[$TAG] Service stopped (WorkManager remains active)")
     }
     
     /**
      * Main sync logic: Health Connect → Database
+     * REVISED: Always fetch, never skip. Merge strategy.
      */
-    private fun syncStepsToDatabase() {
+    /**
+     * Main sync logic: Health Connect → Database (Steps & HR)
+     * REVISED: Always fetch, never skip. Merge strategy.
+     */
+    fun syncDataToDatabase() {
         if (!isEnabled()) {
             aapsLogger.debug(LTag.APS, "[$TAG] Sync skipped (disabled)")
             return
         }
-        
+
         val client = healthConnectClient
         if (client == null) {
             aapsLogger.debug(LTag.APS, "[$TAG] Health Connect client unavailable")
             return
         }
-        
+
         val now = System.currentTimeMillis()
         val syncStart = now - SYNC_INTERVAL_MS // Last 5 minutes
-        
-        // Check if we already have recent data from other sources
-        if (hasRecentDataFromOtherSources(syncStart, now)) {
-            aapsLogger.debug(LTag.APS, "[$TAG] Recent data from Garmin/Wear exists, skipping Health Connect sync")
-            return
-        }
-        
-        aapsLogger.debug(LTag.APS, "[$TAG] Syncing steps from Health Connect (${Instant.ofEpochMilli(syncStart)} to ${Instant.ofEpochMilli(now)})")
-        
+
+        // Audit existing data (for logging only, NOT for skipping)
+        logExistingSources(syncStart, now)
+
+        aapsLogger.debug(LTag.APS, "[$TAG] 🚀 Syncing data from Health Connect (${Instant.ofEpochMilli(syncStart)} to ${Instant.ofEpochMilli(now)})")
+
         try {
-            // Fetch steps from Health Connect for multiple windows
-            val stepsData = fetchStepsFromHealthConnect(now)
+            // 1. Sync Steps
+            syncSteps(client, now)
             
-            if (stepsData.steps5min > 0) {
-                // Insert into database
-                val sc = SC(
-                    timestamp = now,
-                    duration = SYNC_INTERVAL_MS,
-                    steps5min = stepsData.steps5min,
-                    steps10min = stepsData.steps10min,
-                    steps15min = stepsData.steps15min,
-                    steps30min = stepsData.steps30min,
-                    steps60min = stepsData.steps60min,
-                    steps180min = stepsData.steps180min,
-                    device = SOURCE_DEVICE
-                )
-                
-                disposable.add(
-                    persistenceLayer.insertOrUpdateStepsCount(sc)
-                        .subscribeOn(Schedulers.io())
-                        .subscribe(
-                            { result ->
-                                aapsLogger.info(
-                                    LTag.APS,
-                                    "[$TAG] ✅ Synced: ${stepsData.steps5min} steps (5min), " +
-                                            "15min=${stepsData.steps15min}, 30min=${stepsData.steps30min}"
-                                )
-                                lastSyncTimestamp = now
-                                sp.putLong(PREF_KEY_LAST_SYNC, now)
-                            },
-                            { error ->
-                                aapsLogger.error(LTag.APS, "[$TAG] ❌ DB insert failed", error)
-                            }
-                        )
-                )
-            } else {
-                aapsLogger.debug(LTag.APS, "[$TAG] No steps detected in last 5 minutes")
-            }
+            // 2. Sync Heart Rate
+            syncHeartRate(client, now, syncStart)
+
+            lastSyncTimestamp = now
+            sp.putLong(PREF_KEY_LAST_SYNC, now)
+            
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "[$TAG] Sync failed", e)
         }
     }
-    
+
+    @Deprecated("Use syncDataToDatabase()")
+    fun syncStepsToDatabase() {
+        syncDataToDatabase()
+    }
+
+    private fun syncSteps(client: HealthConnectClient, now: Long) {
+        // Fetch steps from Health Connect for multiple windows
+        val stepsData = fetchStepsFromHealthConnect(client, now)
+
+        // Insert into database irrespective of other sources
+        if (stepsData.isValid) {
+            val sc = SC(
+                timestamp = now,
+                duration = SYNC_INTERVAL_MS,
+                steps5min = stepsData.steps5min,
+                steps10min = stepsData.steps10min,
+                steps15min = stepsData.steps15min,
+                steps30min = stepsData.steps30min,
+                steps60min = stepsData.steps60min,
+                steps180min = stepsData.steps180min,
+                device = SOURCE_DEVICE // "HealthConnect"
+            )
+
+            disposable.add(
+                persistenceLayer.insertOrUpdateStepsCount(sc)
+                    .subscribeOn(Schedulers.io())
+                    .subscribe(
+                        { 
+                            aapsLogger.info(
+                                LTag.APS,
+                                "[$TAG] ✅ Synced HC steps: 5min=${stepsData.steps5min}, 30min=${stepsData.steps30min}. Source=$SOURCE_DEVICE"
+                            )
+                        },
+                        { error ->
+                            aapsLogger.error(LTag.APS, "[$TAG] ❌ Steps DB insert failed", error)
+                        }
+                    )
+            )
+        }
+    }
+
+    private fun syncHeartRate(client: HealthConnectClient, now: Long, startMs: Long) {
+        val hrData = fetchHeartRateFromHealthConnect(client, startMs, now)
+        
+        if (hrData != null) {
+             val hr = HR(
+                timestamp = hrData.timestamp, // use actual sample timestamp or now
+                beatsPerMinute = hrData.bpm,
+                duration = SYNC_INTERVAL_MS,
+                device = SOURCE_DEVICE
+            )
+            
+            disposable.add(
+                persistenceLayer.insertOrUpdateHeartRate(hr)
+                    .subscribeOn(Schedulers.io())
+                    .subscribe(
+                        { 
+                            aapsLogger.info(
+                                LTag.APS,
+                                "[$TAG] ✅ Synced HC Heart Rate: ${hr.beatsPerMinute} bpm. Source=$SOURCE_DEVICE"
+                            )
+                        },
+                        { error ->
+                            aapsLogger.error(LTag.APS, "[$TAG] ❌ HR DB insert failed", error)
+                        }
+                    )
+            )
+        }
+    }
+
     /**
      * Fetches steps from Health Connect for multiple time windows
      */
-    private fun fetchStepsFromHealthConnect(nowMs: Long): AIMIStepsDataMTR {
-        val client = healthConnectClient ?: return AIMIStepsDataMTR.EMPTY
-        
+    /**
+     * Fetches steps from Health Connect for multiple time windows
+     */
+    private fun fetchStepsFromHealthConnect(client: HealthConnectClient, nowMs: Long): AIMIStepsDataMTR {
         return runBlocking {
             withContext(Dispatchers.IO) {
                 try {
@@ -211,8 +282,6 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
                         stepsMap[windowMin] = totalSteps
                     }
                     
-                    aapsLogger.debug(LTag.APS, "[$TAG] HC data: 5m=${stepsMap[5]}, 15m=${stepsMap[15]}, 180m=${stepsMap[180]}")
-                    
                     AIMIStepsDataMTR(
                         steps5min = (stepsMap[5] ?: 0L).toInt(),
                         steps10min = (stepsMap[10] ?: 0L).toInt(),
@@ -225,34 +294,78 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
                         isValid = (stepsMap[5] ?: 0) > 0
                     )
                 } catch (e: Exception) {
-                    aapsLogger.error(LTag.APS, "[$TAG] Health Connect read error", e)
+                    aapsLogger.error(LTag.APS, "[$TAG] Health Connect steps read error", e)
                     AIMIStepsDataMTR.EMPTY
                 }
             }
         }
     }
-    
+
+    private fun fetchHeartRateFromHealthConnect(client: HealthConnectClient, startMs: Long, endMs: Long): AIMIHeartRateDataMTR? {
+        return runBlocking {
+             withContext(Dispatchers.IO) {
+                try {
+                    val request = ReadRecordsRequest(
+                        recordType = HeartRateRecord::class,
+                        timeRangeFilter = TimeRangeFilter.between(Instant.ofEpochMilli(startMs), Instant.ofEpochMilli(endMs))
+                    )
+                    
+                    val response = client.readRecords(request)
+                    // Aggregate samples
+                    val allSamples = response.records.flatMap { it.samples }
+                    
+                    if (allSamples.isNotEmpty()) {
+                        val avgBpm = allSamples.map { it.beatsPerMinute }.average()
+                        val lastSampleTime = allSamples.maxOf { it.time }.toEpochMilli()
+                        
+                        AIMIHeartRateDataMTR(
+                             bpm = avgBpm,
+                             timestamp = lastSampleTime
+                        )
+                    } else {
+                        null
+                    }
+                } catch (e: Exception) {
+                    aapsLogger.error(LTag.APS, "[$TAG] Health Connect HR read error", e)
+                    null
+                }
+             }
+        }
+    }
+
     /**
-     * Checks if DB has recent data from Garmin/Wear OS
-     * Returns true if recent data exists (Health Connect should NOT write)
+     * Data holder
      */
-    private fun hasRecentDataFromOtherSources(startMs: Long, endMs: Long): Boolean {
-        return try {
+    private data class AIMIStepsDataMTR(
+        val steps5min: Int,
+        val steps10min: Int,
+        val steps15min: Int,
+        val steps30min: Int,
+        val steps60min: Int,
+        val steps180min: Int,
+        val source: String,
+        val lastUpdateMillis: Long,
+        val isValid: Boolean
+    ) {
+        companion object {
+            val EMPTY = AIMIStepsDataMTR(0, 0, 0, 0, 0, 0, "None", 0, false)
+        }
+    }
+    
+    private data class AIMIHeartRateDataMTR(
+        val bpm: Double,
+        val timestamp: Long
+    )
+    private fun logExistingSources(startMs: Long, endMs: Long) {
+        try {
             val recentSteps = persistenceLayer.getStepsCountFromTimeToTime(startMs, endMs)
+            val otherSources = recentSteps.map { it.device }.distinct().filter { it != SOURCE_DEVICE }
             
-            // Filter out our own Health Connect data
-            val otherSourcesData = recentSteps.filter { it.device != SOURCE_DEVICE }
-            
-            if (otherSourcesData.isNotEmpty()) {
-                val latestSource = otherSourcesData.maxByOrNull { it.timestamp }
-                aapsLogger.debug(LTag.APS, "[$TAG] Found recent data from ${latestSource?.device}")
-                true
-            } else {
-                false
+            if (otherSources.isNotEmpty()) {
+                aapsLogger.info(LTag.APS, "[$TAG] ℹ️ Co-existing data sources found: $otherSources (Merging HC data alongside)")
             }
         } catch (e: Exception) {
-            aapsLogger.error(LTag.APS, "[$TAG] Error checking existing data", e)
-            false // Assume no data, proceed with sync
+            aapsLogger.error(LTag.APS, "[$TAG] Error checking existing sources", e)
         }
     }
     
@@ -267,10 +380,16 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
      * Manual sync trigger (for testing or user-initiated sync)
      */
     fun triggerManualSync(): Boolean {
-        aapsLogger.info(LTag.APS, "[$TAG] Manual sync triggered")
-        Thread {
-            syncStepsToDatabase()
-        }.start()
+        aapsLogger.info(LTag.APS, "[$TAG] Manual sync (OneTimeWork) triggered")
+        
+        val workRequest = OneTimeWorkRequest.Builder(AIMIHealthConnectWorkerMTR::class.java)
+            .build()
+            
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            AIMIHealthConnectWorkerMTR.WORK_NAME_ONCE,
+            ExistingWorkPolicy.REPLACE,
+            workRequest
+        )
         return true
     }
     

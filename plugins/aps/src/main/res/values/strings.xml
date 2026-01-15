@@ -285,6 +285,12 @@
     <string name="oaps_aimi_enableDeleteLine_title">Enable the possibility to delete one day in ML Training</string>
     <string name="countsteps_watch_title">Step counting watch (if disable, use phone)</string>
     <string name="countsteps_watch_summary">This option enables step counting by receiving data from the watch instead of the phone.</string>
+
+    <string name="pref_aimi_steps_source_title">Steps &amp; Heart Rate Data Source</string>
+    <string name="pref_aimi_steps_source_wear">Prefer Wear OS (Direct)</string>
+    <string name="pref_aimi_steps_source_auto">Auto (Wear OS → Health Connect)</string>
+    <string name="pref_aimi_steps_source_hc">Health Connect Only</string>
+    <string name="pref_aimi_steps_source_disabled">Disabled</string>
     <string name="oaps_aimi_weight_summary">Weight in kg to calculate basal</string>
     <string name="oaps_aimi_weight_title">Weight in kg</string>
     <string name="oaps_aimi_tdd7_summary">7-day average TDD</string>

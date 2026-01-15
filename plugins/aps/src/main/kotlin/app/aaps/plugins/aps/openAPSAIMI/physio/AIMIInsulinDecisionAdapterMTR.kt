@@ -323,7 +323,8 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         val features = context.features
         val sb = StringBuilder()
         
-        sb.append("🏥 Physio Status: ${context.state} (Conf: ${(context.confidence * 100).toInt()}%)")
+        val nextSyncMin = ((context.timestamp + 6 * 3600 * 1000 - System.currentTimeMillis()) / 60000).coerceAtLeast(0)
+        sb.append("🏥 Physio Status: ${context.state} (Conf: ${(context.confidence * 100).toInt()}%) | ⏳ Next sync: ${nextSyncMin}min")
         
         if (features != null && features.hasValidData) {
             sb.append("\n    • Sleep: %.1fh (Eff: %.0f%%)".format(features.sleepDurationHours, features.sleepEfficiency * 100))

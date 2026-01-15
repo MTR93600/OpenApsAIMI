@@ -47,8 +47,8 @@ class AIMIPhysioManagerMTR @Inject constructor(
     
     companion object {
         private const val TAG = "PhysioManager"
-        private const val UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000L // 6 hours
-        private const val INITIAL_DELAY_MS = 60 * 1000L // 1 minute after start
+        private const val UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000L // 4 hours
+        private const val INITIAL_DELAY_MS = 10 * 1000L // 10 seconds after start (DEBUG)
         private const val PREF_KEY_LAST_UPDATE = "aimi_physio_last_update_ms"
     }
     
@@ -102,6 +102,19 @@ class AIMIPhysioManagerMTR @Inject constructor(
         
         // Log current context status
         contextStore.logStatus()
+        
+        // 🚀 FORCE IMMEDIATE UPDATE (on background thread)
+        // This ensures the UI has data to show immediately after enable/restart
+        Thread {
+            try {
+                // Short sleep to let system settle
+                Thread.sleep(5000)
+                aapsLogger.info(LTag.APS, "[$TAG] 🚀 Forcing initial update...")
+                performUpdate()
+            } catch (e: Exception) {
+                aapsLogger.error(LTag.APS, "[$TAG] Initial update failed", e)
+            }
+        }.start()
     }
     
     /**
@@ -169,10 +182,12 @@ class AIMIPhysioManagerMTR @Inject constructor(
         }
         
         // Check if user might be sleeping (simple heuristic)
+        /* disable for debugging
         if (isProbablySleeping()) {
             aapsLogger.info(LTag.APS, "[$TAG] Update skipped (probable sleep time)")
             return false
         }
+        */
         
         return true
     }
@@ -192,10 +207,66 @@ class AIMIPhysioManagerMTR @Inject constructor(
         try {
             // Step 1: Fetch raw data from Health Connect
             aapsLogger.info(LTag.APS, "[$TAG] [1/5] Fetching physiological data...")
-            val rawData = dataRepository.fetchAllData(daysBack = 7)
+            
+            // Check Health Connect availability first
+            val isHCAvailable = dataRepository.isAvailable()
+            if (!isHCAvailable) {
+                aapsLogger.error(LTag.APS, "[$TAG] ❌ Health Connect client unavailable")
+                val fallbackContext = PhysioContextMTR(
+                    state = PhysioStateMTR.UNKNOWN,
+                    confidence = 0.0,
+                    narrative = "Health Connect unavailable. Install Google Health Connect app (Android 14+).",
+                    timestamp = System.currentTimeMillis()
+                )
+                contextStore.updateContext(fallbackContext, PhysioBaselineMTR.EMPTY)
+                lastUpdateTime = System.currentTimeMillis()
+                sp.putLong(PREF_KEY_LAST_UPDATE, lastUpdateTime)
+                aapsLogger.info(LTag.APS, "[$TAG] ⏱️ Will retry in 5 minutes")
+                return
+            }
+            
+            val rawData = try {
+                dataRepository.fetchAllData(daysBack = 7)
+            } catch (e: SecurityException) {
+                aapsLogger.error(LTag.APS, "[$TAG] ❌ Permission denied during fetch", e)
+                val fallbackContext = PhysioContextMTR(
+                    state = PhysioStateMTR.UNKNOWN,
+                    confidence = 0.0,
+                    narrative = "Permission denied. Open Health Connect → Manage data → AAPS → Grant Sleep/HRV/Heart Rate access.",
+                    timestamp = System.currentTimeMillis()
+                )
+                contextStore.updateContext(fallbackContext, PhysioBaselineMTR.EMPTY)
+                lastUpdateTime = System.currentTimeMillis()
+                sp.putLong(PREF_KEY_LAST_UPDATE, lastUpdateTime)
+                aapsLogger.info(LTag.APS, "[$TAG] ⏱️ Will retry in 5 minutes")
+                return
+            } catch (e: Exception) {
+                aapsLogger.error(LTag.APS, "[$TAG] ❌ Unexpected error during fetch", e)
+                val fallbackContext = PhysioContextMTR(
+                    state = PhysioStateMTR.UNKNOWN,
+                    confidence = 0.0,
+                    narrative = "Health Connect error: ${e.message ?: e.javaClass.simpleName}. Check system logs.",
+                    timestamp = System.currentTimeMillis()
+                )
+                contextStore.updateContext(fallbackContext, PhysioBaselineMTR.EMPTY)
+                lastUpdateTime = System.currentTimeMillis()
+                sp.putLong(PREF_KEY_LAST_UPDATE, lastUpdateTime)
+                aapsLogger.info(LTag.APS, "[$TAG] ⏱️ Will retry in 5 minutes")
+                return
+            }
             
             if (!rawData.hasAnyData()) {
-                aapsLogger.warn(LTag.APS, "[$TAG] ⚠️ No physiological data available - skipping update")
+                aapsLogger.warn(LTag.APS, "[$TAG] ⚠️ No physiological data available in Health Connect")
+                val fallbackContext = PhysioContextMTR(
+                    state = PhysioStateMTR.UNKNOWN,
+                    confidence = 0.0,
+                    narrative = "No data in Health Connect (last 7 days). Sync your fitness tracker (Garmin/Fitbit/etc).",
+                    timestamp = System.currentTimeMillis()
+                )
+                contextStore.updateContext(fallbackContext, PhysioBaselineMTR.EMPTY)
+                lastUpdateTime = System.currentTimeMillis()
+                sp.putLong(PREF_KEY_LAST_UPDATE, lastUpdateTime)
+                aapsLogger.info(LTag.APS, "[$TAG] ⏱️ Will retry in 5 minutes")
                 return
             }
             

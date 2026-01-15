@@ -9,6 +9,9 @@ plugins {
 
 android {
     namespace = "app.aaps.plugins.aps"
+    buildFeatures {
+        viewBinding = true
+    }
 }
 
 dependencies {
