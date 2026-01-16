@@ -1,11 +1,17 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import android.content.Context
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.keys.BooleanKey
-import java.util.Timer
-import java.util.TimerTask
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -14,27 +20,18 @@ import javax.inject.Singleton
  * 🎛️ AIMI Physiological Manager - MTR Implementation
  * 
  * Central orchestrator for physiological analysis pipeline.
+ * Uses WorkManager for reliable periodic execution (every 4 hours).
  * 
  * Responsibilities:
- * 1. Schedule data collection every 6 hours
- * 2. Trigger collection at sleep end (if detectable)
- * 3. Never collect during sleep
- * 4. Coordinate all pipeline components
- * 5. Handle errors gracefully
- * 
- * Lifecycle:
- * - Started by OpenAPSAIMIPlugin.onStart()
- * - Stopped by OpenAPSAIMIPlugin.onStop()
- * 
- * Update Cadence:
- * - Every 6 hours (default)
- * - Or on wake-up detection
- * - Manual trigger available
+ * 1. Schedule data collection every 4 hours via WorkManager
+ * 2. Coordinate all pipeline components
+ * 3. Handle errors gracefully
  * 
  * @author MTR & Lyra AI - AIMI Physiological Intelligence
  */
 @Singleton
 class AIMIPhysioManagerMTR @Inject constructor(
+    private val context: Context,
     private val dataRepository: AIMIPhysioDataRepositoryMTR,
     private val featureExtractor: AIMIPhysioFeatureExtractorMTR,
     private val baselineModel: AIMIPhysioBaselineModelMTR,
@@ -47,15 +44,21 @@ class AIMIPhysioManagerMTR @Inject constructor(
     
     companion object {
         private const val TAG = "PhysioManager"
-        private const val UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000L // 4 hours
-        private const val INITIAL_DELAY_MS = 10 * 1000L // 10 seconds after start (DEBUG)
+        const val WORK_TAG = "AIMI_PHYSIO_4H"
         private const val PREF_KEY_LAST_UPDATE = "aimi_physio_last_update_ms"
+        
+        // Static accessor for Worker
+        var instance: AIMIPhysioManagerMTR? = null
+            private set
     }
     
-    private var updateTimer: Timer? = null
     private val isRunning = AtomicBoolean(false)
     private var lastUpdateTime: Long = 0
     private var previousFeatures: PhysioFeaturesMTR? = null
+    
+    init {
+        instance = this
+    }
     
     /**
      * Starts the physiological analysis manager
@@ -68,53 +71,74 @@ class AIMIPhysioManagerMTR @Inject constructor(
         }
         
         if (isRunning.get()) {
-            aapsLogger.debug(LTag.APS, "[$TAG] Already running")
             return
         }
         
-        aapsLogger.info(LTag.APS, "[$TAG] 🚀 Starting AIMI Physiological Manager")
+        aapsLogger.info(LTag.APS, "[$TAG] 🚀 Starting AIMI Physiological Manager (WorkManager)")
         
         // Restore last update time
         lastUpdateTime = sp.getLong(PREF_KEY_LAST_UPDATE, 0)
         
         // Schedule periodic updates
-        updateTimer = Timer("PhysioManager", true).apply {
-            scheduleAtFixedRate(object : TimerTask() {
-                override fun run() {
-                    try {
-                        if (shouldUpdate()) {
-                            performUpdate()
-                        }
-                    } catch (e: Exception) {
-                        aapsLogger.error(LTag.APS, "[$TAG] Update failed", e)
-                    }
-                }
-            }, INITIAL_DELAY_MS, UPDATE_INTERVAL_MS)
-        }
+        schedulePeriodicWork()
         
         isRunning.set(true)
-        
-        aapsLogger.info(
-            LTag.APS,
-            "[$TAG] ✅ Manager started (updates every ${UPDATE_INTERVAL_MS / (60 * 60 * 1000)}h, " +
-            "last update ${(System.currentTimeMillis() - lastUpdateTime) / (60 * 60 * 1000)}h ago)"
-        )
         
         // Log current context status
         contextStore.logStatus()
         
-        // 🚀 FORCE IMMEDIATE UPDATE (on background thread)
-        // This ensures the UI has data to show immediately after enable/restart
-        Thread {
-            try {
-                // Short sleep to let system settle
-                Thread.sleep(5000)
-                aapsLogger.info(LTag.APS, "[$TAG] 🚀 Forcing initial update...")
-                performUpdate()
-            } catch (e: Exception) {
-                aapsLogger.error(LTag.APS, "[$TAG] Initial update failed", e)
-            }
-        }.start()
+        // 🚀 BOOTSTRAP: Schedule immediate one-shot if stale or never synced
+        val stale = (System.currentTimeMillis() - lastUpdateTime) > (4 * 60 * 60 * 1000)
+        if (stale || lastUpdateTime == 0L) {
+             aapsLogger.info(LTag.APS, "[$TAG] Data is stale/never synced - triggering bootstrap")
+             scheduleBootstrapUpdate()
+        }
+    }
+    
+    /**
+     * Schedules periodic measurement using WorkManager
+     */
+    private fun schedulePeriodicWork() {
+        try {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.NOT_REQUIRED) // Health Connect is local
+                .setRequiresBatteryNotLow(true)
+                .build()
+
+            val workRequest = PeriodicWorkRequestBuilder<AIMIPhysioWorkerMTR>(4, TimeUnit.HOURS)
+                .setConstraints(constraints)
+                .addTag(WORK_TAG)
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                WORK_TAG,
+                ExistingPeriodicWorkPolicy.UPDATE,
+                workRequest
+            )
+            
+            aapsLogger.info(LTag.APS, "[$TAG] ✅ Periodic work scheduled (4h interval)")
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "[$TAG] Failed to schedule work", e)
+        }
+    }
+    
+    /**
+     * Schedules an immediate one-shot bootstrap update
+     */
+    private fun scheduleBootstrapUpdate() {
+        try {
+            val bootstrapRequest = androidx.work.OneTimeWorkRequestBuilder<AIMIPhysioWorkerMTR>()
+                .addTag("AIMI_PHYSIO_BOOTSTRAP")
+                .setInitialDelay(5, TimeUnit.SECONDS) // Small delay to let system settle
+                .build()
+                
+            WorkManager.getInstance(context).enqueue(bootstrapRequest)
+            
+            aapsLogger.info(LTag.APS, "[$TAG] 🚀 Bootstrap update scheduled (5s delay)")
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "[$TAG] Failed to schedule bootstrap", e)
+        }
     }
     
     /**
@@ -122,30 +146,17 @@ class AIMIPhysioManagerMTR @Inject constructor(
      * Called by OpenAPSAIMIPlugin.onStop()
      */
     fun stop() {
-        if (!isRunning.get()) {
-            return
-        }
-        
-        aapsLogger.info(LTag.APS, "[$TAG] 🛑 Stopping Physiological Manager")
-        
-        updateTimer?.cancel()
-        updateTimer = null
+        // We generally don't stop WorkManager tasks on simple stop, 
+        // they should persist. But flag checks prevent execution if plugin disabled.
         isRunning.set(false)
-        
-        aapsLogger.info(LTag.APS, "[$TAG] Manager stopped")
+        aapsLogger.info(LTag.APS, "[$TAG] Manager stopped (WorkManager implementation)")
     }
     
     /**
      * Manually triggers an update
-     * Useful for testing or user-initiated refresh
-     * 
-     * @return true if update was triggered, false if skipped
      */
     fun triggerManualUpdate(): Boolean {
-        if (!isEnabled()) {
-            aapsLogger.warn(LTag.APS, "[$TAG] Manual update skipped (feature disabled)")
-            return false
-        }
+        if (!isEnabled()) return false
         
         aapsLogger.info(LTag.APS, "[$TAG] 🔄 Manual update requested")
         
@@ -160,196 +171,79 @@ class AIMIPhysioManagerMTR @Inject constructor(
         return true
     }
     
-    // ═══════════════════════════════════════════════════════════════════════
-    // UPDATE PIPELINE
-    // ═══════════════════════════════════════════════════════════════════════
-    
-    /**
-     * Checks if update should be performed
-     * Respects sleep detection and update interval
-     */
-    private fun shouldUpdate(): Boolean {
-        val now = System.currentTimeMillis()
-        val timeSinceLastUpdate = now - lastUpdateTime
-        
-        // Don't update if too recent
-        if (timeSinceLastUpdate < UPDATE_INTERVAL_MS && lastUpdateTime > 0) {
-            aapsLogger.debug(
-                LTag.APS,
-                "[$TAG] Update skipped (last update ${timeSinceLastUpdate / (60 * 1000)}min ago)"
-            )
-            return false
-        }
-        
-        // Check if user might be sleeping (simple heuristic)
-        /* disable for debugging
-        if (isProbablySleeping()) {
-            aapsLogger.info(LTag.APS, "[$TAG] Update skipped (probable sleep time)")
-            return false
-        }
-        */
-        
-        return true
-    }
-    
     /**
      * Performs complete physiological analysis pipeline
-     * 
-     * Pipeline: Data → Features → Baseline → Context → (LLM) → Store
+     * Public for Worker access
      */
-    private fun performUpdate() {
+    fun performUpdate(): Boolean {
         val startTime = System.currentTimeMillis()
+        var fetchMs = 0L
+        var extractMs = 0L
+        var analyzeMs = 0L
         
-        aapsLogger.info(LTag.APS, "[$TAG] ═══════════════════════════════════════")
-        aapsLogger.info(LTag.APS, "[$TAG] 🔄 Starting Physiological Analysis Pipeline")
-        aapsLogger.info(LTag.APS, "[$TAG] ═══════════════════════════════════════")
+        aapsLogger.info(LTag.APS, "[$TAG] 🔄 Pipeline Start (Window: 7 days)")
         
         try {
-            // Step 1: Fetch raw data from Health Connect
-            aapsLogger.info(LTag.APS, "[$TAG] [1/5] Fetching physiological data...")
-            
             // Check Health Connect availability first
             val isHCAvailable = dataRepository.isAvailable()
             if (!isHCAvailable) {
                 aapsLogger.error(LTag.APS, "[$TAG] ❌ Health Connect client unavailable")
-                val fallbackContext = PhysioContextMTR(
-                    state = PhysioStateMTR.UNKNOWN,
-                    confidence = 0.0,
-                    narrative = "Health Connect unavailable. Install Google Health Connect app (Android 14+).",
-                    timestamp = System.currentTimeMillis()
-                )
-                contextStore.updateContext(fallbackContext, PhysioBaselineMTR.EMPTY)
-                lastUpdateTime = System.currentTimeMillis()
-                sp.putLong(PREF_KEY_LAST_UPDATE, lastUpdateTime)
-                aapsLogger.info(LTag.APS, "[$TAG] ⏱️ Will retry in 5 minutes")
-                return
+                return false
             }
             
+            // Step 1: Fetch raw data
+            val t0 = System.currentTimeMillis()
             val rawData = try {
                 dataRepository.fetchAllData(daysBack = 7)
-            } catch (e: SecurityException) {
-                aapsLogger.error(LTag.APS, "[$TAG] ❌ Permission denied during fetch", e)
-                val fallbackContext = PhysioContextMTR(
-                    state = PhysioStateMTR.UNKNOWN,
-                    confidence = 0.0,
-                    narrative = "Permission denied. Open Health Connect → Manage data → AAPS → Grant Sleep/HRV/Heart Rate access.",
-                    timestamp = System.currentTimeMillis()
-                )
-                contextStore.updateContext(fallbackContext, PhysioBaselineMTR.EMPTY)
-                lastUpdateTime = System.currentTimeMillis()
-                sp.putLong(PREF_KEY_LAST_UPDATE, lastUpdateTime)
-                aapsLogger.info(LTag.APS, "[$TAG] ⏱️ Will retry in 5 minutes")
-                return
             } catch (e: Exception) {
-                aapsLogger.error(LTag.APS, "[$TAG] ❌ Unexpected error during fetch", e)
-                val fallbackContext = PhysioContextMTR(
-                    state = PhysioStateMTR.UNKNOWN,
-                    confidence = 0.0,
-                    narrative = "Health Connect error: ${e.message ?: e.javaClass.simpleName}. Check system logs.",
-                    timestamp = System.currentTimeMillis()
-                )
-                contextStore.updateContext(fallbackContext, PhysioBaselineMTR.EMPTY)
-                lastUpdateTime = System.currentTimeMillis()
-                sp.putLong(PREF_KEY_LAST_UPDATE, lastUpdateTime)
-                aapsLogger.info(LTag.APS, "[$TAG] ⏱️ Will retry in 5 minutes")
-                return
+                aapsLogger.error(LTag.APS, "[$TAG] ❌ Fetch error", e)
+                return false
             }
+            fetchMs = System.currentTimeMillis() - t0
             
             if (!rawData.hasAnyData()) {
-                aapsLogger.warn(LTag.APS, "[$TAG] ⚠️ No physiological data available in Health Connect")
-                val fallbackContext = PhysioContextMTR(
-                    state = PhysioStateMTR.UNKNOWN,
-                    confidence = 0.0,
-                    narrative = "No data in Health Connect (last 7 days). Sync your fitness tracker (Garmin/Fitbit/etc).",
-                    timestamp = System.currentTimeMillis()
-                )
-                contextStore.updateContext(fallbackContext, PhysioBaselineMTR.EMPTY)
-                lastUpdateTime = System.currentTimeMillis()
-                sp.putLong(PREF_KEY_LAST_UPDATE, lastUpdateTime)
-                aapsLogger.info(LTag.APS, "[$TAG] ⏱️ Will retry in 5 minutes")
-                return
+                aapsLogger.warn(LTag.APS, "[$TAG] ⚠️ No physiological data available")
+                // Don't wipe context immediately, maybe transient
+                return false
             }
             
             // Step 2: Extract features
-            aapsLogger.info(LTag.APS, "[$TAG] [2/5] Extracting features...")
+            val t1 = System.currentTimeMillis()
             val features = featureExtractor.extractFeatures(rawData, previousFeatures)
-            previousFeatures = features // Save for next time
-            
-            if (!features.hasValidData) {
-                aapsLogger.warn(LTag.APS, "[$TAG] ⚠️ No valid features extracted")
-                return
-            }
+            previousFeatures = features
+            extractMs = System.currentTimeMillis() - t1
             
             // Step 3: Update baseline
-            aapsLogger.info(LTag.APS, "[$TAG] [3/5] Updating baseline model...")
             val baseline = baselineModel.updateBaseline(features)
             
-            // Step 4: Analyze context (deterministic)
-            aapsLogger.info(LTag.APS, "[$TAG] [4/5] Analyzing physiological context...")
+            // Step 4: Analyze context
+            val t2 = System.currentTimeMillis()
             var context = contextEngine.analyze(features, baseline)
+            analyzeMs = System.currentTimeMillis() - t2
             
-            // Step 5: LLM analysis (optional, non-blocking)
-            if (isLLMEnabled() && context.confidence >= 0.5) {
-                aapsLogger.info(LTag.APS, "[$TAG] [5/5] Running LLM analysis...")
-                try {
-                    val llmNarrative = llmAnalyzer.analyze(features, baseline, context)
-                    if (llmNarrative.isNotBlank()) {
-                        // Add LLM narrative to context
-                        context = context.copy(narrative = llmNarrative)
-                        aapsLogger.info(LTag.APS, "[$TAG] ✅ LLM narrative added")
-                    }
-                } catch (e: Exception) {
-                    aapsLogger.warn(LTag.APS, "[$TAG] LLM analysis failed (continuing without)", e)
-                    // Continue without LLM - not critical
-                }
-            } else {
-                aapsLogger.debug(LTag.APS, "[$TAG] [5/5] LLM analysis skipped (disabled or low confidence)")
-            }
-            
-            // Step 6: Store context
+            // Step 5: Store
             contextStore.updateContext(context, baseline)
             
-            // Update tracking
             lastUpdateTime = System.currentTimeMillis()
             sp.putLong(PREF_KEY_LAST_UPDATE, lastUpdateTime)
             
-            val elapsed = System.currentTimeMillis() - startTime
+            val totalMs = System.currentTimeMillis() - startTime
             
-            aapsLogger.info(LTag.APS, "[$TAG] ═══════════════════════════════════════")
+            // STRUCTURED LOG (Production Level)
             aapsLogger.info(
                 LTag.APS,
-                "[$TAG] ✅ Pipeline completed in ${elapsed}ms | " +
-                "State: ${context.state} | " +
-                "Confidence: ${(context.confidence * 100).toInt()}% | " +
-                "Baseline: ${baseline.validDaysCount} days"
+                "[$TAG] ✅ RUN COMPLETE | State: ${context.state} | Conf: ${(context.confidence*100).toInt()}% | " +
+                "Qual: ${(features.dataQuality*100).toInt()}% | " +
+                "Counts: Sleep=${if (rawData.sleep?.hasValidData() == true) "Yes" else "No"}, HRV=${rawData.hrv.size}, RHR=${rawData.rhr.size}, Steps=${if (rawData.steps > 0) "Yes" else "No"} | " +
+                "Timings: Fetch=${fetchMs}ms, Extr=${extractMs}ms, Analysis=${analyzeMs}ms (Total: ${totalMs}ms)"
             )
-            aapsLogger.info(LTag.APS, "[$TAG] ═══════════════════════════════════════")
+            
+            return true
             
         } catch (e: Exception) {
-            aapsLogger.error(LTag.APS, "[$TAG] ❌ Pipeline failed", e)
-            // Don't crash - just log and continue
+            aapsLogger.error(LTag.APS, "[$TAG] ❌ Pipeline CRASH", e)
+            return false
         }
-    }
-    
-    // ═══════════════════════════════════════════════════════════════════════
-    // SLEEP DETECTION (Simple Heuristic)
-    // ═══════════════════════════════════════════════════════════════════════
-    
-    /**
-     * Simple sleep detection based on current time
-     * Returns true if current hour is in typical sleep window (23:00 - 06:00)
-     * 
-     * TODO: Could be enhanced with:
-     * - Actual sleep session detection from Health Connect
-     * - User-configured sleep schedule
-     * - Activity/HR-based detection
-     */
-    private fun isProbablySleeping(): Boolean {
-        val calendar = java.util.Calendar.getInstance()
-        val hour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
-        
-        // Typical sleep window: 11 PM to 6 AM
-        return hour >= 23 || hour < 6
     }
     
     // ═══════════════════════════════════════════════════════════════════════
@@ -368,50 +262,25 @@ class AIMIPhysioManagerMTR @Inject constructor(
     // STATUS & DEBUGGING
     // ═══════════════════════════════════════════════════════════════════════
     
-    /**
-     * Gets manager status for debugging/UI
-     */
     fun getStatus(): Map<String, String> {
         val now = System.currentTimeMillis()
         val timeSinceUpdate = now - lastUpdateTime
-        val nextUpdateIn = UPDATE_INTERVAL_MS - timeSinceUpdate
         
         return mapOf(
             "isRunning" to isRunning.get().toString(),
             "isEnabled" to isEnabled().toString(),
             "lastUpdate" to "${timeSinceUpdate / (60 * 60 * 1000)}h ago",
-            "nextUpdate" to if (nextUpdateIn > 0) "${nextUpdateIn / (60 * 1000)}min" else "soon",
-            "llmEnabled" to isLLMEnabled().toString(),
             "contextValid" to contextStore.isValid().toString()
         )
     }
     
-    /**
-     * Logs current status
-     */
-    fun logStatus() {
-        val status = getStatus()
-        aapsLogger.info(LTag.APS, "[$TAG] ═══════════════════════════════════════")
-        aapsLogger.info(LTag.APS, "[$TAG] Physiological Manager Status:")
-        status.forEach { (key, value) ->
-            aapsLogger.info(LTag.APS, "[$TAG]   $key: $value")
-        }
-        aapsLogger.info(LTag.APS, "[$TAG] ═══════════════════════════════════════")
-    }
-    
-    /**
-     * Clears all stored data (for testing/reset)
-     */
     fun reset() {
         aapsLogger.info(LTag.APS, "[$TAG] 🔄 Resetting Physiological Manager")
-        
         contextStore.clear()
         baselineModel.clearHistory()
         dataRepository.clearCache()
         previousFeatures = null
         lastUpdateTime = 0
         sp.putLong(PREF_KEY_LAST_UPDATE, 0)
-        
-        aapsLogger.info(LTag.APS, "[$TAG] ✅ Reset complete")
     }
 }

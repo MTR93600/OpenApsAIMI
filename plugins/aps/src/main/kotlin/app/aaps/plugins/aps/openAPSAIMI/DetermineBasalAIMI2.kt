@@ -3715,17 +3715,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         }
         
-        // 🏥 Log detailed physio status (Visible in Script Debug)
-        // We use consoleError temporarily to ensure high visibility in the UI log list
-        // logic mirrors existing Trajectory visualization
+        // 🏥 Log detailed physio status (Always visible - never null)
         try {
              val physioLog = physioAdapter.getDetailedLogString()
-             if (physioLog != null) {
-                  consoleError.add(physioLog)
-             } else {
-                  // Persistent feedback that system is active but waiting for data
-                  consoleError.add("🏥 Physio: Waiting for initial Health Connect sync...")
-             }
+             consoleError.add(physioLog)
         } catch (e: Exception) {
              consoleError.add("❌ Physio Log Error: ${e.message}")
         }

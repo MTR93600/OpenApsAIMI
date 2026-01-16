@@ -74,6 +74,124 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
     private val cache = ConcurrentHashMap<String, CachedData<*>>()
     
     // ═══════════════════════════════════════════════════════════════════════
+    // PROBE & DIAGNOSTICS
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    /**
+     * 🔍 Probes Health Connect to diagnose availability and data counts
+     * CRITICAL for debugging "NEVER_SYNCED" issues
+     */
+    suspend fun probeHealthConnect(windowDays: Long = 7): ProbeResult {
+        val client = healthConnectClient
+        
+        if (client == null) {
+            aapsLogger.error(LTag.APS, "[$TAG] PROBE: Health Connect client unavailable")
+            return ProbeResult(
+                sdkStatus = "UNAVAILABLE",
+                grantedPermissions = emptySet(),
+                sleepCount = 0,
+                hrvCount = 0,
+                heartRateCount = 0,
+                stepsCount = 0,
+                dataOrigins = emptySet(),
+                windowDays = windowDays.toInt()
+            )
+        }
+        
+        return withContext(Dispatchers.IO) {
+            try {
+                val sdkStatus = try {
+                    HealthConnectClient.getSdkStatus(context).toString()
+                } catch (e: Exception) {
+                    "SDK_CHECK_FAILED"
+                }
+                
+                val grantedPerms = try {
+                    client.permissionController.getGrantedPermissions()
+                } catch (e: Exception) {
+                    emptySet()
+                }
+                
+                val now = Instant.now()
+                val start = now.minusSeconds(windowDays * 24 * 60 * 60)
+                val writers = mutableSetOf<String>()
+                
+                // Count Sleep
+                val sleepCount = try {
+                    val req = ReadRecordsRequest(SleepSessionRecord::class, TimeRangeFilter.between(start, now))
+                    val resp = client.readRecords(req)
+                    resp.records.forEach { writers.add(it.metadata.dataOrigin.packageName) }
+                    resp.records.size
+                } catch (e: Exception) {
+                    aapsLogger.warn(LTag.APS, "[$TAG] PROBE: Sleep count failed - ${e.message}")
+                    0
+                }
+                
+                // Count HRV
+                val hrvCount = try {
+                    val req = ReadRecordsRequest(HeartRateVariabilityRmssdRecord::class, TimeRangeFilter.between(start, now))
+                    val resp = client.readRecords(req)
+                    resp.records.forEach { writers.add(it.metadata.dataOrigin.packageName) }
+                    resp.records.size
+                } catch (e: Exception) {
+                    aapsLogger.warn(LTag.APS, "[$TAG] PROBE: HRV count failed - ${e.message}")
+                    0
+                }
+                
+                // Count HeartRate
+                val hrCount = try {
+                    val req = ReadRecordsRequest(HeartRateRecord::class, TimeRangeFilter.between(start, now))
+                    val resp = client.readRecords(req)
+                    resp.records.forEach { writers.add(it.metadata.dataOrigin.packageName) }
+                    resp.records.size
+                } catch (e: Exception) {
+                    aapsLogger.warn(LTag.APS, "[$TAG] PROBE: HR count failed - ${e.message}")
+                    0
+                }
+                
+                // Count Steps
+                val stepsCount = try {
+                    val req = ReadRecordsRequest(StepsRecord::class, TimeRangeFilter.between(start, now))
+                    val resp = client.readRecords(req)
+                    resp.records.forEach { writers.add(it.metadata.dataOrigin.packageName) }
+                    resp.records.size
+                } catch (e: Exception) {
+                    aapsLogger.warn(LTag.APS, "[$TAG] PROBE: Steps count failed - ${e.message}")
+                    0
+                }
+                
+                val result = ProbeResult(
+                    sdkStatus = sdkStatus,
+                    grantedPermissions = grantedPerms,
+                    sleepCount = sleepCount,
+                    hrvCount = hrvCount,
+                    heartRateCount = hrCount,
+                    stepsCount = stepsCount,
+                    dataOrigins = writers,
+                    windowDays = windowDays.toInt()
+                )
+                
+                aapsLogger.info(LTag.APS, "[$TAG] ✅ PROBE: ${result.toLogString()}")
+                aapsLogger.info(LTag.APS, "[$TAG] PROBE: Granted perms=${grantedPerms.size}, SDK=$sdkStatus")
+                
+                result
+            } catch (e: Exception) {
+                aapsLogger.error(LTag.APS, "[$TAG] PROBE CRASH", e)
+                ProbeResult(
+                    sdkStatus = "PROBE_FAILED",
+                    grantedPermissions = emptySet(),
+                    sleepCount = 0,
+                    hrvCount = 0,
+                    heartRateCount = 0,
+                    stepsCount = 0,
+                    dataOrigins = emptySet(),
+                    windowDays = windowDays.toInt()
+                )
+            }
+        }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════
     // SLEEP DATA
     // ═══════════════════════════════════════════════════════════════════════
     
@@ -277,6 +395,81 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
     }
     
     // ═══════════════════════════════════════════════════════════════════════
+    // STEPS DATA
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Fetches steps for last 7 days (daily totals)
+     */
+    fun fetchStepsData(daysBack: Int = 7): Int {
+        // Check preference first
+        val mode = app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR.getMode(context)
+        if (mode == app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR.MODE_PREFER_WEAR || 
+            mode == app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR.MODE_DISABLED) {
+            // Steps handled by Wear/Plugin directly, or disabled
+            return 0
+        }
+
+        val cacheKey = "steps_${daysBack}days"
+        val cached = cache[cacheKey] as? CachedData<Int>
+        
+        if (cached?.isValid() == true) {
+            return cached.data ?: 0
+        }
+        
+        val client = healthConnectClient ?: return 0
+        
+        return try {
+            runBlocking {
+                withTimeout(API_TIMEOUT_MS) {
+                    withContext(Dispatchers.IO) {
+                        val now = Instant.now()
+                        val startTime = now.minusSeconds((daysBack * 24 * 60 * 60).toLong())
+                        
+                        val request = ReadRecordsRequest(
+                            recordType = StepsRecord::class,
+                            timeRangeFilter = TimeRangeFilter.between(startTime, now)
+                        )
+                        
+                        val response = client.readRecords(request)
+                        val totalSteps = response.records.sumOf { it.count }
+                        // Average daily steps
+                        val avgSteps = if (daysBack > 0) (totalSteps / daysBack).toInt() else 0
+                        
+                        cache[cacheKey] = CachedData(avgSteps, System.currentTimeMillis())
+                        
+                        aapsLogger.info(LTag.APS, "[$TAG] ✅ Steps (HC): avg $avgSteps/day")
+                        avgSteps
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            aapsLogger.warn(LTag.APS, "[$TAG] Steps fetch failed", e)
+            0
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // HEART RATE SAMPLE DATA
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Fetches detailed HR samples for RHR calculation fallback
+     */
+    private suspend fun fetchHeartRateSamples(startTime: Instant, endTime: Instant): List<HeartRateRecord> {
+        val client = healthConnectClient ?: return emptyList()
+        return try {
+            val request = ReadRecordsRequest(
+                recordType = HeartRateRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(startTime, endTime)
+            )
+            client.readRecords(request).records
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     // AGGREGATED DATA FETCH
     // ═══════════════════════════════════════════════════════════════════════
     
@@ -294,8 +487,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
             val sleep = fetchSleepData()
             val hrv = fetchHRVData(daysBack)
             val rhr = fetchMorningRHR(daysBack)
-            
-            // Steps are handled by existing StepsManager - not fetched here
+            val steps = fetchStepsData(daysBack)
             
             val elapsed = System.currentTimeMillis() - startTime
             aapsLogger.info(LTag.APS, "[$TAG] ✅ Fetch completed in ${elapsed}ms")
@@ -304,6 +496,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                 sleep = sleep,
                 hrv = hrv,
                 rhr = rhr,
+                steps = steps,
                 fetchTimestamp = System.currentTimeMillis()
             )
         } catch (e: Exception) {

@@ -312,20 +312,53 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
 
     /**
      * Returns a detailed formatted log string for user visibility
-     * Shows raw metrics and state regardless of whether multipliers are applied
+     * NEVER RETURNS NULL - Always provides diagnostic info even if UNKNOWN/BOOTSTRAP
      */
-    fun getDetailedLogString(): String? {
-        val context = contextStore.getCurrentContext() ?: return null
+    fun getDetailedLogString(): String {
+        val context = contextStore.getCurrentContext()
         
-        // Only return log if data is relatively fresh (24h)
-        if (context.ageSeconds() > 24 * 3600) return null
-
+        // Case 1: No context at all (never synced)
+        if (context == null) {
+            return "🏥 Physio: NEVER_SYNCED | Waiting for first Health Connect sync (check permissions)"
+        }
+        
+        val ageHours = context.ageSeconds() / 3600
+        val ageDays = ageHours / 24
+        
+        // Case 2: Very stale data (>48h)
+        if (ageHours > 48) {
+            return "🏥 Physio: STALE (${ageDays}d old) | State: ${context.state} | Check Health Connect sync"
+        }
+        
         val features = context.features
         val sb = StringBuilder()
         
-        val nextSyncMin = ((context.timestamp + 6 * 3600 * 1000 - System.currentTimeMillis()) / 60000).coerceAtLeast(0)
-        sb.append("🏥 Physio Status: ${context.state} (Conf: ${(context.confidence * 100).toInt()}%) | ⏳ Next sync: ${nextSyncMin}min")
+        // Base status line (ALWAYS shown)
+        val nextSyncMin = ((context.timestamp + 4 * 3600 * 1000 - System.currentTimeMillis()) / 60000).coerceAtLeast(0)
+        sb.append("🏥 Physio: ${context.state} (Conf: ${(context.confidence * 100).toInt()}%) | Age: ${ageHours}h | Next: ${nextSyncMin}min")
         
+        // Case 3: UNKNOWN/BOOTSTRAP - show WHY
+        if (context.state == PhysioStateMTR.UNKNOWN || context.confidence < 0.3) {
+            sb.append("\n    ⚠️ Bootstrap mode:")
+            if (features == null || !features.hasValidData) {
+                sb.append(" No valid features")
+            } else {
+                sb.append(" Quality=${(features.dataQuality * 100).toInt()}%")
+                val missing = mutableListOf<String>()
+                if (features.sleepDurationHours == 0.0) missing.add("Sleep")
+                if (features.hrvMeanRMSSD == 0.0) missing.add("HRV")
+                if (features.rhrMorning == 0) missing.add("RHR")
+                if (missing.isNotEmpty()) {
+                    sb.append(", Missing: ${missing.joinToString(", ")}")
+                }
+            }
+            if (context.narrative.isNotBlank()) {
+                sb.append("\n    ℹ️ ${context.narrative}")
+            }
+            return sb.toString()
+        }
+        
+        // Case 4: VALID state - show metrics
         if (features != null && features.hasValidData) {
             sb.append("\n    • Sleep: %.1fh (Eff: %.0f%%)".format(features.sleepDurationHours, features.sleepEfficiency * 100))
             if (features.sleepDurationHours > 0) sb.append(" Z=%.1f".format(context.sleepDeviationZ))
