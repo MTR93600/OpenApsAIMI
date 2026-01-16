@@ -5454,7 +5454,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 insulinStep = pumpCaps.bolusStep.toFloat(),
                 highBgOverrideUsed = highBgOverrideUsed,
                 profileCurrentBasal = profile_current_basal,
-                cob = cob
+                cob = cob,
+                globalReactivityFactor = if (preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled)) {
+                    unifiedReactivityLearner.globalFactor
+                } else 1.0  // Backwards compatible default
             ),
             SmbInstructionExecutor.Hooks(
                 refineSmb = { combined, short, long, predicted, profileInput ->
