@@ -365,12 +365,20 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
             if (features == null || !features.hasValidData) {
                 sb.append(" No valid features")
                 // 🎯 HELPFUL HINT: Explain how to fix this
-                sb.append("\n    ℹ️ Health Connect needs a data source:")
-                sb.append("\n       • Samsung Health → Settings → Health Connect → enable sync")
-                sb.append("\n       • Oura → Profile → 3rd party apps → Health Connect")
-                sb.append("\n       • Check AAPS permissions in Health Connect app")
+                sb.append("\n    ℹ️ Health Connect is empty! Check data sources:")
+                sb.append("\n       • Samsung Health: Settings > Health Connect > Allow all to write")
+                sb.append("\n       • Oura: Settings > Data Sharing > Health Connect")
+                sb.append("\n       (Permissions seem OK, but no data records found)")
             } else {
-                sb.append(" Quality=${(features.dataQuality * 100).toInt()}%")
+                // 🎯 FIX: Explicitly show we are learning if quality is good
+                val day = context.narrative.substringAfter("Day ", "").substringBefore("/")
+                if (context.narrative.contains("Learning Baseline")) {
+                     sb.append(" 📊 Building Baseline (Day $day/3)")
+                     sb.append("\n    ℹ️ Data is flowing! Collecting 3 days of history before activation.")
+                } else {
+                     sb.append(" Quality=${(features.dataQuality * 100).toInt()}%")
+                }
+                
                 val missing = mutableListOf<String>()
                 if (features.sleepDurationHours == 0.0) missing.add("Sleep")
                 if (features.hrvMeanRMSSD == 0.0) missing.add("HRV")

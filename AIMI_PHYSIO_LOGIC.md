@@ -31,7 +31,8 @@ Le module récupère les données suivantes (via `AIMIPhysioDataRepositoryMTR`) 
 3.  **💓 Fréquence Cardiaque au Repos (RHR) :** La moyenne "Morning RHR" ou minimale nocturne.
 4.  **👣 Activité :** Pas quotidiens (tendance globlale).
 
-> **Note :** Le module a besoin d'environ **3 jours** de données pour établir une "Baseline" fiable. Avant cela, il reste en mode `NEUTRAL`.
+> **Note :** Le module s'active **immédiatement** dès le premier jour de données.
+> En l'absence d'historique (Baseline < 3 jours), il utilise des **seuils absolus** (ex: Sommeil < 5.5h) et limite la confiance à 70%. Une fois 3 jours acquis, il passe en mode "Analyse Personnalisée" (Déviations).
 
 ---
 
