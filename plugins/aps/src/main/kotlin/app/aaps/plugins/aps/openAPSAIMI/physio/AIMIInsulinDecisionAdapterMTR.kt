@@ -315,11 +315,33 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
      * NEVER RETURNS NULL - Always provides diagnostic info even if UNKNOWN/BOOTSTRAP
      */
     fun getDetailedLogString(): String {
-        val context = contextStore.getCurrentContext()
+        // 🎯 FIX: Use getLastContextUnsafe() to see context even with low/zero confidence
+        // This prevents NEVER_SYNCED when a run happened but HC returned no data
+        val context = contextStore.getLastContextUnsafe()
+        val outcome = contextStore.getLastRunOutcome()
         
-        // Case 1: No context at all (never synced)
-        if (context == null) {
+        // Case 0: Pipeline ran but got an error outcome
+        if (outcome == PhysioPipelineOutcome.SECURITY_ERROR) {
+            return "🏥 Physio: SECURITY_ERROR | Missing Health Connect permissions (check settings)"
+        }
+        
+        if (outcome == PhysioPipelineOutcome.ERROR) {
+            return "🏥 Physio: ERROR | Health Connect fetch failed (check app connectivity)"
+        }
+        
+        // Case 1: Never ran (no context AND outcome is NEVER_RUN)
+        if (context == null && outcome == PhysioPipelineOutcome.NEVER_RUN) {
             return "🏥 Physio: NEVER_SYNCED | Waiting for first Health Connect sync (check permissions)"
+        }
+        
+        // Case 1b: Ran but got NO DATA from Health Connect
+        if (context == null && outcome == PhysioPipelineOutcome.SYNC_OK_NO_DATA) {
+            return "🏥 Physio: NO_DATA | Health Connect OK but no Sleep/HRV/HR records found. Check if Oura/Samsung/Garmin exports data."
+        }
+        
+        // Case 1c: Context null for other reasons
+        if (context == null) {
+            return "🏥 Physio: UNKNOWN | Outcome=$outcome but no context available"
         }
         
         val ageHours = context.ageSeconds() / 3600
@@ -342,6 +364,11 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
             sb.append("\n    ⚠️ Bootstrap mode:")
             if (features == null || !features.hasValidData) {
                 sb.append(" No valid features")
+                // 🎯 HELPFUL HINT: Explain how to fix this
+                sb.append("\n    ℹ️ Health Connect needs a data source:")
+                sb.append("\n       • Samsung Health → Settings → Health Connect → enable sync")
+                sb.append("\n       • Oura → Profile → 3rd party apps → Health Connect")
+                sb.append("\n       • Check AAPS permissions in Health Connect app")
             } else {
                 sb.append(" Quality=${(features.dataQuality * 100).toInt()}%")
                 val missing = mutableListOf<String>()

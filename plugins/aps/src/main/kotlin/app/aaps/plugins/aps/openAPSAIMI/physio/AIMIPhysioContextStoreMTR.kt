@@ -267,7 +267,31 @@ class AIMIPhysioContextStoreMTR @Inject constructor(
             }
         }
         
-        storageFile.writeText(json.toString(2)) // Pretty print with indent=2
+        try {
+            // 📊 LOG 1: Path absolu avant écriture
+            aapsLogger.info(LTag.APS, "[$TAG] 💾 PhysioStore: writing to ${storageFile.absolutePath}")
+            
+            val jsonString = json.toString(2) // Pretty print with indent=2
+            storageFile.writeText(jsonString)
+            
+            // 📊 LOG 2: Confirmation écriture avec taille
+            val writtenBytes = jsonString.toByteArray().size
+            aapsLogger.info(LTag.APS, "[$TAG] ✅ PhysioStore: written bytes=$writtenBytes")
+            
+            // 📊 LOG 3: Verification fichier après écriture  
+            val exists = storageFile.exists()
+            val size = if (exists) storageFile.length() else 0
+            val canRead = storageFile.canRead()
+            val canWrite = storageFile.canWrite()
+            
+            aapsLogger.info(LTag.APS, "[$TAG] 🔍 PhysioStore: exists=$exists size=$size canRead=$canRead canWrite=$canWrite")
+            
+            if (!exists || size == 0L) {
+                aapsLogger.error(LTag.APS, "[$TAG] ❌ PhysioStore: WRITE FAILED! File not created or empty")
+            }
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "[$TAG] ❌ PhysioStore: Save exception: ${e.message}", e)
+        }
         
         aapsLogger.debug(LTag.APS, "[$TAG] Saved to ${storageFile.absolutePath} (${storageFile.length()} bytes)")
     }

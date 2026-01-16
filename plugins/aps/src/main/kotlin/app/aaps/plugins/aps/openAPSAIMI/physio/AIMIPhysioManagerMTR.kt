@@ -65,16 +65,16 @@ class AIMIPhysioManagerMTR @Inject constructor(
      * Called by OpenAPSAIMIPlugin.onStart()
      */
     fun start() {
-        if (!isEnabled()) {
-            aapsLogger.info(LTag.APS, "[$TAG] Physiological Assistant disabled in preferences")
+        val enabled = isEnabled()
+        aapsLogger.info(LTag.APS, "[$TAG] 🚀 Starting AIMI Physiological Manager (Enabled: $enabled)")
+        
+        if (!enabled) {
             return
         }
         
         if (isRunning.get()) {
             return
         }
-        
-        aapsLogger.info(LTag.APS, "[$TAG] 🚀 Starting AIMI Physiological Manager (WorkManager)")
         
         // Restore last update time
         lastUpdateTime = sp.getLong(PREF_KEY_LAST_UPDATE, 0)
@@ -87,11 +87,29 @@ class AIMIPhysioManagerMTR @Inject constructor(
         // Log current context status
         contextStore.logStatus()
         
-        // 🚀 BOOTSTRAP: Schedule immediate one-shot if stale or never synced
-        val stale = (System.currentTimeMillis() - lastUpdateTime) > (4 * 60 * 60 * 1000)
-        if (stale || lastUpdateTime == 0L) {
-             aapsLogger.info(LTag.APS, "[$TAG] Data is stale/never synced - triggering bootstrap")
+        // 🚀 BOOTSTRAP LOGIC
+        // Trigger if:
+        // 1. Data is stale (> 4h)
+        // 2. Never synced (lastUpdateTime == 0)
+        // 3. Data is invalid/empty (confidence low)
+        
+        val timeSinceUpdate = System.currentTimeMillis() - lastUpdateTime
+        val stale = timeSinceUpdate > (4 * 60 * 60 * 1000)
+        
+        // Check current confidence to spot empty/failed states
+        val currentContext = contextStore.getLastContextUnsafe()
+        val lowConfidence = currentContext == null || currentContext.confidence < 0.1
+        
+        if (stale || lastUpdateTime == 0L || lowConfidence) {
+             val reason = when {
+                 stale -> "Data stale (${timeSinceUpdate/60000}min old)"
+                 lowConfidence -> "Low confidence/No data"
+                 else -> "First run"
+             }
+             aapsLogger.info(LTag.APS, "[$TAG] 🔄 Triggering bootstrap update: $reason")
              scheduleBootstrapUpdate()
+        } else {
+            aapsLogger.info(LTag.APS, "[$TAG] ✅ Data is fresh (${timeSinceUpdate/60000}min old) and valid. No immediate update needed.")
         }
     }
     

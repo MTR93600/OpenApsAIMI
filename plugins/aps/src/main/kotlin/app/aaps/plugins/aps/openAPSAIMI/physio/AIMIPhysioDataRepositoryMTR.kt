@@ -484,13 +484,29 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
         aapsLogger.info(LTag.APS, "[$TAG] 🔄 Fetching physiological data (${daysBack}d window)...")
         
         return try {
+            // 📊 DIAGNOSTIC: Log each fetch result individually
             val sleep = fetchSleepData()
+            aapsLogger.info(LTag.APS, "[$TAG] 📊 FETCH RESULT - Sleep: ${if (sleep != null) "${sleep.durationHours.format(1)}h" else "NULL (no data)"}")
+            
             val hrv = fetchHRVData(daysBack)
+            aapsLogger.info(LTag.APS, "[$TAG] 📊 FETCH RESULT - HRV: ${hrv.size} samples ${if (hrv.isEmpty()) "(empty - no HRV data in HC)" else ""}")
+            
             val rhr = fetchMorningRHR(daysBack)
+            aapsLogger.info(LTag.APS, "[$TAG] 📊 FETCH RESULT - RHR: ${rhr.size} samples ${if (rhr.isEmpty()) "(empty - no morning HR data)" else ""}")
+            
             val steps = fetchStepsData(daysBack)
+            aapsLogger.info(LTag.APS, "[$TAG] 📊 FETCH RESULT - Steps: $steps avg/day ${if (steps == 0) "(no steps data)" else ""}")
             
             val elapsed = System.currentTimeMillis() - startTime
-            aapsLogger.info(LTag.APS, "[$TAG] ✅ Fetch completed in ${elapsed}ms")
+            
+            // 📊 SUMMARY
+            val hasAnyData = sleep != null || hrv.isNotEmpty() || rhr.isNotEmpty() || steps > 0
+            if (!hasAnyData) {
+                aapsLogger.warn(LTag.APS, "[$TAG] ⚠️ FETCH SUMMARY: NO DATA from Health Connect!")
+                aapsLogger.warn(LTag.APS, "[$TAG] ⚠️ Check: 1) HC permissions in Settings 2) Samsung Health/Oura sync to HC 3) Recent sleep/HR data exists")
+            } else {
+                aapsLogger.info(LTag.APS, "[$TAG] ✅ Fetch completed in ${elapsed}ms - Sleep=${sleep != null}, HRV=${hrv.size}, RHR=${rhr.size}, Steps=$steps")
+            }
             
             RawPhysioDataMTR(
                 sleep = sleep,
@@ -499,8 +515,11 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                 steps = steps,
                 fetchTimestamp = System.currentTimeMillis()
             )
+        } catch (e: SecurityException) {
+            aapsLogger.error(LTag.APS, "[$TAG] ❌ SECURITY ERROR: Health Connect permissions denied! Check Settings > Apps > AAPS > Health Connect", e)
+            RawPhysioDataMTR.EMPTY
         } catch (e: Exception) {
-            aapsLogger.error(LTag.APS, "[$TAG] ❌ Fetch failed", e)
+            aapsLogger.error(LTag.APS, "[$TAG] ❌ Fetch failed: ${e.javaClass.simpleName} - ${e.message}", e)
             RawPhysioDataMTR.EMPTY
         }
     }
@@ -515,9 +534,63 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
     
     /**
      * Checks if Health Connect is available and permissions granted
+     * Logs diagnostic info about permission state
      */
     fun isAvailable(): Boolean {
-        return healthConnectClient != null
+        val client = healthConnectClient
+        if (client == null) {
+            aapsLogger.error(LTag.APS, "[$TAG] ❌ Health Connect client is NULL - not available on this device")
+            return false
+        }
+        
+        // Check SDK status
+        try {
+            val sdkStatus = HealthConnectClient.getSdkStatus(context)
+            aapsLogger.info(LTag.APS, "[$TAG] Health Connect SDK Status: $sdkStatus")
+            
+            if (sdkStatus != HealthConnectClient.SDK_AVAILABLE) {
+                aapsLogger.error(LTag.APS, "[$TAG] ❌ Health Connect SDK not available (status=$sdkStatus)")
+                return false
+            }
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "[$TAG] ❌ Failed to check SDK status", e)
+            return false
+        }
+        
+        // Check granted permissions (async)
+        try {
+            val grantedPerms = runBlocking {
+                try {
+                    client.permissionController.getGrantedPermissions()
+                } catch (e: Exception) {
+                    emptySet<String>()
+                }
+            }
+            
+            // 🔍 DIAGNOSTIC: Log actual granted strings seen by the app
+            aapsLogger.info(LTag.APS, "[$TAG] 🔍 PERMISSIONS DIAGNOSTIC:")
+            aapsLogger.info(LTag.APS, "[$TAG]    Required (Central): ${AIMIHealthConnectPermissions.ALL_REQUIRED_PERMISSIONS.map { it.substringAfterLast(".") }}")
+            aapsLogger.info(LTag.APS, "[$TAG]    Granted (System):   ${grantedPerms.map { it.substringAfterLast(".") }}")
+            
+            // Use the centralized source of truth for checking
+            val requiredPerms = AIMIHealthConnectPermissions.PHYSIO_REQUIRED_PERMISSIONS
+            val missing = requiredPerms.filter { !grantedPerms.contains(it) }
+            
+            if (missing.isNotEmpty()) {
+                val missingNames = missing.map { 
+                    AIMIHealthConnectPermissions.PERMISSION_NAMES[it] ?: it.substringAfterLast(".") 
+                }
+                aapsLogger.warn(LTag.APS, "[$TAG] ⚠️ Missing Health Connect permissions: ${missingNames.joinToString(", ")}")
+                aapsLogger.warn(LTag.APS, "[$TAG] ⚠️ Grant permissions in: Settings > Apps > AAPS > Health Connect")
+            } else {
+                aapsLogger.info(LTag.APS, "[$TAG] ✅ All required Health Connect permissions granted for Physio")
+            }
+            
+        } catch (e: Exception) {
+            aapsLogger.warn(LTag.APS, "[$TAG] Could not check permissions: ${e.message}")
+        }
+        
+        return true
     }
     
     // ═══════════════════════════════════════════════════════════════════════
