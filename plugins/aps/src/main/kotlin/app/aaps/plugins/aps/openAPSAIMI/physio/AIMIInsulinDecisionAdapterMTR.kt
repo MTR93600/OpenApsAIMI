@@ -310,6 +310,8 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         )
     }
 
+
+
     /**
      * Returns a detailed formatted log string for user visibility
      * NEVER RETURNS NULL - Always provides diagnostic info even if UNKNOWN/BOOTSTRAP
