@@ -53,12 +53,7 @@ class AIMIHealthConnectPermissionsHandlerMTR @Inject constructor(
     companion object {
         private const val TAG = "AIMI_HC"
         
-        val REQUIRED_PERMISSIONS = setOf(
-            HealthPermission.getReadPermission(SleepSessionRecord::class),
-            HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
-            HealthPermission.getReadPermission(HeartRateRecord::class),
-            HealthPermission.getReadPermission(StepsRecord::class)
-        )
+        val REQUIRED_PERMISSIONS = AIMIHealthConnectPermissions.ALL_REQUIRED_PERMISSIONS
     }
     
     /**

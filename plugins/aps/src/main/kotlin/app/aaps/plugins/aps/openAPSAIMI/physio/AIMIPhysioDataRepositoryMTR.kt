@@ -7,6 +7,7 @@ import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
+import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -426,25 +427,27 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                         val now = Instant.now()
                         val startTime = now.minusSeconds((daysBack * 24 * 60 * 60).toLong())
                         
-                        val request = ReadRecordsRequest(
-                            recordType = StepsRecord::class,
-                            timeRangeFilter = TimeRangeFilter.between(startTime, now)
+                        val response = client.aggregate(
+                            AggregateRequest(
+                                metrics = setOf(StepsRecord.COUNT_TOTAL),
+                                timeRangeFilter = TimeRangeFilter.between(startTime, now)
+                            )
                         )
                         
-                        val response = client.readRecords(request)
-                        val totalSteps = response.records.sumOf { it.count }
+                        val totalSteps = response[StepsRecord.COUNT_TOTAL] ?: 0L
+                        
                         // Average daily steps
                         val avgSteps = if (daysBack > 0) (totalSteps / daysBack).toInt() else 0
                         
                         cache[cacheKey] = CachedData(avgSteps, System.currentTimeMillis())
                         
-                        aapsLogger.info(LTag.APS, "[$TAG] ✅ Steps (HC): avg $avgSteps/day")
+                        aapsLogger.info(LTag.APS, "[$TAG] ✅ Steps (HC Aggregated): total=$totalSteps, avg=$avgSteps/day")
                         avgSteps
                     }
                 }
             }
         } catch (e: Exception) {
-            aapsLogger.warn(LTag.APS, "[$TAG] Steps fetch failed", e)
+            aapsLogger.warn(LTag.APS, "[$TAG] Steps aggregation failed", e)
             0
         }
     }
