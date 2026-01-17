@@ -32,8 +32,8 @@ class AiCoachingService @Inject constructor() {
         private const val OPENAI_URL = "https://api.openai.com/v1/chat/completions"
         private const val OPENAI_MODEL = "gpt-5.2"  // O-series reasoning model
         
-        // Gemini 2.5 Flash (Latest - Dec 2024)
-        private const val GEMINI_MODEL = "gemini-2.5-flash"
+        // Gemini 3.0 Pro Preview (Updated Jan 2026)
+        private const val GEMINI_MODEL = "gemini-3.0-pro-preview"
         private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:generateContent"
         
         // DeepSeek Chat (OpenAI-compatible)

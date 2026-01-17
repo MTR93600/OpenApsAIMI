@@ -47,7 +47,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         
         // API endpoints
         private const val OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-        private const val GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent"
+        private const val GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro-preview:generateContent"
         private const val CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
         private const val DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
     }
