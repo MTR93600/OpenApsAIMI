@@ -286,6 +286,16 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
         
         // AIMI Auditor Indicator Setup
         setupAuditorIndicator()
+        
+        // Wire up AIMI Dashboard Loop Indicator for clicks (Loop Mode)
+        binding.root.findViewById<View>(R.id.loop_indicator)?.let { indicator ->
+            indicator.setOnClickListener(this)
+            indicator.setOnLongClickListener(this)
+        }
+        binding.root.findViewById<View>(R.id.loop_status)?.let { status ->
+            status.setOnClickListener(this)
+            status.setOnLongClickListener(this)
+        }
     }
 
     override fun onPause() {
@@ -437,12 +447,17 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             // UNIVERSAL FIX: Support ALL dashboard layouts (overview_info_layout, component_status_card, etc.)
             // Strategy: Try multiple findViewById paths in fallback order
             
-            // 1. Try binding.infoLayout.root (for overview_info_layout.xml - included via <include>)
-            // 2. Try status_card_layout (for component_status_card.xml - Modern Circle)
-            // 3. Try binding.root (last resort)
-            val container = binding.infoLayout?.root?.findViewById<FrameLayout>(
+            // 1. Try finding container in Modern Dashboard (Priority!)
+            val modernCard = binding.root.findViewById<View>(R.id.modernCircleCard)
+            val modernContainer = modernCard?.findViewById<FrameLayout>(R.id.aimi_auditor_indicator_container)
+            
+            // 2. Fallback to Info Layout (Standard) - Only if modern not found
+            val legacyContainer = binding.infoLayout?.root?.findViewById<FrameLayout>(
                 R.id.aimi_auditor_indicator_container
-            ) ?: binding.root.findViewById<FrameLayout>(
+            )
+            
+            // 3. Last resort: Global search
+            val container = modernContainer ?: legacyContainer ?: binding.root.findViewById<FrameLayout>(
                 R.id.aimi_auditor_indicator_container
             ) ?: run {
                 aapsLogger.warn(LTag.CORE, "Auditor indicator container not found in any layout hierarchy")
@@ -640,7 +655,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
                     }
                 }
 
-                R.id.aps_mode            -> {
+                R.id.aps_mode, R.id.loop_indicator, R.id.loop_status -> {
                     protectionCheck.queryProtection(activity, ProtectionCheck.Protection.BOLUS, UIRunnable {
                         if (isAdded) uiInteraction.runLoopDialog(childFragmentManager, 1)
                     })
@@ -674,7 +689,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
                 return true
             }
 
-            R.id.aps_mode            -> {
+            R.id.aps_mode, R.id.loop_indicator, R.id.loop_status -> {
                 activity?.let { activity ->
                     protectionCheck.queryProtection(activity, ProtectionCheck.Protection.BOLUS, UIRunnable {
                         uiInteraction.runLoopDialog(childFragmentManager, 0)
