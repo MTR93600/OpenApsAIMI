@@ -67,13 +67,17 @@ class AIMIPhysioContextEngineMTR @Inject constructor(
             return PhysioContextMTR.NEUTRAL
         }
         
-        if (!baseline.isValid()) {
-            aapsLogger.debug(LTag.APS, "[$TAG] Baseline not valid yet (Day ${baseline.validDaysCount}/$MIN_BASELINE_VALIDITY_DAYS) - returning LEARNING context")
-            // 🎯 FIX: Return context WITH features so UI knows we have data but are learning
+        if (baseline.validDaysCount < 1) {
+            aapsLogger.debug(LTag.APS, "[$TAG] Baseline empty (Day 0) - returning LEARNING context")
             return PhysioContextMTR.NEUTRAL.copy(
                 features = features,
-                narrative = "Learning Baseline (Day ${baseline.validDaysCount}/$MIN_BASELINE_VALIDITY_DAYS)"
+                narrative = "Building Initial Baseline (Day 0/1)"
             )
+        }
+        
+        // 🚀 PROGRESSIVE CONFIDENCE: Proceed even with partial baseline (Day 1+)
+        if (!baseline.isValid()) {
+             aapsLogger.info(LTag.APS, "[$TAG] Using partial baseline (Day ${baseline.validDaysCount}/$MIN_BASELINE_VALIDITY_DAYS)")
         }
         
         // Calculate deviations

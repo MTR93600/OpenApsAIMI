@@ -32,9 +32,7 @@ class AiCoachingService @Inject constructor() {
         private const val OPENAI_URL = "https://api.openai.com/v1/chat/completions"
         private const val OPENAI_MODEL = "gpt-5.2"  // O-series reasoning model
         
-        // Gemini 2.5 Flash (Latest - Dec 2024)
-        private const val GEMINI_MODEL = "gemini-2.5-flash"
-        private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:generateContent"
+
         
         // DeepSeek Chat (OpenAI-compatible)
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
@@ -62,7 +60,7 @@ class AiCoachingService @Inject constructor() {
             val prompt = buildPrompt(androidContext, context, report, history)
             
             return@withContext when (provider) {
-                Provider.GEMINI -> callGemini(apiKey, prompt)
+                Provider.GEMINI -> callGemini(androidContext, apiKey, prompt)
                 Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
                 Provider.CLAUDE -> callClaude(apiKey, prompt)
                 else -> callOpenAI(apiKey, prompt)
@@ -83,6 +81,7 @@ class AiCoachingService @Inject constructor() {
      * @return Generated text or error message
      */
     suspend fun fetchText(
+        context: Context,
         prompt: String,
         apiKey: String,
         provider: Provider
@@ -92,7 +91,7 @@ class AiCoachingService @Inject constructor() {
         
         try {
             return@withContext when (provider) {
-                Provider.GEMINI -> callGemini(apiKey, prompt)
+                Provider.GEMINI -> callGemini(context, apiKey, prompt)
                 Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
                 Provider.CLAUDE -> callClaude(apiKey, prompt)
                 else -> callOpenAI(apiKey, prompt)
@@ -143,16 +142,44 @@ class AiCoachingService @Inject constructor() {
         }
     }
 
-    private fun callGemini(apiKey: String, prompt: String): String {
-        // Gemini URL requires key in query param usually, or header 'x-goog-api-key'
-        val urlStr = "$GEMINI_URL?key=$apiKey"
+    private fun callGemini(context: Context, apiKey: String, prompt: String): String {
+        val resolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
+        
+        // 1. Try Preferred Model (High IQ: Gemini 3 Pro)
+        val primaryModel = resolver.resolveGenerateContentModel(apiKey, "gemini-3-pro-preview")
+        
+        try {
+            return executeGeminiRequest(resolver, apiKey, prompt, primaryModel)
+        } catch (e: Exception) {
+            // 2. Check for Quota Exhaustion (429)
+            // Error message usually contains "429" or "RESOURCE_EXHAUSTED" or "quota"
+            val msg = e.message?.lowercase() ?: ""
+            if (msg.contains("429") || msg.contains("resource_exhausted") || msg.contains("quota")) {
+                
+                // 3. Fallback to Efficient Model (High Quota: Gemini 2.5 Flash)
+                // Flash models typically have 15 RPM free tier vs 2 RPM for Pro
+                val fallbackModel = "gemini-2.5-flash" // Hardcoded safe fallback
+                android.util.Log.w("AIMI_GEMINI", "⚠️ Quota exceeded on $primaryModel. Auto-fallback to $fallbackModel")
+                
+                return executeGeminiRequest(resolver, apiKey, prompt, fallbackModel)
+            }
+            throw e // Re-throw other errors
+        }
+    }
+
+    private fun executeGeminiRequest(
+        resolver: app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver,
+        apiKey: String, 
+        prompt: String, 
+        modelId: String
+    ): String {
+        val urlStr = resolver.getGenerateContentUrl(modelId, apiKey)
         val url = URL(urlStr)
         val connection = url.openConnection() as HttpURLConnection
         
         val jsonBody = JSONObject()
         val parts = JSONArray()
         val part = JSONObject()
-        // STRICT PARITY: Sending exact same prompt as OpenAI (which includes Persona)
         part.put("text", prompt)
         parts.put(part)
         
@@ -166,10 +193,9 @@ class AiCoachingService @Inject constructor() {
         val root = JSONObject()
         root.put("contents", contents)
         
-        // Generation Config
         val config = JSONObject()
         config.put("temperature", 0.7)
-        config.put("maxOutputTokens", 4096) // Significantly increased to prevent ANY truncation
+        config.put("maxOutputTokens", 4096)
         root.put("generationConfig", config)
 
         connection.apply {
@@ -177,13 +203,10 @@ class AiCoachingService @Inject constructor() {
             setRequestProperty("Content-Type", "application/json")
             doOutput = true
             connectTimeout = 15000
-            readTimeout = 60000 // Increased read timeout
+            readTimeout = 60000
         }
 
-        val writer = OutputStreamWriter(connection.outputStream)
-        writer.write(root.toString())
-        writer.flush()
-        writer.close()
+        OutputStreamWriter(connection.outputStream).use { it.write(root.toString()) }
 
         val responseCode = connection.responseCode
         if (responseCode == 200) {
@@ -194,11 +217,11 @@ class AiCoachingService @Inject constructor() {
             reader.close()
             return parseGeminiResponse(response.toString())
         } else {
-            val reader = BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream, java.nio.charset.StandardCharsets.UTF_8))
-            val err = StringBuilder()
-            var line: String?
-            while (reader.readLine().also { line = it } != null) err.append(line)
-            return "Erreur Gemini ($responseCode): $err"
+             val reader = BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream, java.nio.charset.StandardCharsets.UTF_8))
+             val err = StringBuilder()
+             var line: String?
+             while (reader.readLine().also { line = it } != null) err.append(line)
+             throw Exception("Gemini Error ($responseCode): $err")
         }
     }
 

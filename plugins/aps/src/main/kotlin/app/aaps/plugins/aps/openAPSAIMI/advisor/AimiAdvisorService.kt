@@ -254,6 +254,29 @@ class AimiAdvisorService {
             }
         }
 
+        // 3. Calculate Mean BG & GMI
+        if (persistenceLayer != null) {
+            try {
+                // Fetch APS results for the period (approx BG history)
+                val now = System.currentTimeMillis()
+                val fromTime = now - (days * 24 * 3600 * 1000L)
+                val apsResults = persistenceLayer.getApsResults(fromTime, now)
+                
+                // Extract valid glucose values (exclude nulls and noise < 30)
+                val bgValues = apsResults.mapNotNull { it.glucoseStatus?.glucose }
+                    .filter { it > 30 }
+                
+                if (bgValues.isNotEmpty()) {
+                    meanBg = bgValues.average()
+                } else {
+                    android.util.Log.w("AIMI_ADVISOR", "No BG data found for mean calculation over last $days days. Using fallback $meanBg.")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AIMI_ADVISOR", "Failed to calculate Mean BG: ${e.message}")
+                e.printStackTrace()
+            }
+        }
+
         return AdvisorMetrics(
           //periodLabel = "Last $days days",
             periodLabel = rh?.gs(R.string.aimi_adv_period_last_days, days) ?: "Last $days days",
@@ -263,8 +286,8 @@ class AimiAdvisorService {
             timeBelow54 = timeBelow54,
             timeAbove180 = timeAbove180,
             timeAbove250 = timeAbove250,
-            meanBg = meanBg, // TBD: Mean BG calculator
-            gmi = 3.31 + (0.02392 * meanBg), // Estimate GMI from Mean
+            meanBg = meanBg,
+            gmi = 3.31 + (0.02392 * meanBg), // GMI = 3.31 + 0.02392 * MeanBG (mg/dL)
             tdd = tdd,
             basalPercent = basalPercent,
             hypoEvents = 0, // Need Notification/Treatment analysis

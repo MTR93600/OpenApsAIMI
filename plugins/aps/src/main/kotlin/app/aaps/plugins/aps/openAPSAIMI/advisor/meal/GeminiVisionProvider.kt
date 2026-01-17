@@ -11,13 +11,15 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Google Gemini 2.5 Flash Vision Provider  
- * Uses gemini-2.5-flash model with enhanced JSON mode
+ * Google Gemini 3.0 Pro Vision Provider  
+ * Uses gemini-3.0-pro-preview model with enhanced JSON mode
  */
-class GeminiVisionProvider : AIVisionProvider {
-    override val displayName = "Gemini (2.5 Flash)"
+class GeminiVisionProvider(private val context: android.content.Context) : AIVisionProvider {
+    override val displayName = "Gemini (3.0 Pro)"
     override val providerId = "GEMINI"
     
+    private val geminiResolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
+
     override suspend fun estimateFromImage(bitmap: Bitmap, apiKey: String): EstimationResult = withContext(Dispatchers.IO) {
         val base64Image = bitmapToBase64(bitmap)
         val responseJson = callGeminiAPI(apiKey, base64Image)
@@ -32,8 +34,27 @@ class GeminiVisionProvider : AIVisionProvider {
     }
     
     private fun callGeminiAPI(apiKey: String, base64Image: String): String {
-        // Gemini 2.5 Flash endpoint
-        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey")
+        // 1. Try Primary (Gemini 3 Pro)
+        val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-3-pro-preview")
+        
+        try {
+            return executeRequest(apiKey, base64Image, primaryModel)
+        } catch (e: Exception) {
+            // 2. Check for Quota Exhaustion (429)
+            val msg = e.message?.lowercase() ?: ""
+            if (msg.contains("429") || msg.contains("quota") || msg.contains("resource_exhausted")) {
+                // 3. Fallback to Flash
+                val fallbackModel = "gemini-2.5-flash"
+                android.util.Log.w("AIMI_GEMINI", "Vision Quota Exceeded. Fallback to $fallbackModel")
+                return executeRequest(apiKey, base64Image, fallbackModel)
+            }
+            throw e
+        }
+    }
+
+    private fun executeRequest(apiKey: String, base64Image: String, modelId: String): String {
+        val urlStr = geminiResolver.getGenerateContentUrl(modelId, apiKey)
+        val url = URL(urlStr)
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
         connection.setRequestProperty("Content-Type", "application/json")
@@ -61,8 +82,6 @@ class GeminiVisionProvider : AIVisionProvider {
             })
             put("generationConfig", JSONObject().apply {
                 // CRITICAL FIX #2: Increase token limit from 800 to 2048
-                // 800 tokens ≈ 600 chars, often truncated for complex meals
-                // 2048 tokens ≈ 1500-1800 chars, sufficient for detailed reasoning
                 put("maxOutputTokens", 2048)
                 put("temperature", 0.3)
                 put("responseMimeType", "application/json")  // Force JSON output
@@ -74,7 +93,6 @@ class GeminiVisionProvider : AIVisionProvider {
         val responseCode = connection.responseCode
         if (responseCode == HttpURLConnection.HTTP_OK) {
             // CRITICAL FIX #3: Robust stream reading with buffer size control
-            // readText() can truncate if stream isn't fully consumed
             val response = StringBuilder()
             connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
                 val buffer = CharArray(8192)  // 8KB chunks

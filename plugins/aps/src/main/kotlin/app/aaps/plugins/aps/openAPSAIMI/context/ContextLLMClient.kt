@@ -38,7 +38,8 @@ import kotlin.time.Duration.Companion.minutes
 class ContextLLMClient @Inject constructor(
     private val aiCoachingService: AiCoachingService,
     private val sp: SP,
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    private val context: android.content.Context
 ) {
     companion object {
         private const val TIMEOUT_MS = 3000L // 3 secondes max
@@ -232,7 +233,8 @@ Output:
             }
             
             // Call LLM service
-            val llmResponse = aiCoachingService.fetchText(prompt, apiKey, provider)
+            // Call LLM service
+            val llmResponse = aiCoachingService.fetchText(context, prompt, apiKey, provider)
             
             // Parse JSON response
             parseJsonResponse(llmResponse, userText)

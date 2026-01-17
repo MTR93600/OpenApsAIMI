@@ -104,6 +104,14 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
             "[$TAG] Baseline restored (${baseline.validDaysCount} days, " +
             "age=${(System.currentTimeMillis() - baseline.lastUpdateTimestamp) / (60 * 60 * 1000)}h)"
         )
+        
+        // 🔄 RESTORE HISTORY MAPS (Critical Fix)
+        sleepDurationHistory.putAll(baseline.sleepHistory)
+        hrvRMSSDHistory.putAll(baseline.hrvHistory)
+        morningRHRHistory.putAll(baseline.rhrHistory)
+        dailyStepsHistory.putAll(baseline.stepsHistory)
+        
+        aapsLogger.info(LTag.APS, "[$TAG] ✅ History restored: Sleep=${sleepDurationHistory.size}, HRV=${hrvRMSSDHistory.size}, RHR=${morningRHRHistory.size}, Steps=${dailyStepsHistory.size}")
     }
     
     // ═══════════════════════════════════════════════════════════════════════
@@ -148,7 +156,13 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
             morningRHR = rhrBaseline,
             dailySteps = stepsBaseline,
             lastUpdateTimestamp = timestamp,
-            validDaysCount = uniqueDays
+            validDaysCount = uniqueDays,
+            
+            // Export History
+            sleepHistory = sleepDurationHistory.toMap(),
+            hrvHistory = hrvRMSSDHistory.toMap(),
+            rhrHistory = morningRHRHistory.toMap(),
+            stepsHistory = dailyStepsHistory.toMap()
         )
     }
     

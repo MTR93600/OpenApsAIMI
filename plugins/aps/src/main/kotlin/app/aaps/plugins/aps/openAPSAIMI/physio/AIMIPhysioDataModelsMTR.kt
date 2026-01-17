@@ -186,7 +186,13 @@ data class PhysioBaselineMTR(
     val morningRHR: MetricBaselineMTR = MetricBaselineMTR("morningRHR"),
     val dailySteps: MetricBaselineMTR = MetricBaselineMTR("dailySteps"),
     val lastUpdateTimestamp: Long = 0,
-    val validDaysCount: Int = 0
+    val validDaysCount: Int = 0,
+    
+    // 🆕 RAW HISTORY PERSISTENCE (Crucial for progressive baseline)
+    val sleepHistory: Map<Long, Double> = emptyMap(),
+    val hrvHistory: Map<Long, Double> = emptyMap(),
+    val rhrHistory: Map<Long, Int> = emptyMap(),
+    val stepsHistory: Map<Long, Int> = emptyMap()
 ) {
     fun isValid(): Boolean = validDaysCount >= 3
     
@@ -217,6 +223,14 @@ data class PhysioBaselineMTR(
         })
         put("lastUpdate", lastUpdateTimestamp)
         put("validDays", validDaysCount)
+        
+        // Serialize History (Compact format)
+        put("history", JSONObject().apply {
+            put("sleep", JSONObject().apply { sleepHistory.forEach { (k, v) -> put(k.toString(), v) } })
+            put("hrv", JSONObject().apply { hrvHistory.forEach { (k, v) -> put(k.toString(), v) } })
+            put("rhr", JSONObject().apply { rhrHistory.forEach { (k, v) -> put(k.toString(), v) } })
+            put("steps", JSONObject().apply { stepsHistory.forEach { (k, v) -> put(k.toString(), v) } })
+        })
     }
     
     companion object {
@@ -242,7 +256,24 @@ data class PhysioBaselineMTR(
                 morningRHR = parseMetric("morningRHR", json.optJSONObject("morningRHR")),
                 dailySteps = parseMetric("dailySteps", json.optJSONObject("dailySteps")),
                 lastUpdateTimestamp = json.optLong("lastUpdate", 0),
-                validDaysCount = json.optInt("validDays", 0)
+                validDaysCount = json.optInt("validDays", 0),
+                
+                // Restore History
+                sleepHistory = json.optJSONObject("history")?.optJSONObject("sleep")?.let { obj ->
+                    obj.keys().asSequence().associate { it.toLong() to obj.getDouble(it) }
+                } ?: emptyMap(),
+                
+                hrvHistory = json.optJSONObject("history")?.optJSONObject("hrv")?.let { obj ->
+                    obj.keys().asSequence().associate { it.toLong() to obj.getDouble(it) }
+                } ?: emptyMap(),
+                
+                rhrHistory = json.optJSONObject("history")?.optJSONObject("rhr")?.let { obj ->
+                    obj.keys().asSequence().associate { it.toLong() to obj.getInt(it) }
+                } ?: emptyMap(),
+                
+                stepsHistory = json.optJSONObject("history")?.optJSONObject("steps")?.let { obj ->
+                    obj.keys().asSequence().associate { it.toLong() to obj.getInt(it) }
+                } ?: emptyMap()
             )
         } catch (e: Exception) {
             EMPTY

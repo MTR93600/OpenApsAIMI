@@ -372,11 +372,12 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
                 sb.append("\n       • Oura: Settings > Data Sharing > Health Connect")
                 sb.append("\n       (Permissions seem OK, but no data records found)")
             } else {
-                // 🎯 FIX: Explicitly show we are learning if quality is good
-                val day = context.narrative.substringAfter("Day ", "").substringBefore("/")
-                if (context.narrative.contains("Learning Baseline")) {
-                     sb.append(" 📊 Building Baseline (Day $day/3)")
-                     sb.append("\n    ℹ️ Data is flowing! Collecting 3 days of history before activation.")
+                if (context.narrative.contains("Building Initial Baseline")) {
+                     val day = context.narrative.substringAfter("Day ", "").substringBefore("/")
+                     sb.append(" 📊 Building Initial Baseline (Day $day)")
+                } else if (!context.isValid()) {
+                     // Low confidence but has data
+                     sb.append(" 📊 Improving Baseline (Day ${contextStore.getCurrentBaseline()?.validDaysCount ?: 1}/7)")
                 } else {
                      sb.append(" Quality=${(features.dataQuality * 100).toInt()}%")
                 }
