@@ -198,23 +198,38 @@ class AuditorAIService @Inject constructor(
      * Call Gemini API
      */
     private fun callGemini(apiKey: String, prompt: String): String {
-        // Resolve model dynamically
-        val modelId = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-3-pro-preview")
-        val urlStr = geminiResolver.getGenerateContentUrl(modelId, apiKey)
+        // 1. Try Preferred Model
+        val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-3-pro-preview")
         
+        try {
+            return executeGeminiRequest(apiKey, prompt, primaryModel)
+        } catch (e: Exception) {
+            // 2. Fallback on Quota Exceeded (429)
+            val msg = e.message?.lowercase() ?: ""
+            if (msg.contains("429") || msg.contains("quota") || msg.contains("resource_exhausted")) {
+                val fallbackModel = "gemini-2.5-flash"
+                android.util.Log.w("AIMI_GEMINI", "Auditor Quota Exceeded. Fallback to $fallbackModel")
+                return executeGeminiRequest(apiKey, prompt, fallbackModel)
+            }
+            throw e
+        }
+    }
+
+    private fun executeGeminiRequest(apiKey: String, prompt: String, modelId: String): String {
+        val urlStr = geminiResolver.getGenerateContentUrl(modelId, apiKey)
         val url = URL(urlStr)
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
             setRequestProperty("Content-Type", "application/json")
-            connectTimeout = 15_000 // Reduced per audit
-            readTimeout = DEFAULT_TIMEOUT_MS.toInt()   // Reduced per audit
+            connectTimeout = 15_000
+            readTimeout = 45_000
         }
         
         val requestBody = JSONObject().apply {
             put("contents", JSONArray().apply {
                 put(JSONObject().apply {
-                    put("role", "user") // FIX: Explicit role required for stability
+                    put("role", "user")
                     put("parts", JSONArray().apply {
                         put(JSONObject().apply {
                             put("text", prompt)
@@ -232,23 +247,21 @@ class AuditorAIService @Inject constructor(
         OutputStreamWriter(connection.outputStream).use { it.write(requestBody.toString()) }
         
         val responseCode = connection.responseCode
-        if (responseCode != HttpURLConnection.HTTP_OK) {
-            // Read error stream for better debugging
-            val errorStream = connection.errorStream ?: connection.inputStream
-            val errorResponse = errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
-            throw Exception("HTTP $responseCode: $errorResponse")
+        if (responseCode == HttpURLConnection.HTTP_OK) {
+             val response = StringBuilder()
+             connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+                 val buffer = CharArray(8192)
+                 var charsRead: Int
+                 while (reader.read(buffer).also { charsRead = it } != -1) {
+                     response.append(buffer, 0, charsRead)
+                 }
+             }
+             return response.toString()
+        } else {
+             val errorStream = connection.errorStream ?: connection.inputStream
+             val errorResponse = errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+             throw Exception("HTTP $responseCode: $errorResponse")
         }
-        
-        // Robust stream reading
-        val response = StringBuilder()
-        connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
-            val buffer = CharArray(8192)  // 8KB chunks
-            var charsRead: Int
-            while (reader.read(buffer).also { charsRead = it } != -1) {
-                response.append(buffer, 0, charsRead)
-            }
-        }
-        return response.toString()
     }
     
     /**

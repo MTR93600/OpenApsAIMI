@@ -63,9 +63,27 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         context: PhysioContextMTR,
         apiKey: String
     ): String {
-        
         val prompt = buildPrompt(features, baseline, context)
         
+        // 1. Try Preferred Model
+        val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-3-pro-preview")
+        
+        try {
+            return executeGeminiRequest(apiKey, prompt, primaryModel)
+        } catch (e: Exception) {
+            // 2. Fallback on Quota Exceeded (429)
+            val msg = e.message?.lowercase() ?: ""
+            if (msg.contains("429") || msg.contains("quota") || msg.contains("resource_exhausted")) {
+                val fallbackModel = "gemini-2.5-flash"
+                android.util.Log.w(TAG, "Physio Quota Exceeded. Fallback to $fallbackModel")
+                return executeGeminiRequest(apiKey, prompt, fallbackModel)
+            }
+            throw e
+        }
+    }
+
+    private fun executeGeminiRequest(apiKey: String, prompt: String, modelId: String): String {
+        val url = geminiResolver.getGenerateContentUrl(modelId, apiKey)
         val requestBody = JSONObject().apply {
             put("contents", org.json.JSONArray().apply {
                 put(JSONObject().apply {
@@ -83,9 +101,6 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
             })
         }
         
-        val model = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-3-pro-preview")
-        val url = geminiResolver.getGenerateContentUrl(model, apiKey)
-
         val response = makeAPICall(url, requestBody.toString(), mapOf(
             "Content-Type" to "application/json"
         ))
