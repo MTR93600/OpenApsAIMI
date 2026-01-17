@@ -95,7 +95,7 @@
                 app:cardElevation="2dp"
                 app:cardUseCompatPadding="false"
                 android:layout_gravity="center"
-                android:visibility="gone">
+                android:visibility="visible">
 
                 <include
                     android:id="@+id/info_layout"
@@ -136,7 +136,8 @@
                 app:contentPadding="2dp"
                 app:cardElevation="2dp"
                 app:cardUseCompatPadding="false"
-                android:layout_gravity="center">
+                android:layout_gravity="center"
+                android:visibility="gone">
 
                 <include
                     layout="@layout/component_status_card" />

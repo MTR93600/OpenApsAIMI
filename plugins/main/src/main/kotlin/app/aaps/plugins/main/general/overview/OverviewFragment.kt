@@ -434,11 +434,29 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             val jsonStr = preferences.get(app.aaps.core.keys.StringKey.OApsAIMIContextStorage)
             val hasContext = jsonStr.length > 5 // "[]" length is 2
             
-            runOnUiThread {
-                _binding?.root?.findViewById<View>(R.id.aimi_context_indicator)?.visibility = hasContext.toVisibility()
+            _binding?.root?.findViewById<View>(R.id.aimi_context_indicator)?.visibility = hasContext.toVisibility()
+            
+            // 🔄 EXPERT FIX: Switch Dashboard based on AIMI status
+            val aimiEnabled = try {
+                 androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+                    .getBoolean("AimiPhysioAssistantEnable", false)
+            } catch (e: Exception) { false }
+
+            val infoCard = _binding?.root?.findViewById<View>(R.id.infoCard)
+            val modernCard = _binding?.root?.findViewById<View>(R.id.modernCircleCard)
+
+            if (aimiEnabled) {
+                // Show AIMI Dashboard, Hide Standard
+                if (modernCard?.visibility != View.VISIBLE) modernCard?.visibility = View.VISIBLE
+                if (infoCard?.visibility != View.GONE) infoCard?.visibility = View.GONE
+            } else {
+                // Show Standard Dashboard, Hide AIMI
+                if (modernCard?.visibility != View.GONE) modernCard?.visibility = View.GONE
+                if (infoCard?.visibility != View.VISIBLE) infoCard?.visibility = View.VISIBLE
             }
+            
         } catch (e: Exception) {
-            aapsLogger.error(LTag.CORE, "Failed to update context indicator: ${e.message}")
+            aapsLogger.error(LTag.CORE, "Failed to update context indicator/dashboard: ${e.message}")
         }
     }
     
