@@ -5479,7 +5479,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 profileCurrentBasal = profile_current_basal,
                 cob = cob,
                 globalReactivityFactor = if (preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled)) {
-                    unifiedReactivityLearner.globalFactor
+                    unifiedReactivityLearner.getCombinedFactor()
                 } else 1.0  // Backwards compatible default
             ),
             SmbInstructionExecutor.Hooks(

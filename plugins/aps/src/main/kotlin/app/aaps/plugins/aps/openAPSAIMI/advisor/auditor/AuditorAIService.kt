@@ -37,8 +37,8 @@ class AuditorAIService @Inject constructor(
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
         private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
         
-        // Timeout for API calls (3 minutes max for deep reasoning)
-        private const val DEFAULT_TIMEOUT_MS = 180_000L
+        // Timeout for API calls (45s max per security audit to avoid blocking loop)
+        private const val DEFAULT_TIMEOUT_MS = 45_000L
     }
     
     enum class Provider(val id: String, val displayName: String) {
@@ -156,8 +156,8 @@ class AuditorAIService @Inject constructor(
             doOutput = true
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Authorization", "Bearer $apiKey")
-            connectTimeout = 60_000 // Extended
-            readTimeout = 180_000   // Extended
+            connectTimeout = 15_000 // Reduced per audit
+            readTimeout = DEFAULT_TIMEOUT_MS.toInt()   // Reduced per audit
         }
         
         val requestBody = JSONObject().apply {
@@ -202,8 +202,8 @@ class AuditorAIService @Inject constructor(
             requestMethod = "POST"
             doOutput = true
             setRequestProperty("Content-Type", "application/json")
-            connectTimeout = 60_000 // Extended for stability
-            readTimeout = 180_000   // Extended for deep reasoning
+            connectTimeout = 15_000 // Reduced per audit
+            readTimeout = DEFAULT_TIMEOUT_MS.toInt()   // Reduced per audit
         }
         
         val requestBody = JSONObject().apply {
@@ -256,8 +256,8 @@ class AuditorAIService @Inject constructor(
             doOutput = true
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Authorization", "Bearer $apiKey")
-            connectTimeout = 60_000 // Extended
-            readTimeout = 180_000   // Extended
+            connectTimeout = 15_000 // Reduced per audit
+            readTimeout = DEFAULT_TIMEOUT_MS.toInt()   // Reduced per audit
         }
         
         val requestBody = JSONObject().apply {
@@ -303,8 +303,8 @@ class AuditorAIService @Inject constructor(
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("x-api-key", apiKey)
             setRequestProperty("anthropic-version", "2023-06-01")
-            connectTimeout = 60_000 // Extended
-            readTimeout = 180_000   // Extended
+            connectTimeout = 15_000 // Reduced per audit
+            readTimeout = DEFAULT_TIMEOUT_MS.toInt()   // Reduced per audit
         }
         
         val requestBody = JSONObject().apply {
