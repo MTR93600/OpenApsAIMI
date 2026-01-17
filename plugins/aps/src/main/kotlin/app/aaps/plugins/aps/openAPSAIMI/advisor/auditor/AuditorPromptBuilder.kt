@@ -17,6 +17,8 @@ object AuditorPromptBuilder {
         return """
 ${getSystemPrompt()}
 
+${getSafetyAssertionsSection()}
+
 ${getInputDataSection(input)}
 
 ${getInstructionsSection()}
@@ -116,6 +118,32 @@ Tu retournes **UNIQUEMENT** du JSON valide, avec :
 
 Maintenant, Diaby, à toi de jouer ! 🧠
     """.trimIndent()
+
+    /**
+     * Safety Assertions: CRITICAL RULES that must be checked before generating verdict
+     */
+    private fun getSafetyAssertionsSection(): String = """
+## SAFETY ASSERTIONS (REQUIRED)
+Before verdict, you MUST validate these hard rules. If any rule triggers, it overrides your intuition.
+
+1. **DATA_INTEGRITY**: 
+   - If `glucose_delta` is missing/null, verdict MUST be **SOFTEN**.
+   - If `iob_data` is missing, verdict MUST be **SOFTEN**.
+
+2. **HYPO_RULE**: 
+   - If `bg` < 75 mg/dL, verdict MUST be **SOFTEN** or **CONFIRM** (never imply aggressive action).
+   - If `bg` < 70 mg/dL AND `delta` < 0, verdict MUST be **SOFTEN** (Prioritize TBR reduction or suspension).
+
+3. **STACKING_RULE**: 
+   - If `iob_activity` > 80% (Peak effect) AND `smb_proposed` > 0.5U, **CHECK CAREFULLY**.
+   - Unless `bg` is rising fast (> +5 mg/dL/5min), recommend **SOFTEN** to avoid stacking at peak.
+
+4. **ANTI-HALLUCINATION**:
+   - If `Input.steps` is null/0, do NOT mention "sedentary" or "active". State "Activity Unknown".
+   - Do NOT recalculate IOB. Use provided `Input.iob`.
+   - Do NOT invent future BG values. Deal only with the present state and trend.
+   - If you don't know, state: `riskFlags: ["uncertain_data"]`, `confidence: 0.3`.
+    """.trimIndent()
     
     /**
      * Input data section: The JSON payload
@@ -162,6 +190,7 @@ Look for patterns like:
 - `mode_phase_not_executed`: Expected meal phase didn't happen
 - `autodrive_stuck`: Autodrive engaged long time without action
 - `compression_low_suspected`: Impossible drop at night (Sensor artifact)
+- `uncertain_data`: Critical inputs are null or inconsistent
 
 ## 4. Evidence (max 3 bullets):
 Provide concise, clinical reasoning:
@@ -232,4 +261,5 @@ Your response must be ONLY this JSON structure:
 - All fields are required
 - Respect value bounds strictly
     """.trimIndent()
+
 }

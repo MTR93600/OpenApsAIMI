@@ -304,7 +304,7 @@ class UnifiedReactivityLearner @Inject constructor(
             log.debug(LTag.APS, "UnifiedReactivityLearner: Adaptive α=$alpha (hypo=${perf.hypo_count}, CV=${perf.cv_percent.toInt()}%, hyper=${perf.tir_above_180.toInt()}%)")
             
             // Apply EMA: New = (Target * alpha) + (Old * (1-alpha))
-            globalFactor = (targetFactor * alpha + globalFactor * (1 - alpha)).coerceIn(0.4, 6.0)
+            globalFactor = (targetFactor * alpha + globalFactor * (1 - alpha)).coerceIn(0.4, 2.0)
         }
         
         val reasonsStr = reasons.joinToString(", ")
@@ -492,7 +492,7 @@ class UnifiedReactivityLearner @Inject constructor(
         storageHelper.loadFileSafe(file, 
             onSuccess = { content ->
                 val json = JSONObject(content)
-                globalFactor = json.optDouble("globalFactor", 1.0).coerceIn(0.4, 6.0)
+                globalFactor = json.optDouble("globalFactor", 1.0).coerceIn(0.4, 2.0)
                 shortTermFactor = json.optDouble("shortTermFactor", 1.0).coerceIn(0.7, 2.0)
                 lastAnalysisTime = json.optLong("lastAnalysisTime", 0L)
                 lastShortAnalysisTime = json.optLong("lastShortAnalysisTime", 0L)
