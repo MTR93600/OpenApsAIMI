@@ -47,6 +47,14 @@ class UnifiedActivityProviderMTR @Inject constructor(
         // Known Source Identifiers
         private const val SOURCE_HC = "HealthConnect"
         private const val SOURCE_PHONE = "PhoneSensor"
+        
+        /**
+         * Static helper to get mode from any component context
+         */
+        fun getMode(context: android.content.Context): String {
+            val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+            return prefs.getString(PREF_KEY_SOURCE_MODE, DEFAULT_MODE) ?: DEFAULT_MODE
+        }
     }
 
     override fun getLatestSteps(windowMs: Long): StepsResult? {

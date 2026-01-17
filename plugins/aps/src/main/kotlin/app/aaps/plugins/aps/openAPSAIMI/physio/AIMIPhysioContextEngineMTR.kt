@@ -45,7 +45,8 @@ class AIMIPhysioContextEngineMTR @Inject constructor(
         
         // Confidence scoring
         private const val MIN_DATA_QUALITY_FOR_CONFIDENCE = 0.4
-        private const val MIN_BASELINE_VALIDITY_DAYS = 3
+        // 🚀 CHANGED: Activate immediately to show data (Absolute thresholds apply even without baseline)
+        private const val MIN_BASELINE_VALIDITY_DAYS = 0
     }
     
     /**
@@ -67,8 +68,12 @@ class AIMIPhysioContextEngineMTR @Inject constructor(
         }
         
         if (!baseline.isValid()) {
-            aapsLogger.debug(LTag.APS, "[$TAG] Baseline not valid yet - returning NEUTRAL context")
-            return PhysioContextMTR.NEUTRAL
+            aapsLogger.debug(LTag.APS, "[$TAG] Baseline not valid yet (Day ${baseline.validDaysCount}/$MIN_BASELINE_VALIDITY_DAYS) - returning LEARNING context")
+            // 🎯 FIX: Return context WITH features so UI knows we have data but are learning
+            return PhysioContextMTR.NEUTRAL.copy(
+                features = features,
+                narrative = "Learning Baseline (Day ${baseline.validDaysCount}/$MIN_BASELINE_VALIDITY_DAYS)"
+            )
         }
         
         // Calculate deviations

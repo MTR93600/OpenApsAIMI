@@ -312,20 +312,88 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
 
     /**
      * Returns a detailed formatted log string for user visibility
-     * Shows raw metrics and state regardless of whether multipliers are applied
+     * NEVER RETURNS NULL - Always provides diagnostic info even if UNKNOWN/BOOTSTRAP
      */
-    fun getDetailedLogString(): String? {
-        val context = contextStore.getCurrentContext() ?: return null
+    fun getDetailedLogString(): String {
+        // 🎯 FIX: Use getLastContextUnsafe() to see context even with low/zero confidence
+        // This prevents NEVER_SYNCED when a run happened but HC returned no data
+        val context = contextStore.getLastContextUnsafe()
+        val outcome = contextStore.getLastRunOutcome()
         
-        // Only return log if data is relatively fresh (24h)
-        if (context.ageSeconds() > 24 * 3600) return null
-
+        // Case 0: Pipeline ran but got an error outcome
+        if (outcome == PhysioPipelineOutcome.SECURITY_ERROR) {
+            return "🏥 Physio: SECURITY_ERROR | Missing Health Connect permissions (check settings)"
+        }
+        
+        if (outcome == PhysioPipelineOutcome.ERROR) {
+            return "🏥 Physio: ERROR | Health Connect fetch failed (check app connectivity)"
+        }
+        
+        // Case 1: Never ran (no context AND outcome is NEVER_RUN)
+        if (context == null && outcome == PhysioPipelineOutcome.NEVER_RUN) {
+            return "🏥 Physio: NEVER_SYNCED | Waiting for first Health Connect sync (check permissions)"
+        }
+        
+        // Case 1b: Ran but got NO DATA from Health Connect
+        if (context == null && outcome == PhysioPipelineOutcome.SYNC_OK_NO_DATA) {
+            return "🏥 Physio: NO_DATA | Health Connect OK but no Sleep/HRV/HR records found. Check if Oura/Samsung/Garmin exports data."
+        }
+        
+        // Case 1c: Context null for other reasons
+        if (context == null) {
+            return "🏥 Physio: UNKNOWN | Outcome=$outcome but no context available"
+        }
+        
+        val ageHours = context.ageSeconds() / 3600
+        val ageDays = ageHours / 24
+        
+        // Case 2: Very stale data (>48h)
+        if (ageHours > 48) {
+            return "🏥 Physio: STALE (${ageDays}d old) | State: ${context.state} | Check Health Connect sync"
+        }
+        
         val features = context.features
         val sb = StringBuilder()
         
-        val nextSyncMin = ((context.timestamp + 6 * 3600 * 1000 - System.currentTimeMillis()) / 60000).coerceAtLeast(0)
-        sb.append("🏥 Physio Status: ${context.state} (Conf: ${(context.confidence * 100).toInt()}%) | ⏳ Next sync: ${nextSyncMin}min")
+        // Base status line (ALWAYS shown)
+        val nextSyncMin = ((context.timestamp + 4 * 3600 * 1000 - System.currentTimeMillis()) / 60000).coerceAtLeast(0)
+        sb.append("🏥 Physio: ${context.state} (Conf: ${(context.confidence * 100).toInt()}%) | Age: ${ageHours}h | Next: ${nextSyncMin}min")
         
+        // Case 3: UNKNOWN/BOOTSTRAP - show WHY
+        if (context.state == PhysioStateMTR.UNKNOWN || context.confidence < 0.3) {
+            sb.append("\n    ⚠️ Bootstrap mode:")
+            if (features == null || !features.hasValidData) {
+                sb.append(" No valid features")
+                // 🎯 HELPFUL HINT: Explain how to fix this
+                sb.append("\n    ℹ️ Health Connect is empty! Check data sources:")
+                sb.append("\n       • Samsung Health: Settings > Health Connect > Allow all to write")
+                sb.append("\n       • Oura: Settings > Data Sharing > Health Connect")
+                sb.append("\n       (Permissions seem OK, but no data records found)")
+            } else {
+                // 🎯 FIX: Explicitly show we are learning if quality is good
+                val day = context.narrative.substringAfter("Day ", "").substringBefore("/")
+                if (context.narrative.contains("Learning Baseline")) {
+                     sb.append(" 📊 Building Baseline (Day $day/3)")
+                     sb.append("\n    ℹ️ Data is flowing! Collecting 3 days of history before activation.")
+                } else {
+                     sb.append(" Quality=${(features.dataQuality * 100).toInt()}%")
+                }
+                
+                val missing = mutableListOf<String>()
+                if (features.sleepDurationHours == 0.0) missing.add("Sleep")
+                if (features.hrvMeanRMSSD == 0.0) missing.add("HRV")
+                if (features.rhrMorning == 0) missing.add("RHR")
+                if (missing.isNotEmpty()) {
+                    sb.append(", Missing: ${missing.joinToString(", ")}")
+                }
+            }
+            if (context.narrative.isNotBlank()) {
+                sb.append("\n    ℹ️ ${context.narrative}")
+            }
+            return sb.toString()
+        }
+        
+        // Case 4: VALID state - show metrics
         if (features != null && features.hasValidData) {
             sb.append("\n    • Sleep: %.1fh (Eff: %.0f%%)".format(features.sleepDurationHours, features.sleepEfficiency * 100))
             if (features.sleepDurationHours > 0) sb.append(" Z=%.1f".format(context.sleepDeviationZ))

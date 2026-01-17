@@ -287,6 +287,16 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
         
         // AIMI Auditor Indicator Setup
         setupAuditorIndicator()
+
+        // Wire up AIMI Dashboard Loop Indicator for clicks (Loop Mode)
+        binding.root.findViewById<View>(R.id.loop_indicator)?.let { indicator ->
+            indicator.setOnClickListener(this)
+            indicator.setOnLongClickListener(this)
+        }
+        binding.root.findViewById<View>(R.id.loop_status)?.let { status ->
+            status.setOnClickListener(this)
+            status.setOnLongClickListener(this)
+        }
     }
 
     override fun onPause() {
@@ -425,30 +435,35 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             val jsonStr = preferences.get(app.aaps.core.keys.StringKey.OApsAIMIContextStorage)
             val hasContext = jsonStr.length > 5 // "[]" length is 2
             
-            runOnUiThread {
-            //_binding?.root?.findViewById<View>(R.id.aimi_context_indicator)?.visibility = hasContext.toVisibility()
+          //_binding?.root?.findViewById<View>(R.id.aimi_context_indicator)?.visibility = hasContext.toVisibility()
+            val indicator = binding?.root?.findViewById<ImageView>(R.id.aimi_context_indicator)
+            // Assicurati che sia sempre visibile
+            indicator?.visibility = View.VISIBLE
+            // Cambia solo il colore in base a hasContext
+            val color = if (hasContext) 0xFFF44336.toInt() else 0xFF9E9E9E.toInt()
+            indicator?.setColorFilter(color)
 
-                //    val indicator = binding?.root?.findViewById<View>(R.id.aimi_context_indicator)
-                val indicator = binding?.root?.findViewById<ImageView>(R.id.aimi_context_indicator)
+            // 🔄 EXPERT FIX: Switch Dashboard based on AIMI status
+            val aimiEnabled = try {
+                 androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+                    .getBoolean("AimiPhysioAssistantEnable", false)
+            } catch (e: Exception) { false }
 
-                    // Assicurati che sia sempre visibile
-                    indicator?.visibility = View.VISIBLE
+            val infoCard = _binding?.root?.findViewById<View>(R.id.infoCard)
+            val modernCard = _binding?.root?.findViewById<View>(R.id.modernCircleCard)
 
-                    // Cambia solo il colore in base a hasContext
-
-                    val color = if (hasContext) 0xFFF44336.toInt() else 0xFF9E9E9E.toInt()
-
-
-
-                indicator?.setColorFilter(color)
-                 //indicator?.setBackgroundColor(color)
-              //indicator?.backgroundTintList = ColorStateList.valueOf(color)
-              //indicator?.backgroundTintMode = PorterDuff.Mode.SRC_IN // <- qui scegli il mode
-
-                    //
+            if (aimiEnabled) {
+                // Show AIMI Dashboard, Hide Standard
+                if (modernCard?.visibility != View.VISIBLE) modernCard?.visibility = View.VISIBLE
+                if (infoCard?.visibility != View.GONE) infoCard?.visibility = View.GONE
+            } else {
+                // Show Standard Dashboard, Hide AIMI
+                if (modernCard?.visibility != View.GONE) modernCard?.visibility = View.GONE
+                if (infoCard?.visibility != View.VISIBLE) infoCard?.visibility = View.VISIBLE
             }
+
         } catch (e: Exception) {
-            aapsLogger.error(LTag.CORE, "Failed to update context indicator: ${e.message}")
+            aapsLogger.error(LTag.CORE, "Failed to update context indicator/dashboard: ${e.message}")
         }
     }
     
@@ -457,12 +472,17 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             // UNIVERSAL FIX: Support ALL dashboard layouts (overview_info_layout, component_status_card, etc.)
             // Strategy: Try multiple findViewById paths in fallback order
             
-            // 1. Try binding.infoLayout.root (for overview_info_layout.xml - included via <include>)
-            // 2. Try status_card_layout (for component_status_card.xml - Modern Circle)
-            // 3. Try binding.root (last resort)
-            val container = binding.infoLayout?.root?.findViewById<FrameLayout>(
+            // 1. Try finding container in Modern Dashboard (Priority!)
+            val modernCard = binding.root.findViewById<View>(R.id.modernCircleCard)
+            val modernContainer = modernCard?.findViewById<FrameLayout>(R.id.aimi_auditor_indicator_container)
+
+            // 2. Fallback to Info Layout (Standard) - Only if modern not found
+            val legacyContainer = binding.infoLayout?.root?.findViewById<FrameLayout>(
                 R.id.aimi_auditor_indicator_container
-            ) ?: binding.root.findViewById<FrameLayout>(
+            )
+
+            // 3. Last resort: Global search
+            val container = modernContainer ?: legacyContainer ?: binding.root.findViewById<FrameLayout>(
                 R.id.aimi_auditor_indicator_container
             ) ?: run {
                 aapsLogger.warn(LTag.CORE, "Auditor indicator container not found in any layout hierarchy")
@@ -660,7 +680,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
                     }
                 }
 
-                R.id.aps_mode            -> {
+                R.id.aps_mode, R.id.loop_indicator, R.id.loop_status -> {
                     protectionCheck.queryProtection(activity, ProtectionCheck.Protection.BOLUS, UIRunnable {
                         if (isAdded) uiInteraction.runLoopDialog(childFragmentManager, 1)
                     })
@@ -694,7 +714,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
                 return true
             }
 
-            R.id.aps_mode            -> {
+            R.id.aps_mode, R.id.loop_indicator, R.id.loop_status -> {
                 activity?.let { activity ->
                     protectionCheck.queryProtection(activity, ProtectionCheck.Protection.BOLUS, UIRunnable {
                         uiInteraction.runLoopDialog(childFragmentManager, 0)
