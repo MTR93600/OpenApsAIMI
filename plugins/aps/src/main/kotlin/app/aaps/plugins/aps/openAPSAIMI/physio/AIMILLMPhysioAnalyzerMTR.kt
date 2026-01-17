@@ -38,7 +38,8 @@ import javax.inject.Singleton
 @Singleton
 class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     private val sp: SP,
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    private val context: android.content.Context
 ) {
     
     companion object {
@@ -47,9 +48,49 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         
         // API endpoints
         private const val OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-        private const val GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro-preview:generateContent"
+        // GEMINI URL dynamic via Resolver
         private const val CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
         private const val DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+    }
+
+    private val geminiResolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
+    
+    // ...
+
+    private fun analyzeWithGemini(
+        features: PhysioFeaturesMTR,
+        baseline: PhysioBaselineMTR,
+        context: PhysioContextMTR,
+        apiKey: String
+    ): String {
+        
+        val prompt = buildPrompt(features, baseline, context)
+        
+        val requestBody = JSONObject().apply {
+            put("contents", org.json.JSONArray().apply {
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("parts", org.json.JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("text", prompt)
+                        })
+                    })
+                })
+            })
+            put("generationConfig", JSONObject().apply {
+                put("maxOutputTokens", 150)
+                put("temperature", 0.3)
+            })
+        }
+        
+        val model = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-3-pro-preview")
+        val url = geminiResolver.getGenerateContentUrl(model, apiKey)
+
+        val response = makeAPICall(url, requestBody.toString(), mapOf(
+            "Content-Type" to "application/json"
+        ))
+        
+        return parseGeminiResponse(response)
     }
     
     /**
@@ -153,38 +194,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     // GEMINI 2.0 INTEGRATION
     // ═══════════════════════════════════════════════════════════════════════
     
-    private fun analyzeWithGemini(
-        features: PhysioFeaturesMTR,
-        baseline: PhysioBaselineMTR,
-        context: PhysioContextMTR,
-        apiKey: String
-    ): String {
-        
-        val prompt = buildPrompt(features, baseline, context)
-        
-        val requestBody = JSONObject().apply {
-            put("contents", org.json.JSONArray().apply {
-                put(JSONObject().apply {
-                    put("parts", org.json.JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("text", prompt)
-                        })
-                    })
-                })
-            })
-            put("generationConfig", JSONObject().apply {
-                put("maxOutputTokens", 150)
-                put("temperature", 0.3)
-            })
-        }
-        
-        val url = "$GEMINI_API_URL?key=$apiKey"
-        val response = makeAPICall(url, requestBody.toString(), mapOf(
-            "Content-Type" to "application/json"
-        ))
-        
-        return parseGeminiResponse(response)
-    }
+
     
     private fun parseGeminiResponse(response: String): String {
         return try {

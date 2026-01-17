@@ -32,9 +32,7 @@ class AiCoachingService @Inject constructor() {
         private const val OPENAI_URL = "https://api.openai.com/v1/chat/completions"
         private const val OPENAI_MODEL = "gpt-5.2"  // O-series reasoning model
         
-        // Gemini 3.0 Pro Preview (Updated Jan 2026)
-        private const val GEMINI_MODEL = "gemini-3.0-pro-preview"
-        private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:generateContent"
+
         
         // DeepSeek Chat (OpenAI-compatible)
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
@@ -62,7 +60,7 @@ class AiCoachingService @Inject constructor() {
             val prompt = buildPrompt(androidContext, context, report, history)
             
             return@withContext when (provider) {
-                Provider.GEMINI -> callGemini(apiKey, prompt)
+                Provider.GEMINI -> callGemini(androidContext, apiKey, prompt)
                 Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
                 Provider.CLAUDE -> callClaude(apiKey, prompt)
                 else -> callOpenAI(apiKey, prompt)
@@ -83,6 +81,7 @@ class AiCoachingService @Inject constructor() {
      * @return Generated text or error message
      */
     suspend fun fetchText(
+        context: Context,
         prompt: String,
         apiKey: String,
         provider: Provider
@@ -92,7 +91,7 @@ class AiCoachingService @Inject constructor() {
         
         try {
             return@withContext when (provider) {
-                Provider.GEMINI -> callGemini(apiKey, prompt)
+                Provider.GEMINI -> callGemini(context, apiKey, prompt)
                 Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
                 Provider.CLAUDE -> callClaude(apiKey, prompt)
                 else -> callOpenAI(apiKey, prompt)
@@ -143,9 +142,11 @@ class AiCoachingService @Inject constructor() {
         }
     }
 
-    private fun callGemini(apiKey: String, prompt: String): String {
-        // Gemini URL requires key in query param usually, or header 'x-goog-api-key'
-        val urlStr = "$GEMINI_URL?key=$apiKey"
+    private fun callGemini(context: Context, apiKey: String, prompt: String): String {
+        val resolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
+        val model = resolver.resolveGenerateContentModel(apiKey, "gemini-3-pro-preview")
+        val urlStr = resolver.getGenerateContentUrl(model, apiKey)
+
         val url = URL(urlStr)
         val connection = url.openConnection() as HttpURLConnection
         

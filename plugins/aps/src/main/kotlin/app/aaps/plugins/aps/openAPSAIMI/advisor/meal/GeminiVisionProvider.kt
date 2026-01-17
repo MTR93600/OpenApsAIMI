@@ -14,10 +14,12 @@ import java.net.URL
  * Google Gemini 3.0 Pro Vision Provider  
  * Uses gemini-3.0-pro-preview model with enhanced JSON mode
  */
-class GeminiVisionProvider : AIVisionProvider {
+class GeminiVisionProvider(private val context: android.content.Context) : AIVisionProvider {
     override val displayName = "Gemini (3.0 Pro)"
     override val providerId = "GEMINI"
     
+    private val geminiResolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
+
     override suspend fun estimateFromImage(bitmap: Bitmap, apiKey: String): EstimationResult = withContext(Dispatchers.IO) {
         val base64Image = bitmapToBase64(bitmap)
         val responseJson = callGeminiAPI(apiKey, base64Image)
@@ -33,7 +35,9 @@ class GeminiVisionProvider : AIVisionProvider {
     
     private fun callGeminiAPI(apiKey: String, base64Image: String): String {
         // Gemini 3.0 Pro endpoint (Multimodal)
-        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro-preview:generateContent?key=$apiKey")
+        val modelId = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-3-pro-preview")
+        val urlStr = geminiResolver.getGenerateContentUrl(modelId, apiKey)
+        val url = URL(urlStr)
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
         connection.setRequestProperty("Content-Type", "application/json")

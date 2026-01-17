@@ -33,7 +33,7 @@ class AuditorAIService @Inject constructor(
     
     companion object {
         private const val OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-        private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro-preview:generateContent"
+
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
         private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
         
@@ -192,11 +192,16 @@ class AuditorAIService @Inject constructor(
         return response.toString()
     }
     
+    private val geminiResolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
+
     /**
      * Call Gemini API
      */
     private fun callGemini(apiKey: String, prompt: String): String {
-        val urlStr = "$GEMINI_URL?key=$apiKey"
+        // Resolve model dynamically
+        val modelId = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-3-pro-preview")
+        val urlStr = geminiResolver.getGenerateContentUrl(modelId, apiKey)
+        
         val url = URL(urlStr)
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
