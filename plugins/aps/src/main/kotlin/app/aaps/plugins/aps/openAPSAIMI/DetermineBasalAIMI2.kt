@@ -5524,6 +5524,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         highBgOverrideUsed = smbExecution.highBgOverrideUsed
         smbExecution.newSmbInterval?.let { intervalsmb = it }
         var smbToGive = smbExecution.finalSmb
+        consoleLog.add("💉 SMB result: raw=${"%.2f".format(predictedSMB)} -> final=${"%.2f".format(smbToGive)}")
         
         // 🎯 [MIGRATION FCL 10.0]
         // Legacy "Direct SMB Modulation" removed.

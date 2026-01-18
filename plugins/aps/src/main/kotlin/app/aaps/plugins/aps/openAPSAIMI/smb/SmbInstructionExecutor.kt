@@ -180,37 +180,60 @@ object SmbInstructionExecutor {
         // ✅ MEAL-CONTEXT FACTORS (NOW RESPECTING REACTIVITY!)
         // These adjust SMB for specific meal types (breakfast vs dinner etc.)
         // 🔧 FIX: Multiply by globalReactivityFactor to respect user's learned reactivity preference
-        val highcarbfactor = input.preferences.get(DoubleKey.OApsAIMIHCFactor) / 100.0 * input.globalReactivityFactor
-        val mealfactor = input.preferences.get(DoubleKey.OApsAIMIMealFactor) / 100.0 * input.globalReactivityFactor
-        val bfastfactor = input.preferences.get(DoubleKey.OApsAIMIBFFactor) / 100.0 * input.globalReactivityFactor
-        val lunchfactor = input.preferences.get(DoubleKey.OApsAIMILunchFactor) / 100.0 * input.globalReactivityFactor
-        val dinnerfactor = input.preferences.get(DoubleKey.OApsAIMIDinnerFactor) / 100.0 * input.globalReactivityFactor
-        val snackfactor = input.preferences.get(DoubleKey.OApsAIMISnackFactor) / 100.0 * input.globalReactivityFactor
-        val sleepfactor = input.preferences.get(DoubleKey.OApsAIMIsleepFactor) / 100.0 * input.globalReactivityFactor
+        // ✅ MEAL-CONTEXT FACTORS (NOW STRICTLY RESPECTING MANUAL PREFS)
+        // 🔧 FIX: Decouple Prefs from GlobalFactor initially to resolve conflicts properly
+        val hcfRaw = input.preferences.get(DoubleKey.OApsAIMIHCFactor) / 100.0
+        val mealRaw = input.preferences.get(DoubleKey.OApsAIMIMealFactor) / 100.0
+        val bfRaw = input.preferences.get(DoubleKey.OApsAIMIBFFactor) / 100.0
+        val lunchRaw = input.preferences.get(DoubleKey.OApsAIMILunchFactor) / 100.0
+        val dinRaw = input.preferences.get(DoubleKey.OApsAIMIDinnerFactor) / 100.0
+        val snackRaw = input.preferences.get(DoubleKey.OApsAIMISnackFactor) / 100.0
+        val sleepRaw = input.preferences.get(DoubleKey.OApsAIMIsleepFactor) / 100.0
 
-        fun Float.atLeast(min: Float) = if (this < min) min else this
+        // 🧠 Centralized Reactivity Resolver
+        fun resolveFactor(manualFactor: Double, learnerFactor: Double, modeName: String): Double {
+            // 1. If Manual Mode is Neutral (1.0), fully trust Learner
+            if (kotlin.math.abs(manualFactor - 1.0) < 0.01) {
+                return learnerFactor
+            }
 
-        val base = smbToGive
+            // 2. Conflict Resolution: User vs Learner
+            val userWantsLess = manualFactor < 1.0
+            val learnerWantsMore = learnerFactor > 1.0
+            
+            val userWantsMore = manualFactor > 1.0
+            val learnerWantsLess = learnerFactor < 1.0
 
-        // Apply meal-context factors (NOW WITH REACTIVITY!)
-        smbToGive = when {
-            input.honeymoon && input.bg > 160 && input.delta > 4 && input.iob < 0.7 && (input.hourOfDay == 23 || input.hourOfDay in 0..10) ->
-                base.atLeast(0.15f)
+            val resolved = if (userWantsLess && learnerWantsMore) {
+                // User says "Easy", Learner says "Push" -> Trust User + 10% cap on Learner
+                // Ex: User 0.7, Learner 1.5 -> 0.7 * 1.1 = 0.77 (Instead of 1.05)
+                manualFactor * learnerFactor.coerceAtMost(1.1)
+            } else if (userWantsMore && learnerWantsLess) {
+                // User says "Push", Learner says "Easy" -> Trust User + 10% floor on Learner
+                manualFactor * learnerFactor.coerceAtLeast(0.9)
+            } else {
+                // Aligned (both Up or both Down) -> Combine fully
+                manualFactor * learnerFactor
+            }
+            
+            // Log decision for transparency
+            val finalF = resolved
+            input.consoleLog.add("🧠 React: mode=$modeName(%.2f) learn=%.2f => final=%.2f".format(manualFactor, learnerFactor, finalF))
+            
+            return finalF
+        }
 
-            !input.honeymoon && input.bg > 120 && input.delta > 8 && input.iob < 1.0 && base < 0.05f ->
-                input.profileCurrentBasal.toFloat()
+        val highcarbfactor = resolveFactor(hcfRaw, input.globalReactivityFactor, "HighCarb")
+        val mealfactor = resolveFactor(mealRaw, input.globalReactivityFactor, "Meal")
+        val bfastfactor = resolveFactor(bfRaw, input.globalReactivityFactor, "Breakfast")
+        val lunchfactor = resolveFactor(lunchRaw, input.globalReactivityFactor, "Lunch")
+        val dinnerfactor = resolveFactor(dinRaw, input.globalReactivityFactor, "Dinner")
+        val snackfactor = resolveFactor(snackRaw, input.globalReactivityFactor, "Snack")
+        val sleepfactor = resolveFactor(sleepRaw, input.globalReactivityFactor, "Sleep")
+        // No-Mode default: Pure Learner
+        val defaultFactor = input.globalReactivityFactor 
 
-            // ✅ Meal factors now respect globalReactivityFactor
-            input.highCarbTime -> base * highcarbfactor.toFloat()
-            input.mealTime -> base * mealfactor.toFloat()
-            input.bfastTime -> base * bfastfactor.toFloat()
-            input.lunchTime -> base * lunchfactor.toFloat()
-            input.dinnerTime -> base * dinnerfactor.toFloat()
-            input.snackTime -> base * snackfactor.toFloat()
-            input.sleepTime -> base * sleepfactor.toFloat()
-            else -> base  // No time-based adjustment
-        }.coerceAtLeast(0f)
-
+        // Capture factor BEFORE calculation to use it in Safety Override logic
         val factors = when {
             input.highCarbTime -> highcarbfactor
             input.mealTime -> mealfactor
@@ -219,8 +242,39 @@ object SmbInstructionExecutor {
             input.dinnerTime -> dinnerfactor
             input.snackTime -> snackfactor
             input.sleepTime -> sleepfactor
-            else -> input.globalReactivityFactor  // ✅ Use globalFactor as base when no meal mode
+            else -> defaultFactor
         }
+
+        fun Float.atLeast(min: Float) = if (this < min) min else this
+
+        val base = smbToGive
+
+        // Apply meal-context factors
+        smbToGive = when {
+            input.honeymoon && input.bg > 160 && input.delta > 4 && input.iob < 0.7 && (input.hourOfDay == 23 || input.hourOfDay in 0..10) ->
+                base.atLeast(0.15f)
+
+            // ⚠️ Safety Override: Very fast rise > 120 -> Force Basal-level SMB
+            // BUT: Respect factor if it's explicitly REDUCING (safety first)
+            // This now covers ALL modes and Normal mode (defaultFactor)
+            !input.honeymoon && input.bg > 120 && input.delta > 8 && input.iob < 1.0 && base < 0.05f -> {
+                 val safeCapped = input.profileCurrentBasal.toFloat()
+                 if (factors < 1.0) safeCapped * factors.toFloat()
+                 else safeCapped
+            }
+
+            // ✅ Meal factors now respect properly resolved reactivity
+            input.highCarbTime -> base * highcarbfactor.toFloat()
+            input.mealTime -> base * mealfactor.toFloat()
+            input.bfastTime -> base * bfastfactor.toFloat()
+            input.lunchTime -> base * lunchfactor.toFloat()
+            input.dinnerTime -> base * dinnerfactor.toFloat()
+            input.snackTime -> base * snackfactor.toFloat()
+            input.sleepTime -> base * sleepfactor.toFloat()
+            
+            // 🔧 FIX: Apply globalReactivityFactor in normal mode too!
+            else -> base * defaultFactor.toFloat()
+        }.coerceAtLeast(0f)
 
         val currentHour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
         val adjustedDIAInMinutes = hooks.calculateAdjustedDia(
