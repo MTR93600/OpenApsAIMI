@@ -220,8 +220,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var glucoseStatusCalculatorAimi: GlucoseStatusCalculatorAimi
     @Inject lateinit var comparator: AimiSmbComparator
     @Inject lateinit var basalLearner: app.aaps.plugins.aps.openAPSAIMI.learning.BasalLearner
-    @Inject lateinit var unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner  // 🎯 NEW
-    @Inject lateinit var storageHelper: AimiStorageHelper  // 🛡️ Storage health monitoring
+    @Inject lateinit var unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner
+    @Inject lateinit var storageHelper: AimiStorageHelper  // 🛡️ Restored StorageHelper
+    
+    // Helper to safely access learner (handles potential early access before injection)
+    private val safeReactivityFactor: Double
+        get() = if (::unifiedReactivityLearner.isInitialized) unifiedReactivityLearner.getCombinedFactor() else 1.0
     @Inject lateinit var aapsLogger: AAPSLogger  // 📊 Logger for health monitoring
     @Inject lateinit var auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator  // 🧠 AI Decision Auditor
     @Inject lateinit var trajectoryGuard: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard  // 🌀 Phase-Space Trajectory Controller
@@ -3548,7 +3552,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      */
     private fun logLearnersHealth(rT: RT) {
         val storageReport = storageHelper.getHealthReport()
-        val reactivityFactor = unifiedReactivityLearner.getCombinedFactor()
+        val reactivityFactor = safeReactivityFactor // Safety check added
         val basalMultiplier = basalLearner.getMultiplier()
         
         // Construire le rapport de santé
@@ -5415,7 +5419,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Detailed logging as requested
         val hasPred = predictedBg > 20
         val hyperKicker = (bg > target_bg + 30 && (delta >= 0.3 || shortAvgDelta >= 0.2))
-        consoleLog.add("SMB Decision: BG=${"%.0f".format(bg)}, Delta=${"%.1f".format(delta)}, IOB=${"%.2f".format(iob)}, HasPred=$hasPred, HyperKicker=$hyperKicker, UAM=${"%.2f".format(modelcal)}, Proposed=${"%.2f".format(this.predictedSMB)}")
+        consoleLog.add(
+            String.format(
+                java.util.Locale.US,
+                "SMB Decision: BG=%.0f, Delta=%.1f, IOB=%.2f, HasPred=%s, HyperKicker=%s, UAM=%.2f, Proposed=%.2f",
+                bg, delta, iob, hasPred, hyperKicker, modelcal, this.predictedSMB
+            )
+        )
         val pkpdDiaMinutesOverride: Double? = pkpdRuntime?.params?.diaHrs?.let { it * 60.0 } // PKPD donne des heures → on passe en minutes
         val useLegacyDynamicsdia = pkpdDiaMinutesOverride == null
         val smbExecution = SmbInstructionExecutor.execute(
@@ -5479,7 +5489,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 profileCurrentBasal = profile_current_basal,
                 cob = cob,
                 globalReactivityFactor = if (preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled)) {
-                    unifiedReactivityLearner.getCombinedFactor()
+                    safeReactivityFactor
                 } else 1.0  // Backwards compatible default
             ),
             SmbInstructionExecutor.Hooks(
@@ -5524,7 +5534,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         highBgOverrideUsed = smbExecution.highBgOverrideUsed
         smbExecution.newSmbInterval?.let { intervalsmb = it }
         var smbToGive = smbExecution.finalSmb
-        consoleLog.add("💉 SMB result: raw=${"%.2f".format(predictedSMB)} -> final=${"%.2f".format(smbToGive)}")
+        consoleLog.add(
+            String.format(
+                java.util.Locale.US,
+                "💉 SMB result: raw=%.2f -> final=%.2f",
+                predictedSMB, smbToGive
+            )
+        )
         
         // 🎯 [MIGRATION FCL 10.0]
         // Legacy "Direct SMB Modulation" removed.

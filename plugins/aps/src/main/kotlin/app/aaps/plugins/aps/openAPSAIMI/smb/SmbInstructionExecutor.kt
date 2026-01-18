@@ -217,10 +217,15 @@ object SmbInstructionExecutor {
             }
             
             // Log decision for transparency
-            val finalF = resolved
-            input.consoleLog.add("🧠 React: mode=$modeName(%.2f) learn=%.2f => final=%.2f".format(manualFactor, learnerFactor, finalF))
+            input.consoleLog.add(
+                String.format(
+                    java.util.Locale.US,
+                    "🧠 React: mode=%s(%.2f) learn=%.2f => final=%.2f",
+                    modeName, manualFactor, learnerFactor, resolved
+                )
+            )
             
-            return finalF
+            return resolved
         }
 
         val highcarbfactor = resolveFactor(hcfRaw, input.globalReactivityFactor, "HighCarb")
