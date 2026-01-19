@@ -7,7 +7,6 @@ import kotlin.math.min
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
-import com.google.gson.Gson
 
 /**
  * =============================================================================
@@ -259,39 +258,34 @@ class AimiAdvisorService {
         // 3. Calculate Mean BG & GMI
         if (persistenceLayer != null) {
             try {
-                // Fetch APS results for the period (approx BG history)
+                // Fetch BG readings directly for the period
                 val now = System.currentTimeMillis()
                 val fromTime = now - (days * 24 * 3600 * 1000L)
-                val apsResults = persistenceLayer.getApsResults(fromTime, now)
+                val bgReadings = persistenceLayer.getBgReadingsDataFromTimeToTime(fromTime, now, ascending = false)
                 
-                // Extract valid glucose values from JSON using Gson (same approach as DetermineBasalAIMI2)
-                val gson = Gson()
-                val bgValues = apsResults.mapNotNull { apsResult ->
-                    try {
-                        // Access glucoseStatusJson via reflection-free approach
-                        val jsonField = apsResult.javaClass.getDeclaredField("glucoseStatusJson")
-                        jsonField.isAccessible = true
-                        val json = jsonField.get(apsResult) as? String
-                        
-                        if (json != null) {
-                            val glucoseStatus = gson.fromJson(json, GlucoseStatusAIMI::class.java)
-                            if (glucoseStatus.glucose > 30.0) glucoseStatus.glucose else null
-                        } else null
-                    } catch (e: Exception) {
-                        null // Skip malformed JSON or reflection errors
-                    }
-                }
+                android.util.Log.d("AIMI_ADVISOR", "📊 Mean BG calculation: fetched ${bgReadings.size} BG readings")
                 
-                if (bgValues.isNotEmpty()) {
-                    meanBg = bgValues.average()
-                    android.util.Log.d("AIMI_ADVISOR", "✅ Calculated Mean BG: ${meanBg.toInt()} mg/dL from ${bgValues.size} readings")
+                if (bgReadings.isEmpty()) {
+                    android.util.Log.w("AIMI_ADVISOR", "⚠️ No BG readings found for last $days days. Using fallback meanBg=$meanBg")
                 } else {
-                    android.util.Log.w("AIMI_ADVISOR", "⚠️ No valid BG data found for mean calculation over last $days days. Using fallback $meanBg.")
+                    // Extract valid glucose values (GV objects have .value property)
+                    val bgValues = bgReadings
+                        .map { it.value }
+                        .filter { it > 30.0 } // Filter out noise
+                    
+                    if (bgValues.isNotEmpty()) {
+                        meanBg = bgValues.average()
+                        android.util.Log.d("AIMI_ADVISOR", "✅ Calculated Mean BG: ${meanBg.toInt()} mg/dL from ${bgValues.size} readings")
+                    } else {
+                        android.util.Log.w("AIMI_ADVISOR", "⚠️ No valid BG data after filtering. Using fallback $meanBg")
+                    }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("AIMI_ADVISOR", "❌ Failed to calculate Mean BG: ${e.message}")
                 e.printStackTrace()
             }
+        } else {
+            android.util.Log.w("AIMI_ADVISOR", "⚠️ PersistenceLayer is null, cannot calculate mean BG. Using fallback $meanBg")
         }
 
         return AdvisorMetrics(
