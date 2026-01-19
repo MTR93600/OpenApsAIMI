@@ -112,6 +112,15 @@ class BgQualityCheckPlugin @Inject constructor(
             aapsLogger.debug(LTag.APS, "BG_FLAT_CHECK: Not enough data ($sizeRecords < 5)")
             return null // not enough data
         }
+
+        // 🚀 FAST FAIL: If recent data shows movement, assume valid.
+        // Avoids false positives when smoothing hides short term noise but trend exists.
+        val recentSubset = data.take(min(data.size, 4))
+        val recentRange = recentSubset.maxOf { it.value } - recentSubset.minOf { it.value }
+        if (recentRange > 2.9) {
+             aapsLogger.debug(LTag.APS, "BG_FLAT_CHECK: Recent activity ($recentRange > 2.9), ALIVE.")
+             return false
+        }
         
         // 🔧 CRITICAL FIX: Correct flatness detection logic
         // We need TWO things:
@@ -183,6 +192,6 @@ class BgQualityCheckPlugin @Inject constructor(
     companion object {
 
         const val staleBgCheckPeriodMinutes = 45L
-        const val staleBgMaxDeltaMgdl = 2.0
+        const val staleBgMaxDeltaMgdl = 4.0
     }
 }
