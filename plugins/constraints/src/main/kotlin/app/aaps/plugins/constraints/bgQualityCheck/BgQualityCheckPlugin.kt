@@ -110,10 +110,22 @@ class BgQualityCheckPlugin @Inject constructor(
         lastBg ?: return null
         if (sizeRecords < 5) return null // not enough data
         
-        // 🔧 DOUBLE FIX: Both conditions were inverted!
-        // We need: newest data between 7-45 min old to reliably detect flatness
-        if (data[0].timestamp > now - 7 * 60 * 1000L) return null // newest data too fresh (< 7 min), not enough history
-        if (data[0].timestamp < now - 45 * 60 * 1000L) return null // newest data too old (> 45 min), cannot detect RECENT flatness
+        // 🔧 CRITICAL FIX: Correct flatness detection logic
+        // We need TWO things:
+        // 1. Recent data: newest BG (data[0]) must be fresh (< 12 min old)
+        // 2. Historical coverage: we need data spanning back to our analysis window
+        
+        // Check 1: Is newest BG too old? (> 12 min = can't detect CURRENT flatness)
+        if (data[0].timestamp < now - 12 * 60 * 1000L) return null
+        
+        // Check 2: Do we have enough historical data?
+        // We need BG readings going back at least 45 minutes
+        // Find the oldest BG in our dataset
+        val oldestBg = data.lastOrNull()
+        if (oldestBg == null || oldestBg.timestamp > now - minutes * 60 * 1000L) {
+            // Not enough historical coverage
+            return null
+        }
 
         var bgmin: Double = lastBg
         var bgmax: Double = bgmin

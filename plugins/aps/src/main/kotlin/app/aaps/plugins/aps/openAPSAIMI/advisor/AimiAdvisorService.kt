@@ -6,6 +6,8 @@ import kotlin.math.max
 import kotlin.math.min
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.BooleanKey
+import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
+import com.google.gson.Gson
 
 /**
  * =============================================================================
@@ -262,17 +264,32 @@ class AimiAdvisorService {
                 val fromTime = now - (days * 24 * 3600 * 1000L)
                 val apsResults = persistenceLayer.getApsResults(fromTime, now)
                 
-                // Extract valid glucose values (exclude nulls and noise < 30)
-                val bgValues = apsResults.mapNotNull { it.glucoseStatus?.glucose }
-                    .filter { it > 30 }
+                // Extract valid glucose values from JSON using Gson (same approach as DetermineBasalAIMI2)
+                val gson = Gson()
+                val bgValues = apsResults.mapNotNull { apsResult ->
+                    try {
+                        // Access glucoseStatusJson via reflection-free approach
+                        val jsonField = apsResult.javaClass.getDeclaredField("glucoseStatusJson")
+                        jsonField.isAccessible = true
+                        val json = jsonField.get(apsResult) as? String
+                        
+                        if (json != null) {
+                            val glucoseStatus = gson.fromJson(json, GlucoseStatusAIMI::class.java)
+                            if (glucoseStatus.glucose > 30.0) glucoseStatus.glucose else null
+                        } else null
+                    } catch (e: Exception) {
+                        null // Skip malformed JSON or reflection errors
+                    }
+                }
                 
                 if (bgValues.isNotEmpty()) {
                     meanBg = bgValues.average()
+                    android.util.Log.d("AIMI_ADVISOR", "✅ Calculated Mean BG: ${meanBg.toInt()} mg/dL from ${bgValues.size} readings")
                 } else {
-                    android.util.Log.w("AIMI_ADVISOR", "No BG data found for mean calculation over last $days days. Using fallback $meanBg.")
+                    android.util.Log.w("AIMI_ADVISOR", "⚠️ No valid BG data found for mean calculation over last $days days. Using fallback $meanBg.")
                 }
             } catch (e: Exception) {
-                android.util.Log.e("AIMI_ADVISOR", "Failed to calculate Mean BG: ${e.message}")
+                android.util.Log.e("AIMI_ADVISOR", "❌ Failed to calculate Mean BG: ${e.message}")
                 e.printStackTrace()
             }
         }
