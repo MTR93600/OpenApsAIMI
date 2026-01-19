@@ -10,6 +10,8 @@ import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
+import app.aaps.plugins.aps.openAPSAIMI.physio.toSNSDominance
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,7 +44,8 @@ class AuditorOrchestrator @Inject constructor(
     private val preferences: Preferences,
     private val dataCollector: AuditorDataCollector,
     private val aiService: AuditorAIService,
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR
 ) {
     
     // Coroutine scope for async operations
@@ -233,6 +236,9 @@ class AuditorOrchestrator @Inject constructor(
             return
         }
         
+        // Get physio snapshot (safe call)
+        val physioCtx = try { physioAdapter.getCurrentContext()?.toSnapshot() } catch (e: Exception) { null }
+
         // Launch async audit
         scope.launch {
             try {
@@ -263,7 +269,8 @@ class AuditorOrchestrator @Inject constructor(
                     wcyclePhase = wcyclePhase,
                     wcycleFactor = wcycleFactor,
                     tbrMaxMode = tbrMaxMode,
-                    tbrMaxAutoDrive = tbrMaxAutoDrive
+                    tbrMaxAutoDrive = tbrMaxAutoDrive,
+                    physio = physioCtx
                 )
                 
                 // Get provider
@@ -411,6 +418,16 @@ class AuditorOrchestrator @Inject constructor(
             preferTbr = false,
             appliedModulation = false,
             modulationReason = reason
+        )
+    }
+
+    private fun PhysioContextMTR.toSnapshot(): PhysioSnapshot {
+        return PhysioSnapshot(
+            state = this.state.name,
+            snsDominance = this.toSNSDominance(),
+            sleepQualityZ = this.sleepDeviationZ,
+            rhrZ = this.rhrDeviationZ,
+            hrvZ = this.hrvDeviationZ
         )
     }
 }

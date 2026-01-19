@@ -65,6 +65,7 @@ data class Snapshot(
     
     // Activity
     val activity: ActivitySnapshot,
+    val physio: PhysioSnapshot?,
     
     // States
     val states: StatesSnapshot,
@@ -96,6 +97,7 @@ data class Snapshot(
         put("target", target)
         put("pkpd", pkpd.toJSON())
         put("activity", activity.toJSON())
+        if (physio != null) put("physio", physio.toJSON())
         put("states", states.toJSON())
         put("limits", limits.toJSON())
         put("decisionAimi", decisionAimi.toJSON())
@@ -311,3 +313,22 @@ data class BoundedAdjustments(
     val preferTbr: Boolean,         // switch to TBR preference
     val tbrFactorClamp: Double      // 0.8 to 1.2 (multiply TBR rate if applicable)
 )
+
+/**
+ * D) Physio: Physiological Context (Stress, Sleep, Recovery)
+ */
+data class PhysioSnapshot(
+    val state: String,
+    val snsDominance: Double,
+    val sleepQualityZ: Double,
+    val rhrZ: Double,
+    val hrvZ: Double
+) {
+    fun toJSON(): JSONObject = JSONObject().apply {
+        put("state", state)
+        put("snsDominance", snsDominance)
+        put("sleepQualityZ", sleepQualityZ)
+        put("rhrZ", rhrZ)
+        put("hrvZ", hrvZ)
+    }
+}

@@ -56,6 +56,7 @@ import app.aaps.plugins.aps.openAPSAIMI.model.PumpCaps
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.MealAggressionContext
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
+import app.aaps.plugins.aps.openAPSAIMI.physio.toSNSDominance // 🧬 Physio Extensions
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.ports.PkpdPort
@@ -225,7 +226,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     
     // Helper to safely access learner (handles potential early access before injection)
     private val safeReactivityFactor: Double
-        get() = if (::unifiedReactivityLearner.isInitialized) unifiedReactivityLearner.getCombinedFactor() else 1.0
+        get() {
+            val base = if (::unifiedReactivityLearner.isInitialized) unifiedReactivityLearner.getCombinedFactor() else 1.0
+            
+            // 🧬 PHYSIO: SNS=0.8 -> +15% Boost
+            val ctx = if (::physioAdapter.isInitialized) physioAdapter.getCurrentContext() else null
+            val sns = ctx?.toSNSDominance() ?: 0.3
+            val mod = 1.0 + (sns - 0.3) * 0.3
+            
+            return base * mod
+        }
     @Inject lateinit var aapsLogger: AAPSLogger  // 📊 Logger for health monitoring
     @Inject lateinit var auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator  // 🧠 AI Decision Auditor
     @Inject lateinit var trajectoryGuard: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard  // 🌀 Phase-Space Trajectory Controller
@@ -3636,7 +3646,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Actually earlier code used `if (bg > 120...) maxSMBHB else maxSMB`.
         // Let's stick to maxSMB reset first which was the smoking gun.
         // ✅ ETAPE 1: Calculer le Profil d'Action de l'IOB
-        val iobActionProfile = InsulinActionProfiler.calculate(iob_data_array, profile)
+        // 🧬 PHYSIO INTEGRATION: Get SNS Dominance from Adapter
+        val physioContext = physioAdapter.getCurrentContext()
+        val snsDominance = physioContext?.toSNSDominance() ?: 0.3 // Default Neutral
+
+        // ✅ ETAPE 1: Calculer le Profil d'Action de l'IOB (avec modulation physio)
+        val iobActionProfile = InsulinActionProfiler.calculate(iob_data_array, profile, snsDominance)
 
 // Stocker les résultats dans des variables locales pour plus de clarté
         val iobTotal = iobActionProfile.iobTotal

@@ -90,7 +90,8 @@ class AuditorDataCollector @Inject constructor(
         wcyclePhase: String?,
         wcycleFactor: Double?,
         tbrMaxMode: Double?,
-        tbrMaxAutoDrive: Double?
+        tbrMaxAutoDrive: Double?,
+        physio: PhysioSnapshot? = null
     ): AuditorInput {
         
         val now = dateUtil.now()
@@ -123,6 +124,7 @@ class AuditorDataCollector @Inject constructor(
             wcycleFactor = wcycleFactor,
             tbrMaxMode = tbrMaxMode,
             tbrMaxAutoDrive = tbrMaxAutoDrive,
+            physio = physio,
             now = now
         )
         
@@ -169,6 +171,7 @@ class AuditorDataCollector @Inject constructor(
         wcycleFactor: Double?,
         tbrMaxMode: Double?,
         tbrMaxAutoDrive: Double?,
+        physio: PhysioSnapshot?,
         now: Long
     ): Snapshot {
         
@@ -250,6 +253,7 @@ class AuditorDataCollector @Inject constructor(
             target = profile.target_bg,
             pkpd = pkpd,
             activity = activity,
+            physio = physio,
             states = states,
             limits = limits,
             decisionAimi = decision,

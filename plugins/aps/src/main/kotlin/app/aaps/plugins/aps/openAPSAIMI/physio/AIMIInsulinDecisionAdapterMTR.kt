@@ -64,6 +64,23 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
      * @param recentHypoTimestamp Timestamp of most recent hypoglycemia (optional)
      * @return PhysioMultipliersMTR (NEUTRAL if any safety check fails)
      */
+    /**
+     * Returns the current physiological context for external use (e.g. PKPD)
+     */
+    fun getCurrentContext(): PhysioContextMTR? {
+        return contextStore.getCurrentContext()
+    }
+
+    /**
+     * Gets insulin multipliers based on physiological context
+     * 
+     * INTEGRATION POINT: Called by determineBasalAIMI2
+     * 
+     * @param currentBG Current blood glucose (mg/dL)
+     * @param currentDelta Current BG delta (mg/dL/5min)
+     * @param recentHypoTimestamp Explicit timestamp of last hypo
+     * @return PhysioMultipliersMTR (NEUTRAL if any safety check fails)
+     */
     fun getMultipliers(
         currentBG: Double,
         currentDelta: Double? = null,
