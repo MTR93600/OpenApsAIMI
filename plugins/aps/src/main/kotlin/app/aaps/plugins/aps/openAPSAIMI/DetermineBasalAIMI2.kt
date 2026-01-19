@@ -4694,7 +4694,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val autoRes = tryAutodrive(
             bg, delta, shortAvgDelta, profile, lastBolusTimeMs ?: 0L, predictedBg, mealData.slopeFromMinDeviation, targetBg, reason,
             preferences.get(BooleanKey.OApsAIMIautoDrive),
-            dynamicPbolusLarge, dynamicPbolusSmall
+            dynamicPbolusLarge, dynamicPbolusSmall,
+            flatBGsDetected  // 🛡️ Pass CGM quality signal
         )
         
         if (autoRes is DecisionResult.Applied) {
@@ -6898,14 +6899,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         reasonBuf: StringBuilder,
         autodrive: Boolean,
         dynamicPbolusLarge: Double,
-        dynamicPbolusSmall: Double
+        dynamicPbolusSmall: Double,
+        flatBGsDetected: Boolean  // 🔧 NEW: CGM quality signal
     ): DecisionResult {
+        // 🛡️ GATE R0: CGM Quality Check (Priority #1 Safety)
+        if (flatBGsDetected) {
+            return DecisionResult.Fallthrough("CGM data unreliable (FLAT detected)")
+        }
+        
         val autodriveBG = preferences.get(IntKey.OApsAIMIAutodriveBG)
         
-        // GATE R1: Strict BG Threshold
-        if (bg < autodriveBG) {
-            // reasonBuf.append("Autodrive Ignored: BG $bg < Threshold $autodriveBG") 
-            return DecisionResult.Fallthrough("BG $bg < Threshold $autodriveBG")
+        // 🛡️ GATE R1: Strict BG Threshold (Raised from 100 to 120 for safety)
+        // Never trigger Autodrive below 120 mg/dL to prevent hypos
+        val safeMinimumBG = maxOf(autodriveBG.toDouble(), 120.0)
+        if (bg < safeMinimumBG) {
+            return DecisionResult.Fallthrough("BG $bg < Safe minimum ${safeMinimumBG.toInt()}")
         }
 
         // GATE R2: Strict Cooldown (45 min)
@@ -6925,14 +6933,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var amount = 0.0
         var stateReason = ""
         
-        if (bg >= 100.0 && delta >= 5.0 && shortAvgDelta >= 3.0) {
+        // 🔧 FIX: Raised BG threshold from 100 to 120 for all Autodrive triggers
+        if (bg >= 120.0 && delta >= 5.0 && shortAvgDelta >= 3.0) {
              amount = dynamicPbolusLarge
-             stateReason = "Confirmed: Bg>100 & Delta>5 & Avg>3"
-        } else if (delta >= 2.0) {
+             stateReason = "Confirmed: Bg≥120 & Delta≥5 & Avg≥3"
+        } else if (bg >= 120.0 && delta >= 2.0) {
              amount = dynamicPbolusSmall
-             stateReason = "Early: Delta>2"
+             stateReason = "Early: Bg≥120 & Delta≥2"
         } else {
-             return DecisionResult.Fallthrough("Delta insufficient")
+             return DecisionResult.Fallthrough("BG or Delta insufficient (need BG≥120)")
         }
 
         // TBR Calculation
