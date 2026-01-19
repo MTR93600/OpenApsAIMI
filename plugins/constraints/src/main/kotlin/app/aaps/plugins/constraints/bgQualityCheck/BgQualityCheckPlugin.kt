@@ -109,8 +109,11 @@ class BgQualityCheckPlugin @Inject constructor(
 
         lastBg ?: return null
         if (sizeRecords < 5) return null // not enough data
-        if (data[data.size - 1].timestamp > now - 45 * 60 * 1000L) return null // data too fresh to detect
-        if (data[0].timestamp < now - 7 * 60 * 1000L) return null // data is old
+        
+        // 🔧 DOUBLE FIX: Both conditions were inverted!
+        // We need: newest data between 7-45 min old to reliably detect flatness
+        if (data[0].timestamp > now - 7 * 60 * 1000L) return null // newest data too fresh (< 7 min), not enough history
+        if (data[0].timestamp < now - 45 * 60 * 1000L) return null // newest data too old (> 45 min), cannot detect RECENT flatness
 
         var bgmin: Double = lastBg
         var bgmax: Double = bgmin
