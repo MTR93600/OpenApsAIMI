@@ -3634,6 +3634,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         wCycleInfoForRun = null
         wCycleReasonLogged = false
         lastProfile = profile
+
+        // 🛡️ ADAPTIVE SMOOTHIE WORKAROUND
+        // If delta is significant (> 3.0), ignore plugin's Flat detection (likely smoothed artifacts)
+        // We SHADOW the parameter 'flatBGsDetected' to enforce this override globally in this function.
+        val flatBGsDetected = if (flatBGsDetected && abs(glucose_status.delta) > 3.0) {
+            consoleLog.add("⚠️ FLAT OVERRIDE: Delta=${glucose_status.delta} > 3.0 -> Sensor ALIVE.")
+            false
+        } else {
+            flatBGsDetected
+        }
         
         // 🧹 STATE RESET (Critical Fix FCL 10.6):
         // maxSMB is a persistent class member. It MUST be reset to the user's preference at the start of every cycle.
@@ -3893,35 +3903,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleLog.add("MAX_IOB_STATIC: Pref=$maxIob (Dynamic disabled by request)")
         this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
         this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
-        // Calcul initial avec ajustement basé sur la glycémie et le delta
-        var DynMaxSmb = ((bg / 200) * (bg / 100) + (combinedDelta / 2)).toFloat()
-
-// ⚠ Sécurisation : bornes min/max pour éviter des valeurs extrêmes
-        DynMaxSmb = DynMaxSmb.coerceAtLeast(0.1f).coerceAtMost(maxSMBHB.toFloat() * 2.5f)
-
-// ⚠ Ajustement si delta est négatif (la glycémie baisse) pour éviter un SMB trop fort
-        if (combinedDelta < 0) {
-            DynMaxSmb *= 0.75f // Réduction de 25% si la glycémie baisse
-        }
-
-// ⚠ Réduction nocturne pour éviter une surcorrection pendant le sommeil (0h - 6h)
-        //if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) {
-        //    DynMaxSmb *= 0.6f
-        //}
-
-// ⚠ Alignement avec `maxSMB` et `profile.peakTime`
-        DynMaxSmb = DynMaxSmb.coerceAtMost(maxSMBHB.toFloat() * (tp / 60.0).toFloat())
-
-        //val DynMaxSmb = (bg / 200) * (bg / 100) + (delta / 2)
+        // 🔒 STRICT LIMITS: User preferences are HARD CAPS.
+        // Dynamic Autodrive boosting removed to prevent overriding user settings.
         val enableUAM = profile.enableUAM
-
-
-        val prefHighBgMaxSmb = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
-        // [FIX] User fallback: Ensure DynMaxSmb doesn't drop to 0.0 if calculations go weird. 
-        // Use Preference as floor if Autodrive is on.
-        val finalDynMaxSmb = max(DynMaxSmb.toDouble(), prefHighBgMaxSmb)
-        
-        this.maxSMBHB = if (autodrive && !honeymoon) finalDynMaxSmb else prefHighBgMaxSmb
+        this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
         
         // 🔧 ENHANCED MaxSMB Selection: Plateau OR Slope logic
         // Addresses critical edge case: BG stuck high (270-300) with small deltas → slope < 1.0
@@ -3939,18 +3924,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             // 🔴 ACTIVE RISE HIGH: BG >= 140 (meal interception zone)
             // Full maxSMBHB for confirmed meal/resistance in elevated range
-            bg >= 140 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0 ||
-            bg >= 180 && honeymoon && mealData.slopeFromMinDeviation >= 1.4 -> {
-                consoleLog.add("MAXSMB_SLOPE_HIGH BG=${bg.roundToInt()} slope=${String.format("%.2f", mealData.slopeFromMinDeviation)} -> maxSMBHB=${String.format("%.2f", maxSMBHB)}U (rise)")
+            // Added combinedDelta check to confirm rise is real
+            (bg >= 140 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0 && combinedDelta > 0.5) ||
+            (bg >= 180 && honeymoon && mealData.slopeFromMinDeviation >= 1.4 && combinedDelta > 0.5) -> {
+                consoleLog.add("MAXSMB_SLOPE_HIGH BG=${bg.roundToInt()} slope=${String.format("%.2f", mealData.slopeFromMinDeviation)} \u0394=${String.format("%.1f", combinedDelta)} -> maxSMBHB=${String.format("%.2f", maxSMBHB)}U (confirmed rise)")
                 maxSMBHB
             }
             
             // 🟡 ACTIVE RISE SENSITIVE: BG 120-140 (near target zone)
             // 85% maxSMBHB for extra caution close to target
-            // Prevents over-correction on natural fluctuations while still allowing meal interception
-            bg >= 120 && bg < 140 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0 -> {
+            // Added combinedDelta check to confirm rise is real
+            bg >= 120 && bg < 140 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0 && combinedDelta > 0.5 -> {
                 val partial = max(maxSMB, maxSMBHB * 0.85)
-                consoleLog.add("MAXSMB_SLOPE_SENSITIVE BG=${bg.roundToInt()} slope=${String.format("%.2f", mealData.slopeFromMinDeviation)} -> ${String.format("%.2f", partial)}U (85% maxSMBHB)")
+                consoleLog.add("MAXSMB_SLOPE_SENSITIVE BG=${bg.roundToInt()} slope=${String.format("%.2f", mealData.slopeFromMinDeviation)} \u0394=${String.format("%.1f", combinedDelta)} -> ${String.format("%.2f", partial)}U (85% maxSMBHB - confirmed rise)")
                 partial
             }
             
@@ -3975,6 +3961,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add("MAXSMB_STANDARD BG=${bg.roundToInt()} -> ${String.format("%.2f", maxSMB)}U")
                 maxSMB
             }
+        }
+
+        // 🔒 SAFETY CLAMP: Force Standard MaxSMB if < 120
+        // User Rule: "lowbg when < 120". No bypass allowed.
+        val stdMaxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
+        if (bg < 120.0 && this.maxSMB > stdMaxSMB) {
+             this.maxSMB = stdMaxSMB
+             consoleLog.add("🔒 STRICT CLAMP: BG<120 -> Forced Standard MaxSMB (${String.format("%.2f", stdMaxSMB)}U)")
         }
         val ngrConfig = buildNightGrowthResistanceConfig(profile, autosens_data, glucoseStatus, targetBg.toDouble())
         this.tir1DAYabove = tirCalculator.averageTIR(tirCalculator.calculate(1, 65.0, 180.0))?.abovePct()!!
