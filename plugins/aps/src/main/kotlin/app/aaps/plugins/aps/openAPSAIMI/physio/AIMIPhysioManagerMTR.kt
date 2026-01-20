@@ -243,6 +243,18 @@ class AIMIPhysioManagerMTR @Inject constructor(
             var context = contextEngine.analyze(features, baseline)
             analyzeMs = System.currentTimeMillis() - t2
             
+            // 🤖 Step 4b: Cognitive Analysis (LLM - Optional)
+            if (isLLMEnabled()) {
+                // Only run LLM if Data is valid to avoid hallucination on empty data
+                if (features.hasValidData) {
+                    val narrative = llmAnalyzer.analyze(features, baseline, context)
+                    if (narrative.isNotBlank()) {
+                         context = context.copy(narrative = narrative)
+                         aapsLogger.info(LTag.APS, "[$TAG] 🤖 LLM Insight: $narrative")
+                    }
+                }
+            }
+
             // Step 5: Store
             contextStore.updateContext(context, baseline)
             
