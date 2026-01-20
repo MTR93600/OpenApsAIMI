@@ -3645,6 +3645,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             flatBGsDetected
         }
         
+        // 🏃 REAL-TIME ACTIVITY FETCH (every loop)
+        // Fetches immediate Steps & HR for display and micro-adjustments
+        val rtActivity = physioAdapter.getRealTimeActivity()
+        consoleLog.add("PHYSIO_RT Steps=${rtActivity.stepsToday} HR=${rtActivity.heartRate}bpm")
+
         // 🧹 STATE RESET (Critical Fix FCL 10.6):
         // maxSMB is a persistent class member. It MUST be reset to the user's preference at the start of every cycle.
         // Otherwise, temporary overrides (like BFast2 mode) permeate to future cycles.
