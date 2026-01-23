@@ -147,4 +147,9 @@ enum class BooleanKey(
     AimiPhysioHRVDataEnable("aimi_physio_hrv_enable", true),
     AimiPhysioLLMAnalysisEnable("aimi_physio_llm_enable", false),
     AimiPhysioDebugLogs("aimi_physio_debug_logs", false),
+    
+    // 🌸 Endometriosis & Cycle Management (MTR)
+    AimiEndometriosisEnable("aimi_endo_enable", false),
+    AimiEndometriosisHormonalSuppression("aimi_endo_suppression", false),
+    AimiEndometriosisPainFlare("aimi_endo_flare", false),
 }

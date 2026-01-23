@@ -1257,4 +1257,44 @@
     <string name="aimi_physio_llm_enable_summary">Send physio data to LLM for daily health summaries (Optional).</string>
     <string name="aimi_physio_debug_title">Debug Logging</string>
     <string name="aimi_physio_debug_summary">Log detailed physiological states to the console.</string>
+    
+    <!-- 🌸 Endometriosis & Cycle Settings -->
+    <string name="endo_preferences_title">Endometriosis Settings</string>
+    <string name="endo_enable_title">Enable Endometriosis Logic</string>
+    <string name="endo_enable_summary">Adapts ISF/Basal/SMB for inflammatory cycles (Basal-First Strategy).</string>
+    <string name="endo_suppression_title">Hormonal Suppression Mode</string>
+    <string name="endo_suppression_summary">For continuous pill or no-cycle management (Steady state inflammation).</string>
+    <string name="endo_flare_title">Pain Flare Active</string>
+    <string name="endo_flare_summary">Toggle ON during acute pain crisis (Increases Basal, Dampens SMB).</string>
+    <string name="endo_basal_mult_title">Max Basal Multiplier</string>
+    <string name="endo_basal_mult_summary">Maximum temp basal boost during flare (Default 1.3x).</string>
+    <string name="endo_smb_dampen_title">SMB Dampening Factor</string>
+    <string name="endo_smb_dampen_summary">Factor to reduce SMBs during flare to prevent stacking (Default 0.7x).</string>
+    <string name="endo_flare_duration_title">Flare Duration (hours)</string>
+    <string name="endo_flare_duration_summary">How long the flare mode stays active when toggled.</string>
+    
+    <!-- WCycle missing strings -->
+    <string name="wcycle_preferences">Women Cycle Settings</string>
+    <string name="wcycle_preferences_title_menu">Cycle Tracking</string>
+    <string name="wcycle_enable_title">Enable WCycle</string>
+    <string name="wcycle_enable_summary">Adapts insulin sensitivity based on menstrual cycle phase.</string>
+    <string name="wcycle_tracking_mode_title">Tracking Mode</string>
+    <string name="wcycle_contraceptive_title">Contraceptive Method</string>
+    <string name="wcycle_thyroid_title">Thyroid Status</string>
+    <string name="wcycle_verneuil_title">Verneuil Disease</string>
+    <string name="wcycle_start_dom_title">Cycle Start Day (DOM)</string>
+    <string name="wcycle_avg_len_title">Average Cycle Length (Days)</string>
+    <string name="wcycle_shadow_title">Shadow Mode (Log Only)</string>
+    <string name="wcycle_confirm_title">Require Confirmation</string>
+    <string name="wcycle_clamp_min_title">Min Sensitivity Clamp</string>
+    <string name="wcycle_clamp_max_title">Max Sensitivity Clamp</string>
+    
+    <string name="OApsAIMI_Enable_pregnancy">Pregnancy Mode</string>
+    <string name="OApsAIMI_Enable_honeymoon">Honeymoon Mode</string>
+    <string name="OApsAIMI_Enable_night_title">Night Mode</string>
+    
+    <string name="oaps_aimi_learners_title">AI Learners</string>
+    <string name="unified_reactivity_title">Unified Reactivity Learner</string>
+    <string name="unified_reactivity_summary">Learns a single global reactivity factor instead of time-slots.</string>
+
 </resources>

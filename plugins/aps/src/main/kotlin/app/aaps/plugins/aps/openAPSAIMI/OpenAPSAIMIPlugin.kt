@@ -1508,6 +1508,62 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         summary = R.string.context_description
                     )
                 )
+
+                // 🌸 Endometriosis & Cycle Management Section (MTR)
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "AIMI_ENDO"
+                    title = rh.gs(R.string.endo_preferences_title)
+                    
+                    addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.AimiEndometriosisEnable,
+                            title = R.string.endo_enable_title,
+                            summary = R.string.endo_enable_summary
+                        )
+                    )
+                    addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.AimiEndometriosisHormonalSuppression,
+                            title = R.string.endo_suppression_title,
+                            summary = R.string.endo_suppression_summary
+                        )
+                    )
+                    addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.AimiEndometriosisPainFlare,
+                            title = R.string.endo_flare_title,
+                            summary = R.string.endo_flare_summary
+                        )
+                    )
+                    addPreference(
+                        AdaptiveIntPreference(
+                            ctx = context,
+                            intKey = IntKey.AimiEndometriosisFlareDuration,
+                            title = R.string.endo_flare_duration_title,
+                            summary = R.string.endo_flare_duration_summary
+                        )
+                    )
+                    addPreference(
+                        AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.AimiEndometriosisBasalMult,
+                            title = R.string.endo_basal_mult_title,
+                            summary = R.string.endo_basal_mult_summary
+                        )
+                    )
+                    addPreference(
+                        AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.AimiEndometriosisSmbDampen,
+                            title = R.string.endo_smb_dampen_title,
+                            summary = R.string.endo_smb_dampen_summary
+                        )
+                    )
+                })
+                
                 
                 // 🧠 AI Decision Auditor Section
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {

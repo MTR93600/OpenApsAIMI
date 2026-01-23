@@ -243,6 +243,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager  // 🎯 Context Module
     @Inject lateinit var contextInfluenceEngine: app.aaps.plugins.aps.openAPSAIMI.context.ContextInfluenceEngine  // 🎯 Context Influence
     @Inject lateinit var physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR  // 🏥 Physiological Modulation
+    
+    // 🌸 Endometriosis Adjuster (Lazy init manually since not in graph yet or use manual passing)
+    private val endoAdjuster by lazy { app.aaps.plugins.aps.openAPSAIMI.wcycle.EndometriosisAdjuster(preferences, aapsLogger) }
+
     // ❌ OLD reactivityLearner removed - UnifiedReactivityLearner is now the only one
     init {
         // Branche l’historique basal (TBR) sur la persistence réelle
@@ -5261,6 +5265,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
 // --- FIN DE LA NOUVELLE LOGIQUE ---
 
+        // 🌸 ENDOMETRIOSIS & CYCLE LOGIC (MTR)
+        val endoFactors = endoAdjuster.calculateFactors(bg, delta.toDouble())
+        if (endoFactors.reason.isNotEmpty()) {
+            consoleLog.add("Endo: ${endoFactors.reason} (Basal x${endoFactors.basalMult}, SMB x${endoFactors.smbMult}, ISF x${endoFactors.isfMult})")
+            
+            // 1. ISF Adjustment (Stronger ISF means LOWER value, so we DIVIDE by mult > 1, or here isulMult is usually < 1 for resistance?)
+            // In Adjuster: isfMult approx 1.0/basalMult (0.7..1.0). So it acts as Resistance.
+            // variableSensitivity is ISF (mg/dL/U). Lower is stronger.
+            // If isfMult = 0.8 (Resistance), we want ISF to be HIGHER (weaker).
+            // Wait, standard: ISF * factor. If factor < 1, ISF drops -> Stronger.
+            // Let's check logic: EndoAdjuster returns isfMult.
+            //   if basal is 1.3 (high), resistance is high. We need MORE insulin.
+            //   So ISF should be LOWER (e.g. 100 -> 80).
+            //   In Adjuster I did: isfMult = (1.0 / basalMult).coerceIn(0.7, 1.0)
+            //   So if basal 1.3 -> isfMult ~ 0.77.
+            //   NewISF = OldISF * 0.77 (100 -> 77). This is STRONGER insulin. 
+            //   Wait, Endometriosis is INFLAMMATION/RESISTANCE. We need STRONGER insulin.
+            //   So yes, LOWERING the ISF value is correct.
+            this.variableSensitivity *= endoFactors.isfMult.toFloat()
+            
+            // 2. Basal Adjustment (Profile Basal Boost)
+            // We apply it to 'basalaimi' which is the base for calculations
+            this.basalaimi *= endoFactors.basalMult.toFloat()
+        }
+
         // --- 🏃 ACTIVITY MANAGER INTEGRATION ---
         
         // 1. Process Data through Manager
@@ -5602,6 +5631,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add("INTERVAL_ADJUSTED: +${pkpdGuard.intervalAddMin}m → ${intervalsmb}m total")
             }
         }
+
+        // 🌸 ENDOMETRIOSIS SMB DAMPENING
+        if (endoFactors.smbMult < 1.0) {
+            val beforeEndo = smbToGive
+            smbToGive = (smbToGive * endoFactors.smbMult.toFloat()).coerceAtLeast(0f)
+            if (smbToGive < beforeEndo) {
+                consoleLog.add("SMB_ENDO_DAMPEN: ${"%.2f".format(beforeEndo)}U → ${"%.2f".format(smbToGive)}U (x${"%.2f".format(endoFactors.smbMult)})")
+                rT.reason.append(" | EndoDampen x${"%.2f".format(endoFactors.smbMult)}")
+            }
+        }
+
         val beforeCap = smbToGive
         smbToGive = capSmbDose(
             proposedSmb = smbToGive,
