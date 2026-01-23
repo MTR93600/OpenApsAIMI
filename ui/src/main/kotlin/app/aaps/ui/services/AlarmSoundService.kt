@@ -6,6 +6,8 @@ import android.media.MediaPlayer
 import android.os.Binder
 import android.os.Handler
 import android.os.IBinder
+import android.os.Build
+import android.content.pm.ServiceInfo
 import android.os.Looper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -62,13 +64,23 @@ class AlarmSoundService : DaggerService() {
     override fun onCreate() {
         super.onCreate()
         aapsLogger.debug(LTag.CORE, "onCreate parent called")
-        startForeground(notificationHolder.notificationID, notificationHolder.notification)
+        aapsLogger.debug(LTag.CORE, "onCreate parent called")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(notificationHolder.notificationID, notificationHolder.notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        } else {
+            startForeground(notificationHolder.notificationID, notificationHolder.notification)
+        }
         aapsLogger.debug(LTag.CORE, "onCreate End")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         aapsLogger.debug(LTag.CORE, "onStartCommand")
-        startForeground(notificationHolder.notificationID, notificationHolder.notification)
+        aapsLogger.debug(LTag.CORE, "onStartCommand")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(notificationHolder.notificationID, notificationHolder.notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        } else {
+            startForeground(notificationHolder.notificationID, notificationHolder.notification)
+        }
         aapsLogger.debug(LTag.CORE, "onStartCommand Foreground called")
 
         player?.let { if (it.isPlaying) it.stop() }
