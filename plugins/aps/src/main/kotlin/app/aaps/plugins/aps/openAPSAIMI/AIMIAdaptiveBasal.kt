@@ -29,7 +29,10 @@ class AIMIAdaptiveBasal @Inject constructor(
         val profileBasal: Double,
         val lastTempIsZero: Boolean,
         val zeroSinceMin: Int,
-        val minutesSinceLastChange: Int
+        val minutesSinceLastChange: Int,
+        // 🧠 Cognitive Inputs
+        val predictedBg: Double,
+        val auditorConfidence: Double = 0.0
     )
 
     data class Decision(
@@ -96,6 +99,29 @@ class AIMIAdaptiveBasal @Inject constructor(
             return Decision(rate, dur, r)
         }
 
+        // 🧠 COGNITIVE SOFT FLOOR (LLM-Guided)
+        // Avoid "Basal Washout" (0% -> Rebound) if the situation is stable enough.
+        // We only allow this if prediction is safe (>75) and Auditor is confident (>60%).
+        val softFloorActive = input.profileBasal > 0 &&
+            input.predictedBg > 75.0 &&
+            input.auditorConfidence > 0.60 &&
+            input.bg < 115.0 // Active mostly in the "grey zone" where standard logic might panic-cut
+        
+        if (softFloorActive) {
+            // Check if we are dropping fast? If Delta < -5, maybe safer to let LGS work.
+            // But if delta is reasonable (-5 to 0), we hold the floor.
+            if (input.delta > -6.0) {
+                 // 40% Basal Floor is usually enough to suppress hepatic output
+                 val floorRate = max(0.1, input.profileBasal * 0.40)
+                 // Only intervene if current temp is 0 (or very low) to "resume" or "hold"
+                 if (input.lastTempIsZero || (input.minutesSinceLastChange > 5 && input.delta < 0)) {
+                      val r = "LLM-SoftFloor (Pred=${fmt.to0Decimal(input.predictedBg)}, Conf=${fmt.to0Decimal(input.auditorConfidence * 100)}%) -> ${fmt.to2Decimal(floorRate)}U/h"
+                      log.debug(LTag.APS, "AIMI+ $r")
+                      return Decision(floorRate, 30, r)
+                 }
+            }
+        }
+
         val plateau = abs(input.delta) <= plateauBand && abs(input.shortAvgDelta) <= plateauBand
         val highAndFlat = input.bg > highBg && plateau
 
@@ -145,6 +171,17 @@ class AIMIAdaptiveBasal @Inject constructor(
                 val dur = min(settings.zeroResumeMax, max(10, input.minutesSinceLastChange / 2))
                 val r = "micro-resume after ${input.zeroSinceMin}m @0U/h → ${d2(rate)}U/h × ${dur}m"
                 return Decision(rate, dur, r)
+            }
+
+            // pureSuggest logic for Soft Floor (Simplified duplication)
+            if (input.profileBasal > 0 && input.predictedBg > 75.0 && input.auditorConfidence > 0.60 && input.bg < 115.0) {
+                 if (input.delta > -6.0) {
+                     val floorRate = max(0.1, input.profileBasal * 0.40)
+                     if (input.lastTempIsZero || (input.minutesSinceLastChange > 5 && input.delta < 0)) {
+                         val r = "LLM-SoftFloor (Pred=${d0(input.predictedBg)}, Conf=${d0(input.auditorConfidence * 100)}%) → ${d2(floorRate)}U/h"
+                         return Decision(floorRate, 30, r)
+                     }
+                 }
             }
 
             val plateau = abs(input.delta) <= settings.plateauBand &&

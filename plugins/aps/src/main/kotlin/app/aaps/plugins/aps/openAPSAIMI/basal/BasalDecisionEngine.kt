@@ -79,7 +79,8 @@ class BasalDecisionEngine @Inject constructor(
         val smbToGive: Double,
         val zeroSinceMin: Int,
         val minutesSinceLastChange: Int,
-        val pumpCaps: PumpCaps
+        val pumpCaps: PumpCaps,
+        val auditorConfidence: Double = 0.0
     )
 
     data class Helpers(
@@ -194,7 +195,9 @@ class BasalDecisionEngine @Inject constructor(
                 profileBasal = input.profileCurrentBasal,
                 lastTempIsZero = lastTempIsZero,
                 zeroSinceMin = zeroSinceMin,
-                minutesSinceLastChange = minutesSinceLastChange
+                minutesSinceLastChange = minutesSinceLastChange,
+                predictedBg = input.predictedBg,
+                auditorConfidence = input.auditorConfidence
             )
             val aimiDecision = aimiAdaptiveBasal.suggest(inAimi)
             aimiDecision.rateUph?.let { candidate ->

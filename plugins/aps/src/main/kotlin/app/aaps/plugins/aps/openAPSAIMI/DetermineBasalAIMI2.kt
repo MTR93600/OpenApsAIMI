@@ -6202,7 +6202,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 smbToGive = smbToGive.toDouble(),
                 zeroSinceMin = zeroSinceMin,
                 minutesSinceLastChange = minutesSinceLastChange,
-                pumpCaps = pumpCaps
+                pumpCaps = pumpCaps,
+                auditorConfidence = (try { app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache.get(300_000)?.verdict?.confidence } catch (e: Exception) { 0.0 }) ?: 0.0
             )
             val helpers = BasalDecisionEngine.Helpers(
                 calculateRate = { basalValue, currentBasalValue, multiplier, label ->
