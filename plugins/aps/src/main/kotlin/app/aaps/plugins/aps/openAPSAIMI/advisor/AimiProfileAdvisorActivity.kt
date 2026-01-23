@@ -43,6 +43,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     @Inject lateinit var unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner
     @Inject lateinit var tddCalculator: app.aaps.core.interfaces.stats.TddCalculator
     @Inject lateinit var tirCalculator: app.aaps.core.interfaces.stats.TirCalculator
+    @Inject lateinit var aapsLogger: app.aaps.core.interfaces.logging.AAPSLogger
     
     // NOT injected - created manually to avoid Dagger issues
     private lateinit var advisorService: AimiAdvisorService
@@ -193,6 +194,16 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             pill.addView(scoreText)
             addView(pill)
 
+            val supportBtn = TextView(this@AimiProfileAdvisorActivity).apply {
+                text = "🩺"
+                textSize = 22f
+                setPadding(24, 0, 0, 0)
+                setOnClickListener {
+                    showSupportDialog()
+                }
+            }
+            addView(supportBtn)
+
             // Settings Button (Gear)
             val settingsBtn = TextView(this@AimiProfileAdvisorActivity).apply {
                 text = "⚙️"
@@ -203,6 +214,72 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                 }
             }
             addView(settingsBtn)
+        }
+    }
+
+    private fun showSupportDialog() {
+        val input = android.widget.EditText(this).apply {
+            hint = "Enter Expert Code"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val layout = android.widget.FrameLayout(this).apply {
+            setPadding(48, 24, 48, 24)
+            addView(input)
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(rh.gs(R.string.aimi_adv_support_title))
+            .setMessage(rh.gs(R.string.aimi_adv_support_msg))
+            .setView(layout)
+            .setPositiveButton(rh.gs(R.string.aimi_adv_support_verify)) { _, _ ->
+                val code = input.text.toString()
+                if (app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager.verifyCode(code)) {
+                    showIssueDialog()
+                } else {
+                    android.widget.Toast.makeText(this, rh.gs(R.string.aimi_adv_support_invalid), android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showIssueDialog() {
+        val input = android.widget.EditText(this).apply {
+            hint = "Describe your issue (optional)..."
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 3
+        }
+        val layout = android.widget.FrameLayout(this).apply {
+            setPadding(48, 24, 48, 24)
+            addView(input)
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(rh.gs(R.string.aimi_adv_issue_title))
+            .setMessage(rh.gs(R.string.aimi_adv_issue_msg))
+            .setView(layout)
+            .setPositiveButton(rh.gs(R.string.aimi_adv_generate_btn)) { _, _ ->
+                val issue = input.text.toString()
+                generateAndShareReport(issue)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun generateAndShareReport(issue: String) {
+        try {
+            val diagManager = app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager(this, preferences, aapsLogger)
+            val report = diagManager.generateReport(issue)
+            
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND)
+            intent.type = "text/plain"
+            intent.putExtra(android.content.Intent.EXTRA_SUBJECT, "AIMI Diagnostic Report - " + java.util.Date().toString())
+            intent.putExtra(android.content.Intent.EXTRA_TEXT, report)
+            
+            startActivity(android.content.Intent.createChooser(intent, "Send Diagnostic to MTR"))
+        } catch (e: Exception) {
+            aapsLogger.error("AIMI_DIAG", "Failed to generate report", e)
+            android.widget.Toast.makeText(this, "Error generating report", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 

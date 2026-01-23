@@ -336,6 +336,17 @@
     <string name="oaps_aimi_cho_title">Average carbohydrate amount lunch/dinner</string>
     <string name="aimi_preferences">AIMI Settings</string>
     <string name="aimi_advisor_section_settings">AIMI Settings</string>
+    <string name="aimi_adv_support_title">Expert Support</string>
+    <string name="aimi_adv_support_msg">Enter the access code provided by MTR to export diagnostics.</string>
+    <string name="aimi_adv_support_verify">Verify</string>
+    <string name="aimi_adv_support_invalid">⚠️ Invalid Code</string>
+    <string name="aimi_adv_issue_title">Describe Issue</string>
+    <string name="aimi_adv_issue_msg">Briefly describe the problem so MTR can analyze the context.</string>
+    <string name="aimi_adv_issue_hint">Describe your issue (optional)...</string>
+    <string name="aimi_adv_generate_btn">Generate &amp; Share</string>
+    <string name="aimi_adv_error_gen">Error generating report</string>
+    <string name="aimi_diag_subject">AIMI Diagnostic Report - %1$s</string>
+    <string name="aimi_diag_chooser">Send Diagnostic to MTR</string>
 
 
     <string name="user_preferences">Preferences user</string>
