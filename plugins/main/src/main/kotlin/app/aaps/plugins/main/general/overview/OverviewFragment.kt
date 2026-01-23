@@ -434,7 +434,14 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             val jsonStr = preferences.get(app.aaps.core.keys.StringKey.OApsAIMIContextStorage)
             val hasContext = jsonStr.length > 5 // "[]" length is 2
             
+            // 1. Update Badge in Root/Classic Layout
             _binding?.root?.findViewById<View>(R.id.aimi_context_indicator)?.visibility = hasContext.toVisibility()
+            
+            // 2. Update Badge in Modern Dashboard (Critical Fix for duplication)
+            val modernCard = _binding?.root?.findViewById<View>(R.id.modernCircleCard)
+            if (modernCard != null) {
+                modernCard.findViewById<View>(R.id.aimi_context_indicator)?.visibility = hasContext.toVisibility()
+            }
             
             // 🔄 EXPERT FIX: Switch Dashboard based on AIMI status
             val aimiEnabled = try {
@@ -443,7 +450,6 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             } catch (e: Exception) { false }
 
             val infoCard = _binding?.root?.findViewById<View>(R.id.infoCard)
-            val modernCard = _binding?.root?.findViewById<View>(R.id.modernCircleCard)
 
             if (aimiEnabled) {
                 // Show AIMI Dashboard, Hide Standard
