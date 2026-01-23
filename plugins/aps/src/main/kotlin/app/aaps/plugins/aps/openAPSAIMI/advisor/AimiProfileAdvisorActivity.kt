@@ -267,19 +267,44 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     }
 
     private fun generateAndShareReport(issue: String) {
-        try {
-            val diagManager = app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager(this, preferences, aapsLogger)
-            val report = diagManager.generateReport(issue)
-            
-            val intent = android.content.Intent(android.content.Intent.ACTION_SEND)
-            intent.type = "text/plain"
-            intent.putExtra(android.content.Intent.EXTRA_SUBJECT, "AIMI Diagnostic Report - " + java.util.Date().toString())
-            intent.putExtra(android.content.Intent.EXTRA_TEXT, report)
-            
-            startActivity(android.content.Intent.createChooser(intent, "Send Diagnostic to MTR"))
-        } catch (e: Exception) {
-            aapsLogger.error("AIMI_DIAG", "Failed to generate report", e)
-            android.widget.Toast.makeText(this, "Error generating report", android.widget.Toast.LENGTH_SHORT).show()
+        android.widget.Toast.makeText(this, "Generating diagnostic report...", android.widget.Toast.LENGTH_SHORT).show()
+        
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val diagManager = app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager(this@AimiProfileAdvisorActivity, preferences, aapsLogger)
+                val reportContent = diagManager.generateReport(issue)
+                
+                if (reportContent.isNotEmpty()) {
+                    // Create temporary file
+                    val fileName = "AIMI_Diag_${System.currentTimeMillis()}.txt"
+                    val file = java.io.File(cacheDir, fileName)
+                    file.writeText(reportContent)
+                    
+                    // Get URI via FileProvider
+                    val authority = "${packageName}.fileprovider"
+                    val uri = androidx.core.content.FileProvider.getUriForFile(this@AimiProfileAdvisorActivity, authority, file)
+                    
+                    withContext(Dispatchers.Main) {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND)
+                        intent.type = "text/plain" // Or "application/json" if preferred
+                        intent.putExtra(android.content.Intent.EXTRA_SUBJECT, rh.gs(R.string.aimi_diag_subject, java.util.Date().toString()))
+                        intent.putExtra(android.content.Intent.EXTRA_TEXT, "AIMI Diagnostic Report attached.\n\n$issue")
+                        intent.putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                        intent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        
+                        startActivity(android.content.Intent.createChooser(intent, rh.gs(R.string.aimi_diag_chooser)))
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(this@AimiProfileAdvisorActivity, "Report is empty!", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    aapsLogger.error("AIMI_DIAG", "Failed to generate/share report", e)
+                    android.widget.Toast.makeText(this@AimiProfileAdvisorActivity, rh.gs(R.string.aimi_adv_error_gen) + ": " + e.message, android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 

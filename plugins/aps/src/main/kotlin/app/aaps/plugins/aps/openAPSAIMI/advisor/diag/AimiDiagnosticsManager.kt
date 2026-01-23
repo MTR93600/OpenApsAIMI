@@ -88,16 +88,16 @@ class AimiDiagnosticsManager(
 
         // 3. Nightscout (Safe)
         sb.append("[NIGHTSCOUT]\n")
-        val nsUrl = PreferenceManager.getDefaultSharedPreferences(context).getString("ns_url", "Not Set") ?: "Not Set"
+        val nsUrl = preferences.get(app.aaps.core.keys.StringKey.NsClientUrl)
         // Obfuscation partielle de l'URL pour sécurité (masquer le token s'il est dans l'URL)
         val safeUrl = if (nsUrl.contains("@")) {
             val parts = nsUrl.split("@")
             "***SECRET***@" + (if (parts.size > 1) parts[1] else "???")
         } else {
-            nsUrl
+            nsUrl.ifBlank { "Not Set" }
         }
         sb.append("URL: $safeUrl\n")
-        val nsEnabled = PreferenceManager.getDefaultSharedPreferences(context).getBoolean("ns_upload_enabled", false)
+        val nsEnabled = preferences.get(app.aaps.core.keys.BooleanKey.NsClientUploadData)
         sb.append("Upload Enabled: $nsEnabled\n\n")
 
         // 4. AIMI Core Preferences
