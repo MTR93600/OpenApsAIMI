@@ -440,3 +440,19 @@ data class PhysioMultipliersMTR(
         const val REACTIVITY_MAX = 1.10
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STANDARDIZED INPUTS FOR ADJUSTERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Standard container for all inputs required by physiological adjusters.
+ * Allows decoupling the adjuster logic from the source of data.
+ */
+data class AimiPhysioInputs(
+    val bg: Double,
+    val delta: Double,
+    val physioContext: PhysioContextMTR? = null,
+    val isMealActive: Boolean = false,
+    val activityState: String = "IDLE" // e.g., "WALKING", "RUNNING"
+)

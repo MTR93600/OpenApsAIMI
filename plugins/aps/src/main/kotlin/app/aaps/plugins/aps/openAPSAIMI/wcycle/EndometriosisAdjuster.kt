@@ -6,7 +6,8 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.plugins.aps.openAPSAIMI.context.data.AimiPhysioInputs
+
+import app.aaps.plugins.aps.openAPSAIMI.physio.AimiPhysioInputs
 import kotlin.math.min
 
 /**
@@ -33,7 +34,7 @@ class EndometriosisAdjuster(
         val reason: String = ""
     )
 
-    fun calculateFactors(bg: Double, delta: Double): EndoFactors {
+    fun calculateFactors(bg: Double, delta: Double, inputs: AimiPhysioInputs? = null): EndoFactors {
         if (!preferences.get(BooleanKey.AimiEndometriosisEnable)) {
             return EndoFactors()
         }
