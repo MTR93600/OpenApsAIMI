@@ -6729,7 +6729,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 clinical_decision = if ((finalResult.units ?: 0.0) > 0) "SMB_Delivery" else if ((finalResult.rate ?: profile.current_basal) != profile.current_basal) "Basal_Modulation" else "No_Action",
                 dosage_u = finalResult.units ?: 0.0,
                 target_basal_uph = finalResult.rate, 
-                narrative_explanation = finalResult.reason.toString().replace("\n", " | ").take(255) // Headline
+                narrative_explanation = finalResult.reason.toString().replace("\n", " | ").take(2048) // Headline
             )
             
             // Log the 'Medical Record'
