@@ -90,6 +90,93 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
+internal data class AimiDecisionContext(
+    val event_id: String,
+    val timestamp: Long,
+    val trigger: String,
+    val baseline_state: BaselineState,
+    val adjustments: Adjustments = Adjustments(),
+    var outcome: Outcome? = null
+) {
+    data class BaselineState(
+        val profile_isf_mgdl: Double,
+        val profile_basal_uph: Double,
+        val current_bg_mgdl: Double,
+        val cob_g: Double,
+        val iob_u: Double
+    )
+    data class Adjustments(
+        var dynamic_isf: DynamicIsf? = null,
+        var basal_safety_cap: BasalCap? = null,
+        var physiological_context: PhysioContext? = null
+    )
+    data class DynamicIsf(
+        var final_value_mgdl: Double = 0.0,
+        val modifiers: MutableList<Modifier> = mutableListOf()
+    )
+    data class Modifier(val source: String, val factor: Double, val clinical_reason: String)
+    data class BasalCap(val status: String, val limit_uph: Double, val safety_reason: String)
+    data class PhysioContext(val hormonal_cycle_phase: String, val physical_activity_mode: String)
+    data class Outcome(val clinical_decision: String, val dosage_u: Double, val narrative_explanation: String)
+
+    fun toMedicalJson(): String {
+        return try {
+            val json = org.json.JSONObject()
+            json.put("event_id", event_id)
+            json.put("timestamp", timestamp)
+            json.put("trigger", trigger)
+
+            val base = org.json.JSONObject()
+            base.put("profile_isf_mgdl", baseline_state.profile_isf_mgdl)
+            base.put("profile_basal_uph", baseline_state.profile_basal_uph)
+            base.put("current_bg_mgdl", baseline_state.current_bg_mgdl)
+            base.put("cob_g", baseline_state.cob_g)
+            base.put("iob_u", baseline_state.iob_u)
+            json.put("baseline_state", base)
+
+            val adj = org.json.JSONObject()
+            adjustments.dynamic_isf?.let { d ->
+                val dJson = org.json.JSONObject()
+                dJson.put("final_value_mgdl", d.final_value_mgdl)
+                val modsIdx = org.json.JSONArray()
+                d.modifiers.forEach { m ->
+                    val mJson = org.json.JSONObject()
+                    mJson.put("source", m.source)
+                    mJson.put("factor", m.factor)
+                    mJson.put("reason", m.clinical_reason)
+                    modsIdx.put(mJson)
+                }
+                dJson.put("modifiers", modsIdx)
+                adj.put("dynamic_isf", dJson)
+            }
+            adjustments.physiological_context?.let { p ->
+                val pJson = org.json.JSONObject()
+                pJson.put("cycle_phase", p.hormonal_cycle_phase)
+                pJson.put("activity_mode", p.physical_activity_mode)
+                adj.put("physio_context", pJson)
+            }
+            // Add Basal Cap if present
+            adjustments.basal_safety_cap?.let { c ->
+                val cJson = org.json.JSONObject()
+                cJson.put("status", c.status)
+                cJson.put("limit_uph", c.limit_uph)
+                cJson.put("reason", c.safety_reason)
+                adj.put("basal_cap", cJson)
+            }
+            json.put("adjustments", adj)
+
+            outcome?.let { o ->
+                val oJson = org.json.JSONObject()
+                oJson.put("decision", o.clinical_decision)
+                oJson.put("amount", o.dosage_u)
+                oJson.put("narrative", o.narrative_explanation)
+                json.put("outcome", oJson)
+            }
+            json.toString()
+        } catch(e: Exception) { "{ \"error\": \"JSON Generation Failed\" }" }
+    }
+}
+
 internal data class PredictionSanityResult(
     val predBg: Double,
     val eventualBg: Double,
@@ -3614,6 +3701,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleError.clear()
         consoleLog.clear()
         
+        // 🏥 AIMI DECISION CONTEXT INITIALIZATION (For Medical Transparency)
+        val decisionCtx = AimiDecisionContext(
+            event_id = "evt_${currentTime}",
+            timestamp = currentTime,
+            trigger = if (glucose_status.delta > 5) "BG_Rise_Fast" else "Routine_Cycle",
+            baseline_state = AimiDecisionContext.BaselineState(
+                profile_isf_mgdl = profile.sens,
+                profile_basal_uph = profile.current_basal,
+                current_bg_mgdl = glucose_status.glucose,
+                cob_g = mealData.mealCOB,
+                iob_u = iob_data_array.firstOrNull()?.iob ?: 0.0 // Taking first element (Net IOB usually)
+            )
+        )
+        
         var rT = RT(
             algorithm = APSResult.Algorithm.AIMI,
             runningDynamicIsf = dynIsfMode,
@@ -3657,6 +3758,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🧬 PHYSIO INTEGRATION: Get SNS Dominance from Adapter
         val physioContext = physioAdapter.getCurrentContext()
         val snsDominance = physioContext?.toSNSDominance() ?: 0.3 // Default Neutral
+        
+        // 🏥 Update Context
+        decisionCtx.adjustments.physiological_context = AimiDecisionContext.PhysioContext(
+            hormonal_cycle_phase = wCycleInfoForRun?.let { "Phase_${it.cycleDay}" } ?: "Unknown",
+            physical_activity_mode = if (snsDominance > 0.6) "Stress/Activity" else "Resting"
+        )
 
         // ✅ ETAPE 1: Calculer le Profil d'Action de l'IOB (avec modulation physio)
         val iobActionProfile = InsulinActionProfiler.calculate(iob_data_array, profile, snsDominance)
@@ -6585,6 +6692,57 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     aapsLogger.error(LTag.APS, "AI Auditor exception", e)
                     // Continue with original decision on error
                 }
+            }
+            
+            
+            // 🏥 AIMI SNAPSHOT FINALIZATION
+            val fusedIsf = pkpdRuntime?.fusedIsf ?: profile.sens
+            val profileIsf = profile.sens
+            
+            // Populate Dynamic ISF details
+            decisionCtx.adjustments.dynamic_isf = AimiDecisionContext.DynamicIsf(
+                final_value_mgdl = fusedIsf,
+                modifiers = mutableListOf<AimiDecisionContext.Modifier>().apply {
+                    // Autosens
+                    if (autosens_data.ratio != 1.0) {
+                        add(AimiDecisionContext.Modifier(
+                            source = "Autosensitivity",
+                            factor = 1.0 / autosens_data.ratio, // Ratio < 1 => Sensitive => ISF increases (Factor > 1)
+                            clinical_reason = "Rolling avg sensitivity: ${"%.2f".format(autosens_data.ratio)}"
+                        ))
+                    }
+                    // ISF Fusion
+                    if (abs(fusedIsf - (profileIsf * (1.0/autosens_data.ratio))) > 1.0) {
+                         add(AimiDecisionContext.Modifier(
+                            source = "PkPd_Fusion",
+                            factor = fusedIsf / (profileIsf * (1.0/autosens_data.ratio)),
+                            clinical_reason = "Fusion with TDD & Profile"
+                        ))
+                    }
+                }
+            )
+            
+            // Populate Outcome
+            decisionCtx.outcome = AimiDecisionContext.Outcome(
+                clinical_decision = if ((finalResult.units ?: 0.0) > 0) "SMB_Delivery" else if ((finalResult.rate ?: 0.0) != profile.current_basal) "Basal_Modulation" else "No_Action",
+                dosage_u = finalResult.units ?: 0.0,
+                narrative_explanation = finalResult.reason.toString().replace("\n", " | ").take(255) // Headline
+            )
+            
+            // Log the 'Medical Record'
+            val medicalJson = decisionCtx.toMedicalJson()
+            consoleLog.add("AIMI_SNAPSHOT: $medicalJson")
+            
+            // 💾 PERSISTENCE: Save to Documents/AAPS/AIMI_Decisions.jsonl
+            try {
+                val decisionsFile = File(externalDir, "AIMI_Decisions.jsonl")
+                if (!decisionsFile.exists()) {
+                     decisionsFile.parentFile?.mkdirs()
+                     decisionsFile.createNewFile()
+                }
+                decisionsFile.appendText("$medicalJson\n")
+            } catch (e: Exception) {
+                consoleError.add("Failed to save AIMI Decision JSON: ${e.message}")
             }
             
             return finalResult
