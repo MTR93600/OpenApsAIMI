@@ -3761,7 +3761,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         // 🏥 Update Context
         decisionCtx.adjustments.physiological_context = AimiDecisionContext.PhysioContext(
-            hormonal_cycle_phase = wCycleInfoForRun?.let { "Phase_${it.cycleDay}" } ?: "Unknown",
+            hormonal_cycle_phase = wCycleInfoForRun?.let { "${it.phase.name}_Day${it.dayInCycle}" } ?: "Unknown",
             physical_activity_mode = if (snsDominance > 0.6) "Stress/Activity" else "Resting"
         )
 
@@ -6696,12 +6696,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             
             // 🏥 AIMI SNAPSHOT FINALIZATION
-            val fusedIsf = pkpdRuntime?.fusedIsf ?: profile.sens
-            val profileIsf = profile.sens
+            val snapshotFusedIsf = pkpdRuntime?.fusedIsf ?: profile.sens
+            val snapshotProfileIsf = profile.sens
             
             // Populate Dynamic ISF details
             decisionCtx.adjustments.dynamic_isf = AimiDecisionContext.DynamicIsf(
-                final_value_mgdl = fusedIsf,
+                final_value_mgdl = snapshotFusedIsf,
                 modifiers = mutableListOf<AimiDecisionContext.Modifier>().apply {
                     // Autosens
                     if (autosens_data.ratio != 1.0) {
@@ -6712,10 +6712,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         ))
                     }
                     // ISF Fusion
-                    if (abs(fusedIsf - (profileIsf * (1.0/autosens_data.ratio))) > 1.0) {
+                    if (abs(snapshotFusedIsf - (snapshotProfileIsf * (1.0/autosens_data.ratio))) > 1.0) {
                          add(AimiDecisionContext.Modifier(
                             source = "PkPd_Fusion",
-                            factor = fusedIsf / (profileIsf * (1.0/autosens_data.ratio)),
+                            factor = snapshotFusedIsf / (snapshotProfileIsf * (1.0/autosens_data.ratio)),
                             clinical_reason = "Fusion with TDD & Profile"
                         ))
                     }
