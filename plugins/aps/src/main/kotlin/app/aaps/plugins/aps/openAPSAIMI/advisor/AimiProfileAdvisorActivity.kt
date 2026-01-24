@@ -273,32 +273,95 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             try {
                 val diagManager = app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager(this@AimiProfileAdvisorActivity, preferences, aapsLogger)
                 val reportContent = diagManager.generateReport(issue)
+                val authority = "${packageName}.fileprovider"
                 
-                if (reportContent.isNotEmpty()) {
-                    // Create temporary file
-                    val fileName = "AIMI_Diag_${System.currentTimeMillis()}.txt"
-                    val file = java.io.File(cacheDir, fileName)
-                    file.writeText(reportContent)
+                // Create a temporary ZIP file in cache
+                val zipFileName = "AIMI_Support_Package_${System.currentTimeMillis()}.zip"
+                val zipFile = java.io.File(cacheDir, zipFileName)
+                
+                java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(java.io.FileOutputStream(zipFile))).use { out ->
+                    // 1. Add Diagnostic Report (Text)
+                    if (reportContent.isNotEmpty()) {
+                        val entry = java.util.zip.ZipEntry("Diagnostic_Report.txt")
+                        out.putNextEntry(entry)
+                        out.write(reportContent.toByteArray())
+                        out.closeEntry()
+                    }
                     
-                    // Get URI via FileProvider
-                    val authority = "${packageName}.fileprovider"
-                    val uri = androidx.core.content.FileProvider.getUriForFile(this@AimiProfileAdvisorActivity, authority, file)
+                    // 2. Add Decision Log (JSONL) - Last 24h ONLY
+                    val externalDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS)
+                    val jsonFile = java.io.File(externalDir, "AAPS/AIMI_Decisions.jsonl")
                     
-                    withContext(Dispatchers.Main) {
+                    if (jsonFile.exists() && jsonFile.canRead()) {
+                        val entry = java.util.zip.ZipEntry("AIMI_Decisions_Last24h.jsonl")
+                        out.putNextEntry(entry)
+                        
+                        val cutoffTime = System.currentTimeMillis() - (24 * 60 * 60 * 1000L) // 24 hours ago
+                        
+                        // Buffer for reading/writing
+                        val reader = java.io.BufferedReader(java.io.FileReader(jsonFile))
+                        val writer = java.io.BufferedWriter(java.io.OutputStreamWriter(out))
+                        
+                        try {
+                            var line = reader.readLine()
+                            while (line != null) {
+                                // Fast heuristic check: assume timestamp is near the start or parse simple
+                                // {"timestamp":1730000000000,...}
+                                // We'll do a robust regex or substring find to avoid full JSON parsing (too heavy)
+                                try {
+                                    // Look for "timestamp":123456789
+                                    val tsIdx = line.indexOf("\"timestamp\":")
+                                    if (tsIdx != -1) {
+                                        // Extract number after timestamp
+                                        val start = tsIdx + 12
+                                        var end = start
+                                        while (end < line.length && line[end].isDigit()) {
+                                            end++
+                                        }
+                                        if (end > start) {
+                                            val tsStr = line.substring(start, end)
+                                            val ts = tsStr.toLongOrNull()
+                                            if (ts != null && ts >= cutoffTime) {
+                                                writer.write(line)
+                                                writer.newLine()
+                                            }
+                                        }
+                                    } else {
+                                        // If no timestamp found, maybe keep it or discard? Safe to discard for cleaner log.
+                                    }
+                                } catch (e: Exception) {
+                                    // Ignore parse errors, skip line
+                                }
+                                line = reader.readLine()
+                            }
+                            writer.flush() // Flush BufferedWriter to ZipOutputStream
+                        } finally {
+                            reader.close()
+                            // writer.close() -> Do NOT close writer here as it would close the ZipOutputStream!
+                        }
+                        out.closeEntry()
+                    }
+                }
+
+                if (zipFile.exists() && zipFile.length() > 0) {
+                     val uri = androidx.core.content.FileProvider.getUriForFile(this@AimiProfileAdvisorActivity, authority, zipFile)
+                     
+                     withContext(Dispatchers.Main) {
                         val intent = android.content.Intent(android.content.Intent.ACTION_SEND)
-                        intent.type = "text/plain" // Or "application/json" if preferred
+                        intent.type = "application/zip"
                         intent.putExtra(android.content.Intent.EXTRA_SUBJECT, rh.gs(R.string.aimi_diag_subject, java.util.Date().toString()))
-                        intent.putExtra(android.content.Intent.EXTRA_TEXT, "AIMI Diagnostic Report attached.\n\n$issue")
+                        intent.putExtra(android.content.Intent.EXTRA_TEXT, "AIMI Support Package attached (ZIP).\n\nDetails: $issue")
                         intent.putExtra(android.content.Intent.EXTRA_STREAM, uri)
                         intent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         
                         startActivity(android.content.Intent.createChooser(intent, rh.gs(R.string.aimi_diag_chooser)))
                     }
                 } else {
-                    withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(this@AimiProfileAdvisorActivity, "Report is empty!", android.widget.Toast.LENGTH_SHORT).show()
+                     withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(this@AimiProfileAdvisorActivity, "Failed to create support package (Empty)", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
+
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     aapsLogger.error("AIMI_DIAG", "Failed to generate/share report", e)

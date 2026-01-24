@@ -117,7 +117,7 @@ internal data class AimiDecisionContext(
     data class Modifier(val source: String, val factor: Double, val clinical_reason: String)
     data class BasalCap(val status: String, val limit_uph: Double, val safety_reason: String)
     data class PhysioContext(val hormonal_cycle_phase: String, val physical_activity_mode: String)
-    data class Outcome(val clinical_decision: String, val dosage_u: Double, val narrative_explanation: String)
+    data class Outcome(val clinical_decision: String, val dosage_u: Double, val target_basal_uph: Double? = null, val narrative_explanation: String)
 
     fun toMedicalJson(): String {
         return try {
@@ -169,6 +169,7 @@ internal data class AimiDecisionContext(
                 val oJson = org.json.JSONObject()
                 oJson.put("decision", o.clinical_decision)
                 oJson.put("amount", o.dosage_u)
+                o.target_basal_uph?.let { oJson.put("target_basal_rate_uph", it) }
                 oJson.put("narrative", o.narrative_explanation)
                 json.put("outcome", oJson)
             }
@@ -6723,9 +6724,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
             
             // Populate Outcome
+            // Populate Outcome
             decisionCtx.outcome = AimiDecisionContext.Outcome(
-                clinical_decision = if ((finalResult.units ?: 0.0) > 0) "SMB_Delivery" else if ((finalResult.rate ?: 0.0) != profile.current_basal) "Basal_Modulation" else "No_Action",
+                clinical_decision = if ((finalResult.units ?: 0.0) > 0) "SMB_Delivery" else if ((finalResult.rate ?: profile.current_basal) != profile.current_basal) "Basal_Modulation" else "No_Action",
                 dosage_u = finalResult.units ?: 0.0,
+                target_basal_uph = finalResult.rate, 
                 narrative_explanation = finalResult.reason.toString().replace("\n", " | ").take(255) // Headline
             )
             
