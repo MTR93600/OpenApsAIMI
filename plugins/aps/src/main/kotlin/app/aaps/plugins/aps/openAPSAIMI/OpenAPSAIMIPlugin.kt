@@ -1524,14 +1524,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             summary = R.string.endo_enable_summary
                         )
                     )
-                    addPreference(
-                        AdaptiveSwitchPreference(
-                            ctx = context,
-                            booleanKey = BooleanKey.AimiEndometriosisHormonalSuppression,
-                            title = R.string.endo_suppression_title,
-                            summary = R.string.endo_suppression_summary
-                        )
-                    )
+
                     addPreference(
                         AdaptiveSwitchPreference(
                             ctx = context,

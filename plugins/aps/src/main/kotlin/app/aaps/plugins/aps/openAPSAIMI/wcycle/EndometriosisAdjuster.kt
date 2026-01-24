@@ -52,11 +52,25 @@ class EndometriosisAdjuster(
 
         // 2. STATIC CONTEXT (Suppression - Chronic)
         // Active as long as safely above hypo (BG > 85) to maintain steady states
-        if (preferences.get(BooleanKey.AimiEndometriosisHormonalSuppression)) {
-            basalMult = 1.05 // +5% basal
+        // HARMONIZATION: We now infer suppression from WCycle settings to avoid duplicates.
+        val wCyclePrefs = WCyclePreferences(preferences)
+        val contraceptive = wCyclePrefs.contraceptive()
+        val isSuppressed = when(contraceptive) {
+            ContraceptiveType.COC_PILL, 
+            ContraceptiveType.POP_PILL, 
+            ContraceptiveType.HORMONAL_IUD, 
+            ContraceptiveType.IMPLANT, 
+            ContraceptiveType.INJECTION, 
+            ContraceptiveType.RING, 
+            ContraceptiveType.PATCH -> true
+            else -> false
+        }
+
+        if (isSuppressed) {
+            basalMult = 1.05 // +5% basal (Steady state inflammation compensation)
             isfMult = 0.95   // Slightly stronger ISF
             smbMult = 0.95   // Slightly cautious SMB
-            reasons.add("Suppression")
+            reasons.add("Suppression(${contraceptive.name})")
         }
 
         // 3. DYNAMIC CONTEXT (Pain Flare - Acute)
