@@ -145,8 +145,7 @@ enum class DoubleKey(
     OApsAIMIDeltaPosRelease(key = "OApsAIMIDeltaPosRelease", 1.0, 0.5, 3.0), // seuil Δ positif au-delà duquel on arrête l’intensification
     AimiUamConfidence (key = "AIMI_UAM_CONFIDENCE", 0.5, 0.0, 1.0),
     OApsAIMILastEstimatedCarbs(key = "OApsAIMILastEstimatedCarbs", 0.0, 0.0, 300.0), // Meal Advisor Estimate
-    AimiUamConfidence (key = "AIMI_UAM_CONFIDENCE", 0.5, 0.0, 1.0),
-    OApsAIMILastEstimatedCarbs(key = "OApsAIMILastEstimatedCarbs", 0.0, 0.0, 300.0), // Meal Advisor Estimate
+
     OApsAIMILastEstimatedCarbTime(key = "OApsAIMILastEstimatedCarbTime", 0.0, 0.0, 20000000000000.0), // Timestamp as Double
     
     // 🌸 Endometriosis & Cycle Management (MTR)

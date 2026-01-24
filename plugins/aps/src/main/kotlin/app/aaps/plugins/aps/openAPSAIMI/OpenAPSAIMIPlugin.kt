@@ -3,7 +3,6 @@ package app.aaps.plugins.aps.openAPSAIMI
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.util.LongSparseArray
 import androidx.core.util.forEach
 import androidx.preference.PreferenceCategory
@@ -11,7 +10,6 @@ import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreference
-import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import app.aaps.core.data.aps.SMBDefaults
@@ -97,6 +95,11 @@ import app.aaps.plugins.aps.openAPSAIMI.ISF.IsfBlender
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfFusion
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfFusionBounds
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
+import androidx.core.util.isEmpty
+import androidx.core.util.size
+import androidx.core.net.toUri
+import kotlin.math.abs
+import kotlin.math.exp
 
 @Singleton
 open class OpenAPSAIMIPlugin  @Inject constructor(
@@ -248,8 +251,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     }
 
     override fun getAverageIsfMgdl(timestamp: Long, caller: String): Double? {
-        if (dynIsfCache == null || dynIsfCache.size() == 0) {
-            aapsLogger.warn(LTag.APS, "dynIsfCache is null or empty. Unable to calculate average ISF.")
+        if (dynIsfCache.isEmpty()) {
+            aapsLogger.warn(LTag.APS, "dynIsfCache is empty. Unable to calculate average ISF.")
             return profileFunction.getProfile()?.getProfileIsfMgdl() ?: 20.0
         }
         var count = 0
@@ -333,7 +336,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         return when {
             // En cas d'hypoglycémie (delta négatif), on augmente progressivement l'ISF
             combinedDelta < 0 -> {
-                val factor = Math.exp(0.15 * Math.abs(combinedDelta))
+                val factor = exp(0.15 * abs(combinedDelta))
                 factor.coerceAtMost(1.4)
             }
             // En hyperglycémie : si BG est > 130, on applique une réduction progressive
@@ -343,7 +346,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 // On combine ce facteur avec la réponse exponentielle basée sur combinedDelta si nécessaire
                 if (combinedDelta > 10) {
                     // Si le delta est important, on accentue la réduction avec une réponse exponentielle
-                    val expFactor = Math.exp(-0.3 * (combinedDelta - 10))
+                    val expFactor = exp(-0.3 * (combinedDelta - 10))
                     minOf(expFactor, bgReduction)
                 } else {
                     bgReduction
@@ -453,7 +456,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         // 11) cache
         val key = timestamp - timestamp % T.mins(30).msecs() + glucose.toLong()
-        if (dynIsfCache.size() > 1000) dynIsfCache.clear()
+        if (dynIsfCache.size > 1000) dynIsfCache.clear()
         dynIsfCache.put(key, blended)
 
         return "CALC" to blended
@@ -529,8 +532,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         var autosensResult = AutosensResult()
         val tddStatus: TddStatus?
-        var variableSensitivity = 0.0
-        var tdd = 0.0
+        val variableSensitivity = 0.0
+        val tdd = 0.0
         if (dynIsfMode) {
             val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
 //
@@ -538,7 +541,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val minTDD = 10.0
 //
 // Récupération et ajustement du TDD sur 7 jours
-            var tdd7D = tddCalculator.averageTDD(tddCalculator.calculate(7, allowMissingDays = false))
+            val tdd7D = tddCalculator.averageTDD(tddCalculator.calculate(7, allowMissingDays = false))
             if (tdd7D != null && tdd7D.data.totalAmount > tdd7P && tdd7D.data.totalAmount > 1.3 * tdd7P) {
                 tdd7D.data.totalAmount = 1.2 * tdd7P
                 aapsLogger.info(LTag.APS, "TDD for 7 days limited to 10% increase. New TDD7D: ${tdd7D.data.totalAmount}")
@@ -570,7 +573,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val tddLast8to4H = tdd24HrsPerHour * 4
 // // Calcul pondéré du TDD récent pour éviter les fluctuations extrêmes
             val tddWeightedFromLast8H = ((1.2 * tdd2DaysPerHour) + (0.3 * tddLast4H) + (0.5 * tddLast8to4H)) * 3
-            var tdd = (tddWeightedFromLast8H * 0.20) + (tdd2Days * 0.50) + (tddDaily * 0.30)
+            val tdd = (tddWeightedFromLast8H * 0.20) + (tdd2Days * 0.50) + (tddDaily * 0.30)
 
             // On récupère la glycémie et le delta actuel
             val currentBG = glucoseStatusProvider.glucoseStatusData?.glucose
@@ -608,7 +611,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 // FIX: "Rising" defined strictly as Delta > -0.5 (Stable or Up). 
                 // Previously > -2.0 allowed drops, which was risky to un-protect.
                 val isHyper = glucoseStatus.glucose > 150
-                val isRising = (glucoseStatus.delta ?: 0.0) > -0.5 
+                val isRising = glucoseStatus.delta > -0.5
                 
                 if (isHyper && isRising && brainFactor < 1.0) {
                     aapsLogger.debug(LTag.APS, "🧠 Brain Override: IGNORING protective factor ${"%.2f".format(brainFactor)} because BG ${glucoseStatus.glucose} is high & stable/rising.")
@@ -627,7 +630,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     // 2. Modulate Dynamic ISF (SMB)
                     // Factor > 1 (Aggressive) -> ISF Decreases (Larger Bolus) -> ISF / Factor
                     // Factor < 1 (Protective) -> ISF Increases (Smaller Bolus) -> ISF / Factor
-                    variableSensitivity = variableSensitivity / brainFactor
+                    variableSensitivity /= brainFactor
                     
                     aapsLogger.debug(LTag.APS, "🧠 AIMI Brain Override: " +
                         "Autosens ${"%.2f".format(originalRatio)}->${"%.2f".format(autosensResult.ratio)} | " +
@@ -731,7 +734,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
             lastPkpdScale = pkpdRuntimeNow?.pkpdScale ?: 1.0
             aapsLogger.debug(LTag.APS, "PK/PD: pkpdScale=$lastPkpdScale (bg=$bgNow, delta=$deltaNow, iob=$iobNow, tdd24=$tdd24ForPk, isfRaw=$profileIsfRaw)")
-            var tdd4D = tddCalculator.averageTDD(tddCalculator.calculate(4, allowMissingDays = false))
+            val tdd4D = tddCalculator.averageTDD(tddCalculator.calculate(4, allowMissingDays = false))
             val oapsProfile = OapsProfileAimi(
                 dia = profile.dia,
                 min_5m_carbimpact = 0.0, // not used
@@ -773,7 +776,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 temptargetSet = isTempTarget,
                 autosens_max = preferences.get(DoubleKey.AutosensMax),
                 out_units = if (profileFunction.getUnits() == GlucoseUnit.MMOL) "mmol/L" else "mg/dl",
-                variable_sens = variableSensitivity!!,
+                variable_sens = variableSensitivity,
                 insulinDivisor = insulinDivisor,
                 TDD = if (tdd4D == null) preferences.get(DoubleKey.OApsAIMITDD7) else tdd,
                 peakTime = activityPredTimePK.toDouble(),
@@ -818,7 +821,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     val count = it.predBGs?.IOB?.size ?: 0
                     aapsLogger.debug(LTag.APS, "Plugin: Injecting predictions via JSON manually (Size: $count)")
                     try {
-                        val predJson = org.json.JSONObject()
+                        val predJson = JSONObject()
                         // Manual array copy to ensure data transfer
                         // Note: Using JSONArray constructor or equivalent
                         predJson.put("IOB", org.json.JSONArray(it.predBGs?.IOB))
@@ -835,9 +838,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     // 🔮 FCL 11.1: Force Populate predictionsAsGv for UI (OverviewViewModel)
                     // If 'with(RT)' failed to populate the list, we do it manually here.
                     if (determineBasalResult.predictionsAsGv.isEmpty()) {
-                         val start = now
-                         it.predBGs?.IOB?.forEachIndexed { index, value ->
-                             val time = start + index * 300000L // 5 mins
+                        it.predBGs?.IOB?.forEachIndexed { index, value ->
+                             val time = now + index * 300000L // 5 mins
                              val gv = GV(
                                  timestamp = time,
                                  value = value.toDouble(),
@@ -1125,7 +1127,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         summary = "Tap to authorize AAPS to access Sleep, HRV, and Heart Rate data"
                         setOnPreferenceClickListener {
                             try {
-                                val intent = android.content.Intent(
+                                val intent = Intent(
                                     context,
                                     app.aaps.plugins.aps.openAPSAIMI.physio.AIMIHealthConnectPermissionActivityMTR::class.java
                                 )
@@ -1551,7 +1553,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             ctx = context,
                             doubleKey = DoubleKey.AimiEndometriosisBasalMult,
                             title = R.string.endo_basal_mult_title,
-                            summary = R.string.endo_basal_mult_summary
+                            dialogMessage = R.string.endo_basal_mult_summary
                         )
                     )
                     addPreference(
@@ -1559,7 +1561,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             ctx = context,
                             doubleKey = DoubleKey.AimiEndometriosisSmbDampen,
                             title = R.string.endo_smb_dampen_title,
-                            summary = R.string.endo_smb_dampen_summary
+                            dialogMessage = R.string.endo_smb_dampen_summary
                         )
                     )
                 })
@@ -1875,7 +1877,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         AdaptiveIntentPreference(
                             ctx = context,
                             intentKey = IntentKey.ApsLinkToDocs,
-                            intent = Intent().apply { action = Intent.ACTION_VIEW; data = Uri.parse(rh.gs(R.string.openapsama_link_to_preference_json_doc)) },
+                            intent = Intent().apply { action = Intent.ACTION_VIEW; data = rh.gs(R.string.openapsama_link_to_preference_json_doc).toUri() },
                             summary = R.string.openapsama_link_to_preference_json_doc_txt
                         )
                     )

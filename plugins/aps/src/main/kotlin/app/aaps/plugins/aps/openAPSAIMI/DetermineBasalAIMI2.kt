@@ -7,7 +7,6 @@ import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.TB
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.UE
-
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
@@ -20,8 +19,6 @@ import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.plugin.ActivePlugin
-import app.aaps.core.interfaces.pump.Pump
-import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.stats.TddCalculator
@@ -40,17 +37,11 @@ import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
-
-import app.aaps.plugins.aps.openAPSAIMI.extensions.asRounded
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
-import app.aaps.plugins.aps.openAPSAIMI.model.SmbPlan
-// Imports updated for strict patch
 import app.aaps.core.data.model.HR
-import app.aaps.core.data.model.SC
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
-
 import app.aaps.plugins.aps.openAPSAIMI.model.LoopContext
 import app.aaps.plugins.aps.openAPSAIMI.model.PumpCaps
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
@@ -77,7 +68,6 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdAbsorptionGuard
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit  // 🌀 Trajectory Control
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.WarningSeverity  // 🌀 Trajectory Warnings
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextMode  // 🎯 Context Mode
-import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot  // 🎯 Context Snapshot
 import java.io.File
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -92,10 +82,8 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.collections.asSequence
-import kotlin.collections.get
 import kotlin.math.abs
 import kotlin.math.exp
-import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -202,7 +190,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val profileUtil: ProfileUtil,
     private val fabricPrivacy: FabricPrivacy,
     private val preferences: Preferences,
-    private val uiInteraction: app.aaps.core.interfaces.ui.UiInteraction,
+    private val uiInteraction: UiInteraction,
     private val wCycleFacade: WCycleFacade,
     private val wCyclePreferences: WCyclePreferences,
     private val wCycleLearner: WCycleLearner,
@@ -511,8 +499,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             smbFinal: Double,
             audit: PkpdPort.DampingAudit?
         ) {
-            val dateStr  = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(ctx.nowEpochMillis))
-            val epochMin = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes(ctx.nowEpochMillis)
+            val dateStr  = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(ctx.nowEpochMillis))
+            val epochMin = TimeUnit.MILLISECONDS.toMinutes(ctx.nowEpochMillis)
             PkPdCsvLogger.append(
                 PkPdLogRow(
                     dateStr = dateStr,
@@ -1037,7 +1025,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val boluses = persistenceLayer
                 .getBolusesFromTime(lookback30min, ascending = false)
                 .blockingGet()
-                .filter { it.type == app.aaps.core.data.model.BS.Type.SMB }
+                .filter { it.type == BS.Type.SMB }
             
             boluses.sumOf { it.amount }
         } catch (e: Exception) {
@@ -1246,7 +1234,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val predDelta = predictedDelta(getRecentDeltas()).toFloat()
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
         val isEarlyAutodrive = !night && !isMealMode && autodrive &&
-            bgNow > hypoGuard && bgNow > 110 && detectMealOnset(delta, predDelta, bgacc.toFloat(), predictedBg.toFloat(), profile.target_bg.toFloat())
+            bgNow > hypoGuard && bgNow > 110 && detectMealOnset(delta, predDelta, bgacc.toFloat(), predictedBg, profile.target_bg.toFloat())
 
         // 3) Tendance & ajustement
         val bgTrend = calculateBgTrend(getRecentBGs(), StringBuilder())
@@ -1502,7 +1490,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🚀 REACTOR MODE: Full Speed (Safety delegated to applySafetyPrecautions)
         // User Directive: "Garde le moteur à plein régime"
         
-        var effectiveProposed = proposedUnits
+        val effectiveProposed = proposedUnits
 
         // No inline clamping here. 
         // We trust the UnifiedReactivityLearner to provide the correct amplification
@@ -1539,7 +1527,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          // 🔧 RESTORED: Pass PKPD runtime for tail damping
          // Note: pkpdRuntime is calculated later in determine_basal, so we pass null here
          // and rely on the PKPD tail damping in applySafetyPrecautions for context-aware reduction
-         var safetyCappedUnits = applySafetyPrecautions(
+         val safetyCappedUnits = applySafetyPrecautions(
             mealData = mealData,
             smbToGiveParam = proposedFloat,
             hypoThreshold = hypoThreshold,
@@ -2060,6 +2048,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
 
+    @SuppressLint("DefaultLocale")
     private fun isAutodriveModeCondition(
         delta: Float,
         autodrive: Boolean,
@@ -5687,18 +5676,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal)
         val rate: Double? = when {
             snackTime && snackrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 4.0, "AI Force basal because Snack Time $snackrunTime.", currenttemp, rT, overrideSafety = true)
-            // 🚫 BLOCAGE 30 MIN SUPPRIMÉ (Lunch/Meal/Dinner/HighCarb)
-            // Ce bloc forçait la basale à 100% (1.0) empêchant toute TBR (High ou Low) ou SMB proactif.
-            // mealTime && mealruntime... -> removed
-            // bfastTime && bfastruntime... -> removed
-            // lunchTime && lunchruntime... -> removed
-            // dinnerTime && dinnerruntime... -> removed
-            // highCarbTime && highCarbrunTime... -> removed
-            // 📸 Meal Advisor Forced Basal REMOVED (Duplicate of Pipeline)
             
+            // 🚀 RE-ENABLED: 30 MIN INITIAL BOOST (User Request)
+            // Force Max TBR during the first 30 minutes of any meal mode to act as extended prebolus.
+            (mealTime || lunchTime || dinnerTime || highCarbTime || bfastTime) && (listOf(mealruntime, lunchruntime, dinnerruntime, highCarbrunTime, bfastruntime).maxOrNull() ?: 0) in 0..30 -> {
+                val safeMax = if (maxBasalPref > 0.1) maxBasalPref else profile_current_basal * 5.0
+                //val factor = safeMax / profile_current_basal
+                calculateRate(basal, safeMax, 1.0, "Meal Boost 30min (Force MaxBasal)", currenttemp, rT, overrideSafety = true)
+            }
+
             // 🔥 Patch Post-Meal Hyper Boost (AIMI 2.0)
             // Added: Treat Recent Meal Advisor (< 120m) as implicit Meal Mode
-            (mealTime || lunchTime || dinnerTime || highCarbTime || bfastTime || snackTime || (timeSinceEstimateMin <= 120 && estimatedCarbs > 10)) -> {
+            (mealTime || lunchTime || dinnerTime || highCarbTime || bfastTime || snackTime || (timeSinceEstimateMin <= 120 && estimatedCarbs > 10.0)) -> {
                 val runTime = listOf(mealruntime, lunchruntime, dinnerruntime, highCarbrunTime, bfastruntime, snackrunTime).maxOrNull() ?: timeSinceEstimateMin.toInt()
                 val target = target_bg // simplification
                 val rocketStart = delta > 5.0f || bg > target_bg + 40
