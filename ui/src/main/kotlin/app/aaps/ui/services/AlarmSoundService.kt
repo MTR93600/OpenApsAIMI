@@ -65,10 +65,14 @@ class AlarmSoundService : DaggerService() {
         super.onCreate()
         aapsLogger.debug(LTag.CORE, "onCreate parent called")
         aapsLogger.debug(LTag.CORE, "onCreate parent called")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(notificationHolder.notificationID, notificationHolder.notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        } else {
-            startForeground(notificationHolder.notificationID, notificationHolder.notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(notificationHolder.notificationID, notificationHolder.notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            } else {
+                startForeground(notificationHolder.notificationID, notificationHolder.notification)
+            }
+        } catch(e: Exception) {
+            aapsLogger.error(LTag.CORE, "AlarmSoundService onCreate startForeground failed: ${e.message}")
         }
         aapsLogger.debug(LTag.CORE, "onCreate End")
     }
@@ -76,10 +80,14 @@ class AlarmSoundService : DaggerService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         aapsLogger.debug(LTag.CORE, "onStartCommand")
         aapsLogger.debug(LTag.CORE, "onStartCommand")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(notificationHolder.notificationID, notificationHolder.notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        } else {
-            startForeground(notificationHolder.notificationID, notificationHolder.notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(notificationHolder.notificationID, notificationHolder.notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            } else {
+                startForeground(notificationHolder.notificationID, notificationHolder.notification)
+            }
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.CORE, "AlarmSoundService onStartCommand startForeground failed: ${e.message}")
         }
         aapsLogger.debug(LTag.CORE, "onStartCommand Foreground called")
 
