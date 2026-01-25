@@ -2,7 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.trajectory
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
@@ -279,7 +279,7 @@ class TrajectoryGuard @Inject constructor(
         }
         
         // Warning 4: PRE_ONSET stacking risk
-        if (history.last().pkpdStage == InsulinActivityStage.PRE_ONSET &&
+        if (history.last().pkpdStage == ActivityStage.RISING &&
             history.last().iob > 1.5 &&
             metrics.curvature > 0.15) {
             warnings.add(TrajectoryWarning(
@@ -312,32 +312,6 @@ class TrajectoryGuard @Inject constructor(
         
         return warnings
     }
-    
-    /**
-     * Helper: Build a PhaseSpaceState from current AIMI data
-     * 
-     * This is a utility for DetermineBasalAIMI2 integration
-     */
-    fun buildState(
-        timestamp: Long,
-        bg: Double,
-        bgDelta: Double,
-        bgAccel: Double,
-        insulinActivity: Double,
-        iob: Double,
-        pkpdStage: InsulinActivityStage,
-        timeSinceLastBolus: Int,
-        cob: Double = 0.0
-    ): PhaseSpaceState = PhaseSpaceState(
-        timestamp = timestamp,
-        bg = bg,
-        bgDelta = bgDelta,
-        bgAccel = bgAccel,
-        insulinActivity = insulinActivity,
-        iob = iob,
-        pkpdStage = pkpdStage,
-        timeSinceLastBolus = timeSinceLastBolus,
-        cob = cob,
-        tissueDelay = 0.0 // TODO: estimate from PKPD data
-    )
 }
+    
+

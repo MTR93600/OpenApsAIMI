@@ -4269,12 +4269,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     nowMillis = currentTime, historyMinutes = 90, currentBg = bg,
                     currentDelta = delta.toDouble(), currentAccel = bgacc,
                     insulinActivityNow = iobActivityNow, iobNow = iob.toDouble(),
-                    pkpdStage = when (insulinActionState.activityStage) {
-                        app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.RISING -> app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.RISING
-                        app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.PEAK -> app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.PEAK
-                        app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.FALLING -> app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.TAIL
-                        app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.TAIL -> app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.EXHAUSTED
-                    },
+                    pkpdStage = insulinActionState.activityStage,
                     timeSinceLastBolus = if (lastBolusAgeMinutes.isFinite()) lastBolusAgeMinutes.toInt() else 120,
                     cobNow = cob.toDouble()
                 )
@@ -6409,7 +6404,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // Note: Ideally we use a full history provider, but for UI feedback we use instantaneous extrapolation
                 val now = System.currentTimeMillis()
                 val currentActivity = (iob_data.iob * 1.0) // simplified activity equivalent
-                val targetOrb = app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit(targetBg)
+                val targetOrb = app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit(targetBg = targetBg.toDouble(), targetActivity = 0.0)
                 
                 val history = listOf(
                     // t-15 min (approx)
@@ -6420,7 +6415,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         bgAccel = 0.0,
                         insulinActivity = currentActivity,
                         iob = iob_data.iob,
-                        pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.UNKNOWN,
+                        pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.TAIL,
                         timeSinceLastBolus = 0
                     ),
                     // t-5 min
@@ -6431,7 +6426,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         bgAccel = (delta - shortAvgDelta).toDouble(),
                         insulinActivity = currentActivity,
                         iob = iob_data.iob,
-                        pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.UNKNOWN,
+                        pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.TAIL,
                         timeSinceLastBolus = 0
                     ),
                     // Current (t)
@@ -6442,7 +6437,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         bgAccel = (delta - shortAvgDelta).toDouble(),
                         insulinActivity = currentActivity,
                         iob = iob_data.iob,
-                        pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.UNKNOWN,
+                        pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.TAIL,
                         timeSinceLastBolus = 0
                     )
                 )
@@ -6498,7 +6493,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             consoleLog.add("│ $aiIcon AI: %-25s│".format("$action (${(cached.verdict.confidence*100).toInt()}%)"))
                             
                             // Shorten evidence to fit in box
-                            val evidence = cached.verdict.evidence.replace("\n", " ").take(30)
+                            val evidenceList = cached.verdict.evidence
+                            val evidenceStr = if (evidenceList.isNotEmpty()) evidenceList[0] else ""
+                            val evidence = evidenceStr.replace("\n", " ").take(30)
                             consoleLog.add("│ > %-30s│".format(evidence))
                         }
                     } catch (e: Exception) {

@@ -1,6 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.trajectory
 
-import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -30,7 +30,7 @@ data class PhaseSpaceState(
     val bgAccel: Double,                    // mg/dL/5min² (second derivative)
     val insulinActivity: Double,            // U/hr equivalent 
     val iob: Double,                        // U (total active insulin)
-    val pkpdStage: InsulinActivityStage,   // PKPD temporal stage
+    val pkpdStage: ActivityStage,          // PKPD temporal stage
     val timeSinceLastBolus: Int,           // minutes
     val cob: Double = 0.0,                  // g (optional, for meal context)
     val tissueDelay: Double = 0.0           // estimated insulin-tissue lag (0-1)
@@ -332,7 +332,7 @@ data class StableOrbit(
         bgAccel = 0.0,
         insulinActivity = targetActivity,
         iob = 0.0,
-        pkpdStage = InsulinActivityStage.TAIL,
+        pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.TAIL,
         timeSinceLastBolus = 240
     )
     

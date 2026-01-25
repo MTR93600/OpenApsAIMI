@@ -167,7 +167,7 @@ class AuditorDataCollector @Inject constructor(
                     bgAccel = 0.0,
                     insulinActivity = currentActivity,
                     iob = iob,
-                    pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.UNKNOWN,
+                    pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.TAIL,
                     timeSinceLastBolus = 0
                 ),
                 app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState(
@@ -177,7 +177,7 @@ class AuditorDataCollector @Inject constructor(
                     bgAccel = delta - shortAvgDelta,
                     insulinActivity = currentActivity,
                     iob = iob,
-                    pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.UNKNOWN,
+                    pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.TAIL,
                     timeSinceLastBolus = 0
                 ),
                 app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState(
@@ -187,12 +187,12 @@ class AuditorDataCollector @Inject constructor(
                     bgAccel = delta - shortAvgDelta,
                     insulinActivity = currentActivity,
                     iob = iob,
-                    pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.UNKNOWN,
+                    pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.TAIL,
                     timeSinceLastBolus = 0
                 )
             )
 
-            val stableOrbit = app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit(target)
+            val stableOrbit = app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit(targetBg = target, targetActivity = 0.0)
             val metrics = app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryMetricsCalculator.calculateAll(history, stableOrbit)
 
             return if (metrics != null) {
