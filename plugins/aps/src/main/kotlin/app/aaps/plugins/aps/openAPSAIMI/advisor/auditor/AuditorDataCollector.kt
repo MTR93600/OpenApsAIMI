@@ -134,11 +134,86 @@ class AuditorDataCollector @Inject constructor(
         // Build 7-day stats
         val stats = buildStats7d(now)
         
+        // Build Trajectory Snapshot (AIMI 2.1)
+        val trajectory = buildTrajectorySnapshot(
+            bg = bg,
+            delta = delta,
+            shortAvgDelta = shortAvgDelta,
+            iob = iob.iob,
+            target = profile.target_bg,
+            now = now
+        )
+
         return AuditorInput(
             snapshot = snapshot,
             history = history,
-            stats = stats
+            stats = stats,
+            trajectory = trajectory
         )
+    }
+
+    private fun buildTrajectorySnapshot(
+        bg: Double, delta: Double, shortAvgDelta: Double, iob: Double, target: Double, now: Long
+    ): TrajectorySnapshot? {
+        try {
+            // instant reconstruction for auditor
+            val currentActivity = iob * 1.0 // simplified
+            // Uses fully qualified names to ensure resolution
+            val history = listOf(
+                app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState(
+                    timestamp = now - 900000,
+                    bg = bg - (shortAvgDelta * 3), 
+                    bgDelta = shortAvgDelta, 
+                    bgAccel = 0.0,
+                    insulinActivity = currentActivity,
+                    iob = iob,
+                    pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.UNKNOWN,
+                    timeSinceLastBolus = 0
+                ),
+                app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState(
+                    timestamp = now - 300000,
+                    bg = bg - delta, 
+                    bgDelta = delta, 
+                    bgAccel = delta - shortAvgDelta,
+                    insulinActivity = currentActivity,
+                    iob = iob,
+                    pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.UNKNOWN,
+                    timeSinceLastBolus = 0
+                ),
+                app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState(
+                    timestamp = now,
+                    bg = bg, 
+                    bgDelta = delta, 
+                    bgAccel = delta - shortAvgDelta,
+                    insulinActivity = currentActivity,
+                    iob = iob,
+                    pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.UNKNOWN,
+                    timeSinceLastBolus = 0
+                )
+            )
+
+            val stableOrbit = app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit(target)
+            val metrics = app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryMetricsCalculator.calculateAll(history, stableOrbit)
+
+            return if (metrics != null) {
+                // Determine type string carefully
+                val typeStr = when {
+                    metrics.isStable -> "STABLE_ORBIT"
+                    metrics.isTightSpiral -> "TIGHT_SPIRAL"
+                    metrics.isConverging -> "CLOSING_CONVERGING"
+                    metrics.isDiverging -> "OPEN_DIVERGING"
+                    else -> "UNCERTAIN"
+                }
+
+                TrajectorySnapshot(
+                    type = typeStr,
+                    curvature = metrics.curvature,
+                    convergence = metrics.convergenceVelocity,
+                    coherence = metrics.coherence,
+                    energyBalance = metrics.energyBalance
+                )
+            } else null
+        } catch(e: Exception) { return null }
     }
     
     /**

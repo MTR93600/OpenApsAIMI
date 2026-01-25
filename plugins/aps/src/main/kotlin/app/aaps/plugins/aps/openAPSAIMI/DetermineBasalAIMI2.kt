@@ -6403,6 +6403,114 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
             }
 
+            // 🌀 TRAJECTORY VISUALIZATION (AIMI 2.1)
+            try {
+                // Quick reconstruction of recent states for instant visualization
+                // Note: Ideally we use a full history provider, but for UI feedback we use instantaneous extrapolation
+                val now = System.currentTimeMillis()
+                val currentActivity = (iob_data.iob * 1.0) // simplified activity equivalent
+                val targetOrb = app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit(targetBg)
+                
+                val history = listOf(
+                    // t-15 min (approx)
+                    app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState(
+                        timestamp = now - 900000,
+                        bg = bg - (shortAvgDelta * 3), 
+                        bgDelta = shortAvgDelta.toDouble(), 
+                        bgAccel = 0.0,
+                        insulinActivity = currentActivity,
+                        iob = iob_data.iob,
+                        pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.UNKNOWN,
+                        timeSinceLastBolus = 0
+                    ),
+                    // t-5 min
+                    app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState(
+                        timestamp = now - 300000,
+                        bg = bg - delta, 
+                        bgDelta = delta.toDouble(), 
+                        bgAccel = (delta - shortAvgDelta).toDouble(),
+                        insulinActivity = currentActivity,
+                        iob = iob_data.iob,
+                        pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.UNKNOWN,
+                        timeSinceLastBolus = 0
+                    ),
+                    // Current (t)
+                    app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState(
+                        timestamp = now,
+                        bg = bg, 
+                        bgDelta = delta.toDouble(), 
+                        bgAccel = (delta - shortAvgDelta).toDouble(),
+                        insulinActivity = currentActivity,
+                        iob = iob_data.iob,
+                        pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage.UNKNOWN,
+                        timeSinceLastBolus = 0
+                    )
+                )
+
+                val metrics = app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryMetricsCalculator.calculateAll(history, targetOrb)
+                
+                if (metrics != null) {
+                    val healthPercent = (metrics.healthScore * 100).toInt()
+                    val healthBar = "█".repeat(healthPercent / 10) + "░".repeat(10 - (healthPercent / 10))
+                    
+                    val type = when {
+                        metrics.isStable -> "⭕ Stable Orbit"
+                        metrics.isConverging -> "🔄 Converging"
+                        metrics.isDiverging -> "↗️ Diverging"
+                        metrics.isTightSpiral -> "🌀 Spiral"
+                        else -> "❓ Uncertain"
+                    }
+                    
+                    val etaText = if (metrics.convergenceVelocity > 0) {
+                        val eta = app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryMetricsCalculator.estimateConvergenceTime(history, targetOrb)
+                        if (eta != null) "$eta min to stable orbit" else "Approaching..."
+                    } else {
+                        "Diverging from target"
+                    }
+
+                    // Append ASCII Block to Console Log
+                    consoleLog.add("─────────────────────────────────┐")
+                    consoleLog.add("│ 🌀 TRAJECTORY STATUS            │")
+                    consoleLog.add("├─────────────────────────────────┤")
+                    consoleLog.add("│ Type: %-26s│".format(type))
+                    consoleLog.add("│ Health: %s %d%%          │".format(healthBar, healthPercent))
+                    consoleLog.add("│ ETA: %-27s│".format(etaText))
+                    consoleLog.add("│                                 │")
+                    consoleLog.add("│ Metrics:                        │")
+                    consoleLog.add("│ ├─ Curvature:    %-15s│".format("%.2f".format(metrics.curvature)))
+                    consoleLog.add("│ ├─ Convergence:  %-15s│".format("%+.2f".format(metrics.convergenceVelocity)))
+                    consoleLog.add("│ ├─ Coherence:    %-15s│".format("%.2f".format(metrics.coherence)))
+                    consoleLog.add("│ ├─ Energy:       %-15s│".format("%+.1f".format(metrics.energyBalance)))
+                    
+                    // 🤖 AI Auditor Insight (if available and relevant)
+                    // Check cache for recent verdict (10 min validity)
+                    try {
+                        val cached = app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache.get(600_000)
+                        if (cached != null) {
+                            // Only show if it matches the current trajectory uncertainty or implies action
+                            consoleLog.add("│                                 │")
+                            val aiIcon = "🤖"
+                            
+                            // Map VerdictType manually to avoid import issues if not available
+                            val verdictEnum = cached.verdict.verdict
+                            val action = verdictEnum.name // CONFIRM, SOFTEN, SHIFT_TO_TBR
+                            
+                            consoleLog.add("│ $aiIcon AI: %-25s│".format("$action (${(cached.verdict.confidence*100).toInt()}%)"))
+                            
+                            // Shorten evidence to fit in box
+                            val evidence = cached.verdict.evidence.replace("\n", " ").take(30)
+                            consoleLog.add("│ > %-30s│".format(evidence))
+                        }
+                    } catch (e: Exception) {
+                        // Ignore cache access errors
+                    }
+
+                    consoleLog.add("└─────────────────────────────────┘")
+                }
+            } catch (e: Exception) {
+                // Silently fail trajectory visualizer to avoid critical loop crash
+            }
+
             // 📊 Build learners summary for RT visibility (finalResult.learnersInfo)
             val learnersParts = mutableListOf<String>()
             

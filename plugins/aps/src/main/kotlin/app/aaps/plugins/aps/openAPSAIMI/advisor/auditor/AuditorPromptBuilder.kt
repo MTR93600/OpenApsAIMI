@@ -207,6 +207,14 @@ Provide concise, clinical reasoning:
 ## 6. degradedMode:
 Set to `true` if prediction is missing or data is incomplete.
 Recommend conservative modulation (interval + preferTBR) but don't block.
+
+## 7. Trajectory Analysis (Phase-Space):
+Use the `trajectory` object to refine your verdict:
+- **TIGHT_SPIRAL**: System is oscillating. Recommend **SOFTEN** (dampen SMBs) unless meal is active.
+- **OPEN_DIVERGING**: BG is escaping. If IOB is high and divergence persists (> 30min), suspect site failure or meal. check riskFlags for `divergence_alert`.
+- **CLOSING_CONVERGING**: System is recovering. **CONFIRM** unless hypo risk.
+- **STABLE_ORBIT**: System in equilibrium. Avoid aggressive actions. **CONFIRM** or mild SOFTEN.
+- **Coherence < 0.3**: Insulin is not working as expected (low correlation). Heighten suspicion of resistance or site issues.
     """.trimIndent()
     
     /**

@@ -26,12 +26,14 @@ import org.json.JSONObject
 data class AuditorInput(
     val snapshot: Snapshot,
     val history: History,
-    val stats: Stats7d
+    val stats: Stats7d,
+    val trajectory: TrajectorySnapshot?
 ) {
     fun toJSON(): JSONObject = JSONObject().apply {
         put("snapshot", snapshot.toJSON())
         put("history", history.toJSON())
         put("stats", stats.toJSON())
+        if (trajectory != null) put("trajectory", trajectory.toJSON())
     }
 }
 
@@ -248,6 +250,25 @@ data class Stats7d(
         put("tdd7dAvg", tdd7dAvg)
         put("basalPct", basalPct)
         put("bolusPct", bolusPct)
+    }
+}
+
+/**
+ * E) Trajectory: Phase-Space Geometric Analysis
+ */
+data class TrajectorySnapshot(
+    val type: String,          // STABLE_ORBIT, TIGHT_SPIRAL...
+    val curvature: Double,     // 0.0 - 1.0
+    val convergence: Double,   // mg/dL/min
+    val coherence: Double,     // -1.0 to 1.0
+    val energyBalance: Double  // U
+) {
+    fun toJSON(): JSONObject = JSONObject().apply {
+        put("type", type)
+        put("curvature", curvature)
+        put("convergence", convergence)
+        put("coherence", coherence)
+        put("energyBalance", energyBalance)
     }
 }
 
