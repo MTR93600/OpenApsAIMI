@@ -518,10 +518,7 @@ class BasalDecisionEngine @Inject constructor(
             }
         }
 
-        if (chosenRate == null && input.pregnancyEnable && input.delta > 0 && input.bg > 110 && !input.honeymoon) {
-            chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, basalAdjustmentFactor)
-            rT.reason.append(context.getString(R.string.pregnancy_delta_over_0_adjustment))
-        }
+        // (Obsolete pregnancy logic removed - handled by GestationalAutopilot profile scaling)
 
         val finalRate = chosenRate ?: input.profileCurrentBasal
         return Decision(finalRate, 30, overrideSafety)

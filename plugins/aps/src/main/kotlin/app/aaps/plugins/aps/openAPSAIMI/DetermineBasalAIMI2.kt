@@ -278,6 +278,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val profileUtil: ProfileUtil,
     private val fabricPrivacy: FabricPrivacy,
     private val preferences: Preferences,
+    private val gestationalAutopilot: app.aaps.plugins.aps.openAPSAIMI.advisor.gestation.GestationalAutopilot,
+    private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator,
     private val uiInteraction: UiInteraction,
     private val wCycleFacade: WCycleFacade,
     private val wCyclePreferences: WCyclePreferences,
@@ -313,7 +315,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return base * mod
         }
     @Inject lateinit var aapsLogger: AAPSLogger  // 📊 Logger for health monitoring
-    @Inject lateinit var auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator  // 🧠 AI Decision Auditor
+
     @Inject lateinit var trajectoryGuard: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard  // 🌀 Phase-Space Trajectory Controller
     @Inject lateinit var trajectoryHistoryProvider: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryHistoryProvider  // 🌀 Trajectory History
     @Inject lateinit var contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager  // 🎯 Context Module
@@ -3701,6 +3703,48 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): RT {
         consoleError.clear()
         consoleLog.clear()
+
+        // 🤰 Gestational Autopilot Integration
+        try {
+            if (preferences.get(BooleanKey.OApsAIMIpregnancy)) {
+                val dueDateString = preferences.get(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey.PregnancyDueDateString)
+                if (dueDateString.isNotEmpty()) {
+                    try {
+                        val dueDate = java.time.LocalDate.parse(dueDateString)
+                        val gState = gestationalAutopilot.calculateState(dueDate)
+                        val mult = gestationalAutopilot.getProfileMultipliers(gState)
+                        
+                        val factorBasal = mult["basal"] ?: 1.0
+                        val factorISF = mult["isf"] ?: 1.0
+                        val factorCR = mult["cr"] ?: 1.0
+                        
+                        // Capture old values for logging
+                        val oldBasal = profile.current_basal
+                        val oldISF = profile.sens
+                        val oldCR = profile.carb_ratio
+                        
+                        // Apply to profile (In-Flight Mutation)
+                        profile.current_basal *= factorBasal
+                        profile.sens *= factorISF
+                        profile.carb_ratio *= factorCR
+                        // Also adjust variable_sens (DynISF)
+                        profile.variable_sens *= factorISF
+                        
+                        aapsLogger.debug(LTag.APS, "🤰 Pregnancy Mode Active: Week ${gState.gestationalWeek} (${gState.description}) -> Basal*${factorBasal}, ISF*${factorISF}")
+                        consoleLog.add("🤰 GESTATION ACTIVE: ${gState.gestationalWeek.toInt()} SA (${gState.description})")
+                        consoleLog.add("   └ Factors: Basal x${"%.2f".format(factorBasal)} | ISF x${"%.2f".format(factorISF)} | CR x${"%.2f".format(factorCR)}")
+                        consoleLog.add("   └ Adjusted: Basal ${"%.2f".format(oldBasal)}->${"%.2f".format(profile.current_basal)} | ISF ${oldISF.toInt()}->${profile.sens.toInt()}")
+                    } catch (e: Exception) {
+                        aapsLogger.error(LTag.APS, "Error parsing pregnancy due date: $dueDateString", e)
+                    }
+                } else {
+                    consoleLog.add("🤰 PREGNANCY MODE ON but No Due Date set in WCycle prefs.")
+                }
+            }
+        } catch (e: Exception) {
+            consoleLog.add("🤰 Error in Gestation logic: ${e.message}")
+            e.printStackTrace()
+        }
         
         // 🏥 AIMI DECISION CONTEXT INITIALIZATION (For Medical Transparency)
         val decisionCtx = AimiDecisionContext(

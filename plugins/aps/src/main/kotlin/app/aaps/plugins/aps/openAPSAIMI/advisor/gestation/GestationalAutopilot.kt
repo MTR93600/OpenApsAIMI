@@ -16,9 +16,17 @@ import kotlin.math.min
  * - Input: Due Date (DPA)
  * - Output: Dynamic multipliers for Basal, ISF, CR
  */
-class GestationalAutopilot(
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * 🤰 AIMI Gestational Autopilot (Prototype)
+ * ...
+ */
+@Singleton
+class GestationalAutopilot @Inject constructor() {
+    
     private val dateProvider: () -> LocalDate = { LocalDate.now() }
-) {
 
     data class GestationalState(
         val gestationalWeek: Double, // SA (Semaines d'Aménorrhée)

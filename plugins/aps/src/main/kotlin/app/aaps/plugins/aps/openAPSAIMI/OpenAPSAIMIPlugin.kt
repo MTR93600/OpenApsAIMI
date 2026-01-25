@@ -59,6 +59,7 @@ import app.aaps.core.keys.IntentKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.StringKey
+import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
 import app.aaps.core.objects.constraints.ConstraintObject
 import app.aaps.core.objects.extensions.convertedToAbsolute
 import app.aaps.core.objects.extensions.getPassedDurationToTimeInMinutes
@@ -129,7 +130,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val apsResultProvider: Provider<APSResult>,
     private val unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner, // 🧠 Brain Injection
     private val stepsManager: app.aaps.plugins.aps.openAPSAIMI.steps.AIMIStepsManagerMTR, // 🏃 Steps Manager MTR
-    private val physioManager: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioManagerMTR // 🏥 Physiological Manager MTR
+    private val physioManager: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioManagerMTR, // 🏥 Physiological Manager MTR
+    private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator // 🧠 AI Auditor MTR
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -147,6 +149,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
     override fun onStart() {
         super.onStart()
+        preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey::class.java)
         
         // 🏃 Start AIMI Steps Manager (Health Connect + Phone Sensor sync)
         try {
@@ -1474,6 +1477,22 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     )
                 })
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIpregnancy, title = R.string.OApsAIMI_Enable_pregnancy))
+                addPreference(
+                    AdaptiveStringPreference(
+                        ctx = context,
+                        stringKey = AimiStringKey.PregnancyDueDateString,
+                        title = R.string.OApsAIMI_PregnancyDueDate_title, // TODO: Add string resource
+                        summary = R.string.OApsAIMI_PregnancyDueDate_summary, // TODO: Add string resource
+                        validatorParams = DefaultEditTextValidator.Parameters(
+                            testType = EditTextValidator.TEST_REGEXP,
+                            customRegexp = "^\\d{4}-\\d{2}-\\d{2}$",
+                            emptyAllowed = true,
+                            testErrorString = context.getString(R.string.error_invalid_date_format) // Reuse generic error or TODO
+                        )
+                    ).apply {
+                         dialogMessage = "Format: YYYY-MM-DD"
+                    }
+                )
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIhoneymoon, title = R.string.OApsAIMI_Enable_honeymoon))
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMInight, title = R.string.OApsAIMI_Enable_night_title))
                 
