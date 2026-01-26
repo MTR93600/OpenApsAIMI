@@ -27,6 +27,12 @@ class UserManualActivity : AppCompatActivity() {
         setupSection(R.id.section10, R.string.manual_section_10_title, R.string.manual_section_10_content)
         setupSection(R.id.section11, R.string.manual_section_11_title, R.string.manual_section_11_content)
         setupSection(R.id.section12, R.string.manual_section_12_title, R.string.manual_section_12_content)
+        // TODO: Add section13-17 views to activity_user_manual.xml layout first
+        // setupSection(R.id.section13, R.string.manual_section_13_title, R.string.manual_section_13_content)
+        // setupSection(R.id.section14, R.string.manual_section_14_title, R.string.manual_section_14_content)
+        // setupSection(R.id.section15, R.string.manual_section_15_title, R.string.manual_section_15_content)
+        // setupSection(R.id.section16, R.string.manual_section_16_title, R.string.manual_section_16_content)
+        // setupSection(R.id.section17, R.string.manual_section_17_title, R.string.manual_section_17_content)
     }
 
     private fun setupSection(viewId: Int, titleRes: Int, contentRes: Int) {
