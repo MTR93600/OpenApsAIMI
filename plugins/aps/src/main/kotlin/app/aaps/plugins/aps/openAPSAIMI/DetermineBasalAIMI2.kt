@@ -1575,7 +1575,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         mealData: MealData,
         hypoThreshold: Double,
         isExplicitUserAction: Boolean = false,
-        decisionSource: String = "AIMI"
+        decisionSource: String = "AIMI",
+        isMealActive: Boolean = false
     ) {
         // 🚀 REACTOR MODE: Full Speed (Safety delegated to applySafetyPrecautions)
         // User Directive: "Garde le moteur à plein régime"
@@ -1729,24 +1730,61 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             maxIob = this.maxIob
         )
         
-        // 🚀 MEAL MODES FORCE SEND: Garantir l'envoi P1/P2 (Bypass maxIOB si nécessaire)
-        var finalUnits = safeCap.toDouble()
+        // 🚀 MEAL MODES FORCE SEND: "Red Carpet" Logic
+        var finalUnits: Double
         
-        if (isExplicitUserAction && gatedUnits > 0f) {
-            // Pour les modes repas, on utilise directement gatedUnits (déjà réduit par dégradation si nécessaire)
-            // On bypass capSmbDose qui plafonne à maxIOB
-            // Seule limite : 30U hard cap (sécurité absolue contre config erronée)
-            val mealModeCap = gatedUnits.toDouble().coerceAtMost(30.0)
+        // Définition élargie du contexte prioritaire "Tapis Rouge"
+        // 1. Action Explicite (Bouton appuyé)
+        // 2. Mode Repas Actif (Dinner, Lunch, etc.) OU AIMI Context Meal (RContext déclaré)
+        // 3. Chaos Carbohydrate (COB présents + Montée violente > 5 mg/dL/5m)
+        val isMealChaos = (mealData.mealCOB > 10.0 && delta > 5.0)
+        
+        // Helper interne pour vérifier AIMI Context (RContext) - supposer true si mealData indique un repas récent
+        // Dans une implémentation idéale, on injecterait le ContextRepository, mais ici on utilise les proxies disponibles
+        // 🐛 FIX: 'mealData.isMealStart' n'existe pas. On utilise la variable locale 'isMealActive' calculée plus haut.
+        val isAimiContextMeal = isMealActive || (mealData.mealCOB > 5.0 && delta > 2.0)
+
+        val isRedCarpetSituation = isExplicitUserAction || isMealModeCondition() || isAimiContextMeal || ((isMealChaos || isMealActive) && proposedUnits > 0.5f)
+
+        // On entre dans la logique forcée si on est en situation "Red Carpet" et qu'il y a une demande
+        if (isRedCarpetSituation && proposedUnits > 0.0) {
             
-            if (mealModeCap > safeCap.toDouble()) {
-                consoleLog.add("🍱 MEAL_MODE_FORCE_SEND bypassing maxIOB: proposed=${"%.2f".format(proposedUnits)} gated=${"%.2f".format(gatedUnits)} safeCap=${"%.2f".format(safeCap)} → FORCED=${"%.2f".format(mealModeCap)}")
-                consoleLog.add("  ⚠️ IOB will be: current=${"%.2f".format(this.iob)} + bolus=${"%.2f".format(mealModeCap)} = ${"%.2f".format(this.iob + mealModeCap)} (maxIOB=${"%.2f".format(this.maxIob)})")
-                finalUnits = mealModeCap
+            // 1. Restauration de la demande
+            // Si les sécurités mineures ont coupé plus de 40% du bolus, on restaure la demande initiale.
+            val candidateUnits = if (gatedUnits < proposedUnits.toFloat() * 0.6f) { 
+                consoleLog.add("✨ RED CARPET: Restoring meal bolus blocked by minor safety (Proposed=${"%.2f".format(proposedUnits)} vs Gated=${"%.2f".format(gatedUnits)})")
+                 proposedUnits.toFloat()
             } else {
-                // safeCap déjà OK, pas besoin de forcer
-                finalUnits = safeCap.toDouble()
+                 gatedUnits 
             }
+
+            // 2. Appliquer les Sécurités VITALES (Hard Caps uniquement)
+            
+            // a. Cap MaxSMB - On utilise MaxSMBHB (High) si dispo, sinon config standard
+            val maxSmbCap = if (maxSMBHB > baseLimit) maxSMBHB.toFloat() else baseLimit.toFloat()
+            var mealBolus = min(candidateUnits, maxSmbCap)
+
+            // b. Cap MaxIOB (Sécurité Ultime) - On ne s'autorise à remplir QUE l'espace disponible
+            val iobSpace = (this.maxIob - this.iob).coerceAtLeast(0.0)
+            
+            if (mealBolus > iobSpace.toFloat()) {
+                consoleLog.add("🛡️ RED CARPET: Clamped by MaxIOB (Need=${"%.2f".format(mealBolus)}, Space=${"%.2f".format(iobSpace)})")
+                mealBolus = iobSpace.toFloat()
+            }
+            
+            // c. Hard Cap 30U (Ceinture de sécurité absolue anti-bug)
+            mealBolus = mealBolus.coerceAtMost(30f)
+
+            finalUnits = mealBolus.toDouble()
+            
+            // Log explicite pour le debugging
+            if (finalUnits > gatedUnits + 0.1) {
+                val reason = if (isExplicitUserAction) "UserAction" else if (isMealChaos) "CarbChaos" else "MealMode/Context"
+                consoleLog.add("🍱 MEAL_FORCE_EXECUTED ($reason): ${"%.2f".format(finalUnits)} U (Overrides minor safety checks)")
+            }
+
         } else {
+            // Comportement standard (Pas de repas ou demande nulle)
             finalUnits = safeCap.toDouble()
         }
         
@@ -6317,7 +6355,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             mealData = mealData,
                             hypoThreshold = threshold,
                             isExplicitUserAction = false,
-                            decisionSource = "GlobalAIMI"
+                            decisionSource = "GlobalAIMI",
+                            isMealActive = isMealActive
                         )
                     }
                 } else {

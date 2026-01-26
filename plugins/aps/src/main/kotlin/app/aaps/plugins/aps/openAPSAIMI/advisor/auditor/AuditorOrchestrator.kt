@@ -206,8 +206,20 @@ class AuditorOrchestrator @Inject constructor(
         // DUAL-BRAIN TIER 2: EXTERNAL AUDITOR (Conditional, API)
         // ================================================================
         
-        // Determine if External should be called (only if Sentinel tier >= HIGH)
-        val shouldCallExternal = sentinelAdvice.tier == LocalSentinel.Tier.HIGH
+        // Contextes nécessitant une trajectoire fraîche (Repas actif, COB, ou Autosens instable)
+        val isMealContext = (cob ?: 0.0) > 0.0 || modeType != null || inPrebolusWindow
+        val isStale = (now - lastVerdictTime) > 15 * 60 * 1000L // 15 minutes
+        
+        // Force update si contexte repas ET donnée vieille, MÊME si Sentinel dit "Low Risk"
+        // Cela garantit que l'IA peut réévaluer situation après 15 min même si Sentinel dort
+        val forceExternal = isMealContext && isStale
+
+        // Determine if External should be called (only if Sentinel tier >= HIGH OR Forced Update)
+        val shouldCallExternal = sentinelAdvice.tier == LocalSentinel.Tier.HIGH || forceExternal
+        
+        if (forceExternal && sentinelAdvice.tier != LocalSentinel.Tier.HIGH) {
+             aapsLogger.info(LTag.APS, "🌐 External: FORCED UPDATE (MealContext + Stale > 15m)")
+        }
         
         if (!shouldCallExternal) {
             // Sentinel tier < HIGH: Apply Sentinel advice only, no External call
