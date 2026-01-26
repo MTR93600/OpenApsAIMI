@@ -177,6 +177,17 @@ enum class TrajectoryType {
         STABLE_ORBIT -> "⭕"
         UNCERTAIN -> "❓"
     }
+    
+    /**
+     * Compact ASCII art representation for visual identification
+     */
+    fun asciiArt(): String = when (this) {
+        OPEN_DIVERGING -> "●→●→●→  (diverging)"
+        CLOSING_CONVERGING -> "●→●→●  (closing)"
+        TIGHT_SPIRAL -> " ●●●   (spiral)\n      ╱ ╲╱ ╲\n     ● ○ ●"
+        STABLE_ORBIT -> "  ●●●\n ●   ●  (orbit)\n  ●●●"
+        UNCERTAIN -> "● ? ●  (unclear)"
+    }
 }
 
 /**

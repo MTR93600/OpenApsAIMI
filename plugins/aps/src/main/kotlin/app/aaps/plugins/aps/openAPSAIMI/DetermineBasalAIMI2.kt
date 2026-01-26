@@ -4304,11 +4304,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🌀 PHASE-SPACE TRAJECTORY ANALYSIS (Feature Flag)
         // ═══════════════════════════════════════════════════════════════════
         val trajectoryFlagEnabled = preferences.get(BooleanKey.OApsAIMITrajectoryGuardEnabled)
-        consoleLog.add("🔍 TrajectoryGuard flag read = $trajectoryFlagEnabled")
         
         if (trajectoryFlagEnabled) {
             try {
-                consoleLog.add("🌀 Trajectory Guard: ENABLED")
                 val trajectoryHistory = trajectoryHistoryProvider.buildHistory(
                     nowMillis = currentTime, historyMinutes = 90, currentBg = bg,
                     currentDelta = delta.toDouble(), currentAccel = bgacc,
@@ -4317,52 +4315,64 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     timeSinceLastBolus = if (lastBolusAgeMinutes.isFinite()) lastBolusAgeMinutes.toInt() else 120,
                     cobNow = cob.toDouble()
                 )
-                consoleLog.add("🌀 History: ${trajectoryHistory.size} states")
                 
                 val stableOrbit = StableOrbit.fromProfile(targetBg.toDouble(), profile.current_basal)
                 val traj = trajectoryGuard.analyzeTrajectory(trajectoryHistory, stableOrbit)
                 
                 if (traj == null) {
-                    consoleLog.add("⚠️ Analysis returned NULL")
+                    // Insufficient history - display warming up status
+                    consoleLog.add("🌀 Trajectory: ⏳ Warming up (${trajectoryHistory.size}/4 states, need 20min)")
                     rT.trajectoryEnabled = false
                 } else {
-                    consoleLog.add("✓ Analysis SUCCESS")
-                }
-                
-                traj?.let { analysis ->
-                    consoleLog.add("═══════════════════════════════════════════════════")
-                    analysis.toConsoleLog().forEach { consoleLog.add(sanitizeForJson(it)) }
-                    consoleLog.add("═══════════════════════════════════════════════════")
+                    // SUCCESS - Display comprehensive trajectory status
+                    val analysis = traj
+                    val statusEmoji = analysis.classification.emoji()
+                    val typeDesc = analysis.classification.description()
                     
+                    // ALWAYS show this compact summary line
+                    consoleLog.add("🌀 Trajectory: $statusEmoji $typeDesc | κ=${"%.2f".format(analysis.metrics.curvature)} conv=${"%.1f".format(analysis.metrics.convergenceVelocity)} health=${"%.0f".format(analysis.metrics.healthScore*100)}%")
+                    
+                    // Visual representation of trajectory type
+                    val artLines = analysis.classification.asciiArt().split("\n")
+                    artLines.forEach { line -> consoleLog.add("  $line") }
+                    
+                    // Detailed metrics section
+                    consoleLog.add("  📊 Metrics: Coherence=${"%.2f".format(analysis.metrics.coherence)} Energy=${"%.1f".format(analysis.metrics.energyBalance)}U Openness=${"%.2f".format(analysis.metrics.openness)}")
+                    
+                    // Modulation (if active)
                     val mod = analysis.modulation
                     if (mod.isSignificant()) {
-                        consoleLog.add("🌀 TRAJECTORY MODULATION:")
+                        consoleLog.add("  🎛 Modulation: SMB×${"%.2f".format(mod.smbDamping)} Int×${"%.2f".format(mod.intervalStretch)} (${mod.reason})")
+                        
+                        // Apply modulations
                         if (abs(mod.smbDamping - 1.0) > 0.05) {
                             val orig = maxSMB
                             maxSMB *= mod.smbDamping; maxSMBHB *= mod.smbDamping
-                            consoleLog.add("  SMB: %.2f→%.2fU (×%.2f)".format(Locale.US, orig, maxSMB, mod.smbDamping))
+                            consoleLog.add("    → SMB: ${"%.2f".format(orig)}U → ${"%.2f".format(maxSMB)}U")
                         }
                         if (abs(mod.intervalStretch - 1.0) > 0.05) {
                             val orig = intervalsmb
                             intervalsmb = (intervalsmb * mod.intervalStretch).toInt().coerceIn(1, 20)
-                            consoleLog.add("  Interval: %d→%dmin".format(orig, intervalsmb))
+                            consoleLog.add("    → Interval: ${orig}min → ${intervalsmb}min")
                         }
                         if (abs(mod.safetyMarginExpand - 1.0) > 0.05) {
                             val orig = maxIob
                             maxIob *= mod.safetyMarginExpand
-                            consoleLog.add("  MaxIOB: %.2f→%.2fU".format(Locale.US, orig, maxIob))
+                            consoleLog.add("    → MaxIOB: ${"%.2f".format(orig)}U → ${"%.2f".format(maxIob)}U")
                         }
-                        if (mod.basalPreference > 0.7) {
-                            consoleLog.add("  ⚠️ Prefers TEMP BASAL (%.0f%%)".format(Locale.US, mod.basalPreference*100))
-                        }
-                        consoleLog.add("  → ${mod.reason}")
                     }
                     
+                    // High-severity warnings
                     analysis.warnings.filter { it.severity >= WarningSeverity.HIGH }.forEach { w ->
-                        consoleLog.add("🚨 ${w.severity.emoji()} ${w.message}")
+                        consoleLog.add("  🚨 ${w.severity.emoji()} ${w.message}")
                         if (w.severity == WarningSeverity.CRITICAL) {
                             try { uiInteraction.addNotification(w.type.hashCode(), w.message, 2) } catch (e: Exception) {}
                         }
+                    }
+                    
+                    // Convergence ETA (if available)
+                    analysis.predictedConvergenceTime?.let {
+                        consoleLog.add("  ⏱ Est. convergence: ${it}min")
                     }
                     
                     // 📊 Store trajectory metrics in rT for graphing/trending
@@ -4379,12 +4389,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     rT.trajectoryConvergenceETA = analysis.predictedConvergenceTime
                 }
             } catch (e: Exception) {
-                consoleLog.add("⚠️ Trajectory error: ${e.message}")
+                consoleLog.add("🌀 Trajectory: ❌ Error (${e.message})")
                 aapsLogger.error(LTag.APS, "Trajectory Guard failed", e)
-                rT.trajectoryEnabled = false  // Mark as failed
+                rT.trajectoryEnabled = false
             }
         } else {
-            // Feature flag OFF: mark as disabled in rT
+            // Feature flag OFF - still show status
+            consoleLog.add("🌀 Trajectory: ⏸ Disabled")
             rT.trajectoryEnabled = false
         }
 
