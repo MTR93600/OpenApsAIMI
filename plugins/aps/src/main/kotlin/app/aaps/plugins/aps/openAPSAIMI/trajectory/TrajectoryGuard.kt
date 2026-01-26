@@ -29,6 +29,11 @@ class TrajectoryGuard @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
     
+    // Store last analysis for UI display
+    private var lastAnalysis: TrajectoryAnalysis? = null
+
+    fun getLastAnalysis(): TrajectoryAnalysis? = lastAnalysis
+    
     companion object {
         // Metric thresholds for classification
         const val CURVATURE_HIGH = 0.3          // Tight spiral warning
@@ -106,7 +111,7 @@ class TrajectoryGuard @Inject constructor(
             }
         }
         
-        return analysis
+        return analysis.also { lastAnalysis = it }
     }
     
     /**

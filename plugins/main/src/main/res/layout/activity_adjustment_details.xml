@@ -110,6 +110,71 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/dashboard_block_spacing"
                 style="@style/Widget.AAPS.Dashboard.Card" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/trajectory_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/dashboard_block_spacing"
+                android:visibility="gone"
+                style="@style/Widget.AAPS.Dashboard.Card">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="🌀 Trajectory Analysis"
+                            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1"
+                            android:textColor="@color/defaultTextColor" />
+                            
+                        <TextView
+                            android:id="@+id/trajectory_title"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="STABLE_ORBIT"
+                            android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+                            android:textStyle="bold"
+                            android:textColor="@color/colorAccent" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/trajectory_ascii"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:fontFamily="monospace"
+                        android:textSize="14sp"
+                        android:lineSpacingExtra="2dp"
+                        android:gravity="center"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+                        android:textColor="@color/defaultTextColor" />
+
+                    <TextView
+                        android:id="@+id/trajectory_metrics"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center"
+                        android:fontFamily="monospace"
+                        android:textSize="12sp"
+                        android:text="Metrics: ..."
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                        android:textColor="@color/defaultText" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
             
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/reason_card"
