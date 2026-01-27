@@ -101,10 +101,11 @@ class AIMIAdaptiveBasal @Inject constructor(
 
         // 🧠 COGNITIVE SOFT FLOOR (LLM-Guided)
         // Avoid "Basal Washout" (0% -> Rebound) if the situation is stable enough.
-        // We only allow this if prediction is safe (>75) and Auditor is confident (>60%).
+        // We only allow this if prediction is safe (>75).
+        // If Auditor is not confident, we fallback to stability check (delta < 3.0).
         val softFloorActive = input.profileBasal > 0 &&
             input.predictedBg > 75.0 &&
-            input.auditorConfidence > 0.60 &&
+            (input.auditorConfidence > 0.60 || abs(input.delta) < 3.0) &&
             input.bg < 115.0 // Active mostly in the "grey zone" where standard logic might panic-cut
         
         if (softFloorActive) {

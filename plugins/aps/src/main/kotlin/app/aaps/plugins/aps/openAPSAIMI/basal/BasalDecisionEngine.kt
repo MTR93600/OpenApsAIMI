@@ -300,9 +300,13 @@ class BasalDecisionEngine @Inject constructor(
                     if (input.delta > 1.0) {
                         chosenRate = input.profileCurrentBasal * 0.5
                         rT.reason.append("BG ${input.lgsThreshold.toInt()}-${(input.lgsThreshold + 10).toInt()} rising: 50% basal")
+                    } else if (input.delta > -2.0) {
+                        // Soft LGS Floor: Avoid 0% if not dropping fast
+                        chosenRate = input.profileCurrentBasal * 0.3
+                        rT.reason.append("BG ${input.lgsThreshold.toInt()}-${(input.lgsThreshold + 10).toInt()} stable: 30% basal")
                     } else {
                         chosenRate = 0.0
-                        rT.reason.append("BG ${input.lgsThreshold.toInt()}-${(input.lgsThreshold + 10).toInt()} not rising: 0% basal")
+                        rT.reason.append("BG ${input.lgsThreshold.toInt()}-${(input.lgsThreshold + 10).toInt()} dropping: 0% basal")
                     }
                 }
                 input.bg in 80.0..90.0 &&
