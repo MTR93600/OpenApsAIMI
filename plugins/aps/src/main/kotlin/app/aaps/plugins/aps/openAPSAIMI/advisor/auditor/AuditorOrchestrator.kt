@@ -237,7 +237,7 @@ class AuditorOrchestrator @Inject constructor(
         }
         
         // Sentinel tier HIGH: Check rate limiting for External Auditor
-        if (!checkRateLimit(now)) {
+        if (!checkRateLimit(now, bg)) {
             // External rate limited: Apply Sentinel advice only
             aapsLogger.info(LTag.APS, "🌐 External: Rate limited, using Sentinel only")
             AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.SKIPPED_RATE_LIMITED)
@@ -381,8 +381,14 @@ class AuditorOrchestrator @Inject constructor(
     
     /**
      * Check rate limit (per-hour and minimum interval)
+     * Bypass if BG > 160 (Emergency Audit)
      */
-    private fun checkRateLimit(now: Long): Boolean {
+    private fun checkRateLimit(now: Long, bg: Double): Boolean {
+        // 🚨 EMERGENCY BYPASS: If BG > 160, ignored quotas
+        if (bg > 160.0) {
+            return true
+        }
+
         val maxAuditsPerHour = preferences.get(IntKey.AimiAuditorMaxPerHour)
         
         // Reset hour window if needed
