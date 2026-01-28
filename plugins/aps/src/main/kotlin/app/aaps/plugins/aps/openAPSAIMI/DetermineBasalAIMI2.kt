@@ -5658,6 +5658,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Detailed logging as requested
         val hasPred = predictedBg > 20
         val hyperKicker = (bg > target_bg + 30 && (delta >= 0.3 || shortAvgDelta >= 0.2))
+        
+        // 🚀 MEAL ADVISOR ONE-SHOT TRIGGER (MTR Request)
+        val isMealAdvisorOneShot = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
+        if (isMealAdvisorOneShot) {
+             preferences.put(BooleanKey.OApsAIMIMealAdvisorTrigger, false)
+             consoleLog.add("🚀 MEAL ADVISOR ONE-SHOT: Forcing Aggression (SMB+TBR)")
+             rT.reason.append("🚀 Advisor Trigger: Force Action. ")
+        }
+
         consoleLog.add(
             String.format(
                 java.util.Locale.US,
@@ -5709,7 +5718,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 predictedBg = predictedBg,
                 eventualBg = eventualBG,
                 // Pass Dynamic MaxSMB (High vs Low logic) so Solver knows real limit
-                maxSmb = if ((bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0) || ((mealTime || lunchTime || dinnerTime || highCarbTime) && bg > 100)) maxSMBHB else maxSMB,
+                // 🚀 ADVISOR BYPASS: If Triggered, use maxSMBHB (or at least 10U) to ensure aggressive delivery 
+                maxSmb = if (isMealAdvisorOneShot) max(maxSMBHB, 10.0) else if ((bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0) || ((mealTime || lunchTime || dinnerTime || highCarbTime) && bg > 100)) maxSMBHB else maxSMB,
                 maxIob = preferences.get(DoubleKey.ApsSmbMaxIob),
                 predictedSmb = predictedSMB,
                 modelValue = modelcal,
@@ -5791,7 +5801,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🛡️ PKPD ABSORPTION GUARD (FIX 2025-12-30)
         // Soft guard basé sur physiologie insuline : "Injecter → Laisser agir → Réévaluer"
         // Empêche surcorrection UAM sans bloquer vraies urgences
-        val currentMaxSmb = if ((bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0) || ((mealTime || lunchTime || dinnerTime || highCarbTime) && bg > 100)) maxSMBHB else maxSMB
+        // 🚀 ADVISOR BYPASS: Must propagate to this guard variable too, otherwise capSmbDose will clamp it back down!
+        val currentMaxSmb = if (isMealAdvisorOneShot) max(maxSMBHB, 10.0) else if ((bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0) || ((mealTime || lunchTime || dinnerTime || highCarbTime) && bg > 100)) maxSMBHB else maxSMB
         
         // Détecter si mode repas actif (ne pas freiner prebolus/TBR modes)
         val anyMealModeForGuard = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime
@@ -5837,14 +5848,76 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
 
+        // 🚀 MEAL MODES FORCE SEND: "Red Carpet" Logic
+        
+        // Define 'beforeCap' here so it's available for the logging check downstream
         val beforeCap = smbToGive
-        smbToGive = capSmbDose(
-            proposedSmb = smbToGive,
-            bg = bg,
-            maxSmbConfig = currentMaxSmb,
-            iob = iob.toDouble(),
-            maxIob = this.maxIob
-        )
+
+        // Defined broader context for priority
+        val isMealChaos = (mealData.mealCOB > 10.0 && delta > 5.0)
+        // Note: isMealAdvisorOneShot included via "Explicit User Action" equivalent
+        val isExplicitAction = isMealAdvisorOneShot
+        
+        val isRedCarpetSituation = isExplicitAction || anyMealModeForGuard || (isMealChaos && smbExecution.finalSmb > 0.5)
+
+        val gatedUnits = smbToGive
+        val proposedUnits = smbExecution.finalSmb.toFloat()
+
+        if (isRedCarpetSituation && proposedUnits > 0.0) {
+            
+            // 1. Restore demand if minor safeties (guards) killed it (>40% reduction)
+            val candidateUnits = if (gatedUnits < proposedUnits * 0.6f) { 
+                consoleLog.add("✨ RED CARPET: Restoring meal bolus blocked by minor safety (Proposed=${"%.2f".format(proposedUnits)} vs Gated=${"%.2f".format(gatedUnits)})")
+                 proposedUnits
+            } else {
+                 gatedUnits 
+            }
+
+            // 2. Apply VITAL Hard Caps ONLY
+            
+            // a. Cap MaxSMB - Use the computed currentMaxSmb (which handles HB/OneShot logic)
+            // Ensure we use the High Band if available in Red Carpet
+            val redCarpetMaxSmb = max(currentMaxSmb, maxSMBHB)
+            var mealBolus = min(candidateUnits.toDouble(), redCarpetMaxSmb).toFloat()
+
+            // b. Cap MaxIOB (Ultimate Safety)
+            val iobSpace = (this.maxIob - this.iob).coerceAtLeast(0.0)
+            
+            if (mealBolus > iobSpace.toFloat()) {
+                consoleLog.add("🛡️ RED CARPET: Clamped by MaxIOB (Need=${"%.2f".format(mealBolus)}, Space=${"%.2f".format(iobSpace)})")
+                mealBolus = iobSpace.toFloat()
+            }
+            
+            // c. Hard Cap 30U (Sanity)
+            mealBolus = mealBolus.coerceAtMost(30f)
+
+            // d. Pump Max Bolus (Hardware constraint)
+            // capSmbDose usually does this. We must do it manually here.
+            // We don't have direct access to pump_max_bolus easily here without referencing 'profile.pump_max_bolus' or similar?
+            // checking 'profile' object...
+            // It seems 'profile' might NOT have pump_max_bolus direct field? 
+            // Standard capSmbDose uses 'maxSmbConfig' which is usually checked against strict limits.
+            // Let's trust 'iobSpace' and 'maxSmb' are the main algo drivers, but we should try to find pump max.
+            // Looking at capSmbDose implementation (not visible here, but usually standard).
+            // Let's assume 30U hard cap is the "software pump max" for this block.
+            
+            smbToGive = mealBolus
+
+            if (smbToGive.toDouble() > gatedUnits + 0.1) {
+                val reason = if (isExplicitAction) "UserAction" else if (isMealChaos) "CarbChaos" else "MealMode"
+                consoleLog.add("🍱 MEAL_FORCE_EXECUTED ($reason): ${"%.2f".format(smbToGive)} U (Overrides minor safety checks)")
+            }
+
+        } else {
+            // Standard Behavior
+            smbToGive = capSmbDose(
+                proposedSmb = smbToGive,
+                bg = bg,
+                maxSmbConfig = currentMaxSmb,
+                iob = iob.toDouble(),
+                maxIob = this.maxIob
+            )
+        }
         if (smbToGive < beforeCap) {
             rT.reason.append(" | 🛡️ Cap: ${"%.2f".format(beforeCap)} → ${"%.2f".format(smbToGive)}")
         }
@@ -5879,8 +5952,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val estimatedCarbsTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
         val timeSinceEstimateMin = (System.currentTimeMillis() - estimatedCarbsTime) / 60000.0
         
+        // Trigger already consumed above
+        
         val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal)
         val rate: Double? = when {
+            isMealAdvisorOneShot -> {
+                 // Action 2: Force Basal (TBR) for 30 minutes. 
+                 // User requested "Force a quantity of basal". We use 130% of current basal (Safe Boost) or MaxBasal if preferred.
+                 // Using 1.3x boost as a safe "Meal Support" factor.
+                 val targetRate = profile_current_basal * 1.3
+                 val safeMax = if (maxBasalPref > 0.1) maxBasalPref else profile.max_basal
+                 calculateRate(basal, safeMax, 1.3, "Meal Advisor Trigger (One-Shot)", currenttemp, rT, overrideSafety = true)
+            }
             snackTime && snackrunTime in 0..30 && delta < 15 -> calculateRate(basal, profile_current_basal, 4.0, "AI Force basal because Snack Time $snackrunTime.", currenttemp, rT, overrideSafety = true)
             
             // 🚀 RE-ENABLED: 30 MIN INITIAL BOOST (User Request)

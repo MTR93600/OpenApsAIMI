@@ -152,4 +152,5 @@ enum class BooleanKey(
     AimiEndometriosisEnable("aimi_endo_enable", false),
     AimiEndometriosisHormonalSuppression("aimi_endo_suppression", false),
     AimiEndometriosisPainFlare("aimi_endo_flare", false),
+    OApsAIMIMealAdvisorTrigger("aimi_meal_advisor_trigger", false), // Trigger for one-shot MAX-SMB bypass
 }
