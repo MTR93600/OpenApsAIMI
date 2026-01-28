@@ -818,14 +818,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Liste des facteurs multiplicatifs proposés ; on calculera la moyenne à la fin
         val factors = mutableListOf<Float>()
 
-        // 1. Contrôle de la chute rapide
-        // 1. Contrôle de la chute rapide
-        if (dropPerHour >= maxAllowedDropPerHour && delta < 0 && currentBG < 110f) {
-            stopBasal = true 
-            isHypoRisk = true
-            factors.add(0.0f) 
-            //reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction; ")
-            reasonBuilder.append(context.getString(R.string.bg_drop_high, dropPerHour))
+        // 1. Contrôle de la chute rapide (RÉVISÉ : Basal-First)
+        // Avant : StopBasal si BG < 110 (Trop agressif)
+        // Après : StopBasal si BG < 85 (Sécurité), Sinon Réduction 50% (Douceur)
+        val safetyFloor = 85.0f
+
+        if (dropPerHour >= maxAllowedDropPerHour && delta < 0) {
+            if (currentBG < safetyFloor) {
+                // CAS CRITIQUE : On coupe tout
+                stopBasal = true
+                isHypoRisk = true
+                factors.add(0.0f)
+                reasonBuilder.append(context.getString(R.string.bg_drop_high_critical, dropPerHour))
+            } else if (currentBG < 110f) {
+                // CAS AVERTISSEMENT : On réduit de 50% mais on garde le flux
+                stopBasal = false
+                factors.add(0.5f)
+                reasonBuilder.append(context.getString(R.string.bg_drop_high_warning, dropPerHour))
+            }
         }
 
         // 2. Mode montée très rapide : override de toutes les réductions

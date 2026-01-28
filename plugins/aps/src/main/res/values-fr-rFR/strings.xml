@@ -681,6 +681,8 @@
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - FILE DeterminebasalAIMI.kt -->
 
     <string name="bg_drop_high">BG drop élevé (%1$.2f mg/dL/h), forte réduction; </string>
+    <string name="bg_drop_high_critical">CHUTE CRITIQUE sous 85 (%1$.1f mg/dL/h), ARRET BASAL;</string>
+    <string name="bg_drop_high_warning">Chute modérée sous 110 (%1$.1f mg/dL/h), basal réduit 50%;</string>
     <string name="bg_rapid_rise">Montée rapide détectée (delta %1$.2f mg/dL), application du mode d\'urgence; </string>
     <string name="bg_combined_delta_weak">combinedDelta très faible (%1$.2f), réduction x0.6; </string>
     <string name="bg_combined_delta_moderate">combinedDelta modéré (%1$.2f), réduction x0.8; </string>
