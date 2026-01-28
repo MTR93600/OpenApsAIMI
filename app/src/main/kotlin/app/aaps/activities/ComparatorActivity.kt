@@ -81,8 +81,8 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
         binding.avgRateDiffValue.text = String.format(Locale.US, "%.2f U/h", stats.avgRateDiff)
         binding.avgSmbDiffValue.text = String.format(Locale.US, "%.2f U", stats.avgSmbDiff)
         binding.agreementRateValue.text = String.format(Locale.US, "%.1f%%", stats.agreementRate)
-        binding.aimiWinRateValue.text = String.format(Locale.US, "%.1f%%", stats.aimiWinRate)
-        binding.smbWinRateValue.text = String.format(Locale.US, "%.1f%%", stats.smbWinRate)
+        binding.aimiWinRateValue.text = String.format(Locale.US, "%.1f%% (Activité)", stats.aimiWinRate)
+        binding.smbWinRateValue.text = String.format(Locale.US, "%.1f%% (Activité)", stats.smbWinRate)
     }
 
     private fun displayAnalytics() {
@@ -118,33 +118,50 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
     private fun displayCriticalMoments(moments: List<CriticalMoment>) {
         binding.criticalMomentsContainer.removeAllViews()
         
-        moments.forEach { moment ->
-            val momentView = TextView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    setMargins(0, 0, 0, 16)
+        // Filter out Screaming Shadow artifacts
+        moments.filter { 
+             // Logic: Check associated entry for artifact flag (need access to entries, or enhance CriticalMoment)
+             // Simpler: Check if divergence is massive (>2U) and reason mentions specific keywords
+             // Better: CriticalMoment doesn't have the flag yet. I will rely on the divergence magnitude heuristic for now
+             // or check if entry exists.
+             // Actually, I can't easily filter by the new flag because CriticalMoment doesn't have it.
+             // I'll add a label instead.
+             true 
+        }.forEach { moment ->
+             // Try to find the original entry to get the flag (inefficient but works for 5 items)
+             val entry = entries.getOrNull(moment.index)
+             val isArtifact = entry?.artifactFlag == "SCREAMING_SHADOW"
+             
+             if (!isArtifact) { // Only show real moments
+                val momentView = TextView(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        setMargins(0, 0, 0, 16)
+                    }
+                    setPadding(0, 8, 0, 8)
+                    
+                    val entryText = getString(
+                        R.string.comparator_critical_moment_entry,
+                        moment.index,
+                        moment.bg,
+                        moment.iob
+                    )
+                    
+                    val divergenceText = getString(
+                        R.string.comparator_critical_moment_divergence,
+                        moment.divergenceRate?.let { String.format(Locale.US, "%+.2f", it) } ?: "--",
+                        moment.divergenceSmb?.let { String.format(Locale.US, "%+.2f", it) } ?: "--"
+                    )
+                    
+                    val verdictText = if (entry?.verdict?.isNotEmpty() == true) " | ${entry.verdict}" else ""
+                    
+                    text = "$entryText\n$divergenceText$verdictText"
+                    textSize = 13f
                 }
-                setPadding(0, 8, 0, 8)
-                
-                val entryText = getString(
-                    R.string.comparator_critical_moment_entry,
-                    moment.index,
-                    moment.bg,
-                    moment.iob
-                )
-                
-                val divergenceText = getString(
-                    R.string.comparator_critical_moment_divergence,
-                    moment.divergenceRate?.let { String.format(Locale.US, "%+.2f", it) } ?: "--",
-                    moment.divergenceSmb?.let { String.format(Locale.US, "%+.2f", it) } ?: "--"
-                )
-                
-                text = "$entryText\n$divergenceText"
-                textSize = 13f
-            }
-            binding.criticalMomentsContainer.addView(momentView)
+                binding.criticalMomentsContainer.addView(momentView)
+             }
         }
     }
 

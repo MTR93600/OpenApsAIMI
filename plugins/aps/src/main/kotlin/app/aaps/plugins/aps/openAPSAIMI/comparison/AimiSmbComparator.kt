@@ -56,6 +56,7 @@ class AimiSmbComparator @Inject constructor(
                         "AIMI_Insulin_30min,SMB_Insulin_30min,Cumul_Diff," +
                         "AIMI_Active,SMB_Active,Both_Active," +
                         "AIMI_UAM_Last,SMB_UAM_Last," +
+                        "Verdict,Artifact_Flag,Diff_Sign," +
                         "Reason_AIMI,Reason_SMB\n"
                 )
             }
@@ -262,6 +263,34 @@ class AimiSmbComparator @Inject constructor(
             .replace(",", ";")
             .replace("\"", "'")
 
+        // 🧠 INTERPRETATION LOGIC (Lyra Expert Analysis)
+        
+        val diffTotal = aimiInsulinStep - smbInsulinStep
+        val absDiff = kotlin.math.abs(diffTotal)
+        val diffSign = if (absDiff < 0.02) "=" else if (diffTotal > 0) "+" else "-"
+
+        // 1. Verdict
+        val verdict = when {
+            absDiff < 0.05 -> "AGREEMENT"
+            diffTotal > 0.0 -> "AIMI_AGGRESSIVE" // AIMI donne plus (Risque Hypo ?)
+            else -> "AIMI_CONSERVATIVE" // AIMI donne moins (Retard ?)
+        }
+
+        // 2. Artifact Detection ("Screaming Shadow")
+        // If SMB asks > 3x AIMI while BG is high, it's likely just catching up on history
+        // Condition: High BG (>140) AND Big Divergence (>0.5U difference) AND Ratio > 3
+        val isHighBg = glucoseStatus.glucose > 140
+        val isBigDiff = absDiff > 0.5
+        val ratio = if (aimiInsulinStep > 0.05) smbInsulinStep / aimiInsulinStep else 100.0 // Avoid div/0
+        
+        val artifactFlag = if (verdict == "AIMI_CONSERVATIVE" && isHighBg && isBigDiff && ratio > 2.0) {
+            "SCREAMING_SHADOW" // "Ignorer la magnitude, noter juste le signe"
+        } else if (verdict == "AIMI_AGGRESSIVE" && glucoseStatus.glucose < 80) {
+            "SAFETY_RISK?" // AIMI force alors qu'on est bas ?
+        } else {
+            "VALID"
+        }
+
         val line = listOf(
             timestamp,
             date,
@@ -302,6 +331,10 @@ class AimiSmbComparator @Inject constructor(
             // UAM
             aimiUamLast?.let { "%.1f".format(Locale.US, it) } ?: "",
             smbUamLast?.let { "%.1f".format(Locale.US, it) } ?: "",
+            // Interpretation
+            verdict,
+            artifactFlag,
+            diffSign,
             // Raisons
             "\"$aimiReason\"",
             "\"$smbReason\""

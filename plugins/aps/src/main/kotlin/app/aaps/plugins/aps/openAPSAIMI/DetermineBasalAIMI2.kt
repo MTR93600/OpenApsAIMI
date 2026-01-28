@@ -3752,6 +3752,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleError.clear()
         consoleLog.clear()
 
+        // 🕵️ COMPARATOR: Capture Original Profile to avoid Bias
+        // AIMI modifies the profile (activity, pregnancy, autosens) in-flight.
+        // We want the comparator to run against the RAW profile.
+        val originalProfile = profile.copy()
+        
         // 🤰 Gestational Autopilot Integration
         try {
             if (preferences.get(BooleanKey.OApsAIMIpregnancy)) {
@@ -6356,7 +6361,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 glucoseStatus = glucose_status,
                 currentTemp = currenttemp,
                 iobData = iob_data_array,
-                profileAimi = profile,
+                profileAimi = originalProfile,
                 autosens = autosens_data,
                 mealData = mealData,
                 microBolusAllowed = microBolusAllowed,
@@ -6733,7 +6738,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 glucoseStatus = glucose_status,
                 currentTemp = currenttemp,
                 iobData = iob_data_array,
-                profileAimi = profile,
+                profileAimi = originalProfile,
                 autosens = autosens_data,
                 mealData = mealData,
                 microBolusAllowed = microBolusAllowed,
