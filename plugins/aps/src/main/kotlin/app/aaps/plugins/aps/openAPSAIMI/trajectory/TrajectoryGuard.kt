@@ -116,6 +116,8 @@ class TrajectoryGuard @Inject constructor(
     
     /**
      * Classify trajectory into geometric type
+     * 
+     * Uses "Velocity Split" logic to ensure continuous coverage
      */
     private fun classifyTrajectory(
         metrics: TrajectoryMetrics,
@@ -123,33 +125,39 @@ class TrajectoryGuard @Inject constructor(
         stableOrbit: StableOrbit
     ): TrajectoryType {
         
-        // Priority 1: Tight spiral (over-correction risk) - CRITICAL
-        if (metrics.curvature > CURVATURE_HIGH && 
-            metrics.energyBalance > ENERGY_STACKING) {
+        // Priority 1: Tight spiral (High Risk)
+        // High curvature AND significant energy accumulation
+        if ((metrics.curvature > 0.4 && metrics.energyBalance > 1.0) || 
+            metrics.energyBalance > 3.0) {
             return TrajectoryType.TIGHT_SPIRAL
         }
         
-        // Priority 2: Stable orbit achieved
-        if (stableOrbit.contains(history.last()) && 
-            metrics.curvature < 0.1 && 
-            abs(metrics.convergenceVelocity) < 0.2) {
-            return TrajectoryType.STABLE_ORBIT
-        }
+        val velocity = metrics.convergenceVelocity
         
-        // Priority 3: Open diverging (needs action)
-        if (metrics.openness > OPENNESS_DIVERGING && 
-            metrics.convergenceVelocity < CONVERGENCE_SLOW) {
-            return TrajectoryType.OPEN_DIVERGING
+        return when {
+            // Case 2: Diverging (Moving AWAY from target)
+            velocity < -0.2 -> {
+                if (metrics.openness > 0.6 || metrics.coherence < 0.3) {
+                    TrajectoryType.OPEN_DIVERGING
+                } else {
+                    TrajectoryType.SLOW_DRIFT
+                }
+            }
+            
+            // Case 3: Converging (Moving TOWARDS target)
+            velocity > 0.1 -> {
+                TrajectoryType.CLOSING_CONVERGING
+            }
+            
+            // Case 4: Stable / Stationary (Velocity near zero)
+            else -> {
+                if (stableOrbit.contains(history.last())) {
+                    TrajectoryType.STABLE_ORBIT
+                } else {
+                    TrajectoryType.HOVERING // Stable but off-target
+                }
+            }
         }
-        
-        // Priority 4: Closing converging (let it work)
-        if (metrics.convergenceVelocity > 0.2 && 
-            metrics.openness < 0.5) {
-            return TrajectoryType.CLOSING_CONVERGING
-        }
-        
-        // Default: Uncertain
-        return TrajectoryType.UNCERTAIN
     }
     
     /**
@@ -170,7 +178,7 @@ class TrajectoryGuard @Inject constructor(
                 val dampingBoost = when {
                     metrics.coherence < COHERENCE_LOW -> 1.4  // Very poor response, likely resistance
                     metrics.openness > 0.85 -> 1.3            // Extremely open
-                    else -> 1.2                               // Moderately open
+                    else -> 1.25                              // Moderately open
                 }
                 
                 TrajectoryModulation(
@@ -178,7 +186,18 @@ class TrajectoryGuard @Inject constructor(
                     intervalStretch = 1.0,          // No delay needed
                     basalPreference = 0.2,          // Prefer bolus for acute action
                     safetyMarginExpand = 0.95,      // Slightly tighter margins OK
-                    reason = "Trajectory diverging, need stronger action (coherence=${"%.2f".format(metrics.coherence)})"
+                    reason = "Diverging, need stronger action (coherence=${"%.2f".format(metrics.coherence)})"
+                )
+            }
+            
+            TrajectoryType.SLOW_DRIFT -> {
+                // Drifting away slowly - gentle correction needed
+                TrajectoryModulation(
+                    smbDamping = 1.15,               // +15% SMB strength
+                    intervalStretch = 1.1,           // Slight wait to observe effect
+                    basalPreference = 0.4,           // Slight preference for SMB
+                    safetyMarginExpand = 1.0,
+                    reason = "Slow drift - gentle boost applied"
                 )
             }
             
@@ -212,7 +231,7 @@ class TrajectoryGuard @Inject constructor(
                     intervalStretch = 1.3,           // Slightly longer wait
                     basalPreference = 0.5,           // Neutral
                     safetyMarginExpand = 1.1,        // Slight caution
-                    reason = "Trajectory closing naturally (v_conv=${"+%.2f".format(metrics.convergenceVelocity)} mg/dL/min)"
+                    reason = "Closing naturally (v=${"+%.2f".format(metrics.convergenceVelocity)})"
                 )
             }
             
@@ -223,12 +242,26 @@ class TrajectoryGuard @Inject constructor(
                     intervalStretch = 1.0,
                     basalPreference = 0.5,
                     safetyMarginExpand = 1.0,
-                    reason = "Stable orbit maintained - continue current strategy"
+                    reason = "Stable orbit - maintain"
+                )
+            }
+            
+            TrajectoryType.HOVERING -> {
+                // Stable but off-target. If high, we want basal/SMB.
+                // If low, we want less insulin.
+                // But generally "Hovering" implies stuck high/low.
+                // Assuming safety checks handle lows, we focus on stuck high.
+                TrajectoryModulation(
+                    smbDamping = 1.05,               // Neutral/Slight boost
+                    intervalStretch = 1.0,
+                    basalPreference = 0.8,           // PREFER BASAL to nudge it down smoothly
+                    safetyMarginExpand = 1.0,
+                    reason = "Hovering off-target - prefer basal"
                 )
             }
             
             TrajectoryType.UNCERTAIN -> {
-                // Not enough data or ambiguous → neutral modulation
+                // Should be rare now
                 TrajectoryModulation.NEUTRAL
             }
         }

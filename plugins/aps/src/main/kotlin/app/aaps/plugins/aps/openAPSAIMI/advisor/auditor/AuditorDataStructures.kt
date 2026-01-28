@@ -257,11 +257,12 @@ data class Stats7d(
  * E) Trajectory: Phase-Space Geometric Analysis
  */
 data class TrajectorySnapshot(
-    val type: String,          // STABLE_ORBIT, TIGHT_SPIRAL...
+    val type: String,          // STABLE_ORBIT, TIGHT_SPIRAL, SLOW_DRIFT, HOVERING...
     val curvature: Double,     // 0.0 - 1.0
     val convergence: Double,   // mg/dL/min
     val coherence: Double,     // -1.0 to 1.0
-    val energyBalance: Double  // U
+    val energyBalance: Double, // U
+    val modulation: String?    // Description of active modulation (e.g. "SMBx1.15 (Slow drift)")
 ) {
     fun toJSON(): JSONObject = JSONObject().apply {
         put("type", type)
@@ -269,6 +270,7 @@ data class TrajectorySnapshot(
         put("convergence", convergence)
         put("coherence", coherence)
         put("energyBalance", energyBalance)
+        if (modulation != null) put("modulation", modulation)
     }
 }
 

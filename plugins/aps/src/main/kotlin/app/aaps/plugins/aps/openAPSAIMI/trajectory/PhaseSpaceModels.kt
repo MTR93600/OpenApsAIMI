@@ -151,9 +151,11 @@ data class TrajectoryMetrics(
  */
 enum class TrajectoryType {
     OPEN_DIVERGING,        // ↗️ System escaping, insufficient insulin
+    SLOW_DRIFT,            // ↗️ Slow divergence, needs gentle correction
     CLOSING_CONVERGING,    // ↗️→↘️ Returning to target
     TIGHT_SPIRAL,          // 🌀 Over-correction risk
     STABLE_ORBIT,          // ⭕ Optimal control achieved
+    HOVERING,              // ➖ Stable but off-target
     UNCERTAIN;             // ? Insufficient data or ambiguous
     
     /**
@@ -161,9 +163,11 @@ enum class TrajectoryType {
      */
     fun description(): String = when (this) {
         OPEN_DIVERGING -> "Trajectory diverging - BG not controlled"
+        SLOW_DRIFT -> "Slow drift away from target"
         CLOSING_CONVERGING -> "Trajectory closing - returning to target"
         TIGHT_SPIRAL -> "Trajectory compressed - over-correction risk"
         STABLE_ORBIT -> "Stable orbit maintained"
+        HOVERING -> "Hovering stable but off-target"
         UNCERTAIN -> "Trajectory unclear - need more data"
     }
     
@@ -172,9 +176,11 @@ enum class TrajectoryType {
      */
     fun emoji(): String = when (this) {
         OPEN_DIVERGING -> "↗️"
+        SLOW_DRIFT -> "🐌"
         CLOSING_CONVERGING -> "🔄"
         TIGHT_SPIRAL -> "🌀"
         STABLE_ORBIT -> "⭕"
+        HOVERING -> "➖"
         UNCERTAIN -> "❓"
     }
     
@@ -183,9 +189,11 @@ enum class TrajectoryType {
      */
     fun asciiArt(): String = when (this) {
         OPEN_DIVERGING -> "●→●→●→  (diverging)"
+        SLOW_DRIFT -> " ● ● ● (drift)"
         CLOSING_CONVERGING -> "●→●→●  (closing)"
         TIGHT_SPIRAL -> " ●●●   (spiral)\n      ╱ ╲╱ ╲\n     ● ○ ●"
         STABLE_ORBIT -> "  ●●●\n ●   ●  (orbit)\n  ●●●"
+        HOVERING -> " —●—●— (hovering)"
         UNCERTAIN -> "● ? ●  (unclear)"
     }
 }

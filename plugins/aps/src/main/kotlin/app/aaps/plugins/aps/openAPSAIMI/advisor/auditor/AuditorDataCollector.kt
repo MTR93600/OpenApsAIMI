@@ -13,6 +13,7 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToInt
+import kotlin.math.abs
 
 /**
  * ============================================================================
@@ -32,40 +33,17 @@ class AuditorDataCollector @Inject constructor(
     private val dateUtil: DateUtil,
     private val activityManager: ActivityManager,
     private val aapsLogger: AAPSLogger,
-    private val trajectoryHistoryProvider: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryHistoryProvider
+    private val trajectoryHistoryProvider: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryHistoryProvider,
+    private val trajectoryGuard: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard // 🌀 Injected
 ) {
     
+    // ... (buildAuditorInput remains mostly same, just checking call sites)
+
     /**
      * Build complete auditor input from AIMI runtime state
-     * 
-     * @param bg Current BG (mg/dL)
-     * @param delta Delta over 5min
-     * @param shortAvgDelta Short average delta
-     * @param longAvgDelta Long average delta
-     * @param glucoseStatus Glucose status object
-     * @param iob IOB object
-     * @param cob COB value (g)
-     * @param profile Current profile
-     * @param pkpdRuntime PKPD runtime if available
-     * @param isfUsed ISF actually used (after fusion)
-     * @param smbProposed SMB proposed by AIMI (U)
-     * @param tbrRate TBR rate proposed (U/h)
-     * @param tbrDuration TBR duration (min)
-     * @param intervalMin Interval proposed (min)
-     * @param maxSMB Max SMB limit
-     * @param maxSMBHB Max SMB High BG limit
-     * @param maxIOB Max IOB limit
-     * @param maxBasal Max basal limit
-     * @param reasonTags Decision reason tags
-     * @param modeType Current meal mode type (null if none)
-     * @param modeRuntimeMin Meal mode runtime (minutes)
-     * @param autodriveState Autodrive state string
-     * @param wcyclePhase WCycle phase (null if not active)
-     * @param wcycleFactor WCycle factor (null if not active)
-     * @param tbrMaxMode TBR max for mode (if active)
-     * @param tbrMaxAutoDrive TBR max for autodrive (if active)
      */
     fun buildAuditorInput(
+        // ... params ...
         bg: Double,
         delta: Double,
         shortAvgDelta: Double,
@@ -130,13 +108,12 @@ class AuditorDataCollector @Inject constructor(
         )
         
         // Retrieve robust history from TrajectoryHistoryProvider
-        // This ensures consistency between 'history' validation and 'trajectory' analysis
         val trajectoryHistory = trajectoryHistoryProvider.buildHistory(
             nowMillis = now,
-            historyMinutes = 60,
+            historyMinutes = 90, // Increased to 90 to match Guard requirements
             currentBg = bg,
             currentDelta = delta,
-            currentAccel = delta - shortAvgDelta, // Approx accel
+            currentAccel = delta - shortAvgDelta,
             insulinActivityNow = pkpdRuntime?.activity?.relativeActivity ?: (iob.iob / 3.0),
             iobNow = iob.iob,
             pkpdStage = when(pkpdRuntime?.activity?.stage?.name) {
@@ -145,17 +122,18 @@ class AuditorDataCollector @Inject constructor(
                 "FALLING" -> app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.FALLING
                 else -> app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.TAIL
             },
-            timeSinceLastBolus = 0, // TODO: fetch from persistence if needed, defaulting for now
+            timeSinceLastBolus = 0, 
             cobNow = cob ?: 0.0
         )
 
-        // Build history object for JSON output (Arrays for AI context)
+        // Build history object
         val history = buildHistoryFromTrajectory(trajectoryHistory, now)
         
         // Build 7-day stats
         val stats = buildStats7d(now)
         
         // Build Trajectory Snapshot (AIMI 2.1)
+        // Try to reuse last analysis if valid strings match, otherwise re-analyze
         val trajectory = buildTrajectorySnapshot(
             trajectoryHistory,
             profile.target_bg
@@ -174,28 +152,32 @@ class AuditorDataCollector @Inject constructor(
         target: Double
     ): TrajectorySnapshot? {
         try {
-            val stableOrbit = app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit.fromProfile(targetBg = target, basalRate = 1.0) // Basal placeholder
-            val metrics = app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryMetricsCalculator.calculateAll(history, stableOrbit)
-
-            return if (metrics != null) {
-                // Determine type string carefully
-                val typeStr = when {
-                    metrics.isStable -> "STABLE_ORBIT"
-                    metrics.isTightSpiral -> "TIGHT_SPIRAL"
-                    metrics.isConverging -> "CLOSING_CONVERGING"
-                    metrics.isDiverging -> "OPEN_DIVERGING"
-                    else -> "UNCERTAIN"
-                }
-
-                TrajectorySnapshot(
-                    type = typeStr,
-                    curvature = metrics.curvature,
-                    convergence = metrics.convergenceVelocity,
-                    coherence = metrics.coherence,
-                    energyBalance = metrics.energyBalance
-                )
+            // Re-run analysis logic to ensure we get the EXACT same classification
+            val stableOrbit = app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit.fromProfile(targetBg = target, basalRate = 1.0)
+            
+            // Call the Guard to analyze (it's robust and stateless-ish)
+            val analysis = trajectoryGuard.analyzeTrajectory(history, stableOrbit) ?: return null
+            
+            val modString = if (analysis.modulation.isSignificant()) {
+                val parts = mutableListOf<String>()
+                if (abs(analysis.modulation.smbDamping - 1.0) > 0.05) parts.add("SMBx%.2f".format(analysis.modulation.smbDamping))
+                if (abs(analysis.modulation.intervalStretch - 1.0) > 0.05) parts.add("Intx%.2f".format(analysis.modulation.intervalStretch))
+                if (analysis.modulation.basalPreference > 0.6) parts.add("PreferBasal")
+                "${parts.joinToString(", ")} (${analysis.modulation.reason})"
             } else null
-        } catch(e: Exception) { return null }
+
+            return TrajectorySnapshot(
+                type = analysis.classification.name,
+                curvature = analysis.metrics.curvature,
+                convergence = analysis.metrics.convergenceVelocity,
+                coherence = analysis.metrics.coherence,
+                energyBalance = analysis.metrics.energyBalance,
+                modulation = modString
+            )
+        } catch(e: Exception) { 
+            aapsLogger.error(app.aaps.core.interfaces.logging.LTag.APS, "Auditor Trajectory snapshot failed", e)
+            return null 
+        }
     }
     
     /**
