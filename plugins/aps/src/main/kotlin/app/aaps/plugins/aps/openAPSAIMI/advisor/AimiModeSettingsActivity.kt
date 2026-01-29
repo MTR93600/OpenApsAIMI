@@ -403,27 +403,29 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
         OKDialog.showConfirmation(
             this,
             "Activate $modeNote mode?",
-            "This will create a Note '$modeNote' to trigger AIMI logic."
-        ) {
-             // Create Therapy Event
-             val te = app.aaps.core.data.model.TE(
-                 timestamp = System.currentTimeMillis(),
-                 type = app.aaps.core.data.model.TE.Type.NOTE,
-                 note = modeNote,
-                 enteredBy = "AIMI Advisor"
-             )
-             
-             persistenceLayer.insertOrUpdateTherapyEvent(te)
-                 .subscribeOn(aapsSchedulers.io())
-                 .observeOn(aapsSchedulers.main())
-                 .subscribe({
-                     app.aaps.core.ui.toast.ToastUtils.okToast(this, "$modeNote Mode Activated!")
-                     finish()
-                 }, { error ->
-                     app.aaps.core.ui.toast.ToastUtils.errorToast(this, "Error: ${error.message}")
-                     error.printStackTrace()
-                 })
-        }
+            "This will create a Note '$modeNote' to trigger AIMI logic.",
+            {
+                 // Create Therapy Event
+                 val te = app.aaps.core.data.model.TE(
+                     timestamp = System.currentTimeMillis(),
+                     type = app.aaps.core.data.model.TE.Type.NOTE,
+                     note = modeNote,
+                     enteredBy = "AIMI Advisor",
+                     glucoseUnit = app.aaps.core.data.model.GlucoseUnit.MGDL
+                 )
+                 
+                 persistenceLayer.insertOrUpdateTherapyEvent(te)
+                     .subscribeOn(aapsSchedulers.io)
+                     .observeOn(aapsSchedulers.main)
+                     .subscribe({
+                         app.aaps.core.ui.toast.ToastUtils.okToast(this, "$modeNote Mode Activated!")
+                         finish()
+                     }, { error ->
+                         app.aaps.core.ui.toast.ToastUtils.errorToast(this, "Error: ${error.message}")
+                         error.printStackTrace()
+                     })
+            }
+        )
     }
 
     private fun getStringPref(key: DoubleKey): String {
