@@ -45,6 +45,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.concurrent.withLock
 import kotlin.math.roundToInt
+import app.aaps.core.interfaces.sharedPreferences.SP
 
 /** Support communication with Garmin devices.
  *
@@ -57,6 +58,7 @@ class GarminPlugin @Inject constructor(
     aapsLogger: AAPSLogger,
     resourceHelper: ResourceHelper,
     preferences: Preferences,
+    private val sp: SP,
     private val context: Context,
     private val loopHub: LoopHub,
     private val rxBus: RxBus
@@ -74,6 +76,11 @@ class GarminPlugin @Inject constructor(
 
     /** HTTP Server for local HTTP server communication (device app requests values) .*/
     private var server: HttpServer? = null
+
+    companion object {
+        private const val PREF_GARMIN_LAST_STEPS = "garmin_http_last_steps"
+        private const val PREF_GARMIN_LAST_TS = "garmin_http_last_steps_ts"
+    }
 
     @VisibleForTesting
     var garminMessengerField: GarminMessenger? = null
@@ -202,7 +209,7 @@ class GarminPlugin @Inject constructor(
         }
     }
 
-    public override fun onStop() {
+    override fun onStop() {
         disposable.clear()
         aapsLogger.info(LTag.GARMIN, "Stop")
         server?.close()
@@ -547,6 +554,13 @@ class GarminPlugin @Inject constructor(
         val hasData = steps5 > 0 || steps10 > 0 || steps15 > 0 || steps30 > 0 || steps60 > 0 || steps180 > 0
         
         if (!hasData) {
+            //Fix Garmin sending only "steps=xxx"
+            val totalSteps = getQueryParameter(uri, "steps")?.toIntOrNull() ?: -1
+            if (totalSteps >= 0 ) {
+                ingestHttpTotalSteps(uri, totalSteps)
+                return
+            }
+
             aapsLogger.debug(LTag.GARMIN, "HTTP Steps: All buckets are 0. Skipping.")
             return
         }
@@ -570,6 +584,58 @@ class GarminPlugin @Inject constructor(
              // Low-level debug only to avoid spamming if watchface sends empty heartbeat
              // aapsLogger.debug(LTag.GARMIN, "Received steps timestamp but all buckets are 0/missing")
         }
+    }
+
+    fun ingestHttpTotalSteps(uri: URI, totalSteps: Int) {
+        val device = getQueryParameter(uri, "device")
+
+        val now = System.currentTimeMillis()
+        val lastTotal = sp.getInt(PREF_GARMIN_LAST_STEPS, -1)
+
+        // First ever value → store baseline only
+        if (lastTotal < 0) {
+            sp.putInt(PREF_GARMIN_LAST_STEPS, totalSteps)
+            sp.putLong(PREF_GARMIN_LAST_TS, now)
+            aapsLogger.info(LTag.GARMIN, "[GarminHTTP] baseline steps=$totalSteps")
+            return
+        }
+
+        val delta = totalSteps - lastTotal
+
+        // Guard rails, should be between 1 and 3000
+        if (delta !in 1..3000) {
+            aapsLogger.warn(
+                LTag.GARMIN,
+                "[GarminHTTP] invalid step delta=$delta (total=$totalSteps last=$lastTotal) => 1...3000"
+            )
+            sp.putInt(PREF_GARMIN_LAST_STEPS, totalSteps)
+            sp.putLong(PREF_GARMIN_LAST_TS, now)
+            return
+        }
+
+        val start = Instant.ofEpochMilli(now - 5 * 60_000)
+        val end = Instant.ofEpochMilli(now)
+        val none = 0
+
+        loopHub.storeStepsCount(
+            start,
+            end,
+            delta,
+            none,
+            none,
+            none,
+            none,
+            none,
+            device
+        )
+
+        aapsLogger.info(
+            LTag.GARMIN,
+            "[GarminHTTP] steps delta=$delta (${start} → ${end}) Total: $totalSteps"
+        )
+
+        sp.putInt(PREF_GARMIN_LAST_STEPS, totalSteps)
+        sp.putLong(PREF_GARMIN_LAST_TS, now)
     }
 
     private fun receiveSteps(
