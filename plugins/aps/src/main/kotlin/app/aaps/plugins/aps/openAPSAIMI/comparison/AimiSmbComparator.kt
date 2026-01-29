@@ -24,6 +24,7 @@ import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import app.aaps.core.interfaces.utils.DateUtil
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,8 +35,16 @@ class AimiSmbComparator @Inject constructor(
     private val context: Context,
     private val constraintsChecker: ConstraintsChecker,
     private val profileFunction: ProfileFunction,
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    // Removed specific ActivePlugin dependency to avoid cycle/injection failure
+    private val dateUtil: DateUtil          // Dependency for time
 ) {
+    // 🧠 VIRTUAL PATIENT STATE (Lyra Reality System)
+    // Allows SMB to run "Counter-Factually" (deciding based on its own past, not AIMI's)
+    private val virtualReservoir = VirtualInsulinReservoir()
+    // No longer passing activePlugin
+    private val virtualIobCalculator = VirtualIobCalculator(virtualReservoir, dateUtil)
+
     // 📊 Track cumulative insulin difference over time
     private var cumulativeDiff = 0.0
 
@@ -77,13 +86,23 @@ class AimiSmbComparator @Inject constructor(
         dynIsfMode: Boolean
     ) {
         try {
-            // 🔧 FIX: Calculate IOB array specifically for SMB (not AIMI's IOB)
-            // This is CRITICAL - SMB uses different IOB calculation that affects all decisions
-            val smbIobArray = iobCobCalculator.calculateIobArrayForSMB(
+            // Map Profile directly (values are already constrained)
+            val profileSmb = mapProfile(profileAimi)
+
+            // 🔧 FIX: Calculate IOB array specifically for SMB (Counter-Factual IOB)
+            // We use the Virtual Calculator which looks at what SMB *would have done*
+            
+            // 1. Maintain Virtual Reservoir (Prevent memory leak)
+            // Keep 6 hours of history (DIA + buffers)
+            virtualReservoir.pruneOldData(currentTime - 6 * 60 * 60 * 1000L)
+
+            // 2. Calculate Virtual IOB
+            val smbIobArray = virtualIobCalculator.calculateIobArrayForSMB(
+                profileSmb, // Use mapped profile
                 autosens,
                 profileAimi.exercise_mode,
                 profileAimi.half_basal_exercise_target,
-                profileAimi.temptargetSet
+                profileAimi.high_temptarget_raises_sensitivity || profileAimi.low_temptarget_lowers_sensitivity // isTempTarget
             )
             
             aapsLogger.debug(
@@ -95,9 +114,6 @@ class AimiSmbComparator @Inject constructor(
 
             // 🔧 FIX: Convert GlucoseStatusAIMI to GlucoseStatus (different types)
             val smbGlucoseStatus = convertToSMBGlucoseStatus(glucoseStatus)
-
-            // Map Profile directly (values are already constrained)
-            val profileSmb = mapProfile(profileAimi)
 
             // ✅ Run SMB with SMB-specific parameters (not AIMI's)
             val smbResult = determineBasalSMB.determine_basal(
@@ -112,6 +128,12 @@ class AimiSmbComparator @Inject constructor(
                 flatBGsDetected = flatBGsDetected,
                 dynIsfMode = dynIsfMode
             )
+
+            // ✅ UPDATE VIRTUAL STATE
+            // Record what SMB decided so it remembers it next time (Counter-Factual History)
+            if (smbResult != null) {
+                virtualReservoir.addDecision(smbResult, currentTime)
+            }
 
             logComparison(
                 aimiResult, 
@@ -343,7 +365,7 @@ class AimiSmbComparator @Inject constructor(
         try {
             FileWriter(logFile, true).use { it.append(line) }
         } catch (e: Exception) {
-            aapsLogger.error(LTag.APS, "SMB Comparator log error: ${e.message}", e)
+            aapsLogger.error(LTag.APS, "SMB Comparator log error: " + e.message)
             e.printStackTrace()
         }
     }
