@@ -1964,7 +1964,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         // Ajustements spécifiques
         val beforeAdj = smbToGive
-        smbToGive = applySpecificAdjustments(smbToGive)
+        smbToGive = applySpecificAdjustments(smbToGive, ignoreSafetyRestrictions = ignoreSafetyConditions)
         if (smbToGive != beforeAdj) {
             //reason?.appendLine("🎛️ Ajustements: ${"%.2f".format(beforeAdj)} → ${"%.2f".format(smbToGive)} U")
             reason?.appendLine(context.getString(R.string.adjustments_smb, beforeAdj, smbToGive))
@@ -2887,7 +2887,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
-    private fun applySpecificAdjustments(smbAmount: Float): Float {
+    private fun applySpecificAdjustments(smbAmount: Float, ignoreSafetyRestrictions: Boolean = false): Float {
+        // 🚀 BYPASS: If explicitly triggered by user (Meal Advisor), skip soft reductions
+        if (ignoreSafetyRestrictions) return smbAmount
 
         val currentHour = LocalTime.now().hour
         val honeymoon   = preferences.get(BooleanKey.OApsAIMIhoneymoon)
@@ -3742,6 +3744,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleError.clear()
         consoleLog.clear()
 
+        // 🕵️ COMPARATOR: Capture Original Profile to avoid Bias
+        // AIMI modifies the profile (activity, pregnancy, autosens) in-flight.
+        // We want the comparator to run against the RAW profile.
+        val originalProfile = profile.copy()
+        
         // 🤰 Gestational Autopilot Integration
         try {
             if (preferences.get(BooleanKey.OApsAIMIpregnancy)) {
@@ -4900,6 +4907,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              logDecisionFinal("MEAL_ADVISOR", rT, bg, delta)
              return rT
         }
+
+
+        // -----------------------------------------------------
+        // 🛡️ HARD BRAKE (Lyra Optimization)
+        // Check "falling decelerating" condition BEFORE Autodrive to prevent fueling the drop.
+        val fallingDecelerating = delta < -EPS_FALL &&
+                                  shortAvgDelta < -EPS_FALL &&
+                                  longAvgDelta < -EPS_FALL &&
+                                  shortAvgDelta > longAvgDelta + EPS_ACC
+
+        if (fallingDecelerating && bg < targetBg + 10) {
+            consoleLog.add("🛑 HARD_BRAKE triggered: delta=$delta, short=$shortAvgDelta")
+            rT.reason.append("🛑 Hard Brake: Falling Fast & Decelerating -> Zero Basal\n")
+            // Force 0% for 30m
+            setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+            lastSafetySource = "HardBrake" 
+            logDecisionFinal("HARD_BRAKE", rT, bg, delta)
+            return rT
+        }
+        // -----------------------------------------------------
 
         // PRIORITY 4: AUTODRIVE (Strict)
         val autoRes = tryAutodrive(
@@ -6354,7 +6381,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 glucoseStatus = glucose_status,
                 currentTemp = currenttemp,
                 iobData = iob_data_array,
-                profileAimi = profile,
+                profileAimi = originalProfile,
                 autosens = autosens_data,
                 mealData = mealData,
                 microBolusAllowed = microBolusAllowed,
@@ -6731,7 +6758,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 glucoseStatus = glucose_status,
                 currentTemp = currenttemp,
                 iobData = iob_data_array,
-                profileAimi = profile,
+                profileAimi = originalProfile,
                 autosens = autosens_data,
                 mealData = mealData,
                 microBolusAllowed = microBolusAllowed,
@@ -7444,7 +7471,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // TBR Calculation
         val rawAutoMax = preferences.get(DoubleKey.autodriveMaxBasal) ?: 0.0
         val scalarAuto: Double = if (rawAutoMax > 0.1) rawAutoMax.toDouble() else profile.max_basal.toDouble()
-        val safeAutoMax = minOf(scalarAuto, profile.max_basal.toDouble())
+        
+        // 🛡️ TIERED AUTODRIVE BASAL (Lyra Optimization)
+        // If "Early", we use only 50% of the allowed max (Soft Start).
+        // If "Confirmed", we use 100%.
+        val tierFactor = if (stateReason.startsWith("Early")) 0.5 else 1.0
+        val effectiveAutoMax = scalarAuto * tierFactor
+
+        val safeAutoMax = minOf(effectiveAutoMax, profile.max_basal.toDouble())
         
         // 🛡️ Sanitize stateReason to prevent JSON crashes
         val safeStateReason = sanitizeForJson(stateReason)

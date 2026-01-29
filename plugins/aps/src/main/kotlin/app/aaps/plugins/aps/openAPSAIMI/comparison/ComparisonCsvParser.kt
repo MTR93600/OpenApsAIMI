@@ -78,10 +78,20 @@ class ComparisonCsvParser {
                 aimiActive = parts[27] == "1",
                 smbActive = parts[28] == "1",
                 bothActive = parts[29] == "1",
-                aimiUamLast = parts[30].toDoubleOrNull(),
-                smbUamLast = parts[31].toDoubleOrNull(),
-                reasonAimi = parts.getOrNull(32)?.trim('"') ?: "",
-                reasonSmb = parts.getOrNull(33)?.trim('"') ?: ""
+                aimiUamLast = parts.getOrNull(30)?.toDoubleOrNull(),
+                smbUamLast = parts.getOrNull(31)?.toDoubleOrNull(),
+                
+                // Handle versioning (Logic Update Step 6904)
+                // Old Schema (size ~34): reasons at 32, 33
+                // New Schema (size ~37): 32=Verdict, 33=Artifact, 34=Sign, 35=ReasonAimi, 36=ReasonSmb
+                
+                reasonAimi = if (parts.size >= 37) parts.getOrNull(35)?.trim('"') ?: "" else parts.getOrNull(32)?.trim('"') ?: "",
+                reasonSmb = if (parts.size >= 37) parts.getOrNull(36)?.trim('"') ?: "" else parts.getOrNull(33)?.trim('"') ?: "",
+                
+                // New Fields Population
+                verdict = if (parts.size >= 37) parts.getOrNull(32) ?: "" else "",
+                artifactFlag = if (parts.size >= 37) parts.getOrNull(33) ?: "" else "",
+                diffSign = if (parts.size >= 37) parts.getOrNull(34) ?: "" else ""
             )
         } catch (e: Exception) {
             null

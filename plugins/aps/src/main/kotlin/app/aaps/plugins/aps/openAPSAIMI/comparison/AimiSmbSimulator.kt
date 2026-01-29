@@ -14,6 +14,7 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSSMB.DetermineBasalSMB
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalaimiSMB2
+import app.aaps.core.interfaces.utils.DateUtil
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -36,8 +37,12 @@ class DualEngineSimulator @Inject constructor(
     private val aimiLogic: DetermineBasalaimiSMB2,
     private val smbLogic: DetermineBasalSMB,
     private val aapsLogger: AAPSLogger,
-    private val uiInteraction: UiInteraction
+    private val uiInteraction: UiInteraction,
+    private val dateUtil: DateUtil          // Dependency for time
 ) {
+    // Virtual Patient State for SMB
+    private val virtualReservoir = VirtualInsulinReservoir()
+    private val virtualIobCalculator = VirtualIobCalculator(virtualReservoir, dateUtil)
     
     /**
      * Input for simulation - contains all data needed to run both engines.
@@ -98,6 +103,9 @@ class DualEngineSimulator @Inject constructor(
         val periodStart = ticks.first().timestamp
         val periodEnd = ticks.last().timestamp
         
+        // Reset Virtual State at start of simulation
+        virtualReservoir.clear()
+        
         aapsLogger.info(LTag.APS, "DualEngineSimulator: Starting simulation with ${ticks.size} ticks")
         
         for (tick in ticks) {
@@ -109,9 +117,15 @@ class DualEngineSimulator @Inject constructor(
                 }
                 
                 // === RUN SMB ===
+                // === RUN SMB (Counter-Factual Mode) ===
                 val smbResult = runSmb(tick)
                 if (smbResult != null) {
-                    smbDecisions.add(convertToDecision(tick, smbResult, AlgorithmType.OPENAPS_SMB))
+                    val decision = convertToDecision(tick, smbResult, AlgorithmType.OPENAPS_SMB)
+                    smbDecisions.add(decision)
+                    
+                    // UPDATE VIRTUAL STATE
+                    // SMB thinks it delivered this. We must record it so next cycle reflects it.
+                    virtualReservoir.addDecision(smbResult, tick.timestamp)
                 }
                 
             } catch (e: Exception) {
@@ -167,10 +181,21 @@ class DualEngineSimulator @Inject constructor(
             // Convert GlucoseStatusAIMI to GlucoseStatus
             val smbGlucoseStatus = convertGlucoseStatus(tick.glucoseStatus)
             
+            // CALCULATE VIRTUAL IOB
+            // Instead of using tick.iobData (Real IOB from AIMI), we ask our Virtual Calculator
+            // what the IOB is based on SMB's past decisions.
+            val virtualIob = virtualIobCalculator.calculateIobArrayForSMB(
+                profile = smbProfile,
+                lastAutosensResult = tick.autosens,
+                exerciseMode = tick.profileAimi.exercise_mode, 
+                halfBasalExerciseTarget = tick.profileAimi.half_basal_exercise_target,
+                isTempTarget = tick.profileAimi.high_temptarget_raises_sensitivity || tick.profileAimi.low_temptarget_lowers_sensitivity
+            )
+
             smbLogic.determine_basal(
                 glucose_status = smbGlucoseStatus,
                 currenttemp = tick.currentTemp,
-                iob_data_array = tick.iobData,
+                iob_data_array = virtualIob, // INJECT VIRTUAL IOB HERE (Critical Fix)
                 profile = smbProfile,
                 autosens_data = tick.autosens,
                 meal_data = tick.mealData,
