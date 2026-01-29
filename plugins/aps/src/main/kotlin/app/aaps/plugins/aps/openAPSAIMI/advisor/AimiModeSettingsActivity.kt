@@ -5,7 +5,6 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
-import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
@@ -14,20 +13,14 @@ import android.widget.ScrollView
 import android.widget.Space
 import android.widget.TextView
 import androidx.cardview.widget.CardView
-import androidx.core.content.ContextCompat
-import androidx.core.widget.addTextChangedListener
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
-import android.content.Context
-import androidx.preference.PreferenceManager
 import app.aaps.core.ui.activities.TranslatedDaggerAppCompatActivity
 import app.aaps.core.interfaces.automation.Automation
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.ui.dialogs.OKDialog
 import javax.inject.Inject
-import android.os.Handler
-import android.os.Looper
 import android.widget.Switch
 
 
