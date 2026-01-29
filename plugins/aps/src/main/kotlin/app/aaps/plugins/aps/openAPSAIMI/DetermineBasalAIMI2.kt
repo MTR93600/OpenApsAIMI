@@ -1974,7 +1974,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         // Ajustements spécifiques
         val beforeAdj = smbToGive
-        smbToGive = applySpecificAdjustments(smbToGive)
+        smbToGive = applySpecificAdjustments(smbToGive, ignoreSafetyRestrictions = ignoreSafetyConditions)
         if (smbToGive != beforeAdj) {
             //reason?.appendLine("🎛️ Ajustements: ${"%.2f".format(beforeAdj)} → ${"%.2f".format(smbToGive)} U")
             reason?.appendLine(context.getString(R.string.adjustments_smb, beforeAdj, smbToGive))
@@ -2897,7 +2897,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
-    private fun applySpecificAdjustments(smbAmount: Float): Float {
+    private fun applySpecificAdjustments(smbAmount: Float, ignoreSafetyRestrictions: Boolean = false): Float {
+        // 🚀 BYPASS: If explicitly triggered by user (Meal Advisor), skip soft reductions
+        if (ignoreSafetyRestrictions) return smbAmount
 
         val currentHour = LocalTime.now().hour
         val honeymoon   = preferences.get(BooleanKey.OApsAIMIhoneymoon)
