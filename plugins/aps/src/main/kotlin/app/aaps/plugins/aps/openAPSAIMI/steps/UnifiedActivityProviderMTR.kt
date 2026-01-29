@@ -101,6 +101,51 @@ class UnifiedActivityProviderMTR @Inject constructor(
         }
     }
 
+    fun getStepsTotalSince(startMs: Long): StepsResult? {
+        val mode = getMode()
+        if (mode == MODE_DISABLED) return null
+
+        val now = System.currentTimeMillis()
+
+        return try {
+            val records = persistenceLayer
+                .getStepsCountFromTimeToTime(startMs, now)
+                .sortedBy { it.timestamp } // zeitlich vorwärts
+
+            if (records.isEmpty()) return null
+
+            // Quelle nach Modus auswählen
+            val filtered = when (mode) {
+                MODE_PREFER_WEAR ->
+                    records.filter { isWearDevice(it.device) }
+
+                MODE_HEALTH_CONNECT_ONLY ->
+                    records.filter { it.device == SOURCE_HC }
+
+                MODE_AUTO_FALLBACK -> {
+                    val wear = records.filter { isWearDevice(it.device) }
+                    wear.ifEmpty { records.filter { it.device == SOURCE_HC || it.device == SOURCE_PHONE } }
+                }
+                else -> emptyList()
+            }
+
+            if (filtered.isEmpty()) return null
+
+            // WICHTIG: nur Delta-Felder summieren
+            val totalSteps = filtered.sumOf { it.steps5min }
+
+            StepsResult(
+                steps = totalSteps,
+                timestamp = now,
+                source = filtered.first().device,
+                duration = now - startMs
+            )
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "[$TAG] Error fetching total steps", e)
+            null
+        }
+    }
+
     override fun getLatestHeartRate(windowMs: Long): HrResult? {
         val mode = getMode()
         if (mode == MODE_DISABLED) return null
@@ -137,7 +182,7 @@ class UnifiedActivityProviderMTR @Inject constructor(
     // Helpers
     
     private fun getMode(): String {
-        return sp.getString(PREF_KEY_SOURCE_MODE, DEFAULT_MODE) ?: DEFAULT_MODE
+        return sp.getString(PREF_KEY_SOURCE_MODE, DEFAULT_MODE)
     }
     
     private fun isWearDevice(device: String?): Boolean {
@@ -152,7 +197,7 @@ class UnifiedActivityProviderMTR @Inject constructor(
         return StepsResult(
             steps = sc.steps5min, // Using 5min as standard accumulator
             timestamp = sc.timestamp,
-            source = sc.device ?: "Unknown",
+            source = sc.device,
             duration = sc.duration
         )
     }
@@ -161,7 +206,7 @@ class UnifiedActivityProviderMTR @Inject constructor(
         return HrResult(
             bpm = hr.beatsPerMinute,
             timestamp = hr.timestamp,
-            source = hr.device ?: "Unknown"
+            source = hr.device
         )
     }
 }
