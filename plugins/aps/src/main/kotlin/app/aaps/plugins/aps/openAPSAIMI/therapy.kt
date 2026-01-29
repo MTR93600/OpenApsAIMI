@@ -130,7 +130,7 @@ class Therapy (private val persistenceLayer: PersistenceLayer){
                         // Une simple marche ne devrait pas bloquer SMB pendant 1h+
                         // Seuls les VRAIS sports (cardio, vélo, course, natation) déclenchent la sécurité
                         val containsSport = note.contains("sport", ignoreCase = true)
-                        val isWalking = note.contains("marche") || note.contains("walk")
+                        val isWalking = note.contains("marche", ignoreCase = true) || note.contains("walk", ignoreCase = true)
                         
                         (containsSport && !isWalking) &&
                             System.currentTimeMillis() <= (event.timestamp + event.duration)
@@ -169,7 +169,8 @@ class Therapy (private val persistenceLayer: PersistenceLayer){
             .map { events ->
                 events.filter { it.type == TE.Type.NOTE }
                     .any { event ->
-                        event.note?.contains("highcarb", ignoreCase = true) == true &&
+                        val note = event.note ?: ""
+                        (note.contains("highcarb", ignoreCase = true) || note.contains("high carb", ignoreCase = true)) &&
                             System.currentTimeMillis() <= (event.timestamp + event.duration)
                     }
             }
@@ -191,7 +192,8 @@ class Therapy (private val persistenceLayer: PersistenceLayer){
             .map { events ->
                 events.filter { it.type == TE.Type.NOTE }
                     .any { event ->
-                        event.note?.contains("bfast", ignoreCase = true) == true &&
+                        val note = event.note ?: ""
+                        (note.contains("bfast", ignoreCase = true) || note.contains("breakfast", ignoreCase = true)) &&
                             System.currentTimeMillis() <= (event.timestamp + event.duration)
                     }
             }

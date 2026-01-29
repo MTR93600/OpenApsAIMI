@@ -412,5 +412,55 @@ class ComparisonCsvParser {
             recommendation = recommendation
         )
     }
+    fun getLast24h(entries: List<ComparisonEntry>, now: Long): List<ComparisonEntry> {
+        val window = 24 * 60 * 60 * 1000L
+        return entries.filter { it.timestamp >= now - window }
+    }
+
+    fun getLast7d(entries: List<ComparisonEntry>, now: Long): List<ComparisonEntry> {
+        val window = 7 * 24 * 60 * 60 * 1000L
+        return entries.filter { it.timestamp >= now - window }
+    }
+
+    fun generateLlmSummary(
+        periodLabel: String,
+        stats: ComparisonStats,
+        safety: SafetyMetrics,
+        impact: ClinicalImpact,
+        criticalMoments: List<CriticalMoment>,
+        recommendation: Recommendation
+    ): String {
+        val sb = StringBuilder()
+        sb.append("=== AIMI vs SMB Comparison Report ($periodLabel) ===\n\n")
+
+        sb.append("## 1. Global Performance\n")
+        sb.append("- Agreement Rate: %.1f%%\n".format(stats.agreementRate))
+        sb.append("- AIMI More Aggressive: %.1f%%\n".format(stats.aimiWinRate))
+        sb.append("- SMB More Aggressive: %.1f%%\n".format(stats.smbWinRate))
+        sb.append("- Total Insulin Difference: %.2f U (AIMI - SMB)\n".format(impact.cumulativeDiff))
+        
+        sb.append("\n## 2. Safety Analysis\n")
+        sb.append("- Variability Score: %.1f/100 (%s)\n".format(safety.variabilityScore, safety.variabilityLabel))
+        sb.append("- Estimated Hypo Risk: %s\n".format(safety.estimatedHypoRisk))
+        sb.append("- Safety Note: %s\n".format(recommendation.safetyNote))
+
+        sb.append("\n## 3. Recommendation\n")
+        sb.append("- Preferred Algorithm: **${recommendation.preferredAlgorithm}**\n")
+        sb.append("- Reason: ${recommendation.reason}\n")
+        sb.append("- Confidence: ${recommendation.confidenceLevel}\n")
+
+        sb.append("\n## 4. Critical Moments (Top Divergences)\n")
+        criticalMoments.take(3).forEach { m ->
+            sb.append("- [${m.date}] BG: ${m.bg} | IOB: ${m.iob} | COB: ${m.cob}\n")
+            sb.append("  AIMI Reason: ${m.reasonAimi}\n")
+            sb.append("  SMB Reason: ${m.reasonSmb}\n")
+            sb.append("  (Diff Rate: ${m.divergenceRate}, Diff SMB: ${m.divergenceSmb})\n\n")
+        }
+
+        sb.append("\n## 5. Request to LLM\n")
+        sb.append("Based on this data, analyze why the algorithms diverged. Focus on the 'Critical Moments' and the 'Safety Analysis'. Does the aggressive behavior of the winner seem justified given the glucose context?")
+        
+        return sb.toString()
+    }
 }
 

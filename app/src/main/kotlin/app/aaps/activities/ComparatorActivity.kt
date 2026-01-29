@@ -26,7 +26,15 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
 
     private lateinit var binding: ActivityComparatorBinding
     private val parser = ComparisonCsvParser()
-    private var entries: List<ComparisonEntry> = emptyList()
+    private var allEntries: List<ComparisonEntry> = emptyList()
+    private var displayedEntries: List<ComparisonEntry> = emptyList()
+    
+    // UI Elements created programmatically
+    private lateinit var timeWindowTabs: android.widget.RadioGroup
+    
+    companion object {
+        const val MENU_ID_EXPORT_LLM = 1001
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +47,13 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
         supportActionBar?.setDisplayShowHomeEnabled(true)
 
         loadData()
+    }
+
+    override fun onCreateOptionsMenu(menu: android.view.Menu): Boolean {
+        menu.add(0, MENU_ID_EXPORT_LLM, 0, "Export LLM Summary")
+            .setIcon(android.R.drawable.ic_menu_share)
+            .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+        return true
     }
 
     private fun loadData() {
@@ -58,24 +73,24 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
             return
         }
 
-        entries = parser.parse(csvFile)
+        allEntries = parser.parse(csvFile)
         
-        if (entries.isEmpty()) {
+        if (allEntries.isEmpty()) {
             binding.noDataText.visibility = View.VISIBLE
             binding.contentLayout.visibility = View.GONE
             return
         }
 
-        binding.noDataText.visibility = View.GONE
-        binding.contentLayout.visibility = View.VISIBLE
+        // Initialize Tabs if not exists
+        setupTimeWindowTabs()
 
-        displayStats()
-        displayAnalytics()
-        setupCharts()
+        // Default to Global
+        updateTimeWindow(0)
+
     }
 
     private fun displayStats() {
-        val stats = parser.calculateStats(entries)
+        val stats = parser.calculateStats(displayedEntries)
         
         binding.totalEntriesValue.text = stats.totalEntries.toString()
         binding.avgRateDiffValue.text = String.format(Locale.US, "%.2f U/h", stats.avgRateDiff)
@@ -86,10 +101,10 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
     }
 
     private fun displayAnalytics() {
-        val stats = parser.calculateStats(entries)
-        val safetyMetrics = parser.calculateSafetyMetrics(entries)
-        val clinicalImpact = parser.calculateClinicalImpact(entries)
-        val criticalMoments = parser.findCriticalMoments(entries)
+        val stats = parser.calculateStats(displayedEntries)
+        val safetyMetrics = parser.calculateSafetyMetrics(displayedEntries)
+        val clinicalImpact = parser.calculateClinicalImpact(displayedEntries)
+        val criticalMoments = parser.findCriticalMoments(displayedEntries)
         val recommendation = parser.generateRecommendation(stats, safetyMetrics, clinicalImpact)
 
         displaySafetyAnalysis(safetyMetrics)
@@ -129,7 +144,7 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
              true 
         }.forEach { moment ->
              // Try to find the original entry to get the flag (inefficient but works for 5 items)
-             val entry = entries.getOrNull(moment.index)
+             val entry = displayedEntries.getOrNull(moment.index)
              val isArtifact = entry?.artifactFlag == "SCREAMING_SHADOW"
              
              if (!isArtifact) { // Only show real moments
@@ -187,7 +202,7 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
         val aimiEntries = mutableListOf<Entry>()
         val smbEntries = mutableListOf<Entry>()
 
-        entries.forEachIndexed { index, entry ->
+        displayedEntries.forEachIndexed { index, entry ->
             entry.aimiRate?.let { aimiEntries.add(Entry(index.toFloat(), it.toFloat())) }
             entry.smbRate?.let { smbEntries.add(Entry(index.toFloat(), it.toFloat())) }
         }
@@ -225,7 +240,7 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
         val aimiEntries = mutableListOf<Entry>()
         val smbEntries = mutableListOf<Entry>()
 
-        entries.forEachIndexed { index, entry ->
+        displayedEntries.forEachIndexed { index, entry ->
             entry.aimiSmb?.let { aimiEntries.add(Entry(index.toFloat(), it.toFloat())) }
             entry.smbSmb?.let { smbEntries.add(Entry(index.toFloat(), it.toFloat())) }
         }
@@ -258,11 +273,112 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
             invalidate()
         }
     }
+    private fun setupTimeWindowTabs() {
+        if (this::timeWindowTabs.isInitialized) return
+
+        val radioGroup = android.widget.RadioGroup(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(0, 0, 0, 16)
+            }
+        }
+
+        val options = listOf("Global", "24h", "7d")
+        options.forEachIndexed { index, label ->
+            val radioButton = android.widget.RadioButton(this).apply {
+                text = label
+                id = index
+                layoutParams = android.widget.RadioGroup.LayoutParams(
+                    0, 
+                    LinearLayout.LayoutParams.WRAP_CONTENT, 
+                    1f
+                )
+            }
+            if (index == 0) radioButton.isChecked = true
+            radioGroup.addView(radioButton)
+        }
+
+        radioGroup.setOnCheckedChangeListener { _, checkedId ->
+            updateTimeWindow(checkedId)
+        }
+
+        // Insert at top of content layout
+        binding.contentLayout.addView(radioGroup, 0)
+        timeWindowTabs = radioGroup
+        binding.contentLayout.visibility = View.VISIBLE
+        binding.noDataText.visibility = View.GONE
+    }
+
+    private fun updateTimeWindow(index: Int) {
+        val now = System.currentTimeMillis()
+        displayedEntries = when (index) {
+            1 -> parser.getLast24h(allEntries, now)
+            2 -> parser.getLast7d(allEntries, now)
+            else -> allEntries
+        }
+        
+        if (displayedEntries.isEmpty()) {
+            Toast.makeText(this, "No data for this period", Toast.LENGTH_SHORT).show()
+        }
+        
+        refreshUI()
+    }
+
+    private fun refreshUI() {
+        displayStats()
+        displayAnalytics()
+        setupCharts()
+        binding.rateChart.invalidate()
+        binding.smbChart.invalidate()
+    }
+
+    private fun exportLlmSummary() {
+         if (displayedEntries.isEmpty()) return
+         
+         val stats = parser.calculateStats(displayedEntries)
+         val safety = parser.calculateSafetyMetrics(displayedEntries)
+         val impact = parser.calculateClinicalImpact(displayedEntries)
+         val moments = parser.findCriticalMoments(displayedEntries)
+         val rec = parser.generateRecommendation(stats, safety, impact)
+         
+         val periodLabel = when(timeWindowTabs.checkedRadioButtonId) {
+             1 -> "Last 24h"
+             2 -> "Last 7 Days"
+             else -> "Global History"
+         }
+         
+         val summary = parser.generateLlmSummary(
+             periodLabel, stats, safety, impact, moments, rec
+         )
+         
+         // Copy to clipboard
+         val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+         val clip = android.content.ClipData.newPlainText("Comparator LLM Summary", summary)
+         clipboard.setPrimaryClip(clip)
+         
+         Toast.makeText(this, "Summary copied to clipboard!", Toast.LENGTH_LONG).show()
+         
+         // Also share text intent
+         val sendIntent: Intent = Intent().apply {
+            action = Intent.ACTION_SEND
+            putExtra(Intent.EXTRA_TEXT, summary)
+            type = "text/plain"
+         }
+         startActivity(Intent.createChooser(sendIntent, "Export using..."))
+    }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean =
         when (item.itemId) {
             android.R.id.home -> {
                 onBackPressedDispatcher.onBackPressed()
+                true
+            }
+            MENU_ID_EXPORT_LLM -> {
+                exportLlmSummary()
                 true
             }
             else -> super.onOptionsItemSelected(item)
