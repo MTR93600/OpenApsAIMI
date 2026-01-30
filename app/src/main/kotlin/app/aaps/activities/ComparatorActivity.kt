@@ -342,10 +342,10 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
          if (displayedEntries.isEmpty()) return
 
          val stats = parser.calculateStats(displayedEntries)
-         val safety = parser.calculateSafetyMetrics(displayedEntries)
+         val safety = parser.calculateSafetyMetrics(this,displayedEntries)
          val impact = parser.calculateClinicalImpact(displayedEntries)
          val moments = parser.findCriticalMoments(displayedEntries)
-         val rec = parser.generateRecommendation(stats, safety, impact)
+         val rec = parser.generateRecommendation(stats, safety, impact,this)
 
          val periodLabel = when(timeWindowTabs.checkedRadioButtonId) {
              1 -> "Last 24h"
