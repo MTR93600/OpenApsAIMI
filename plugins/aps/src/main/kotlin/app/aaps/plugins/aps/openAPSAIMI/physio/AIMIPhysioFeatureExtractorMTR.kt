@@ -59,7 +59,7 @@ class AIMIPhysioFeatureExtractorMTR @Inject constructor(
         val sleepFeatures = extractSleepFeatures(rawData.sleep)
         
         // Extract HRV features
-        val hrvFeatures = extractHRVFeatures(rawData.hrv, previousFeatures)
+        val hrvFeatures = extractHRVFeatures(rawData.hrv, rawData.sleep, previousFeatures)
         
         // Extract RHR features
         val rhrFeatures = extractRHRFeatures(rawData.rhr)
@@ -142,19 +142,40 @@ class AIMIPhysioFeatureExtractorMTR @Inject constructor(
     
     private fun extractHRVFeatures(
         hrvList: List<HRVDataMTR>,
+        sleep: SleepDataMTR?,
         previousFeatures: PhysioFeaturesMTR?
     ): HRVFeatures {
         if (hrvList.isEmpty()) {
             return HRVFeatures(0.0, 0.0, 0.0)
         }
         
-        val validHRV = hrvList.filter { it.hasValidData() }
-        if (validHRV.isEmpty()) {
+        // 1. Filter for RECENT data (Last 24h)
+        // We only want the "Current State", not the 7-day history average
+        val now = System.currentTimeMillis()
+        val oneDayAgo = now - (24 * 60 * 60 * 1000)
+        val recentSamples = hrvList.filter { it.timestamp >= oneDayAgo && it.hasValidData() }
+        
+        if (recentSamples.isEmpty()) {
             return HRVFeatures(0.0, 0.0, 0.0)
         }
         
+        // 2. Prioritize NOCTURNAL HRV (Standardization)
+        // If we have a sleep session, try to specifically lock onto nocturnal samples.
+        // This unifies Oura (Night) vs Galaxy (24h) logic.
+        val targetSamples = if (sleep != null && sleep.hasValidData()) {
+            val nocturnal = recentSamples.filter { it.timestamp >= sleep.startTime && it.timestamp <= sleep.endTime }
+            if (nocturnal.isNotEmpty()) {
+                //aapsLogger.debug(LTag.APS, "[$TAG] Using ${nocturnal.size} nocturnal HRV samples (Sleep overlap)")
+                nocturnal
+            } else {
+                recentSamples
+            }
+        } else {
+            recentSamples
+        }
+        
         // Mean RMSSD
-        val meanRMSSD = validHRV.map { it.rmssd }.average()
+        val meanRMSSD = targetSamples.map { it.rmssd }.average()
         
         // Trend calculation (compare to previous mean)
         val trend = if (previousFeatures != null && previousFeatures.hrvMeanRMSSD > 0) {
@@ -163,8 +184,8 @@ class AIMIPhysioFeatureExtractorMTR @Inject constructor(
         } else 0.0
         
         // Variability (coefficient of variation)
-        val variability = if (validHRV.size > 1) {
-            val stdDev = calculateStdDev(validHRV.map { it.rmssd })
+        val variability = if (targetSamples.size > 1) {
+            val stdDev = calculateStdDev(targetSamples.map { it.rmssd })
             if (meanRMSSD > 0) (stdDev / meanRMSSD).coerceIn(0.0, 1.0) else 0.0
         } else 0.0
         

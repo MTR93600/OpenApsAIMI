@@ -308,8 +308,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val base = if (::unifiedReactivityLearner.isInitialized) unifiedReactivityLearner.getCombinedFactor() else 1.0
             
             // 🧬 PHYSIO: SNS=0.8 -> +15% Boost
-            val ctx = if (::physioAdapter.isInitialized) physioAdapter.getCurrentContext() else null
-            val sns = ctx?.toSNSDominance() ?: 0.3
+            val snapshot = if (::physioAdapter.isInitialized) physioAdapter.getLatestSnapshot() else null
+            val sns = snapshot?.toSNSDominance() ?: 0.3
             val mod = 1.0 + (sns - 0.3) * 0.3
             
             return base * mod
@@ -3856,8 +3856,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Let's stick to maxSMB reset first which was the smoking gun.
         // ✅ ETAPE 1: Calculer le Profil d'Action de l'IOB
         // 🧬 PHYSIO INTEGRATION: Get SNS Dominance from Adapter
-        val physioContext = physioAdapter.getCurrentContext()
-        val snsDominance = physioContext?.toSNSDominance() ?: 0.3 // Default Neutral
+        val physioSnapshot = physioAdapter.getLatestSnapshot()
+        val snsDominance = physioSnapshot.toSNSDominance()
         
         // 🏥 Update Context
         decisionCtx.adjustments.physiological_context = AimiDecisionContext.PhysioContext(

@@ -131,6 +131,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner, // 🧠 Brain Injection
     private val stepsManager: app.aaps.plugins.aps.openAPSAIMI.steps.AIMIStepsManagerMTR, // 🏃 Steps Manager MTR
     private val physioManager: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioManagerMTR, // 🏥 Physiological Manager MTR
+    // 🏥 Physiological Decision Adapter (The Safety Gate)
+    private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR,
     private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator // 🧠 AI Auditor MTR
 ) : PluginBase(
     PluginDescription()
@@ -449,6 +451,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         // 10) facteur dynamique + bornes globales
         blended *= dynamicFactor
+        
+        // 🏥 PHYSIO MODULATION (ISF)
+        // We fetching multipliers for the specific timestamp is tricky, so we use current context
+        // This affects the "Displayed ISF" in AAPS.
+        val physioMults = physioAdapter.getMultipliers(glucose, currentDelta ?: 0.0)
+        if (physioMults.isfFactor != 1.0) {
+            blended *= physioMults.isfFactor
+            aapsLogger.debug(LTag.APS, "🏥 DynISF modulated by Physio: x${physioMults.isfFactor} -> $blended")
+        }
+
         blended = blended.coerceIn(5.0, 300.0)
 
         aapsLogger.debug(LTag.APS, "Final DynISF: $blended")
@@ -504,6 +516,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         if (!hardLimits.checkHardLimits(pump.baseBasalRate, app.aaps.core.ui.R.string.current_basal_value, 0.01, hardLimits.maxBasal())) return
 
         // End of check, start gathering data
+        
+        // 🏥 PHYSIO INTEGRATION: Retrieve Context & Multipliers
+        val glucoseForPhysio = glucoseStatusProvider.glucoseStatusData?.glucose ?: 100.0
+        val deltaForPhysio = glucoseStatusProvider.glucoseStatusData?.delta ?: 0.0
+        val physioMults = physioAdapter.getMultipliers(glucoseForPhysio, deltaForPhysio)
+        if (!physioMults.isNeutral()) {
+            aapsLogger.info(LTag.APS, "🏥 LOOP: Applying Physio Factors: ISF x${physioMults.isfFactor}, Basal x${physioMults.basalFactor}, SMB x${physioMults.smbFactor}")
+        }
 
         val dynIsfMode = preferences.get(BooleanKey.ApsUseDynamicSensitivity)
         val smbEnabled = preferences.get(BooleanKey.ApsUseSmb)
@@ -594,6 +614,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
             // Imposition des bornes pour que l'ISF soit toujours compris entre 5 et 300
             variableSensitivity = variableSensitivity.coerceIn(5.0, 300.0)
+            
+            // 🏥 Apply Physio ISF Modulation to Dynamic ISF
+            if (physioMults.isfFactor != 1.0) {
+                variableSensitivity *= physioMults.isfFactor
+                aapsLogger.debug(LTag.APS, "🏥 LOOP: DynISF modulated: $variableSensitivity (x${physioMults.isfFactor})")
+            }
+            
             aapsLogger.debug(LTag.APS, "Final adaptive ISF after clamping: $variableSensitivity")
 
 // 🔹 Création du résultat final
@@ -748,10 +775,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 max_bg = maxBg,
                 target_bg = targetBg,
                 carb_ratio = profile.getIc(),
-                sens = profile.getIsfMgdl("OpenAPSAIMIPlugin"),
+                sens = profile.getIsfMgdl("OpenAPSAIMIPlugin") * physioMults.isfFactor, // 🏥 ISF Modulation
                 autosens_adjust_targets = false, // not used
-                max_daily_safety_multiplier = preferences.get(DoubleKey.ApsMaxDailyMultiplier),
-                current_basal_safety_multiplier = preferences.get(DoubleKey.ApsMaxCurrentBasalMultiplier),
+                max_daily_safety_multiplier = preferences.get(DoubleKey.ApsMaxDailyMultiplier) * physioMults.smbFactor, // 🏥 SMB Cap modulation
+                current_basal_safety_multiplier = preferences.get(DoubleKey.ApsMaxCurrentBasalMultiplier) * physioMults.basalFactor, // 🏥 Basal Cap modulation
                 lgsThreshold = profileUtil.convertToMgdlDetect(preferences.get(UnitDoubleKey.ApsLgsThreshold)).toInt(),
                 high_temptarget_raises_sensitivity = false,
                 low_temptarget_lowers_sensitivity = false,
@@ -775,7 +802,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 maxUAMSMBBasalMinutes = preferences.get(IntKey.ApsUamMaxMinutesOfBasalToLimitSmb),
                 bolus_increment = pump.pumpDescription.bolusStep,
                 carbsReqThreshold = preferences.get(IntKey.ApsCarbsRequestThreshold),
-                current_basal = activePlugin.activePump.baseBasalRate,
+                current_basal = activePlugin.activePump.baseBasalRate * physioMults.basalFactor, // 🏥 Basal Rate Modulation
                 temptargetSet = isTempTarget,
                 autosens_max = preferences.get(DoubleKey.AutosensMax),
                 out_units = if (profileFunction.getUnits() == GlucoseUnit.MMOL) "mmol/L" else "mg/dl",
