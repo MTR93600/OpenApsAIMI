@@ -1263,7 +1263,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         summary = "Tap to authorize AAPS to access Sleep, HRV, and Heart Rate data"
                         setOnPreferenceClickListener {
                             try {
-                                val intent = android.content.Intent(
+                                val intent = Intent(
                                     context,
                                     app.aaps.plugins.aps.openAPSAIMI.physio.AIMIHealthConnectPermissionActivityMTR::class.java
                                 )
@@ -1939,7 +1939,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         AdaptiveIntentPreference(
                             ctx = context,
                             intentKey = IntentKey.ApsLinkToDocs,
-                            intent = Intent().apply { action = Intent.ACTION_VIEW; data = Uri.parse(rh.gs(R.string.openapsama_link_to_preference_json_doc)) },
+                            intent = Intent().apply { action = Intent.ACTION_VIEW; data = rh.gs(R.string.openapsama_link_to_preference_json_doc).toUri() },
                             summary = R.string.openapsama_link_to_preference_json_doc_txt
                         )
                     )
