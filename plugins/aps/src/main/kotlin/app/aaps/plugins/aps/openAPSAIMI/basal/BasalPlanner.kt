@@ -112,8 +112,8 @@ class BasalPlanner @Inject constructor(
         }
 
         // C) Predictive Low Guard (Safety for drops starting from higher BG, e.g. < 160)
-        // Check 30 min projection: mgdl + (delta * 6)
-        val projected30 = mgdl + (d5 * 6.0)
+        // Check 30 min projection: mgdl + (shortAvgDelta * 6) - Less noise sensitivity
+        val projected30 = mgdl + (short * 6.0)
         if (d5 < -2.0 && projected30 < lgs) {
             return BasalPlan(
                 rateUph = 0.0,

@@ -7,7 +7,6 @@ import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.TB
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.UE
-
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
@@ -20,8 +19,6 @@ import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.plugin.ActivePlugin
-import app.aaps.core.interfaces.pump.Pump
-import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.stats.TddCalculator
@@ -40,22 +37,17 @@ import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
-
-import app.aaps.plugins.aps.openAPSAIMI.extensions.asRounded
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
-import app.aaps.plugins.aps.openAPSAIMI.model.SmbPlan
-// Imports updated for strict patch
 import app.aaps.core.data.model.HR
-import app.aaps.core.data.model.SC
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
-
 import app.aaps.plugins.aps.openAPSAIMI.model.LoopContext
 import app.aaps.plugins.aps.openAPSAIMI.model.PumpCaps
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.MealAggressionContext
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
+import app.aaps.plugins.aps.openAPSAIMI.physio.toSNSDominance // 🧬 Physio Extensions
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.ports.PkpdPort
@@ -76,7 +68,6 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdAbsorptionGuard
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit  // 🌀 Trajectory Control
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.WarningSeverity  // 🌀 Trajectory Warnings
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextMode  // 🎯 Context Mode
-import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot  // 🎯 Context Snapshot
 import java.io.File
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -91,15 +82,101 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.collections.asSequence
-import kotlin.collections.get
 import kotlin.math.abs
 import kotlin.math.exp
-import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
+
+internal data class AimiDecisionContext(
+    val event_id: String,
+    val timestamp: Long,
+    val trigger: String,
+    val baseline_state: BaselineState,
+    val adjustments: Adjustments = Adjustments(),
+    var outcome: Outcome? = null
+) {
+    data class BaselineState(
+        val profile_isf_mgdl: Double,
+        val profile_basal_uph: Double,
+        val current_bg_mgdl: Double,
+        val cob_g: Double,
+        val iob_u: Double
+    )
+    data class Adjustments(
+        var dynamic_isf: DynamicIsf? = null,
+        var basal_safety_cap: BasalCap? = null,
+        var physiological_context: PhysioContext? = null
+    )
+    data class DynamicIsf(
+        var final_value_mgdl: Double = 0.0,
+        val modifiers: MutableList<Modifier> = mutableListOf()
+    )
+    data class Modifier(val source: String, val factor: Double, val clinical_reason: String)
+    data class BasalCap(val status: String, val limit_uph: Double, val safety_reason: String)
+    data class PhysioContext(val hormonal_cycle_phase: String, val physical_activity_mode: String)
+    data class Outcome(val clinical_decision: String, val dosage_u: Double, val target_basal_uph: Double? = null, val narrative_explanation: String)
+
+    fun toMedicalJson(): String {
+        return try {
+            val json = org.json.JSONObject()
+            json.put("event_id", event_id)
+            json.put("timestamp", timestamp)
+            json.put("trigger", trigger)
+
+            val base = org.json.JSONObject()
+            base.put("profile_isf_mgdl", baseline_state.profile_isf_mgdl)
+            base.put("profile_basal_uph", baseline_state.profile_basal_uph)
+            base.put("current_bg_mgdl", baseline_state.current_bg_mgdl)
+            base.put("cob_g", baseline_state.cob_g)
+            base.put("iob_u", baseline_state.iob_u)
+            json.put("baseline_state", base)
+
+            val adj = org.json.JSONObject()
+            adjustments.dynamic_isf?.let { d ->
+                val dJson = org.json.JSONObject()
+                dJson.put("final_value_mgdl", d.final_value_mgdl)
+                val modsIdx = org.json.JSONArray()
+                d.modifiers.forEach { m ->
+                    val mJson = org.json.JSONObject()
+                    mJson.put("source", m.source)
+                    mJson.put("factor", m.factor)
+                    mJson.put("reason", m.clinical_reason)
+                    modsIdx.put(mJson)
+                }
+                dJson.put("modifiers", modsIdx)
+                adj.put("dynamic_isf", dJson)
+            }
+            adjustments.physiological_context?.let { p ->
+                val pJson = org.json.JSONObject()
+                pJson.put("cycle_phase", p.hormonal_cycle_phase)
+                pJson.put("activity_mode", p.physical_activity_mode)
+                adj.put("physio_context", pJson)
+            }
+            // Add Basal Cap if present
+            adjustments.basal_safety_cap?.let { c ->
+                val cJson = org.json.JSONObject()
+                cJson.put("status", c.status)
+                cJson.put("limit_uph", c.limit_uph)
+                cJson.put("reason", c.safety_reason)
+                adj.put("basal_cap", cJson)
+            }
+            json.put("adjustments", adj)
+
+            outcome?.let { o ->
+                val oJson = org.json.JSONObject()
+                oJson.put("decision", o.clinical_decision)
+                oJson.put("amount", o.dosage_u)
+                o.target_basal_uph?.let { oJson.put("target_basal_rate_uph", it) }
+                oJson.put("narrative", o.narrative_explanation)
+                json.put("outcome", oJson)
+            }
+            json.toString()
+        } catch(e: Exception) { "{ \"error\": \"JSON Generation Failed\" }" }
+    }
+}
 
 internal data class PredictionSanityResult(
     val predBg: Double,

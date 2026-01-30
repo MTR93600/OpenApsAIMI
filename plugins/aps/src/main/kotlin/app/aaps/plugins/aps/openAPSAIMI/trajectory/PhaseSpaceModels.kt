@@ -1,6 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.trajectory
 
-import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -30,7 +30,7 @@ data class PhaseSpaceState(
     val bgAccel: Double,                    // mg/dL/5min² (second derivative)
     val insulinActivity: Double,            // U/hr equivalent 
     val iob: Double,                        // U (total active insulin)
-    val pkpdStage: InsulinActivityStage,   // PKPD temporal stage
+    val pkpdStage: ActivityStage,          // PKPD temporal stage
     val timeSinceLastBolus: Int,           // minutes
     val cob: Double = 0.0,                  // g (optional, for meal context)
     val tissueDelay: Double = 0.0           // estimated insulin-tissue lag (0-1)
@@ -151,9 +151,11 @@ data class TrajectoryMetrics(
  */
 enum class TrajectoryType {
     OPEN_DIVERGING,        // ↗️ System escaping, insufficient insulin
+    SLOW_DRIFT,            // ↗️ Slow divergence, needs gentle correction
     CLOSING_CONVERGING,    // ↗️→↘️ Returning to target
     TIGHT_SPIRAL,          // 🌀 Over-correction risk
     STABLE_ORBIT,          // ⭕ Optimal control achieved
+    HOVERING,              // ➖ Stable but off-target
     UNCERTAIN;             // ? Insufficient data or ambiguous
     
     /**
@@ -161,9 +163,11 @@ enum class TrajectoryType {
      */
     fun description(): String = when (this) {
         OPEN_DIVERGING -> "Trajectory diverging - BG not controlled"
+        SLOW_DRIFT -> "Slow drift away from target"
         CLOSING_CONVERGING -> "Trajectory closing - returning to target"
         TIGHT_SPIRAL -> "Trajectory compressed - over-correction risk"
         STABLE_ORBIT -> "Stable orbit maintained"
+        HOVERING -> "Hovering stable but off-target"
         UNCERTAIN -> "Trajectory unclear - need more data"
     }
     
@@ -172,10 +176,25 @@ enum class TrajectoryType {
      */
     fun emoji(): String = when (this) {
         OPEN_DIVERGING -> "↗️"
+        SLOW_DRIFT -> "🐌"
         CLOSING_CONVERGING -> "🔄"
         TIGHT_SPIRAL -> "🌀"
         STABLE_ORBIT -> "⭕"
+        HOVERING -> "➖"
         UNCERTAIN -> "❓"
+    }
+    
+    /**
+     * Compact ASCII art representation for visual identification
+     */
+    fun asciiArt(): String = when (this) {
+        OPEN_DIVERGING -> "●→●→●→  (diverging)"
+        SLOW_DRIFT -> " ● ● ● (drift)"
+        CLOSING_CONVERGING -> "●→●→●  (closing)"
+        TIGHT_SPIRAL -> " ●●●   (spiral)\n      ╱ ╲╱ ╲\n     ● ○ ●"
+        STABLE_ORBIT -> "  ●●●\n ●   ●  (orbit)\n  ●●●"
+        HOVERING -> " —●—●— (hovering)"
+        UNCERTAIN -> "● ? ●  (unclear)"
     }
 }
 
@@ -332,7 +351,7 @@ data class StableOrbit(
         bgAccel = 0.0,
         insulinActivity = targetActivity,
         iob = 0.0,
-        pkpdStage = InsulinActivityStage.TAIL,
+        pkpdStage = app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.TAIL,
         timeSinceLastBolus = 240
     )
     

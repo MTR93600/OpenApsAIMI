@@ -79,7 +79,8 @@ class BasalDecisionEngine @Inject constructor(
         val smbToGive: Double,
         val zeroSinceMin: Int,
         val minutesSinceLastChange: Int,
-        val pumpCaps: PumpCaps
+        val pumpCaps: PumpCaps,
+        val auditorConfidence: Double = 0.0
     )
 
     data class Helpers(
@@ -195,7 +196,9 @@ class BasalDecisionEngine @Inject constructor(
                 profileBasal = input.profileCurrentBasal,
                 lastTempIsZero = lastTempIsZero,
                 zeroSinceMin = zeroSinceMin,
-                minutesSinceLastChange = minutesSinceLastChange
+                minutesSinceLastChange = minutesSinceLastChange,
+                predictedBg = input.predictedBg,
+                auditorConfidence = input.auditorConfidence
             )
             val aimiDecision = aimiAdaptiveBasal.suggest(inAimi)
             aimiDecision.rateUph?.let { candidate ->
@@ -311,9 +314,13 @@ class BasalDecisionEngine @Inject constructor(
                     if (input.delta > 1.0) {
                         chosenRate = input.profileCurrentBasal * 0.5
                         rT.reason.append("BG ${input.lgsThreshold.toInt()}-${(input.lgsThreshold + 10).toInt()} rising: 50% basal")
+                    } else if (input.delta > -2.0) {
+                        // Soft LGS Floor: Avoid 0% if not dropping fast
+                        chosenRate = input.profileCurrentBasal * 0.3
+                        rT.reason.append("BG ${input.lgsThreshold.toInt()}-${(input.lgsThreshold + 10).toInt()} stable: 30% basal")
                     } else {
                         chosenRate = 0.0
-                        rT.reason.append("BG ${input.lgsThreshold.toInt()}-${(input.lgsThreshold + 10).toInt()} not rising: 0% basal")
+                        rT.reason.append("BG ${input.lgsThreshold.toInt()}-${(input.lgsThreshold + 10).toInt()} dropping: 0% basal")
                     }
                 }
                 input.bg in 80.0..90.0 &&
@@ -533,10 +540,7 @@ class BasalDecisionEngine @Inject constructor(
             }
         }
 
-        if (chosenRate == null && input.pregnancyEnable && input.delta > 0 && input.bg > 110 && !input.honeymoon) {
-            chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, basalAdjustmentFactor)
-            rT.reason.append(context.getString(R.string.pregnancy_delta_over_0_adjustment))
-        }
+        // (Obsolete pregnancy logic removed - handled by GestationalAutopilot profile scaling)
 
         val finalRate = chosenRate ?: input.profileCurrentBasal
         return Decision(finalRate, 30, overrideSafety)

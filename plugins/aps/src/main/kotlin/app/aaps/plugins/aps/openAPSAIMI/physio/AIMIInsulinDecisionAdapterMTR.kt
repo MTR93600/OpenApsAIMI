@@ -31,6 +31,7 @@ import kotlin.math.abs
 class AIMIInsulinDecisionAdapterMTR @Inject constructor(
     private val contextStore: AIMIPhysioContextStoreMTR,
     private val persistenceLayer: PersistenceLayer,
+    private val dataRepository: AIMIPhysioDataRepositoryMTR,
     private val aapsLogger: AAPSLogger
 ) {
     
@@ -62,6 +63,23 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
      * @param currentBG Current blood glucose (mg/dL)
      * @param currentDelta Current BG delta (mg/dL/5min)
      * @param recentHypoTimestamp Timestamp of most recent hypoglycemia (optional)
+     * @return PhysioMultipliersMTR (NEUTRAL if any safety check fails)
+     */
+    /**
+     * Returns the current physiological context for external use (e.g. PKPD)
+     */
+    fun getCurrentContext(): PhysioContextMTR? {
+        return contextStore.getCurrentContext()
+    }
+
+    /**
+     * Gets insulin multipliers based on physiological context
+     * 
+     * INTEGRATION POINT: Called by determineBasalAIMI2
+     * 
+     * @param currentBG Current blood glucose (mg/dL)
+     * @param currentDelta Current BG delta (mg/dL/5min)
+     * @param recentHypoTimestamp Explicit timestamp of last hypo
      * @return PhysioMultipliersMTR (NEUTRAL if any safety check fails)
      */
     fun getMultipliers(
@@ -289,6 +307,26 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         return false
     }
     
+    // ═══════════════════════════════════════════════════════════════════════
+    // REAL-TIME ACTIVITY (Direct Pass-through)
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    data class RealTimeActivity(
+        val stepsToday: Int,
+        val heartRate: Int
+    )
+
+    /**
+     * Fetches current interaction data (Steps, HR) directly from repository
+     * This bypasses the 15-min cache to allow real-time reactivity in the loop
+     */
+    fun getRealTimeActivity(): RealTimeActivity {
+         // Graceful fallback if repo fail (returns 0)
+         val steps = dataRepository.fetchStepsData(0) 
+         val hr = dataRepository.fetchLastHeartRate()
+         return RealTimeActivity(steps, hr)
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // UTILITIES
     // ═══════════════════════════════════════════════════════════════════════

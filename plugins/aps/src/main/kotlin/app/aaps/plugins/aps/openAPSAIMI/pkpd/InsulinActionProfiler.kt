@@ -24,8 +24,10 @@ object InsulinActionProfiler {
         return activity
     }
 
-    fun calculate(iobArray: Array<IobTotal>, profile: OapsProfileAimi): IobActionProfile {
-        val insulinPeakTime = profile.peakTime.toDouble() // ex: 75.0 pour Novorapid
+    fun calculate(iobArray: Array<IobTotal>, profile: OapsProfileAimi, snsDominance: Double = 0.3): IobActionProfile {
+        // 🧬 PHYSIO-MODULATION: Stress (SNS=0.8) -> +20% Peak; Optimal (SNS=0.2) -> -4% Peak
+        val peakModulation = 1.0 + (snsDominance - 0.3) * 0.4
+        val insulinPeakTime = (profile.peakTime.toDouble() * peakModulation).coerceAtLeast(30.0) // ex: 75.0 pour Novorapid
         if (iobArray.isEmpty() || insulinPeakTime <= 0) {
             return IobActionProfile(0.0, 0.0, 0.0, 0.0)
         }

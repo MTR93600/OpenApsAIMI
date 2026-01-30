@@ -93,6 +93,7 @@ class DashboardFragment : DaggerFragment() {
     @Inject lateinit var notificationUiBinder: NotificationUiBinder
     @Inject lateinit var auditorStatusLiveData: AuditorStatusLiveData
     @Inject lateinit var auditorNotificationManager: AuditorNotificationManager
+    @Inject lateinit var trajectoryGuard: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard // 🌀 Trajectory Injection
 
     private val disposables = CompositeDisposable()
     private var _binding: FragmentDashboardBinding? = null
@@ -160,7 +161,8 @@ class DashboardFragment : DaggerFragment() {
             aapsSchedulers,
             fabricPrivacy,
             preferences,
-            overviewData
+            overviewData,
+            trajectoryGuard // 🌀 Pass to Factory
         )
     }
 
@@ -320,6 +322,7 @@ class DashboardFragment : DaggerFragment() {
 
     override fun onResume() {
         super.onResume()
+        updateContextBadge()
         viewModel.start()
         notificationUiBinder.bind(
             overviewBus = activePlugin.activeOverview.overviewBus,
@@ -333,7 +336,20 @@ class DashboardFragment : DaggerFragment() {
                 if (event.isChanged(IntNonKey.RangeToDisplay.key)) {
                     syncGraphRange(preferences.get(IntNonKey.RangeToDisplay), false)
                 }
+                if (event.isChanged(app.aaps.core.keys.StringKey.OApsAIMIContextStorage.key)) {
+                    updateContextBadge()
+                }
             }, fabricPrivacy::logException)
+    }
+
+    private fun updateContextBadge() {
+        try {
+            val jsonStr = preferences.get(app.aaps.core.keys.StringKey.OApsAIMIContextStorage)
+            val hasContext = jsonStr.length > 5 // "[]" length is 2
+            binding.statusCard.getContextIndicator().visibility = if (hasContext) View.VISIBLE else View.GONE
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.CORE, "Failed to update context badge: ${e.message}")
+        }
     }
 
     override fun onPause() {

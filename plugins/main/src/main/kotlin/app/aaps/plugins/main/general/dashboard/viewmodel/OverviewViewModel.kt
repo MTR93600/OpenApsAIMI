@@ -23,6 +23,7 @@ import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.AapsSchedulers
+import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard // 🌀 Trajectory
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventBucketedDataCreated
 import app.aaps.core.interfaces.rx.events.EventExtendedBolusChange
@@ -73,7 +74,8 @@ class OverviewViewModel(
     private val aapsSchedulers: AapsSchedulers,
     private val fabricPrivacy: FabricPrivacy,
     private val preferences: Preferences,
-    private val overviewData: OverviewData
+    private val overviewData: OverviewData,
+    private val trajectoryGuard: TrajectoryGuard // 🌀 Trajectory Injection
 ) : ViewModel() {
 
     private val disposables = CompositeDisposable()
@@ -427,7 +429,15 @@ class OverviewViewModel(
             smb = loop.lastRun?.request?.smb,
             basal = loop.lastRun?.request?.rate,
             detailedReason = loop.lastRun?.request?.reason,
-            isHypoRisk = loop.lastRun?.request?.isHypoRisk ?: false
+            isHypoRisk = loop.lastRun?.request?.isHypoRisk ?: false,
+            // 🌀 Trajectory Visualization
+            trajectoryTitle = trajectoryGuard.getLastAnalysis()?.let { 
+                "${it.classification.emoji()} ${it.classification.name}" 
+            },
+            trajectoryAscii = trajectoryGuard.getLastAnalysis()?.classification?.asciiArt(),
+            trajectoryMetrics = trajectoryGuard.getLastAnalysis()?.metrics?.let {
+                "κ=%.3f  E=%.1fU  Θ=%.2f".format(it.curvature, it.energyBalance, it.openness)
+            }
         )
         _adjustmentState.postValue(state)
     }
@@ -688,7 +698,8 @@ class OverviewViewModel(
         private val aapsSchedulers: AapsSchedulers,
         private val fabricPrivacy: FabricPrivacy,
         private val preferences: Preferences,
-        private val overviewData: OverviewData
+        private val overviewData: OverviewData,
+        private val trajectoryGuard: TrajectoryGuard // 🌀 Add to Factory
     ) : ViewModelProvider.Factory {
 
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -713,7 +724,8 @@ class OverviewViewModel(
                     aapsSchedulers,
                     fabricPrivacy,
                     preferences,
-                    overviewData
+                    overviewData,
+                    trajectoryGuard
                 ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class $modelClass")
@@ -796,5 +808,9 @@ data class AdjustmentCardState(
     val smb: Double? = null,
     val basal: Double? = null,
     val detailedReason: String? = null,
-    val isHypoRisk: Boolean = false
+    val isHypoRisk: Boolean = false,
+    // 🌀 Trajectory Data
+    val trajectoryTitle: String? = null,
+    val trajectoryAscii: String? = null,
+    val trajectoryMetrics: String? = null
 ) : Serializable

@@ -377,6 +377,33 @@ data class PhysioContextMTR(
     }
 }
 
+
+/**
+ * Convertit le contexte physiologique en facteur SNS dominance (0.0-1.0)
+ * Scientific Rationale:
+ * La stimulation sympathique (Stress, Sommeil pauvre) provoque une vasoconstriction périphérique.
+ * Cela ralentit la diffusion de l'insuline depuis le tissu sous-cutané.
+ * 
+ * 0.0 = Parasympathique dominant (Relaxation, Perfusion optimale)
+ * 1.0 = Sympathique dominant (Stress aigu, Vasoconstriction)
+ * Ref: [AIMI Physio Cartography Section 4.1]
+ */
+fun PhysioContextMTR.toSNSDominance(): Double {
+    return when (this.state) {
+        // High Sympathetic tone -> Vasoconstriction -> Delayed absorption
+        PhysioStateMTR.STRESS_DETECTED, PhysioStateMTR.INFECTION_RISK -> 0.8 
+        
+        // Moderate Sympathetic tone
+        PhysioStateMTR.RECOVERY_NEEDED -> 0.6 
+        
+        // Balanced/Parasympathetic tone -> Optimal absorption
+        PhysioStateMTR.OPTIMAL -> 0.2 
+        
+        // Neutral assumption
+        PhysioStateMTR.UNKNOWN -> 0.3 
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // INSULIN DECISION MULTIPLIERS (Output for APS)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -413,3 +440,19 @@ data class PhysioMultipliersMTR(
         const val REACTIVITY_MAX = 1.10
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STANDARDIZED INPUTS FOR ADJUSTERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Standard container for all inputs required by physiological adjusters.
+ * Allows decoupling the adjuster logic from the source of data.
+ */
+data class AimiPhysioInputs(
+    val bg: Double,
+    val delta: Double,
+    val physioContext: PhysioContextMTR? = null,
+    val isMealActive: Boolean = false,
+    val activityState: String = "IDLE" // e.g., "WALKING", "RUNNING"
+)

@@ -13,6 +13,7 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToInt
+import kotlin.math.abs
 
 /**
  * ============================================================================
@@ -31,40 +32,18 @@ class AuditorDataCollector @Inject constructor(
     private val tirCalculator: TirCalculator,
     private val dateUtil: DateUtil,
     private val activityManager: ActivityManager,
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    private val trajectoryHistoryProvider: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryHistoryProvider,
+    private val trajectoryGuard: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard // 🌀 Injected
 ) {
     
+    // ... (buildAuditorInput remains mostly same, just checking call sites)
+
     /**
      * Build complete auditor input from AIMI runtime state
-     * 
-     * @param bg Current BG (mg/dL)
-     * @param delta Delta over 5min
-     * @param shortAvgDelta Short average delta
-     * @param longAvgDelta Long average delta
-     * @param glucoseStatus Glucose status object
-     * @param iob IOB object
-     * @param cob COB value (g)
-     * @param profile Current profile
-     * @param pkpdRuntime PKPD runtime if available
-     * @param isfUsed ISF actually used (after fusion)
-     * @param smbProposed SMB proposed by AIMI (U)
-     * @param tbrRate TBR rate proposed (U/h)
-     * @param tbrDuration TBR duration (min)
-     * @param intervalMin Interval proposed (min)
-     * @param maxSMB Max SMB limit
-     * @param maxSMBHB Max SMB High BG limit
-     * @param maxIOB Max IOB limit
-     * @param maxBasal Max basal limit
-     * @param reasonTags Decision reason tags
-     * @param modeType Current meal mode type (null if none)
-     * @param modeRuntimeMin Meal mode runtime (minutes)
-     * @param autodriveState Autodrive state string
-     * @param wcyclePhase WCycle phase (null if not active)
-     * @param wcycleFactor WCycle factor (null if not active)
-     * @param tbrMaxMode TBR max for mode (if active)
-     * @param tbrMaxAutoDrive TBR max for autodrive (if active)
      */
     fun buildAuditorInput(
+        // ... params ...
         bg: Double,
         delta: Double,
         shortAvgDelta: Double,
@@ -90,7 +69,8 @@ class AuditorDataCollector @Inject constructor(
         wcyclePhase: String?,
         wcycleFactor: Double?,
         tbrMaxMode: Double?,
-        tbrMaxAutoDrive: Double?
+        tbrMaxAutoDrive: Double?,
+        physio: PhysioSnapshot? = null
     ): AuditorInput {
         
         val now = dateUtil.now()
@@ -123,20 +103,81 @@ class AuditorDataCollector @Inject constructor(
             wcycleFactor = wcycleFactor,
             tbrMaxMode = tbrMaxMode,
             tbrMaxAutoDrive = tbrMaxAutoDrive,
+            physio = physio,
             now = now
         )
         
-        // Build history (45-60 min, max 12 points)
-        val history = buildHistory(now)
+        // Retrieve robust history from TrajectoryHistoryProvider
+        val trajectoryHistory = trajectoryHistoryProvider.buildHistory(
+            nowMillis = now,
+            historyMinutes = 90, // Increased to 90 to match Guard requirements
+            currentBg = bg,
+            currentDelta = delta,
+            currentAccel = delta - shortAvgDelta,
+            insulinActivityNow = pkpdRuntime?.activity?.relativeActivity ?: (iob.iob / 3.0),
+            iobNow = iob.iob,
+            pkpdStage = when(pkpdRuntime?.activity?.stage?.name) {
+                "RISING", "PRE_ONSET" -> app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.RISING
+                "PEAK" -> app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.PEAK
+                "FALLING" -> app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.FALLING
+                else -> app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage.TAIL
+            },
+            timeSinceLastBolus = 0, 
+            cobNow = cob ?: 0.0
+        )
+
+        // Build history object
+        val history = buildHistoryFromTrajectory(trajectoryHistory, now)
         
         // Build 7-day stats
         val stats = buildStats7d(now)
         
+        // Build Trajectory Snapshot (AIMI 2.1)
+        // Try to reuse last analysis if valid strings match, otherwise re-analyze
+        val trajectory = buildTrajectorySnapshot(
+            trajectoryHistory,
+            profile.target_bg
+        )
+
         return AuditorInput(
             snapshot = snapshot,
             history = history,
-            stats = stats
+            stats = stats,
+            trajectory = trajectory
         )
+    }
+
+    private fun buildTrajectorySnapshot(
+        history: List<app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState>,
+        target: Double
+    ): TrajectorySnapshot? {
+        try {
+            // Re-run analysis logic to ensure we get the EXACT same classification
+            val stableOrbit = app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit.fromProfile(targetBg = target, basalRate = 1.0)
+            
+            // Call the Guard to analyze (it's robust and stateless-ish)
+            val analysis = trajectoryGuard.analyzeTrajectory(history, stableOrbit) ?: return null
+            
+            val modString = if (analysis.modulation.isSignificant()) {
+                val parts = mutableListOf<String>()
+                if (abs(analysis.modulation.smbDamping - 1.0) > 0.05) parts.add("SMBx%.2f".format(analysis.modulation.smbDamping))
+                if (abs(analysis.modulation.intervalStretch - 1.0) > 0.05) parts.add("Intx%.2f".format(analysis.modulation.intervalStretch))
+                if (analysis.modulation.basalPreference > 0.6) parts.add("PreferBasal")
+                "${parts.joinToString(", ")} (${analysis.modulation.reason})"
+            } else null
+
+            return TrajectorySnapshot(
+                type = analysis.classification.name,
+                curvature = analysis.metrics.curvature,
+                convergence = analysis.metrics.convergenceVelocity,
+                coherence = analysis.metrics.coherence,
+                energyBalance = analysis.metrics.energyBalance,
+                modulation = modString
+            )
+        } catch(e: Exception) { 
+            aapsLogger.error(app.aaps.core.interfaces.logging.LTag.APS, "Auditor Trajectory snapshot failed", e)
+            return null 
+        }
     }
     
     /**
@@ -169,6 +210,7 @@ class AuditorDataCollector @Inject constructor(
         wcycleFactor: Double?,
         tbrMaxMode: Double?,
         tbrMaxAutoDrive: Double?,
+        physio: PhysioSnapshot?,
         now: Long
     ): Snapshot {
         
@@ -250,6 +292,7 @@ class AuditorDataCollector @Inject constructor(
             target = profile.target_bg,
             pkpd = pkpd,
             activity = activity,
+            physio = physio,
             states = states,
             limits = limits,
             decisionAimi = decision,
@@ -308,6 +351,7 @@ class AuditorDataCollector @Inject constructor(
         val tbrs = try {
             persistenceLayer.getTemporaryBasalsStartingFromTime(fromTime, ascending = false)
                 .blockingGet()
+                .filter { it.duration.toInt() != 0 } // Filter out CANCELs
         } catch (e: Exception) {
             emptyList()
         }
@@ -324,43 +368,38 @@ class AuditorDataCollector @Inject constructor(
     }
     
     /**
-     * Build history: BG/delta/IOB/TBR/SMB/HR/steps over 45-60 min
-     * Max 12 points (5-min intervals)
+     * Build history object from PhaseSpace states
      */
-    private fun buildHistory(now: Long): History {
-        val lookbackMin = 60
-        val intervalMin = 5
+    private fun buildHistoryFromTrajectory(
+        states: List<app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState>, 
+        now: Long
+    ): History {
+        // Take last 12 points (60 min), reversed for JSON array [newest...oldest] or [oldest...newest]
+        // Usually charts expect chronological order. Let's provide newest first as typical history lookback?
+        // Actually, for stats libraries, usually chronological. 
+        // Let's stick to chronological [oldest -> newest] for alignment, logic dictates we filter by time.
+        
         val maxPoints = 12
+        val recentStates = states.sortedBy { it.timestamp }.takeLast(maxPoints)
         
-        val bgSeries = mutableListOf<Double>()
-        val deltaSeries = mutableListOf<Double>()
-        val iobSeries = mutableListOf<Double>()
-        val tbrSeries = mutableListOf<Double?>()
-        val smbSeries = mutableListOf<Double>()
-        val hrSeries = mutableListOf<Int?>()
-        val stepsSeries = mutableListOf<Int>()
+        val bgSeries = recentStates.map { it.bg }.toMutableList()
+        val deltaSeries = recentStates.map { it.bgDelta }.toMutableList()
+        val iobSeries = recentStates.map { it.iob }.toMutableList()
         
-        repeat(maxPoints) { i ->
-            val timeOffset = (i + 1) * intervalMin * 60 * 1000L
-            val timestamp = now - timeOffset
-            
-            // BG & delta (simplified - ideally fetch from persistence)
-            bgSeries.add(0.0)  // TODO: fetch from GlucoseValue
-            deltaSeries.add(0.0)
-            
-            // IOB (simplified - would need to recalculate at each point)
-            iobSeries.add(0.0)  // TODO: calculate IOB at timestamp
-            
-            // TBR (check if active at this time)
-            tbrSeries.add(null)  // TODO: fetch TBR rate
-            
-            // SMB (check if delivered around this time)
-            smbSeries.add(0.0)  // TODO: fetch SMB
-            
-            // HR & steps
-            hrSeries.add(null)  // TODO: from ActivityManager
-            stepsSeries.add(0)
-        }
+        // Pad with zeros if not enough points to maintain array structure consistency? 
+        // No, list length can vary, but for "Series" often fixed length expected.
+        // Let's rely on map.
+        
+        // For other series (smb, tbr) we don't have them in phase space state.
+        // We will fill with zeros/nulls for now as they are less critical for trajectory physics
+        // but important for AI context.
+        // Ideally we should fetch them similarly from persistence if Critical.
+        // Given Phase 1 fix, let's keep them zero-filled but correctly sized.
+        
+        val tbrSeries = MutableList<Double?>(recentStates.size) { null }
+        val smbSeries = MutableList<Double>(recentStates.size) { 0.0 }
+        val hrSeries = MutableList<Int?>(recentStates.size) { null }
+        val stepsSeries = MutableList<Int>(recentStates.size) { 0 }
         
         return History(
             bgSeries = bgSeries,

@@ -349,6 +349,17 @@ Prolonged Unannounced Hypers: Decrease (0.3–0.4) so the ISF adapts more quickl
     <string name="oaps_aimi_cho_title">Average carbohydrate amount lunch/dinner</string>
     <string name="aimi_preferences">AIMI Settings</string>
     <string name="aimi_advisor_section_settings">AIMI Settings</string>
+    <string name="aimi_adv_support_title">Expert Support</string>
+    <string name="aimi_adv_support_msg">Enter the access code provided by MTR to export diagnostics.</string>
+    <string name="aimi_adv_support_verify">Verify</string>
+    <string name="aimi_adv_support_invalid">⚠️ Invalid Code</string>
+    <string name="aimi_adv_issue_title">Describe Issue</string>
+    <string name="aimi_adv_issue_msg">Briefly describe the problem so MTR can analyze the context.</string>
+    <string name="aimi_adv_issue_hint">Describe your issue (optional)...</string>
+    <string name="aimi_adv_generate_btn">Generate &amp; Share</string>
+    <string name="aimi_adv_error_gen">Error generating report</string>
+    <string name="aimi_diag_subject">AIMI Diagnostic Report - %1$s</string>
+    <string name="aimi_diag_chooser">Send Diagnostic to MTR</string>
 
 
 
@@ -386,6 +397,9 @@ Prolonged Unannounced Hypers: Decrease (0.3–0.4) so the ISF adapts more quickl
     <string name="oaps_aimi_sleep_interval_summary">Interval between SMB for Sleep Mode</string>
     <string name="oaps_aimi_sleep_interval_title">SMB Interval Sleep Mode</string>
     <string name="OApsAIMI_Enable_pregnancy">Pregnancy Mode</string>
+    <string name="OApsAIMI_PregnancyDueDate_title">Due Date (Terme)</string>
+    <string name="OApsAIMI_PregnancyDueDate_summary">Enter estimated delivery date (YYYY-MM-DD) to enable gestational autopilot.</string>
+    <string name="error_invalid_date_format">Invalid format. Please use YYYY-MM-DD.</string>
     <string name="OApsAIMI_Force_Limits">Force AAPS Multiplier Limits</string>
     <string name="OApsAIMI_Enable_honeymoon">Child Mode (insulin needs lower than adult)</string>
     <string name="oaps_aimi_HIGHBG_interval_summary">High BG SMB Interval</string>
@@ -1356,4 +1370,26 @@ Prolonged Unannounced Hypers: Decrease (0.3–0.4) so the ISF adapts more quickl
     <string name="aimi_physio_llm_enable_summary">Send physio data to LLM for daily health summaries (Optional).</string>
     <string name="aimi_physio_debug_title">Debug Logging</string>
     <string name="aimi_physio_debug_summary">Log detailed physiological states to the console.</string>
+
+    <!-- 🌸 Endometriosis & Cycle Settings -->
+    <string name="endo_preferences_title">Endometriosis Settings</string>
+    <string name="endo_enable_title">Enable Endometriosis Logic</string>
+    <string name="endo_enable_summary">Adapts ISF/Basal/SMB for inflammatory cycles (Basal-First Strategy).</string>
+    <string name="endo_suppression_title">Hormonal Suppression Mode</string>
+    <string name="endo_suppression_summary">For continuous pill or no-cycle management (Steady state inflammation).</string>
+    <string name="endo_flare_title">Pain Flare Active</string>
+    <string name="endo_flare_summary">Toggle ON during acute pain crisis (Increases Basal, Dampens SMB).</string>
+    <string name="endo_basal_mult_title">Max Basal Multiplier</string>
+    <string name="endo_basal_mult_summary">Maximum temp basal boost during flare (Default 1.3x).</string>
+    <string name="endo_smb_dampen_title">SMB Dampening Factor</string>
+    <string name="endo_smb_dampen_summary">Factor to reduce SMBs during flare to prevent stacking (Default 0.7x).</string>
+    <string name="endo_flare_duration_title">Flare Duration (hours)</string>
+    <string name="endo_flare_duration_summary">How long the flare mode stays active when toggled.</string>
+
+
+
+
+
+
+
 </resources>

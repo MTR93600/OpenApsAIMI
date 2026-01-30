@@ -47,6 +47,17 @@ class AdjustmentDetailsActivity : TranslatedDaggerAppCompatActivity() {
         binding.smbValue.text = state.smb?.let { "%.2f U".format(it) } ?: "--"
         binding.basalValue.text = state.basal?.let { "%.2f U/h".format(it) } ?: "--"
 
+        // 🌀 Trajectory Visualization
+        if (state.trajectoryTitle != null && state.trajectoryAscii != null) {
+            binding.trajectoryCard.isVisible = true
+            binding.trajectoryTitle.text = state.trajectoryTitle
+            binding.trajectoryAscii.text = state.trajectoryAscii
+            binding.trajectoryMetrics.text = state.trajectoryMetrics ?: ""
+            binding.trajectoryMetrics.isVisible = !state.trajectoryMetrics.isNullOrEmpty()
+        } else {
+            binding.trajectoryCard.isVisible = false
+        }
+
         val reasonToShow = state.detailedReason ?: state.reason
         if (!reasonToShow.isNullOrEmpty()) {
             binding.reasonCard.isVisible = true

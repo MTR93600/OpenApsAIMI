@@ -50,8 +50,8 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
         private const val TAG = "PhysioRepository"
         private const val CACHE_TTL_MS = 30 * 60 * 1000L // 30 minutes
         private const val API_TIMEOUT_MS = 10_000L // 10 seconds
-        private const val MORNING_WINDOW_START = 5 // 5 AM
-        private const val MORNING_WINDOW_END = 9 // 9 AM
+        private const val MORNING_WINDOW_START = 2 // 2 AM (Widened)
+        private const val MORNING_WINDOW_END = 11 // 11 AM (Widened)
     }
     
     private val healthConnectClient: HealthConnectClient? by lazy {
@@ -324,6 +324,41 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
     }
     
     // ═══════════════════════════════════════════════════════════════════════
+    // HEART RATE DATA
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Fetches the most recent Heart Rate sample (Real-Time check)
+     * Lookback window: 1 hour
+     */
+    fun fetchLastHeartRate(): Int {
+        val client = healthConnectClient ?: return 0
+        return try {
+            runBlocking {
+                withTimeout(API_TIMEOUT_MS) {
+                    withContext(Dispatchers.IO) {
+                        val now = Instant.now()
+                        val start = now.minusSeconds(3600) // 1 hour lookback
+                        val request = ReadRecordsRequest(
+                            recordType = HeartRateRecord::class,
+                            timeRangeFilter = TimeRangeFilter.between(start, now),
+                            ascendingOrder = false, // Newest first
+                            pageSize = 1
+                        )
+                        val response = client.readRecords(request)
+                        val lastRecord = response.records.firstOrNull()
+                        // Get the last sample in the record series
+                        lastRecord?.samples?.lastOrNull()?.beatsPerMinute?.toInt() ?: 0
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            aapsLogger.debug(LTag.APS, "[$TAG] Last HR fetch failed: ${e.message}")
+            0
+        }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════
     // RESTING HEART RATE (RHR)
     // ═══════════════════════════════════════════════════════════════════════
     
@@ -351,24 +386,21 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                         val now = Instant.now()
                         val startTime = now.minusSeconds((daysBack * 24 * 60 * 60).toLong())
                         
-                        val request = ReadRecordsRequest(
-                            recordType = HeartRateRecord::class,
-                            timeRangeFilter = TimeRangeFilter.between(startTime, now)
+                        // Optimize: Use Aggregation to get Min HR without loading raw samples
+                        val aggregation = client.aggregate(
+                            AggregateRequest(
+                                metrics = setOf(HeartRateRecord.BPM_MIN),
+                                timeRangeFilter = TimeRangeFilter.between(startTime, now)
+                            )
                         )
-                        
-                        val response = client.readRecords(request)
-                        
-                        // Filter to morning window and calculate daily minimum
-                        // Simplified: Just take overall minimum from all samples
-                        val allSamples = response.records.flatMap { it.samples }
-                        val minBPM = allSamples.minOfOrNull { it.beatsPerMinute }
-                        
+                        val minBPM = aggregation[HeartRateRecord.BPM_MIN]
+
                         val morningRHRs = if (minBPM != null && minBPM > 0) {
                             listOf(
                                 RHRDataMTR(
                                     timestamp = now.toEpochMilli(),
                                     bpm = minBPM.toInt(),
-                                    source = response.records.firstOrNull()?.metadata?.dataOrigin?.packageName ?: "Unknown"
+                                    source = "HealthConnect(Agg)"
                                 )
                             )
                         } else {

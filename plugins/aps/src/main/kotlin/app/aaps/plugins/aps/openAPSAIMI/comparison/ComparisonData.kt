@@ -206,7 +206,11 @@ data class ComparisonEntry(
     val aimiUamLast: Double?,
     val smbUamLast: Double?,
     val reasonAimi: String,
-    val reasonSmb: String
+    val reasonSmb: String,
+    // New Interpretation Fields
+    val verdict: String = "",
+    val artifactFlag: String = "",
+    val diffSign: String = ""
 )
 
 data class ComparisonStats(

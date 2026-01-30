@@ -20,10 +20,10 @@ import javax.inject.Singleton
  * 🎛️ AIMI Physiological Manager - MTR Implementation
  * 
  * Central orchestrator for physiological analysis pipeline.
- * Uses WorkManager for reliable periodic execution (every 4 hours).
+ * Uses WorkManager for reliable periodic execution (every 15 minutes).
  * 
  * Responsibilities:
- * 1. Schedule data collection every 4 hours via WorkManager
+ * 1. Schedule data collection every 15 minutes via WorkManager
  * 2. Coordinate all pipeline components
  * 3. Handle errors gracefully
  * 
@@ -44,7 +44,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
     
     companion object {
         private const val TAG = "PhysioManager"
-        const val WORK_TAG = "AIMI_PHYSIO_4H"
+        const val WORK_TAG = "AIMI_PHYSIO_15M" // Frequency increased for near real-time context
         private const val PREF_KEY_LAST_UPDATE = "aimi_physio_last_update_ms"
         
         // Static accessor for Worker
@@ -118,12 +118,16 @@ class AIMIPhysioManagerMTR @Inject constructor(
      */
     private fun schedulePeriodicWork() {
         try {
+            // Cleanup old 4h worker to prevent duplicates
+            WorkManager.getInstance(context).cancelAllWorkByTag("AIMI_PHYSIO_4H")
+
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.NOT_REQUIRED) // Health Connect is local
                 .setRequiresBatteryNotLow(true)
                 .build()
 
-            val workRequest = PeriodicWorkRequestBuilder<AIMIPhysioWorkerMTR>(4, TimeUnit.HOURS)
+            // Uses 15 minutes (minimum allowed by Android WorkManager)
+            val workRequest = PeriodicWorkRequestBuilder<AIMIPhysioWorkerMTR>(15, TimeUnit.MINUTES)
                 .setConstraints(constraints)
                 .addTag(WORK_TAG)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
@@ -239,6 +243,18 @@ class AIMIPhysioManagerMTR @Inject constructor(
             var context = contextEngine.analyze(features, baseline)
             analyzeMs = System.currentTimeMillis() - t2
             
+            // 🤖 Step 4b: Cognitive Analysis (LLM - Optional)
+            if (isLLMEnabled()) {
+                // Only run LLM if Data is valid to avoid hallucination on empty data
+                if (features.hasValidData) {
+                    val narrative = llmAnalyzer.analyze(features, baseline, context)
+                    if (narrative.isNotBlank()) {
+                         context = context.copy(narrative = narrative)
+                         aapsLogger.info(LTag.APS, "[$TAG] 🤖 LLM Insight: $narrative")
+                    }
+                }
+            }
+
             // Step 5: Store
             contextStore.updateContext(context, baseline)
             

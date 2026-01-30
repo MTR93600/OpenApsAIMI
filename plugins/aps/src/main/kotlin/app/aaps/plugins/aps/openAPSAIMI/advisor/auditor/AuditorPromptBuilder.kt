@@ -207,6 +207,18 @@ Provide concise, clinical reasoning:
 ## 6. degradedMode:
 Set to `true` if prediction is missing or data is incomplete.
 Recommend conservative modulation (interval + preferTBR) but don't block.
+
+## 7. Trajectory Analysis (Phase-Space):
+Use the `trajectory` object to refine your verdict. 
+**IMPORTANT**: The system has *already* applied modulation (visible in `trajectory.modulation`). Do not double-penalize unless unsafe.
+
+- **TIGHT_SPIRAL** (Modulation: SMB Damping applied): System is oscillating. **CONFIRM** the damping.
+- **OPEN_DIVERGING** (Modulation: SMB Boost applied): BG is escaping. **CONFIRM** the boost unless `hypo_risk` is present.
+- **SLOW_DRIFT** (🐌): Gentle divergence (-0.2 to -0.5). System has applied a small helper boost. **CONFIRM**.
+- **HOVERING** (➖): Stable off-target. System prefers Basal. **CONFIRM** or **SHIFT_TO_TBR** if SMB is too aggressive.
+- **CLOSING_CONVERGING**: System is recovering. **CONFIRM** unless hypo risk.
+- **STABLE_ORBIT**: System in equilibrium. Avoid aggressive actions. **CONFIRM** or gentle **SOFTEN**.
+- **Coherence < 0.3**: Insulin is not working as expected (potential resistance/site issue). Be cautious with stacking.
     """.trimIndent()
     
     /**

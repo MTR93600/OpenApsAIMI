@@ -6,7 +6,7 @@ import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionProfiler
-import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
@@ -53,7 +53,7 @@ class TrajectoryHistoryProvider @Inject constructor(
         currentAccel: Double,
         insulinActivityNow: Double,
         iobNow: Double,
-        pkpdStage: InsulinActivityStage,
+        pkpdStage: ActivityStage,
         timeSinceLastBolus: Int,
         cobNow: Double = 0.0
     ): List<PhaseSpaceState> {
@@ -161,7 +161,7 @@ class TrajectoryHistoryProvider @Inject constructor(
         accel: Double,
         activity: Double,
         iob: Double,
-        stage: InsulinActivityStage,
+        stage: ActivityStage,
         timeSinceBolus: Int,
         cob: Double
     ): PhaseSpaceState = PhaseSpaceState(
@@ -258,13 +258,13 @@ class TrajectoryHistoryProvider @Inject constructor(
      * 
      * TODO: Use actual bolus timing and PKPD model
      */
-    private fun estimatePkpdStage(iob: Double, delta: Double): InsulinActivityStage {
+    private fun estimatePkpdStage(iob: Double, delta: Double): ActivityStage {
         return when {
-            iob < 0.1 -> InsulinActivityStage.EXHAUSTED
-            delta > 0 -> InsulinActivityStage.PRE_ONSET   // BG still rising
-            delta < -5 -> InsulinActivityStage.PEAK        // Strong fall
-            delta < -2 -> InsulinActivityStage.RISING      // Moderate fall
-            else -> InsulinActivityStage.TAIL              // Gradual decline
+            iob < 0.1 -> ActivityStage.TAIL
+            delta > 0 -> ActivityStage.RISING
+            delta < -5 -> ActivityStage.PEAK
+            delta < -2 -> ActivityStage.FALLING
+            else -> ActivityStage.TAIL
         }
     }
     

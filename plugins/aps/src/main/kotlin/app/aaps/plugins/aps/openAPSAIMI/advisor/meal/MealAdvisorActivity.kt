@@ -27,6 +27,9 @@ import app.aaps.core.keys.DoubleKey
 class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
 
     @Inject lateinit var preferences: Preferences
+    @Inject lateinit var persistenceLayer: app.aaps.core.interfaces.db.PersistenceLayer
+    @Inject lateinit var profileFunction: app.aaps.core.interfaces.profile.ProfileFunction
+    @Inject lateinit var dateUtil: app.aaps.core.interfaces.utils.DateUtil
     
     private lateinit var recognitionService: FoodRecognitionService
     private val REQUEST_IMAGE_CAPTURE = 1
@@ -35,6 +38,8 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     private lateinit var reasoningText: TextView
     private lateinit var confirmButton: Button
     private lateinit var imageView: ImageView
+    private lateinit var carbsInput: android.widget.EditText
+    private lateinit var detailsLayout: LinearLayout
 
     private var currentEstimate: EstimationResult? = null
 
@@ -51,6 +56,7 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             setPadding(32, 32, 32, 32)
             setBackgroundColor(bgColor)
             gravity = Gravity.CENTER_HORIZONTAL
+            isFocusableInTouchMode = true // Clear focus on touch
         }
 
         // 0. Provider Selector
@@ -74,7 +80,6 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         }
         
         // All supported vision providers
-        // Note: GPT-4o has vision, GPT-5.2 is text-only (used in Advisor/Auditor)
         val providers = arrayOf(
             "OpenAI (GPT-4o Vision)", 
             "Gemini (2.5 Flash)", 
@@ -92,7 +97,7 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             "GEMINI" -> 1
             "DEEPSEEK" -> 2
             "CLAUDE" -> 3
-            else -> 0  // Default to OpenAI
+            else -> 0
         }
         spinner.setSelection(initialPosition)
 
@@ -106,7 +111,6 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                      else -> "OPENAI"
                  }
                  preferences.put(app.aaps.core.keys.StringKey.AimiAdvisorProvider, selected)
-                 // Ensure text color is readable
                  (view as? TextView)?.setTextColor(Color.WHITE)
              }
              override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
@@ -120,7 +124,7 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(600, 600)
             setBackgroundColor(Color.parseColor("#1E293B"))
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setImageResource(android.R.drawable.ic_menu_camera) // Placeholder
+            setImageResource(android.R.drawable.ic_menu_camera)
         }
         layout.addView(imageView)
 
@@ -136,19 +140,56 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             setOnClickListener { dispatchTakePictureIntent() }
         }
         layout.addView(snapButton)
-
-        // 3. Result Card
-        resultText = TextView(this).apply {
-            text = "No food analyzed yet."
-            textSize = 20f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
+        
+        // --- Details Section (Hidden until result) ---
+        detailsLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = android.view.View.GONE
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 
+                LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { topMargin = 48 }
         }
-        layout.addView(resultText)
+
+        // 3. Result Display
+        resultText = TextView(this).apply {
+            textSize = 20f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+        }
+        detailsLayout.addView(resultText)
+
+        // 4. Carbs Editor
+        val carbEditLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                 LinearLayout.LayoutParams.MATCH_PARENT,
+                 LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 24 }
+        }
+        
+        val carbLabel = TextView(this).apply { 
+            text = "Carbs (g): "
+            setTextColor(Color.LTGRAY)
+        }
+        
+        carbsInput = android.widget.EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+            setTextColor(Color.WHITE)
+            setEms(4)
+            gravity = Gravity.CENTER
+            setText("0")
+            addTextChangedListener(object : android.text.TextWatcher {
+                 override fun afterTextChanged(s: android.text.Editable?) { recalculateProposal() }
+                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            })
+        }
+        
+        carbEditLayout.addView(carbLabel)
+        carbEditLayout.addView(carbsInput)
+        detailsLayout.addView(carbEditLayout)
 
         reasoningText = TextView(this).apply {
             text = ""
@@ -160,21 +201,22 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { topMargin = 16 }
         }
-        layout.addView(reasoningText)
+        detailsLayout.addView(reasoningText)
 
-        // 4. Confirm Button (Hidden initially)
+        // 5. Confirm Button
         confirmButton = Button(this).apply {
-            text = "✅ Confirm & Inject to FCL"
+            text = "✅ Confirm"
             setBackgroundColor(Color.parseColor("#10B981")) // Green
             setTextColor(Color.WHITE)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { topMargin = 48 }
-            visibility = android.view.View.GONE
-            setOnClickListener { confirmEstimate() }
+            setOnClickListener { confirmInjection() }
         }
-        layout.addView(confirmButton)
+        detailsLayout.addView(confirmButton)
+        
+        layout.addView(detailsLayout)
 
         setContentView(layout)
     }
@@ -225,34 +267,81 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                 // Calculate Total Effective (Carbs + FPU)
                 val totalEffective = result.carbsGrams + result.fpuEquivalent
 
-                // Update UI: Show breakdown but emphasize Total
-                resultText.text = """
-                    Total Effective: ${totalEffective.toInt()}g
-                    (Carbs: ${result.carbsGrams.toInt()}g + FPU: ${result.fpuEquivalent.toInt()}g)
-                    
-                    ${result.description}
-                """.trimIndent()
-                
+                // Update UI
+                resultText.text = result.description
+                carbsInput.setText(totalEffective.toInt().toString())
                 reasoningText.text = result.reasoning
-                confirmButton.visibility = android.view.View.VISIBLE
-                confirmButton.text = "✅ Confirm ${totalEffective.toInt()}g (Carbs + FPU)" // Verify explicit sum
+                
+                detailsLayout.visibility = android.view.View.VISIBLE
+                recalculateProposal() // Update button text immediately
 
             } catch (e: Exception) {
                 resultText.text = "Error: ${e.message}"
+                detailsLayout.visibility = android.view.View.VISIBLE
             }
         }
     }
+    
+    // 🔧 Recalculate suggested insulin dynamically
+    private fun recalculateProposal() {
+        try {
+            val carbs = carbsInput.text.toString().toDoubleOrNull() ?: 0.0
+            val profile = profileFunction.getProfile()
+            
+            // Get CR (Carb Ratio) - handling variants
+            val cr = if (profile != null) {
+                 val ratio = profile.getIc()
+                 if (ratio > 0.1) ratio else 10.0 // Fail-safe
+            } else 10.0
+            
+            val insulin = carbs / cr
+            
+            confirmButton.text = "✅ Inject ${carbs.toInt()}g Carbs\n(Prop: %.1f U @ CR %.1f)".format(insulin, cr)
+        } catch (e: Exception) {
+            confirmButton.text = "✅ Confirm"
+        }
+    }
 
-    private fun confirmEstimate() {
-        val estimate = currentEstimate ?: return
+    private fun confirmInjection() {
+        val carbsVal = carbsInput.text.toString().toDoubleOrNull() ?: return
         
-        // Inject SUM into Preferences for FCL logic
-        val totalToInject = estimate.carbsGrams + estimate.fpuEquivalent
+        if (carbsVal <= 0.0) {
+             Toast.makeText(this, "Please enter valid carbs", Toast.LENGTH_SHORT).show()
+             return
+        }
+
+        // 1. Insert Real Carbs into DB
+        val now = System.currentTimeMillis()
+        val ca = app.aaps.core.data.model.CA(
+             timestamp = now, // Valid now
+             isValid = true,
+             amount = carbsVal,
+             duration = 0, // 0 = Let Profile Decide / Calculator
+             notes = "AIMI Advisor: Snap & Go",
+             ids = app.aaps.core.data.model.IDs()
+        )
         
-        preferences.put(DoubleKey.OApsAIMILastEstimatedCarbs, totalToInject)
-        preferences.put(DoubleKey.OApsAIMILastEstimatedCarbTime, System.currentTimeMillis().toDouble())
+        // Blocking Get for safety in this synchronous UI flow
+        try {
+            persistenceLayer.insertOrUpdateCarbs(
+                 ca, 
+                 app.aaps.core.data.ue.Action.TREATMENT, 
+                 app.aaps.core.data.ue.Sources.CarbDialog, 
+                 ca.notes
+            ).blockingGet()
+        } catch (e: Exception) {
+            Toast.makeText(this, "DB Error: ${e.message}", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        // 2. Set Trigger Preferences for DetermineBasalAIMI2
+        preferences.put(app.aaps.core.keys.BooleanKey.OApsAIMIMealAdvisorTrigger, true)
         
-        Toast.makeText(this, "Injected ${totalToInject.toInt()}g (Carbs + FPU) into AIMI.", Toast.LENGTH_LONG).show()
+        // Also update legacy prefs for redundancy/display
+        preferences.put(DoubleKey.OApsAIMILastEstimatedCarbs, carbsVal)
+        preferences.put(DoubleKey.OApsAIMILastEstimatedCarbTime, now.toDouble())
+        
+        Toast.makeText(this, "Injected ${carbsVal.toInt()}g + Triggered SMB/TBR Logic", Toast.LENGTH_LONG).show()
         finish()
     }
 }
