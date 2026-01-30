@@ -308,8 +308,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val base = if (::unifiedReactivityLearner.isInitialized) unifiedReactivityLearner.getCombinedFactor() else 1.0
             
             // 🧬 PHYSIO: SNS=0.8 -> +15% Boost
-            val ctx = if (::physioAdapter.isInitialized) physioAdapter.getCurrentContext() else null
-            val sns = ctx?.toSNSDominance() ?: 0.3
+            val snapshot = if (::physioAdapter.isInitialized) physioAdapter.getLatestSnapshot() else null
+            val sns = snapshot?.toSNSDominance() ?: 0.3
             val mod = 1.0 + (sns - 0.3) * 0.3
             
             return base * mod
@@ -3744,6 +3744,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleError.clear()
         consoleLog.clear()
 
+        // 🚀 MEAL ADVISOR: Check explicitly for Trigger (Snap&Go)
+        // We read it here to pass it to the specific logic, bypassing refractory checks.
+        val isExplicitAdvisorRun = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
+
         // 🕵️ COMPARATOR: Capture Original Profile to avoid Bias
         // AIMI modifies the profile (activity, pregnancy, autosens) in-flight.
         // We want the comparator to run against the RAW profile.
@@ -3846,8 +3850,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Let's stick to maxSMB reset first which was the smoking gun.
         // ✅ ETAPE 1: Calculer le Profil d'Action de l'IOB
         // 🧬 PHYSIO INTEGRATION: Get SNS Dominance from Adapter
-        val physioContext = physioAdapter.getCurrentContext()
-        val snsDominance = physioContext?.toSNSDominance() ?: 0.3 // Default Neutral
+        val physioSnapshot = physioAdapter.getLatestSnapshot()
+        val snsDominance = physioSnapshot.toSNSDominance()
         
         // 🏥 Update Context
         decisionCtx.adjustments.physiological_context = AimiDecisionContext.PhysioContext(
@@ -4893,7 +4897,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // PRIORITY 3: MEAL ADVISOR
-        val advisorRes = tryMealAdvisor(bg, delta, iob_data, profile, lastBolusTimeMs ?: 0L, modesCondition)
+        // PRIORITY 3: MEAL ADVISOR
+        val advisorRes = tryMealAdvisor(bg, delta, iob_data, profile, lastBolusTimeMs ?: 0L, modesCondition, isExplicitAdvisorRun)
         if (advisorRes is DecisionResult.Applied) {
              consoleLog.add("MEAL_ADVISOR_APPLIED source=${advisorRes.source} bolus=${advisorRes.bolusU}")
              if (advisorRes.tbrUph != null) {
@@ -7348,22 +7353,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return DecisionResult.Fallthrough("Safety OK")
     }
 
-    private fun tryMealAdvisor(bg: Double, delta: Float, iobData: IobTotal, profile: OapsProfileAimi, lastBolusTime: Long, modesCondition: Boolean): DecisionResult {
+    private fun tryMealAdvisor(bg: Double, delta: Float, iobData: IobTotal, profile: OapsProfileAimi, lastBolusTime: Long, modesCondition: Boolean, isExplicitTrigger: Boolean): DecisionResult {
         val estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
         val estimatedCarbsTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
         val timeSinceEstimateMin = (System.currentTimeMillis() - estimatedCarbsTime) / 60000.0
 
         if (estimatedCarbs > 10.0 && timeSinceEstimateMin in 0.0..120.0 && bg >= 60) {
             // Refractory Check (Safety)
-            if (hasReceivedRecentBolus(45, lastBolusTime)) {
+            // 🚀 BYPASS if Explicit Trigger (User clicked Snap&Go)
+            if (!isExplicitTrigger && hasReceivedRecentBolus(45, lastBolusTime)) {
                 return DecisionResult.Fallthrough("Advisor Refractory (Recent Bolus <45m)")
             }
             
             // FIX: Removed delta > 0.0 condition - Meal Advisor should work even if BG is stable/falling
             // The refractory check, BG floor (>=60), and time window (120min) are sufficient safety
-            if (modesCondition) { 
+            if (modesCondition || isExplicitTrigger) { 
                 val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal)
                 val safeMax = if (maxBasalPref > 0.1) maxBasalPref else profile.max_basal
+                
+
                 
                 // FIX: TBR Coverage Calculation
                 // ORIGINAL logic subtracted coveredByBasal from SMB, causing netNeeded to become 0
@@ -7397,6 +7405,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add("ADVISOR_CALC TBR=${String.format("%.1f", safeMax)}U/h (will deliver ${String.format("%.2f", tbrCoverage)}U over 30min as complement)")
                 consoleLog.add("ADVISOR_CALC TOTAL delivery: SMB ${String.format("%.2f", netNeeded)}U + TBR ${String.format("%.2f", tbrCoverage)}U = ${String.format("%.2f", netNeeded + tbrCoverage)}U delta=$delta modesOK=true")
                 
+                // 🚀 If explicit trigger, consume the flag NOW to prevent loop
+                if (isExplicitTrigger) {
+                    preferences.put(BooleanKey.OApsAIMIMealAdvisorTrigger, false)
+                    consoleLog.add("🚀 MEAL ADVISOR: Trigger Consumed.")
+                }
+
                      return DecisionResult.Applied(
                         source = "MealAdvisor",
                         bolusU = netNeeded,

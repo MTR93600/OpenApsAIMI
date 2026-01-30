@@ -94,7 +94,7 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
         // Mode Toggles (Tabs)
         val toggleContainer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            weightSum = 2f
+            weightSum = 4f
             // Custom simplified background logic
             setBackgroundColor(cardDark)
             setPadding(16, 16, 16, 16)
@@ -139,18 +139,6 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
         formCard.addView(formLayout)
         container.addView(formCard)
 
-
-        // --- Buttons ---
-        val buttonPanel = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            weightSum = 2f
-            // Custom simplified background logic
-            setBackgroundColor(cardDark)
-            setPadding(16, 16, 16, 16)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = 64
-            }
-        }
 
         // Save Button
         val saveBtn = Button(this).apply {
@@ -205,15 +193,6 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
 
         setContentView(mainScroll)
 
-        // Functionality
-        lunchButton.setOnClickListener { 
-            switchMode(ModeType.LUNCH) 
-            activateBtn.text = "⚡ ACTIVATE LUNCH"
-        }
-        dinnerButton.setOnClickListener { 
-            switchMode(ModeType.DINNER) 
-            activateBtn.text = "⚡ ACTIVATE DINNER"
-        }
 
         // Initial Load
         loadValues(ModeType.LUNCH)
