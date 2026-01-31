@@ -225,16 +225,31 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                         )
                         
                         val response = client.readRecords(request)
-                        val sleepSession = response.records.maxByOrNull { it.endTime }
                         
-                        sleepSession?.let { session ->
-                            val durationHours = (session.endTime.epochSecond - session.startTime.epochSecond) / 3600.0
+                        // 🚀 FILTER & AGGREGATE Sleep Sessions
+                        // Health Connect can return multiple segments (Naps, fragmented night)
+                        // We sum up all sleep within the 'Last Night' window (e.g. last 16h to be safe, or just use the response window)
+                        // The response window is 'yesterday' to 'now' (48h). 
+                        // To get "Last Night" specifically, we should look for the most recent generic block.
+                        
+                        // Simple robust logic: Sum all sleep ending in the last 24h
+                        val oneDayAgo = now.minusSeconds(24 * 60 * 60)
+                        val recentSessions = response.records.filter { it.endTime.isAfter(oneDayAgo) }
+
+                        if (recentSessions.isNotEmpty()) {
+                            // Sum durations
+                            val totalDurationHours = recentSessions.sumOf { 
+                                (it.endTime.epochSecond - it.startTime.epochSecond) / 3600.0 
+                            }
                             
-                            // Simplified: No stage details (API varies by version)
+                            // Use the latest end time as the session "end"
+                            val latestEnd = recentSessions.maxOf { it.endTime }
+                            val earliestStart = recentSessions.minOf { it.startTime }
+
                             val sleepData = SleepDataMTR(
-                                startTime = session.startTime.toEpochMilli(),
-                                endTime = session.endTime.toEpochMilli(),
-                                durationHours = durationHours,
+                                startTime = earliestStart.toEpochMilli(),
+                                endTime = latestEnd.toEpochMilli(),
+                                durationHours = totalDurationHours,
                                 efficiency = 0.85, // Conservative estimate
                                 deepSleepMinutes = 0,
                                 remSleepMinutes = 0,
@@ -247,10 +262,12 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                             
                             aapsLogger.info(
                                 LTag.APS,
-                                "[$TAG] ✅ Sleep: ${durationHours.format(1)}h"
+                                "[$TAG] ✅ Sleep (Aggregated): ${totalDurationHours.format(1)}h from ${recentSessions.size} segments"
                             )
                             
                             sleepData
+                        } else {
+                            null
                         }
                     }
                 }

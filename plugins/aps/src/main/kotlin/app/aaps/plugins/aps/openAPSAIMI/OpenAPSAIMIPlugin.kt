@@ -1175,7 +1175,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     })
 
                     // Steps & Heart Rate Source Mode
-                    // Steps & Heart Rate Source Mode
                     addPreference(ListPreference(context).apply {
                         key = UnifiedActivityProviderMTR.PREF_KEY_SOURCE_MODE
                         title = rh.gs(R.string.pref_aimi_steps_source_title)
@@ -1508,8 +1507,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     AdaptiveStringPreference(
                         ctx = context,
                         stringKey = AimiStringKey.PregnancyDueDateString,
-                        title = R.string.OApsAIMI_PregnancyDueDate_title, // TODO: Add string resource
-                        summary = R.string.OApsAIMI_PregnancyDueDate_summary, // TODO: Add string resource
+                        title = R.string.OApsAIMI_PregnancyDueDate_title,
+                        summary = R.string.OApsAIMI_PregnancyDueDate_summary,
                         validatorParams = DefaultEditTextValidator.Parameters(
                             testType = EditTextValidator.TEST_REGEXP,
                             customRegexp = "^\\d{4}-\\d{2}-\\d{2}$",
@@ -1536,7 +1535,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     )
                 )
                 
-                // 🔧 Tools & Analysis Section
+                /* // 🔧 Tools & Analysis Section
                 addPreference(PreferenceCategory(context).apply {
                     title = rh.gs(R.string.aimi_advisor_section)
                 })
@@ -1555,7 +1554,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         intent = Intent(context, app.aaps.plugins.aps.openAPSAIMI.context.ui.ContextActivity::class.java),
                         summary = R.string.context_description
                     )
-                )
+                ) */
 
                 // 🌸 Endometriosis & Cycle Management Section (MTR)
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
