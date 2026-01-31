@@ -419,6 +419,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         row1.addView(Space(this).apply { layoutParams = LinearLayout.LayoutParams(24, 0) })
       //row1.addView(createMetricCard("TDD MOYEN", "${metrics.tdd.roundToInt()} U", Color.parseColor("#60A5FA"), cardColor), paramHalf())
         row1.addView(createMetricCard(rh.gs(R.string.aimi_advisor_metric_tdd_avg),"${metrics.tdd.roundToInt()} U",Color.parseColor("#60A5FA"),cardColor),paramHalf())
+
         // Row 2
         val row2 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL

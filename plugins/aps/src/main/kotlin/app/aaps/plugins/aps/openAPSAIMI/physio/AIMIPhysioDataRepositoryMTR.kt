@@ -401,40 +401,54 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                 withTimeout(API_TIMEOUT_MS) {
                     withContext(Dispatchers.IO) {
                         val now = Instant.now()
-                        val startTime = now.minusSeconds((daysBack * 24 * 60 * 60).toLong())
+                        val zoneId = ZoneId.systemDefault()
+                        val rhrList = mutableListOf<RHRDataMTR>()
                         
-                        // Optimize: Use Aggregation to get Min HR without loading raw samples
-                        val aggregation = client.aggregate(
-                            AggregateRequest(
-                                metrics = setOf(HeartRateRecord.BPM_MIN),
-                                timeRangeFilter = TimeRangeFilter.between(startTime, now)
-                            )
-                        )
-                        val minBPM = aggregation[HeartRateRecord.BPM_MIN]
+                        // Loop through last N days to get daily morning mins
+                        for (i in 0 until daysBack) {
+                            val dayStart = now.minusSeconds((i * 24 * 60 * 60).toLong())
+                            
+                             // Define Morning Window (e.g., 04:00 - 10:00 local time) regarding the *start* of that 24h block
+                            val localDate = dayStart.atZone(zoneId).toLocalDate()
+                            val windowStart = localDate.atTime(4, 0).atZone(zoneId).toInstant()
+                            val windowEnd = localDate.atTime(10, 0).atZone(zoneId).toInstant()
+                            
+                            // Skip if window is in future
+                            if (windowStart.isAfter(now)) continue
 
-                        val morningRHRs = if (minBPM != null && minBPM > 0) {
-                            listOf(
-                                RHRDataMTR(
-                                    timestamp = now.toEpochMilli(),
-                                    bpm = minBPM.toInt(),
-                                    source = "HealthConnect(Agg)"
+                            val aggregation = client.aggregate(
+                                AggregateRequest(
+                                    metrics = setOf(HeartRateRecord.BPM_MIN),
+                                    timeRangeFilter = TimeRangeFilter.between(windowStart, windowEnd)
                                 )
                             )
-                        } else {
-                            emptyList()
+                            val minBPM = aggregation[HeartRateRecord.BPM_MIN]
+                            
+                            if (minBPM != null && minBPM > 0) {
+                                rhrList.add(
+                                    RHRDataMTR(
+                                        timestamp = windowStart.toEpochMilli(),
+                                        bpm = minBPM.toInt(),
+                                        source = "HealthConnect(DailyMin)"
+                                    )
+                                )
+                            }
                         }
                         
-                        cache[cacheKey] = CachedData(morningRHRs, System.currentTimeMillis())
+                        // Sort by timestamp (oldest first usually, but list is irrelevant)
+                        val sortedRHR = rhrList.sortedBy { it.timestamp }
+
+                        cache[cacheKey] = CachedData(sortedRHR, System.currentTimeMillis())
                         
-                        if (morningRHRs.isNotEmpty()) {
-                            val avgRHR = morningRHRs.map { it.bpm }.average()
+                        if (sortedRHR.isNotEmpty()) {
+                            val avgRHR = sortedRHR.map { it.bpm }.average()
                             aapsLogger.info(
                                 LTag.APS,
-                                "[$TAG] ✅ RHR: ${morningRHRs.size} days, avg=${avgRHR.toInt()} bpm"
+                                "[$TAG] ✅ RHR: ${sortedRHR.size} daily points, avg=${avgRHR.toInt()} bpm"
                             )
                         }
                         
-                        morningRHRs
+                        sortedRHR
                     }
                 }
             }
