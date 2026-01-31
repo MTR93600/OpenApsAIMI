@@ -225,16 +225,31 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                         )
                         
                         val response = client.readRecords(request)
-                        val sleepSession = response.records.maxByOrNull { it.endTime }
                         
-                        sleepSession?.let { session ->
-                            val durationHours = (session.endTime.epochSecond - session.startTime.epochSecond) / 3600.0
+                        // 🚀 FILTER & AGGREGATE Sleep Sessions
+                        // Health Connect can return multiple segments (Naps, fragmented night)
+                        // We sum up all sleep within the 'Last Night' window (e.g. last 16h to be safe, or just use the response window)
+                        // The response window is 'yesterday' to 'now' (48h). 
+                        // To get "Last Night" specifically, we should look for the most recent generic block.
+                        
+                        // Simple robust logic: Sum all sleep ending in the last 24h
+                        val oneDayAgo = now.minusSeconds(24 * 60 * 60)
+                        val recentSessions = response.records.filter { it.endTime.isAfter(oneDayAgo) }
+
+                        if (recentSessions.isNotEmpty()) {
+                            // Sum durations
+                            val totalDurationHours = recentSessions.sumOf { 
+                                (it.endTime.epochSecond - it.startTime.epochSecond) / 3600.0 
+                            }
                             
-                            // Simplified: No stage details (API varies by version)
+                            // Use the latest end time as the session "end"
+                            val latestEnd = recentSessions.maxOf { it.endTime }
+                            val earliestStart = recentSessions.minOf { it.startTime }
+
                             val sleepData = SleepDataMTR(
-                                startTime = session.startTime.toEpochMilli(),
-                                endTime = session.endTime.toEpochMilli(),
-                                durationHours = durationHours,
+                                startTime = earliestStart.toEpochMilli(),
+                                endTime = latestEnd.toEpochMilli(),
+                                durationHours = totalDurationHours,
                                 efficiency = 0.85, // Conservative estimate
                                 deepSleepMinutes = 0,
                                 remSleepMinutes = 0,
@@ -247,10 +262,12 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                             
                             aapsLogger.info(
                                 LTag.APS,
-                                "[$TAG] ✅ Sleep: ${durationHours.format(1)}h"
+                                "[$TAG] ✅ Sleep (Aggregated): ${totalDurationHours.format(1)}h from ${recentSessions.size} segments"
                             )
                             
                             sleepData
+                        } else {
+                            null
                         }
                     }
                 }
@@ -384,40 +401,54 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                 withTimeout(API_TIMEOUT_MS) {
                     withContext(Dispatchers.IO) {
                         val now = Instant.now()
-                        val startTime = now.minusSeconds((daysBack * 24 * 60 * 60).toLong())
+                        val zoneId = ZoneId.systemDefault()
+                        val rhrList = mutableListOf<RHRDataMTR>()
                         
-                        // Optimize: Use Aggregation to get Min HR without loading raw samples
-                        val aggregation = client.aggregate(
-                            AggregateRequest(
-                                metrics = setOf(HeartRateRecord.BPM_MIN),
-                                timeRangeFilter = TimeRangeFilter.between(startTime, now)
-                            )
-                        )
-                        val minBPM = aggregation[HeartRateRecord.BPM_MIN]
+                        // Loop through last N days to get daily morning mins
+                        for (i in 0 until daysBack) {
+                            val dayStart = now.minusSeconds((i * 24 * 60 * 60).toLong())
+                            
+                             // Define Morning Window (e.g., 04:00 - 10:00 local time) regarding the *start* of that 24h block
+                            val localDate = dayStart.atZone(zoneId).toLocalDate()
+                            val windowStart = localDate.atTime(4, 0).atZone(zoneId).toInstant()
+                            val windowEnd = localDate.atTime(10, 0).atZone(zoneId).toInstant()
+                            
+                            // Skip if window is in future
+                            if (windowStart.isAfter(now)) continue
 
-                        val morningRHRs = if (minBPM != null && minBPM > 0) {
-                            listOf(
-                                RHRDataMTR(
-                                    timestamp = now.toEpochMilli(),
-                                    bpm = minBPM.toInt(),
-                                    source = "HealthConnect(Agg)"
+                            val aggregation = client.aggregate(
+                                AggregateRequest(
+                                    metrics = setOf(HeartRateRecord.BPM_MIN),
+                                    timeRangeFilter = TimeRangeFilter.between(windowStart, windowEnd)
                                 )
                             )
-                        } else {
-                            emptyList()
+                            val minBPM = aggregation[HeartRateRecord.BPM_MIN]
+                            
+                            if (minBPM != null && minBPM > 0) {
+                                rhrList.add(
+                                    RHRDataMTR(
+                                        timestamp = windowStart.toEpochMilli(),
+                                        bpm = minBPM.toInt(),
+                                        source = "HealthConnect(DailyMin)"
+                                    )
+                                )
+                            }
                         }
                         
-                        cache[cacheKey] = CachedData(morningRHRs, System.currentTimeMillis())
+                        // Sort by timestamp (oldest first usually, but list is irrelevant)
+                        val sortedRHR = rhrList.sortedBy { it.timestamp }
+
+                        cache[cacheKey] = CachedData(sortedRHR, System.currentTimeMillis())
                         
-                        if (morningRHRs.isNotEmpty()) {
-                            val avgRHR = morningRHRs.map { it.bpm }.average()
+                        if (sortedRHR.isNotEmpty()) {
+                            val avgRHR = sortedRHR.map { it.bpm }.average()
                             aapsLogger.info(
                                 LTag.APS,
-                                "[$TAG] ✅ RHR: ${morningRHRs.size} days, avg=${avgRHR.toInt()} bpm"
+                                "[$TAG] ✅ RHR: ${sortedRHR.size} daily points, avg=${avgRHR.toInt()} bpm"
                             )
                         }
                         
-                        morningRHRs
+                        sortedRHR
                     }
                 }
             }

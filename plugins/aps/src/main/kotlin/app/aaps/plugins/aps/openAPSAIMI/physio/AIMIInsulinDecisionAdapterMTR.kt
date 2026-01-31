@@ -29,7 +29,7 @@ import kotlin.math.abs
  */
 @Singleton
 class AIMIInsulinDecisionAdapterMTR @Inject constructor(
-    private val contextStore: AIMIPhysioContextStoreMTR,
+    private val repo: HealthContextRepository,
     private val persistenceLayer: PersistenceLayer,
     private val dataRepository: AIMIPhysioDataRepositoryMTR,
     private val aapsLogger: AAPSLogger
@@ -56,6 +56,13 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
     }
     
     /**
+     * Returns the current physiological snapshot for external use (e.g. PKPD, Auditor)
+     */
+    fun getLatestSnapshot(): HealthContextSnapshot {
+        return repo.getLastSnapshot()
+    }
+    
+    /**
      * Gets insulin multipliers based on physiological context
      * 
      * INTEGRATION POINT: Called by determineBasalAIMI2
@@ -68,9 +75,7 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
     /**
      * Returns the current physiological context for external use (e.g. PKPD)
      */
-    fun getCurrentContext(): PhysioContextMTR? {
-        return contextStore.getCurrentContext()
-    }
+
 
     /**
      * Gets insulin multipliers based on physiological context
@@ -103,40 +108,32 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
             return PhysioMultipliersMTR.NEUTRAL
         }
         
-        // Get current context
-        val context = contextStore.getCurrentContext()
+        // Get current snapshot
+        val snapshot = repo.getLastSnapshot() // Use cached valid one to avoid blocking main thread
         
-        if (context == null) {
-            aapsLogger.debug(LTag.APS, "[$TAG] No valid context - returning NEUTRAL")
+        if (!snapshot.isValid) {
+            //aapsLogger.debug(LTag.APS, "[$TAG] No valid snapshot - returning NEUTRAL")
             return PhysioMultipliersMTR.NEUTRAL
         }
         
         // Safety Check 3: Confidence too low
-        if (context.confidence < MIN_CONFIDENCE_THRESHOLD) {
-            aapsLogger.warn(
-                LTag.APS,
-                "[$TAG] ⚠️ Low confidence (${(context.confidence * 100).toInt()}%) - skipping modulation"
-            )
+        if (snapshot.confidence < MIN_CONFIDENCE_THRESHOLD) {
+             // Silently ignore low confidence
             return PhysioMultipliersMTR.NEUTRAL
         }
         
-        // Calculate raw multipliers based on context
-        val rawMultipliers = calculateRawMultipliers(context, currentBG, currentDelta)
+        // Calculate raw multipliers
+        val rawMultipliers = calculateRawMultipliers(snapshot, currentBG, currentDelta)
         
         // Apply HARD CAPS
         val cappedMultipliers = applyHardCaps(rawMultipliers)
         
-        // Log application
+        // COMPACT LOGING (User Request: "concis, en anglais, écran étroit")
+        // "PHYSIO ctx: steps15=, hr=, hrv=, conf= -> brake=, stress= -> smbMult="
         if (!cappedMultipliers.isNeutral()) {
-            aapsLogger.info(
-                LTag.APS,
-                "[$TAG] 💉 Applying Physio Modulation | " +
-                "State: ${context.state} | " +
-                "ISF: ${cappedMultipliers.isfFactor.format(3)} | " +
-                "Basal: ${cappedMultipliers.basalFactor.format(3)} | " +
-                "SMB: ${cappedMultipliers.smbFactor.format(3)} | " +
-                "Confidence: ${(cappedMultipliers.confidence * 100).toInt()}%"
-            )
+            val logMsg = "🏥 PHYSIO ctx: steps15=${snapshot.stepsLast15m}, hr=${snapshot.hrNow}, hrv=${snapshot.hrvRmssd.toInt()}, conf=${(snapshot.confidence*100).toInt()}% " +
+                         "-> ${cappedMultipliers.appliedCaps} -> ISF x${cappedMultipliers.isfFactor.format(2)}, SMB x${cappedMultipliers.smbFactor.format(2)}"
+            aapsLogger.info(LTag.APS, logMsg)
         }
         
         return cappedMultipliers
@@ -150,77 +147,102 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
      * Calculates raw multipliers based on physiological state
      * These are BEFORE safety caps
      */
+    /**
+     * Calculates raw multipliers based on Physiological Snapshot
+     * Uses explicit conservative modulators: Brake, Penalty, Debt.
+     */
     private fun calculateRawMultipliers(
-        context: PhysioContextMTR,
+        snapshot: HealthContextSnapshot,
         currentBG: Double,
         currentDelta: Double?
     ): PhysioMultipliersMTR {
         
-        return when (context.state) {
-            PhysioStateMTR.OPTIMAL -> {
-                // No changes - everything nominal
-                PhysioMultipliersMTR(
-                    isfFactor = 1.0,
-                    basalFactor = 1.0,
-                    smbFactor = 1.0,
-                    reactivityFactor = 1.0,
-                    confidence = context.confidence,
-                    source = "Deterministic"
-                )
-            }
-            
-            PhysioStateMTR.RECOVERY_NEEDED -> {
-                // Slightly protective:
-                // - Increase ISF by ~5-10% (less aggressive corrections)
-                // - Reduce SMB by ~5% if poor sleep
-                PhysioMultipliersMTR(
-                    isfFactor = if (context.recommendIncreaseISF) 1.08 else 1.0,
-                    basalFactor = 1.0, // No basal change
-                    smbFactor = if (context.recommendReduceSMB) 0.95 else 1.0,
-                    reactivityFactor = 0.95, // Slightly less reactive
-                    confidence = context.confidence,
-                    appliedCaps = "Recovery mode: ↑ISF, ↓SMB",
-                    source = "Deterministic"
-                )
-            }
-            
-            PhysioStateMTR.STRESS_DETECTED -> {
-                // Moderately protective:
-                // - Increase ISF by ~10%
-                // - Reduce basal slightly (~5%)
-                // - Reduce SMB by ~8%
-                PhysioMultipliersMTR(
-                    isfFactor = 1.10,
-                    basalFactor = 0.95,
-                    smbFactor = 0.92,
-                    reactivityFactor = 0.92,
-                    confidence = context.confidence,
-                    appliedCaps = "Stress detected: ↑ISF, ↓Basal, ↓SMB",
-                    source = "Deterministic"
-                )
-            }
-            
-            PhysioStateMTR.INFECTION_RISK -> {
-                // Very protective (max allowed):
-                // - Increase ISF by 15% (max allowed)
-                // - Reduce basal by 10%
-                // - Reduce SMB by 10% (max allowed)
-                PhysioMultipliersMTR(
-                    isfFactor = 1.15, // Will be capped
-                    basalFactor = 0.90,
-                    smbFactor = 0.90, // Will be capped
-                    reactivityFactor = 0.90,
-                    confidence = context.confidence,
-                    appliedCaps = "Infection risk: MAX protective",
-                    source = "Deterministic"
-                )
-            }
-            
-            PhysioStateMTR.UNKNOWN -> {
-                // No changes when uncertain
-                PhysioMultipliersMTR.NEUTRAL
-            }
+        // 1. Calculate Factors
+        
+        // Activity Brake: 0.0 (Stop) to 1.0 (Full speed)
+        // If recent steps > threshold, we brake aggression
+        val activityBrakeFactor = when {
+            snapshot.stepsLast15m > 1000 -> 0.8 // Heavy braking for intense activity
+            snapshot.stepsLast15m > 500 -> 0.9  // Moderate braking
+            else -> 1.0
         }
+
+        // Stress Penalty: 0.7 (Max penalty) to 1.0 (No penalty)
+        // High HR or Low HRV -> Penalty
+        val stressPenaltyFactor = if (snapshot.hrvRmssd > 0 && snapshot.hrvRmssd < 20) {
+            0.9 // Mild stress penalty
+        } else if (snapshot.hrNow > 100 && snapshot.stepsLast15m < 100) {
+             // High HR but sedentary -> Stress?
+             0.95
+        } else {
+            1.0
+        }
+        
+        // Sleep Debt Factor: 0.85 (Max debt) to 1.0 (No debt)
+        val sleepDebtFactor = if (snapshot.sleepDebtMinutes > 60) {
+            0.95 // 1 hour debt -> 5% reduction in aggression
+        } else {
+            1.0
+        }
+        
+        // BP Safety Flag
+        // If BP is dangerous, we might want to flag it (log mostly, but could cap)
+        val bpSafetyFlag = snapshot.bpSys > 160 || snapshot.bpDia > 100
+
+        // 2. Map Factors to Insulin Parameters
+        
+        // ISF: Increased by Stress (Resistance) ?
+        // Or pure conservative: prevent aggression. 
+        // User rule: "uniquement freiner / plafonner".
+        // SO: We generally DO NOT decrease ISF (make it more aggressive) based solely on stress unless certain.
+        // However, Stress = Resistance, so *raising* profile.sens (making loop weaker) is safer?
+        // Wait, raising profile.sens makes loop WEAKER (higher ISF = less insulin).
+        // Decreasing profile.sens makes loop STRONGER.
+        
+        // "StressPenalty" usually means "Reduce Insulin / Safety". 
+        // If Stress -> We want to be CAREFUL. 
+        // Let's interpret factors as "Aggressiveness Multipliers".
+        
+        val totalAggression = activityBrakeFactor * stressPenaltyFactor * sleepDebtFactor
+        
+        // Apply to Components
+        
+        // Basal: Direct scale
+        val newBasalFactor = 1.0 * totalAggression
+        
+        // SMB: More sensitive to braking
+        val newSmbFactor = 1.0 * totalAggression
+        
+        // ISF: Inverse! Lower aggression means HIGHER ISF value (weaker sensitivity).
+        // But typical Multiplier usage in Loop is `profile.sens * factor` ? 
+        // Check OpenAPSAIMIPlugin usage:
+        // sens = profile.getIsfMgdl() * physioMults.isfFactor
+        // If isfFactor > 1.0 -> ISF increases -> Weaker/Safer.
+        // If totalAggression < 1.0 (e.g. 0.8), we want ISF to INCREASE (Safer).
+        // So isfFactor should be 1/totalAggression?
+        // Let's be consistent: 
+        // If Brake=0.8, we want 80% aggression.
+        // Basal * 0.8 (Lower)
+        // SMB * 0.8 (Lower)
+        // ISF * (1/0.8) = 1.25 (Higher value, weaker correction)
+        
+        val newIsfFactor = if (totalAggression < 1.0) (1.0 / totalAggression) else 1.0
+
+        val appliedCapsList = mutableListOf<String>()
+        if (activityBrakeFactor < 1.0) appliedCapsList.add("ActBrake:${activityBrakeFactor.format(2)}")
+        if (stressPenaltyFactor < 1.0) appliedCapsList.add("StressPen:${stressPenaltyFactor.format(2)}")
+        if (sleepDebtFactor < 1.0) appliedCapsList.add("SleepDebt:${sleepDebtFactor.format(2)}")
+        if (bpSafetyFlag) appliedCapsList.add("BP_FLAG")
+
+        return PhysioMultipliersMTR(
+            isfFactor = newIsfFactor,
+            basalFactor = newBasalFactor,
+            smbFactor = newSmbFactor,
+            reactivityFactor = totalAggression,
+            confidence = snapshot.confidence,
+            appliedCaps = appliedCapsList.joinToString(", "),
+            source = "RealtimeLogic"
+        )
     }
     
     // ═══════════════════════════════════════════════════════════════════════
@@ -337,117 +359,52 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
      * Gets current adapter status for debugging
      */
     fun getStatus(): Map<String, String> {
-        val context = contextStore.getCurrentContext()
+        val snapshot = repo.getLastSnapshot()
         
         return mapOf(
-            "hasContext" to (context != null).toString(),
-            "state" to (context?.state?.name ?: "NONE"),
-            "confidence" to "${((context?.confidence ?: 0.0) * 100).toInt()}%",
-            "contextAge" to "${context?.ageSeconds() ?: 0}s",
-            "isValid" to (context?.isValid() ?: false).toString()
+            "source" to snapshot.source,
+            "confidence" to "${(snapshot.confidence * 100).toInt()}%",
+            "age" to "${(System.currentTimeMillis() - snapshot.timestamp) / 1000}s",
+            "isValid" to snapshot.isValid.toString()
         )
     }
 
 
 
     /**
-     * Returns a detailed formatted log string for user visibility
-     * NEVER RETURNS NULL - Always provides diagnostic info even if UNKNOWN/BOOTSTRAP
+     * Returns a detailed formatted log string for user visibility (UI Status)
+     * Replaces the old diagnostic log with a Snapshot summary
      */
     fun getDetailedLogString(): String {
-        // 🎯 FIX: Use getLastContextUnsafe() to see context even with low/zero confidence
-        // This prevents NEVER_SYNCED when a run happened but HC returned no data
-        val context = contextStore.getLastContextUnsafe()
-        val outcome = contextStore.getLastRunOutcome()
+        val snapshot = repo.getLastSnapshot()
         
-        // Case 0: Pipeline ran but got an error outcome
-        if (outcome == PhysioPipelineOutcome.SECURITY_ERROR) {
-            return "🏥 Physio: SECURITY_ERROR | Missing Health Connect permissions (check settings)"
+        if (!snapshot.isValid || snapshot.timestamp == 0L) {
+            return "🏥 Physio: NO DATA / WAITING | Check Health Connect permissions & Sync"
         }
         
-        if (outcome == PhysioPipelineOutcome.ERROR) {
-            return "🏥 Physio: ERROR | Health Connect fetch failed (check app connectivity)"
-        }
-        
-        // Case 1: Never ran (no context AND outcome is NEVER_RUN)
-        if (context == null && outcome == PhysioPipelineOutcome.NEVER_RUN) {
-            return "🏥 Physio: NEVER_SYNCED | Waiting for first Health Connect sync (check permissions)"
-        }
-        
-        // Case 1b: Ran but got NO DATA from Health Connect
-        if (context == null && outcome == PhysioPipelineOutcome.SYNC_OK_NO_DATA) {
-            return "🏥 Physio: NO_DATA | Health Connect OK but no Sleep/HRV/HR records found. Check if Oura/Samsung/Garmin exports data."
-        }
-        
-        // Case 1c: Context null for other reasons
-        if (context == null) {
-            return "🏥 Physio: UNKNOWN | Outcome=$outcome but no context available"
-        }
-        
-        val ageHours = context.ageSeconds() / 3600
-        val ageDays = ageHours / 24
-        
-        // Case 2: Very stale data (>48h)
-        if (ageHours > 48) {
-            return "🏥 Physio: STALE (${ageDays}d old) | State: ${context.state} | Check Health Connect sync"
-        }
-        
-        val features = context.features
+        val ageMin = (System.currentTimeMillis() - snapshot.timestamp) / 60000
         val sb = StringBuilder()
         
-        // Base status line (ALWAYS shown)
-        val nextSyncMin = ((context.timestamp + 4 * 3600 * 1000 - System.currentTimeMillis()) / 60000).coerceAtLeast(0)
-        sb.append("🏥 Physio: ${context.state} (Conf: ${(context.confidence * 100).toInt()}%) | Age: ${ageHours}h | Next: ${nextSyncMin}min")
+        // Header
+        sb.append("🏥 Physio Status (${ageMin}m ago) | Conf: ${(snapshot.confidence * 100).toInt()}%")
         
-        // Case 3: UNKNOWN/BOOTSTRAP - show WHY
-        if (context.state == PhysioStateMTR.UNKNOWN || context.confidence < 0.3) {
-            sb.append("\n    ⚠️ Bootstrap mode:")
-            if (features == null || !features.hasValidData) {
-                sb.append(" No valid features")
-                // 🎯 HELPFUL HINT: Explain how to fix this
-                sb.append("\n    ℹ️ Health Connect is empty! Check data sources:")
-                sb.append("\n       • Samsung Health: Settings > Health Connect > Allow all to write")
-                sb.append("\n       • Oura: Settings > Data Sharing > Health Connect")
-                sb.append("\n       (Permissions seem OK, but no data records found)")
-            } else {
-                if (context.narrative.contains("Building Initial Baseline")) {
-                     val day = context.narrative.substringAfter("Day ", "").substringBefore("/")
-                     sb.append(" 📊 Building Initial Baseline (Day $day)")
-                } else if (!context.isValid()) {
-                     // Low confidence but has data
-                     sb.append(" 📊 Improving Baseline (Day ${contextStore.getCurrentBaseline()?.validDaysCount ?: 1}/7)")
-                } else {
-                     sb.append(" Quality=${(features.dataQuality * 100).toInt()}%")
-                }
-                
-                val missing = mutableListOf<String>()
-                if (features.sleepDurationHours == 0.0) missing.add("Sleep")
-                if (features.hrvMeanRMSSD == 0.0) missing.add("HRV")
-                if (features.rhrMorning == 0) missing.add("RHR")
-                if (missing.isNotEmpty()) {
-                    sb.append(", Missing: ${missing.joinToString(", ")}")
-                }
-            }
-            if (context.narrative.isNotBlank()) {
-                sb.append("\n    ℹ️ ${context.narrative}")
-            }
-            return sb.toString()
+        // Activity
+        sb.append("\n🏃 Activity: ${snapshot.stepsLast15m} steps/15m (State: ${snapshot.activityState})")
+        
+        // Heart
+        val hrvStr = if (snapshot.hrvRmssd > 0) "${snapshot.hrvRmssd.toInt()}ms" else "--"
+        sb.append("\n❤️ Heart: HR ${snapshot.hrNow} | RHR ${snapshot.rhrResting} | HRV $hrvStr")
+        
+        // Sleep
+        if (snapshot.sleepDebtMinutes > 0) {
+             sb.append("\n😴 Sleep Debt: ${snapshot.sleepDebtMinutes} min")
+        } else {
+             sb.append("\n😴 Sleep: OK")
         }
         
-        // Case 4: VALID state - show metrics
-        if (features != null && features.hasValidData) {
-            sb.append("\n    • Sleep: %.1fh (Eff: %.0f%%)".format(features.sleepDurationHours, features.sleepEfficiency * 100))
-            if (features.sleepDurationHours > 0) sb.append(" Z=%.1f".format(context.sleepDeviationZ))
-            
-            sb.append("\n    • HRV: %.0fms".format(features.hrvMeanRMSSD))
-            if (features.hrvMeanRMSSD > 0) sb.append(" Z=%.1f".format(context.hrvDeviationZ))
-            
-            sb.append(" | RHR: %dbpm".format(features.rhrMorning))
-            if (features.rhrMorning > 0) sb.append(" Z=%.1f".format(context.rhrDeviationZ))
-        }
-        
-        if (context.narrative.isNotBlank()) {
-            sb.append("\n    • AI Insight: ${context.narrative.take(60)}...")
+        // BP
+        if (snapshot.bpSys > 0) {
+            sb.append("\n🩸 BP: ${snapshot.bpSys}/${snapshot.bpDia}")
         }
         
         return sb.toString()

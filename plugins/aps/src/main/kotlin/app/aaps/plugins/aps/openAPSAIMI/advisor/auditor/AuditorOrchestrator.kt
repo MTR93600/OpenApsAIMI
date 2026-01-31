@@ -249,7 +249,8 @@ class AuditorOrchestrator @Inject constructor(
         }
         
         // Get physio snapshot (safe call)
-        val physioCtx = try { physioAdapter.getCurrentContext()?.toSnapshot() } catch (e: Exception) { null }
+        // Get physio snapshot (safe call)
+        val physioCtx = try { physioAdapter.getLatestSnapshot().toStartSnapshot() } catch (e: Exception) { null }
 
         // Launch async audit
         scope.launch {
@@ -439,13 +440,14 @@ class AuditorOrchestrator @Inject constructor(
         )
     }
 
-    private fun PhysioContextMTR.toSnapshot(): PhysioSnapshot {
+    private fun app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot.toStartSnapshot(): PhysioSnapshot {
+        // Map simplified Snapshot to Auditor's view
         return PhysioSnapshot(
-            state = this.state.name,
+            state = this.activityState, // Mapping ActivityState to State string
             snsDominance = this.toSNSDominance(),
-            sleepQualityZ = this.sleepDeviationZ,
-            rhrZ = this.rhrDeviationZ,
-            hrvZ = this.hrvDeviationZ
+            sleepQualityZ = 0.0, // Detailed Z-scores not available in simple snapshot, using 0 (nominal)
+            rhrZ = 0.0, 
+            hrvZ = 0.0
         )
     }
 }

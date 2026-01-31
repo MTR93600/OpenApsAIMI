@@ -32,6 +32,7 @@ import javax.inject.Singleton
 @Singleton
 class AIMIPhysioManagerMTR @Inject constructor(
     private val context: Context,
+    val repo: HealthContextRepository, // Public for Workers
     private val dataRepository: AIMIPhysioDataRepositoryMTR,
     private val featureExtractor: AIMIPhysioFeatureExtractorMTR,
     private val baselineModel: AIMIPhysioBaselineModelMTR,
@@ -115,31 +116,57 @@ class AIMIPhysioManagerMTR @Inject constructor(
     
     /**
      * Schedules periodic measurement using WorkManager
+     * Implements 3-tier strategy: Realtime(15m), Metabolic(30m), Daily(24h)
      */
     private fun schedulePeriodicWork() {
         try {
-            // Cleanup old 4h worker to prevent duplicates
+            // Cleanup old workers
             WorkManager.getInstance(context).cancelAllWorkByTag("AIMI_PHYSIO_4H")
+            WorkManager.getInstance(context).cancelAllWorkByTag(WORK_TAG)
 
             val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.NOT_REQUIRED) // Health Connect is local
+                .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
                 .setRequiresBatteryNotLow(true)
                 .build()
 
-            // Uses 15 minutes (minimum allowed by Android WorkManager)
-            val workRequest = PeriodicWorkRequestBuilder<AIMIPhysioWorkerMTR>(15, TimeUnit.MINUTES)
+            // 1. Realtime Worker (15m - Best effort)
+            val realtimeRequest = PeriodicWorkRequestBuilder<PhysioRealtimeWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(constraints)
-                .addTag(WORK_TAG)
-                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
+                .addTag("AIMI_PHYSIO_REALTIME")
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 5, TimeUnit.MINUTES)
                 .build()
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                WORK_TAG,
+                "AIMI_PHYSIO_REALTIME",
                 ExistingPeriodicWorkPolicy.UPDATE,
-                workRequest
+                realtimeRequest
             )
             
-            aapsLogger.info(LTag.APS, "[$TAG] ✅ Periodic work scheduled (4h interval)")
+            // 2. Metabolic Worker (30m)
+            val metabolicRequest = PeriodicWorkRequestBuilder<PhysioMetabolicWorker>(30, TimeUnit.MINUTES)
+                .setConstraints(constraints)
+                .addTag("AIMI_PHYSIO_METABOLIC")
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                "AIMI_PHYSIO_METABOLIC",
+                ExistingPeriodicWorkPolicy.UPDATE,
+                metabolicRequest
+            )
+            
+            // 3. Daily Worker (24h)
+            val dailyRequest = PeriodicWorkRequestBuilder<PhysioDailyWorker>(24, TimeUnit.HOURS)
+                .setConstraints(constraints)
+                .addTag("AIMI_PHYSIO_DAILY")
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                "AIMI_PHYSIO_DAILY",
+                ExistingPeriodicWorkPolicy.KEEP, // Don't replace if existing, to maintain schedule
+                dailyRequest
+            )
+            
+            aapsLogger.info(LTag.APS, "[$TAG] ✅ Periodic work scheduled (Realtime 15m, Metabolic 30m, Daily 24h)")
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "[$TAG] Failed to schedule work", e)
         }
@@ -150,7 +177,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
      */
     private fun scheduleBootstrapUpdate() {
         try {
-            val bootstrapRequest = androidx.work.OneTimeWorkRequestBuilder<AIMIPhysioWorkerMTR>()
+            val bootstrapRequest = androidx.work.OneTimeWorkRequestBuilder<PhysioRealtimeWorker>()
                 .addTag("AIMI_PHYSIO_BOOTSTRAP")
                 .setInitialDelay(5, TimeUnit.SECONDS) // Small delay to let system settle
                 .build()

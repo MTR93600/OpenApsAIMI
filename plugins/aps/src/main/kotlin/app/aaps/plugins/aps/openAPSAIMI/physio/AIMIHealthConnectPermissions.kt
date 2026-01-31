@@ -22,7 +22,8 @@ object AIMIHealthConnectPermissions {
     val PHYSIO_REQUIRED_PERMISSIONS = setOf(
         HealthPermission.getReadPermission(SleepSessionRecord::class),
         HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
-        HealthPermission.getReadPermission(HeartRateRecord::class)
+        HealthPermission.getReadPermission(HeartRateRecord::class),
+        HealthPermission.getReadPermission(androidx.health.connect.client.records.BloodPressureRecord::class)
     )
     
     /**
@@ -46,6 +47,7 @@ object AIMIHealthConnectPermissions {
         HealthPermission.getReadPermission(SleepSessionRecord::class) to "Sleep Sessions",
         HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class) to "Heart Rate Variability (HRV)",
         HealthPermission.getReadPermission(HeartRateRecord::class) to "Heart Rate",
+        HealthPermission.getReadPermission(androidx.health.connect.client.records.BloodPressureRecord::class) to "Blood Pressure",
         HealthPermission.getReadPermission(StepsRecord::class) to "Steps"
     )
     
