@@ -1766,6 +1766,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             // b. Cap MaxIOB (Sécurité Ultime) - On ne s'autorise à remplir QUE l'espace disponible
             val iobSpace = (this.maxIob - this.iob).coerceAtLeast(0.0)
+
+            // DEBUG TRACE (MTR Audit)
+            consoleLog.add("MEAL_DEBUG Need=${"%.2f".format(candidateUnits)} MaxSMB=${"%.2f".format(baseLimit)} MaxSMBHB=${"%.2f".format(maxSMBHB)} Cap=${"%.2f".format(maxSmbCap)} MaxIOB=${"%.2f".format(this.maxIob)} IOB=${"%.2f".format(this.iob)} Space=${"%.2f".format(iobSpace)}")
             
             if (mealBolus > iobSpace.toFloat()) {
                 consoleLog.add("🛡️ RED CARPET: Clamped by MaxIOB (Need=${"%.2f".format(mealBolus)}, Space=${"%.2f".format(iobSpace)})")
@@ -4898,19 +4901,49 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // PRIORITY 3: MEAL ADVISOR
         // PRIORITY 3: MEAL ADVISOR
+        // PRIORITY 3: MEAL ADVISOR
         val advisorRes = tryMealAdvisor(bg, delta, iob_data, profile, lastBolusTimeMs ?: 0L, modesCondition, isExplicitAdvisorRun)
         if (advisorRes is DecisionResult.Applied) {
              consoleLog.add("MEAL_ADVISOR_APPLIED source=${advisorRes.source} bolus=${advisorRes.bolusU}")
+             
+             // 1. Apply TBR (Override Limits)
              if (advisorRes.tbrUph != null) {
                   setTempBasal(advisorRes.tbrUph, advisorRes.tbrMin ?: 30, profile, rT, currenttemp, overrideSafetyLimits = true)
              }
-             if (advisorRes.bolusU != null && advisorRes.bolusU > 0) {
-                  finalizeAndCapSMB(rT, advisorRes.bolusU, advisorRes.reason, mealData, threshold, true, advisorRes.source)
+             
+             // 2. Logic Split: Direct Send (User) vs Standard Safety (Background)
+             val bolusIntent = (advisorRes.bolusU ?: 0.0).toDouble()
+             if (isExplicitAdvisorRun && bolusIntent > 0) {
+                  // A. DIRECT SEND (User Triggered "Snap&Go")
+                  // Bypass standard safety limiting to ensure full delivery of the user-validated amount.
+                  // This mimics 'prebolusHC' behavior to solve the 3.12U clipping issue.
+                  
+                  // 🔒 Hardware Cap (Ultima Ratio)
+                  val safeIntent = kotlin.math.min(bolusIntent, 30.0)
+                  rT.units = safeIntent
+                  rT.reason.append(advisorRes.reason)
+                  consoleLog.add("🍱 MEAL_ADVISOR_DIRECT_SEND Pushed=${"%.2f".format(safeIntent)}U (Limits Bypassed)")
+                  
+                  // 🕒 Update Internal Timer IMMEDIATELY to prevent double-bolus during DB lag
+                  if (safeIntent > 0) {
+                       internalLastSmbMillis = dateUtil.now()
+                       lastSmbCapped = safeIntent
+                       lastSmbFinal = safeIntent
+                  }
+             } else if (bolusIntent > 0) {
+                  // B. STANDARD SAFETY (Background / Loop)
+                  // Use standard finalization which includes Refractory, MaxIOB, and MaxSMB checks.
+                  // This protects against loop issues if the Advisor runs in background.
+                  finalizeAndCapSMB(rT, bolusIntent, advisorRes.reason, mealData, threshold, false, advisorRes.source)
+             } else {
+                  // Zero bolus (but maybe TBR was set)
+                  rT.reason.append(advisorRes.reason)
              }
+             
              // Add Status Log (User Request)
              rT.reason.appendLine(context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", "Meal Advisor"))
              logDecisionFinal("MEAL_ADVISOR", rT, bg, delta)
-             return rT
+             return rT // 🛑 HARD RETURN to ensure no other logic overrides this
         }
 
 
