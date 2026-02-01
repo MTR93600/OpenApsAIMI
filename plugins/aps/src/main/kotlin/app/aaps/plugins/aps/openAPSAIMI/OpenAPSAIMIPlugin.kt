@@ -1070,7 +1070,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     key = "AIMI_AI"
                     title = rh.gs(R.string.aimi_prefs_ai_title) // "🤖 Assistant AI"
 
-                    // Meal Advisor
+                    /*// Meal Advisor
                     addPreference(
                         AdaptiveIntentPreference(
                             ctx = context,
@@ -1078,16 +1078,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             intent = Intent(context, app.aaps.plugins.aps.openAPSAIMI.advisor.meal.MealAdvisorActivity::class.java),
                             title = R.string.aimi_meal_advisor_title
                         )
-                    )
+                    )*/
 
-                    // 🎯 Context Module
+                    /*// 🎯 Context Module
                     addPreference(AdaptiveIntentPreference(
                         ctx = context,
                         intentKey = IntentKey.OApsAIMIContext,
                         intent = Intent(context, app.aaps.plugins.aps.openAPSAIMI.context.ui.ContextActivity::class.java),
                         summary = R.string.context_description
                     )
-                    )
+                    )*/
 
                     addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIMLtraining, title = R.string.oaps_aimi_enableMlTraining_title))
 
