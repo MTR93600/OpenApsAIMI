@@ -37,14 +37,7 @@ class WCycleAdjuster(
         val amp = ampContraceptive * ampMode
         var basal = 1.0 + (b0 - 1.0) * amp
         var smb   = 1.0 + (s0 - 1.0) * amp
-        val (vb, vs) = WCycleDefaults.verneuilBump(profile.verneuil)
-        basal *= vb; smb *= vs
-
-        // Thyroid dampening removed as per user request and research alignment
-        // Treated thyroid conditions should not penalize the cycle adjustment
-        val thyroidDamp = 1.0 
-        basal = 1.0 + (basal - 1.0) * thyroidDamp
-        smb   = 1.0 + (smb   - 1.0) * thyroidDamp
+        // Verneuil & Thyroid logic moved to InflammationAdjuster (Decoupling)
         
         // 🔮 FCL 11.0: Deep Endo - Luteal Dawn Phenomenon
         // Cortisol Awakening Response + Progesterone = High Resistance at 4am-8am
@@ -80,7 +73,7 @@ class WCycleAdjuster(
         
         val finalIc = if (apply) ic else 1.0
 
-        val reason = "♀️ ${phase0} J${day + 1} | amp=${fmt(amp)} thy=${fmt(thyroidDamp)} ver=${profile.verneuil} | base=(${fmt(baseBasal)},${fmt(baseSmb)}) ic=${fmt(finalIc)} learn=(${fmt(bLearn)},${fmt(sLearn)}) dawn=${if(dawnBoost>1.0)"🌅" else "-"} ${guardReason}"
+        val reason = "♀️ ${phase0} J${day + 1} | amp=${fmt(amp)} | base=(${fmt(baseBasal)},${fmt(baseSmb)}) ic=${fmt(finalIc)} learn=(${fmt(bLearn)},${fmt(sLearn)}) dawn=${if(dawnBoost>1.0)"🌅" else "-"} ${guardReason}"
         return WCycleInfo(
             enabled = true,
             dayInCycle = day,

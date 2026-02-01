@@ -1433,28 +1433,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             entryValues = contraceptiveValues
                         )
                     )
-                    val thyroidEntries = context.resources.getStringArray(R.array.wcycle_thyroid_entries).map { it as CharSequence }.toTypedArray()
-                    val thyroidValues = context.resources.getStringArray(R.array.wcycle_thyroid_values).map { it as CharSequence }.toTypedArray()
-                    addPreference(
-                        AdaptiveListPreference(
-                            ctx = context,
-                            stringKey = StringKey.OApsAIMIWCycleThyroid,
-                            title = R.string.wcycle_thyroid_title,
-                            entries = thyroidEntries,
-                            entryValues = thyroidValues
-                        )
-                    )
-                    val verneuilEntries = context.resources.getStringArray(R.array.wcycle_verneuil_entries).map { it as CharSequence }.toTypedArray()
-                    val verneuilValues = context.resources.getStringArray(R.array.wcycle_verneuil_values).map { it as CharSequence }.toTypedArray()
-                    addPreference(
-                        AdaptiveListPreference(
-                            ctx = context,
-                            stringKey = StringKey.OApsAIMIWCycleVerneuil,
-                            title = R.string.wcycle_verneuil_title,
-                            entries = verneuilEntries,
-                            entryValues = verneuilValues
-                        )
-                    )
+
                     addPreference(
                         AdaptiveDoublePreference(
                             ctx = context,
@@ -1499,6 +1478,39 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             doubleKey = DoubleKey.OApsAIMIWCycleClampMax,
                             dialogMessage = R.string.wcycle_clamp_max_title,
                             title = R.string.wcycle_clamp_max_title
+                        )
+                    )
+                })
+
+                // 🏥 Autoimmune / Inflammatory Diseases (Decoupled from WCycle)
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "Inflammatory_Diseases"
+                    title = "Inflammatory / Autoimmune Diseases"
+                    
+                    addPreference(PreferenceCategory(context).apply {
+                        title = "Settings"
+                    })
+                    
+                    val thyroidEntries = context.resources.getStringArray(R.array.wcycle_thyroid_entries).map { it as CharSequence }.toTypedArray()
+                    val thyroidValues = context.resources.getStringArray(R.array.wcycle_thyroid_values).map { it as CharSequence }.toTypedArray()
+                    addPreference(
+                        AdaptiveListPreference(
+                            ctx = context,
+                            stringKey = StringKey.OApsAIMIWCycleThyroid,
+                            title = R.string.wcycle_thyroid_title,
+                            entries = thyroidEntries,
+                            entryValues = thyroidValues
+                        )
+                    )
+                    val verneuilEntries = context.resources.getStringArray(R.array.wcycle_verneuil_entries).map { it as CharSequence }.toTypedArray()
+                    val verneuilValues = context.resources.getStringArray(R.array.wcycle_verneuil_values).map { it as CharSequence }.toTypedArray()
+                    addPreference(
+                        AdaptiveListPreference(
+                            ctx = context,
+                            stringKey = StringKey.OApsAIMIWCycleVerneuil,
+                            title = R.string.wcycle_verneuil_title,
+                            entries = verneuilEntries,
+                            entryValues = verneuilValues
                         )
                     )
                 })

@@ -324,6 +324,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     
     // 🌸 Endometriosis Adjuster (Lazy init manually since not in graph yet or use manual passing)
     private val endoAdjuster by lazy { app.aaps.plugins.aps.openAPSAIMI.wcycle.EndometriosisAdjuster(preferences, aapsLogger) }
+    
+    // 🏥 Inflammation Adjuster (New Refactor - Decoupled from WCycle)
+    private val inflammationAdjuster by lazy { 
+        app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster(wCyclePreferences) 
+    }
 
     // ❌ OLD reactivityLearner removed - UnifiedReactivityLearner is now the only one
     init {
@@ -4048,6 +4053,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              this.maxSMB = (this.maxSMB * physioMultipliers.smbFactor).coerceAtLeast(0.1)
              
              consoleLog.add("🏥 PHYSIO APPLIED: MaxSMB=${"%.2f".format(this.maxSMB)} MaxBasal=${"%.2f".format(profile.max_daily_basal)}")
+        }
+
+        // 5.5) 🏥 Inflammatory / Autoimmune Adjustments (Always applied, independent of WCycle)
+        val inflamResult = inflammationAdjuster.getAdjustments()
+        if (inflamResult.basalMultiplier != 1.0 || inflamResult.smbMultiplier != 1.0) {
+             // Apply to limits and current basal
+             // Note: Multipliers are cumulative with Physio
+             profile.current_basal = profile.current_basal * inflamResult.basalMultiplier
+             profile.max_daily_basal = profile.max_daily_basal * inflamResult.basalMultiplier
+             
+             val prevMaxSMB = this.maxSMB
+             this.maxSMB = (this.maxSMB * inflamResult.smbMultiplier).coerceAtLeast(0.1)
+             this.maxSMBHB = (this.maxSMBHB * inflamResult.smbMultiplier).coerceAtLeast(0.1)
+             
+             consoleLog.add("${inflamResult.reason} -> Basal×${"%.2f".format(inflamResult.basalMultiplier)} SMB: ${"%.2f".format(prevMaxSMB)}->${"%.2f".format(this.maxSMB)}U")
         }
 
         val reasonAimi = StringBuilder()
