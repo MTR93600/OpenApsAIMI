@@ -602,14 +602,19 @@ class GarminPlugin @Inject constructor(
 
         val delta = totalSteps - lastTotal
 
-        // Guard rails, should be between 1 and 3000
-        if (delta !in 1..3000) {
+        // Guard rails: Only strict check is that delta must be positive.
+        // We remove the 3000 upper limit because during a long run (e.g. 1h without sync), 
+        // the delta can easily exceed 3000 steps.
+        if (delta <= 0) {
             aapsLogger.warn(
                 LTag.GARMIN,
-                "[GarminHTTP] invalid step delta=$delta (total=$totalSteps last=$lastTotal) => 1...3000"
+                "[GarminHTTP] invalid step delta=$delta (total=$totalSteps last=$lastTotal) => must be > 0"
             )
-            sp.putInt(PREF_GARMIN_LAST_STEPS, totalSteps)
-            sp.putLong(PREF_GARMIN_LAST_TS, now)
+            // If delta is 0 or negative (device reset?), we just update the last known value to sync up
+            if (totalSteps > 0) {
+                sp.putInt(PREF_GARMIN_LAST_STEPS, totalSteps)
+                sp.putLong(PREF_GARMIN_LAST_TS, now)
+            }
             return
         }
 
