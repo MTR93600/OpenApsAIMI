@@ -1089,53 +1089,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     )
                     )
 
-                    // 🌸 Endometriosis & Cycle Management Section (MTR)
-                    addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                        key = "AIMI_ENDO"
-                        title = rh.gs(R.string.endo_preferences_title)
-
-                        addPreference(
-                            AdaptiveSwitchPreference(
-                                ctx = context,
-                                booleanKey = BooleanKey.AimiEndometriosisEnable,
-                                title = R.string.endo_enable_title,
-                                summary = R.string.endo_enable_summary
-                            )
-                        )
-
-                        addPreference(
-                            AdaptiveSwitchPreference(
-                                ctx = context,
-                                booleanKey = BooleanKey.AimiEndometriosisPainFlare,
-                                title = R.string.endo_flare_title,
-                                summary = R.string.endo_flare_summary
-                            )
-                        )
-                        addPreference(
-                            AdaptiveIntPreference(
-                                ctx = context,
-                                intKey = IntKey.AimiEndometriosisFlareDuration,
-                                title = R.string.endo_flare_duration_title,
-                                summary = R.string.endo_flare_duration_summary
-                            )
-                        )
-                        addPreference(
-                            AdaptiveDoublePreference(
-                                ctx = context,
-                                doubleKey = DoubleKey.AimiEndometriosisBasalMult,
-                                title = R.string.endo_basal_mult_title,
-                                dialogMessage = R.string.endo_basal_mult_summary
-                            )
-                        )
-                        addPreference(
-                            AdaptiveDoublePreference(
-                                ctx = context,
-                                doubleKey = DoubleKey.AimiEndometriosisSmbDampen,
-                                title = R.string.endo_smb_dampen_title,
-                                dialogMessage = R.string.endo_smb_dampen_summary
-                            )
-                        )
-                    })
                     addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIMLtraining, title = R.string.oaps_aimi_enableMlTraining_title))
 
                     // 🧠 AI Decision Auditor Section
@@ -1506,6 +1459,70 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             dialogMessage = R.string.wcycle_clamp_max_title,
                             title = R.string.wcycle_clamp_max_title
                         )
+                    )
+                    // 🌸 Endometriosis & Cycle Management Section (MTR)
+                    addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                        key = "AIMI_ENDO"
+                        title = rh.gs(R.string.endo_preferences_title)
+
+                        addPreference(
+                            AdaptiveSwitchPreference(
+                                ctx = context,
+                                booleanKey = BooleanKey.AimiEndometriosisEnable,
+                                title = R.string.endo_enable_title,
+                                summary = R.string.endo_enable_summary
+                            )
+                        )
+
+                        addPreference(
+                            AdaptiveSwitchPreference(
+                                ctx = context,
+                                booleanKey = BooleanKey.AimiEndometriosisPainFlare,
+                                title = R.string.endo_flare_title,
+                                summary = R.string.endo_flare_summary
+                            )
+                        )
+                        addPreference(
+                            AdaptiveIntPreference(
+                                ctx = context,
+                                intKey = IntKey.AimiEndometriosisFlareDuration,
+                                title = R.string.endo_flare_duration_title,
+                                summary = R.string.endo_flare_duration_summary
+                            )
+                        )
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.AimiEndometriosisBasalMult,
+                                title = R.string.endo_basal_mult_title,
+                                dialogMessage = R.string.endo_basal_mult_summary
+                            )
+                        )
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.AimiEndometriosisSmbDampen,
+                                title = R.string.endo_smb_dampen_title,
+                                dialogMessage = R.string.endo_smb_dampen_summary
+                            )
+                        )
+                    })
+                    addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIpregnancy, title = R.string.OApsAIMI_Enable_pregnancy))
+                    addPreference(
+                        AdaptiveStringPreference(
+                            ctx = context,
+                            stringKey = AimiStringKey.PregnancyDueDateString,
+                            title = R.string.OApsAIMI_PregnancyDueDate_title,
+                            summary = R.string.OApsAIMI_PregnancyDueDate_summary,
+                            validatorParams = DefaultEditTextValidator.Parameters(
+                                testType = EditTextValidator.TEST_REGEXP,
+                                customRegexp = "^\\d{4}-\\d{2}-\\d{2}$",
+                                emptyAllowed = true,
+                                testErrorString = context.getString(R.string.error_invalid_date_format) // Reuse generic error or TODO
+                            )
+                        ).apply {
+                            dialogMessage = "Format: YYYY-MM-DD"
+                        }
                     )
                 })
                  addPreference(preferenceManager.createPreferenceScreen(context).apply {
