@@ -137,4 +137,20 @@ enum class BooleanKey(
     OApsAIMIPkpdEnabled("key_aimi_pkpd_enabled", false),
     OApsAIMIUnifiedReactivityEnabled("key_use_unified_reactivity", true),  // 🎯 NEW: Enable UnifiedReactivityLearner
     AimiAuditorEnabled("aimi_auditor_enabled", false),  // 🧠 AI Decision Auditor
+    OApsAIMITrajectoryGuardEnabled("key_aimi_trajectory_guard_enabled", false),  // 🌀 Phase-Space Trajectory Control
+    OApsAIMIContextEnabled("key_aimi_context_enabled", false),  // 🎯 Context Module
+    OApsAIMIContextLLMEnabled("key_aimi_context_llm_enabled", false),  // 🤖 LLM-powered context parsing
+    
+    // 🏥 AIMI Physiological Assistant (MTR)
+    AimiPhysioAssistantEnable("aimi_physio_assistant_enable", false),
+    AimiPhysioSleepDataEnable("aimi_physio_sleep_enable", true),
+    AimiPhysioHRVDataEnable("aimi_physio_hrv_enable", true),
+    AimiPhysioLLMAnalysisEnable("aimi_physio_llm_enable", false),
+    AimiPhysioDebugLogs("aimi_physio_debug_logs", false),
+    
+    // 🌸 Endometriosis & Cycle Management (MTR)
+    AimiEndometriosisEnable("aimi_endo_enable", false),
+    AimiEndometriosisHormonalSuppression("aimi_endo_suppression", false),
+    AimiEndometriosisPainFlare("aimi_endo_flare", false),
+    OApsAIMIMealAdvisorTrigger("aimi_meal_advisor_trigger", false), // Trigger for one-shot MAX-SMB bypass
 }

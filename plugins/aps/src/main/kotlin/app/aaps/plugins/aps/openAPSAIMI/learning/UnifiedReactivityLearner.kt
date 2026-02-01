@@ -102,7 +102,7 @@ class UnifiedReactivityLearner @Inject constructor(
      * Retourne le facteur combiné (60% long terme, 40% court terme)
      */
     fun getCombinedFactor(): Double {
-        return (globalFactor * 0.60 + shortTermFactor * 0.40).coerceIn(0.7, 2.5)
+        return (globalFactor * 0.60 + shortTermFactor * 0.40).coerceIn(0.5, 1.5)
     }
     
     /**
@@ -304,7 +304,7 @@ class UnifiedReactivityLearner @Inject constructor(
             log.debug(LTag.APS, "UnifiedReactivityLearner: Adaptive α=$alpha (hypo=${perf.hypo_count}, CV=${perf.cv_percent.toInt()}%, hyper=${perf.tir_above_180.toInt()}%)")
             
             // Apply EMA: New = (Target * alpha) + (Old * (1-alpha))
-            globalFactor = (targetFactor * alpha + globalFactor * (1 - alpha)).coerceIn(0.7, 5.0)
+            globalFactor = (targetFactor * alpha + globalFactor * (1 - alpha)).coerceIn(0.5, 1.5)
         }
         
         val reasonsStr = reasons.joinToString(", ")
@@ -448,7 +448,7 @@ class UnifiedReactivityLearner @Inject constructor(
             else -> 0.40                         // Standard short-term rate
         }
         
-        shortTermFactor = (target * alpha + shortTermFactor * (1 - alpha)).coerceIn(0.7, 2.0)
+        shortTermFactor = (target * alpha + shortTermFactor * (1 - alpha)).coerceIn(0.5, 1.5)
     }
     
     /**
@@ -492,8 +492,8 @@ class UnifiedReactivityLearner @Inject constructor(
         storageHelper.loadFileSafe(file, 
             onSuccess = { content ->
                 val json = JSONObject(content)
-                globalFactor = json.optDouble("globalFactor", 1.0).coerceIn(0.7, 6.0)
-                shortTermFactor = json.optDouble("shortTermFactor", 1.0).coerceIn(0.7, 2.0)
+                globalFactor = json.optDouble("globalFactor", 1.0).coerceIn(0.5, 1.5)
+                shortTermFactor = json.optDouble("shortTermFactor", 1.0).coerceIn(0.5, 1.5)
                 lastAnalysisTime = json.optLong("lastAnalysisTime", 0L)
                 lastShortAnalysisTime = json.optLong("lastShortAnalysisTime", 0L)
                 log.info(LTag.APS, "UnifiedReactivityLearner: ✅ Loaded state")

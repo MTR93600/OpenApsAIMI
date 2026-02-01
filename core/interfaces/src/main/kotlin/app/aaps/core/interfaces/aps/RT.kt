@@ -61,7 +61,25 @@ data class RT(
     var aiAuditorRiskFlags: String? = null,     // Comma-separated risk flags
     
     // 📊 Learners state (for RT visibility)
-    var learnersInfo: String? = null            // Summary: "Basal×1.05, ISF:42, React:0.95x"
+    var learnersInfo: String? = null,           // Summary: "Basal×1.05, ISF:42, React:0.95x"
+    
+    // 🌀 Phase-Space Trajectory Control (for trending/graphing)
+    var trajectoryEnabled: Boolean = false,            // Feature flag status
+    var trajectoryType: String? = null,                // OPEN_DIVERGING, CLOSING_CONVERGING, TIGHT_SPIRAL, STABLE_ORBIT
+    var trajectoryCurvature: Double? = null,           // κ: 0-1+ (>0.3 = tight spiral)
+    var trajectoryConvergence: Double? = null,         // v_conv: mg/dL/min (+ve = converging)
+    var trajectoryCoherence: Double? = null,           // ρ: -1 to 1 (>0.6 = good response)
+    var trajectoryEnergy: Double? = null,              // E: insulin units (>2 = stacking)
+    var trajectoryOpenness: Double? = null,            // Θ: 0-1 (>0.7 = diverging)
+    var trajectoryHealth: Int? = null,                 // Overall health: 0-100%
+    var trajectoryModulationActive: Boolean = false,   // Was modulation applied?
+    var trajectoryWarningsCount: Int? = null,          // Number of warnings generated
+    var trajectoryConvergenceETA: Int? = null          // Predicted minutes to stable orbit
+,
+    // 🎯 Context Module fields
+    var contextEnabled: Boolean = false,               // Context Module feature flag
+    var contextIntentCount: Int = 0,                   // Number of active context intents
+    var contextModulation: Double = 1.0                // SMB modulation factor (0.5-1.1)
 ) {
 
     fun serialize() = Json.encodeToString(serializer(), this)

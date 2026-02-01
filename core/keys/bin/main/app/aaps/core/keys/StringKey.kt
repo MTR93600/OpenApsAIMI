@@ -65,5 +65,18 @@ enum class StringKey(
     AimiAdvisorClaudeKey("aimi_advisor_claude_key", "", isPassword = true),
     AimiAdvisorProvider("aimi_advisor_provider", "OPENAI"),
     AimiAuditorMode("aimi_auditor_mode", "AUDIT_ONLY"),  // 🧠 AI Auditor mode: AUDIT_ONLY, SOFT_MODULATION, HIGH_RISK_ONLY
-    OApsAIMIUnstableModeState("key_oaps_aimi_mode_state", "")
+
+    // Context Module (dedicated provider for flexibility)
+    ContextLLMProvider("aimi_context_llm_provider", "OPENAI"),
+    ContextLLMOpenAIKey("aimi_context_llm_openai_key", "", isPassword = true),
+    ContextLLMGeminiKey("aimi_context_llm_gemini_key", "", isPassword = true),
+    ContextLLMDeepSeekKey("aimi_context_llm_deepseek_key", "", isPassword = true),
+    ContextLLMClaudeKey("aimi_context_llm_claude_key", "", isPassword = true),
+    ContextMode("aimi_context_mode", "BALANCED"), // CONSERVATIVE, BALANCED, AGGRESSIVE
+
+    OApsAIMIUnstableModeState("key_oaps_aimi_mode_state", ""),
+    OApsAIMIContextStorage("aimi_context_storage", "", exportable = false),
+    
+    // 🏥 AIMI Physiological Assistant (MTR)
+    AimiPhysioLLMProvider("aimi_physio_llm_provider", "gpt4"),
 }

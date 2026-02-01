@@ -35,7 +35,8 @@ data class LoopProfile(
     val targetMgdl: Double,
     val isfMgdlPerU: Double,
     val basalProfileUph: Double,
-    val lgsThreshold: Double // Added for Hypo safety respecting user prefs
+    val lgsThreshold: Double, // Added for Hypo safety respecting user prefs
+    val minBg: Double? = null  // Min BG from profile for LGS fallback calculation
 )
 
 data class AimiSettings(

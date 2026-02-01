@@ -241,6 +241,16 @@ class LoopHubImpl @Inject constructor(
             device = device ?: "Garmin",
             dateCreated = clock.millis(),
         )
-        disposable += persistenceLayer.insertOrUpdateStepsCount(sc).subscribe()
+        disposable += persistenceLayer.insertOrUpdateStepsCount(sc).subscribe(
+            { result ->
+                val id = result.inserted.firstOrNull()?.id ?: result.updated.firstOrNull()?.id
+                aapsLogger.info(app.aaps.core.interfaces.logging.LTag.GARMIN, 
+                    "✅ Steps stored in DB: ID=$id, 5min=$steps5min, timestamp=${java.util.Date(samplingEnd.toEpochMilli())}")
+            },
+            { error ->
+                aapsLogger.error(app.aaps.core.interfaces.logging.LTag.GARMIN, 
+                    "❌ Failed to store steps: ${error.message}")
+            }
+        )
     }
 }

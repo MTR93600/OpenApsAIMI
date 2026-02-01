@@ -6,6 +6,7 @@ import android.content.Context
 import info.nightscout.comboctl.base.BluetoothAddress
 import info.nightscout.comboctl.base.BluetoothDevice
 import info.nightscout.comboctl.base.BluetoothException
+import kotlin.time.Duration.Companion.minutes
 import info.nightscout.comboctl.base.BluetoothInterface
 import info.nightscout.comboctl.base.ComboIOException
 import info.nightscout.comboctl.base.LogLevel
@@ -46,114 +47,125 @@ class AndroidBluetoothDevice(
     @Volatile
     private var lastTrafficTime: Long = 0
     private var watchdogThread: Thread? = null
-    private val watchdogTimeoutMs = 20000L // 20 seconds
+    // Increased from 20s to 120s to tolerate Android Doze mode delays (especially at night)
+    // This prevents false-positive disconnections when the system delays Bluetooth operations.
+    // Ref: Issue with nightly disconnections - Dec 2025
+    private val watchdogTimeoutMs = 240000L // 240 seconds (4 min - forensic analysis Jan 2026)
 
     // Use toUpperCase() since Android expects the A-F hex digits in the
     // Bluetooth address string to be uppercase (lowercase ones are considered
     // invalid and cause an exception to be thrown).
     private val androidBtAddressString = address.toString().uppercase(Locale.ROOT)
 
+    private val bluetoothWakeLock = BluetoothWakeLock(androidContext)
+
     // Base class overrides.
 
     override fun connect() {
         check(systemBluetoothSocket == null) { "Connection already established" }
 
-        logger(LogLevel.DEBUG) { "Attempting to get object representing device with address $address" }
+        bluetoothWakeLock.use(timeout = 3.minutes) {
+            logger(LogLevel.DEBUG) { "Attempting to get object representing device with address $address" }
 
-        abortConnectAttempt = false
+            // Log power state to help debug BT issues related to Doze mode
+            DozeMonitor.logPowerState(androidContext, "BT connect to $address")
 
-        lateinit var device: SystemBluetoothDevice
 
-        try {
-            // Establishing the RFCOMM connection does not always work right away.
-            // Depending on the Android version and the individual Android device,
-            // it may require several attempts until the connection is actually
-            // established. Some phones behave better in this than others. We
-            // also retrieve the BluetoothDevice instance, create an RFCOMM
-            // socket, _and_ try to connect in each attempt, since any one of
-            // these steps may initially fail.
-            // This is kept separate from the for-loop in Pump.connect() on purpose;
-            // that loop is in place because the _pump_ may not be ready to connect
-            // just yet (for example because the UI is still shown on the LCD), while
-            // the retryBlocking loop here is in place because the _Android device_
-            // may not be ready to connect right away.
-            // When all attempts fail, retryBlocking() lets the exception pass through.
-            // That exception is wrapped in BluetoothException, which then needs to be
-            // handled by the caller.
-            val totalNumAttempts = 5
-            retryBlocking(numberOfRetries = totalNumAttempts, delayBetweenRetries = 100) { attemptNumber, previousException ->
-                if (abortConnectAttempt)
-                    return@retryBlocking
+            abortConnectAttempt = false
 
-                if (attemptNumber == 0) {
-                    logger(LogLevel.DEBUG) { "First attempt to establish an RFCOMM client connection to the Combo" }
-                } else {
-                    logger(LogLevel.DEBUG) {
-                        "Previous attempt to establish an RFCOMM client connection to the Combo failed with" +
-                            "exception \"$previousException\"; trying again (this is attempt #${attemptNumber + 1} of 5)"
+            lateinit var device: SystemBluetoothDevice
+
+            try {
+                // Establishing the RFCOMM connection does not always work right away.
+                // Depending on the Android version and the individual Android device,
+                // it may require several attempts until the connection is actually
+                // established. Some phones behave better in this than others. We
+                // also retrieve the BluetoothDevice instance, create an RFCOMM
+                // socket, _and_ try to connect in each attempt, since any one of
+                // these steps may initially fail.
+                // This is kept separate from the for-loop in Pump.connect() on purpose;
+                // that loop is in place because the _pump_ may not be ready to connect
+                // just yet (for example because the UI is still shown on the LCD), while
+                // the retryBlocking loop here is in place because the _Android device_
+                // may not be ready to connect right away.
+                // When all attempts fail, retryBlocking() lets the exception pass through.
+                // That exception is wrapped in BluetoothException, which then needs to be
+                // handled by the caller.
+                val totalNumAttempts = 5
+                retryBlocking(numberOfRetries = totalNumAttempts, delayBetweenRetries = 100) { attemptNumber, previousException ->
+                    if (abortConnectAttempt)
+                        return@retryBlocking
+
+                    if (attemptNumber == 0) {
+                        logger(LogLevel.DEBUG) { "First attempt to establish an RFCOMM client connection to the Combo" }
+                    } else {
+                        logger(LogLevel.DEBUG) {
+                            "Previous attempt to establish an RFCOMM client connection to the Combo failed with" +
+                                "exception \"$previousException\"; trying again (this is attempt #${attemptNumber + 1} of 5)"
+                        }
+                    }
+
+                    // Give the GC the chance to collect an older BluetoothSocket instance
+                    // while this thread sleep (see below).
+                    systemBluetoothSocket = null
+
+                    device = systemBluetoothAdapter.getRemoteDevice(androidBtAddressString)
+
+                    // Wait for 500 ms until we actually try to connect. This seems to
+                    // circumvent an as-of-yet unknown Bluetooth related race condition.
+                    // TODO: Clarify this and wait for whatever is going on there properly.
+                    try {
+                        Thread.sleep(500)
+                    } catch (ignored: InterruptedException) {
+                    }
+
+                    checkForConnectPermission(androidContext) {
+                        systemBluetoothSocket = device.createInsecureRfcommSocketToServiceRecord(Constants.sdpSerialPortUUID)
+
+                        // connect() must be explicitly called. Just creating the socket via
+                        // createInsecureRfcommSocketToServiceRecord() does not implicitly
+                        // establish the connection. This is important to keep in mind, since
+                        // otherwise, the calls below get input and output streams which appear
+                        // at first to be OK until their read/write functions are actually used.
+                        // At that point, very confusing NullPointerExceptions are thrown from
+                        // seemingly nowhere. These NPEs happen because *inside* the streams
+                        // there are internal Input/OutputStreams, and *these* are set to null
+                        // if the connection wasn't established. See also:
+                        // https://stackoverflow.com/questions/24267671/inputstream-read-causes-nullpointerexception-after-having-checked-inputstream#comment37491136_24267671
+                        // and: https://stackoverflow.com/a/24269255/560774
+                        systemBluetoothSocket!!.connect()
                     }
                 }
-
-                // Give the GC the chance to collect an older BluetoothSocket instance
-                // while this thread sleep (see below).
-                systemBluetoothSocket = null
-
-                device = systemBluetoothAdapter.getRemoteDevice(androidBtAddressString)
-
-                // Wait for 500 ms until we actually try to connect. This seems to
-                // circumvent an as-of-yet unknown Bluetooth related race condition.
-                // TODO: Clarify this and wait for whatever is going on there properly.
-                try {
-                    Thread.sleep(500)
-                } catch (ignored: InterruptedException) {
-                }
-
-                checkForConnectPermission(androidContext) {
-                    systemBluetoothSocket = device.createInsecureRfcommSocketToServiceRecord(Constants.sdpSerialPortUUID)
-
-                    // connect() must be explicitly called. Just creating the socket via
-                    // createInsecureRfcommSocketToServiceRecord() does not implicitly
-                    // establish the connection. This is important to keep in mind, since
-                    // otherwise, the calls below get input and output streams which appear
-                    // at first to be OK until their read/write functions are actually used.
-                    // At that point, very confusing NullPointerExceptions are thrown from
-                    // seemingly nowhere. These NPEs happen because *inside* the streams
-                    // there are internal Input/OutputStreams, and *these* are set to null
-                    // if the connection wasn't established. See also:
-                    // https://stackoverflow.com/questions/24267671/inputstream-read-causes-nullpointerexception-after-having-checked-inputstream#comment37491136_24267671
-                    // and: https://stackoverflow.com/a/24269255/560774
-                    systemBluetoothSocket!!.connect()
-                }
+            } catch (t: Throwable) {
+                disconnectImpl() // Clean up any partial connection states that may exist.
+                throw BluetoothException("Could not establish an RFCOMM client connection to device with address $address", t)
             }
-        } catch (t: Throwable) {
-            disconnectImpl() // Clean up any partial connection states that may exist.
-            throw BluetoothException("Could not establish an RFCOMM client connection to device with address $address", t)
+
+            if (abortConnectAttempt) {
+                logger(LogLevel.INFO) { "RFCOMM connection setup with device with address $address aborted" }
+                return@use
+            }
+
+            try {
+                inputStream = systemBluetoothSocket!!.inputStream
+            } catch (e: IOException) {
+                disconnectImpl()
+                throw ComboIOException("Could not get input stream to device with address $address", e)
+            }
+
+            try {
+                outputStream = systemBluetoothSocket!!.outputStream
+            } catch (e: IOException) {
+                disconnectImpl()
+                throw ComboIOException("Could not get output stream to device with address $address", e)
+            }
+
+            canDoIO = true
+
+            startWatchdog()
+
+            logger(LogLevel.INFO) { "RFCOMM connection with device with address $address established" }
         }
-
-        if (abortConnectAttempt) {
-            logger(LogLevel.INFO) { "RFCOMM connection setup with device with address $address aborted" }
-            return
-        }
-
-        try {
-            inputStream = systemBluetoothSocket!!.inputStream
-        } catch (e: IOException) {
-            disconnectImpl()
-            throw ComboIOException("Could not get input stream to device with address $address", e)
-        }
-
-        try {
-            outputStream = systemBluetoothSocket!!.outputStream
-        } catch (e: IOException) {
-            disconnectImpl()
-            throw ComboIOException("Could not get output stream to device with address $address", e)
-        }
-
-        canDoIO = true
-
-        startWatchdog()
-
-        logger(LogLevel.INFO) { "RFCOMM connection with device with address $address established" }
     }
 
     override fun disconnect() {
@@ -190,19 +202,21 @@ class AndroidBluetoothDevice(
 
         check(outputStream != null) { "Device is not connected - cannot send data" }
 
-        try {
-            lastTrafficTime = System.currentTimeMillis()
-            outputStream!!.write(dataToSend.toByteArray())
-            lastTrafficTime = System.currentTimeMillis()
-        } catch (e: IOException) {
-            // If we are disconnecting, don't bother re-throwing the exception;
-            // one is always thrown when the stream is closed while write() blocks,
-            // and this essentially just means "write() call aborted because the
-            // stream got closed". That's not an error.
-            if (canDoIO)
-                throw ComboIOException("Could not write data to device with address $address", e)
-            else
-                logger(LogLevel.DEBUG) { "Aborted write call because we are disconnecting" }
+        bluetoothWakeLock.use(timeout = 1.minutes) {
+            try {
+                lastTrafficTime = System.currentTimeMillis()
+                outputStream!!.write(dataToSend.toByteArray())
+                lastTrafficTime = System.currentTimeMillis()
+            } catch (e: IOException) {
+                // If we are disconnecting, don't bother re-throwing the exception;
+                // one is always thrown when the stream is closed while write() blocks,
+                // and this essentially just means "write() call aborted because the
+                // stream got closed". That's not an error.
+                if (canDoIO)
+                    throw ComboIOException("Could not write data to device with address $address", e)
+                else
+                    logger(LogLevel.DEBUG) { "Aborted write call because we are disconnecting" }
+            }
         }
     }
 
@@ -235,9 +249,11 @@ class AndroidBluetoothDevice(
 
     private fun disconnectImpl() {
         stopWatchdog()
+        bluetoothWakeLock.forceRelease()
 
         canDoIO = false
         abortConnectAttempt = true
+
 
         if (inputStream != null) {
             try {

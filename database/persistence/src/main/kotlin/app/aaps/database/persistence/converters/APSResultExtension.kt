@@ -39,6 +39,8 @@ private fun sanitizeJson(json: String): String {
         .replace("×", "x")       // U+00D7 MULTIPLICATION SIGN
         .replace("÷", "/")       // U+00F7 DIVISION SIGN
         .replace("±", "+/-")     // U+00B1 PLUS-MINUS SIGN
+        // Remove surrogate pairs (emojis, etc) which can break strict JSON parsers
+        .replace(Regex("[\\ud800-\\udbff][\\udc00-\\udfff]"), "")
         // Note: We keep emojis like 🍱, ⚠️, ✅ as they are generally safe when at start of strings
 }
 

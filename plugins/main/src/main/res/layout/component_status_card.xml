@@ -9,15 +9,28 @@
         android:background="@drawable/dashboard_card_surface"
         android:padding="24dp">
 
-        <!-- Loop Status (Top Right) -->
-        <View
-            android:id="@+id/loop_indicator"
-            android:layout_width="12dp"
-            android:layout_height="12dp"
-            android:background="@drawable/dashboard_loop_indicator"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- TOP ROW: Badges + Loop Status                               -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
 
+        <!-- AIMI Context Badge (Top Left) -->
+        <ImageView
+            android:id="@+id/aimi_context_indicator"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_margin="6dp"
+            android:padding="2dp"
+            android:elevation="20dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            android:contentDescription="AIMI Context Active"
+            app:srcCompat="@drawable/ic_graduation"
+            android:visibility="gone"
+            app:tint="?android:attr/textColorPrimary" />
+
+        <!-- Context indicator removed from top - will be repositioned later if needed -->
+
+        <!-- Loop Status (Top Right) -->
         <TextView
             android:id="@+id/loop_status"
             android:layout_width="wrap_content"
@@ -31,51 +44,107 @@
             app:layout_constraintEnd_toStartOf="@id/loop_indicator"
             app:layout_constraintTop_toTopOf="@id/loop_indicator" />
 
-        <!-- Unicorn Icon (Left of Glucose) - Slightly larger -->
+        <View
+            android:id="@+id/loop_indicator"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:background="@drawable/dashboard_loop_indicator"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- CENTER ROW: Unicorn + Modern Circle + Trend                  -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
 
-        <!-- Glucose Value (Center) -->
-
+        <!-- Dynamic Unicorn (Left) - Color changes with BG range -->
         <ImageView
             android:id="@+id/unicorn_icon"
             android:layout_width="70dp"
             android:layout_height="70dp"
-            android:layout_marginEnd="8dp"
+            android:layout_marginEnd="12dp"
+            android:layout_marginTop="16dp"
             android:contentDescription="@string/dashboard_unicorn_status"
             android:src="@drawable/unicorn"
-            app:layout_constraintBottom_toBottomOf="@id/glucose_value"
-            app:layout_constraintEnd_toStartOf="@id/glucose_value"
+            app:layout_constraintEnd_toStartOf="@id/glucose_circle"
             app:layout_constraintHorizontal_chainStyle="packed"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="@id/glucose_value"
-            app:layout_constraintVertical_bias="0.0" />
+            app:layout_constraintTop_toBottomOf="@id/loop_indicator"
+            app:layout_constraintBottom_toTopOf="@id/iob_text"
+            app:layout_constraintVertical_chainStyle="packed" />
 
-        <TextView
-            android:id="@+id/glucose_value"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="--"
-            android:textAppearance="@style/TextAppearance.MaterialComponents.Headline3"
-            android:textColor="@color/dashboard_on_surface"
-            android:textStyle="bold"
+        <!-- Modern Glucose Circle (Custom View) -->
+        <app.aaps.core.ui.elements.GlucoseCircleView
+            android:id="@+id/glucose_circle"
+            android:layout_width="150dp"
+            android:layout_height="150dp"
+            android:layout_marginTop="16dp"
             app:layout_constraintEnd_toStartOf="@id/trend_arrow"
             app:layout_constraintStart_toEndOf="@id/unicorn_icon"
-            app:layout_constraintTop_toBottomOf="@id/loop_status" />
+            app:layout_constraintTop_toBottomOf="@id/loop_status"
+            app:layout_constraintBottom_toTopOf="@id/iob_text"
+            app:layout_constraintVertical_chainStyle="packed" />
 
-        <!-- Trend Arrow (Right of Glucose) -->
+        <!-- Glucose Info Container (INSIDE Circle) -->
+        <LinearLayout
+            android:id="@+id/glucose_container"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="vertical"
+            app:layout_constraintBottom_toBottomOf="@id/glucose_circle"
+            app:layout_constraintEnd_toEndOf="@id/glucose_circle"
+            app:layout_constraintStart_toStartOf="@id/glucose_circle"
+            app:layout_constraintTop_toTopOf="@id/glucose_circle">
+
+            <!-- Main Glucose Value -->
+            <TextView
+                android:id="@+id/glucose_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Headline3"
+                android:textColor="@color/dashboard_on_surface"
+                android:textStyle="bold"
+                tools:text="179" />
+
+            <!-- Time Ago -->
+            <TextView
+                android:id="@+id/time_ago"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:alpha="0.6"
+                android:text="--"
+                android:textSize="11sp"
+                android:textColor="@color/dashboard_on_surface"
+                tools:text="14m ago" />
+
+            <!-- Delta Small (inside circle) -->
+            <TextView
+                android:id="@+id/delta_small"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:alpha="0.7"
+                android:text="--"
+                android:textSize="12sp"
+                android:textColor="@color/dashboard_on_surface"
+                tools:text="Δ +2,05" />
+        </LinearLayout>
+
+        <!-- Trend Arrow (Right of Circle) -->
         <ImageView
             android:id="@+id/trend_arrow"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="12dp"
             android:contentDescription="@string/dashboard_trend"
-            app:layout_constraintBottom_toBottomOf="@id/glucose_value"
+            app:layout_constraintBottom_toBottomOf="@id/glucose_circle"
             app:layout_constraintEnd_toStartOf="@id/delta_value"
-            app:layout_constraintStart_toEndOf="@id/glucose_value"
-            app:layout_constraintTop_toTopOf="@id/glucose_value" />
+            app:layout_constraintStart_toEndOf="@id/glucose_circle"
+            app:layout_constraintTop_toTopOf="@id/glucose_circle" />
 
-        <!-- Delta (Bottom Center) -->
+        <!-- Delta Large (Right of Arrow) -->
         <TextView
             android:id="@+id/delta_value"
             android:layout_width="wrap_content"
@@ -85,59 +154,97 @@
             android:text="--"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
             android:textColor="@color/dashboard_on_surface"
-            app:layout_constraintBottom_toBottomOf="@id/glucose_value"
+            app:layout_constraintBottom_toBottomOf="@id/trend_arrow"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@id/trend_arrow"
-            app:layout_constraintTop_toTopOf="@id/glucose_value" />
+            app:layout_constraintTop_toTopOf="@id/trend_arrow"
+            tools:text="+5" />
 
-        <!-- IOB (Below Glucose) -->
+        <!-- 🔍 AUDITOR BADGE - Bottom-right of Glucose Circle (GUARANTEED VISIBLE) -->
+        <FrameLayout
+            android:id="@+id/aimi_auditor_indicator_container"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_marginEnd="12dp"
+            android:layout_marginBottom="12dp"
+            android:elevation="24dp"
+            app:layout_constraintEnd_toEndOf="@id/glucose_circle"
+            app:layout_constraintBottom_toBottomOf="@id/glucose_circle">
+            <!-- Placeholder - AuditorStatusIndicator added programmatically -->
+        </FrameLayout>
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- BOTTOM ROW: Info Grid (2 columns)                            -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+
+        <!-- IOB Text (Bottom Left) -->
         <TextView
             android:id="@+id/iob_text"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="20dp"
+            android:layout_marginEnd="12dp"
             android:textColor="@color/dashboard_on_surface"
-            android:textSize="14sp"
+            android:textSize="13sp"
+            app:layout_constraintEnd_toStartOf="@id/activity_text"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/glucose_value" />
+            app:layout_constraintTop_toBottomOf="@id/unicorn_icon"
+            tools:text="IOB: 5,47 IE" />
+
+        <!-- Activity Text (Bottom Right) -->
+        <TextView
+            android:id="@+id/activity_text"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:textColor="@color/dashboard_on_surface"
+            android:textSize="13sp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/iob_text"
+            app:layout_constraintTop_toBottomOf="@id/glucose_circle"
+            tools:text="Activity: 100%" />
 
         <!-- Pump Status (Below IOB) -->
         <TextView
             android:id="@+id/pump_status_text"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="12dp"
+            android:alpha="0.8"
+            android:textColor="@color/dashboard_on_surface"
+            android:textSize="11sp"
+            app:layout_constraintEnd_toStartOf="@id/tbr_text"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/iob_text"
+            tools:text="Pump: OK" />
+
+        <!-- TBR Text (Below Activity) -->
+        <TextView
+            android:id="@+id/tbr_text"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:alpha="0.8"
             android:textColor="@color/dashboard_on_surface"
-            android:textSize="12sp"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/iob_text" />
+            android:textSize="11sp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/pump_status_text"
+            app:layout_constraintTop_toBottomOf="@id/activity_text"
+            tools:text="TBR: 0,72 U/h" />
 
-        <!-- Prediction (Below Pump) -->
+        <!-- Prediction Text (Full Width) -->
         <TextView
             android:id="@+id/prediction_text"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:alpha="0.8"
             android:textColor="@color/dashboard_on_surface"
-            android:textSize="12sp"
+            android:textSize="11sp"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/pump_status_text" />
-
-        <!-- Time Ago (Bottom Right) -->
-        <TextView
-            android:id="@+id/time_ago"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:alpha="0.5"
-            android:text="--"
-            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-            android:textColor="@color/dashboard_on_surface"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/prediction_text" />
+            app:layout_constraintTop_toBottomOf="@id/pump_status_text"
+            tools:text="Prediction: → 209 in 31m" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </merge>

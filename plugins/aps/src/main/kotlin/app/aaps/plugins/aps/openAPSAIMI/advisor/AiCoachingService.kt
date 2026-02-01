@@ -8,6 +8,8 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,25 +23,24 @@ import kotlinx.coroutines.withContext
  * Uses robust HttpURLConnection (zero dependency).
  * =============================================================================
  */
-class AiCoachingService {
+@Singleton
+class AiCoachingService @Inject constructor() {
 
     enum class Provider { OPENAI, GEMINI, DEEPSEEK, CLAUDE }
 
     companion object {
         private const val OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-        private const val OPENAI_MODEL = "gpt-4o"
+        private const val OPENAI_MODEL = "gpt-5.2"  // O-series reasoning model
         
-        // Gemini 2.5 Flash (Dec 2025 standard)
-        private const val GEMINI_MODEL = "gemini-2.5-flash"
-        private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:generateContent"
+
         
         // DeepSeek Chat (OpenAI-compatible)
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
         private const val DEEPSEEK_MODEL = "deepseek-chat"
         
-        // Claude 3.5 Sonnet
+        // Claude Sonnet 4.5 (Sept 2025 - replaces deprecated 3.5)
         private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
-        private const val CLAUDE_MODEL = "claude-3-5-sonnet-20241022"
+        private const val CLAUDE_MODEL = "claude-sonnet-4-5-20250929"  // Claude Sonnet 4.5 (Sept 2025)
     }
 
     /**
@@ -59,7 +60,7 @@ class AiCoachingService {
             val prompt = buildPrompt(androidContext, context, report, history)
             
             return@withContext when (provider) {
-                Provider.GEMINI -> callGemini(apiKey, prompt)
+                Provider.GEMINI -> callGemini(androidContext, apiKey, prompt)
                 Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
                 Provider.CLAUDE -> callClaude(apiKey, prompt)
                 else -> callOpenAI(apiKey, prompt)
@@ -68,6 +69,36 @@ class AiCoachingService {
         } catch (e: Exception) {
             e.printStackTrace()
             return@withContext "Erreur de connexion (${provider.name}) : ${e.localizedMessage}"
+        }
+    }
+    
+    /**
+     * Simple text generation for Context Module.
+     * 
+     * @param prompt Complete prompt (system + user message)
+     * @param apiKey API key for the provider
+     * @param provider Which LLM provider to use
+     * @return Generated text or error message
+     */
+    suspend fun fetchText(
+        context: Context,
+        prompt: String,
+        apiKey: String,
+        provider: Provider
+    ): String = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank()) return@withContext "Clé API manquante."
+        if (prompt.isBlank()) return@withContext "Prompt vide."
+        
+        try {
+            return@withContext when (provider) {
+                Provider.GEMINI -> callGemini(context, apiKey, prompt)
+                Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
+                Provider.CLAUDE -> callClaude(apiKey, prompt)
+                else -> callOpenAI(apiKey, prompt)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return@withContext "Erreur: ${e.localizedMessage}"
         }
     }
 
@@ -111,16 +142,44 @@ class AiCoachingService {
         }
     }
 
-    private fun callGemini(apiKey: String, prompt: String): String {
-        // Gemini URL requires key in query param usually, or header 'x-goog-api-key'
-        val urlStr = "$GEMINI_URL?key=$apiKey"
+    private fun callGemini(context: Context, apiKey: String, prompt: String): String {
+        val resolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
+        
+        // 1. Try Preferred Model (High IQ: Gemini 3 Pro)
+        val primaryModel = resolver.resolveGenerateContentModel(apiKey, "gemini-3-pro-preview")
+        
+        try {
+            return executeGeminiRequest(resolver, apiKey, prompt, primaryModel)
+        } catch (e: Exception) {
+            // 2. Check for Quota Exhaustion (429)
+            // Error message usually contains "429" or "RESOURCE_EXHAUSTED" or "quota"
+            val msg = e.message?.lowercase() ?: ""
+            if (msg.contains("429") || msg.contains("resource_exhausted") || msg.contains("quota")) {
+                
+                // 3. Fallback to Efficient Model (High Quota: Gemini 2.5 Flash)
+                // Flash models typically have 15 RPM free tier vs 2 RPM for Pro
+                val fallbackModel = "gemini-2.5-flash" // Hardcoded safe fallback
+                android.util.Log.w("AIMI_GEMINI", "⚠️ Quota exceeded on $primaryModel. Auto-fallback to $fallbackModel")
+                
+                return executeGeminiRequest(resolver, apiKey, prompt, fallbackModel)
+            }
+            throw e // Re-throw other errors
+        }
+    }
+
+    private fun executeGeminiRequest(
+        resolver: app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver,
+        apiKey: String, 
+        prompt: String, 
+        modelId: String
+    ): String {
+        val urlStr = resolver.getGenerateContentUrl(modelId, apiKey)
         val url = URL(urlStr)
         val connection = url.openConnection() as HttpURLConnection
         
         val jsonBody = JSONObject()
         val parts = JSONArray()
         val part = JSONObject()
-        // STRICT PARITY: Sending exact same prompt as OpenAI (which includes Persona)
         part.put("text", prompt)
         parts.put(part)
         
@@ -134,10 +193,9 @@ class AiCoachingService {
         val root = JSONObject()
         root.put("contents", contents)
         
-        // Generation Config
         val config = JSONObject()
         config.put("temperature", 0.7)
-        config.put("maxOutputTokens", 4096) // Significantly increased to prevent ANY truncation
+        config.put("maxOutputTokens", 4096)
         root.put("generationConfig", config)
 
         connection.apply {
@@ -145,13 +203,10 @@ class AiCoachingService {
             setRequestProperty("Content-Type", "application/json")
             doOutput = true
             connectTimeout = 15000
-            readTimeout = 60000 // Increased read timeout
+            readTimeout = 60000
         }
 
-        val writer = OutputStreamWriter(connection.outputStream)
-        writer.write(root.toString())
-        writer.flush()
-        writer.close()
+        OutputStreamWriter(connection.outputStream).use { it.write(root.toString()) }
 
         val responseCode = connection.responseCode
         if (responseCode == 200) {
@@ -162,11 +217,11 @@ class AiCoachingService {
             reader.close()
             return parseGeminiResponse(response.toString())
         } else {
-            val reader = BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream, java.nio.charset.StandardCharsets.UTF_8))
-            val err = StringBuilder()
-            var line: String?
-            while (reader.readLine().also { line = it } != null) err.append(line)
-            return "Erreur Gemini ($responseCode): $err"
+             val reader = BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream, java.nio.charset.StandardCharsets.UTF_8))
+             val err = StringBuilder()
+             var line: String?
+             while (reader.readLine().also { line = it } != null) err.append(line)
+             throw Exception("Gemini Error ($responseCode): $err")
         }
     }
 
@@ -263,7 +318,9 @@ class AiCoachingService {
         val usr = JSONObject().put("role", "user").put("content", prompt)
         messages.put(usr)
         root.put("messages", messages)
-        root.put("temperature", 0.7)
+        // GPT-5 series (o-series) uses max_completion_tokens instead of max_tokens
+        // and doesn't support temperature (uses reasoning.effort instead)
+        root.put("max_completion_tokens", 4096)
         
         return root
     }

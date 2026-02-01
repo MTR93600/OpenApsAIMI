@@ -404,5 +404,21 @@
     <string name="hypo_risk_notification_title">Hypo Risk</string>
     <string name="hypo_risk_notification_text">Hypo risk detected! Please check your BG.</string>
     <string name="graph_range_updated">Graph range: %1$d hours</string>
+
+    <!-- Circle-Top Hybrid Dashboard -->
+    <string name="advisor_button">Advisor</string>
+    <string name="adjust_button">Adjust</string>
+    <string name="prefs_button">Prefs</string>
+    <string name="stats_button">Stats</string>
+    <string name="closed_loop">Closed Loop</string>
+    <string name="trend">Trend</string>
+    <string name="aimi_context">AIMI Context</string>
+    <string name="reservoir_short">Reservoir</string>
+    <string name="infusion_age">Infusion Age</string>
+    <string name="sensor_age">Sensor Age</string>
+    <string name="pump_battery">Pump Battery</string>
+    <string name="last_sensor_value">Last sensor</string>
+    <string name="activity_pct">Activity</string>
+    <string name="basal">Basal</string>
 </resources>
 
