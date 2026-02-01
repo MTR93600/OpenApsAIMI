@@ -285,6 +285,12 @@
     <string name="oaps_aimi_enableDeleteLine_title">Enable the possibility to delete one day in ML Training</string>
     <string name="countsteps_watch_title">Step counting watch (if disable, use phone)</string>
     <string name="countsteps_watch_summary">This option enables step counting by receiving data from the watch instead of the phone.</string>
+
+    <string name="pref_aimi_steps_source_title">Steps &amp; Heart Rate Data Source</string>
+    <string name="pref_aimi_steps_source_wear">Prefer Wear OS (Direct)</string>
+    <string name="pref_aimi_steps_source_auto">Auto (Wear OS → Health Connect)</string>
+    <string name="pref_aimi_steps_source_hc">Health Connect Only</string>
+    <string name="pref_aimi_steps_source_disabled">Disabled</string>
     <string name="oaps_aimi_weight_summary">Weight in kg to calculate basal</string>
     <string name="oaps_aimi_weight_title">Weight in kg</string>
     <string name="oaps_aimi_tdd7_summary">7-day average TDD</string>
@@ -324,10 +330,23 @@
     <string name="oaps_aimi_smb_exercise_damping_summary">Multiplier applied to SMB after recent exercise.</string>
     <string name="oaps_aimi_smb_late_fat_damping_title">Late meal damping factor</string>
     <string name="oaps_aimi_smb_late_fat_damping_summary">Multiplier applied to SMB when a late fatty meal is suspected.</string>
+    <string name="oaps_aimi_trajectory_enabled_title">Enable Trajectory Guard</string>
+    <string name="oaps_aimi_trajectory_enabled_summary">Phase-space control system that analyzes glucose trajectory geometry to prevent over/under-correction and improve convergence to target.</string>
     <string name="oaps_aimi_cho_summary">Average carbohydrates per meal. Estimated value, not exact</string>
     <string name="oaps_aimi_cho_title">Average carbohydrate amount lunch/dinner</string>
     <string name="aimi_preferences">AIMI Settings</string>
     <string name="aimi_advisor_section_settings">AIMI Settings</string>
+    <string name="aimi_adv_support_title">Expert Support</string>
+    <string name="aimi_adv_support_msg">Enter the access code provided by MTR to export diagnostics.</string>
+    <string name="aimi_adv_support_verify">Verify</string>
+    <string name="aimi_adv_support_invalid">⚠️ Invalid Code</string>
+    <string name="aimi_adv_issue_title">Describe Issue</string>
+    <string name="aimi_adv_issue_msg">Briefly describe the problem so MTR can analyze the context.</string>
+    <string name="aimi_adv_issue_hint">Describe your issue (optional)...</string>
+    <string name="aimi_adv_generate_btn">Generate &amp; Share</string>
+    <string name="aimi_adv_error_gen">Error generating report</string>
+    <string name="aimi_diag_subject">AIMI Diagnostic Report - %1$s</string>
+    <string name="aimi_diag_chooser">Send Diagnostic to MTR</string>
 
 
     <string name="user_preferences">Preferences user</string>
@@ -364,6 +383,9 @@
     <string name="oaps_aimi_sleep_interval_summary">Interval between SMB for Sleep Mode</string>
     <string name="oaps_aimi_sleep_interval_title">SMB Interval Sleep Mode</string>
     <string name="OApsAIMI_Enable_pregnancy">Pregnancy Mode</string>
+    <string name="OApsAIMI_PregnancyDueDate_title">Due Date (Terme)</string>
+    <string name="OApsAIMI_PregnancyDueDate_summary">Enter estimated delivery date (YYYY-MM-DD) to enable gestational autopilot.</string>
+    <string name="error_invalid_date_format">Invalid format. Please use YYYY-MM-DD.</string>
     <string name="OApsAIMI_Force_Limits">Force AAPS Multiplier Limits</string>
     <string name="OApsAIMI_Enable_honeymoon">Child Mode (insulin needs lower than adult)</string>
     <string name="oaps_aimi_HIGHBG_interval_summary">High BG SMB Interval</string>
@@ -1107,10 +1129,10 @@
     <string name="aimi_prefs_ai_title">🤖 Assistant AI</string>
     <string name="aimi_prefs_provider_title">AI Provider</string>
     <string name="aimi_prefs_provider_dialog_title">Select AI Provider</string>
-    <string name="aimi_prefs_provider_openai">OpenAI (GPT-4o)</string>
-    <string name="aimi_prefs_provider_gemini">Google Gemini (1.5 Flash)</string>
-    <string name="aimi_prefs_provider_deepseek">DeepSeek (V3)</string>
-    <string name="aimi_prefs_provider_claude">Claude (Sonnet)</string>
+    <string name="aimi_prefs_provider_openai">OpenAI (GPT-5.2)</string>
+    <string name="aimi_prefs_provider_gemini">Gemini (2.5 Flash)</string>
+    <string name="aimi_prefs_provider_deepseek">DeepSeek (Chat)</string>
+    <string name="aimi_prefs_provider_claude">Claude (3.5 Sonnet)</string>
     <string name="aimi_prefs_openai_key_title">OpenAI API Key</string>
     <string name="aimi_prefs_openai_key_summary">Enter your OpenAI API Key (sk-...)</string>
     <string name="aimi_prefs_gemini_key_title">Gemini API Key</string>
@@ -1195,6 +1217,69 @@
     <string name="aimi_auditor_timeout_summary">Maximum wait time for AI provider response (default: 10s)</string>
     <string name="aimi_auditor_min_confidence_title">Minimum Confidence (%)</string>
     <string name="aimi_auditor_min_confidence_summary">Only apply modulations if AI confidence is above this threshold (default: 70%)</string>
+    
+    <!-- Context Module -->
+    <string name="context_title">AIMI Context</string>
+    <string name="context_description">Describe your current situation to help AIMI adapt insulin delivery</string>
+    <string name="context_chat_hint">Type here... (e.g., "heavy cardio 1h", "sick with flu")</string>
+    <string name="context_btn_ai_parse">🤖 AI Parse</string>
+    <string name="context_btn_manual">📝 Manual</string>
+    <string name="context_btn_clear">Clear</string>
+    <string name="context_btn_clear_all">Clear All</string>
+    <string name="context_preset_cardio">🏃 Cardio</string>
+    <string name="context_preset_strength">💪 Strength</string>
+    <string name="context_preset_yoga">🧘 Yoga</string>
+    <string name="context_preset_sport">⚽ Sport</string>
+    <string name="context_preset_walking">🚶 Walking</string>
+    <string name="context_preset_sick">🤒 Sick</string>
+    <string name="context_preset_stress">😰 Stress</string>
+    <string name="context_preset_meal_risk">🍕 Meal Risk</string>
+    <string name="context_preset_alcohol">🍷 Alcohol</string>
+    <string name="context_preset_travel">✈️ Travel</string>
+    <string name="context_active_intents">📋 Active Contexts</string>
+    <string name="context_empty_state">No active contexts.\n\nUse quick presets or describe your situation.</string>
+    <string name="context_settings_title">Settings</string>
+    <string name="context_module_enabled">Enable Context Module</string>
+    <string name="context_llm_enabled">Enable AI Parsing (LLM)</string>
+    <string name="context_mode_title">Context Mode</string>
+    <string name="context_mode_conservative">Conservative</string>
+    <string name="context_mode_balanced">Balanced</string>
+    <string name="context_mode_aggressive">Aggressive</string>
+
+    <!-- Physiological Assistant Strings -->
+    <string name="aimi_physio_title">🏥 Physiological Assistant</string>
+    <string name="aimi_physio_enable_title">Enable Assistant</string>
+    <string name="aimi_physio_enable_summary">Adjusts insulin based on sleep, activity, and heart rate patterns.</string>
+    <string name="aimi_physio_data_sources_title">Data Sources</string>
+    <string name="aimi_physio_sleep_enable_title">Sync Sleep Data</string>
+    <string name="aimi_physio_sleep_enable_summary">Use Health Connect to fetch sleep stages and efficiency.</string>
+    <string name="aimi_physio_hrv_enable_title">Sync HRV &amp; RHR</string>
+    <string name="aimi_physio_hrv_enable_summary">Use heart rate variability to detect stress/fatigue.</string>
+    <string name="aimi_physio_advanced_title">Analysis &amp; Logs</string>
+    <string name="aimi_physio_llm_enable_title">LLM Narrative Analysis</string>
+    <string name="aimi_physio_llm_enable_summary">Send physio data to LLM for daily health summaries (Optional).</string>
+    <string name="aimi_physio_debug_title">Debug Logging</string>
+    <string name="aimi_physio_debug_summary">Log detailed physiological states to the console.</string>
+    
+    <!-- 🌸 Endometriosis & Cycle Settings -->
+    <string name="endo_preferences_title">Endometriosis Settings</string>
+    <string name="endo_enable_title">Enable Endometriosis Logic</string>
+    <string name="endo_enable_summary">Adapts ISF/Basal/SMB for inflammatory cycles (Basal-First Strategy).</string>
+    <string name="endo_suppression_title">Hormonal Suppression Mode</string>
+    <string name="endo_suppression_summary">For continuous pill or no-cycle management (Steady state inflammation).</string>
+    <string name="endo_flare_title">Pain Flare Active</string>
+    <string name="endo_flare_summary">Toggle ON during acute pain crisis (Increases Basal, Dampens SMB).</string>
+    <string name="endo_basal_mult_title">Max Basal Multiplier</string>
+    <string name="endo_basal_mult_summary">Maximum temp basal boost during flare (Default 1.3x).</string>
+    <string name="endo_smb_dampen_title">SMB Dampening Factor</string>
+    <string name="endo_smb_dampen_summary">Factor to reduce SMBs during flare to prevent stacking (Default 0.7x).</string>
+    <string name="endo_flare_duration_title">Flare Duration (hours)</string>
+    <string name="endo_flare_duration_summary">How long the flare mode stays active when toggled.</string>
+    
+
+    
+
+    
+
 
 </resources>
-

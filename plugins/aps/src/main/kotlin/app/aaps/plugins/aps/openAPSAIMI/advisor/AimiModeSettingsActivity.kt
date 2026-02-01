@@ -5,7 +5,6 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
-import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
@@ -14,20 +13,14 @@ import android.widget.ScrollView
 import android.widget.Space
 import android.widget.TextView
 import androidx.cardview.widget.CardView
-import androidx.core.content.ContextCompat
-import androidx.core.widget.addTextChangedListener
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
-import android.content.Context
-import androidx.preference.PreferenceManager
 import app.aaps.core.ui.activities.TranslatedDaggerAppCompatActivity
 import app.aaps.core.interfaces.automation.Automation
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.ui.dialogs.OKDialog
 import javax.inject.Inject
-import android.os.Handler
-import android.os.Looper
 import android.widget.Switch
 
 
@@ -39,16 +32,21 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
     // Removed Inject to avoid Dagger graph issues with new Activity - REVERTED: Now we use Dagger
     // private val prefs by lazy { PreferenceManager.getDefaultSharedPreferences(this) }
     @Inject lateinit var preferences: Preferences
+    @Inject lateinit var persistenceLayer: app.aaps.core.interfaces.db.PersistenceLayer
+    @Inject lateinit var aapsSchedulers: app.aaps.core.interfaces.rx.AapsSchedulers
     private val sp by lazy { androidx.preference.PreferenceManager.getDefaultSharedPreferences(this) }
 
     private var selectedMode = ModeType.LUNCH
 
     private lateinit var lunchButton: TextView
     private lateinit var dinnerButton: TextView
+    private lateinit var bfastButton: TextView
+    private lateinit var highCarbButton: TextView
     
     private lateinit var inputPrebolus1: EditText
     private lateinit var inputPrebolus2: EditText
     private lateinit var inputReactivity: EditText
+    private lateinit var inputDuration: EditText
     private lateinit var inputInterval: EditText
 
     // AI Settings Inputs
@@ -63,7 +61,7 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
     private val accentColor = Color.parseColor("#6366F1") // Indigo
     private val activeTabColor = Color.parseColor("#334155")
 
-    enum class ModeType { LUNCH, DINNER }
+    enum class ModeType { LUNCH, DINNER, BFAST, HIGHCARB }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -97,7 +95,7 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
         // Mode Toggles (Tabs)
         val toggleContainer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            weightSum = 2f
+            weightSum = 4f
             // Custom simplified background logic
             setBackgroundColor(cardDark)
             setPadding(16, 16, 16, 16)
@@ -108,10 +106,16 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
 
         lunchButton = createTabButton("LUNCH 🥗", true)
         dinnerButton = createTabButton("DINNER 🍽️", false)
+        bfastButton = createTabButton("BFAST 🍳", false)
+        highCarbButton = createTabButton("HIGHCARB 🍕", false)
 
         toggleContainer.addView(lunchButton)
-        toggleContainer.addView(Space(this), LinearLayout.LayoutParams(32, 1))
+        toggleContainer.addView(Space(this), LinearLayout.LayoutParams(16, 1))
         toggleContainer.addView(dinnerButton)
+        toggleContainer.addView(Space(this), LinearLayout.LayoutParams(16, 1))
+        toggleContainer.addView(bfastButton)
+        toggleContainer.addView(Space(this), LinearLayout.LayoutParams(16, 1))
+        toggleContainer.addView(highCarbButton)
         container.addView(toggleContainer)
 
         // Inputs Card
@@ -130,24 +134,13 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
         inputPrebolus1 = createLabeledInput(formLayout, "Prebolus 1 (U)", "2.5")
         inputPrebolus2 = createLabeledInput(formLayout, "Prebolus 2 (U)", "2.0")
         inputReactivity = createLabeledInput(formLayout, "Reactivity (%)", "100")
+        inputDuration = createLabeledInput(formLayout, "Duration (min)", "60") // 🚀 ADDED
         inputInterval = createLabeledInput(formLayout, "Interval (min)", "5")
         (inputInterval.layoutParams as LinearLayout.LayoutParams).bottomMargin = 0
 
         formCard.addView(formLayout)
         container.addView(formCard)
 
-
-        // --- Buttons ---
-        val buttonPanel = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            weightSum = 2f
-            // Custom simplified background logic
-            setBackgroundColor(cardDark)
-            setPadding(16, 16, 16, 16)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = 64
-            }
-        }
 
         // Save Button
         val saveBtn = Button(this).apply {
@@ -191,18 +184,17 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
             switchMode(ModeType.DINNER) 
             activateBtn.text = "⚡ ACTIVATE DINNER"
         }
+        bfastButton.setOnClickListener { 
+            switchMode(ModeType.BFAST) 
+            activateBtn.text = "⚡ ACTIVATE BFAST"
+        }
+        highCarbButton.setOnClickListener { 
+            switchMode(ModeType.HIGHCARB) 
+            activateBtn.text = "⚡ ACTIVATE HIGH CARB"
+        }
 
         setContentView(mainScroll)
 
-        // Functionality
-        lunchButton.setOnClickListener { 
-            switchMode(ModeType.LUNCH) 
-            activateBtn.text = "⚡ ACTIVATE LUNCH"
-        }
-        dinnerButton.setOnClickListener { 
-            switchMode(ModeType.DINNER) 
-            activateBtn.text = "⚡ ACTIVATE DINNER"
-        }
 
         // Initial Load
         loadValues(ModeType.LUNCH)
@@ -268,27 +260,72 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
             lunchButton.setTextColor(Color.WHITE)
             dinnerButton.setBackgroundColor(Color.TRANSPARENT)
             dinnerButton.setTextColor(textSecondary)
-        } else {
+            bfastButton.setBackgroundColor(Color.TRANSPARENT)
+            bfastButton.setTextColor(textSecondary)
+            highCarbButton.setBackgroundColor(Color.TRANSPARENT)
+            highCarbButton.setTextColor(textSecondary)
+        } else if (mode == ModeType.DINNER) {
             dinnerButton.setBackgroundColor(activeTabColor)
             dinnerButton.setTextColor(Color.WHITE)
             lunchButton.setBackgroundColor(Color.TRANSPARENT)
             lunchButton.setTextColor(textSecondary)
+            bfastButton.setBackgroundColor(Color.TRANSPARENT)
+            bfastButton.setTextColor(textSecondary)
+            highCarbButton.setBackgroundColor(Color.TRANSPARENT)
+            highCarbButton.setTextColor(textSecondary)
+        } else if (mode == ModeType.BFAST) {
+            bfastButton.setBackgroundColor(activeTabColor)
+            bfastButton.setTextColor(Color.WHITE)
+            lunchButton.setBackgroundColor(Color.TRANSPARENT)
+            lunchButton.setTextColor(textSecondary)
+            dinnerButton.setBackgroundColor(Color.TRANSPARENT)
+            dinnerButton.setTextColor(textSecondary)
+            highCarbButton.setBackgroundColor(Color.TRANSPARENT)
+            highCarbButton.setTextColor(textSecondary)
+        } else {
+            highCarbButton.setBackgroundColor(activeTabColor)
+            highCarbButton.setTextColor(Color.WHITE)
+            lunchButton.setBackgroundColor(Color.TRANSPARENT)
+            lunchButton.setTextColor(textSecondary)
+            dinnerButton.setBackgroundColor(Color.TRANSPARENT)
+            dinnerButton.setTextColor(textSecondary)
+            bfastButton.setBackgroundColor(Color.TRANSPARENT)
+            bfastButton.setTextColor(textSecondary)
         }
 
         loadValues(mode)
     }
 
     private fun loadValues(mode: ModeType) {
-        if (mode == ModeType.LUNCH) {
-            inputPrebolus1.setText(getStringPref(DoubleKey.OApsAIMILunchPrebolus))
-            inputPrebolus2.setText(getStringPref(DoubleKey.OApsAIMILunchPrebolus2))
-            inputReactivity.setText(getStringPref(DoubleKey.OApsAIMILunchFactor))
-            inputInterval.setText(getStringPref(IntKey.OApsAIMILunchinterval))
-        } else {
-            inputPrebolus1.setText(getStringPref(DoubleKey.OApsAIMIDinnerPrebolus))
-            inputPrebolus2.setText(getStringPref(DoubleKey.OApsAIMIDinnerPrebolus2))
-            inputReactivity.setText(getStringPref(DoubleKey.OApsAIMIDinnerFactor))
-            inputInterval.setText(getStringPref(IntKey.OApsAIMIDinnerinterval))
+        when (mode) {
+            ModeType.LUNCH -> {
+                inputPrebolus1.setText(getStringPref(DoubleKey.OApsAIMILunchPrebolus))
+                inputPrebolus2.setText(getStringPref(DoubleKey.OApsAIMILunchPrebolus2))
+                inputReactivity.setText(getStringPref(DoubleKey.OApsAIMILunchFactor))
+                inputDuration.setText(sp.getInt("aimi_mode_lunch_duration", 60).toString())
+                inputInterval.setText(getStringPref(IntKey.OApsAIMILunchinterval))
+            }
+            ModeType.DINNER -> {
+                inputPrebolus1.setText(getStringPref(DoubleKey.OApsAIMIDinnerPrebolus))
+                inputPrebolus2.setText(getStringPref(DoubleKey.OApsAIMIDinnerPrebolus2))
+                inputReactivity.setText(getStringPref(DoubleKey.OApsAIMIDinnerFactor))
+                inputDuration.setText(sp.getInt("aimi_mode_dinner_duration", 60).toString())
+                inputInterval.setText(getStringPref(IntKey.OApsAIMIDinnerinterval))
+            }
+            ModeType.BFAST -> {
+                inputPrebolus1.setText(getStringPref(DoubleKey.OApsAIMIBFPrebolus))
+                inputPrebolus2.setText(getStringPref(DoubleKey.OApsAIMIBFPrebolus2))
+                inputReactivity.setText(getStringPref(DoubleKey.OApsAIMIBFFactor))
+                inputDuration.setText(sp.getInt("aimi_mode_bfast_duration", 60).toString())
+                inputInterval.setText(getStringPref(IntKey.OApsAIMIBFinterval))
+            }
+            ModeType.HIGHCARB -> {
+                inputPrebolus1.setText(getStringPref(DoubleKey.OApsAIMIHighCarbPrebolus))
+                inputPrebolus2.setText(getStringPref(DoubleKey.OApsAIMIHighCarbPrebolus2))
+                inputReactivity.setText(getStringPref(DoubleKey.OApsAIMIHCFactor))
+                inputDuration.setText(sp.getInt("aimi_mode_hc_duration", 60).toString())
+                inputInterval.setText(getStringPref(IntKey.OApsAIMIHCinterval))
+            }
         }
     }
 
@@ -297,18 +334,38 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
         val p1 = inputPrebolus1.text.toString().toDoubleOrNull() ?: 0.0
         val p2 = inputPrebolus2.text.toString().toDoubleOrNull() ?: 0.0
         val react = inputReactivity.text.toString().toDoubleOrNull() ?: 100.0
+        val dur = inputDuration.text.toString().toIntOrNull() ?: 60
         val interv = inputInterval.text.toString().toIntOrNull() ?: 5
 
-        if (selectedMode == ModeType.LUNCH) {
-            preferences.put(DoubleKey.OApsAIMILunchPrebolus, p1)
-            preferences.put(DoubleKey.OApsAIMILunchPrebolus2, p2)
-            preferences.put(DoubleKey.OApsAIMILunchFactor, react)
-            preferences.put(IntKey.OApsAIMILunchinterval, interv)
-        } else {
-            preferences.put(DoubleKey.OApsAIMIDinnerPrebolus, p1)
-            preferences.put(DoubleKey.OApsAIMIDinnerPrebolus2, p2)
-            preferences.put(DoubleKey.OApsAIMIDinnerFactor, react)
-            preferences.put(IntKey.OApsAIMIDinnerinterval, interv)
+        when (selectedMode) {
+            ModeType.LUNCH -> {
+                preferences.put(DoubleKey.OApsAIMILunchPrebolus, p1)
+                preferences.put(DoubleKey.OApsAIMILunchPrebolus2, p2)
+                preferences.put(DoubleKey.OApsAIMILunchFactor, react)
+                sp.edit().putInt("aimi_mode_lunch_duration", dur).apply()
+                preferences.put(IntKey.OApsAIMILunchinterval, interv)
+            }
+            ModeType.DINNER -> {
+                preferences.put(DoubleKey.OApsAIMIDinnerPrebolus, p1)
+                preferences.put(DoubleKey.OApsAIMIDinnerPrebolus2, p2)
+                preferences.put(DoubleKey.OApsAIMIDinnerFactor, react)
+                sp.edit().putInt("aimi_mode_dinner_duration", dur).apply()
+                preferences.put(IntKey.OApsAIMIDinnerinterval, interv)
+            }
+            ModeType.BFAST -> {
+                preferences.put(DoubleKey.OApsAIMIBFPrebolus, p1)
+                preferences.put(DoubleKey.OApsAIMIBFPrebolus2, p2)
+                preferences.put(DoubleKey.OApsAIMIBFFactor, react)
+                sp.edit().putInt("aimi_mode_bfast_duration", dur).apply()
+                preferences.put(IntKey.OApsAIMIBFinterval, interv)
+            }
+            ModeType.HIGHCARB -> {
+                preferences.put(DoubleKey.OApsAIMIHighCarbPrebolus, p1)
+                preferences.put(DoubleKey.OApsAIMIHighCarbPrebolus2, p2)
+                preferences.put(DoubleKey.OApsAIMIHCFactor, react)
+                sp.edit().putInt("aimi_mode_hc_duration", dur).apply()
+                preferences.put(IntKey.OApsAIMIHCinterval, interv)
+            }
         }
 
         if (finishAfterSave) {
@@ -318,28 +375,44 @@ class AimiModeSettingsActivity : TranslatedDaggerAppCompatActivity() {
 
     private fun activateMode() {
         saveValues(false) // Save without closing logic merged.
-
-        // Find the automation event
-        val eventTitle = if (selectedMode == ModeType.LUNCH) "Lunch" else "Dinner"
-        val events = automation.userEvents()
-        val event = events.find { it.title.trim().equals(eventTitle, ignoreCase = true) }
         
-        if (event != null) {
-            OKDialog.showConfirmation(
-                this,
-                "Activate $eventTitle mode?"
-            ) {
-                 Handler(Looper.getMainLooper()).post { 
-                     automation.processEvent(event) 
-                     finish()
-                 }
-            }
-        } else {
-            // Debug info for user
-            val available = events.joinToString(", ") { it.title }
-            val msg = if (available.isEmpty()) "No automations found." else "Available: $available"
-            OKDialog.show(this, "Error: '$eventTitle' not found", msg)
+        val modeNote = when (selectedMode) {
+            ModeType.LUNCH -> "Lunch"
+            ModeType.DINNER -> "Dinner"
+            ModeType.BFAST -> "Breakfast"
+            ModeType.HIGHCARB -> "High Carb"
         }
+
+        val durationMin = inputDuration.text.toString().toIntOrNull() ?: 60
+        val durationMs = durationMin * 60 * 1000L
+
+        OKDialog.showConfirmation(
+            this,
+            "Activate $modeNote mode?",
+            "This will create a Note '$modeNote' ($durationMin min) to trigger AIMI logic.",
+            {
+                 // Create Therapy Event
+                 val te = app.aaps.core.data.model.TE(
+                     timestamp = System.currentTimeMillis(),
+                     type = app.aaps.core.data.model.TE.Type.NOTE,
+                     note = modeNote,
+                     duration = durationMs, // 🚀 ADDED DURATION
+                     enteredBy = "AIMI Advisor",
+                     glucoseUnit = app.aaps.core.data.model.GlucoseUnit.MGDL
+                 )
+                 
+                 persistenceLayer.insertOrUpdateTherapyEvent(te)
+                     .subscribeOn(aapsSchedulers.io)
+                     .observeOn(aapsSchedulers.main)
+                     .subscribe({
+                         app.aaps.core.ui.toast.ToastUtils.okToast(this, "$modeNote Mode Activated ($durationMin min)!")
+                         finish()
+                     }, { error ->
+                         app.aaps.core.ui.toast.ToastUtils.errorToast(this, "Error: ${error.message}")
+                         error.printStackTrace()
+                     })
+            }
+        )
     }
 
     private fun getStringPref(key: DoubleKey): String {

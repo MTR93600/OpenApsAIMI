@@ -10,6 +10,8 @@ import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
+import app.aaps.plugins.aps.openAPSAIMI.physio.toSNSDominance
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,7 +44,8 @@ class AuditorOrchestrator @Inject constructor(
     private val preferences: Preferences,
     private val dataCollector: AuditorDataCollector,
     private val aiService: AuditorAIService,
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR
 ) {
     
     // Coroutine scope for async operations
@@ -203,21 +206,38 @@ class AuditorOrchestrator @Inject constructor(
         // DUAL-BRAIN TIER 2: EXTERNAL AUDITOR (Conditional, API)
         // ================================================================
         
-        // Determine if External should be called (only if Sentinel tier >= HIGH)
-        val shouldCallExternal = sentinelAdvice.tier == LocalSentinel.Tier.HIGH
+        // Contextes nécessitant une trajectoire fraîche (Repas actif, COB, ou Autosens instable)
+        val isMealContext = (cob ?: 0.0) > 0.0 || modeType != null || inPrebolusWindow
+        val isStale = (now - lastVerdictTime) > 15 * 60 * 1000L // 15 minutes
+        
+        // Force update si contexte repas ET donnée vieille, MÊME si Sentinel dit "Low Risk"
+        // Cela garantit que l'IA peut réévaluer situation après 15 min même si Sentinel dort
+        val forceExternal = isMealContext && isStale
+
+        // Determine if External should be called (only if Sentinel tier >= HIGH OR Forced Update)
+        val shouldCallExternal = sentinelAdvice.tier == LocalSentinel.Tier.HIGH || forceExternal
+        
+        if (forceExternal && sentinelAdvice.tier != LocalSentinel.Tier.HIGH) {
+             aapsLogger.info(LTag.APS, "🌐 External: FORCED UPDATE (MealContext + Stale > 15m)")
+        }
         
         if (!shouldCallExternal) {
             // Sentinel tier < HIGH: Apply Sentinel advice only, no External call
             aapsLogger.info(LTag.APS, "🌐 External: Skipped (Sentinel tier=${sentinelAdvice.tier})")
+            
+            // 🔧 FIX: Update status tracker to reflect Sentinel-only operation
+            AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OK_CONFIRM)
+            
             val combined = DualBrainHelpers.combineAdvice(sentinelAdvice, null)
             val modulated = combined.toModulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin)
             aapsLogger.info(LTag.APS, "✅ ${combined.toLogString()}")
+            
             callback?.invoke(null, modulated)
             return
         }
         
         // Sentinel tier HIGH: Check rate limiting for External Auditor
-        if (!checkRateLimit(now)) {
+        if (!checkRateLimit(now, bg)) {
             // External rate limited: Apply Sentinel advice only
             aapsLogger.info(LTag.APS, "🌐 External: Rate limited, using Sentinel only")
             AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.SKIPPED_RATE_LIMITED)
@@ -228,6 +248,10 @@ class AuditorOrchestrator @Inject constructor(
             return
         }
         
+        // Get physio snapshot (safe call)
+        // Get physio snapshot (safe call)
+        val physioCtx = try { physioAdapter.getLatestSnapshot().toStartSnapshot() } catch (e: Exception) { null }
+
         // Launch async audit
         scope.launch {
             try {
@@ -258,7 +282,8 @@ class AuditorOrchestrator @Inject constructor(
                     wcyclePhase = wcyclePhase,
                     wcycleFactor = wcycleFactor,
                     tbrMaxMode = tbrMaxMode,
-                    tbrMaxAutoDrive = tbrMaxAutoDrive
+                    tbrMaxAutoDrive = tbrMaxAutoDrive,
+                    physio = physioCtx
                 )
                 
                 // Get provider
@@ -357,8 +382,14 @@ class AuditorOrchestrator @Inject constructor(
     
     /**
      * Check rate limit (per-hour and minimum interval)
+     * Bypass if BG > 160 (Emergency Audit)
      */
-    private fun checkRateLimit(now: Long): Boolean {
+    private fun checkRateLimit(now: Long, bg: Double): Boolean {
+        // 🚨 EMERGENCY BYPASS: If BG > 160, ignored quotas
+        if (bg > 160.0) {
+            return true
+        }
+
         val maxAuditsPerHour = preferences.get(IntKey.AimiAuditorMaxPerHour)
         
         // Reset hour window if needed
@@ -406,6 +437,17 @@ class AuditorOrchestrator @Inject constructor(
             preferTbr = false,
             appliedModulation = false,
             modulationReason = reason
+        )
+    }
+
+    private fun app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot.toStartSnapshot(): PhysioSnapshot {
+        // Map simplified Snapshot to Auditor's view
+        return PhysioSnapshot(
+            state = this.activityState, // Mapping ActivityState to State string
+            snsDominance = this.toSNSDominance(),
+            sleepQualityZ = 0.0, // Detailed Z-scores not available in simple snapshot, using 0 (nominal)
+            rhrZ = 0.0, 
+            hrvZ = 0.0
         )
     }
 }

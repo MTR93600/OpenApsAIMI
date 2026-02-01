@@ -25,7 +25,7 @@ class FoodRecognitionService(
         
         return when (providerName.uppercase()) {
             "OPENAI" -> OpenAIVisionProvider()
-            "GEMINI" -> GeminiVisionProvider()
+            "GEMINI" -> GeminiVisionProvider(context)
             "DEEPSEEK" -> DeepSeekVisionProvider()
             "CLAUDE" -> ClaudeVisionProvider()
             else -> {

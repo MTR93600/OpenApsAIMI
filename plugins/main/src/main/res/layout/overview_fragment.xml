@@ -94,7 +94,8 @@
                 app:contentPadding="2dp"
                 app:cardElevation="2dp"
                 app:cardUseCompatPadding="false"
-                android:layout_gravity="center">
+                android:layout_gravity="center"
+                android:visibility="visible">
 
                 <include
                     android:id="@+id/info_layout"
@@ -119,6 +120,27 @@
                 <include
                     android:id="@+id/status_lights_layout"
                     layout="@layout/overview_statuslights_layout" />
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Modern Circle Dashboard Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/modernCircleCard"
+                style="@style/Widget.MaterialComponents.CardView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
+                android:layout_marginTop="4dp"
+                app:cardCornerRadius="4dp"
+                app:contentPadding="2dp"
+                app:cardElevation="2dp"
+                app:cardUseCompatPadding="false"
+                android:layout_gravity="center"
+                android:visibility="gone">
+
+                <include
+                    layout="@layout/component_status_card" />
 
             </com.google.android.material.card.MaterialCardView>
 

@@ -223,6 +223,11 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
                         true
                     }
 
+                    R.id.nav_aimi_context       -> {
+                        startActivity(Intent(this@MainActivity, app.aaps.plugins.aps.openAPSAIMI.context.ui.ContextActivity::class.java))
+                        true
+                    }
+
                     R.id.nav_about              -> {
                         var message = "Build: ${config.BUILD_VERSION}\n"
                         message += "Flavor: ${BuildConfig.FLAVOR}${BuildConfig.BUILD_TYPE}\n"

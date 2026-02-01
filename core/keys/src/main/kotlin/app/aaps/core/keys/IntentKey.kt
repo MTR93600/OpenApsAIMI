@@ -21,5 +21,6 @@ enum class IntentKey(
     XdripInfo(key = "xdrip_info"),
     InsulinConcentrationRequest("InsulinConcentrationRequest"),
     OApsAIMIProfileAdvisor("OApsAIMIProfileAdvisor"),
-    OApsAIMIMealAdvisor("OApsAIMIMealAdvisor")
+    OApsAIMIMealAdvisor("OApsAIMIMealAdvisor"),
+    OApsAIMIContext("OApsAIMIContext")
 }

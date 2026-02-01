@@ -1,0 +1,420 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/dashboard_card_surface"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <!-- ═══════════════════════════════════════════════════ -->
+        <!-- TOP SECTION: Circle + Badges + Trend               -->
+        <!-- ═══════════════════════════════════════════════════ -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="0dp"
+            android:layout_marginBottom="0dp">
+
+            <!-- GlucoseRingView (Center) -->
+            <app.aaps.core.ui.views.GlucoseRingView
+                android:id="@+id/glucose_ring"
+                android:layout_width="149dp"
+                android:layout_height="149dp"
+                android:elevation="3dp"
+                app:ringStrokeWidth="5dp"
+                app:glucoseRingUseSteppedColors="true"
+                app:glucoseRingStep1MaxMgdl="100"
+                app:glucoseRingStep2MaxMgdl="160"
+                app:glucoseRingStep3MaxMgdl="220"
+                app:glucoseRingStepColor1="#00C853"
+                app:glucoseRingStepColor2="#FFD600"
+                app:glucoseRingStepColor3="#FF6D00"
+                app:glucoseRingStepColor4="#D50000"
+                app:ringBackgroundColor="@android:color/transparent"
+                app:ringTextColor="?android:attr/textColorPrimary"
+                app:ringSubTextColor="?android:attr/textColorSecondary"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+            <!-- Context Badge (Top-Left of Circle, like × on photo) -->
+            <ImageView
+                android:id="@+id/aimi_context_indicator"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:contentDescription="@string/aimi_context"
+                android:elevation="20dp"
+                android:visibility="gone"
+                app:srcCompat="@drawable/ic_graduation"
+                app:tint="?android:attr/textColorPrimary"
+                app:layout_constraintTop_toTopOf="@id/glucose_ring"
+                app:layout_constraintStart_toStartOf="@id/glucose_ring"
+                android:layout_marginStart="8dp"
+                android:layout_marginTop="8dp" />
+
+            <!-- Auditor Badge (Top-Right of Circle, like × on photo) -->
+            <FrameLayout
+                android:id="@+id/aimi_auditor_indicator_container"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:elevation="20dp"
+                app:layout_constraintTop_toTopOf="@id/glucose_ring"
+                app:layout_constraintEnd_toEndOf="@id/glucose_ring"
+                android:layout_marginEnd="8dp"
+                android:layout_marginTop="8dp" />
+
+            <!-- Loop Status (Top-Right, outside circle) -->
+            <LinearLayout
+                android:id="@+id/loop_status_container"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <TextView
+                    android:id="@+id/loop_status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="6dp"
+                    android:alpha="0.7"
+                    android:text="@string/closed_loop"
+                    android:textColor="@color/dashboard_on_surface"
+                    android:textSize="12sp" />
+
+                <View
+                    android:id="@+id/loop_indicator"
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:background="@drawable/dashboard_loop_indicator" />
+            </LinearLayout>
+
+
+
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <!-- ═══════════════════════════════════════════════════ -->
+        <!-- METRICS ROW: Left Column + Right Column             -->
+        <!-- ═══════════════════════════════════════════════════ -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="-75dp"
+            android:layout_marginBottom="4dp">
+
+            <!-- LEFT COLUMN -->
+            <LinearLayout
+                android:id="@+id/left_col"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginEnd="8dp">
+
+                <!-- STEPS (First Item) -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        app:srcCompat="@drawable/ic_dashboard_shoe"
+                        app:tint="#AAFFFFFF" />
+
+                    <TextView
+                        android:id="@+id/steps_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textColor="#AAFFFFFF"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Reservoir -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        app:srcCompat="@drawable/ic_cp_age_insulin"
+                        app:tint="@color/dashboard_on_surface" />
+
+                    <TextView
+                        android:id="@+id/reservoir_chip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                        android:textColor="@color/dashboard_on_surface" />
+                </LinearLayout>
+
+                <!-- Infusion Age -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        app:srcCompat="@drawable/ic_cp_age_cannula"
+                        app:tint="@color/dashboard_on_surface" />
+
+                    <TextView
+                        android:id="@+id/infusion_age_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                        android:textColor="@color/dashboard_on_surface" />
+                </LinearLayout>
+
+                <!-- Pump Battery -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        app:srcCompat="@drawable/ic_dashboard_battery"
+                        app:tint="@color/dashboard_on_surface" />
+
+                    <TextView
+                        android:id="@+id/pump_battery_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                        android:textColor="@color/dashboard_on_surface" />
+                </LinearLayout>
+
+                <!-- Sensor Age -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        app:srcCompat="@drawable/ic_cp_age_sensor"
+                        app:tint="@color/dashboard_on_surface" />
+
+                    <TextView
+                        android:id="@+id/sensor_age_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                        android:textColor="@color/dashboard_on_surface" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- RIGHT COLUMN -->
+            <LinearLayout
+                android:id="@+id/right_col"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="end"
+                android:layout_marginStart="8dp">
+
+                <!-- HEART RATE (First Item) -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        app:srcCompat="@drawable/ic_cp_heart_rate"
+                        app:tint="#AAFFFFFF" />
+
+                    <TextView
+                        android:id="@+id/hr_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textColor="#AAFFFFFF"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Last Update -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        app:srcCompat="@drawable/ic_dashboard_droplet"
+                        app:tint="@color/dashboard_on_surface" />
+
+                    <TextView
+                        android:id="@+id/last_sensor_value_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                        android:textColor="@color/dashboard_on_surface" />
+                </LinearLayout>
+
+                <!-- Activity % -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        app:srcCompat="@drawable/ic_dashboard_wave"
+                        app:tint="@color/dashboard_on_surface" />
+
+                    <TextView
+                        android:id="@+id/activity_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0%"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                        android:textColor="@color/dashboard_on_surface" />
+                </LinearLayout>
+
+                <!-- TBR Rate -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        app:srcCompat="@drawable/ic_sensor_reading"
+                        app:tint="@color/dashboard_on_surface" />
+
+                    <TextView
+                        android:id="@+id/tbr_rate_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0.00 U/h"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                        android:textColor="@color/dashboard_on_surface" />
+                </LinearLayout>
+
+                <!-- Basal -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        app:srcCompat="@drawable/ic_cp_basal"
+                        app:tint="@color/dashboard_on_surface" />
+
+                    <TextView
+                        android:id="@+id/basal_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                        android:textColor="@color/dashboard_on_surface" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ═══════════════════════════════════════════════════ -->
+        <!-- BOTTOM ROW: Action Chips                            -->
+        <!-- ═══════════════════════════════════════════════════ -->
+        <HorizontalScrollView
+            android:id="@+id/bottom_action_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none">
+
+            <com.google.android.material.chip.ChipGroup
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                app:singleSelection="false">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_aimi_advisor"
+                    style="@style/Widget.MaterialComponents.Chip.Action"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/advisor_button" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_adjust"
+                    style="@style/Widget.MaterialComponents.Chip.Action"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/adjust_button" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_aimi_pref"
+                    style="@style/Widget.MaterialComponents.Chip.Action"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/dashboard_mode_meal" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_stat"
+                    style="@style/Widget.MaterialComponents.Chip.Action"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/aimi_context" />
+            </com.google.android.material.chip.ChipGroup>
+        </HorizontalScrollView>
+    </LinearLayout>
+</merge>

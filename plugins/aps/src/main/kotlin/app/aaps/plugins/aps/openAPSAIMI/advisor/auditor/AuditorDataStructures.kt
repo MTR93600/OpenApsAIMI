@@ -26,12 +26,14 @@ import org.json.JSONObject
 data class AuditorInput(
     val snapshot: Snapshot,
     val history: History,
-    val stats: Stats7d
+    val stats: Stats7d,
+    val trajectory: TrajectorySnapshot?
 ) {
     fun toJSON(): JSONObject = JSONObject().apply {
         put("snapshot", snapshot.toJSON())
         put("history", history.toJSON())
         put("stats", stats.toJSON())
+        if (trajectory != null) put("trajectory", trajectory.toJSON())
     }
 }
 
@@ -65,6 +67,7 @@ data class Snapshot(
     
     // Activity
     val activity: ActivitySnapshot,
+    val physio: PhysioSnapshot?,
     
     // States
     val states: StatesSnapshot,
@@ -96,6 +99,7 @@ data class Snapshot(
         put("target", target)
         put("pkpd", pkpd.toJSON())
         put("activity", activity.toJSON())
+        if (physio != null) put("physio", physio.toJSON())
         put("states", states.toJSON())
         put("limits", limits.toJSON())
         put("decisionAimi", decisionAimi.toJSON())
@@ -249,6 +253,27 @@ data class Stats7d(
     }
 }
 
+/**
+ * E) Trajectory: Phase-Space Geometric Analysis
+ */
+data class TrajectorySnapshot(
+    val type: String,          // STABLE_ORBIT, TIGHT_SPIRAL, SLOW_DRIFT, HOVERING...
+    val curvature: Double,     // 0.0 - 1.0
+    val convergence: Double,   // mg/dL/min
+    val coherence: Double,     // -1.0 to 1.0
+    val energyBalance: Double, // U
+    val modulation: String?    // Description of active modulation (e.g. "SMBx1.15 (Slow drift)")
+) {
+    fun toJSON(): JSONObject = JSONObject().apply {
+        put("type", type)
+        put("curvature", curvature)
+        put("convergence", convergence)
+        put("coherence", coherence)
+        put("energyBalance", energyBalance)
+        if (modulation != null) put("modulation", modulation)
+    }
+}
+
 // ============================================================================
 // OUTPUT: AI Auditor Response
 // ============================================================================
@@ -311,3 +336,22 @@ data class BoundedAdjustments(
     val preferTbr: Boolean,         // switch to TBR preference
     val tbrFactorClamp: Double      // 0.8 to 1.2 (multiply TBR rate if applicable)
 )
+
+/**
+ * D) Physio: Physiological Context (Stress, Sleep, Recovery)
+ */
+data class PhysioSnapshot(
+    val state: String,
+    val snsDominance: Double,
+    val sleepQualityZ: Double,
+    val rhrZ: Double,
+    val hrvZ: Double
+) {
+    fun toJSON(): JSONObject = JSONObject().apply {
+        put("state", state)
+        put("snsDominance", snsDominance)
+        put("sleepQualityZ", sleepQualityZ)
+        put("rhrZ", rhrZ)
+        put("hrvZ", hrvZ)
+    }
+}

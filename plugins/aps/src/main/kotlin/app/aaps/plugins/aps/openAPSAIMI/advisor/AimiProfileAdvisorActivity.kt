@@ -43,6 +43,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     @Inject lateinit var unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner
     @Inject lateinit var tddCalculator: app.aaps.core.interfaces.stats.TddCalculator
     @Inject lateinit var tirCalculator: app.aaps.core.interfaces.stats.TirCalculator
+    @Inject lateinit var aapsLogger: app.aaps.core.interfaces.logging.AAPSLogger
     
     // NOT injected - created manually to avoid Dagger issues
     private lateinit var advisorService: AimiAdvisorService
@@ -193,6 +194,16 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             pill.addView(scoreText)
             addView(pill)
 
+            val supportBtn = TextView(this@AimiProfileAdvisorActivity).apply {
+                text = "🩺"
+                textSize = 22f
+                setPadding(24, 0, 0, 0)
+                setOnClickListener {
+                    showSupportDialog()
+                }
+            }
+            addView(supportBtn)
+
             // Settings Button (Gear)
             val settingsBtn = TextView(this@AimiProfileAdvisorActivity).apply {
                 text = "⚙️"
@@ -203,6 +214,160 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                 }
             }
             addView(settingsBtn)
+        }
+    }
+
+    private fun showSupportDialog() {
+        val input = android.widget.EditText(this).apply {
+            hint = "Enter Expert Code"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val layout = android.widget.FrameLayout(this).apply {
+            setPadding(48, 24, 48, 24)
+            addView(input)
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(rh.gs(R.string.aimi_adv_support_title))
+            .setMessage(rh.gs(R.string.aimi_adv_support_msg))
+            .setView(layout)
+            .setPositiveButton(rh.gs(R.string.aimi_adv_support_verify)) { _, _ ->
+                val code = input.text.toString()
+                if (app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager.verifyCode(code)) {
+                    showIssueDialog()
+                } else {
+                    android.widget.Toast.makeText(this, rh.gs(R.string.aimi_adv_support_invalid), android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showIssueDialog() {
+        val input = android.widget.EditText(this).apply {
+            hint = "Describe your issue (optional)..."
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 3
+        }
+        val layout = android.widget.FrameLayout(this).apply {
+            setPadding(48, 24, 48, 24)
+            addView(input)
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(rh.gs(R.string.aimi_adv_issue_title))
+            .setMessage(rh.gs(R.string.aimi_adv_issue_msg))
+            .setView(layout)
+            .setPositiveButton(rh.gs(R.string.aimi_adv_generate_btn)) { _, _ ->
+                val issue = input.text.toString()
+                generateAndShareReport(issue)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun generateAndShareReport(issue: String) {
+        android.widget.Toast.makeText(this, "Generating diagnostic report...", android.widget.Toast.LENGTH_SHORT).show()
+        
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val diagManager = app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager(this@AimiProfileAdvisorActivity, preferences, aapsLogger)
+                val reportContent = diagManager.generateReport(issue)
+                val authority = "${packageName}.fileprovider"
+                
+                // Create a temporary ZIP file in cache
+                val zipFileName = "AIMI_Support_Package_${System.currentTimeMillis()}.zip"
+                val zipFile = java.io.File(cacheDir, zipFileName)
+                
+                java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(java.io.FileOutputStream(zipFile))).use { out ->
+                    // 1. Add Diagnostic Report (Text)
+                    if (reportContent.isNotEmpty()) {
+                        val entry = java.util.zip.ZipEntry("Diagnostic_Report.txt")
+                        out.putNextEntry(entry)
+                        out.write(reportContent.toByteArray())
+                        out.closeEntry()
+                    }
+                    
+                    // 2. Add Decision Log (JSONL) - Last 24h ONLY
+                    val externalDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS)
+                    val jsonFile = java.io.File(externalDir, "AAPS/AIMI_Decisions.jsonl")
+                    
+                    if (jsonFile.exists() && jsonFile.canRead()) {
+                        val entry = java.util.zip.ZipEntry("AIMI_Decisions_Last24h.jsonl")
+                        out.putNextEntry(entry)
+                        
+                        val cutoffTime = System.currentTimeMillis() - (24 * 60 * 60 * 1000L) // 24 hours ago
+                        
+                        // Buffer for reading/writing
+                        val reader = java.io.BufferedReader(java.io.FileReader(jsonFile))
+                        val writer = java.io.BufferedWriter(java.io.OutputStreamWriter(out))
+                        
+                        try {
+                            var line = reader.readLine()
+                            while (line != null) {
+                                // Fast heuristic check: assume timestamp is near the start or parse simple
+                                // {"timestamp":1730000000000,...}
+                                // We'll do a robust regex or substring find to avoid full JSON parsing (too heavy)
+                                try {
+                                    // Look for "timestamp":123456789
+                                    val tsIdx = line.indexOf("\"timestamp\":")
+                                    if (tsIdx != -1) {
+                                        // Extract number after timestamp
+                                        val start = tsIdx + 12
+                                        var end = start
+                                        while (end < line.length && line[end].isDigit()) {
+                                            end++
+                                        }
+                                        if (end > start) {
+                                            val tsStr = line.substring(start, end)
+                                            val ts = tsStr.toLongOrNull()
+                                            if (ts != null && ts >= cutoffTime) {
+                                                writer.write(line)
+                                                writer.newLine()
+                                            }
+                                        }
+                                    } else {
+                                        // If no timestamp found, maybe keep it or discard? Safe to discard for cleaner log.
+                                    }
+                                } catch (e: Exception) {
+                                    // Ignore parse errors, skip line
+                                }
+                                line = reader.readLine()
+                            }
+                            writer.flush() // Flush BufferedWriter to ZipOutputStream
+                        } finally {
+                            reader.close()
+                            // writer.close() -> Do NOT close writer here as it would close the ZipOutputStream!
+                        }
+                        out.closeEntry()
+                    }
+                }
+
+                if (zipFile.exists() && zipFile.length() > 0) {
+                     val uri = androidx.core.content.FileProvider.getUriForFile(this@AimiProfileAdvisorActivity, authority, zipFile)
+                     
+                     withContext(Dispatchers.Main) {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND)
+                        intent.type = "application/zip"
+                        intent.putExtra(android.content.Intent.EXTRA_SUBJECT, rh.gs(R.string.aimi_diag_subject, java.util.Date().toString()))
+                        intent.putExtra(android.content.Intent.EXTRA_TEXT, "AIMI Support Package attached (ZIP).\n\nDetails: $issue")
+                        intent.putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                        intent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        
+                        startActivity(android.content.Intent.createChooser(intent, rh.gs(R.string.aimi_diag_chooser)))
+                    }
+                } else {
+                     withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(this@AimiProfileAdvisorActivity, "Failed to create support package (Empty)", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    aapsLogger.error("AIMI_DIAG", "Failed to generate/share report", e)
+                    android.widget.Toast.makeText(this@AimiProfileAdvisorActivity, rh.gs(R.string.aimi_adv_error_gen) + ": " + e.message, android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 
@@ -219,7 +384,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(rh.gs(R.string.aimi_advisor_model_title)) // "Select Model"
             .setSingleChoiceItems(
-                arrayOf("ChatGPT (GPT-4o)", "Gemini (2.5 Flash)", "DeepSeek (Chat)", "Claude (3.5 Sonnet)"), 
+                arrayOf("ChatGPT (GPT-5.2)", "Gemini (2.5 Flash)", "DeepSeek (Chat)", "Claude (3.5 Sonnet)"), 
                 idx
             ) { dialog, which ->
                 val newValue = when (which) {

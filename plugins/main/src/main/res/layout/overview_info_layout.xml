@@ -7,6 +7,8 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal">
 
+
+    
     <TextView
         android:id="@+id/bg"
         android:layout_width="wrap_content"
@@ -439,4 +441,31 @@
             tools:ignore="HardcodedText" />
     </LinearLayout>
 
+    <ImageView
+        android:id="@+id/aimi_context_indicator"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_margin="6dp"
+        android:padding="2dp"
+        android:elevation="20dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        android:contentDescription="AIMI Context Active"
+        app:srcCompat="@drawable/ic_graduation"
+        android:visibility="gone"
+        app:tint="?android:attr/textColorPrimary" />
+
+    <!-- AIMI Auditor Status Indicator - Living Badge System -->
+    <FrameLayout
+        android:id="@+id/aimi_auditor_indicator_container"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:layout_margin="2dp"
+        android:elevation="20dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+        
+        <!-- Placeholder - will be replaced by AuditorStatusIndicator in code -->
+        <!-- The custom view will be added programmatically in OverviewFragment -->
+    </FrameLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

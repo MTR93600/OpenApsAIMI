@@ -18,6 +18,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.View.OnLongClickListener
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.TextView
@@ -111,6 +112,10 @@ import app.aaps.plugins.main.general.overview.notifications.NotificationStore
 import app.aaps.plugins.main.general.overview.notifications.NotificationUiBinder
 import app.aaps.plugins.main.general.overview.ui.StatusLightHandler
 import app.aaps.plugins.main.skins.SkinProvider
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusIndicator
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorNotificationManager
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model.AuditorUIState
 import com.jjoe64.graphview.GraphView
 import dagger.android.support.DaggerFragment
 import io.reactivex.rxjava3.disposables.CompositeDisposable
@@ -162,6 +167,8 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
     @Inject lateinit var graphDataProvider: Provider<GraphData>
     @Inject lateinit var commandQueue: CommandQueue
     @Inject lateinit var notificationUiBinder: NotificationUiBinder
+    @Inject lateinit var auditorStatusLiveData: AuditorStatusLiveData
+    @Inject lateinit var auditorNotificationManager: AuditorNotificationManager
 
     private val disposable = CompositeDisposable()
 
@@ -176,6 +183,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
 
     private var carbAnimation: AnimationDrawable? = null
     private var lastUserAction = ""
+    private var auditorIndicator: AuditorStatusIndicator? = null
 
     private var _binding: OverviewFragmentBinding? = null
 
@@ -266,6 +274,28 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
         binding.buttonsLayout.quickWizardButton.setOnLongClickListener(this)
         binding.infoLayout.apsMode.setOnClickListener(this)
         binding.infoLayout.apsMode.setOnLongClickListener(this)
+
+        binding.root.findViewById<View>(R.id.aimi_context_indicator).setOnClickListener {
+            try {
+                val intent = Intent().setClassName(requireContext(), "app.aaps.plugins.aps.openAPSAIMI.context.ui.ContextActivity")
+                startActivity(intent)
+            } catch (e: Exception) {
+                aapsLogger.error(LTag.CORE, "Failed to launch ContextActivity: ${e.message}")
+            }
+        }
+        
+        // AIMI Auditor Indicator Setup
+        setupAuditorIndicator()
+        
+        // Wire up AIMI Dashboard Loop Indicator for clicks (Loop Mode)
+        binding.root.findViewById<View>(R.id.loop_indicator)?.let { indicator ->
+            indicator.setOnClickListener(this)
+            indicator.setOnLongClickListener(this)
+        }
+        binding.root.findViewById<View>(R.id.loop_status)?.let { status ->
+            status.setOnClickListener(this)
+            status.setOnLongClickListener(this)
+        }
     }
 
     override fun onPause() {
@@ -387,6 +417,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             updateSensitivity()
             updateGraph()
             updateNotification()
+            updateAimiContextIndicator()
         }
         updateBg()
         updateTemporaryBasal()
@@ -396,6 +427,149 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
         processAps()
         updateProfile()
         updateTemporaryTarget()
+    }
+
+    private fun updateAimiContextIndicator() {
+        try {
+            val jsonStr = preferences.get(app.aaps.core.keys.StringKey.OApsAIMIContextStorage)
+            val hasContext = jsonStr.length > 5 // "[]" length is 2
+            
+            // 1. Update Badge in Root/Classic Layout
+            _binding?.root?.findViewById<View>(R.id.aimi_context_indicator)?.visibility = hasContext.toVisibility()
+            
+            // 2. Update Badge in Modern Dashboard (Critical Fix for duplication)
+            val modernCard = _binding?.root?.findViewById<View>(R.id.modernCircleCard)
+            if (modernCard != null) {
+                modernCard.findViewById<View>(R.id.aimi_context_indicator)?.visibility = hasContext.toVisibility()
+            }
+            
+            // 🔄 EXPERT FIX: Switch Dashboard based on AIMI status
+            val aimiEnabled = try {
+                 androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+                    .getBoolean("AimiPhysioAssistantEnable", false)
+            } catch (e: Exception) { false }
+
+            val infoCard = _binding?.root?.findViewById<View>(R.id.infoCard)
+
+            if (aimiEnabled) {
+                // Show AIMI Dashboard, Hide Standard
+                if (modernCard?.visibility != View.VISIBLE) modernCard?.visibility = View.VISIBLE
+                if (infoCard?.visibility != View.GONE) infoCard?.visibility = View.GONE
+            } else {
+                // Show Standard Dashboard, Hide AIMI
+                if (modernCard?.visibility != View.GONE) modernCard?.visibility = View.GONE
+                if (infoCard?.visibility != View.VISIBLE) infoCard?.visibility = View.VISIBLE
+            }
+            
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.CORE, "Failed to update context indicator/dashboard: ${e.message}")
+        }
+    }
+    
+    private fun setupAuditorIndicator() {
+        try {
+            // UNIVERSAL FIX: Support ALL dashboard layouts (overview_info_layout, component_status_card, etc.)
+            // Strategy: Try multiple findViewById paths in fallback order
+            
+            // 1. Try finding container in Modern Dashboard (Priority!)
+            val modernCard = binding.root.findViewById<View>(R.id.modernCircleCard)
+            val modernContainer = modernCard?.findViewById<FrameLayout>(R.id.aimi_auditor_indicator_container)
+            
+            // 2. Fallback to Info Layout (Standard) - Only if modern not found
+            val legacyContainer = binding.infoLayout?.root?.findViewById<FrameLayout>(
+                R.id.aimi_auditor_indicator_container
+            )
+            
+            // 3. Last resort: Global search
+            val container = modernContainer ?: legacyContainer ?: binding.root.findViewById<FrameLayout>(
+                R.id.aimi_auditor_indicator_container
+            ) ?: run {
+                aapsLogger.warn(LTag.CORE, "Auditor indicator container not found in any layout hierarchy")
+                return
+            }
+            
+            aapsLogger.debug(LTag.CORE, "Auditor indicator container found successfully")
+            
+            // Create and add custom indicator
+            auditorIndicator = AuditorStatusIndicator(requireContext())
+            container.removeAllViews()
+            container.addView(auditorIndicator)
+            
+            // Setup click listener
+            auditorIndicator?.setOnClickListener {
+                handleAuditorClick()
+            }
+            
+            // Observe LiveData for state changes
+            auditorStatusLiveData.uiState.observe(viewLifecycleOwner) { uiState ->
+                auditorIndicator?.setState(uiState)
+                
+                // Show notification if needed
+                if (uiState.shouldNotify) {
+                    auditorNotificationManager.showInsightAvailable(uiState)
+                }
+                
+                // 🎨 LIVING BADGE: Always visible, visual state changes instead of hiding
+                // - IDLE/OFF: Static gray icon (base state)
+                // - ACTIVE: Pulsing colored icon (AI decision applied)
+                // - ERROR: Static red icon (problem detected)
+                container.visibility = View.VISIBLE  // Always visible!
+                
+                aapsLogger.debug(LTag.CORE, "Auditor indicator state updated: ${uiState.type}, visible=${container.visibility == View.VISIBLE}")
+            }
+            
+            // Initial update
+            auditorStatusLiveData.forceUpdate()
+            
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.CORE, "Failed to setup Auditor indicator: ${e.message}", e)
+        }
+    }
+    
+    private fun handleAuditorClick() {
+        val state = auditorIndicator?.getCurrentState() ?: return
+        
+        when (state.type) {
+            AuditorUIState.StateType.READY,
+            AuditorUIState.StateType.WARNING -> {
+                // Mark as read
+                auditorStatusLiveData.markAsRead()
+                auditorNotificationManager.cancelNotification()
+                
+                // TODO: Open AuditorVerdictActivity when implemented
+                // For now, show dialog with status
+                activity?.let { activity ->
+                    OKDialog.show(activity, 
+                        "Auditor Insight",
+                        state.statusMessage)
+                }
+            }
+            
+            AuditorUIState.StateType.PROCESSING -> {
+                activity?.let { activity ->
+                    OKDialog.show(activity,
+                        "Auditor",
+                        "Analysis in progress, please wait...")
+                }
+            }
+            
+            AuditorUIState.StateType.ERROR -> {
+                activity?.let { activity ->
+                    OKDialog.show(activity,
+                        rh.gs(app.aaps.core.ui.R.string.error),
+                        state.statusMessage)
+                }
+            }
+            
+            else -> {
+                // IDLE - show info
+                activity?.let { activity ->
+                    OKDialog.show(activity,
+                        "Auditor",
+                        "Auditor will activate at next trigger")
+                }
+            }
+        }
     }
 
     @Synchronized
@@ -410,6 +584,11 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             graph.setOnLongClickListener(null)
             graph.removeAllSeries()
         }
+        
+        // Cleanup Auditor indicator
+        auditorIndicator?.stopAnimations()
+        auditorIndicator = null
+        
         _binding = null
         carbAnimation?.stop()
         carbAnimation = null
@@ -500,7 +679,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
                     }
                 }
 
-                R.id.aps_mode            -> {
+                R.id.aps_mode, R.id.loop_indicator, R.id.loop_status -> {
                     protectionCheck.queryProtection(activity, ProtectionCheck.Protection.BOLUS, UIRunnable {
                         if (isAdded) uiInteraction.runLoopDialog(childFragmentManager, 1)
                     })
@@ -534,7 +713,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
                 return true
             }
 
-            R.id.aps_mode            -> {
+            R.id.aps_mode, R.id.loop_indicator, R.id.loop_status -> {
                 activity?.let { activity ->
                     protectionCheck.queryProtection(activity, ProtectionCheck.Protection.BOLUS, UIRunnable {
                         uiInteraction.runLoopDialog(childFragmentManager, 0)
@@ -905,10 +1084,184 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
                 binding.infoLayout.bgQuality.visibility = View.GONE
             }
             binding.infoLayout.simpleMode.visibility = preferences.simpleMode.toVisibility()
+            
+            // ═══════════════════════════════════════════════════════════════════════════════
+            // MODERN CIRCLE DASHBOARD - Dynamic Unicorn + Glucose Circle
+            // ═══════════════════════════════════════════════════════════════════════════════
+            updateModernCircleDashboard()
+        }
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════════
+     * MODERN CIRCLE DASHBOARD UPDATE
+     * ═══════════════════════════════════════════════════════════════════════════════
+     * 
+     * Updates Modern Circle dashboard components:
+     * - Dynamic Unicorn color (based on BG range)
+     * - Glucose Circle animation (arc progress)
+     * - Centralized info (glucose + delta + time)
+     * - Trend arrow
+     */
+    private fun updateModernCircleDashboard() {
+        runOnUiThread {
+            _binding ?: return@runOnUiThread
+            val profile = profileFunction.getProfile() ?: return@runOnUiThread
+            
+            // Get current data from providers (same as updateBg)
+            val lastBg = lastBgData.lastBg()
+            val lastBgColor = lastBgData.lastBgColor(context)
+            val glucoseStatus = glucoseStatusProvider.glucoseStatusData
+            val trendArrow = trendCalculator.getTrendArrow(iobCobCalculator.ads)
+            
+            // Try to find Modern Circle components (component_status_card.xml)
+            // Uses fallback strategy (binding.root) for direct layout access
+            val glucoseCircle = binding.root.findViewById<app.aaps.core.ui.elements.GlucoseCircleView>(
+                app.aaps.core.ui.R.id.glucose_circle
+            )
+            val unicornIcon = binding.root.findViewById<android.widget.ImageView>(
+                app.aaps.core.ui.R.id.unicorn_icon
+            )
+            val glucoseValue = binding.root.findViewById<android.widget.TextView>(
+                app.aaps.core.ui.R.id.glucose_value
+            )
+            val timeAgo = binding.root.findViewById<android.widget.TextView>(
+                app.aaps.core.ui.R.id.time_ago
+            )
+            val deltaSmall = binding.root.findViewById<android.widget.TextView>(
+                app.aaps.core.ui.R.id.delta_small
+            )
+            val trendArrowView = binding.root.findViewById<android.widget.ImageView>(
+                app.aaps.core.ui.R.id.trend_arrow
+            )
+            val deltaValue = binding.root.findViewById<android.widget.TextView>(
+                app.aaps.core.ui.R.id.delta_value
+            )
+            val activityText = binding.root.findViewById<android.widget.TextView>(
+                app.aaps.core.ui.R.id.activity_text
+            )
+            val tbrText = binding.root.findViewById<android.widget.TextView>(
+                app.aaps.core.ui.R.id.tbr_text
+            )
+            
+            // If Modern Circle components not found, silently return (legacy layout)
+            if (glucoseCircle == null || unicornIcon == null) {
+                return@runOnUiThread
+            }
+            
+            // ───────────────────────────────────────────────────────────────────────
+            // 1. UPDATE GLUCOSE CIRCLE (Custom View with animation)
+            // ───────────────────────────────────────────────────────────────────────
+            if (lastBg != null) {
+                glucoseCircle.setGlucose(
+                    glucoseMgDl = lastBg.recalculated,
+                    targetLow = profile.getTargetLowMgdl(),
+                    targetHigh = profile.getTargetHighMgdl(),
+                    animate = true
+                )
+            }
+            
+            // ───────────────────────────────────────────────────────────────────────
+            // 2. UPDATE DYNAMIC UNICORN COLOR (Based on BG range)
+            // ───────────────────────────────────────────────────────────────────────
+            val unicornColor = when {
+                lastBg == null -> android.graphics.Color.GRAY
+                lastBg.recalculated < 54.0 -> androidx.core.content.ContextCompat.getColor(
+                    requireContext(),
+                    app.aaps.core.ui.R.color.critical_low
+                ) // Red - Severe hypo
+                lastBg.recalculated < profile.getTargetLowMgdl() -> androidx.core.content.ContextCompat.getColor(
+                    requireContext(),
+                    app.aaps.core.ui.R.color.low
+                ) // Orange - Hypo
+                lastBg.recalculated <= profile.getTargetHighMgdl() -> androidx.core.content.ContextCompat.getColor(
+                    requireContext(),
+                    app.aaps.core.ui.R.color.inRange
+                ) // Green - In range ✅
+                lastBg.recalculated <= 250.0 -> androidx.core.content.ContextCompat.getColor(
+                    requireContext(),
+                    app.aaps.core.ui.R.color.high
+                ) // Yellow - High
+                else -> androidx.core.content.ContextCompat.getColor(
+                    requireContext(),
+                    app.aaps.core.ui.R.color.critical_high
+                ) // Orange-red - Severe high
+            }
+            
+            unicornIcon.setColorFilter(unicornColor, android.graphics.PorterDuff.Mode.SRC_ATOP)
+            
+            // ───────────────────────────────────────────────────────────────────────
+            // 3. UPDATE GLUCOSE VALUE (Inside circle)
+            // ───────────────────────────────────────────────────────────────────────
+            glucoseValue?.text = profileUtil.fromMgdlToStringInUnits(lastBg?.recalculated)
+            glucoseValue?.setTextColor(lastBgColor)
+            
+            // ───────────────────────────────────────────────────────────────────────
+            // 4. UPDATE TIME AGO (Inside circle)
+            // ───────────────────────────────────────────────────────────────────────
+            timeAgo?.text = dateUtil.minAgoShort(lastBg?.timestamp)
+            
+            // ───────────────────────────────────────────────────────────────────────
+            // 5. UPDATE DELTA SMALL (Inside circle - compact format)
+            // ───────────────────────────────────────────────────────────────────────
+            if (glucoseStatus != null && deltaSmall != null) {
+                val deltaStr = profileUtil.fromMgdlToSignedStringInUnits(glucoseStatus.delta)
+                deltaSmall.text = "Δ $deltaStr"
+                deltaSmall.setTextColor(lastBgColor)
+            } else {
+                deltaSmall?.text = "--"
+            }
+            
+            // ───────────────────────────────────────────────────────────────────────
+            // 6. UPDATE TREND ARROW (Right of circle)
+            // ───────────────────────────────────────────────────────────────────────
+            if (trendArrowView != null && trendArrow != null) {
+                trendArrowView.setImageResource(trendArrow.directionToIcon())
+                trendArrowView.visibility = android.view.View.VISIBLE
+                trendArrowView.setColorFilter(lastBgColor)
+            } else if (trendArrowView != null) {
+                trendArrowView.visibility = android.view.View.INVISIBLE
+            }
+            
+            // ───────────────────────────────────────────────────────────────────────
+            // 7. UPDATE DELTA LARGE (Right of arrow)
+            // ───────────────────────────────────────────────────────────────────────
+            deltaValue?.let { tv ->
+                if (glucoseStatus != null) {
+                    tv.text = profileUtil.fromMgdlToSignedStringInUnits(glucoseStatus.delta)
+                    tv.setTextColor(lastBgColor)
+                } else {
+                    tv.text = "--"
+                }
+            }
+            
+            // ───────────────────────────────────────────────────────────────────────
+            // 8. UPDATE ACTIVITY TEXT (Bottom right - Activity % from loop data)
+            // ───────────────────────────────────────────────────────────────────────
+            activityText?.let { tv ->
+                // Get TBR percentage from current basal vs profile basal
+                val basalData = iobCobCalculator.getBasalData(profile, lastBg?.timestamp ?: dateUtil.now())
+                val currentBasal = basalData.basal
+                val profileBasal = profile.getBasal(lastBg?.timestamp ?: dateUtil.now())
+                val activity = if (profileBasal > 0) {
+                    ((currentBasal / profileBasal) * 100).toInt()
+                } else 100
+                tv.text = "Activity: $activity%"
+            }
+            
+            // ───────────────────────────────────────────────────────────────────────
+            // 9. UPDATE TBR TEXT (Bottom right - Current basal rate)
+            // ───────────────────────────────────────────────────────────────────────
+            tbrText?.let { tv ->
+                val basalRate = iobCobCalculator.getBasalData(profile, lastBg?.timestamp ?: dateUtil.now())
+                val formattedRate = String.format("%.2f", basalRate.basal)
+                tv.text = "TBR: $formattedRate U/h"
+            }
         }
     }
 
     private fun updateProfile() {
+
         val profile = profileFunction.getProfile()
         runOnUiThread {
             _binding ?: return@runOnUiThread

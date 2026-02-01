@@ -49,6 +49,12 @@
         app:showAsAction="never"
         android:title="@string/aimi_advisor_title" />
     <item
+        android:id="@+id/nav_aimi_context"
+        android:orderInCategory="1"
+        app:showAsAction="never"
+        android:title="@string/context_title" />
+
+    <item
         android:id="@+id/nav_stats"
         android:orderInCategory="1"
         app:showAsAction="never"

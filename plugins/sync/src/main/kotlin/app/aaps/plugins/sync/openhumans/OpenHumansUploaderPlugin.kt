@@ -26,6 +26,7 @@ import app.aaps.core.data.model.data.Block
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.PluginBaseWithPreferences
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -652,26 +653,34 @@ class OpenHumansUploaderPlugin @Inject internal constructor(
                 )
             )
             .build()
-        NotificationManagerCompat.from(context).notify(SIGNED_OUT_NOTIFICATION_ID, notification)
+        try {
+            NotificationManagerCompat.from(context).notify(SIGNED_OUT_NOTIFICATION_ID, notification)
+        } catch (e: SecurityException) {
+            aapsLogger.debug(LTag.OHUPLOADER, "Notification permission missing: ${e.message}")
+        }
         withContext(Dispatchers.Main) {
             logout()
         }
     }
 
     internal fun createForegroundInfo(id: UUID): ForegroundInfo {
+        val title = context.getString(R.string.open_humans_uploading)
         val cancel = context.getString(R.string.cancel)
-
+        // This PendingIntent can be used to cancel the worker
         val intent = WorkManager.getInstance(context)
             .createCancelPendingIntent(id)
 
         val notification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_WORKER)
-            .setContentTitle(context.getString(R.string.open_humans_uploading))
-            .setContentText(context.getString(R.string.uploading_to_open_humans))
-            .setSmallIcon(R.drawable.open_humans_notification)
+            .setContentTitle(title)
+            .setTicker(title)
+            .setSmallIcon(R.drawable.open_humans_white)
             .setOngoing(true)
             .addAction(android.R.drawable.ic_delete, cancel, intent)
             .build()
-
+            
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            return ForegroundInfo(UPLOAD_NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        }
         return ForegroundInfo(UPLOAD_NOTIFICATION_ID, notification)
     }
 
