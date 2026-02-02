@@ -102,6 +102,7 @@ fun allCommitted(): Boolean {
 android {
     compileSdk = 36
     // Si tu n'as pas de variable pour compileSdk, mets-le en dur, ex. 34
+    // compileSdk = Versions.compileSdk
 
     namespace = "app.aaps"
 
