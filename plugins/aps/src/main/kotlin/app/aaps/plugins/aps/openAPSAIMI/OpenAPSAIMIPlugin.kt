@@ -1359,6 +1359,22 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         title = rh.gs(R.string.women_preferences_title_menu)
                     })
                     addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIpregnancy, title = R.string.OApsAIMI_Enable_pregnancy))
+                    addPreference(
+                        AdaptiveStringPreference(
+                            ctx = context,
+                            stringKey = AimiStringKey.PregnancyDueDateString,
+                            title = R.string.OApsAIMI_PregnancyDueDate_title,
+                            summary = R.string.OApsAIMI_PregnancyDueDate_summary,
+                            validatorParams = DefaultEditTextValidator.Parameters(
+                                testType = EditTextValidator.TEST_REGEXP,
+                                customRegexp = "^\\d{4}-\\d{2}-\\d{2}$",
+                                emptyAllowed = true,
+                                testErrorString = context.getString(R.string.error_invalid_date_format) // Reuse generic error or TODO
+                            )
+                        ).apply {
+                            dialogMessage = "Format: YYYY-MM-DD"
+                        }
+                    )
                     addPreference(PreferenceCategory(context).apply {
                         title = rh.gs(R.string.wcycle_preferences_title_menu)
                     })
@@ -1507,23 +1523,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             )
                         )
                     })
-                    addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIpregnancy, title = R.string.OApsAIMI_Enable_pregnancy))
-                    addPreference(
-                        AdaptiveStringPreference(
-                            ctx = context,
-                            stringKey = AimiStringKey.PregnancyDueDateString,
-                            title = R.string.OApsAIMI_PregnancyDueDate_title,
-                            summary = R.string.OApsAIMI_PregnancyDueDate_summary,
-                            validatorParams = DefaultEditTextValidator.Parameters(
-                                testType = EditTextValidator.TEST_REGEXP,
-                                customRegexp = "^\\d{4}-\\d{2}-\\d{2}$",
-                                emptyAllowed = true,
-                                testErrorString = context.getString(R.string.error_invalid_date_format) // Reuse generic error or TODO
-                            )
-                        ).apply {
-                            dialogMessage = "Format: YYYY-MM-DD"
-                        }
-                    )
+
                 })
                  addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "Child_Menu"
