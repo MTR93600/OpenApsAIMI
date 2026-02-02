@@ -1,3 +1,9 @@
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal() // <-- Add this line
+    }
+}
 include ':app'
 include ':wear'
 include ':benchmark'

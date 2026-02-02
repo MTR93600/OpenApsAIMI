@@ -5758,6 +5758,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         val pkpdDiaMinutesOverride: Double? = pkpdRuntime?.params?.diaHrs?.let { it * 60.0 } // PKPD donne des heures → on passe en minutes
         val useLegacyDynamicsdia = pkpdDiaMinutesOverride == null
+        // ═══════════════════════════════════════════════════════════════════════════
+        // 🛡️ BASAL-FIRST POLICY GATE (Single Source of Truth)
+        // ═══════════════════════════════════════════════════════════════════════════
+        val learnerFactor = safeReactivityFactor // Already computed: unifiedReactivityLearner + Physio
+        val isFragileBg = bg < 110.0 && delta < 0.0
+        val isLearnerPrudent = learnerFactor < 0.75
+        
+        // Gate: Activate Basal-First if Learner is Prudent OR BG is Fragile
+        // EXCEPTION: Explicit Meal Advisor / OneShot overrides (User manual intent)
+        val basalFirstActive = (isLearnerPrudent || isFragileBg) && !isMealAdvisorOneShot
+        
+        if (basalFirstActive) {
+            // FORCE limits to 0.0 -> Disables SMB effectively
+            this.maxSMB = 0.0
+            this.maxSMBHB = 0.0
+            
+            // Log for transparency
+            val reason = if (isLearnerPrudent) "Learner Prudence (Factor=${"%.2f".format(learnerFactor)})" else "Fragile BG (<110 & falling)"
+            consoleLog.add("🛡️ BASAL-FIRST ACTIVE: $reason -> SMB DISABLED (MaxSMB=0)")
+            rT.reason.append(" [Basal-First: SMB OFF]")
+        }
+        // ═══════════════════════════════════════════════════════════════════════════
+
         val smbExecution = SmbInstructionExecutor.execute(
             SmbInstructionExecutor.Input(
                 context = context,
