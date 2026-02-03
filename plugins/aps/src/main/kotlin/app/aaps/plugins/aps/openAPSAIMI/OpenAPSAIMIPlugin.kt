@@ -1806,8 +1806,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     AdaptiveStringPreference(
                         ctx = context,
                         stringKey = AimiStringKey.RemoteControlPin,
-                        title = "Security PIN", // TODO: Add string resource
-                        summary = "PIN required for remote commands (AIMI: PIN CMD)", // TODO: Add string resource
+                        title = "Security PIN",
+                        summary = "PIN required for remote commands (AIMI: PIN CMD)",
                         isPassword = true,
                         validatorParams = DefaultEditTextValidator.Parameters(
                             testType = EditTextValidator.TEST_REGEXP,
@@ -1815,9 +1815,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             emptyAllowed = true,
                             testErrorString = "PIN must be 4-8 digits"
                         )
-                    ).apply {
-                        dialogMessage = "Enter 4-8 digit PIN"
-                    }
+                    ).get() // Call .get() to retrieve the actual Preference object
                 )
             })
 
