@@ -1803,19 +1803,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 })
 
                 addPreference(
-                    AdaptiveStringPreference(
-                        ctx = context,
-                        stringKey = AimiStringKey.RemoteControlPin,
-                        title = "Security PIN",
-                        summary = "PIN required for remote commands (AIMI: PIN CMD)",
-                        isPassword = true,
-                        validatorParams = DefaultEditTextValidator.Parameters(
-                            testType = EditTextValidator.TEST_REGEXP,
-                            customRegexp = "^\\d{4,8}$",
-                            emptyAllowed = true,
-                            testErrorString = "PIN must be 4-8 digits"
-                        )
-                    ).get() // Call .get() to retrieve the actual Preference object
+                    androidx.preference.EditTextPreference(context).apply {
+                        key = AimiStringKey.RemoteControlPin.key
+                        title = "Security PIN"
+                        summary = "PIN required for remote commands (AIMI: PIN CMD)"
+                        dialogTitle = "Enter 4-8 digit PIN"
+                        setOnBindEditTextListener { editText ->
+                            editText.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+                        }
+                    }
                 )
             })
 
