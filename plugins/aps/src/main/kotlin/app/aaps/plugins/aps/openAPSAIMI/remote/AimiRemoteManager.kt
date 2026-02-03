@@ -61,7 +61,7 @@ class AimiRemoteManager @Inject constructor(
         val now = dateUtil.now()
         val since = now - T.mins(5).msecs()
         
-        val events = persistenceLayer.getTherapyEvents(since, now)
+        val events = persistenceLayer.getTherapyEventDataFromToTime(since, now).blockingGet() ?: emptyList()
         
         events.forEach { event ->
             // Only Notes/Announcements
