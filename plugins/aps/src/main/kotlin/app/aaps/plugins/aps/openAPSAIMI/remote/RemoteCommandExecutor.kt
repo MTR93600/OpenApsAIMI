@@ -4,8 +4,8 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventNSClientNewLog
-import app.aaps.core.interfaces.rx.events.EventNSClientUpdateGuiStatus
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextManager
+import app.aaps.core.interfaces.rx.events.EventRefreshOverview
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -71,8 +71,8 @@ class RemoteCommandExecutor @Inject constructor(
 
     private fun executeStatus() {
         log("Executing Remote STATUS: Requesting update")
-        // Force an update of the GUI/Status, which usually triggers NSClient update loop if active
-        rxBus.send(EventNSClientUpdateGuiStatus())
+        // Force an update of the GUI/Status
+        rxBus.send(EventRefreshOverview("AIMI Remote", true))
     }
 
     private fun executeSet(args: List<String>) {
