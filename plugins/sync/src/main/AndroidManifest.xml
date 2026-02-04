@@ -15,11 +15,13 @@
         <service
             android:name=".nsclient.services.NSClientService"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
         <service
             android:name=".nsclientV3.services.NSClientV3Service"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <activity
             android:name=".openhumans.ui.OHLoginActivity"
