@@ -54,6 +54,7 @@ import dagger.android.ContributesAndroidInjector
 abstract class SyncModule {
 
     @ContributesAndroidInjector abstract fun contributesNSClientFragment(): NSClientFragment
+    @ContributesAndroidInjector abstract fun contributesRemoteControlFragment(): app.aaps.plugins.sync.nsShared.RemoteControlFragment
 
     @ContributesAndroidInjector abstract fun contributesNSClientService(): NSClientService
     @ContributesAndroidInjector abstract fun contributesNSClientV3Service(): NSClientV3Service

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Remote Control Panel -->
+    <string name="remote_control_title">Remote Control</string>
+    <string name="remote_control_security">Security</string>
+    <string name="enter_control_pin">Enter Control PIN</string>
+    <string name="invalid_pin">Invalid PIN. Access denied.</string>
+    
+    <!-- PIN Setup -->
+    <string name="setup_remote_pin">🔐 Setup Remote PIN</string>
+    <string name="remote_pin_setup_required">Please configure your Remote Control PIN to use this feature.</string>
+    <string name="new_pin">New PIN (4-6 digits)</string>
+    <string name="confirm_pin">Confirm PIN</string>
+    <string name="save_pin">Save PIN</string>
+    <string name="pin_cannot_be_empty">PIN cannot be empty</string>
+    <string name="pin_too_short">PIN must be at least 4 digits</string>
+    <string name="pins_do_not_match">PINs do not match</string>
+    <string name="pin_saved_successfully">PIN saved successfully</string>
+    <string name="enter_your_pin">Enter PIN</string>
+    
+    <!-- Quick Actions -->
+    <string name="quick_actions">⚡ Quick Actions</string>
+    <string name="quick_action_sport">🏃 Sport</string>
+    <string name="quick_action_meal">🍽️ Meal</string>
+    <string name="quick_action_stress">😰 Stress</string>
+    <string name="quick_action_cancel_all">❌ Cancel All</string>
+    <string name="minutes">min</string>
+    
+    <!-- Advanced Commands -->
+    <string name="advanced_command">🛠️ Advanced</string>
+    <string name="custom_command_hint">e.g., CONTEXT EXERCISE LIGHT</string>
+    <string name="send_command">Send Command</string>
+    <string name="command_cannot_be_empty">Command cannot be empty</string>
+    
+    <!-- Active Contexts -->
+    <string name="active_contexts">📊 Active Contexts</string>
+    <string name="no_active_contexts">No active contexts</string>
+    <string name="context_remaining_time">%1$s - %2$d min remaining</string>
+    
+    <!-- Confirmations & Feedback -->
+    <string name="confirm_cancel_all_contexts">Are you sure you want to cancel ALL active contexts?</string>
+    <string name="command_sent_successfully">✅ Command sent: %1$s</string>
+    <string name="command_failed_to_send">❌ Failed to send command</string>
+    <string name="command_error">Error: %1$s</string>
+    
+    <!-- Plugin Description -->
+    <string name="remote_control_description">Secure remote control panel for parents to manage AIMI contexts</string>
+</resources>
