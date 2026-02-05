@@ -788,6 +788,8 @@
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - FILE DeterminebasalAIMI.kt -->
 
     <string name="bg_drop_high">BG high drop (%1$.1f mg/dL/h), strong reduction;</string>
+    <string name="bg_drop_high_critical">CRITICAL drop below 85 (%1$.1f mg/dL/h), BASAL STOP;</string>
+    <string name="bg_drop_high_warning">Moderate drop below 110 (%1$.1f mg/dL/h), basal reduced 50%;</string>
     <string name="bg_rapid_rise">Rapid rise detected (delta %1$.0f mg/dL), applying emergency mode; </string>
     <string name="bg_combined_delta_weak">Combined delta very weak (%1$.2f), reduction x0.6; </string>
     <string name="bg_combined_delta_moderate">Combined delta moderate (%1$.2f), reduction x0.8; </string>

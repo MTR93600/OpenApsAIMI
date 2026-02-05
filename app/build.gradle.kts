@@ -1,18 +1,24 @@
 import org.gradle.kotlin.dsl.android
-import java.io.ByteArrayOutputStream
 import org.gradle.kotlin.dsl.debugImplementation
 import java.text.SimpleDateFormat
 import java.util.Date
+import org.gradle.kotlin.dsl.dependencies
+import org.gradle.kotlin.dsl.project
+
+// Fixes errors in KSP task dependency
+import org.gradle.api.GradleException
 
 plugins {
-    alias(libs.plugins.ksp)
     id("com.android.application")
-    id("kotlin-android")
+    kotlin("android")
+    kotlin("kapt")
+    //alias(libs.plugins.ksp)
     id("com.google.gms.google-services")
     id("com.google.firebase.crashlytics")
     id("android-app-dependencies")
     id("test-app-dependencies")
     id("jacoco-app-dependencies")
+
 }
 
 repositories {
@@ -20,6 +26,9 @@ repositories {
     google()
     maven("https://jitpack.io")
 }
+
+fun DependencyHandler.`kapt`(dependencyNotation: Any): Dependency? =
+    add("kapt", dependencyNotation)
 
 // -----------------------------------------------------------------------------
 // Fonctions personnalisées
@@ -91,8 +100,9 @@ fun allCommitted(): Boolean {
 // Configuration Android
 // -----------------------------------------------------------------------------
 android {
+    compileSdk = 36
     // Si tu n'as pas de variable pour compileSdk, mets-le en dur, ex. 34
-    compileSdk = Versions.compileSdk
+    // compileSdk = Versions.compileSdk
 
     namespace = "app.aaps"
 
@@ -259,13 +269,13 @@ dependencies {
     debugImplementation(libs.com.squareup.leakcanary.android)
 
 
-    kspAndroidTest(libs.com.google.dagger.android.processor)
+    //kspAndroidTest(libs.com.google.dagger.android.processor)
 
     /* Dagger2 - We are going to use dagger.android which includes
      * support for Activity and fragment injection so we need to include
      * the following dependencies */
-    ksp(libs.com.google.dagger.android.processor)
-    ksp(libs.com.google.dagger.compiler)
+    kapt(libs.com.google.dagger.android.processor)
+    kapt(libs.com.google.dagger.compiler)
 
     // MainApp
     api(libs.com.uber.rxdogtag2.rxdogtag)

@@ -285,7 +285,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val wCyclePreferences: WCyclePreferences,
     private val wCycleLearner: WCycleLearner,
     private val pumpCapabilityValidator: app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator,
-    context: Context
+    private val context: Context
 ) {
     @Inject lateinit var persistenceLayer: PersistenceLayer
     @Inject lateinit var tddCalculator: TddCalculator
@@ -357,7 +357,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
     }
 
-    private val context: Context = context.applicationContext
     private val EPS_FALL = 0.3      // mg/dL/5min : seuil de baisse
     private val EPS_ACC  = 0.2      // mg/dL/5min : seuil d'écart short vs long
     private var lateFatRiseFlag: Boolean = false
@@ -797,7 +796,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * @param targetBG Objectif de glycémie (mg/dL).
      * @param zeroBasalDurationMinutes Durée cumulée en minutes pendant laquelle la basale est déjà à zéro.
      */
-    fun safetyAdjustment(
+    @SuppressLint("StringFormatInvalid") fun safetyAdjustment(
         currentBG: Float,
         predictedBG: Float,
         bgHistory: List<Float>,
@@ -823,14 +822,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Liste des facteurs multiplicatifs proposés ; on calculera la moyenne à la fin
         val factors = mutableListOf<Float>()
 
-        // 1. Contrôle de la chute rapide
-        // 1. Contrôle de la chute rapide
-        if (dropPerHour >= maxAllowedDropPerHour && delta < 0 && currentBG < 110f) {
-            stopBasal = true 
-            isHypoRisk = true
-            factors.add(0.0f) 
-            //reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction; ")
-            reasonBuilder.append(context.getString(R.string.bg_drop_high, dropPerHour))
+        // 1. Contrôle de la chute rapide (RÉVISÉ : Basal-First)
+        // Avant : StopBasal si BG < 110 (Trop agressif)
+        // Après : StopBasal si BG < 85 (Sécurité), Sinon Réduction 50% (Douceur)
+        val safetyFloor = 85.0f
+
+        if (dropPerHour >= maxAllowedDropPerHour && delta < 0) {
+            if (currentBG < safetyFloor) {
+                // CAS CRITIQUE : On coupe tout
+                stopBasal = true
+                isHypoRisk = true
+                factors.add(0.0f)
+                reasonBuilder.append(String.format(context.getString(R.string.bg_drop_high_critical), dropPerHour))
+            } else if (currentBG < 110f) {
+                // CAS AVERTISSEMENT : On réduit de 50% mais on garde le flux
+                stopBasal = false
+                factors.add(0.5f)
+                reasonBuilder.append(String.format(context.getString(R.string.bg_drop_high_warning), dropPerHour))
+            }
         }
 
         // 2. Mode montée très rapide : override de toutes les réductions
@@ -3752,8 +3761,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleError.clear()
         consoleLog.clear()
 
-        // 🚀 MEAL ADVISOR: Check explicitly for Trigger (Snap&Go)
-        // We read it here to pass it to the specific logic, bypassing refractory checks.
+        // 🚀 MEAL ADVISOR: Hydrate COB if Trigger is active (Fixes DB latency)
+        // Moved to helper to avoid VerifyError (Method too large/complex)
+        hydrateMealDataIfTriggered(mealData)
+        
+        // Restore variable needed for later logic (Fix Unresolved Reference)
         val isExplicitAdvisorRun = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
 
         // 🕵️ COMPARATOR: Capture Original Profile to avoid Bias
@@ -3975,14 +3987,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         
         // 🏥 Log detailed physio status (Always visible - never null)
-        val physioLog = physioAdapter.getDetailedLogString()
-        if (physioLog != null) {
-             consoleLog.add(physioLog)
-        }
-        
-        // 🏥 Log detailed physio status (Visible in Script Debug)
-        // We use consoleError temporarily to ensure high visibility in the UI log list
-        // logic mirrors existing Trajectory visualization
         try {
              val physioLog = physioAdapter.getDetailedLogString()
              consoleError.add(physioLog)
@@ -5745,8 +5749,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val isMealAdvisorOneShot = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
         if (isMealAdvisorOneShot) {
              preferences.put(BooleanKey.OApsAIMIMealAdvisorTrigger, false)
-             consoleLog.add("🚀 MEAL ADVISOR ONE-SHOT: Forcing Aggression (SMB+TBR)")
-             rT.reason.append("🚀 Advisor Trigger: Force Action. ")
+             
+             // 🔓 SAFETY BYPASS: Temporarily lift MaxSMB limits to allow full Advisor Bolus
+             // We use a reasonably high cap (e.g. 30U) to avoid infinite unchecked bolus, 
+             // but enough to cover almost any meal.
+             this.maxSMB = Math.max(this.maxSMB, 30.0) 
+             this.maxSMBHB = Math.max(this.maxSMBHB, 30.0)
+             
+             consoleLog.add("🚀 MEAL ADVISOR ONE-SHOT: Forcing Aggression. MaxSMB raised to 30U.")
+             rT.reason.append("🚀 Advisor Trigger: MaxSMB Bypass Active. ")
         }
 
         consoleLog.add(
@@ -5758,6 +5769,45 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         val pkpdDiaMinutesOverride: Double? = pkpdRuntime?.params?.diaHrs?.let { it * 60.0 } // PKPD donne des heures → on passe en minutes
         val useLegacyDynamicsdia = pkpdDiaMinutesOverride == null
+        // ═══════════════════════════════════════════════════════════════════════════
+        // 🛡️ BASAL-FIRST POLICY GATE (Single Source of Truth)
+        // ═══════════════════════════════════════════════════════════════════════════
+        val learnerFactor = safeReactivityFactor // Already computed: unifiedReactivityLearner + Physio
+        val isFragileBg = bg < 110.0 && delta < 0.0
+        val isLearnerPrudent = learnerFactor < 0.75
+        val basalFirstMealActive = mealData.mealCOB > 0.1 // 🍕 Digestion active?
+        val basalFirstHeavyMeal = mealData.mealCOB > 20.0 // 🍔 Heavy Meal?
+
+        // Gate: Activate Basal-First if:
+        // A) Learner is Prudent AND NO Meal is active
+        // OR
+        // B) BG is Fragile AND NO Heavy Meal is active (User rule: COB > 20 -> Priority to Insulin)
+        // EXCEPTION: Explicit Meal Advisor / OneShot overrides
+        val basalFirstActive = ((isLearnerPrudent && !basalFirstMealActive) || (isFragileBg && !basalFirstHeavyMeal)) && !isMealAdvisorOneShot
+        
+        if (basalFirstActive) {
+            // FORCE limits to 0.0 -> Disables SMB effectively
+            this.maxSMB = 0.0
+            this.maxSMBHB = 0.0
+            
+            // Log for transparency
+            val reason = when {
+                isFragileBg -> "Fragile BG (<110 & falling)"
+                isLearnerPrudent -> "Learner Prudence (Factor=${"%.2f".format(learnerFactor)})"
+                else -> "Unknown Safety Trigger"
+            }
+            consoleLog.add("🛡️ BASAL-FIRST ACTIVE: $reason -> SMB DISABLED (MaxSMB=0)")
+            rT.reason.append(" [Basal-First: SMB OFF]")
+        } else {
+             if (isLearnerPrudent && basalFirstMealActive) {
+                 consoleLog.add("🍕 MEAL EXEMPTION: Learner is Prudent but Meal Active (COB=${"%.1f".format(mealData.mealCOB)}g) -> SMB Allowed.")
+             }
+             if (isFragileBg && basalFirstHeavyMeal) {
+                 consoleLog.add("🍔 HEAVY MEAL EXEMPTION: Fragile BG but COB > 20g (COB=${"%.1f".format(mealData.mealCOB)}g) -> SMB Allowed.")
+             }
+        }
+        // ═══════════════════════════════════════════════════════════════════════════
+
         val smbExecution = SmbInstructionExecutor.execute(
             SmbInstructionExecutor.Input(
                 context = context,
@@ -7557,6 +7607,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             tbrMin = 30,
             reason = "🚀 Autodrive [$safeStateReason] -> Force ${amount}U"
         )
+    }
+
+    // =========================================================================================
+    // 🛠️ MTR FIX Helper: Hydrate COB from Prefs if DB is too slow (Isolated to avoid VerifyError)
+    // =========================================================================================
+    private fun hydrateMealDataIfTriggered(mealData: MealData) {
+        // We handle the read directly to keep the stack simple in the main method
+        val isExplicitAdvisorRun: Boolean = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
+        
+        if (isExplicitAdvisorRun) {
+            val fallbackCarbs: Double = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
+            // Use explicit comparison (0.0) and safe casting
+            if (mealData.mealCOB < 0.1 && fallbackCarbs > 0.0) {
+                 mealData.mealCOB = fallbackCarbs 
+                 consoleLog.add("⚡ COB HYDRATION: Injected ${fallbackCarbs.toInt()}g from Advisor Prefs (DB latency bypass)")
+            }
+        }
     }
 
 }

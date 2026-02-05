@@ -38,12 +38,7 @@ class DummyService : DaggerService() {
 
     override fun onCreate() {
         super.onCreate()
-        try {
-            aapsLogger.debug("Starting DummyService with ID ${notificationHolder.notificationID} notification ${notificationHolder.notification}")
-            startForeground(notificationHolder.notificationID, notificationHolder.notification)
-        } catch (e: Exception) {
-            startForeground(4711, Notification())
-        }
+        startForegroundSafe()
         disposable.add(
             rxBus
                 .toObservable(EventAppExit::class.java)
@@ -64,12 +59,40 @@ class DummyService : DaggerService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        try {
-            aapsLogger.debug("Starting DummyService with ID ${notificationHolder.notificationID} notification ${notificationHolder.notification}")
-            startForeground(notificationHolder.notificationID, notificationHolder.notification)
-        } catch (e: Exception) {
-            startForeground(4711, Notification())
-        }
+        startForegroundSafe()
         return START_STICKY
+    }
+
+    private fun startForegroundSafe() {
+        try {
+            aapsLogger.debug("Starting DummyService with ID ${notificationHolder.notificationID}")
+            
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                // On Android 14+, we MUST explicitly declare the type if strict rules apply
+                // Ideally we check permissions here, but catching SecurityException is robust enough
+                // and handles cases where permissions are revoked at runtime.
+                // We use the 'location' type as checking permissions and passing 0 would also crash if manifest implies location.
+                startForeground(
+                    notificationHolder.notificationID, 
+                    notificationHolder.notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                )
+            } else {
+                startForeground(notificationHolder.notificationID, notificationHolder.notification)
+            }
+        } catch (se: SecurityException) {
+            aapsLogger.error(LTag.CORE, "❌ CRITICAL: Failed to start Foreground Service due to missing permissions (Android 14+). Service will stop.", se)
+            // Do NOT retry. Retrying causes the crash loop.
+            // Just stop this service to let the App UI survive and ask for permissions.
+            stopSelf()
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.CORE, "Error starting FGS, retrying with fallback", e)
+            try {
+                startForeground(4711, Notification())
+            } catch (e2: Exception) {
+                aapsLogger.error(LTag.CORE, "Fallback FGS failed too. Giving up.", e2)
+                stopSelf()
+            }
+        }
     }
 }
