@@ -52,6 +52,7 @@ import app.aaps.plugins.source.TomatoPlugin
 import app.aaps.plugins.source.XdripSourcePlugin
 import app.aaps.plugins.sync.garmin.GarminPlugin
 import app.aaps.plugins.sync.nsclient.NSClientPlugin
+import app.aaps.plugins.sync.nsShared.RemoteControlPlugin
 import app.aaps.plugins.sync.nsclientV3.NSClientV3Plugin
 import app.aaps.plugins.sync.openhumans.OpenHumansUploaderPlugin
 import app.aaps.plugins.sync.tidepool.TidepoolPlugin
@@ -340,6 +341,12 @@ abstract class PluginsListModule {
     @IntoMap
     @IntKey(355)
     abstract fun bindNSClientV3Plugin(plugin: NSClientV3Plugin): PluginBase
+
+    @Binds
+    @AllConfigs
+    @IntoMap
+    @IntKey(357)
+    abstract fun bindRemoteControlPlugin(plugin: RemoteControlPlugin): PluginBase
 
     @Binds
     @NotNSClient

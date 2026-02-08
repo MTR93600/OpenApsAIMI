@@ -214,7 +214,10 @@ class SWDefinition @Inject constructor(
             .add(
                 swButtonProvider.get()
                      .text(R.string.aaps_directory)
-                     .visibility { preferences.getIfExists(StringKey.AapsDirectoryUri) == null }
+                     .visibility { 
+                         val uri = preferences.getIfExists(StringKey.AapsDirectoryUri)
+                         uri.isNullOrEmpty()
+                     }
                     .action { maintenancePlugin.selectAapsDirectory(requireActivity() as DaggerAppCompatActivityWithResult) })
             .add(swBreakProvider.get())
             .add(swEventListenerProvider.get().with(EventAAPSDirectorySelected::class.java, this).label(app.aaps.core.ui.R.string.settings).initialStatus(preferences.get(StringKey.AapsDirectoryUri)))
@@ -229,7 +232,7 @@ class SWDefinition @Inject constructor(
                 Settings.canDrawOverlays(requireActivity()) &&
                     !androidPermission.permissionNotGranted(requireActivity(), Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) &&
                     !androidPermission.permissionNotGranted(requireActivity(), Manifest.permission.READ_EXTERNAL_STORAGE) &&
-                    preferences.getIfExists(StringKey.AapsDirectoryUri) != null
+                    !preferences.getIfExists(StringKey.AapsDirectoryUri).isNullOrEmpty()
             }
 
     private val screenPermissionBt
