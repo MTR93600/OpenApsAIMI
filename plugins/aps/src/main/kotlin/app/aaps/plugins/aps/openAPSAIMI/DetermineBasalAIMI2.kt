@@ -1009,15 +1009,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // 3. Ajustement en fonction de l'activité physique (Via ActivityContext)
     when (activityContext.state) {
         app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE -> {
-             diaMinutes *= 0.7f
-             // reasonBuilder.append(context.getString(R.string.reason_high_activity)) // Using Bio-Sync reason now
+             // FIX: Softened DIA reduction (was x0.7) to prevent artificial IOB drop.
+             // Strategy: Target 150 mg/dL + Prefer Basal (Handled in ContextEngine/DetermineBasal)
+             diaMinutes *= 0.95f 
+             // reasonBuilder.append("Sport Intense: DIA x0.95 (Gentle)")
         }
         app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.MODERATE -> {
-             diaMinutes *= 0.8f
-             reasonBuilder.append(" • Moderate Activity ➝ x0.8\n")
+             diaMinutes *= 0.98f
+             reasonBuilder.append(" • Moderate Activity ➝ x0.98\n")
         }
         app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.LIGHT -> {
-             diaMinutes *= 0.9f
+             diaMinutes *= 1.0f
         }
         else -> {
             // REST
@@ -4487,6 +4489,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🎯 CONTEXT MODULE INTEGRATION
         // ═══════════════════════════════════════════════════════════════════
         
+
+        // 🔧 USER REQUEST: Context State Variables (Target Override)
+        var contextTargetOverride: Double? = null
+
         val contextEnabled = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIContextEnabled)
         
         if (contextEnabled) {
@@ -4536,7 +4542,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     }
                     
                     if (contextInfluence.preferBasal) {
-                        consoleLog.add("  ⚠️ Prefers TEMP BASAL over SMB")
+                        consoleLog.add("  ⚠️ Prefers TEMP BASAL over SMB (SMB Disabled)")
+                        // 1. Enforce Basal Preference: Disable SMBs (User Request)
+                        maxSMB = 0.0
+                        
+                        // 2. Target Elevation for Sport (User Request: 140-150)
+                        // If we are in an Activity context that requests Basal Preference (Intense/Mod), elevate target.
+                        if (contextSnapshot.hasActivity) {
+                             contextTargetOverride = 150.0
+                             consoleLog.add("  🎯 Sport Target Override -> 150 mg/dL")
+                        }
                     }
                     
                     // Log reasoning
@@ -5127,6 +5142,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var target_bg = (profile.min_bg + profile.max_bg) / 2
         var min_bg = profile.min_bg
         var max_bg = profile.max_bg
+
+        // 🔧 USER REQUEST: Apply Context Target Override (e.g. Sport 150)
+        if (contextTargetOverride != null) {
+            val override = contextTargetOverride!!
+            if (min_bg < override) min_bg = override
+            if (max_bg < override) max_bg = override
+        }
 
         var sensitivityRatio: Double
         val high_temptarget_raises_sensitivity = profile.exercise_mode || profile.high_temptarget_raises_sensitivity
