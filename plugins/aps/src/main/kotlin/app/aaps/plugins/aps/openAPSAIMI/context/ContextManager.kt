@@ -1,9 +1,16 @@
 package app.aaps.plugins.aps.openAPSAIMI.context
 
+import app.aaps.core.data.model.GlucoseUnit
+import app.aaps.core.data.model.TE
+import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.core.interfaces.sharedPreferences.SP
+import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.*
+import io.reactivex.rxjava3.kotlin.plusAssign
+import io.reactivex.rxjava3.disposables.CompositeDisposable
 import javax.inject.Inject
 import javax.inject.Singleton
 import java.util.concurrent.ConcurrentHashMap
@@ -40,7 +47,10 @@ class ContextManager @Inject constructor(
     private val contextLLMClient: ContextLLMClient,
     private val contextParser: ContextParser,
     private val sp: SP,
-    internal val aapsLogger: AAPSLogger  // Internal for inline functions
+    internal val aapsLogger: AAPSLogger,  // Internal for inline functions
+    private val persistenceLayer: PersistenceLayer,  // For NS sync
+    private val dateUtil: DateUtil,
+    private val aapsSchedulers: AapsSchedulers
 ) {
     
     // Thread-safe storage (internal for inline functions)
@@ -99,6 +109,9 @@ class ContextManager @Inject constructor(
             activeIntents[id] = intent
             ids.add(id)
             aapsLogger.debug(LTag.APS, "[ContextManager] Stored intent $id: $intent")
+            
+            // Sync to Nightscout via TherapyEvent wrapper
+            syncContextToNS(id, intent)
         }
         
         if (ids.isEmpty()) {
@@ -428,5 +441,77 @@ class ContextManager @Inject constructor(
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "[ContextManager] Load failed: ${e.message}")
         }
+    }
+    
+    // ========================================
+    // NIGHTSCOUT SYNC
+    // ========================================
+    
+    /**
+     * Sync ContextIntent to Nightscout via TherapyEvent wrapper.
+     * Creates a NOTE TherapyEvent with AIMI_CONTEXT prefix.
+     */
+    private fun syncContextToNS(intentId: String, intent: ContextIntent) {
+        try {
+            val intentJson = serializeContextIntent(intent)
+            
+            val therapyEvent = TE(
+                timestamp = intent.startTimeMs,
+                type = TE.Type.NOTE,
+                glucoseUnit = GlucoseUnit.MGDL,
+                note = "AIMI_CONTEXT:$intentId:$intentJson",
+                duration = intent.durationMs
+            )
+            
+            aapsLogger.debug(LTag.APS, "[ContextManager] Syncing context $intentId to NS")
+            
+            val disposable = CompositeDisposable()
+            disposable += persistenceLayer.insertOrUpdateTherapyEvent(therapyEvent)
+                .subscribeOn(aapsSchedulers.io)
+                .subscribe(
+                    {
+                        aapsLogger.info(LTag.APS, "[ContextManager] ✅ Context $intentId synced to NS")
+                        disposable.clear()
+                    },
+                    { error ->
+                        aapsLogger.error(LTag.APS, "[ContextManager] ❌ Failed to sync context $intentId: $error")
+                        disposable.clear()
+                    }
+                )
+                
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "[ContextManager] Exception syncing context $intentId", e)
+        }
+    }
+    
+    private fun serializeContextIntent(intent: ContextIntent): String {
+        return when (intent) {
+            is Activity -> """{"type":"Activity","act":"${intent.activityType}","int":"${intent.intensity}","dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
+            is Stress -> """{"type":"Stress","stress":"${intent.stressType}","int":"${intent.intensity}","dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
+            is Illness -> """{"type":"Illness","symptom":"${intent.symptomType}","int":"${intent.intensity}","dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
+            is UnannouncedMealRisk -> """{"type":"UnannouncedMeal","dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
+            is Alcohol -> """{"type":"Alcohol","units":${intent.units},"dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
+            is Travel -> """{"type":"Travel","tz":${intent.timezoneShiftHours},"dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
+            is MenstrualCycle -> """{"type":"MenstrualCycle","phase":"${intent.phase}","int":"${intent.intensity}","dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
+            is Custom -> """{"type":"Custom","desc":"${intent.description}","strat":"${intent.suggestedStrategy}","int":"${intent.intensity}","dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
+        }
+    }
+    
+    /**
+     * Inject ContextIntent received from Nightscout.
+     * Skips local parsing, direct injection.
+     */
+    @Synchronized
+    fun injectContextFromNS(intentId: String, intent: ContextIntent) {
+        // Check if already exists (deduplication)
+        if (activeIntents.containsKey(intentId)) {
+            aapsLogger.debug(LTag.APS, "[ContextManager] Context $intentId already exists, skipping NS injection")
+            return
+        }
+        
+        activeIntents[intentId] = intent
+        aapsLogger.info(LTag.APS, "[ContextManager] ✅ Injected context from NS: $intentId -> $intent")
+        
+        saveToStorage()
     }
 }

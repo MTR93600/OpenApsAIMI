@@ -133,7 +133,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val physioManager: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioManagerMTR, // 🏥 Physiological Manager MTR
     // 🏥 Physiological Decision Adapter (The Safety Gate)
     private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR,
-    private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator // 🧠 AI Auditor MTR
+    private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator, // 🧠 AI Auditor MTR
+    private val aimiRemoteManager: app.aaps.plugins.aps.openAPSAIMI.remote.AimiRemoteManager, // 📡 Remote Control MTR
+    private val contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager // 🎯 Context Manager
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -152,6 +154,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     override fun onStart() {
         super.onStart()
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey::class.java)
+        preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey::class.java)
+        
+        // 📡 Start AIMI Remote Manager
+        try {
+            aimiRemoteManager.start()
+            aapsLogger.info(LTag.APS, "✅ AIMI Remote Manager started")
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "❌ Failed to start AIMI Remote Manager", e)
+        }
+
         
         // 🏃 Start AIMI Steps Manager (Health Connect + Phone Sensor sync)
         try {
@@ -206,6 +218,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "Error stopping AIMI Physiological Manager", e)
         }
+        
+        // 📡 Stop AIMI Remote Manager
+        aimiRemoteManager.stop()
         
         AimiUamHandler.close(context)
     }
@@ -926,19 +941,26 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // ────────────────────────────────────────────────────
         // 1️⃣ On détecte si l’on est en mode “meal” ou “early autodrive”
         val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
+        
+        // 🎯 Context Integration (Remote/AI)
+        val contextSnapshot = contextManager.getSnapshot(dateUtil.now())
+        
         val isMealMode = therapy.snackTime
             || therapy.highCarbTime
             || therapy.mealTime
             || therapy.lunchTime
             || therapy.dinnerTime
             || therapy.bfastTime
+            || contextSnapshot.hasMealRisk // 🍕 Remote "Lunch/Meal" triggers this
+
+        val isSportMode = therapy.sportTime || contextSnapshot.hasActivity // 🏃 Remote "Sport" triggers this
 
         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
         val night = hour <= 7
         val smb = glucoseStatusCalculatorAimi.getGlucoseStatusData(false) ?: return absoluteRate
         val feats = glucoseStatusCalculatorAimi.getAimiFeatures(false)
         val accel = feats?.accel ?: 0.0
-        val isEarlyAutodrive = !night && !isMealMode && !therapy.sportTime &&
+        val isEarlyAutodrive = !night && !isMealMode && !isSportMode &&
             smb.glucose > 110 &&
             detectMealOnset(
                 smb.delta.toFloat(),
@@ -1769,6 +1791,28 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 // addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHyperFactor...))
                 addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIHighBGinterval, dialogMessage = R.string.oaps_aimi_HIGHBG_interval_summary, title = R.string.oaps_aimi_HIGHBG_interval_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHighBGMaxSMB, dialogMessage = R.string.openapsaimi_highBG_maxsmb_summary, title = R.string.openapsaimi_highBG_maxsmb_title))
+            })
+
+            // 📡 Remote Control Section
+            addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                key = "AIMI_REMOTE"
+                title = "Remote Control" // TODO: Add string resource
+
+                addPreference(PreferenceCategory(context).apply {
+                    title = "Security" // TODO: Add string resource
+                })
+
+                addPreference(
+                    androidx.preference.EditTextPreference(context).apply {
+                        key = AimiStringKey.RemoteControlPin.key
+                        title = "Security PIN"
+                        summary = "PIN required for remote commands (AIMI: PIN CMD)"
+                        dialogTitle = "Enter 4-8 digit PIN"
+                        setOnBindEditTextListener { editText ->
+                            editText.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+                        }
+                    }
+                )
             })
 
 
