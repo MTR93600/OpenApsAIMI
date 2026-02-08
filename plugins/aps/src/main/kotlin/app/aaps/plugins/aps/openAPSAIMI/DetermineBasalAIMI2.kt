@@ -7472,7 +7472,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val estimatedCarbsTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
         val timeSinceEstimateMin = (System.currentTimeMillis() - estimatedCarbsTime) / 60000.0
 
-        if (estimatedCarbs > 10.0 && timeSinceEstimateMin in 0.0..120.0 && bg >= 60) {
+        // 🛡️ CRITICAL FIX (Zombie Meal Bug): 
+        // We limit the "Passive" window to 20 minutes (was 120).
+        // If > 20 mins, we assume the meal is either consumed or handled by standard COB logic.
+        // Re-calculating "Carbs/IC - IOB" after 90 mins with decayed IOB causes massive dangerous boluses.
+        val maxPassiveWindow = if (isExplicitTrigger) 120.0 else 20.0
+
+        if (estimatedCarbs > 10.0 && timeSinceEstimateMin in 0.0..maxPassiveWindow && bg >= 60) {
             // Refractory Check (Safety)
             // 🚀 BYPASS if Explicit Trigger (User clicked Snap&Go)
             if (!isExplicitTrigger && hasReceivedRecentBolus(45, lastBolusTime)) {
@@ -7480,7 +7486,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
             
             // FIX: Removed delta > 0.0 condition - Meal Advisor should work even if BG is stable/falling
-            // The refractory check, BG floor (>=60), and time window (120min) are sufficient safety
+            // The refractory check, BG floor (>=60), and time window (120min/20min) are sufficient safety
             if (modesCondition || isExplicitTrigger) { 
                 val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal)
                 val safeMax = if (maxBasalPref > 0.1) maxBasalPref else profile.max_basal
