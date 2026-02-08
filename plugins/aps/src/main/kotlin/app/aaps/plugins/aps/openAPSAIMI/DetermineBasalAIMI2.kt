@@ -3764,7 +3764,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🚀 MEAL ADVISOR: Hydrate COB if Trigger is active (Fixes DB latency)
         // Moved to helper to avoid VerifyError (Method too large/complex)
         hydrateMealDataIfTriggered(mealData)
-        
+
         // Restore variable needed for later logic (Fix Unresolved Reference)
         val isExplicitAdvisorRun = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
 
@@ -7615,12 +7615,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun hydrateMealDataIfTriggered(mealData: MealData) {
         // We handle the read directly to keep the stack simple in the main method
         val isExplicitAdvisorRun: Boolean = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
-        
+
         if (isExplicitAdvisorRun) {
             val fallbackCarbs: Double = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
             // Use explicit comparison (0.0) and safe casting
             if (mealData.mealCOB < 0.1 && fallbackCarbs > 0.0) {
-                 mealData.mealCOB = fallbackCarbs 
+                 mealData.mealCOB = fallbackCarbs
                  consoleLog.add("⚡ COB HYDRATION: Injected ${fallbackCarbs.toInt()}g from Advisor Prefs (DB latency bypass)")
             }
         }
