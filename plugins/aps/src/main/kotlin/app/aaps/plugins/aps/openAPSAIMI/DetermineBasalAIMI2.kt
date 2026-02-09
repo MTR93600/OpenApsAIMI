@@ -1009,22 +1009,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // 3. Ajustement en fonction de l'activité physique (Via ActivityContext)
     when (activityContext.state) {
         app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE -> {
-             // FIX: Softened DIA reduction (was x0.7) to prevent artificial IOB drop.
-             // Strategy: Target 150 mg/dL + Prefer Basal (Handled in ContextEngine/DetermineBasal)
-             diaMinutes *= 0.95f 
-             // reasonBuilder.append("Sport Intense: DIA x0.95 (Gentle)")
+             // FIX: Stronger reduction for Intense activity to react faster
+             diaMinutes *= 0.85f 
+             // reasonBuilder.append("Sport Intense: DIA x0.85")
         }
         app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.MODERATE -> {
-             diaMinutes *= 0.98f
-             reasonBuilder.append(" • Moderate Activity ➝ x0.98\n")
+             diaMinutes *= 0.90f
+             reasonBuilder.append(" • Moderate Activity ➝ x0.90\n")
         }
         app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.LIGHT -> {
-             diaMinutes *= 1.0f
+             diaMinutes *= 0.98f
+             reasonBuilder.append(" • Light Activity ➝ x0.98\n")
         }
         else -> {
             // REST
             if (activityContext.isRecovery) {
-                // Recovery might imply lasting effects? For now, keep normal.
+                // Recovery: Keep Dia normal or slightly extend?
             }
         }
     }    
@@ -1036,12 +1036,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              // Stress / Maladie : Résistance -> DIA plus long
              diaMinutes *= 1.2f
              reasonBuilder.append(context.getString(R.string.reason_bio_sync_stress, h, s))
-        } else if (s > 1000) {
-             // Flow / Sport : Absorption rapide -> DIA plus court (si pas déjà appliqué par ActivityContext)
-             // On s'assure qu'on ne double pas la réduction si ActivityState est déjà INTENSE
+        } else if (s > 350) {
+             // Flow / Sport (Undeclared): > 70spm (Brisk Walk)
+             // Absorption rapide -> DIA plus court (si pas déjà appliqué par ActivityContext)
              if (activityContext.state != app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE) {
-                 diaMinutes *= 0.85f
-                 reasonBuilder.append(context.getString(R.string.reason_bio_sync_flow, s, h, 0.85f))
+                 diaMinutes *= 0.90f
+                 reasonBuilder.append(context.getString(R.string.reason_bio_sync_flow, s, h, 0.90f))
              }
         }
 
