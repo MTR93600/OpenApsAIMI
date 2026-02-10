@@ -5073,6 +5073,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Independent Refractory: Only block if 'Small' was given recently.
         if (!nightbis && autodrive && bg >= 80 && !isPostHypo && !hasReceivedRecentBolus(45, lastBolusTimeMs ?: 0L) && isDriftTerminatorCondition(bg.toFloat(), terminatorTarget.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
             val terminatortap = dynamicPbolusSmall
+
+            // [FIX] Force-Enable SMB for Drift Terminator if blocked by Basal First
+            // Prudent Learner (<0.75) may have triggered Basal-First (MaxSMB=0), but Drift Terminator needs to act.
+            if (this.maxSMB < 0.1) {
+                this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
+                // Fallback safe if preference is also zero/missing
+                if (this.maxSMB < 0.1) this.maxSMB = 0.5
+                reason.append(" [Drift Override]")
+                consoleLog.add("⚡ DriftTerminator: Overrode Basal-First block (MaxSMB 0.0 -> ${"%.2f".format(this.maxSMB)})")
+            }
+
             reason.append("→ Drift Terminator (Trigger +${terminatorThresholdAdd}): Micro-Tap ${terminatortap}U\n")
             consoleLog.add("AD_EARLY_TBR_TRIGGER rate=0.0 duration=0 reason=DriftTerminator_Tap") // Actually a bolus tap, not TBR, but fits "Early Action" category
             consoleLog.add("AD_SMALL_PREBOLUS_TRIGGER amount=$terminatortap reason=DriftTerminator")
