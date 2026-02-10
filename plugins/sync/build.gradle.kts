@@ -21,6 +21,8 @@ dependencies {
     implementation(project(":core:utils"))
     implementation(project(":core:validators"))
     implementation(project(":shared:impl"))
+    implementation(project(":plugins:aps"))  // For ContextManager access
+
 
 
     testImplementation(libs.kotlinx.coroutines.test)
@@ -38,6 +40,9 @@ dependencies {
     api(libs.androidx.work.runtime)
     api(libs.androidx.gridlayout)
     api(libs.com.google.android.material)
+    
+    // Security - EncryptedSharedPreferences for Remote Access password
+    api("androidx.security:security-crypto:1.1.0-alpha06")
 
     // NSClient, Tidepool
     api(libs.io.socket.client)

@@ -50,7 +50,7 @@
 
         <service 
             android:name=".general.persistentNotification.DummyService"
-            android:foregroundServiceType="location" />
+            android:foregroundServiceType="dataSync" />
 
         <service
             android:name="app.aaps.plugins.sync.wear.wearintegration.DataLayerListenerServiceMobile"
