@@ -50,8 +50,8 @@ class ActivityManager @Inject constructor() {
         if (stepsPerMin > 20) {
             rawScore = stepScore
             if (hrScore > 1.0) {
-                // Confirming activity with HR
-                rawScore += (hrScore * 0.5)
+                // Confirming activity with HR (Higher weight 0.7 for better sensitivity)
+                rawScore += (hrScore * 0.7)
             }
         } else if (hrScore > 3.0) {
            // High HR without steps -> Stress or Resistance, or Cycling?

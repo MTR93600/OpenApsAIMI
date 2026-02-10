@@ -285,7 +285,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val wCyclePreferences: WCyclePreferences,
     private val wCycleLearner: WCycleLearner,
     private val pumpCapabilityValidator: app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator,
-    context: Context
+    private val context: Context
 ) {
     @Inject lateinit var persistenceLayer: PersistenceLayer
     @Inject lateinit var tddCalculator: TddCalculator
@@ -357,7 +357,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
     }
 
-    private val context: Context = context.applicationContext
     private val EPS_FALL = 0.3      // mg/dL/5min : seuil de baisse
     private val EPS_ACC  = 0.2      // mg/dL/5min : seuil d'écart short vs long
     private var lateFatRiseFlag: Boolean = false
@@ -797,7 +796,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * @param targetBG Objectif de glycémie (mg/dL).
      * @param zeroBasalDurationMinutes Durée cumulée en minutes pendant laquelle la basale est déjà à zéro.
      */
-    fun safetyAdjustment(
+    @SuppressLint("StringFormatInvalid") fun safetyAdjustment(
         currentBG: Float,
         predictedBG: Float,
         bgHistory: List<Float>,
@@ -823,14 +822,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Liste des facteurs multiplicatifs proposés ; on calculera la moyenne à la fin
         val factors = mutableListOf<Float>()
 
-        // 1. Contrôle de la chute rapide
-        // 1. Contrôle de la chute rapide
-        if (dropPerHour >= maxAllowedDropPerHour && delta < 0 && currentBG < 110f) {
-            stopBasal = true 
-            isHypoRisk = true
-            factors.add(0.0f) 
-            //reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction; ")
-            reasonBuilder.append(context.getString(R.string.bg_drop_high, dropPerHour))
+        // 1. Contrôle de la chute rapide (RÉVISÉ : Basal-First)
+        // Avant : StopBasal si BG < 110 (Trop agressif)
+        // Après : StopBasal si BG < 85 (Sécurité), Sinon Réduction 50% (Douceur)
+        val safetyFloor = 85.0f
+
+        if (dropPerHour >= maxAllowedDropPerHour && delta < 0) {
+            if (currentBG < safetyFloor) {
+                // CAS CRITIQUE : On coupe tout
+                stopBasal = true
+                isHypoRisk = true
+                factors.add(0.0f)
+                reasonBuilder.append(String.format(context.getString(R.string.bg_drop_high_critical), dropPerHour))
+            } else if (currentBG < 110f) {
+                // CAS AVERTISSEMENT : On réduit de 50% mais on garde le flux
+                stopBasal = false
+                factors.add(0.5f)
+                reasonBuilder.append(String.format(context.getString(R.string.bg_drop_high_warning), dropPerHour))
+            }
         }
 
         // 2. Mode montée très rapide : override de toutes les réductions
@@ -1000,20 +1009,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // 3. Ajustement en fonction de l'activité physique (Via ActivityContext)
     when (activityContext.state) {
         app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE -> {
-             diaMinutes *= 0.7f
-             // reasonBuilder.append(context.getString(R.string.reason_high_activity)) // Using Bio-Sync reason now
+             // FIX: Stronger reduction for Intense activity to react faster
+             diaMinutes *= 0.85f 
+             // reasonBuilder.append("Sport Intense: DIA x0.85")
         }
         app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.MODERATE -> {
-             diaMinutes *= 0.8f
-             reasonBuilder.append(" • Moderate Activity ➝ x0.8\n")
+             diaMinutes *= 0.90f
+             reasonBuilder.append(" • Moderate Activity ➝ x0.90\n")
         }
         app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.LIGHT -> {
-             diaMinutes *= 0.9f
+             diaMinutes *= 0.98f
+             reasonBuilder.append(" • Light Activity ➝ x0.98\n")
         }
         else -> {
             // REST
             if (activityContext.isRecovery) {
-                // Recovery might imply lasting effects? For now, keep normal.
+                // Recovery: Keep Dia normal or slightly extend?
             }
         }
     }    
@@ -1025,12 +1036,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              // Stress / Maladie : Résistance -> DIA plus long
              diaMinutes *= 1.2f
              reasonBuilder.append(context.getString(R.string.reason_bio_sync_stress, h, s))
-        } else if (s > 1000) {
-             // Flow / Sport : Absorption rapide -> DIA plus court (si pas déjà appliqué par ActivityContext)
-             // On s'assure qu'on ne double pas la réduction si ActivityState est déjà INTENSE
+        } else if (s > 350) {
+             // Flow / Sport (Undeclared): > 70spm (Brisk Walk)
+             // Absorption rapide -> DIA plus court (si pas déjà appliqué par ActivityContext)
              if (activityContext.state != app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE) {
-                 diaMinutes *= 0.85f
-                 reasonBuilder.append(context.getString(R.string.reason_bio_sync_flow, s, h, 0.85f))
+                 diaMinutes *= 0.90f
+                 reasonBuilder.append(context.getString(R.string.reason_bio_sync_flow, s, h, 0.90f))
              }
         }
 
@@ -2119,19 +2130,38 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bg: Float,
         targetBg: Float,
         delta: Float,
+        avgDelta: Float,
+        combinedDelta: Float,
+        minDeviation: Double,
         lastBolusVolume: Double,
         reason: StringBuilder
     ): Boolean {
         // 1. Slow Creep (Target + 15)
         if (bg <= targetBg + 15) return false
         
-        // 2. Rising
-        if (delta <= 0) return false
+        // 2. Nature of the Drift: Must be Flat or Rising Slow (CONFIRMED BY 15m AVG & DEVIATION)
+        // [FIX] Plateau/Hovering Detection with Deep Analysis:
+        // - Instant Delta must be > -1.5 (Not falling)
+        // - Avg Delta (15m) must be > -1.5 (Sustained not falling)
+        // - Both must be < 6.0 (Not a spike)
         
-        // 3. No recent bolus activity (Clean slate)
+        if (delta < -1.5 || avgDelta < -1.5) return false // Falling real (instant or trend)
+        if (delta > 6.0 || avgDelta > 6.0) return false // Rising fast (Not a creep)
+        
+        // 3. Confirmation by MinDeviation (Are we stuck *worse* than IOB allows?)
+        // If deviation is positive, it means BG > IOB prediction -> Resistance/Drift
+        // If combinedDelta is also weak (-1 to +2), it confirms the "stuck" nature.
+        val isStuck = minDeviation > 0 && combinedDelta > -1.0 && combinedDelta < 3.0
+        
+        if (!isStuck) {
+             // Fallback: If deviation isn't available/positive, ensure delta is strictly flat
+             if (delta < -0.5) return false 
+        }
+
+        // 4. No recent bolus activity (Clean slate)
         if (lastBolusVolume > 0.1) return false
         
-        reason.append("🧹 Drift Terminator: Slow creep detected without recent bolus -> ENGAGED\n")
+        reason.append("🧹 Drift Terminator: Plateau detected (Δ${"%.1f".format(delta)} Avg${"%.1f".format(avgDelta)} Dev${"%.0f".format(minDeviation)}) -> ENGAGED\n")
         return true
     }
 
@@ -2412,7 +2442,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val predicted = predictedBg.toDouble()
         val overshoot = (predicted - targetBg).coerceAtLeast(0.0)
         val normalized = (overshoot / 80.0).coerceIn(0.0, 1.0)
-        val boost = 1.0 + 0.05 + 0.15 * normalized
+        // TIR 70-140 Optimization: Cap aggression to 10% (1.10x) to prevent stacking with high MaxSMB
+        val boost = 1.0 + 0.05 + 0.05 * normalized
         val guardScale = if (overshoot > 10 && (bg - hypoThreshold) > 5.0) {
             (0.4 + 0.3 * normalized).coerceAtMost(0.85)
         } else 0.0
@@ -3650,9 +3681,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val normalizedRise = ((predictedBg - targetBg) / 70.0f).coerceIn(0.0f, 1.0f)
         if (normalizedRise > 0.3f && combinedDelta > 2.0f && acceleration > 0.3f) return true
         
-        // 3. [FIX] Brute Force Rise (No Acceleration needed if Delta is huge)
-        // If BG is rising +5 mg/dL/min, it IS a meal/carb impact, even if linear.
-        if (combinedDelta > 5.0f || delta > 5.0f) return true
+        // 3. [FIX] Smart Rise Detection (TIR 70-140)
+        // Require acceleration OR sustained high delta, rejecting single-point noise
+        val isHighNoise = (delta > 5.0f && acceleration < 0.0f) // Sharp jump but slowing down
+        if (!isHighNoise && (combinedDelta > 6.0f || (delta > 5.0f && acceleration > 0.5f))) return true
 
         return false
     }
@@ -3752,8 +3784,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleError.clear()
         consoleLog.clear()
 
-        // 🚀 MEAL ADVISOR: Check explicitly for Trigger (Snap&Go)
-        // We read it here to pass it to the specific logic, bypassing refractory checks.
+        // 🚀 MEAL ADVISOR: Hydrate COB if Trigger is active (Fixes DB latency)
+        // Moved to helper to avoid VerifyError (Method too large/complex)
+        hydrateMealDataIfTriggered(mealData)
+
+        // Restore variable needed for later logic (Fix Unresolved Reference)
         val isExplicitAdvisorRun = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
 
         // 🕵️ COMPARATOR: Capture Original Profile to avoid Bias
@@ -3975,14 +4010,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         
         // 🏥 Log detailed physio status (Always visible - never null)
-        val physioLog = physioAdapter.getDetailedLogString()
-        if (physioLog != null) {
-             consoleLog.add(physioLog)
-        }
-        
-        // 🏥 Log detailed physio status (Visible in Script Debug)
-        // We use consoleError temporarily to ensure high visibility in the UI log list
-        // logic mirrors existing Trajectory visualization
         try {
              val physioLog = physioAdapter.getDetailedLogString()
              consoleError.add(physioLog)
@@ -4483,6 +4510,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🎯 CONTEXT MODULE INTEGRATION
         // ═══════════════════════════════════════════════════════════════════
         
+
+        // 🔧 USER REQUEST: Context State Variables (Target Override)
+        var contextTargetOverride: Double? = null
+
         val contextEnabled = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIContextEnabled)
         
         if (contextEnabled) {
@@ -4532,7 +4563,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     }
                     
                     if (contextInfluence.preferBasal) {
-                        consoleLog.add("  ⚠️ Prefers TEMP BASAL over SMB")
+                        consoleLog.add("  ⚠️ Prefers TEMP BASAL over SMB (SMB Disabled)")
+                        // 1. Enforce Basal Preference: Disable SMBs (User Request)
+                        maxSMB = 0.0
+                        
+                        // 2. Target Elevation for Sport (User Request: 140-150)
+                        // If we are in an Activity context that requests Basal Preference (Intense/Mod), elevate target.
+                        if (contextSnapshot.hasActivity) {
+                             contextTargetOverride = 150.0
+                             consoleLog.add("  🎯 Sport Target Override -> 150 mg/dL")
+                        }
                     }
                     
                     // Log reasoning
@@ -5050,8 +5090,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 🧹 Innovation: FCL 5.0 Drift Terminator (Blocked by Post-Hypo)
         // Independent Refractory: Only block if 'Small' was given recently.
-        if (!nightbis && autodrive && bg >= 80 && !isPostHypo && !hasReceivedRecentBolus(45, lastBolusTimeMs ?: 0L) && isDriftTerminatorCondition(bg.toFloat(), terminatorTarget.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
+        if (!nightbis && autodrive && bg >= 80 && !isPostHypo && !hasReceivedRecentBolus(45, lastBolusTimeMs ?: 0L) && isDriftTerminatorCondition(bg.toFloat(), terminatorTarget.toFloat(), delta.toFloat(), shortAvgDelta.toFloat(), combinedDelta.toFloat(), mealData.slopeFromMinDeviation, totalBolusLastHour, reason) && modesCondition) {
             val terminatortap = dynamicPbolusSmall
+
+            // [FIX] Force-Enable SMB for Drift Terminator if blocked by Basal First
+            // Prudent Learner (<0.75) may have triggered Basal-First (MaxSMB=0), but Drift Terminator needs to act.
+            if (this.maxSMB < 0.1) {
+                this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
+                // Fallback safe if preference is also zero/missing
+                if (this.maxSMB < 0.1) this.maxSMB = 0.5
+                reason.append(" [Drift Override]")
+                consoleLog.add("⚡ DriftTerminator: Overrode Basal-First block (MaxSMB 0.0 -> ${"%.2f".format(this.maxSMB)})")
+            }
+
             reason.append("→ Drift Terminator (Trigger +${terminatorThresholdAdd}): Micro-Tap ${terminatortap}U\n")
             consoleLog.add("AD_EARLY_TBR_TRIGGER rate=0.0 duration=0 reason=DriftTerminator_Tap") // Actually a bolus tap, not TBR, but fits "Early Action" category
             consoleLog.add("AD_SMALL_PREBOLUS_TRIGGER amount=$terminatortap reason=DriftTerminator")
@@ -5123,6 +5174,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var target_bg = (profile.min_bg + profile.max_bg) / 2
         var min_bg = profile.min_bg
         var max_bg = profile.max_bg
+
+        // 🔧 USER REQUEST: Apply Context Target Override (e.g. Sport 150)
+        if (contextTargetOverride != null) {
+            val override = contextTargetOverride!!
+            if (min_bg < override) min_bg = override
+            if (max_bg < override) max_bg = override
+        }
 
         var sensitivityRatio: Double
         val high_temptarget_raises_sensitivity = profile.exercise_mode || profile.high_temptarget_raises_sensitivity
@@ -5745,8 +5803,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val isMealAdvisorOneShot = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
         if (isMealAdvisorOneShot) {
              preferences.put(BooleanKey.OApsAIMIMealAdvisorTrigger, false)
-             consoleLog.add("🚀 MEAL ADVISOR ONE-SHOT: Forcing Aggression (SMB+TBR)")
-             rT.reason.append("🚀 Advisor Trigger: Force Action. ")
+             
+             // 🔓 SAFETY BYPASS: Temporarily lift MaxSMB limits to allow full Advisor Bolus
+             // We use a reasonably high cap (e.g. 30U) to avoid infinite unchecked bolus, 
+             // but enough to cover almost any meal.
+             this.maxSMB = Math.max(this.maxSMB, 30.0) 
+             this.maxSMBHB = Math.max(this.maxSMBHB, 30.0)
+             
+             consoleLog.add("🚀 MEAL ADVISOR ONE-SHOT: Forcing Aggression. MaxSMB raised to 30U.")
+             rT.reason.append("🚀 Advisor Trigger: MaxSMB Bypass Active. ")
         }
 
         consoleLog.add(
@@ -5758,6 +5823,45 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         val pkpdDiaMinutesOverride: Double? = pkpdRuntime?.params?.diaHrs?.let { it * 60.0 } // PKPD donne des heures → on passe en minutes
         val useLegacyDynamicsdia = pkpdDiaMinutesOverride == null
+        // ═══════════════════════════════════════════════════════════════════════════
+        // 🛡️ BASAL-FIRST POLICY GATE (Single Source of Truth)
+        // ═══════════════════════════════════════════════════════════════════════════
+        val learnerFactor = safeReactivityFactor // Already computed: unifiedReactivityLearner + Physio
+        val isFragileBg = bg < 110.0 && delta < 0.0
+        val isLearnerPrudent = learnerFactor < 0.75
+        val basalFirstMealActive = mealData.mealCOB > 0.1 // 🍕 Digestion active?
+        val basalFirstHeavyMeal = mealData.mealCOB > 20.0 // 🍔 Heavy Meal?
+
+        // Gate: Activate Basal-First if:
+        // A) Learner is Prudent AND NO Meal is active
+        // OR
+        // B) BG is Fragile AND NO Heavy Meal is active (User rule: COB > 20 -> Priority to Insulin)
+        // EXCEPTION: Explicit Meal Advisor / OneShot overrides
+        val basalFirstActive = ((isLearnerPrudent && !basalFirstMealActive) || (isFragileBg && !basalFirstHeavyMeal)) && !isMealAdvisorOneShot
+        
+        if (basalFirstActive) {
+            // FORCE limits to 0.0 -> Disables SMB effectively
+            this.maxSMB = 0.0
+            this.maxSMBHB = 0.0
+            
+            // Log for transparency
+            val reason = when {
+                isFragileBg -> "Fragile BG (<110 & falling)"
+                isLearnerPrudent -> "Learner Prudence (Factor=${"%.2f".format(learnerFactor)})"
+                else -> "Unknown Safety Trigger"
+            }
+            consoleLog.add("🛡️ BASAL-FIRST ACTIVE: $reason -> SMB DISABLED (MaxSMB=0)")
+            rT.reason.append(" [Basal-First: SMB OFF]")
+        } else {
+             if (isLearnerPrudent && basalFirstMealActive) {
+                 consoleLog.add("🍕 MEAL EXEMPTION: Learner is Prudent but Meal Active (COB=${"%.1f".format(mealData.mealCOB)}g) -> SMB Allowed.")
+             }
+             if (isFragileBg && basalFirstHeavyMeal) {
+                 consoleLog.add("🍔 HEAVY MEAL EXEMPTION: Fragile BG but COB > 20g (COB=${"%.1f".format(mealData.mealCOB)}g) -> SMB Allowed.")
+             }
+        }
+        // ═══════════════════════════════════════════════════════════════════════════
+
         val smbExecution = SmbInstructionExecutor.execute(
             SmbInstructionExecutor.Input(
                 context = context,
@@ -7410,7 +7514,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val estimatedCarbsTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
         val timeSinceEstimateMin = (System.currentTimeMillis() - estimatedCarbsTime) / 60000.0
 
-        if (estimatedCarbs > 10.0 && timeSinceEstimateMin in 0.0..120.0 && bg >= 60) {
+        // 🛡️ CRITICAL FIX (Zombie Meal Bug): 
+        // We limit the "Passive" window to 20 minutes (was 120).
+        // If > 20 mins, we assume the meal is either consumed or handled by standard COB logic.
+        // Re-calculating "Carbs/IC - IOB" after 90 mins with decayed IOB causes massive dangerous boluses.
+        val maxPassiveWindow = if (isExplicitTrigger) 120.0 else 20.0
+
+        if (estimatedCarbs > 10.0 && timeSinceEstimateMin in 0.0..maxPassiveWindow && bg >= 60) {
             // Refractory Check (Safety)
             // 🚀 BYPASS if Explicit Trigger (User clicked Snap&Go)
             if (!isExplicitTrigger && hasReceivedRecentBolus(45, lastBolusTime)) {
@@ -7418,7 +7528,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
             
             // FIX: Removed delta > 0.0 condition - Meal Advisor should work even if BG is stable/falling
-            // The refractory check, BG floor (>=60), and time window (120min) are sufficient safety
+            // The refractory check, BG floor (>=60), and time window (120min/20min) are sufficient safety
             if (modesCondition || isExplicitTrigger) { 
                 val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal)
                 val safeMax = if (maxBasalPref > 0.1) maxBasalPref else profile.max_basal
@@ -7557,6 +7667,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             tbrMin = 30,
             reason = "🚀 Autodrive [$safeStateReason] -> Force ${amount}U"
         )
+    }
+
+    // =========================================================================================
+    // 🛠️ MTR FIX Helper: Hydrate COB from Prefs if DB is too slow (Isolated to avoid VerifyError)
+    // =========================================================================================
+    private fun hydrateMealDataIfTriggered(mealData: MealData) {
+        // We handle the read directly to keep the stack simple in the main method
+        val isExplicitAdvisorRun: Boolean = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
+
+        if (isExplicitAdvisorRun) {
+            val fallbackCarbs: Double = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
+            // Use explicit comparison (0.0) and safe casting
+            if (mealData.mealCOB < 0.1 && fallbackCarbs > 0.0) {
+                 mealData.mealCOB = fallbackCarbs
+                 consoleLog.add("⚡ COB HYDRATION: Injected ${fallbackCarbs.toInt()}g from Advisor Prefs (DB latency bypass)")
+            }
+        }
     }
 
 }

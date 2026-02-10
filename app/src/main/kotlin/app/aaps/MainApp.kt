@@ -209,8 +209,29 @@ class MainApp : DaggerApplication() {
         }
         handler.postDelayed(refreshWidget, 60000)
         val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        val stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
-        sensorManager.registerListener(StepService, stepSensor, SensorManager.SENSOR_DELAY_NORMAL)
+        try {
+            val stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
+            if (stepSensor != null) {
+                // 🛡️ CRITICAL FIX: Check Permission before Registering (Prevents Crash on Fresh Install)
+                val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    androidx.core.content.ContextCompat.checkSelfPermission(
+                        this, 
+                        android.Manifest.permission.ACTIVITY_RECOGNITION
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                } else {
+                    true
+                }
+
+                if (hasPermission) {
+                    sensorManager.registerListener(StepService, stepSensor, SensorManager.SENSOR_DELAY_NORMAL)
+                    aapsLogger.debug("StepService registered")
+                } else {
+                    aapsLogger.debug("StepService SKIPPED (No Permission)")
+                }
+            }
+        } catch (e: Exception) {
+            aapsLogger.error("StepService registration failed", e)
+        }
         config.appInitialized = true
         aapsLogger.debug("doInit end")
     }
