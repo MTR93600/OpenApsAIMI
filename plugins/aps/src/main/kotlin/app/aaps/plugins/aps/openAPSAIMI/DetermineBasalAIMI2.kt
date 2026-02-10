@@ -2423,7 +2423,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val predicted = predictedBg.toDouble()
         val overshoot = (predicted - targetBg).coerceAtLeast(0.0)
         val normalized = (overshoot / 80.0).coerceIn(0.0, 1.0)
-        val boost = 1.0 + 0.05 + 0.15 * normalized
+        // TIR 70-140 Optimization: Cap aggression to 10% (1.10x) to prevent stacking with high MaxSMB
+        val boost = 1.0 + 0.05 + 0.05 * normalized
         val guardScale = if (overshoot > 10 && (bg - hypoThreshold) > 5.0) {
             (0.4 + 0.3 * normalized).coerceAtMost(0.85)
         } else 0.0
@@ -3661,9 +3662,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val normalizedRise = ((predictedBg - targetBg) / 70.0f).coerceIn(0.0f, 1.0f)
         if (normalizedRise > 0.3f && combinedDelta > 2.0f && acceleration > 0.3f) return true
         
-        // 3. [FIX] Brute Force Rise (No Acceleration needed if Delta is huge)
-        // If BG is rising +5 mg/dL/min, it IS a meal/carb impact, even if linear.
-        if (combinedDelta > 5.0f || delta > 5.0f) return true
+        // 3. [FIX] Smart Rise Detection (TIR 70-140)
+        // Require acceleration OR sustained high delta, rejecting single-point noise
+        val isHighNoise = (delta > 5.0f && acceleration < 0.0f) // Sharp jump but slowing down
+        if (!isHighNoise && (combinedDelta > 6.0f || (delta > 5.0f && acceleration > 0.5f))) return true
 
         return false
     }
