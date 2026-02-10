@@ -1009,15 +1009,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // 3. Ajustement en fonction de l'activité physique (Via ActivityContext)
     when (activityContext.state) {
         app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE -> {
-             diaMinutes *= 0.7f
-             // reasonBuilder.append(context.getString(R.string.reason_high_activity)) // Using Bio-Sync reason now
+             // FIX: Softened DIA reduction (was x0.7) to prevent artificial IOB drop.
+             // Strategy: Target 150 mg/dL + Prefer Basal (Handled in ContextEngine/DetermineBasal)
+             diaMinutes *= 0.95f 
+             // reasonBuilder.append("Sport Intense: DIA x0.95 (Gentle)")
         }
         app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.MODERATE -> {
-             diaMinutes *= 0.8f
-             reasonBuilder.append(" • Moderate Activity ➝ x0.8\n")
+             diaMinutes *= 0.98f
+             reasonBuilder.append(" • Moderate Activity ➝ x0.98\n")
         }
         app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.LIGHT -> {
-             diaMinutes *= 0.9f
+             diaMinutes *= 1.0f
         }
         else -> {
             // REST
@@ -3764,7 +3766,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🚀 MEAL ADVISOR: Hydrate COB if Trigger is active (Fixes DB latency)
         // Moved to helper to avoid VerifyError (Method too large/complex)
         hydrateMealDataIfTriggered(mealData)
-        
+
         // Restore variable needed for later logic (Fix Unresolved Reference)
         val isExplicitAdvisorRun = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
 
@@ -4487,6 +4489,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🎯 CONTEXT MODULE INTEGRATION
         // ═══════════════════════════════════════════════════════════════════
         
+
+        // 🔧 USER REQUEST: Context State Variables (Target Override)
+        var contextTargetOverride: Double? = null
+
         val contextEnabled = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIContextEnabled)
         
         if (contextEnabled) {
@@ -4536,7 +4542,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     }
                     
                     if (contextInfluence.preferBasal) {
-                        consoleLog.add("  ⚠️ Prefers TEMP BASAL over SMB")
+                        consoleLog.add("  ⚠️ Prefers TEMP BASAL over SMB (SMB Disabled)")
+                        // 1. Enforce Basal Preference: Disable SMBs (User Request)
+                        maxSMB = 0.0
+                        
+                        // 2. Target Elevation for Sport (User Request: 140-150)
+                        // If we are in an Activity context that requests Basal Preference (Intense/Mod), elevate target.
+                        if (contextSnapshot.hasActivity) {
+                             contextTargetOverride = 150.0
+                             consoleLog.add("  🎯 Sport Target Override -> 150 mg/dL")
+                        }
                     }
                     
                     // Log reasoning
@@ -5127,6 +5142,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var target_bg = (profile.min_bg + profile.max_bg) / 2
         var min_bg = profile.min_bg
         var max_bg = profile.max_bg
+
+        // 🔧 USER REQUEST: Apply Context Target Override (e.g. Sport 150)
+        if (contextTargetOverride != null) {
+            val override = contextTargetOverride!!
+            if (min_bg < override) min_bg = override
+            if (max_bg < override) max_bg = override
+        }
 
         var sensitivityRatio: Double
         val high_temptarget_raises_sensitivity = profile.exercise_mode || profile.high_temptarget_raises_sensitivity
@@ -7460,7 +7482,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val estimatedCarbsTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
         val timeSinceEstimateMin = (System.currentTimeMillis() - estimatedCarbsTime) / 60000.0
 
-        if (estimatedCarbs > 10.0 && timeSinceEstimateMin in 0.0..120.0 && bg >= 60) {
+        // 🛡️ CRITICAL FIX (Zombie Meal Bug): 
+        // We limit the "Passive" window to 20 minutes (was 120).
+        // If > 20 mins, we assume the meal is either consumed or handled by standard COB logic.
+        // Re-calculating "Carbs/IC - IOB" after 90 mins with decayed IOB causes massive dangerous boluses.
+        val maxPassiveWindow = if (isExplicitTrigger) 120.0 else 20.0
+
+        if (estimatedCarbs > 10.0 && timeSinceEstimateMin in 0.0..maxPassiveWindow && bg >= 60) {
             // Refractory Check (Safety)
             // 🚀 BYPASS if Explicit Trigger (User clicked Snap&Go)
             if (!isExplicitTrigger && hasReceivedRecentBolus(45, lastBolusTime)) {
@@ -7468,7 +7496,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
             
             // FIX: Removed delta > 0.0 condition - Meal Advisor should work even if BG is stable/falling
-            // The refractory check, BG floor (>=60), and time window (120min) are sufficient safety
+            // The refractory check, BG floor (>=60), and time window (120min/20min) are sufficient safety
             if (modesCondition || isExplicitTrigger) { 
                 val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal)
                 val safeMax = if (maxBasalPref > 0.1) maxBasalPref else profile.max_basal
@@ -7615,12 +7643,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun hydrateMealDataIfTriggered(mealData: MealData) {
         // We handle the read directly to keep the stack simple in the main method
         val isExplicitAdvisorRun: Boolean = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
-        
+
         if (isExplicitAdvisorRun) {
             val fallbackCarbs: Double = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
             // Use explicit comparison (0.0) and safe casting
             if (mealData.mealCOB < 0.1 && fallbackCarbs > 0.0) {
-                 mealData.mealCOB = fallbackCarbs 
+                 mealData.mealCOB = fallbackCarbs
                  consoleLog.add("⚡ COB HYDRATION: Injected ${fallbackCarbs.toInt()}g from Advisor Prefs (DB latency bypass)")
             }
         }

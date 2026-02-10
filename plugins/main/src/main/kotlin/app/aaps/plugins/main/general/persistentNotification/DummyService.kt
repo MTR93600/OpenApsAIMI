@@ -68,14 +68,12 @@ class DummyService : DaggerService() {
             aapsLogger.debug("Starting DummyService with ID ${notificationHolder.notificationID}")
             
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                // On Android 14+, we MUST explicitly declare the type if strict rules apply
-                // Ideally we check permissions here, but catching SecurityException is robust enough
-                // and handles cases where permissions are revoked at runtime.
-                // We use the 'location' type as checking permissions and passing 0 would also crash if manifest implies location.
+                // Android 14+: Use DATA_SYNC instead of LOCATION (no need for location permission)
+                // DATA_SYNC is more appropriate for AndroidAPS which syncs health/glucose data
                 startForeground(
                     notificationHolder.notificationID, 
                     notificationHolder.notification,
-                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
                 )
             } else {
                 startForeground(notificationHolder.notificationID, notificationHolder.notification)

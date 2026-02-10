@@ -46,6 +46,7 @@ class NSClientAddUpdateWorker(
     @Inject lateinit var rxBus: RxBus
     @Inject lateinit var storeDataForDb: StoreDataForDb
     @Inject lateinit var profileUtil: ProfileUtil
+    @Inject lateinit var contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager
 
     override suspend fun doWorkAndLog(): Result {
         val treatments = dataWorkerStorage.pickupJSONArray(inputData.getLong(DataWorkerStorage.STORE_KEY, -1))
@@ -113,6 +114,40 @@ class NSClientAddUpdateWorker(
                         storeDataForDb.addToBolusCalculatorResults(bolusCalculatorResult)
                     } ?: aapsLogger.error("Error parsing BolusCalculatorResult json $json")
 
+                // AIMI Context sync from Nightscout
+                eventType == TE.Type.NOTE.text && JsonHelper.safeGetString(json, "notes")?.startsWith("AIMI_CONTEXT:") == true ->
+                    if (preferences.get(BooleanKey.NsClientAcceptTherapyEvent) || config.AAPSCLIENT) {
+                        val note = JsonHelper.safeGetString(json, "notes") ?: ""
+                        aapsLogger.info(LTag.NSCLIENT, "[NS] ✅ AIMI_CONTEXT case MATCHED! note=$note")
+                        try {
+                            // Parse: "AIMI_CONTEXT:ctx_123:{json}"
+                            val parts = note.split(":", limit = 3)
+                            if (parts.size == 3) {
+                                val intentId = parts[1]
+                                val intentJson = parts[2]
+                                
+                                aapsLogger.debug(LTag.NSCLIENT, "[NS] Received AIMI context: $intentId")
+                                
+                                val intent = app.aaps.plugins.aps.openAPSAIMI.context.ContextIntentDeserializer.deserialize(intentJson, aapsLogger)
+                                if (intent != null) {
+                                    contextManager.injectContextFromNS(intentId, intent)
+                                    aapsLogger.info(LTag.NSCLIENT, "[NS] ✅ Injected AIMI context: $intentId")
+                                } else {
+                                    aapsLogger.warn(LTag.NSCLIENT, "[NS] Failed to parse AIMI context: $intentJson")
+                                }
+                            } else {
+                                aapsLogger.warn(LTag.NSCLIENT, "[NS] AIMI note wrong format (parts=${parts.size}): $note")
+                            }
+                        } catch (e: Exception) {
+                            aapsLogger.error(LTag.NSCLIENT, "[NS] Exception parsing AIMI context: ${e.message}", e)
+                        }
+                        
+                        // Also store as regular TherapyEvent for history
+                        TE.fromJson(json)?.let { therapyEvent ->
+                            storeDataForDb.addToTherapyEvents(therapyEvent)
+                        }
+                    }
+
                 eventType == TE.Type.CANNULA_CHANGE.text ||
                     eventType == TE.Type.INSULIN_CHANGE.text ||
                     eventType == TE.Type.SENSOR_CHANGE.text ||
@@ -124,6 +159,11 @@ class NSClientAddUpdateWorker(
                     eventType == TE.Type.NOTE.text ||
                     eventType == TE.Type.PUMP_BATTERY_CHANGE.text                 ->
                     if (preferences.get(BooleanKey.NsClientAcceptTherapyEvent) || config.AAPSCLIENT) {
+                        // Debug: check if this catches AIMI contexts that should go to special case
+                        val noteContent = JsonHelper.safeGetString(json, "notes") ?: ""
+                        if (noteContent.startsWith("AIMI_CONTEXT:")) {
+                            aapsLogger.warn(LTag.NSCLIENT, "[NS] ⚠️ AIMI_CONTEXT caught by generic NOTE case! This is a BUG. note=$noteContent")
+                        }
                         TE.fromJson(json)?.let { therapyEvent ->
                             storeDataForDb.addToTherapyEvents(therapyEvent)
                         } ?: aapsLogger.error("Error parsing TherapyEvent json $json")

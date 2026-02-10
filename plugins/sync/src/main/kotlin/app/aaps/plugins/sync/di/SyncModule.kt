@@ -54,6 +54,7 @@ import dagger.android.ContributesAndroidInjector
 abstract class SyncModule {
 
     @ContributesAndroidInjector abstract fun contributesNSClientFragment(): NSClientFragment
+    @ContributesAndroidInjector abstract fun contributesRemoteControlFragment(): app.aaps.plugins.sync.nsShared.RemoteControlFragment
 
     @ContributesAndroidInjector abstract fun contributesNSClientService(): NSClientService
     @ContributesAndroidInjector abstract fun contributesNSClientV3Service(): NSClientV3Service
@@ -79,6 +80,10 @@ abstract class SyncModule {
     @ContributesAndroidInjector abstract fun contributesWearDataReceiver(): WearDataReceiver
     @ContributesAndroidInjector abstract fun contributesWatchUpdaterService(): DataLayerListenerServiceMobile
     @ContributesAndroidInjector abstract fun contributesCustomWatchfaceInfosActivity(): CwfInfosActivity
+    
+    // Premium License Dialogs
+    @ContributesAndroidInjector abstract fun contributesLicenseKeyDialog(): app.aaps.plugins.sync.nsShared.LicenseKeyDialog
+    @ContributesAndroidInjector abstract fun contributesRemoteAccessLoginDialog(): app.aaps.plugins.sync.nsShared.RemoteAccessLoginDialog
 
     @Module
     open class Provide {

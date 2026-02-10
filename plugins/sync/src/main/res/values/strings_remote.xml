@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Remote Control Panel -->
+    <string name="remote_control_title">Remote Control</string>
+    <string name="remote_control_security">Security</string>
+    <string name="enter_control_pin">Enter Control PIN</string>
+    
+    <!-- PIN Setup -->
+    <string name="setup_remote_pin">🔐 Setup Remote PIN</string>
+    <string name="remote_pin_setup_required">Veuillez configurer un code PIN sécurisé pour activer les commandes distantes.</string>
+    <string name="new_pin_label">Nouveau PIN (4-6 chiffres)</string>
+    <string name="confirm_pin_label">Confirmer le PIN</string>
+    <string name="save_pin">Enregistrer le PIN</string>
+    <string name="pin_cannot_be_empty">Le PIN ne peut pas être vide</string>
+    <string name="pin_too_short">Le PIN doit contenir au moins 4 chiffres</string>
+    <string name="pins_do_not_match">Les PINs ne correspondent pas</string>
+    <string name="pin_saved_successfully">PIN enregistré avec succès</string>
+    <string name="enter_your_pin">Entrer le PIN</string>
+    <string name="invalid_pin">PIN invalide. Veuillez réessayer.</string>
+    
+    <!-- Quick Actions -->
+    <string name="quick_actions">⚡ Quick Actions</string>
+    <string name="quick_action_sport">🏃 Sport</string>
+    <string name="quick_action_meal">🍽️ Meal</string>
+    <string name="quick_action_stress">😰 Stress</string>
+    <string name="quick_action_cancel_all">❌ Cancel All</string>
+    <string name="minutes">min</string>
+    <string name="send_mode_button">ENVOYER</string>
+    <string name="mode_name_placeholder">Mode Name</string>
+    <string name="mode_description_placeholder">Description</string>
+    <string name="time_remaining_placeholder">45 min restantes</string>
+    <string name="duration_hint">60</string>
+    <string name="mode_icon_description">Mode icon</string>
+    <string name="active_mode_icon_description">Active mode icon</string>
+    
+    <!-- Advanced Commands -->
+    <string name="advanced_command">🛠️ Advanced</string>
+    <string name="custom_command_hint">e.g., CONTEXT EXERCISE LIGHT</string>
+    <string name="send_command">Send Command</string>
+    <string name="command_cannot_be_empty">Command cannot be empty</string>
+    
+    <!-- Active Contexts -->
+    <string name="active_contexts">📊 Active Contexts</string>
+    <string name="no_active_contexts">No active contexts</string>
+    <string name="context_remaining_time">%1$s - %2$d min remaining</string>
+    
+    <!-- Confirmations & Feedback -->
+    <string name="confirm_cancel_all_contexts">Are you sure you want to cancel ALL active contexts?</string>
+    <string name="command_sent_successfully">✅ Command sent: %1$s</string>
+    <string name="command_failed_to_send">❌ Failed to send command</string>
+    <string name="command_error">Error: %1$s</string>
+    
+    <!-- Plugin Description -->
+    <string name="remote_control_description">Secure remote control panel for parents to manage AIMI contexts</string>
+    
+    <!-- Fragment Headers -->
+    <string name="security_header">🔒 Sécurité</string>
+    <string name="pin_instruction">Entrez votre code PIN pour activer les boutons</string>
+    <string name="active_now_header">🟢 EN COURS MAINTENANT</string>
+    <string name="no_active_modes">Aucun mode actif</string>
+    <string name="activate_mode_header">📋 ACTIVER UN MODE</string>
+    
+    <!-- Tab Titles -->
+    <string name="tab_modes">MODES</string>
+    <string name="tab_contexts">CONTEXTS</string>
+    <string name="tab_active">EN COURS</string>
+    <string name="tab_llm">LLM</string>
+    
+    <!-- LLM Tab -->
+    <string name="llm_context_header">🤖 Génération intelligente</string>
+    <string name="llm_context_description">Décrivez votre situation en langage naturel et l\'IA déterminera automatiquement les contexts adaptés.</string>
+    <string name="llm_examples">Exemples :\n• "Heavy cardio 1h30"\n• "Malade avec fièvre"\n• "Stress exams demain"</string>
+    <string name="llm_input_hint">Décrivez votre situation…</string>
+    <string name="send_to_llm">GÉNÉRER CONTEXT</string>
+    <string name="llm_status_processing">Génération en cours…</string>
+    <string name="llm_status_success">Context créé !</string>
+    <string name="llm_status_error">Erreur : %1$s</string>
+    
+    <!-- Premium License Key -->
+    <string name="license_key_title">💎 Premium License</string>
+    <string name="license_key_message">Enter your premium license key to unlock Remote Control</string>
+    <string name="license_key_hint">AIMI-PRO-2024-XXXXX</string>
+    <string name="license_key_required">License key is required</string>
+    <string name="license_key_invalid">Invalid license key. Please contact support.</string>
+    <string name="activate_license">Activate</string>
+    <string name="license_activated">Premium license activated successfully!</string>
+    
+    <!-- Access Password Protection -->
+    <string name="remote_access_login_title">🔒 Remote Control Access</string>
+    <string name="remote_access_login_message">Enter the access password to unlock Remote Control</string>
+    <string name="access_password">Access Password</string>
+    <string name="unlock">Unlock</string>
+    <string name="password_required">Password is required</string>
+    <string name="remote_access_invalid_password">Invalid password. Please try again.</string>
+    <string name="remote_access_password_configured">Access password configured successfully</string>
+    <string name="remote_access_session_expired">Session expired. Please re-authenticate.</string>
+    <string name="configure_access_password">Configure Access Password</string>
+    <string name="access_password_setup_message">Set a password to protect Remote Control access. You will share this password with authorized users.</string>
+    <string name="password_min_length">Password must be at least 6 characters</string>
+</resources>
