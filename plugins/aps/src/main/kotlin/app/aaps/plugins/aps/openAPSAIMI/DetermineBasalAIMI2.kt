@@ -2130,19 +2130,38 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bg: Float,
         targetBg: Float,
         delta: Float,
+        avgDelta: Float,
+        combinedDelta: Float,
+        minDeviation: Double,
         lastBolusVolume: Double,
         reason: StringBuilder
     ): Boolean {
         // 1. Slow Creep (Target + 15)
         if (bg <= targetBg + 15) return false
         
-        // 2. Rising
-        if (delta <= 0) return false
+        // 2. Nature of the Drift: Must be Flat or Rising Slow (CONFIRMED BY 15m AVG & DEVIATION)
+        // [FIX] Plateau/Hovering Detection with Deep Analysis:
+        // - Instant Delta must be > -1.5 (Not falling)
+        // - Avg Delta (15m) must be > -1.5 (Sustained not falling)
+        // - Both must be < 6.0 (Not a spike)
         
-        // 3. No recent bolus activity (Clean slate)
+        if (delta < -1.5 || avgDelta < -1.5) return false // Falling real (instant or trend)
+        if (delta > 6.0 || avgDelta > 6.0) return false // Rising fast (Not a creep)
+        
+        // 3. Confirmation by MinDeviation (Are we stuck *worse* than IOB allows?)
+        // If deviation is positive, it means BG > IOB prediction -> Resistance/Drift
+        // If combinedDelta is also weak (-1 to +2), it confirms the "stuck" nature.
+        val isStuck = minDeviation > 0 && combinedDelta > -1.0 && combinedDelta < 3.0
+        
+        if (!isStuck) {
+             // Fallback: If deviation isn't available/positive, ensure delta is strictly flat
+             if (delta < -0.5) return false 
+        }
+
+        // 4. No recent bolus activity (Clean slate)
         if (lastBolusVolume > 0.1) return false
         
-        reason.append("🧹 Drift Terminator: Slow creep detected without recent bolus -> ENGAGED\n")
+        reason.append("🧹 Drift Terminator: Plateau detected (Δ${"%.1f".format(delta)} Avg${"%.1f".format(avgDelta)} Dev${"%.0f".format(minDeviation)}) -> ENGAGED\n")
         return true
     }
 
@@ -5071,8 +5090,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 🧹 Innovation: FCL 5.0 Drift Terminator (Blocked by Post-Hypo)
         // Independent Refractory: Only block if 'Small' was given recently.
-        if (!nightbis && autodrive && bg >= 80 && !isPostHypo && !hasReceivedRecentBolus(45, lastBolusTimeMs ?: 0L) && isDriftTerminatorCondition(bg.toFloat(), terminatorTarget.toFloat(), delta.toFloat(), totalBolusLastHour, reason) && modesCondition) {
+        if (!nightbis && autodrive && bg >= 80 && !isPostHypo && !hasReceivedRecentBolus(45, lastBolusTimeMs ?: 0L) && isDriftTerminatorCondition(bg.toFloat(), terminatorTarget.toFloat(), delta.toFloat(), shortAvgDelta.toFloat(), combinedDelta.toFloat(), mealData.slopeFromMinDeviation, totalBolusLastHour, reason) && modesCondition) {
             val terminatortap = dynamicPbolusSmall
+
+            // [FIX] Force-Enable SMB for Drift Terminator if blocked by Basal First
+            // Prudent Learner (<0.75) may have triggered Basal-First (MaxSMB=0), but Drift Terminator needs to act.
+            if (this.maxSMB < 0.1) {
+                this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
+                // Fallback safe if preference is also zero/missing
+                if (this.maxSMB < 0.1) this.maxSMB = 0.5
+                reason.append(" [Drift Override]")
+                consoleLog.add("⚡ DriftTerminator: Overrode Basal-First block (MaxSMB 0.0 -> ${"%.2f".format(this.maxSMB)})")
+            }
+
             reason.append("→ Drift Terminator (Trigger +${terminatorThresholdAdd}): Micro-Tap ${terminatortap}U\n")
             consoleLog.add("AD_EARLY_TBR_TRIGGER rate=0.0 duration=0 reason=DriftTerminator_Tap") // Actually a bolus tap, not TBR, but fits "Early Action" category
             consoleLog.add("AD_SMALL_PREBOLUS_TRIGGER amount=$terminatortap reason=DriftTerminator")
