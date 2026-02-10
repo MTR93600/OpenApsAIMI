@@ -5090,7 +5090,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 🧹 Innovation: FCL 5.0 Drift Terminator (Blocked by Post-Hypo)
         // Independent Refractory: Only block if 'Small' was given recently.
-        if (!nightbis && autodrive && bg >= 80 && !isPostHypo && !hasReceivedRecentBolus(45, lastBolusTimeMs ?: 0L) && isDriftTerminatorCondition(bg.toFloat(), terminatorTarget.toFloat(), delta.toFloat(), shortAvgDelta.toFloat(), combinedDelta, mealData.minDeviation, totalBolusLastHour, reason) && modesCondition) {
+        if (!nightbis && autodrive && bg >= 80 && !isPostHypo && !hasReceivedRecentBolus(45, lastBolusTimeMs ?: 0L) && isDriftTerminatorCondition(bg.toFloat(), terminatorTarget.toFloat(), delta.toFloat(), shortAvgDelta.toFloat(), combinedDelta.toFloat(), mealData.slopeFromMinDeviation, totalBolusLastHour, reason) && modesCondition) {
             val terminatortap = dynamicPbolusSmall
 
             // [FIX] Force-Enable SMB for Drift Terminator if blocked by Basal First
