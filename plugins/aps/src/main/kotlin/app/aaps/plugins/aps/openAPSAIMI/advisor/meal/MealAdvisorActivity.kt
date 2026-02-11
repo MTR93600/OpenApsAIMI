@@ -51,6 +51,18 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
 
         // UI Setup (Code Layout)
         val bgColor = Color.parseColor("#10141C")
+
+        // 1. Create the ScrollView (Parent)
+        val scrollView = android.widget.ScrollView(this).apply {
+             layoutParams = android.view.ViewGroup.LayoutParams(
+                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                 android.view.ViewGroup.LayoutParams.MATCH_PARENT
+             )
+             isFillViewport = true
+             setBackgroundColor(bgColor)
+        }
+
+        // 2. Create the Content Layout (Child of ScrollView)
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 32, 32, 32)
@@ -218,7 +230,9 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         
         layout.addView(detailsLayout)
 
-        setContentView(layout)
+        // Add content to ScrollView
+        scrollView.addView(layout)
+        setContentView(scrollView)
     }
 
     private fun dispatchTakePictureIntent() {
@@ -226,6 +240,11 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.CAMERA), 100)
         } else {
             val takePictureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+            // Force Back Camera (Try multiple extras as manufacturers differ)
+            takePictureIntent.putExtra("android.intent.extras.CAMERA_FACING", 0)
+            takePictureIntent.putExtra("android.intent.extras.LENS_FACING_FRONT", 0)
+            takePictureIntent.putExtra("android.intent.extra.USE_FRONT_CAMERA", false)
+
             if (takePictureIntent.resolveActivity(packageManager) != null) {
                 startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE)
             } else {
