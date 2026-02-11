@@ -381,11 +381,21 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
         super.onResume()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
-                ToastUtils.errorToast(this, "Permission to manage files is required for this app to work.")
-             } //else {
-            //     // La permission est accordée, continuez normalement
-            //     ToastUtils.okToast(this, "Permission granted. Thank you!")
-            // }
+                // [FIX] Force active prompt instead of passive toast
+                checkAndRequestPermissions()
+            } else {
+                // [FIX] Ensure Documents/AAPS exists for fresh installs
+                try {
+                    val aapsDir = java.io.File(Environment.getExternalStorageDirectory(), "Documents/AAPS")
+                    if (!aapsDir.exists()) {
+                        if (aapsDir.mkdirs()) {
+                            ToastUtils.okToast(this, "Created Documents/AAPS folder")
+                        }
+                    }
+                } catch (e: Exception) {
+                    ToastUtils.errorToast(this, "Error creating AAPS dir: ${e.message}")
+                }
+            }
         }
         if (config.appInitialized) binding.splash.visibility = View.GONE
         if (!isProtectionCheckActive) {

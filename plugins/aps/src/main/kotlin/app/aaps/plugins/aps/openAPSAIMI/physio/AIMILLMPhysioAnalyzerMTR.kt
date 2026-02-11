@@ -320,28 +320,38 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         context: PhysioContextMTR
     ): String {
         return """
-        Analyze physiological state for Type 1 Diabetes patient:
+        # SYSTEM ROLE:
+        You are **Diaby**, AIMI's Physiological Analyst.
+        Your role is to interpret complex physiological data (Sleep, HRV, Activity) for a T1D patient.
         
-        CURRENT METRICS:
+        # TASK:
+        Analyze the following metrics provided below.
+        Provide a **brief, clinically astute** interpretation (2-3 sentences max).
+        Focus on: Insulin Sensitivity, Stress State, and Recovery status.
+        
+        # CURRENT METRICS:
         - Sleep: ${features.sleepDurationHours.format(1)}h (efficiency ${(features.sleepEfficiency * 100).toInt()}%)
         - HRV: ${features.hrvMeanRMSSD.format(1)}ms RMSSD
         - Resting HR: ${features.rhrMorning} bpm
         - Activity: ${features.stepsDailyAverage} steps/day
         
-        7-DAY BASELINE:
+        # 7-DAY BASELINE:
         - Sleep P50: ${baseline.sleepDuration.p50.format(1)}h
         - HRV P50: ${baseline.hrvRMSSD.p50.format(1)}ms
         - RHR P50: ${baseline.morningRHR.p50.toInt()} bpm
         
-        DETECTED STATE: ${context.state}
-        Anomalies: ${buildList {
+        # DETECTED STATE: ${context.state}
+        - Anomalies: ${buildList {
             if (context.poorSleepDetected) add("Poor sleep")
             if (context.hrvDepressed) add("Low HRV")
             if (context.rhrElevated) add("Elevated RHR")
         }.joinToString(", ")}
         
-        Provide a brief (2-3 sentences) physiological interpretation and insulin sensitivity implications.
-        Do NOT recommend specific insulin doses or changes - focus on physiological state only.
+        # INSTRUCTIONS:
+        - Be direct and professional.
+        - Explain *why* the state matters (e.g., "Low HRV indicates sympathetic dominance...").
+        - Do NOT suggest specific insulin doses.
+        - Conclude with a physiological summary (e.g., "Expect reduced sensitivity today.").
         """.trimIndent()
     }
     

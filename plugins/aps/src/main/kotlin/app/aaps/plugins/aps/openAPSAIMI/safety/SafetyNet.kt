@@ -11,9 +11,9 @@ import kotlin.math.max
  * 
  * Zone Architecture:
  * - Zone 0.5: Soft Landing (Target → Target+15) - Gentle convergence boost
- * - Zone 1: Strict Guard (< 120) - Hypo prevention with UAM bypass
- * - Zone 2: Buffer (120-160) - Progressive SMB scaling
- * - Zone 3: Reactor (> 160) - Full aggression
+ * - Zone 1: Strict Guard (< 130) - Hypo prevention with UAM bypass
+ * - Zone 2: Buffer (130-170) - Progressive SMB scaling
+ * - Zone 3: Reactor (> 170) - Full aggression
  */
 object SafetyNet {
 
@@ -73,12 +73,13 @@ object SafetyNet {
             }
         }
 
-        // 3. ZONE 1: STRICT GUARD (< 120 mg/dL)
+        // 3. ZONE 1: STRICT GUARD (< 130 mg/dL)
+        // [TIR 70-140 OPTIMIZATION] Limit extended to 130 to protect the 140 ceiling
         // Standard: Clamp to 50% to prevent deep hypos
         // Exception: UAM ROCKET BYPASS
         val isUamRise = delta > 6.0 || shortAvgDelta > 6.0
 
-        if (bg < 120.0) {
+        if (bg < 130.0) {
             if (isUamRise) {
                 // 🚀 ROCKET BYPASS: Meal detected early
                 return maxSmbLow
@@ -89,15 +90,15 @@ object SafetyNet {
             return maxSmbLow * strictFactor
         }
 
-        // 4. ZONE 2: BUFFER / TRANSITION (120 - 160 mg/dL)
-        if (bg < 160.0) {
+        // 4. ZONE 2: BUFFER / TRANSITION (130 - 170 mg/dL)
+        if (bg < 170.0) {
             // Predictive Check
-            if (eventualBg < 120.0) {
+            if (eventualBg < 130.0) {
                 return maxSmbLow
             }
             
             // Linear interpolation
-            val progress = (bg - 120.0) / (160.0 - 120.0)
+            val progress = (bg - 130.0) / (170.0 - 130.0)
             val range = maxSmbHigh - maxSmbLow
             return maxSmbLow + (range * progress)
         }
