@@ -138,7 +138,6 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         // COMPACT LOGING (User Request: "concis, en anglais, écran étroit")
         // "PHYSIO ctx: steps15=, hr=, hrv=, conf= -> brake=, stress= -> smbMult="
         if (!cappedMultipliers.isNeutral()) {
-        if (!cappedMultipliers.isNeutral()) {
             val logMsg = "🏥 PHYSIO ctx: State=${physioContext.state} (${(physioContext.confidence*100).toInt()}%) | " + 
                          "steps15=${snapshot.stepsLast15m}, hr=${snapshot.hrNow} " +
                          "-> ${cappedMultipliers.appliedCaps} -> ISF x${cappedMultipliers.isfFactor.format(2)}, SMB x${cappedMultipliers.smbFactor.format(2)}"
