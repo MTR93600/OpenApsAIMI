@@ -94,7 +94,7 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         // All supported vision providers
         val providers = arrayOf(
             "OpenAI (GPT-4o Vision)", 
-            "Gemini (2.5 Flash)", 
+            "Gemini (2.0 Flash)", 
             "DeepSeek (Chat)",
             "Claude (3.5 Sonnet)"
         )
