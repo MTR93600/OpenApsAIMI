@@ -15,7 +15,7 @@ import java.net.URL
  * Uses gemini-3.0-pro-preview model with enhanced JSON mode
  */
 class GeminiVisionProvider(private val context: android.content.Context) : AIVisionProvider {
-    override val displayName = "Gemini (3.0 Pro)"
+    override val displayName = "Gemini (2.0 Flash)"
     override val providerId = "GEMINI"
     
     private val geminiResolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
@@ -34,8 +34,8 @@ class GeminiVisionProvider(private val context: android.content.Context) : AIVis
     }
     
     private fun callGeminiAPI(apiKey: String, base64Image: String): String {
-        // 1. Try Primary (Gemini 3 Pro)
-        val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-3-pro-preview")
+        // 1. Try Primary (Gemini 2.0 Flash - Fast & Efficient)
+        val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-2.0-flash-exp")
         
         try {
             return executeRequest(apiKey, base64Image, primaryModel)
@@ -43,9 +43,9 @@ class GeminiVisionProvider(private val context: android.content.Context) : AIVis
             // 2. Check for Quota Exhaustion (429)
             val msg = e.message?.lowercase() ?: ""
             if (msg.contains("429") || msg.contains("quota") || msg.contains("resource_exhausted")) {
-                // 3. Fallback to Flash
-                val fallbackModel = "gemini-2.5-flash"
-                android.util.Log.w("AIMI_GEMINI", "Vision Quota Exceeded. Fallback to $fallbackModel")
+                // 3. Fallback to 1.5 Flash
+                val fallbackModel = "gemini-1.5-flash-latest"
+                android.util.Log.w("AIMI_GEMINI", "Scale-down Fallback: $fallbackModel")
                 return executeRequest(apiKey, base64Image, fallbackModel)
             }
             throw e
@@ -62,7 +62,7 @@ class GeminiVisionProvider(private val context: android.content.Context) : AIVis
         
         // CRITICAL FIX #1: Increase timeout to prevent premature connection closure
         connection.connectTimeout = 30000  // 30 seconds
-        connection.readTimeout = 45000     // 45 seconds
+        connection.readTimeout = 60000     // 60 seconds (Increased for detailed analysis)
         
         val jsonBody = JSONObject().apply {
             put("contents", JSONArray().apply {
@@ -81,8 +81,8 @@ class GeminiVisionProvider(private val context: android.content.Context) : AIVis
                 })
             })
             put("generationConfig", JSONObject().apply {
-                // CRITICAL FIX #2: Increase token limit from 800 to 2048
-                put("maxOutputTokens", 2048)
+                // CRITICAL FIX #2: Increase token limit from 2048 to 8192 to prevent JSON truncation
+                put("maxOutputTokens", 8192)
                 put("temperature", 0.3)
                 put("responseMimeType", "application/json")  // Force JSON output
             })
