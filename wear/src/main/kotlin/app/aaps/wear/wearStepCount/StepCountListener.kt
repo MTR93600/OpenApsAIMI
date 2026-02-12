@@ -96,16 +96,20 @@ class StepCountListener(
                     val stepCount = event.values[0].toInt()
                     if (previousStepCount >= 0) {
                         var recentStepCount = stepCount - previousStepCount
-                        if (stepsMap.contains(now)) {
-                            recentStepCount += stepsMap.getValue(now)
+                        synchronized(stepsMap) {
+                            if (stepsMap.contains(now)) {
+                                recentStepCount += stepsMap.getValue(now)
+                            }
+                            stepsMap[now] = recentStepCount
                         }
-                        stepsMap[now] = recentStepCount
                     }
                     previousStepCount = stepCount
 
-                    if (stepsMap.size > numOf5MinBlocksToKeep) {
-                        val removeBefore = now - numOf5MinBlocksToKeep
-                        stepsMap.entries.removeIf { it.key < removeBefore }
+                    synchronized(stepsMap) {
+                        if (stepsMap.size > numOf5MinBlocksToKeep) {
+                            val removeBefore = now - numOf5MinBlocksToKeep
+                            stepsMap.entries.removeIf { it.key < removeBefore }
+                        }
                     }
                 }
             }
@@ -118,17 +122,23 @@ class StepCountListener(
 
     private fun getStepsInLast5Min(): Int {
         val now = currentTimeIn5Min() - 1
-        return if (stepsMap.contains(now)) stepsMap.getValue(now) else 0
+        synchronized(stepsMap) {
+            return if (stepsMap.contains(now)) stepsMap.getValue(now) else 0
+        }
     }
 
     private fun getStepsInLast10Min(): Int {
         val tenMinAgo = currentTimeIn5Min() - 2
-        return if (stepsMap.contains(tenMinAgo)) stepsMap.getValue(tenMinAgo) else 0
+        synchronized(stepsMap) {
+            return if (stepsMap.contains(tenMinAgo)) stepsMap.getValue(tenMinAgo) else 0
+        }
     }
 
     private fun getStepsInLast15Min(): Int {
         val fifteenMinAgo = currentTimeIn5Min() - 3
-        return if (stepsMap.contains(fifteenMinAgo)) stepsMap.getValue(fifteenMinAgo) else 0
+        synchronized(stepsMap) {
+            return if (stepsMap.contains(fifteenMinAgo)) stepsMap.getValue(fifteenMinAgo) else 0
+        }
     }
 
     private fun getStepsInLast30Min(): Int {
@@ -236,9 +246,11 @@ class StepCountListener(
         var stepCount = 0
         val thirtyMinAgo = currentTimeIn5Min() - numberOf5MinIncrements
         val now = currentTimeIn5Min()
-        for (entry in stepsMap.entries) {
-            if (entry.key in (thirtyMinAgo + 1)..now) {
-                stepCount += entry.value
+        synchronized(stepsMap) {
+            for (entry in stepsMap.entries) {
+                if (entry.key in (thirtyMinAgo + 1)..now) {
+                    stepCount += entry.value
+                }
             }
         }
         return stepCount
