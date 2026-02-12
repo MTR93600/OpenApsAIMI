@@ -240,10 +240,11 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.CAMERA), 100)
         } else {
             val takePictureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-            // Force Back Camera (Try multiple extras as manufacturers differ)
-            takePictureIntent.putExtra("android.intent.extras.CAMERA_FACING", 0)
-            takePictureIntent.putExtra("android.intent.extras.LENS_FACING_FRONT", 0)
+            // Force Back Camera (Official & Manufacturer specific extras)
+            takePictureIntent.putExtra("android.intent.extras.CAMERA_FACING", 0) // 0 = BACK
+            takePictureIntent.putExtra("android.intent.extras.LENS_FACING_FRONT", 0) // Samsung hack: 0 usually means not front
             takePictureIntent.putExtra("android.intent.extra.USE_FRONT_CAMERA", false)
+            takePictureIntent.putExtra("android.intent.extras.LENS_FACING_BACK", 1) // Some others use 1 for BACK here
 
             if (takePictureIntent.resolveActivity(packageManager) != null) {
                 startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE)
