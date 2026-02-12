@@ -10,8 +10,6 @@ import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
-import app.aaps.plugins.aps.openAPSAIMI.physio.toSNSDominance
-import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

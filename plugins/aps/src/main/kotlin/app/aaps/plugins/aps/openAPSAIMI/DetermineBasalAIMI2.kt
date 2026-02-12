@@ -47,7 +47,7 @@ import app.aaps.plugins.aps.openAPSAIMI.model.PumpCaps
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.MealAggressionContext
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
-import app.aaps.plugins.aps.openAPSAIMI.physio.toSNSDominance // 🧬 Physio Extensions
+// 🧬 Physio Extensions removed - functionality moved to Adapter
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.ports.PkpdPort
@@ -305,14 +305,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // Helper to safely access learner (handles potential early access before injection)
     private val safeReactivityFactor: Double
         get() {
-            val base = if (::unifiedReactivityLearner.isInitialized) unifiedReactivityLearner.getCombinedFactor() else 1.0
-            
-            // 🧬 PHYSIO: SNS=0.8 -> +15% Boost
-            val snapshot = if (::physioAdapter.isInitialized) physioAdapter.getLatestSnapshot() else null
-            val sns = snapshot?.toSNSDominance() ?: 0.3
-            val mod = 1.0 + (sns - 0.3) * 0.3
-            
-            return base * mod
+            // 🛡️ PHYSIO: Integration Refactored. 
+            // Aggressive boosts removed. All physio modulation is now handled 
+            // by AIMIInsulinDecisionAdapterMTR via getMultipliers().
+            // We return only the Learner's factor here.
+            return if (::unifiedReactivityLearner.isInitialized) unifiedReactivityLearner.getCombinedFactor() else 1.0
         }
     @Inject lateinit var aapsLogger: AAPSLogger  // 📊 Logger for health monitoring
 
