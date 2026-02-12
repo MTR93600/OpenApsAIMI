@@ -379,28 +379,33 @@ data class PhysioContextMTR(
 
 
 /**
- * Convertit le contexte physiologique en facteur SNS dominance (0.0-1.0)
- * Scientific Rationale:
- * La stimulation sympathique (Stress, Sommeil pauvre) provoque une vasoconstriction périphérique.
- * Cela ralentit la diffusion de l'insuline depuis le tissu sous-cutané.
+ * Converts physiological context into a Risk Aversion Factor (0.0-1.0)
  * 
- * 0.0 = Parasympathique dominant (Relaxation, Perfusion optimale)
- * 1.0 = Sympathique dominant (Stress aigu, Vasoconstriction)
- * Ref: [AIMI Physio Cartography Section 4.1]
+ * CLINICAL SAFETY LOGIC:
+ * "In times of uncertainty or stress, play it safe."
+ * 
+ * 1.0 = Optimal State (Normal Operation, Full Confidence)
+ * <1.0 = Protective Mode (Reduce Aggression to avoid Hypo on sick/stressed body)
+ * 
+ * Mapping:
+ * - OPTIMAL -> 1.0 (Normal)
+ * - UNKNOWN -> 1.0 (Neutral/Fail-safe)
+ * - RECOVERY -> 0.9 (Mild Caution, -10%)
+ * - STRESS  -> 0.8 (High Caution, -20%)
+ * - INFECTION -> 0.8 (High Caution, -20%)
  */
-fun PhysioContextMTR.toSNSDominance(): Double {
+fun PhysioContextMTR.toRiskAversionFactor(): Double {
     return when (this.state) {
-        // High Sympathetic tone -> Vasoconstriction -> Delayed absorption
+        // Optimal or Unknown -> No Modulation (Neutral)
+        PhysioStateMTR.OPTIMAL, PhysioStateMTR.UNKNOWN -> 1.0 
+        
+        // Mild Caution (Recovery needed) -> 90% Aggressiveness
+        PhysioStateMTR.RECOVERY_NEEDED -> 0.9 
+        
+        // High Caution (Stress/Infection) -> 80% Aggressiveness
+        // We brake because stress/sickness makes insulin sensitivity unpredictable.
+        // Safety First: Avoid hypo > Avoid hyper.
         PhysioStateMTR.STRESS_DETECTED, PhysioStateMTR.INFECTION_RISK -> 0.8 
-        
-        // Moderate Sympathetic tone
-        PhysioStateMTR.RECOVERY_NEEDED -> 0.6 
-        
-        // Balanced/Parasympathetic tone -> Optimal absorption
-        PhysioStateMTR.OPTIMAL -> 0.2 
-        
-        // Neutral assumption
-        PhysioStateMTR.UNKNOWN -> 0.3 
     }
 }
 

@@ -14,6 +14,11 @@
             android:label="AIMI Meal Advisor"
             android:exported="false"
             android:theme="@style/AppTheme.NoActionBar" />
+        <activity
+            android:name=".openAPSAIMI.advisor.meal.MealAdvisorCameraActivity"
+            android:label="AIMI Camera"
+            android:exported="false"
+            android:theme="@style/AppTheme.NoActionBar" />
 
         <activity
             android:name=".openAPSAIMI.advisor.AimiModeSettingsActivity"

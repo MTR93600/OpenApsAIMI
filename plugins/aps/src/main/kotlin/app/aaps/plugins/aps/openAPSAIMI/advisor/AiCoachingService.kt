@@ -30,7 +30,8 @@ class AiCoachingService @Inject constructor() {
 
     companion object {
         private const val OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-        private const val OPENAI_MODEL = "gpt-5.2"  // O-series reasoning model
+
+        private const val OPENAI_MODEL = "gpt-4o-mini" // Efficient model for coaching logic
         
 
         
@@ -38,9 +39,9 @@ class AiCoachingService @Inject constructor() {
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
         private const val DEEPSEEK_MODEL = "deepseek-chat"
         
-        // Claude Sonnet 4.5 (Sept 2025 - replaces deprecated 3.5)
+        // Claude Haiku (Fast & Cheap)
         private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
-        private const val CLAUDE_MODEL = "claude-sonnet-4-5-20250929"  // Claude Sonnet 4.5 (Sept 2025)
+        private const val CLAUDE_MODEL = "claude-3-haiku-20240307"
     }
 
     /**
@@ -145,8 +146,8 @@ class AiCoachingService @Inject constructor() {
     private fun callGemini(context: Context, apiKey: String, prompt: String): String {
         val resolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
         
-        // 1. Try Preferred Model (High IQ: Gemini 3 Pro)
-        val primaryModel = resolver.resolveGenerateContentModel(apiKey, "gemini-3-pro-preview")
+        // 1. Try Preferred Model (Efficient: Gemini 2.5 Flash)
+        val primaryModel = resolver.resolveGenerateContentModel(apiKey, "gemini-2.5-flash")
         
         try {
             return executeGeminiRequest(resolver, apiKey, prompt, primaryModel)
@@ -318,9 +319,8 @@ class AiCoachingService @Inject constructor() {
         val usr = JSONObject().put("role", "user").put("content", prompt)
         messages.put(usr)
         root.put("messages", messages)
-        // GPT-5 series (o-series) uses max_completion_tokens instead of max_tokens
-        // and doesn't support temperature (uses reasoning.effort instead)
-        root.put("max_completion_tokens", 4096)
+        root.put("messages", messages)
+        root.put("max_tokens", 4096)
         
         return root
     }

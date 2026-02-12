@@ -94,7 +94,7 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         // All supported vision providers
         val providers = arrayOf(
             "OpenAI (GPT-4o Vision)", 
-            "Gemini (2.5 Flash)", 
+            "Gemini (2.0 Flash)", 
             "DeepSeek (Chat)",
             "Claude (3.5 Sonnet)"
         )
@@ -239,17 +239,8 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.CAMERA), 100)
         } else {
-            val takePictureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-            // Force Back Camera (Try multiple extras as manufacturers differ)
-            takePictureIntent.putExtra("android.intent.extras.CAMERA_FACING", 0)
-            takePictureIntent.putExtra("android.intent.extras.LENS_FACING_FRONT", 0)
-            takePictureIntent.putExtra("android.intent.extra.USE_FRONT_CAMERA", false)
-
-            if (takePictureIntent.resolveActivity(packageManager) != null) {
-                startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE)
-            } else {
-                Toast.makeText(this, "No Camera App found", Toast.LENGTH_SHORT).show()
-            }
+            val customCameraIntent = Intent(this, MealAdvisorCameraActivity::class.java)
+            startActivityForResult(customCameraIntent, REQUEST_IMAGE_CAPTURE)
         }
     }
 
@@ -267,9 +258,29 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK) {
-            val imageBitmap = data?.extras?.get("data") as Bitmap
-            imageView.setImageBitmap(imageBitmap)
-            simulateAnalysis(imageBitmap)
+            try {
+                var imageBitmap: Bitmap? = null
+                
+                // 1. Check for File URI (From Custom Camera Activity)
+                if (data?.data != null) {
+                    val uri = data.data
+                    val inputStream = contentResolver.openInputStream(uri!!)
+                    imageBitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                } 
+                // 2. Check for Bitmap Extra (Legacy/Fallback)
+                else if (data?.extras?.containsKey("data") == true) {
+                     imageBitmap = data.extras?.get("data") as? Bitmap
+                }
+
+                if (imageBitmap != null) {
+                    imageView.setImageBitmap(imageBitmap)
+                    simulateAnalysis(imageBitmap)
+                } else {
+                    Toast.makeText(this, "Failed to load image", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                 Toast.makeText(this, "Image Load Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 

@@ -10,6 +10,8 @@ import android.location.Location
 import android.location.LocationManager
 import android.os.Binder
 import android.os.IBinder
+import android.os.Build
+import android.content.pm.ServiceInfo
 import androidx.core.app.ActivityCompat
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -84,9 +86,34 @@ class LocationService : DaggerService() {
         super.onStartCommand(intent, flags, startId)
         try {
             aapsLogger.debug("Starting LocationService with ID ${notificationHolder.notificationID} notification ${notificationHolder.notification}")
-            startForeground(notificationHolder.notificationID, notificationHolder.notification)
-        } catch (_: Exception) {
-            startForeground(4711, Notification())
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Ensure permission is granted before starting with LOCATION type (Android 14 requirement)
+                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                    ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                    
+                    startForeground(
+                        notificationHolder.notificationID, 
+                        notificationHolder.notification, 
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                    )
+                } else {
+                    // Try without type if permission missing (might fail on 14 but safer than crash)
+                    aapsLogger.warn(LTag.LOCATION, "Starting without LOCATION type (permissions missing)")
+                    startForeground(notificationHolder.notificationID, notificationHolder.notification)
+                }
+            } else {
+                startForeground(notificationHolder.notificationID, notificationHolder.notification)
+            }
+        } catch (e: Exception) {
+            // Catch Android 14 ForegroundServiceStartNotAllowedException & SecurityException
+            aapsLogger.error(LTag.LOCATION, "Failed to start foreground service: ${e.message}", e)
+            try {
+                // Fallback attempt (generic notification ID, no type)
+                startForeground(4711, Notification())
+            } catch (ignored: Exception) {
+                // Total failure to start foreground
+            }
         }
         return START_STICKY
     }
@@ -95,9 +122,27 @@ class LocationService : DaggerService() {
         super.onCreate()
         try {
             aapsLogger.debug("Starting LocationService with ID ${notificationHolder.notificationID} notification ${notificationHolder.notification}")
-            startForeground(notificationHolder.notificationID, notificationHolder.notification)
-        } catch (_: Exception) {
-            startForeground(4711, Notification())
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                    ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                    
+                    startForeground(
+                        notificationHolder.notificationID, 
+                        notificationHolder.notification, 
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                    )
+                } else {
+                    startForeground(notificationHolder.notificationID, notificationHolder.notification)
+                }
+            } else {
+                startForeground(notificationHolder.notificationID, notificationHolder.notification)
+            }
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.LOCATION, "Failed to start foreground service: ${e.message}", e)
+            try {
+                startForeground(4711, Notification())
+            } catch (ignored: Exception) {}
         }
 
         // Get last location once until we get regular update

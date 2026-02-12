@@ -32,6 +32,7 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
     private val repo: HealthContextRepository,
     private val persistenceLayer: PersistenceLayer,
     private val dataRepository: AIMIPhysioDataRepositoryMTR,
+    private val contextStore: AIMIPhysioContextStoreMTR, // 🚀 NEW INJECTION
     private val aapsLogger: AAPSLogger
 ) {
     
@@ -108,9 +109,14 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
             return PhysioMultipliersMTR.NEUTRAL
         }
         
-        // Get current snapshot
-        val snapshot = repo.getLastSnapshot() // Use cached valid one to avoid blocking main thread
+        // Get current snapshot (still needed for Real-Time Activity Brake)
+        val snapshot = repo.getLastSnapshot() 
         
+        // Get formulated Physio Context (Semantic Brain)
+        // We accept lower confidence (0.3) because we default to 1.0 (Neutral) anyway
+        // This ensures availability even during "building baseline" phase
+        val physioContext = contextStore.getEffectiveContext(0.3) ?: PhysioContextMTR.NEUTRAL
+
         if (!snapshot.isValid) {
             //aapsLogger.debug(LTag.APS, "[$TAG] No valid snapshot - returning NEUTRAL")
             return PhysioMultipliersMTR.NEUTRAL
@@ -123,7 +129,8 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         }
         
         // Calculate raw multipliers
-        val rawMultipliers = calculateRawMultipliers(snapshot, currentBG, currentDelta)
+        // Calculate raw multipliers combining Semantic + Tactical
+        val rawMultipliers = calculateRawMultipliers(snapshot, physioContext, currentBG, currentDelta)
         
         // Apply HARD CAPS
         val cappedMultipliers = applyHardCaps(rawMultipliers)
@@ -131,7 +138,8 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         // COMPACT LOGING (User Request: "concis, en anglais, écran étroit")
         // "PHYSIO ctx: steps15=, hr=, hrv=, conf= -> brake=, stress= -> smbMult="
         if (!cappedMultipliers.isNeutral()) {
-            val logMsg = "🏥 PHYSIO ctx: steps15=${snapshot.stepsLast15m}, hr=${snapshot.hrNow}, hrv=${snapshot.hrvRmssd.toInt()}, conf=${(snapshot.confidence*100).toInt()}% " +
+            val logMsg = "🏥 PHYSIO ctx: State=${physioContext.state} (${(physioContext.confidence*100).toInt()}%) | " + 
+                         "steps15=${snapshot.stepsLast15m}, hr=${snapshot.hrNow} " +
                          "-> ${cappedMultipliers.appliedCaps} -> ISF x${cappedMultipliers.isfFactor.format(2)}, SMB x${cappedMultipliers.smbFactor.format(2)}"
             aapsLogger.info(LTag.APS, logMsg)
         }
@@ -153,95 +161,59 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
      */
     private fun calculateRawMultipliers(
         snapshot: HealthContextSnapshot,
+        context: PhysioContextMTR,
         currentBG: Double,
         currentDelta: Double?
     ): PhysioMultipliersMTR {
         
         // 1. Calculate Factors
         
-        // Activity Brake: 0.0 (Stop) to 1.0 (Full speed)
-        // If recent steps > threshold, we brake aggression
+        // A. Semantic Risk Aversion (The "Brain")
+        // "In times of uncertainty or stress, play it safe."
+        val riskAversionFactor = context.toRiskAversionFactor()
+        
+        // B. Tactical Activity Brake (The "Reflex")
+        // Activity requires immediate braking regardless of stress state
         val activityBrakeFactor = when {
-            snapshot.stepsLast15m > 1000 -> 0.8 // Heavy braking for intense activity
-            snapshot.stepsLast15m > 500 -> 0.9  // Moderate braking
+            snapshot.stepsLast15m > 1000 -> 0.7 // Heavy braking (Sport)
+            snapshot.stepsLast15m > 500 -> 0.85 // Moderate braking (Walk)
             else -> 1.0
         }
 
-        // Stress Penalty: 0.7 (Max penalty) to 1.0 (No penalty)
-        // High HR or Low HRV -> Penalty
-        val stressPenaltyFactor = if (snapshot.hrvRmssd > 0 && snapshot.hrvRmssd < 20) {
-            0.9 // Mild stress penalty
-        } else if (snapshot.hrNow > 100 && snapshot.stepsLast15m < 100) {
-             // High HR but sedentary -> Stress?
-             0.95
-        } else {
-            1.0
-        }
+        // C. Sleep Debt (Auxiliary)
+        // If deep sleep debt, slightly reduce aggression
+        val sleepDebtFactor = if (snapshot.sleepDebtMinutes > 90) 0.95 else 1.0
         
-        // Sleep Debt Factor: 0.85 (Max debt) to 1.0 (No debt)
-        val sleepDebtFactor = if (snapshot.sleepDebtMinutes > 60) {
-            0.95 // 1 hour debt -> 5% reduction in aggression
-        } else {
-            1.0
-        }
+        // 2. Combine Factors (Safety First Strategy)
+        // We take the STRONGEST brake (Minimum factor)
+        // Example: Stress(0.8) vs Sport(0.7) -> Result 0.7
+        val totalAggression = minOf(riskAversionFactor, activityBrakeFactor, sleepDebtFactor)
         
-        // BP Safety Flag
-        // If BP is dangerous, we might want to flag it (log mostly, but could cap)
-        val bpSafetyFlag = snapshot.bpSys > 160 || snapshot.bpDia > 100
-
-        // 2. Map Factors to Insulin Parameters
+        // 3. Map to Components
         
-        // ISF: Increased by Stress (Resistance) ?
-        // Or pure conservative: prevent aggression. 
-        // User rule: "uniquement freiner / plafonner".
-        // SO: We generally DO NOT decrease ISF (make it more aggressive) based solely on stress unless certain.
-        // However, Stress = Resistance, so *raising* profile.sens (making loop weaker) is safer?
-        // Wait, raising profile.sens makes loop WEAKER (higher ISF = less insulin).
-        // Decreasing profile.sens makes loop STRONGER.
-        
-        // "StressPenalty" usually means "Reduce Insulin / Safety". 
-        // If Stress -> We want to be CAREFUL. 
-        // Let's interpret factors as "Aggressiveness Multipliers".
-        
-        val totalAggression = activityBrakeFactor * stressPenaltyFactor * sleepDebtFactor
-        
-        // Apply to Components
-        
-        // Basal: Direct scale
+        // Basal & SMB: Direct scaling (Lower aggression = Lower delivery)
         val newBasalFactor = 1.0 * totalAggression
-        
-        // SMB: More sensitive to braking
         val newSmbFactor = 1.0 * totalAggression
         
-        // ISF: Inverse! Lower aggression means HIGHER ISF value (weaker sensitivity).
-        // But typical Multiplier usage in Loop is `profile.sens * factor` ? 
-        // Check OpenAPSAIMIPlugin usage:
-        // sens = profile.getIsfMgdl() * physioMults.isfFactor
-        // If isfFactor > 1.0 -> ISF increases -> Weaker/Safer.
-        // If totalAggression < 1.0 (e.g. 0.8), we want ISF to INCREASE (Safer).
-        // So isfFactor should be 1/totalAggression?
-        // Let's be consistent: 
-        // If Brake=0.8, we want 80% aggression.
-        // Basal * 0.8 (Lower)
-        // SMB * 0.8 (Lower)
-        // ISF * (1/0.8) = 1.25 (Higher value, weaker correction)
-        
+        // ISF: Inverse scaling (Lower aggression = Higher ISF value/Weaker sensitivity)
+        // Logic: specific resistance (Stress) might want lower ISF (stronger), 
+        // BUT our Risk Aversion strategy says "play it safe". 
+        // So we WEAKEN the ISF (increase the value) to avoid over-correction.
         val newIsfFactor = if (totalAggression < 1.0) (1.0 / totalAggression) else 1.0
 
         val appliedCapsList = mutableListOf<String>()
+        if (riskAversionFactor < 1.0) appliedCapsList.add("RiskAv:${riskAversionFactor.format(2)}")
         if (activityBrakeFactor < 1.0) appliedCapsList.add("ActBrake:${activityBrakeFactor.format(2)}")
-        if (stressPenaltyFactor < 1.0) appliedCapsList.add("StressPen:${stressPenaltyFactor.format(2)}")
         if (sleepDebtFactor < 1.0) appliedCapsList.add("SleepDebt:${sleepDebtFactor.format(2)}")
-        if (bpSafetyFlag) appliedCapsList.add("BP_FLAG")
 
         return PhysioMultipliersMTR(
             isfFactor = newIsfFactor,
             basalFactor = newBasalFactor,
             smbFactor = newSmbFactor,
             reactivityFactor = totalAggression,
-            confidence = snapshot.confidence,
+            confidence = context.confidence, // Use Semantic confidence
             appliedCaps = appliedCapsList.joinToString(", "),
-            source = "RealtimeLogic"
+            source = "Semantic+Tactical"
         )
     }
     
