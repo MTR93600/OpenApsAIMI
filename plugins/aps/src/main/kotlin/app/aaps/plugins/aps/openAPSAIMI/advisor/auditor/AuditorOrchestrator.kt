@@ -58,7 +58,10 @@ class AuditorOrchestrator @Inject constructor(
     
     // Rate limiting
     private var lastAuditTime: Long = 0L
-    private val MIN_AUDIT_INTERVAL_MS = 3 * 60 * 1000L // 3 minutes minimum (was 5, reduced for better reactivity)
+    private val MIN_AUDIT_INTERVAL_ROUTINE_MS = 60 * 60 * 1000L // 60 min (Routine)
+    private val MIN_AUDIT_INTERVAL_DRIFT_MS = 45 * 60 * 1000L // 45 min (Slow Drift)
+    private val MIN_AUDIT_INTERVAL_RISK_MS = 30 * 60 * 1000L // 30 min (High Risk)
+    private val MIN_AUDIT_INTERVAL_MEAL_MS = 15 * 60 * 1000L // 15 min (Meal/Bolus)
     
     // Audit count tracking
     private var auditsThisHour: Int = 0
@@ -236,10 +239,20 @@ class AuditorOrchestrator @Inject constructor(
             return
         }
         
-        // Sentinel tier HIGH: Check rate limiting for External Auditor
-        if (!checkRateLimit(now, bg)) {
-            // External rate limited: Apply Sentinel advice only
-            aapsLogger.info(LTag.APS, "🌐 External: Rate limited, using Sentinel only")
+        // Sentinel tier HIGH: Check Smart Rate Limiting for External Auditor
+        
+        // Determine Trigger Type & Complexity
+        val triggerType = determineTriggerType(bg, delta, shortAvgDelta, modeType != null, inPrebolusWindow, profile.target_bg)
+        
+        if (triggerType == TriggerType.NONE) {
+            aapsLogger.info(LTag.APS, "🌐 External: Skipped (No valid trigger)")
+            AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.SKIPPED_NO_TRIGGER)
+            callback?.invoke(null, createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "No Trigger"))
+            return
+        }
+        
+        if (!checkSmartRateLimit(now, triggerType)) {
+            aapsLogger.info(LTag.APS, "🌐 External: Rate limited ($triggerType), using Sentinel only")
             AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.SKIPPED_RATE_LIMITED)
             val combined = DualBrainHelpers.combineAdvice(sentinelAdvice, null)
             val modulated = combined.toModulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin)
@@ -248,7 +261,8 @@ class AuditorOrchestrator @Inject constructor(
             return
         }
         
-        // Get physio snapshot (safe call)
+        aapsLogger.info(LTag.APS, "🌐 External: TRIGGERED ($triggerType)")
+
         // Get physio snapshot (safe call)
         val physioCtx = try { physioAdapter.getLatestSnapshot().toStartSnapshot() } catch (e: Exception) { null }
 
@@ -292,11 +306,12 @@ class AuditorOrchestrator @Inject constructor(
                 // Get timeout from preferences
                 val timeoutMs = preferences.get(IntKey.AimiAuditorTimeoutSeconds) * 1000L
                 
-                // Call AI
-                val verdict = aiService.getVerdict(input, provider, timeoutMs)
+                // Call AI (Pass complexity flag)
+                val useHighPerf = (triggerType == TriggerType.HIGH_RISK || triggerType == TriggerType.MEAL)
+                val verdict = aiService.getVerdict(input, provider, timeoutMs, useHighPerf)
                 
                 // Update rate limiting
-                updateRateLimit(now)
+                updateRateLimit(now, triggerType)
                 
                 if (verdict != null) {
                     aapsLogger.info(LTag.APS, "AI Auditor: Verdict=${verdict.verdict}, Confidence=${String.format("%.2f", verdict.confidence)}")
@@ -384,37 +399,47 @@ class AuditorOrchestrator @Inject constructor(
      * Check rate limit (per-hour and minimum interval)
      * Bypass if BG > 160 (Emergency Audit)
      */
-    private fun checkRateLimit(now: Long, bg: Double): Boolean {
-        // 🚨 EMERGENCY BYPASS: If BG > 160, ignored quotas
-        if (bg > 160.0) {
-            return true
-        }
+    enum class TriggerType { NONE, ROUTINE, SLOW_DRIFT, HIGH_RISK, MEAL }
 
-        val maxAuditsPerHour = preferences.get(IntKey.AimiAuditorMaxPerHour)
+    private fun determineTriggerType(
+        bg: Double, delta: Double, shortAvg: Double, 
+        inMeal: Boolean, inPrebolus: Boolean, target: Double
+    ): TriggerType {
+        // 1. Meal / Prebolus (Highest Priority for responsiveness)
+        if (inMeal || inPrebolus) return TriggerType.MEAL
         
-        // Reset hour window if needed
+        // 2. High Risk (Rapid Rise at High BG)
+        if (bg > 180 && delta > 8.0) return TriggerType.HIGH_RISK
+        
+        // 3. Slow Drift (Gentle Rise above target)
+        if (bg > (target + 30) && shortAvg > 2.0) return TriggerType.SLOW_DRIFT
+        
+        // 4. Routine (Health Check)
+        return TriggerType.ROUTINE
+    }
+
+    private fun checkSmartRateLimit(now: Long, type: TriggerType): Boolean {
+        // Global Hour Limit Check
+        val maxAuditsPerHour = preferences.get(IntKey.AimiAuditorMaxPerHour)
         if (now - hourWindowStart > 60 * 60 * 1000L) {
             hourWindowStart = now
             auditsThisHour = 0
         }
-        
-        // Check per-hour limit
-        if (auditsThisHour >= maxAuditsPerHour) {
-            return false
+        if (auditsThisHour >= maxAuditsPerHour) return false
+
+        // Interval Check based on Type
+        val minInterval = when(type) {
+            TriggerType.MEAL -> MIN_AUDIT_INTERVAL_MEAL_MS
+            TriggerType.HIGH_RISK -> MIN_AUDIT_INTERVAL_RISK_MS
+            TriggerType.SLOW_DRIFT -> MIN_AUDIT_INTERVAL_DRIFT_MS
+            TriggerType.ROUTINE -> MIN_AUDIT_INTERVAL_ROUTINE_MS
+            else -> MIN_AUDIT_INTERVAL_ROUTINE_MS
         }
         
-        // Check minimum interval
-        if (now - lastAuditTime < MIN_AUDIT_INTERVAL_MS) {
-            return false
-        }
-        
-        return true
+        return (now - lastAuditTime) >= minInterval
     }
-    
-    /**
-     * Update rate limiting counters
-     */
-    private fun updateRateLimit(now: Long) {
+
+    private fun updateRateLimit(now: Long, type: TriggerType) {
         lastAuditTime = now
         auditsThisHour++
     }

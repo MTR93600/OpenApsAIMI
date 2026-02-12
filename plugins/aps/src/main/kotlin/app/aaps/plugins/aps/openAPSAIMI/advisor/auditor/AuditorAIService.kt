@@ -59,7 +59,8 @@ class AuditorAIService @Inject constructor(
     suspend fun getVerdict(
         input: AuditorInput,
         provider: Provider,
-        timeoutMs: Long = DEFAULT_TIMEOUT_MS
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS,
+        useHighPerf: Boolean = false
     ): AuditorVerdict? = withContext(Dispatchers.IO) {
         
         // Get API key
@@ -82,10 +83,10 @@ class AuditorAIService @Inject constructor(
                 // Call AI with timeout
                 val responseJson = withTimeoutOrNull(timeoutMs) {
                     when (provider) {
-                        Provider.OPENAI -> callOpenAI(apiKey, prompt)
-                        Provider.GEMINI -> callGemini(apiKey, prompt)
-                        Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
-                        Provider.CLAUDE -> callClaude(apiKey, prompt)
+                        Provider.OPENAI -> callOpenAI(apiKey, prompt, useHighPerf)
+                        Provider.GEMINI -> callGemini(apiKey, prompt, useHighPerf)
+                        Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt) // DeepSeek is always cheap/fast
+                        Provider.CLAUDE -> callClaude(apiKey, prompt, useHighPerf)
                     }
                 }
                 
@@ -149,7 +150,9 @@ class AuditorAIService @Inject constructor(
     /**
      * Call OpenAI API
      */
-    private fun callOpenAI(apiKey: String, prompt: String): String {
+    private fun callOpenAI(apiKey: String, prompt: String, useHighPerf: Boolean): String {
+        val model = if (useHighPerf) "gpt-4o" else "gpt-4o-mini"
+
         val url = URL(OPENAI_URL)
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -161,15 +164,14 @@ class AuditorAIService @Inject constructor(
         }
         
         val requestBody = JSONObject().apply {
-            put("model", "gpt-5.2")  // O-series reasoning model
+            put("model", model) 
             put("messages", JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "user")
                     put("content", prompt)
                 })
             })
-            // GPT-5 uses max_completion_tokens instead of max_tokens
-            put("max_completion_tokens", 2048)
+            put("max_tokens", 2048)
             put("response_format", JSONObject().put("type", "json_object"))
         }
         
@@ -197,9 +199,12 @@ class AuditorAIService @Inject constructor(
     /**
      * Call Gemini API
      */
-    private fun callGemini(apiKey: String, prompt: String): String {
-        // 1. Try Preferred Model
-        val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-3-pro-preview")
+    private fun callGemini(apiKey: String, prompt: String, useHighPerf: Boolean): String {
+        // 1. Select Model based on complexity
+        // HighPerf -> gemini-3-pro-preview | Standard -> gemini-2.5-flash
+        val modelName = if (useHighPerf) "gemini-3-pro-preview" else "gemini-2.5-flash"
+        
+        val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, modelName)
         
         try {
             return executeGeminiRequest(apiKey, prompt, primaryModel)
@@ -313,7 +318,8 @@ class AuditorAIService @Inject constructor(
     /**
      * Call Claude API
      */
-    private fun callClaude(apiKey: String, prompt: String): String {
+    private fun callClaude(apiKey: String, prompt: String, useHighPerf: Boolean): String {
+        val model = if (useHighPerf) "claude-3-5-sonnet-20241022" else "claude-3-haiku-20240307"
         val url = URL(CLAUDE_URL)
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -326,7 +332,7 @@ class AuditorAIService @Inject constructor(
         }
         
         val requestBody = JSONObject().apply {
-            put("model", "claude-sonnet-4-5-20250929")  // Claude Sonnet 4.5 (Sept 2025)
+            put("model", model)
             put("max_tokens", 2048)
             put("temperature", 0.3)
             put("messages", JSONArray().apply {
