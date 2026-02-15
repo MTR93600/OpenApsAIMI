@@ -18,9 +18,9 @@ class ClaudeVisionProvider : AIVisionProvider {
     override val displayName = "Claude (3.5 Sonnet)"
     override val providerId = "CLAUDE"
     
-    override suspend fun estimateFromImage(bitmap: Bitmap, apiKey: String): EstimationResult = withContext(Dispatchers.IO) {
+    override suspend fun estimateFromImage(bitmap: Bitmap, userDescription: String, apiKey: String): EstimationResult = withContext(Dispatchers.IO) {
         val base64Image = bitmapToBase64(bitmap)
-        val responseJson = callClaudeAPI(apiKey, base64Image)
+        val responseJson = callClaudeAPI(apiKey, base64Image, userDescription)
         return@withContext parseResponse(responseJson)
     }
     
@@ -31,7 +31,8 @@ class ClaudeVisionProvider : AIVisionProvider {
         return Base64.encodeToString(byteArray, Base64.NO_WRAP)
     }
     
-    private fun callClaudeAPI(apiKey: String, base64Image: String): String {
+    private fun callClaudeAPI(apiKey: String, base64Image: String, userDescription: String): String {
+
         val url = URL("https://api.anthropic.com/v1/messages")
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
@@ -44,6 +45,13 @@ class ClaudeVisionProvider : AIVisionProvider {
         connection.connectTimeout = 30000  // 30 seconds
         connection.readTimeout = 45000     // 45 seconds
         
+        // Construct User Prompt
+        val userPrompt = if (userDescription.isNotBlank()) {
+            "User Description: \"$userDescription\". Estimate macros and FPU for this food."
+        } else {
+            "Estimate macros and FPU for this food."
+        }
+
         val jsonBody = JSONObject().apply {
             put("model", "claude-sonnet-4-5-20250929")
             // CRITICAL FIX #2: Increase token limit from 800 to 2048
@@ -64,7 +72,7 @@ class ClaudeVisionProvider : AIVisionProvider {
                         })
                         put(JSONObject().apply {
                             put("type", "text")
-                            put("text", "Estimate macros and FPU for this food.")
+                            put("text", userPrompt)
                         })
                     })
                 })
