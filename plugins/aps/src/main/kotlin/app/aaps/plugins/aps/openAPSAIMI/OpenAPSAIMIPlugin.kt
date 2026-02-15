@@ -455,10 +455,23 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // 🏥 PHYSIO MODULATION (ISF)
         // We fetching multipliers for the specific timestamp is tricky, so we use current context
         // This affects the "Displayed ISF" in AAPS.
-        val physioMults = physioAdapter.getMultipliers(glucose, currentDelta ?: 0.0)
-        if (physioMults.isfFactor != 1.0) {
-            blended *= physioMults.isfFactor
-            aapsLogger.debug(LTag.APS, "🏥 DynISF modulated by Physio: x${physioMults.isfFactor} -> $blended")
+        
+        // Calculate IOB/COB for Cosine Gate
+        val profile = profileFunction.getProfile()
+        if (profile != null) {
+            val iobCalc = iobCobCalculator.calculateFromTreatmentsAndTemps(timestamp, profile)
+            val mealData = iobCobCalculator.getMealDataWithWaitingForCalculationFinish()
+            
+            val physioMults = physioAdapter.getMultipliers(
+                currentBG = glucose, 
+                currentDelta = currentDelta ?: 0.0,
+                iob = iobCalc.iob,
+                cob = mealData.carbs
+            )
+            if (physioMults.isfFactor != 1.0) {
+                blended *= physioMults.isfFactor
+                aapsLogger.debug(LTag.APS, "🏥 DynISF modulated by Physio: x${physioMults.isfFactor} -> $blended")
+            }
         }
 
         blended = blended.coerceIn(5.0, 300.0)
@@ -520,7 +533,19 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // 🏥 PHYSIO INTEGRATION: Retrieve Context & Multipliers
         val glucoseForPhysio = glucoseStatusProvider.glucoseStatusData?.glucose ?: 100.0
         val deltaForPhysio = glucoseStatusProvider.glucoseStatusData?.delta ?: 0.0
-        val physioMults = physioAdapter.getMultipliers(glucoseForPhysio, deltaForPhysio)
+        
+        // Calculate IOB/COB early for Physio Adapter
+        val nowMs = dateUtil.now()
+        val iobCalc = iobCobCalculator.calculateFromTreatmentsAndTemps(nowMs, profile) // Uses 'profile' from enabled check above
+        val mealDataForPhysio = iobCobCalculator.getMealDataWithWaitingForCalculationFinish()
+        
+        val physioMults = physioAdapter.getMultipliers(
+            currentBG = glucoseForPhysio, 
+            currentDelta = deltaForPhysio,
+            iob = iobCalc.iob,
+            cob = mealDataForPhysio.carbs
+        )
+        
         if (!physioMults.isNeutral()) {
             aapsLogger.info(LTag.APS, "🏥 LOOP: Applying Physio Factors: ISF x${physioMults.isfFactor}, Basal x${physioMults.basalFactor}, SMB x${physioMults.smbFactor}")
         }
@@ -679,9 +704,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 currentActivity += iob.activity
             }
             var futureActivity = 0.0
-            val activityPredTimePK = insulin.peak
+            
+            // 🌀 Cosine Gate: Apply Peak Shift
+            val activityPredTimePK = insulin.peak + physioMults.peakShiftMinutes
+            // Ensure peak time remains reasonable (min 35m)
+            val safepk = activityPredTimePK.coerceAtLeast(35)
+            
             for (i in -4..0) { //MP: calculate 5-minute-insulin activity centering around peakTime
-                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(activityPredTimePK.toLong() - i), profile)
+                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(safepk.toLong() - i), profile)
                 futureActivity += iob.activity
             }
             val sensorLag = -10L //MP Assume that the glucose value measurement reflect the BG value from 'sensorlag' minutes ago & calculate the insulin activity then
@@ -841,7 +871,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 currentTime = now,
                 flatBGsDetected = flatBGsDetected,
                 dynIsfMode = dynIsfMode,
-                uiInteraction = uiInteraction
+                uiInteraction = uiInteraction,
+                extraDebug = physioMults.detailedReason
             ).also {
                 val determineBasalResult = apsResultProvider.get().with(it)
                 

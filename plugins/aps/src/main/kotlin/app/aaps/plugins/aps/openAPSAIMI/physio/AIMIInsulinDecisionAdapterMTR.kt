@@ -4,6 +4,9 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.data.model.TE
+import app.aaps.plugins.aps.openAPSAIMI.physio.gate.CosineTrajectoryGate
+import app.aaps.plugins.aps.openAPSAIMI.physio.GateInput
+import app.aaps.plugins.aps.openAPSAIMI.physio.KernelType
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
@@ -33,6 +36,7 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
     private val persistenceLayer: PersistenceLayer,
     private val dataRepository: AIMIPhysioDataRepositoryMTR,
     private val contextStore: AIMIPhysioContextStoreMTR, // 🚀 NEW INJECTION
+    private val cosineGate: CosineTrajectoryGate, // 🌀 Cosine Gate Injection
     private val aapsLogger: AAPSLogger
 ) {
     
@@ -91,7 +95,9 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
     fun getMultipliers(
         currentBG: Double,
         currentDelta: Double? = null,
-        recentHypoTimestamp: Long? = null
+        recentHypoTimestamp: Long? = null,
+        iob: Double = 0.0,
+        cob: Double = 0.0
     ): PhysioMultipliersMTR {
         
         // Safety Check 1: BG too low
@@ -128,20 +134,64 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
             return PhysioMultipliersMTR.NEUTRAL
         }
         
-        // Calculate raw multipliers
-        // Calculate raw multipliers combining Semantic + Tactical
+        // 1. Calculate raw multipliers (Semantic + Tactical)
         val rawMultipliers = calculateRawMultipliers(snapshot, physioContext, currentBG, currentDelta)
         
-        // Apply HARD CAPS
-        val cappedMultipliers = applyHardCaps(rawMultipliers)
+        // 2. 🌀 Adaptive Kernel Bank (Cosine Gate)
+        // Modulates the amplitude and phase of the trajectory based on vector similarity
+        val gateInput = GateInput(
+            bgCurrent = currentBG,
+            bgDelta = currentDelta ?: 0.0,
+            iob = iob,
+            cob = cob,
+            stepCount15m = snapshot.stepsLast15m,
+            hrCurrent = snapshot.hrNow,
+            hrvCurrent = snapshot.hrvRmssd,
+            sleepState = snapshot.sleepDebtMinutes > 0, // Simple heuristic for now
+            physioState = physioContext.state,
+            dataQuality = snapshot.confidence
+        )
+        
+        val modulation = cosineGate.compute(gateInput)
+        
+        // Apply Modulation to Raw Multipliers
+        // ISF: We multiply by effectiveSensitivityMultiplier.
+        // If > 1.0 (weaker) -> Increase ISF Value.
+        // If < 1.0 (stronger) -> Decrease ISF Value.
+        val modulatedISF = rawMultipliers.isfFactor * modulation.effectiveSensitivityMultiplier
+        
+        // Basal/SMB: We typically don't modulate these with Cosine Gate yet (keeping it ISF focused for Phase 2),
+        // or we can mirror the sensitivity effect (inverse).
+        // For now, let's keep it strictly ISF + PeakShift as per plan ("effectiveSensitivityMultiplier... PeakTimeShift")
+        
+        val modulatedMultipliers = rawMultipliers.copy(
+            isfFactor = modulatedISF,
+            peakShiftMinutes = modulation.peakTimeShiftMinutes, // Carrier for Phase Shift
+            appliedCaps = if (modulation.dominantKernel != KernelType.REST) 
+                            "${rawMultipliers.appliedCaps} + CGate:${modulation.dominantKernel}" 
+                          else rawMultipliers.appliedCaps,
+            source = "Semantic+Tactical+CGate",
+            detailedReason = "🌀 CGate: ${modulation.debug}" 
+        )
+        
+        // 3. Apply HARD CAPS (Final Safety Net)
+        val cappedMultipliers = applyHardCaps(modulatedMultipliers)
         
         // COMPACT LOGING (User Request: "concis, en anglais, écran étroit")
+        // "CGate: state=STRESS dq=0.82 sim=[R:0.12 A:0.41 S:0.77] w=[R:0.08 A:0.22 S:0.70] mult=0.92 shift=+8m"
         // "PHYSIO ctx: steps15=, hr=, hrv=, conf= -> brake=, stress= -> smbMult="
+        
         if (!cappedMultipliers.isNeutral()) {
-            val logMsg = "🏥 PHYSIO ctx: State=${physioContext.state} (${(physioContext.confidence*100).toInt()}%) | " + 
+            // Log core physio
+            val coreLog = "🏥 PHYSIO ctx: State=${physioContext.state} (${(physioContext.confidence*100).toInt()}%) | " + 
                          "steps15=${snapshot.stepsLast15m}, hr=${snapshot.hrNow} " +
                          "-> ${cappedMultipliers.appliedCaps} -> ISF x${cappedMultipliers.isfFactor.format(2)}, SMB x${cappedMultipliers.smbFactor.format(2)}"
-            aapsLogger.info(LTag.APS, logMsg)
+            aapsLogger.info(LTag.APS, coreLog)
+            
+            // Log Cosine Gate details if active
+            if (modulation.dominantKernel != KernelType.REST || abs(modulation.effectiveSensitivityMultiplier - 1.0) > 0.05) {
+                 aapsLogger.info(LTag.APS, "🌀 CGate: ${modulation.debug}")
+            }
         }
         
         return cappedMultipliers
@@ -255,7 +305,8 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
             reactivityFactor = cappedReactivity,
             confidence = multipliers.confidence,
             appliedCaps = if (wasCapped) "${multipliers.appliedCaps} + CAPPED" else multipliers.appliedCaps,
-            source = multipliers.source
+            source = multipliers.source,
+            detailedReason = multipliers.detailedReason
         )
     }
     
