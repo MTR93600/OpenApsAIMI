@@ -39,6 +39,7 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     private lateinit var confirmButton: Button
     private lateinit var imageView: ImageView
     private lateinit var carbsInput: android.widget.EditText
+    private lateinit var descriptionInput: android.widget.EditText
     private lateinit var detailsLayout: LinearLayout
 
     private var currentEstimate: EstimationResult? = null
@@ -139,6 +140,18 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             setImageResource(android.R.drawable.ic_menu_camera)
         }
         layout.addView(imageView)
+
+        // 1.5 Description Input
+        descriptionInput = android.widget.EditText(this).apply {
+            hint = "Optional: Describe food (e.g. 'Tuna steak with rice')"
+            setHintTextColor(Color.GRAY)
+            setTextColor(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 16 }
+        }
+        layout.addView(descriptionInput)
 
         // 2. Action Button
         val snapButton = Button(this).apply {
@@ -286,12 +299,13 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
 
     // Mock simulation for prototype consistency without camera hardware
     private fun simulateAnalysis(bitmap: Bitmap) {
+        val userDesc = descriptionInput.text.toString()
         Toast.makeText(this, "Analyzing image (AI Vision)...", Toast.LENGTH_SHORT).show()
 
         lifecycleScope.launch {
             try {
                 // Call Service
-                val result = recognitionService.estimateCarbsFromImage(bitmap)
+                val result = recognitionService.estimateCarbsFromImage(bitmap, userDesc)
                 currentEstimate = result
 
                 // Calculate Total Effective (Carbs + FPU)

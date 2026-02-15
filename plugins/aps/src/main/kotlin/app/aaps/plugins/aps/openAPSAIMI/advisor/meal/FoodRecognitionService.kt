@@ -52,7 +52,7 @@ class FoodRecognitionService(
      * Estimate carbs and macros from food image
      * Uses currently selected provider from preferences
      */
-    suspend fun estimateCarbsFromImage(bitmap: Bitmap): EstimationResult = withContext(Dispatchers.IO) {
+    suspend fun estimateCarbsFromImage(bitmap: Bitmap, userDescription: String = ""): EstimationResult = withContext(Dispatchers.IO) {
         val provider = getProvider()
         val apiKey = getApiKey(provider.providerId)
         
@@ -68,7 +68,7 @@ class FoodRecognitionService(
         }
         
         try {
-            return@withContext provider.estimateFromImage(bitmap, apiKey)
+            return@withContext provider.estimateFromImage(bitmap, userDescription, apiKey)
         } catch (e: Exception) {
             return@withContext EstimationResult(
                 description = "Error",

@@ -3776,10 +3776,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     @SuppressLint("NewApi", "DefaultLocale") fun determine_basal(
         glucose_status: GlucoseStatusAIMI, currenttemp: CurrentTemp, iob_data_array: Array<IobTotal>, profile: OapsProfileAimi, autosens_data: AutosensResult, mealData: MealData,
-        microBolusAllowed: Boolean, currentTime: Long, flatBGsDetected: Boolean, dynIsfMode: Boolean, uiInteraction: UiInteraction
+        microBolusAllowed: Boolean, currentTime: Long, flatBGsDetected: Boolean, dynIsfMode: Boolean, uiInteraction: UiInteraction,
+        extraDebug: String = "" // 🌀 Extensible Debug Channel (e.g. Cosine Gate)
     ): RT {
         consoleError.clear()
         consoleLog.clear()
+        
+        if (extraDebug.isNotEmpty()) {
+             // Append to log history AND consoleError for "Script Debug" visibility
+             consoleLog.add(extraDebug)
+             consoleError.add(extraDebug)
+        }
 
         // 🚀 MEAL ADVISOR: Hydrate COB if Trigger is active (Fixes DB latency)
         // Moved to helper to avoid VerifyError (Method too large/complex)
@@ -3856,6 +3863,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog = consoleLog,
             consoleError = consoleError
         )
+        
+        if (extraDebug.isNotEmpty()) {
+             rT.reason.append("$extraDebug\n")
+        }
         
         // 🛡️ Log health status of storage and learners (NOW with rT)
         logLearnersHealth(rT)

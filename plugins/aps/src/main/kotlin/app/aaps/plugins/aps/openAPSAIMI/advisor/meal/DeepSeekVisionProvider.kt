@@ -18,9 +18,9 @@ class DeepSeekVisionProvider : AIVisionProvider {
     override val displayName = "DeepSeek (Chat)"
     override val providerId = "DEEPSEEK"
     
-    override suspend fun estimateFromImage(bitmap: Bitmap, apiKey: String): EstimationResult = withContext(Dispatchers.IO) {
+    override suspend fun estimateFromImage(bitmap: Bitmap, userDescription: String, apiKey: String): EstimationResult = withContext(Dispatchers.IO) {
         val base64Image = bitmapToBase64(bitmap)
-        val responseJson = callDeepSeekAPI(apiKey, base64Image)
+        val responseJson = callDeepSeekAPI(apiKey, base64Image, userDescription)
         return@withContext parseResponse(responseJson)
     }
     
@@ -31,7 +31,8 @@ class DeepSeekVisionProvider : AIVisionProvider {
         return Base64.encodeToString(byteArray, Base64.NO_WRAP)
     }
     
-    private fun callDeepSeekAPI(apiKey: String, base64Image: String): String {
+    private fun callDeepSeekAPI(apiKey: String, base64Image: String, userDescription: String): String {
+
         val url = URL("https://api.deepseek.com/v1/chat/completions")
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
@@ -42,6 +43,13 @@ class DeepSeekVisionProvider : AIVisionProvider {
         // CRITICAL FIX #1: Increase timeout to prevent premature connection closure
         connection.connectTimeout = 30000  // 30 seconds
         connection.readTimeout = 45000     // 45 seconds
+
+        // Construct User Prompt
+        val userPrompt = if (userDescription.isNotBlank()) {
+            "User Description: \"$userDescription\". Estimate macros and FPU for this food."
+        } else {
+            "Estimate macros and FPU for this food."
+        }
         
         val jsonBody = JSONObject().apply {
             put("model", "deepseek-chat")
@@ -55,7 +63,7 @@ class DeepSeekVisionProvider : AIVisionProvider {
                     put("content", JSONArray().apply {
                         put(JSONObject().apply {
                             put("type", "text")
-                            put("text", "Estimate macros and FPU for this food.")
+                            put("text", userPrompt)
                         })
                         put(JSONObject().apply {
                             put("type", "image_url")
