@@ -20,9 +20,9 @@ class GeminiVisionProvider(private val context: android.content.Context) : AIVis
     
     private val geminiResolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
 
-    override suspend fun estimateFromImage(bitmap: Bitmap, apiKey: String): EstimationResult = withContext(Dispatchers.IO) {
+    override suspend fun estimateFromImage(bitmap: Bitmap, userDescription: String, apiKey: String): EstimationResult = withContext(Dispatchers.IO) {
         val base64Image = bitmapToBase64(bitmap)
-        val responseJson = callGeminiAPI(apiKey, base64Image)
+        val responseJson = callGeminiAPI(apiKey, base64Image, userDescription)
         return@withContext parseResponse(responseJson)
     }
     
@@ -33,27 +33,27 @@ class GeminiVisionProvider(private val context: android.content.Context) : AIVis
         return Base64.encodeToString(byteArray, Base64.NO_WRAP)
     }
     
-    private fun callGeminiAPI(apiKey: String, base64Image: String): String {
-        // 1. Try Primary (Gemini 2.0 Flash - Fast & Efficient)
+    private fun callGeminiAPI(apiKey: String, base64Image: String, userDescription: String): String {
+        // ... (resolver logic) ...
         val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-2.0-flash-exp")
         
         try {
-            return executeRequest(apiKey, base64Image, primaryModel)
+            return executeRequest(apiKey, base64Image, primaryModel, userDescription)
         } catch (e: Exception) {
-            // 2. Check for Quota Exhaustion (429)
+            // ... (fallback logic) ...
             val msg = e.message?.lowercase() ?: ""
             if (msg.contains("429") || msg.contains("quota") || msg.contains("resource_exhausted")) {
-                // 3. Fallback to 1.5 Flash
                 val fallbackModel = "gemini-1.5-flash-latest"
                 android.util.Log.w("AIMI_GEMINI", "Scale-down Fallback: $fallbackModel")
-                return executeRequest(apiKey, base64Image, fallbackModel)
+                return executeRequest(apiKey, base64Image, fallbackModel, userDescription)
             }
             throw e
         }
     }
 
-    private fun executeRequest(apiKey: String, base64Image: String, modelId: String): String {
+    private fun executeRequest(apiKey: String, base64Image: String, modelId: String, userDescription: String): String {
         val urlStr = geminiResolver.getGenerateContentUrl(modelId, apiKey)
+        // ... (connection setup) ...
         val url = URL(urlStr)
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
@@ -64,12 +64,19 @@ class GeminiVisionProvider(private val context: android.content.Context) : AIVis
         connection.connectTimeout = 30000  // 30 seconds
         connection.readTimeout = 60000     // 60 seconds (Increased for detailed analysis)
         
+        // Construct detailed system instructions + user description
+        val promptText = if (userDescription.isNotBlank()) {
+            "${FoodAnalysisPrompt.SYSTEM_PROMPT}\n\nUSER DESCRIPTION: \"$userDescription\""
+        } else {
+            FoodAnalysisPrompt.SYSTEM_PROMPT
+        }
+
         val jsonBody = JSONObject().apply {
             put("contents", JSONArray().apply {
                 put(JSONObject().apply {
                     put("parts", JSONArray().apply {
                         put(JSONObject().apply {
-                            put("text", FoodAnalysisPrompt.SYSTEM_PROMPT)
+                            put("text", promptText)
                         })
                         put(JSONObject().apply {
                             put("inline_data", JSONObject().apply {
