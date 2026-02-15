@@ -152,4 +152,10 @@ enum class DoubleKey(
     AimiEndometriosisBasalMult("aimi_endo_basal_mult", 1.3, 1.0, 2.0),
     AimiEndometriosisSmbDampen("aimi_endo_smb_dampen", 0.7, 0.0, 1.0),
 
+    // 🌀 Adaptive Kernel Bank (Cosine Gate)
+    AimiCosineGateAlpha("aimi_cosine_gate_alpha", 2.0, 0.1, 10.0),
+    AimiCosineGateMinDataQuality("aimi_cosine_gate_min_dq", 0.3, 0.0, 1.0),
+    AimiCosineGateMinSensitivity("aimi_cosine_gate_min_sens", 0.7, 0.5, 1.0),
+    AimiCosineGateMaxSensitivity("aimi_cosine_gate_max_sens", 1.3, 1.0, 2.0),
+
 }

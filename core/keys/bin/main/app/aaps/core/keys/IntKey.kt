@@ -103,4 +103,7 @@ enum class IntKey(
     // 🌸 Endometriosis & Cycle Management (MTR)
     AimiEndometriosisFlareDuration("aimi_endo_flare_duration", 4, 1, 24),
 
+    // 🌀 Adaptive Kernel Bank (Cosine Gate)
+    AimiCosineGateMaxPeakShift("aimi_cosine_gate_max_shift", 15, 0, 60),
+
 }
