@@ -421,15 +421,18 @@ data class PhysioMultipliersMTR(
     val basalFactor: Double = 1.0,    // Basal multiplier (0.85 - 1.15)
     val smbFactor: Double = 1.0,      // SMB multiplier (0.90 - 1.10)
     val reactivityFactor: Double = 1.0, // Reactivity modulation (0.90 - 1.10)
+    val peakShiftMinutes: Int = 0,    // 🌀 Phase Shift (Cosine Gate)
     val confidence: Double = 0.0,     // Confidence in these multipliers
     val appliedCaps: String = "",     // Description of applied limits
-    val source: String = "Deterministic" // "Deterministic" or "LLM-Assisted"
+    val source: String = "Deterministic", // "Deterministic" or "LLM-Assisted"
+    val detailedReason: String = ""       // 🌀 Internal Debug Info (e.g. Cosine Gate breakdown)
 ) {
     fun isNeutral(): Boolean = 
         isfFactor == 1.0 && 
         basalFactor == 1.0 && 
         smbFactor == 1.0 && 
-        reactivityFactor == 1.0
+        reactivityFactor == 1.0 &&
+        peakShiftMinutes == 0
     
     companion object {
         val NEUTRAL = PhysioMultipliersMTR()
