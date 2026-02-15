@@ -11,11 +11,12 @@ interface AIVisionProvider {
     /**
      * Estimate food macros from image bitmap
      * @param bitmap The food image
+     * @param userDescription Optional text description from user
      * @param apiKey The API key for this provider
      * @return EstimationResult with food data
      * @throws Exception on API errors
      */
-    suspend fun estimateFromImage(bitmap: Bitmap, apiKey: String): EstimationResult
+    suspend fun estimateFromImage(bitmap: Bitmap, userDescription: String, apiKey: String): EstimationResult
     
     /**
      * Provider display name (e.g., "OpenAI GPT-4o")

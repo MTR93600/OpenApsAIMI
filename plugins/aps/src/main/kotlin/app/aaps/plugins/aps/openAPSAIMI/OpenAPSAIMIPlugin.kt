@@ -1780,6 +1780,28 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHighBGMaxSMB, dialogMessage = R.string.openapsaimi_highBG_maxsmb_summary, title = R.string.openapsaimi_highBG_maxsmb_title))
             })
 
+            // 📡 Remote Control Section
+            addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                key = "AIMI_REMOTE"
+                title = "Remote Control" // TODO: Add string resource
+
+                addPreference(PreferenceCategory(context).apply {
+                    title = "Security" // TODO: Add string resource
+                })
+
+                addPreference(
+                    androidx.preference.EditTextPreference(context).apply {
+                        key = AimiStringKey.RemoteControlPin.key
+                        title = "Security PIN"
+                        summary = "PIN required for remote commands (AIMI: PIN CMD)"
+                        dialogTitle = "Enter 4-8 digit PIN"
+                        setOnBindEditTextListener { editText ->
+                            editText.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+                        }
+                    }
+                )
+            })
+
 
 
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
