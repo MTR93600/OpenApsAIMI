@@ -17,4 +17,5 @@ enum class AimiStringKey(
     override val exportable: Boolean = true
 ) : StringPreferenceKey {
     PregnancyDueDateString("aimi_pregnancy_due_date_string", ""),
+    RemoteControlPin("aimi_remote_control_pin", "", isPin = true, isPassword = true),
 }
