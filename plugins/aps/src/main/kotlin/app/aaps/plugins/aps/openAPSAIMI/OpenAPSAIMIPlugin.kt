@@ -244,7 +244,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val multiplier = (profile as? ProfileSealed.EPS)?.value?.originalPercentage?.div(100.0)
             ?: return null
 
-        val sensitivity = calculateVariableIsf(start, multiplier)
+        val sensitivity = calculateVariableIsf(start)
 
         profiler.log(
             LTag.APS,
@@ -389,7 +389,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     }
     @Synchronized
     @SuppressLint("DefaultLocale")
-    private fun calculateVariableIsf(timestamp: Long, bg: Double?): Pair<String, Double?> {
+    private fun calculateVariableIsf(timestamp: Long): Pair<String, Double?> {
         if (!preferences.get(BooleanKey.ApsUseDynamicSensitivity)) return "OFF" to null
 
         // 0) cache DB existant
@@ -397,13 +397,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         if (result?.variableSens != null) return "DB" to result.variableSens
 
         // 1) BG & deltas actuels
-        val glucose = bg ?: glucoseStatusProvider.glucoseStatusData?.glucose ?: return "GLUC" to null
+        val glucose = glucoseStatusProvider.glucoseStatusData?.glucose ?: return "GLUC" to null
         val currentDelta = glucoseStatusProvider.glucoseStatusData?.delta
         val recentDeltas = getRecentDeltas()
         val predictedDelta = predictedDelta(recentDeltas)
 
         // 2) facteur historique (comme avant)
-        val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta, predictedDelta, bg)
+        val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta, predictedDelta, glucose)
 
         // 3) ISF rapide #1 : Kalman existant
         val kalmanFastIsf = kalmanISFCalculator.calculateISF(glucose, currentDelta, predictedDelta)
@@ -515,6 +515,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
 
         val inputConstraints = ConstraintObject(0.0, aapsLogger) // fake. only for collecting all results
+        val isfMgdl = profile.getIsfMgdl("OpenAPSAIMIPlugin")
 
         if (!hardLimits.checkHardLimits(profile.dia, app.aaps.core.ui.R.string.profile_dia, hardLimits.minDia(), hardLimits.maxDia())) return
         if (!hardLimits.checkHardLimits(
@@ -524,7 +525,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 hardLimits.maxIC()
             )
         ) return
-        if (!hardLimits.checkHardLimits(profile.getIsfMgdl("OpenAPSAIMIPlugin"), app.aaps.core.ui.R.string.profile_sensitivity_value, HardLimits.MIN_ISF, HardLimits.MAX_ISF)) return
+        if (!hardLimits.checkHardLimits(isfMgdl, app.aaps.core.ui.R.string.profile_sensitivity_value, HardLimits.MIN_ISF, HardLimits.MAX_ISF)) return
         if (!hardLimits.checkHardLimits(profile.getMaxDailyBasal(), app.aaps.core.ui.R.string.profile_max_daily_basal_value, 0.02, hardLimits.maxBasal())) return
         if (!hardLimits.checkHardLimits(pump.baseBasalRate, app.aaps.core.ui.R.string.current_basal_value, 0.01, hardLimits.maxBasal())) return
 
@@ -805,7 +806,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 max_bg = maxBg,
                 target_bg = targetBg,
                 carb_ratio = profile.getIc(),
-                sens = profile.getIsfMgdl("OpenAPSAIMIPlugin") * physioMults.isfFactor, // 🏥 ISF Modulation
+                sens = isfMgdl * physioMults.isfFactor, // 🏥 ISF Modulation
                 autosens_adjust_targets = false, // not used
                 max_daily_safety_multiplier = preferences.get(DoubleKey.ApsMaxDailyMultiplier) * physioMults.smbFactor, // 🏥 SMB Cap modulation
                 current_basal_safety_multiplier = preferences.get(DoubleKey.ApsMaxCurrentBasalMultiplier) * physioMults.basalFactor, // 🏥 Basal Cap modulation
