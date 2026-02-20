@@ -1595,7 +1595,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             title = R.string.oaps_aimi_thyroid_mode_title,
                             entries = modeEntries,
                             entryValues = modeValues
-                        ).apply { summaryProvider = androidx.preference.ListPreference.SimpleSummaryProvider.getInstance() }
+                        )
                     )
 
                     val statusEntries = context.resources.getStringArray(R.array.oaps_aimi_thyroid_status_entries).map { it as CharSequence }.toTypedArray()
@@ -1607,7 +1607,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             title = R.string.oaps_aimi_thyroid_manual_status_title,
                             entries = statusEntries,
                             entryValues = statusValues
-                        ).apply { summaryProvider = androidx.preference.ListPreference.SimpleSummaryProvider.getInstance() }
+                        )
                     )
                     
                     addPreference(PreferenceCategory(context).apply {
@@ -1623,7 +1623,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             title = R.string.oaps_aimi_thyroid_treatment_phase_title,
                             entries = phaseEntries,
                             entryValues = phaseValues
-                        ).apply { summaryProvider = androidx.preference.ListPreference.SimpleSummaryProvider.getInstance() }
+                        )
                     )
 
                     val guardEntries = context.resources.getStringArray(R.array.oaps_aimi_thyroid_guard_entries).map { it as CharSequence }.toTypedArray()
@@ -1635,7 +1635,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             title = R.string.oaps_aimi_thyroid_guard_level_title,
                             entries = guardEntries,
                             entryValues = guardValues
-                        ).apply { summaryProvider = androidx.preference.ListPreference.SimpleSummaryProvider.getInstance() }
+                        )
                     )
                     
                     addPreference(PreferenceCategory(context).apply {
