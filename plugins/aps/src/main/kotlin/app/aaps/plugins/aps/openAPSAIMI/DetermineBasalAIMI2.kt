@@ -327,6 +327,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster(wCyclePreferences) 
     }
 
+    // 🦋 Thyroid (Basedow) Module
+    private val thyroidPreferences by lazy { app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidPreferences(preferences) }
+    private val thyroidStateEstimator = app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidStateEstimator()
+    private val thyroidEffectModel = app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidEffectModel()
+    private val thyroidSafetyGates = app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidSafetyGates()
+
     // ❌ OLD reactivityLearner removed - UnifiedReactivityLearner is now the only one
     init {
         // Branche l’historique basal (TBR) sur la persistence réelle
@@ -472,6 +478,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastEventualBgSnapshot: Double = 0.0
     private var lastSmbProposed: Double = 0.0
     private var lastSmbCapped: Double = 0.0
+    private var currentThyroidEffects = app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidEffects()
     private var lastSmbFinal: Double = 0.0
     private var lastAutodriveState: AutodriveState = AutodriveState.IDLE
     private var internalLastSmbMillis: Long = 0L // Local Atomic Timestamp for Safety
@@ -1661,6 +1668,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          val refractoryBlocked = sinceBolus < refractoryWindow && !isExplicitUserAction
          var gatedUnits = safetyCappedUnits
          var absorptionFactor = 1.0
+
+         // 🦋 THYROID NORMALIZING SAFETY GATE
+         if (this.currentThyroidEffects.status == app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidStatus.NORMALIZING) {
+             val inputs = thyroidPreferences.inputsFlow.value
+             val gatedEffects = thyroidSafetyGates.applyGates(
+                 inputs = inputs,
+                 effects = this.currentThyroidEffects,
+                 currentBg = bg,
+                 bgDelta = delta.toDouble(),
+                 currentIob = iob.toDouble()
+             )
+             if (gatedEffects.blockSmb) {
+                 gatedUnits = 0f
+                 consoleLog.add("🦋 THYROID_GUARD: SMB Blocked (Normalizing Phase risk)")
+                 rT.reason.append("🦋 Thyroid Guard: Blocked. ")
+             } else if (gatedEffects.smbCapUnits != null) {
+                 val cap = gatedEffects.smbCapUnits!!.toFloat()
+                 if (gatedUnits > cap) {
+                     consoleLog.add("🦋 THYROID_GUARD: SMB Capped to ${cap} (was $gatedUnits)")
+                     rT.reason.append("🦋 Thyroid Guard: Cap ${cap}U. ")
+                     gatedUnits = cap
+                 }
+             }
+         }
 
          if (refractoryBlocked) {
              gatedUnits = 0f
@@ -3839,6 +3870,51 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         } catch (e: Exception) {
             consoleLog.add("🤰 Error in Gestation logic: ${e.message}")
+            e.printStackTrace()
+        }
+
+        // 🦋 Thyroid (Basedow) Module Integration
+        this.currentThyroidEffects = app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidEffects()
+        try {
+            thyroidPreferences.update()
+            val thyroidInputs = thyroidPreferences.inputsFlow.value
+            if (thyroidInputs.isEnabled) {
+                thyroidStateEstimator.updateState(thyroidInputs)
+                val status = thyroidStateEstimator.currentState.value
+                val confidence = thyroidStateEstimator.confidence.value
+                currentThyroidEffects = thyroidEffectModel.calculateEffects(status, confidence)
+                
+                // Safety Gates evaluated later during SMB cap, but logging effects here
+                val logMsg = app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidDiagnosticsLogger.formatDecisionLog(
+                    inputs = thyroidInputs,
+                    status = status,
+                    effects = currentThyroidEffects,
+                    confidence = confidence,
+                    direction = "INIT",
+                    reason = ""
+                )
+                if (logMsg.isNotBlank()) consoleLog.add("🦋 $logMsg")
+
+                // Apply Profile Multipliers (In-Flight Mutation similar to Gestation)
+                if (currentThyroidEffects.diaMultiplier != 1.0) {
+                     profile.dia *= currentThyroidEffects.diaMultiplier
+                }
+                if (currentThyroidEffects.egpMultiplier != 1.0) {
+                     profile.current_basal *= currentThyroidEffects.egpMultiplier
+                }
+                if (currentThyroidEffects.carbRateMultiplier != 1.0) {
+                     // Normally CR modification isn't directly 'carb rate', but we can lower Carbohydrate Ratio 
+                     // so that carbs require MORE insulin or absorb faster. Actually, Carb Rate in typical 
+                     // OAPS is handled in MealAdvisor or PKPD directly. We'll modify sens for now 
+                     // as a proxy for the ISF multiplier.
+                }
+                if (currentThyroidEffects.isfMultiplier != 1.0) {
+                     profile.sens *= currentThyroidEffects.isfMultiplier
+                     profile.variable_sens *= currentThyroidEffects.isfMultiplier
+                }
+            }
+        } catch (e: Exception) {
+            consoleLog.add("🦋 Error in Thyroid logic: ${e.message}")
             e.printStackTrace()
         }
         
