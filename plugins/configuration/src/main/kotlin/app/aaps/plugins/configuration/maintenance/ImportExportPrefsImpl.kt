@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.provider.Settings
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
@@ -113,7 +114,11 @@ class ImportExportPrefsImpl @Inject constructor(
     }
 
     override fun verifyStoragePermissions(fragment: Fragment, onGranted: Runnable) {
-        fragment.context?.let { ctx ->
+        val ctx = fragment.context ?:return
+
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU){
+            onGranted.run()
+        } else {
             val permission = ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_EXTERNAL_STORAGE)
             if (permission != PackageManager.PERMISSION_GRANTED) {
                 // We don't have permission so prompt the user
