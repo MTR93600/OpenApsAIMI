@@ -515,6 +515,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
 
         val inputConstraints = ConstraintObject(0.0, aapsLogger) // fake. only for collecting all results
+        val isfMgdl = profile.getIsfMgdl("OpenAPSAIMIPlugin")
 
         if (!hardLimits.checkHardLimits(profile.dia, app.aaps.core.ui.R.string.profile_dia, hardLimits.minDia(), hardLimits.maxDia())) return
         if (!hardLimits.checkHardLimits(
@@ -524,7 +525,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 hardLimits.maxIC()
             )
         ) return
-        if (!hardLimits.checkHardLimits(profile.getIsfMgdl("OpenAPSAIMIPlugin"), app.aaps.core.ui.R.string.profile_sensitivity_value, HardLimits.MIN_ISF, HardLimits.MAX_ISF)) return
+        if (!hardLimits.checkHardLimits(isfMgdl, app.aaps.core.ui.R.string.profile_sensitivity_value, HardLimits.MIN_ISF, HardLimits.MAX_ISF)) return
         if (!hardLimits.checkHardLimits(profile.getMaxDailyBasal(), app.aaps.core.ui.R.string.profile_max_daily_basal_value, 0.02, hardLimits.maxBasal())) return
         if (!hardLimits.checkHardLimits(pump.baseBasalRate, app.aaps.core.ui.R.string.current_basal_value, 0.01, hardLimits.maxBasal())) return
 
@@ -805,7 +806,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 max_bg = maxBg,
                 target_bg = targetBg,
                 carb_ratio = profile.getIc(),
-                sens = profile.getIsfMgdl("OpenAPSAIMIPlugin") * physioMults.isfFactor, // 🏥 ISF Modulation
+                sens = isfMgdl * physioMults.isfFactor, // 🏥 ISF Modulation
                 autosens_adjust_targets = false, // not used
                 max_daily_safety_multiplier = preferences.get(DoubleKey.ApsMaxDailyMultiplier) * physioMults.smbFactor, // 🏥 SMB Cap modulation
                 current_basal_safety_multiplier = preferences.get(DoubleKey.ApsMaxCurrentBasalMultiplier) * physioMults.basalFactor, // 🏥 Basal Cap modulation
