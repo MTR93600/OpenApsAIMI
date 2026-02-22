@@ -277,14 +277,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
         var count = 0
         var sum = 0.0
-        val start = timestamp - T.hours(8).msecs()
+        val start = timestamp - T.hours(24).msecs()
         dynIsfCache.forEach { key, value ->
             if (key in start..timestamp) {
                 count++
                 sum += value
             }
         }
-        val sensitivity = if (count == 0) null else sum / count
+        val sensitivity = if (count == 0) profileFunction.getProfile()?.getProfileIsfMgdl() else sum / count
         aapsLogger.debug(LTag.APS, "getAverageIsfMgdl() $sensitivity from $count values ${dateUtil.dateAndTimeAndSecondsString(timestamp)} $caller")
         return sensitivity
     }
@@ -597,7 +597,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val tddStatus: TddStatus?
         val variableSensitivity = 0.0
         val tdd = 0.0
-        if (dynIsfMode) {
+        if (true) { // FIX: Always run, DetermineBasalAIMI2 handles dynIsfMode internally
             val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
 //
 // // Plancher pour éviter des TDD trop faibles au démarrage
@@ -648,17 +648,22 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val recentDeltas = getRecentDeltas()
             val predictedDelta = predictedDelta(recentDeltas)
 
-            // Calcul adaptatif de l'ISF via le filtre de Kalman
-            var variableSensitivity = kalmanISFCalculator.calculateISF(currentBG, currentDelta, predictedDelta)
-            aapsLogger.debug(LTag.APS, "Adaptive ISF computed: $variableSensitivity for BG: $currentBG, currentDelta: $currentDelta, predictedDelta: $predictedDelta")
-
-            // Imposition des bornes pour que l'ISF soit toujours compris entre 5 et 300
-            variableSensitivity = variableSensitivity.coerceIn(5.0, 300.0)
+            // Calcul adaptatif de l'ISF via la fonction centralisée encapsulant le tout (incluant l'alimentation du cache)
+            val (source, calcSensitivity) = calculateVariableIsf(now)
+            var variableSensitivity = calcSensitivity ?: profile.getProfileIsfMgdl()
             
-            // 🏥 Apply Physio ISF Modulation to Dynamic ISF
-            if (physioMults.isfFactor != 1.0) {
-                variableSensitivity *= physioMults.isfFactor
-                aapsLogger.debug(LTag.APS, "🏥 LOOP: DynISF modulated: $variableSensitivity (x${physioMults.isfFactor})")
+            aapsLogger.debug(LTag.APS, "Adaptive ISF computed (source: $source): $variableSensitivity for BG: $currentBG, currentDelta: $currentDelta, predictedDelta: $predictedDelta")
+
+            // 🏥 Apply Physio ISF Modulation to Dynamic ISF (it might already be in calculateVariableIsf, but applying it if not fully wrapped)
+            // (calculateVariableIsf does apply physioMults internally before returning blended, 
+            // but if we fell back to profile ISF, we apply it here for safety)
+            if (source == "OFF" || calcSensitivity == null) {
+                if (physioMults.isfFactor != 1.0) {
+                    variableSensitivity *= physioMults.isfFactor
+                    aapsLogger.debug(LTag.APS, "🏥 LOOP: DynISF modulated: $variableSensitivity (x${physioMults.isfFactor})")
+                }
+                // Imposition des bornes
+                variableSensitivity = variableSensitivity.coerceIn(5.0, 300.0)
             }
             
             aapsLogger.debug(LTag.APS, "Final adaptive ISF after clamping: $variableSensitivity")

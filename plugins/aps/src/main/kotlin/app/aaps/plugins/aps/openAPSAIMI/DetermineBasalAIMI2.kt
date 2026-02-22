@@ -4485,7 +4485,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         ensureWCycleInfo()
         // --- GS + features AIMI -----------------------------------------------------
         val pack = try {
-            glucoseStatusCalculatorAimi.compute(false)
+            glucoseStatusCalculatorAimi.compute(true)
         } catch (e: Exception) {
             consoleError.add("❌ GlucoseStatusCalculatorAimi.compute() failed: ${e.message}")
             null
@@ -5584,6 +5584,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (learnedBasalMultiplier != 1.0) {
                 consoleLog.add("Basal adjusted by learner (x${"%.2f".format(learnedBasalMultiplier)})")
             }
+        } else {
+            basalaimi = profile_current_basal.toFloat()
+            consoleLog.add("TDDis 0 -> Baseline Basal: ${basalaimi}U/h")
         }
         this.basalaimi = basalDecisionEngine.smoothBasalRate(tdd7P.toFloat(), tdd7Days.toFloat(), basalaimi)
         if (tdd7Days.toFloat() != 0.0f) {
@@ -7076,6 +7079,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         tbrMaxAutoDrive = null,  // TODO: if you track max TBR for autodrive
                         smb30min = smb30min,
                         predictionAvailable = predictionAvailable,
+                        predictedBg = this.predictedBg?.toDouble(),
+                        eventualBg = rT.eventualBG,
                         inPrebolusWindow = inPrebolusWindow
                     ) { verdict, modulated ->
                         // Callback executed when audit completes
