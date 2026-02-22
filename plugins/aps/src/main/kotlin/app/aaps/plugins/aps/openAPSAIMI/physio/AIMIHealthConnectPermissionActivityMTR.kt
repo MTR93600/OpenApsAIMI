@@ -22,6 +22,7 @@ import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import java.time.Instant
 import app.aaps.plugins.aps.R
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -177,6 +178,8 @@ class AIMIHealthConnectPermissionActivityMTR : AppCompatActivity() {
                 val granted = client.permissionController.getGrantedPermissions()
                 Log.i(TAG, "HC: Initial Status: ${granted.size}/${REQUIRED_PERMISSIONS.size} granted")
                 updateStatus(granted)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Error checking permissions", e)
                 tvStatus.text = "Status: Error checking permissions"
@@ -236,6 +239,8 @@ class AIMIHealthConnectPermissionActivityMTR : AppCompatActivity() {
                 val count = response.records.sumOf { it.count }
                 Log.i(TAG, "HC: ✅ TEST READ SUCCESS: $count steps found")
                 tvStatus.append("\n\n✅ TEST READ: Success! Found $count steps")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "HC: ❌ TEST READ FAILED", e)
                 tvStatus.append("\n\n❌ TEST READ FAILED: ${e.message}")

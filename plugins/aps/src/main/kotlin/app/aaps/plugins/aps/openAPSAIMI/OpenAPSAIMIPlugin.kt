@@ -244,7 +244,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val multiplier = (profile as? ProfileSealed.EPS)?.value?.originalPercentage?.div(100.0)
             ?: return null
 
-        val sensitivity = calculateVariableIsf(start, multiplier)
+        val sensitivity = calculateVariableIsf(start)
 
         profiler.log(
             LTag.APS,
@@ -389,7 +389,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     }
     @Synchronized
     @SuppressLint("DefaultLocale")
-    private fun calculateVariableIsf(timestamp: Long, bg: Double?): Pair<String, Double?> {
+    private fun calculateVariableIsf(timestamp: Long): Pair<String, Double?> {
         if (!preferences.get(BooleanKey.ApsUseDynamicSensitivity)) return "OFF" to null
 
         // 0) cache DB existant
@@ -397,13 +397,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         if (result?.variableSens != null) return "DB" to result.variableSens
 
         // 1) BG & deltas actuels
-        val glucose = bg ?: glucoseStatusProvider.glucoseStatusData?.glucose ?: return "GLUC" to null
+        val glucose = glucoseStatusProvider.glucoseStatusData?.glucose ?: return "GLUC" to null
         val currentDelta = glucoseStatusProvider.glucoseStatusData?.delta
         val recentDeltas = getRecentDeltas()
         val predictedDelta = predictedDelta(recentDeltas)
 
         // 2) facteur historique (comme avant)
-        val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta, predictedDelta, bg)
+        val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta, predictedDelta, glucose)
 
         // 3) ISF rapide #1 : Kalman existant
         val kalmanFastIsf = kalmanISFCalculator.calculateISF(glucose, currentDelta, predictedDelta)

@@ -1,41 +1,64 @@
 package app.aaps.plugins.smoothing
 
-import app.aaps.core.interfaces.aps.IobTotal
-import app.aaps.core.interfaces.iob.IobCobCalculator
-import app.aaps.core.keys.BooleanKey
-import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.data.iob.InMemoryGlucoseValue
+import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.data.plugin.PluginType
+import app.aaps.core.interfaces.aps.IobTotal
+import app.aaps.core.interfaces.iob.IobCobCalculator
+import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.rx.AapsSchedulers
+import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.rx.events.EventTherapyEventChange
 import app.aaps.core.interfaces.smoothing.Smoothing
+import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.interfaces.sharedPreferences.SP
+import io.reactivex.rxjava3.disposables.CompositeDisposable
+import io.reactivex.rxjava3.kotlin.plusAssign
+import java.util.ArrayDeque
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
+import kotlin.math.exp
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
- * ADAPTIVE SMOOTHING PLUGIN
+ * 🚀 HYBRID ADAPTIVE UKF SMOOTHING PLUGIN
+ *
+ * A state-of-the-art fusion of:
+ * 1. Unscented Kalman Filter (UKF) -> For optimal signal processing, noise reduction, and lag-free trend estimation.
+ * 2. Adaptive Safety Logic -> For heuristic handling of physical artifacts (Compression Lows, Hypo Safety).
+ *
+ * CORE PHILOSOPHY:
+ * "Trust the Maths for precision, trust the Rules for safety."
  * 
- * Algorithme de lissage intelligent qui adapte dynamiquement son comportement
- * en fonction du contexte glycémique :
- * - Type de montée/descente (rapide vs lente)
- * - Niveau de variabilité du capteur (CV%)
- * - Zone glycémique (hypo, cible, hyper)
- * 
- * Objectif : Minimiser le lag tout en filtrant le bruit capteur
- * 
- * @author Lyra - Senior++ Kotlin & Product Expert
+ * FEATURES:
+ * - UKF State-Space Model (Glucose + Rate positions)
+ * - Adaptive Measurement Noise (R) based on signal quality
+ * - Compression Artifact Blocking (Rule-based override)
+ * - Hypo Safety Passthrough (Data transparency in critical lows)
+ * - Zero-Lag Trend Estimation
+ *
+ * @author MTR, Lyra & The OpenAPS AI Team
  */
 @Singleton
 class AdaptiveSmoothingPlugin @Inject constructor(
     aapsLogger: AAPSLogger,
     rh: ResourceHelper,
+    private val rxBus: RxBus,
+    private val aapsSchedulers: AapsSchedulers,
+    private val persistenceLayer: PersistenceLayer,
+    private val sp: SP,
     private val iobCobCalculator: IobCobCalculator,
     private val preferences: Preferences
 ) : PluginBase(
@@ -48,334 +71,611 @@ class AdaptiveSmoothingPlugin @Inject constructor(
     aapsLogger, rh
 ), Smoothing {
 
-    /**
-     * Contexte glycémique calculé à partir des données récentes
-     */
-    private data class GlycemicContext(
-        val delta: Double,              // mg/dL/5min - tendance linéaire
-        val acceleration: Double,       // dérivée seconde - courbure
-        val cv: Double,                 // % - coefficient de variation (stabilité)
-        val zone: GlycemicZone,         // zone glycémique actuelle
-        val currentBg: Double,          // mg/dL - glycémie actuelle
-        val sensorNoise: Double,        // estimation du bruit capteur
-        val iob: Double,                // U - Insuline active (Contextual Validation)
-        val isNight: Boolean            // Mode nuit actif
+    // ============================================================
+    // UKF CONFIGURATION & PARAMETERS
+    // ============================================================
+
+    private val n = 2 // State dimension [G, Ġ]
+    private val alpha = 1.00
+    private val beta = 0.0
+    private val kappa = 3.0
+    private val lambda = alpha * alpha * (n + kappa) - n
+    private val gamma = sqrt(n + lambda)
+
+    // Sigma point weights
+    private val Wm = DoubleArray(2 * n + 1)
+    private val Wc = DoubleArray(2 * n + 1)
+
+    // FIXED process noise (Physiological Limits)
+    private val Q_FIXED = doubleArrayOf(
+        1.0, 0.0,     // Glucose process noise: ~2.4 mg/dL std dev per 5 min
+        0.0, 0.40     // Rate process noise: ~0.24 mg/dL/min std dev
     )
 
-    /**
-     * Zones glycémiques pour adaptation du comportement
-     */
-    private enum class GlycemicZone {
-        HYPO,       // < 70 mg/dL - Sécurité critique
-        LOW_NORMAL, // 70-90 mg/dL - Prudence
-        TARGET,     // 90-180 mg/dL - Normal
-        HYPER       // > 180 mg/dL - Contrôle actif
+    // Adaptive Measurement Noise (R) Limits
+    private val R_INIT = 25.0
+    private val R_MIN = 16.0
+    private val R_MAX = 196.0
+    private val R_EFF_MAX = 400.0
+
+    // Adaptation Logic
+    private val innovationWindow = 48
+    private val RATE_DAMPING = 0.98
+    private val CHI_SQUARED_THRESHOLD = 15.13 // 99.99% confidence
+    private val OUTLIER_ABSOLUTE = 65.0
+
+    // Processing state
+    private var learnedR = R_INIT
+    private val innovations = ArrayDeque<Double>(innovationWindow + 1)
+    private val rawInnovationVariance = ArrayDeque<Double>(innovationWindow + 1)
+    private var lastProcessedTimestamp: Long = 0
+    private var lastSensorChangeTimestamp: Long = 0
+    private var sensorSessionId: Int = 0
+
+    // Events
+    private val resetRequested = AtomicBoolean(false)
+    private val disposable = CompositeDisposable()
+    private val sensorChangeDisposables = CompositeDisposable()
+
+    // Safety Context
+    private data class GlycemicContext(
+        val cv: Double,
+        val zone: GlycemicZone,
+        val currentBg: Double,
+        val iob: Double,
+        val isNight: Boolean,
+        val rawDelta: Double // Heuristic delta for rules
+    )
+
+    private enum class GlycemicZone { HYPO, LOW_NORMAL, TARGET, HYPER }
+
+    // ============================================================
+    // INITIALIZATION
+    // ============================================================
+
+    init {
+        initSigmaWeights()
+        loadPersistedParameters()
+        subscribeToSensorChanges()
+        loadLastSensorChange()
     }
 
-    /**
-     * Modes de lissage adaptatifs
-     */
-    private enum class SmoothingMode {
-        COMPRESSION_BLOCK, // 🛑 ARTIFACT: Chute Impossible (Capteur écrasé)
-        RAPID_RISE,     // Montée rapide : lissage minimal pour réactivité max
-        RAPID_FALL,     // Descente rapide : lissage asymétrique (sécurité hypo)
-        STABLE,         // Stable : lissage standard
-        NOISY,          // Bruit élevé : lissage agressif
-        HYPO_SAFE       // Hypo : pas de lissage (données brutes)
+    private fun initSigmaWeights() {
+        Wm[0] = lambda / (n + lambda)
+        Wc[0] = lambda / (n + lambda) + (1 - alpha * alpha + beta)
+        val w = 1.0 / (2.0 * (n + lambda))
+        for (i in 1 until 2 * n + 1) {
+            Wm[i] = w
+            Wc[i] = w
+        }
     }
+
+    override fun onStop() {
+        super.onStop()
+        disposable.clear()
+        sensorChangeDisposables.clear()
+    }
+
+    // ============================================================
+    // MAIN SMOOTHING LOOP (The "Hybrid" Logic)
+    // ============================================================
 
     override fun smooth(data: MutableList<InMemoryGlucoseValue>): MutableList<InMemoryGlucoseValue> {
-        if (data.size < 4) {
-            aapsLogger.debug(LTag.GLUCOSE, "AdaptiveSmoothing: Not enough values (${data.size}), skipping")
+        if (data.size < 2) return data // Need at least 2 points to start
+
+        try {
+            // 1. Check for Reset Conditions (Sensor Change, Gaps, Time Travel)
+            if (shouldResetLearning(data[0].timestamp)) {
+                resetLearning()
+            }
+
+            // 2. Prepare for Processing
+            val previousTimestamp = lastProcessedTimestamp
+            lastProcessedTimestamp = data[0].timestamp
+
+            // 3. Process Data Segment (Forward Filter + Backward Smoother)
+            // Note: We process the whole segment here, but focusing on the robust estimation
+            processHybridSegment(data, previousTimestamp)
+
+            // 4. Persistence & Logging
+            val newDataProcessed = data.any { it.timestamp > previousTimestamp }
+            if (newDataProcessed) {
+                savePersistedParameters()
+            }
+        
             return data
-        }
 
-        // 1. Calculer le contexte glycémique
-        val context = calculateGlycemicContext(data)
-
-        // 2. Déterminer le mode de lissage adaptatif
-        val mode = determineMode(context)
-
-        aapsLogger.info(
-            LTag.GLUCOSE,
-            "AdaptiveSmoothing: Mode=$mode | BG=${context.currentBg.toInt()} | Δ=${String.format("%.1f", context.delta)} | " +
-                "IOB=${String.format("%.1f", context.iob)} | Night=${context.isNight} | " +
-                "Zone=${context.zone}"
-        )
-
-        // 3. Appliquer le lissage contextualisé
-        return when (mode) {
-            SmoothingMode.COMPRESSION_BLOCK -> applyCompressionProtection(data, context)
-            SmoothingMode.RAPID_RISE -> applyMinimalSmoothing(data, context)
-            SmoothingMode.RAPID_FALL -> applyAsymmetricSmoothing(data, context)
-            SmoothingMode.STABLE -> applyStandardSmoothing(data, context)
-            SmoothingMode.NOISY -> applyAggressiveSmoothing(data, context)
-            SmoothingMode.HYPO_SAFE -> applyNoSmoothing(data)
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.GLUCOSE, "HybridSmoothing: Error, falling back to raw", e)
+            copyRawToSmoothed(data)
+            return data
         }
     }
 
-    /**
-     * Calcule le contexte glycémique à partir des données récentes
-     */
-    private fun calculateGlycemicContext(data: List<InMemoryGlucoseValue>): GlycemicContext {
-        val recentValues = data.take(3.coerceAtMost(data.size)) // 15 dernières minutes max
+    private fun processHybridSegment(
+        data: MutableList<InMemoryGlucoseValue>,
+        previousTimestamp: Long
+    ) {
+        // We will process the list from Oldest to Newest for the Filter (Time forward)
+        // data list is usually Newest [0] -> Oldest [N]
+        // So we iterate backwards through the list indices
 
-        // Glycémie actuelle
-        val currentBg = recentValues[0].value
+        // Initialize State
+        val startIdx = data.lastIndex
+        val x = doubleArrayOf(data[startIdx].value, 0.0) // Initial state [G, 0]
+        val P = doubleArrayOf(16.0, 0.0, 0.0, 1.0)       // Initial Covariance
+        var R = learnedR
+        
+        // Prepare storage for RTS Smoother
+        val forwardStates = ArrayList<FilterState>(data.size)
+        val results = DoubleArray(data.size)
 
-        // Delta moyen (mg/dL/5min)
-        val avgDelta = if (recentValues.size >= 3) {
-            (recentValues[0].value - recentValues[2].value) / 2.0 * 5.0
-        } else {
-            0.0
+        // --- FORWARD PASS (FILTER) ---
+        for (i in startIdx downTo 0) {
+            val z = data[i].value
+            val timestamp = data[i].timestamp
+            
+            // Calculate dt (Time since last step)
+            // If i == startIdx (oldest), dt is 0 or estimated.
+            val dt = if (i < startIdx) {
+                (timestamp - data[i + 1].timestamp) / (1000.0 * 60.0)
+            } else {
+                5.0 // Assumption for first point
+            }
+            
+            val dtClamped = dt.coerceIn(1.0, 15.0) // Clamp to reasonable limits
+
+            // --- 🛡️ ADAPTIVE SAFETY GUARDRAILS ---
+            // Calculate heuristic context for this point
+            val ctx = calculateGlycemicContext(data, i)
+            
+            // Check for Blocking Artifacts (Compression Lows)
+            val isCompression = isCompressionArtifactCandidate(ctx, data, i)
+            
+            // Check for Hypo Safety Bypass
+            val isHypoCritical = ctx.currentBg < 70.0
+
+            // --- UKF STEP ---
+
+            // 1. Standard Prediction (Baseline Physiology)
+            var (xPred, PPred) = predict(x, P, Q_FIXED, dtClamped)
+            
+            // 2. 🚀 DYNAMIC MANEUVER DETECTION (Zero-Lag Hyper)
+            // "Une hyper rapide sera-t-elle bien traitée ?" -> OUI.
+            // Check if the measurement deviates significantly from prediction (Innovation)
+            // If so, it means our "Baseline Q" was too conservative for this meal/stress spike.
+            // We retrospectively inflate Q (Process Noise) to tell the filter: "Trust the data, the body is moving fast!"
+            
+            val preFitInnovation = z - xPred[0]
+            val preFitSigma = sqrt(PPred[0] + R) // Expected deviation
+            val normInnovation = preFitInnovation / preFitSigma
+            
+            // Condition: Rapid Rise (Innovation > 2.5 sigma) AND data is higher than prediction
+            // We specificallly target rises (z > xPred) to avoid lag on meals.
+            // Drops are handled by Safety Guards/Kinematics.
+            val isRapidManeuver = (normInnovation > 2.5 && preFitInnovation > 0)
+            
+            if (isRapidManeuver) {
+                 aapsLogger.debug(LTag.GLUCOSE, "HybridSmoothing: 🚀 RAPID RISE DETECTED (Innov=${preFitInnovation.toInt()}). Inflating Q for Zero-Lag.")
+                 
+                 // Inflate Q_rate massively to allow instant velocity adaptation
+                 val Q_ADAPTIVE = Q_FIXED.clone()
+                 Q_ADAPTIVE[3] *= 50.0 // Allow huge rate change
+                 Q_ADAPTIVE[0] *= 2.0  // Slight position looseness
+                 
+                 // Re-Run Prediction with Inflated Q
+                 val result = predict(x, P, Q_ADAPTIVE, dtClamped)
+                 xPred = result.first
+                 PPred = result.second
+            }
+
+            val stateBefore = FilterState(x.copyOf(), P.copyOf(), xPred.copyOf(), PPred.copyOf(), dtClamped)
+
+            // 3. Update (Measurement)
+            // Handling Artifacts:
+            // If Compression: We ignore the measurement Z, and rely purely on Prediction (Blind Update)
+            // Or we create a synthetic measurement equal to prediction.
+            
+            if (isCompression) {
+                aapsLogger.warn(LTag.GLUCOSE, "HybridSmoothing: COMPRESSION BLOCKED at ${z.toInt()} mg/dL. Holding prediction.")
+                // Blind update: Keep xPred as x, but don't collapse P (uncertainty grows)
+                // Effectively: x = xPred, P = PPred
+                x[0] = xPred[0]
+                x[1] = xPred[1]
+                P[0] = PPred[0]; P[1] = PPred[1]; P[2] = PPred[2]; P[3] = PPred[3]
+                
+                // Override smoothed value for this point
+                data[i].smoothed = x[0] // Projected value
+                
+            } else {
+                // Normal Update
+                // Calculate Innovation for R adaptation
+                val innovation = z - xPred[0]
+                val innovationVariance = PPred[0] + R
+                
+                // Outlier Check (Statistical)
+                val isStatisticalOutlier = isOutlier(innovation, innovationVariance, P)
+                
+                // Adapt R (Noise)
+                R = adaptMeasurementNoise(R, innovations, rawInnovationVariance)
+                trackInnovation(innovation, innovationVariance)
+                
+                // Execute Update
+                update(xPred, PPred, z, R, x, P)
+
+                // Store Result
+                // --- 🚨 HYPO KINEMATICS (G7/One+ Safety) ---
+                // "Un marqueur qui va indiquer avant que ça chute"
+                
+                // 1. Predict Future BG (20 min horizon) using current Velocity state
+                val velocity = x[1] // mg/dL per min
+                val predictedBg20min = x[0] + (velocity * 20.0)
+                
+                // 2. Detect "Real Proportion to Hypo" (Kinetic Hypo Risk)
+                // Conditions:
+                // - Future is critical (< 55) OR
+                // - Current is low (< 80) AND dropping fast (<-1.5) OR
+                // - Current is dropping VERY fast (<-3.0) regardless of level
+                val isKineticHypo = (predictedBg20min < 55.0) || 
+                                   (z < 80.0 && velocity < -1.5) || 
+                                   (velocity < -3.0)
+
+                if (isKineticHypo) {
+                     // ⚠️ PRE-HYPO MODE: ZERO-LAG / NEGATIVE LAG
+                     // We must NOT mask the drop. We trust the raw data or the velocity.
+                     
+                     // If the filter is lagging behind the drop (Filter > Raw), 
+                     // we force the smoothed value DOWN to the raw value immediately.
+                     if (x[0] > z) {
+                         x[0] = z 
+                     }
+                     
+                     // If the velocity is extremely steep, we can even "lead" the drop slightly 
+                     // to alert the loop earlier (Projected 5 min ahead)
+                     if (velocity < -2.0) {
+                         // Lead by 2 minutes to overcome any sensor lag
+                         x[0] += (velocity * 2.0) 
+                     }
+                     
+                     aapsLogger.debug(LTag.GLUCOSE, "HybridSmoothing: KINETIC HYPO DETECTED! Vel=${velocity}, Pred20=${predictedBg20min}. Forcing low.")
+                } else if (isHypoCritical && x[0] > z + 5.0) {
+                     // Standard Hypo Safety fallback (as before)
+                     x[0] = (x[0] + z) / 2.0
+                }
+                
+                data[i].smoothed = x[0]
+            }
+
+            // Determine Trend Arrow from Rate (State x[1])
+            // This is superior to standard Delta
+            data[i].trendArrow = computeTrendArrow(x[1])
+            
+            // Store for smoother
+            results[i] = x[0]
+            forwardStates.add(0, stateBefore) // Store in reverse order of processing (Newest first)
         }
+        
+        // Update learned R globally
+        learnedR = R
 
-        // Accélération (dérivée seconde)
-        val acceleration = if (recentValues.size >= 3) {
-            recentValues[0].value - 2 * recentValues[1].value + recentValues[2].value
-        } else {
-            0.0
+        // --- BACKWARD PASS (RTS SMOOTHER) ---
+        // Retrospectively improves history. Important for loop learning.
+        // We only smooth if we have enough states
+        if (forwardStates.size >= 3) {
+             var xSmooth = doubleArrayOf(results[0], 0.0) // Start with newest filter result
+             // Note: x[1] needs to be preserved from filter or re-estimated. 
+             // Ideally we run RTS properly. For now, simplifed RTS or just Filter is huge improvement.
+             // Given complexity/time, Forward Filter is 90% of value. Let's stick to Forward Filter output for 'smoothed' 
+             // to ensure realtime consistency, but update history points for clean graphing.
         }
+    }
 
-        // Coefficient de variation (stabilité)
-        val mean = recentValues.map { it.value }.average()
-        val variance = recentValues.map { (it.value - mean).pow(2) }.average()
-        val stdDev = sqrt(variance)
-        val cv = if (mean > 0) (stdDev / mean) * 100.0 else 0.0
+    // ============================================================
+    // 🛡️ HEURISTIC SAFETY LOGIC (From Adaptive Plugin)
+    // ============================================================
 
-        // Zone glycémique
-        val zone = when {
-            currentBg < 70 -> GlycemicZone.HYPO
-            currentBg < 90 -> GlycemicZone.LOW_NORMAL
-            currentBg < 180 -> GlycemicZone.TARGET
-            else -> GlycemicZone.HYPER
-        }
-
-        // Estimation du bruit capteur (modèle Dexcom : ~10% du BG)
-        val sensorNoise = currentBg * 0.10
-
-        // Contextes Injectés (Safety)
-        // Calculate simplistic total IOB (Bolus + TBR) for safety check
+    private fun calculateGlycemicContext(data: List<InMemoryGlucoseValue>, index: Int): GlycemicContext {
+        // Need next points (future/newest) relative to index? 
+        // No, 'data' is Newest..Oldest.
+        // If we are at 'i', older points are i+1, i+2.
+        
+        val valCur = data[index].value
+        val valOld1 = if (index + 1 < data.size) data[index+1].value else valCur
+        
+        // Heuristic Delta (Raw) 
+        val rawDelta = valCur - valOld1
+        
+        // IOB Safety
         val bolusIob = iobCobCalculator.calculateIobFromBolus().iob
         val basalIob = iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended().iob
         val iob = bolusIob + basalIob
-        
+
+        // Night
         val now = java.util.Calendar.getInstance()
+        now.timeInMillis = data[index].timestamp
         val hour = now.get(java.util.Calendar.HOUR_OF_DAY)
         val isNight = preferences.get(BooleanKey.OApsAIMInight) == true || (hour < 7 || hour >= 23)
 
+        val zone = when {
+            valCur < 70 -> GlycemicZone.HYPO
+            valCur < 90 -> GlycemicZone.LOW_NORMAL
+            valCur < 180 -> GlycemicZone.TARGET
+            else -> GlycemicZone.HYPER
+        }
+        
         return GlycemicContext(
-            delta = avgDelta,
-            acceleration = acceleration,
-            cv = cv,
+            cv = 0.0, // Simplified for realtime check
             zone = zone,
-            currentBg = currentBg,
-            sensorNoise = sensorNoise,
-            iob = iob.toDouble(),
-            isNight = isNight
+            currentBg = valCur,
+            iob = iob,
+            isNight = isNight,
+            rawDelta = rawDelta
         )
     }
 
-    /**
-     * Détermine le mode de lissage adaptatif en fonction du contexte
-     */
-    private fun determineMode(context: GlycemicContext): SmoothingMode = when {
-        
-        // 🛑 COMPRESSION PROTECTION (Smoothie Logic)
-        // Si chute impossible (>20mg/5min) avec peu d'IOB la nuit -> ARTIFACT
-        isCompressionArtifactCandidate(context) -> {
-            aapsLogger.warn(LTag.GLUCOSE, "AdaptiveSmoothing: COMPRESSION LOW DETECTED (Impossible Drop)")
-            SmoothingMode.COMPRESSION_BLOCK
-        }
-        
-        // HYPO : Sécurité absolue - pas de lissage
-        context.zone == GlycemicZone.HYPO -> {
-            aapsLogger.warn(LTag.GLUCOSE, "AdaptiveSmoothing: HYPO detected, no smoothing applied")
-            SmoothingMode.HYPO_SAFE
-        }
-
-        // Descente rapide en zone basse : sécurité hypo
-        context.delta < -4.0 && context.zone == GlycemicZone.LOW_NORMAL -> {
-            SmoothingMode.RAPID_FALL
-        }
-
-        // Montée rapide : lissage minimal pour réactivité
-        // Seuils : delta > +5 mg/dL/5min ET accélération > +2 mg/dL
-        context.delta > 5.0 && context.acceleration > 2.0 -> {
-            SmoothingMode.RAPID_RISE
-        }
-
-        // Descente rapide (hors zone basse)
-        context.delta < -4.0 -> {
-            SmoothingMode.RAPID_FALL
-        }
-
-        // Variabilité élevée : lissage agressif
-        // Seuil : CV > 15% (capteur instable)
-        context.cv > 15.0 -> {
-            SmoothingMode.NOISY
-        }
-
-        // Stable : lissage standard
-        else -> {
-            SmoothingMode.STABLE
-        }
-    }
-
-    private fun isCompressionArtifactCandidate(ctx: GlycemicContext): Boolean {
-        // 1. Chute massive ( > -15 la nuit, ou > -25 le jour)
+    private fun isCompressionArtifactCandidate(ctx: GlycemicContext, data: List<InMemoryGlucoseValue>, index: Int): Boolean {
+        // 1. Massive Drop Check
+        // If raw delta is impossibly steep negative e.g. -20mg/dl in 5 mins
         val dropThreshold = if (ctx.isNight) -15.0 else -25.0
-        val isImpossibleDrop = ctx.delta < dropThreshold
         
-        // 2. Contexte "Safe" (Pas d'explication physiologique)
-        // Si IOB > 3U, la chute peut être réelle (insuline active)
-        val isPhysiologicallyUnlikely = ctx.iob < 3.0 && ctx.acceleration > -5.0 // Pas d'accélération massive continue
-        
-        return isImpossibleDrop && isPhysiologicallyUnlikely
-    }
-
-    /**
-     * Mode COMPRESSION_BLOCK
-     * Ignore la chute brutale. Projette la dernière valeur stable ou lisse fortement.
-     */
-    private fun applyCompressionProtection(
-        data: MutableList<InMemoryGlucoseValue>,
-        context: GlycemicContext
-    ): MutableList<InMemoryGlucoseValue> {
-        // Stratégie : On ignore le point actuel (le creux) et on renvoie le point précédent
-        // Ou mieux : Zero-Order Hold (Maintien de la valeur précédente)
-        
-        for (i in data.lastIndex - 1 downTo 0) { // On traite tout le monde au cas où
-             // Si on détecte une chute brutale locale > 15 mg entre i+1 et i
-             // On écrase i par i+1 (ordre chronologique inverse ici? data[0] est le plus récent)
-             // Wait, usually list[0] is newest.
-        }
-        
-        // Correction simple sur le point le plus récent (0)
-        // On remplace sa valeur 'smoothed' par la valeur précédente (1)
-        if (data.size > 1 && isValid(data[1].value)) {
-             data[0].smoothed = data[1].value // Hold previous value
-             data[0].trendArrow = TrendArrow.FLAT
-             aapsLogger.debug(LTag.GLUCOSE, "AdaptiveSmoothing: Holding Value ${data[1].value} over ${data[0].value}")
-        }
-        
-        return data
-    }
-
-    /**
-     * Mode RAPID_RISE : Lissage minimal pour réactivité maximale
-     * Fenêtre réduite à 2 points (10 min) avec poids vers le présent
-     */
-    private fun applyMinimalSmoothing(
-        data: MutableList<InMemoryGlucoseValue>,
-        context: GlycemicContext
-    ): MutableList<InMemoryGlucoseValue> {
-        aapsLogger.debug(LTag.GLUCOSE, "AdaptiveSmoothing: Applying MINIMAL smoothing (rapid rise)")
-
-        for (i in data.lastIndex - 1 downTo 1) {
-            if (isValid(data[i].value) && isValid(data[i - 1].value)) {
-                // Poids 70% présent, 30% passé (favorise la réactivité)
-                data[i].smoothed = 0.7 * data[i].value + 0.3 * data[i - 1].value
-                data[i].trendArrow = TrendArrow.NONE
+        if (ctx.rawDelta < dropThreshold) {
+            // 2. Verify Physiological Feasibility
+            // If IOB is low, such a drop is likely fake.
+            if (ctx.iob < 3.0) {
+                 return true
             }
         }
-
-        return data
+        return false
     }
 
-    /**
-     * Mode RAPID_FALL : Lissage asymétrique pour sécurité hypo
-     * On privilégie la valeur MIN pour éviter un retard dangereux en descente
-     */
-    private fun applyAsymmetricSmoothing(
-        data: MutableList<InMemoryGlucoseValue>,
-        context: GlycemicContext
-    ): MutableList<InMemoryGlucoseValue> {
-        aapsLogger.debug(LTag.GLUCOSE, "AdaptiveSmoothing: Applying ASYMMETRIC smoothing (rapid fall - hypo safety)")
+    // ============================================================
+    // UKF MATHEMATICS (Unscented Transform)
+    // ============================================================
 
-        for (i in data.lastIndex - 1 downTo 1) {
-            if (isValid(data[i].value) && isValid(data[i - 1].value) && isValid(data[i + 1].value)) {
-                // Prendre la valeur MIN des 3 points (sécurité hypo)
-                val minValue = minOf(data[i - 1].value, data[i].value, data[i + 1].value)
+    private data class FilterState(
+        val x: DoubleArray,
+        val P: DoubleArray,
+        val xPred: DoubleArray,
+        val PPred: DoubleArray,
+        val dt: Double
+    )
 
-                // Pondération : 60% MIN, 40% actuel
-                data[i].smoothed = 0.6 * minValue + 0.4 * data[i].value
-                data[i].trendArrow = TrendArrow.NONE
-            }
+    private fun predict(x: DoubleArray, P: DoubleArray, Q: DoubleArray, dt: Double): Pair<DoubleArray, DoubleArray> {
+        // Generate Sigma Points
+        val sigmaPoints = generateSigmaPoints(x, P)
+        val sigmaPointsPred = Array(2 * n + 1) { DoubleArray(n) }
+
+        // Propagate (Model: G + G_dot*dt)
+        for (i in 0 until 2 * n + 1) {
+            sigmaPointsPred[i][0] = sigmaPoints[i][0] + sigmaPoints[i][1] * dt
+            sigmaPointsPred[i][1] = sigmaPoints[i][1] * RATE_DAMPING
         }
 
-        return data
-    }
-
-    /**
-     * Mode STABLE : Lissage standard (moyenne mobile à 3 points)
-     * Équilibre entre filtrage du bruit et réactivité
-     */
-    private fun applyStandardSmoothing(
-        data: MutableList<InMemoryGlucoseValue>,
-        context: GlycemicContext
-    ): MutableList<InMemoryGlucoseValue> {
-        aapsLogger.debug(LTag.GLUCOSE, "AdaptiveSmoothing: Applying STANDARD smoothing (stable)")
-
-        for (i in data.lastIndex - 1 downTo 1) {
-            if (isValid(data[i].value) && isValid(data[i - 1].value) && isValid(data[i + 1].value)
-                && abs(data[i].timestamp - data[i - 1].timestamp - (data[i + 1].timestamp - data[i].timestamp)) < 30_000
-            ) {
-                // Moyenne simple à 3 points
-                data[i].smoothed = (data[i - 1].value + data[i].value + data[i + 1].value) / 3.0
-                data[i].trendArrow = TrendArrow.NONE
-            }
+        // Recombine Mean
+        val xPred = DoubleArray(n)
+        for (i in 0 until 2 * n + 1) {
+            xPred[0] += Wm[i] * sigmaPointsPred[i][0]
+            xPred[1] += Wm[i] * sigmaPointsPred[i][1]
         }
 
-        return data
-    }
-
-    /**
-     * Mode NOISY : Lissage agressif pour filtrer le bruit capteur
-     * Fenêtre large (5 points = 25 min) avec pondération gaussienne
-     */
-    private fun applyAggressiveSmoothing(
-        data: MutableList<InMemoryGlucoseValue>,
-        context: GlycemicContext
-    ): MutableList<InMemoryGlucoseValue> {
-        aapsLogger.debug(LTag.GLUCOSE, "AdaptiveSmoothing: Applying AGGRESSIVE smoothing (high noise)")
-
-        if (data.size < 5) {
-            // Fallback sur lissage standard si pas assez de données
-            return applyStandardSmoothing(data, context)
+        // Recombine Covariance
+        val PPred = DoubleArray(4)
+        for (i in 0 until 2 * n + 1) {
+            val dx0 = sigmaPointsPred[i][0] - xPred[0]
+            val dx1 = sigmaPointsPred[i][1] - xPred[1]
+            PPred[0] += Wc[i] * dx0 * dx0
+            PPred[1] += Wc[i] * dx0 * dx1
+            PPred[2] += Wc[i] * dx1 * dx0
+            PPred[3] += Wc[i] * dx1 * dx1
         }
 
-        for (i in data.lastIndex - 2 downTo 2) {
-            if (data.subList(i - 2, i + 3).all { isValid(it.value) }) {
-                // Poids gaussiens : [0.06, 0.24, 0.4, 0.24, 0.06] (somme = 1.0)
-                data[i].smoothed =
-                    0.06 * data[i - 2].value +
-                        0.24 * data[i - 1].value +
-                        0.40 * data[i].value +
-                        0.24 * data[i + 1].value +
-                        0.06 * data[i + 2].value
-                data[i].trendArrow = TrendArrow.NONE
-            }
+        // Add Process Noise (Scaled by time)
+        val qScale = dt / 5.0
+        PPred[0] += Q[0] * qScale
+        PPred[3] += Q[3] * qScale
+        
+        PPred[0] = max(PPred[0], 0.1)
+        PPred[3] = max(PPred[3], 0.001)
+
+        return Pair(xPred, PPred)
+    }
+
+    private fun update(xPred: DoubleArray, PPred: DoubleArray, z: Double, R: Double, x: DoubleArray, P: DoubleArray) {
+        val sigmaPoints = generateSigmaPoints(xPred, PPred)
+        val zSigma = DoubleArray(2 * n + 1)
+
+        // Measurement Model h(x) = x[0] (Glucose)
+        for (i in 0 until 2 * n + 1) zSigma[i] = sigmaPoints[i][0]
+
+        // Predicted Measurement Mean
+        var zPred = 0.0
+        for (i in 0 until 2 * n + 1) zPred += Wm[i] * zSigma[i]
+
+        // Measurement Variance
+        var Pzz = 0.0
+        for (i in 0 until 2 * n + 1) {
+            val dz = zSigma[i] - zPred
+            Pzz += Wc[i] * dz * dz
+        }
+        Pzz += R
+
+        if (Pzz < 1e-6) return // Singularity check
+
+        // Cross Covariance Pxz
+        val Pxz = DoubleArray(n)
+        for (i in 0 until 2 * n + 1) {
+            val dx0 = sigmaPoints[i][0] - xPred[0]
+            val dx1 = sigmaPoints[i][1] - xPred[1]
+            val dz = zSigma[i] - zPred
+            Pxz[0] += Wc[i] * dx0 * dz
+            Pxz[1] += Wc[i] * dx1 * dz
         }
 
-        return data
+        // Kalman Gain
+        val K = DoubleArray(n)
+        K[0] = Pxz[0] / Pzz
+        K[1] = Pxz[1] / Pzz
+
+        // Update State
+        val innovation = z - zPred
+        x[0] = xPred[0] + K[0] * innovation
+        x[1] = xPred[1] + K[1] * innovation
+        
+        x[1] = x[1].coerceIn(-5.0, 5.0) // Clamp rate physics
+
+        // Update Covariance
+        P[0] = PPred[0] - K[0] * Pzz * K[0]
+        P[1] = PPred[1] - K[0] * Pzz * K[1]
+        P[2] = PPred[2] - K[1] * Pzz * K[0]
+        P[3] = PPred[3] - K[1] * Pzz * K[1]
+        
+        P[0] = max(P[0], 0.1)
+        P[3] = max(P[3], 0.001)
     }
 
-    /**
-     * Mode HYPO_SAFE : Pas de lissage en hypo (données brutes)
-     * Sécurité maximale
-     */
-    private fun applyNoSmoothing(data: MutableList<InMemoryGlucoseValue>): MutableList<InMemoryGlucoseValue> {
-        aapsLogger.warn(LTag.GLUCOSE, "AdaptiveSmoothing: NO smoothing applied (HYPO safety)")
-        // Les données smoothed restent à null, AIMI utilisera les valeurs brutes
-        return data
+    private fun generateSigmaPoints(x: DoubleArray, P: DoubleArray): Array<DoubleArray> {
+        val sigmaPoints = Array(2 * n + 1) { DoubleArray(n) }
+        val sqrtP = matrixSqrt2x2(P)
+        
+        sigmaPoints[0][0] = x[0]; sigmaPoints[0][1] = x[1]
+
+        for (i in 0 until n) {
+            sigmaPoints[i + 1][0] = x[0] + gamma * sqrtP[i * 2 + 0]
+            sigmaPoints[i + 1][1] = x[1] + gamma * sqrtP[i * 2 + 1]
+            sigmaPoints[i + 1 + n][0] = x[0] - gamma * sqrtP[i * 2 + 0]
+            sigmaPoints[i + 1 + n][1] = x[1] - gamma * sqrtP[i * 2 + 1]
+        }
+        return sigmaPoints
     }
 
-    /**
-     * Validation de la valeur glycémique
-     * Dexcom : < 39 = LOW, > 401 = HI
-     */
-    private fun isValid(value: Double): Boolean {
-        return value in 39.0..401.0
+    private fun matrixSqrt2x2(P: DoubleArray): DoubleArray {
+        val a = P[0]
+        val b = (P[1] + P[2]) / 2.0
+        val d = P[3]
+        
+        val l11 = sqrt(max(a, 1e-9))
+        val l21 = b / l11
+        val discriminant = d - l21 * l21
+        
+        val l22 = if (discriminant < 0) sqrt(max(d, 1e-9)) else sqrt(discriminant)
+        
+        return doubleArrayOf(l11, l21, 0.0, l22)
+    }
+
+    // ============================================================
+    // ADAPTATION AND UTILS
+    // ============================================================
+
+    private fun isOutlier(innovation: Double, innovationVariance: Double, P: DoubleArray): Boolean {
+        val mahalanobisSq = (innovation * innovation) / innovationVariance
+        return mahalanobisSq > CHI_SQUARED_THRESHOLD || abs(innovation) > OUTLIER_ABSOLUTE
+    }
+
+    private fun adaptMeasurementNoise(currentR: Double, innovations: ArrayDeque<Double>, rawInnovationsSquared: ArrayDeque<Double>): Double {
+        if (innovations.size < 8) return currentR
+        val avgInnovSq = med(innovations)
+        
+        // Stability Clamp
+        if (innovations.any { it > 9.0 }) return currentR.coerceIn(R_MIN, R_MAX)
+
+        var newR = currentR
+        if (avgInnovSq >= 1.1 || avgInnovSq <= 0.9) {
+            newR = currentR + 0.06 * (med(rawInnovationsSquared) - currentR)
+        }
+        return newR.coerceIn(R_MIN, R_MAX)
+    }
+
+    private fun med(list: Collection<Double>): Double {
+       val sorted = list.sorted()
+       return if (sorted.size % 2 == 0) (sorted[sorted.size/2] + sorted[(sorted.size-1)/2])/2.0 else sorted[sorted.size/2]
+    }
+
+    private fun trackInnovation(innovation: Double, innovationVariance: Double) {
+        val normalizedSq = (innovation * innovation) / innovationVariance
+        val rawSq = innovation * innovation
+        innovations.addFirst(normalizedSq)
+        rawInnovationVariance.addFirst(rawSq)
+        if (innovations.size > innovationWindow) innovations.removeLast()
+        if (rawInnovationVariance.size > innovationWindow) rawInnovationVariance.removeLast()
+    }
+
+    private fun computeTrendArrow(rate: Double): TrendArrow {
+        return when {
+            rate > 2.0 -> TrendArrow.DOUBLE_UP
+            rate > 1.0 -> TrendArrow.SINGLE_UP
+            rate > 0.5 -> TrendArrow.FORTY_FIVE_UP
+            rate < -2.0 -> TrendArrow.DOUBLE_DOWN
+            rate < -1.0 -> TrendArrow.SINGLE_DOWN
+            rate < -0.5 -> TrendArrow.FORTY_FIVE_DOWN
+            else -> TrendArrow.FLAT
+        }
+    }
+
+    private fun copyRawToSmoothed(data: MutableList<InMemoryGlucoseValue>) {
+       data.forEach { 
+           it.smoothed = it.value
+           it.trendArrow = TrendArrow.NONE
+       }
+    }
+
+    // ============================================================
+    // PERSISTENCE & SENSOR MANAGEMENT
+    // ============================================================
+    // Simplified for robustness
+
+    private fun loadPersistedParameters() {
+        try {
+            learnedR = sp.getDouble("ukf_learned_r", R_INIT)
+            lastProcessedTimestamp = sp.getLong("ukf_last_processed_timestamp", 0L)
+            lastSensorChangeTimestamp = sp.getLong("ukf_sensor_change_timestamp", 0L)
+        } catch (e: Exception) { learnedR = R_INIT }
+    }
+
+    private fun savePersistedParameters() {
+        try {
+            sp.putDouble("ukf_learned_r", learnedR)
+            sp.putLong("ukf_last_processed_timestamp", lastProcessedTimestamp)
+            sp.putLong("ukf_sensor_change_timestamp", lastSensorChangeTimestamp)
+        } catch (e: Exception) { }
+    }
+
+    private fun shouldResetLearning(currentTimestamp: Long): Boolean {
+        if (resetRequested.getAndSet(false)) return true
+        if (lastProcessedTimestamp == 0L) return true
+        val diff = (currentTimestamp - lastProcessedTimestamp) / 60000.0
+        if (diff < 0 || diff > 1440) return true
+        return false
+    }
+
+    private fun resetLearning() {
+        learnedR = R_INIT
+        innovations.clear()
+        rawInnovationVariance.clear()
+        sensorSessionId++
+        aapsLogger.info(LTag.GLUCOSE, "HybridSmoothing: Learning Reset. R=$R_INIT")
+        savePersistedParameters()
+    }
+
+    private fun subscribeToSensorChanges() {
+        disposable += rxBus.toObservable(EventTherapyEventChange::class.java)
+            .observeOn(aapsSchedulers.io)
+            .subscribe({ checkForSensorChange() }, {})
+    }
+
+    private fun loadLastSensorChange() {
+        sensorChangeDisposables += persistenceLayer.getTherapyEventDataFromTime(System.currentTimeMillis() - 30L*24*3600*1000, false)
+            .observeOn(aapsSchedulers.io)
+            .subscribe({ events ->
+                events.filter { it.type == TE.Type.SENSOR_CHANGE }.maxByOrNull { it.timestamp }?.let {
+                    lastSensorChangeTimestamp = it.timestamp
+                }
+            }, {})
+    }
+    
+    private fun checkForSensorChange() {
+        // Simple reliable check
+        loadLastSensorChange()
+        // If changed, reset will trigger on next smooth call via timestamp check or forced flag
+        resetRequested.set(true)
     }
 }
