@@ -7,6 +7,7 @@ import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.rx.events.Event
 import app.aaps.core.interfaces.rx.events.EventNewBG
+import app.aaps.core.interfaces.rx.events.EventNewHistoryData
 import app.aaps.core.objects.workflow.LoggingWorker
 import app.aaps.core.utils.receivers.DataWorkerStorage
 import kotlinx.coroutines.Dispatchers
@@ -37,11 +38,16 @@ class InvokeLoopWorker(
         val data = dataWorkerStorage.pickupObject(inputData.getLong(DataWorkerStorage.STORE_KEY, -1)) as InvokeLoopData?
             ?: return Result.failure(workDataOf("Error" to "missing input data"))
 
-        if (data.cause !is EventNewBG) return Result.success(workDataOf("Result" to "no calculation needed"))
+        if (data.cause !is EventNewBG && data.cause !is EventNewHistoryData) return Result.success(workDataOf("Result" to "no calculation needed"))
         val glucoseValue = iobCobCalculator.ads.actualBg() ?: return Result.success(workDataOf("Result" to "bg outdated"))
-        if (glucoseValue.timestamp <= loop.lastBgTriggeredRun) return Result.success(workDataOf("Result" to "already looped with that value"))
-        loop.lastBgTriggeredRun = glucoseValue.timestamp
-        loop.invoke("Calculation for $glucoseValue", true)
+        
+        if (data.cause is EventNewBG) {
+            if (glucoseValue.timestamp <= loop.lastBgTriggeredRun) return Result.success(workDataOf("Result" to "already looped with that value"))
+            loop.lastBgTriggeredRun = glucoseValue.timestamp
+        }
+        
+        val causeName = data.cause?.javaClass?.simpleName ?: "Unknown"
+        loop.invoke("Calculation for $glucoseValue (cause=$causeName)", true)
         return Result.success()
     }
 }
