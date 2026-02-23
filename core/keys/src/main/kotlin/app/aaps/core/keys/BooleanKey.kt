@@ -141,6 +141,10 @@ enum class BooleanKey(
     OApsAIMIContextEnabled("key_aimi_context_enabled", false),  // 🎯 Context Module
     OApsAIMIContextLLMEnabled("key_aimi_context_llm_enabled", false),  // 🤖 LLM-powered context parsing
     
+    // 🦋 Thyroid / Basedow Module (MTR)
+    OApsAIMIThyroidEnabled("key_aimi_thyroid_enabled", false),
+    OApsAIMIThyroidLogVerbosity("key_aimi_thyroid_debug", false),
+    
     // 🏥 AIMI Physiological Assistant (MTR)
     AimiPhysioAssistantEnable("aimi_physio_assistant_enable", false),
     AimiPhysioSleepDataEnable("aimi_physio_sleep_enable", true),

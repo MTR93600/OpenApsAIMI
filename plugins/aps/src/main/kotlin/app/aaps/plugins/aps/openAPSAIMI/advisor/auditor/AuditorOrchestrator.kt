@@ -131,6 +131,8 @@ class AuditorOrchestrator @Inject constructor(
         tbrMaxAutoDrive: Double?,
         smb30min: Double,
         predictionAvailable: Boolean,
+        predictedBg: Double?,
+        eventualBg: Double?,
         inPrebolusWindow: Boolean,
         callback: ((AuditorVerdict?, DecisionModulator.ModulatedDecision) -> Unit)? = null
     ) {
@@ -182,8 +184,8 @@ class AuditorOrchestrator @Inject constructor(
             delta = delta,
             shortAvgDelta = shortAvgDelta,
             longAvgDelta = longAvgDelta,
-            predictedBg = null,  // TODO Phase 3
-            eventualBg = null,  // TODO Phase 3
+            predictedBg = predictedBg,  // Fixed: Replaced null // TODO Phase 3
+            eventualBg = eventualBg,    // Fixed: Replaced null // TODO Phase 3
             predBgsAvailable = predictionAvailable,
             iobTotal = iob.iob,
             iobActivity = iob.activity,

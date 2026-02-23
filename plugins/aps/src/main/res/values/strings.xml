@@ -399,6 +399,73 @@
     <string name="unified_reactivity_title">Unified Reactivity Learner</string>
     <string name="unified_reactivity_summary">Analyzes TIR/CV%/Hypo every 6h to adapt reactivity (0.6-1.5). Replaces time-bucket reactivity. Exports to CSV in Documents/AAPS.</string>
     
+    <!-- 🦋 Thyroid Module -->
+    <string name="oaps_aimi_thyroid_title">🦋 Hyperthyroidism (Basedow) Module</string>
+    <string name="oaps_aimi_thyroid_enabled_title">Enable Thyroid Module</string>
+    <string name="oaps_aimi_thyroid_enabled_summary">Adapts DIA, ISF, EGP and safety caps based on metabolic hyper-function. Critical during treatment when insulin resistance drops fast.</string>
+    <string name="oaps_aimi_thyroid_mode_title">Estimation Mode</string>
+    <string name="oaps_aimi_thyroid_mode_summary">Choose how the algorithm determines your Thyroid status.</string>
+    <string name="oaps_aimi_thyroid_manual_status_title">Thyroid Status (Manual)</string>
+    <string name="oaps_aimi_thyroid_manual_status_summary">Force the module into a specific physical state (e.g. Mild, Severe, Euthyroid).</string>
+    <string name="oaps_aimi_thyroid_treatment_phase_title">Treatment Phase</string>
+    <string name="oaps_aimi_thyroid_treatment_phase_summary">Define your current medical context (e.g. Titration, Normalizing). High risk of hypo during Titration/De-escalation.</string>
+    <string name="oaps_aimi_thyroid_guard_level_title">Normalizing Guard Level</string>
+    <string name="oaps_aimi_thyroid_guard_level_summary">Aggressiveness of the safety gate blocking SMBs while the thyroid rapidly normalizes to Euthyroid phase.</string>
+    <string name="oaps_aimi_thyroid_log_verbosity_title">Extended Logs</string>
+    <string name="oaps_aimi_thyroid_log_verbosity_summary">Adds extreme detail to the Thyroid state machine and effect model calculation logs.</string>
+    
+    <string-array name="oaps_aimi_thyroid_mode_entries">
+        <item>Manual Selection</item>
+        <item>Auto (Labs + Physio) - Experimental</item>
+    </string-array>
+    
+    <string-array name="oaps_aimi_thyroid_mode_values">
+        <item>MANUAL</item>
+        <item>AUTO</item>
+    </string-array>
+    
+    <string-array name="oaps_aimi_thyroid_status_entries">
+        <item>Euthyroid (Normal)</item>
+        <item>Mild Hyper</item>
+        <item>Moderate Hyper</item>
+        <item>Severe Hyper</item>
+        <item>Normalizing (High Risk)</item>
+    </string-array>
+    
+    <string-array name="oaps_aimi_thyroid_status_values">
+        <item>EUTHYROID</item>
+        <item>HYPER_MILD</item>
+        <item>HYPER_MODERATE</item>
+        <item>HYPER_SEVERE</item>
+        <item>NORMALIZING</item>
+    </string-array>
+    
+    <string-array name="oaps_aimi_thyroid_phase_entries">
+        <item>None (Stable Euthyroid)</item>
+        <item>Titration (Starting Meds)</item>
+        <item>Stable Treatment</item>
+        <item>De-escalation (Stopping Meds)</item>
+    </string-array>
+    
+    <string-array name="oaps_aimi_thyroid_phase_values">
+        <item>NONE</item>
+        <item>TITRATION</item>
+        <item>STABLE</item>
+        <item>DE_ESCALATION</item>
+    </string-array>
+    
+    <string-array name="oaps_aimi_thyroid_guard_entries">
+        <item>Low (Minimal caps)</item>
+        <item>Medium (Standard caps)</item>
+        <item>High (Strict block on fast drops)</item>
+    </string-array>
+    
+    <string-array name="oaps_aimi_thyroid_guard_values">
+        <item>LOW</item>
+        <item>MEDIUM</item>
+        <item>HIGH</item>
+    </string-array>
+    
     <!-- Night Growth Restriction -->
     <string name="prebolus_lunch_mode_summary">Lunch Mode Prebolus 1/2</string>
     <string name="prebolus2_lunch_mode_summary">Lunch Mode Prebolus 2/2</string>
