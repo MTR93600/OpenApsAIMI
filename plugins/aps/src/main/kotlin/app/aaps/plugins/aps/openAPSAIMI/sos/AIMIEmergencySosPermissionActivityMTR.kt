@@ -37,6 +37,7 @@ class AIMIEmergencySosPermissionActivityMTR : AppCompatActivity() {
 
     private val requiredForegroundPermissions = arrayOf(
         Manifest.permission.SEND_SMS,
+        Manifest.permission.CALL_PHONE,
         Manifest.permission.ACCESS_FINE_LOCATION,
         Manifest.permission.ACCESS_COARSE_LOCATION
     )

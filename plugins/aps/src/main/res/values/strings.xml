@@ -407,8 +407,8 @@
     <string name="aimi_sos_phone_summary">Phone number to send the SMS to (include country code e.g. +33...).</string>
     <string name="aimi_sos_threshold_title">Critical Hypo Threshold</string>
     <string name="aimi_sos_threshold_summary">BG below which the SOS will be triggered (mg/dL).</string>
-    <string name="aimi_sos_permissions_title">📍 Grant SMS &amp; Location Permissions</string>
-    <string name="aimi_sos_permissions_summary">Tap to authorize AAPS to send SMS and access background location for emergencies.</string>
+    <string name="aimi_sos_permissions_title">📍 Grant SMS, Call &amp; Location Permissions</string>
+    <string name="aimi_sos_permissions_summary">Tap to authorize AAPS to send SMS, make calls, and access background location for emergencies.</string>>
 
     <!-- 🦋 Thyroid Module -->
     <string name="oaps_aimi_thyroid_title">🦋 Hyperthyroidism (Basedow) Module</string>
