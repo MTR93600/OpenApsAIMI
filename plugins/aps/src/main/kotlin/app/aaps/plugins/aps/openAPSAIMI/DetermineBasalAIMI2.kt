@@ -487,6 +487,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var currentThyroidEffects = app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidEffects()
     private var lastSmbFinal: Double = 0.0
     private var lastAutodriveState: AutodriveState = AutodriveState.IDLE
+    fun isAutodriveEngaged(): Boolean = lastAutodriveState == AutodriveState.ENGAGED
+
     private var internalLastSmbMillis: Long = 0L // Local Atomic Timestamp for Safety
     private val nightGrowthResistanceMode = NightGrowthResistanceMode()
     private val ngrTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
