@@ -160,4 +160,7 @@ enum class BooleanKey(
     
     // 🌀 Adaptive Kernel Bank (Cosine Gate)
     AimiCosineGateEnabled("aimi_cosine_gate_enabled", true),
+    
+    // 🚨 Emergency SOS (Hypo)
+    AimiEmergencySosEnable("aimi_emergency_sos_enable", false),
 }

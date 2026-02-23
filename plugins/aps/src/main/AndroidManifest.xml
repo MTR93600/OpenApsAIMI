@@ -3,8 +3,15 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    
+    <!-- 🚨 Emergency SOS (Hypo) Permissions -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <application>
+        <!-- ... existing activities ... -->
         <activity
             android:name=".openAPSAIMI.advisor.AimiProfileAdvisorActivity"
             android:theme="@style/AppTheme.NoActionBar"
@@ -31,6 +38,13 @@
             android:exported="false"
             android:theme="@style/AppTheme"
             android:label="@string/context_title" />
+
+        <!-- 🚨 Emergency SOS (Hypo) Permissions activity -->
+        <activity
+            android:name=".openAPSAIMI.sos.AIMIEmergencySosPermissionActivityMTR"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:label="AIMI Emergency SOS" />
     </application>
 
 </manifest>

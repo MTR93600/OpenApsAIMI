@@ -7204,6 +7204,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleError.add("Failed to save AIMI Decision JSON: ${e.message}")
             }
             
+            // 🚨 Trigger Emergency SOS logic if necessary
+            app.aaps.plugins.aps.openAPSAIMI.sos.EmergencySosManager.evaluateSosCondition(
+                bg = bg,
+                delta = delta.toDouble(),
+                iob = iob_data_array.firstOrNull()?.iob ?: 0.0,
+                context = context,
+                preferences = this.preferences
+            )
+            
             return finalResult
         }
     }
