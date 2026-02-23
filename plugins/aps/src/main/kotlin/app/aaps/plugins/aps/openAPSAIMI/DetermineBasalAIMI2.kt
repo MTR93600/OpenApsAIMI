@@ -3989,13 +3989,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val basalFirstMealActive = mealData.mealCOB > 0.1
         val basalFirstHeavyMeal  = mealData.mealCOB > 20.0
         val isPersistentRise = bg > targetBg && combinedDelta >= 0.3f
-        val basalFirstActive = ((isLearnerPrudent && !basalFirstMealActive && !isPersistentRise)
-            || (isFragileBg && !basalFirstHeavyMeal)) && !isMealAdvisorOneShot
+        
+        val isT3cBrittleMode = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
+        
+        val basalFirstActive = if (isT3cBrittleMode) {
+            // T3c Brittle Mode: Strict Basal-First logic. 
+            // Disables routine SMBs in favor of TBR, unless it's a heavy meal or explicitly requested.
+            (!basalFirstHeavyMeal) && !isMealAdvisorOneShot
+        } else {
+            ((isLearnerPrudent && !basalFirstMealActive && !isPersistentRise)
+                || (isFragileBg && !basalFirstHeavyMeal)) && !isMealAdvisorOneShot
+        }
+        
         this.cachedBasalFirstActive = basalFirstActive
         this.cachedIsFragileBg = isFragileBg
         if (basalFirstActive) {
             this.maxSMB = 0.0; this.maxSMBHB = 0.0
             val reason = when {
+                isT3cBrittleMode -> "T3c Brittle Diabetes Mode (Strict Basal-First)"
                 isFragileBg    -> "Fragile BG (<110 & falling)"
                 isLearnerPrudent -> "Learner Prudence (Factor=${"%.2f".format(learnerFactor)})"
                 else -> "Unknown Safety Trigger"

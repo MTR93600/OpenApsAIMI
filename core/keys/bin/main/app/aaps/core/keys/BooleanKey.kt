@@ -140,6 +140,8 @@ enum class BooleanKey(
     OApsAIMITrajectoryGuardEnabled("key_aimi_trajectory_guard_enabled", false),  // 🌀 Phase-Space Trajectory Control
     OApsAIMIContextEnabled("key_aimi_context_enabled", false),  // 🎯 Context Module
     OApsAIMIContextLLMEnabled("key_aimi_context_llm_enabled", false),  // 🤖 LLM-powered context parsing
+    OApsAIMIT3cBrittleMode("key_aimi_t3c_brittle_mode", false),
+
     
     // 🦋 Thyroid / Basedow Module (MTR)
     OApsAIMIThyroidEnabled("key_aimi_thyroid_enabled", false),

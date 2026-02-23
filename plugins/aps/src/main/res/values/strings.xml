@@ -1361,5 +1361,8 @@
 
     
 
+    <!-- T3c Brittle Mode -->
+    <string name="aimi_t3c_brittle_mode_title">T3c / Brittle Diabetes Mode</string>
+    <string name="aimi_t3c_brittle_mode_summary">Prioritize TBR over SMB. Disables SMB boost from ISF Fusion, and imposes strict Basal-First behavior on persistent rises.</string>
 
 </resources>
