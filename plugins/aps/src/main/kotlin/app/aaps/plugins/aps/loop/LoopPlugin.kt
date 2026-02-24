@@ -189,16 +189,16 @@ class LoopPlugin @Inject constructor(
             // 1) Vérifie l'option autodrive
             val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
 
-            // 2) Récupère la glycémie (ajustez le code si la variable/méthode diffère)
+            // 2) Récupère la glycémie (pour les logs)
             val currentBG = glucoseStatusProvider.glucoseStatusData?.glucose
 
-            // 3) Condition : autodrive activé ET glycémie disponible >= 120
-            if (autodrive && currentBG != null && currentBG >= 130.0) {
-                aapsLogger.debug(LTag.APS, "OApsAIMIautoDrive=$autodrive; BG=$currentBG => on lance le loop.")
+            // 3) Condition : autodrive activé
+            if (autodrive) {
+                aapsLogger.debug(LTag.APS, "OApsAIMIautoDrive=$autodrive => on lance le loop périodique de fallback (BG=$currentBG).")
                 invoke("PeriodicApsMaxSmbFrequency", true)
             } else {
                 // Sinon, on logge qu'on ne fait rien
-                aapsLogger.debug(LTag.APS, "Pas de loop : autodrive=$autodrive; BG=$currentBG (<130 ?).")
+                aapsLogger.debug(LTag.APS, "Pas de loop périodique : autodrive=$autodrive.")
             }
 
             // Replanifie le prochain cycle
