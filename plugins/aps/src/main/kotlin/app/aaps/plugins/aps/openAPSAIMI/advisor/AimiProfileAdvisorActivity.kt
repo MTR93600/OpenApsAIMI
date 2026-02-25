@@ -94,11 +94,21 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                     startService(serviceIntent)
                 }
                 
-                // Share the Link
-                val shareUrl = "https://support.aimisystem.com/?room=$roomId"
+                // 🌐 Use the real local Wi-Fi IP address and the MJPEG server port
+                val wifiManager = applicationContext.getSystemService(android.content.Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+                val ipInt = wifiManager.connectionInfo.ipAddress
+                val ipAddress = String.format(
+                    "%d.%d.%d.%d",
+                    ipInt and 0xFF,
+                    ipInt shr 8 and 0xFF,
+                    ipInt shr 16 and 0xFF,
+                    ipInt shr 24 and 0xFF
+                )
+                val shareUrl = "http://$ipAddress:${AimiScreenShareService.HTTP_PORT}"
+                
                 val sendIntent = Intent().apply {
                     action = Intent.ACTION_SEND
-                    putExtra(Intent.EXTRA_TEXT, "AAPS Support Session Active (Screen Share):\n\nJoin Live: $shareUrl\n\n(Do not share this link with untrusted users)")
+                    putExtra(Intent.EXTRA_TEXT, "AAPS Support Session Active (Screen Share):\n\nJoin Live: $shareUrl\n\n(Open this URL in a browser on the same network — Do not share with untrusted users)")
                     type = "text/plain"
                 }
                 val shareIntent = Intent.createChooser(sendIntent, "Share Secure Room Link")
