@@ -3996,8 +3996,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         val basalFirstActive = if (isT3cBrittleMode) {
             // T3c Brittle Mode: Strict Basal-First logic. 
-            // Disables routine SMBs in favor of TBR, unless it's a heavy meal or explicitly requested.
-            (!basalFirstHeavyMeal) && !isMealAdvisorOneShot
+            // Disables routine SMBs in favor of TBR, even during heavy meals,
+            // allowing only MealAdvisor one-shots.
+            !isMealAdvisorOneShot
         } else {
             ((isLearnerPrudent && !basalFirstMealActive && !isPersistentRise)
                 || (isFragileBg && !basalFirstHeavyMeal)) && !isMealAdvisorOneShot
