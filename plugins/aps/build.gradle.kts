@@ -47,4 +47,7 @@ dependencies {
 
     testImplementation("io.mockk:mockk:1.13.8")
     ksp(libs.com.google.dagger.android.processor)
+    
+    // 📺 LiveKit WebRTC (Screen Sharing)
+    api("io.livekit:livekit-android:2.3.0")
 }
