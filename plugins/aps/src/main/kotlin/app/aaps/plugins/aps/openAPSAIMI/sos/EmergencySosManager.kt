@@ -91,10 +91,18 @@ object EmergencySosManager {
         }
 
         // 4. Have we waited long enough for the first action? (30 mins)
-        if (now - firstBelowTime < OBSERVATION_WINDOW_MS) {
+        // [FIX] User Request: Skip the 30-min window if BG just dropped below threshold and is actively falling.
+        val isFirstAction = prefs.getLong(KEY_LAST_ACTION_TIME, 0L) == 0L
+        val forceImmediateTrigger = isFirstAction && delta < 0.0
+        
+        if (!forceImmediateTrigger && now - firstBelowTime < OBSERVATION_WINDOW_MS) {
             val remain = (OBSERVATION_WINDOW_MS - (now - firstBelowTime)) / 60000
             Log.d(TAG, "SOS Monitoring: BG still low. $remain minutes remaining before first alert.")
             return
+        }
+
+        if (forceImmediateTrigger) {
+             Log.w(TAG, "🚨 SOS IMMEDIATE TRIGGER: BG ($bg) crossed threshold ($threshold) while falling (Δ$delta). Bypassing 30-min window.")
         }
 
         // 5. Ready for Action! Check if we need to act based on 15 min interval
