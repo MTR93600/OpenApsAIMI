@@ -5171,12 +5171,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // -----------------------------------------------------
 
         // PRIORITY 4: AUTODRIVE (Strict)
-        val autoRes = tryAutodrive(
-            bg, delta, shortAvgDelta, profile, lastBolusTimeMs ?: 0L, predictedBg, mealData.slopeFromMinDeviation, targetBg, reason,
-            preferences.get(BooleanKey.OApsAIMIautoDrive),
-            dynamicPbolusLarge, dynamicPbolusSmall,
-            flatBGsDetected  // 🛡️ Pass CGM quality signal
-        )
+        val isT3cBrittleMode = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
+        
+        val autoRes = if (isT3cBrittleMode) {
+            DecisionResult.Fallthrough("T3c Brittle Mode Active (Blocks Autodrive Priority)")
+        } else {
+            tryAutodrive(
+                bg, delta, shortAvgDelta, profile, lastBolusTimeMs ?: 0L, predictedBg, mealData.slopeFromMinDeviation, targetBg, reason,
+                preferences.get(BooleanKey.OApsAIMIautoDrive),
+                dynamicPbolusLarge, dynamicPbolusSmall,
+                flatBGsDetected  // 🛡️ Pass CGM quality signal
+            )
+        }
         
         if (autoRes is DecisionResult.Applied) {
              // 1. Apply TBR (System Intent) if present
