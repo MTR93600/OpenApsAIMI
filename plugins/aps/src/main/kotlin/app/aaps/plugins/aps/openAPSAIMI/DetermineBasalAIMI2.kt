@@ -3992,24 +3992,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val basalFirstHeavyMeal  = mealData.mealCOB > 20.0
         val isPersistentRise = bg > targetBg && combinedDelta >= 0.3f
         
-        val isT3cBrittleMode = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
-        
-        val basalFirstActive = if (isT3cBrittleMode) {
-            // T3c Brittle Mode: Strict Basal-First logic. 
-            // Disables routine SMBs in favor of TBR, even during heavy meals,
-            // allowing only MealAdvisor one-shots.
-            !isMealAdvisorOneShot
-        } else {
-            ((isLearnerPrudent && !basalFirstMealActive && !isPersistentRise)
+        val basalFirstActive = ((isLearnerPrudent && !basalFirstMealActive && !isPersistentRise)
                 || (isFragileBg && !basalFirstHeavyMeal)) && !isMealAdvisorOneShot
-        }
         
         this.cachedBasalFirstActive = basalFirstActive
         this.cachedIsFragileBg = isFragileBg
         if (basalFirstActive) {
             this.maxSMB = 0.0; this.maxSMBHB = 0.0
             val reason = when {
-                isT3cBrittleMode -> "T3c Brittle Diabetes Mode (Strict Basal-First)"
                 isFragileBg    -> "Fragile BG (<110 & falling)"
                 isLearnerPrudent -> "Learner Prudence (Factor=${"%.2f".format(learnerFactor)})"
                 else -> "Unknown Safety Trigger"
@@ -4863,6 +4853,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.decceleratingDown = if (delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta)) 1 else 0
         this.stable = if (delta > -3 && delta < 3 && shortAvgDelta > -3 && shortAvgDelta < 3 && longAvgDelta > -3 && longAvgDelta < 3) 1 else 0
         val nightbis = hourOfDay <= 7
+        
+        // 🛡️ T3C BRITTLE MODE BRANCH (Moved here to capture `therapy` variables for Prebolus)
+        // If the user has no pancreas and relies solely on basal shifts, we skip ALL
+        // standard Autodrive/SMB/Meal logic and use the dedicated execution method.
+        if (preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)) {
+            consoleLog.add("⚡ T3c Brittle Mode Active: Bypassing standard AIMI algorithm.")
+            
+            // 🍱 Inject Legacy Meal Prebolus Support for T3c
+            // This safely calculates `rT.units` using Meal Mode buttons without applying full loop logic.
+            // Any TBR (rT.rate) mutated by this call will be safely overwritten in executeT3cBrittleMode.
+            applyLegacyMealModes(profile, rT, currenttemp, profile.max_basal.toDouble())
+            
+            return executeT3cBrittleMode(
+                bg = glucose_status.glucose,
+                delta = glucose_status.delta.toFloat(),
+                profile = profile,
+                currenttemp = currenttemp,
+                iob = iob_data_array.firstOrNull() ?: IobTotal(System.currentTimeMillis()),
+                targetBg = originalProfile.target_bg,
+                rT = rT
+            )
+        }
         val modesCondition = (!mealTime || mealruntime > 30) && (!lunchTime || lunchruntime > 30) && (!bfastTime || bfastruntime > 30) && (!dinnerTime || dinnerruntime > 30) && !sportTime && (!snackTime || snackrunTime > 30) && (!highCarbTime || highCarbrunTime > 30) && !sleepTime && !lowCarbTime
         val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
         val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
@@ -5171,18 +5183,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // -----------------------------------------------------
 
         // PRIORITY 4: AUTODRIVE (Strict)
-        val isT3cBrittleMode = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
-        
-        val autoRes = if (isT3cBrittleMode) {
-            DecisionResult.Fallthrough("T3c Brittle Mode Active (Blocks Autodrive Priority)")
-        } else {
-            tryAutodrive(
-                bg, delta, shortAvgDelta, profile, lastBolusTimeMs ?: 0L, predictedBg, mealData.slopeFromMinDeviation, targetBg, reason,
-                preferences.get(BooleanKey.OApsAIMIautoDrive),
-                dynamicPbolusLarge, dynamicPbolusSmall,
-                flatBGsDetected  // 🛡️ Pass CGM quality signal
-            )
-        }
+        val autoRes = tryAutodrive(
+            bg, delta, shortAvgDelta, profile, lastBolusTimeMs ?: 0L, predictedBg, mealData.slopeFromMinDeviation, targetBg, reason,
+            preferences.get(BooleanKey.OApsAIMIautoDrive),
+            dynamicPbolusLarge, dynamicPbolusSmall,
+            flatBGsDetected  // 🛡️ Pass CGM quality signal
+        )
         
         if (autoRes is DecisionResult.Applied) {
              // 1. Apply TBR (System Intent) if present
@@ -7691,6 +7697,63 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  consoleLog.add("⚡ COB HYDRATION: Injected ${fallbackCarbs.toInt()}g from Advisor Prefs (DB latency bypass)")
             }
         }
+    }
+
+    // =========================================================================================
+    // 🛡️ T3C BRITTLE MODE (Strict Basal-First Isolation)
+    // =========================================================================================
+    private fun executeT3cBrittleMode(
+        bg: Double, delta: Float, profile: OapsProfileAimi,
+        currenttemp: CurrentTemp, iob: IobTotal, targetBg: Double, rT: RT
+    ): RT {
+        rT.reason = StringBuilder("")
+        rT.deliverAt = System.currentTimeMillis()
+        
+        // 1. Force Max SMB to 0.0 (Absolute Safety for Pancreas-less algorithm)
+        val maxSMB = 0.0
+        // We DO NOT wipe `rT.units` here to preserve any Prebolus injected by `applyLegacyMealModes`.
+        
+        val localLog = StringBuilder("🛡️ T3c Mode: ")
+        
+        // 2. Base TBR Calculation
+        val baseBasal = profile.current_basal
+        val maxBasal = profile.max_basal.toDouble()
+        val bgToTarget = bg - targetBg
+        
+        // 3. Simple Dynamic Proportional Modulation
+        var suggestedRate = baseBasal
+        
+        if (bgToTarget > 0 && delta > 0.5f) {
+            // Rising BG: Accelerate Basal proportionally to the rise velocity
+            val aggression = (delta / 2.0).coerceIn(1.0, 3.0) 
+            suggestedRate = baseBasal * aggression
+            localLog.append("Rising (Δ+$delta). Increasing Basal x${String.format("%.1f", aggression)}. ")
+        } else if (bg < targetBg || delta < -1.0f) {
+            // Falling BG or below target: Hard panic cut
+            suggestedRate = 0.0
+            localLog.append("Falling/Low (Δ$delta). Suspending Basal. ")
+        } else {
+            // Stable cruise
+            suggestedRate = baseBasal
+            localLog.append("Stable. Normal Basal. ")
+        }
+        
+        val safeRate = suggestedRate.coerceIn(0.0, maxBasal)
+        
+        // 4. Apply Action
+        if (currenttemp.rate != safeRate) {
+            rT.rate = safeRate
+            rT.duration = 30
+            rT.reason.append(localLog.toString() + "Req TBR: ${String.format("%.2f", safeRate)}U/h (SMB Disabled)")
+        } else {
+            rT.rate = currenttemp.rate
+            rT.duration = currenttemp.duration
+            rT.reason.append(localLog.toString() + "Maintaining TBR: ${String.format("%.2f", currenttemp.rate)}U/h")
+        }
+        
+        consoleLog.add(rT.reason.toString())
+        
+        return rT
     }
 
 }
