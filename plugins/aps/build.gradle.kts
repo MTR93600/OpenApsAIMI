@@ -48,6 +48,6 @@ dependencies {
     testImplementation("io.mockk:mockk:1.13.8")
     ksp(libs.com.google.dagger.android.processor)
     
-    // 📺 LiveKit WebRTC (Screen Sharing)
-    api("io.livekit:livekit-android:2.3.0")
+    // 📺 Jitsi Screen Share: no SDK needed — handled via Android Intent deep-link
+    // The app opens meet.jit.si room via browser or the Jitsi Meet app if installed.
 }

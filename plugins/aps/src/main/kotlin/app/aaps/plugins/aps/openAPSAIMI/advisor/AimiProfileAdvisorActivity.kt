@@ -27,11 +27,7 @@ import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.keys.interfaces.StringPreferenceKey
 import android.content.Intent
-import android.media.projection.MediaProjectionManager
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
-import app.aaps.plugins.aps.openAPSAIMI.advisor.service.AimiScreenShareService
-import java.util.UUID
+
 
 /**
  * =============================================================================
@@ -54,7 +50,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     // NOT injected - created manually to avoid Dagger issues
     private lateinit var advisorService: AimiAdvisorService
     private lateinit var historyRepo: app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
-    private lateinit var screenShareLauncher: ActivityResultLauncher<Intent>
+
 
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,50 +69,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         historyRepo = app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository(this)
         title = rh.gs(R.string.aimi_advisor_title)
         
-        // 📺 Screen Share Intent Launcher
-        screenShareLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == RESULT_OK && result.data != null) {
-                val roomId = "Aimi-Support-${UUID.randomUUID().toString().substring(0, 4).uppercase()}"
-                val token = "dummy_token" // Backend needed to generate JWT
-                
-                // Start Foreground Service
-                val serviceIntent = Intent(this, AimiScreenShareService::class.java).apply {
-                    action = AimiScreenShareService.ACTION_START
-                    putExtra(AimiScreenShareService.EXTRA_RESULT_CODE, result.resultCode)
-                    putExtra(AimiScreenShareService.EXTRA_RESULT_DATA, result.data)
-                    putExtra(AimiScreenShareService.EXTRA_ROOM_ID, roomId)
-                    putExtra(AimiScreenShareService.EXTRA_TOKEN, token)
-                }
-                
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    startForegroundService(serviceIntent)
-                } else {
-                    startService(serviceIntent)
-                }
-                
-                // 🌐 Use the real local Wi-Fi IP address and the MJPEG server port
-                val wifiManager = applicationContext.getSystemService(android.content.Context.WIFI_SERVICE) as android.net.wifi.WifiManager
-                val ipInt = wifiManager.connectionInfo.ipAddress
-                val ipAddress = String.format(
-                    "%d.%d.%d.%d",
-                    ipInt and 0xFF,
-                    ipInt shr 8 and 0xFF,
-                    ipInt shr 16 and 0xFF,
-                    ipInt shr 24 and 0xFF
-                )
-                val shareUrl = "http://$ipAddress:${AimiScreenShareService.HTTP_PORT}"
-                
-                val sendIntent = Intent().apply {
-                    action = Intent.ACTION_SEND
-                    putExtra(Intent.EXTRA_TEXT, "AAPS Support Session Active (Screen Share):\n\nJoin Live: $shareUrl\n\n(Open this URL in a browser on the same network — Do not share with untrusted users)")
-                    type = "text/plain"
-                }
-                val shareIntent = Intent.createChooser(sendIntent, "Share Secure Room Link")
-                startActivity(shareIntent)
-            } else {
-                android.widget.Toast.makeText(this, "Screen share permission denied.", android.widget.Toast.LENGTH_SHORT).show()
-            }
-        }
+
 
         
         // Dark Navy Background
@@ -257,17 +210,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             }
             addView(supportBtn)
 
-            // 📺 Screen Share (WebRTC) Button
-            val screenShareBtn = TextView(this@AimiProfileAdvisorActivity).apply {
-                text = "📺"
-                textSize = 22f
-                setPadding(24, 0, 0, 0)
-                setOnClickListener {
-                    val mProjectionManager = getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                    screenShareLauncher.launch(mProjectionManager.createScreenCaptureIntent())
-                }
-            }
-            addView(screenShareBtn)
+
 
             // Settings Button (Gear)
             val settingsBtn = TextView(this@AimiProfileAdvisorActivity).apply {
