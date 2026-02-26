@@ -36,6 +36,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
+import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
@@ -4868,10 +4869,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return executeT3cBrittleMode(
                 bg = glucose_status.glucose,
                 delta = glucose_status.delta.toFloat(),
+                shortAvgDelta = glucose_status.shortAvgDelta,
+                longAvgDelta = glucose_status.longAvgDelta,
+                duraISFminutes = glucose_status.duraISFminutes,
                 profile = profile,
                 currenttemp = currenttemp,
                 iob = iob_data_array.firstOrNull() ?: IobTotal(System.currentTimeMillis()),
                 targetBg = originalProfile.target_bg,
+                variableSensitivity = variableSensitivity.toDouble(),
+                maxIob = maxIob,
+                eventualBg = this.eventualBG.coerceAtLeast(40.0),
                 rT = rT
             )
         }
@@ -7700,59 +7707,53 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     // =========================================================================================
-    // 🛡️ T3C BRITTLE MODE (Strict Basal-First Isolation)
+    // 🛡️ T3C BRITTLE MODE — Dynamic PI Basal (Strict Basal-First Isolation)
     // =========================================================================================
     private fun executeT3cBrittleMode(
-        bg: Double, delta: Float, profile: OapsProfileAimi,
-        currenttemp: CurrentTemp, iob: IobTotal, targetBg: Double, rT: RT
+        bg: Double,
+        delta: Float,
+        shortAvgDelta: Double,
+        longAvgDelta: Double,
+        duraISFminutes: Double,
+        profile: OapsProfileAimi,
+        currenttemp: CurrentTemp,
+        iob: IobTotal,
+        targetBg: Double,
+        variableSensitivity: Double,
+        maxIob: Double,
+        eventualBg: Double,
+        rT: RT
     ): RT {
         rT.reason = StringBuilder("")
         rT.deliverAt = System.currentTimeMillis()
-        
-        // 1. Force Max SMB to 0.0 (Absolute Safety for Pancreas-less algorithm)
-        val maxSMB = 0.0
-        // We DO NOT wipe `rT.units` here to preserve any Prebolus injected by `applyLegacyMealModes`.
-        
-        val localLog = StringBuilder("🛡️ T3c Mode: ")
-        
-        // 2. Base TBR Calculation
+        // maxSMB = 0.0 is enforced: this function ONLY sets TBR, never rT.units
+        // rT.units is preserved for pre-bolus from applyLegacyMealModes
+
         val baseBasal = profile.current_basal
         val maxBasal = profile.max_basal.toDouble()
-        val bgToTarget = bg - targetBg
-        
-        // 3. Simple Dynamic Proportional Modulation
-        var suggestedRate = baseBasal
-        
-        if (bgToTarget > 0 && delta > 0.5f) {
-            // Rising BG: Accelerate Basal proportionally to the rise velocity
-            val aggression = (delta / 2.0).coerceIn(1.0, 3.0) 
-            suggestedRate = baseBasal * aggression
-            localLog.append("Rising (Δ+$delta). Increasing Basal x${String.format("%.1f", aggression)}. ")
-        } else if (bg < targetBg || delta < -1.0f) {
-            // Falling BG or below target: Hard panic cut
-            suggestedRate = 0.0
-            localLog.append("Falling/Low (Δ$delta). Suspending Basal. ")
-        } else {
-            // Stable cruise
-            suggestedRate = baseBasal
-            localLog.append("Stable. Normal Basal. ")
-        }
-        
-        val safeRate = suggestedRate.coerceIn(0.0, maxBasal)
-        
-        // 4. Apply Action
-        if (currenttemp.rate != safeRate) {
-            rT.rate = safeRate
-            rT.duration = 30
-            rT.reason.append(localLog.toString() + "Req TBR: ${String.format("%.2f", safeRate)}U/h (SMB Disabled)")
-        } else {
-            rT.rate = currenttemp.rate
-            rT.duration = currenttemp.duration
-            rT.reason.append(localLog.toString() + "Maintaining TBR: ${String.format("%.2f", currenttemp.rate)}U/h")
-        }
-        
+
+        // 🧠 Predictive PI Controller — 1000% scale, predictedBg as error term
+        val decision = DynamicBasalController.computeT3c(
+            bg = bg,
+            targetBg = targetBg,
+            delta = delta,
+            shortAvgDelta = shortAvgDelta,
+            longAvgDelta = longAvgDelta,
+            iob = iob.iob,
+            maxIob = maxIob,
+            profileBasal = baseBasal,
+            isf = variableSensitivity.coerceAtLeast(10.0),
+            duraISFminutes = duraISFminutes,
+            eventualBg = if (eventualBg > 0) eventualBg else null
+        )
+
+        val safeRate = decision.rate.coerceIn(0.0, maxBasal)
+
+        rT.rate = safeRate
+        rT.duration = decision.durationMin
+        rT.reason.append("🛡️T3c | SMB=0 | ").append(decision.reason)
+
         consoleLog.add(rT.reason.toString())
-        
         return rT
     }
 
