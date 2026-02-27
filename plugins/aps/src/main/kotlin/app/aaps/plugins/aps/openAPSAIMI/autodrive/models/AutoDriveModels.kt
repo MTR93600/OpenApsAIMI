@@ -1,0 +1,25 @@
+package app.aaps.plugins.aps.openAPSAIMI.autodrive.models
+
+/**
+ * Représente l'état mathématique continu du patient à un instant T (généralement toutes les 5 min).
+ * Contrairement à BgSnapshot, cet objet est agnostique des règles d'APS (pas de "meal", etc.).
+ */
+data class AutoDriveState(
+    val bg: Double,
+    val bgVelocity: Double,         // mg/dL/min
+    val iob: Double,                // Unités actives
+    val cob: Double = 0.0,          // Graphes optionnels si annoncés
+    val estimatedSI: Double = 1.0,  // Sensibilité à l'insuline estimée à l'instant T (par défaut 1.0 = profile)
+    val estimatedRa: Double = 0.0,  // Taux d'apparition des glucides estimé (Glucose Rate of Appearance)
+    val physiologicalStressMask: DoubleArray // Vecteur optionnel d'attention (pour plus tard)
+)
+
+/**
+ * La commande brute calculée par le MPC de l'Autodrive, AVANT le passage dans le bouclier de sécurité.
+ */
+data class AutoDriveCommand(
+    val scheduledMicroBolus: Double,
+    val temporaryBasalRate: Double,
+    val isSafe: Boolean = true,
+    val reason: String = "Autodrive Init"
+)

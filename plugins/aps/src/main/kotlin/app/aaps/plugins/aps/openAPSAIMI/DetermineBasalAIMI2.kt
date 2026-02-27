@@ -69,6 +69,8 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdAbsorptionGuard
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit  // 🌀 Trajectory Control
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.WarningSeverity  // 🌀 Trajectory Warnings
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextMode  // 🎯 Context Mode
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.AutodriveEngine // 🧠 Autodrive
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState // 🧠 Autodrive
 import java.io.File
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -287,6 +289,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val wCycleLearner: WCycleLearner,
     private val pumpCapabilityValidator: app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator,
     private val dynamicBasalController: app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController,
+    private val autodriveEngine: AutodriveEngine,
     private val context: Context
 ) {
     @Inject lateinit var persistenceLayer: PersistenceLayer
@@ -4442,6 +4445,38 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val rtActivity = physioAdapter.getRealTimeActivity()
         consoleLog.add("PHYSIO_RT Steps=${rtActivity.stepsToday} HR=${rtActivity.heartRate}bpm")
 
+        // 🧠 AUTODRIVE SHADOW MODE INJECTION
+        // Transform the APS state context into a clean mathematical state
+        val autodriveState = AutoDriveState(
+            bg = glucose_status.glucose,
+            bgVelocity = glucose_status.delta / 5.0, // Convert delta/5min to mg/dL/min
+            iob = iob_data_array.firstOrNull()?.iob ?: 0.0,
+            cob = mealData.mealCOB,
+            estimatedSI = 1.0, // TODO Phase 2
+            estimatedRa = 0.0, // TODO Phase 2
+            physiologicalStressMask = doubleArrayOf() // TODO Attention Gate Phase
+        )
+
+        // Set actual mode based on UI Preferences
+        autodriveEngine.setShadowMode(true) // Always shadow for logs
+        
+        // Execute Autodrive 
+        val autodriveCommand = autodriveEngine.tick(autodriveState, profile.current_basal)
+        
+        // 🚨 THE AUTODRIVE SWITCH 🚨
+        val isAutodriveActive = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIautoDriveActive)
+        
+        if (isAutodriveActive && autodriveCommand != null) {
+            consoleLog.add("🚀 --- AUTODRIVE IS ACTIVE --- 🚀")
+            rT.rate = autodriveCommand.temporaryBasalRate
+            rT.duration = 5
+            rT.units = autodriveCommand.scheduledMicroBolus
+            rT.reason.append("Autodrive Mode: ${autodriveCommand.reason}")
+            
+            // Clean exit, bypassing all other AIMI rules
+            return rT
+        }
+        
         // 🧹 STATE RESET (Critical Fix FCL 10.6):
         // maxSMB is a persistent class member. It MUST be reset to the user's preference at the start of every cycle.
         // Otherwise, temporary overrides (like BFast2 mode) permeate to future cycles.
