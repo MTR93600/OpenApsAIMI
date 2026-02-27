@@ -1,0 +1,9 @@
+diff a/core/keys/src/main/kotlin/app/aaps/core/keys/IntKey.kt b/core/keys/src/main/kotlin/app/aaps/core/keys/IntKey.kt	(rejected hunks)
+@@ -103,4 +103,7 @@
+     // 🌸 Endometriosis & Cycle Management (MTR)
+     AimiEndometriosisFlareDuration("aimi_endo_flare_duration", 4, 1, 24),
+ 
++    // 🌀 Adaptive Kernel Bank (Cosine Gate)
++    AimiCosineGateMaxPeakShift("aimi_cosine_gate_max_shift", 15, 0, 60),
++
+ }
