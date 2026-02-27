@@ -425,8 +425,11 @@ object SmbInstructionExecutor {
         var smbAfterDamping = dampingOut.smbAfterDamping
         val audit = dampingOut.audit
         val dampedRaw = smbAfterDamping
+        val isT3cBrittleMode = input.preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
+        
         input.pkpdRuntime?.let { runtime ->
-                        if (input.bg >= 120.0 &&
+                        if (!isT3cBrittleMode &&
+                                input.bg >= 120.0 &&
                                 input.delta >= 0.0 &&
                                 runtime.tailFraction < 0.30 &&
                                 runtime.fusedIsf <= runtime.profileIsf
@@ -443,6 +446,8 @@ object SmbInstructionExecutor {
                                                 )
                                         )
                                 smbAfterDamping = boosted
+                            } else if (isT3cBrittleMode && runtime.fusedIsf <= runtime.profileIsf) {
+                                input.rT.reason.append("\n[T3c Mode] HighBG PKPD boost (20%) is DISABLED.")
                             }
                     }
         var highBgOverrideFlag = false

@@ -133,7 +133,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val physioManager: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioManagerMTR, // 🏥 Physiological Manager MTR
     // 🏥 Physiological Decision Adapter (The Safety Gate)
     private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR,
-    private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator // 🧠 AI Auditor MTR
+    private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator, // 🧠 AI Auditor MTR
+    private val contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager // 🎯 Context Manager
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -152,7 +153,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     override fun onStart() {
         super.onStart()
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey::class.java)
-        
+        preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey::class.java)
+
         // 🏃 Start AIMI Steps Manager (Health Connect + Phone Sensor sync)
         try {
             stepsManager.start()
@@ -206,7 +208,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "Error stopping AIMI Physiological Manager", e)
         }
-        
+
         AimiUamHandler.close(context)
     }
     // last values
@@ -931,25 +933,27 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // ────────────────────────────────────────────────────
         // 1️⃣ On détecte si l’on est en mode “meal” ou “early autodrive”
         val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
+        
+        // 🎯 Context Integration (Remote/AI)
+        val contextSnapshot = contextManager.getSnapshot(dateUtil.now())
+        
         val isMealMode = therapy.snackTime
             || therapy.highCarbTime
             || therapy.mealTime
             || therapy.lunchTime
             || therapy.dinnerTime
             || therapy.bfastTime
+            || contextSnapshot.hasMealRisk // 🍕 Remote "Lunch/Meal" triggers this
+
+        val isSportMode = therapy.sportTime || contextSnapshot.hasActivity // 🏃 Remote "Sport" triggers this
 
         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
         val night = hour <= 7
+        val isAutodriveEnabled = preferences.get(BooleanKey.OApsAIMIautoDrive)
         val smb = glucoseStatusCalculatorAimi.getGlucoseStatusData(false) ?: return absoluteRate
-        val feats = glucoseStatusCalculatorAimi.getAimiFeatures(false)
-        val accel = feats?.accel ?: 0.0
-        val isEarlyAutodrive = !night && !isMealMode && !therapy.sportTime &&
-            smb.glucose > 110 &&
-            detectMealOnset(
-                smb.delta.toFloat(),
-                predictedDelta(getRecentDeltas()).toFloat(),
-                accel.toFloat()
-            )
+
+        val isEarlyAutodrive = !night && !isMealMode && !isSportMode && isAutodriveEnabled &&
+            determineBasalaimiSMB2.isAutodriveEngaged()
 
         val isSpecialMode = isMealMode || isEarlyAutodrive
 
@@ -1141,6 +1145,59 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     )
                 })
 
+                // 🚨 Emergency SOS (Hypo) Section
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "AIMI_EMERGENCY_SOS"
+                    title = rh.gs(R.string.aimi_sos_title)
+
+                    addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.AimiEmergencySosEnable,
+                            title = R.string.aimi_sos_enable_title,
+                            summary = R.string.aimi_sos_enable_summary
+                        )
+                    )
+
+                    addPreference(
+                        app.aaps.core.validators.preferences.AdaptiveStringPreference(
+                            ctx = context,
+                            stringKey = app.aaps.core.keys.StringKey.AimiEmergencySosPhone,
+                            title = R.string.aimi_sos_phone_title,
+                            dialogMessage = R.string.aimi_sos_phone_summary
+                        )
+                    )
+
+                    addPreference(
+                        app.aaps.core.validators.preferences.AdaptiveIntPreference(
+                            ctx = context,
+                            intKey = app.aaps.core.keys.IntKey.AimiEmergencySosThreshold,
+                            title = R.string.aimi_sos_threshold_title,
+                            dialogMessage = R.string.aimi_sos_threshold_summary
+                        )
+                    )
+
+                    // 📍 Permissions Button
+                    addPreference(androidx.preference.Preference(context).apply {
+                        key = "aimi_sos_permissions"
+                        title = rh.gs(R.string.aimi_sos_permissions_title)
+                        summary = rh.gs(R.string.aimi_sos_permissions_summary)
+                        setOnPreferenceClickListener {
+                            try {
+                                val intent = Intent(
+                                    context,
+                                    app.aaps.plugins.aps.openAPSAIMI.sos.AIMIEmergencySosPermissionActivityMTR::class.java
+                                )
+                                context.startActivity(intent)
+                                true
+                            } catch (e: Exception) {
+                                android.util.Log.e("OpenAPSAIMIPlugin", "Failed to launch SOS permissions", e)
+                                false
+                            }
+                        }
+                    })
+                })
+
                 // 🏥 Physiological Assistant Section
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "AIMI_PHYSIO"
@@ -1317,6 +1374,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             doubleKey = DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin,
                             dialogMessage = R.string.oaps_aimi_pkpd_max_peak_delta_summary,
                             title = R.string.oaps_aimi_pkpd_max_peak_delta_title
+                        )
+                    )
+                    addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.OApsAIMIT3cBrittleMode,
+                            title = R.string.aimi_t3c_brittle_mode_title,
+                            summary = R.string.aimi_t3c_brittle_mode_summary
                         )
                     )
                     addPreference(
@@ -1648,15 +1713,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         summary = R.string.aimi_advisor_summary
                     )
                 )
-                // Meal Advisor
-                addPreference(
-                    AdaptiveIntentPreference(
-                        ctx = context,
-                        intentKey = IntentKey.OApsAIMIMealAdvisor,
-                        intent = Intent(context, app.aaps.plugins.aps.openAPSAIMI.advisor.meal.MealAdvisorActivity::class.java),
-                        title = R.string.aimi_meal_advisor_title
-                    )
-                )
                 
                 // 🎯 Context Module
                 addPreference(AdaptiveIntentPreference(
@@ -1869,30 +1925,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIHighBGinterval, dialogMessage = R.string.oaps_aimi_HIGHBG_interval_summary, title = R.string.oaps_aimi_HIGHBG_interval_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHighBGMaxSMB, dialogMessage = R.string.openapsaimi_highBG_maxsmb_summary, title = R.string.openapsaimi_highBG_maxsmb_title))
             })
-
-            // 📡 Remote Control Section
-            addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                key = "AIMI_REMOTE"
-                title = "Remote Control" // TODO: Add string resource
-
-                addPreference(PreferenceCategory(context).apply {
-                    title = "Security" // TODO: Add string resource
-                })
-
-                addPreference(
-                    androidx.preference.EditTextPreference(context).apply {
-                        key = AimiStringKey.RemoteControlPin.key
-                        title = "Security PIN"
-                        summary = "PIN required for remote commands (AIMI: PIN CMD)"
-                        dialogTitle = "Enter 4-8 digit PIN"
-                        setOnBindEditTextListener { editText ->
-                            editText.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
-                        }
-                    }
-                )
-            })
-
-
 
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "Training_ML_Modes"

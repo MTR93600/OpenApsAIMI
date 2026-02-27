@@ -36,6 +36,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
+import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
@@ -487,6 +488,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var currentThyroidEffects = app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidEffects()
     private var lastSmbFinal: Double = 0.0
     private var lastAutodriveState: AutodriveState = AutodriveState.IDLE
+    fun isAutodriveEngaged(): Boolean = lastAutodriveState == AutodriveState.ENGAGED
+
     private var internalLastSmbMillis: Long = 0L // Local Atomic Timestamp for Safety
     private val nightGrowthResistanceMode = NightGrowthResistanceMode()
     private val ngrTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
@@ -3989,8 +3992,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val basalFirstMealActive = mealData.mealCOB > 0.1
         val basalFirstHeavyMeal  = mealData.mealCOB > 20.0
         val isPersistentRise = bg > targetBg && combinedDelta >= 0.3f
+        
         val basalFirstActive = ((isLearnerPrudent && !basalFirstMealActive && !isPersistentRise)
-            || (isFragileBg && !basalFirstHeavyMeal)) && !isMealAdvisorOneShot
+                || (isFragileBg && !basalFirstHeavyMeal)) && !isMealAdvisorOneShot
+        
         this.cachedBasalFirstActive = basalFirstActive
         this.cachedIsFragileBg = isFragileBg
         if (basalFirstActive) {
@@ -4403,6 +4408,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (extraDebug.isNotEmpty()) {
              rT.reason.append("$extraDebug\n")
         }
+
+        // 🚨 GLOBAL SAFETY: Trigger Emergency SOS early (Avoids T3c / Cruise Mode Bypass)
+        app.aaps.plugins.aps.openAPSAIMI.sos.EmergencySosManager.evaluateSosCondition(
+            bg = glucose_status.glucose,
+            delta = glucose_status.delta,
+            iob = iob_data_array.firstOrNull()?.iob ?: 0.0,
+            context = context,
+            preferences = this.preferences,
+            nowMs = dateUtil.now()
+        )
         
         // 🛡️ Log health status of storage and learners (NOW with rT)
         logLearnersHealth(rT)
@@ -4849,6 +4864,34 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.decceleratingDown = if (delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta)) 1 else 0
         this.stable = if (delta > -3 && delta < 3 && shortAvgDelta > -3 && shortAvgDelta < 3 && longAvgDelta > -3 && longAvgDelta < 3) 1 else 0
         val nightbis = hourOfDay <= 7
+        
+        // 🛡️ T3C BRITTLE MODE BRANCH (Moved here to capture `therapy` variables for Prebolus)
+        // If the user has no pancreas and relies solely on basal shifts, we skip ALL
+        // standard Autodrive/SMB/Meal logic and use the dedicated execution method.
+        if (preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)) {
+            consoleLog.add("⚡ T3c Brittle Mode Active: Bypassing standard AIMI algorithm.")
+            
+            // 🍱 Inject Legacy Meal Prebolus Support for T3c
+            // This safely calculates `rT.units` using Meal Mode buttons without applying full loop logic.
+            // Any TBR (rT.rate) mutated by this call will be safely overwritten in executeT3cBrittleMode.
+            applyLegacyMealModes(profile, rT, currenttemp, profile.max_basal.toDouble())
+            
+            return executeT3cBrittleMode(
+                bg = glucose_status.glucose,
+                delta = glucose_status.delta.toFloat(),
+                shortAvgDelta = glucose_status.shortAvgDelta,
+                longAvgDelta = glucose_status.longAvgDelta,
+                duraISFminutes = glucose_status.duraISFminutes,
+                profile = profile,
+                currenttemp = currenttemp,
+                iob = iob_data_array.firstOrNull() ?: IobTotal(System.currentTimeMillis()),
+                targetBg = originalProfile.target_bg,
+                variableSensitivity = variableSensitivity.toDouble(),
+                maxIob = maxIob,
+                eventualBg = this.eventualBG.coerceAtLeast(40.0),
+                rT = rT
+            )
+        }
         val modesCondition = (!mealTime || mealruntime > 30) && (!lunchTime || lunchruntime > 30) && (!bfastTime || bfastruntime > 30) && (!dinnerTime || dinnerruntime > 30) && !sportTime && (!snackTime || snackrunTime > 30) && (!highCarbTime || highCarbrunTime > 30) && !sleepTime && !lowCarbTime
         val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
         val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
@@ -7662,6 +7705,57 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  consoleLog.add("⚡ COB HYDRATION: Injected ${fallbackCarbs.toInt()}g from Advisor Prefs (DB latency bypass)")
             }
         }
+    }
+
+    // =========================================================================================
+    // 🛡️ T3C BRITTLE MODE — Dynamic PI Basal (Strict Basal-First Isolation)
+    // =========================================================================================
+    private fun executeT3cBrittleMode(
+        bg: Double,
+        delta: Float,
+        shortAvgDelta: Double,
+        longAvgDelta: Double,
+        duraISFminutes: Double,
+        profile: OapsProfileAimi,
+        currenttemp: CurrentTemp,
+        iob: IobTotal,
+        targetBg: Double,
+        variableSensitivity: Double,
+        maxIob: Double,
+        eventualBg: Double,
+        rT: RT
+    ): RT {
+        rT.reason = StringBuilder("")
+        rT.deliverAt = System.currentTimeMillis()
+        // maxSMB = 0.0 is enforced: this function ONLY sets TBR, never rT.units
+        // rT.units is preserved for pre-bolus from applyLegacyMealModes
+
+        val baseBasal = profile.current_basal
+        val maxBasal = profile.max_basal.toDouble()
+
+        // 🧠 Predictive PI Controller — 1000% scale, predictedBg as error term
+        val decision = DynamicBasalController.computeT3c(
+            bg = bg,
+            targetBg = targetBg,
+            delta = delta,
+            shortAvgDelta = shortAvgDelta,
+            longAvgDelta = longAvgDelta,
+            iob = iob.iob,
+            maxIob = maxIob,
+            profileBasal = baseBasal,
+            isf = variableSensitivity.coerceAtLeast(10.0),
+            duraISFminutes = duraISFminutes,
+            eventualBg = if (eventualBg > 0) eventualBg else null
+        )
+
+        val safeRate = decision.rate.coerceIn(0.0, maxBasal)
+
+        rT.rate = safeRate
+        rT.duration = decision.durationMin
+        rT.reason.append("🛡️T3c | SMB=0 | ").append(decision.reason)
+
+        consoleLog.add(rT.reason.toString())
+        return rT
     }
 
 }

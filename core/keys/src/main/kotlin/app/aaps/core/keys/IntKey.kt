@@ -102,4 +102,7 @@ enum class IntKey(
     // 🌸 Endometriosis & Cycle Management (MTR)
     AimiEndometriosisFlareDuration("aimi_endo_flare_duration", 4, 1, 24),
 
+    // 🚨 Emergency SOS (Hypo)
+    AimiEmergencySosThreshold("aimi_emergency_sos_threshold", 55, 40, 100),
+
 }
