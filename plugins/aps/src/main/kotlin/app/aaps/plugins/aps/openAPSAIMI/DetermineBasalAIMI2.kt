@@ -286,6 +286,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val wCyclePreferences: WCyclePreferences,
     private val wCycleLearner: WCycleLearner,
     private val pumpCapabilityValidator: app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator,
+    private val dynamicBasalController: app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController,
     private val context: Context
 ) {
     @Inject lateinit var persistenceLayer: PersistenceLayer
@@ -1355,10 +1356,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val isEarlyAutodrive = !night && !isMealMode && autodrive &&
             bgNow > hypoGuard && bgNow > 110 && detectMealOnset(delta, predDelta, bgacc.toFloat(), predictedBg, profile.target_bg.toFloat())
 
-        // 3) Tendance & ajustement
+        // 3) Tendance & ajustement dynamique
         val bgTrend = calculateBgTrend(getRecentBGs(), StringBuilder())
-        var rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend).coerceAtLeast(0.0)
         
+        // Use the new progressive Sigmoid/PD controller instead of the old fixed 1.2x limit
+        val dynamicState = dynamicBasalController.calculateDynamicRate(
+            currentRate = _rate,
+            bg = bgNow,
+            targetBg = profile.target_bg.toDouble(),
+            delta = delta.toDouble(),
+            shortAvgDelta = shortAvgDelta.toDouble()
+        )
+        var rateAdjustment = dynamicState.finalRate.coerceAtLeast(0.0)
+        
+        // Log the math for debugging and transparency
+        consoleLog.add(
+            "DYNAMIC_BASAL P-Err=${"%.1f".format(dynamicState.errorP)} " +
+            "D-Err=${"%.1f".format(dynamicState.errorD)} " +
+            "Total=${"%.2f".format(dynamicState.totalError)} " +
+            "Mult=${"%.2f".format(dynamicState.sigmoidMultiplier)}x " +
+            "Brake=${dynamicState.isBraking}"
+        )
+
         // 🚀 PKPD TBR Boost: Augmenter TBR si preferTbr (sauf modes repas)
         // Note: pkpdPreferTbrBoost est déjà à 1.0 pour les modes repas (via reset dans finalizeAndCapSMB)
         if (pkpdPreferTbrBoost > 1.0 && !isMealMode) {
@@ -1440,40 +1459,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun calculateBgTrend(recentBGs: List<Float>, reason: StringBuilder): Float {
         if (recentBGs.isEmpty()) {
-            //reason.append("✘ Aucun historique de glycémie disponible.\n")
             reason.append(context.getString(R.string.no_bg_history))
             return 0.0f
         }
 
-        // Hypothèse : recentBGs = liste du plus récent au plus ancien → on inverse
         val sortedBGs = recentBGs.reversed()
-
         val firstValue = sortedBGs.first()
         val lastValue = sortedBGs.last()
         val count = sortedBGs.size
 
         val bgTrend = (lastValue - firstValue) / count.toFloat()
 
-        //reason.append("→ Analyse BG Trend\n")
         reason.append(context.getString(R.string.bg_trend_analysis))
-        //reason.append("  • Première glycémie : $firstValue mg/dL\n")
         reason.append(context.getString(R.string.first_bg_value, firstValue))
-        //reason.append("  • Dernière glycémie : $lastValue mg/dL\n")
         reason.append(context.getString(R.string.last_bg_value, lastValue))
-        //reason.append("  • Nombre de valeurs : $count\n")
         reason.append(context.getString(R.string.number_of_values, count))
-        //reason.append("  • Tendance calculée : $bgTrend mg/dL/intervalle\n")
         reason.append(context.getString(R.string.calculated_trend, bgTrend))
         return bgTrend
-    }
-
-    private fun adjustRateBasedOnBgTrend(_rate: Double, bgTrend: Float): Double {
-        // Si la BG est accessible dans le scope, on peut aussi y jeter un œil ici :
-        val bgNow = bg
-        // Si on s’approche du seuil hypo et que la tendance est négative, coupe à 0 SEULEMENT si chute rapide
-        if (bgNow <= 90.0 && bgTrend < -2.0f) return 0.0
-        val adjustmentFactor = if (bgTrend < 0.0f) 0.8 else 1.2
-        return _rate * adjustmentFactor
     }
 
 
