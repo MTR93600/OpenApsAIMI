@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:gravity="center"
+    android:background="#FFFFFF">
+
+    <TextView
+        android:id="@+id/tv_title_sos"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🚨 AIMI Emergency SOS"
+        android:textColor="#000000"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp"/>
+
+    <TextView
+        android:id="@+id/tv_description_sos"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="AIMI needs access to your Location and SMS services to send an automated text message with your GPS coordinates in case of a severe hypoglycemic event."
+        android:textColor="#666666"
+        android:textSize="16sp"
+        android:gravity="center"
+        android:layout_marginBottom="24dp"/>
+
+    <TextView
+        android:id="@+id/tv_status_sos"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Status: Checking..."
+        android:textColor="#333333"
+        android:textSize="14sp"
+        android:layout_marginBottom="24dp"
+        android:gravity="center"/>
+
+    <Button
+        android:id="@+id/btn_request_perms_sos"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Grant Access"
+        android:backgroundTint="#FF3B30"
+        android:textColor="#FFFFFF"
+        android:layout_marginBottom="12dp"/>
+
+    <Button
+        android:id="@+id/btn_open_settings_sos"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Open App Settings"
+        android:backgroundTint="#E0E0E0"
+        android:textColor="#000000"/>
+
+</LinearLayout>
