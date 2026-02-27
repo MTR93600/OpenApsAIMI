@@ -131,4 +131,61 @@ class DynamicBasalController @Inject constructor(
             isBraking = isBraking
         )
     }
+
+    companion object {
+        /**
+         * Dedicated T3c Brittle Mode calculation.
+         * T3c patients have zero endogenous insulin and glucagon, leading to extreme brittleness.
+         * This function provides a pure proportional-derivative TBR (Temporary Basal Rate)
+         * escalation without delivering micro-boluses (which are blocked by maxSMB=0.0 upstream).
+         */
+        fun computeT3c(
+            bg: Double,
+            targetBg: Double,
+            delta: Float,
+            shortAvgDelta: Double,
+            longAvgDelta: Double,
+            iob: Double,
+            maxIob: Double,
+            profileBasal: Double,
+            isf: Double,
+            duraISFminutes: Double,
+            eventualBg: Double?
+        ): Double {
+            // If BG is dangerously low or dropping fast, immediately cut basal to 0%
+            if (bg < 80.0 || (bg < targetBg && delta < -1.0)) {
+                return 0.0
+            }
+
+            // If we have too much insulin on board relative to our max, throttle back
+            if (iob > maxIob * 1.5) {
+               return profileBasal * 0.1 // 10% basal
+            }
+
+            val currentError = bg - targetBg
+            val futureError = (eventualBg ?: bg) - targetBg
+
+            // Base Multiplier from Proportional Distance
+            var multiplier = 1.0
+            
+            if (currentError > 0) {
+                 // For every 30mg/dL above target, we add +100% to the basal rate
+                 multiplier += (currentError / 30.0) 
+            } else if (currentError < 0) {
+                 // For every 15mg/dL below target, we halve the basal rate
+                 multiplier *= exp(currentError / 15.0)
+            }
+
+            // Derivative modifier (Velocity)
+            val velocity = delta * 0.7 + shortAvgDelta * 0.3
+            if (velocity > 1.0) {
+                 multiplier *= 1.5 // Climbing fast, aggressive boost
+            } else if (velocity < -1.0) {
+                 multiplier *= 0.5 // Falling fast, aggressive braking
+            }
+
+            // Cap at 1000% (10x) for extreme safety ceilings, though maxSafe will limit it later
+            return (profileBasal * multiplier).coerceIn(0.0, profileBasal * 10.0)
+        }
+    }
 }
