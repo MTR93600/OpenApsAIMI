@@ -85,4 +85,7 @@ enum class StringKey(
     OApsAIMIThyroidManualStatus("key_aimi_thyroid_manual_status", "EUTHYROID"),
     OApsAIMIThyroidTreatmentPhase("key_aimi_thyroid_treatment_phase", "NONE"),
     OApsAIMIThyroidGuardLevel("key_aimi_thyroid_guard_level", "HIGH"),
+    
+    // 🚨 Emergency SOS (Hypo)
+    AimiEmergencySosPhone("aimi_emergency_sos_phone", ""),
 }
