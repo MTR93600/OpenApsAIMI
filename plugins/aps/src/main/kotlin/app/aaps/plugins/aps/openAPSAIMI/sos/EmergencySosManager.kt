@@ -47,7 +47,8 @@ object EmergencySosManager {
         delta: Double,
         iob: Double,
         context: Context,
-        preferences: Preferences
+        preferences: Preferences,
+        nowMs: Long
     ) {
         val appContext = context.applicationContext
 
@@ -67,8 +68,6 @@ object EmergencySosManager {
             return
         }
 
-        val now = System.currentTimeMillis()
-
         // 2. BG Recovered -> Reset everything
         if (bg > threshold || bg <= 10.0) {
             if (prefs.getLong(KEY_FIRST_BELOW_THRESHOLD_TIME, 0L) != 0L) {
@@ -84,19 +83,21 @@ object EmergencySosManager {
             // This is the first time we drop below threshold
             Log.w(TAG, "⚠️ BG dropped below threshold ($bg < $threshold). Starting 30 min trend monitoring...")
             with(prefs.edit()) {
-                putLong(KEY_FIRST_BELOW_THRESHOLD_TIME, now)
+                putLong(KEY_FIRST_BELOW_THRESHOLD_TIME, nowMs)
                 apply()
             }
-            firstBelowTime = now
+            firstBelowTime = nowMs
         }
 
         // 4. Have we waited long enough for the first action? (30 mins)
-        // [FIX] User Request: Skip the 30-min window if BG just dropped below threshold and is actively falling.
-        val isFirstAction = prefs.getLong(KEY_LAST_ACTION_TIME, 0L) == 0L
+        // Skip the 30-min window ONLY IF it's the very first action AND BG is falling.
+        val lastActionTime = prefs.getLong(KEY_LAST_ACTION_TIME, 0L)
+        val isFirstAction = lastActionTime == 0L
         val forceImmediateTrigger = isFirstAction && delta < 0.0
         
-        if (!forceImmediateTrigger && now - firstBelowTime < OBSERVATION_WINDOW_MS) {
-            val remain = (OBSERVATION_WINDOW_MS - (now - firstBelowTime)) / 60000
+        // If it's the first action and we aren't forcing an immediate trigger, we MUST wait 30 minutes
+        if (isFirstAction && !forceImmediateTrigger && nowMs - firstBelowTime < OBSERVATION_WINDOW_MS) {
+            val remain = (OBSERVATION_WINDOW_MS - (nowMs - firstBelowTime)) / 60000
             Log.d(TAG, "SOS Monitoring: BG still low. $remain minutes remaining before first alert.")
             return
         }
@@ -106,19 +107,15 @@ object EmergencySosManager {
         }
 
         // 5. Ready for Action! Check if we need to act based on 15 min interval
-        val lastActionTime = prefs.getLong(KEY_LAST_ACTION_TIME, 0L)
-        
         // If it's the very first action (lastActionTime == 0) OR 15 mins have passed
-        if (lastActionTime == 0L || now - lastActionTime >= FOLLOWUP_INTERVAL_MS) {
+        if (isFirstAction || nowMs - lastActionTime >= FOLLOWUP_INTERVAL_MS) {
             
             val lastActionWasSms = prefs.getBoolean(KEY_LAST_ACTION_WAS_SMS, false)
             
             // Intelligent Alternation Logic based on permissions
-            val shouldSendSms = canSms && (lastActionTime == 0L || !lastActionWasSms || !canCall)
-            val shouldMakeCall = canCall && (!shouldSendSms || (lastActionTime > 0L && lastActionWasSms && !canSms)) // Fallback if SMS forced above but caller desired. Simple logic: If SMS is slated but we want to alternate...
-            
+            val shouldSendSms = canSms && (isFirstAction || !lastActionWasSms || !canCall)
             // To be precise: We want SMS if (first time OR it's SMS turn OR we can't call). We want Call if (it's Call turn and we can Call) OR (we can't SMS and we can Call).
-            val doSmsNow = canSms && (lastActionTime == 0L || !lastActionWasSms || !canCall)
+            val doSmsNow = canSms && (isFirstAction || !lastActionWasSms || !canCall)
             // If doSmsNow is false, we must do Call (because we know at least one permission exists). 
             val doCallNow = !doSmsNow // By elimination, since at least one of canSms/canCall is true.
             
@@ -134,7 +131,7 @@ object EmergencySosManager {
                 }
                 
                 with(prefs.edit()) {
-                    putLong(KEY_LAST_ACTION_TIME, now)
+                    putLong(KEY_LAST_ACTION_TIME, nowMs)
                     putBoolean(KEY_LAST_ACTION_WAS_SMS, true)
                     apply()
                 }
@@ -144,13 +141,13 @@ object EmergencySosManager {
                 makeCall(appContext, phoneNumber)
                 
                 with(prefs.edit()) {
-                    putLong(KEY_LAST_ACTION_TIME, now)
+                    putLong(KEY_LAST_ACTION_TIME, nowMs)
                     putBoolean(KEY_LAST_ACTION_WAS_SMS, false)
                     apply()
                 }
             }
         } else {
-             val remain = (FOLLOWUP_INTERVAL_MS - (now - lastActionTime)) / 60000
+             val remain = (FOLLOWUP_INTERVAL_MS - (nowMs - lastActionTime)) / 60000
              Log.d(TAG, "SOS Active. Next escalation in $remain minutes.")
         }
     }
