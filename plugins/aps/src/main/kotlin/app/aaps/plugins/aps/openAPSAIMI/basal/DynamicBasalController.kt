@@ -132,7 +132,67 @@ class DynamicBasalController @Inject constructor(
         )
     }
 
+    enum class Mode {
+        STANDARD, AGGRESSIVE, CONSERVATIVE
+    }
+
+    data class Input(
+        val bg: Double,
+        val targetBg: Double,
+        val delta: Double,
+        val shortAvgDelta: Double,
+        val longAvgDelta: Double,
+        val iob: Double,
+        val maxIob: Double,
+        val profileBasal: Double,
+        val variableSensitivity: Double,
+        val duraISFminutes: Double,
+        val predictedBgOverride: Double?,
+        val mode: Mode
+    )
+
+    data class Decision(
+        val rate: Double,
+        val durationMin: Int,
+        val reason: String
+    )
+
     companion object {
+        /**
+         * Main compute function called by BasalDecisionEngine.
+         * For now, it delegates back to a simplified instance/companion calculation
+         * or provides a robust fallback logic using the same math.
+         */
+        fun compute(input: Input): Decision {
+            // Replicate the logic simply to satisfy the interface for the general engine fallback.
+            // Using similar math to `calculateDynamicRate` without injecting the logger for this static path.
+            val proportionalError = input.bg - input.targetBg
+            val velocity = input.delta * 0.8 + input.shortAvgDelta * 0.2
+            
+            // Braking
+            if ((input.bg < input.targetBg && velocity < -1.0) || (input.bg <= 90.0 && velocity < -2.0)) {
+                return Decision(0.0, 30, "PI-Brake: Fast Drop")
+            }
+
+            // P-D simplistic map for fallback
+            var multiplier = 1.0 + (proportionalError * 0.05) + (velocity * 12.0 * 0.15)
+            
+            // Scale and constrain
+            multiplier = multiplier.coerceIn(0.0, 10.0)
+            
+            // Adjust for High IOB vs Max IOB
+            if (input.iob > input.maxIob) {
+                multiplier *= 0.5 // Throttle if massive IOB exists
+            }
+
+            val finalRate = input.profileBasal * multiplier
+            return Decision(
+                rate = finalRate,
+                durationMin = 30,
+                reason = "PI-Fallback: P=%.1f D=%.1f Mult=%.2fx".format(proportionalError, velocity, multiplier)
+            )
+        }
+
         /**
          * Dedicated T3c Brittle Mode calculation.
          * T3c patients have zero endogenous insulin and glucagon, leading to extreme brittleness.
