@@ -9,6 +9,7 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.controller.MpcController // �
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.ControlBarrierShield // 🛡️ CBF
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.OnlineLearner // 🎓 Learner
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataLake // 🗂️ Data Lake
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataBackfiller // 🧹 Backfiller
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.advisor.AutodriveAuditor // 👨‍🏫 Auditor
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,7 +29,8 @@ class AutodriveEngine @Inject constructor(
     private val safetyShield: ControlBarrierShield,
     private val onlineLearner: OnlineLearner,
     private val autodriveAuditor: AutodriveAuditor,
-    private val dataLake: AutodriveDataLake
+    private val dataLake: AutodriveDataLake,
+    private val dataBackfiller: AutodriveDataBackfiller
 ) {
 
     private var isActive = false // Feature Toggle pour le monde réel
