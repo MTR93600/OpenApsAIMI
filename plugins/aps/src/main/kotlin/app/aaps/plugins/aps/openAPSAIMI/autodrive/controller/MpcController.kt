@@ -38,12 +38,18 @@ class MpcController @Inject constructor(
      * Calcule la dose optimale pour les 5 prochaines minutes (Receding Horizon).
      */
     fun calculateOptimalDose(state: AutoDriveState, profileBasal: Double): AutoDriveCommand {
+        // Optimisation Newton-Raphson 1D simplifiée ou Recherche Dichotomique pour trouver min(J)
+        // La fonction J(u) est supposée convexe par rapport à la dose d'insuline injectée maintement.
+        
         var bestDose = 0.0
         var minCost = Double.MAX_VALUE
 
-        // SQP très primitif (Grid Search) pour éviter d'importer un solver lourd NLOPT.
-        // On teste des doses potentielles de 0.0U à `maxSmbPer5Min` U avec un pas de 0.1U
-        val doseCandidates = generateSequence(0.0) { it + 0.1 }.takeWhile { it <= maxSmbPer5Min }.toList()
+        // Résolution via balayage fin sur le domaine praticable [0.0 , maxSmbPer5Min]
+        // C'est robuste et peu coûteux avec un horizon de 12 k-steps.
+        val searchStep = 0.05
+        val doseCandidates = generateSequence(0.0) { it + searchStep }
+            .takeWhile { it <= maxSmbPer5Min }
+            .toList()
 
         for (candidateDose in doseCandidates) {
             val cost = simulateAndCost(candidateDose, state)
@@ -55,19 +61,19 @@ class MpcController @Inject constructor(
 
         aapsLogger.debug(
             LTag.APS,
-            "🧮 [MPC] Optimal U=${bestDose.format(2)} found with Cost=$minCost"
+            "🧮 [MPC] Optimal U=${bestDose.format(2)} found with Cost=${minCost.format(1)}"
         )
 
-        // On convertit la dose optimale en Commande Autodrive
-        // Pour simplifier l'intégration dans APS, si c'est petit on met en Basal (TBR),
-        // sinon on envoie un SMB massif.
-        val microbolus = if (bestDose >= 0.1) bestDose else 0.0
-        val tbr = if (bestDose < 0.1) (bestDose * 12.0) else profileBasal // Dose/5min * 12 = U/h
+        // Traitement de la sortie :
+        // Si la dose est minime, on s'oriente vers un ajustement basal (TBR)
+        // Si la dose est forte, on s'oriente vers un SMB.
+        val tbrUph = min(bestDose * 12.0, profileBasal * 3.0) // On limite le TBR Max à 3x le profil
+        val smbU = max(0.0, bestDose - (tbrUph / 12.0))
 
         return AutoDriveCommand(
-            temporaryBasalRate = tbr,
-            scheduledMicroBolus = microbolus,
-            reason = "[MPC] Cost=$minCost | H=60"
+            temporaryBasalRate = tbrUph,
+            scheduledMicroBolus = smbU,
+            reason = "[MPC] Cost=${minCost.format(1)} | H=$horizonMinutes"
         )
     }
 
@@ -79,27 +85,38 @@ class MpcController @Inject constructor(
         var currentIob = startState.iob + doseU
         var totalCost = 0.0
 
-        // Paramètres Bergman Modifiés
-        val p1 = 0.01
+        // Modèle Métabolique Simplifié EKF/UKF (Bergman Minimal Model paramétré par state)
+        // p1 = efficacité de base du glucose à se résorber seul (GEZI)
+        val p1 = 0.015 
+        
+        // La sensibilité est dynamique, estimée dans l'état
+        val si = startState.estimatedSI
 
         for (k in 1..steps) {
-            // Modèle de simulation (Dérivée Euler simple)
-            // dBG/dt = - (p1 + SI * IOB) * BG + p1 * Target + Ra
-            val deltaBgPerMin = - (p1 + startState.estimatedSI * currentIob) * currentBg + (p1 * targetBg) + startState.estimatedRa
+            // -- Dynamique du Glucose (Simulation Euler sur 5 min) --
+            // Formulation classique : dBG/dt = - [p1 + SI * IOB]*(BG) + p1*BG_Target + Ra
+            val deltaBgPerMin = - (p1 + (si * currentIob)) * currentBg + (p1 * targetBg) + startState.estimatedRa
             val deltaBgPer5 = deltaBgPerMin * stepMinutes
 
             currentBg += deltaBgPer5
             
-            // Decroissance naïve de l'IOB (Approx)
-            currentIob *= 0.95 
+            // -- Dynamique de l'Insuline --
+            // Décroissance de l'IOB selon un modèle à 1 compartiment (demi-vie ~ 50 min)
+            currentIob *= 0.90 
 
-            // Somme des coûts au stade k
-            val errorBg = (currentBg - targetBg)
-            totalCost += (qBg * errorBg * errorBg)
+            // -- Évaluation du Coût --
+            // Pénalité asymétrique : l'hypo (BG < 100) est lourdement pénalisée par rapport à l'hyper
+            val errorBg = currentBg - targetBg
+            val qPenalty = if (errorBg < 0) qBg * 5.0 else qBg
+            
+            totalCost += (qPenalty * errorBg * errorBg)
         }
 
-        // Ajout du coût de l'action (Regularisation de l'agressivité)
+        // Ajout du coût de régularisation R (Évite au solver de paniquer et de tirer un gros bolus d'un coup)
         totalCost += (rInsulin * doseU * doseU)
+
+        // Pénalité infinie si la simulation franchit le seuil létal absolu (Safety fallback intra-MPC)
+        if (currentBg < 60.0) totalCost += 1_000_000.0
 
         return totalCost
     }

@@ -4445,38 +4445,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val rtActivity = physioAdapter.getRealTimeActivity()
         consoleLog.add("PHYSIO_RT Steps=${rtActivity.stepsToday} HR=${rtActivity.heartRate}bpm")
 
-        // 🧠 AUTODRIVE SHADOW MODE INJECTION
-        // Transform the APS state context into a clean mathematical state
-        val autodriveState = AutoDriveState(
-            bg = glucose_status.glucose,
-            bgVelocity = glucose_status.delta / 5.0, // Convert delta/5min to mg/dL/min
-            iob = iob_data_array.firstOrNull()?.iob ?: 0.0,
-            cob = mealData.mealCOB,
-            estimatedSI = 1.0, // TODO Phase 2
-            estimatedRa = 0.0, // TODO Phase 2
-            physiologicalStressMask = doubleArrayOf() // TODO Attention Gate Phase
-        )
-
-        // Set actual mode based on UI Preferences
-        autodriveEngine.setShadowMode(true) // Always shadow for logs
-        
-        // Execute Autodrive 
-        val autodriveCommand = autodriveEngine.tick(autodriveState, profile.current_basal)
-        
-        // 🚨 THE AUTODRIVE SWITCH 🚨
-        val isAutodriveActive = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIautoDriveActive)
-        
-        if (isAutodriveActive && autodriveCommand != null) {
-            consoleLog.add("🚀 --- AUTODRIVE IS ACTIVE --- 🚀")
-            rT.rate = autodriveCommand.temporaryBasalRate
-            rT.duration = 5
-            rT.units = autodriveCommand.scheduledMicroBolus
-            rT.reason.append("Autodrive Mode: ${autodriveCommand.reason}")
-            
-            // Clean exit, bypassing all other AIMI rules
-            return rT
-        }
-        
         // 🧹 STATE RESET (Critical Fix FCL 10.6):
         // maxSMB is a persistent class member. It MUST be reset to the user's preference at the start of every cycle.
         // Otherwise, temporary overrides (like BFast2 mode) permeate to future cycles.
@@ -6178,6 +6146,41 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT.predBGs = savedPredBGs ?: rT.predBGs
         ensurePredictionFallback(rT, bg)
         rT.reason.append(savedReason)
+
+        // ====================================================================================
+        // 🧠 AUTODRIVE V2 MULTI-VARIABLES INJECTION (The "Super-iLet" implementation)
+        // Note: Placé ICI (et non au début), car `variable_sens` contient désormais TOUTE la physique :
+        // Autosens + WCycle + HeartRate + Inflammation + Thyroid. C'est l'ISF le plus fin possible.
+        // ====================================================================================
+        val dynamicIsfMgDl = rT.variable_sens ?: profile.sens
+        val autodriveState = AutoDriveState(
+            bg = glucose_status.glucose,
+            bgVelocity = glucose_status.delta / 5.0, // Convert delta/5min to mg/dL/min
+            iob = iob_data_array.firstOrNull()?.iob ?: 0.0,
+            cob = mealData.mealCOB,
+            // ISF scaling (approx 0.004 pour ISF=40). 
+            // C'est ce paramètre qui permet au MPC et CBF de voir la résistance en temps réel.
+            estimatedSI = dynamicIsfMgDl / 10000.0, 
+            estimatedRa = 0.0, // TODO Phase 2
+            physiologicalStressMask = doubleArrayOf() // TODO Attention Gate Phase
+        )
+
+        autodriveEngine.setShadowMode(true) // Always shadow for logs (invisible comparator)
+        val autodriveCommand = autodriveEngine.tick(autodriveState, profile.current_basal)
+        
+        // 🚨 THE AUTODRIVE SWITCH 🚨
+        val isAutodriveActive = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIautoDriveActive)
+        if (isAutodriveActive && autodriveCommand != null) {
+            consoleLog.add("🚀 --- AUTODRIVE V2 (PHYSIO-AWARE) IS SECURING THE PUMP --- 🚀")
+            rT.rate = autodriveCommand.temporaryBasalRate
+            rT.duration = 5
+            rT.units = autodriveCommand.scheduledMicroBolus
+            rT.reason = java.lang.StringBuilder("Autodrive Mode (DynISF=$dynamicIsfMgDl): ${autodriveCommand.reason}")
+            
+            return rT
+        }
+        // ====================================================================================
+
         // Re-define for Global Logic
         val estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
         val estimatedCarbsTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()

@@ -53,12 +53,10 @@ class AutodriveEngine @Inject constructor(
         val estimatedState = stateEstimator.updateAndPredict(learningAdjustedState)
 
         // 2. MPC (Model Predictive Controller) Calculation
-        // val rawCommand = mpcController.calculateOptimalDose(estimatedState)
-        val rawCommand = calculateMockDose(estimatedState, profileBasal)
+        val rawCommand = mpcController.calculateOptimalDose(estimatedState, profileBasal)
 
         // 3. CBF (Control Barrier Shield) Safety Check
-        // val safeCommand = safetyShield.enforce(rawCommand, estimatedState)
-        val safeCommand = rawCommand // Mock pour l'instant
+        val safeCommand = safetyShield.enforce(rawCommand, estimatedState, profileBasal)
 
         // 4. Logging & Shadow metrics
         if (isShadowMode) {
@@ -66,17 +64,6 @@ class AutodriveEngine @Inject constructor(
         }
 
         return if (isActive) safeCommand else null
-    }
-
-    private fun calculateMockDose(state: AutoDriveState, profileBasal: Double): AutoDriveCommand {
-        // Logique rudimentaire provisoire remplaçant le MPC pendant la phase de mock
-        val error = state.bg - 100.0
-        val tbr = if (error > 0) profileBasal * 1.5 else profileBasal * 0.5
-        return AutoDriveCommand(
-            scheduledMicroBolus = 0.0,
-            temporaryBasalRate = tbr.coerceIn(0.0, profileBasal * 5.0),
-            reason = "Mock MPC (Error: $error)"
-        )
     }
 
     private fun logShadowDecision(state: AutoDriveState, autodriveCommand: AutoDriveCommand, profileBasal: Double) {

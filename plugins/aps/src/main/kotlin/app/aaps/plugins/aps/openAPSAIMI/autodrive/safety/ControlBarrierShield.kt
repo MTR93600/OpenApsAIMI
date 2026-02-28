@@ -25,8 +25,9 @@ class ControlBarrierShield @Inject constructor(
 ) {
 
     // Paramètres de Sécurité CBF
-    private val bgDangerThreshold = 75.0 // Limite absolue de sécurité h(x) = 0
-    private val gamma = 0.5 // Paramètre de convergence CBF (Plus c'est grand, plus on s'autorise à approcher la limite vite)
+    // Paramètres de Sécurité CBF
+    private val bgDangerThreshold = 80.0 // Marge renforcée pour la limite absolue
+    private val gamma = 0.04 // Autorise environ -1.0 mg/dL/min quand h(x) = 25 (BG=105)
 
     /**
      * Vérifie et modifie si besoin la commande brute proposée par le MPC.
