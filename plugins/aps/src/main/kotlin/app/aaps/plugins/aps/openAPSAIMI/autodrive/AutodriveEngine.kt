@@ -10,6 +10,7 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.ControlBarrierShield //
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.OnlineLearner // 🎓 Learner
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataLake // 🗂️ Data Lake
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataBackfiller // 🧹 Backfiller
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.MechanismAttentionGate // 🚪 Attention Gate
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.advisor.AutodriveAuditor // 👨‍🏫 Auditor
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,7 +31,8 @@ class AutodriveEngine @Inject constructor(
     private val onlineLearner: OnlineLearner,
     private val autodriveAuditor: AutodriveAuditor,
     private val dataLake: AutodriveDataLake,
-    private val dataBackfiller: AutodriveDataBackfiller
+    private val dataBackfiller: AutodriveDataBackfiller,
+    private val attentionGate: MechanismAttentionGate
 ) {
 
     private var isActive = false // Feature Toggle pour le monde réel
@@ -55,8 +57,13 @@ class AutodriveEngine @Inject constructor(
             estimatedSI = currentState.estimatedSI * onlineLearner.learnedResistanceFactor
         )
 
-        // 1. PSE (Physiological State Estimator) Update
-        val estimatedState = stateEstimator.updateAndPredict(learningAdjustedState)
+        // 1. Attention Gate (Phase 9 - ML On-Device)
+        // L'intelligence artificielle vient potentiellement biaiser la sensibilité perçue 
+        // pour corriger de manière prédictive le comportement du MPC face à des menaces physio.
+        val attentionState = attentionGate.applyAttention(learningAdjustedState)
+
+        // 2. PSE (Physiological State Estimator) Update
+        val estimatedState = stateEstimator.updateAndPredict(attentionState)
 
         // 2. MPC (Model Predictive Controller) Calculation
         val rawCommand = mpcController.calculateOptimalDose(estimatedState, profileBasal)
