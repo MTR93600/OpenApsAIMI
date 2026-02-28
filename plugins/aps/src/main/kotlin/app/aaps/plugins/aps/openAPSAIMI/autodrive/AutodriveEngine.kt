@@ -8,6 +8,7 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstim
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.controller.MpcController // 🧮 MPC
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.ControlBarrierShield // 🛡️ CBF
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.OnlineLearner // 🎓 Learner
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataLake // 🗂️ Data Lake
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.advisor.AutodriveAuditor // 👨‍🏫 Auditor
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -26,7 +27,8 @@ class AutodriveEngine @Inject constructor(
     private val mpcController: MpcController,
     private val safetyShield: ControlBarrierShield,
     private val onlineLearner: OnlineLearner,
-    private val autodriveAuditor: AutodriveAuditor
+    private val autodriveAuditor: AutodriveAuditor,
+    private val dataLake: AutodriveDataLake
 ) {
 
     private var isActive = false // Feature Toggle pour le monde réel
@@ -60,7 +62,7 @@ class AutodriveEngine @Inject constructor(
         // 3. CBF (Control Barrier Shield) Safety Check
         val safeCommand = safetyShield.enforce(rawCommand, estimatedState, profileBasal)
 
-        // 4. Explicabilité de l'IA (Auditor Traducteur)
+        // 5. Explicabilité de l'IA (Auditor Traducteur)
         val auditedReason = autodriveAuditor.generateHumanReadableReason(
             state = estimatedState,
             baseProfileIsf = profileBasal * 10.0, // Approximation relative pour l'auditeur
@@ -69,7 +71,16 @@ class AutodriveEngine @Inject constructor(
         )
         val auditedCommand = safeCommand.copy(reason = auditedReason)
 
-        // 5. Logging & Shadow metrics
+        // 6. Data Lake CSV persistancy (Pour entraînement V3)
+        // L'enregistrement est silencieux et asynchrone par rapport à la boucle de contrôle
+        dataLake.recordSnapshot(
+            state = estimatedState,
+            rawCommand = rawCommand,
+            safeCommand = auditedCommand,
+            currentTimestamp = currentEpochMs
+        )
+
+        // 7. Logging & Shadow metrics
         if (isShadowMode) {
             logShadowDecision(currentState, auditedCommand, profileBasal)
         }
