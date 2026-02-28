@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveCommand
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper // 🛡️ Unification du Storage
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
@@ -22,15 +23,12 @@ import javax.inject.Singleton
  */
 @Singleton
 class AutodriveDataLake @Inject constructor(
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    private val storageHelper: AimiStorageHelper // Injection du centralisateur
 ) {
 
     private val logFile by lazy {
-        val externalDir = File(
-            Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS"
-        )
-        File(externalDir, "autodrive_dataset.csv").apply {
-            parentFile?.mkdirs()
+        storageHelper.getAimiFile("autodrive_dataset.csv").apply {
             if (!exists()) {
                 // Création du Header structuré selon le Blueprint
                 writeText(
