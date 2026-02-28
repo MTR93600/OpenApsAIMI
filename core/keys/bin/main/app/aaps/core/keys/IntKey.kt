@@ -105,4 +105,7 @@ enum class IntKey(
     // 🌀 Adaptive Kernel Bank (Cosine Gate)
     AimiCosineGateMaxPeakShift("aimi_cosine_gate_max_shift", 15, 0, 60),
 
+    // 🚨 Emergency SOS (Hypo)
+    AimiEmergencySosThreshold("aimi_emergency_sos_threshold", 55, 40, 100),
+
 }

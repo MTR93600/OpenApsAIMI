@@ -524,8 +524,33 @@ class BasalDecisionEngine @Inject constructor(
 
         // (Obsolete pregnancy logic removed - handled by GestationalAutopilot profile scaling)
 
+        // ===== DYNAMIC BASAL FALLBACK (PI Controller) =====
+        // All rule blocks above returned null. Instead of silently falling back to
+        // profile basal, use the DynamicBasalController to compute a continuously
+        // modulated rate based on BG error, trajectory, and IOB.
+        if (chosenRate == null) {
+            val piInput = DynamicBasalController.Input(
+                bg = input.bg,
+                targetBg = input.targetBg,
+                delta = input.delta,
+                shortAvgDelta = input.shortAvgDelta,
+                longAvgDelta = input.longAvgDelta,
+                iob = input.iob,
+                maxIob = input.maxIob,
+                profileBasal = input.profileCurrentBasal,
+                variableSensitivity = input.variableSensitivity,
+                duraISFminutes = input.glucoseStatus?.duraISFminutes ?: 0.0,
+                predictedBgOverride = if (input.eventualBg > 0) input.eventualBg else null,
+                mode = DynamicBasalController.Mode.STANDARD
+            )
+            val piDecision = DynamicBasalController.compute(piInput)
+            chosenRate = piDecision.rate
+            rT.duration = piDecision.durationMin
+            rT.reason.append(" | ").append(piDecision.reason)
+        }
+
         val finalRate = chosenRate ?: input.profileCurrentBasal
-        return Decision(finalRate, 30, overrideSafety)
+        return Decision(finalRate, rT.duration ?: 30, overrideSafety)
     }
 
     // ===== utilitaires existants inchangés =====

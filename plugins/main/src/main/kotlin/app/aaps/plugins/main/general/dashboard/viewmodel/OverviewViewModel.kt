@@ -54,6 +54,7 @@ import io.reactivex.rxjava3.kotlin.plusAssign
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.sqrt
 
 class OverviewViewModel(
     private val context: Context,
@@ -252,21 +253,68 @@ class OverviewViewModel(
             decimalFormatter.to2Decimal(total) + " IE"
         }
         
-        // 9. TBR Rate
+        // 9. TBR Rate (Combined U/h and %)
         val tbrRateText = processedTbrEbData.getTempBasalIncludingConvertedExtended(dateUtil.now())?.takeIf { it.isInProgress }?.let { tbr ->
-            decimalFormatter.to2Decimal(tbr.rate) + " U/h"
+            val rateUh = decimalFormatter.to2Decimal(tbr.rate) + " U/h"
+            val pctStr = profileFunction.getProfile()?.let { profile ->
+                val currentBasal = profile.getBasal(dateUtil.now())
+                if (currentBasal > 0) {
+                    val pct = ((tbr.rate / currentBasal) * 100).toInt()
+                    " ($pct%)"
+                } else ""
+            } ?: ""
+            rateUh + pctStr
         } ?: "0.00 U/h"
 
         // 10. Steps & HR
         var stepsText: String = "--"
         var hrText: String = "--"
         
+        // 11. 24H Clinical Stats (TIR, CV, A1C)
+        var cvText: String? = "CV --%"
+        var tirVeryLow: Double? = null
+        var tirLow: Double? = null
+        var tirTarget: Double? = null
+        var tirHigh: Double? = null
+        var tirVeryHigh: Double? = null
+        var avgBgMgdl: Double? = null
+        var bgCv: Double? = null
+        var a1c: Double? = null
+        
         try {
             val now = System.currentTimeMillis()
             val from = dateUtil.beginOfDay(now) // Start of today (Midnight)
-
-            // Steps (Sum of steps in the last 15m)
-            // Steps (Integration of rolling windows)
+            
+            // --- 24H CLINICAL STATS COMPUTATION ---
+            val from24h = now - 24 * 60 * 60 * 1000
+            val bgs24h = persistenceLayer.getBgReadingsDataFromTimeToTime(from24h, now, true)
+            
+            if (bgs24h.isNotEmpty()) {
+                val values = bgs24h.map { it.value }
+                val count = values.size.toDouble()
+                
+                tirVeryLow = (values.count { it < 54.0 } / count) * 100.0
+                tirLow = (values.count { it in 54.0..69.99 } / count) * 100.0
+                tirTarget = (values.count { it in 70.0..180.0 } / count) * 100.0
+                tirHigh = (values.count { it in 180.01..250.0 } / count) * 100.0
+                tirVeryHigh = (values.count { it > 250.0 } / count) * 100.0
+                
+                val mean = values.average()
+                avgBgMgdl = mean
+                
+                val variance = values.map { (it - mean) * (it - mean) }.average()
+                val stdDev = sqrt(variance)
+                
+                if (mean > 0) {
+                    bgCv = (stdDev / mean) * 100.0
+                    cvText = "CV ${decimalFormatter.to0Decimal(bgCv)}%"
+                }
+                
+                // GMI / Estimated A1C Formula: (mean + 46.7) / 28.7
+                a1c = (mean + 46.7) / 28.7
+            }
+            
+            // --- Steps (Integration of rolling windows) ---
             val stepsList = persistenceLayer.getStepsCountFromTimeToTime(from, now).sortedBy { it.timestamp }
             var totalSteps = 0.0
             var lastTimestamp = from
@@ -294,7 +342,6 @@ class OverviewViewModel(
                  if (stepsList.isNotEmpty()) stepsText = "0"
             }
 
-            // Heart Rate (Average or Last)
             // Heart Rate (Average or Last)
             // Fix: Use 3h window + 15min buffer for overlapped records (Garmin), and ensure sorting
             val hrFrom = now - 3 * 60 * 60 * 1000
@@ -350,7 +397,18 @@ class OverviewViewModel(
             tbrRateText = tbrRateText,
             basalText = basalText,
             stepsText = stepsText,
-            hrText = hrText
+            hrText = hrText,
+            cvText = cvText,
+            
+            // 24H TIR Clinical Stats
+            tirVeryLow = tirVeryLow,
+            tirLow = tirLow,
+            tirTarget = tirTarget,
+            tirHigh = tirHigh,
+            tirVeryHigh = tirVeryHigh,
+            avgBgMgdl = avgBgMgdl,
+            bgCv = bgCv,
+            a1c = a1c
         )
         _statusCardState.postValue(state)
     }
@@ -788,7 +846,18 @@ data class StatusCardState(
     val tbrRateText: String? = null,
     val basalText: String? = null,
     val stepsText: String? = null,
-    val hrText: String? = null
+    val hrText: String? = null,
+    val cvText: String? = null,
+    
+    // 24H TIR Clinical Stats
+    val tirVeryLow: Double? = null,
+    val tirLow: Double? = null,
+    val tirTarget: Double? = null,
+    val tirHigh: Double? = null,
+    val tirVeryHigh: Double? = null,
+    val avgBgMgdl: Double? = null,
+    val bgCv: Double? = null,
+    val a1c: Double? = null
 )
 
 data class AdjustmentCardState(
