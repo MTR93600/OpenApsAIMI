@@ -6161,8 +6161,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // ISF scaling (approx 0.004 pour ISF=40). 
             // C'est ce paramètre qui permet au MPC et CBF de voir la résistance en temps réel.
             estimatedSI = dynamicIsfMgDl / 10000.0, 
-            estimatedRa = 0.0, // TODO Phase 2
-            physiologicalStressMask = doubleArrayOf() // TODO Attention Gate Phase
+            estimatedRa = 0.0, // Sera calculé formellement par l'Unscented Kalman Filter dans le PSE
+            physiologicalStressMask = doubleArrayOf() // TODO Phase X: Mechanism Attention Gate (Future)
         )
 
         autodriveEngine.setShadowMode(true) // Always shadow for logs (invisible comparator)
