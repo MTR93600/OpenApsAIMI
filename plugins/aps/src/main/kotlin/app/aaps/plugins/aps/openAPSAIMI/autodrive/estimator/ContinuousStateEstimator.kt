@@ -31,68 +31,66 @@ class ContinuousStateEstimator @Inject constructor(
 
     /**
      * Reçoit le nouvel état réel depuis la pompe/capteur et met à jour l'estimation
-     * des variables physiologiques cachées (Ra, SI).
+     * des variables physiologiques cachées (Principalement Ra = Rate of Appearance).
+     * 
+     * [FCL 11.0] Modification : state.estimatedSI contient DÉJÀ la super-sensibilité
+     * calculée par AIMI V1 (WCycle + Heart Rate + Autosens). Le PSE va donc l'utiliser
+     * comme "truth" robuste et se focaliser sur l'estimation du repas fantôme (Ra).
      */
     fun updateAndPredict(actualState: AutoDriveState): AutoDriveState {
         
-        // 1. Modèle Interne Prédictif (Ce qu'on PENSE qui aurait dû se passer)
-        // Bergman simplifié : dBG/dt = - (p1 + SI * IOB) * BG + p1 * Gb + Ra
-        // Hypothèse de base (T=5min)
-        val p1 = 0.01 // Efficacité du glucose propre (basale)
-        val gb = 100.0 // Glucose basal théorique
+        // 1. Modèle Interne Prédictif (Ce qu'on PENSE qui aurait dû se passer sans repas)
+        // dBG/dt = - [p1 + SI * IOB]*(BG - BG_target) + Ra
+        val p1 = 0.015 // Efficacité du glucose à retourner à la basale
+        val bgTarget = 100.0
         
-        val predictedDelta = - (p1 + lastSi * actualState.iob) * actualState.bg + p1 * gb + lastRa
+        // Dynamique naturelle attendue en mg/dL/min
+        val expectedNaturalDelta = - (p1 + (actualState.estimatedSI * actualState.iob)) * (actualState.bg - bgTarget)
         
-        // 2. Erreur d'Innovation (L'écart avec la réalité)
-        // bgVelocity (mg/dL/min). Le delta attendu est par minute.
-        val innovation = actualState.bgVelocity - predictedDelta
+        // 2. Erreur d'Innovation (L'écart avec la réalité : La vitesse BG réelle)
+        // bgVelocity est en mg/dL/min. 
+        val innovation = actualState.bgVelocity - (expectedNaturalDelta + lastRa)
         
-        // 3. Matrice Jacobienne (Gradients)
-        // Comment le dBG dépend de SI et de Ra ?
-        val hSi = - actualState.iob * actualState.bg // L'impact de SI est énorme si gros IOB et gros BG
-        val hRa = 1.0 // L'impact de Ra est direct (+1)
-
-        // 4. Bruit (Tuning Autodrive)
-        val rVariance = 2.0 // Bruit de la mesure CGM
-        val qSi = 0.001     // Bruit de process SI (on veut que ça varie lentement)
-        val qRa = 0.5       // Bruit de process Ra (peut exploser d'un coup avec un repas)
-
-        // Étape de Prédiction (Incertitude augmente)
-        pSi += qSi
+        // 3. Matrice de Bruit de Processus Q & Matrice de Mesure R
+        val rVariance = 2.0 // Bruit de la mesure du capteur CGM (Incertitude Dexcom/Libre)
+        val qRa = 0.5       // Le Rate of Appearance peut exploser ou s'arrêter soudainement
+        
+        // 4. Prédiction de Covariance (P_k|k-1)
         pRa += qRa
 
-        // 5. Gain de Kalman
-        // S = H * P * H^t + R (Incertitude totale projetée sur la mesure)
-        val s = (hSi * pSi * hSi) + (hRa * pRa * hRa) + rVariance
-        val kSi = pSi * hSi / s
-        val kRa = pRa * hRa / s
+        // 5. Calcul du Gain de Kalman (K) pour Ra (H = 1 car Ra impacte directement dBG)
+        val sRa = pRa + rVariance // Variance de l'innovation
+        val kRa = pRa / sRa 
 
-        // 6. Mise à jour de l'état
-        var newSi = lastSi + kSi * innovation
-        var newRa = lastRa + kRa * innovation
+        // 6. Mise à jour de l'état caché (Rate of Appearance)
+        // Si l'innovation est fortement positive (On monte + vite que prévu), Ra explose.
+        var estimatedRa = lastRa + (kRa * innovation)
 
-        // 7. Contraintes Physiologiques (Clipping)
-        newSi = newSi.coerceIn(0.2, 5.0) // On ne peut pas avoir une sensibilité négative ou infinie
-        newRa = max(0.0, newRa)          // On ne vomit pas le repas (Ra >= 0)
+        // 7. Règles physiologiques d'Écrêtage (Clipping)
+        // Ra ne peut pas être inférieur à 0 (On ne peut pas absorber "négativement" un repas)
+        // L'excès de chute inexpliquée sera géré par la sensibilité dynamique d'AIMI.
+        estimatedRa = max(0.0, estimatedRa)
 
-        // 8. Mise à jour des covariances
-        pSi = (1 - kSi * hSi) * pSi
-        pRa = (1 - kRa * hRa) * pRa
+        // Désamorçage rapide (Decay) si on a fini de manger
+        // Si la glycémie chute vite ou est stable et que l'innovation est négative, on tue le Ra fantôme.
+        if (innovation < -0.5 && actualState.bgVelocity <= 0.0) {
+            estimatedRa *= 0.5
+        }
 
-        // Sauvegarde pour le prochain cycle
-        lastSi = newSi
-        lastRa = newRa
+        // 8. Mise à jour de la Covariance (P_k|k)
+        pRa = (1 - kRa) * pRa
 
-        // MTR Autodrive Logger
+        // Sauvegarde d'État Externe
+        lastRa = estimatedRa
+
         aapsLogger.debug(
             LTag.APS,
-            "👽 [PSE] Innovation: ${innovation.format(2)} | SI_est=${newSi.format(2)} | Ra_est=${newRa.format(2)}"
+            "👽 [PSE UKF] dBG_attendu=${expectedNaturalDelta.format(2)} | dBG_vrai=${actualState.bgVelocity.format(2)} | Innov=${innovation.format(2)} || 🍽️ Ra_estimé = ${estimatedRa.format(2)} mg/dL/min"
         )
 
-        // Renvoie l'état enrichi avec la vérité estimée
+        // Renvoie l'état enrichi avec le modèle de digestion fantôme calculé
         return actualState.copy(
-            estimatedSI = newSi,
-            estimatedRa = newRa
+            estimatedRa = estimatedRa
         )
     }
 
