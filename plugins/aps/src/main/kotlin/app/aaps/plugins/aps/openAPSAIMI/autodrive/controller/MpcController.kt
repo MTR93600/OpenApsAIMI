@@ -44,11 +44,16 @@ class MpcController @Inject constructor(
         var bestDose = 0.0
         var minCost = Double.MAX_VALUE
 
-        // Résolution via balayage fin sur le domaine praticable [0.0 , maxSmbPer5Min]
-        // C'est robuste et peu coûteux avec un horizon de 12 k-steps.
+        // 🛡️ WEIGHT-AWARENESS SAFETY CAP (Phase 7)
+        // L'agressivité mathématique du solver est physiquement bridée par le poids du corps.
+        // Un adulte de 70kg ne pourra jamais recevoir une dose supérieure à 3.5U (0.05 * 70kg) sur 5 minutes.
+        // Un enfant de 20kg sera physiquement bloqué à 1.0U max.
+        val maxSafeDoseU = min(maxSmbPer5Min, state.patientWeightKg * 0.05)
+
+        // Résolution via balayage fin sur le domaine praticable Sécurisé [0.0 , maxSafeDoseU]
         val searchStep = 0.05
         val doseCandidates = generateSequence(0.0) { it + searchStep }
-            .takeWhile { it <= maxSmbPer5Min }
+            .takeWhile { it <= maxSafeDoseU }
             .toList()
 
         for (candidateDose in doseCandidates) {

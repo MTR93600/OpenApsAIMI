@@ -69,7 +69,10 @@ class ContinuousStateEstimator @Inject constructor(
         // 7. Règles physiologiques d'Écrêtage (Clipping)
         // Ra ne peut pas être inférieur à 0 (On ne peut pas absorber "négativement" un repas)
         // L'excès de chute inexpliquée sera géré par la sensibilité dynamique d'AIMI.
-        estimatedRa = max(0.0, estimatedRa)
+        // [PHASE 7] Limite Supérieure : Un intestin ne peut pas absorber plus de glucides que le Volume Sanguin (Vd) ne peut en encaisser.
+        // Cap théorique agressif : ~1.5 mg/dL/min par tranche de 10 kg de poids corporel.
+        val maxBiologicalRa = (actualState.patientWeightKg / 10.0) * 1.5
+        estimatedRa = estimatedRa.coerceIn(0.0, maxBiologicalRa)
 
         // Désamorçage rapide (Decay) si on a fini de manger
         // Si la glycémie chute vite ou est stable et que l'innovation est négative, on tue le Ra fantôme.

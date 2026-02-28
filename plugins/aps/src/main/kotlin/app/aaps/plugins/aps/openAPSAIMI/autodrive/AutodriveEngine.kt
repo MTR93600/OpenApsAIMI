@@ -8,6 +8,7 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstim
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.controller.MpcController // 🧮 MPC
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.ControlBarrierShield // 🛡️ CBF
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.OnlineLearner // 🎓 Learner
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.advisor.AutodriveAuditor // 👨‍🏫 Auditor
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,7 +25,8 @@ class AutodriveEngine @Inject constructor(
     private val stateEstimator: ContinuousStateEstimator,
     private val mpcController: MpcController,
     private val safetyShield: ControlBarrierShield,
-    private val onlineLearner: OnlineLearner
+    private val onlineLearner: OnlineLearner,
+    private val autodriveAuditor: AutodriveAuditor
 ) {
 
     private var isActive = false // Feature Toggle pour le monde réel
@@ -58,12 +60,21 @@ class AutodriveEngine @Inject constructor(
         // 3. CBF (Control Barrier Shield) Safety Check
         val safeCommand = safetyShield.enforce(rawCommand, estimatedState, profileBasal)
 
-        // 4. Logging & Shadow metrics
+        // 4. Explicabilité de l'IA (Auditor Traducteur)
+        val auditedReason = autodriveAuditor.generateHumanReadableReason(
+            state = estimatedState,
+            baseProfileIsf = profileBasal * 10.0, // Approximation relative pour l'auditeur
+            rawCommand = rawCommand,
+            safeCommand = safeCommand
+        )
+        val auditedCommand = safeCommand.copy(reason = auditedReason)
+
+        // 5. Logging & Shadow metrics
         if (isShadowMode) {
-            logShadowDecision(currentState, safeCommand, profileBasal)
+            logShadowDecision(currentState, auditedCommand, profileBasal)
         }
 
-        return if (isActive) safeCommand else null
+        return if (isActive) auditedCommand else null
     }
 
     private fun logShadowDecision(state: AutoDriveState, autodriveCommand: AutoDriveCommand, profileBasal: Double) {

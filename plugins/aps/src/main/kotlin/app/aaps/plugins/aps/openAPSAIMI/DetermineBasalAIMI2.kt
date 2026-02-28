@@ -6153,6 +6153,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Autosens + WCycle + HeartRate + Inflammation + Thyroid. C'est l'ISF le plus fin possible.
         // ====================================================================================
         val dynamicIsfMgDl = rT.variable_sens ?: profile.sens
+        val patientWeight = preferences.get(DoubleKey.OApsAIMIweight)
+
         val autodriveState = AutoDriveState(
             bg = glucose_status.glucose,
             bgVelocity = glucose_status.delta / 5.0, // Convert delta/5min to mg/dL/min
@@ -6162,6 +6164,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // C'est ce paramètre qui permet au MPC et CBF de voir la résistance en temps réel.
             estimatedSI = dynamicIsfMgDl / 10000.0, 
             estimatedRa = 0.0, // Sera calculé formellement par l'Unscented Kalman Filter dans le PSE
+            patientWeightKg = patientWeight, // Injection Phase 7 (Weight-Aware MPC)
             physiologicalStressMask = doubleArrayOf() // TODO Phase X: Mechanism Attention Gate (Future)
         )
 

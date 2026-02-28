@@ -11,6 +11,7 @@ data class AutoDriveState(
     val cob: Double = 0.0,          // Graphes optionnels si annoncés
     val estimatedSI: Double = 1.0,  // Sensibilité à l'insuline estimée à l'instant T (par défaut 1.0 = profile)
     val estimatedRa: Double = 0.0,  // Taux d'apparition des glucides estimé (Glucose Rate of Appearance)
+    val patientWeightKg: Double = 70.0, // Poids du patient (Volume de Distribution Vd) - Phase 7
     val physiologicalStressMask: DoubleArray // Vecteur optionnel d'attention (pour plus tard)
 )
 
