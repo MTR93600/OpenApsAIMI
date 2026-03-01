@@ -375,8 +375,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastHypoBlockAt: Long = 0L
     private var hypoClearCandidateSince: Long? = null
     private var mealModeSmbReason: String? = null
-    private val consoleError = mutableListOf<String>()
-    private val consoleLog = mutableListOf<String>()
+    private var consoleError = mutableListOf<String>()
+    private var consoleLog = mutableListOf<String>()
     private var lastAutodriveActionTime: Long = 0L  // FCL 14.1 Cooldown State
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
     //private val modelFile = File(externalDir, "ml/model.tflite")
@@ -4358,8 +4358,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         microBolusAllowed: Boolean, currentTime: Long, flatBGsDetected: Boolean, dynIsfMode: Boolean, uiInteraction: UiInteraction,
         extraDebug: String = "" // 🌀 Extensible Debug Channel (e.g. Cosine Gate)
     ): RT {
-        consoleError.clear()
-        consoleLog.clear()
+        consoleError = mutableListOf()
+    consoleLog = mutableListOf()
         
         if (extraDebug.isNotEmpty()) {
              // Append to log history AND consoleError for "Script Debug" visibility
