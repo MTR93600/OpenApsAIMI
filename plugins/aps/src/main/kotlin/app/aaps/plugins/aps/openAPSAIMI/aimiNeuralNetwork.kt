@@ -1,10 +1,13 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
+import java.io.File
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sign
 import kotlin.math.sqrt
 import kotlin.random.Random
+import org.json.JSONArray
+import org.json.JSONObject
 
 class AimiNeuralNetwork(
     private val inputSize: Int,
@@ -270,7 +273,64 @@ class AimiNeuralNetwork(
         return totalLoss / valInputs.size
     }
 
+    fun saveToFile(file: File) {
+        val root = JSONObject()
+        root.put("inputSize", inputSize)
+        root.put("hiddenSize", hiddenSize)
+        root.put("outputSize", outputSize)
+
+        fun DoubleArray.toJsonArray(): JSONArray {
+            val arr = JSONArray()
+            this.forEach { arr.put(it) }
+            return arr
+        }
+
+        fun Array<DoubleArray>.toJsonArray(): JSONArray {
+            val arr = JSONArray()
+            this.forEach { arr.put(it.toJsonArray()) }
+            return arr
+        }
+
+        root.put("weightsInputHidden", weightsInputHidden.toJsonArray())
+        root.put("biasHidden", biasHidden.toJsonArray())
+        root.put("weightsHiddenOutput", weightsHiddenOutput.toJsonArray())
+        root.put("biasOutput", biasOutput.toJsonArray())
+
+        file.writeText(root.toString())
+    }
+
     companion object {
+        fun loadFromFile(file: File): AimiNeuralNetwork? {
+            if (!file.exists()) return null
+            try {
+                val root = JSONObject(file.readText())
+                val inputSize = root.getInt("inputSize")
+                val hiddenSize = root.getInt("hiddenSize")
+                val outputSize = root.getInt("outputSize")
+
+                val nn = AimiNeuralNetwork(inputSize, hiddenSize, outputSize)
+
+                fun parseDoubleArray(jsonArr: JSONArray): DoubleArray {
+                    return DoubleArray(jsonArr.length()) { i -> jsonArr.getDouble(i) }
+                }
+
+                fun parseArrayOfDoubleArray(jsonArr: JSONArray): Array<DoubleArray> {
+                    return Array(jsonArr.length()) { i ->
+                        parseDoubleArray(jsonArr.getJSONArray(i))
+                    }
+                }
+
+                nn.weightsInputHidden = parseArrayOfDoubleArray(root.getJSONArray("weightsInputHidden"))
+                nn.biasHidden = parseDoubleArray(root.getJSONArray("biasHidden"))
+                nn.weightsHiddenOutput = parseArrayOfDoubleArray(root.getJSONArray("weightsHiddenOutput"))
+                nn.biasOutput = parseDoubleArray(root.getJSONArray("biasOutput"))
+
+                return nn
+            } catch (e: Exception) {
+                e.printStackTrace()
+                return null
+            }
+        }
 
         fun refineSMB(smb: Float, nn: AimiNeuralNetwork, input: DoubleArray?): Float {
             if (input == null) return smb

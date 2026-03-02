@@ -134,7 +134,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     // 🏥 Physiological Decision Adapter (The Safety Gate)
     private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR,
     private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator, // 🧠 AI Auditor MTR
-    private val aimiRemoteManager: app.aaps.plugins.aps.openAPSAIMI.remote.AimiRemoteManager, // 📡 Remote Control MTR
     private val contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager // 🎯 Context Manager
 ) : PluginBase(
     PluginDescription()
@@ -155,16 +154,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         super.onStart()
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey::class.java)
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey::class.java)
-        
-        // 📡 Start AIMI Remote Manager
-        try {
-            aimiRemoteManager.start()
-            aapsLogger.info(LTag.APS, "✅ AIMI Remote Manager started")
-        } catch (e: Exception) {
-            aapsLogger.error(LTag.APS, "❌ Failed to start AIMI Remote Manager", e)
-        }
 
-        
         // 🏃 Start AIMI Steps Manager (Health Connect + Phone Sensor sync)
         try {
             stepsManager.start()
@@ -179,6 +169,27 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             aapsLogger.info(LTag.APS, "✅ AIMI Physiological Manager started successfully")
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "❌ Failed to start AIMI Physiological Manager", e)
+        }
+        
+        // 🧠 Start AIMI Neural Trainer
+        try {
+            val constraints = androidx.work.Constraints.Builder()
+                .setRequiresCharging(true)
+                .setRequiresDeviceIdle(true)
+                .build()
+                
+            val workRequest = androidx.work.PeriodicWorkRequestBuilder<app.aaps.plugins.aps.openAPSAIMI.learning.AutodriveNeuralTrainerWorker>(
+                6, java.util.concurrent.TimeUnit.HOURS
+            ).setConstraints(constraints).build()
+
+            androidx.work.WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                "AIMINeuralTrainer",
+                androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                workRequest
+            )
+            aapsLogger.info(LTag.APS, "✅ AIMI Neural Trainer scheduled successfully")
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "❌ Failed to schedule AIMI Neural Trainer", e)
         }
         
         AimiUamHandler.clearCache(context)
@@ -218,10 +229,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "Error stopping AIMI Physiological Manager", e)
         }
-        
-        // 📡 Stop AIMI Remote Manager
-        aimiRemoteManager.stop()
-        
+
+        try {
+            androidx.work.WorkManager.getInstance(context).cancelUniqueWork("AIMINeuralTrainer")
+            aapsLogger.info(LTag.APS, "🛑 AIMI Neural Trainer stopped")
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "Error stopping AIMI Neural Trainer", e)
+        }
+
         AimiUamHandler.close(context)
     }
     // last values
@@ -1969,30 +1984,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIHighBGinterval, dialogMessage = R.string.oaps_aimi_HIGHBG_interval_summary, title = R.string.oaps_aimi_HIGHBG_interval_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHighBGMaxSMB, dialogMessage = R.string.openapsaimi_highBG_maxsmb_summary, title = R.string.openapsaimi_highBG_maxsmb_title))
             })
-
-            // 📡 Remote Control Section
-            addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                key = "AIMI_REMOTE"
-                title = "Remote Control" // TODO: Add string resource
-
-                addPreference(PreferenceCategory(context).apply {
-                    title = "Security" // TODO: Add string resource
-                })
-
-                addPreference(
-                    androidx.preference.EditTextPreference(context).apply {
-                        key = AimiStringKey.RemoteControlPin.key
-                        title = "Security PIN"
-                        summary = "PIN required for remote commands (AIMI: PIN CMD)"
-                        dialogTitle = "Enter 4-8 digit PIN"
-                        setOnBindEditTextListener { editText ->
-                            editText.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
-                        }
-                    }
-                )
-            })
-
-
 
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "Training_ML_Modes"
