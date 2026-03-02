@@ -39,5 +39,6 @@ data class GlucoseStatusAIMI(
     /** correlation coefficient, i.e. quality of parabola fit */
     val corrSqu: Double = 0.0,
     val combinedDelta: Double = 0.0,          // delta pondéré AIMI (prefs)
-    val isNightGrowthCandidate: Boolean = false
+    val isNightGrowthCandidate: Boolean = false,
+    val sourceSensor: app.aaps.core.data.model.SourceSensor? = null
 ) : GlucoseStatus

@@ -47,9 +47,19 @@ class ContinuousStateEstimator @Inject constructor(
         // Dynamique naturelle attendue en mg/dL/min
         val expectedNaturalDelta = - (p1 + (actualState.estimatedSI * actualState.iob)) * (actualState.bg - bgTarget)
         
+        // 🚀 LEAD COMPENSATOR (Phase 10 - Hardware-Awareness)
+        // Le capteur Dexcom G6 possède un lag matériel (lissage natif) qui écrase et retarde la dérivée.
+        // Si détecté, on booste l'accélération perçue pour réagir en temps réel comme le One+
+        val isG6 = actualState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE
+        val hardwareCompensatedVelocity = if (isG6) {
+            actualState.bgVelocity * 1.5 // +50% de projection du signal dans le futur
+        } else {
+            actualState.bgVelocity // Transmission directe temps réel (One+ / G7 / Libre)
+        }
+
         // 2. Erreur d'Innovation (L'écart avec la réalité : La vitesse BG réelle)
         // bgVelocity est en mg/dL/min. 
-        val innovation = actualState.bgVelocity - (expectedNaturalDelta + lastRa)
+        val innovation = hardwareCompensatedVelocity - (expectedNaturalDelta + lastRa)
         
         // 3. Matrice de Bruit de Processus Q & Matrice de Mesure R
         val rVariance = 2.0 // Bruit de la mesure du capteur CGM (Incertitude Dexcom/Libre)
@@ -76,7 +86,7 @@ class ContinuousStateEstimator @Inject constructor(
 
         // Désamorçage rapide (Decay) si on a fini de manger
         // Si la glycémie chute vite ou est stable et que l'innovation est négative, on tue le Ra fantôme.
-        if (innovation < -0.5 && actualState.bgVelocity <= 0.0) {
+        if (innovation < -0.5 && hardwareCompensatedVelocity <= 0.0) {
             estimatedRa *= 0.5
         }
 
@@ -88,7 +98,7 @@ class ContinuousStateEstimator @Inject constructor(
 
         aapsLogger.debug(
             LTag.APS,
-            "👽 [PSE UKF] dBG_attendu=${expectedNaturalDelta.format(2)} | dBG_vrai=${actualState.bgVelocity.format(2)} | Innov=${innovation.format(2)} || 🍽️ Ra_estimé = ${estimatedRa.format(2)} mg/dL/min"
+            "👽 [PSE UKF] dBG_attendu=${expectedNaturalDelta.format(2)} | dBG_vrai=${actualState.bgVelocity.format(2)} (G6?=$isG6) | Innov=${innovation.format(2)} || 🍽️ Ra_estimé = ${estimatedRa.format(2)} mg/dL/min"
         )
 
         // Renvoie l'état enrichi avec le modèle de digestion fantôme calculé

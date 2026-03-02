@@ -167,7 +167,8 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
             a0 = features.a0,
             a1 = features.a1,
             a2 = features.a2,
-            corrSqu = features.corrR2
+            corrSqu = features.corrR2,
+            sourceSensor = head.sourceSensor
         ).asRounded()
 
         log.debug(

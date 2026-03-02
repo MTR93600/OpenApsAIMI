@@ -13,7 +13,8 @@ data class AutoDriveState(
     val estimatedRa: Double = 0.0,  // Taux d'apparition des glucides estimé (Glucose Rate of Appearance)
     val patientWeightKg: Double = 70.0, // Poids du patient (Volume de Distribution Vd) - Phase 7
     val physiologicalStressMask: DoubleArray, // Vecteur optionnel d'attention (pour plus tard)
-    val isNight: Boolean = false       // Mode Nuit (Sommeil = réduction drastique de l'agressivité)
+    val isNight: Boolean = false,      // Mode Nuit (Sommeil = réduction drastique de l'agressivité)
+    val sourceSensor: app.aaps.core.data.model.SourceSensor? = null // Type de capteur matériel (Phase 10)
 )
 
 /**

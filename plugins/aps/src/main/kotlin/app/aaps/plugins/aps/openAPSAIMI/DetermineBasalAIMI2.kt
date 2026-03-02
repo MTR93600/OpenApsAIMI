@@ -6166,8 +6166,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             estimatedRa = 0.0, // Sera calculé formellement par l'Unscented Kalman Filter dans le PSE
             patientWeightKg = patientWeight, // Injection Phase 7 (Weight-Aware MPC)
             physiologicalStressMask = doubleArrayOf(), // TODO Phase X: Mechanism Attention Gate (Future)
-            isNight = java.util.Calendar.getInstance()[java.util.Calendar.HOUR_OF_DAY] <= 7 // 🌙 Activation du Bridage Nocturne du MPC
+            isNight = java.util.Calendar.getInstance()[java.util.Calendar.HOUR_OF_DAY] <= 7, // 🌙 Activation du Bridage Nocturne du MPC
+            sourceSensor = glucose_status.sourceSensor // 📡 Détection Matérielle G6 vs One+ pour Time-Shift
         )
+
+        // 🤖 Hardware-Awareness Logging
+        if (autodriveState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE) {
+            consoleLog.add("🤖 SENSOR_AWARE: G6 Detected -> Engaging Lead Compensator (UKF +50% Vel).")
+        } else if (autodriveState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G7_NATIVE) {
+            consoleLog.add("🤖 SENSOR_AWARE: One+/G7 Detected -> Fast Sensor, Real-Time Maths Engaged.")
+        }
 
         autodriveEngine.setShadowMode(true) // Always shadow for logs (invisible comparator)
         val autodriveCommand = autodriveEngine.tick(autodriveState, profile.current_basal)
