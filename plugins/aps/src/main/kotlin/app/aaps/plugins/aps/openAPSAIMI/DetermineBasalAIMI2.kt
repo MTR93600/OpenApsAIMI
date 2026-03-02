@@ -6165,7 +6165,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             estimatedSI = dynamicIsfMgDl / 10000.0, 
             estimatedRa = 0.0, // Sera calculé formellement par l'Unscented Kalman Filter dans le PSE
             patientWeightKg = patientWeight, // Injection Phase 7 (Weight-Aware MPC)
-            physiologicalStressMask = doubleArrayOf() // TODO Phase X: Mechanism Attention Gate (Future)
+            physiologicalStressMask = doubleArrayOf(), // TODO Phase X: Mechanism Attention Gate (Future)
+            isNight = java.util.Calendar.getInstance()[java.util.Calendar.HOUR_OF_DAY] <= 7 // 🌙 Activation du Bridage Nocturne du MPC
         )
 
         autodriveEngine.setShadowMode(true) // Always shadow for logs (invisible comparator)

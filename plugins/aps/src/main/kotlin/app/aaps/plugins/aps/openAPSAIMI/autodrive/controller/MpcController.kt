@@ -27,12 +27,8 @@ class MpcController @Inject constructor(
     private val horizonMinutes = 60          // On vérifie sur 60 minutes
     private val stepMinutes = 5              // Pas de simulation
     private val steps = horizonMinutes / stepMinutes
-    private val targetBg = 100.0             // Cible agnostique dure
-    private val maxSmbPer5Min = 2.0          // Limite dure d'optimisation (exploration)
-
-    // Poids de la fonction de coût (J)
+    // Poids de base (Modifiés dynamiquement si Nuit/Jour)
     private val qBg = 1.0                    // Pénalité pour l'écart au Target BG
-    private val rInsulin = 50.0              // Pénalité pour injecter de l'insuline (évite l'agressivité max)
 
     /**
      * Calcule la dose optimale pour les 5 prochaines minutes (Receding Horizon).
@@ -44,11 +40,29 @@ class MpcController @Inject constructor(
         var bestDose = 0.0
         var minCost = Double.MAX_VALUE
 
+        // 🌙 PROTECTION NOCTURNE ANTI-HYPO (Phase 3+)
+        // La nuit, on dort : pas de repas en cours, la sensibilité est souvent stable.
+        // On interdit au solver de chercher la perfection absolue et on sur-pénalise l'injection
+        // d'insuline rapide (SMB) pour privilégier des basales douces.
+        val activeTargetBg: Double
+        val activeRInsulin: Double
+        val activeMaxSmb: Double
+
+        if (state.isNight) {
+            activeTargetBg = 110.0 // On rehausse la cible de sécurité
+            activeRInsulin = 250.0 // On multiplie par 5 le coût "Mathématique" de l'insuline (très doux)
+            activeMaxSmb = 0.5 // On refuse d'envoyer de fortes doses d'un coup
+        } else {
+            activeTargetBg = 100.0
+            activeRInsulin = 50.0
+            activeMaxSmb = 2.0
+        }
+
         // 🛡️ WEIGHT-AWARENESS SAFETY CAP (Phase 7)
         // L'agressivité mathématique du solver est physiquement bridée par le poids du corps.
         // Un adulte de 70kg ne pourra jamais recevoir une dose supérieure à 3.5U (0.05 * 70kg) sur 5 minutes.
         // Un enfant de 20kg sera physiquement bloqué à 1.0U max.
-        val maxSafeDoseU = min(maxSmbPer5Min, state.patientWeightKg * 0.05)
+        val maxSafeDoseU = min(activeMaxSmb, state.patientWeightKg * 0.05)
 
         // Résolution via balayage fin sur le domaine praticable Sécurisé [0.0 , maxSafeDoseU]
         val searchStep = 0.05
@@ -57,7 +71,7 @@ class MpcController @Inject constructor(
             .toList()
 
         for (candidateDose in doseCandidates) {
-            val cost = simulateAndCost(candidateDose, state)
+            val cost = simulateAndCost(candidateDose, state, activeTargetBg, activeRInsulin)
             if (cost < minCost) {
                 minCost = cost
                 bestDose = candidateDose
@@ -85,7 +99,7 @@ class MpcController @Inject constructor(
     /**
      * Simule la trajectoire pour une dose candidate U donnée et retourne le coût total J.
      */
-    private fun simulateAndCost(doseU: Double, startState: AutoDriveState): Double {
+    private fun simulateAndCost(doseU: Double, startState: AutoDriveState, activeTargetBg: Double, activeRInsulin: Double): Double {
         var currentBg = startState.bg
         var currentIob = startState.iob + doseU
         var totalCost = 0.0
@@ -100,7 +114,7 @@ class MpcController @Inject constructor(
         for (k in 1..steps) {
             // -- Dynamique du Glucose (Simulation Euler sur 5 min) --
             // Formulation classique : dBG/dt = - [p1 + SI * IOB]*(BG) + p1*BG_Target + Ra
-            val deltaBgPerMin = - (p1 + (si * currentIob)) * currentBg + (p1 * targetBg) + startState.estimatedRa
+            val deltaBgPerMin = - (p1 + (si * currentIob)) * currentBg + (p1 * activeTargetBg) + startState.estimatedRa
             val deltaBgPer5 = deltaBgPerMin * stepMinutes
 
             currentBg += deltaBgPer5
@@ -110,15 +124,15 @@ class MpcController @Inject constructor(
             currentIob *= 0.90 
 
             // -- Évaluation du Coût --
-            // Pénalité asymétrique : l'hypo (BG < 100) est lourdement pénalisée par rapport à l'hyper
-            val errorBg = currentBg - targetBg
+            // Pénalité asymétrique : l'hypo (BG < Cible) est lourdement pénalisée par rapport à l'hyper
+            val errorBg = currentBg - activeTargetBg
             val qPenalty = if (errorBg < 0) qBg * 5.0 else qBg
             
             totalCost += (qPenalty * errorBg * errorBg)
         }
 
         // Ajout du coût de régularisation R (Évite au solver de paniquer et de tirer un gros bolus d'un coup)
-        totalCost += (rInsulin * doseU * doseU)
+        totalCost += (activeRInsulin * doseU * doseU)
 
         // Pénalité infinie si la simulation franchit le seuil létal absolu (Safety fallback intra-MPC)
         if (currentBg < 60.0) totalCost += 1_000_000.0
