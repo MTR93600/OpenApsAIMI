@@ -171,6 +171,27 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             aapsLogger.error(LTag.APS, "❌ Failed to start AIMI Physiological Manager", e)
         }
         
+        // 🧠 Start AIMI Neural Trainer
+        try {
+            val constraints = androidx.work.Constraints.Builder()
+                .setRequiresCharging(true)
+                .setRequiresDeviceIdle(true)
+                .build()
+                
+            val workRequest = androidx.work.PeriodicWorkRequestBuilder<app.aaps.plugins.aps.openAPSAIMI.learning.AutodriveNeuralTrainerWorker>(
+                6, java.util.concurrent.TimeUnit.HOURS
+            ).setConstraints(constraints).build()
+
+            androidx.work.WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                "AIMINeuralTrainer",
+                androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                workRequest
+            )
+            aapsLogger.info(LTag.APS, "✅ AIMI Neural Trainer scheduled successfully")
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "❌ Failed to schedule AIMI Neural Trainer", e)
+        }
+        
         AimiUamHandler.clearCache(context)
         AimiUamHandler.installConfidenceSupplier {
             // retourne null si tu veux "laisser la main" au runtime
@@ -207,6 +228,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             aapsLogger.info(LTag.APS, "🛑 AIMI Physiological Manager stopped")
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "Error stopping AIMI Physiological Manager", e)
+        }
+
+        try {
+            androidx.work.WorkManager.getInstance(context).cancelUniqueWork("AIMINeuralTrainer")
+            aapsLogger.info(LTag.APS, "🛑 AIMI Neural Trainer stopped")
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "Error stopping AIMI Neural Trainer", e)
         }
 
         AimiUamHandler.close(context)
