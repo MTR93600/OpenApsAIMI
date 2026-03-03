@@ -270,6 +270,31 @@ class AimiNeuralNetwork(
         return totalLoss / valInputs.size
     }
 
+    /**
+     * Serialize this network's weights to a JSON file.
+     * Format: flat JSON object with arrays for each weight matrix and bias vector.
+     */
+    fun saveToFile(file: java.io.File) {
+        val sb = StringBuilder()
+        sb.append("{")
+        sb.append("\"inputSize\":$inputSize,")
+        sb.append("\"hiddenSize\":$hiddenSize,")
+        sb.append("\"outputSize\":$outputSize,")
+
+        fun array2d(a: Array<DoubleArray>) = "[" + a.joinToString(",") { row ->
+            "[" + row.joinToString(",") { it.toString() } + "]"
+        } + "]"
+
+        fun array1d(a: DoubleArray) = "[" + a.joinToString(",") { it.toString() } + "]"
+
+        sb.append("\"weightsIH\":${array2d(weightsInputHidden)},")
+        sb.append("\"biasH\":${array1d(biasHidden)},")
+        sb.append("\"weightsHO\":${array2d(weightsHiddenOutput)},")
+        sb.append("\"biasO\":${array1d(biasOutput)}")
+        sb.append("}")
+        file.writeText(sb.toString())
+    }
+
     companion object {
 
         fun refineSMB(smb: Float, nn: AimiNeuralNetwork, input: DoubleArray?): Float {
@@ -277,6 +302,56 @@ class AimiNeuralNetwork(
             val floatInput = input.map { it.toFloat() }.toFloatArray()
             val prediction = nn.predict(floatInput)[0]
             return smb + prediction.toFloat()
+        }
+
+        /**
+         * Deserialize a network from a JSON file written by saveToFile().
+         * Returns null if the file is malformed or missing.
+         */
+        fun loadFromFile(file: java.io.File): AimiNeuralNetwork? {
+            return try {
+                val text = file.readText()
+                // Simple manual JSON parsing (no Gson dependency)
+                fun extractInt(json: String, key: String): Int {
+                    val pattern = "\"$key\":(\\d+)".toRegex()
+                    return pattern.find(json)?.groupValues?.get(1)?.toInt() ?: return -1
+                }
+                fun extractDoubles1D(json: String, key: String): DoubleArray {
+                    val pattern = "\"$key\":\\[([^\\]]+)\\]".toRegex()
+                    val content = pattern.find(json)?.groupValues?.get(1) ?: return DoubleArray(0)
+                    return content.split(",").mapNotNull { it.trim().toDoubleOrNull() }.toDoubleArray()
+                }
+                fun extractDoubles2D(json: String, key: String): Array<DoubleArray> {
+                    val outerPattern = "\"$key\":\\[\\[(.+?)\\]\\]".toRegex(RegexOption.DOT_MATCHES_ALL)
+                    val inner = outerPattern.find(json)?.groupValues?.get(1) ?: return emptyArray()
+                    // Split rows by "],["
+                    val rows = inner.split("],[").map { row ->
+                        row.trim('[', ']').split(",")
+                            .mapNotNull { it.trim().toDoubleOrNull() }.toDoubleArray()
+                    }
+                    return rows.toTypedArray()
+                }
+
+                val inputSize  = extractInt(text, "inputSize")
+                val hiddenSize = extractInt(text, "hiddenSize")
+                val outputSize = extractInt(text, "outputSize")
+                if (inputSize <= 0 || hiddenSize <= 0 || outputSize <= 0) return null
+
+                val net = AimiNeuralNetwork(inputSize, hiddenSize, outputSize)
+                val wIH = extractDoubles2D(text, "weightsIH")
+                val bH  = extractDoubles1D(text, "biasH")
+                val wHO = extractDoubles2D(text, "weightsHO")
+                val bO  = extractDoubles1D(text, "biasO")
+
+                if (wIH.size != inputSize || bH.size != hiddenSize
+                    || wHO.size != hiddenSize || bO.size != outputSize) return null
+
+                net.weightsInputHidden = wIH
+                net.biasHidden = bH
+                net.weightsHiddenOutput = wHO
+                net.biasOutput = bO
+                net
+            } catch (e: Exception) { null }
         }
     }
 

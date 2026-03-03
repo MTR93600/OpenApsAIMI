@@ -197,6 +197,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             count++
         }
         aapsLogger.debug(LTag.APS, "Loaded $count variable sensitivity values from database")
+
+        // 🧠 Pre-load ML model into memory for O(1) SMB inference on hot path
+        try {
+            val externalDir = java.io.File(android.os.Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
+            app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer.loadModel(externalDir)
+            aapsLogger.info(LTag.APS, "✅ AimiSmbTrainer: model load requested (async)")
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "❌ AimiSmbTrainer: failed to request model load", e)
+        }
     }
     override fun getGlucoseStatusData(allowOldData: Boolean): GlucoseStatus? =
         glucoseStatusCalculatorAimi.getGlucoseStatusData(allowOldData)

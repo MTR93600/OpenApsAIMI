@@ -113,53 +113,52 @@ object SmbInstructionExecutor {
         var basal = input.initialBasal
 
         val trainingEnabled = input.preferences.get(BooleanKey.OApsAIMIMLtraining)
-        if (trainingEnabled && input.csvFile.exists()) {
-            val allLines = input.csvFile.readLines()
-            val minutesToConsider = 1000.0
-            val linesToConsider = (minutesToConsider / 5).toInt()
-            if (allLines.size > linesToConsider) {
-                val refined = hooks.refineSmb(
-                    input.combinedDelta.toFloat(),
-                    input.shortAvgDelta,
-                    input.longAvgDelta,
-                    predictedSmb,
-                    input.profile
+        if (trainingEnabled) {
+            // 🧠 ML Refinement (O(1) — no disk IO, model is pre-loaded in memory)
+            // AimiSmbTrainer returns predictedSmb unchanged if model is null/circuit open/throws.
+            val refined = hooks.refineSmb(
+                input.combinedDelta.toFloat(),
+                input.shortAvgDelta,
+                input.longAvgDelta,
+                predictedSmb,
+                input.profile
+            )
+            val isModelActive = refined != predictedSmb
+            input.rT.reason.appendLine(
+                input.context.getString(
+                    R.string.reason_ai_file,
+                    if (isModelActive) "✔" else "⏳",
+                    "%.2f".format(refined.takeIf { it.isFinite() } ?: predictedSmb)
                 )
+            )
+            predictedSmb = refined
+
+            val maxIobPref = input.preferences.get(DoubleKey.ApsSmbMaxIob)
+            if (input.bg > 170 && input.delta > 4 && input.iob < maxIobPref) {
                 input.rT.reason.appendLine(
                     input.context.getString(
-                        R.string.reason_ai_file,
-                        if (input.csvFile.exists()) "✔" else "✘",
-                        "%.2f".format(refined.takeIf { it.isFinite() } ?: 0f)
+                        R.string.reason_boost_hyper,
+                        input.bg.toInt(),
+                        input.delta
                     )
                 )
-                predictedSmb = refined
-                val maxIobPref = input.preferences.get(DoubleKey.ApsSmbMaxIob)
-                if (input.bg > 170 && input.delta > 4 && input.iob < maxIobPref) {
-                    input.rT.reason.appendLine(
-                        input.context.getString(
-                            R.string.reason_boost_hyper,
-                            input.bg.toInt(),
-                            input.delta
-                        )
+                predictedSmb *= 1.7f
+            } else if (input.bg > 150 && input.delta > 3 && input.iob < maxIobPref) {
+                input.rT.reason.appendLine(
+                    input.context.getString(
+                        R.string.reason_boost_hyper_2,
+                        input.bg.toInt(),
+                        input.delta
                     )
-                    predictedSmb *= 1.7f
-                } else if (input.bg > 150 && input.delta > 3 && input.iob < maxIobPref) {
-                    input.rT.reason.appendLine(
-                        input.context.getString(
-                            R.string.reason_boost_hyper_2,
-                            input.bg.toInt(),
-                            input.delta
-                        )
-                    )
-                    predictedSmb *= 1.5f
-                }
-
-                basal = when {
-                    input.honeymoon && input.bg < 170 -> input.basalaimi * 1.0
-                    else -> input.basalaimi.toDouble()
-                }
-                basal = hooks.roundBasal(basal)
+                )
+                predictedSmb *= 1.5f
             }
+
+            basal = when {
+                input.honeymoon && input.bg < 170 -> input.basalaimi * 1.0
+                else -> input.basalaimi.toDouble()
+            }
+            basal = hooks.roundBasal(basal)
         } else {
             input.rT.reason.appendLine(input.context.getString(R.string.reason_ml_training))
         }

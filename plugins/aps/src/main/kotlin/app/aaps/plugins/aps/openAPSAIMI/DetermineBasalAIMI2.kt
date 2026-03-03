@@ -3073,165 +3073,38 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): Float {
         val recentDeltas = getRecentDeltas()
         val predicted = predictedDelta(recentDeltas)
-        val combinedDelta = (delta + predicted) / 2.0f
-        // Définir un nombre maximal d'itérations plus bas en cas de montée rapide
-        val maxIterations = if (combinedDelta > 15f) 25 else 50
-        var finalRefinedSMB: Float = calculateSMBFromModel()
 
-        val allLines = csvfile.readLines()
-        //println("CSV file path: \${csvfile.absolutePath}")
-        println(context.getString(R.string.csv_file_path, csvfile.absolutePath))
-        if (allLines.isEmpty()) {
-            //println("CSV file is empty.")
-            println(context.getString(R.string.csv_file_empty))
-            return predictedSMB
-        }
+        // 🛡️ Fallback baseline (always available, no IO)
+        val finalRefinedSMB: Float = calculateSMBFromModel()
 
-        val headerLine = allLines.first()
-        val headers = headerLine.split(",").map { it.trim() }
-        val requiredColumns = listOf(
-            "bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta",
-            "tdd7DaysPerHour", "tdd2DaysPerHour", "tddPerHour", "tdd24HrsPerHour",
-            "predictedSMB", "smbGiven"
+        // 🧠 Feature vector (10 physio + 1 trendIndicator)
+        val trendIndicator = calculateTrendIndicator(
+            delta, shortAvgDelta, longAvgDelta,
+            bg.toFloat(), iob, variableSensitivity, cob, normalBgThreshold,
+            recentSteps180Minutes, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
+            profile.insulinDivisor.toFloat(), recentSteps5Minutes, recentSteps10Minutes
         )
-        if (!requiredColumns.all { headers.contains(it) }) {
-            //println("CSV file is missing required columns.")
-            println(context.getString(R.string.csv_missing_columns))
-            return predictedSMB
-        }
+        val features = floatArrayOf(
+            bg.toFloat(), iob.toFloat(), cob.toFloat(), delta, shortAvgDelta, longAvgDelta,
+            tdd7DaysPerHour.toFloat(), tdd2DaysPerHour.toFloat(), tddPerHour.toFloat(),
+            tdd24HrsPerHour.toFloat(), trendIndicator.toFloat()
+        )
 
-        val colIndices = requiredColumns.map { headers.indexOf(it) }
-        val targetColIndex = headers.indexOf("smbGiven")
-        val inputs = mutableListOf<FloatArray>()
-        val targets = mutableListOf<DoubleArray>()
-        var lastEnhancedInput: FloatArray? = null
+        // 🔥 Trigger async training (fire-and-forget, rate-limited to 1/6h, never blocks)
+        app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer.maybeTrainAsync(
+            dir = externalDir,
+            csvFile = csvfile
+        )
 
-        for (line in allLines.drop(1)) {
-            val cols = line.split(",").map { it.trim() }
-            val rawInput = colIndices.mapNotNull { idx -> cols.getOrNull(idx)?.toFloatOrNull() }.toFloatArray()
+        // 🎯 Inference-only O(1): fallback to predictedSMB on any issue
+        val mlRefined = app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer.refine(finalRefinedSMB, features)
 
-            val trendIndicator = calculateTrendIndicator(
-                delta, shortAvgDelta, longAvgDelta,
-                bg.toFloat(), iob, variableSensitivity, cob, normalBgThreshold,
-                recentSteps180Minutes, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
-                profile.insulinDivisor.toFloat(), recentSteps5Minutes, recentSteps10Minutes
-            )
-
-            val enhancedInput = rawInput.copyOf(rawInput.size + 1)
-            enhancedInput[rawInput.size] = trendIndicator.toFloat()
-            lastEnhancedInput = enhancedInput
-
-            val targetValue = cols.getOrNull(targetColIndex)?.toDoubleOrNull()
-            if (targetValue != null) {
-                inputs.add(enhancedInput)
-                targets.add(doubleArrayOf(targetValue))
-            }
-        }
-
-        if (inputs.isEmpty() || targets.isEmpty()) {
-            //println("Insufficient data for training.")
-            println(context.getString(R.string.insufficient_data_training))
-            return predictedSMB
-        }
-
-        val maxK = 10
-        val adjustedK = minOf(maxK, inputs.size)
-        val foldSize = maxOf(1, inputs.size / adjustedK)
-        var bestNetwork: AimiNeuralNetwork? = null
-        var bestFoldValLoss = Double.MAX_VALUE
-
-        for (k in 0 until adjustedK) {
-            val validationInputs = inputs.subList(k * foldSize, minOf((k + 1) * foldSize, inputs.size))
-            val validationTargets = targets.subList(k * foldSize, minOf((k + 1) * foldSize, targets.size))
-            val trainingInputs = inputs.minus(validationInputs)
-            val trainingTargets = targets.minus(validationTargets)
-            if (validationInputs.isEmpty()) continue
-
-            val tempNetwork = AimiNeuralNetwork(
-                inputSize = inputs.first().size,
-                hiddenSize = 5,
-                outputSize = 1,
-                config = TrainingConfig(
-                    learningRate = 0.001,
-                    epochs = 200
-                ),
-                regularizationLambda = 0.01
-            )
-
-            tempNetwork.trainWithValidation(trainingInputs, trainingTargets, validationInputs, validationTargets)
-            val foldValLoss = tempNetwork.validate(validationInputs, validationTargets)
-
-            if (foldValLoss < bestFoldValLoss) {
-                bestFoldValLoss = foldValLoss
-                bestNetwork = tempNetwork
-            }
-        }
-
-        val adjustedLearningRate = if (bestFoldValLoss < 0.01) 0.0005 else 0.001
-        val epochs = if (bestFoldValLoss < 0.01) 100 else 200
-
-        if (bestNetwork != null) {
-            //println("Réentraînement final avec les meilleurs hyperparamètres sur toutes les données...")
-            println(context.getString(R.string.retraining_final_model))
-            val finalNetwork = AimiNeuralNetwork(
-                inputSize = inputs.first().size,
-                hiddenSize = 5,
-                outputSize = 1,
-                config = TrainingConfig(
-                    learningRate = adjustedLearningRate,
-                    beta1 = 0.9,
-                    beta2 = 0.999,
-                    epsilon = 1e-8,
-                    patience = 10,
-                    batchSize = 32,
-                    weightDecay = 0.01,
-                    epochs = epochs,
-                    useBatchNorm = false,
-                    useDropout = true,
-                    dropoutRate = 0.3,
-                    leakyReluAlpha = 0.01
-                ),
-                regularizationLambda = 0.01
-            )
-            finalNetwork.copyWeightsFrom(bestNetwork)
-            finalNetwork.trainWithValidation(inputs, targets, inputs, targets)
-            bestNetwork = finalNetwork
-        }
-
-        // --- Normalisation légère sur lastEnhancedInput ---
-        fun normalize(input: FloatArray): FloatArray {
-            val mean = input.average().toFloat()
-            val std = input.map { (it - mean) * (it - mean) }.average().let { sqrt(it).toFloat().coerceAtLeast(1e-8f) }
-            return input.map { (it - mean) / std }.toFloatArray()
-        }
-
-        var iterationCount = 0
-        do {
-            val dynamicThreshold = calculateDynamicThreshold(iterationCount, delta, shortAvgDelta, longAvgDelta)
-            val normalizedInput = lastEnhancedInput?.let { normalize(it) }?.toDoubleArray() ?: DoubleArray(0)
-            val refinedSMB = bestNetwork?.let {
-                AimiNeuralNetwork.refineSMB(finalRefinedSMB, it, normalizedInput)
-            } ?: finalRefinedSMB
-
-            //println("→ Iteration $iterationCount | SMB=$finalRefinedSMB → $refinedSMB | Δ=${abs(finalRefinedSMB - refinedSMB)} | threshold=$dynamicThreshold")
-            println(context.getString(R.string.iteration_smb, iterationCount, finalRefinedSMB, refinedSMB, abs(finalRefinedSMB - refinedSMB), dynamicThreshold))
-
-            if (abs(finalRefinedSMB - refinedSMB) <= dynamicThreshold) {
-                finalRefinedSMB = max(0.05f, refinedSMB)
-                break
-            }
-            iterationCount++
-        } while (iterationCount < maxIterations)
-
-        if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
-            //println("Modèle prédictif plus élevé, ajustement retenu.")
-            println(context.getString(R.string.predicted_smb_higher))
-            return finalRefinedSMB
+        if (mlRefined > predictedSMB && bg > 150 && delta > 5) {
+            return mlRefined
         }
 
         val alpha = 0.7f
-        val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
-        return blendedSMB
+        return alpha * mlRefined + (1 - alpha) * predictedSMB
     }
 
     private fun computeDynamicBolusMultiplier(delta: Float): Float {
