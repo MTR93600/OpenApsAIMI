@@ -4558,7 +4558,35 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val predicted = predictedDelta(recentDeltas)
         val useLegacyDynamics = (pkpdRuntime == null)
         // Calcul du delta combiné : on combine le delta mesuré et le delta prédit
-        val combinedDelta = (delta + predicted) / 2.0f
+        val rawCombinedDelta: Float = ((delta + predicted) / 2.0).toFloat()
+
+        // 📡 G6 BYODA LEAD COMPENSATOR (Phase 10 — Main Loop Integration)
+        // BYODA (DEXCOM_G6_NATIVE) introduit un lag interne de ~5-8 min via lissage natif.
+        // En compensant combinedDelta et shortAvgDelta, on aligne les triggers Autodrive V3
+        // sur la réalité physiologique, comme si on était sur le One+.
+        //
+        // Facteurs (mesurés empiriquement sur lag G6 BYODA) :
+        //  - combinedDelta : +40%  (dénisifie la pente filtrée → chiffre réel de montée)
+        //  - shortAvgDelta : +30%  (accélère la confirmation tendance courte)
+        //  - delta brut et longAvgDelta : INCHANGÉS (sécurité anti-overcorrection)
+        //
+        // ⚠️ One+ / G7 / xDrip libre → aucun ajustement.
+        val isG6Byoda = glucose_status.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE
+        val combinedDelta: Float
+        val shortAvgDeltaAdj: Float
+        if (isG6Byoda) {
+            combinedDelta    = rawCombinedDelta * 1.40f
+            shortAvgDeltaAdj = shortAvgDelta    * 1.30f
+            consoleLog.add(
+                "📡 G6_LEAD rawΔcomb=%.2f → %.2f | rawΔshort=%.2f → %.2f (BYODA +40/+30%%)".format(
+                    rawCombinedDelta, combinedDelta, shortAvgDelta, shortAvgDeltaAdj
+                )
+            )
+        } else {
+            combinedDelta    = rawCombinedDelta
+            shortAvgDeltaAdj = shortAvgDelta
+        }
+
         val tp = if (useLegacyDynamics) {
         calculateDynamicPeakTime(
             currentActivity = profile.currentActivity,
@@ -4569,7 +4597,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             recentSteps15Minutes,
             averageBeatsPerMinute.toInt(),
             bg,
-            combinedDelta,
+            combinedDelta.toDouble(),
             reasonAimi
         )
         } else {
@@ -5079,7 +5107,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // PRIORITY 4: AUTODRIVE (Strict)
         val autoRes = tryAutodrive(
-            bg, delta, shortAvgDelta, profile, lastBolusTimeMs ?: 0L, predictedBg, mealData.slopeFromMinDeviation, targetBg, reason,
+            bg, delta, shortAvgDeltaAdj.toFloat(), profile, lastBolusTimeMs ?: 0L, predictedBg, mealData.slopeFromMinDeviation, targetBg, reason,
             preferences.get(BooleanKey.OApsAIMIautoDrive),
             dynamicPbolusLarge, dynamicPbolusSmall,
             flatBGsDetected  // 🛡️ Pass CGM quality signal
