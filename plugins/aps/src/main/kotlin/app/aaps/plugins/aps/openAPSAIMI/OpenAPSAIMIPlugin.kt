@@ -173,6 +173,23 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         
         // 🧠 Start AIMI Neural Trainer
         try {
+            val weightsFile = java.io.File(
+                android.os.Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS",
+                "aimi_brain_weights.json"
+            )
+
+            // 1. Initialisation d'Urgence (Si le Cerveau n'existe pas encore)
+            if (!weightsFile.exists()) {
+                val initRequest = androidx.work.OneTimeWorkRequestBuilder<app.aaps.plugins.aps.openAPSAIMI.learning.AutodriveNeuralTrainerWorker>().build()
+                androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
+                    "AIMINeuralTrainer_Init",
+                    androidx.work.ExistingWorkPolicy.REPLACE,
+                    initRequest
+                )
+                aapsLogger.info(LTag.APS, "⚡ AIMI Neural Trainer: First learning triggered immediately (no constraints).")
+            }
+
+            // 2. Initialisation de Routine (Nocturne)
             val constraints = androidx.work.Constraints.Builder()
                 .setRequiresCharging(true)
                 .setRequiresDeviceIdle(true)

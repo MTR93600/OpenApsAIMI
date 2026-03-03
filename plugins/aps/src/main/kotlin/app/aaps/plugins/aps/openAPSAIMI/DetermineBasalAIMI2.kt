@@ -3084,7 +3084,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else null
 
         if (bestNetwork == null) {
-            println(context.getString(R.string.insufficient_data_training))
+            // println(context.getString(R.string.insufficient_data_training))
             return predictedSMB
         }
 
@@ -3115,17 +3115,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val normalizedInput = normalize(enhancedInput).toDoubleArray()
             val refinedSMB = AimiNeuralNetwork.refineSMB(finalRefinedSMB, bestNetwork, normalizedInput)
 
-            println(context.getString(R.string.iteration_smb, iterationCount, finalRefinedSMB, refinedSMB, abs(finalRefinedSMB - refinedSMB), dynamicThreshold))
+            // println(context.getString(R.string.iteration_smb, iterationCount, finalRefinedSMB, refinedSMB, abs(finalRefinedSMB - refinedSMB), dynamicThreshold))
 
             if (abs(finalRefinedSMB - refinedSMB) <= dynamicThreshold) {
-                finalRefinedSMB = max(0.05f, refinedSMB)
+                finalRefinedSMB = max(0f, refinedSMB)
                 break
             }
             iterationCount++
         } while (iterationCount < maxIterations)
 
         if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
-            println(context.getString(R.string.predicted_smb_higher))
+            // println(context.getString(R.string.predicted_smb_higher))
             return finalRefinedSMB
         }
 
