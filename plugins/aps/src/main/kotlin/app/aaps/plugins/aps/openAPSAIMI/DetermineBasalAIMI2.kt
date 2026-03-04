@@ -4565,24 +4565,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // En compensant combinedDelta et shortAvgDelta, on aligne les triggers Autodrive V3
         // sur la réalité physiologique, comme si on était sur le One+.
         //
-        // Facteurs (mesurés empiriquement sur lag G6 BYODA) :
-        //  - combinedDelta : +40%  (dénisifie la pente filtrée → chiffre réel de montée)
-        //  - shortAvgDelta : +30%  (accélère la confirmation tendance courte)
+        // Facteurs jour (07h–23h) :
+        //  - combinedDelta : +30%  (dénisifie la pente filtrée → chiffre réel de montée)
+        //  - shortAvgDelta : +20%  (accélère la confirmation tendance courte)
         //  - delta brut et longAvgDelta : INCHANGÉS (sécurité anti-overcorrection)
         //
+        // Nuit (23h–06h) : DÉSACTIVÉ (no compensation — évite les sur-bolus nocturnes sur résiduel IOB)
         // ⚠️ One+ / G7 / xDrip libre → aucun ajustement.
         val isG6Byoda = glucose_status.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE
+        val isNight = hourOfDay >= 23 || hourOfDay < 6
         val combinedDelta: Float
         val shortAvgDeltaAdj: Float
-        if (isG6Byoda) {
-            combinedDelta    = rawCombinedDelta * 1.40f
-            shortAvgDeltaAdj = shortAvgDelta    * 1.30f
+        if (isG6Byoda && !isNight) {
+            combinedDelta    = rawCombinedDelta * 1.30f
+            shortAvgDeltaAdj = shortAvgDelta    * 1.20f
             consoleLog.add(
-                "📡 G6_LEAD rawΔcomb=%.2f → %.2f | rawΔshort=%.2f → %.2f (BYODA +40/+30%%)".format(
+                "📡 G6_LEAD rawΔcomb=%.2f → %.2f | rawΔshort=%.2f → %.2f (BYODA +30/+20%%)".format(
                     rawCombinedDelta, combinedDelta, shortAvgDelta, shortAvgDeltaAdj
                 )
             )
         } else {
+            if (isG6Byoda) consoleLog.add("📡 G6_LEAD nuit [${hourOfDay}h] → pas de compensation (sécurité nocturne)")
             combinedDelta    = rawCombinedDelta
             shortAvgDeltaAdj = shortAvgDelta
         }
