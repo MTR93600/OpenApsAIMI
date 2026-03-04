@@ -2264,11 +2264,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bg: Float,
         predictedBg: Float,
         reason: StringBuilder,
-        targetBg: Float
+        targetBg: Float,
+        isG6Byoda: Boolean = false   // 📡 G6 BYODA: enables acceleration-based early trigger
     ): Boolean {
         // ⚙️ Prefs
         val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
-        val autodriveDelta: Float = preferences.get(DoubleKey.OApsAIMIcombinedDelta).toFloat()
+        val autodriveDeltaBase: Float = preferences.get(DoubleKey.OApsAIMIcombinedDelta).toFloat()
         val autodriveMinDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
     val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG) // User Decision: Static Threshold
 
@@ -2278,21 +2279,36 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //      return false
     // }
 
-        // 📈 Deltas récents & delta combiné (IMPROVED: 15-min history)
+        // 📈 Deltas récents & delta combiné
         val recentDeltas = getRecentDeltas()
         val predicted = predictedDelta(recentDeltas).toFloat()
-        
+
+        // 📡 G6 BYODA — Second-Derivative Early Trigger
+        // G6 native smoothing already attenuates delta by 5-8 min.
+        // If delta is *accelerating* (rising over 2 consecutive cycles), this signals a real meal rise
+        // in progress. We lower the autodriveDelta threshold by 20% to trigger earlier.
+        val g6Accelerating = isG6Byoda &&
+            recentDeltas.size >= 2 &&
+            recentDeltas[0] > recentDeltas[1] + 1.5  // delta increasing ≥1.5 vs previous cycle
+        val autodriveDelta: Float = if (g6Accelerating) {
+            val adjusted = autodriveDeltaBase * 0.80f
+            consoleLog.add("📡 G6_ACCEL: delta[0]=${"%.1f".format(recentDeltas[0])} > delta[1]=${"%.1f".format(recentDeltas[1])} → threshold ${"%.2f".format(autodriveDeltaBase)} → ${"%.2f".format(adjusted)} (-20%)")
+            adjusted
+        } else {
+            autodriveDeltaBase
+        }
+
         // FIX: Extended delta history (3 periods: 0, -5, -10 min) for better noise filtering
         val avgRecentDelta = if (recentDeltas.size >= 2) {
-            recentDeltas.take(2).average().toFloat()  // Average of 2 most recent deltas (~10 min)
+            recentDeltas.take(2).average().toFloat()
         } else {
-            delta  // Fallback to current delta if insufficient history
+            delta
         }
-        
-        // Combine: current + predicted + recent average + trend
+
+        // Combine: current + predicted + recent average
         // Weighted: 40% current, 30% predicted, 30% recent average
         val combinedDelta = (delta * 0.4f + predicted * 0.3f + avgRecentDelta * 0.3f)
-        
+
         consoleLog.add("DELTA_CALC current=${String.format("%.1f", delta)} predicted=${String.format("%.1f", predicted)} avgRecent=${String.format("%.1f", avgRecentDelta)} → combined=${String.format("%.1f", combinedDelta)}")
         
         // 🎯 Dynamic Thresholds
@@ -5124,11 +5140,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // -----------------------------------------------------
 
         // PRIORITY 4: AUTODRIVE (Strict)
+        // 🍽️ Meal context: COB > 0 or any active meal mode → enables shorter cooldown for G6
+        val mealRising = cob > 0.5 || mealTime || lunchTime || dinnerTime || bfastTime || snackTime
         val autoRes = tryAutodrive(
             bg, delta, shortAvgDeltaAdj.toFloat(), profile, lastBolusTimeMs ?: 0L, predictedBg, mealData.slopeFromMinDeviation, targetBg, reason,
             preferences.get(BooleanKey.OApsAIMIautoDrive),
             dynamicPbolusLarge, dynamicPbolusSmall,
-            flatBGsDetected  // 🛡️ Pass CGM quality signal
+            flatBGsDetected,  // 🛡️ Pass CGM quality signal
+            isG6Byoda = isG6Byoda,
+            mealRising = mealRising
         )
         
         if (autoRes is DecisionResult.Applied) {
@@ -7592,7 +7612,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         autodrive: Boolean,
         dynamicPbolusLarge: Double,
         dynamicPbolusSmall: Double,
-        flatBGsDetected: Boolean  // 🔧 NEW: CGM quality signal
+        flatBGsDetected: Boolean,
+        isG6Byoda: Boolean = false,       // 📡 G6 BYODA sensor context
+        mealRising: Boolean = false        // 🍽️ Active meal context (COB or meal mode)
     ): DecisionResult {
         // 🛡️ GATE R0: CGM Quality Check (Priority #1 Safety)
         if (flatBGsDetected) {
@@ -7608,16 +7630,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return DecisionResult.Fallthrough("BG $bg < Safe minimum ${safeMinimumBG.toInt()}")
         }
 
-        // GATE R2: Strict Cooldown (45 min)
+        // 🍽️ GATE R2: Contextual Cooldown
+        // G6 BYODA + active meal → 20 min cooldown (G6 lag means we need faster re-trigger)
+        // All other cases → 45 min cooldown (standard safety)
         val now = System.currentTimeMillis()
-        val cooldownMs = 45 * 60 * 1000L
+        val cooldownMs = if (isG6Byoda && mealRising) 20 * 60 * 1000L else 45 * 60 * 1000L
         val remaining = (lastAutodriveActionTime + cooldownMs) - now
         if (remaining > 0) {
-            return DecisionResult.Fallthrough("Cooldown active (${remaining/1000/60}m)")
+            val cooldownLabel = if (isG6Byoda && mealRising) "G6+Meal 20min" else "Standard 45min"
+            return DecisionResult.Fallthrough("Cooldown [$cooldownLabel] active (${remaining/1000/60}m)")
         }
 
-        // Logic Re-Use
-        val validCondition = isAutodriveModeCondition(delta, autodrive, slopeFromMinDeviation, bg.toFloat(), predictedBg, reasonBuf, targetBg)
+        // Logic Re-Use — pass isG6Byoda for second-derivative acceleration detection
+        val validCondition = isAutodriveModeCondition(delta, autodrive, slopeFromMinDeviation, bg.toFloat(), predictedBg, reasonBuf, targetBg, isG6Byoda)
         
         if (!validCondition) return DecisionResult.Fallthrough("Conditions not met")
 
