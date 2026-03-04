@@ -9,6 +9,7 @@ import kotlinx.serialization.Serializable
 //@SuppressLint("UnsafeOptInUsageError")
 @OptIn(InternalSerializationApi::class)
 @Serializable
+@kotlinx.serialization.json.JsonIgnoreUnknownKeys
 data class OapsProfileAimi(
     var dia: Double, // AMA only
     var min_5m_carbimpact: Double, // AMA only
