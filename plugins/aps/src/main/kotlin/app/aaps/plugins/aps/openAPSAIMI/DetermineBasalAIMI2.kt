@@ -286,6 +286,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val wCyclePreferences: WCyclePreferences,
     private val wCycleLearner: WCycleLearner,
     private val pumpCapabilityValidator: app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator,
+    private val dynamicBasalController: app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController,
     private val context: Context
 ) {
     @Inject lateinit var persistenceLayer: PersistenceLayer
@@ -1355,10 +1356,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val isEarlyAutodrive = !night && !isMealMode && autodrive &&
             bgNow > hypoGuard && bgNow > 110 && detectMealOnset(delta, predDelta, bgacc.toFloat(), predictedBg, profile.target_bg.toFloat())
 
-        // 3) Tendance & ajustement
+        // 3) Tendance & ajustement dynamique
         val bgTrend = calculateBgTrend(getRecentBGs(), StringBuilder())
-        var rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend).coerceAtLeast(0.0)
         
+        // Use the new progressive Sigmoid/PD controller instead of the old fixed 1.2x limit
+        val dynamicState = dynamicBasalController.calculateDynamicRate(
+            currentRate = _rate,
+            bg = bgNow,
+            targetBg = profile.target_bg.toDouble(),
+            delta = delta.toDouble(),
+            shortAvgDelta = shortAvgDelta.toDouble()
+        )
+        var rateAdjustment = dynamicState.finalRate.coerceAtLeast(0.0)
+        
+        // Log the math for debugging and transparency
+        consoleLog.add(
+            "DYNAMIC_BASAL P-Err=${"%.1f".format(dynamicState.errorP)} " +
+            "D-Err=${"%.1f".format(dynamicState.errorD)} " +
+            "Total=${"%.2f".format(dynamicState.totalError)} " +
+            "Mult=${"%.2f".format(dynamicState.sigmoidMultiplier)}x " +
+            "Brake=${dynamicState.isBraking}"
+        )
+
         // 🚀 PKPD TBR Boost: Augmenter TBR si preferTbr (sauf modes repas)
         // Note: pkpdPreferTbrBoost est déjà à 1.0 pour les modes repas (via reset dans finalizeAndCapSMB)
         if (pkpdPreferTbrBoost > 1.0 && !isMealMode) {
@@ -1440,40 +1459,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun calculateBgTrend(recentBGs: List<Float>, reason: StringBuilder): Float {
         if (recentBGs.isEmpty()) {
-            //reason.append("✘ Aucun historique de glycémie disponible.\n")
             reason.append(context.getString(R.string.no_bg_history))
             return 0.0f
         }
 
-        // Hypothèse : recentBGs = liste du plus récent au plus ancien → on inverse
         val sortedBGs = recentBGs.reversed()
-
         val firstValue = sortedBGs.first()
         val lastValue = sortedBGs.last()
         val count = sortedBGs.size
 
         val bgTrend = (lastValue - firstValue) / count.toFloat()
 
-        //reason.append("→ Analyse BG Trend\n")
         reason.append(context.getString(R.string.bg_trend_analysis))
-        //reason.append("  • Première glycémie : $firstValue mg/dL\n")
         reason.append(context.getString(R.string.first_bg_value, firstValue))
-        //reason.append("  • Dernière glycémie : $lastValue mg/dL\n")
         reason.append(context.getString(R.string.last_bg_value, lastValue))
-        //reason.append("  • Nombre de valeurs : $count\n")
         reason.append(context.getString(R.string.number_of_values, count))
-        //reason.append("  • Tendance calculée : $bgTrend mg/dL/intervalle\n")
         reason.append(context.getString(R.string.calculated_trend, bgTrend))
         return bgTrend
-    }
-
-    private fun adjustRateBasedOnBgTrend(_rate: Double, bgTrend: Float): Double {
-        // Si la BG est accessible dans le scope, on peut aussi y jeter un œil ici :
-        val bgNow = bg
-        // Si on s’approche du seuil hypo et que la tendance est négative, coupe à 0 SEULEMENT si chute rapide
-        if (bgNow <= 90.0 && bgTrend < -2.0f) return 0.0
-        val adjustmentFactor = if (bgTrend < 0.0f) 0.8 else 1.2
-        return _rate * adjustmentFactor
     }
 
 
@@ -2259,11 +2261,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bg: Float,
         predictedBg: Float,
         reason: StringBuilder,
-        targetBg: Float
+        targetBg: Float,
+        isG6Byoda: Boolean = false,           // 📡 G6 BYODA: enables acceleration-based early trigger
+        externalCombinedDelta: Float = 0f     // 📡 GAP1: G6-compensated combinedDelta from determine_basal
     ): Boolean {
         // ⚙️ Prefs
         val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
-        val autodriveDelta: Float = preferences.get(DoubleKey.OApsAIMIcombinedDelta).toFloat()
+        val autodriveDeltaBase: Float = preferences.get(DoubleKey.OApsAIMIcombinedDelta).toFloat()
         val autodriveMinDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
     val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG) // User Decision: Static Threshold
 
@@ -2273,22 +2277,44 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //      return false
     // }
 
-        // 📈 Deltas récents & delta combiné (IMPROVED: 15-min history)
+        // 📈 Deltas récents & delta combiné
         val recentDeltas = getRecentDeltas()
         val predicted = predictedDelta(recentDeltas).toFloat()
-        
-        // FIX: Extended delta history (3 periods: 0, -5, -10 min) for better noise filtering
-        val avgRecentDelta = if (recentDeltas.size >= 2) {
-            recentDeltas.take(2).average().toFloat()  // Average of 2 most recent deltas (~10 min)
+
+        // 📡 G6 BYODA — Second-Derivative Early Trigger
+        // G6 native smoothing already attenuates delta by 5-8 min.
+        // If delta is *accelerating* (rising over 2 consecutive cycles), this signals a real meal rise
+        // in progress. We lower the autodriveDelta threshold by 20% to trigger earlier.
+        val g6Accelerating = isG6Byoda &&
+            recentDeltas.size >= 2 &&
+            recentDeltas[0] > recentDeltas[1] + 1.5  // delta increasing ≥1.5 vs previous cycle
+        val autodriveDelta: Float = if (g6Accelerating) {
+            val adjusted = autodriveDeltaBase * 0.80f
+            consoleLog.add("📡 G6_ACCEL: delta[0]=${"%".format(recentDeltas[0])} > delta[1]=${"%".format(recentDeltas[1])} → threshold ${"%".format(autodriveDeltaBase)} → ${"%".format(adjusted)} (-20%)")
+            adjusted
         } else {
-            delta  // Fallback to current delta if insufficient history
+            autodriveDeltaBase
         }
-        
-        // Combine: current + predicted + recent average + trend
-        // Weighted: 40% current, 30% predicted, 30% recent average
-        val combinedDelta = (delta * 0.4f + predicted * 0.3f + avgRecentDelta * 0.3f)
-        
-        consoleLog.add("DELTA_CALC current=${String.format("%.1f", delta)} predicted=${String.format("%.1f", predicted)} avgRecent=${String.format("%.1f", avgRecentDelta)} → combined=${String.format("%.1f", combinedDelta)}")
+
+        // 📡 GAP1: Use G6-compensated combinedDelta from determine_basal if available.
+        // Otherwise, compute locally from raw G6 deltas (un-compensated fallback).
+        val useExternalCombined = externalCombinedDelta > 0f
+        val combinedDelta: Float = if (useExternalCombined) {
+            consoleLog.add("📡 G6_COMBINED_EXT: using pre-compensated combinedDelta=${"%".format(externalCombinedDelta)} (skipping raw recompute)")
+            externalCombinedDelta
+        } else {
+            // FIX: Extended delta history (3 periods: 0, -5, -10 min) for better noise filtering
+            val avgRecentDelta = if (recentDeltas.size >= 2) {
+                recentDeltas.take(2).average().toFloat()
+            } else {
+                delta
+            }
+            // Combine: current + predicted + recent average
+            // Weighted: 40% current, 30% predicted, 30% recent average
+            val computed = (delta * 0.4f + predicted * 0.3f + avgRecentDelta * 0.3f)
+            consoleLog.add("DELTA_CALC current=${String.format("%.1f", delta)} predicted=${String.format("%.1f", predicted)} avgRecent=${String.format("%.1f", avgRecentDelta)} → combined=${String.format("%.1f", computed)}")
+            computed
+        }
         
         // 🎯 Dynamic Thresholds
     // Respect User Static Threshold AND Safety Margin (Target + 10)
@@ -3068,70 +3094,38 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): Float {
         val recentDeltas = getRecentDeltas()
         val predicted = predictedDelta(recentDeltas)
-        val combinedDelta = (delta + predicted) / 2.0f
-        // Définir un nombre maximal d'itérations plus bas en cas de montée rapide
-        val maxIterations = if (combinedDelta > 15f) 25 else 50
-        var finalRefinedSMB: Float = calculateSMBFromModel()
 
-        // 🧠 Chargement Asynchrone du "Cerveau" (Inférence = O(1) time)
-        val weightsFile = File(externalDir, "aimi_brain_weights.json")
-        val bestNetwork = if (weightsFile.exists()) {
-             try {
-                 AimiNeuralNetwork.loadFromFile(weightsFile)
-             } catch (e: Exception) {
-                 null
-             }
-        } else null
+        // 🛡️ Fallback baseline (always available, no IO)
+        val finalRefinedSMB: Float = calculateSMBFromModel()
 
-        if (bestNetwork == null) {
-            // println(context.getString(R.string.insufficient_data_training))
-            return predictedSMB
-        }
-
-        // Reconstruit le feature vector (11 dimensions = 10 physiques + 1 trendIndicator)
+        // 🧠 Feature vector (10 physio + 1 trendIndicator)
         val trendIndicator = calculateTrendIndicator(
             delta, shortAvgDelta, longAvgDelta,
             bg.toFloat(), iob, variableSensitivity, cob, normalBgThreshold,
             recentSteps180Minutes, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
             profile.insulinDivisor.toFloat(), recentSteps5Minutes, recentSteps10Minutes
         )
-
-        val rawInput = floatArrayOf(
+        val features = floatArrayOf(
             bg.toFloat(), iob.toFloat(), cob.toFloat(), delta, shortAvgDelta, longAvgDelta,
-            tdd7DaysPerHour.toFloat(), tdd2DaysPerHour.toFloat(), tddPerHour.toFloat(), tdd24HrsPerHour.toFloat()
+            tdd7DaysPerHour.toFloat(), tdd2DaysPerHour.toFloat(), tddPerHour.toFloat(),
+            tdd24HrsPerHour.toFloat(), trendIndicator.toFloat()
         )
-        val enhancedInput = rawInput.copyOf(rawInput.size + 1)
-        enhancedInput[rawInput.size] = trendIndicator.toFloat()
 
-        fun normalize(input: FloatArray): FloatArray {
-            val mean = input.average().toFloat()
-            val std = input.map { (it - mean) * (it - mean) }.average().let { sqrt(it).toFloat().coerceAtLeast(1e-8f) }
-            return input.map { (it - mean) / std }.toFloatArray()
-        }
+        // 🔥 Trigger async training (fire-and-forget, rate-limited to 1/6h, never blocks)
+        app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer.maybeTrainAsync(
+            dir = externalDir,
+            csvFile = csvfile
+        )
 
-        var iterationCount = 0
-        do {
-            val dynamicThreshold = calculateDynamicThreshold(iterationCount, delta, shortAvgDelta, longAvgDelta)
-            val normalizedInput = normalize(enhancedInput).toDoubleArray()
-            val refinedSMB = AimiNeuralNetwork.refineSMB(finalRefinedSMB, bestNetwork, normalizedInput)
+        // 🎯 Inference-only O(1): fallback to predictedSMB on any issue
+        val mlRefined = app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer.refine(finalRefinedSMB, features)
 
-            // println(context.getString(R.string.iteration_smb, iterationCount, finalRefinedSMB, refinedSMB, abs(finalRefinedSMB - refinedSMB), dynamicThreshold))
-
-            if (abs(finalRefinedSMB - refinedSMB) <= dynamicThreshold) {
-                finalRefinedSMB = max(0f, refinedSMB)
-                break
-            }
-            iterationCount++
-        } while (iterationCount < maxIterations)
-
-        if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
-            // println(context.getString(R.string.predicted_smb_higher))
-            return finalRefinedSMB
+        if (mlRefined > predictedSMB && bg > 150 && delta > 5) {
+            return mlRefined
         }
 
         val alpha = 0.7f
-        val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
-        return blendedSMB
+        return alpha * mlRefined + (1 - alpha) * predictedSMB
     }
 
     private fun computeDynamicBolusMultiplier(delta: Float): Float {
@@ -4585,7 +4579,38 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val predicted = predictedDelta(recentDeltas)
         val useLegacyDynamics = (pkpdRuntime == null)
         // Calcul du delta combiné : on combine le delta mesuré et le delta prédit
-        val combinedDelta = (delta + predicted) / 2.0f
+        val rawCombinedDelta: Float = ((delta + predicted) / 2.0).toFloat()
+
+        // 📡 G6 BYODA LEAD COMPENSATOR (Phase 10 — Main Loop Integration)
+        // BYODA (DEXCOM_G6_NATIVE) introduit un lag interne de ~5-8 min via lissage natif.
+        // En compensant combinedDelta et shortAvgDelta, on aligne les triggers Autodrive V3
+        // sur la réalité physiologique, comme si on était sur le One+.
+        //
+        // Facteurs jour (07h–23h) :
+        //  - combinedDelta : +30%  (dénisifie la pente filtrée → chiffre réel de montée)
+        //  - shortAvgDelta : +20%  (accélère la confirmation tendance courte)
+        //  - delta brut et longAvgDelta : INCHANGÉS (sécurité anti-overcorrection)
+        //
+        // Nuit (23h–06h) : DÉSACTIVÉ (no compensation — évite les sur-bolus nocturnes sur résiduel IOB)
+        // ⚠️ One+ / G7 / xDrip libre → aucun ajustement.
+        val isG6Byoda = iobCobCalculator.ads.actualBg()?.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE
+        val isNight = hourOfDay >= 23 || hourOfDay < 6
+        val combinedDelta: Float
+        val shortAvgDeltaAdj: Float
+        if (isG6Byoda && !isNight) {
+            combinedDelta    = rawCombinedDelta * 1.30f
+            shortAvgDeltaAdj = shortAvgDelta    * 1.20f
+            consoleLog.add(
+                "📡 G6_LEAD rawΔcomb=%.2f → %.2f | rawΔshort=%.2f → %.2f (BYODA +30/+20%%)".format(
+                    rawCombinedDelta, combinedDelta, shortAvgDelta, shortAvgDeltaAdj
+                )
+            )
+        } else {
+            if (isG6Byoda) consoleLog.add("📡 G6_LEAD nuit [${hourOfDay}h] → pas de compensation (sécurité nocturne)")
+            combinedDelta    = rawCombinedDelta
+            shortAvgDeltaAdj = shortAvgDelta
+        }
+
         val tp = if (useLegacyDynamics) {
         calculateDynamicPeakTime(
             currentActivity = profile.currentActivity,
@@ -4596,7 +4621,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             recentSteps15Minutes,
             averageBeatsPerMinute.toInt(),
             bg,
-            combinedDelta,
+            combinedDelta.toDouble(),
             reasonAimi
         )
         } else {
@@ -4776,10 +4801,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)) {
             consoleLog.add("⚡ T3c Brittle Mode Active: Bypassing standard AIMI algorithm.")
             
-            // 🍱 Inject Legacy Meal Prebolus Support for T3c
-            // This safely calculates `rT.units` using Meal Mode buttons without applying full loop logic.
-            // Any TBR (rT.rate) mutated by this call will be safely overwritten in executeT3cBrittleMode.
-            applyLegacyMealModes(profile, rT, currenttemp, profile.max_basal.toDouble())
+            // 🛡️ T3c Pre-bolus Cap: max 2 SMBs within 20 minutes
+            // Without this cap, a 3rd meal-mode cycle can deliver an extra SMB that tips the patient
+            // into hypoglycemia — they have no glucagon to recover.
+            val t3cCapWindowMs = 20 * 60 * 1000L
+            val t3cCapCutoff   = System.currentTimeMillis() - t3cCapWindowMs
+            val recentSmbCount = persistenceLayer
+                .getBolusesFromTime(t3cCapCutoff, true)
+                .blockingGet()
+                .count { it.type == BS.Type.SMB }
+
+            if (recentSmbCount < 2) {
+                // 🍱 Inject Legacy Meal Prebolus Support for T3c
+                // This safely calculates `rT.units` using Meal Mode buttons without applying full loop logic.
+                // Any TBR (rT.rate) mutated by this call will be safely overwritten in executeT3cBrittleMode.
+                applyLegacyMealModes(profile, rT, currenttemp, profile.max_basal.toDouble())
+                consoleLog.add("🍱 T3c pre-bolus allowed (recentSMB=$recentSmbCount < 2)")
+            } else {
+                consoleLog.add("🛡️ T3c pre-bolus CAP: $recentSmbCount SMBs in last 20min — skipping applyLegacyMealModes")
+            }
             
             return executeT3cBrittleMode(
                 bg = glucose_status.glucose,
@@ -5105,11 +5145,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // -----------------------------------------------------
 
         // PRIORITY 4: AUTODRIVE (Strict)
+        // 🍽️ Meal context: COB > 0 or any active meal mode → enables shorter cooldown for G6
+        val mealRising = cob > 0.5 || mealTime || lunchTime || dinnerTime || bfastTime || snackTime
         val autoRes = tryAutodrive(
-            bg, delta, shortAvgDelta, profile, lastBolusTimeMs ?: 0L, predictedBg, mealData.slopeFromMinDeviation, targetBg, reason,
+            bg, delta, shortAvgDeltaAdj.toFloat(), profile, lastBolusTimeMs ?: 0L, predictedBg, mealData.slopeFromMinDeviation, targetBg, reason,
             preferences.get(BooleanKey.OApsAIMIautoDrive),
             dynamicPbolusLarge, dynamicPbolusSmall,
-            flatBGsDetected  // 🛡️ Pass CGM quality signal
+            flatBGsDetected,          // 🛡️ CGM quality signal
+            isG6Byoda = isG6Byoda,
+            mealRising = mealRising,
+            combinedDeltaG6 = combinedDelta  // 📡 GAP1: inject G6-compensated combinedDelta
         )
         
         if (autoRes is DecisionResult.Applied) {
@@ -6046,6 +6091,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT.predBGs = savedPredBGs ?: rT.predBGs
         ensurePredictionFallback(rT, bg)
         rT.reason.append(savedReason)
+
         // Re-define for Global Logic
         val estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
         val estimatedCarbsTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
@@ -7516,7 +7562,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun tryAutodrive(
         bg: Double, 
         delta: Float, 
-        shortAvgDelta: Float, 
+        shortAvgDelta: Float,  // ← shortAvgDeltaAdj (G6-compensé +20%) depuis determine_basal
         profile: OapsProfileAimi,
         lastBolusTime: Long,
         predictedBg: Float,
@@ -7526,7 +7572,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         autodrive: Boolean,
         dynamicPbolusLarge: Double,
         dynamicPbolusSmall: Double,
-        flatBGsDetected: Boolean  // 🔧 NEW: CGM quality signal
+        flatBGsDetected: Boolean,
+        isG6Byoda: Boolean = false,       // 📡 G6 BYODA sensor context
+        mealRising: Boolean = false,       // 🍽️ Active meal context (COB or meal mode)
+        combinedDeltaG6: Float = 0f        // 📡 GAP1: G6-compensated combinedDelta from determine_basal
     ): DecisionResult {
         // 🛡️ GATE R0: CGM Quality Check (Priority #1 Safety)
         if (flatBGsDetected) {
@@ -7542,32 +7591,45 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return DecisionResult.Fallthrough("BG $bg < Safe minimum ${safeMinimumBG.toInt()}")
         }
 
-        // GATE R2: Strict Cooldown (45 min)
+        // 🍽️ GATE R2: Contextual Cooldown
+        // G6 BYODA + active meal → 20 min cooldown (G6 lag means we need faster re-trigger)
+        // All other cases → 45 min cooldown (standard safety)
         val now = System.currentTimeMillis()
-        val cooldownMs = 45 * 60 * 1000L
+        val cooldownMs = if (isG6Byoda && mealRising) 20 * 60 * 1000L else 45 * 60 * 1000L
         val remaining = (lastAutodriveActionTime + cooldownMs) - now
         if (remaining > 0) {
-            return DecisionResult.Fallthrough("Cooldown active (${remaining/1000/60}m)")
+            val cooldownLabel = if (isG6Byoda && mealRising) "G6+Meal 20min" else "Standard 45min"
+            return DecisionResult.Fallthrough("Cooldown [$cooldownLabel] active (${remaining/1000/60}m)")
         }
 
-        // Logic Re-Use
-        val validCondition = isAutodriveModeCondition(delta, autodrive, slopeFromMinDeviation, bg.toFloat(), predictedBg, reasonBuf, targetBg)
+        // Logic Re-Use — pass isG6Byoda + compensated combinedDelta (GAP1 fix)
+        val validCondition = isAutodriveModeCondition(
+            delta, autodrive, slopeFromMinDeviation, bg.toFloat(), predictedBg,
+            reasonBuf, targetBg, isG6Byoda,
+            externalCombinedDelta = combinedDeltaG6  // feeds G6-compensated signal directly
+        )
         
         if (!validCondition) return DecisionResult.Fallthrough("Conditions not met")
+
+        // 📡 GAP2: G6-aware intensity gates
+        // In G6 BYODA mode, `delta` (raw) is attenuated by sensor lag.
+        // Apply the same +30% lead compensation as the main loop to get the effective physiological delta.
+        // `shortAvgDelta` is already G6-compensated (+20%) from determine_basal.
+        val effectiveDelta: Float = if (isG6Byoda) delta * 1.30f else delta
 
         // Determine Intensity
         var amount = 0.0
         var stateReason = ""
         
-        // 🔧 FIX: Raised BG threshold from 100 to 120 for all Autodrive triggers
-        if (bg >= 120.0 && delta >= 5.0 && shortAvgDelta >= 3.0) {
+        // Confirmed: strong rise — use G6-adjusted delta for correct tier selection
+        if (bg >= 120.0 && effectiveDelta >= 5.0 && shortAvgDelta >= 3.0) {
              amount = dynamicPbolusLarge
-             stateReason = "Confirmed: Bg≥120 & Delta≥5 & Avg≥3"
-        } else if (bg >= 120.0 && delta >= 2.0) {
+             stateReason = "Confirmed: Bg≥120 & EffDelta≥5 & Avg≥3${if (isG6Byoda) " [G6adj×1.30]" else ""}"
+        } else if (bg >= 120.0 && effectiveDelta >= 2.0) {
              amount = dynamicPbolusSmall
-             stateReason = "Early: Bg≥120 & Delta≥2"
+             stateReason = "Early: Bg≥120 & EffDelta≥2${if (isG6Byoda) " [G6adj×1.30]" else ""}"
         } else {
-             return DecisionResult.Fallthrough("BG or Delta insufficient (need BG≥120)")
+             return DecisionResult.Fallthrough("BG or Delta insufficient (need BG≥120, effDelta≥2, was ${"%.1f".format(effectiveDelta)})") 
         }
 
         // TBR Calculation
@@ -7639,7 +7701,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val maxBasal = profile.max_basal.toDouble()
 
         // 🧠 Predictive PI Controller — 1000% scale, predictedBg as error term
-        val decision = DynamicBasalController.computeT3c(
+        val computedRate = DynamicBasalController.computeT3c(
             bg = bg,
             targetBg = targetBg,
             delta = delta,
@@ -7653,11 +7715,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             eventualBg = if (eventualBg > 0) eventualBg else null
         )
 
-        val safeRate = decision.rate.coerceIn(0.0, maxBasal)
+        val safeRate = computedRate.coerceIn(0.0, maxBasal)
 
         rT.rate = safeRate
-        rT.duration = decision.durationMin
-        rT.reason.append("🛡️T3c | SMB=0 | ").append(decision.reason)
+        rT.duration = 30
+        rT.reason.append("🛡️T3c | SMB=0 | PI Rate: ${"%.2f".format(safeRate)}U/h")
 
         consoleLog.add(rT.reason.toString())
         return rT

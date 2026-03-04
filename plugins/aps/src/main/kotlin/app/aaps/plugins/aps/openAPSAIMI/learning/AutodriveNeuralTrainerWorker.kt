@@ -20,7 +20,7 @@ class AutodriveNeuralTrainerWorker(
     override suspend fun doWorkAndLog(): Result {
         aapsLogger.debug(LTag.APS, "🧠 AutodriveNeuralTrainerWorker: Démarrage de l'entraînement du Cerveau Asynchrone")
         
-        val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
+        val externalDir = applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS + "/AAPS") ?: applicationContext.filesDir
         val csvfile = File(externalDir, "oapsaimiML2_records.csv")
         val weightsFile = File(externalDir, "aimi_brain_weights.json")
 

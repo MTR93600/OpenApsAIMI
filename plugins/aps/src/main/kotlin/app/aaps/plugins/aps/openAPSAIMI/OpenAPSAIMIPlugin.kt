@@ -173,23 +173,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         
         // 🧠 Start AIMI Neural Trainer
         try {
-            val weightsFile = java.io.File(
-                android.os.Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS",
-                "aimi_brain_weights.json"
-            )
-
-            // 1. Initialisation d'Urgence (Si le Cerveau n'existe pas encore)
-            if (!weightsFile.exists()) {
-                val initRequest = androidx.work.OneTimeWorkRequestBuilder<app.aaps.plugins.aps.openAPSAIMI.learning.AutodriveNeuralTrainerWorker>().build()
-                androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
-                    "AIMINeuralTrainer_Init",
-                    androidx.work.ExistingWorkPolicy.REPLACE,
-                    initRequest
-                )
-                aapsLogger.info(LTag.APS, "⚡ AIMI Neural Trainer: First learning triggered immediately (no constraints).")
-            }
-
-            // 2. Initialisation de Routine (Nocturne)
             val constraints = androidx.work.Constraints.Builder()
                 .setRequiresCharging(true)
                 .setRequiresDeviceIdle(true)
@@ -225,6 +208,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             count++
         }
         aapsLogger.debug(LTag.APS, "Loaded $count variable sensitivity values from database")
+
+        // 🧠 Pre-load ML model into memory for O(1) SMB inference on hot path
+        try {
+            val externalDir = java.io.File(android.os.Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
+            app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer.loadModel(externalDir)
+            aapsLogger.info(LTag.APS, "✅ AimiSmbTrainer: model load requested (async)")
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "❌ AimiSmbTrainer: failed to request model load", e)
+        }
     }
     override fun getGlucoseStatusData(allowOldData: Boolean): GlucoseStatus? =
         glucoseStatusCalculatorAimi.getGlucoseStatusData(allowOldData)
