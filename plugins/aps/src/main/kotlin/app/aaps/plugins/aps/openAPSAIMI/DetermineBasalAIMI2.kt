@@ -2293,7 +2293,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             recentDeltas[0] > recentDeltas[1] + 1.5  // delta increasing ≥1.5 vs previous cycle
         val autodriveDelta: Float = if (g6Accelerating) {
             val adjusted = autodriveDeltaBase * 0.80f
-            consoleLog.add("📡 G6_ACCEL: delta[0]=${"%".format(recentDeltas[0])} > delta[1]=${"%".format(recentDeltas[1])} → threshold ${"%".format(autodriveDeltaBase)} → ${"%".format(adjusted)} (-20%)")
+            consoleLog.add("📡 G6_ACCEL: delta[0]=${"%.1f".format(recentDeltas[0])} > delta[1]=${"%.1f".format(recentDeltas[1])} → threshold ${"%.2f".format(autodriveDeltaBase)} → ${"%.2f".format(adjusted)} (-20%)")
             adjusted
         } else {
             autodriveDeltaBase
@@ -2303,7 +2303,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Otherwise, compute locally from raw G6 deltas (un-compensated fallback).
         val useExternalCombined = externalCombinedDelta > 0f
         val combinedDelta: Float = if (useExternalCombined) {
-            consoleLog.add("📡 G6_COMBINED_EXT: using pre-compensated combinedDelta=${"%".format(externalCombinedDelta)} (skipping raw recompute)")
+            consoleLog.add("📡 G6_COMBINED_EXT: using pre-compensated combinedDelta=${"%.2f".format(externalCombinedDelta)} (skipping raw recompute)")
             externalCombinedDelta
         } else {
             // FIX: Extended delta history (3 periods: 0, -5, -10 min) for better noise filtering
