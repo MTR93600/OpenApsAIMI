@@ -3923,71 +3923,108 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun applyLegacyMealModes(profile: OapsProfileAimi, rT: RT, currenttemp: CurrentTemp, modeTbrLimit: Double): RT? {
         fun rbf(key: DoubleKey) = preferences.get(key)
+
+        // ─────────────────────────────────────────────────────────────────────
+        // 📈 PROGRESSIVE MEAL TBR — active en permanence pendant le mode repas
+        //
+        // ⚠️ T3c Anti-Résistance : la résistance à l'insuline se développe AVANT
+        //    que le delta ne monte. Attendre delta > 0 pour déclencher la TBR
+        //    est physiologiquement trop tard. La TBR est donc TOUJOURS active
+        //    dès le début du mode, avec un taux escaladé selon BG :
+        //
+        //   BG < 130  → 2× basale   (pré-emptif, au niveau du seuil T3c)
+        //   BG 130–180 → 5.0 U/h    (correction préventive)
+        //   BG 180–220 → 7.0 U/h    (correction active)
+        //   BG > 220  → 10.0 U/h    (urgence — résistance imminente)
+        //
+        // Durée = 5 min (reconfirmée à chaque cycle loop).
+        // Si BG < 80 ou chute rapide → sécurité setTempBasal coupe à 0 de toute façon.
+        // ─────────────────────────────────────────────────────────────────────
+        fun progressiveMealTBR(runtime: Long,
+                                overrideSafety: Boolean = true) {
+            val mealTbrMaxUh = 10.0
+            val tbrRate: Double = when {
+                bg >= 220.0 -> mealTbrMaxUh                             // 🔴 urgence hyper → 10 U/h
+                bg >= 180.0 -> 7.0                                      // 🟠 hyper modéré → 7 U/h
+                bg >= 130.0 -> 5.0                                      // 🟡 seuil résistance T3c → 5 U/h
+                else        -> (profile.current_basal * 2.0)            // 🟢 pré-emptif → 2× basale
+                    .coerceIn(profile.current_basal, 4.0)
+            }
+            val effectiveTbrRate = tbrRate.coerceAtMost(modeTbrLimit)
+
+            // ✅ TBR PERMANENTE — aucune condition sur delta
+            // La résistance T3c s'installe silencieusement, avant tout signal glycémique visible.
+            setTempBasal(effectiveTbrRate, 5, profile, rT, currenttemp, overrideSafetyLimits = overrideSafety)
+            val deltaTag = if (delta > 0f) "+%.1f".format(delta) else "%.1f".format(delta)
+            consoleLog.add("📈 MEAL_TBR [${runtime/60}m]: BG=${bg.toInt()} Δ=$deltaTag → ${"%.2f".format(effectiveTbrRate)}U/h 🛡️anti-resist")
+        }
+
+
         if (isMealModeCondition()) {
-            if (mealruntime < 30 * 60) setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+            progressiveMealTBR(mealruntime)
             rT.units = rbf(DoubleKey.OApsAIMIMealPrebolus)
             rT.reason.append(context.getString(R.string.manual_meal_prebolus, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_MEAL P1=${"%.2f".format(rT.units)}U")
             return rT
         }
         if (isbfastModeCondition()) {
-            if (bfastruntime < 30 * 60) setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+            progressiveMealTBR(bfastruntime)
             rT.units = rbf(DoubleKey.OApsAIMIBFPrebolus)
             rT.reason.append(context.getString(R.string.reason_prebolus_bfast1, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_BFAST P1=${"%.2f".format(rT.units)}U")
             return rT
         }
         if (isbfast2ModeCondition()) {
-            if (bfastruntime < 30 * 60) setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+            progressiveMealTBR(bfastruntime)
             rT.units = rbf(DoubleKey.OApsAIMIBFPrebolus2)
             rT.reason.append(context.getString(R.string.reason_prebolus_bfast2, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_BFAST P2=${"%.2f".format(rT.units)}U")
             return rT
         }
         if (isLunchModeCondition()) {
-            if (lunchruntime < 30 * 60) setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+            progressiveMealTBR(lunchruntime)
             rT.units = rbf(DoubleKey.OApsAIMILunchPrebolus)
             rT.reason.append(context.getString(R.string.reason_prebolus_lunch1, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_LUNCH P1=${"%.2f".format(rT.units)}U")
             return rT
         }
         if (isLunch2ModeCondition()) {
-            if (lunchruntime < 30 * 60) setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+            progressiveMealTBR(lunchruntime)
             rT.units = rbf(DoubleKey.OApsAIMILunchPrebolus2)
             rT.reason.append(context.getString(R.string.reason_prebolus_lunch2, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_LUNCH P2=${"%.2f".format(rT.units)}U")
             return rT
         }
         if (isDinnerModeCondition()) {
-            if (dinnerruntime < 30 * 60) setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+            progressiveMealTBR(dinnerruntime)
             rT.units = rbf(DoubleKey.OApsAIMIDinnerPrebolus)
             rT.reason.append(context.getString(R.string.reason_prebolus_dinner1, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_DINNER P1=${"%.2f".format(rT.units)}U")
             return rT
         }
         if (isDinner2ModeCondition()) {
-            if (dinnerruntime < 30 * 60) setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+            progressiveMealTBR(dinnerruntime)
             rT.units = rbf(DoubleKey.OApsAIMIDinnerPrebolus2)
             rT.reason.append(context.getString(R.string.reason_prebolus_dinner2, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_DINNER P2=${"%.2f".format(rT.units)}U")
             return rT
         }
         if (isHighCarbModeCondition()) {
-            if (highCarbrunTime < 30 * 60) setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+            progressiveMealTBR(highCarbrunTime)
             rT.units = rbf(DoubleKey.OApsAIMIHighCarbPrebolus)
             rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P1=${"%.2f".format(rT.units)}U")
             return rT
         }
         if (isHighCarb2ModeCondition()) {
-            if (highCarbrunTime < 30 * 60) setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+            progressiveMealTBR(highCarbrunTime)
             rT.units = rbf(DoubleKey.OApsAIMIHighCarbPrebolus2)
             rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P2=${"%.2f".format(rT.units)}U")
             return rT
         }
         if (issnackModeCondition()) {
-            if (snackrunTime < 30 * 60) setTempBasal(modeTbrLimit, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+            progressiveMealTBR(snackrunTime, overrideSafety = false)
             rT.units = rbf(DoubleKey.OApsAIMISnackPrebolus)
             rT.reason.append(context.getString(R.string.reason_prebolus_snack, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_SNACK P1=${"%.2f".format(rT.units)}U")
@@ -3995,6 +4032,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         return null
     }
+
 
     private fun applyEndoAndActivityAdjustments(
         bg: Double, delta: Float,
