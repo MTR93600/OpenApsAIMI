@@ -194,10 +194,18 @@ class DynamicBasalController @Inject constructor(
         }
 
         /**
-         * Dedicated T3c Brittle Mode calculation.
-         * T3c patients have zero endogenous insulin and glucagon, leading to extreme brittleness.
-         * This function provides a pure proportional-derivative TBR (Temporary Basal Rate)
-         * escalation without delivering micro-boluses (which are blocked by maxSMB=0.0 upstream).
+         * Dedicated T3c Brittle Mode calculation — ISF-driven, resistance-aware.
+         *
+         * T3c patients have zero endogenous insulin and glucagon. The main risks are:
+         *  1. Prolonged hyperglycemia → glucotoxicity → transient insulin resistance
+         *  2. Resistance resolving suddenly → accumulated IOB causes rapid hypoglycemia
+         *
+         * Strategy:
+         *  - Correction activates at 130 mg/dL (not target=100) to prevent resistance
+         *  - ISF-driven formula (not multiplier-based) → proper correction magnitude
+         *  - Adaptive horizon: 20 min at BG 130–160, 15 min above 160 (more urgent)
+         *  - Resistance→sensitivity transition detection: cut basal EARLY when drop begins
+         *    after a prolonged hyperglycemic period (duraISFminutes)
          */
         fun computeT3c(
             bg: Double,
@@ -212,40 +220,75 @@ class DynamicBasalController @Inject constructor(
             duraISFminutes: Double,
             eventualBg: Double?
         ): Double {
-            // If BG is dangerously low or dropping fast, immediately cut basal to 0%
-            if (bg < 80.0 || (bg < targetBg && delta < -1.0)) {
-                return 0.0
+            val effectiveIsf = isf.coerceAtLeast(10.0)
+            val velocity = delta * 0.7f + shortAvgDelta.toFloat() * 0.3f
+
+            // ── Safety Guard 1: Immediate zero basal ───────────────────────
+            if (bg < 80.0 || (bg < targetBg && delta < -1.5f)) return 0.0
+
+            // ── Safety Guard 2: Resistance→Sensitivity transition ──────────
+            // After prolonged hyperglycemia (duraISF > 30 min), any drop signals
+            // that accumulated IOB is now becoming effective. Pre-emptive cut.
+            val wasChronicallyHigh = duraISFminutes > 30.0
+            val nowFalling = velocity < -0.5f
+            val highIobPresent = iob > maxIob * 0.35
+            if (wasChronicallyHigh && nowFalling && highIobPresent) {
+                return 0.0  // resistance resolved → IOB acting → pre-emptive zero
             }
 
-            // If we have too much insulin on board relative to our max, throttle back
-            if (iob > maxIob * 1.5) {
-               return profileBasal * 0.1 // 10% basal
+            // ── Safety Guard 3: Excessive IOB ──────────────────────────────
+            if (iob > maxIob * 1.5) return profileBasal * 0.1
+
+            // ── Zone: Below correction threshold 130 ───────────────────────
+            val correctionThreshold = 130.0
+            if (bg < correctionThreshold) {
+                return if (bg < targetBg) {
+                    // Below target: gentle exponential reduction
+                    profileBasal * exp((bg - targetBg) / 20.0)
+                } else {
+                    // In-range 100–130: standard basal (no over-insulin)
+                    profileBasal
+                }
             }
 
-            val currentError = bg - targetBg
-            val futureError = (eventualBg ?: bg) - targetBg
+            // ── Zone: Above 130 → Stepped ISF-driven correction ───────────
+            // Discrete steps of 5 mg/dL above correctionThreshold.
+            // Each step = 5 mg/dL of ISF-driven correction to deliver in horizonH.
+            // This gives a progressive, auditable escalation rather than a continuous curve.
 
-            // Base Multiplier from Proportional Distance
-            var multiplier = 1.0
-            
-            if (currentError > 0) {
-                 // For every 30mg/dL above target, we add +100% to the basal rate
-                 multiplier += (currentError / 30.0) 
-            } else if (currentError < 0) {
-                 // For every 15mg/dL below target, we halve the basal rate
-                 multiplier *= exp(currentError / 15.0)
+            // Step 1 — How many 5mg/dL steps above threshold?
+            val bgSteps = ((bg - correctionThreshold) / 5.0).toInt().coerceAtLeast(0)
+
+            // Step 2 — Acceleration bonus steps (shortAvgDelta = trend velocity)
+            // If BG is rising faster, add virtual extra steps to anticipate and prevent resistance.
+            val accelSteps: Int = when {
+                shortAvgDelta > 6.0 -> 3  // very fast rise  → +3 virtual steps (+15 mg/dL worth)
+                shortAvgDelta > 4.0 -> 2  // fast rise       → +2 virtual steps
+                shortAvgDelta > 2.0 -> 1  // moderate rise   → +1 virtual step
+                else                -> 0
             }
 
-            // Derivative modifier (Velocity)
-            val velocity = delta * 0.7 + shortAvgDelta * 0.3
-            if (velocity > 1.0) {
-                 multiplier *= 1.5 // Climbing fast, aggressive boost
-            } else if (velocity < -1.0) {
-                 multiplier *= 0.5 // Falling fast, aggressive braking
+            val totalSteps = bgSteps + accelSteps
+
+            // Adaptive urgency horizon:
+            //  BG 130–160: 20 min (0.33h) — preventive
+            //  BG > 160  : 15 min (0.25h) — urgent
+            val horizonH = if (bg > 160.0) 0.25 else 0.33
+
+            // ISF-driven correction rate: each step = 5 mg/dL / ISF / horizon
+            val correctionRate = (totalSteps * 5.0 / effectiveIsf) / horizonH
+
+            // Braking override: if falling despite being above threshold, protect
+            val brakeFactor: Double = when {
+                velocity < -2.0f -> return 0.0              // fast fall → zero immediately
+                velocity < -0.5f -> 0.4                     // moderate fall → 40% of correction
+                else             -> 1.0
             }
 
-            // Cap at 1000% (10x) for extreme safety ceilings, though maxSafe will limit it later
-            return (profileBasal * multiplier).coerceIn(0.0, profileBasal * 10.0)
+            val totalRate = profileBasal + correctionRate * brakeFactor
+
+            // Cap at 10× profileBasal (maxBasal from profile applied externally)
+            return totalRate.coerceIn(0.0, profileBasal * 10.0)
         }
     }
 }
