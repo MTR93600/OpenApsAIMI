@@ -2265,7 +2265,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         predictedBg: Float,
         reason: StringBuilder,
         targetBg: Float,
-        isG6Byoda: Boolean = false   // 📡 G6 BYODA: enables acceleration-based early trigger
+        isG6Byoda: Boolean = false,           // 📡 G6 BYODA: enables acceleration-based early trigger
+        externalCombinedDelta: Float = 0f     // 📡 GAP1: G6-compensated combinedDelta from determine_basal
     ): Boolean {
         // ⚙️ Prefs
         val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
@@ -2292,24 +2293,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             recentDeltas[0] > recentDeltas[1] + 1.5  // delta increasing ≥1.5 vs previous cycle
         val autodriveDelta: Float = if (g6Accelerating) {
             val adjusted = autodriveDeltaBase * 0.80f
-            consoleLog.add("📡 G6_ACCEL: delta[0]=${"%.1f".format(recentDeltas[0])} > delta[1]=${"%.1f".format(recentDeltas[1])} → threshold ${"%.2f".format(autodriveDeltaBase)} → ${"%.2f".format(adjusted)} (-20%)")
+            consoleLog.add("📡 G6_ACCEL: delta[0]=${"%".format(recentDeltas[0])} > delta[1]=${"%".format(recentDeltas[1])} → threshold ${"%".format(autodriveDeltaBase)} → ${"%".format(adjusted)} (-20%)")
             adjusted
         } else {
             autodriveDeltaBase
         }
 
-        // FIX: Extended delta history (3 periods: 0, -5, -10 min) for better noise filtering
-        val avgRecentDelta = if (recentDeltas.size >= 2) {
-            recentDeltas.take(2).average().toFloat()
+        // 📡 GAP1: Use G6-compensated combinedDelta from determine_basal if available.
+        // Otherwise, compute locally from raw G6 deltas (un-compensated fallback).
+        val useExternalCombined = externalCombinedDelta > 0f
+        val combinedDelta: Float = if (useExternalCombined) {
+            consoleLog.add("📡 G6_COMBINED_EXT: using pre-compensated combinedDelta=${"%".format(externalCombinedDelta)} (skipping raw recompute)")
+            externalCombinedDelta
         } else {
-            delta
+            // FIX: Extended delta history (3 periods: 0, -5, -10 min) for better noise filtering
+            val avgRecentDelta = if (recentDeltas.size >= 2) {
+                recentDeltas.take(2).average().toFloat()
+            } else {
+                delta
+            }
+            // Combine: current + predicted + recent average
+            // Weighted: 40% current, 30% predicted, 30% recent average
+            val computed = (delta * 0.4f + predicted * 0.3f + avgRecentDelta * 0.3f)
+            consoleLog.add("DELTA_CALC current=${String.format("%.1f", delta)} predicted=${String.format("%.1f", predicted)} avgRecent=${String.format("%.1f", avgRecentDelta)} → combined=${String.format("%.1f", computed)}")
+            computed
         }
-
-        // Combine: current + predicted + recent average
-        // Weighted: 40% current, 30% predicted, 30% recent average
-        val combinedDelta = (delta * 0.4f + predicted * 0.3f + avgRecentDelta * 0.3f)
-
-        consoleLog.add("DELTA_CALC current=${String.format("%.1f", delta)} predicted=${String.format("%.1f", predicted)} avgRecent=${String.format("%.1f", avgRecentDelta)} → combined=${String.format("%.1f", combinedDelta)}")
         
         // 🎯 Dynamic Thresholds
     // Respect User Static Threshold AND Safety Margin (Target + 10)
@@ -5146,9 +5154,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bg, delta, shortAvgDeltaAdj.toFloat(), profile, lastBolusTimeMs ?: 0L, predictedBg, mealData.slopeFromMinDeviation, targetBg, reason,
             preferences.get(BooleanKey.OApsAIMIautoDrive),
             dynamicPbolusLarge, dynamicPbolusSmall,
-            flatBGsDetected,  // 🛡️ Pass CGM quality signal
+            flatBGsDetected,          // 🛡️ CGM quality signal
             isG6Byoda = isG6Byoda,
-            mealRising = mealRising
+            mealRising = mealRising,
+            combinedDeltaG6 = combinedDelta  // 📡 GAP1: inject G6-compensated combinedDelta
         )
         
         if (autoRes is DecisionResult.Applied) {
@@ -7602,7 +7611,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun tryAutodrive(
         bg: Double, 
         delta: Float, 
-        shortAvgDelta: Float, 
+        shortAvgDelta: Float,  // ← shortAvgDeltaAdj (G6-compensé +20%) depuis determine_basal
         profile: OapsProfileAimi,
         lastBolusTime: Long,
         predictedBg: Float,
@@ -7614,7 +7623,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         dynamicPbolusSmall: Double,
         flatBGsDetected: Boolean,
         isG6Byoda: Boolean = false,       // 📡 G6 BYODA sensor context
-        mealRising: Boolean = false        // 🍽️ Active meal context (COB or meal mode)
+        mealRising: Boolean = false,       // 🍽️ Active meal context (COB or meal mode)
+        combinedDeltaG6: Float = 0f        // 📡 GAP1: G6-compensated combinedDelta from determine_basal
     ): DecisionResult {
         // 🛡️ GATE R0: CGM Quality Check (Priority #1 Safety)
         if (flatBGsDetected) {
@@ -7641,24 +7651,34 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return DecisionResult.Fallthrough("Cooldown [$cooldownLabel] active (${remaining/1000/60}m)")
         }
 
-        // Logic Re-Use — pass isG6Byoda for second-derivative acceleration detection
-        val validCondition = isAutodriveModeCondition(delta, autodrive, slopeFromMinDeviation, bg.toFloat(), predictedBg, reasonBuf, targetBg, isG6Byoda)
+        // Logic Re-Use — pass isG6Byoda + compensated combinedDelta (GAP1 fix)
+        val validCondition = isAutodriveModeCondition(
+            delta, autodrive, slopeFromMinDeviation, bg.toFloat(), predictedBg,
+            reasonBuf, targetBg, isG6Byoda,
+            externalCombinedDelta = combinedDeltaG6  // feeds G6-compensated signal directly
+        )
         
         if (!validCondition) return DecisionResult.Fallthrough("Conditions not met")
+
+        // 📡 GAP2: G6-aware intensity gates
+        // In G6 BYODA mode, `delta` (raw) is attenuated by sensor lag.
+        // Apply the same +30% lead compensation as the main loop to get the effective physiological delta.
+        // `shortAvgDelta` is already G6-compensated (+20%) from determine_basal.
+        val effectiveDelta: Float = if (isG6Byoda) delta * 1.30f else delta
 
         // Determine Intensity
         var amount = 0.0
         var stateReason = ""
         
-        // 🔧 FIX: Raised BG threshold from 100 to 120 for all Autodrive triggers
-        if (bg >= 120.0 && delta >= 5.0 && shortAvgDelta >= 3.0) {
+        // Confirmed: strong rise — use G6-adjusted delta for correct tier selection
+        if (bg >= 120.0 && effectiveDelta >= 5.0 && shortAvgDelta >= 3.0) {
              amount = dynamicPbolusLarge
-             stateReason = "Confirmed: Bg≥120 & Delta≥5 & Avg≥3"
-        } else if (bg >= 120.0 && delta >= 2.0) {
+             stateReason = "Confirmed: Bg≥120 & EffDelta≥5 & Avg≥3${if (isG6Byoda) " [G6adj×1.30]" else ""}"
+        } else if (bg >= 120.0 && effectiveDelta >= 2.0) {
              amount = dynamicPbolusSmall
-             stateReason = "Early: Bg≥120 & Delta≥2"
+             stateReason = "Early: Bg≥120 & EffDelta≥2${if (isG6Byoda) " [G6adj×1.30]" else ""}"
         } else {
-             return DecisionResult.Fallthrough("BG or Delta insufficient (need BG≥120)")
+             return DecisionResult.Fallthrough("BG or Delta insufficient (need BG≥120, effDelta≥2, was ${"%.1f".format(effectiveDelta)})") 
         }
 
         // TBR Calculation
