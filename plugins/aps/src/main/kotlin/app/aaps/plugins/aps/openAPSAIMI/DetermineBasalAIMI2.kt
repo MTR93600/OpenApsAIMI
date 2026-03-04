@@ -4780,10 +4780,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)) {
             consoleLog.add("⚡ T3c Brittle Mode Active: Bypassing standard AIMI algorithm.")
             
-            // 🍱 Inject Legacy Meal Prebolus Support for T3c
-            // This safely calculates `rT.units` using Meal Mode buttons without applying full loop logic.
-            // Any TBR (rT.rate) mutated by this call will be safely overwritten in executeT3cBrittleMode.
-            applyLegacyMealModes(profile, rT, currenttemp, profile.max_basal.toDouble())
+            // 🛡️ T3c Pre-bolus Cap: max 2 SMBs within 20 minutes
+            // Without this cap, a 3rd meal-mode cycle can deliver an extra SMB that tips the patient
+            // into hypoglycemia — they have no glucagon to recover.
+            val t3cCapWindowMs = 20 * 60 * 1000L
+            val t3cCapCutoff   = System.currentTimeMillis() - t3cCapWindowMs
+            val recentSmbCount = persistenceLayer
+                .getBolusesFromTime(t3cCapCutoff, true)
+                .blockingGet()
+                .count { it.type == BS.Type.SMB }
+
+            if (recentSmbCount < 2) {
+                // 🍱 Inject Legacy Meal Prebolus Support for T3c
+                // This safely calculates `rT.units` using Meal Mode buttons without applying full loop logic.
+                // Any TBR (rT.rate) mutated by this call will be safely overwritten in executeT3cBrittleMode.
+                applyLegacyMealModes(profile, rT, currenttemp, profile.max_basal.toDouble())
+                consoleLog.add("🍱 T3c pre-bolus allowed (recentSMB=$recentSmbCount < 2)")
+            } else {
+                consoleLog.add("🛡️ T3c pre-bolus CAP: $recentSmbCount SMBs in last 20min — skipping applyLegacyMealModes")
+            }
             
             return executeT3cBrittleMode(
                 bg = glucose_status.glucose,
