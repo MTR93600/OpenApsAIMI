@@ -361,7 +361,7 @@
     <string name="oaps_aimi_logsize_title">Nombre de lignes du tableau AIMI plugin/Loop</string>
     <string name="Enable_xdripOM_title">Libre3 1-minute readings</string>
     <string name="oaps_aimi_enableMlautoDrive_title">Activer Auto Drive – détection automatique des repas – EXPÉRIMENTAL</string>
-    <string name="oaps_aimi_enableMlautoDriveActive_title">Activer Auto Drive V2 – Moteur MPC Continu (DANGER – EXPÉRIMENTAL)</string>
+    <string name="oaps_aimi_enableMlautoDriveActive_title">Activer Auto Drive V3 – Moteur MPC Continu (DANGER – EXPÉRIMENTAL)</string>
     <string name="autodrive_prebolus_variables">Limites et conditions Pré-bolus</string>
     <string name="autodrive_prebolus_title_menu">Autodrive – Pré-bolus – Paramètres</string>
     <string name="autodrive_prebolus_variablesMorning">Repas 00:00&#8211;10:00</string>
