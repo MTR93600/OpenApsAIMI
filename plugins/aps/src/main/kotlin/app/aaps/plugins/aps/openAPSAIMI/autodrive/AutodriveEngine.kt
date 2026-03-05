@@ -38,6 +38,10 @@ class AutodriveEngine @Inject constructor(
     private var isActive = false // Feature Toggle pour le monde réel
     private var isShadowMode = true // Tourne silencieusement
 
+    fun setIsActive(enabled: Boolean) {
+        isActive = enabled
+    }
+
     fun setShadowMode(enabled: Boolean) {
         isShadowMode = enabled
     }
