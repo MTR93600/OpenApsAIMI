@@ -5307,6 +5307,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // PRIORITY 4: AUTODRIVE (Strict)
         // 🍽️ Meal context: COB > 0 or any active meal mode → enables shorter cooldown for G6
         val mealRising = cob > 0.5 || mealTime || lunchTime || dinnerTime || bfastTime || snackTime
+        val contextFactor = if (rT.contextEnabled && rT.contextIntentCount > 0) rT.contextModulation.toFloat() else 1.0f
+        val contextPrefersBasal = (maxSMB == 0.0 && rT.contextEnabled && rT.contextIntentCount > 0)
+        
         val autoRes = tryAutodrive(
             bg, delta, shortAvgDeltaAdj.toFloat(), profile, lastBolusTimeMs ?: 0L, predictedBg, mealData.slopeFromMinDeviation, targetBg, reason,
             preferences.get(BooleanKey.OApsAIMIautoDrive),
@@ -5314,7 +5317,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             flatBGsDetected,          // 🛡️ CGM quality signal
             isG6Byoda = isG6Byoda,
             mealRising = mealRising,
-            combinedDeltaG6 = combinedDelta  // 📡 GAP1: inject G6-compensated combinedDelta
+            combinedDeltaG6 = combinedDelta,  // 📡 GAP1: inject G6-compensated combinedDelta
+            contextFactor = contextFactor,
+            contextPrefersBasal = contextPrefersBasal
         )
         
         if (autoRes is DecisionResult.Applied) {
@@ -7830,11 +7835,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         flatBGsDetected: Boolean,
         isG6Byoda: Boolean = false,       // 📡 G6 BYODA sensor context
         mealRising: Boolean = false,       // 🍽️ Active meal context (COB or meal mode)
-        combinedDeltaG6: Float = 0f        // 📡 GAP1: G6-compensated combinedDelta from determine_basal
+        combinedDeltaG6: Float = 0f,       // 📡 GAP1: G6-compensated combinedDelta from determine_basal
+        contextFactor: Float = 1.0f,       // 🎯 Modulateur AIMI Context (ex: 0.5 pour -50%)
+        contextPrefersBasal: Boolean = false // 🎯 AIMI Context interdit les SMB
     ): DecisionResult {
         // 🛡️ GATE R0: CGM Quality Check (Priority #1 Safety)
         if (flatBGsDetected) {
             return DecisionResult.Fallthrough("CGM data unreliable (FLAT detected)")
+        }
+        
+        // 🛡️ GATE R0b: AIMI Context Constraint Check
+        if (contextPrefersBasal) {
+            return DecisionResult.Fallthrough("AIMI Context: SMB constraint active (Basal Pref)")
         }
         
         val autodriveBG = preferences.get(IntKey.OApsAIMIAutodriveBG)
@@ -7872,17 +7884,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // `shortAvgDelta` is already G6-compensated (+20%) from determine_basal.
         val effectiveDelta: Float = if (isG6Byoda) delta * 1.30f else delta
 
+        // Apply context modulation to amounts (e.g. Activity reduces SMB by 50%)
+        val modulatedAmountLarge = dynamicPbolusLarge * contextFactor
+        val modulatedAmountSmall = dynamicPbolusSmall * contextFactor
+
         // Determine Intensity
         var amount = 0.0
         var stateReason = ""
+        val contextLog = if (contextFactor < 1.0f) " [Ctx ×${"%.2f".format(contextFactor)}]" else ""
         
         // Confirmed: strong rise — use G6-adjusted delta for correct tier selection
         if (bg >= 120.0 && effectiveDelta >= 5.0 && shortAvgDelta >= 3.0) {
-             amount = dynamicPbolusLarge
-             stateReason = "Confirmed: Bg≥120 & EffDelta≥5 & Avg≥3${if (isG6Byoda) " [G6adj×1.30]" else ""}"
+             amount = modulatedAmountLarge
+             stateReason = "Confirmed: Bg≥120 & EffDelta≥5 & Avg≥3${if (isG6Byoda) " [G6adj×1.30]" else ""}$contextLog"
         } else if (bg >= 120.0 && effectiveDelta >= 2.0) {
-             amount = dynamicPbolusSmall
-             stateReason = "Early: Bg≥120 & EffDelta≥2${if (isG6Byoda) " [G6adj×1.30]" else ""}"
+             amount = modulatedAmountSmall
+             stateReason = "Early: Bg≥120 & EffDelta≥2${if (isG6Byoda) " [G6adj×1.30]" else ""}$contextLog"
         } else {
              return DecisionResult.Fallthrough("BG or Delta insufficient (need BG≥120, effDelta≥2, was ${"%.1f".format(effectiveDelta)})") 
         }
