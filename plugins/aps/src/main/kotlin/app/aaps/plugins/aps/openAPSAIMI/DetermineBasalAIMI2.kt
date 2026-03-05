@@ -6339,10 +6339,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         autodriveEngine.setShadowMode(true) // Always shadow for logs (invisible comparator)
-        val autodriveCommand = autodriveEngine.tick(autodriveState, profile.current_basal)
         
         // 🚨 THE AUTODRIVE SWITCH 🚨
         val isAutodriveActive = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIautoDriveActive)
+        autodriveEngine.setIsActive(isAutodriveActive) // Unlock the engine here
+        
+        val autodriveCommand = autodriveEngine.tick(autodriveState, profile.current_basal)
+        
         if (isAutodriveActive && autodriveCommand != null) {
             consoleLog.add("🚀 --- AUTODRIVE V3 (PHYSIO-AWARE) IS SECURING THE PUMP --- 🚀")
             rT.rate = autodriveCommand.temporaryBasalRate
