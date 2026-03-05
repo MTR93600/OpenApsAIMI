@@ -361,6 +361,7 @@
     <string name="oaps_aimi_logsize_title">Nombre de lignes du tableau AIMI plugin/Loop</string>
     <string name="Enable_xdripOM_title">Libre3 1-minute readings</string>
     <string name="oaps_aimi_enableMlautoDrive_title">Activer Auto Drive – détection automatique des repas – EXPÉRIMENTAL</string>
+    <string name="oaps_aimi_enableMlautoDriveActive_title">Activer Auto Drive V3 – Moteur MPC Continu (DANGER – EXPÉRIMENTAL)</string>
     <string name="autodrive_prebolus_variables">Limites et conditions Pré-bolus</string>
     <string name="autodrive_prebolus_title_menu">Autodrive – Pré-bolus – Paramètres</string>
     <string name="autodrive_prebolus_variablesMorning">Repas 00:00&#8211;10:00</string>
@@ -681,6 +682,8 @@
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - FILE DeterminebasalAIMI.kt -->
 
     <string name="bg_drop_high">BG drop élevé (%1$.2f mg/dL/h), forte réduction; </string>
+    <string name="bg_drop_high_critical">CHUTE CRITIQUE sous 85 (%1$.1f mg/dL/h), ARRET BASAL;</string>
+    <string name="bg_drop_high_warning">Chute modérée sous 110 (%1$.1f mg/dL/h), basal réduit 50%;</string>
     <string name="bg_rapid_rise">Montée rapide détectée (delta %1$.2f mg/dL), application du mode d\'urgence; </string>
     <string name="bg_combined_delta_weak">combinedDelta très faible (%1$.2f), réduction x0.6; </string>
     <string name="bg_combined_delta_moderate">combinedDelta modéré (%1$.2f), réduction x0.8; </string>

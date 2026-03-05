@@ -347,6 +347,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         preferenceFragment.findPreference<SwitchPreference>(BooleanKey.ApsResistanceLowersTarget.key)?.isVisible = autoSensOrDynIsfSensEnabled
         preferenceFragment.findPreference<SwitchPreference>(BooleanKey.ApsSensitivityRaisesTarget.key)?.isVisible = autoSensOrDynIsfSensEnabled
         preferenceFragment.findPreference<AdaptiveIntPreference>(IntKey.ApsUamMaxMinutesOfBasalToLimitSmb.key)?.isVisible = smbEnabled && uamEnabled
+        
+        // 🧠 Autodrive System
+        preferenceFragment.findPreference<SwitchPreference>(BooleanKey.OApsAIMIautoDrive.key)?.isVisible = true
     }
 
     private val dynIsfCache = LongSparseArray<Double>()
