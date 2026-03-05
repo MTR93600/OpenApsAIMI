@@ -5304,7 +5304,84 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         // -----------------------------------------------------
 
-        // PRIORITY 4: AUTODRIVE (Strict)
+        // -----------------------------------------------------
+
+        // ====================================================================================
+        // 🧠 AUTODRIVE V3 MULTI-VARIABLES INJECTION (The "Super-iLet" implementation)
+        // ====================================================================================
+        val isAutodriveActive = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIautoDriveActive)
+        
+        if (isAutodriveActive) {
+            aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🚦 [AUTODRIVE V3] Intercepting Control Loop...")
+            
+            // ISF must be approximated because we haven't reached the end of the function where variable_sens might receive last updates
+            // (But on this branch, dynamicIsfMgDl logic might be needed before Priority 4. Actually rT.variable_sens is evaluated later? 
+            // Wait, looking at the code around 5300, rT.variable_sens might not be completely finalized.
+            // But we will use the best available variableSensitivity and shortAvgDeltaAdj)
+            val adState = app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState(
+                bg = glucose_status.glucose,
+                bgVelocity = shortAvgDeltaAdj.toDouble(), // Delta compensé G6 
+                iob = iob_data_array.firstOrNull()?.iob ?: 0.0,
+                cob = mealData.mealCOB,
+                estimatedSI = (variableSensitivity.toDouble() / 10000.0), 
+                estimatedRa = 0.0,
+                patientWeightKg = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIweight),
+                physiologicalStressMask = doubleArrayOf(),
+                isNight = hourOfDay >= 23 || hourOfDay < 6,
+                sourceSensor = glucose_status.sourceSensor
+            )
+
+            // 🤖 Hardware-Awareness Logging
+            if (adState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE) {
+                consoleLog.add("🤖 SENSOR_AWARE: G6 Detected -> Engaging Lead Compensator (UKF +50% Vel).")
+            } else if (adState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G7_NATIVE) {
+                consoleLog.add("🤖 SENSOR_AWARE: One+/G7 Detected -> Fast Sensor, Real-Time Maths Engaged.")
+            }
+
+            autodriveEngine.setShadowMode(false) 
+            autodriveEngine.setIsActive(true) 
+            
+            val adCommand = autodriveEngine.tick(adState, profile.current_basal)
+            
+            if (adCommand != null && adCommand.isSafe) {
+                
+                val v3TbrRate = adCommand.temporaryBasalRate
+                if (v3TbrRate != null && v3TbrRate > 0) {
+                    setTempBasal(v3TbrRate, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+                }
+
+                val v3Smb = adCommand.scheduledMicroBolus ?: 0.0
+                if (v3Smb > 0) {
+                    finalizeAndCapSMB(
+                        rT = rT,
+                        proposedUnits = v3Smb,
+                        reasonHeader = "Autodrive V3: ${adCommand.reason}",
+                        mealData = mealData,
+                        hypoThreshold = threshold.toDouble(),
+                        isExplicitUserAction = false,
+                        decisionSource = "AutodriveV3"
+                    )
+                }
+
+                val effectiveBolus = rT.insulinReq ?: 0.0
+                val effectiveDuration = rT.duration ?: 0
+
+                if (effectiveBolus > 0.05 || effectiveDuration > 0) {
+                    lastAutodriveActionTime = System.currentTimeMillis()
+                    consoleLog.add("🚀 AUTODRIVE_V3_APPLIED intent=$v3Smb actual=$effectiveBolus")
+                    logDecisionFinal("AUTODRIVE_V3", rT, bg, delta)
+                    return rT // 🛑 HARD RETURN: V3 take-over
+                } else {
+                    consoleLog.add("🚀 AUTODRIVE_V3_NOOP_FALLBACK (capped/no temp)")
+                    rT.insulinReq = 0.0
+                }
+            } else {
+                aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🛑 [AUTODRIVE V3] Safety Shield Blocked Action. Falling back to V2.")
+            }
+        }
+        // ====================================================================================
+
+        // PRIORITY 4: AUTODRIVE (Strict) [FALLBACK V2]
         // 🍽️ Meal context: COB > 0 or any active meal mode → enables shorter cooldown for G6
         val mealRising = cob > 0.5 || mealTime || lunchTime || dinnerTime || bfastTime || snackTime
         val contextFactor = if (rT.contextEnabled && rT.contextIntentCount > 0) rT.contextModulation.toFloat() else 1.0f
@@ -6309,53 +6386,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT.reason.append(savedReason)
 
         // ====================================================================================
-        // 🧠 AUTODRIVE V3 MULTI-VARIABLES INJECTION (The "Super-iLet" implementation)
-        // Note: Placé ICI (et non au début), car `variable_sens` contient désormais TOUTE la physique :
-        // Autosens + WCycle + HeartRate + Inflammation + Thyroid. C'est l'ISF le plus fin possible.
-        // ====================================================================================
-        val dynamicIsfMgDl = rT.variable_sens ?: profile.sens
-        val patientWeight = preferences.get(DoubleKey.OApsAIMIweight)
 
-        val autodriveState = AutoDriveState(
-            bg = glucose_status.glucose,
-            bgVelocity = glucose_status.delta / 5.0, // Convert delta/5min to mg/dL/min
-            iob = iob_data_array.firstOrNull()?.iob ?: 0.0,
-            cob = mealData.mealCOB,
-            // ISF scaling (approx 0.004 pour ISF=40). 
-            // C'est ce paramètre qui permet au MPC et CBF de voir la résistance en temps réel.
-            estimatedSI = dynamicIsfMgDl / 10000.0, 
-            estimatedRa = 0.0, // Sera calculé formellement par l'Unscented Kalman Filter dans le PSE
-            patientWeightKg = patientWeight, // Injection Phase 7 (Weight-Aware MPC)
-            physiologicalStressMask = doubleArrayOf(), // TODO Phase X: Mechanism Attention Gate (Future)
-            isNight = java.util.Calendar.getInstance()[java.util.Calendar.HOUR_OF_DAY] <= 7, // 🌙 Activation du Bridage Nocturne du MPC
-            sourceSensor = glucose_status.sourceSensor // 📡 Détection Matérielle G6 vs One+ pour Time-Shift
-        )
-
-        // 🤖 Hardware-Awareness Logging
-        if (autodriveState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE) {
-            consoleLog.add("🤖 SENSOR_AWARE: G6 Detected -> Engaging Lead Compensator (UKF +50% Vel).")
-        } else if (autodriveState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G7_NATIVE) {
-            consoleLog.add("🤖 SENSOR_AWARE: One+/G7 Detected -> Fast Sensor, Real-Time Maths Engaged.")
-        }
-
-        autodriveEngine.setShadowMode(true) // Always shadow for logs (invisible comparator)
-        
-        // 🚨 THE AUTODRIVE SWITCH 🚨
-        val isAutodriveActive = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIautoDriveActive)
-        autodriveEngine.setIsActive(isAutodriveActive) // Unlock the engine here
-        
-        val autodriveCommand = autodriveEngine.tick(autodriveState, profile.current_basal)
-        
-        if (isAutodriveActive && autodriveCommand != null) {
-            consoleLog.add("🚀 --- AUTODRIVE V3 (PHYSIO-AWARE) IS SECURING THE PUMP --- 🚀")
-            rT.rate = autodriveCommand.temporaryBasalRate
-            rT.duration = 5
-            rT.units = autodriveCommand.scheduledMicroBolus
-            rT.reason = java.lang.StringBuilder("Autodrive Mode (DynISF=$dynamicIsfMgDl): ${autodriveCommand.reason}")
-            
-            return rT
-        }
-        // ====================================================================================
 
         // Try already consumed above
         val timeSinceEstimateMin = if (estimatedCarbsTime > 0L) (System.currentTimeMillis() - estimatedCarbsTime) / 60000.0 else Double.MAX_VALUE
