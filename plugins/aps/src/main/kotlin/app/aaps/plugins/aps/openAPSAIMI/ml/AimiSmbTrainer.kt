@@ -113,8 +113,7 @@ object AimiSmbTrainer {
         val model = modelRef.get() ?: return predictedSmb
 
         return try {
-            val normalizedInput = normalize(features)
-            val out = model.predict(normalizedInput)
+            val out = model.predict(features)
 
             val mlOut = out.firstOrNull()?.toFloat() ?: return predictedSmb
             if (!mlOut.isFinite()) return predictedSmb
@@ -247,12 +246,6 @@ object AimiSmbTrainer {
         return 0.5f + sig * 0.7f
     }
 
-    private fun normalize(input: FloatArray): FloatArray {
-        val mean = input.average().toFloat()
-        val variance = input.map { (it - mean) * (it - mean) }.average().toFloat()
-        val std = sqrt(variance).coerceAtLeast(1e-8f)
-        return input.map { (it - mean) / std }.toFloatArray()
-    }
 
     private fun isCircuitOpen(now: Long): Boolean {
         return cbFailures.get() >= CB_MAX_FAILURES && now < cbCoolingUntilMs.get()
