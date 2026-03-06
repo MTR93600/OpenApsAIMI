@@ -5346,9 +5346,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val contextPrefersBasal = (maxSMB == 0.0 && rT.contextEnabled && rT.contextIntentCount > 0)
                 // -----------------------------------------------------
         // PRIORITY 4: AIMI AUTODRIVE (V3 Engine -> V2 Fallback)
-        val autodriveEnabled = preferences.get(BooleanKey.OApsAIMIautoDrive)
+        val isAutodriveActive = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
 
-        if (autodriveEnabled) {
+        if (isAutodriveActive) {
             aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🚦 [AUTODRIVE V3] Intercepting Control Loop...")
 
             // Finest-resolution state for V3

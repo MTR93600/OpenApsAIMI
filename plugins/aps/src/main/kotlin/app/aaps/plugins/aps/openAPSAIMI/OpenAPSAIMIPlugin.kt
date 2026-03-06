@@ -178,7 +178,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 .setRequiresDeviceIdle(true)
                 .build()
                 
-            val workRequest = androidx.work.PeriodicWorkRequestBuilder<app.aaps.plugins.aps.openAPSAIMI.learning.AutodriveNeuralTrainerWorker>(
+            val workRequest = androidx.work.PeriodicWorkRequestBuilder<app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveNeuralTrainerWorker>(
                 6, java.util.concurrent.TimeUnit.HOURS
             ).setConstraints(constraints).build()
 

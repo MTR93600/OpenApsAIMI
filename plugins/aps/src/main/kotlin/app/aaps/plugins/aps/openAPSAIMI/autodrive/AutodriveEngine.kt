@@ -75,7 +75,7 @@ class AutodriveEngine @Inject constructor(
         // Exécute le réseau de neurones "Attention Gate" (Phase 8).
         // Si le réseau détecte un danger que les maths n'ont pas vu (Stress, Rebond d'hypo secret, etc.)
         // il peut modifier nos variables avant qu'elles n'entrent dans les maths de contrôle.
-        val contextAwareState = attentionGate.processState(state)
+        val contextAwareState = attentionGate.applyAttention(state)
         
         // 2. Continuous Learning : Apprentissage des erreurs passées (Phase 5)
         // Mets à jour la sensibilité (Si on s'est trompé il y a 30min).
@@ -108,14 +108,12 @@ class AutodriveEngine @Inject constructor(
         
         // 6. Data Lake Intake (Phase 1)
         // Sauvegarde de l'état d'entrée pour la télémétrie locale et l'entraînement Cloud du futur
-        dataLake.ingest(
+        dataLake.recordSnapshot(
             state = enrichedState,
             rawCommand = rawCommand,
-            finalCommand = filteredSafeCommand,
-            timestampMs = System.currentTimeMillis()
+            safeCommand = filteredSafeCommand,
+            currentTimestamp = System.currentTimeMillis()
         )
-        // Exécute le backup asynchrone pour ne pas ralentir le cycle courant
-        dataLake.flushToDiskIfReady()
 
         aapsLogger.debug(LTag.APS, "╰━[ AUTODRIVE ENGINE V3 FINISHED ]━")
 

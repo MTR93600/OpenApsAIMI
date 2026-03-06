@@ -70,8 +70,8 @@ class AimiNeuralNetwork(
             hidden[h] = if (v >= 0) v else config.leakyReluAlpha * v
         }
 
-        // Batch normalization (in place) si activée et pas en mode inférence
-        if (!inferenceMode && config.useBatchNorm) {
+        // Layer normalization (in place) si activée. DOIT s'appliquer en inférence !
+        if (config.useBatchNorm) {
             var sum = 0.0
             for (h in 0 until hiddenSize) {
                 sum += hidden[h]
@@ -90,11 +90,14 @@ class AimiNeuralNetwork(
             }
         }
 
-        // Application du dropout (in place) si activé et pas en mode inférence
+        // Application du dropout (in place) avec inverted dropout scaling
         if (!inferenceMode && config.useDropout) {
+            val keepProb = 1.0 - config.dropoutRate
             for (h in 0 until hiddenSize) {
                 if (Random.nextDouble() < config.dropoutRate) {
                     hidden[h] = 0.0
+                } else {
+                    hidden[h] = hidden[h] / keepProb
                 }
             }
         }
