@@ -8004,7 +8004,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // rT.units is preserved for pre-bolus from applyLegacyMealModes
 
         val baseBasal = profile.current_basal
-        val maxBasal = profile.max_basal.toDouble()
+        // Removed the maxBasal restrictor for T3c because T3c NEEDS the 1000% capability 
+        // to act as a proper bolus replacement. It will be safely capped at 10x inside the compute function.
 
         // 🧠 Predictive PI Controller — 1000% scale, predictedBg as error term
         val computedRate = DynamicBasalController.computeT3c(
@@ -8021,7 +8022,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             eventualBg = if (eventualBg > 0) eventualBg else null
         )
 
-        val safeRate = computedRate.coerceIn(0.0, maxBasal)
+        // Safety cap applied from inside computeT3c, simply fallback to absolute upper bounds
+        val safeRate = computedRate.coerceIn(0.0, baseBasal * 10.0)
 
         rT.rate = safeRate
         rT.duration = 30

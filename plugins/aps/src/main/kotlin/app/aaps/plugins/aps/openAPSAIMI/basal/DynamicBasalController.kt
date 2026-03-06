@@ -240,10 +240,12 @@ class DynamicBasalController @Inject constructor(
             if (iob > maxIob * 1.5) return profileBasal * 0.1
 
             // ── T3C V2: Prédictif et Agressif ──────────────────────────────
-
-            // 1. Projection à 30 minutes
+            
+            // 1. Projection
             // On veut corriger sur la base du BG projeté (s'il est plus haut que le BG actuel)
-            val projectedBg = bg + (velocity * 6.0)
+            // Si la montée est violente, on projette plus loin
+            val projectionMins = if (delta >= 3.0f && delta > shortAvgDelta) 40.0 else 30.0
+            val projectedBg = bg + (velocity * (projectionMins / 5.0))
             val effectiveBgToCorrect = projectedBg.coerceAtLeast(bg)
             
             // Si on est sous la cible et stable ou en baisse, approche douce exponentielle
@@ -266,16 +268,24 @@ class DynamicBasalController @Inject constructor(
                 1.0
             }
             
+            // 3.b Multiplicateur d'Accélération (Nouveau)
+            // Si on monte très vite, on booste l'insuline immédiatement pour casser la courbe
+            val accelFactor = if (delta >= 3.0f) {
+                1.0 + (delta / 10.0).coerceAtMost(0.5) // Jusqu'à +50%
+            } else {
+                1.0
+            }
+            
             // 4. Horizon de Livraison Réactif (en Heures)
             // Plus on monte vite, plus on compresse l'horizon pour expédier l'insuline comme un bolus
             val deliveryHorizonHours = when {
-                velocity >= 3.0f -> 0.16   // 10 mins (Urgence Post-Repas)
-                effectiveBgToCorrect > 160.0 -> 0.25 // 15 mins (Réponse Rapide)
-                else -> 0.33               // 20 mins (Standard T3C)
+                delta >= 3.0f || velocity >= 3.0f -> 0.16   // 10 mins (Urgence Post-Repas ou Montée Fulgurante)
+                effectiveBgToCorrect > 160.0 -> 0.25        // 15 mins (Réponse Rapide)
+                else -> 0.33                                // 20 mins (Standard T3C)
             }
             
             // Taux de correction ciblé
-            val correctionRate = (requiredU / deliveryHorizonHours) * resistanceFactor
+            val correctionRate = (requiredU / deliveryHorizonHours) * resistanceFactor * accelFactor
             
             // 5. Braking override : on protège les chutes non-détectées par la Guard 1
             val brakeFactor: Double = when {
