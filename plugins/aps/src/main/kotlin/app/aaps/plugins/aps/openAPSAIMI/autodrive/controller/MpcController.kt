@@ -33,7 +33,7 @@ class MpcController @Inject constructor(
     /**
      * Calcule la dose optimale pour les 5 prochaines minutes (Receding Horizon).
      */
-    fun calculateOptimalDose(state: AutoDriveState, profileBasal: Double): AutoDriveCommand {
+    fun calculateOptimalDose(state: AutoDriveState, profileBasal: Double, lgsThreshold: Double): AutoDriveCommand {
         // Optimisation Newton-Raphson 1D simplifiée ou Recherche Dichotomique pour trouver min(J)
         // La fonction J(u) est supposée convexe par rapport à la dose d'insuline injectée maintement.
         
@@ -54,8 +54,17 @@ class MpcController @Inject constructor(
             activeMaxSmb = 0.5 // On refuse d'envoyer de fortes doses d'un coup
         } else {
             activeTargetBg = 100.0
-            activeRInsulin = 50.0
-            activeMaxSmb = 2.0
+            // 🧨 DYNAMIC AGGRESSIVENESS (Phase 11 - Unannounced Meal Crushing)
+            // Si le Ra estimé est énorme, c'est un repas non annoncé hyper-glycémiant.
+            // On lève la pénalité d'insuline pour autoriser le solver à agir brutalement,
+            // et on augmente le plafond SMB mathématique autorisé.
+            if (state.estimatedRa > 3.0) {
+                activeRInsulin = 10.0
+                activeMaxSmb = 3.0
+            } else {
+                activeRInsulin = 50.0
+                activeMaxSmb = 2.0
+            }
         }
 
         // 🛡️ WEIGHT-AWARENESS SAFETY CAP (Phase 7)
@@ -71,7 +80,7 @@ class MpcController @Inject constructor(
             .toList()
 
         for (candidateDose in doseCandidates) {
-            val cost = simulateAndCost(candidateDose, state, activeTargetBg, activeRInsulin)
+            val cost = simulateAndCost(candidateDose, state, activeTargetBg, activeRInsulin, lgsThreshold)
             if (cost < minCost) {
                 minCost = cost
                 bestDose = candidateDose
@@ -99,7 +108,7 @@ class MpcController @Inject constructor(
     /**
      * Simule la trajectoire pour une dose candidate U donnée et retourne le coût total J.
      */
-    private fun simulateAndCost(doseU: Double, startState: AutoDriveState, activeTargetBg: Double, activeRInsulin: Double): Double {
+    private fun simulateAndCost(doseU: Double, startState: AutoDriveState, activeTargetBg: Double, activeRInsulin: Double, lgsThreshold: Double): Double {
         var currentBg = startState.bg
         var currentIob = startState.iob + doseU
         var totalCost = 0.0
@@ -126,16 +135,17 @@ class MpcController @Inject constructor(
             // -- Évaluation du Coût --
             // Pénalité asymétrique : l'hypo (BG < Cible) est lourdement pénalisée par rapport à l'hyper
             val errorBg = currentBg - activeTargetBg
+            val scaledErrorBg = errorBg / 10.0 // Divide par 10 pour que le carré (divisé par 100) soit comparable au coût de RInsulin
             val qPenalty = if (errorBg < 0) qBg * 5.0 else qBg
             
-            totalCost += (qPenalty * errorBg * errorBg)
+            totalCost += (qPenalty * scaledErrorBg * scaledErrorBg)
         }
 
         // Ajout du coût de régularisation R (Évite au solver de paniquer et de tirer un gros bolus d'un coup)
         totalCost += (activeRInsulin * doseU * doseU)
 
         // Pénalité infinie si la simulation franchit le seuil létal absolu (Safety fallback intra-MPC)
-        if (currentBg < 60.0) totalCost += 1_000_000.0
+        if (currentBg < lgsThreshold + 5.0) totalCost += 1_000_000.0
 
         return totalCost
     }

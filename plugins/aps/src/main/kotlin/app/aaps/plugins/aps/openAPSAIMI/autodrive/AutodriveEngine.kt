@@ -49,7 +49,7 @@ class AutodriveEngine @Inject constructor(
     /**
      * Point d'entrée principal à chaque Tique (5 min) depuis DetermineBasalAIMI2.
      */
-    fun tick(currentState: AutoDriveState, profileBasal: Double, currentEpochMs: Long = System.currentTimeMillis()): AutoDriveCommand? {
+    fun tick(currentState: AutoDriveState, profileBasal: Double, lgsThreshold: Double, currentEpochMs: Long = System.currentTimeMillis()): AutoDriveCommand? {
         if (!isActive && !isShadowMode) return null
 
         // 0. Le Processus d'apprentissage en ligne s'exécute pour affiner les paramètres
@@ -70,7 +70,7 @@ class AutodriveEngine @Inject constructor(
         val estimatedState = stateEstimator.updateAndPredict(attentionState)
 
         // 2. MPC (Model Predictive Controller) Calculation
-        val rawCommand = mpcController.calculateOptimalDose(estimatedState, profileBasal)
+        val rawCommand = mpcController.calculateOptimalDose(estimatedState, profileBasal, lgsThreshold)
 
         // 3. CBF (Control Barrier Shield) Safety Check
         val safeCommand = safetyShield.enforce(rawCommand, estimatedState, profileBasal)

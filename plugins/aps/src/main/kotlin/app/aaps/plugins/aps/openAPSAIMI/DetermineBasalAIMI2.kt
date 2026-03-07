@@ -5341,12 +5341,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             autodriveEngine.setShadowMode(false) 
             autodriveEngine.setIsActive(true) 
             
-            val adCommand = autodriveEngine.tick(adState, profile.current_basal)
+            val adCommand = autodriveEngine.tick(adState, profile.current_basal, threshold.toDouble())
             
             if (adCommand != null && adCommand.isSafe) {
                 
                 val v3TbrRate = adCommand.temporaryBasalRate
-                if (v3TbrRate != null && v3TbrRate > 0) {
+                if (v3TbrRate != null && v3TbrRate >= 0.0) {
                     setTempBasal(v3TbrRate, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
                 }
 
@@ -5366,9 +5366,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val effectiveBolus = rT.insulinReq ?: 0.0
                 val effectiveDuration = rT.duration ?: 0
 
-                if (effectiveBolus > 0.05 || effectiveDuration > 0) {
+                if (effectiveBolus > 0.05 || effectiveDuration > 0 || (v3TbrRate != null && v3TbrRate <= 0.0)) {
                     lastAutodriveActionTime = System.currentTimeMillis()
-                    consoleLog.add("🚀 AUTODRIVE_V3_APPLIED intent=$v3Smb actual=$effectiveBolus")
+                    consoleLog.add("🚀 AUTODRIVE_V3_APPLIED intent=$v3Smb actual=$effectiveBolus tbr=$v3TbrRate")
                     logDecisionFinal("AUTODRIVE_V3", rT, bg, delta)
                     return rT // 🛑 HARD RETURN: V3 take-over
                 } else {

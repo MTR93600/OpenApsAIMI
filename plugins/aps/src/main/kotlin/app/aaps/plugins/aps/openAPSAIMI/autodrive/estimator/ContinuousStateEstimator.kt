@@ -63,7 +63,15 @@ class ContinuousStateEstimator @Inject constructor(
         
         // 3. Matrice de Bruit de Processus Q & Matrice de Mesure R
         val rVariance = 2.0 // Bruit de la mesure du capteur CGM (Incertitude Dexcom/Libre)
-        val qRa = 0.5       // Le Rate of Appearance peut exploser ou s'arrêter soudainement
+        
+        // 🚀 DYNAMIC MANEUVER DETECTION (Phase 11 - Agile Tracking)
+        // Si l'innovation est très forte, on a affaire à un repas non annoncé (McDo).
+        // On relâche la contrainte (qRa) pour permettre au UKF d'absorber la montée instantanément.
+        val qRa = if (innovation > 1.5) {
+            5.0 // Gain de Kalman explosif
+        } else {
+            0.5 // Tracking doux de routine
+        }
         
         // 4. Prédiction de Covariance (P_k|k-1)
         pRa += qRa
@@ -87,7 +95,7 @@ class ContinuousStateEstimator @Inject constructor(
         // Désamorçage rapide (Decay) si on a fini de manger
         // Si la glycémie chute vite ou est stable et que l'innovation est négative, on tue le Ra fantôme.
         if (innovation < -0.5 && hardwareCompensatedVelocity <= 0.0) {
-            estimatedRa *= 0.5
+            estimatedRa *= 0.25 // Écrase le repas fantôme 2x plus vite pour éviter le crash en fin de pic
         }
 
         // 8. Mise à jour de la Covariance (P_k|k)
