@@ -8047,7 +8047,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             eventualBg = if (eventualBg > 0) eventualBg else null
         )
 
-        val safeRate = computedRate.coerceIn(0.0, maxBasal)
+        // Safety cap applied from inside computeT3c, simply fallback to absolute upper bounds
+        val safeRate = computedRate.coerceIn(0.0, baseBasal * 10.0)
 
         rT.rate = safeRate
         rT.duration = 30
