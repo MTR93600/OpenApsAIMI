@@ -74,13 +74,14 @@ class MpcController @Inject constructor(
         val maxSafeDoseU = min(activeMaxSmb, state.patientWeightKg * 0.05)
 
         // Résolution via balayage fin sur le domaine praticable Sécurisé [0.0 , maxSafeDoseU]
-        val searchStep = 0.05
+        // Un pas de 0.005U sur 5 min équivaut à un ajustement basal lisse de 0.06 U/h
+        val searchStep = 0.005
         val doseCandidates = generateSequence(0.0) { it + searchStep }
             .takeWhile { it <= maxSafeDoseU }
             .toList()
 
         for (candidateDose in doseCandidates) {
-            val cost = simulateAndCost(candidateDose, state, activeTargetBg, activeRInsulin, lgsThreshold)
+            val cost = simulateAndCost(candidateDose, state, activeTargetBg, activeRInsulin, lgsThreshold, state.isNight)
             if (cost < minCost) {
                 minCost = cost
                 bestDose = candidateDose
@@ -93,9 +94,10 @@ class MpcController @Inject constructor(
         )
 
         // Traitement de la sortie :
-        // Si la dose est minime, on s'oriente vers un ajustement basal (TBR)
-        // Si la dose est forte, on s'oriente vers un SMB.
-        val tbrUph = min(bestDose * 12.0, profileBasal * 3.0) // On limite le TBR Max à 3x le profil
+        // Si la dose est minime, on s'oriente vers un ajustement basal lisse (TBR)
+        // La nuit, on autorise la TBR à répondre à des besoins plus grands (5x) pour éviter l'usage des micro-bolus
+        val maxTbrMultiplier = if (state.isNight) 5.0 else 3.0
+        val tbrUph = min(bestDose * 12.0, profileBasal * maxTbrMultiplier)
         val smbU = max(0.0, bestDose - (tbrUph / 12.0))
 
         return AutoDriveCommand(
@@ -108,7 +110,7 @@ class MpcController @Inject constructor(
     /**
      * Simule la trajectoire pour une dose candidate U donnée et retourne le coût total J.
      */
-    private fun simulateAndCost(doseU: Double, startState: AutoDriveState, activeTargetBg: Double, activeRInsulin: Double, lgsThreshold: Double): Double {
+    private fun simulateAndCost(doseU: Double, startState: AutoDriveState, activeTargetBg: Double, activeRInsulin: Double, lgsThreshold: Double, isNight: Boolean): Double {
         var currentBg = startState.bg
         var currentIob = startState.iob + doseU
         var totalCost = 0.0
@@ -123,7 +125,9 @@ class MpcController @Inject constructor(
         for (k in 1..steps) {
             // -- Dynamique du Glucose (Simulation Euler sur 5 min) --
             // Formulation classique : dBG/dt = - [p1 + SI * IOB]*(BG) + p1*BG_Target + Ra
-            val deltaBgPerMin = - (p1 + (si * currentIob)) * currentBg + (p1 * activeTargetBg) + startState.estimatedRa
+            // IMPORTANT : Limite biologique stricte à 0.0 pour empêcher l'explosion mathématique avec une IOB très négative
+            val glucoseClearanceRate = max(0.0, p1 + (si * currentIob))
+            val deltaBgPerMin = - (glucoseClearanceRate) * currentBg + (p1 * activeTargetBg) + startState.estimatedRa
             val deltaBgPer5 = deltaBgPerMin * stepMinutes
 
             currentBg += deltaBgPer5
@@ -145,7 +149,9 @@ class MpcController @Inject constructor(
         totalCost += (activeRInsulin * doseU * doseU)
 
         // Pénalité infinie si la simulation franchit le seuil létal absolu (Safety fallback intra-MPC)
-        if (currentBg < lgsThreshold + 5.0) totalCost += 1_000_000.0
+        // La nuit, on renforce la marge à +10 mg/dL pour forcer la coupure préventive des vagues de basales
+        val lgsBuffer = if (isNight) 10.0 else 5.0
+        if (currentBg < lgsThreshold + lgsBuffer) totalCost += 1_000_000.0
 
         return totalCost
     }

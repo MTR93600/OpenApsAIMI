@@ -98,7 +98,25 @@ class AutodriveEngine @Inject constructor(
             logShadowDecision(currentState, auditedCommand, profileBasal)
         }
 
-        return if (isActive) auditedCommand else null
+        if (!isActive) return null
+
+        // 8. Quiet Mode Handover (Rollback to AIMI V2 PI Controller)
+        // Autodrive V3 (MPC) is mathematically aggressive by nature. For calm waters and slight upstream drifts, 
+        // the legacy proportional controller is superior. We yield control (return null) unless V3 is actively fighting.
+        val isAggressiveRise = estimatedState.estimatedRa > 0.5 || estimatedState.bgVelocity > 1.0
+        val isHigh = estimatedState.bg > 130.0
+        val needsSmb = auditedCommand.scheduledMicroBolus > 0.0
+        val needsSafetyBrake = auditedCommand.temporaryBasalRate == 0.0
+
+        return if (isAggressiveRise || isHigh || needsSmb || needsSafetyBrake) {
+            auditedCommand
+        } else {
+            aapsLogger.debug(
+                LTag.APS,
+                "💤 [AUTODRIVE_V3] Quiet Mode: Delegating prophylactic TBR adjustments to legacy V2 PI Controller."
+            )
+            null
+        }
     }
 
     private fun logShadowDecision(state: AutoDriveState, autodriveCommand: AutoDriveCommand, profileBasal: Double) {
