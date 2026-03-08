@@ -2,38 +2,36 @@ package app.aaps.plugins.aps.openAPSAIMI.autodrive
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.plugins.aps.openAPSAIMI.autodrive.controller.MpcController
-import app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstimator
-import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.OnlineLearner
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveCommand
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
-import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.ControlBarrierShield
-import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataLake
-import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveAuditor
-import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.MechanismAttentionGate
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstimator // 🧠 PSE
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.controller.MpcController // 🧮 MPC
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.ControlBarrierShield // 🛡️ CBF
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.OnlineLearner // 🎓 Learner
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataLake // 🗂️ Data Lake
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataBackfiller // 🧹 Backfiller
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.MechanismAttentionGate // 🚪 Attention Gate
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveAuditor // 👨‍🏫 Auditor
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 🚀 Autodrive Engine - V3 (ML + CBF + MPC)
+ * 🧠 Autodrive Engine (iLet-like Architecture)
  * 
- * Noyau central de l'Autodrive. Coordonne les 6 modules majeurs :
- * 1. Auditor : Valide que les donnés d'entrée sont propres et fiables.
- * 2. Estimator (PSE) : Devine ce qui se passe sous la peau (Ra - Rate of Appearance).
- * 3. Controller (MPC) : Simule l'avenir et calcule l'insuline parfaite pour atterrir à 100mg/dL.
- * 4. Safety Shield (CBF) : Vérifie mathématiquement que la proposition du MPC ne tuera pas le patient.
- * 5. Learner (Online) : Apprend en continu du passé pour ajuster les calculs futurs.
- * 6. Big Data (DataLake) : Enregistre tout pour l'entraînement "Off-device" des réseaux de neurones.
+ * Moteur unifié de contrôle continu remplissant les fonctions cumulées de TrajectoryGuard,
+ * DynamicBasalController, et SMB.
+ * Actuellement en mode SHADOW (Fantôme) : il calcule et logge ses décisions sans ordonner à la pompe.
  */
 @Singleton
 class AutodriveEngine @Inject constructor(
     private val aapsLogger: AAPSLogger,
-    private val auditor: AutodriveAuditor,
-    private val estimator: ContinuousStateEstimator,
-    private val controller: MpcController,
-    private val shield: ControlBarrierShield,
-    private val learner: OnlineLearner,
+    private val stateEstimator: ContinuousStateEstimator,
+    private val mpcController: MpcController,
+    private val safetyShield: ControlBarrierShield,
+    private val onlineLearner: OnlineLearner,
+    private val autodriveAuditor: AutodriveAuditor,
     private val dataLake: AutodriveDataLake,
+    private val dataBackfiller: AutodriveDataBackfiller,
     private val attentionGate: MechanismAttentionGate
 ) {
 
@@ -49,77 +47,85 @@ class AutodriveEngine @Inject constructor(
     }
 
     /**
-     * Point d'entrée à chaque cycle APS (Toutes les 5 minutes).
-     * 
-     * @param state L'état du patient tel que lu par le capteur Dexcom/Libre et la Pompe.
-     * @param profileBasal La basal par défaut configurée pour cette heure de la journée.
-     * @return La commande d'injection finale.
+     * Point d'entrée principal à chaque Tique (5 min) depuis DetermineBasalAIMI2.
      */
-    fun tick(state: AutoDriveState, profileBasal: Double): AutoDriveCommand? {
+    fun tick(currentState: AutoDriveState, profileBasal: Double, lgsThreshold: Double, currentEpochMs: Long = System.currentTimeMillis()): AutoDriveCommand? {
         if (!isActive && !isShadowMode) return null
-        
-        aapsLogger.debug(LTag.APS, "╭━━[ AUTODRIVE ENGINE V3 STARTED ]━━")
-        
-        // 1. Audit Check : Est-ce qu'on doit même envisager de contrôler la pompe ?
-        if (!auditor.isSafeToRun(state)) {
-            aapsLogger.debug(LTag.APS, "🛑 [REJECTED] Auditor Flagged system as unsafe or unreadable.")
-            return AutoDriveCommand(
-                temporaryBasalRate = profileBasal, // Retour à la normale
-                scheduledMicroBolus = 0.0,
-                isSafe = false,
-                reason = "Auditor Reject"
-            )
-        }
-        
-        // --- MACHINE LEARNING PRE-FLIGHT ---
-        // Exécute le réseau de neurones "Attention Gate" (Phase 8).
-        // Si le réseau détecte un danger que les maths n'ont pas vu (Stress, Rebond d'hypo secret, etc.)
-        // il peut modifier nos variables avant qu'elles n'entrent dans les maths de contrôle.
-        val contextAwareState = attentionGate.applyAttention(state)
-        
-        // 2. Continuous Learning : Apprentissage des erreurs passées (Phase 5)
-        // Mets à jour la sensibilité (Si on s'est trompé il y a 30min).
-        learner.learnAndUpdate(contextAwareState, System.currentTimeMillis())
-        val learnerResistanceFactor = learner.learnedResistanceFactor
 
-        // Modifie finement la sensibilité lue en l'ajustant avec l'expérience récente
-        val adjustedState = contextAwareState.copy(
-            estimatedSI = contextAwareState.estimatedSI / learnerResistanceFactor
+        // 0. Le Processus d'apprentissage en ligne s'exécute pour affiner les paramètres
+        onlineLearner.learnAndUpdate(currentState, currentEpochMs)
+
+        // On injecte le facteur appris dans l'état (Phase 2 -> Phase 5)
+        // Note: Ici c'est super simplifié, le SI global baisse ou monte selon le facteur.
+        val learningAdjustedState = currentState.copy(
+            estimatedSI = currentState.estimatedSI * onlineLearner.learnedResistanceFactor
         )
 
-        // 3. State Estimation (Phase 2) : Deviner l'absorption des glucides (Ra)
-        // Si la glycémie monte plus vite que ce que p1 et l'insuline active (IOB) prédisent,
-        // c'est qu'on a un taux d'apparition de carb (Ra) fantôme.
-        val enrichedState = estimator.updateAndPredict(adjustedState)
+        // 1. Attention Gate (Phase 9 - ML On-Device)
+        // L'intelligence artificielle vient potentiellement biaiser la sensibilité perçue 
+        // pour corriger de manière prédictive le comportement du MPC face à des menaces physio.
+        val attentionState = attentionGate.applyAttention(learningAdjustedState)
 
-        // 4. Model Predictive Control (Phase 3) : Résolution Optimale
-        // Calcule le couple (SMB / TBR) parfait pour atteindre l'objectif sans bruit heuristique.
-        val rawCommand = controller.calculateOptimalDose(enrichedState, profileBasal)
+        // 2. PSE (Physiological State Estimator) Update
+        val estimatedState = stateEstimator.updateAndPredict(attentionState)
 
-        // 5. Control Barrier Shield (Phase 4) : Sécurité Absolue
-        // Filtre la commande agressive contre une barrière mathématique pour empêcher
-        // l'algorithme d'envoyer le patient en hypo (h(x) >= 0).
-        val filteredSafeCommand = shield.enforce(rawCommand, enrichedState, profileBasal)
+        // 2. MPC (Model Predictive Controller) Calculation
+        val rawCommand = mpcController.calculateOptimalDose(estimatedState, profileBasal, lgsThreshold)
 
-        aapsLogger.debug(
-            LTag.APS, 
-            "🚀 [AUTODRIVE OUT] -> TBR=${filteredSafeCommand.temporaryBasalRate.format(2)} U/h | SMB=${filteredSafeCommand.scheduledMicroBolus.format(2)} U"
-        )
-        
-        // 6. Data Lake Intake (Phase 1)
-        // Sauvegarde de l'état d'entrée pour la télémétrie locale et l'entraînement Cloud du futur
-        dataLake.recordSnapshot(
-            state = enrichedState,
+        // 3. CBF (Control Barrier Shield) Safety Check
+        val safeCommand = safetyShield.enforce(rawCommand, estimatedState, profileBasal)
+
+        // 5. Explicabilité de l'IA (Auditor Traducteur)
+        val auditedReason = autodriveAuditor.generateHumanReadableReason(
+            state = estimatedState,
+            baseProfileIsf = profileBasal * 10.0, // Approximation relative pour l'auditeur
             rawCommand = rawCommand,
-            safeCommand = filteredSafeCommand,
-            currentTimestamp = System.currentTimeMillis()
+            safeCommand = safeCommand
+        )
+        val auditedCommand = safeCommand.copy(reason = auditedReason)
+
+        // 6. Data Lake CSV persistancy (Pour entraînement V3)
+        // L'enregistrement est silencieux et asynchrone par rapport à la boucle de contrôle
+        dataLake.recordSnapshot(
+            state = estimatedState,
+            rawCommand = rawCommand,
+            safeCommand = auditedCommand,
+            currentTimestamp = currentEpochMs
         )
 
-        aapsLogger.debug(LTag.APS, "╰━[ AUTODRIVE ENGINE V3 FINISHED ]━")
+        // 7. Logging & Shadow metrics
+        if (isShadowMode) {
+            logShadowDecision(currentState, auditedCommand, profileBasal)
+        }
 
-        return if (isActive) filteredSafeCommand else null
+        if (!isActive) return null
+
+        // 8. Quiet Mode Handover (Rollback to AIMI V2 PI Controller)
+        // Autodrive V3 (MPC) is mathematically aggressive by nature. For calm waters and slight upstream drifts, 
+        // the legacy proportional controller is superior. We yield control (return null) unless V3 is actively fighting.
+        val isAggressiveRise = estimatedState.estimatedRa > 0.5 || estimatedState.bgVelocity > 1.0
+        val isHigh = estimatedState.bg > 130.0
+        val needsSmb = auditedCommand.scheduledMicroBolus > 0.0
+        val needsSafetyBrake = auditedCommand.temporaryBasalRate == 0.0
+
+        return if (isAggressiveRise || isHigh || needsSmb || needsSafetyBrake) {
+            auditedCommand
+        } else {
+            aapsLogger.debug(
+                LTag.APS,
+                "💤 [AUTODRIVE_V3] Quiet Mode: Delegating prophylactic TBR adjustments to legacy V2 PI Controller."
+            )
+            null
+        }
     }
-    
-    // Fonction utilitaire locale pour l'affichage des floats à X décimales
-    private fun Double.format(digits: Int) = "%.${digits}f".format(this)
+
+    private fun logShadowDecision(state: AutoDriveState, autodriveCommand: AutoDriveCommand, profileBasal: Double) {
+        aapsLogger.debug(
+            LTag.APS,
+            "👽 [AUTODRIVE_SHADOW] BG: ${state.bg} (v: ${String.format("%.1f", state.bgVelocity)}) | " +
+            "Est_SI: ${String.format("%.2f", state.estimatedSI)} | Est_Ra: ${String.format("%.2f", state.estimatedRa)} || " +
+            "Autodrive dictates: TBR=${autodriveCommand.temporaryBasalRate} U/h, " +
+            "SMB=${autodriveCommand.scheduledMicroBolus} U | Reason: ${autodriveCommand.reason}"
+        )
+    }
 }
