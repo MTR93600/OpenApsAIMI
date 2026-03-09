@@ -67,7 +67,9 @@ class AutodriveEngine @Inject constructor(
         val attentionState = attentionGate.applyAttention(learningAdjustedState)
 
         // 2. PSE (Physiological State Estimator) Update
-        val estimatedState = stateEstimator.updateAndPredict(attentionState)
+        // [FIX CRITIQUE]: On réinjecte le Ra précédemment appris pour garder le momentum de la courbe
+        val stateWithMomentum = attentionState.copy(estimatedRa = stateEstimator.getLastRa())
+        val estimatedState = stateEstimator.updateAndPredict(stateWithMomentum)
 
         // 2. MPC (Model Predictive Controller) Calculation
         val rawCommand = mpcController.calculateOptimalDose(estimatedState, profileBasal, lgsThreshold)

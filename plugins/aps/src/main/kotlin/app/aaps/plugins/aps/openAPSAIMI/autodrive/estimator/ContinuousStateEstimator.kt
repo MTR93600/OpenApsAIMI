@@ -116,5 +116,7 @@ class ContinuousStateEstimator @Inject constructor(
         )
     }
 
+    fun getLastRa(): Double = lastRa
+
     private fun Double.format(digits: Int) = "%.${digits}f".format(this)
 }

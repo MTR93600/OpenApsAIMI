@@ -5344,7 +5344,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             autodriveEngine.setShadowMode(false) 
             autodriveEngine.setIsActive(true) 
             
-            val adCommand = autodriveEngine.tick(adState, profile.current_basal, threshold.toDouble())
+            val adCommand = autodriveEngine.tick(adState, profile.current_basal, min(90.0, threshold.toDouble()))
             
             if (adCommand != null && adCommand.isSafe) {
                 
