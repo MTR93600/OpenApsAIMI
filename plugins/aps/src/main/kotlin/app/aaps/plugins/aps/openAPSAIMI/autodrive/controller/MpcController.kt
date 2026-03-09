@@ -61,9 +61,12 @@ class MpcController @Inject constructor(
             if (state.estimatedRa > 3.0) {
                 activeRInsulin = 10.0
                 activeMaxSmb = 3.0
+            } else if (state.bg > 120.0) {
+                activeRInsulin = 30.0 // Légère réduction du coût pour aider la descente
+                activeMaxSmb = state.highBgMaxSMB
             } else {
                 activeRInsulin = 50.0
-                activeMaxSmb = 2.0
+                activeMaxSmb = state.maxSMB
             }
         }
 
