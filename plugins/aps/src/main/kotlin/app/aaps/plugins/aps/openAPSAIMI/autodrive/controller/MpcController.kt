@@ -50,7 +50,7 @@ class MpcController @Inject constructor(
 
         if (state.isNight) {
             activeTargetBg = 110.0 // On rehausse la cible de sécurité
-            activeRInsulin = 250.0 // On multiplie par 5 le coût "Mathématique" de l'insuline (très doux)
+            activeRInsulin = 150.0 // On multiplie par 3 le coût (plus proactif que 5x)
             activeMaxSmb = 0.5 // On refuse d'envoyer de fortes doses d'un coup
         } else {
             activeTargetBg = 100.0
@@ -61,6 +61,9 @@ class MpcController @Inject constructor(
             if (state.estimatedRa > 3.0) {
                 activeRInsulin = 10.0
                 activeMaxSmb = 3.0
+            } else if (state.bg > 120.0) {
+                activeRInsulin = 30.0 // Légère réduction du coût pour aider la descente
+                activeMaxSmb = state.highBgMaxSMB
             } else {
                 activeRInsulin = 50.0
                 activeMaxSmb = 2.0
@@ -145,8 +148,9 @@ class MpcController @Inject constructor(
             totalCost += (qPenalty * scaledErrorBg * scaledErrorBg)
         }
 
-        // Ajout du coût de régularisation R (Évite au solver de paniquer et de tirer un gros bolus d'un coup)
-        totalCost += (activeRInsulin * doseU * doseU)
+        // Ajout du coût de régularisation R (Linear-Quadratic)
+        // Le terme linéaire (doseU * 10) encourage les micro-actions correctives précoces.
+        totalCost += (activeRInsulin * doseU * doseU) + (activeRInsulin * 10.0 * doseU)
 
         // Pénalité infinie si la simulation franchit le seuil létal absolu (Safety fallback intra-MPC)
         // La nuit, on renforce la marge à +10 mg/dL pour forcer la coupure préventive des vagues de basales

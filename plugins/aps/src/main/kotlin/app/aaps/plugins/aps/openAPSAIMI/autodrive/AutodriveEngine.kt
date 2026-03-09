@@ -108,7 +108,12 @@ class AutodriveEngine @Inject constructor(
         val needsSmb = auditedCommand.scheduledMicroBolus > 0.0
         val needsSafetyBrake = auditedCommand.temporaryBasalRate == 0.0
 
-        return if (isAggressiveRise || isHigh || needsSmb || needsSafetyBrake) {
+        // 🚀 HYBRID SMOOTHING: Si la correction demandée est minime (ex: < 0.3 U/h d'écart), 
+        // on laisse la V2 gérer la fluidité.
+        val tbrDelta = kotlin.math.abs(auditedCommand.temporaryBasalRate - profileBasal)
+        val isStrongCorrection = tbrDelta > 0.3
+
+        return if (isAggressiveRise || isHigh || needsSmb || needsSafetyBrake || isStrongCorrection) {
             auditedCommand
         } else {
             aapsLogger.debug(

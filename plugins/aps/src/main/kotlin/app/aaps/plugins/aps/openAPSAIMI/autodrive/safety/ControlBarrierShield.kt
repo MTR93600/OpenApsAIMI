@@ -6,6 +6,7 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveCommand
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -63,51 +64,61 @@ class ControlBarrierShield @Inject constructor(
         val safetyBoundary = -gamma * h
         val systemEvolution = lfh + (lgh * totalProposedDose)
 
-        if (systemEvolution >= safetyBoundary) {
-            // SAFE: La trajectoire reste dans le domaine invariant
-            return rawCommand
-        }
-
-        // --- 4. Violation : Filtrage Actif ---
-        // La dose est trop agressive. On résout u pour être *exactement* sur la frontière
-        // L_f(h) + L_g(h) * u_safe = - gamma * h
-        // u_safe = (-gamma * h - L_f(h)) / L_g(h)
-        val safeU = (-gamma * h - lfh) / lgh
-
-        var safeTbr = profileBasal
-        var safeSmb = 0.0
-        var reason = "${rawCommand.reason} | [🛡️ CBF SATURATED]"
-
-        // Si safeU est négatif, même une dose de 0 ne sauvera pas le patient (l'hypothèse est déjà franchie)
-        // Il faut alors couper l'insuline complètement (Suspension).
-        if (safeU <= 0.0) {
-            safeTbr = 0.0
-            safeSmb = 0.0
-            reason += " ZERO BASAL (Hypo Bound)"
+        var currentReason = rawCommand.reason
+        
+        var (finalTbr, finalSmb) = if (systemEvolution >= safetyBoundary) {
+            // 🛡️ CBF SAFE
+            Pair(rawCommand.temporaryBasalRate, rawCommand.scheduledMicroBolus)
         } else {
-            // Le safeU total autorisé doit être réparti en TBR et SMB.
-            // On convertit safeU (insuline absolue sur 5 min) en commandes APS.
-            if (safeU <= 0.2) {
-                // Petite dose -> TBR
-                safeTbr = min(safeU * 12.0, rawCommand.temporaryBasalRate)
-                safeSmb = 0.0
+            // 🚨 CBF VIOLATION: Filtrage Actif
+            val safeU = (-gamma * h - lfh) / lgh
+            
+            val (cbfTbr, cbfSmb) = if (safeU <= 0.0) {
+                Pair(0.0, 0.0) // Suspension complète
+            } else if (safeU <= 0.2) {
+                Pair(min(safeU * 12.0, rawCommand.temporaryBasalRate), 0.0)
             } else {
-                // Grosse dose -> On garde un peu de TBR et on met le reste en SMB
-                safeTbr = min(profileBasal, rawCommand.temporaryBasalRate)
-                val remainingU = safeU - (safeTbr / 12.0)
-                safeSmb = min(remainingU, rawCommand.scheduledMicroBolus)
+                val tbr = min(profileBasal, rawCommand.temporaryBasalRate)
+                val smb = min(safeU - (tbr / 12.0), rawCommand.scheduledMicroBolus)
+                Pair(tbr, max(0.0, smb))
             }
+            
+            currentReason = "${rawCommand.reason} | [🛡️ CBF SATURATED]"
+            if (safeU <= 0.0) currentReason += " ZERO BASAL (Hypo Bound)"
+            
+            aapsLogger.debug(
+                LTag.APS,
+                "🛡️ [CBF SHIELD] MPC Restricted. Required H($h) Boundary($safetyBoundary). Overridden: U_req=${totalProposedDose.format(2)} -> U_safe=${safeU.format(2)}"
+            )
+            Pair(cbfTbr, cbfSmb)
         }
 
-        aapsLogger.debug(
-            LTag.APS,
-            "🛡️ [CBF SHIELD] MPC Restricted. Required H($h) Boundary($safetyBoundary). Overridden: U_req=${totalProposedDose.format(2)} -> U_safe=${safeU.format(2)}"
-        )
+        // --- 5. MaxIOB Enforcement (Phase 4+) ---
+        val currentIob = state.iob
+        val maxAllowedDose = max(0.0, state.maxIOB - currentIob)
+        val currentProposedTotalU = (finalTbr / 12.0) + finalSmb
+        
+        if (currentProposedTotalU > maxAllowedDose) {
+            // Surcharge détectée : On coupe le SMB d'abord, puis la TBR si nécessaire.
+            val truncatedSmb = min(finalSmb, maxAllowedDose)
+            val remainingForTbr = max(0.0, maxAllowedDose - truncatedSmb)
+            val truncatedTbr = min(finalTbr, remainingForTbr * 12.0)
+            
+            finalSmb = truncatedSmb
+            finalTbr = truncatedTbr
+            currentReason = if (currentReason.contains("V3") || currentReason.contains("MPC")) currentReason else "V3: État stable"
+            currentReason += " | [🛡️ CBF SATURATED] MAX_IOB Limit reached"
+            
+            aapsLogger.debug(
+                LTag.APS,
+                "🛡️ [CBF SHIELD] MAX_IOB Violation. IOB=${currentIob.format(2)} Max=${state.maxIOB.format(2)} | Truncating Total=${currentProposedTotalU.format(2)} -> ${maxAllowedDose.format(2)}"
+            )
+        }
 
         return AutoDriveCommand(
-            temporaryBasalRate = safeTbr,
-            scheduledMicroBolus = safeSmb,
-            reason = reason
+            temporaryBasalRate = finalTbr,
+            scheduledMicroBolus = finalSmb,
+            reason = currentReason
         )
     }
 
