@@ -13,7 +13,7 @@ import kotlin.math.min
  * 🧮 Model Predictive Controller (MPC) - Autodrive Phase 3
  * 
  * Ce contrôleur remplace complètement les heuristiques classiques (PD, Sigmoïde).
- * Il prend l'état courant estimé (BG, SI, Ra) et simule le futur sur N étapes pour trouver
+ * Il prend l'état courant estimé (BG, SI, Ra) et simule le tur sur N étapes pour trouver
  * la séquence d'insuline optimale minimisant l'écart par rapport à la cible (100 mg/dL).
  * 
  * Il ne gère pas la sécurité absolue (Hypo). Cela sera géré par la Phase 4 (CBF).
@@ -55,18 +55,23 @@ class MpcController @Inject constructor(
         } else {
             activeTargetBg = 100.0
             // 🧨 DYNAMIC AGGRESSIVENESS (Phase 11 - Unannounced Meal Crushing)
-            // Si le Ra estimé est énorme, c'est un repas non annoncé hyper-glycémiant.
-            // On lève la pénalité d'insuline pour autoriser le solver à agir brutalement,
-            // et on augmente le plafond SMB mathématique autorisé.
+            // On indexe maintenant le coût de l'insuline sur l'absorption estimée (Ra).
+            // Si Ra est faible (croisière/pomme), on garde un coût élevé (> 80) pour favoriser
+            // la basale de profil. Si Ra explose (> 3), on tombe à 10 pour écraser le pic.
+            val raFactor = (state.estimatedRa / 3.0).coerceIn(0.0, 1.0)
+            
             if (state.estimatedRa > 3.0) {
                 activeRInsulin = 10.0
                 activeMaxSmb = 3.0
             } else if (state.bg > 120.0) {
-                activeRInsulin = 30.0 // Légère réduction du coût pour aider la descente
+                // Transition fluide entre 40 (stable) et 15 (montée)
+                activeRInsulin = 40.0 - (raFactor * 25.0)
                 activeMaxSmb = state.highBgMaxSMB
             } else {
-                activeRInsulin = 50.0
-                activeMaxSmb = 2.0
+                // Mode croisière : Coût élevé (80) pour éviter les à-coups, 
+                // descend vers 40 si un petitRa est détecté.
+                activeRInsulin = 80.0 - (raFactor * 40.0)
+                activeMaxSmb = state.maxSMB
             }
         }
 

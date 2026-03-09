@@ -51,7 +51,7 @@ class ContinuousStateEstimator @Inject constructor(
         // Le capteur Dexcom G6 possède un lag matériel (lissage natif) qui écrase et retarde la dérivée.
         // Si détecté, on booste l'accélération perçue pour réagir en temps réel comme le One+
         val isG6 = actualState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE
-        val hardwareCompensatedVelocity = if (isG6) {
+        val hardwareCompensatedVelocity = if (isG6 && actualState.bgVelocity > 0.5) {
             actualState.bgVelocity * 1.5 // +50% de projection du signal dans le futur
         } else {
             actualState.bgVelocity // Transmission directe temps réel (One+ / G7 / Libre)
@@ -65,12 +65,13 @@ class ContinuousStateEstimator @Inject constructor(
         val rVariance = 2.0 // Bruit de la mesure du capteur CGM (Incertitude Dexcom/Libre)
         
         // 🚀 DYNAMIC MANEUVER DETECTION (Phase 11 - Agile Tracking)
-        // Si l'innovation est très forte, on a affaire à un repas non annoncé (McDo).
-        // On relâche la contrainte (qRa) pour permettre au UKF d'absorber la montée instantanément.
-        val qRa = if (innovation > 1.5) {
-            5.0 // Gain de Kalman explosif
-        } else {
-            0.5 // Tracking doux de routine
+        // On remplace le switch binaire (0.5 ou 5.0) par un gain proportionnel à l'innovation.
+        // Cela permet de ne pas sur-réagir aux petits grignotages (pomme).
+        val qRa = when {
+            innovation > 3.0 -> 5.0   // Repas lourd confirmé (McDo)
+            innovation > 1.0 -> 0.5 + (innovation - 1.0) * 0.75 // Transition linéaire vers l'agressivité
+            innovation < -1.0 -> 1.0  // Aide au désamorçage rapide
+            else -> 0.2               // Tracking ultra-doux en croisière (stabilité basale)
         }
         
         // 4. Prédiction de Covariance (P_k|k-1)

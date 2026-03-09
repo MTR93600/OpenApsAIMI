@@ -5330,6 +5330,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 isNight = hourOfDay >= 23 || hourOfDay < 6,
                 sourceSensor = glucose_status.sourceSensor,
                 maxIOB = this.maxIob,
+                maxSMB = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIMaxSMB),
                 highBgMaxSMB = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIHighBGMaxSMB)
             )
 
