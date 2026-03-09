@@ -5328,7 +5328,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 patientWeightKg = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIweight),
                 physiologicalStressMask = doubleArrayOf(),
                 isNight = hourOfDay >= 23 || hourOfDay < 6,
-                sourceSensor = glucose_status.sourceSensor
+                sourceSensor = glucose_status.sourceSensor,
+                maxIOB = this.maxIob
             )
 
             // 🤖 Hardware-Awareness Logging

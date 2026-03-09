@@ -14,7 +14,8 @@ data class AutoDriveState(
     val patientWeightKg: Double = 70.0, // Poids du patient (Volume de Distribution Vd) - Phase 7
     val physiologicalStressMask: DoubleArray, // Vecteur optionnel d'attention (pour plus tard)
     val isNight: Boolean = false,      // Mode Nuit (Sommeil = réduction drastique de l'agressivité)
-    val sourceSensor: app.aaps.core.data.model.SourceSensor? = null // Type de capteur matériel (Phase 10)
+    val sourceSensor: app.aaps.core.data.model.SourceSensor? = null, // Type de capteur matériel (Phase 10)
+    val maxIOB: Double = 3.0           // Limite MaxIOB de sécurité (Phase 4+)
 )
 
 /**
