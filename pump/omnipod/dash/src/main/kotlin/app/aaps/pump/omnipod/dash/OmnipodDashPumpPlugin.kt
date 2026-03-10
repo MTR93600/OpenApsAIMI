@@ -54,28 +54,27 @@ import app.aaps.pump.omnipod.common.queue.command.CommandPlayTestBeep
 import app.aaps.pump.omnipod.common.queue.command.CommandResumeDelivery
 import app.aaps.pump.omnipod.common.queue.command.CommandSilenceAlerts
 import app.aaps.pump.omnipod.common.queue.command.CommandUpdateAlertConfiguration
-import app.aaps.pump.omnipod.dash.driver.OmnipodDashManager
-import app.aaps.pump.omnipod.dash.driver.comm.exceptions.BusyException
-import app.aaps.pump.omnipod.dash.driver.pod.definition.ActivationProgress
-import app.aaps.pump.omnipod.dash.driver.pod.definition.AlertConfiguration
-import app.aaps.pump.omnipod.dash.driver.pod.definition.AlertTrigger
-import app.aaps.pump.omnipod.dash.driver.pod.definition.AlertType
-import app.aaps.pump.omnipod.dash.driver.pod.definition.BeepRepetitionType
-import app.aaps.pump.omnipod.dash.driver.pod.definition.BeepType
-import app.aaps.pump.omnipod.dash.driver.pod.definition.DeliveryStatus
-import app.aaps.pump.omnipod.dash.driver.pod.definition.PodConstants
-import app.aaps.pump.omnipod.dash.driver.pod.definition.PodConstants.Companion.POD_EXPIRATION_IMMINENT_ALERT_HOURS_REMAINING
-import app.aaps.pump.omnipod.dash.driver.pod.response.ResponseType
-import app.aaps.pump.omnipod.dash.driver.pod.state.CommandConfirmed
-import app.aaps.pump.omnipod.dash.driver.pod.state.OmnipodDashPodStateManager
+import app.aaps.pump.omnipod.common.bledriver.OmnipodDashManager
+import app.aaps.pump.omnipod.common.bledriver.pod.definition.ActivationProgress
+import app.aaps.pump.omnipod.common.bledriver.pod.definition.AlertConfiguration
+import app.aaps.pump.omnipod.common.bledriver.pod.definition.AlertTrigger
+import app.aaps.pump.omnipod.common.bledriver.pod.definition.AlertType
+import app.aaps.pump.omnipod.common.bledriver.pod.definition.BeepRepetitionType
+import app.aaps.pump.omnipod.common.bledriver.pod.definition.BeepType
+import app.aaps.pump.omnipod.common.bledriver.pod.definition.DeliveryStatus
+import app.aaps.pump.omnipod.common.bledriver.pod.definition.PodConstants
+import app.aaps.pump.omnipod.common.bledriver.pod.definition.PodConstants.Companion.POD_EXPIRATION_IMMINENT_ALERT_HOURS_REMAINING
+import app.aaps.pump.omnipod.common.bledriver.pod.response.ResponseType
+import app.aaps.pump.omnipod.common.bledriver.pod.state.CommandConfirmed
+import app.aaps.pump.omnipod.common.bledriver.pod.state.OmnipodDashPodStateManager
 import app.aaps.pump.omnipod.dash.history.DashHistory
 import app.aaps.pump.omnipod.dash.history.data.BasalValuesRecord
 import app.aaps.pump.omnipod.dash.history.data.BolusRecord
 import app.aaps.pump.omnipod.dash.history.data.BolusType
 import app.aaps.pump.omnipod.dash.history.data.TempBasalRecord
 import app.aaps.pump.omnipod.dash.history.database.DashHistoryDatabase
-import app.aaps.pump.omnipod.dash.keys.DashBooleanPreferenceKey
-import app.aaps.pump.omnipod.dash.keys.DashStringNonPreferenceKey
+import app.aaps.pump.omnipod.common.keys.DashBooleanPreferenceKey
+import app.aaps.pump.omnipod.common.keys.DashStringNonPreferenceKey
 import app.aaps.pump.omnipod.dash.ui.OmnipodDashOverviewFragment
 import app.aaps.pump.omnipod.dash.util.Constants
 import app.aaps.pump.omnipod.dash.util.mapProfileToBasalProgram
@@ -258,88 +257,36 @@ class OmnipodDashPumpPlugin @Inject constructor(
     override fun finishHandshaking() {
     }
 
-    // override fun connect(reason: String) {
-    //     aapsLogger.info(LTag.PUMP, "connect reason=$reason")
-    //     podStateManager.bluetoothConnectionState = OmnipodDashPodStateManager.BluetoothConnectionState.CONNECTING
-    //     synchronized(this) {
-    //         stopConnecting?.let {
-    //             aapsLogger.warn(LTag.PUMP, "Already connecting: $stopConnecting")
-    //             return
-    //         }
-    //         val stop = CountDownLatch(1)
-    //         stopConnecting = stop
-    //     }
-    //     thread(
-    //         start = true,
-    //         name = "ConnectionThread",
-    //     ) {
-    //         try {
-    //             stopConnecting?.let {
-    //                 omnipodManager.connect(it).ignoreElements()
-    //                     .doOnComplete { podStateManager.incrementSuccessfulConnectionAttemptsAfterRetries() }
-    //                     .blockingAwait()
-    //             }
-    //         } catch (e: Exception) {
-    //             aapsLogger.info(LTag.PUMPCOMM, "connect error=$e")
-    //         } finally {
-    //             synchronized(this) {
-    //                 stopConnecting = null
-    //             }
-    //         }
-    //     }
-    // }
     override fun connect(reason: String) {
         aapsLogger.info(LTag.PUMP, "connect reason=$reason")
         podStateManager.bluetoothConnectionState = OmnipodDashPodStateManager.BluetoothConnectionState.CONNECTING
-
         synchronized(this) {
             stopConnecting?.let {
                 aapsLogger.warn(LTag.PUMP, "Already connecting: $stopConnecting")
                 return
             }
-            stopConnecting = CountDownLatch(1)
+            val stop = CountDownLatch(1)
+            stopConnecting = stop
         }
-
         thread(
             start = true,
             name = "ConnectionThread",
         ) {
             try {
-                var retries = 0
-                val maxRetries = 5
-                while (retries < maxRetries) {
-                    try {
-                        stopConnecting?.let { latch ->
-                            omnipodManager.connect(latch)
-                                .ignoreElements()
-                                .doOnComplete { podStateManager.incrementSuccessfulConnectionAttemptsAfterRetries() }
-                                .blockingAwait()
-                        }
-                        break
-                    } catch (e: Exception) {
-                        if (e is BusyException) {
-                            aapsLogger.warn(LTag.PUMPBTCOMM, "BusyException: retrying in 1 s")
-                            Thread.sleep(1000)
-                            retries++
-                        } else {
-                            aapsLogger.error(LTag.PUMPCOMM, "Error in connect loop: $e, forcing BLE reset")
-                            omnipodManager.disconnect(true)  // <— ferme le BluetoothGatt
-                            Thread.sleep(2000)
-                            retries++
-                        }
-                    }
+                stopConnecting?.let {
+                    omnipodManager.connect(it).ignoreElements()
+                        .doOnComplete { podStateManager.incrementSuccessfulConnectionAttemptsAfterRetries() }
+                        .blockingAwait()
                 }
-                if (retries >= maxRetries) {
-                    aapsLogger.error(LTag.PUMPCOMM, "Maximum retries reached, forcing BLE reset")
-                    omnipodManager.disconnect(true)
-                }
+            } catch (e: Exception) {
+                aapsLogger.info(LTag.PUMPCOMM, "connect error=$e")
             } finally {
-                synchronized(this) { stopConnecting = null }
+                synchronized(this) {
+                    stopConnecting = null
+                }
             }
         }
     }
-
-
 
     override fun disconnect(reason: String) {
         aapsLogger.info(LTag.PUMP, "disconnect reason=$reason")
@@ -753,10 +700,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
                 continue
             }
             val percent = (waited.toFloat() / estimatedDeliveryTimeSeconds) * 100
-            updateBolusProgressDialog(
-                rh.gs(app.aaps.core.interfaces.R.string.bolus_delivering, Round.roundTo(percent * requestedBolusAmount / 100, PodConstants.POD_PULSE_BOLUS_UNITS)),
-                percent.toInt()
-            )
+            rxBus.send(EventOverviewBolusProgress(rh, percent = percent.toInt()))
         }
 
         (1..BOLUS_RETRIES).forEach { tryNumber ->
@@ -784,10 +728,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
                 // delivery not complete yet
                 val remainingUnits = podStateManager.lastBolus!!.bolusUnitsRemaining
                 val percent = ((requestedBolusAmount - remainingUnits) / requestedBolusAmount) * 100
-                updateBolusProgressDialog(
-                    rh.gs(app.aaps.core.interfaces.R.string.bolus_delivering, Round.roundTo(requestedBolusAmount - remainingUnits, PodConstants.POD_PULSE_BOLUS_UNITS)),
-                    percent.toInt()
-                )
+                rxBus.send(EventOverviewBolusProgress(rh, percent = percent.toInt()))
 
                 val sleepSeconds = if (bolusCanceled)
                     BOLUS_RETRY_INTERVAL_MS

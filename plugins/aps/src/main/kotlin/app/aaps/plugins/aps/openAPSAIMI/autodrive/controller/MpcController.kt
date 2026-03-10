@@ -61,17 +61,18 @@ class MpcController @Inject constructor(
             val raFactor = (state.estimatedRa / 3.0).coerceIn(0.0, 1.0)
             
             if (state.estimatedRa > 3.0) {
+                // Raising floor to 10.0 to prevent hyper-aggressiveness
                 activeRInsulin = 10.0
-                activeMaxSmb = 3.0
+                activeMaxSmb = 5.0
             } else if (state.bg > 120.0) {
-                // Transition fluide entre 40 (stable) et 15 (montée)
-                activeRInsulin = 40.0 - (raFactor * 25.0)
-                activeMaxSmb = state.highBgMaxSMB
+                // Transition fluide entre 20 (stable) et 10 (montée)
+                activeRInsulin = 20.0 - (raFactor * 10.0)
+                activeMaxSmb = max(1.0, state.highBgMaxSMB)
             } else {
-                // Mode croisière : Coût élevé (80) pour éviter les à-coups, 
-                // descend vers 40 si un petitRa est détecté.
-                activeRInsulin = 80.0 - (raFactor * 40.0)
-                activeMaxSmb = state.maxSMB
+                // Mode croisière : Coût agile (30), 
+                // descend vers 20 si un Ra est détecté.
+                activeRInsulin = 30.0 - (raFactor * 10.0)
+                activeMaxSmb = max(0.5, state.maxSMB)
             }
         }
 
@@ -105,7 +106,15 @@ class MpcController @Inject constructor(
         // Si la dose est minime, on s'oriente vers un ajustement basal lisse (TBR)
         // La nuit, on autorise la TBR à répondre à des besoins plus grands (5x) pour éviter l'usage des micro-bolus
         val maxTbrMultiplier = if (state.isNight) 5.0 else 3.0
-        val tbrUph = min(bestDose * 12.0, profileBasal * maxTbrMultiplier)
+        var tbrUph = min(bestDose * 12.0, profileBasal * maxTbrMultiplier)
+        
+        // 🛡️ ANTI-SUSPENSION GUARD (Emergency Fix)
+        // L'IA ne doit JAMAIS couper la basale quand on est en Hyper (> 130) 
+        // à cause d'une prédiction de chute lointaine, surtout après un bolus manuel.
+        if (state.bg > 100.0 && tbrUph < profileBasal) {
+            tbrUph = profileBasal
+        }
+
         val smbU = max(0.0, bestDose - (tbrUph / 12.0))
 
         return AutoDriveCommand(
@@ -148,14 +157,16 @@ class MpcController @Inject constructor(
             // Pénalité asymétrique : l'hypo (BG < Cible) est lourdement pénalisée par rapport à l'hyper
             val errorBg = currentBg - activeTargetBg
             val scaledErrorBg = errorBg / 10.0 // Divide par 10 pour que le carré (divisé par 100) soit comparable au coût de RInsulin
-            val qPenalty = if (errorBg < 0) qBg * 5.0 else qBg
+            
+            // 🚀 REACTIVITY BOOST: On triple le poids de l'erreur en hyper (>0) pour écraser le pic
+            val qPenalty = if (errorBg < 0) qBg * 5.0 else qBg * 3.0
             
             totalCost += (qPenalty * scaledErrorBg * scaledErrorBg)
         }
 
-        // Ajout du coût de régularisation R (Linear-Quadratic)
-        // Le terme linéaire (doseU * 10) encourage les micro-actions correctives précoces.
-        totalCost += (activeRInsulin * doseU * doseU) + (activeRInsulin * 10.0 * doseU)
+        // Ajout du coût de régularisation R
+        // On réintroduit un léger terme linéaire pour tuer les micro-bolus inutiles (bruit)
+        totalCost += (activeRInsulin * doseU * doseU) + (activeRInsulin * 0.1 * doseU)
 
         // Pénalité infinie si la simulation franchit le seuil létal absolu (Safety fallback intra-MPC)
         // La nuit, on renforce la marge à +10 mg/dL pour forcer la coupure préventive des vagues de basales
