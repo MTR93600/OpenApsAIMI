@@ -16,7 +16,9 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.work.ExistingWorkPolicy
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -1113,5 +1115,22 @@ class ImportExportPrefsImpl @Inject constructor(
             }
             return ret
         }
+    }
+
+    override fun uploadFileToCloud(fileName: String, fileContent: ByteArray, mimeType: String, remotePath: String): Boolean {
+        // This is a bridge to CloudStorageManager which is in the same module
+        val provider = cloudStorageManager.getActiveProvider() ?: return false
+        
+        // We launch in IO dispatcher
+        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+            try {
+                if (provider.testConnection()) {
+                    provider.uploadFileToPath(fileName, fileContent, mimeType, remotePath)
+                }
+            } catch (e: Exception) {
+                aapsLogger.error(LTag.CORE, "Failed to upload file to cloud from bridge: $fileName", e)
+            }
+        }
+        return true // Assume started
     }
 }

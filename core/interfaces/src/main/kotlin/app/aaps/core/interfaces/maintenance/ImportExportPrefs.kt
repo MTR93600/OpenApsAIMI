@@ -19,6 +19,8 @@ interface ImportExportPrefs {
     fun exportSharedPreferencesNonInteractive(context: Context, password: String): Boolean
     fun exportUserEntriesCsv(activity: FragmentActivity)
     fun exportApsResult(algorithm: String?, input: JSONObject, output: JSONObject?)
+    fun uploadFileToCloud(fileName: String, fileContent: ByteArray, mimeType: String, remotePath: String): Boolean
+
 
     /**
      * Store for selected file from UI

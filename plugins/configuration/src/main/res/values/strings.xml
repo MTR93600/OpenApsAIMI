@@ -274,4 +274,5 @@
     <string name="authorization_status">Authorization Status</string>
     <string name="google_drive_authorized">Google Drive Authorized</string>
     <string name="google_drive_reauth_required">Please clear settings and re-authorize Google Drive</string>
+    <string name="aimi_backup_to_cloud">Backup AIMI to Cloud</string>
 </resources>
