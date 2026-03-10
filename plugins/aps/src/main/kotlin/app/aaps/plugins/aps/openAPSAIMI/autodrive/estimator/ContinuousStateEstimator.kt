@@ -52,7 +52,7 @@ class ContinuousStateEstimator @Inject constructor(
         // Si détecté, on booste l'accélération perçue pour réagir en temps réel comme le One+
         val isG6 = actualState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE
         val hardwareCompensatedVelocity = if (isG6 && actualState.bgVelocity > 0.5) {
-            actualState.bgVelocity * 1.5 // +50% de projection du signal dans le futur
+            actualState.bgVelocity * 1.25 // +25% lead (Total lead with orchestrator = +50%)
         } else {
             actualState.bgVelocity // Transmission directe temps réel (One+ / G7 / Libre)
         }

@@ -61,16 +61,17 @@ class MpcController @Inject constructor(
             val raFactor = (state.estimatedRa / 3.0).coerceIn(0.0, 1.0)
             
             if (state.estimatedRa > 3.0) {
-                activeRInsulin = 5.0
+                // Raising floor to 10.0 to prevent hyper-aggressiveness
+                activeRInsulin = 10.0
                 activeMaxSmb = 5.0
             } else if (state.bg > 120.0) {
-                // Transition fluide entre 15 (stable) et 5 (montée)
-                activeRInsulin = 15.0 - (raFactor * 10.0)
+                // Transition fluide entre 20 (stable) et 10 (montée)
+                activeRInsulin = 20.0 - (raFactor * 10.0)
                 activeMaxSmb = max(1.0, state.highBgMaxSMB)
             } else {
-                // Mode croisière : Coût agile (25), 
-                // descend vers 15 si un Ra est détecté.
-                activeRInsulin = 25.0 - (raFactor * 10.0)
+                // Mode croisière : Coût agile (30), 
+                // descend vers 20 si un Ra est détecté.
+                activeRInsulin = 30.0 - (raFactor * 10.0)
                 activeMaxSmb = max(0.5, state.maxSMB)
             }
         }
@@ -164,8 +165,8 @@ class MpcController @Inject constructor(
         }
 
         // Ajout du coût de régularisation R
-        // On repasse en purement Quadratique pour éviter l'effet "porte bloquée" du terme linéaire
-        totalCost += (activeRInsulin * doseU * doseU)
+        // On réintroduit un léger terme linéaire pour tuer les micro-bolus inutiles (bruit)
+        totalCost += (activeRInsulin * doseU * doseU) + (activeRInsulin * 0.1 * doseU)
 
         // Pénalité infinie si la simulation franchit le seuil létal absolu (Safety fallback intra-MPC)
         // La nuit, on renforce la marge à +10 mg/dL pour forcer la coupure préventive des vagues de basales
