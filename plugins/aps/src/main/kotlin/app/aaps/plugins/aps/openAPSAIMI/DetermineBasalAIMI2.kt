@@ -300,6 +300,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var iobCobCalculator: IobCobCalculator
     @Inject lateinit var activePlugin: ActivePlugin
     @Inject lateinit var basalDecisionEngine: BasalDecisionEngine
+    @Inject
+    lateinit var autodriveGater: app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.AutoDriveGater
     @Inject lateinit var activityManager: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityManager // Agnostic injection
     @Inject lateinit var glucoseStatusCalculatorAimi: GlucoseStatusCalculatorAimi
     @Inject lateinit var comparator: AimiSmbComparator
@@ -5309,30 +5311,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // ====================================================================================
         // 🧠 AUTODRIVE V3 MULTI-VARIABLES INJECTION (The "Super-iLet" implementation)
         // ====================================================================================
-        val isAutodriveActive = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIautoDriveActive)
-        
-        if (isAutodriveActive) {
-            aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🚦 [AUTODRIVE V3] Intercepting Control Loop...")
+        val isAutodriveConfigEnabled = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIautoDriveActive)
+        if (isAutodriveConfigEnabled) {
+            // 🚦 Gating: Autodrive V3 takes over ONLY if BG > 120 and rising (using filtered combinedDelta)
+            val gate = autodriveGater.shouldEngageV3(glucose_status.glucose, combinedDelta.toDouble())
             
-            // ISF must be approximated because we haven't reached the end of the function where variable_sens might receive last updates
-            // (But on this branch, dynamicIsfMgDl logic might be needed before Priority 4. Actually rT.variable_sens is evaluated later? 
-            // Wait, looking at the code around 5300, rT.variable_sens might not be completely finalized.
-            // But we will use the best available variableSensitivity and shortAvgDeltaAdj)
-            val adState = app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState(
-                bg = glucose_status.glucose,
-                bgVelocity = shortAvgDeltaAdj.toDouble(), // Delta compensé G6 
-                iob = iob_data_array.firstOrNull()?.iob ?: 0.0,
-                cob = mealData.mealCOB,
-                estimatedSI = (variableSensitivity.toDouble() / 10000.0), 
-                estimatedRa = 0.0,
-                patientWeightKg = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIweight),
-                physiologicalStressMask = doubleArrayOf(),
-                isNight = hourOfDay >= 23 || hourOfDay < 6,
-                sourceSensor = glucose_status.sourceSensor,
-                maxIOB = this.maxIob,
-                maxSMB = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIMaxSMB),
-                highBgMaxSMB = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIHighBGMaxSMB)
-            )
+            if (gate.engage) {
+                aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🚦 [AUTODRIVE V3] ${gate.reason} - Engaging Control Loop...")
+                
+                val adState = app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState(
+                    bg = glucose_status.glucose,
+                    bgVelocity = shortAvgDeltaAdj.toDouble(),
+                    iob = iob_data_array.firstOrNull()?.iob ?: 0.0,
+                    cob = mealData.mealCOB,
+                    estimatedSI = (variableSensitivity.toDouble() / 10000.0), 
+                    estimatedRa = 0.0,
+                    patientWeightKg = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIweight),
+                    physiologicalStressMask = doubleArrayOf(),
+                    isNight = hourOfDay >= 23 || hourOfDay < 6,
+                    sourceSensor = glucose_status.sourceSensor,
+                    maxIOB = this.maxIob,
+                    maxSMB = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIMaxSMB).coerceAtLeast(0.5),
+                    highBgMaxSMB = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIHighBGMaxSMB).coerceAtLeast(1.0)
+                )
 
             // 🤖 Hardware-Awareness Logging
             if (adState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE) {
@@ -5367,20 +5368,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
 
                 val effectiveBolus = rT.insulinReq ?: 0.0
-                val effectiveDuration = rT.duration ?: 0
-
-                if (effectiveBolus > 0.05 || effectiveDuration > 0 || (v3TbrRate != null && v3TbrRate <= 0.0)) {
-                    lastAutodriveActionTime = System.currentTimeMillis()
-                    consoleLog.add("🚀 AUTODRIVE_V3_APPLIED intent=$v3Smb actual=$effectiveBolus tbr=$v3TbrRate")
-                    logDecisionFinal("AUTODRIVE_V3", rT, bg, delta)
-                    return rT // 🛑 HARD RETURN: V3 take-over
-                } else {
-                    consoleLog.add("🚀 AUTODRIVE_V3_NOOP_FALLBACK (capped/no temp)")
-                    rT.insulinReq = 0.0
-                }
+                
+                consoleLog.add("🚀 ${gate.reason} intent=$v3Smb actual=$effectiveBolus tbr=$v3TbrRate")
+                logDecisionFinal("AUTODRIVE_V3", rT, bg, delta)
+                return rT 
             } else {
-                aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🛑 [AUTODRIVE V3] Safety Shield Blocked Action. Falling back to V2.")
+                consoleLog.add("🧘 ${gate.reason} (Falling back to Classic)")
+                aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🛑 [AUTODRIVE V3] Gated: ${gate.reason}")
             }
+        }
         }
         // ====================================================================================
 
@@ -5421,7 +5417,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              // Action is meaningful if we are giving insulin OR setting a HIGH temp (greater than current or 0). 
              // Strictly: "NE DOIT JAMAIS retourner Applied s’il n’a RIEN appliqué."
              
-             if (effectiveBolus > 0.05 || effectiveDuration > 0) {
+             if (effectiveBolus > 0.01 || effectiveDuration > 0) {
                  lastAutodriveActionTime = System.currentTimeMillis() // 🟢 Update Strict Cooldown
                  consoleLog.add("AUTODRIVE_APPLIED intent=${intentBolus} actual=$effectiveBolus")
                  logDecisionFinal("AUTODRIVE", rT, bg, delta)
@@ -7720,7 +7716,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 "smb=${"%.2f".format(lastSmbProposed)}->${"%.2f".format(lastSmbCapped)}->${"%.2f".format(smbFinalValue)} " +
                 "tbr=${"%.2f".format(tbr)} src=$lastDecisionSource"
         consoleLog.add(tickLine)
-    }
+    } // 🛑 END OF determine_basal
+
 
     // ==========================================
     // 🛡️ PRIORITY 1: SAFETY (LGS/HYPO)
@@ -8035,7 +8032,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleLog.add(rT.reason.toString())
         return rT
     }
-
 }
 
 enum class AutodriveState {

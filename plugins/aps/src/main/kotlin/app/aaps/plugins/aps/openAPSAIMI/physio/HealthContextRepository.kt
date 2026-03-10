@@ -84,7 +84,7 @@ class HealthContextRepository @Inject constructor(
         val snapshot = HealthContextSnapshot(
             stepsLast15m = steps15,
             stepsLast60m = steps60,
-            activityState = if (steps15 > 200) "ACTIVE" else "IDLE", // Lowered threshold for sensitivity
+            activityState = if (steps15 > 1000) "ACTIVE" else "IDLE", 
             hrNow = currentHR,
             hrAvg15m = currentHR, // Approximation if simple point
             hrvRmssd = hrv,

@@ -61,17 +61,17 @@ class MpcController @Inject constructor(
             val raFactor = (state.estimatedRa / 3.0).coerceIn(0.0, 1.0)
             
             if (state.estimatedRa > 3.0) {
-                activeRInsulin = 10.0
-                activeMaxSmb = 3.0
+                activeRInsulin = 5.0
+                activeMaxSmb = 5.0
             } else if (state.bg > 120.0) {
-                // Transition fluide entre 25 (stable) et 10 (montée)
-                activeRInsulin = 25.0 - (raFactor * 15.0)
-                activeMaxSmb = state.highBgMaxSMB
+                // Transition fluide entre 15 (stable) et 5 (montée)
+                activeRInsulin = 15.0 - (raFactor * 10.0)
+                activeMaxSmb = max(1.0, state.highBgMaxSMB)
             } else {
-                // Mode croisière : Coût équilibré (40), 
-                // descend vers 25 si un Ra est détecté.
-                activeRInsulin = 40.0 - (raFactor * 15.0)
-                activeMaxSmb = state.maxSMB
+                // Mode croisière : Coût agile (25), 
+                // descend vers 15 si un Ra est détecté.
+                activeRInsulin = 25.0 - (raFactor * 10.0)
+                activeMaxSmb = max(0.5, state.maxSMB)
             }
         }
 
@@ -163,9 +163,9 @@ class MpcController @Inject constructor(
             totalCost += (qPenalty * scaledErrorBg * scaledErrorBg)
         }
 
-        // Ajout du coût de régularisation R (Linear-Quadratic)
-        // Le terme linéaire (doseU * 10) encourage les micro-actions correctives précoces.
-        totalCost += (activeRInsulin * doseU * doseU) + (activeRInsulin * 10.0 * doseU)
+        // Ajout du coût de régularisation R
+        // On repasse en purement Quadratique pour éviter l'effet "porte bloquée" du terme linéaire
+        totalCost += (activeRInsulin * doseU * doseU)
 
         // Pénalité infinie si la simulation franchit le seuil létal absolu (Safety fallback intra-MPC)
         // La nuit, on renforce la marge à +10 mg/dL pour forcer la coupure préventive des vagues de basales
