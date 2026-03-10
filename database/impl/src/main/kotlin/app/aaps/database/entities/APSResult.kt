@@ -44,6 +44,7 @@ data class APSResult(
         UNKNOWN,
         AMA,
         SMB,
+        AIMI,
         AUTO_ISF
     }
 }

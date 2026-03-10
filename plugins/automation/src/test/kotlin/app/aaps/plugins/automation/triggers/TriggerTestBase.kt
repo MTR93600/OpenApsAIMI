@@ -2,6 +2,7 @@ package app.aaps.plugins.automation.triggers
 
 import app.aaps.core.interfaces.aps.AutosensDataStore
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.receivers.ReceiverStatusStore
 import app.aaps.plugins.automation.AutomationPlugin
 import app.aaps.plugins.automation.services.LastLocationDataContainer
@@ -38,6 +39,7 @@ open class TriggerTestBase : TestBaseWithProfile() {
                 it.glucoseStatusProvider = smbGlucoseStatusProvider
                 it.dateUtil = dateUtil
                 it.profileUtil = profileUtil
+                it.ch = ch
             }
             if (it is TriggerBg) {
                 it.profileFunction = profileFunction

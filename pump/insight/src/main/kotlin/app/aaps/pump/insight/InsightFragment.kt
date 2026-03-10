@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.queue.Callback
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -35,6 +36,7 @@ class InsightFragment : DaggerFragment(), View.OnClickListener {
     @Inject lateinit var fabricPrivacy: FabricPrivacy
     @Inject lateinit var dateUtil: DateUtil
     @Inject lateinit var aapsSchedulers: AapsSchedulers
+    @Inject lateinit var ch: ConcentrationHelper
 
     private var _binding: LocalInsightFragmentBinding? = null
 
@@ -259,7 +261,7 @@ class InsightFragment : DaggerFragment(), View.OnClickListener {
     private fun getCartridgeStatusItem() {
         insightPlugin.cartridgeStatus?.let { cartridgeStatus ->
             binding.reservoirLevelLine.visibility = View.VISIBLE
-            val status: String = if (cartridgeStatus.isInserted) rh.gs(app.aaps.core.ui.R.string.format_insulin_units, cartridgeStatus.remainingAmount) else rh.gs(R.string.not_inserted)
+            val status: String = if (cartridgeStatus.isInserted) ch.insulinAmountString(cartridgeStatus.remainingAmount) else rh.gs(R.string.not_inserted)
             binding.reservoirLevel.text = status
         } ?: apply {
             binding.reservoirLevelLine.visibility = View.GONE
@@ -269,11 +271,11 @@ class InsightFragment : DaggerFragment(), View.OnClickListener {
     private fun getTDDItems() {
         insightPlugin.totalDailyDose?.let { tdd ->
             binding.tddBolusLine.visibility = View.VISIBLE
-            binding.tddBolus.text = rh.gs(app.aaps.core.ui.R.string.format_insulin_units, tdd.bolus)
+            binding.tddBolus.text = ch.insulinAmountString(tdd.bolus)
             binding.tddBasalLine.visibility = View.VISIBLE
-            binding.tddBasal.text = rh.gs(app.aaps.core.ui.R.string.format_insulin_units, tdd.basal)
+            binding.tddBasal.text = ch.insulinAmountString(tdd.basal)
             binding.tddTotalLine.visibility = View.VISIBLE
-            binding.tddTotal.text = rh.gs(app.aaps.core.ui.R.string.format_insulin_units, tdd.bolusAndBasal)
+            binding.tddTotal.text = ch.insulinAmountString(tdd.bolusAndBasal)
         } ?: apply {
             binding.tddBolusLine.visibility = View.GONE
             binding.tddBasalLine.visibility = View.GONE
@@ -284,7 +286,7 @@ class InsightFragment : DaggerFragment(), View.OnClickListener {
     private fun getBaseBasalRateItem() {
         insightPlugin.activeBasalRate?.let { activeBasalRate ->
             binding.activeBasalRateLine.visibility = View.VISIBLE
-            binding.activeBasalRate.text = rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, activeBasalRate.activeBasalRate) + " (${activeBasalRate.activeBasalProfileName})"
+            binding.activeBasalRate.text = ch.basalRateString(activeBasalRate.activeBasalRate) + " (${activeBasalRate.activeBasalProfileName})"
         } ?: apply {
             binding.activeBasalRateLine.visibility = View.GONE
         }
@@ -313,7 +315,7 @@ class InsightFragment : DaggerFragment(), View.OnClickListener {
         } else {
             dateUtil.hourAgo(insightPlugin.lastBolusTimestamp, rh)
         }
-        binding.lastBolus.text = rh.gs(R.string.insight_last_bolus_formater, insightPlugin.lastBolusAmount, unit, ago)
+        binding.lastBolus.text = "${ch.insulinAmountString(insightPlugin.lastBolusAmount)} $ago"
     }
 
     private fun getBolusItems() {
@@ -337,7 +339,7 @@ class InsightFragment : DaggerFragment(), View.OnClickListener {
             else                -> null
         }?.let { label ->
             labelView.text = label
-            view.text = rh.gs(R.string.eb_formatter, activeBolus.remainingAmount, activeBolus.initialAmount, activeBolus.remainingDuration)
+            view.text = rh.gs(R.string.eb_formatter, ch.bolusProgressShort(activeBolus.remainingAmount, activeBolus.initialAmount), activeBolus.remainingDuration)
         }
     }
 

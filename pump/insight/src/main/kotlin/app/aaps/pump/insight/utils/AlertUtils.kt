@@ -1,5 +1,6 @@
 package app.aaps.pump.insight.utils
 
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.pump.insight.R
 import app.aaps.pump.insight.descriptors.AlertCategory
@@ -9,7 +10,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class AlertUtils @Inject constructor(private val rh: ResourceHelper) {
+class AlertUtils @Inject constructor(private val rh: ResourceHelper, private val ch: ConcentrationHelper) {
 
     fun getAlertCode(alertType: AlertType) = rh.gs(
         when (alertType) {
@@ -83,12 +84,12 @@ class AlertUtils @Inject constructor(private val rh: ResourceHelper) {
             AlertType.REMINDER_03    -> null
             AlertType.REMINDER_04    -> null
             AlertType.REMINDER_07    -> rh.gs(R.string.alert_r7_description, alert.tBRAmount, DecimalFormat("#0").format(hours.toLong()) + ":" + DecimalFormat("00").format(minutes.toLong()))
-            AlertType.WARNING_31     -> rh.gs(R.string.alert_w31_description, decimalFormat.format(alert.cartridgeAmount))
+            AlertType.WARNING_31     -> rh.gs(R.string.alert_w31_description, ch.insulinAmountString(alert.cartridgeAmount))
             AlertType.WARNING_32     -> rh.gs(R.string.alert_w32_description)
             AlertType.WARNING_33     -> rh.gs(R.string.alert_w33_description)
             AlertType.WARNING_34     -> rh.gs(R.string.alert_w34_description)
             AlertType.WARNING_36     -> rh.gs(R.string.alert_w36_description, alert.tBRAmount, DecimalFormat("#0").format(hours.toLong()) + ":" + DecimalFormat("00").format(minutes.toLong()))
-            AlertType.WARNING_38     -> rh.gs(R.string.alert_w38_description, decimalFormat.format(alert.programmedBolusAmount), decimalFormat.format(alert.deliveredBolusAmount))
+            AlertType.WARNING_38     -> rh.gs(R.string.alert_w38_description, ch.insulinAmountString(alert.programmedBolusAmount), ch.insulinAmountString(alert.deliveredBolusAmount))
             AlertType.WARNING_39     -> null
             AlertType.MAINTENANCE_20 -> rh.gs(R.string.alert_m20_description)
             AlertType.MAINTENANCE_21 -> rh.gs(R.string.alert_m21_description)

@@ -111,6 +111,14 @@
     <string name="wrong_pump_data">Data is coming from different pump. Change pump driver to reset pump state.</string>
     <string name="bg_label">BG</string>
     <string name="calibration">Calibration</string>
+    <string name="ins_concentration_confirmed">Insulin U%1$d confirmed</string>
+    <string name="ins_concentration_unchanged">Insulin U%1$d confirmed, Target Insulin concentration U%2$d has been cancelled</string>
+    <string name="concentration">Insulin Concentration</string>
+    <string name="concentration_label">Insulin: U</string>
+    <string name="concentration_title">For safety reason, you should confirm Insulin concentration put within your pump on each Reservoir Change to enable close loop:\n    - Previous Insulin concentration was: U%1$d</string>
+    <string name="concentration_title2">This is a safety parameter which can lead to under or overdosing!\nCan you please confirm Insulin concentration put within your pump?\n    - Previous Insulin Concentration was: U%1$d\n    - new Insulin Insulin Concentration is: U%2$d.</string>
+    <string name="concentration_not_confirmed">Insulin concentration is not confirmed or incorrect.\nClosed Loop is disabled</string>
+    <string name="concentration_confirmation">Confirm Insulin Concentration</string>
     <string name="alarminxmin">Run alarm in %1$d min</string>
     <string name="treatmentdeliveryerror">Bolus reported an error. Manually check real delivered insulin and carb amount</string>
     <string name="bolus_reminder">Bolus reminder</string>
@@ -178,9 +186,12 @@
     <string name="loopstatus_OAPS_result">OAPS RESULT:</string>
     <string name="extended_bolus_data_point_graph">%1$.2f U ( %2$.2f U/h )</string>
     <string name="temp_basal_tsf_fake_extended">%1$.2f U/h (%2$.2fE) @%3$s</string>
+    <string name="temp_basal_tsf_fake_extended_conc">%1$s (%2$.2fE) @%3$s</string>
     <string name="temp_basal_tsf_absolute">%1$.2f U/h @%2$s</string>
+    <string name="temp_basal_tsf_absolute_conc">%1$s @%2$s</string>
     <string name="temp_basal_tsf_percent">%1$.0f%% @%2$s</string>
     <string name="extended_bolus_full">E %1$.2f U/h @%2$s %3$s/%4$s min</string>
+    <string name="extended_bolus_conc_full">E %1$s @%2$s %3$s/%4$s min</string>
     <string name="extended_bolus_medium">%1$.2f U/h %2$s/%3$s\'</string>
     <string name="nav_export">Export settings</string>
     <string name="location_permission_not_granted">Location permission not granted. Allow in android settings.</string>
@@ -250,6 +261,7 @@
     <string name="pump_battery_change">Pump Battery Change</string>
     <string name="temporary_target">Temporary target</string>
     <string name="running_mode">Running mode</string>
+    <string name="dashboard_run_question">Run %1$s?</string>
     <string name="careportal_temporarytargetvalue">Temporary target value</string>
     <string name="careportal_temporarytargetcancel">Temporary target cancel</string>
     <string name="boluswizard">Bolus wizard</string>

@@ -5,7 +5,11 @@ import app.aaps.core.interfaces.overview.OverviewMenus
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.main.general.dashboard.AdjustmentDetailsActivity
+import app.aaps.plugins.main.general.dashboard.DashboardFragment
+import app.aaps.plugins.main.general.dashboard.DashboardModesActivity
 import app.aaps.plugins.main.general.overview.OverviewDataImpl
+import app.aaps.plugins.main.general.overview.OverviewEntryFragment
 import app.aaps.plugins.main.general.overview.OverviewFragment
 import app.aaps.plugins.main.general.overview.OverviewMenusImpl
 import app.aaps.plugins.main.general.overview.graphData.GraphData
@@ -25,7 +29,11 @@ import dagger.android.ContributesAndroidInjector
 abstract class OverviewModule {
 
     @ContributesAndroidInjector abstract fun contributesDismissNotificationReceiver(): DismissNotificationReceiver
+    @ContributesAndroidInjector abstract fun contributesOverviewEntryFragment(): OverviewEntryFragment
     @ContributesAndroidInjector abstract fun contributesOverviewFragment(): OverviewFragment
+    @ContributesAndroidInjector abstract fun contributesDashboardFragment(): DashboardFragment
+    @ContributesAndroidInjector abstract fun contributesDashboardModesActivity(): DashboardModesActivity
+    @ContributesAndroidInjector abstract fun contributesAdjustmentDetailsActivity(): AdjustmentDetailsActivity
     @ContributesAndroidInjector abstract fun graphDataInjector(): GraphData
 
     @Module

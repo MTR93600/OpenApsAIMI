@@ -6,7 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
-import app.aaps.core.data.configuration.Constants
+import app.aaps.wear.interaction.utils.Constants
 import app.aaps.core.interfaces.rx.events.EventWearToMobile
 import app.aaps.core.interfaces.rx.weardata.EventData.ActionProfileSwitchPreCheck
 import app.aaps.core.interfaces.utils.SafeParse

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- GlucoseRingView attributes (from feature/circle-top) -->
+    <declare-styleable name="GlucoseRingView">
+        <!-- Ring stroke width -->
+        <attr name="ringStrokeWidth" format="dimension" />
+        
+        <!-- Ring background color (inside circle) -->
+        <attr name="ringBackgroundColor" format="color" />
+        
+        <!-- Main text color (BG value) -->
+        <attr name="ringTextColor" format="color" />
+        
+        <!-- Sub text color (time + delta) -->
+        <attr name="ringSubTextColor" format="color" />
+        
+        <!-- Nose pointer length -->
+        <attr name="ringNoseLength" format="dimension" />
+        
+        <!-- Nose pointer width -->
+        <attr name="ringNoseWidth" format="dimension" />
+        
+        <!-- Use stepped colors (vs gradient) -->
+        <attr name="glucoseRingUseSteppedColors" format="boolean" />
+        
+        <!-- Step thresholds (mg/dL) -->
+        <attr name="glucoseRingStep1MaxMgdl" format="float" />
+        <attr name="glucoseRingStep2MaxMgdl" format="float" />
+        <attr name="glucoseRingStep3MaxMgdl" format="float" />
+        
+        <!-- Step colors -->
+        <attr name="glucoseRingStepColor1" format="color" />
+        <attr name="glucoseRingStepColor2" format="color" />
+        <attr name="glucoseRingStepColor3" format="color" />
+        <attr name="glucoseRingStepColor4" format="color" />
+    </declare-styleable>
+</resources>

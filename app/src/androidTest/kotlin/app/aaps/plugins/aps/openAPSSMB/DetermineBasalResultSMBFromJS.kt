@@ -1,19 +1,17 @@
 package app.aaps.plugins.aps.openAPSSMB
 
-import app.aaps.core.interfaces.aps.Predictions
+import app.aaps.core.interfaces.aps.VariableSensitivityResult
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.utils.DateUtil
-import app.aaps.plugins.aps.openAPS.APSResultObject
+import app.aaps.core.objects.aps.APSResultObject
 import dagger.android.HasAndroidInjector
 import org.json.JSONException
 import org.json.JSONObject
 import javax.inject.Inject
 
-class DetermineBasalResultSMBFromJS private constructor(injector: HasAndroidInjector) : APSResultObject(injector) {
+open class DetermineBasalResultSMB internal constructor(injector: HasAndroidInjector) : APSResultObject(injector), VariableSensitivityResult {
 
     @Inject lateinit var dateUtil: DateUtil
-
-    private var json: JSONObject? = null
 
     private var eventualBG = 0.0
     private var snoozeBG = 0.0
@@ -64,56 +62,21 @@ class DetermineBasalResultSMBFromJS private constructor(injector: HasAndroidInje
         }
     }
 
-    override fun newAndClone(): DetermineBasalResultSMBFromJS {
-        val newResult = DetermineBasalResultSMBFromJS(injector)
+    override fun newAndClone(): DetermineBasalResultSMB {
+        val newResult = DetermineBasalResultSMB(injector)
         doClone(newResult)
         newResult.eventualBG = eventualBG
         newResult.snoozeBG = snoozeBG
-        newResult.json = json
         return newResult
     }
 
-    override fun json(): JSONObject? = json
-
-    override fun predictions(): Predictions {
-        val predictions = Predictions()
-
-        json?.let { json ->
-            if (json.has("predBGs")) {
-                val predBGs = json.getJSONObject("predBGs")
-                if (predBGs.has("IOB")) {
-                    val iob = predBGs.getJSONArray("IOB")
-                    val list = mutableListOf<Int>()
-                    for (i in 1 until iob.length()) list.add(iob.getInt(i))
-                    predictions.IOB = list
-                }
-                if (predBGs.has("aCOB")) {
-                    val iob = predBGs.getJSONArray("aCOB")
-                    val list = mutableListOf<Int>()
-                    for (i in 1 until iob.length()) list.add(iob.getInt(i))
-                    predictions.aCOB = list
-                }
-                if (predBGs.has("COB")) {
-                    val iob = predBGs.getJSONArray("COB")
-                    val list = mutableListOf<Int>()
-                    for (i in 1 until iob.length()) list.add(iob.getInt(i))
-                    predictions.COB = list
-                }
-                if (predBGs.has("UAM")) {
-                    val iob = predBGs.getJSONArray("UAM")
-                    val list = mutableListOf<Int>()
-                    for (i in 1 until iob.length()) list.add(iob.getInt(i))
-                    predictions.UAM = list
-                }
-                if (predBGs.has("ZT")) {
-                    val iob = predBGs.getJSONArray("ZT")
-                    val list = mutableListOf<Int>()
-                    for (i in 1 until iob.length()) list.add(iob.getInt(i))
-                    predictions.ZT = list
-                }
-            }
+    override fun json(): JSONObject? {
+        try {
+            return JSONObject(json.toString())
+        } catch (e: JSONException) {
+            aapsLogger.error(LTag.APS, "Error converting determine-basal result to JSON", e)
         }
-        return predictions
+        return null
     }
 
     init {

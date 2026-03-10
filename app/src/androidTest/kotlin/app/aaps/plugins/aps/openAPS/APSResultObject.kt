@@ -18,6 +18,7 @@ import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -35,6 +36,7 @@ import org.json.JSONObject
 import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.round
 
 /**
  * Created by mike on 09.06.2016.
@@ -49,6 +51,7 @@ open class APSResultObject(protected val injector: HasAndroidInjector) : APSResu
     @Inject lateinit var profileFunction: ProfileFunction
     @Inject lateinit var rh: ResourceHelper
     @Inject lateinit var decimalFormatter: DecimalFormatter
+    @Inject lateinit var ch: ConcentrationHelper
     override fun with(result: RT): APSResult = this
 
     init {
@@ -68,6 +71,8 @@ open class APSResultObject(protected val injector: HasAndroidInjector) : APSResu
     override var hasPredictions = false
     override var smb = 0.0 // super micro bolus in units
     override var deliverAt: Long = 0
+
+
     override var targetBG = 0.0
     override var carbsReq = 0
     override var carbsReqWithin = 0
@@ -88,6 +93,8 @@ open class APSResultObject(protected val injector: HasAndroidInjector) : APSResu
     override var oapsProfileAutoIsf: OapsProfileAutoIsf? = null
     override var mealData: MealData? = null
     override var autosensResult: AutosensResult? = null
+    override var isHypoRisk: Boolean = false
+    override var oapsProfileAimi: app.aaps.core.interfaces.aps.OapsProfileAimi? = null
 
     override fun predictions(): Predictions? = null
     override fun rawData(): Any = Object()
@@ -119,6 +126,22 @@ open class APSResultObject(protected val injector: HasAndroidInjector) : APSResu
             carbsRequiredText
         } else rh.gs(R.string.nochangerequested)
     }
+    /*fun updateAPSResult(delta: Float, bg: Float, basalaimi: Float, targetBG: Double) {
+        val newRate = round(basalaimi.toDouble() * delta)
+        val newDuration = 30
+        if (delta <= 0.0f && bg <= 140.0f) {
+            this.rate = 0.0
+            this.duration = newDuration
+            this.isTempBasalRequested = true
+            this.isChangeRequested
+        } else if (delta > 0.0f && bg > 80) {
+            this.rate = newRate.toDouble()
+            this.duration = newDuration
+            this.isTempBasalRequested = true
+            this.isChangeRequested
+        }
+        this.targetBG = targetBG
+    }*/
 
     override fun resultAsSpanned(): Spanned {
         val pump = activePlugin.activePump
@@ -173,6 +196,8 @@ open class APSResultObject(protected val injector: HasAndroidInjector) : APSResu
         newResult.carbsReq = carbsReq
         newResult.carbsReqWithin = carbsReqWithin
         newResult.targetBG = targetBG
+        newResult.isHypoRisk = isHypoRisk
+        newResult.oapsProfileAimi = oapsProfileAimi
     }
 
     override fun json(): JSONObject? {
@@ -297,7 +322,7 @@ open class APSResultObject(protected val injector: HasAndroidInjector) : APSResu
                     aapsLogger.debug(LTag.APS, "FALSE: No temp running, asking cancel temp")
                     return false
                 }
-                if (activeTemp != null && abs(percent - activeTemp.convertedToPercent(now, profile)) < pump.pumpDescription.basalStep) {
+                if (activeTemp != null && abs(percent - activeTemp.convertedToPercent(now, profile)) < ch.fromPump(pump.pumpDescription.basalStep)) {
                     aapsLogger.debug(LTag.APS, "FALSE: Temp equal")
                     return false
                 }
@@ -333,7 +358,7 @@ open class APSResultObject(protected val injector: HasAndroidInjector) : APSResu
                     aapsLogger.debug(LTag.APS, "FALSE: No temp running, asking cancel temp")
                     return false
                 }
-                if (activeTemp != null && abs(rate - activeTemp.convertedToAbsolute(now, profile)) < pump.pumpDescription.basalStep) {
+                if (activeTemp != null && abs(rate - activeTemp.convertedToAbsolute(now, profile)) < ch.fromPump(pump.pumpDescription.basalStep)) {
                     aapsLogger.debug(LTag.APS, "FALSE: Temp equal")
                     return false
                 }

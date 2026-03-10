@@ -23,6 +23,7 @@ dependencies {
     implementation(project(":core:utils"))
     implementation(project(":core:validators"))
     implementation(project(":shared:impl"))
+    implementation(project(":plugins:aps"))  // For AIMI Auditor UI components
 
     testImplementation(project(":implementation"))
     testImplementation(project(":plugins:aps"))

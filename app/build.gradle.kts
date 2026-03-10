@@ -1,23 +1,38 @@
+import org.gradle.kotlin.dsl.android
 import org.gradle.kotlin.dsl.debugImplementation
 import java.text.SimpleDateFormat
 import java.util.Date
+import org.gradle.kotlin.dsl.dependencies
+import org.gradle.kotlin.dsl.project
+
+// Fixes errors in KSP task dependency
+import org.gradle.api.GradleException
 
 plugins {
-    alias(libs.plugins.ksp)
     id("com.android.application")
-    id("kotlin-android")
+    kotlin("android")
+    kotlin("kapt")
+    //alias(libs.plugins.ksp)
     id("com.google.gms.google-services")
     id("com.google.firebase.crashlytics")
     id("android-app-dependencies")
     id("test-app-dependencies")
     id("jacoco-app-dependencies")
+
 }
 
 repositories {
     mavenCentral()
     google()
+    maven("https://jitpack.io")
 }
 
+fun DependencyHandler.`kapt`(dependencyNotation: Any): Dependency? =
+    add("kapt", dependencyNotation)
+
+// -----------------------------------------------------------------------------
+// Fonctions personnalisées
+// -----------------------------------------------------------------------------
 fun generateGitBuild(): String {
     try {
         val processBuilder = ProcessBuilder("git", "describe", "--always")
@@ -81,11 +96,18 @@ fun allCommitted(): Boolean {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Configuration Android
+// -----------------------------------------------------------------------------
 android {
+    compileSdk = 36
+    // Si tu n'as pas de variable pour compileSdk, mets-le en dur, ex. 34
+    // compileSdk = Versions.compileSdk
 
     namespace = "app.aaps"
 
     defaultConfig {
+        // Remplace par des valeurs fixes si besoin (ex. 21, 34, etc.)
         minSdk = Versions.minSdk
         targetSdk = Versions.targetSdk
 
@@ -136,6 +158,38 @@ android {
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Configuration de signature (release)
+    // -------------------------------------------------------------------------
+    signingConfigs {
+        // On peut l'appeler "release" ou un autre nom
+        create("release") {
+            // Seule storeFile attend un File
+            storeFile = file(System.getenv("KEYSTORE_FILE") ?: "dummy.jks")
+            // Les autres sont des Strings
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "dummy"
+            keyAlias = System.getenv("KEY_ALIAS") ?: "dummy"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: "dummy"
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Build Types
+    // -------------------------------------------------------------------------
+    buildTypes {
+        getByName("release") {
+            // Active ou non le minify
+            // minifyEnabled true
+            // shrinkResources true
+
+            // Associe la config "release"
+            signingConfig = signingConfigs.getByName("release")
+        }
+        getByName("debug") {
+            // config debug
+        }
+    }
+
     useLibrary("org.apache.http.legacy")
 
     //Deleting it causes a binding error
@@ -145,11 +199,19 @@ android {
     }
 }
 
+// -----------------------------------------------------------------------------
+// allprojects / repositories
+// -----------------------------------------------------------------------------
 allprojects {
     repositories {
+        mavenCentral()
+        google()
     }
 }
 
+// -----------------------------------------------------------------------------
+// Dependencies
+// -----------------------------------------------------------------------------
 dependencies {
     // in order to use internet"s versions you"d need to enable Jetifier again
     // https://github.com/nightscout/graphview.git
@@ -180,6 +242,7 @@ dependencies {
     implementation(project(":implementation"))
     implementation(project(":database:impl"))
     implementation(project(":database:persistence"))
+    implementation(project(":pump:apex"))
     implementation(project(":pump:combov2"))
     implementation(project(":pump:dana"))
     implementation(project(":pump:danars"))
@@ -206,20 +269,25 @@ dependencies {
     debugImplementation(libs.com.squareup.leakcanary.android)
 
 
-    kspAndroidTest(libs.com.google.dagger.android.processor)
+    //kspAndroidTest(libs.com.google.dagger.android.processor)
 
     /* Dagger2 - We are going to use dagger.android which includes
      * support for Activity and fragment injection so we need to include
      * the following dependencies */
-    ksp(libs.com.google.dagger.android.processor)
-    ksp(libs.com.google.dagger.compiler)
+    kapt(libs.com.google.dagger.android.processor)
+    kapt(libs.com.google.dagger.compiler)
 
     // MainApp
     api(libs.com.uber.rxdogtag2.rxdogtag)
+    // MPAndroidChart for comparator
+    implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
     // Remote config
     api(libs.com.google.firebase.config)
 }
 
+// -----------------------------------------------------------------------------
+// Dernières lignes (messages console)
+// -----------------------------------------------------------------------------
 println("-------------------")
 println("isMaster: ${isMaster()}")
 println("gitAvailable: ${gitAvailable()}")
@@ -228,7 +296,7 @@ println("-------------------")
 if (!gitAvailable()) {
     throw GradleException("GIT system is not available. On Windows try to run Android Studio as an Administrator. Check if GIT is installed and Studio have permissions to use it")
 }
-if (isMaster() && !allCommitted()) {
-    throw GradleException("There are uncommitted changes. Clone sources again as described in wiki and do not allow gradle update")
-}
 
+/*if (isMaster() && !allCommitted()) {
+    throw GradleException("There are uncommitted changes.")
+}*/

@@ -6,10 +6,10 @@ import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.profile.Profile
-import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpEnactResult
@@ -53,7 +53,7 @@ class DanaRKoreanExecutionService : AbstractDanaRExecutionService() {
     @Inject lateinit var danaRKoreanPlugin: DanaRKoreanPlugin
     @Inject lateinit var commandQueue: CommandQueue
     @Inject lateinit var messageHashTableRKorean: MessageHashTableRKorean
-    @Inject lateinit var profileFunction: ProfileFunction
+    @Inject lateinit var ch: ConcentrationHelper
 
     override fun messageHashTable() = messageHashTableRKorean
 
@@ -86,7 +86,7 @@ class DanaRKoreanExecutionService : AbstractDanaRExecutionService() {
             rxBus.send(EventPumpStatusChanged(rh.gs(R.string.gettingbolusstatus)))
             val now = System.currentTimeMillis()
             danaPump.lastConnection = now
-            val profile: Profile? = profileFunction.getProfile()
+            val profile: Profile? = ch.getProfile()
             if (profile != null && abs(danaPump.currentBasal - profile.getBasal()) >= danaRKoreanPlugin.pumpDescription.basalStep) {
                 rxBus.send(EventPumpStatusChanged(rh.gs(R.string.gettingpumpsettings)))
                 mSerialIOThread?.sendMessage(MsgSettingBasal(injector))

@@ -40,7 +40,7 @@ internal class TizenPluginTest : TestBaseWithProfile() {
     fun setUp() {
         sut = TizenPlugin(
             aapsLogger, rh, aapsSchedulers, context, dateUtil, fabricPrivacy, rxBus, iobCobCalculator, processedTbrEbData, profileFunction, preferences, processedDeviceStatusData,
-            loop, activePlugin, receiverStatusStore, config, glucoseStatusProvider, pumpStatusProvider
+            loop, activePlugin, receiverStatusStore, config, glucoseStatusProvider, ch, pumpStatusProvider
         )
         whenever(iobCobCalculator.ads).thenReturn(autosensDataStore)
         whenever(autosensDataStore.lastBg()).thenReturn(InMemoryGlucoseValue(1000, 100.0, sourceSensor = SourceSensor.UNKNOWN))

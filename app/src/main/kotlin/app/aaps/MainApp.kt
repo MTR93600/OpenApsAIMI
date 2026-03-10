@@ -1,14 +1,22 @@
 package app.aaps
 
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.app.AlertDialog
 import android.bluetooth.BluetoothDevice
+import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.hardware.Sensor
+import android.hardware.SensorManager
 import android.net.ConnectivityManager
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
+import android.util.Log
 import androidx.lifecycle.ProcessLifecycleOwner
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.model.GlucoseUnit
@@ -24,6 +32,7 @@ import app.aaps.core.interfaces.configuration.ConfigBuilder
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -50,6 +59,8 @@ import app.aaps.implementation.plugin.PluginStore
 import app.aaps.implementation.receivers.NetworkChangeReceiver
 import app.aaps.plugins.configuration.keys.ConfigurationBooleanComposedKey
 import app.aaps.plugins.constraints.objectives.keys.ObjectivesLongComposedKey
+import app.aaps.plugins.aps.openAPSAIMI.StepService
+import app.aaps.plugins.main.general.overview.notifications.NotificationStore
 import app.aaps.plugins.main.general.themes.ThemeSwitcherPlugin
 import app.aaps.plugins.main.profile.keys.ProfileComposedBooleanKey
 import app.aaps.plugins.main.profile.keys.ProfileComposedDoubleKey
@@ -77,11 +88,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import rxdogtag2.RxDogTag
+import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Provider
 import kotlin.reflect.KMutableProperty
 import kotlin.reflect.full.declaredMemberProperties
+import android.provider.Settings
 
 class MainApp : DaggerApplication() {
 
@@ -118,6 +132,9 @@ class MainApp : DaggerApplication() {
 
         // Here should be everything injected
         aapsLogger.debug("onCreate")
+        aapsLogger.debug("onCreate - début")
+        copyModelToInternalStorage(this)
+        aapsLogger.debug("onCreate - après copyModelToFileSystem")
         ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleListener.get())
         // Configure LeakCanary with Firebase reporting
         // Memory leaks will be uploaded to Firebase Crashlytics via FabricPrivacy.logException
@@ -191,8 +208,88 @@ class MainApp : DaggerApplication() {
             Widget.updateWidget(this@MainApp, "ScheduleEveryMin")
         }
         handler.postDelayed(refreshWidget, 60000)
+        val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        try {
+            val stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
+            if (stepSensor != null) {
+                // 🛡️ CRITICAL FIX: Check Permission before Registering (Prevents Crash on Fresh Install)
+                val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    androidx.core.content.ContextCompat.checkSelfPermission(
+                        this, 
+                        android.Manifest.permission.ACTIVITY_RECOGNITION
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                } else {
+                    true
+                }
+
+                if (hasPermission) {
+                    sensorManager.registerListener(StepService, stepSensor, SensorManager.SENSOR_DELAY_NORMAL)
+                    aapsLogger.debug("StepService registered")
+                } else {
+                    aapsLogger.debug("StepService SKIPPED (No Permission)")
+                }
+            }
+        } catch (e: Exception) {
+            aapsLogger.error("StepService registration failed", e)
+        }
         config.appInitialized = true
         aapsLogger.debug("doInit end")
+    }
+
+    private fun copyModelToInternalStorage(context: Context) {
+        aapsLogger.debug("copyModelToInternalStorage - début")
+        try {
+            val assetManager = context.assets
+            aapsLogger.debug("copyModelToInternalStorage - assetManager : $assetManager")
+
+            // Définition du répertoire cible dans le stockage externe
+            val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS/ml")
+            if (!externalDir.exists() && !externalDir.mkdirs()) {
+                Log.e("ModelCopyError", "Impossible de créer le répertoire : ${externalDir.absolutePath}")
+                return
+            }
+
+            // Fonction générique pour copier les fichiers
+            fun copyAssetToFile(assetName: String, destinationFile: File) {
+                try {
+                    aapsLogger.debug("copyModelToInternalStorage - Copie de $assetName vers ${destinationFile.absolutePath}")
+                    assetManager.open(assetName).use { inputStream ->
+                        FileOutputStream(destinationFile).use { outputStream ->
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
+                    Log.d("ModelCopy", "Fichier '$assetName' copié dans ${destinationFile.absolutePath}")
+                } catch (e: Exception) {
+                    Log.e("ModelCopyError", "Erreur lors de la copie de $assetName : ${e.message}")
+                }
+            }
+
+            // Copie des fichiers nécessaires
+            copyAssetToFile("model.tflite", File(externalDir, "model.tflite"))
+            copyAssetToFile("modelUAM.tflite", File(externalDir, "modelUAM.tflite"))
+
+            // Vérification si les fichiers existent après copie
+            val modelFilePath = "${externalDir.absolutePath}/model.tflite"
+            val modelFile = File(modelFilePath)
+            if (modelFile.exists()) {
+                Log.d("FileCheck", "Le fichier existe à l'emplacement $modelFilePath")
+            } else {
+                Log.e("FileCheck", "Le fichier n'existe pas à l'emplacement $modelFilePath")
+            }
+
+            val uamFilePath = "${externalDir.absolutePath}/modelUAM.tflite"
+            val uamFile = File(uamFilePath)
+            if (uamFile.exists()) {
+                Log.d("FileCheck", "Le fichier existe à l'emplacement $uamFilePath")
+            } else {
+                Log.e("FileCheck", "Le fichier n'existe pas à l'emplacement $uamFilePath")
+            }
+
+            aapsLogger.debug("copyModelToInternalStorage - Copie terminée")
+
+        } catch (e: Exception) {
+            Log.e("ModelCopyError", "Erreur globale lors de la copie: ${e.message}")
+        }
     }
 
     private fun setRxErrorHandler() {

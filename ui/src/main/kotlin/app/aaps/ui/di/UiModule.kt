@@ -3,6 +3,7 @@ package app.aaps.ui.di
 import dagger.Module
 import dagger.android.ContributesAndroidInjector
 import app.aaps.ui.activities.BolusProgressHelperActivity
+import app.aaps.ui.activities.ConcentrationActivity
 import app.aaps.ui.activities.ErrorHelperActivity
 import app.aaps.ui.activities.ProfileHelperActivity
 import app.aaps.ui.activities.QuickWizardListActivity
@@ -23,6 +24,7 @@ import app.aaps.ui.dialogs.BolusProgressDialog
 import app.aaps.ui.dialogs.CalibrationDialog
 import app.aaps.ui.dialogs.CarbsDialog
 import app.aaps.ui.dialogs.CareDialog
+import app.aaps.ui.dialogs.ConcentrationDialog
 import app.aaps.ui.dialogs.EditQuickWizardDialog
 import app.aaps.ui.dialogs.ExtendedBolusDialog
 import app.aaps.ui.dialogs.FillDialog
@@ -53,6 +55,7 @@ abstract class UiModule {
     @ContributesAndroidInjector abstract fun contributesCalibrationDialog(): CalibrationDialog
     @ContributesAndroidInjector abstract fun contributesCarbsDialog(): CarbsDialog
     @ContributesAndroidInjector abstract fun contributesCareDialog(): CareDialog
+    @ContributesAndroidInjector abstract fun contributesConcentrationDialog(): ConcentrationDialog
     @ContributesAndroidInjector abstract fun contributesWizardInfoDialog(): WizardInfoDialog
     @ContributesAndroidInjector abstract fun contributesProfileViewerDialog(): ProfileViewerDialog
     @ContributesAndroidInjector abstract fun contributesExtendedBolusDialog(): ExtendedBolusDialog
@@ -71,6 +74,7 @@ abstract class UiModule {
 
     @ContributesAndroidInjector abstract fun contributesTDDStatsActivity(): TDDStatsActivity
     @ContributesAndroidInjector abstract fun contributeBolusProgressHelperActivity(): BolusProgressHelperActivity
+    @ContributesAndroidInjector abstract fun contributeConcentrationActivity(): ConcentrationActivity
     @ContributesAndroidInjector abstract fun contributeErrorHelperActivity(): ErrorHelperActivity
     @ContributesAndroidInjector abstract fun contributesStatsActivity(): StatsActivity
     @ContributesAndroidInjector abstract fun contributesSurveyActivity(): SurveyActivity

@@ -1,5 +1,6 @@
 package app.aaps.core.interfaces.aps
 
+import android.annotation.SuppressLint
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -15,6 +16,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
+@SuppressLint("UnsafeOptInUsageError")
 @Serializable
 data class RT(
     var algorithm: APSResult.Algorithm = APSResult.Algorithm.UNKNOWN,
@@ -43,10 +45,41 @@ data class RT(
     var IOB: Double? = null,
     var variable_sens: Double? = null,
     var isfMgdlForCarbs: Double? = null, // used to pass to AAPS client
+    @Serializable(with = StringBuilderSerializer::class)
+    var aimilog: StringBuilder = StringBuilder(),
 
-
+    @Serializable(with = ConsoleLogSerializer::class)
     var consoleLog: MutableList<String>? = null,
-    var consoleError: MutableList<String>? = null
+    var consoleError: MutableList<String>? = null,
+    var isHypoRisk: Boolean = false,
+    
+    // 🧠 AI Decision Auditor fields
+    var aiAuditorEnabled: Boolean = false,
+    var aiAuditorVerdict: String? = null,       // CONFIRM, SOFTEN, SHIFT_TO_TBR
+    var aiAuditorConfidence: Double? = null,    // 0.0-1.0
+    var aiAuditorModulation: String? = null,    // Description of modulation applied
+    var aiAuditorRiskFlags: String? = null,     // Comma-separated risk flags
+    
+    // 📊 Learners state (for RT visibility)
+    var learnersInfo: String? = null,           // Summary: "Basal×1.05, ISF:42, React:0.95x"
+    
+    // 🌀 Phase-Space Trajectory Control (for trending/graphing)
+    var trajectoryEnabled: Boolean = false,            // Feature flag status
+    var trajectoryType: String? = null,                // OPEN_DIVERGING, CLOSING_CONVERGING, TIGHT_SPIRAL, STABLE_ORBIT
+    var trajectoryCurvature: Double? = null,           // κ: 0-1+ (>0.3 = tight spiral)
+    var trajectoryConvergence: Double? = null,         // v_conv: mg/dL/min (+ve = converging)
+    var trajectoryCoherence: Double? = null,           // ρ: -1 to 1 (>0.6 = good response)
+    var trajectoryEnergy: Double? = null,              // E: insulin units (>2 = stacking)
+    var trajectoryOpenness: Double? = null,            // Θ: 0-1 (>0.7 = diverging)
+    var trajectoryHealth: Int? = null,                 // Overall health: 0-100%
+    var trajectoryModulationActive: Boolean = false,   // Was modulation applied?
+    var trajectoryWarningsCount: Int? = null,          // Number of warnings generated
+    var trajectoryConvergenceETA: Int? = null          // Predicted minutes to stable orbit
+,
+    // 🎯 Context Module fields
+    var contextEnabled: Boolean = false,               // Context Module feature flag
+    var contextIntentCount: Int = 0,                   // Number of active context intents
+    var contextModulation: Double = 1.0                // SMB modulation factor (0.5-1.1)
 ) {
 
     fun serialize() = Json.encodeToString(serializer(), this)
@@ -61,6 +94,66 @@ data class RT(
 
         override fun deserialize(decoder: Decoder): StringBuilder {
             return StringBuilder().append(decoder.decodeString())
+        }
+    }
+
+    /**
+     * 🛡️ Custom serializer for consoleLog that sanitizes decorative characters
+     * 
+     * Purpose: Keep visual logs with emojis for display, but serialize clean ASCII-only JSON
+     * 
+     * Removes:
+     * - Emojis (📊 🍱 ⚠️ etc.)
+     * - Box drawing characters (│ └ etc.)  
+     * - Unicode arrows (→ × etc.)
+     * - Control characters (\0 \n \t etc.)
+     * 
+     * Preserves:
+     * - ASCII printable characters (0x20-0x7E)
+     * - Essential content (numbers, letters, punctuation)
+     */
+    object ConsoleLogSerializer : KSerializer<MutableList<String>?> {
+        
+        override val descriptor: SerialDescriptor = 
+            kotlinx.serialization.descriptors.listSerialDescriptor<String>()
+        
+        override fun serialize(encoder: Encoder, value: MutableList<String>?) {
+            if (value == null) {
+                encoder.encodeNull()
+                return
+            }
+            
+            // Sanitize each log entry before serialization
+            val sanitized = value.map { entry ->
+                entry
+                    // Remove all non-ASCII characters (emojis, unicode, etc.)
+                    .replace(Regex("[^\\x20-\\x7E]"), "")
+                    // Collapse multiple spaces into one
+                    .replace(Regex("\\s+"), " ")
+                    // Trim leading/trailing spaces
+                    .trim()
+            }.filter { it.isNotEmpty() }  // Remove empty entries
+            
+            // Encode as list
+            val compositeEncoder = encoder.beginCollection(descriptor, sanitized.size)
+            sanitized.forEachIndexed { index, item ->
+                compositeEncoder.encodeStringElement(descriptor, index, item)
+            }
+            compositeEncoder.endStructure(descriptor)
+        }
+        
+        override fun deserialize(decoder: Decoder): MutableList<String>? {
+            // Simple deserialization: decode as list normally
+            val compositeDecoder = decoder.beginStructure(descriptor)
+            val list = mutableListOf<String>()
+            
+            while (true) {
+                val index = compositeDecoder.decodeElementIndex(descriptor)
+                if (index == kotlinx.serialization.encoding.CompositeDecoder.DECODE_DONE) break
+                list.add(compositeDecoder.decodeStringElement(descriptor, index))
+            }
+            compositeDecoder.endStructure(descriptor)
+            return list
         }
     }
 

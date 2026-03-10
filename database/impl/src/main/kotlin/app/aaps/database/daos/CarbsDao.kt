@@ -62,4 +62,7 @@ internal interface CarbsDao : TraceableDao<Carbs> {
 
     @Query("SELECT * FROM $TABLE_CARBS WHERE dateCreated > :since AND dateCreated <= :until LIMIT :limit OFFSET :offset")
     fun getNewEntriesSince(since: Long, until: Long, limit: Int, offset: Int): List<Carbs>
+
+    @Query("SELECT * FROM $TABLE_CARBS WHERE isValid = 1 AND referenceId IS NULL AND timestamp < time() ORDER BY timestamp DESC LIMIT 1")
+    fun getMostRecentCarbByDate(): Carbs?
 }

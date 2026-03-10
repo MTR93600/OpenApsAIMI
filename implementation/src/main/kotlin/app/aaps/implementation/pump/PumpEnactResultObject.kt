@@ -1,10 +1,11 @@
 package app.aaps.implementation.pump
 
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.resources.ResourceHelper
 import javax.inject.Inject
 
-class PumpEnactResultObject @Inject constructor(private val rh: ResourceHelper) : PumpEnactResult {
+class PumpEnactResultObject @Inject constructor(private val rh: ResourceHelper, private val ch: ConcentrationHelper) : PumpEnactResult {
 
     override var success = false // request was processed successfully (but possible no change was needed)
     override var enacted = false // request was processed successfully and change has been made
@@ -29,10 +30,10 @@ class PumpEnactResultObject @Inject constructor(private val rh: ResourceHelper) 
     override fun comment(comment: String): PumpEnactResultObject = this.also { it.comment = comment }
     override fun comment(comment: Int): PumpEnactResultObject = this.also { it.comment = rh.gs(comment) }
     override fun duration(duration: Int): PumpEnactResultObject = this.also { it.duration = duration }
-    override fun absolute(absolute: Double): PumpEnactResultObject = this.also { it.absolute = absolute }
+    override fun absolute(absolute: Double): PumpEnactResultObject = this.also { it.absolute = ch.fromPump(absolute) }
     override fun percent(percent: Int): PumpEnactResultObject = this.also { it.percent = percent }
     override fun isPercent(isPercent: Boolean): PumpEnactResultObject = this.also { it.isPercent = isPercent }
     override fun isTempCancel(isTempCancel: Boolean): PumpEnactResultObject = this.also { it.isTempCancel = isTempCancel }
-    override fun bolusDelivered(bolusDelivered: Double): PumpEnactResultObject = this.also { it.bolusDelivered = bolusDelivered }
+    override fun bolusDelivered(bolusDelivered: Double): PumpEnactResultObject = this.also { it.bolusDelivered = ch.fromPump(bolusDelivered) }
     override fun queued(queued: Boolean): PumpEnactResultObject = this.also { it.queued = queued }
 }

@@ -36,6 +36,7 @@ import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.constraints.PluginConstraints
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -95,6 +96,8 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.math.abs
+import app.aaps.plugins.aps.openAPSAIMI.GlucoseStatusCalculatorAimi
+
 
 @Singleton
 class LoopPlugin @Inject constructor(
@@ -121,6 +124,8 @@ class LoopPlugin @Inject constructor(
     private val uiInteraction: UiInteraction,
     private val pumpEnactResultProvider: Provider<PumpEnactResult>,
     private val processedDeviceStatusData: ProcessedDeviceStatusData,
+    private val ch: ConcentrationHelper,
+    private val glucoseStatusCalculatorAimi: GlucoseStatusCalculatorAimi,
     private val pumpStatusProvider: PumpStatusProvider
 ) : PluginBase(
     PluginDescription()
@@ -154,8 +159,40 @@ class LoopPlugin @Inject constructor(
             // Skip db change of ending previous TT
             .debounce(10L, TimeUnit.SECONDS)
             .subscribe({ invoke("EventTempTargetChange", true) }, fabricPrivacy::logException)
+        // Démarrage du déclenchement périodique
+        startPeriodicLoop()
     }
 
+    private fun startPeriodicLoop() {
+    // Récupère l'intervalle (en minutes) pour la planification
+    val freqMinutes = preferences.get(IntKey.ApsMaxSmbFrequency).toLong()
+    val freqMs = T.mins(freqMinutes).msecs()
+
+    val periodicRunnable = object : Runnable {
+        override fun run() {
+            // 1) Vérifie l'option autodrive
+            val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
+
+            // 2) Récupère la glycémie (pour les logs)
+            val currentBG = glucoseStatusCalculatorAimi.compute(false).gs?.glucose
+
+            // 3) Condition : autodrive activé
+            if (autodrive) {
+                aapsLogger.debug(LTag.APS, "OApsAIMIautoDrive=$autodrive => on lance le loop périodique de fallback (BG=$currentBG).")
+                invoke("PeriodicApsMaxSmbFrequency", true)
+            } else {
+                // Sinon, on logge qu'on ne fait rien
+                aapsLogger.debug(LTag.APS, "Pas de loop périodique : autodrive=$autodrive.")
+            }
+
+            // Replanifie le prochain cycle
+            handler?.postDelayed(this, freqMs)
+        }
+    }
+
+    // Lance la première exécution
+    handler?.postDelayed(periodicRunnable, freqMs)
+}
     private fun createNotificationChannel() {
         val mNotificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         @SuppressLint("WrongConstant") val channel = NotificationChannel(
@@ -780,7 +817,7 @@ class LoopPlugin @Inject constructor(
         aapsLogger.debug(LTag.APS, "applyAPSRequest: $request")
         val now = System.currentTimeMillis()
         val activeTemp = processedTbrEbData.getTempBasalIncludingConvertedExtended(now)
-        if (request.rate == 0.0 && request.duration == 0 || abs(request.rate - pump.baseBasalRate) < pump.pumpDescription.basalStep) {
+        if (request.rate == 0.0 && request.duration == 0 || abs(request.rate - ch.fromPump(pump.baseBasalRate)) < ch.fromPump(pump.pumpDescription.basalStep)) {
             if (activeTemp != null) {
                 aapsLogger.debug(LTag.APS, "applyAPSRequest: cancelTempBasal()")
                 uel.log(Action.CANCEL_TEMP_BASAL, Sources.Loop)
@@ -834,7 +871,7 @@ class LoopPlugin @Inject constructor(
                         now,
                         profile
                     )
-                ) < pump.pumpDescription.basalStep
+                ) < ch.fromPump(pump.pumpDescription.basalStep)
             ) {
                 aapsLogger.debug(LTag.APS, "applyAPSRequest: Temp basal set correctly")
                 callback?.result(

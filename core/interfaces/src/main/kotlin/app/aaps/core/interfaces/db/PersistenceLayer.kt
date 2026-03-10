@@ -1294,6 +1294,9 @@ interface PersistenceLayer {
     fun insertUserEntries(entries: List<UE>): Single<TransactionResult<UE>>
     fun getUserEntryDataFromTime(timestamp: Long): Single<List<UE>>
     fun getUserEntryFilteredDataFromTime(timestamp: Long): Single<List<UE>>
+    fun deleteLastEventMatchingKeyword(noteKeyword: String)
+
+
 
     // TDD
 
@@ -1363,8 +1366,11 @@ interface PersistenceLayer {
     fun getLastStepsCountFromTimeToTime(startTime: Long, endTime: Long): SC?
 
     /**
-     * Insert or update if exists record
+     * Get latest step counts record from interval
      *
+     * @param startTime from
+     * @param endTime to
+     * @return step count record
      * @param stepsCount record
      * @return List of inserted/updated records
      */
@@ -1391,6 +1397,28 @@ interface PersistenceLayer {
      * @param offset
      * @return List of arrays of records
      */
+    fun getMostRecentCarbByDate(): Long? {
+        val now = System.currentTimeMillis()
+        return getCarbsFromTime(now, false) // false pour ordre décroissant
+            .blockingGet()
+            .maxByOrNull { it.timestamp }
+            ?.timestamp
+    }
+    fun getMostRecentCarbAmount(): Double? {
+        val now = System.currentTimeMillis()
+        return getCarbsFromTime(now, false) // Supposant que cette méthode existe
+            .blockingGet()
+            .maxByOrNull { it.timestamp }
+            ?.amount
+    }
+    fun getFutureCob(): Double {
+        val now = System.currentTimeMillis()
+        return getCarbsFromTime(now, true) // Supposant que cette méthode existe
+            .blockingGet()
+            .filter { it.timestamp > now }
+            .sumOf { it.amount }
+    }
+
     fun collectNewEntriesSince(since: Long, until: Long, limit: Int, offset: Int): NE
     class TransactionResult<T> {
 

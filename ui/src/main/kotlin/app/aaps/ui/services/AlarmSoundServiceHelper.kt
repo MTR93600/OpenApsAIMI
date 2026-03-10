@@ -39,7 +39,15 @@ class AlarmSoundServiceHelper @Inject constructor(
 
                 val alarmSoundService: AlarmSoundService = binder.getService()
 
-                context.startForegroundService(getServiceIntent(context, sound))
+                try {
+                    context.startForegroundService(getServiceIntent(context, sound))
+                } catch (e: Exception) {
+                    // CHANGED: Android 14+ Protection
+                    // If we are bound but the app is in background, startForegroundService might still throw
+                    // ForegroundServiceStartNotAllowedException on API 34+.
+                    aapsLogger.error(LTag.CORE, "Failed to promote AlarmSoundService to FgService inside connection: ${e.message}")
+                    // We continue, as we are bound, but we know the service might be demoted or killed if restricted.
+                }
 
                 // This is the key: Without waiting Android Framework to call this method
                 // inside Service.onCreate(), immediately call here to post the notification.
@@ -60,7 +68,14 @@ class AlarmSoundServiceHelper @Inject constructor(
             // Just call startForegroundService instead since we cannot bind a service to a
             // broadcast receiver context. The service also have to call startForeground in
             // this case.
-            context.startForegroundService(getServiceIntent(context, sound))
+            try {
+                context.startForegroundService(getServiceIntent(context, sound))
+            } catch (e: Exception) {
+                // CHANGED: Android 14+ Background Start Restriction fix
+                // If app is in background, startForegroundService() throws ForegroundServiceStartNotAllowedException
+                // We catch it to prevent crash. The visual notification will still appear via NotificationPlugin.
+                aapsLogger.error(LTag.CORE, "Failed to start AlarmSoundService (Background restriction?): ${e.message}")
+            }
         }
     }
 

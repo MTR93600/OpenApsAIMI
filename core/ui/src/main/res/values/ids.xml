@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Modern Circle Dashboard IDs -->
+    <item name="glucose_circle" type="id" />
+    <item name="unicorn_icon" type="id" />
+    <item name="glucose_value" type="id" />
+    <item name="time_ago" type="id" />
+    <item name="delta_small" type="id" />
+    <item name="trend_arrow" type="id" />
+    <item name="delta_value" type="id" />
+    <item name="activity_text" type="id" />
+    <item name="tbr_text" type="id" />
+</resources>

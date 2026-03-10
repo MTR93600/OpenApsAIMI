@@ -14,6 +14,7 @@ import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
@@ -43,7 +44,8 @@ class PumpSyncImplementation @Inject constructor(
     private val rh: ResourceHelper,
     private val profileFunction: ProfileFunction,
     private val persistenceLayer: PersistenceLayer,
-    private val activePlugin: ActivePlugin
+    private val activePlugin: ActivePlugin,
+    private val ch: ConcentrationHelper
 ) : PumpSync {
 
     private val disposable = CompositeDisposable()
@@ -145,7 +147,7 @@ class PumpSyncImplementation @Inject constructor(
                     amount = bolus.amount
                 )
             },
-            profile = profileFunction.getProfile(),
+            profile = ch.getProfile(),
             serialNumber = preferences.get(StringNonKey.ActivePumpSerialNumber)
         )
     }
@@ -154,7 +156,7 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial)) return false
         val bolus = BS(
             timestamp = timestamp,
-            amount = amount,
+            amount = ch.fromPump(amount),
             type = type,
             ids = IDs(
                 temporaryId = temporaryId,
@@ -171,7 +173,7 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial)) return false
         val bolus = BS(
             timestamp = timestamp,
-            amount = amount,
+            amount = ch.fromPump(amount),
             type = BS.Type.NORMAL, // not used for update
             ids = IDs(
                 temporaryId = temporaryId,
@@ -189,7 +191,7 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial)) return false
         val bolus = BS(
             timestamp = timestamp,
-            amount = amount,
+            amount = ch.fromPump(amount),
             type = type ?: BS.Type.NORMAL,
             ids = IDs(
                 pumpId = pumpId,
@@ -306,7 +308,7 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial)) return false
         val temporaryBasal = TB(
             timestamp = timestamp,
-            rate = rate,
+            rate = if (isAbsolute) ch.fromPump(rate) else rate,
             duration = duration,
             type = type?.toDbType() ?: TB.Type.NORMAL,
             isAbsolute = isAbsolute,
@@ -341,7 +343,7 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial)) return false
         val temporaryBasal = TB(
             timestamp = timestamp,
-            rate = rate,
+            rate = if(isAbsolute) ch.fromPump(rate) else rate,
             duration = duration,
             type = type.toDbType(),
             isAbsolute = isAbsolute,
@@ -370,7 +372,7 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial)) return false
         val temporaryBasal = TB(
             timestamp = timestamp,
-            rate = rate,
+            rate = if(isAbsolute) ch.fromPump(rate) else rate,
             duration = duration,
             type = TB.Type.NORMAL, // not used for update
             isAbsolute = isAbsolute,
@@ -410,7 +412,7 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial)) return false
         val extendedBolus = EB(
             timestamp = timestamp,
-            amount = amount,
+            amount = ch.fromPump(amount),
             duration = duration,
             isEmulatingTempBasal = isEmulatingTB,
             ids = IDs(
@@ -436,9 +438,9 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial, showNotification = false)) return false
         val tdd = TDD(
             timestamp = timestamp,
-            bolusAmount = bolusAmount,
-            basalAmount = basalAmount,
-            totalAmount = totalAmount,
+            bolusAmount = ch.fromPump(bolusAmount),
+            basalAmount = ch.fromPump(basalAmount),
+            totalAmount = ch.fromPump(totalAmount),
             ids = IDs(
                 pumpId = pumpId,
                 pumpType = pumpType,

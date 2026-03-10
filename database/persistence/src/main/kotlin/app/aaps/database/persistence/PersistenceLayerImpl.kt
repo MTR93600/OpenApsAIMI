@@ -757,6 +757,12 @@ class PersistenceLayerImpl @Inject constructor(
                 transactionResult
             }
 
+
+
+    override fun deleteLastEventMatchingKeyword(noteKeyword: String) {
+        repository.deleteLastEventMatchingKeyword(noteKeyword)
+    }
+
     override fun invalidateEffectiveProfileSwitch(id: Long, action: Action, source: Sources, note: String?, listValues: List<ValueWithUnit>): Single<PersistenceLayer.TransactionResult<EPS>> =
         repository.runTransactionForResult(InvalidateEffectiveProfileSwitchTransaction(id))
             .doOnError { aapsLogger.error(LTag.DATABASE, "Error while invalidating EffectiveProfileSwitch", it) }
@@ -1695,10 +1701,6 @@ class PersistenceLayerImpl @Inject constructor(
                 result.updatedDuration.forEach { therapyEvent ->
                     aapsLogger.debug(LTag.DATABASE, "Updated duration TherapyEvent from ${Sources.NSClient.name} $therapyEvent")
                     transactionResult.updatedDuration.add(therapyEvent.fromDb())
-                }
-                result.updatedSite.forEach { therapyEvent ->
-                    aapsLogger.debug(LTag.DATABASE, "Updated Site Rotation TherapyEvent from ${Sources.NSClient.name} $therapyEvent")
-                    transactionResult.updated.add(therapyEvent.fromDb())
                 }
                 log(ueValues)
                 transactionResult

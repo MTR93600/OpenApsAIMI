@@ -6,6 +6,7 @@ import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.PersistableBundle
 import android.text.SpannableString
 import android.text.method.LinkMovementMethod
@@ -28,13 +29,17 @@ import androidx.appcompat.widget.Toolbar
 import androidx.core.view.GravityCompat
 import androidx.core.view.MenuCompat
 import androidx.core.view.MenuProvider
+import app.aaps.activities.DashboardPreviewActivity
 import app.aaps.activities.HistoryBrowseActivity
 import app.aaps.activities.PreferencesActivity
+import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.configuration.ConfigBuilder
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
+import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.maintenance.FileListProvider
 import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -43,6 +48,7 @@ import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.protection.ExportPasswordDataStore
 import app.aaps.core.interfaces.protection.ProtectionCheck
 import app.aaps.core.interfaces.rx.AapsSchedulers
+import app.aaps.core.interfaces.rx.events.EventAppExit
 import app.aaps.core.interfaces.rx.events.EventAppInitialized
 import app.aaps.core.interfaces.rx.events.EventPreferenceChange
 import app.aaps.core.interfaces.rx.events.EventRebuildTabs
@@ -78,6 +84,7 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
 import java.util.Locale
 import javax.inject.Inject
+import android.provider.Settings
 
 class MainActivity : DaggerAppCompatActivityWithResult() {
 
@@ -116,6 +123,7 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
         LocaleHelper.update(applicationContext)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        checkAndRequestPermissions()
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayShowTitleEnabled(false)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -192,6 +200,31 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
                         protectionCheck.queryProtection(this@MainActivity, ProtectionCheck.Protection.PREFERENCES, {
                             startActivity(Intent(this@MainActivity, SetupWizardActivity::class.java).setAction("info.nightscout.androidaps.MainActivity"))
                         })
+                        true
+                    }
+
+                    R.id.nav_dashboard_preview  -> {
+                        startActivity(Intent(this@MainActivity, DashboardPreviewActivity::class.java))
+                        true
+                    }
+
+                    R.id.nav_comparator         -> {
+                        startActivity(Intent(this@MainActivity, app.aaps.activities.ComparatorActivity::class.java))
+                        true
+                    }
+
+                    R.id.nav_meal_advisor       -> {
+                        startActivity(Intent(this@MainActivity, app.aaps.plugins.aps.openAPSAIMI.advisor.meal.MealAdvisorActivity::class.java))
+                        true
+                    }
+
+                    R.id.nav_aimi_advisor       -> {
+                        startActivity(Intent(this@MainActivity, app.aaps.plugins.aps.openAPSAIMI.advisor.AimiProfileAdvisorActivity::class.java))
+                        true
+                    }
+
+                    R.id.nav_aimi_context       -> {
+                        startActivity(Intent(this@MainActivity, app.aaps.plugins.aps.openAPSAIMI.context.ui.ContextActivity::class.java))
                         true
                     }
 
@@ -346,6 +379,24 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
 
     override fun onResume() {
         super.onResume()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                // [FIX] Force active prompt instead of passive toast
+                checkAndRequestPermissions()
+            } else {
+                // [FIX] Ensure Documents/AAPS exists for fresh installs
+                try {
+                    val aapsDir = java.io.File(Environment.getExternalStorageDirectory(), "Documents/AAPS")
+                    if (!aapsDir.exists()) {
+                        if (aapsDir.mkdirs()) {
+                            ToastUtils.okToast(this, "Created Documents/AAPS folder")
+                        }
+                    }
+                } catch (e: Exception) {
+                    ToastUtils.errorToast(this, "Error creating AAPS dir: ${e.message}")
+                }
+            }
+        }
         if (config.appInitialized) binding.splash.visibility = View.GONE
         if (!isProtectionCheckActive) {
             isProtectionCheckActive = true
@@ -449,9 +500,11 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
         val result = super.onMenuOpened(featureId, menu)
         menu.findItem(R.id.nav_treatments)?.isEnabled = profileFunction.getProfile() != null
         if (binding.mainPager.currentItem >= 0) {
-            val plugin = (binding.mainPager.adapter as TabPageAdapter?)?.getPluginAt(binding.mainPager.currentItem) ?: return result
-            this.menu?.findItem(R.id.nav_plugin_preferences)?.title = rh.gs(R.string.nav_preferences_plugin, plugin.name)
-            pluginPreferencesMenuItem?.isEnabled = (binding.mainPager.adapter as TabPageAdapter).getPluginAt(binding.mainPager.currentItem).preferencesId != PluginDescription.PREFERENCE_NONE
+            (binding.mainPager.adapter as? TabPageAdapter)?.let { tabPageAdapter ->
+                val plugin = tabPageAdapter.getPluginAt(binding.mainPager.currentItem)
+                this.menu?.findItem(R.id.nav_plugin_preferences)?.title = rh.gs(R.string.nav_preferences_plugin, plugin.name)
+                pluginPreferencesMenuItem?.isEnabled = plugin.preferencesId != PluginDescription.PREFERENCE_NONE
+            }
         }
         if (pluginPreferencesMenuItem?.isEnabled == false) {
             val spanString = SpannableString(this.menu?.findItem(R.id.nav_plugin_preferences)?.title.toString())
@@ -461,6 +514,26 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
         return result
     }
 
+    /*override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
+        menuOpen = true
+        if (binding.mainDrawerLayout.isDrawerOpen(GravityCompat.START)) {
+            binding.mainDrawerLayout.closeDrawers()
+        }
+        val result = super.onMenuOpened(featureId, menu)
+        menu.findItem(R.id.nav_treatments)?.isEnabled = profileFunction.getProfile() != null
+        if (binding.mainPager.currentItem >= 0) {
+            val plugin = (binding.mainPager.adapter as TabPageAdapter).getPluginAt(binding.mainPager.currentItem)
+            this.menu?.findItem(R.id.nav_plugin_preferences)?.title = rh.gs(R.string.nav_preferences_plugin, plugin.name)
+            pluginPreferencesMenuItem?.isEnabled = (binding.mainPager.adapter as TabPageAdapter).getPluginAt(binding.mainPager.currentItem).preferencesId != PluginDescription.PREFERENCE_NONE
+        }
+        if (pluginPreferencesMenuItem?.isEnabled == false) {
+            val spanString = SpannableString(this.menu?.findItem(R.id.nav_plugin_preferences)?.title.toString())
+            spanString.setSpan(ForegroundColorSpan(rh.gac(app.aaps.core.ui.R.attr.disabledTextColor)), 0, spanString.length, 0)
+            this.menu?.findItem(R.id.nav_plugin_preferences)?.title = spanString
+        }
+        return result
+    }*/
+
     override fun onPanelClosed(featureId: Int, menu: Menu) {
         menuOpen = false
         super.onPanelClosed(featureId, menu)
@@ -468,6 +541,32 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
 
     // Correct place for calling setUserStats() would be probably MainApp
     // but we need to have it called at least once a day. Thus this location
+    private fun checkAndRequestPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                showPermissionExplanation()
+            }
+        }
+    }
+
+    private fun showPermissionExplanation() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Permission Required")
+            .setMessage("This app needs access to manage all files to provide functionality.")
+            .setPositiveButton("Grant Access") { _, _ ->
+                requestManageExternalStoragePermission()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun requestManageExternalStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+            intent.data = Uri.parse("package:$packageName")
+            startActivity(intent)
+        }
+    }
 
     private fun setUserStats() {
         if (!fabricPrivacy.fabricEnabled()) return

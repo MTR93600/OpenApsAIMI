@@ -283,8 +283,6 @@ sealed class ProfileSealed(
                 aps.getAverageIsfMgdl(timestamp, caller) ?: toMgdl(isfBlocks.blockValueBySeconds(MidnightUtils.secondsFromMidnight(timestamp), 100.0 / percentage, timeshift), units)
             else toMgdl(isfBlocks.blockValueBySeconds(MidnightUtils.secondsFromMidnight(timestamp), 100.0 / percentage, timeshift), units)
         }
-
-
     override fun getTargetMgdl(): Double = toMgdl(targetBlocks.targetBlockValueBySeconds(MidnightUtils.secondsFromMidnight(), timeshift), units)
     override fun getTargetLowMgdl(): Double = toMgdl(targetBlocks.lowTargetBlockValueBySeconds(MidnightUtils.secondsFromMidnight(), timeshift), units)
     override fun getTargetLowMgdl(timestamp: Long): Double = toMgdl(targetBlocks.lowTargetBlockValueBySeconds(MidnightUtils.secondsFromMidnight(timestamp), timeshift), units)
@@ -324,6 +322,25 @@ sealed class ProfileSealed(
                 is Pure -> this.value.dia
             },
             timeZone = TimeZone.getDefault()
+        )
+
+    override fun toPump(concentration: Double): Profile =
+        Pure(
+            PureProfile(
+                jsonObject = JSONObject(),
+                basalBlocks = basalBlocks.shiftBlock(percentage / 100.0 / concentration, timeshift),
+                isfBlocks = isfBlocks.shiftBlock(100.0 / percentage * concentration, timeshift),
+                icBlocks = icBlocks.shiftBlock(100.0 / percentage * concentration, timeshift),
+                targetBlocks = targetBlocks.shiftTargetBlock(timeshift),
+                glucoseUnit = units,
+                dia = when (this) {
+                    is PS   -> this.value.iCfg.insulinEndTime / 3600.0 / 1000.0
+                    is EPS  -> this.value.iCfg.insulinEndTime / 3600.0 / 1000.0
+                    is Pure -> this.value.dia
+                },
+                timeZone = TimeZone.getDefault()
+            ),
+            null
         )
 
     override fun toPureNsJson(dateUtil: DateUtil): JSONObject {

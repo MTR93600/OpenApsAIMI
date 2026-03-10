@@ -436,6 +436,9 @@ class AppRepository @Inject internal constructor(
 
     fun getLastTherapyEventId(): Long? =
         database.therapyEventDao.getLastId()
+    fun deleteLastEventMatchingKeyword(noteKeyword: String) {
+        database.therapyEventDao.deleteLastEventMatchingKeyword(noteKeyword)
+    }
 
     // FOOD
     /*

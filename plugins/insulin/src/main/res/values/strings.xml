@@ -8,6 +8,14 @@
     <string name="description_insulin_free_peak">Allows you to define the peak of the insulin activity and should only be used by advanced users</string>
     <string name="insulin_shortname">INS</string>
     <string name="insulin_oref_peak">IOB Curve Peak Time</string>
+    <string name="insulin_settings">Insulin settings</string>
+    <string name="insulin_concentration_request">Change Insulin Concentration</string>
+    <string name="insulin_concentration_doc_txt">Attention!\nInsulin concentration is a Safety parameter. Please CLICK HERE and READ the text and make sure you UNDERSTAND it before this value.\nThe risks of insulin overdose are very high!</string>
+    <string name="insulin_concentration_doc" comment="For translation, only replace /en/ by /xx/ with xx your language code within wiki documentation">http://openaps.readthedocs.io/en/latest/docs/walkthrough/phase-3/beyond-low-glucose-suspend.html</string>
+    <string name="insulin_current_concentration">Insulin Concentration: U%1$d</string>
+    <string name="insulin_requested_concentration_title">Change Insulin Concentration in pump</string>
+    <string name="insulin_requested_concentration_summary">Insulin concentration should be confirmed after each reservoir change.\nYou will receive a PopUp on next Insulin Change event to confirm the new Concentration</string>
+    <string name="insulin_change_concentration_summary">Insulin concentration can only be changed during the 15min following a reservoir change.\nCheck carefully within Insulin Plugin is the requested change has been applied</string>
     <string name="insulin_peak_time">Peak Time [min]</string>
     <string name="free_peak_oref">Free-Peak Oref</string>
     <string name="rapid_acting_oref">Rapid-Acting Oref</string>

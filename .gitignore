@@ -27,6 +27,7 @@ app/pumpcontrol/*
 wear/aapsclient/*
 wear/aapsclient2/*
 wear/pumpcontrol/*
+wear/full/
 .kotlin/*
 /*.log
 *.preferences_pb

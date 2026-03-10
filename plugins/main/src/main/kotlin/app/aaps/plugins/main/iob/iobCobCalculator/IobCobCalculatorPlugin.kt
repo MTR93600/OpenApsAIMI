@@ -594,6 +594,7 @@ class IobCobCalculatorPlugin @Inject constructor(
     override fun calculateIobFromTempBasalsIncludingConvertedExtended(): IobTotal =
         calculateIobToTimeFromTempBasalsIncludingConvertedExtended(dateUtil.now())
 
+
     override fun calculateIobToTimeFromTempBasalsIncludingConvertedExtended(toTime: Long): IobTotal {
         val total = IobTotal(toTime)
         val now = dateUtil.now()

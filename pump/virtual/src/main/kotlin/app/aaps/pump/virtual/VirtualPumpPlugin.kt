@@ -15,13 +15,13 @@ import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.Profile
-import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.Pump
@@ -62,14 +62,14 @@ open class VirtualPumpPlugin @Inject constructor(
     rh: ResourceHelper,
     private val aapsSchedulers: AapsSchedulers,
     preferences: Preferences,
-    private val profileFunction: ProfileFunction,
     commandQueue: CommandQueue,
     private val pumpSync: PumpSync,
     private val config: Config,
     private val dateUtil: DateUtil,
     private val processedDeviceStatusData: ProcessedDeviceStatusData,
     private val persistenceLayer: PersistenceLayer,
-    private val pumpEnactResultProvider: Provider<PumpEnactResult>
+    private val pumpEnactResultProvider: Provider<PumpEnactResult>,
+    private val ch: ConcentrationHelper
 ) : PumpPluginBase(
     pluginDescription = PluginDescription()
         .mainType(PluginType.PUMP)
@@ -166,7 +166,7 @@ open class VirtualPumpPlugin @Inject constructor(
 
     override val lastBolusTime: Long? get() = pumpSync.expectedPumpState().bolus?.timestamp
     override val lastBolusAmount: Double? get() = pumpSync.expectedPumpState().bolus?.amount
-    override val baseBasalRate: Double get() = profileFunction.getProfile()?.getBasal() ?: 0.0
+    override val baseBasalRate: Double get() = ch.getProfile()?.getBasal() ?: 0.0
 
     override val reservoirLevel: Double
         get() =
@@ -179,7 +179,6 @@ open class VirtualPumpPlugin @Inject constructor(
         // Insulin value must be greater than 0
         require(detailedBolusInfo.carbs == 0.0) { detailedBolusInfo.toString() }
         require(detailedBolusInfo.insulin > 0) { detailedBolusInfo.toString() }
-
         val result = pumpEnactResultProvider.get()
             .success(true)
             .bolusDelivered(detailedBolusInfo.insulin)

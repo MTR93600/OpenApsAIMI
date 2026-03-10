@@ -47,6 +47,7 @@ class OpenAPSFragment : DaggerFragment(), MenuProvider {
     @Suppress("PrivatePropertyName")
     private val ID_MENU_RUN = 503
 
+
     private var _binding: OpenapsFragmentBinding? = null
     private var handler = Handler(HandlerThread(this::class.simpleName + "Handler").also { it.start() }.looper)
 
@@ -86,6 +87,7 @@ class OpenAPSFragment : DaggerFragment(), MenuProvider {
                 handler.post { activePlugin.activeAPS.invoke("OpenAPS menu", false) }
                 true
             }
+
 
             else        -> false
         }

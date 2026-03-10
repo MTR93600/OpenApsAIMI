@@ -1,5 +1,6 @@
 package app.aaps.implementation.queue.commands
 
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -22,6 +23,7 @@ class CommandExtendedBolus(
     @Inject lateinit var rh: ResourceHelper
     @Inject lateinit var activePlugin: ActivePlugin
     @Inject lateinit var pumpEnactResultProvider: Provider<PumpEnactResult>
+    @Inject lateinit var ch: ConcentrationHelper
 
     init {
         injector.androidInjector().inject(this)
@@ -30,14 +32,14 @@ class CommandExtendedBolus(
     override val commandType: Command.CommandType = Command.CommandType.EXTENDEDBOLUS
 
     override fun execute() {
-        val r = activePlugin.activePump.setExtendedBolus(insulin, durationInMinutes)
+        val r = activePlugin.activePump.setExtendedBolus(ch.toPump(insulin), durationInMinutes).fromPump(ch.concentration)
         aapsLogger.debug(LTag.PUMPQUEUE, "Result rate: $insulin durationInMinutes: $durationInMinutes success: ${r.success} enacted: ${r.enacted}")
         callback?.result(r)?.run()
     }
 
     override fun status(): String = rh.gs(app.aaps.core.ui.R.string.extended_bolus_u_min, insulin, durationInMinutes)
 
-    override fun log(): String = "EXTENDEDBOLUS $insulin U $durationInMinutes min"
+    override fun log(): String = "EXTENDEDBOLUS ${ch.insulinAmountString(insulin, true)} U $durationInMinutes min"
     override fun cancel() {
         aapsLogger.debug(LTag.PUMPQUEUE, "Result cancel")
         callback?.result(pumpEnactResultProvider.get().success(false).comment(app.aaps.core.ui.R.string.connectiontimedout))?.run()

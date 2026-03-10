@@ -21,6 +21,7 @@ import app.aaps.core.ui.toast.ToastUtils
 import app.aaps.plugins.configuration.activities.SingleFragmentActivity
 import app.aaps.plugins.main.general.overview.notifications.NotificationWithAction
 import app.aaps.ui.activities.BolusProgressHelperActivity
+import app.aaps.ui.activities.ConcentrationActivity
 import app.aaps.ui.activities.ErrorHelperActivity
 import app.aaps.ui.activities.QuickWizardListActivity
 import app.aaps.ui.activities.TDDStatsActivity
@@ -28,6 +29,7 @@ import app.aaps.ui.dialogs.BolusProgressDialog
 import app.aaps.ui.dialogs.CalibrationDialog
 import app.aaps.ui.dialogs.CarbsDialog
 import app.aaps.ui.dialogs.CareDialog
+import app.aaps.ui.dialogs.ConcentrationDialog
 import app.aaps.ui.dialogs.ExtendedBolusDialog
 import app.aaps.ui.dialogs.FillDialog
 import app.aaps.ui.dialogs.InsulinDialog
@@ -59,6 +61,7 @@ class UiInteractionImpl @Inject constructor(
     override val historyBrowseActivity: Class<*> = HistoryBrowseActivity::class.java
     override val errorHelperActivity: Class<*> = ErrorHelperActivity::class.java
     override val bolusProgressHelperActivity: Class<*> = BolusProgressHelperActivity::class.java
+    override val concentrationActivity: Class<*> = ConcentrationActivity::class.java
     override val singleFragmentActivity: Class<*> = SingleFragmentActivity::class.java
     override val preferencesActivity: Class<*> = PreferencesActivity::class.java
     override val myPreferenceFragment: Class<*> = MyPreferenceFragment::class.java
@@ -74,6 +77,10 @@ class UiInteractionImpl @Inject constructor(
         i.putExtra(AlarmSoundService.TITLE, title)
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(i)
+    }
+
+    override fun runInsulinConfirmation() {
+        context.startActivity(Intent(context, concentrationActivity).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     override fun updateWidget(context: Context, from: String) {
@@ -120,6 +127,11 @@ class UiInteractionImpl @Inject constructor(
     override fun runCalibrationDialog(fragmentManager: FragmentManager) {
         CalibrationDialog()
             .show(fragmentManager, "CalibrationDialog")
+    }
+
+    override fun runConcentrationDialog(fragmentManager: FragmentManager) {
+        ConcentrationDialog()
+            .show(fragmentManager, "ConcentrationDialog")
     }
 
     override fun runCarbsDialog(fragmentManager: FragmentManager) {

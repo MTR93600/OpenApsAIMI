@@ -6,6 +6,7 @@ import app.aaps.core.data.model.TE
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.pump.WarnColors
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -33,7 +34,8 @@ class StatusLightHandler @Inject constructor(
     private val config: Config,
     private val persistenceLayer: PersistenceLayer,
     private val tddCalculator: TddCalculator,
-    private val decimalFormatter: DecimalFormatter
+    private val decimalFormatter: DecimalFormatter,
+    private val ch: ConcentrationHelper
 ) {
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -66,11 +68,13 @@ class StatusLightHandler @Inject constructor(
             handlePatchReservoirLevel(
                 reservoirLevel,
                 IntKey.OverviewResCritical, IntKey.OverviewResWarning,
-                pump.reservoirLevel,
+                ch.fromPump(pump.reservoirLevel),
                 insulinUnit,
                 pump.pumpDescription.maxResorvoirReading.toDouble()
             )
         } else {
+            if (cannulaUsage != null) scope.launch { handleUsage(cannulaUsage, insulinUnit) }
+            handleLevel(reservoirLevel, IntKey.OverviewResCritical, IntKey.OverviewResWarning, ch.fromPump(pump.reservoirLevel), insulinUnit)
             handleLevel(reservoirLevel, IntKey.OverviewResCritical, IntKey.OverviewResWarning, pump.reservoirLevel, insulinUnit)
         }
         if (!config.AAPSCLIENT) {

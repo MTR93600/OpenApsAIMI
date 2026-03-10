@@ -5,8 +5,8 @@ import android.os.SystemClock
 import android.view.View
 import android.widget.Button
 import androidx.navigation.fragment.findNavController
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.queue.Callback
 import app.aaps.core.ui.extensions.runOnUiThread
 import app.aaps.core.ui.toast.ToastUtils
@@ -23,7 +23,7 @@ import javax.inject.Inject
 
 class EquilPairAirFragment : EquilPairFragmentBase() {
 
-    @Inject lateinit var profileFunction: ProfileFunction
+    @Inject lateinit var ch: ConcentrationHelper
 
     private var buttonAir: Button? = null
     private var buttonFinish: Button? = null
@@ -124,7 +124,7 @@ class EquilPairAirFragment : EquilPairFragmentBase() {
     }
 
     private fun setProfile() {
-        val profile = profileFunction.getProfile()
+        val profile = ch.getProfile()
         if (profile == null) {
             setTime()
             return

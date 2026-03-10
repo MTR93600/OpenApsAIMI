@@ -1,5 +1,6 @@
 package app.aaps.implementation.queue.commands
 
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -26,8 +27,8 @@ class CommandTempBasalPercent(
     @Inject lateinit var aapsLogger: AAPSLogger
     @Inject lateinit var rh: ResourceHelper
     @Inject lateinit var activePlugin: ActivePlugin
-
     @Inject lateinit var pumpEnactResultProvider: Provider<PumpEnactResult>
+    @Inject lateinit var ch: ConcentrationHelper
 
     init {
         injector.androidInjector().inject(this)
@@ -40,7 +41,7 @@ class CommandTempBasalPercent(
             if (percent == 100)
                 activePlugin.activePump.cancelTempBasal(enforceNew)
             else
-                activePlugin.activePump.setTempBasalPercent(percent, durationInMinutes, profile, enforceNew, tbrType)
+                activePlugin.activePump.setTempBasalPercent(percent, durationInMinutes, ch.toPump(profile), enforceNew, tbrType).fromPump(ch.concentration)
         aapsLogger.debug(LTag.PUMPQUEUE, "Result percent: $percent durationInMinutes: $durationInMinutes success: ${r.success} enacted: ${r.enacted}")
         callback?.result(r)?.run()
     }

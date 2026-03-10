@@ -8,6 +8,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -44,6 +45,7 @@ abstract class Trigger(val injector: HasAndroidInjector) {
     @Inject lateinit var iobCobCalculator: IobCobCalculator
     @Inject lateinit var glucoseStatusProvider: GlucoseStatusProvider
     @Inject lateinit var dateUtil: DateUtil
+    @Inject lateinit var ch: ConcentrationHelper
 
     init {
         @Suppress("LeakingThis")

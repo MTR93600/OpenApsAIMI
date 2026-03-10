@@ -124,6 +124,7 @@ interface Profile {
     fun getMaxDailyBasal(): Double
     fun baseBasalSum(): Double
     fun percentageBasalSum(): Double
+    fun toPump(concentration: Double): Profile
 
     fun getBasalValues(): Array<ProfileValue>
     fun getIcsValues(): Array<ProfileValue>

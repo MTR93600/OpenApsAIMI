@@ -17,6 +17,13 @@
             android:textAppearance="?android:attr/textAppearanceLarge" />
 
         <TextView
+            android:id="@+id/concentration"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="10dp"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+
+        <TextView
             android:id="@+id/comment"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -35,6 +42,15 @@
             android:layout_width="match_parent"
             android:layout_height="200dip"
             android:layout_margin="20dp" />
+
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/insulin_confirmation"
+            style="@style/GrayButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="10dp"
+            android:text="@string/concentration_confirmation" />
 
     </LinearLayout>
 

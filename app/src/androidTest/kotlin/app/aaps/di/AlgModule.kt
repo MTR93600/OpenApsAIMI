@@ -15,10 +15,13 @@ import dagger.android.ContributesAndroidInjector
 abstract class AlgModule {
 
     @ContributesAndroidInjector abstract fun loggerCallbackInjector(): LoggerCallback
-    @ContributesAndroidInjector abstract fun determineBasalResultSMBInjector(): DetermineBasalResultSMBFromJS
+    //@ContributesAndroidInjector abstract fun determineBasalResultSMBInjector(): DetermineBasalResultSMBFromJS
     @ContributesAndroidInjector abstract fun determineBasalResultAMAInjector(): DetermineBasalResultAMAFromJS
     @ContributesAndroidInjector abstract fun determineBasalAdapterAMAJSInjector(): DetermineBasalAdapterAMAJS
     @ContributesAndroidInjector abstract fun determineBasalAdapterSMBJSInjector(): DetermineBasalAdapterSMBJS
     @ContributesAndroidInjector abstract fun determineBasalAdapterSMBDynamicISFJSInjector(): DetermineBasalAdapterSMBDynamicISFJS
     @ContributesAndroidInjector abstract fun determineBasalAdapterSMBAutoISFJSInjector(): DetermineBasalAdapterAutoISFJS
+    //@ContributesAndroidInjector abstract fun determineBasalAdapterAIMIInjector(): DetermineBasalAdapterAIMI
+    //@ContributesAndroidInjector abstract fun determineBasalResultAIMISMBInjector(): DetermineBasalResultAIMISMB
+
 }

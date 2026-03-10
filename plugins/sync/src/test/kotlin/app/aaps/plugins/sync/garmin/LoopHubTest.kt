@@ -5,6 +5,7 @@ import app.aaps.core.data.model.EPS
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.HR
+import app.aaps.core.data.model.SC
 import app.aaps.core.data.model.ICfg
 import app.aaps.core.data.model.RM
 import app.aaps.core.data.model.SourceSensor
@@ -27,9 +28,10 @@ import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.queue.CommandQueue
+import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.Preferences
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.UnitDoubleKey
-import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.shared.tests.TestBase
 import io.reactivex.rxjava3.core.Single
 import org.junit.jupiter.api.AfterEach
@@ -65,6 +67,7 @@ class LoopHubTest : TestBase() {
     @Mock lateinit var userEntryLogger: UserEntryLogger
     @Mock lateinit var preferences: Preferences
     @Mock lateinit var processedTbrEbData: ProcessedTbrEbData
+    @Mock lateinit var dateUtil: DateUtil
 
     private lateinit var loopHub: LoopHubImpl
     private val clock = Clock.fixed(Instant.ofEpochMilli(10_000), ZoneId.of("UTC"))
@@ -78,7 +81,7 @@ class LoopHubTest : TestBase() {
         }
         loopHub = LoopHubImpl(
             aapsLogger, commandQueue, constraints, iobCobCalculator, loop,
-            profileFunction, profileUtil, persistenceLayer, userEntryLogger, preferences, processedTbrEbData
+            profileFunction, profileUtil, persistenceLayer, userEntryLogger, preferences, processedTbrEbData, dateUtil
         )
         loopHub.clock = clock
     }
@@ -311,8 +314,7 @@ class LoopHubTest : TestBase() {
             duration = samplingEnd.toEpochMilli() - samplingStart.toEpochMilli(),
             dateCreated = clock.millis(),
             beatsPerMinute = 101.0,
-            device = "Test Device"
-        )
+            device = "Test Device")
         whenever(persistenceLayer.insertOrUpdateHeartRate(hr)).thenReturn(
             Single.just(PersistenceLayer.TransactionResult())
         )
@@ -320,5 +322,38 @@ class LoopHubTest : TestBase() {
             samplingStart, samplingEnd, 101, "Test Device"
         )
         verify(persistenceLayer).insertOrUpdateHeartRate(hr)
+    }
+
+    @Test
+    fun testStoreStepsCount() {
+        val samplingStart = Instant.ofEpochMilli(1_001_000)
+        val samplingEnd = Instant.ofEpochMilli(1_301_000)
+        val sc = SC(
+            duration = samplingEnd.toEpochMilli() - samplingStart.toEpochMilli(),
+            timestamp = samplingEnd.toEpochMilli(),
+            steps5min = 12,
+            steps10min = 18,
+            steps15min = 24,
+            steps30min = 36,
+            steps60min = 48,
+            steps180min = 60,
+            device = "Test Device",
+            dateCreated = clock.millis(),
+        )
+        whenever(persistenceLayer.insertOrUpdateStepsCount(sc)).thenReturn(
+            Single.just(PersistenceLayer.TransactionResult())
+        )
+        loopHub.storeStepsCount(
+            samplingStart,
+            samplingEnd,
+            12,
+            18,
+            24,
+            36,
+            48,
+            60,
+            "Test Device",
+        )
+        verify(persistenceLayer).insertOrUpdateStepsCount(sc)
     }
 }

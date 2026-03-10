@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/dashboard_card_surface"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+<!--        <TextView-->
+<!--            android:id="@+id/adjustment_title"-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:text="@string/dashboard_adjustments"-->
+<!--            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1"-->
+<!--            android:textColor="@color/dashboard_on_surface" />-->
+
+        <TextView
+            android:id="@+id/glycemia_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+            android:textColor="@color/dashboard_on_surface"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/prediction_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+            android:textColor="@color/dashboard_on_surface" />
+
+        <TextView
+            android:id="@+id/iob_activity_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+            android:textColor="@color/dashboard_on_surface" />
+
+        <TextView
+            android:id="@+id/decision_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+            android:textColor="@color/dashboard_on_surface" />
+
+        <TextView
+            android:id="@+id/mode_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+            android:textColor="@color/dashboard_on_surface"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/pump_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+            android:textColor="@color/dashboard_on_surface" />
+
+        <TextView
+            android:id="@+id/safety_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+            android:textColor="@color/dashboard_on_surface" />
+
+        <TextView
+            android:id="@+id/empty_message"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/dashboard_no_adjustments"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+            android:textColor="@color/dashboard_on_surface" />
+
+        <LinearLayout
+            android:id="@+id/adjustment_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/run_loop_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Run Loop"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:textColor="@color/dashboard_on_surface"
+            app:strokeColor="@color/dashboard_on_surface" />
+
+    </LinearLayout>
+</merge>

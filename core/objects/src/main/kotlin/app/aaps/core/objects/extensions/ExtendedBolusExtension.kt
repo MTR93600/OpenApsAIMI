@@ -7,6 +7,7 @@ import app.aaps.core.data.model.TB
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.IobTotal
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.insulin.Insulin
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -25,6 +26,9 @@ val EB.plannedRemainingMinutes: Int
 
 fun EB.toStringFull(dateUtil: DateUtil, rh:ResourceHelper): String =
     rh.gs(app.aaps.core.ui.R.string.extended_bolus_full, rate, dateUtil.timeString(timestamp), getPassedDurationToTimeInMinutes(dateUtil.now()), T.msecs(duration).mins())
+
+fun EB.toStringFull(dateUtil: DateUtil, rh:ResourceHelper, ch: ConcentrationHelper): String =
+    rh.gs(app.aaps.core.ui.R.string.extended_bolus_conc_full, ch.insulinAmountString(rate), dateUtil.timeString(timestamp), getPassedDurationToTimeInMinutes(dateUtil.now()), T.msecs(duration).mins())
 
 fun EB.toStringMedium(dateUtil: DateUtil, rh:ResourceHelper): String =
     rh.gs(app.aaps.core.ui.R.string.extended_bolus_medium, rate, getPassedDurationToTimeInMinutes(dateUtil.now()), T.msecs(duration).mins())

@@ -24,6 +24,7 @@ interface APSResult {
     var variableSens: Double?
     var isfMgdlForCarbs: Double? // used only to pass to AAPS client
     var scriptDebug: List<String>?
+    var isHypoRisk: Boolean
 
     val predictionsAsGv: MutableList<GV>
     val latestPredictionsTime: Long
@@ -47,6 +48,7 @@ interface APSResult {
     var currentTemp: CurrentTemp?
     var oapsProfile: OapsProfile?
     var oapsProfileAutoIsf: OapsProfileAutoIsf?
+    var oapsProfileAimi: OapsProfileAimi?
     var mealData: MealData?
 
     val iob: IobTotal? get() = iobData?.get(0)
@@ -62,6 +64,9 @@ interface APSResult {
         UNKNOWN,
         AMA,
         SMB,
+        AIMI,
         AUTO_ISF
     }
 }
+
+

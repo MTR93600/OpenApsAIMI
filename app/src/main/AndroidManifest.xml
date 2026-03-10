@@ -5,12 +5,17 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="com.google.android.permission.PROVIDE_BACKGROUND" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -18,6 +23,8 @@
     <uses-permission android:name="com.dexcom.cgm.EXTERNAL_PERMISSION" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-permission-sdk-23 android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -27,7 +34,25 @@
     <!-- To receive data from Aidex -->
     <uses-permission android:name="com.microtechmd.cgms.aidex.permissions.RECEIVE_BG_ESTIMATE" />
 
+    <!-- 🏥 Health Connect - MTR Steps Integration (Android 14+) -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE_VARIABILITY" />
+    
+    <!-- Health Connect availability query -->
+    <!-- Health Connect availability query (Android 14+ requirement) -->
+    <queries>
+        <!-- Detect if Health Connect is installed -->
+        <package android:name="com.google.android.apps.healthdata" />
+        
+        <intent>
+            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+        </intent>
+    </queries>
+
     <application
+        android:requestLegacyExternalStorage="true"
         android:name="app.aaps.MainApp"
         android:allowBackup="true"
         android:backupAgent="app.aaps.utils.SPBackupAgent"
@@ -71,6 +96,15 @@
         <activity
             android:name="app.aaps.activities.HistoryBrowseActivity"
             android:exported="false"
+            android:theme="@style/AppTheme" />
+        <activity
+            android:name="app.aaps.activities.DashboardPreviewActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+        <activity
+            android:name="app.aaps.activities.ComparatorActivity"
+            android:label="@string/comparator_title"
+            android:parentActivityName="app.aaps.MainActivity"
             android:theme="@style/AppTheme" />
         <!-- Receive new BG readings from other local apps -->
         <receiver
@@ -143,6 +177,32 @@
         <uses-library
             android:name="org.apache.http.legacy"
             android:required="false" />
+
+        <!-- AIMI Health Connect Permission Request (Promoted to Main Manifest for Discovery) -->
+        <activity
+            android:name="app.aaps.plugins.aps.openAPSAIMI.physio.AIMIHealthConnectPermissionActivityMTR"
+            android:exported="true"
+            android:label="Health Connect Permissions"
+            android:theme="@style/AppTheme">
+            <!-- CRITICAL: This Intent Filter is how Health Connect "Discovers" the app -->
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+                <category android:name="androidx.health.category.HEALTH_PERMISSIONS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Android 14+ "Manage Access" Link -->
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity="app.aaps.plugins.aps.openAPSAIMI.physio.AIMIHealthConnectPermissionActivityMTR"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
 
     </application>
 

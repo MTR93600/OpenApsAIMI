@@ -17,6 +17,7 @@ interface UiInteraction {
     val historyBrowseActivity: Class<*>
     val errorHelperActivity: Class<*>
     val bolusProgressHelperActivity: Class<*>
+    val concentrationActivity: Class<*>
     val singleFragmentActivity: Class<*>
     val preferencesActivity: Class<*>
     val myPreferenceFragment: Class<*>
@@ -48,6 +49,7 @@ interface UiInteraction {
      * @param soundId sound resource. if == 0 alarm is not started
      */
     fun runAlarm(status: String, title: String, @RawRes soundId: Int = 0)
+    fun runInsulinConfirmation()
 
     fun updateWidget(context: Context, from: String)
 
@@ -58,6 +60,7 @@ interface UiInteraction {
     fun runTreatmentDialog(fragmentManager: FragmentManager)
     fun runInsulinDialog(fragmentManager: FragmentManager)
     fun runCalibrationDialog(fragmentManager: FragmentManager)
+    fun runConcentrationDialog(fragmentManager: FragmentManager)
     fun runCarbsDialog(fragmentManager: FragmentManager)
     fun runTempTargetDialog(fragmentManager: FragmentManager)
     fun runExtendedBolusDialog(fragmentManager: FragmentManager)

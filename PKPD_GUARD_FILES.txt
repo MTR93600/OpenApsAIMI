@@ -1,0 +1,25 @@
+FILES MODIFIÉS - PKPD ABSORPTION GUARD
+======================================
+
+NOUVEAUX FICHIERS:
+------------------
+plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/pkpd/PkpdAbsorptionGuard.kt
+docs/PKPD_ABSORPTION_GUARD_COMPLETE.md
+docs/PKPD_ABSORPTION_GUARD_AUDIT.md
+docs/COMMIT_MSG_PKPD_GUARD.md
+
+FICHIERS MODIFIÉS:
+------------------
+plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt
+  - Ligne 72: Import PkpdAbsorptionGuard
+  - Lignes 5327-5365: Remplacement ABS_GUARD par PKPD Absorption Guard
+
+COMMANDES DE COMMIT SUGGÉRÉES:
+------------------------------
+git add plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/pkpd/PkpdAbsorptionGuard.kt
+git add plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt
+git add docs/PKPD_ABSORPTION_GUARD_COMPLETE.md
+git add docs/PKPD_ABSORPTION_GUARD_AUDIT.md
+git add docs/COMMIT_MSG_PKPD_GUARD.md
+
+git commit -F docs/COMMIT_MSG_PKPD_GUARD.md

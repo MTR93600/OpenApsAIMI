@@ -6,6 +6,7 @@ import app.aaps.core.data.model.TB
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.IobTotal
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.insulin.Insulin
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -44,6 +45,24 @@ fun TB.toStringFull(profile: Profile, dateUtil: DateUtil, rh: ResourceHelper): S
 
         isAbsolute                    -> {
             rh.gs(app.aaps.core.ui.R.string.temp_basal_tsf_absolute, rate, timeAndDuration)
+        }
+
+        else                          -> { // percent
+            rh.gs(app.aaps.core.ui.R.string.temp_basal_tsf_percent, rate, timeAndDuration)
+        }
+    }
+}
+
+fun TB.toStringFull(profile: Profile, dateUtil: DateUtil, rh: ResourceHelper, ch: ConcentrationHelper): String {
+    val timeAndDuration = "${dateUtil.timeString(timestamp)} ${getPassedDurationToTimeInMinutes(dateUtil.now())}/${durationInMinutes}'"
+
+    return when {
+        type == TB.Type.FAKE_EXTENDED -> {
+            rh.gs(app.aaps.core.ui.R.string.temp_basal_tsf_fake_extended_conc, ch.insulinAmountString(rate), netExtendedRate(profile), timeAndDuration)
+        }
+
+        isAbsolute                    -> {
+            rh.gs(app.aaps.core.ui.R.string.temp_basal_tsf_absolute_conc, ch.insulinAmountString(rate), timeAndDuration)
         }
 
         else                          -> { // percent

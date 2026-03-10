@@ -5,6 +5,7 @@ import app.aaps.pump.virtual.VirtualPumpPlugin
 import com.google.common.truth.Truth.assertThat
 import org.json.JSONObject
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers
 import org.mockito.Mock
 import org.mockito.kotlin.whenever
 import org.skyscreamer.jsonassert.JSONAssert
@@ -17,6 +18,7 @@ class TriggerReservoirLevelTest : TriggerTestBase() {
     @Test fun shouldRunTest() {
         whenever(activePlugin.activePump).thenReturn(virtualPumpPlugin)
         whenever(virtualPumpPlugin.reservoirLevel).thenReturn(6.0)
+        whenever(ch.fromPump(ArgumentMatchers.anyDouble())).thenAnswer { invocation -> invocation.getArgument<Double>(0) }
         var t: TriggerReservoirLevel = TriggerReservoirLevel(injector).setValue(1.0).comparator(Comparator.Compare.IS_EQUAL)
         assertThat(t.shouldRun()).isFalse()
         t = TriggerReservoirLevel(injector).setValue(6.0).comparator(Comparator.Compare.IS_EQUAL)

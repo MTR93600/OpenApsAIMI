@@ -51,7 +51,7 @@ enum class IntKey(
     ApsMaxSmbFrequency("smbinterval", 3, 1, 10, defaultedBySM = true, dependency = BooleanKey.ApsUseSmb),
     ApsMaxMinutesOfBasalToLimitSmb("smbmaxminutes", 30, 15, 120, defaultedBySM = true, dependency = BooleanKey.ApsUseSmb),
     ApsUamMaxMinutesOfBasalToLimitSmb("uamsmbmaxminutes", 30, 15, 120, defaultedBySM = true, dependency = BooleanKey.ApsUseSmb),
-    ApsCarbsRequestThreshold("carbsReqThreshold", 1, 1, 100, defaultedBySM = true),
+    ApsCarbsRequestThreshold("carbsReqThreshold", 1, 1, 20, defaultedBySM = true),
     ApsAutoIsfHalfBasalExerciseTarget("half_basal_exercise_target", 160, 120, 200, defaultedBySM = true),
     ApsAutoIsfIobThPercent("iob_threshold_percent", 100, 10, 100, defaultedBySM = true),
     ApsDynIsfAdjustmentFactor("DynISFAdjust", 100, 1, 300, dependency = BooleanKey.ApsUseDynamicSensitivity),
@@ -60,6 +60,7 @@ enum class IntKey(
     AlertsStaleDataThreshold("missed_bg_readings_threshold", 30, 15, 10000, defaultedBySM = true, dependency = BooleanKey.AlertMissedBgReading),
     AlertsPumpUnreachableThreshold("pump_unreachable_threshold", 30, 30, 300, defaultedBySM = true, dependency = BooleanKey.AlertPumpUnreachable),
     InsulinOrefPeak("insulin_oref_peak", 75, 35, 120, hideParentScreenIfHidden = true),
+    InsulinRequestedConcentration("insulin_requested_concentration", 100, 10, 200, defaultedBySM = true, engineeringModeOnly = true),
 
     AutotuneDefaultTuneDays("autotune_default_tune_days", 5, 1, 30),
 
@@ -68,8 +69,44 @@ enum class IntKey(
     SmsRemoteBolusDistance("smscommunicator_remotebolusmindistance", 15, 3, 60),
 
     BgSourceRandomInterval("randombg_interval_min", 5, 1, 15, defaultedBySM = true),
+    GarminLocalHttpPort("communication_http_port", 28891, 1001, 65535, defaultedBySM = true, hideParentScreenIfHidden = true),
     NsClientAlarmStaleData("ns_alarm_stale_data_value", 16, 15, 120),
     NsClientUrgentAlarmStaleData("ns_alarm_urgent_stale_data_value", 31, 30, 180),
-
+    OApsAIMIHighBGinterval("key_oaps_aimi_highBG_interval", 3, 1, 20, defaultedBySM = true),
+    OApsAIMImealinterval("key_oaps_aimi_meal_interval", 3, 1, 20, defaultedBySM = true),
+    OApsAIMILunchinterval("key_oaps_aimi_lunch_interval", 3, 1, 20, defaultedBySM = true),
+    OApsAIMIDinnerinterval("key_oaps_aimi_dinner_interval", 3, 1, 20, defaultedBySM = true),
+    OApsAIMIHCinterval("key_oaps_aimi_HC_interval", 3, 1, 20, defaultedBySM = true),
+    OApsAIMISnackinterval("key_oaps_aimi_snack_interval", 3, 1, 20, defaultedBySM = true),
+    OApsAIMIBFinterval("key_oaps_aimi_BF_interval", 3, 1, 20, defaultedBySM = true),
+    OApsAIMISleepinterval("key_oaps_aimi_sleep_interval", 3, 1, 20, defaultedBySM = true),
+    //OApsAIMIautodriveISF("key_oaps_aimi_autodriveISF",5,1,500),
+    OApsAIMIAutodriveTarget("key_oaps_aimi_autodriveTarget",70,1,160),
+    OApsAIMIAutodriveBG("key_oaps_aimi_autodriveBG",90,1,160),
+    OApsAIMIWCycleAvgLength("key_wcycle_avg_length", 28, 20, 90),
+    OApsAIMINightGrowthAgeYears("key_oaps_aimi_ngr_age_years", 14, 1, 25),
+    OApsAIMINightGrowthMinDurationMin("key_oaps_aimi_ngr_min_duration", 30, 5, 240),
+    OApsAIMINightGrowthMinEventualOverTarget("key_oaps_aimi_ngr_min_eventual_over_target", 15, 0, 120),
+    OApsAIMINightGrowthDecayMinutes("key_oaps_aimi_ngr_decay_minutes", 20, 0, 120),
+    OApsAIMIlogsize("key_oaps_aimi_logsize",25,1,50),
     SiteRotationUserProfile("site_rotation_user_profile", 0, 0, 2),
+    // --- AIMI Adaptive Basal ---
+    OApsAIMIKickerStartMin(key = "OApsAIMIKickerStartMin", 10, 5, 30), // durée initiale du “kick” plateau (min)
+    OApsAIMIKickerMaxMin(key = "OApsAIMIKickerMaxMin", 30, 10, 60), // durée max du “kick” plateau (min)
+    OApsAIMIZeroResumeMin(key = "OApsAIMIZeroResumeMin", 10,  5, 30), // délai avant micro-reprise (minutes à 0)
+    OApsAIMIZeroResumeMax(key = "OApsAIMIZeroResumeMax", 30, 10, 60), // durée max de la micro-reprise
+    // --- AI Decision Auditor ---
+    AimiAuditorMaxPerHour("aimi_auditor_max_per_hour", 12, 1, 30),  // Max audits per hour
+    AimiAuditorTimeoutSeconds("aimi_auditor_timeout_seconds", 120, 30, 300),  // API timeout (seconds)
+    AimiAuditorMinConfidence("aimi_auditor_min_confidence", 65, 50, 95),  // Min confidence % to apply modulation
+    
+    // 🌸 Endometriosis & Cycle Management (MTR)
+    AimiEndometriosisFlareDuration("aimi_endo_flare_duration", 4, 1, 24),
+
+    // 🌀 Adaptive Kernel Bank (Cosine Gate)
+    AimiCosineGateMaxPeakShift("aimi_cosine_gate_max_shift", 15, 0, 60),
+
+    // 🚨 Emergency SOS (Hypo)
+    AimiEmergencySosThreshold("aimi_emergency_sos_threshold", 55, 40, 100),
+
 }

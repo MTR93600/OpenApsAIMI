@@ -5,9 +5,9 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.map
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.time.T
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.AapsSchedulers
@@ -42,11 +42,11 @@ class EopatchOverviewViewModel @Inject constructor(
     private val tempBasalManager: TempBasalManager,
     private val normalBasalManager: NormalBasalManager,
     val preferenceManager: PreferenceManager,
-    private val profileFunction: ProfileFunction,
     private val aapsSchedulers: AapsSchedulers,
     private val aapsLogger: AAPSLogger,
     private val dateUtil: DateUtil,
-    private val pumpSync: PumpSync
+    private val pumpSync: PumpSync,
+    private val ch: ConcentrationHelper
 ) : EoBaseViewModel<EoBaseNavigator>() {
 
     private val _eventHandler = SingleLiveEvent<UIEvent<EventType>>()
@@ -184,7 +184,7 @@ class EopatchOverviewViewModel @Inject constructor(
     }
 
     fun onClickActivation() {
-        val profile = profileFunction.getProfile()
+        val profile = ch.getProfile()
         if (profile == null) {
             _eventHandler.postValue(UIEvent(EventType.PROFILE_NOT_SET))
         } else {

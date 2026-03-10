@@ -45,7 +45,12 @@ class DetermineBasalSMB @Inject constructor(
     }
 
     fun Double.withoutZeros(): String = DecimalFormat("0.##").format(this)
-    fun round(value: Double): Int = value.roundToInt()
+    //fun round(value: Double): Int = value.roundToInt()
+    fun round(value: Double): Int {
+        if (value.isNaN()) return 0
+        val scale = 10.0.pow(2.0)
+        return (Math.round(value * scale) / scale).toInt()
+    }
 
     // we expect BG to rise or fall at the rate of BGI,
     // adjusted by the rate at which BG would need to rise /

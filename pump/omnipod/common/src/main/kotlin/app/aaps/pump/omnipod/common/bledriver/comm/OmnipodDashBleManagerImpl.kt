@@ -96,8 +96,10 @@ class OmnipodDashBleManagerImpl @Inject constructor(
                     return@create
                 }*/
                 when (val readResult = session.readAndAckResponse()) {
-                    is CommandReceiveSuccess ->
+                    is CommandReceiveSuccess -> {
+                        aapsLogger.debug(LTag.PUMPBTCOMM, "Dash: lastCommandAck=${System.currentTimeMillis()} cmd=${cmd.javaClass.simpleName}")
                         emitter.onNext(PodEvent.ResponseReceived(cmd, readResult.result))
+                    }
 
                     is CommandAckError       ->
                         emitter.onNext(PodEvent.ResponseReceived(cmd, readResult.result))
@@ -152,7 +154,8 @@ class OmnipodDashBleManagerImpl @Inject constructor(
                     ?: throw ConnectException("Bluetooth not available")
 
                 if (podDevice.bondState == BluetoothDevice.BOND_NONE && preferences.get(DashBooleanPreferenceKey.UseBonding)) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM && ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                        aapsLogger.info(LTag.PUMPBTCOMM, "Dash: Creating bond (Android 14+)")
                         val result = podDevice.createBond()
                         aapsLogger.debug(LTag.PUMPBTCOMM, "Bonding with pod resulted $result")
                         Thread.sleep(10000)
@@ -162,6 +165,9 @@ class OmnipodDashBleManagerImpl @Inject constructor(
                 val conn = connection
                     ?: Connection(podDevice, aapsLogger, config, context, podState)
                 connection = conn
+                
+                aapsLogger.info(LTag.PUMPBTCOMM, "Dash: lastConnectionAt=${System.currentTimeMillis()}")
+                
                 if (conn.connectionState() is Connected && conn.session != null) {
                     emitter.onNext(PodEvent.AlreadyConnected(podAddress))
                     emitter.onComplete()

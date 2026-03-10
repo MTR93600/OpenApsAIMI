@@ -15,12 +15,12 @@ interface HardLimits {
         val LIMIT_TEMP_MIN_BG = doubleArrayOf(72.0, 180.0)
         val LIMIT_TEMP_MAX_BG = doubleArrayOf(72.0, 270.0)
         val LIMIT_TEMP_TARGET_BG = doubleArrayOf(72.0, 200.0)
-        val MIN_DIA = doubleArrayOf(5.0, 5.0, 5.0, 5.0, 5.0)
-        val MAX_DIA = doubleArrayOf(9.0, 9.0, 9.0, 9.0, 10.0)
+        val MIN_DIA = doubleArrayOf(5.0, 5.0, 3.0, 3.0, 3.0)
+        val MAX_DIA = doubleArrayOf(9.0, 9.0, 12.0, 12.0, 12.0)
         val MIN_IC = doubleArrayOf(2.0, 2.0, 2.0, 2.0, 0.3)
         val MAX_IC = doubleArrayOf(100.0, 100.0, 100.0, 100.0, 100.0)
         const val MIN_ISF = 2.0 // mgdl
-        const val MAX_ISF = 1000.0 // mgdl
+        const val MAX_ISF = 1200.0 // mgdl
         val MAX_IOB_AMA = doubleArrayOf(3.0, 5.0, 7.0, 12.0, 25.0)
         val MAX_IOB_SMB = doubleArrayOf(7.0, 13.0, 22.0, 30.0, 70.0)
         val MAX_BASAL = doubleArrayOf(2.0, 5.0, 10.0, 12.0, 25.0)

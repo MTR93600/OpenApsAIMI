@@ -1,0 +1,53 @@
+old mode 100644
+new mode 100755
+--- a/plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt
++++ b/plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/DetermineBasalAIMI2.kt
+@@ -1495,20 +1495,25 @@
+                 return 0f
+             }
+         }
+-        val wCycleInfo = ensureWCycleInfo()
+-        if (wCycleInfo != null) {
+-            if (wCycleInfo.applied) {
+-                val pre = smbToGive
+-                smbToGive = (smbToGive * wCycleInfo.smbMultiplier.toFloat()).coerceAtLeast(0f)
+-                val need = if (pre > 0f) (smbToGive / pre).toDouble() else null
+-                updateWCycleLearner(null, need)
++        // [PATCH] WCycle Application Gate
++        // We skip WCycle scaling if:
++        // 1. Info is missing or not applied (User preference)
++        // 2. SAFETY: 'ignoreSafetyConditions' is TRUE. This implies an EXPLICIT/FORCED action (Manual/Advisor).
++        //    "Manual" means "Exact Dose", so we should not scale it efficiently.
++        if (!ignoreSafetyConditions) {
++            val wCycleInfo = ensureWCycleInfo()
++            if (wCycleInfo != null && wCycleInfo.applied) {
++                 val pre = smbToGive
++                 smbToGive = (smbToGive * wCycleInfo.smbMultiplier.toFloat()).coerceAtLeast(0f)
++                 val need = if (pre > 0f) (smbToGive / pre).toDouble() else null
++                 updateWCycleLearner(null, need)
+ 
+-// 🔁 log "post-application" avec la mesure d'écart réellement appliquée
+-                val profile = lastProfile
+-                if (profile != null) {
+-                    wCycleFacade.infoAndLog(
+-                        mapOf(
+-                            "trackingMode" to wCyclePreferences.trackingMode().name,
++                 // 🔁 log "post-application"
++                 val profile = lastProfile
++                 if (profile != null) {
++                     wCycleFacade.infoAndLog(
++                         mapOf(
++                             "trackingMode" to wCyclePreferences.trackingMode().name,
+                              "contraceptive" to wCyclePreferences.contraceptive().name,
+                              "thyroid" to wCyclePreferences.thyroid().name,
+                              "verneuil" to wCyclePreferences.verneuil().name,
+@@ -1523,9 +1528,9 @@
+-                        )
+-                    )
+-                }
++                         )
++                     )
++                 }
+             }
+         }
+         // Ajustements spécifiques

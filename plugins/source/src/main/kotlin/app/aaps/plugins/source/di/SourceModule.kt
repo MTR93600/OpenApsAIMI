@@ -8,6 +8,7 @@ import app.aaps.plugins.source.DexcomPlugin
 import app.aaps.plugins.source.GlimpPlugin
 import app.aaps.plugins.source.MM640gPlugin
 import app.aaps.plugins.source.NSClientSourcePlugin
+import app.aaps.plugins.source.OttaiPlugin
 import app.aaps.plugins.source.PatchedSiAppPlugin
 import app.aaps.plugins.source.PatchedSinoAppPlugin
 import app.aaps.plugins.source.PoctechPlugin
@@ -37,6 +38,7 @@ abstract class SourceModule {
     @ContributesAndroidInjector abstract fun contributesPoctechWorker(): PoctechPlugin.PoctechWorker
     @ContributesAndroidInjector abstract fun contributesTomatoWorker(): TomatoPlugin.TomatoWorker
     @ContributesAndroidInjector abstract fun contributesSyaiWorker(): SyaiPlugin.SyaiWorker
+    @ContributesAndroidInjector abstract fun contributesOttaiWorker(): OttaiPlugin.OttaiWorker
     @ContributesAndroidInjector abstract fun contributesSiAppWorker(): PatchedSiAppPlugin.PatchedSiAppWorker
     @ContributesAndroidInjector abstract fun contributesSinoAppWorker(): PatchedSinoAppPlugin.PatchedSinoAppWorker
 

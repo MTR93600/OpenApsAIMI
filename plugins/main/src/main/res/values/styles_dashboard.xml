@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Widget.AAPS.Dashboard.Card" parent="@style/Widget.MaterialComponents.CardView">
+        <item name="cardElevation">@dimen/dashboard_card_elevation</item>
+        <item name="cardUseCompatPadding">true</item>
+        <item name="cardBackgroundColor">@color/dashboard_card_background</item>
+        <item name="strokeColor">@color/dashboard_card_stroke</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="rippleColor">@color/dashboard_ripple</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.AAPS.Dashboard.Card</item>
+    </style>
+
+    <style name="ShapeAppearance.AAPS.Dashboard.Card" parent="@style/ShapeAppearance.MaterialComponents.MediumComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSizeTopLeft">@dimen/dashboard_card_corner_large</item>
+        <item name="cornerSizeTopRight">@dimen/dashboard_card_corner_large</item>
+        <item name="cornerSizeBottomRight">@dimen/dashboard_card_corner_large</item>
+        <item name="cornerSizeBottomLeft">@dimen/dashboard_card_corner_small</item>
+    </style>
+</resources>

@@ -28,6 +28,7 @@ import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.constraints.PluginConstraints
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -104,7 +105,8 @@ open class OpenAPSSMBPlugin @Inject constructor(
     private val determineBasalSMB: DetermineBasalSMB,
     private val profiler: Profiler,
     private val glucoseStatusCalculatorSMB: GlucoseStatusCalculatorSMB,
-    private val apsResultProvider: Provider<APSResult>
+    private val apsResultProvider: Provider<APSResult>,
+    private val ch: ConcentrationHelper
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -334,7 +336,7 @@ open class OpenAPSSMBPlugin @Inject constructor(
         ) return
         if (!hardLimits.checkHardLimits(profile.getIsfMgdl("OpenAPSSMBPlugin"), app.aaps.core.ui.R.string.profile_sensitivity_value, HardLimits.MIN_ISF, HardLimits.MAX_ISF)) return
         if (!hardLimits.checkHardLimits(profile.getMaxDailyBasal(), app.aaps.core.ui.R.string.profile_max_daily_basal_value, 0.02, hardLimits.maxBasal())) return
-        if (!hardLimits.checkHardLimits(pump.baseBasalRate, app.aaps.core.ui.R.string.current_basal_value, 0.01, hardLimits.maxBasal())) return
+        if (!hardLimits.checkHardLimits(ch.fromPump(pump.baseBasalRate), app.aaps.core.ui.R.string.current_basal_value, 0.01, hardLimits.maxBasal())) return
 
         // End of check, start gathering data
 
@@ -457,7 +459,7 @@ open class OpenAPSSMBPlugin @Inject constructor(
             maxUAMSMBBasalMinutes = preferences.get(IntKey.ApsUamMaxMinutesOfBasalToLimitSmb),
             bolus_increment = pump.pumpDescription.bolusStep,
             carbsReqThreshold = preferences.get(IntKey.ApsCarbsRequestThreshold),
-            current_basal = activePlugin.activePump.baseBasalRate,
+            current_basal = ch.fromPump(activePlugin.activePump.baseBasalRate),
             temptargetSet = isTempTarget,
             autosens_max = preferences.get(DoubleKey.AutosensMax),
             out_units = if (profileFunction.getUnits() == GlucoseUnit.MMOL) "mmol/L" else "mg/dl",

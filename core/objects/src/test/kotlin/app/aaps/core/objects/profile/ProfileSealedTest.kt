@@ -3,6 +3,7 @@ package app.aaps.core.objects.profile
 import android.content.Context
 import app.aaps.core.interfaces.aps.APS
 import app.aaps.core.interfaces.configuration.Config
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -36,6 +37,7 @@ class ProfileSealedTest : TestBase() {
     @Mock lateinit var preferences: Preferences
     @Mock lateinit var aps: APS
     @Mock lateinit var processedDeviceStatusData: ProcessedDeviceStatusData
+    @Mock lateinit var ch: ConcentrationHelper
 
     private lateinit var hardLimits: HardLimits
     private lateinit var dateUtil: DateUtil
@@ -58,7 +60,7 @@ class ProfileSealedTest : TestBase() {
 
     @BeforeEach
     fun prepare() {
-        testPumpPlugin = TestPumpPlugin(rh)
+        testPumpPlugin = TestPumpPlugin(rh, ch)
         dateUtil = DateUtilImpl(context)
         hardLimits = HardLimitsMock(preferences, rh)
         whenever(activePlugin.activePump).thenReturn(testPumpPlugin)

@@ -2,6 +2,7 @@ package app.aaps.implementation.queue.commands
 
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -30,8 +31,8 @@ class CommandSMBBolus(
     @Inject lateinit var activePlugin: ActivePlugin
     @Inject lateinit var persistenceLayer: PersistenceLayer
     @Inject lateinit var preferences: Preferences
-
     @Inject lateinit var pumpEnactResultProvider: Provider<PumpEnactResult>
+    @Inject lateinit var ch: ConcentrationHelper
 
     init {
         injector.androidInjector().inject(this)
@@ -40,6 +41,7 @@ class CommandSMBBolus(
     override val commandType: Command.CommandType = Command.CommandType.SMB_BOLUS
 
     override fun execute() {
+        detailedBolusInfo.insulin = ch.toPump(detailedBolusInfo.insulin)
         val r: PumpEnactResult
         val lastBolusTime = persistenceLayer.getNewestBolus()?.timestamp ?: 0L
         aapsLogger.debug(LTag.PUMPQUEUE, "Last bolus: $lastBolusTime ${dateUtil.dateAndTimeAndSecondsString(lastBolusTime)}")
@@ -59,7 +61,7 @@ class CommandSMBBolus(
 
     override fun status(): String = rh.gs(app.aaps.core.ui.R.string.smb_bolus_u, detailedBolusInfo.insulin)
 
-    override fun log(): String = "SMB BOLUS ${rh.gs(app.aaps.core.ui.R.string.format_insulin_units, detailedBolusInfo.insulin)}"
+    override fun log(): String = "SMB BOLUS ${ch.insulinAmountString(detailedBolusInfo.insulin, true)}"
     override fun cancel() {
         aapsLogger.debug(LTag.PUMPQUEUE, "Result cancel")
         callback?.result(pumpEnactResultProvider.get().success(false).comment(app.aaps.core.ui.R.string.connectiontimedout))?.run()

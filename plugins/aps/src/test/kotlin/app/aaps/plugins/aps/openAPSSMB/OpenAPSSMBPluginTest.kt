@@ -29,7 +29,7 @@ class OpenAPSSMBPluginTest : TestBaseWithProfile() {
         openAPSSMBPlugin = OpenAPSSMBPlugin(
             aapsLogger, rxBus, constraintChecker, rh, profileFunction, profileUtil, config, activePlugin,
             iobCobCalculator, hardLimits, preferences, dateUtil, processedTbrEbData, persistenceLayer, glucoseStatusProvider,
-            tddCalculator, bgQualityCheck, uiInteraction, determineBasalSMB, profiler, GlucoseStatusCalculatorSMB(aapsLogger, iobCobCalculator, dateUtil, decimalFormatter, deltaCalculator), apsResultProvider
+            tddCalculator, bgQualityCheck, uiInteraction, determineBasalSMB, profiler, GlucoseStatusCalculatorSMB(aapsLogger, iobCobCalculator, dateUtil, decimalFormatter, deltaCalculator), apsResultProvider, ch
         )
     }
 

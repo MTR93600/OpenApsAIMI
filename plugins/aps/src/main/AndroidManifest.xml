@@ -1,4 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    
+    <!-- 🚨 Emergency SOS (Hypo) Permissions -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- 📺 Screen Share (WebRTC) Permissions -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
+    <application>
+        <!-- ... existing activities ... -->
+        <activity
+            android:name=".openAPSAIMI.advisor.AimiProfileAdvisorActivity"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:label="@string/aimi_advisor_title" />
+        <activity
+            android:name=".openAPSAIMI.advisor.meal.MealAdvisorActivity"
+            android:label="AIMI Meal Advisor"
+            android:exported="false"
+            android:theme="@style/AppTheme.NoActionBar" />
+        <activity
+            android:name=".openAPSAIMI.advisor.meal.MealAdvisorCameraActivity"
+            android:label="AIMI Camera"
+            android:exported="false"
+            android:theme="@style/AppTheme.NoActionBar" />
+
+        <activity
+            android:name=".openAPSAIMI.advisor.AimiModeSettingsActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:label="AIMI Modes" />
+        
+        <activity
+            android:name=".openAPSAIMI.context.ui.ContextActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:label="@string/context_title" />
+
+        <!-- 🚨 Emergency SOS (Hypo) Permissions activity -->
+        <activity
+            android:name=".openAPSAIMI.sos.AIMIEmergencySosPermissionActivityMTR"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:label="AIMI Emergency SOS" />
+            
+        <!-- 📺 Screen Share Foreground Service -->
+        <service
+            android:name=".openAPSAIMI.advisor.service.AimiScreenShareService"
+            android:foregroundServiceType="mediaProjection"
+            android:exported="false" />
+    </application>
+
 </manifest>

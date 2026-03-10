@@ -22,6 +22,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.constraints.PluginConstraints
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
@@ -129,7 +130,8 @@ class ComboV2Plugin @Inject constructor(
     private val uiInteraction: UiInteraction,
     private val androidPermission: AndroidPermission,
     private val config: Config,
-    private val pumpEnactResultProvider: Provider<PumpEnactResult>
+    private val pumpEnactResultProvider: Provider<PumpEnactResult>,
+    private val ch: ConcentrationHelper
 ) :
     PumpPluginBase(
         pluginDescription = PluginDescription()

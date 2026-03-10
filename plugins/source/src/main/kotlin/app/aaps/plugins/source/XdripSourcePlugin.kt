@@ -16,6 +16,7 @@ import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.receivers.Intents
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -31,6 +32,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
 import kotlin.math.round
+import kotlin.text.get
 
 @Singleton
 class XdripSourcePlugin @Inject constructor(
@@ -80,7 +82,8 @@ class XdripSourcePlugin @Inject constructor(
         @Inject lateinit var preferences: Preferences
         @Inject lateinit var dateUtil: DateUtil
         @Inject lateinit var dataWorkerStorage: DataWorkerStorage
-
+        @Inject lateinit var uel: UserEntryLogger
+        private val xdripOM = preferences.get(BooleanKey.OApsxdriponeminute)
         fun getSensorStartTime(bundle: Bundle): Long? {
             val now = dateUtil.now()
             var sensorStartTime: Long? = if (preferences.get(BooleanKey.BgSourceCreateSensorChange)) {
@@ -94,6 +97,9 @@ class XdripSourcePlugin @Inject constructor(
             }
             return sensorStartTime
         }
+        companion object {
+            var lastDataTimestamp: Long = 0
+        }
 
         @SuppressLint("CheckResult")
         override suspend fun doWorkAndLog(): Result {
@@ -102,6 +108,13 @@ class XdripSourcePlugin @Inject constructor(
             if (!xdripSourcePlugin.isEnabled()) return Result.success(workDataOf("Result" to "Plugin not enabled"))
             val bundle = dataWorkerStorage.pickupBundle(inputData.getLong(DataWorkerStorage.STORE_KEY, -1))
                 ?: return Result.failure(workDataOf("Error" to "missing input data"))
+            val currentTimestamp = bundle.getLong(Intents.EXTRA_TIMESTAMP, 0)
+            if (!xdripOM && currentTimestamp - lastDataTimestamp < 240000) {
+                // Less than 5 minutes has passed since last data processing, ignore this data
+                return Result.success(workDataOf("Result" to "Ignoring data, not enough time passed since last processing"))
+            }
+
+            lastDataTimestamp = currentTimestamp
 
             aapsLogger.debug(LTag.BGSOURCE, "Received xDrip data: $bundle")
             val glucoseValues = mutableListOf<GV>()

@@ -22,4 +22,7 @@ interface TIR {
 
     fun toTableRow(context: Context, rh: ResourceHelper, dateUtil: DateUtil): TableRow
     fun toTableRow(context: Context, rh: ResourceHelper, days: Int): TableRow
+    fun belowPct(): Double?
+    fun inRangePct(): Double?
+    fun abovePct(): Double?
 }

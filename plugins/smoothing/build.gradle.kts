@@ -16,6 +16,7 @@ dependencies {
     implementation(project(":core:data"))
     implementation(project(":core:interfaces"))
     implementation(project(":core:ui"))
+    implementation(project(":core:keys"))
 
     ksp(libs.com.google.dagger.compiler)
     ksp(libs.com.google.dagger.android.processor)

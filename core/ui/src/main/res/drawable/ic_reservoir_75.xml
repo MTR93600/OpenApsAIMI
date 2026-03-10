@@ -1,0 +1,23 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Tampa -->
+    <path
+        android:fillColor="?attr/colorOnSurface"
+        android:pathData="M8,2h8a1,1 0 0 1 1,1v1a1,1 0 0 1 -1,1H8a1,1 0 0 1 -1,-1V3a1,1 0 0 1 1,-1z" />
+
+    <!-- Corpo -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="0.4"
+        android:pathData="M6,8 L9,4 H15 L18,8 V20 a2,2 0 0 1 -2,2 H8a2,2 0 0 1 -2,-2 Z" />
+
+    <!-- Líquido 75% -->
+    <path
+        android:fillColor="#90CAF9"
+        android:pathData="M6,11 L18,11 V20 a2,2 0 0 1 -2,2 H8a2,2 0 0 1 -2,-2 Z" />
+</vector>

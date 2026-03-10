@@ -19,6 +19,7 @@ import app.aaps.core.data.model.BS;
 import app.aaps.core.data.model.TE;
 import app.aaps.core.data.pump.defs.PumpType;
 import app.aaps.core.data.time.T;
+import app.aaps.core.interfaces.insulin.ConcentrationHelper;
 import app.aaps.core.interfaces.logging.AAPSLogger;
 import app.aaps.core.interfaces.logging.LTag;
 import app.aaps.core.interfaces.notifications.Notification;
@@ -106,6 +107,7 @@ public class AapsOmnipodErosManager {
     private final PumpSync pumpSync;
     private final UiInteraction uiInteraction;
     private final Provider<PumpEnactResult> pumpEnactResultProvider;
+    private final ConcentrationHelper ch;
 
     private boolean basalBeepsEnabled;
     private boolean bolusBeepsEnabled;
@@ -135,7 +137,8 @@ public class AapsOmnipodErosManager {
                                   OmnipodAlertUtil omnipodAlertUtil,
                                   PumpSync pumpSync,
                                   UiInteraction uiInteraction,
-                                  Provider<PumpEnactResult> pumpEnactResultProvider
+                                  Provider<PumpEnactResult> pumpEnactResultProvider,
+                                  ConcentrationHelper ch
     ) {
 
         this.podStateManager = podStateManager;
@@ -149,6 +152,7 @@ public class AapsOmnipodErosManager {
         this.pumpSync = pumpSync;
         this.uiInteraction = uiInteraction;
         this.pumpEnactResultProvider = pumpEnactResultProvider;
+        this.ch = ch;
 
         delegate = new OmnipodManager(aapsLogger, aapsSchedulers, communicationService, podStateManager);
 

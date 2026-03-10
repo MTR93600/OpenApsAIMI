@@ -27,6 +27,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -128,6 +129,7 @@ class DataHandlerMobile @Inject constructor(
     private val importExportPrefs: ImportExportPrefs,
     private val decimalFormatter: DecimalFormatter,
     private val bolusWizardProvider: Provider<BolusWizard>,
+    private val ch: ConcentrationHelper,
     private val pumpStatusProvider: PumpStatusProvider
 ) {
 
@@ -1511,7 +1513,7 @@ class DataHandlerMobile @Inject constructor(
         // Reservoir Level
         val pump = activePlugin.activePump
         val maxReading = pump.pumpDescription.maxResorvoirReading.toDouble()
-        val reservoir = pump.reservoirLevel.let { if (pump.pumpDescription.isPatchPump && it > maxReading) maxReading else it }
+        val reservoir = ch.fromPump(pump.reservoirLevel.let { if (pump.pumpDescription.isPatchPump && it > maxReading) maxReading else it })
         val reservoirString = if (reservoir > 0) decimalFormatter.to0Decimal(reservoir, rh.gs(app.aaps.core.ui.R.string.insulin_unit_shortname)) else ""
         val resUrgent = preferences.get(IntKey.OverviewResCritical)
         val resWarn = preferences.get(IntKey.OverviewResWarning)
@@ -1628,7 +1630,7 @@ class DataHandlerMobile @Inject constructor(
             } else if (result.rate == 0.0 && result.duration == 0) {
                 rh.gs(app.aaps.core.ui.R.string.cancel_temp) + "\n"
             } else {
-                rh.gs(R.string.rate_duration, result.rate, result.rate / activePlugin.activePump.baseBasalRate * 100, result.duration) + "\n"
+                rh.gs(R.string.rate_duration, result.rate, result.rate / (ch.fromPump(activePlugin.activePump.baseBasalRate)) * 100, result.duration) + "\n"
             }
             ret += "\n" + rh.gs(app.aaps.core.ui.R.string.reason) + ": " + result.reason
             return ret
@@ -1905,7 +1907,17 @@ class DataHandlerMobile @Inject constructor(
             steps180min = actionStepsRate.steps180min,
             device = actionStepsRate.device
         )
-        disposable += persistenceLayer.insertOrUpdateStepsCount(stepsCount).subscribe()
+        disposable += persistenceLayer.insertOrUpdateStepsCount(stepsCount).subscribe(
+            { result ->
+                val id = result.inserted.firstOrNull()?.id ?: result.updated.firstOrNull()?.id
+                aapsLogger.info(LTag.WEAR,
+                    "✅ Wear Steps stored in DB: ID=$id, 5min=${actionStepsRate.steps5min}, timestamp=${java.util.Date(actionStepsRate.timestamp)}")
+            },
+            { error ->
+                aapsLogger.error(LTag.WEAR,
+                    "❌ Failed to store Wear steps: ${error.message}")
+            }
+        )
     }
 
     private fun handleGetCustomWatchface(command: EventData.ActionGetCustomWatchface) {

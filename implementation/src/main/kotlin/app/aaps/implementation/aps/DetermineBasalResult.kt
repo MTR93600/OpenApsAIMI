@@ -12,12 +12,14 @@ import app.aaps.core.interfaces.aps.GlucoseStatus
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.OapsProfile
+import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.OapsProfileAutoIsf
 import app.aaps.core.interfaces.aps.Predictions
 import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -47,8 +49,18 @@ class DetermineBasalResult @Inject constructor(
     private val rh: ResourceHelper,
     private val decimalFormatter: DecimalFormatter,
     private val dateUtil: DateUtil,
-    private val apsResultProvider: Provider<APSResult>
+    private val apsResultProvider: Provider<APSResult>,
+    private val ch: ConcentrationHelper
 ) : APSResult {
+
+    companion object {
+        private val allowedAlgorithms = setOf(
+            APSResult.Algorithm.AMA,
+            APSResult.Algorithm.SMB,
+            APSResult.Algorithm.AUTO_ISF,
+            APSResult.Algorithm.AIMI
+        )
+    }
 
     override var date: Long = 0
     override var reason: String = ""
@@ -67,6 +79,7 @@ class DetermineBasalResult @Inject constructor(
     override var variableSens: Double? = null
     override var isfMgdlForCarbs: Double? = null // used only to pass to AAPS client
     override var scriptDebug: List<String>? = null
+    override var isHypoRisk: Boolean = false
     var eventualBG = 0.0
     var snoozeBG = 0.0
 
@@ -83,12 +96,16 @@ class DetermineBasalResult @Inject constructor(
     override var currentTemp: CurrentTemp? = null
     override var oapsProfile: OapsProfile? = null
     override var oapsProfileAutoIsf: OapsProfileAutoIsf? = null
+    override var oapsProfileAimi: OapsProfileAimi? = null   // <-- garde override si l'interface le définit
     override var mealData: MealData? = null
 
     lateinit var result: RT
 
     override fun with(result: RT): APSResult = this.also {
         this.algorithm = result.algorithm
+        if (this.algorithm !in allowedAlgorithms) {
+            throw IllegalArgumentException("Unsupported algorithm: ${this.algorithm}")
+        }
         this.result = result
         hasPredictions = true
         date = result.timestamp ?: dateUtil.now()
@@ -109,6 +126,7 @@ class DetermineBasalResult @Inject constructor(
         variableSens = result.variable_sens
         isfMgdlForCarbs = result.isfMgdlForCarbs
         scriptDebug = result.consoleError
+        isHypoRisk = result.isHypoRisk
     }
 
     override val carbsRequiredText: String
@@ -117,50 +135,34 @@ class DetermineBasalResult @Inject constructor(
     override fun resultAsString(): String {
         val pump = activePlugin.activePump
         if (isChangeRequested) {
-            // rate
             var ret: String = if (rate == 0.0 && duration == 0) "${rh.gs(R.string.cancel_temp)} "
             else if (rate == -1.0) "${rh.gs(R.string.let_temp_basal_run)}\n"
-            else if (usePercent) "${rh.gs(R.string.percent_rate_duration, percent.toDouble(), percent * pump.baseBasalRate / 100.0, duration)} "
-            else "${rh.gs(R.string.rate_percent_duration, rate, rate / pump.baseBasalRate * 100.0, duration)} "
+            else if (usePercent) "${rh.gs(R.string.percent_rate_duration, percent.toDouble(), percent * ch.fromPump(pump.baseBasalRate) / 100.0, duration)} "
+            else "${rh.gs(R.string.rate_percent_duration, rate, rate / (ch.fromPump(pump.baseBasalRate)) * 100.0, duration)} "
 
-            // smb
             if (smb != 0.0) ret += "SMB: ${decimalFormatter.toPumpSupportedBolus(smb, activePlugin.activePump.pumpDescription.bolusStep)} "
-            if (isCarbsRequired) {
-                ret += "$carbsRequiredText "
-            }
-
-            // reason
+            if (isCarbsRequired) ret += "$carbsRequiredText "
             ret += rh.gs(R.string.reason) + ": " + reason
             return ret
         }
-        return if (isCarbsRequired) {
-            carbsRequiredText
-        } else rh.gs(R.string.nochangerequested)
+        return if (isCarbsRequired) carbsRequiredText else rh.gs(R.string.nochangerequested)
     }
 
     override fun resultAsSpanned(): Spanned {
         val pump = activePlugin.activePump
         if (isChangeRequested) {
-            // rate
             var ret: String =
                 if (rate == 0.0 && duration == 0) rh.gs(R.string.cancel_temp) + "<br>"
                 else if (rate == -1.0) rh.gs(R.string.let_temp_basal_run) + "<br>"
-                else if (usePercent) rh.gs(R.string.percent_rate_duration_formatted, percent.toDouble(), percent * pump.baseBasalRate / 100.0, duration)
-                else rh.gs(R.string.rate_percent_duration_formatted, rate, rate / pump.baseBasalRate * 100.0, duration)
+                else if (usePercent) rh.gs(R.string.percent_rate_duration_formatted, percent.toDouble(), percent * ch.fromPump(pump.baseBasalRate) / 100.0, duration)
+                else rh.gs(R.string.rate_percent_duration_formatted, rate, rate / (ch.fromPump(pump.baseBasalRate)) * 100.0, duration)
 
-            // smb
-            if (smb != 0.0) ret += "<b>" + "SMB" + "</b>: " + decimalFormatter.toPumpSupportedBolus(smb, activePlugin.activePump.pumpDescription.bolusStep) + "<br>"
-            if (isCarbsRequired) {
-                ret += "$carbsRequiredText<br>"
-            }
-
-            // reason
+            if (smb != 0.0) ret += "<b>SMB</b>: " + decimalFormatter.toPumpSupportedBolus(smb, activePlugin.activePump.pumpDescription.bolusStep) + "<br>"
+            if (isCarbsRequired) ret += "$carbsRequiredText<br>"
             ret += "<b>" + rh.gs(R.string.reason) + "</b>: " + reason.replace("<", "&lt;").replace(">", "&gt;")
             return HtmlHelper.fromHtml(ret)
         }
-        return if (isCarbsRequired) {
-            HtmlHelper.fromHtml(carbsRequiredText)
-        } else HtmlHelper.fromHtml(rh.gs(R.string.nochangerequested))
+        return if (isCarbsRequired) HtmlHelper.fromHtml(carbsRequiredText) else HtmlHelper.fromHtml(rh.gs(R.string.nochangerequested))
     }
 
     override fun newAndClone(): APSResult = apsResultProvider.get().with(result)
@@ -177,95 +179,139 @@ class DetermineBasalResult @Inject constructor(
             val startTime = date
 
             val predictions = predictions()
+            
+            // 🔮 FCL 11.0: Debug & JSON Fallback
+            if (predictions?.IOB.isNullOrEmpty()) {
+                aapsLogger.debug(LTag.APS, "DEBUG GV: predBGs object is empty/null. Checking JSON...")
+                try {
+                    val jsonPreds = json().optJSONObject("predBGs")
+                    if (jsonPreds != null) {
+                         aapsLogger.debug(LTag.APS, "DEBUG GV: Found predictions in JSON fallback!")
+                         val iob = ArrayList<Int>()
+                         jsonPreds.optJSONArray("IOB")?.let { ja -> for(i in 0 until ja.length()) iob.add(ja.getInt(i)) }
+                         // We could reconstruct the full object, but for now let's just populate the array from JSON if needed
+                         // Or better: Create a temporary Predictions object from JSON and use it
+                         val fallbackPreds = Predictions(IOB = iob) 
+                         // Note: This is a hack for debugging. 
+                         // Just proceeding with standard logic if possible, or manual parse here.
+                         
+                         // Manual parse loop for JSON fallback IOB
+                         for (i in 1 until iob.size) {
+                             array.add(
+                                 GV(
+                                     raw = 0.0,
+                                     noise = 0.0,
+                                     value = iob[i].toDouble(),
+                                     timestamp = startTime + i * 5 * 60 * 1000L,
+                                     sourceSensor = SourceSensor.IOB_PREDICTION,
+                                     trendArrow = TrendArrow.NONE
+                                 )
+                             )
+                         }
+                         // Also assume other fields might exist in JSON but prioritizing IOB for visibility
+                    }
+                } catch (e: Exception) {
+                    aapsLogger.error(LTag.APS, "DEBUG GV: JSON fallback failed: $e")
+                }
+            } else {
+                 aapsLogger.debug(LTag.APS, "DEBUG GV: Found predBGs object (IOB size: ${predictions?.IOB?.size})")
+            }
+            
             predictions?.IOB?.let { iob ->
                 for (i in 1 until iob.size) {
-                    val gv = GV(
-                        raw = 0.0,
-                        noise = 0.0,
-                        value = iob[i].toDouble(),
-                        timestamp = startTime + i * 5 * 60 * 1000L,
-                        sourceSensor = SourceSensor.IOB_PREDICTION,
-                        trendArrow = TrendArrow.NONE
+                    array.add(
+                        GV(
+                            raw = 0.0,
+                            noise = 0.0,
+                            value = iob[i].toDouble(),
+                            timestamp = startTime + i * 5 * 60 * 1000L,
+                            sourceSensor = SourceSensor.IOB_PREDICTION,
+                            trendArrow = TrendArrow.NONE
+                        )
                     )
-                    array.add(gv)
                 }
             }
-            predictions?.aCOB?.let { iob ->
-                for (i in 1 until iob.size) {
-                    val gv = GV(
-                        raw = 0.0,
-                        noise = 0.0,
-                        value = iob[i].toDouble(),
-                        timestamp = startTime + i * 5 * 60 * 1000L,
-                        sourceSensor = SourceSensor.A_COB_PREDICTION,
-                        trendArrow = TrendArrow.NONE
+            predictions?.aCOB?.let { aCob ->
+                for (i in 1 until aCob.size) {
+                    array.add(
+                        GV(
+                            raw = 0.0,
+                            noise = 0.0,
+                            value = aCob[i].toDouble(),
+                            timestamp = startTime + i * 5 * 60 * 1000L,
+                            sourceSensor = SourceSensor.A_COB_PREDICTION,
+                            trendArrow = TrendArrow.NONE
+                        )
                     )
-                    array.add(gv)
                 }
             }
-            predictions?.COB?.let { iob ->
-                for (i in 1 until iob.size) {
-                    val gv = GV(
-                        raw = 0.0,
-                        noise = 0.0,
-                        value = iob[i].toDouble(),
-                        timestamp = startTime + i * 5 * 60 * 1000L,
-                        sourceSensor = SourceSensor.COB_PREDICTION,
-                        trendArrow = TrendArrow.NONE
+            predictions?.COB?.let { cob ->
+                for (i in 1 until cob.size) {
+                    array.add(
+                        GV(
+                            raw = 0.0,
+                            noise = 0.0,
+                            value = cob[i].toDouble(),
+                            timestamp = startTime + i * 5 * 60 * 1000L,
+                            sourceSensor = SourceSensor.COB_PREDICTION,
+                            trendArrow = TrendArrow.NONE
+                        )
                     )
-                    array.add(gv)
                 }
             }
-            predictions?.UAM?.let { iob ->
-                for (i in 1 until iob.size) {
-                    val gv = GV(
-                        raw = 0.0,
-                        noise = 0.0,
-                        value = iob[i].toDouble(),
-                        timestamp = startTime + i * 5 * 60 * 1000L,
-                        sourceSensor = SourceSensor.UAM_PREDICTION,
-                        trendArrow = TrendArrow.NONE
+            predictions?.UAM?.let { uam ->
+                for (i in 1 until uam.size) {
+                    array.add(
+                        GV(
+                            raw = 0.0,
+                            noise = 0.0,
+                            value = uam[i].toDouble(),
+                            timestamp = startTime + i * 5 * 60 * 1000L,
+                            sourceSensor = SourceSensor.UAM_PREDICTION,
+                            trendArrow = TrendArrow.NONE
+                        )
                     )
-                    array.add(gv)
                 }
             }
-            predictions?.ZT?.let { iob ->
-                for (i in 1 until iob.size) {
-                    val gv = GV(
-                        raw = 0.0,
-                        noise = 0.0,
-                        value = iob[i].toDouble(),
-                        timestamp = startTime + i * 5 * 60 * 1000L,
-                        sourceSensor = SourceSensor.ZT_PREDICTION,
-                        trendArrow = TrendArrow.NONE
+            predictions?.ZT?.let { zt ->
+                for (i in 1 until zt.size) {
+                    array.add(
+                        GV(
+                            raw = 0.0,
+                            noise = 0.0,
+                            value = zt[i].toDouble(),
+                            timestamp = startTime + i * 5 * 60 * 1000L,
+                            sourceSensor = SourceSensor.ZT_PREDICTION,
+                            trendArrow = TrendArrow.NONE
+                        )
                     )
-                    array.add(gv)
                 }
             }
             return array
         }
+
+
     override val latestPredictionsTime: Long
         get() {
-            var latest: Long = 0
+            var latest = 0L
             val startTime = date
-            val predictions = predictions()
-            predictions?.IOB?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
-            predictions?.aCOB?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
-            predictions?.COB?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
-            predictions?.UAM?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
-            predictions?.ZT?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
+            val preds = predictions()
+            preds?.IOB?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
+            preds?.aCOB?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
+            preds?.COB?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
+            preds?.UAM?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
+            preds?.ZT?.let { if (it.isNotEmpty()) latest = max(latest, startTime + (it.size - 1) * 5 * 60 * 1000L) }
             return latest
         }
+
     override val isChangeRequested: Boolean
         get() {
             val closedLoopEnabled = constraintChecker.isClosedLoopAllowed()
-            // closed loop mode: handle change at driver level
             if (closedLoopEnabled.value()) {
                 aapsLogger.debug(LTag.APS, "DEFAULT: Closed mode")
                 return isTempBasalRequested || isBolusRequested
             }
 
-            // open loop mode: try to limit request
             if (!isTempBasalRequested && !isBolusRequested) {
                 aapsLogger.debug(LTag.APS, "FALSE: No request")
                 return false
@@ -273,83 +319,49 @@ class DetermineBasalResult @Inject constructor(
             val now = System.currentTimeMillis()
             val activeTemp = processedTbrEbData.getTempBasalIncludingConvertedExtended(now)
             val pump = activePlugin.activePump
-            val profile = profileFunction.getProfile()
-            if (profile == null) {
+            val profile = profileFunction.getProfile() ?: run {
                 aapsLogger.error("FALSE: No Profile")
                 return false
             }
+
             return if (usePercent) {
                 if (activeTemp == null && percent == 100) {
                     aapsLogger.debug(LTag.APS, "FALSE: No temp running, asking cancel temp")
                     return false
                 }
-                if (activeTemp != null && abs(percent - activeTemp.convertedToPercent(now, profile)) < pump.pumpDescription.basalStep) {
+                if (activeTemp != null && abs(percent - activeTemp.convertedToPercent(now, profile)) < ch.fromPump(pump.pumpDescription.basalStep)) {
                     aapsLogger.debug(LTag.APS, "FALSE: Temp equal")
                     return false
                 }
-                // always report zero temp
-                if (percent == 0) {
-                    aapsLogger.debug(LTag.APS, "TRUE: Zero temp")
-                    return true
-                }
-                // always report high temp
+                if (percent == 0) return true
                 if (pump.pumpDescription.tempBasalStyle == PumpDescription.PERCENT) {
                     val pumpLimit = pump.pumpDescription.pumpType.tbrSettings()?.maxDose ?: 0.0
-                    if (percent.toDouble() == pumpLimit) {
-                        aapsLogger.debug(LTag.APS, "TRUE: Pump limit")
-                        return true
-                    }
+                    if (percent.toDouble() == pumpLimit) return true
                 }
-                // report change bigger than 30%
-                var percentMinChangeChange = preferences.get(IntKey.LoopOpenModeMinChange).toDouble()
-                percentMinChangeChange /= 100.0
-                val lowThreshold = 1 - percentMinChangeChange
-                val highThreshold = 1 + percentMinChangeChange
-                var change = percent / 100.0
-                if (activeTemp != null) change = percent / activeTemp.convertedToPercent(now, profile).toDouble()
-                if (change < lowThreshold || change > highThreshold) {
-                    aapsLogger.debug(LTag.APS, "TRUE: Outside allowed range " + change * 100.0 + "%")
-                    true
-                } else {
-                    aapsLogger.debug(LTag.APS, "TRUE: Inside allowed range " + change * 100.0 + "%")
-                    false
-                }
+                var percentMinChangeChange = preferences.get(IntKey.LoopOpenModeMinChange).toDouble() / 100.0
+                val low = 1 - percentMinChangeChange
+                val high = 1 + percentMinChangeChange
+                val change = if (activeTemp != null) percent / activeTemp.convertedToPercent(now, profile).toDouble() else percent / 100.0
+                change < low || change > high
             } else {
-                if (activeTemp == null && rate == pump.baseBasalRate) {
+                if (activeTemp == null && rate == ch.fromPump(pump.baseBasalRate)) {
                     aapsLogger.debug(LTag.APS, "FALSE: No temp running, asking cancel temp")
                     return false
                 }
-                if (activeTemp != null && abs(rate - activeTemp.convertedToAbsolute(now, profile)) < pump.pumpDescription.basalStep) {
+                if (activeTemp != null && abs(rate - activeTemp.convertedToAbsolute(now, profile)) < ch.fromPump(pump.pumpDescription.basalStep)) {
                     aapsLogger.debug(LTag.APS, "FALSE: Temp equal")
                     return false
                 }
-                // always report zero temp
-                if (rate == 0.0) {
-                    aapsLogger.debug(LTag.APS, "TRUE: Zero temp")
-                    return true
-                }
-                // always report high temp
+                if (rate == 0.0) return true
                 if (pump.pumpDescription.tempBasalStyle == PumpDescription.ABSOLUTE) {
                     val pumpLimit = pump.pumpDescription.pumpType.tbrSettings()?.maxDose ?: 0.0
-                    if (rate == pumpLimit) {
-                        aapsLogger.debug(LTag.APS, "TRUE: Pump limit")
-                        return true
-                    }
+                    if (rate == pumpLimit) return true
                 }
-                // report change bigger than 30%
-                var percentMinChangeChange = preferences.get(IntKey.LoopOpenModeMinChange).toDouble()
-                percentMinChangeChange /= 100.0
-                val lowThreshold = 1 - percentMinChangeChange
-                val highThreshold = 1 + percentMinChangeChange
-                var change = rate / profile.getBasal()
-                if (activeTemp != null) change = rate / activeTemp.convertedToAbsolute(now, profile)
-                if (change < lowThreshold || change > highThreshold) {
-                    aapsLogger.debug(LTag.APS, "TRUE: Outside allowed range " + change * 100.0 + "%")
-                    true
-                } else {
-                    aapsLogger.debug(LTag.APS, "TRUE: Inside allowed range " + change * 100.0 + "%")
-                    false
-                }
+                var percentMinChangeChange = preferences.get(IntKey.LoopOpenModeMinChange).toDouble() / 100.0
+                val low = 1 - percentMinChangeChange
+                val high = 1 + percentMinChangeChange
+                val change = if (activeTemp != null) rate / activeTemp.convertedToAbsolute(now, profile) else rate / profile.getBasal()
+                change < low || change > high
             }
         }
 }

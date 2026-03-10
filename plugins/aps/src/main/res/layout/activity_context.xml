@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Chat Input Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/context_description"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:layout_marginBottom="8dp"/>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/context_chat_hint"
+            app:boxBackgroundMode="outline"
+            android:layout_marginBottom="8dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/editChatInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minLines="2"
+                android:maxLines="4"
+                android:inputType="textMultiLine|textCapSentences"/>
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btnSendChat"
+                style="@style/Widget.MaterialComponents.Button"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/context_btn_ai_parse"/>
+
+            <Space
+                android:layout_width="8dp"
+                android:layout_height="1dp"/>
+
+            <Button
+                android:id="@+id/btnClearInput"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/context_btn_clear"/>
+        </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/progressParsing"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone"
+            tools:visibility="visible"/>
+
+        <!-- Quick Presets -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Quick Presets"
+            android:textAppearance="?attr/textAppearanceHeadlineSmall"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp"/>
+
+        <com.google.android.material.chip.ChipGroup
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipCardio"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/context_preset_cardio"/>
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipStrength"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/context_preset_strength"/>
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipYoga"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/context_preset_yoga"/>
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipSport"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/context_preset_sport"/>
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipWalking"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/context_preset_walking"/>
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipSick"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/context_preset_sick"/>
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipStress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/context_preset_stress"/>
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipMealRisk"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/context_preset_meal_risk"/>
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipAlcohol"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/context_preset_alcohol"/>
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipTravel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/context_preset_travel"/>
+        </com.google.android.material.chip.ChipGroup>
+
+        <!-- Active Intents -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/context_active_intents"
+                android:textAppearance="?attr/textAppearanceHeadlineSmall"/>
+
+            <Button
+                android:id="@+id/btnClearAll"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/context_btn_clear_all"/>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/textEmptyState"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/context_empty_state"
+            android:textAlignment="center"
+            android:padding="32dp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:visibility="gone"
+            tools:visibility="visible"/>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerActiveIntents"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:nestedScrollingEnabled="false"
+            tools:itemCount="2"
+            tools:listitem="@layout/item_active_intent"/>
+
+        <!-- Settings Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/context_settings_title"
+            android:textAppearance="?attr/textAppearanceHeadlineSmall"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp"/>
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switchContextEnabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/context_module_enabled"
+            android:padding="12dp"/>
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switchLLMEnabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/context_llm_enabled"
+            android:padding="12dp"/>
+
+    </LinearLayout>
+</ScrollView>

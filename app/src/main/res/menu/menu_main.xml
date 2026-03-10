@@ -29,6 +29,32 @@
         app:showAsAction="never"
         android:title="@string/nav_setupwizard" />
     <item
+        android:id="@+id/nav_dashboard_preview"
+        android:orderInCategory="1"
+        app:showAsAction="never"
+        android:title="@string/nav_dashboard_preview" />
+    <item
+        android:id="@+id/nav_comparator"
+        android:orderInCategory="1"
+        app:showAsAction="never"
+        android:title="@string/menu_comparator" />
+    <item
+        android:id="@+id/nav_meal_advisor"
+        android:orderInCategory="1"
+        app:showAsAction="never"
+        android:title="@string/aimi_meal_advisor_title" />
+    <item
+        android:id="@+id/nav_aimi_advisor"
+        android:orderInCategory="1"
+        app:showAsAction="never"
+        android:title="@string/aimi_advisor_title" />
+    <item
+        android:id="@+id/nav_aimi_context"
+        android:orderInCategory="1"
+        app:showAsAction="never"
+        android:title="@string/context_title" />
+
+    <item
         android:id="@+id/nav_stats"
         android:orderInCategory="1"
         app:showAsAction="never"

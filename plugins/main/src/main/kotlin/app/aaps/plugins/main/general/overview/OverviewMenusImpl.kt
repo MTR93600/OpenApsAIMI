@@ -226,6 +226,7 @@ class OverviewMenusImpl @Inject constructor(
         scaleButton.setOnClickListener { v: View ->
             val popup = PopupMenu(v.context, v)
             popup.menu.add(Menu.NONE, 6, Menu.NONE, rh.gs(R.string.graph_long_scale_6h))
+            popup.menu.add(Menu.NONE, 9, Menu.NONE, rh.gs(R.string.graph_long_scale_9h))
             popup.menu.add(Menu.NONE, 12, Menu.NONE, rh.gs(R.string.graph_long_scale_12h))
             popup.menu.add(Menu.NONE, 18, Menu.NONE, rh.gs(R.string.graph_long_scale_18h))
             popup.menu.add(Menu.NONE, 24, Menu.NONE, rh.gs(R.string.graph_long_scale_24h))
@@ -321,6 +322,7 @@ class OverviewMenusImpl @Inject constructor(
 
     override fun scaleString(rangeToDisplay: Int): String = when (rangeToDisplay) {
         6    -> rh.gs(R.string.graph_scale_6h)
+        9    -> rh.gs(R.string.graph_scale_9h)
         12   -> rh.gs(R.string.graph_scale_12h)
         18   -> rh.gs(R.string.graph_scale_18h)
         24   -> rh.gs(R.string.graph_scale_24h)

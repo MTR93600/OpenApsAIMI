@@ -35,6 +35,7 @@ allprojects {
         mavenCentral()
         google()
         maven("https://jitpack.io")
+
     }
     tasks.withType<KotlinCompile>().configureEach {
         compilerOptions {

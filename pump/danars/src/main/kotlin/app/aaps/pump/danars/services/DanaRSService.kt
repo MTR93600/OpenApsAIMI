@@ -8,12 +8,12 @@ import android.os.SystemClock
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.Profile
-import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpEnactResult
@@ -98,7 +98,7 @@ class DanaRSService : DaggerService() {
     @Inject lateinit var rxBus: RxBus
     @Inject lateinit var preferences: Preferences
     @Inject lateinit var rh: ResourceHelper
-    @Inject lateinit var profileFunction: ProfileFunction
+    @Inject lateinit var ch: ConcentrationHelper
     @Inject lateinit var commandQueue: CommandQueue
     @Inject lateinit var context: Context
     @Inject lateinit var danaRSPlugin: DanaRSPlugin
@@ -210,7 +210,7 @@ class DanaRSService : DaggerService() {
             rxBus.send(EventPumpStatusChanged(rh.gs(R.string.gettingbolusstatus)))
             sendMessage(danaRSPacketBolusGetStepBolusInformation.get()) // last bolus, bolusStep, maxBolus
             danaPump.lastConnection = System.currentTimeMillis()
-            val profile = profileFunction.getProfile()
+            val profile = ch.getProfile()
             if (profile != null && abs(danaPump.currentBasal - profile.getBasal()) >= pump.pumpDescription.basalStep) {
                 rxBus.send(EventPumpStatusChanged(rh.gs(R.string.gettingpumpsettings)))
                 if (!pump.isThisProfileSet(profile) && !commandQueue.isRunning(Command.CommandType.BASAL_PROFILE)) {

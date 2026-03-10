@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="dashboard_card_background">#1E2133</color>
+    <color name="dashboard_card_stroke">#334067</color>
+    <color name="dashboard_ripple">#33A2C6FF</color>
+    <color name="dashboard_surface_start">#24364F</color>
+    <color name="dashboard_surface_end">#1E2A43</color>
+    <color name="dashboard_chip_background">#2F3C5C</color>
+    <color name="dashboard_chip_border">#4C6AA6</color>
+    <color name="dashboard_on_surface">#E7ECFF</color>
+</resources>

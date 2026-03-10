@@ -68,4 +68,4 @@ interface IobCobCalculator {
      *  @return IobTotal
      */
     fun calculateIobFromTempBasalsIncludingConvertedExtended(): IobTotal
-}
+    }

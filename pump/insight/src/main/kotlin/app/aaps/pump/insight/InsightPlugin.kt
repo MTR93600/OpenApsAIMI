@@ -20,6 +20,7 @@ import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.PluginConstraints
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
@@ -144,7 +145,8 @@ class InsightPlugin @Inject constructor(
     private val insightDbHelper: InsightDbHelper,
     private val pumpSync: PumpSync,
     private val insightDatabase: InsightDatabase,
-    private val pumpEnactResultProvider: Provider<PumpEnactResult>
+    private val pumpEnactResultProvider: Provider<PumpEnactResult>,
+    private val ch: ConcentrationHelper
 ) : PumpPluginBase(
     pluginDescription = PluginDescription()
         .pluginIcon(app.aaps.core.ui.R.drawable.ic_insight_128)

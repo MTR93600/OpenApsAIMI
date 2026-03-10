@@ -1,0 +1,31 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+
+    <!-- Tampa (cor mais clara) -->
+    <path
+        android:fillColor="#CCCCCC"
+        android:pathData="M8,2h8a1,1 0 0 1 1,1v1a1,1 0 0 1 -1,1H8a1,1 0 0 1 -1,-1V3a1,1 0 0 1 1,-1z" />
+
+    <!-- Corpo do frasco (cor mais clara) -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#CCCCCC"
+        android:strokeWidth="0.4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M6,8 L9,4 H15 L18,8 V20 a2,2 0 0 1 -2,2 H8a2,2 0 0 1 -2,-2 Z" />
+
+    <!-- Área do líquido (será preenchida dinamicamente) -->
+    <path
+        android:name="liquidLevel"
+        android:fillColor="#17B7FF"
+        android:pathData="M6,20h12v0H6z" />
+</vector>
+
+
+
+

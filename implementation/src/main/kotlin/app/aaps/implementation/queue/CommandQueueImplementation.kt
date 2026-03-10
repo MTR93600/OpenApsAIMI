@@ -19,6 +19,7 @@ import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
@@ -101,7 +102,8 @@ class CommandQueueImplementation @Inject constructor(
     private val decimalFormatter: DecimalFormatter,
     private val pumpEnactResultProvider: Provider<PumpEnactResult>,
     private val jobName: CommandQueueName,
-    private val workManager: WorkManager
+    private val workManager: WorkManager,
+    private val ch: ConcentrationHelper
 ) : CommandQueue {
 
     private val disposable = CompositeDisposable()
@@ -460,13 +462,13 @@ class CommandQueueImplementation @Inject constructor(
             callback?.result(pumpEnactResultProvider.get().success(true).enacted(false))?.run()
             return false
         }
-        if (isThisProfileSet(profile) && persistenceLayer.getEffectiveProfileSwitchActiveAt(dateUtil.now()) != null) {
+        if (isThisProfileSet(ch.toPump(profile)) && persistenceLayer.getEffectiveProfileSwitchActiveAt(dateUtil.now()) != null) {
             aapsLogger.debug(LTag.PUMPQUEUE, "Correct profile already set")
             callback?.result(pumpEnactResultProvider.get().success(true).enacted(false))?.run()
             return false
         }
         // Compare with pump limits
-        val basalValues = profile.getBasalValues()
+        val basalValues = ch.toPump(profile).getBasalValues()
         for (basalValue in basalValues) {
             if (basalValue.value < activePlugin.activePump.pumpDescription.basalMinimumRate) {
                 val notification = Notification(Notification.BASAL_VALUE_BELOW_MINIMUM, rh.gs(R.string.basal_value_below_minimum), Notification.URGENT)
@@ -673,7 +675,7 @@ class CommandQueueImplementation @Inject constructor(
 
     override fun isThisProfileSet(requestedProfile: Profile): Boolean {
         val runningProfile = profileFunction.getProfile() ?: return false
-        val result = activePlugin.activePump.isThisProfileSet(requestedProfile) && requestedProfile.isEqual(runningProfile)
+        val result = activePlugin.activePump.isThisProfileSet(ch.toPump(requestedProfile)) && requestedProfile.isEqual(runningProfile)
         if (!result) {
             aapsLogger.debug(LTag.PUMPQUEUE, "Current profile: ${profileFunction.getProfile()}")
             aapsLogger.debug(LTag.PUMPQUEUE, "New profile: $requestedProfile")

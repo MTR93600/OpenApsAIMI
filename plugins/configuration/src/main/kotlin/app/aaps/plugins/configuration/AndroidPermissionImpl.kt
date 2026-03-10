@@ -138,6 +138,8 @@ class AndroidPermissionImpl @Inject constructor(
     }
 
     @Synchronized override fun notifyForStoragePermission(activity: FragmentActivity) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) return
+
         if (permissionNotGranted(activity, Manifest.permission.READ_EXTERNAL_STORAGE))
             uiInteraction.addNotification(
                 id = Notification.PERMISSION_STORAGE,

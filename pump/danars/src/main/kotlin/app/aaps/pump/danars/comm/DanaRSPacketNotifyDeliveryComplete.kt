@@ -1,5 +1,6 @@
 package app.aaps.pump.danars.comm
 
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.pump.BolusProgressData
@@ -14,7 +15,8 @@ class DanaRSPacketNotifyDeliveryComplete @Inject constructor(
     private val aapsLogger: AAPSLogger,
     private val rh: ResourceHelper,
     private val rxBus: RxBus,
-    private val danaPump: DanaPump
+    private val danaPump: DanaPump,
+    private val ch: ConcentrationHelper
 ) : DanaRSPacket() {
 
     init {
