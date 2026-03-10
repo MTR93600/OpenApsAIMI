@@ -218,6 +218,7 @@ class DynamicBasalController @Inject constructor(
             profileBasal: Double,
             isf: Double,
             duraISFminutes: Double,
+            duraISFaverage: Double,
             eventualBg: Double?
         ): Double {
             val effectiveIsf = isf.coerceAtLeast(10.0)
@@ -227,9 +228,9 @@ class DynamicBasalController @Inject constructor(
             if (bg < 80.0 || (bg < targetBg && delta < -1.5f)) return 0.0
 
             // ── Safety Guard 2: Resistance→Sensitivity transition ──────────
-            // After prolonged hyperglycemia (duraISF > 30 min), any drop signals
+            // After prolonged hyperglycemia (duraISF > 20 min AND avg > 140), any drop signals
             // that accumulated IOB is now becoming effective. Pre-emptive cut.
-            val wasChronicallyHigh = duraISFminutes > 30.0
+            val wasChronicallyHigh = duraISFminutes > 20.0 && duraISFaverage > 140.0
             val nowFalling = velocity < -0.5f
             val highIobPresent = iob > maxIob * 0.35
             if (wasChronicallyHigh && nowFalling && highIobPresent) {
@@ -242,61 +243,53 @@ class DynamicBasalController @Inject constructor(
             // ── T3C V2: Prédictif et Agressif ──────────────────────────────
             
             // 1. Projection
-            // On veut corriger sur la base du BG projeté (s'il est plus haut que le BG actuel)
-            // Si la montée est violente, on projette plus loin
+            // On veut corriger sur la base du BG projeté.
+            // On retire le .coerceAtLeast(bg) pour permettre à l'algorithme de voir la chute.
             val projectionMins = if (delta >= 3.0f && delta > shortAvgDelta) 40.0 else 30.0
             val projectedBg = bg + (velocity * (projectionMins / 5.0))
-            val effectiveBgToCorrect = projectedBg.coerceAtLeast(bg)
             
-            // Si on est sous la cible et stable ou en baisse, approche douce exponentielle
-            if (bg < targetBg && projectedBg < targetBg) {
-                return profileBasal * exp((bg - targetBg) / 20.0)
+            // 2. Anticipation de la Cible (Smarter Braking)
+            // Si on projette d'être sous la cible, on applique une réduction exponentielle immédiate.
+            if (projectedBg < targetBg) {
+                return profileBasal * exp((projectedBg - targetBg) / 20.0)
             }
             
-            val projectedError = (effectiveBgToCorrect - targetBg).coerceAtLeast(0.0)
+            val projectedError = (projectedBg - targetBg).coerceAtLeast(0.0)
             
-            // 2. Calcul du Besoin Brut T3C
-            // Pour le T3C on convertit directement l'erreur en insuline (sans retirer the IOB localement 
-            // pour garantir la force de la pente. La Guard 3 limite l'accumulation totale d'IOB).
+            // 3. Calcul du Besoin Brut T3C
             val requiredU = projectedError / effectiveIsf
             
-            // 3. Multiplicateur Anti-Résistance (Glucotoxicité)
-            // Passe de 1.0x (à 160) jusqu'à 2.0x (à 260) pour vaincre la résistance installée
+            // 4. Multiplicateur Anti-Résistance (Glucotoxicité)
             val resistanceFactor = if (bg > 160.0) {
                 1.0 + ((bg - 160.0) / 100.0).coerceAtMost(1.0)
             } else {
                 1.0
             }
             
-            // 3.b Multiplicateur d'Accélération (Nouveau)
-            // Si on monte très vite, on booste l'insuline immédiatement pour casser la courbe
+            // 5. Multiplicateur d'Accélération
             val accelFactor = if (delta >= 3.0f) {
-                1.0 + (delta / 10.0).coerceAtMost(0.5) // Jusqu'à +50%
+                1.0 + (delta / 10.0).coerceAtMost(0.5)
             } else {
                 1.0
             }
             
-            // 4. Horizon de Livraison Réactif (en Heures)
-            // Plus on monte vite, plus on compresse l'horizon pour expédier l'insuline comme un bolus
+            // 6. Horizon de Livraison Réactif
             val deliveryHorizonHours = when {
-                delta >= 3.0f || velocity >= 3.0f -> 0.16   // 10 mins (Urgence Post-Repas ou Montée Fulgurante)
-                effectiveBgToCorrect > 160.0 -> 0.25        // 15 mins (Réponse Rapide)
-                else -> 0.33                                // 20 mins (Standard T3C)
+                delta >= 3.0f || velocity >= 3.0f -> 0.16
+                projectedBg > 160.0 -> 0.25
+                else -> 0.33
             }
             
             // Taux de correction ciblé
             val correctionRate = (requiredU / deliveryHorizonHours) * resistanceFactor * accelFactor
             
-            // 5. Braking override : on protège les chutes non-détectées par la Guard 1
-            val brakeFactor: Double = when {
-                velocity < -2.0f -> return 0.0              // chute rapide → zero immédiat
-                velocity < -0.5f -> 0.4                     // chute modérée → 40%
-                else             -> 1.0
-            }
+            // 7. Continuous Braking : Freinage linéaire basé sur la vitesse de chute
+            // Si velocity = -2.0, brakeFactor = 0.0. Si velocity >= 0.0, brakeFactor = 1.0.
+            val brakeFactor = (1.0 + velocity / 2.0).coerceIn(0.0, 1.0)
 
             val totalRate = profileBasal + (correctionRate * brakeFactor)
 
-            // Cap at 10× profileBasal (maxBasal from profile applied externally)
+            // Cap at 10× profileBasal
             return totalRate.coerceIn(0.0, profileBasal * 10.0)
         }
     }

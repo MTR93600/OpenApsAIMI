@@ -4984,6 +4984,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 shortAvgDelta = glucose_status.shortAvgDelta,
                 longAvgDelta = glucose_status.longAvgDelta,
                 duraISFminutes = glucose_status.duraISFminutes,
+                duraISFaverage = glucose_status.duraISFaverage,
                 profile = profile,
                 currenttemp = currenttemp,
                 iob = iob_data_array.firstOrNull() ?: IobTotal(System.currentTimeMillis()),
@@ -7984,6 +7985,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         shortAvgDelta: Double,
         longAvgDelta: Double,
         duraISFminutes: Double,
+        duraISFaverage: Double,
         profile: OapsProfileAimi,
         currenttemp: CurrentTemp,
         iob: IobTotal,
@@ -8014,6 +8016,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             profileBasal = baseBasal,
             isf = variableSensitivity.coerceAtLeast(10.0),
             duraISFminutes = duraISFminutes,
+            duraISFaverage = duraISFaverage,
             eventualBg = if (eventualBg > 0) eventualBg else null
         )
 
