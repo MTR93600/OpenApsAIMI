@@ -63,16 +63,16 @@ class MpcController @Inject constructor(
             if (state.estimatedRa > 3.0) {
                 // Raising floor to 10.0 to prevent hyper-aggressiveness
                 activeRInsulin = 10.0
-                activeMaxSmb = 5.0
+                activeMaxSmb = state.highBgMaxSMB // Respect user cap strictly
             } else if (state.bg > 120.0) {
                 // Transition fluide entre 20 (stable) et 10 (montée)
                 activeRInsulin = 20.0 - (raFactor * 10.0)
-                activeMaxSmb = max(1.0, state.highBgMaxSMB)
+                activeMaxSmb = state.highBgMaxSMB
             } else {
                 // Mode croisière : Coût agile (30), 
                 // descend vers 20 si un Ra est détecté.
                 activeRInsulin = 30.0 - (raFactor * 10.0)
-                activeMaxSmb = max(0.5, state.maxSMB)
+                activeMaxSmb = state.maxSMB
             }
         }
 

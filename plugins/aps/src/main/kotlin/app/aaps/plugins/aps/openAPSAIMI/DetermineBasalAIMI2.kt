@@ -4505,12 +4505,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // maxSMB is a persistent class member. It MUST be reset to the user's preference at the start of every cycle.
         // Otherwise, temporary overrides (like BFast2 mode) permeate to future cycles.
         this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
-        this.maxSMBHB = this.maxSMB // Fallback since specific key doesn't exist yet 
-        // Logic check: usually maxSMBHB is just maxSMB. Let's check init. Init said 0.5.
-        // Better safe:
-        // this.maxSMBHB = 2.0 // or whatever default.
-        // Actually earlier code used `if (bg > 120...) maxSMBHB else maxSMB`.
-        // Let's stick to maxSMB reset first which was the smoking gun.
+        this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB).coerceAtLeast(this.maxSMB)
         // ✅ ETAPE 1: Calculer le Profil d'Action de l'IOB
         // 🧬 PHYSIO INTEGRATION: Get SNS Dominance from Adapter
         val physioSnapshot = physioAdapter.getLatestSnapshot()
@@ -5331,8 +5326,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     isNight = hourOfDay >= 23 || hourOfDay < 6,
                     sourceSensor = glucose_status.sourceSensor,
                     maxIOB = this.maxIob,
-                    maxSMB = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIMaxSMB).coerceAtLeast(0.5),
-                    highBgMaxSMB = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIHighBGMaxSMB).coerceAtLeast(1.0)
+                    maxSMB = this.maxSMB,
+                    highBgMaxSMB = this.maxSMBHB
                 )
 
             // 🤖 Hardware-Awareness Logging
