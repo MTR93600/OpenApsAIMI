@@ -14,7 +14,5 @@ enum class LongNonKey(
     LastCleanupRun("last_cleanup_run", 0L),
     LastInsulinConfirmation("last_insulin_confirmation", 0L),
     LastInsulinChange("last_insulin_change", 0L),
-    LastInsulinConfirmation("last_insulin_confirmation", 0L),
-    LastInsulinChange("last_insulin_change", 0L),
 }
 
