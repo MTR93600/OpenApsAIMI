@@ -118,5 +118,29 @@ class ContinuousStateEstimator @Inject constructor(
 
     fun getLastRa(): Double = lastRa
 
+    /**
+     * T9 — Compensation lag matériel G6 (Lead Compensator standalone)
+     *
+     * Expose la correction de délai Dexcom G6 (+25% sur la vélocité, +50% combiné avec l'orchestrateur)
+     * dans un appel indépendant du pipeline Autodrive V3.
+     * Utilisable depuis le chemin AIMI V2 pour que la compensation s'applique partout.
+     *
+     * @param velocity Vélocité BG brute du capteur (mg/dL/min)
+     * @param isG6     Vrai si le capteur est un Dexcom G6 natif
+     * @return Vélocité corrigée (ou identique si non-G6)
+     */
+    fun applyG6LeadCompensation(velocity: Double, isG6: Boolean): Double {
+        return if (isG6 && velocity > 0.5) {
+            val compensated = velocity * 1.25
+            aapsLogger.debug(
+                LTag.APS,
+                "👽 [G6-Lead-V2] v_raw=${velocity.format(2)} → v_comp=${compensated.format(2)} (+25% lead corr)"
+            )
+            compensated
+        } else {
+            velocity
+        }
+    }
+
     private fun Double.format(digits: Int) = "%.${digits}f".format(this)
 }
