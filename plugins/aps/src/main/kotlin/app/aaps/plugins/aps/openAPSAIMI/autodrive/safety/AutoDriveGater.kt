@@ -45,13 +45,17 @@ class AutoDriveGater @Inject constructor(
         // 3. Glycemic Thresholds (Strict Full Closed Loop)
         // Autodrive V3 is designed to "catch" rises. Use combinedDelta (filtered) for trend.
         val bgRising = combinedDelta > 0.1
-        val highBg = bg > 120.0
+        
+        // 🚀 ANTI-LAG: Lower threshold if rising fast (CombinedDelta > 2.0)
+        val activationThreshold = if (combinedDelta > 2.0) 90.0 else 120.0
+        val highBg = bg > activationThreshold
 
-        // Logic: Engage only if High BG + Rising (Filtered Trend)
+        // Logic: Engage if High BG + Rising (Filtered Trend)
         val shouldEngage = highBg && bgRising
 
         if (!shouldEngage) {
-            val reason = if (bg <= 120.0) "BG Safe ($bg <= 120)" else "BG Stable/Dropping (CombinedDelta=$combinedDelta)"
+            val reasonSource = if (combinedDelta > 2.0) "Aggressive Rise" else "Standard"
+            val reason = if (bg <= activationThreshold) "BG Safe ($bg <= $activationThreshold for $reasonSource)" else "BG Stable/Dropping (CombinedDelta=$combinedDelta)"
             return GatingResult(engage = false, reason = "🧘 $reason")
         }
 

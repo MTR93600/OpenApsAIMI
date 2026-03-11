@@ -1229,7 +1229,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         mealModeActive: Boolean,
         currentBg: Double,
         delta: Double,
-        eventualBg: Double
+        eventualBg: Double,
+        combinedDelta: Double
     ): Boolean {
         mealModeSmbReason = null
 
@@ -1285,17 +1286,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 4) Enfin, l'exception meal-rise si elle est vraie
         if (mealModeActive) {
-            val safeFloor = max(100.0, targetbg - 5)
-            val risingFast = delta >= 2.0 || (delta > 0 && currentBg > 120)
+            val safeFloorValue = max(100.0, targetbg - 5)
+            val risingFast = combinedDelta >= 2.0 || (combinedDelta > 0 && currentBg > 120)
+            
+            // 🚀 EXPLOSIVE RISE EXCEPTION: Allow SMB at 90mg/dL if combinedDelta is huge (> 4.0)
+            val isExplosive = combinedDelta > 4.0 && currentBg > 90.0
             
             // Condition assouplie: eventualBg ignoré si montée confirmée
-            if (currentBg > safeFloor && delta > 0.5 && (eventualBg > safeFloor || risingFast)) {
+            if ((currentBg > safeFloorValue || isExplosive) && combinedDelta > 0.5 && (eventualBg > safeFloorValue || risingFast || isExplosive)) {
                 mealModeSmbReason = context.getString(
                     R.string.smb_enabled_meal_mode,
                     convertBG(currentBg),
-                    delta,
+                    combinedDelta,
                     convertBG(eventualBg)
-                )
+                ) + if (isExplosive) " [🚀 EXPLOSIVE]" else ""
                 return true
             }
         }
@@ -6706,7 +6710,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             mealModeActive,
             bg,
             delta.toDouble(),
-            eventualBG
+            eventualBG,
+            combinedDelta.toDouble()
         )
 
         mealModeSmbReason?.let { reason(rT, it) }

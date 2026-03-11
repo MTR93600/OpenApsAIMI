@@ -712,14 +712,21 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 
                 // 🚨 SAFETY OVERRIDE (FCL 10.3) - Refined for "Blind Spot" Removal:
                 // If we are in Hyper (>150) AND Rising/Stable, we MUST NOT be protective (<1.0).
-                // FIX: "Rising" defined strictly as Delta > -0.5 (Stable or Up). 
-                // Previously > -2.0 allowed drops, which was risky to un-protect.
-                val isHyper = glucoseStatus.glucose > 150
+                // ANTI-LAG: Lower threshold to 110 if rising fast (delta > 3.0)
+                val isFastRise = glucoseStatus.delta > 3.0
+                val overrideThreshold = if (isFastRise) 110.0 else 150.0
+                val isHyper = glucoseStatus.glucose > overrideThreshold
                 val isRising = glucoseStatus.delta > -0.5
                 
                 if (isHyper && isRising && brainFactor < 1.0) {
-                    aapsLogger.debug(LTag.APS, "🧠 Brain Override: IGNORING protective factor ${"%.2f".format(brainFactor)} because BG ${glucoseStatus.glucose} is high & stable/rising.")
+                    aapsLogger.debug(LTag.APS, "🧠 Brain Override: IGNORING protective factor ${"%.2f".format(brainFactor)} because BG ${glucoseStatus.glucose} is > $overrideThreshold & stable/rising.")
                     brainFactor = 1.0
+                }
+
+                // 🚀 EXPLOSIVE RISE BOOST: If delta is very high, force a slight aggressive factor
+                if (glucoseStatus.delta > 6.0 && brainFactor < 1.1) {
+                    aapsLogger.debug(LTag.APS, "🚀 Brain Boost: Forcing factor 1.1 due to explosive rise (delta=${glucoseStatus.delta})")
+                    brainFactor = 1.1
                 }
 
                 if (brainFactor != 1.0) {
