@@ -473,8 +473,14 @@ class GoogleDriveManager @Inject constructor(
     private fun inferCloudPathFor(fileName: String): String? {
         val lower = fileName.lowercase(Locale.getDefault())
         return when {
-            lower.endsWith(".json") -> CloudConstants.CLOUD_PATH_SETTINGS
-            lower.endsWith(".csv") -> CloudConstants.CLOUD_PATH_USER_ENTRIES
+            lower.endsWith(".json") || lower.endsWith(".jsonl") -> {
+                if (lower.contains("aimi") || lower.contains("autodrive")) CloudConstants.CLOUD_PATH_AIMI
+                else CloudConstants.CLOUD_PATH_SETTINGS
+            }
+            lower.endsWith(".csv") -> {
+                if (lower.contains("aimi") || lower.contains("autodrive")) CloudConstants.CLOUD_PATH_AIMI
+                else CloudConstants.CLOUD_PATH_USER_ENTRIES
+            }
             lower.endsWith(".zip") -> CloudConstants.CLOUD_PATH_LOGS
             else -> null
         }
@@ -1139,7 +1145,8 @@ class GoogleDriveManager @Inject constructor(
                 val existingId = findFolderIdByName(seg, currentParentId)
                 
                 val resolvedId = existingId ?: createFolder(seg, currentParentId) ?: run {
-                    aapsLogger.error(LTag.CORE, "$LOG_PREFIX FOLDER_SEGMENT_CREATE_FAIL name='$seg' parentPath='$parentDisplay' parentId=$currentParentId requested='/$currentPath'")
+                    aapsLogger.error(LTag.CORE, "$LOG_PREFIX FOLDER_SEGMENT_CREATE_FAIL name='$seg' parentPath='$parentDisplay' parentId=$currentParentId fullPath='/$currentPath'")
+                    aapsLogger.info(LTag.CORE, "$LOG_PREFIX DEBUG ERROR: Check if parentId $currentParentId is valid and accessible.")
                     return@withContext null
                 }
 
@@ -1170,7 +1177,8 @@ class GoogleDriveManager @Inject constructor(
             val accessToken = getValidAccessToken() ?: return@withContext null
             val query = "mimeType='application/vnd.google-apps.folder' and name='$name' and '$parentId' in parents and trashed=false"
             val encodedQuery = URLEncoder.encode(query, "UTF-8")
-            val url = "$DRIVE_API_URL/files?q=$encodedQuery&fields=files(id,name)&pageSize=1&supportsAllDrives=true&includeItemsFromAllDrives=true"
+            val url = "$DRIVE_API_URL/files?q=$encodedQuery&fields=files(id,name)&pageSize=5&supportsAllDrives=true&includeItemsFromAllDrives=true"
+            aapsLogger.info(LTag.CORE, "$LOG_PREFIX findFolderIdByName: Searching for '$name' under parent '$parentId'")
             val request = Request.Builder()
                 .url(url)
                 .header("Authorization", "Bearer $accessToken")
@@ -1180,7 +1188,13 @@ class GoogleDriveManager @Inject constructor(
             if (!response.isSuccessful) return@withContext null
             val json = JSONObject(body)
             val arr = json.optJSONArray("files") ?: JSONArray()
-            if (arr.length() == 0) return@withContext null
+            if (arr.length() == 0) {
+                aapsLogger.info(LTag.CORE, "$LOG_PREFIX findFolderIdByName: No folder found matching '$name' under '$parentId'")
+                return@withContext null
+            }
+            if (arr.length() > 1) {
+                aapsLogger.warn(LTag.CORE, "$LOG_PREFIX findFolderIdByName: Found multiple folders (${arr.length()}) matching '$name' under '$parentId'. Using the first one.")
+            }
             arr.getJSONObject(0).getString("id")
         } catch (_: Exception) {
             null
@@ -1193,7 +1207,7 @@ class GoogleDriveManager @Inject constructor(
     suspend fun uploadFileToPath(fileName: String, fileContent: ByteArray, mimeType: String, path: String): String? {
         return withContext(Dispatchers.IO) {
             try {
-                aapsLogger.info(LTag.CORE, "$LOG_PREFIX UPLOAD_PATH_REQUESTED path='$path' file=$fileName size=${fileContent.size}")
+                aapsLogger.info(LTag.CORE, "$LOG_PREFIX UPLOAD_PATH_REQUESTED path='$path' file=$fileName size=${fileContent.size} mime=$mimeType")
                 val folderId = resolveFolderIdForUpload(path) ?: run {
                     aapsLogger.error(LTag.CORE, "$LOG_PREFIX Cannot resolve target path '$path'")
                     showConnectionError("Cannot create destination path")
@@ -1274,7 +1288,7 @@ class GoogleDriveManager @Inject constructor(
         if (prov.isNotEmpty() && prov != "application/octet-stream") return prov
         val lower = fileName.lowercase(Locale.getDefault())
         return when {
-            lower.endsWith(".json") -> "application/json; charset=UTF-8"
+            lower.endsWith(".json") || lower.endsWith(".jsonl") -> "application/json; charset=UTF-8"
             lower.endsWith(".csv") -> "text/csv; charset=UTF-8"
             lower.endsWith(".zip") -> "application/zip"
             else -> if (prov.isNotEmpty()) prov else "application/octet-stream"

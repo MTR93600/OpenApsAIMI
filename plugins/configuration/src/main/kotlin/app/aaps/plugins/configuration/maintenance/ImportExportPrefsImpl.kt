@@ -44,6 +44,7 @@ import app.aaps.core.interfaces.protection.ExportPasswordDataStore
 import app.aaps.core.interfaces.protection.PasswordCheck
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.rx.events.EventAimiCloudBackupTrigger
 import app.aaps.core.interfaces.rx.events.EventDiaconnG8PumpLogReset
 import app.aaps.core.interfaces.rx.weardata.CwfData
 import app.aaps.core.interfaces.rx.weardata.CwfMetadataKey
@@ -414,6 +415,11 @@ class ImportExportPrefsImpl @Inject constructor(
             doExportToLocal(activity, newFile, password)
             // Then export to cloud
             doExportToCloud(activity, password)
+
+            // Trigger AIMI backup if enabled
+            if (exportOptionsDialog.isAimiCloudEnabled()) {
+                rxBus.send(EventAimiCloudBackupTrigger())
+            }
         }
     }
     
@@ -489,6 +495,11 @@ class ImportExportPrefsImpl @Inject constructor(
                 // Delete the temp file created for prompt, doExportToCloud will create its own
                 tempDoc.delete()
                 doExportToCloud(activity, password)
+
+                // Trigger AIMI backup if enabled
+                if (exportOptionsDialog.isAimiCloudEnabled()) {
+                    rxBus.send(EventAimiCloudBackupTrigger())
+                }
             }
         }
     }
@@ -662,6 +673,11 @@ class ImportExportPrefsImpl @Inject constructor(
                             aapsLogger.info(LTag.CORE, "${CloudConstants.LOG_PREFIX} NONINTERACTIVE_EXPORT_CLOUD_OK fileName=$fileName fileId=$uploadedFileId")
                         } else {
                             aapsLogger.error(LTag.CORE, "${CloudConstants.LOG_PREFIX} NONINTERACTIVE_EXPORT_CLOUD_FAIL")
+                        }
+
+                        // Trigger AIMI backup if enabled
+                        if (exportOptionsDialog.isAimiCloudEnabled()) {
+                            rxBus.send(EventAimiCloudBackupTrigger())
                         }
                     } else {
                         aapsLogger.error(LTag.CORE, "${CloudConstants.LOG_PREFIX} NONINTERACTIVE_EXPORT_READ_FILE_FAIL")
@@ -1117,20 +1133,33 @@ class ImportExportPrefsImpl @Inject constructor(
         }
     }
 
-    override fun uploadFileToCloud(fileName: String, fileContent: ByteArray, mimeType: String, remotePath: String): Boolean {
+    override suspend fun uploadFileToCloud(fileName: String, fileContent: ByteArray, mimeType: String, remotePath: String): Boolean {
         // This is a bridge to CloudStorageManager which is in the same module
         val provider = cloudStorageManager.getActiveProvider() ?: return false
         
-        // We launch in IO dispatcher
-        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
-            try {
-                if (provider.testConnection()) {
-                    provider.uploadFileToPath(fileName, fileContent, mimeType, remotePath)
+        return try {
+            if (provider.testConnection()) {
+                // Align with doExportToCloud: force selection of the target folder
+                provider.getOrCreateFolderPath(remotePath)?.let {
+                    provider.setSelectedFolderId(it)
                 }
-            } catch (e: Exception) {
-                aapsLogger.error(LTag.CORE, "Failed to upload file to cloud from bridge: $fileName", e)
+
+                // Primary attempt: upload to specific path
+                var resultId = provider.uploadFileToPath(fileName, fileContent, mimeType, remotePath)
+                
+                // Fallback attempt: upload using selection/inference if path-based failed
+                if (resultId == null) {
+                    aapsLogger.warn(LTag.CORE, "uploadFileToPath failed for $fileName, attempting fallback uploadFile")
+                    resultId = provider.uploadFile(fileName, fileContent, mimeType)
+                }
+                
+                resultId != null
+            } else {
+                false
             }
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.CORE, "Failed to upload file to cloud from bridge: $fileName", e)
+            false
         }
-        return true // Assume started
     }
 }

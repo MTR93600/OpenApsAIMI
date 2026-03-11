@@ -101,6 +101,7 @@ import androidx.core.util.size
 import androidx.core.net.toUri
 import kotlin.math.abs
 import kotlin.math.exp
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiBackupManager
 
 @Singleton
 open class OpenAPSAIMIPlugin  @Inject constructor(
@@ -134,7 +135,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     // 🏥 Physiological Decision Adapter (The Safety Gate)
     private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR,
     private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator, // 🧠 AI Auditor MTR
-    private val contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager // 🎯 Context Manager
+    private val contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager, // 🎯 Context Manager
+    private val aimiBackupManager: AimiBackupManager // ☁️ Cloud Backup Manager (Force Init)
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)

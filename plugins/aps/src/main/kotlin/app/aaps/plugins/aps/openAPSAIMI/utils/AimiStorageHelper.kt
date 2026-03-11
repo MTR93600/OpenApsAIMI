@@ -142,6 +142,8 @@ class AimiStorageHelper @Inject constructor(
         val root = getAimiDirectory()
         val candidates = mutableListOf<File>()
         
+        log.info(LTag.APS, "AimiStorageHelper: Scanning legacy directory for backup: ${root.absolutePath}")
+        
         fun scan(dir: File) {
             dir.listFiles()?.forEach { file ->
                 if (file.isDirectory) {

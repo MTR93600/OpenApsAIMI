@@ -34,6 +34,7 @@ class ExportOptionsDialog @Inject constructor(
         const val PREF_SETTINGS_CLOUD_ENABLED = "export_settings_cloud_enabled"
         const val PREF_CSV_LOCAL_ENABLED = "export_csv_local_enabled"
         const val PREF_CSV_CLOUD_ENABLED = "export_csv_cloud_enabled"
+        const val PREF_AIMI_CLOUD_ENABLED = "export_aimi_cloud_enabled"
     }
     
     /**
@@ -52,6 +53,7 @@ class ExportOptionsDialog @Inject constructor(
         val settingsCloudCheckbox = dialogView.findViewById<CheckBox>(R.id.settings_cloud_checkbox)
         val csvLocalSwitch = dialogView.findViewById<Switch>(R.id.csv_local_switch)
         val csvCloudSwitch = dialogView.findViewById<Switch>(R.id.csv_cloud_switch)
+        val aimiCloudSwitch = dialogView.findViewById<Switch>(R.id.aimi_cloud_switch)
         
         // Load current settings
         allCloudSwitch.isChecked = sp.getBoolean(PREF_ALL_CLOUD_ENABLED, false)
@@ -61,6 +63,7 @@ class ExportOptionsDialog @Inject constructor(
         settingsCloudCheckbox.isChecked = sp.getBoolean(PREF_SETTINGS_CLOUD_ENABLED, false)
         csvLocalSwitch.isChecked = sp.getBoolean(PREF_CSV_LOCAL_ENABLED, true) // Default to local
         csvCloudSwitch.isChecked = sp.getBoolean(PREF_CSV_CLOUD_ENABLED, false)
+        aimiCloudSwitch.isChecked = sp.getBoolean(PREF_AIMI_CLOUD_ENABLED, false)
         
         // Check if cloud directory is configured
         val isCloudConfigured = cloudStorageManager.isCloudStorageActive()
@@ -70,11 +73,13 @@ class ExportOptionsDialog @Inject constructor(
             logCloudSwitch.isEnabled = false
             settingsCloudCheckbox.isEnabled = false
             csvCloudSwitch.isEnabled = false
+            aimiCloudSwitch.isEnabled = false
             
             // Force disable cloud options and enable local/email options
             logCloudSwitch.isChecked = false
             settingsCloudCheckbox.isChecked = false
             csvCloudSwitch.isChecked = false
+            aimiCloudSwitch.isChecked = false
             
             if (!logEmailSwitch.isChecked && !logCloudSwitch.isChecked) {
                 logEmailSwitch.isChecked = true
@@ -101,6 +106,7 @@ class ExportOptionsDialog @Inject constructor(
                 logCloudSwitch.isChecked = true
                 settingsCloudCheckbox.isChecked = true
                 csvCloudSwitch.isChecked = true
+                aimiCloudSwitch.isChecked = true
                 logEmailSwitch.isChecked = false
                 // settingsLocalCheckbox - keep current state, don't force uncheck
                 csvLocalSwitch.isChecked = false
@@ -112,6 +118,7 @@ class ExportOptionsDialog @Inject constructor(
                 settingsCloudCheckbox.isEnabled = false
                 csvLocalSwitch.isEnabled = false
                 csvCloudSwitch.isEnabled = false
+                aimiCloudSwitch.isEnabled = false
             } else {
                 // Re-enable per-row toggles (cloud options depend on configuration)
                 // Don't reset values - just allow user to change them
@@ -121,6 +128,7 @@ class ExportOptionsDialog @Inject constructor(
                 settingsCloudCheckbox.isEnabled = isCloudConfigured
                 csvLocalSwitch.isEnabled = true
                 csvCloudSwitch.isEnabled = isCloudConfigured
+                aimiCloudSwitch.isEnabled = isCloudConfigured
             }
         }
         
@@ -152,6 +160,7 @@ class ExportOptionsDialog @Inject constructor(
                 sp.putBoolean(PREF_SETTINGS_CLOUD_ENABLED, settingsCloudCheckbox.isChecked)
                 sp.putBoolean(PREF_CSV_LOCAL_ENABLED, csvLocalSwitch.isChecked)
                 sp.putBoolean(PREF_CSV_CLOUD_ENABLED, csvCloudSwitch.isChecked)
+                sp.putBoolean(PREF_AIMI_CLOUD_ENABLED, aimiCloudSwitch.isChecked)
                 
                 onSettingsChanged()
                 ToastUtils.infoToast(activity, rh.gs(R.string.export_options_updated))
@@ -251,6 +260,12 @@ class ExportOptionsDialog @Inject constructor(
         return value
     }
     
+    fun isAimiCloudEnabled(): Boolean {
+        val value = sp.getBoolean(PREF_AIMI_CLOUD_ENABLED, false)
+        aapsLogger.info(LTag.CORE, "$LOG_PREFIX ExportDestination: isAimiCloudEnabled=$value")
+        return value
+    }
+    
     /**
      * Reset all export settings to local/email mode
      * - Disable "All Cloud"
@@ -267,6 +282,7 @@ class ExportOptionsDialog @Inject constructor(
         sp.putBoolean(PREF_SETTINGS_CLOUD_ENABLED, false)
         sp.putBoolean(PREF_CSV_LOCAL_ENABLED, true)
         sp.putBoolean(PREF_CSV_CLOUD_ENABLED, false)
+        sp.putBoolean(PREF_AIMI_CLOUD_ENABLED, false)
     }
     
     /**
@@ -285,6 +301,7 @@ class ExportOptionsDialog @Inject constructor(
         sp.putBoolean(PREF_SETTINGS_CLOUD_ENABLED, true)
         sp.putBoolean(PREF_CSV_LOCAL_ENABLED, false)
         sp.putBoolean(PREF_CSV_CLOUD_ENABLED, true)
+        sp.putBoolean(PREF_AIMI_CLOUD_ENABLED, true)
     }
 
     /**
