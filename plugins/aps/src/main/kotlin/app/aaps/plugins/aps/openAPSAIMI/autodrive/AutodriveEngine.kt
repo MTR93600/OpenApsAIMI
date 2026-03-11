@@ -46,6 +46,10 @@ class AutodriveEngine @Inject constructor(
         isShadowMode = enabled
     }
 
+    fun getAttentionMultiplier(): Double = attentionGate.lastAttentionMultiplier
+    
+    fun getHealthScore(): Double = autodriveAuditor.lastHealthScore
+
     /**
      * Point d'entrée principal à chaque Tique (5 min) depuis DetermineBasalAIMI2.
      */

@@ -7,5 +7,6 @@
     <color name="dashboard_surface_end">#1E2A43</color>
     <color name="dashboard_chip_background">#2F3C5C</color>
     <color name="dashboard_chip_border">#4C6AA6</color>
+    <color name="dashboard_chip_border_warning">#E57373</color>
     <color name="dashboard_on_surface">#E7ECFF</color>
 </resources>

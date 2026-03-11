@@ -26,6 +26,10 @@ class MechanismAttentionGate @Inject constructor(
     // Cache en mémoire pour ne pas tuer les I/O à chaque tique de 5 minutes
     private var weightsCache: AttentionWeights? = null
     private var lastLoadTime: Long = 0
+    
+    // Pour l'UI
+    var lastAttentionMultiplier: Double = 1.0
+        private set
 
     init {
         loadWeights()
@@ -67,6 +71,7 @@ class MechanismAttentionGate @Inject constructor(
         }
 
         val modulatedSI = state.estimatedSI * attentionMultiplier
+        lastAttentionMultiplier = attentionMultiplier
 
         return state.copy(estimatedSI = modulatedSI)
     }

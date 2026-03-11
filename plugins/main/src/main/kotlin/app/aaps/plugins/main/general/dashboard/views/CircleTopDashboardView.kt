@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
+import androidx.viewbinding.ViewBinding
 import app.aaps.plugins.main.databinding.ComponentCircleTopStatusHybridBinding
 
 /**
@@ -73,6 +74,7 @@ class CircleTopDashboardView @JvmOverloads constructor(
             binding.cobText.text = getProp<String>("cobText") ?: "0g"
             binding.cvText.text = getProp<String>("cvText") ?: "CV --%"
             binding.activityText.text = getProp<String>("activityPctText") ?: "0%"
+            binding.pumpBatteryText.text = getProp<String>("pumpBatteryText") ?: "--"
 
             // ═══════════════════════════════════════════════════════════════
             // 3. Right Column Metrics
@@ -127,6 +129,21 @@ class CircleTopDashboardView @JvmOverloads constructor(
             // Steps & HR
             binding.stepsText.text = getProp<String>("stepsText") ?: "--"
             binding.hrText.text = getProp<String>("hrText") ?: "--"
+            
+            // ═══════════════════════════════════════════════════════════════
+            // 6. AIMI Insights
+            // ═══════════════════════════════════════════════════════════════
+            binding.insightT3c.text = getProp<String>("insightT3c") ?: "🎯 --"
+            binding.insightManoeuvre.text = getProp<String>("insightManoeuvre") ?: "🌀 --"
+            binding.insightFactor.text = getProp<String>("insightFactor") ?: "⚡ x1.0"
+            
+            // Adjust container style based on health score (confidence)
+            val health = getProp<Double>("aimiHealthScore") ?: 1.0
+            if (health < 0.8) {
+                binding.aimiInsightsContainer.setBackgroundResource(app.aaps.plugins.main.R.drawable.dashboard_chip_background_warning)
+            } else {
+                binding.aimiInsightsContainer.setBackgroundResource(app.aaps.plugins.main.R.drawable.dashboard_chip_background)
+            }
             
 
             

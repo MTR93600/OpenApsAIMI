@@ -19,6 +19,9 @@ import javax.inject.Singleton
 class AutodriveAuditor @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
+    // Pour l'UI (Indice de confiance)
+    var lastHealthScore: Double = 1.0
+        private set
 
     /**
      * Analyse l'état physiologique estimé par l'UKF et la décision sécurisée finale,
@@ -65,6 +68,12 @@ class AutodriveAuditor @Inject constructor(
             val rejectedU = (rawCommand.scheduledMicroBolus + (rawCommand.temporaryBasalRate / 12.0)) - (safeCommand.scheduledMicroBolus + (safeCommand.temporaryBasalRate / 12.0))
             explanations.add("🛡️ CBF a bloqué ${rejectedU.format(1)}U (Risque Hypo à 80mg/dL)")
         }
+
+        // 5. Calcul d'un score de santé approximatif pour l'UI
+        var health = 1.0
+        if (rawCommand.scheduledMicroBolus > safeCommand.scheduledMicroBolus) health -= 0.2 // Blocage CBF
+        if (isfRatio > 1.3 || isfRatio < 0.7) health -= 0.1 // Forte instabilité SI
+        lastHealthScore = health.coerceIn(0.1, 1.0)
 
         val finalReason = explanations.joinToString(" | ")
 
