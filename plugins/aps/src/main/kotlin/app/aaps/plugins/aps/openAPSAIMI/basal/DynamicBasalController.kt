@@ -225,7 +225,8 @@ class DynamicBasalController @Inject constructor(
             val velocity = delta * 0.7f + shortAvgDelta.toFloat() * 0.3f
 
             // ── Safety Guard 1: Immediate zero basal ───────────────────────
-            if (bg < 80.0 || (bg < targetBg && delta < -1.5f)) return 0.0
+            // Tightened: Cut at 90 mg/dL if dropping, or 80 mg/dL regardless
+            if (bg < 80.0 || (bg < 95.0 && delta < -1.0f) || (bg < targetBg && delta < -1.5f)) return 0.0
 
             // ── Safety Guard 2: Resistance→Sensitivity transition ──────────
             // After prolonged hyperglycemia (duraISF > 20 min AND avg > 140), any drop signals
@@ -249,9 +250,12 @@ class DynamicBasalController @Inject constructor(
             val projectedBg = bg + (velocity * (projectionMins / 5.0))
             
             // 2. Anticipation de la Cible (Smarter Braking)
-            // Si on projette d'être sous la cible, on applique une réduction exponentielle immédiate.
-            if (projectedBg < targetBg) {
-                return profileBasal * exp((projectedBg - targetBg) / 20.0)
+            // Si on projette d'être sous la cible, on réduit la basale de manière exponentielle.
+            // On ne fait plus de return immédiat ici pour permettre l'application du brakeFactor global.
+            val baseToDeliver = if (projectedBg < targetBg) {
+                profileBasal * exp((projectedBg - targetBg) / 15.0) // Sharper cut (15 vs 20)
+            } else {
+                profileBasal
             }
             
             val projectedError = (projectedBg - targetBg).coerceAtLeast(0.0)
@@ -287,7 +291,8 @@ class DynamicBasalController @Inject constructor(
             // Si velocity = -2.0, brakeFactor = 0.0. Si velocity >= 0.0, brakeFactor = 1.0.
             val brakeFactor = (1.0 + velocity / 2.0).coerceIn(0.0, 1.0)
 
-            val totalRate = profileBasal + (correctionRate * brakeFactor)
+            // MTR FIX: Apply brakeFactor to BOTH base and correction (Fixes Brake Floor bug)
+            val totalRate = (baseToDeliver + correctionRate) * brakeFactor
 
             // Cap at 10× profileBasal
             return totalRate.coerceIn(0.0, profileBasal * 10.0)
