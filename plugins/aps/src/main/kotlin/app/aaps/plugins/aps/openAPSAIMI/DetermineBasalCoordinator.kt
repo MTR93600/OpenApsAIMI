@@ -1,10 +1,11 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
+import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.model.*
 import app.aaps.plugins.aps.openAPSAIMI.ports.*
 import app.aaps.plugins.aps.openAPSAIMI.smb.BypassHeuristics
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbEngine
-import timber.log.Timber
 
 class DetermineBasalCoordinator(
     private val clock: Clock,
@@ -13,35 +14,36 @@ class DetermineBasalCoordinator(
     private val smbEngine: SmbEngine,
     private val safety: SafetyGuards,
     private val basalActuator: BasalActuator,
-    private val smbActuator: SmbActuator
+    private val smbActuator: SmbActuator,
+    private val aapsLogger: AAPSLogger
 ) {
     fun runOnce(ctx: LoopContext): Decision {
-        Timber.d("Starting DetermineBasalCoordinator.runOnce() for context timestamp: ${ctx.timestampMs}")
+        aapsLogger.debug(LTag.APS, "Starting DetermineBasalCoordinator.runOnce() for context timestamp: ${ctx.nowEpochMillis}")
 
         val basalPlan = basalPlanner(ctx)
-        Timber.d("Basal plan computed: ${basalPlan?.let { "Present" } ?: "Null"}")
+        aapsLogger.debug(LTag.APS, "Basal plan computed: ${basalPlan?.let { "Present" } ?: "Null"}")
 
         val bypass = BypassHeuristics.computeBypass(ctx, hypoRisk(ctx))
-        Timber.d("Bypass computation completed with reason: ${bypass.reason}")
+        aapsLogger.debug(LTag.APS, "Bypass computation completed: $bypass")
 
         val smb = smbEngine.planSmb(ctx, bypass)
         val smbPlan = if (smb.units > 0.0) SmbPlan(smb.units, clock.now(), smb.reason) else null
-        Timber.d("SMB plan computed: ${smbPlan?.let { "Present" } ?: "Null"}")
+        aapsLogger.debug(LTag.APS, "SMB plan computed: ${smbPlan?.let { "Present" } ?: "Null"}")
 
         val safetyReport = safety.apply(ctx, basalPlan, smbPlan)
-        Timber.d("Safety check completed with report: ${safetyReport?.let { "Present" } ?: "Null"}")
+        aapsLogger.debug(LTag.APS, "Safety check completed with report: ${safetyReport?.let { "Present" } ?: "Null"}")
 
         basalPlan?.let { 
-            Timber.d("Setting temp basal: ${it.basalRate} U/h")
+            aapsLogger.debug(LTag.APS, "Setting temp basal: ${it.rateUph} U/h")
             basalActuator.setTempBasal(it) 
         }
         
         smbPlan?.let { 
-            Timber.d("Delivering SMB: ${it.units} U")
+            aapsLogger.debug(LTag.APS, "Delivering SMB: ${it.units} U")
             smbActuator.deliver(it) 
         }
 
-        Timber.d("DetermineBasalCoordinator.runOnce() completed successfully")
+        aapsLogger.debug(LTag.APS, "DetermineBasalCoordinator.runOnce() completed successfully")
         return Decision(basalPlan, smbPlan, safetyReport)
     }
 }
