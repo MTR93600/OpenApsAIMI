@@ -53,16 +53,32 @@ class AutodriveEngine @Inject constructor(
     /**
      * Point d'entrée principal à chaque Tique (5 min) depuis DetermineBasalAIMI2.
      */
-    fun tick(currentState: AutoDriveState, profileBasal: Double, lgsThreshold: Double, currentEpochMs: Long = System.currentTimeMillis()): AutoDriveCommand? {
+    fun tick(
+        currentState: AutoDriveState,
+        profileBasal: Double,
+        lgsThreshold: Double,
+        hour: Int,
+        steps: Int,
+        hr: Int,
+        rhr: Int,
+        currentEpochMs: Long = System.currentTimeMillis()
+    ): AutoDriveCommand? {
         if (!isActive && !isShadowMode) return null
 
+        // On injecte les données physiologiques temps réel dans l'état avant traitement
+        val stateWithContext = currentState.copy(
+            hour = hour,
+            steps = steps,
+            hr = hr,
+            rhr = rhr
+        )
+
         // 0. Le Processus d'apprentissage en ligne s'exécute pour affiner les paramètres
-        onlineLearner.learnAndUpdate(currentState, currentEpochMs)
+        onlineLearner.learnAndUpdate(stateWithContext, currentEpochMs)
 
         // On injecte le facteur appris dans l'état (Phase 2 -> Phase 5)
-        // Note: Ici c'est super simplifié, le SI global baisse ou monte selon le facteur.
-        val learningAdjustedState = currentState.copy(
-            estimatedSI = currentState.estimatedSI * onlineLearner.learnedResistanceFactor
+        val learningAdjustedState = stateWithContext.copy(
+            estimatedSI = stateWithContext.estimatedSI * onlineLearner.learnedResistanceFactor
         )
 
         // 1. Attention Gate (Phase 9 - ML On-Device)

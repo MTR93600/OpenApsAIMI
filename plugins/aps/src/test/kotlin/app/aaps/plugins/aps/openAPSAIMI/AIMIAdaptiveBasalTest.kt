@@ -110,6 +110,7 @@ class AIMIAdaptiveBasalTest {
         zeroSinceMin: Int = 0,
         minutesSinceLastChange: Int = 0
     ) = AIMIAdaptiveBasal.Input(
-        bg, delta, shortAvgDelta, longAvgDelta, accel, r2, parabolaMin, combinedDelta, profileBasal, lastTempIsZero, zeroSinceMin, minutesSinceLastChange
+        bg, delta, shortAvgDelta, longAvgDelta, accel, r2, parabolaMin, combinedDelta, profileBasal, lastTempIsZero, zeroSinceMin, minutesSinceLastChange,
+        predictedBg = 120.0, auditorConfidence = 0.9
     )
 }

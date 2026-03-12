@@ -36,7 +36,7 @@ class BypassHeuristicsTest {
             bg = snapshot,
             iobU = iob,
             cobG = 0.0,
-            profile = LoopProfile(targetMgdl = 100.0, isfMgdlPerU = 40.0, basalProfileUph = 1.0),
+            profile = LoopProfile(targetMgdl = 100.0, isfMgdlPerU = 40.0, basalProfileUph = 1.0, lgsThreshold = 70.0),
             pump = PumpCaps(
                 basalStep = 0.05,
                 bolusStep = 0.05,

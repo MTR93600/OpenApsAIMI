@@ -22,6 +22,7 @@ import kotlin.math.min
 class MpcController @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
+    private val METABOLIC_SI_BASE = 0.0012 // Calibration factor (Phase 12)
 
     // Paramètres MPC
     private val horizonMinutes = 60          // On vérifie sur 60 minutes
@@ -54,24 +55,26 @@ class MpcController @Inject constructor(
             activeMaxSmb = 0.5 // On refuse d'envoyer de fortes doses d'un coup
         } else {
             activeTargetBg = 100.0
-            // 🧨 DYNAMIC AGGRESSIVENESS (Phase 11 - Unannounced Meal Crushing)
-            // On indexe maintenant le coût de l'insuline sur l'absorption estimée (Ra).
-            // Si Ra est faible (croisière/pomme), on garde un coût élevé (> 80) pour favoriser
-            // la basale de profil. Si Ra explose (> 3), on tombe à 10 pour écraser le pic.
-            val raFactor = (state.estimatedRa / 3.0).coerceIn(0.0, 1.0)
             
-            if (state.estimatedRa > 3.0) {
-                // Raising floor to 10.0 to prevent hyper-aggressiveness
+            // 🚀 DAWN GUARD CONSERVATISM
+            // Si on suspecte un pic de cortisol (Matériel + Heure + Pas de glucides + Pas de pas), 
+            // on rend l'IA extrêmement prudente sur l'envoi de bolus (SMB).
+            val isDawnWindow = state.hour in 5..9
+            val isLowActivity = state.steps < 200
+            val isDawnRiseSuspected = isDawnWindow && isLowActivity && (state.hr > state.rhr + 5) && state.cob < 0.1
+
+            if (isDawnRiseSuspected) {
+                activeRInsulin = 100.0 // L'insuline est "très chère" : on préfère la basale lente
+                activeMaxSmb = state.maxSMB * 0.5 // On divise par 2 le plafond de bolus
+            } else if (state.estimatedRa > 3.0) {
+                // 🧨 DYNAMIC AGGRESSIVENESS (Phase 11 - Unannounced Meal Crushing)
                 activeRInsulin = 10.0
-                activeMaxSmb = state.highBgMaxSMB // Respect user cap strictly
+                activeMaxSmb = state.highBgMaxSMB 
             } else if (state.bg > 120.0) {
-                // Transition fluide entre 20 (stable) et 10 (montée)
-                activeRInsulin = 20.0 - (raFactor * 10.0)
+                activeRInsulin = 20.0
                 activeMaxSmb = state.highBgMaxSMB
             } else {
-                // Mode croisière : Coût agile (30), 
-                // descend vers 20 si un Ra est détecté.
-                activeRInsulin = 30.0 - (raFactor * 10.0)
+                activeRInsulin = 30.0
                 activeMaxSmb = state.maxSMB
             }
         }
@@ -136,8 +139,8 @@ class MpcController @Inject constructor(
         // p1 = efficacité de base du glucose à se résorber seul (GEZI)
         val p1 = 0.015 
         
-        // La sensibilité est dynamique, estimée dans l'état
-        val si = startState.estimatedSI
+        // La sensibilité est dynamique, estimée dans l'état, mise à l'échelle métabolique
+        val si = startState.estimatedSI * METABOLIC_SI_BASE
 
         for (k in 1..steps) {
             // -- Dynamique du Glucose (Simulation Euler sur 5 min) --

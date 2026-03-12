@@ -61,42 +61,46 @@ class ContinuousStateEstimator @Inject constructor(
         // bgVelocity est en mg/dL/min. 
         val innovation = hardwareCompensatedVelocity - (expectedNaturalDelta + lastRa)
         
+        // 🚀 DAWN GUARD DAMPENING (Prevent Cortisol Over-Correction)
+        // Entre 5h et 9h, si peu d'activité physique (pas de marche), on suspecte le cortisol.
+        // On augmente le scepticisme (rVariance) pour ne pas sauter sur chaque variation du capteur.
+        val isDawnWindow = actualState.hour in 5..9
+        val isLowActivity = actualState.steps < 200
+        val isDawnGuardActive = isDawnWindow && isLowActivity && (actualState.cob < 0.1)
+
         // 3. Matrice de Bruit de Processus Q & Matrice de Mesure R
-        val rVariance = 2.0 // Bruit de la mesure du capteur CGM (Incertitude Dexcom/Libre)
+        val rVariance = if (isDawnGuardActive) 10.0 else 2.0 // Scepticisme CGM élevé au réveil
         
         // 🚀 DYNAMIC MANEUVER DETECTION (Phase 11 - Agile Tracking)
-        // On remplace le switch binaire (0.5 ou 5.0) par un gain proportionnel à l'innovation.
-        // Cela permet de ne pas sur-réagir aux petits grignotages (pomme).
-        val qRa = when {
-            innovation > 3.0 -> 5.0   // Repas lourd confirmé (McDo)
-            innovation > 1.0 -> 0.5 + (innovation - 1.0) * 0.75 // Transition linéaire vers l'agressivité
-            innovation < -1.0 -> 1.0  // Aide au désamorçage rapide
-            else -> 0.2               // Tracking ultra-doux en croisière (stabilité basale)
+        val baseQ = when {
+            innovation > 3.0 -> 5.0   // Repas lourd confirmé
+            innovation > 1.0 -> 0.5 + (innovation - 1.0) * 0.75
+            innovation < -1.0 -> 1.0  // Désamorçage
+            else -> 0.2
         }
+        
+        // Sous Dawn Guard, on divise par 2.5 (x0.4) la vitesse à laquelle l'IA accepte que c'est un repas
+        val qRa = if (isDawnGuardActive && innovation > 0) baseQ * 0.4 else baseQ 
         
         // 4. Prédiction de Covariance (P_k|k-1)
         pRa += qRa
 
-        // 5. Calcul du Gain de Kalman (K) pour Ra (H = 1 car Ra impacte directement dBG)
-        val sRa = pRa + rVariance // Variance de l'innovation
+        // 5. Calcul du Gain de Kalman (K) pour Ra
+        val sRa = pRa + rVariance 
         val kRa = pRa / sRa 
 
         // 6. Mise à jour de l'état caché (Rate of Appearance)
-        // Si l'innovation est fortement positive (On monte + vite que prévu), Ra explose.
         var estimatedRa = lastRa + (kRa * innovation)
 
         // 7. Règles physiologiques d'Écrêtage (Clipping)
-        // Ra ne peut pas être inférieur à 0 (On ne peut pas absorber "négativement" un repas)
-        // L'excès de chute inexpliquée sera géré par la sensibilité dynamique d'AIMI.
-        // [PHASE 7] Limite Supérieure : Un intestin ne peut pas absorber plus de glucides que le Volume Sanguin (Vd) ne peut en encaisser.
-        // Cap théorique agressif : ~1.5 mg/dL/min par tranche de 10 kg de poids corporel.
-        val maxBiologicalRa = (actualState.patientWeightKg / 10.0) * 1.5
+        // On limite le maximum de Ra possible (Vitesse d'absorption) pendant le Dawn Guard
+        val baseMaxRa = (actualState.patientWeightKg / 10.0) * 1.5
+        val maxBiologicalRa = if (isDawnGuardActive) baseMaxRa * 0.5 else baseMaxRa // Cap Ra 50% plus bas
         estimatedRa = estimatedRa.coerceIn(0.0, maxBiologicalRa)
 
-        // Désamorçage rapide (Decay) si on a fini de manger
-        // Si la glycémie chute vite ou est stable et que l'innovation est négative, on tue le Ra fantôme.
+        // Désamorçage rapide (Decay)
         if (innovation < -0.5 && hardwareCompensatedVelocity <= 0.0) {
-            estimatedRa *= 0.25 // Écrase le repas fantôme 2x plus vite pour éviter le crash en fin de pic
+            estimatedRa *= 0.25 
         }
 
         // 8. Mise à jour de la Covariance (P_k|k)

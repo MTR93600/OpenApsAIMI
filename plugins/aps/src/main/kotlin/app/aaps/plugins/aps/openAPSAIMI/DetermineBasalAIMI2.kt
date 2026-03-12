@@ -5431,6 +5431,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (gate.engage) {
                 aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🚦 [AUTODRIVE V3] ${gate.reason} - Engaging Control Loop...")
                 
+                val snapshot = physioAdapter.getLatestSnapshot()
                 val adState = app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState(
                     bg = glucose_status.glucose,
                     bgVelocity = shortAvgDeltaAdj.toDouble(),
@@ -5441,6 +5442,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     patientWeightKg = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIweight),
                     physiologicalStressMask = doubleArrayOf(),
                     isNight = hourOfDay >= 23 || hourOfDay < 6,
+                    hour = hourOfDay,
+                    steps = snapshot.stepsLast15m,
+                    hr = snapshot.hrNow,
+                    rhr = snapshot.rhrResting,
                     sourceSensor = glucose_status.sourceSensor,
                     maxIOB = this.maxIob,
                     maxSMB = this.maxSMB,
@@ -5457,7 +5462,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             autodriveEngine.setShadowMode(false) 
             autodriveEngine.setIsActive(true) 
             
-            val adCommand = autodriveEngine.tick(adState, profile.current_basal, min(90.0, threshold.toDouble()))
+            val adCommand = autodriveEngine.tick(
+                currentState = adState,
+                profileBasal = profile.current_basal,
+                lgsThreshold = min(90.0, threshold.toDouble()),
+                hour = hourOfDay,
+                steps = snapshot.stepsLast15m,
+                hr = snapshot.hrNow,
+                rhr = snapshot.rhrResting
+            )
             
             if (adCommand != null && adCommand.isSafe) {
                 
