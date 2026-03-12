@@ -1,8 +1,18 @@
 package app.aaps.plugins.aps.openAPSAIMI.context
 
+import app.aaps.plugins.aps.openAPSAIMI.model.LoopContext
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
+
+/**
+ * Strategy interface for Context Intents.
+ * Allows modular validation and influence calculation.
+ */
+interface ContextIntentStrategy {
+    fun validate(): Boolean
+    fun applyEffect(context: LoopContext): LoopContext
+}
 
 /**
  * Représente une déclaration de contexte de l'utilisateur.
@@ -12,7 +22,7 @@ import kotlin.time.Duration.Companion.minutes
  * 
  * Design Pattern: Value Object immutable avec validation
  */
-sealed class ContextIntent {
+sealed class ContextIntent : ContextIntentStrategy {
     abstract val startTimeMs: Long
     abstract val durationMs: Long
     abstract val intensity: Intensity
@@ -29,6 +39,10 @@ sealed class ContextIntent {
     fun isActiveAt(timestampMs: Long): Boolean {
         return timestampMs in startTimeMs..endTimeMs
     }
+
+    // Default strategy implementations
+    override fun validate(): Boolean = confidence > 0.5f
+    override fun applyEffect(context: LoopContext): LoopContext = context
     
     enum class Intensity {
         LOW,      // Impact faible

@@ -66,9 +66,19 @@ enum class AdvisorSeverity {
 }
 
 /**
+ * Strategy interface for Advisor Actions.
+ * Enables modular validation, execution and serialization.
+ */
+interface AdvisorActionStrategy {
+    fun validate(): Boolean
+    fun apply()
+    fun serialize(): String
+}
+
+/**
  * Smart Actions
  */
-sealed class AdvisorAction {
+sealed class AdvisorAction : AdvisorActionStrategy {
     // A single atomic change
     data class Prediction(
         val key: Any,        // PreferenceKey object
@@ -76,12 +86,25 @@ sealed class AdvisorAction {
         val oldValue: Any,
         val newValue: Any,
         val explanation: String
-    )
+    ) : AdvisorActionStrategy {
+        override fun validate(): Boolean = true
+        override fun apply() { /* Logic to update preference */ }
+        override fun serialize(): String = "Prediction($keyName: $oldValue -> $newValue)"
+    }
 
     // Action can now be a single update or a batch
     data class UpdatePreference(
         val changes: List<Prediction>
-    ) : AdvisorAction()
+    ) : AdvisorAction() {
+        override fun validate(): Boolean = changes.isNotEmpty() && changes.all { it.validate() }
+        override fun apply() { changes.forEach { it.apply() } }
+        override fun serialize(): String = "BatchUpdate(${changes.size} changes)"
+    }
+
+    // Fallback implementations for the sealed class base
+    override fun validate(): Boolean = true
+    override fun apply() {}
+    override fun serialize(): String = this.javaClass.simpleName
 }
 
 /**
