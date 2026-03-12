@@ -2874,6 +2874,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             (context.bg < context.targetBg || context.delta < -2.0)
 
     private fun isSportSafetyCondition(): Boolean {
+        // [User Request]: Immediate release if steps stopped (0 steps in 5 min)
+        // This allows AIMI to resume SMBs immediately after a walk to handle the meal rise.
+        if (recentSteps5Minutes == 0 && !sportTime) return false
+
         val manualSport = sportTime
         
         // Assouplissement des seuils : ne détecter que des VRAIS sports intenses
