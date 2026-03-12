@@ -213,6 +213,7 @@ class DynamicBasalController @Inject constructor(
             delta: Float,
             shortAvgDelta: Double,
             longAvgDelta: Double,
+            accel: Double,
             iob: Double,
             maxIob: Double,
             profileBasal: Double,
@@ -224,36 +225,36 @@ class DynamicBasalController @Inject constructor(
             val effectiveIsf = isf.coerceAtLeast(10.0)
             val velocity = delta * 0.7f + shortAvgDelta.toFloat() * 0.3f
 
-            // ── Safety Guard 1: Immediate zero basal ───────────────────────
-            // Tightened: Cut at 90 mg/dL if dropping, or 80 mg/dL regardless
-            if (bg < 80.0 || (bg < 95.0 && delta < -1.0f) || (bg < targetBg && delta < -1.5f)) return 0.0
+            // ── Safety Guard 1: Adaptive Immediate Zero Basal ──────────────
+            // [Improvement 1]: Thresholds are now relative to targetBg
+            val floor = (targetBg - 20.0).coerceAtLeast(70.0)
+            val cushion = (targetBg - 5.0).coerceAtLeast(85.0)
+            if (bg < floor || (bg < cushion && delta < -1.0f) || (bg < targetBg && delta < -1.5f)) return 0.0
 
             // ── Safety Guard 2: Resistance→Sensitivity transition ──────────
-            // After prolonged hyperglycemia (duraISF > 20 min AND avg > 140), any drop signals
-            // that accumulated IOB is now becoming effective. Pre-emptive cut.
+            // [Improvement 3]: Smooth progressive cut instead of binary 0.0
             val wasChronicallyHigh = duraISFminutes > 20.0 && duraISFaverage > 140.0
-            val nowFalling = velocity < -0.5f
-            val highIobPresent = iob > maxIob * 0.35
-            if (wasChronicallyHigh && nowFalling && highIobPresent) {
-                return 0.0  // resistance resolved → IOB acting → pre-emptive zero
-            }
+            val nowFalling = velocity < -0.2f
+            val resTransitionMult = if (wasChronicallyHigh && nowFalling) {
+                // If velocity = -1.2 -> mult = 0.0. If velocity = -0.2 -> mult = 1.0
+                (1.0 + (velocity + 0.2) / 1.0).coerceIn(0.0, 1.0)
+            } else 1.0
 
             // ── Safety Guard 3: Excessive IOB ──────────────────────────────
             if (iob > maxIob * 1.5) return profileBasal * 0.1
 
-            // ── T3C V2: Prédictif et Agressif ──────────────────────────────
+            // ── T3C V3: Parabolic & Adaptive ───────────────────────────────
             
-            // 1. Projection
-            // On veut corriger sur la base du BG projeté.
-            // On retire le .coerceAtLeast(bg) pour permettre à l'algorithme de voir la chute.
+            // 1. Parabolic Projection
+            // [Improvement 2]: Uses acceleration for better anticipation
+            // Formula: BG(t) = BG + v*t + 0.5*a*t^2
             val projectionMins = if (delta >= 3.0f && delta > shortAvgDelta) 40.0 else 30.0
-            val projectedBg = bg + (velocity * (projectionMins / 5.0))
+            val t = projectionMins / 5.0
+            val projectedBg = bg + (velocity * t) + (0.5 * accel * t * t)
             
             // 2. Anticipation de la Cible (Smarter Braking)
-            // Si on projette d'être sous la cible, on réduit la basale de manière exponentielle.
-            // On ne fait plus de return immédiat ici pour permettre l'application du brakeFactor global.
             val baseToDeliver = if (projectedBg < targetBg) {
-                profileBasal * exp((projectedBg - targetBg) / 15.0) // Sharper cut (15 vs 20)
+                profileBasal * exp((projectedBg - targetBg) / 15.0)
             } else {
                 profileBasal
             }
@@ -284,15 +285,13 @@ class DynamicBasalController @Inject constructor(
                 else -> 0.33
             }
             
-            // Taux de correction ciblé
             val correctionRate = (requiredU / deliveryHorizonHours) * resistanceFactor * accelFactor
             
             // 7. Continuous Braking : Freinage linéaire basé sur la vitesse de chute
-            // Si velocity = -2.0, brakeFactor = 0.0. Si velocity >= 0.0, brakeFactor = 1.0.
             val brakeFactor = (1.0 + velocity / 2.0).coerceIn(0.0, 1.0)
 
-            // MTR FIX: Apply brakeFactor to BOTH base and correction (Fixes Brake Floor bug)
-            val totalRate = (baseToDeliver + correctionRate) * brakeFactor
+            // Apply BOTH brakeFactor AND resTransitionMult
+            val totalRate = (baseToDeliver + correctionRate) * brakeFactor * resTransitionMult
 
             // Cap at 10× profileBasal
             return totalRate.coerceIn(0.0, profileBasal * 10.0)
