@@ -44,6 +44,7 @@ object KpiCalculator {
      * @param periodStart Start timestamp in milliseconds
      * @param periodEnd End timestamp in milliseconds
      */
+    @JvmStatic
     fun calculate(
         algo: AlgorithmType,
         decisions: List<ComparisonDecision>,
@@ -371,6 +372,7 @@ object KpiCalculator {
     /**
      * Calculate KPIs for multiple days and return daily + aggregate results.
      */
+    @JvmStatic
     fun calculateMultiDay(
         algo: AlgorithmType,
         decisions: List<ComparisonDecision>,

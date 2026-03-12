@@ -5,6 +5,7 @@ object CarbsAdvisor {
      * Estime la quantité de glucides à consommer pour éviter une hypo à court terme.
      * Logique identique à ton helper existant.
      */
+    @JvmStatic
     fun estimateRequiredCarbs(
         bg: Double,
         targetBG: Double,

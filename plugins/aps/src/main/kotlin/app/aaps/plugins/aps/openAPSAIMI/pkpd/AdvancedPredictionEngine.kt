@@ -19,6 +19,8 @@ object AdvancedPredictionEngine {
      * @param profile User profile used for insulin timing and carb ratio.
      * @param horizonMinutes Prediction horizon (defaults to 4h).
      */
+    @JvmStatic
+    @JvmOverloads
     fun predict(
         currentBG: Double,
         iobArray: Array<IobTotal>,

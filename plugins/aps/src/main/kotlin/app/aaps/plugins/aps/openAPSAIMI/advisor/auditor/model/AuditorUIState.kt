@@ -54,6 +54,7 @@ data class AuditorUIState(
         /**
          * Create IDLE state (default)
          */
+        @JvmStatic
         fun idle(): AuditorUIState = AuditorUIState(
             type = StateType.IDLE,
             iconTintColor = CoreR.color.deviationGrey,
@@ -70,6 +71,7 @@ data class AuditorUIState(
         /**
          * Create PROCESSING state
          */
+        @JvmStatic
         fun processing(): AuditorUIState = AuditorUIState(
             type = StateType.PROCESSING,
             iconTintColor = CoreR.color.examinedProfile,  // Blue
@@ -86,6 +88,8 @@ data class AuditorUIState(
         /**
          * Create READY state with insights
          */
+        @JvmStatic
+        @JvmOverloads
         fun ready(insightCount: Int, shouldNotify: Boolean = true): AuditorUIState = AuditorUIState(
             type = StateType.READY,
             iconTintColor = app.aaps.core.ui.R.color.inRange,  // Green
@@ -102,6 +106,8 @@ data class AuditorUIState(
         /**
          * Create WARNING state
          */
+        @JvmStatic
+        @JvmOverloads
         fun warning(message: String = "Warning"): AuditorUIState = AuditorUIState(
             type = StateType.WARNING,
             iconTintColor = CoreR.color.warning,  // Orange
@@ -118,6 +124,8 @@ data class AuditorUIState(
         /**
          * Create ERROR state
          */
+        @JvmStatic
+        @JvmOverloads
         fun error(message: String = "Error"): AuditorUIState = AuditorUIState(
             type = StateType.ERROR,
             iconTintColor = CoreR.color.high,  // Red
