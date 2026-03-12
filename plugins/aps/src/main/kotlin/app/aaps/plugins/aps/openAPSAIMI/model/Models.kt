@@ -77,8 +77,24 @@ sealed class DecisionResult {
         val bolusU: Double? = null,
         val tbrUph: Double? = null,
         val tbrMin: Int? = null,
-        val reason: String
-    ) : DecisionResult()
+        val reason: String,
+        // Rollback state
+        val originalBasalRate: Double? = null,
+        val originalBasalDuration: Int? = null,
+        val timestampMs: Long = System.currentTimeMillis()
+    ) : DecisionResult() {
+        /**
+         * Returns a Fallthrough decision that "undoes" this applied action
+         * by requesting a return to the original basal rate.
+         */
+        fun undo(undoReason: String = "Undo Applied Action"): Applied {
+            return copy(
+                tbrUph = originalBasalRate,
+                tbrMin = originalBasalDuration,
+                reason = "ROLLBACK ($source): $undoReason"
+            )
+        }
+    }
 
     data class Fallthrough(
         val reason: String

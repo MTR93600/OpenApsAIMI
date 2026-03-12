@@ -19,6 +19,12 @@ sealed class ContextIntent {
     abstract val confidence: Float  // 0.0..1.0 (confiance du parsing)
     
     val endTimeMs: Long get() = startTimeMs + durationMs
+
+    init {
+        require(confidence in 0.0f..1.0f) { "Confidence must be between 0.0 and 1.0: $confidence" }
+        require(durationMs >= 0) { "Duration cannot be negative: $durationMs" }
+        require(startTimeMs > 0) { "Invalid start time: $startTimeMs" }
+    }
     
     fun isActiveAt(timestampMs: Long): Boolean {
         return timestampMs in startTimeMs..endTimeMs
