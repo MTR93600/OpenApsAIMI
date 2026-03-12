@@ -217,7 +217,30 @@
                         android:textColor="@color/dashboard_on_surface" />
                 </LinearLayout>
                 
-                <!-- Activity % -->
+                <!-- Pump Battery -->
+                <LinearLayout
+                    android:id="@+id/pump_battery_container"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        app:srcCompat="@drawable/ic_cp_age_battery"
+                        app:tint="@color/dashboard_on_surface" />
+                    <TextView
+                        android:id="@+id/pump_battery_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                        android:textColor="@color/dashboard_on_surface" />
+                </LinearLayout>
+
+                <!-- Activity % (Relative to Basal) -->
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -228,7 +251,7 @@
                         android:layout_width="18dp"
                         android:layout_height="18dp"
                         android:layout_marginEnd="6dp"
-                        app:srcCompat="@drawable/ic_dashboard_wave"
+                        app:srcCompat="@drawable/ic_cp_basal"
                         app:tint="@color/dashboard_on_surface" />
 
                     <TextView
@@ -349,6 +372,52 @@
                         android:textColor="@color/dashboard_on_surface" />
                 </LinearLayout>
             </LinearLayout>
+        </LinearLayout>
+
+        <!-- ═══════════════════════════════════════════════════ -->
+        <!-- AIMI INSIGHTS (T3c, Manoeuvre, AI Factor)           -->
+        <!-- ═══════════════════════════════════════════════════ -->
+        <LinearLayout
+            android:id="@+id/aimi_insights_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="4dp"
+            android:padding="6dp"
+            android:background="@drawable/dashboard_chip_background"
+            android:alpha="0.85">
+
+            <!-- T3c (Time to Control) -->
+            <TextView
+                android:id="@+id/insight_t3c"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🎯 --"
+                android:textSize="11sp"
+                android:textColor="@color/dashboard_on_surface"
+                android:layout_marginEnd="16dp" />
+
+            <!-- Manoeuvre (Trajectory Type) -->
+            <TextView
+                android:id="@+id/insight_manoeuvre"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🌀 --"
+                android:textSize="11sp"
+                android:textColor="@color/dashboard_on_surface"
+                android:layout_marginEnd="16dp" />
+
+            <!-- Cosinus Factor (IA Attention) -->
+            <TextView
+                android:id="@+id/insight_factor"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚡ x1.0"
+                android:textSize="11sp"
+                android:textColor="@color/dashboard_on_surface" />
+
         </LinearLayout>
 
         <!-- ═══════════════════════════════════════════════════ -->

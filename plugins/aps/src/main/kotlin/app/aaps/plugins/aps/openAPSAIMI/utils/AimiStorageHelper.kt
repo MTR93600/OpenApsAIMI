@@ -133,6 +133,37 @@ class AimiStorageHelper @Inject constructor(
             log.debug(LTag.APS, "AimiStorageHelper: File '$filename' → ${it.absolutePath}")
         }
     }
+
+    /**
+     * Liste tous les fichiers AIMI susceptibles d'être sauvegardés.
+     * Scanne récursivement le répertoire AAPS pour les modèles (.json), datasets (.csv) et logs (.jsonl).
+     */
+    fun listBackupCandidates(): List<File> {
+        val root = getAimiDirectory()
+        val candidates = mutableListOf<File>()
+        
+        log.info(LTag.APS, "AimiStorageHelper: Scanning legacy directory for backup: ${root.absolutePath}")
+        
+        fun scan(dir: File) {
+            dir.listFiles()?.forEach { file ->
+                if (file.isDirectory) {
+                    scan(file)
+                } else {
+                    val name = file.name.lowercase()
+                    if (name.endsWith(".json") || name.endsWith(".csv") || name.endsWith(".jsonl")) {
+                        // Exclure les fichiers temporaires ou backups automatiques si nécessaire
+                        if (!name.contains(".tmp") && !name.contains(".pending")) {
+                            candidates.add(file)
+                        }
+                    }
+                }
+            }
+        }
+        
+        scan(root)
+        log.info(LTag.APS, "AimiStorageHelper: Found ${candidates.size} backup candidates in ${root.absolutePath}")
+        return candidates
+    }
     
     /**
      * Obtient un fichier dans un sous-répertoire AIMI.

@@ -325,6 +325,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager  // 🎯 Context Module
     @Inject lateinit var contextInfluenceEngine: app.aaps.plugins.aps.openAPSAIMI.context.ContextInfluenceEngine  // 🎯 Context Influence
     @Inject lateinit var physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR  // 🏥 Physiological Modulation
+    @Inject lateinit var continuousStateEstimator: app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstimator  // 🌐 T9: G6 lead compensation universelle (V2+V3)
     
     // 🌸 Endometriosis Adjuster (Lazy init manually since not in graph yet or use manual passing)
     private val endoAdjuster by lazy { app.aaps.plugins.aps.openAPSAIMI.wcycle.EndometriosisAdjuster(preferences, aapsLogger) }
@@ -379,6 +380,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // État interne d’hystérèse
     private var lastHypoBlockAt: Long = 0L
     private var hypoClearCandidateSince: Long? = null
+    // T6: Verrou nocturne anti-bang-bang pour BG_Rise_Fast
+    // Empêche le trigger de s'emballer si l'IOB est déjà élevé la nuit
+    private var lastBgRiseFastNightMs: Long = 0L
     private var mealModeSmbReason: String? = null
     private var consoleError = mutableListOf<String>()
     private var consoleLog = mutableListOf<String>()
@@ -1225,7 +1229,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         mealModeActive: Boolean,
         currentBg: Double,
         delta: Double,
-        eventualBg: Double
+        eventualBg: Double,
+        combinedDelta: Double
     ): Boolean {
         mealModeSmbReason = null
 
@@ -1281,17 +1286,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 4) Enfin, l'exception meal-rise si elle est vraie
         if (mealModeActive) {
-            val safeFloor = max(100.0, targetbg - 5)
-            val risingFast = delta >= 2.0 || (delta > 0 && currentBg > 120)
+            val safeFloorValue = max(100.0, targetbg - 5)
+            val risingFast = combinedDelta >= 2.0 || (combinedDelta > 0 && currentBg > 120)
+            
+            // 🚀 EXPLOSIVE RISE EXCEPTION: Allow SMB at 90mg/dL if combinedDelta is huge (> 4.0)
+            val isExplosive = combinedDelta > 4.0 && currentBg > 90.0
             
             // Condition assouplie: eventualBg ignoré si montée confirmée
-            if (currentBg > safeFloor && delta > 0.5 && (eventualBg > safeFloor || risingFast)) {
+            if ((currentBg > safeFloorValue || isExplosive) && combinedDelta > 0.5 && (eventualBg > safeFloorValue || risingFast || isExplosive)) {
                 mealModeSmbReason = context.getString(
                     R.string.smb_enabled_meal_mode,
                     convertBG(currentBg),
-                    delta,
+                    combinedDelta,
                     convertBG(eventualBg)
-                )
+                ) + if (isExplosive) " [🚀 EXPLOSIVE]" else ""
                 return true
             }
         }
@@ -4448,7 +4456,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val decisionCtx = AimiDecisionContext(
             event_id = "evt_${currentTime}",
             timestamp = currentTime,
-            trigger = if (glucose_status.delta > 5) "BG_Rise_Fast" else "Routine_Cycle",
+            trigger = run {
+                val iobNow = iob_data_array.firstOrNull()?.iob ?: 0.0
+                val bgNow  = glucose_status.glucose
+                val hour   = java.util.Calendar.getInstance()[java.util.Calendar.HOUR_OF_DAY]
+                val isNight = hour >= 22 || hour <= 7
+                val isBgRiseFast = glucose_status.delta > 5
+                // T6: Rate-limiter nocturne anti-bang-bang
+                // Si IOB élevé (> 2 U) ET BG encore bas (< 100) la nuit, bloquer le trigger 15 min
+                val nightBangBangBlock = isNight && isBgRiseFast && iobNow > 2.0 && bgNow < 100.0 &&
+                    (currentTime - lastBgRiseFastNightMs) < 15 * 60_000L
+                if (isBgRiseFast && isNight && iobNow > 2.0 && bgNow < 100.0) {
+                    // Enregistrer le premier déclenchement pour démarrer la fenêtre de 15 min
+                    if (lastBgRiseFastNightMs == 0L || (currentTime - lastBgRiseFastNightMs) >= 15 * 60_000L) {
+                        lastBgRiseFastNightMs = currentTime
+                    }
+                }
+                when {
+                    nightBangBangBlock -> {
+                        consoleLog.add("🚫 T6 NIGHT_RATE_LIMIT: BG_Rise_Fast bloqué (IOB=${"%.2f".format(iobNow)}U > 2.0 ET BG=${bgNow.toInt()} < 100 la nuit)")
+                        "Routine_Cycle" // Dégradé en cycle routine
+                    }
+                    isBgRiseFast -> "BG_Rise_Fast"
+                    else -> "Routine_Cycle"
+                }
+            },
             baseline_state = AimiDecisionContext.BaselineState(
                 profile_isf_mgdl = profile.sens,
                 profile_basal_uph = profile.current_basal,
@@ -4505,12 +4537,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // maxSMB is a persistent class member. It MUST be reset to the user's preference at the start of every cycle.
         // Otherwise, temporary overrides (like BFast2 mode) permeate to future cycles.
         this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
-        this.maxSMBHB = this.maxSMB // Fallback since specific key doesn't exist yet 
-        // Logic check: usually maxSMBHB is just maxSMB. Let's check init. Init said 0.5.
-        // Better safe:
-        // this.maxSMBHB = 2.0 // or whatever default.
-        // Actually earlier code used `if (bg > 120...) maxSMBHB else maxSMB`.
-        // Let's stick to maxSMB reset first which was the smoking gun.
+        this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB).coerceAtLeast(this.maxSMB)
         // ✅ ETAPE 1: Calculer le Profil d'Action de l'IOB
         // 🧬 PHYSIO INTEGRATION: Get SNS Dominance from Adapter
         val physioSnapshot = physioAdapter.getLatestSnapshot()
@@ -4601,6 +4628,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         ensurePredictionFallback(rT, glucoseStatus.glucose)
         
+        // ═══════════════════════════════════════════════════════════════════════════
+        // 🌐 T9 — COMPENSATION LAG G6 UNIVERSELLE (V2 + V3)
+        // Applique le correcteur de délai Dexcom G6 (+25% lead) dès ce point,
+        // afin que TOUS les modules aval (physioAdapter, PKPD, LGS, SMB) bénéficient
+        // de la vélocité corrigée — et pas seulement le pipeline Autodrive V3.
+        // ═══════════════════════════════════════════════════════════════════════════
+        val isG6Sensor = try {
+            // Détection robuste du G6 via le plugin BG source actif
+            // (glucoseStatus ne porte pas le type capteur en V2)
+            activePlugin.activeBgSource.javaClass.simpleName.contains("Dexcom", ignoreCase = true) &&
+            activePlugin.activeBgSource.javaClass.simpleName.contains("G6", ignoreCase = true)
+        } catch (e: Exception) { false }
+        val rawVelocityMgdlMin = glucoseStatus.delta / 5.0 // delta mg/dL/5min → mg/dL/min
+        val correctedVelocityMgdlMin = continuousStateEstimator.applyG6LeadCompensation(rawVelocityMgdlMin, isG6Sensor)
+        // Reconvertir en mg/dL/5min pour les modules qui utilisent delta
+        val correctedDelta = correctedVelocityMgdlMin * 5.0
+        if (isG6Sensor && correctedDelta != glucoseStatus.delta.toDouble()) {
+            consoleLog.add("🌐 T9 G6-Lead: delta_raw=${String.format("%.1f", glucoseStatus.delta)} → delta_corr=${String.format("%.1f", correctedDelta)} mg/dL/5min")
+        }
+        // ═══════════════════════════════════════════════════════════════════════════
+
         // ═══════════════════════════════════════════════════════════════════════════
         // 🏥 PHYSIOLOGICAL ASSISTANT INTEGRATION (MTR)
         // ═══════════════════════════════════════════════════════════════════════════
@@ -4989,6 +5037,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 shortAvgDelta = glucose_status.shortAvgDelta,
                 longAvgDelta = glucose_status.longAvgDelta,
                 duraISFminutes = glucose_status.duraISFminutes,
+                duraISFaverage = glucose_status.duraISFaverage,
                 profile = profile,
                 currenttemp = currenttemp,
                 iob = iob_data_array.firstOrNull() ?: IobTotal(System.currentTimeMillis()),
@@ -5119,6 +5168,69 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT = rT,
             uiInteraction = uiInteraction
         )
+
+        // ═══════════════════════════════════════════════════════════════════
+        // 🌀 TRAJECTORY → SAFETY BRIDGE (Prévention proactive hypo/hyper)
+        // ═══════════════════════════════════════════════════════════════════
+        // TrajectoryGuard détecte l'accumulation d'insuline geometriquement
+        // (TIGHT_SPIRAL = IOB qui s'accumule + courbure de trajectoire haute).
+        // Ce pont fait remonter cette alerte vers le pipeline safety pour
+        // déclencher une réduction de basale AVANT que le LGS ne soit atteint,
+        // évitant la chute vers l'hypo 30-60 min plus tard.
+        //
+        // CGate amplifie le guard si l'ISF a déjà été réduit (fragilité physio).
+        // ═══════════════════════════════════════════════════════════════════
+        run {
+            val lastTraj = trajectoryGuard.getLastAnalysis()
+            if (lastTraj != null &&
+                lastTraj.classification == app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType.TIGHT_SPIRAL) {
+
+                val energy = lastTraj.metrics.energyBalance
+                val curvature = lastTraj.metrics.curvature
+                val iobNow = iob_data.iob
+
+                // Escalade selon l'énergie accumulée
+                // > 3.5 U → situation critique, réduction forte
+                // > 2.5 U → stacking modéré, réduction intermédiaire
+                // > 1.5 U → début de spirale, réduction douce
+                val basalFraction = when {
+                    energy > 3.5 -> 0.25  // Critique : 25% basale (évite l'hypo sévère)
+                    energy > 2.5 -> 0.50  // Modéré   : 50% basale
+                    energy > 1.5 -> 0.70  // Léger    : 70% basale
+                    else         -> 1.0   // Pas assez d'énergie pour agir
+                }
+
+                // Amplification CGate : si le contexte physiologique (sport, stress)
+                // avait déjà réduit l'ISF, la fragilité est double → descendre d'un cran
+                val cgateAmplified = physioMultipliers.isfFactor > 1.05 // ISF augmenté = sensibilité réduite
+                val effectiveFraction = if (cgateAmplified && basalFraction > 0.25) {
+                    (basalFraction - 0.20).coerceAtLeast(0.25) // Descend d'un cran
+                } else {
+                    basalFraction
+                }
+
+                if (effectiveFraction < 1.0) {
+                    val proactiveBasal = profile.current_basal * effectiveFraction
+                    val cgateNote = if (cgateAmplified) " [CGate ISF↑ → amplification]" else ""
+                    val reason = "TRAJ_TIGHT_SPIRAL: E=${String.format("%.1f", energy)}U κ=${String.format("%.2f", curvature)} IOB=${String.format("%.2f", iobNow)}U → Basale proactive ${(effectiveFraction * 100).toInt()}%$cgateNote"
+
+                    consoleLog.add("🌀🛡️ TRAJECTORY_SAFETY_BRIDGE: $reason")
+
+                    // Appliquer la basale réduite directement (court-circuite le pipeline normal)
+                    // MAIS ne bloque PAS les SMBs futurs (smbDamping est déjà appliqué par applyTrajectoryAnalysis)
+                    rT.rate = proactiveBasal
+                    rT.duration = if (energy > 3.5) 30 else 15
+                    rT.reason.append(" | 🌀 Traj-Bridge: $reason")
+
+                    // Signaler au LGS pipeline pour éviter double-action
+                    lastSafetySource = "TrajBridge_Tier${when { energy > 3.5 -> 1; energy > 2.5 -> 2; else -> 3 }}"
+                    logDecisionFinal("TRAJ_SAFETY", rT, bg, delta)
+                    // NB: On NE retourne PAS ici — on laisse le pipeline LGS confirmer ou renforcer
+                    // si la prédiction atteint un seuil critique. Le TBR est posé mais les guards
+                    // LGS peuvent encore l'abaisser à 0 si nécessaire.
+                }
+            }
+        }
 
         // ═══════════════════════════════════════════════════════════════════
         // 🎯 CONTEXT MODULE INTEGRATION
@@ -5319,6 +5431,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (gate.engage) {
                 aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🚦 [AUTODRIVE V3] ${gate.reason} - Engaging Control Loop...")
                 
+                val snapshot = physioAdapter.getLatestSnapshot()
                 val adState = app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState(
                     bg = glucose_status.glucose,
                     bgVelocity = shortAvgDeltaAdj.toDouble(),
@@ -5329,10 +5442,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     patientWeightKg = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIweight),
                     physiologicalStressMask = doubleArrayOf(),
                     isNight = hourOfDay >= 23 || hourOfDay < 6,
+                    hour = hourOfDay,
+                    steps = snapshot.stepsLast15m,
+                    hr = snapshot.hrNow,
+                    rhr = snapshot.rhrResting,
                     sourceSensor = glucose_status.sourceSensor,
                     maxIOB = this.maxIob,
-                    maxSMB = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIMaxSMB).coerceAtLeast(0.5),
-                    highBgMaxSMB = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIHighBGMaxSMB).coerceAtLeast(1.0)
+                    maxSMB = this.maxSMB,
+                    highBgMaxSMB = this.maxSMBHB
                 )
 
             // 🤖 Hardware-Awareness Logging
@@ -5345,7 +5462,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             autodriveEngine.setShadowMode(false) 
             autodriveEngine.setIsActive(true) 
             
-            val adCommand = autodriveEngine.tick(adState, profile.current_basal, min(90.0, threshold.toDouble()))
+            val adCommand = autodriveEngine.tick(
+                currentState = adState,
+                profileBasal = profile.current_basal,
+                lgsThreshold = min(90.0, threshold.toDouble()),
+                hour = hourOfDay,
+                steps = snapshot.stepsLast15m,
+                hr = snapshot.hrNow,
+                rhr = snapshot.rhrResting
+            )
             
             if (adCommand != null && adCommand.isSafe) {
                 
@@ -6598,7 +6723,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             mealModeActive,
             bg,
             delta.toDouble(),
-            eventualBG
+            eventualBG,
+            combinedDelta.toDouble()
         )
 
         mealModeSmbReason?.let { reason(rT, it) }
@@ -7737,26 +7863,64 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              consoleLog.add("⚠ Unit Mismatch Suspected? BG=$bg")
         }
 
-        // 1. Extreme Low / LGS (Correct Logic)
-        // Explicit Debug Structure
+        // 1. Extreme Low / LGS — 3-Tier Differentiated Logic
+        // -------------------------------------------------------
+        // TIER 1 : BG actuel sous seuil → arrêt strict (sécurité absolue)
+        // TIER 2 : Prédiction sous seuil mais BG encore safe → basale 25% (évite rebond bang-bang)
+        // TIER 3 : Éventuel bas mais BG + pred ok → basale 50% (précaution douce)
+        // -------------------------------------------------------
         fun safe(v: Double) = if (v.isFinite()) v else 999.0
-        val bgNow = safe(bg)
-        val predNow = safe(predBg)
+        val bgNow    = safe(bg)
+        val predNow  = safe(predBg)
         val eventualNow = safe(eventualBg)
-        val lgsMin = minOf(bgNow, predNow, eventualNow)
-        val lgsTh = computeHypoThreshold(lgsMin, profile.lgsThreshold) // Uses member function
+        val lgsTh = computeHypoThreshold(minOf(bgNow, predNow, eventualNow), profile.lgsThreshold)
 
-        if (lgsMin < lgsTh || (bg < 70 && delta < 0)) {
-            val reasonStr = "LGS_TRIGGER: min=${lgsMin.toInt()} <= Th=${lgsTh.toInt()} (BG=${bgNow.toInt()} pred=${predNow.toInt()} ev=${eventualNow.toInt()})"
-            consoleLog.add("SAFETY_APPLIED_TBR_ZERO reason=$reasonStr")
-            lastSafetySource = "SafetyLGS"
-            return DecisionResult.Applied(
-                source = "SafetyLGS",
-                bolusU = 0.0,
-                tbrUph = 0.0, // Strict 0.0
-                tbrMin = 30,
-                reason = reasonStr
-            )
+        // TIER 1 : BG réel sous seuil OU chute franche sous 70
+        val tier1BgReal = bgNow < lgsTh || (bg < 70.0 && delta < 0)
+        // TIER 2 : Prédiction sous seuil mais BG encore au-dessus
+        val tier2PredLow = !tier1BgReal && predNow < lgsTh && bgNow >= lgsTh
+        // TIER 3 : Éventuel sous seuil seulement
+        val tier3EventualLow = !tier1BgReal && !tier2PredLow && eventualNow < lgsTh
+
+        when {
+            tier1BgReal -> {
+                val reasonStr = "LGS_BG_ACTUEL: BG=${bgNow.toInt()} <= Th=${lgsTh.toInt()} — Arrêt insuline total (pred=${predNow.toInt()} ev=${eventualNow.toInt()})"
+                consoleLog.add("🛑 SAFETY_LGS_TIER1 $reasonStr")
+                lastSafetySource = "SafetyLGS_T1"
+                return DecisionResult.Applied(
+                    source = "SafetyLGS_T1",
+                    bolusU = 0.0,
+                    tbrUph = 0.0,  // Strict 0.0
+                    tbrMin = 30,
+                    reason = reasonStr
+                )
+            }
+            tier2PredLow -> {
+                val safeBasal = profile.current_basal * 0.25 // 25% basale profil
+                val reasonStr = "LGS_PRED_LOW: pred=${predNow.toInt()} <= Th=${lgsTh.toInt()} (BG actuel=${bgNow.toInt()} OK) — Basale réduite 25%"
+                consoleLog.add("🟠 SAFETY_LGS_TIER2 $reasonStr")
+                lastSafetySource = "SafetyLGS_T2"
+                return DecisionResult.Applied(
+                    source = "SafetyLGS_T2",
+                    bolusU = 0.0,
+                    tbrUph = safeBasal, // Basale résiduelle pour éviter rebond
+                    tbrMin = 30,
+                    reason = reasonStr
+                )
+            }
+            tier3EventualLow -> {
+                val safeBasal = profile.current_basal * 0.50 // 50% basale profil
+                val reasonStr = "LGS_EVENTUAL_LOW: ev=${eventualNow.toInt()} <= Th=${lgsTh.toInt()} (BG=${bgNow.toInt()} pred=${predNow.toInt()} OK) — Basale réduite 50%"
+                consoleLog.add("🟡 SAFETY_LGS_TIER3 $reasonStr")
+                lastSafetySource = "SafetyLGS_T3"
+                return DecisionResult.Applied(
+                    source = "SafetyLGS_T3",
+                    bolusU = 0.0,
+                    tbrUph = safeBasal,
+                    tbrMin = 15,
+                    reason = reasonStr
+                )
+            }
         }
 
         // 2. High Noise / Stale Data
@@ -7989,6 +8153,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         shortAvgDelta: Double,
         longAvgDelta: Double,
         duraISFminutes: Double,
+        duraISFaverage: Double,
         profile: OapsProfileAimi,
         currenttemp: CurrentTemp,
         iob: IobTotal,
@@ -8019,6 +8184,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             profileBasal = baseBasal,
             isf = variableSensitivity.coerceAtLeast(10.0),
             duraISFminutes = duraISFminutes,
+            duraISFaverage = duraISFaverage,
             eventualBg = if (eventualBg > 0) eventualBg else null
         )
 

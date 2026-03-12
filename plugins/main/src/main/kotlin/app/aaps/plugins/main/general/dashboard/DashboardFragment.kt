@@ -94,6 +94,7 @@ class DashboardFragment : DaggerFragment() {
     @Inject lateinit var auditorStatusLiveData: AuditorStatusLiveData
     @Inject lateinit var auditorNotificationManager: AuditorNotificationManager
     @Inject lateinit var trajectoryGuard: app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard // 🌀 Trajectory Injection
+    @Inject lateinit var autodriveEngine: app.aaps.plugins.aps.openAPSAIMI.autodrive.AutodriveEngine // 🧠 Engine Injection
 
     private val disposables = CompositeDisposable()
     private var _binding: FragmentDashboardBinding? = null
@@ -162,7 +163,8 @@ class DashboardFragment : DaggerFragment() {
             fabricPrivacy,
             preferences,
             overviewData,
-            trajectoryGuard // 🌀 Pass to Factory
+            trajectoryGuard, // 🌀 Pass to Factory
+            autodriveEngine  // 🧠 Pass to Factory
         )
     }
 

@@ -16,7 +16,9 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.work.ExistingWorkPolicy
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -42,6 +44,7 @@ import app.aaps.core.interfaces.protection.ExportPasswordDataStore
 import app.aaps.core.interfaces.protection.PasswordCheck
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.rx.events.EventAimiCloudBackupTrigger
 import app.aaps.core.interfaces.rx.events.EventDiaconnG8PumpLogReset
 import app.aaps.core.interfaces.rx.weardata.CwfData
 import app.aaps.core.interfaces.rx.weardata.CwfMetadataKey
@@ -412,6 +415,11 @@ class ImportExportPrefsImpl @Inject constructor(
             doExportToLocal(activity, newFile, password)
             // Then export to cloud
             doExportToCloud(activity, password)
+
+            // Trigger AIMI backup if enabled
+            if (exportOptionsDialog.isAimiCloudEnabled()) {
+                rxBus.send(EventAimiCloudBackupTrigger())
+            }
         }
     }
     
@@ -487,6 +495,11 @@ class ImportExportPrefsImpl @Inject constructor(
                 // Delete the temp file created for prompt, doExportToCloud will create its own
                 tempDoc.delete()
                 doExportToCloud(activity, password)
+
+                // Trigger AIMI backup if enabled
+                if (exportOptionsDialog.isAimiCloudEnabled()) {
+                    rxBus.send(EventAimiCloudBackupTrigger())
+                }
             }
         }
     }
@@ -660,6 +673,11 @@ class ImportExportPrefsImpl @Inject constructor(
                             aapsLogger.info(LTag.CORE, "${CloudConstants.LOG_PREFIX} NONINTERACTIVE_EXPORT_CLOUD_OK fileName=$fileName fileId=$uploadedFileId")
                         } else {
                             aapsLogger.error(LTag.CORE, "${CloudConstants.LOG_PREFIX} NONINTERACTIVE_EXPORT_CLOUD_FAIL")
+                        }
+
+                        // Trigger AIMI backup if enabled
+                        if (exportOptionsDialog.isAimiCloudEnabled()) {
+                            rxBus.send(EventAimiCloudBackupTrigger())
                         }
                     } else {
                         aapsLogger.error(LTag.CORE, "${CloudConstants.LOG_PREFIX} NONINTERACTIVE_EXPORT_READ_FILE_FAIL")
@@ -1112,6 +1130,36 @@ class ImportExportPrefsImpl @Inject constructor(
                 ret = Result.failure(workDataOf("Error" to "Error IOException"))
             }
             return ret
+        }
+    }
+
+    override suspend fun uploadFileToCloud(fileName: String, fileContent: ByteArray, mimeType: String, remotePath: String): Boolean {
+        // This is a bridge to CloudStorageManager which is in the same module
+        val provider = cloudStorageManager.getActiveProvider() ?: return false
+        
+        return try {
+            if (provider.testConnection()) {
+                // Align with doExportToCloud: force selection of the target folder
+                provider.getOrCreateFolderPath(remotePath)?.let {
+                    provider.setSelectedFolderId(it)
+                }
+
+                // Primary attempt: upload to specific path
+                var resultId = provider.uploadFileToPath(fileName, fileContent, mimeType, remotePath)
+                
+                // Fallback attempt: upload using selection/inference if path-based failed
+                if (resultId == null) {
+                    aapsLogger.warn(LTag.CORE, "uploadFileToPath failed for $fileName, attempting fallback uploadFile")
+                    resultId = provider.uploadFile(fileName, fileContent, mimeType)
+                }
+                
+                resultId != null
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.CORE, "Failed to upload file to cloud from bridge: $fileName", e)
+            false
         }
     }
 }

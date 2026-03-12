@@ -64,6 +64,7 @@ class AuditorPromptSafeguardsTest {
                 target = 100.0,
                 pkpd = PKPDSnapshot(300, 75, 0.2, true, 0.0),
                 activity = ActivitySnapshot(0, 0, null, null),
+                physio = null,
                 states = StatesSnapshot("Normal", 10, "Idle", null, 1.0),
                 limits = LimitsSnapshot(2.0, 3.0, 5.0, 2.0, null, null),
                 decisionAimi = DecisionSnapshot(0.0, null, null, 5.0, emptyList()),
@@ -75,7 +76,8 @@ class AuditorPromptSafeguardsTest {
             ),
             stats = Stats7d(
                 80.0, 1.0, 19.0, 130.0, 30.0, 40.0, 50.0, 50.0
-            )
+            ),
+            trajectory = null
         )
     }
 }

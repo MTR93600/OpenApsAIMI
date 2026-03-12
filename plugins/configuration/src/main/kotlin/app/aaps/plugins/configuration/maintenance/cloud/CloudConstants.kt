@@ -1,5 +1,8 @@
 package app.aaps.plugins.configuration.maintenance.cloud
 
+import app.aaps.core.interfaces.maintenance.CloudBackupConstants
+
+
 /**
  * Centralized management of cloud-related constants.
  * 
@@ -10,10 +13,11 @@ object CloudConstants {
     const val LOG_PREFIX = "[Cloud]"
     
     // Cloud storage paths - these are logical paths that providers should map to their structure
-    const val CLOUD_PATH_EXPORT = "/AAPS/export"
-    const val CLOUD_PATH_SETTINGS = "${CLOUD_PATH_EXPORT}/preferences"
-    const val CLOUD_PATH_LOGS = "${CLOUD_PATH_EXPORT}/logs"
-    const val CLOUD_PATH_USER_ENTRIES = "${CLOUD_PATH_EXPORT}/user_entries"
+    const val CLOUD_PATH_EXPORT = CloudBackupConstants.CLOUD_PATH_EXPORT
+    const val CLOUD_PATH_SETTINGS = CloudBackupConstants.CLOUD_PATH_SETTINGS
+    const val CLOUD_PATH_LOGS = CloudBackupConstants.CLOUD_PATH_LOGS
+    const val CLOUD_PATH_USER_ENTRIES = CloudBackupConstants.CLOUD_PATH_USER_ENTRIES
+    const val CLOUD_PATH_AIMI = CloudBackupConstants.CLOUD_PATH_AIMI
     
     // Activity request codes
     const val CLOUD_IMPORT_REQUEST_CODE = 1001

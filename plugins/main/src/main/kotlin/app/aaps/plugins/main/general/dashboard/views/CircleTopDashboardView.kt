@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
+import app.aaps.plugins.main.R
 import app.aaps.plugins.main.databinding.ComponentCircleTopStatusHybridBinding
 
 /**
@@ -127,7 +128,22 @@ class CircleTopDashboardView @JvmOverloads constructor(
             // Steps & HR
             binding.stepsText.text = getProp<String>("stepsText") ?: "--"
             binding.hrText.text = getProp<String>("hrText") ?: "--"
+            binding.pumpBatteryText.text = getProp<String>("pumpBatteryText") ?: "--"
+
+            // ═══════════════════════════════════════════════════════════════
+            // 6. AIMI Insights
+            // ═══════════════════════════════════════════════════════════════
+            binding.insightT3c.text = getProp<String>("insightT3c") ?: "🎯 --"
+            binding.insightManoeuvre.text = getProp<String>("insightManoeuvre") ?: "🌀 --"
+            binding.insightFactor.text = getProp<String>("insightFactor") ?: "⚡ x1.0"
             
+            // Adjust container style based on health score (confidence)
+            val health = getProp<Double>("aimiHealthScore") ?: 1.0
+            if (health < 0.8) {
+                binding.aimiInsightsContainer.setBackgroundResource(R.drawable.dashboard_chip_background_warning)
+            } else {
+                binding.aimiInsightsContainer.setBackgroundResource(R.drawable.dashboard_chip_background)
+            }
 
             
         } catch (e: Exception) {

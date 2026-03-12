@@ -26,6 +26,9 @@ class MechanismAttentionGate @Inject constructor(
     // Cache en mémoire pour ne pas tuer les I/O à chaque tique de 5 minutes
     private var weightsCache: AttentionWeights? = null
     private var lastLoadTime: Long = 0
+    // Pour l'UI
+    var lastAttentionMultiplier: Double = 1.0
+        private set
 
     init {
         loadWeights()
@@ -40,6 +43,7 @@ class MechanismAttentionGate @Inject constructor(
         
         // Si la V3 n'a pas encore eu le temps de s'entraîner (Data Gate fermée), on reste en V2 = Neutre
         if (weights == null || state.physiologicalStressMask.isEmpty()) {
+            lastAttentionMultiplier = 1.0
             return state
         }
 
@@ -67,6 +71,7 @@ class MechanismAttentionGate @Inject constructor(
         }
 
         val modulatedSI = state.estimatedSI * attentionMultiplier
+        lastAttentionMultiplier = attentionMultiplier
 
         return state.copy(estimatedSI = modulatedSI)
     }

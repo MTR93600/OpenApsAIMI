@@ -24,6 +24,7 @@ import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard // 🌀 Trajectory
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.AutodriveEngine // 🧠 Engine
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventBucketedDataCreated
 import app.aaps.core.interfaces.rx.events.EventExtendedBolusChange
@@ -76,7 +77,8 @@ class OverviewViewModel(
     private val fabricPrivacy: FabricPrivacy,
     private val preferences: Preferences,
     private val overviewData: OverviewData,
-    private val trajectoryGuard: TrajectoryGuard // 🌀 Trajectory Injection
+    private val trajectoryGuard: TrajectoryGuard, // 🌀 Trajectory Injection
+    private val autodriveEngine: AutodriveEngine // 🧠 Engine Injection
 ) : ViewModel() {
 
     private val disposables = CompositeDisposable()
@@ -237,7 +239,8 @@ class OverviewViewModel(
                 val currentBasal = profile.getBasal(dateUtil.now())
                 if (currentBasal > 0) {
                     val pct = ((tbr.rate / currentBasal) * 100 - 100).toInt()
-                    "$pct%"
+                    val sign = if (pct >= 0) "+" else ""
+                    "$sign$pct%"
                 } else "0%"
             } ?: "0%"
         } ?: "0%"
@@ -359,6 +362,18 @@ class OverviewViewModel(
              e.printStackTrace()
         }
 
+        // 12. AIMI Insights (Autodrive V3)
+        val t3cMinutes = trajectoryGuard.getLastAnalysis()?.predictedConvergenceTime ?: -1
+        val insightT3c = if (t3cMinutes > 0) "🎯 ${t3cMinutes}m" else "🎯 --"
+        
+        val classification = trajectoryGuard.getLastAnalysis()?.classification
+        val insightManoeuvre = classification?.let { "${it.emoji()} ${it.name}" } ?: "🌀 --"
+        
+        val factor = autodriveEngine.getAttentionMultiplier()
+        val insightFactor = "⚡ x${decimalFormatter.to1Decimal(factor)}"
+        
+        val healthScore = autodriveEngine.getHealthScore()
+
         val state = StatusCardState(
             glucoseText = glucoseText,
             glucoseColor = lastBgData.lastBgColor(context),
@@ -408,7 +423,13 @@ class OverviewViewModel(
             tirVeryHigh = tirVeryHigh,
             avgBgMgdl = avgBgMgdl,
             bgCv = bgCv,
-            a1c = a1c
+            a1c = a1c,
+            
+            // AIMI Insights
+            insightT3c = insightT3c,
+            insightManoeuvre = insightManoeuvre,
+            insightFactor = insightFactor,
+            aimiHealthScore = healthScore
         )
         _statusCardState.postValue(state)
     }
@@ -757,7 +778,8 @@ class OverviewViewModel(
         private val fabricPrivacy: FabricPrivacy,
         private val preferences: Preferences,
         private val overviewData: OverviewData,
-        private val trajectoryGuard: TrajectoryGuard // 🌀 Add to Factory
+        private val trajectoryGuard: TrajectoryGuard, // 🌀 Add to Factory
+        private val autodriveEngine: AutodriveEngine // 🧠 Add to Factory
     ) : ViewModelProvider.Factory {
 
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -783,7 +805,8 @@ class OverviewViewModel(
                     fabricPrivacy,
                     preferences,
                     overviewData,
-                    trajectoryGuard
+                    trajectoryGuard,
+                    autodriveEngine
                 ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class $modelClass")
@@ -857,7 +880,13 @@ data class StatusCardState(
     val tirVeryHigh: Double? = null,
     val avgBgMgdl: Double? = null,
     val bgCv: Double? = null,
-    val a1c: Double? = null
+    val a1c: Double? = null,
+    
+    // AIMI Insights
+    val insightT3c: String? = null,
+    val insightManoeuvre: String? = null,
+    val insightFactor: String? = null,
+    val aimiHealthScore: Double? = null
 )
 
 data class AdjustmentCardState(

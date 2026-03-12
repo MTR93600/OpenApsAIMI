@@ -41,9 +41,16 @@ class BasalPlannerTest {
 
     class DummyFormatter : DecimalFormatter {
         override fun to0Decimal(value: Double): String = String.format("%.0f", value)
+        override fun to0Decimal(value: Double, unit: String): String = "${to0Decimal(value)} $unit"
         override fun to1Decimal(value: Double): String = String.format("%.1f", value)
+        override fun to1Decimal(value: Double, unit: String): String = "${to1Decimal(value)} $unit"
         override fun to2Decimal(value: Double): String = String.format("%.2f", value)
+        override fun to2Decimal(value: Double, unit: String): String = "${to2Decimal(value)} $unit"
         override fun to3Decimal(value: Double): String = String.format("%.3f", value)
+        override fun to3Decimal(value: Double, unit: String): String = "${to3Decimal(value)} $unit"
+        override fun toPumpSupportedBolus(value: Double, bolusStep: Double): String = to2Decimal(value)
+        override fun toPumpSupportedBolusWithUnits(value: Double, bolusStep: Double): String = to2Decimal(value)
+        override fun pumpSupportedBolusFormat(bolusStep: Double): java.text.DecimalFormat = java.text.DecimalFormat("0.00")
     }
 
     private val logger = DummyLogger()

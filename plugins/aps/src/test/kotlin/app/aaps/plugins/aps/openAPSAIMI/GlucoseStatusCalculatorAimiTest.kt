@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
-import app.aaps.core.data.iob.BucketedRecord
 import app.aaps.core.data.iob.InMemoryGlucoseValue
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -39,7 +38,7 @@ class GlucoseStatusCalculatorAimiTest {
 
     @Test
     fun `test compute with no data`() {
-        every { iobCobCalculator.ads.getBucketedDataTableCopy() } returns emptyList()
+        every { iobCobCalculator.ads.getBucketedDataTableCopy() } returns mutableListOf()
         val result = calculator.compute(allowOldData = false)
         assertEquals(null, result.gs)
         assertEquals(null, result.features)
@@ -55,8 +54,8 @@ class GlucoseStatusCalculatorAimiTest {
             createRecord(now - 15 * 60 * 1000, 115.0),
             createRecord(now - 20 * 60 * 1000, 120.0)
         )
-        every { iobCobCalculator.ads.getBucketedDataTableCopy() } returns records
-        every { deltaCalculator.calculateDeltas(any()) } returns DeltaCalculator.Deltas(
+        every { iobCobCalculator.ads.getBucketedDataTableCopy() } returns records.toMutableList()
+        every { deltaCalculator.calculateDeltas(any()) } returns DeltaCalculator.DeltaResult(
             delta = -5.0,
             shortAvgDelta = -5.0,
             longAvgDelta = -5.0
@@ -78,8 +77,8 @@ class GlucoseStatusCalculatorAimiTest {
         assertEquals(-5.0, features.combinedDelta, 0.1)
     }
 
-    private fun createRecord(timestamp: Long, value: Double): BucketedRecord {
-        val record = mockk<BucketedRecord>(relaxed = true)
+    private fun createRecord(timestamp: Long, value: Double): InMemoryGlucoseValue {
+        val record = mockk<InMemoryGlucoseValue>(relaxed = true)
         every { record.timestamp } returns timestamp
         every { record.recalculated } returns value
         every { record.value } returns value

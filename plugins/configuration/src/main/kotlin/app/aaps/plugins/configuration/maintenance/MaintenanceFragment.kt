@@ -48,6 +48,9 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
 import io.reactivex.rxjava3.kotlin.subscribeBy
 import javax.inject.Inject
+import app.aaps.core.interfaces.rx.events.EventAimiCloudBackupResult
+import app.aaps.core.interfaces.rx.events.EventAimiCloudBackupTrigger
+
 
 class MaintenanceFragment : DaggerFragment() {
 
@@ -234,6 +237,16 @@ class MaintenanceFragment : DaggerFragment() {
         }
 
         binding.unlock.setOnClickListener { queryProtection() }
+        
+        binding.aimiCloudBackup.setOnClickListener {
+            if (!cloudStorageManager.isCloudStorageActive()) {
+                app.aaps.core.ui.toast.ToastUtils.warnToast(requireContext(), rh.gs(R.string.setup_cloud_directory_first))
+                return@setOnClickListener
+            }
+            
+            app.aaps.core.ui.toast.ToastUtils.infoToast(requireContext(), rh.gs(R.string.uploading_to_cloud))
+            rxBus.send(EventAimiCloudBackupTrigger())
+        }
     }
 
     override fun onResume() {
@@ -242,6 +255,19 @@ class MaintenanceFragment : DaggerFragment() {
         checkAndRestoreCloudSettings()
         
         // Subscribe to cloud storage status changes to update UI immediately
+        disposable += rxBus
+            .toObservable(EventAimiCloudBackupResult::class.java)
+            .observeOn(aapsSchedulers.main)
+            .subscribe({ result ->
+                if (result.successCount > 0) {
+                    app.aaps.core.ui.toast.ToastUtils.okToast(requireContext(), "AIMI Backup: ${result.successCount}/${result.totalCount} files uploaded.")
+                } else if (result.totalCount == 0) {
+                    app.aaps.core.ui.toast.ToastUtils.warnToast(requireContext(), "No AIMI files found to backup.")
+                } else {
+                    app.aaps.core.ui.toast.ToastUtils.errorToast(requireContext(), "AIMI Backup failed.")
+                }
+            }, fabricPrivacy::logException)
+
         disposable += rxBus
             .toObservable(EventCloudStorageStatusChanged::class.java)
             .observeOn(aapsSchedulers.main)

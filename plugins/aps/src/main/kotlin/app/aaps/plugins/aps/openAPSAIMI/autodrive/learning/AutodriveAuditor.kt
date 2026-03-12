@@ -11,6 +11,10 @@ class AutodriveAuditor @Inject constructor() {
         return state.bg > 0
     }
 
+    // Pour l'UI (Indice de confiance)
+    var lastHealthScore: Double = 1.0
+        private set
+
     /**
      * Traduit le comportement mathématique complexe en explications compréhensibles.
      */
@@ -35,9 +39,20 @@ class AutodriveAuditor @Inject constructor() {
             sb.append(" | 💧 TBR: ${safeCommand.temporaryBasalRate}U/h")
         }
 
-        if (rawCommand.temporaryBasalRate != safeCommand.temporaryBasalRate) {
+        if (rawCommand.temporaryBasalRate != safeCommand.temporaryBasalRate || rawCommand.scheduledMicroBolus > safeCommand.scheduledMicroBolus) {
             sb.append(" | 🛡️ Sécurité Activée")
         }
+
+        // 🚀 CALCUL DU SCORE DE SANTÉ (Confidence Index) pour l'UI
+        var health = 1.0
+        // Si CBF bloque des unités, on baisse la confiance
+        if (rawCommand.scheduledMicroBolus > safeCommand.scheduledMicroBolus) health -= 0.2
+        
+        // Si la Sensibilité Insulinaire (SI) estimée est très éloignée de la base (instabilité)
+        val isfRatio = if (baseProfileIsf > 0) state.estimatedSI / baseProfileIsf else 1.0
+        if (isfRatio > 1.3 || isfRatio < 0.7) health -= 0.1
+        
+        lastHealthScore = health.coerceIn(0.1, 1.0)
 
         return if (sb.isEmpty()) "V3: État Stable" else "V3: ${sb.toString().trim()}"
     }

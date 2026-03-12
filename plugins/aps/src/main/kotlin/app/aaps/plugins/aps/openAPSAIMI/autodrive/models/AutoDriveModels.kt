@@ -9,11 +9,15 @@ data class AutoDriveState(
     val bgVelocity: Double,         // mg/dL/min
     val iob: Double,                // Unités actives
     val cob: Double = 0.0,          // Graphes optionnels si annoncés
-    val estimatedSI: Double = 1.0,  // Sensibilité à l'insuline estimée à l'instant T (par défaut 1.0 = profile)
-    val estimatedRa: Double = 0.0,  // Taux d'apparition des glucides estimé (Glucose Rate of Appearance)
+    val estimatedSI: Double = 1.0,  // Sensibilité à l'insuline estimée à l'instant T
+    val estimatedRa: Double = 0.0,  // Taux d'apparition des glucides estimé
     val patientWeightKg: Double = 70.0, // Poids du patient (Volume de Distribution Vd) - Phase 7
     val physiologicalStressMask: DoubleArray, // Vecteur optionnel d'attention (pour plus tard)
     val isNight: Boolean = false,      // Mode Nuit (Sommeil = réduction drastique de l'agressivité)
+    val hour: Int = 12,                // Heure locale (0-23) pour Dawn Guard
+    val steps: Int = 0,                // Pas cumulés sur 15 min
+    val hr: Int = 70,                  // Rythme cardiaque actuel
+    val rhr: Int = 60,                 // Rythme cardiaque au repos
     val sourceSensor: app.aaps.core.data.model.SourceSensor? = null, // Type de capteur matériel (Phase 10)
     val maxIOB: Double = 3.0,          // Limite MaxIOB de sécurité (Phase 4+)
     val maxSMB: Double = 1.0,          // Plafond SMB utilisateur standard (Phase 11+)

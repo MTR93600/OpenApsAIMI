@@ -101,6 +101,7 @@ import androidx.core.util.size
 import androidx.core.net.toUri
 import kotlin.math.abs
 import kotlin.math.exp
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiBackupManager
 
 @Singleton
 open class OpenAPSAIMIPlugin  @Inject constructor(
@@ -134,7 +135,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     // 🏥 Physiological Decision Adapter (The Safety Gate)
     private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR,
     private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator, // 🧠 AI Auditor MTR
-    private val contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager // 🎯 Context Manager
+    private val contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager, // 🎯 Context Manager
+    private val aimiBackupManager: AimiBackupManager // ☁️ Cloud Backup Manager (Force Init)
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -710,14 +712,21 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 
                 // 🚨 SAFETY OVERRIDE (FCL 10.3) - Refined for "Blind Spot" Removal:
                 // If we are in Hyper (>150) AND Rising/Stable, we MUST NOT be protective (<1.0).
-                // FIX: "Rising" defined strictly as Delta > -0.5 (Stable or Up). 
-                // Previously > -2.0 allowed drops, which was risky to un-protect.
-                val isHyper = glucoseStatus.glucose > 150
+                // ANTI-LAG: Lower threshold to 110 if rising fast (delta > 3.0)
+                val isFastRise = glucoseStatus.delta > 3.0
+                val overrideThreshold = if (isFastRise) 110.0 else 150.0
+                val isHyper = glucoseStatus.glucose > overrideThreshold
                 val isRising = glucoseStatus.delta > -0.5
                 
                 if (isHyper && isRising && brainFactor < 1.0) {
-                    aapsLogger.debug(LTag.APS, "🧠 Brain Override: IGNORING protective factor ${"%.2f".format(brainFactor)} because BG ${glucoseStatus.glucose} is high & stable/rising.")
+                    aapsLogger.debug(LTag.APS, "🧠 Brain Override: IGNORING protective factor ${"%.2f".format(brainFactor)} because BG ${glucoseStatus.glucose} is > $overrideThreshold & stable/rising.")
                     brainFactor = 1.0
+                }
+
+                // 🚀 EXPLOSIVE RISE BOOST: If delta is very high, force a slight aggressive factor
+                if (glucoseStatus.delta > 6.0 && brainFactor < 1.1) {
+                    aapsLogger.debug(LTag.APS, "🚀 Brain Boost: Forcing factor 1.1 due to explosive rise (delta=${glucoseStatus.delta})")
+                    brainFactor = 1.1
                 }
 
                 if (brainFactor != 1.0) {
@@ -1368,7 +1377,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     )
                 })
             addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIMLtraining, title = R.string.oaps_aimi_enableMlTraining_title))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMaxSMB, dialogMessage = R.string.openapsaimi_maxsmb_summary, title = R.string.openapsaimi_maxsmb_title))
+            addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMaxSMB, dialogMessage = R.string.openapsaimi_maxsmb_summary, title = R.string.openapsaimi_maxsmb_title))
+            addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHighBGMaxSMB, dialogMessage = R.string.openapsaimi_highBG_maxsmb_summary, title = R.string.openapsaimi_highBG_maxsmb_title))
             addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIweight, dialogMessage = R.string.oaps_aimi_weight_summary, title = R.string.oaps_aimi_weight_title))
             addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMICHO, dialogMessage = R.string.oaps_aimi_cho_summary, title = R.string.oaps_aimi_cho_title))
             addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMITDD7, dialogMessage = R.string.oaps_aimi_tdd7_summary, title = R.string.oaps_aimi_tdd7_title))
@@ -1984,18 +1994,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             //     })
             //
             // })
-                addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                key = "high_BG_settings"
-                //title = "High BG Preferences (BG > 120)"
-                title = rh.gs(R.string.high_BG_preferences)
-                addPreference(PreferenceCategory(context).apply {
-                       title = rh.gs(R.string.bg_over_120_preferences_title_menu)
-                })
-                // ❌ HYPER FACTOR REMOVED (replaced by UnifiedReactivityLearner)
-                // addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHyperFactor...))
-                addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIHighBGinterval, dialogMessage = R.string.oaps_aimi_HIGHBG_interval_summary, title = R.string.oaps_aimi_HIGHBG_interval_title))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHighBGMaxSMB, dialogMessage = R.string.openapsaimi_highBG_maxsmb_summary, title = R.string.openapsaimi_highBG_maxsmb_title))
-            })
 
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "Training_ML_Modes"

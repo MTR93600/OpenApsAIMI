@@ -24,6 +24,7 @@ import kotlin.math.min
 class ControlBarrierShield @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
+    private val METABOLIC_SI_BASE = 0.0012 // Calibration factor (Phase 12)
 
     // Paramètres de Sécurité CBF
     private val bgDangerThreshold = 80.0 // Marge renforcée pour la limite absolue
@@ -52,11 +53,12 @@ class ControlBarrierShield @Inject constructor(
         
         val totalProposedDose = proposedIobIncrement + tbrIncrement
         
-        // Dérivée Lie L_f(h) : Évolution naturelle sans insuline actionnée (Dose = 0)
-        val lfh = - (p1 + state.estimatedSI * state.iob) * state.bg + (p1 * 100.0) + state.estimatedRa
+        // Lie Derivative L_f(h) : Évolution naturelle sans insuline actionnée (Dose = 0)
+        val siMetabolic = state.estimatedSI * METABOLIC_SI_BASE
+        val lfh = - (p1 + siMetabolic * state.iob) * state.bg + (p1 * 100.0) + state.estimatedRa
 
         // Lie Derivative L_g(h) : Impact de l'action de contrôle (Dose_u)
-        val lgh = - state.estimatedSI * state.bg
+        val lgh = - siMetabolic * state.bg
 
         // --- 3. Filtre CBF : Inéquation de sécurité ---
         // On veut garantir : L_f(h) + L_g(h) * u >= - gamma * h
