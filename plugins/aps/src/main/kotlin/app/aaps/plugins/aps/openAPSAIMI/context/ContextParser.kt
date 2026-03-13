@@ -50,7 +50,7 @@ class ContextParser @Inject constructor(
         )
         
         private val WALKING_PATTERNS = listOf(
-            Regex("\\b(walking|walk|marche)\\b", RegexOption.IGNORE_CASE)
+            Regex("\\b(walking|walk|marche|marcher|marchais|balade|promenade)\\b", RegexOption.IGNORE_CASE)
         )
         
         // Illness patterns

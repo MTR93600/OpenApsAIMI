@@ -26,6 +26,7 @@ interface APSResult {
     var scriptDebug: List<String>?
     var isHypoRisk: Boolean
 
+
     val predictionsAsGv: MutableList<GV>
     val latestPredictionsTime: Long
     val isChangeRequested: Boolean

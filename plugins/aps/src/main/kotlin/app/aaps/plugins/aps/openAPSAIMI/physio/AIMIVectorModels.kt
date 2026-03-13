@@ -47,24 +47,26 @@ data class TrajectoryKernelRef(
 }
 
 /**
- * Result of the Cosine Gate calculation.
+ * Result of the Cosine Gate calculation (Physiological Modulation).
  * Contains the final modulation parameters to be applied to the trajectory.
  */
-data class TrajectoryModulation(
+data class PhysioModulation(
     val effectiveSensitivityMultiplier: Double,
     val peakTimeShiftMinutes: Int,
     val weights: Map<KernelType, Double>,
     val dominantKernel: KernelType,
     val dataQuality: Double,
+    val relevanceScore: Double, // 🌀 Relevance to current context
     val debug: String
 ) {
     companion object {
-        val NEUTRAL = TrajectoryModulation(
+        val NEUTRAL = PhysioModulation(
             effectiveSensitivityMultiplier = 1.0,
             peakTimeShiftMinutes = 0,
             weights = mapOf(KernelType.REST to 1.0),
             dominantKernel = KernelType.REST,
             dataQuality = 1.0,
+            relevanceScore = 0.0,
             debug = "NEUTRAL (Default)"
         )
     }

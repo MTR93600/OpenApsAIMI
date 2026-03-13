@@ -43,7 +43,7 @@ class AuditorAIService @Inject constructor(
     
     enum class Provider(val id: String, val displayName: String) {
         OPENAI("openai", "ChatGPT (GPT-5.2)"),
-        GEMINI("gemini", "Gemini (3.0 Pro)"),
+        GEMINI("gemini", "Gemini (3.0 Flash)"),
         DEEPSEEK("deepseek", "DeepSeek (Chat)"),
         CLAUDE("claude", "Claude (3.5 Sonnet)")
     }
@@ -201,8 +201,8 @@ class AuditorAIService @Inject constructor(
      */
     private fun callGemini(apiKey: String, prompt: String, useHighPerf: Boolean): String {
         // 1. Select Model based on complexity
-        // HighPerf -> gemini-3-pro-preview | Standard -> gemini-2.5-flash
-        val modelName = if (useHighPerf) "gemini-3-pro-preview" else "gemini-2.5-flash"
+        // HighPerf -> gemini-3-pro | Standard -> gemini-3-flash
+        val modelName = if (useHighPerf) "gemini-3-pro" else "gemini-3-flash"
         
         val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, modelName)
         
@@ -212,7 +212,7 @@ class AuditorAIService @Inject constructor(
             // 2. Fallback on Quota Exceeded (429)
             val msg = e.message?.lowercase() ?: ""
             if (msg.contains("429") || msg.contains("quota") || msg.contains("resource_exhausted")) {
-                val fallbackModel = "gemini-2.5-flash"
+                val fallbackModel = "gemini-3-flash"
                 android.util.Log.w("AIMI_GEMINI", "Auditor Quota Exceeded. Fallback to $fallbackModel")
                 return executeGeminiRequest(apiKey, prompt, fallbackModel)
             }

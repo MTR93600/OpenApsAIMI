@@ -8,7 +8,7 @@ import app.aaps.core.keys.IntKey
 import app.aaps.plugins.aps.openAPSAIMI.physio.GateInput
 import app.aaps.plugins.aps.openAPSAIMI.physio.KernelType
 import app.aaps.plugins.aps.openAPSAIMI.physio.TrajectoryKernelRef
-import app.aaps.plugins.aps.openAPSAIMI.physio.TrajectoryModulation
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioModulation
 import java.util.EnumMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,10 +16,23 @@ import kotlin.math.exp
 import kotlin.math.sqrt
 
 /**
- * 🌀 Cosine Trajectory Gate
+ * 🌀 Cosine Trajectory Gate (Physiological Relevance Filter)
  *
- * Computes trajectory modulation (Sensitivity & Peak Shift) by comparing
- * current state vector against reference kernels using Cosine Similarity.
+ * This component acts as the "relevance filter" for trajectory-based insulin modulation.
+ * It compares the current physiological state (Activity, Stress, Trend) against 
+ * reference kernels to determine if the current dynamics are "relevant" enough 
+ * to justify departing from baseline insulin delivery.
+ * 
+ * ROLE IN THE PIPELINE:
+ * 1. Computes a "trajectoryRelevanceScore" (0.0 to 1.0) using Cosine Similarity.
+ * 2. If Score > 0.5: The state is considered clear/significant (e.g. clearly STRESS).
+ * 3. If Score <= 0.5: The state is "too close to noise" or REST to justify 
+ *    special trajectory adjustments.
+ * 
+ * IMPACT ON SAFETY:
+ * By filtering at 0.5, we ensure that the TrajectoryGuard only acts on 
+ * signals with a strong physiological signature, preventing "jitter" from 
+ * low-confidence sensor data.
  *
  * @author MTR & Lyra AI - AIMI Physiological Intelligence
  */
@@ -73,18 +86,18 @@ class CosineTrajectoryGate @Inject constructor(
     /**
      * Main computation function
      */
-    fun compute(input: GateInput): TrajectoryModulation {
+    fun compute(input: GateInput): PhysioModulation {
         
         // 1. Gate Switch (Feature Flag)
         // Note: Key will be added to BooleanKey enum
         if (!prefs.get(BooleanKey.AimiCosineGateEnabled)) {
-             return TrajectoryModulation.NEUTRAL.copy(debug = "Disabled")
+             return PhysioModulation.NEUTRAL.copy(debug = "Disabled")
         }
 
         // 2. Data Quality Check
         val minQuality = prefs.get(DoubleKey.AimiCosineGateMinDataQuality)
         if (input.dataQuality < minQuality) {
-            return TrajectoryModulation.NEUTRAL.copy(
+            return PhysioModulation.NEUTRAL.copy(
                 dataQuality = input.dataQuality,
                 debug = "Low Quality ${"%.2f".format(input.dataQuality)} < $minQuality"
             )
@@ -137,12 +150,13 @@ class CosineTrajectoryGate @Inject constructor(
              // Only log high impact changes to avoid spam, or rely on caller to log
         }
 
-        return TrajectoryModulation(
+        return PhysioModulation(
             effectiveSensitivityMultiplier = clampedSens,
             peakTimeShiftMinutes = clampedShift,
             weights = weights,
             dominantKernel = dominantKernel,
             dataQuality = input.dataQuality,
+            relevanceScore = maxWeight, // Using maxWeight as relevance score
             debug = debugStr
         )
     }

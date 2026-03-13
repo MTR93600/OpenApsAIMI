@@ -4348,11 +4348,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         currentTime: Long, bg: Double, delta: Double, bgacc: Double, iobActivityNow: Double,
         iob: Float, insulinActionState: app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionState,
         lastBolusAgeMinutes: Double, cob: Float, targetBg: Double, profile: OapsProfileAimi,
-        rT: RT, uiInteraction: UiInteraction
+        rT: RT, uiInteraction: UiInteraction,
+        relevanceScore: Double = 0.0 // 🌀 Relevance from Cosine Gate
     ) {
         val trajectoryFlagEnabled = preferences.get(BooleanKey.OApsAIMITrajectoryGuardEnabled)
+        
+        rT.trajectoryRelevanceScore = relevanceScore
+        
         if (trajectoryFlagEnabled) {
             try {
+                // 1. Build Phase-Space History
                 val trajectoryHistory = trajectoryHistoryProvider.buildHistory(
                     nowMillis = currentTime, historyMinutes = 90, currentBg = bg,
                     currentDelta = delta, currentAccel = bgacc,
@@ -4362,6 +4367,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     cobNow = cob.toDouble()
                 )
                 
+                // 2. Run Trajectory Analysis (The "Insight" Gate)
                 val stableOrbit = app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit.fromProfile(targetBg, profile.current_basal)
                 val traj = trajectoryGuard.analyzeTrajectory(trajectoryHistory, stableOrbit)
                 
@@ -4375,13 +4381,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     
                     consoleLog.add("🌀 Trajectory: $statusEmoji $typeDesc | κ=${"%.2f".format(analysis.metrics.curvature)} conv=${"%.1f".format(analysis.metrics.convergenceVelocity)} health=${"%.0f".format(analysis.metrics.healthScore*100)}%")
                     
+                    // Display Visual Insights
                     val artLines = analysis.classification.asciiArt().split("\n")
                     artLines.forEach { line -> consoleLog.add("  $line") }
-                    
                     consoleLog.add("  📊 Metrics: Coherence=${"%.2f".format(analysis.metrics.coherence)} Energy=${"%.1f".format(analysis.metrics.energyBalance)}U Openness=${"%.2f".format(analysis.metrics.openness)}")
                     
+                    // 3. Apply Modulation (The "Safety" Gate)
+                    // We only modify insulin delivery if relevance is sufficient (> 0.4)
                     val mod = analysis.modulation
-                    if (mod.isSignificant()) {
+                    if (relevanceScore > 0.4 && mod.isSignificant()) {
                         consoleLog.add("  🎛 Modulation: SMB×${"%.2f".format(mod.smbDamping)} Int×${"%.2f".format(mod.intervalStretch)} (${mod.reason})")
                         
                         if (kotlin.math.abs(mod.smbDamping - 1.0) > 0.05) {
@@ -4399,8 +4407,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             maxIob *= mod.safetyMarginExpand
                             consoleLog.add("    → MaxIOB: ${"%.2f".format(orig)}U → ${"%.2f".format(maxIob)}U")
                         }
+                    } else if (relevanceScore <= 0.4) {
+                        consoleLog.add("  ⏸ Modulation Gated (Relevance ${"%.2f".format(relevanceScore)} <= 0.4)")
                     }
                     
+                    // Warning Propagation
                     analysis.warnings.filter { it.severity >= app.aaps.plugins.aps.openAPSAIMI.trajectory.WarningSeverity.HIGH }.forEach { w ->
                         consoleLog.add("  🚨 ${w.severity.emoji()} ${w.message}")
                         if (w.severity == app.aaps.plugins.aps.openAPSAIMI.trajectory.WarningSeverity.CRITICAL) {
@@ -4412,15 +4423,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         consoleLog.add("  ⏱ Est. convergence: ${it}min")
                     }
                     
+                    // 4. Populate RT for UI (Always if traj exists)
                     rT.trajectoryEnabled = true
                     rT.trajectoryType = analysis.classification.name
+                    // Note: rT.trajectoryRelevanceScore is already set to the Cosine relevanceScore at start
                     rT.trajectoryCurvature = analysis.metrics.curvature
                     rT.trajectoryConvergence = analysis.metrics.convergenceVelocity
                     rT.trajectoryCoherence = analysis.metrics.coherence
                     rT.trajectoryEnergy = analysis.metrics.energyBalance
                     rT.trajectoryOpenness = analysis.metrics.openness
                     rT.trajectoryHealth = (analysis.metrics.healthScore * 100).toInt()
-                    rT.trajectoryModulationActive = analysis.modulation.isSignificant()
+                    rT.trajectoryModulationActive = relevanceScore > 0.4 && analysis.modulation.isSignificant()
                     rT.trajectoryWarningsCount = analysis.warnings.size
                     rT.trajectoryConvergenceETA = analysis.predictedConvergenceTime
                 }
@@ -5203,7 +5216,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             targetBg = targetBg.toDouble(),
             profile = profile,
             rT = rT,
-            uiInteraction = uiInteraction
+            uiInteraction = uiInteraction,
+            relevanceScore = physioMultipliers.trajectoryRelevanceScore
         )
 
         // ═══════════════════════════════════════════════════════════════════

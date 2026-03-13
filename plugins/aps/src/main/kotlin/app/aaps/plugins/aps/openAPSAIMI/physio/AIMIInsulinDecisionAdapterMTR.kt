@@ -35,8 +35,8 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
     private val repo: HealthContextRepository,
     private val persistenceLayer: PersistenceLayer,
     private val dataRepository: AIMIPhysioDataRepositoryMTR,
-    private val contextStore: AIMIPhysioContextStoreMTR, // 🚀 NEW INJECTION
-    private val cosineGate: CosineTrajectoryGate, // 🌀 Cosine Gate Injection
+    private val contextStore: AIMIPhysioContextStoreMTR,
+    private val relevanceGate: CosineTrajectoryGate, // 🌀 Relevance Gate (Trajectory Filter)
     private val aapsLogger: AAPSLogger
 ) {
     
@@ -137,8 +137,9 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         // 1. Calculate raw multipliers (Semantic + Tactical)
         val rawMultipliers = calculateRawMultipliers(snapshot, physioContext, currentBG, currentDelta)
         
-        // 2. 🌀 Adaptive Kernel Bank (Cosine Gate)
-        // Modulates the amplitude and phase of the trajectory based on vector similarity
+        // 2. 🌀 Physiological Relevance Filter (based on Cosine Similarity)
+        // This gate determines if the current physiological state is "relevant" enough
+        // to justify trajectory-based modulation. 
         val gateInput = GateInput(
             bgCurrent = currentBG,
             bgDelta = currentDelta ?: 0.0,
@@ -147,31 +148,33 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
             stepCount15m = snapshot.stepsLast15m,
             hrCurrent = snapshot.hrNow,
             hrvCurrent = snapshot.hrvRmssd,
-            sleepState = snapshot.sleepDebtMinutes > 0, // Simple heuristic for now
+            sleepState = snapshot.sleepDebtMinutes > 0, 
             physioState = physioContext.state,
             dataQuality = snapshot.confidence
         )
         
-        val modulation = cosineGate.compute(gateInput)
+        val gateOutcome = relevanceGate.compute(gateInput)
+        val trajectoryRelevanceScore = gateOutcome.relevanceScore
         
         // Apply Modulation to Raw Multipliers
         // ISF: We multiply by effectiveSensitivityMultiplier.
-        // If > 1.0 (weaker) -> Increase ISF Value.
-        // If < 1.0 (stronger) -> Decrease ISF Value.
-        val modulatedISF = rawMultipliers.isfFactor * modulation.effectiveSensitivityMultiplier
+        val modulatedISF = rawMultipliers.isfFactor * gateOutcome.effectiveSensitivityMultiplier
         
         // Basal/SMB: We typically don't modulate these with Cosine Gate yet (keeping it ISF focused for Phase 2),
         // or we can mirror the sensitivity effect (inverse).
         // For now, let's keep it strictly ISF + PeakShift as per plan ("effectiveSensitivityMultiplier... PeakTimeShift")
         
+        // val trajectoryRelevanceScore = gateOutcome.relevanceScore (Already defined above)
+        
         val modulatedMultipliers = rawMultipliers.copy(
             isfFactor = modulatedISF,
-            peakShiftMinutes = modulation.peakTimeShiftMinutes, // Carrier for Phase Shift
-            appliedCaps = if (modulation.dominantKernel != KernelType.REST) 
-                            "${rawMultipliers.appliedCaps} + CGate:${modulation.dominantKernel}" 
+            peakShiftMinutes = gateOutcome.peakTimeShiftMinutes, // Carrier for Phase Shift
+            trajectoryRelevanceScore = trajectoryRelevanceScore,
+            appliedCaps = if (gateOutcome.dominantKernel != KernelType.REST) 
+                            "${rawMultipliers.appliedCaps} + CGate:${gateOutcome.dominantKernel}" 
                           else rawMultipliers.appliedCaps,
             source = "Semantic+Tactical+CGate",
-            detailedReason = "🌀 CGate: ${modulation.debug}" 
+            detailedReason = "🌀 CGate: ${gateOutcome.debug}" 
         )
         
         // 3. Apply HARD CAPS (Final Safety Net)
@@ -188,9 +191,9 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
                          "-> ${cappedMultipliers.appliedCaps} -> ISF x${cappedMultipliers.isfFactor.format(2)}, SMB x${cappedMultipliers.smbFactor.format(2)}"
             aapsLogger.info(LTag.APS, coreLog)
             
-            // Log Cosine Gate details if active
-            if (modulation.dominantKernel != KernelType.REST || abs(modulation.effectiveSensitivityMultiplier - 1.0) > 0.05) {
-                 aapsLogger.info(LTag.APS, "🌀 CGate: ${modulation.debug}")
+            // Log Relevance details if active
+            if (gateOutcome.dominantKernel != KernelType.REST || abs(gateOutcome.effectiveSensitivityMultiplier - 1.0) > 0.05) {
+                 aapsLogger.info(LTag.APS, "🌀 CGate: ${gateOutcome.debug}")
             }
         }
         

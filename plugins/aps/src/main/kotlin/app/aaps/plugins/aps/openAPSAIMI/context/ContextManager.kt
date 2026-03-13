@@ -411,14 +411,63 @@ class ContextManager @Inject constructor(
                     val confidence = obj.getDouble("confidence").toFloat()
                     
                     val intent = when(type) {
-                        "Activity" -> Activity(startTimeMs, durationMs, intensity, confidence, Activity.ActivityType.valueOf(obj.getString("activityType")))
-                        "Illness" -> Illness(startTimeMs, durationMs, intensity, confidence, Illness.SymptomType.valueOf(obj.getString("symptomType")))
-                        "Stress" -> Stress(startTimeMs, durationMs, intensity, confidence, Stress.StressType.valueOf(obj.getString("stressType")))
-                        "Alcohol" -> Alcohol(startTimeMs, durationMs, intensity, confidence, obj.getDouble("units").toFloat())
-                        "UnannouncedMealRisk" -> UnannouncedMealRisk(startTimeMs, durationMs, intensity, confidence, obj.getLong("riskWindow").minutes)
-                        "Travel" -> Travel(startTimeMs, durationMs, intensity, confidence, obj.getInt("tz"))
-                        "MenstrualCycle" -> MenstrualCycle(startTimeMs, durationMs, intensity, confidence, MenstrualCycle.CyclePhase.valueOf(obj.getString("phase")))
-                        "Custom" -> Custom(startTimeMs, durationMs, intensity, confidence, obj.getString("desc"), obj.optString("strat", ""))
+                        "Activity" -> Activity(
+                            startTimeMs = if (startTimeMs > 0) startTimeMs else System.currentTimeMillis(),
+                            durationMs = durationMs,
+                            intensity = intensity,
+                            confidence = confidence,
+                            activityType = Activity.ActivityType.valueOf(obj.getString("activityType"))
+                        )
+                        "Illness" -> Illness(
+                            startTimeMs = if (startTimeMs > 0) startTimeMs else System.currentTimeMillis(),
+                            durationMs = durationMs,
+                            intensity = intensity,
+                            confidence = confidence,
+                            symptomType = Illness.SymptomType.valueOf(obj.getString("symptomType"))
+                        )
+                        "Stress" -> Stress(
+                            startTimeMs = if (startTimeMs > 0) startTimeMs else System.currentTimeMillis(),
+                            durationMs = durationMs,
+                            intensity = intensity,
+                            confidence = confidence,
+                            stressType = Stress.StressType.valueOf(obj.getString("stressType"))
+                        )
+                        "Alcohol" -> Alcohol(
+                            startTimeMs = if (startTimeMs > 0) startTimeMs else System.currentTimeMillis(),
+                            durationMs = durationMs,
+                            intensity = intensity,
+                            confidence = confidence,
+                            units = obj.getDouble("units").toFloat()
+                        )
+                        "UnannouncedMealRisk" -> UnannouncedMealRisk(
+                            startTimeMs = if (startTimeMs > 0) startTimeMs else System.currentTimeMillis(),
+                            durationMs = durationMs,
+                            intensity = intensity,
+                            confidence = confidence,
+                            riskWindow = obj.getLong("riskWindow").minutes
+                        )
+                        "Travel" -> Travel(
+                            startTimeMs = if (startTimeMs > 0) startTimeMs else System.currentTimeMillis(),
+                            durationMs = durationMs,
+                            intensity = intensity,
+                            confidence = confidence,
+                            timezoneShiftHours = obj.getInt("tz")
+                        )
+                        "MenstrualCycle" -> MenstrualCycle(
+                            startTimeMs = if (startTimeMs > 0) startTimeMs else System.currentTimeMillis(),
+                            durationMs = durationMs,
+                            intensity = intensity,
+                            confidence = confidence,
+                            phase = MenstrualCycle.CyclePhase.valueOf(obj.getString("phase"))
+                        )
+                        "Custom" -> Custom(
+                            startTimeMs = if (startTimeMs > 0) startTimeMs else System.currentTimeMillis(),
+                            durationMs = durationMs,
+                            intensity = intensity,
+                            confidence = confidence,
+                            description = obj.getString("desc"),
+                            suggestedStrategy = obj.optString("strat", "")
+                        )
                         else -> null
                     }
                     

@@ -237,8 +237,13 @@ Output:
             }
             
             // Call LLM service
-            // Call LLM service
             val llmResponse = aiCoachingService.fetchText(context, prompt, apiKey, provider)
+            
+            // Check for service errors
+            if (llmResponse.startsWith("Erreur")) {
+                aapsLogger.error(LTag.APS, "[ContextLLM] Service error: $llmResponse")
+                throw Exception(llmResponse)
+            }
             
             // Parse JSON response
             parseJsonResponse(llmResponse, userText)

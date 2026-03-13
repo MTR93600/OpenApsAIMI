@@ -186,6 +186,7 @@ class TrajectoryGuard @Inject constructor(
                     intervalStretch = 1.0,          // No delay needed
                     basalPreference = 0.2,          // Prefer bolus for acute action
                     safetyMarginExpand = 0.95,      // Slightly tighter margins OK
+                    relevanceScore = 1.0,           // High relevance for diverging
                     reason = "Diverging, need stronger action (coherence=${"%.2f".format(metrics.coherence)})"
                 )
             }
@@ -197,6 +198,7 @@ class TrajectoryGuard @Inject constructor(
                     intervalStretch = 1.1,           // Slight wait to observe effect
                     basalPreference = 0.4,           // Slight preference for SMB
                     safetyMarginExpand = 1.0,
+                    relevanceScore = 0.8,            // Moderate relevance
                     reason = "Slow drift - gentle boost applied"
                 )
             }
@@ -214,6 +216,7 @@ class TrajectoryGuard @Inject constructor(
                     intervalStretch = 1.8,           // Wait much longer
                     basalPreference = 0.85,          // Strongly prefer temp basal
                     safetyMarginExpand = 1.3,        // Expand safety margins significantly
+                    relevanceScore = 1.0,            // High relevance for spiral
                     reason = "Trajectory compressed - over-correction risk (E=${"%.2f".format(metrics.energyBalance)}U, κ=${"%.3f".format(metrics.curvature)})"
                 )
             }
@@ -231,6 +234,7 @@ class TrajectoryGuard @Inject constructor(
                     intervalStretch = 1.3,           // Slightly longer wait
                     basalPreference = 0.5,           // Neutral
                     safetyMarginExpand = 1.1,        // Slight caution
+                    relevanceScore = 0.7,            // Moderate relevance for closure
                     reason = "Closing naturally (v=${"+%.2f".format(metrics.convergenceVelocity)})"
                 )
             }
@@ -242,6 +246,7 @@ class TrajectoryGuard @Inject constructor(
                     intervalStretch = 1.0,
                     basalPreference = 0.5,
                     safetyMarginExpand = 1.0,
+                    relevanceScore = 0.0,            // Low relevance (baseline)
                     reason = "Stable orbit - maintain"
                 )
             }
@@ -256,6 +261,7 @@ class TrajectoryGuard @Inject constructor(
                     intervalStretch = 1.0,
                     basalPreference = 0.8,           // PREFER BASAL to nudge it down smoothly
                     safetyMarginExpand = 1.0,
+                    relevanceScore = 0.1,            // Low relevance
                     reason = "Hovering off-target - prefer basal"
                 )
             }
