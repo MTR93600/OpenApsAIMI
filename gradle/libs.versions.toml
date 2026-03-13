@@ -16,6 +16,7 @@ work = "2.11.0"
 datastorePreferences = "1.2.0"
 annotation = "1.9.1"
 jmh = "1.37"
+dokka = "2.0.0"
 
 # Compose
 activityCompose = "1.12.2"
@@ -34,6 +35,7 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 jmh = { id = "me.champeau.jmh", version = "0.7.2" }
+dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
 
 [libraries]
 com-android-tools-build = { group = "com.android.tools.build", name = "gradle", version.ref = "gradlePlugin" }

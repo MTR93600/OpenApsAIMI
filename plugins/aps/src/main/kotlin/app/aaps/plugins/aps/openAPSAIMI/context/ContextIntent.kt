@@ -6,11 +6,25 @@ import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
 /**
- * Strategy interface for Context Intents.
- * Allows modular validation and influence calculation.
+ * 🎯 ContextIntentStrategy
+ *
+ * Defines how a specific user intent (e.g., exercise, illness, stress)
+ * influences the global physiological context of the Loop.
  */
 interface ContextIntentStrategy {
+    /**
+     * Validates if the intent is clinically sound and has enough parsing confidence.
+     * @return True if the intent should be considered during the decision loop.
+     */
     fun validate(): Boolean
+
+    /**
+     * Applies the effect of this intent to the [LoopContext].
+     * Typically modifies sensitivity multipliers or safety thresholds.
+     * 
+     * @param context The raw physiological context before this intent's influence.
+     * @return A modified [LoopContext] reflecting the intent's impact.
+     */
     fun applyEffect(context: LoopContext): LoopContext
 }
 

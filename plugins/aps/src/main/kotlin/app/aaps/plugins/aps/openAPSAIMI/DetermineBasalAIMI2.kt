@@ -264,17 +264,27 @@ private const val MEAL_ADVISOR_IOB_DISCOUNT_FACTOR = 0.7
 private const val MEAL_ADVISOR_MIN_CARB_COVERAGE = 0.25
 
 /**
- * Main orchestrator for the AIMI loop.
+ * 🛰️ DetermineBasalaimiSMB2
  *
- * High level flow (all numbers are mg/dL unless stated otherwise):
- *  1. Gather loop context (profile, COB/IOB, modes, history) and build the PKPD runtime.
- *  2. Use PKPD engines to derive final insulin action parameters and predictions
- *     (eventual BG + full prediction curve) that feed both basal and SMB logic.
- *  3. Blend ISF/autosens, apply wCycle/NGR adjustments, then run ML to propose an SMB.
- *  4. Pipe the proposed SMB through centralized safety and damping (tail/exercise/meal),
- *     then quantize before execution via the SMB engine.
- *  5. Basal decisions reuse the same PKPD/ISF context and the shared safety gates to
- *     avoid diverging behaviours between basal and SMB paths.
+ * The primary medical orchestrator for the AIMI Advanced Hybrid Closed Loop (AHCL).
+ * It coordinates insulin delivery decisions by balancing physiological predictions (PKPD),
+ * learned user behavior (WCycle), and real-time safety constraints.
+ *
+ * ### Core Responsibilities:
+ * 1. **Context Synthesis**: Aggregates glucose history, IOB, COB, and physiological stress (steps/HR).
+ * 2. **PKPD Modeling**: Uses [AdvancedPredictionEngine] to forecast glucose trajectories.
+ * 3. **Modular Decision Making**: Delegates to [AutodriveEngine] (V3) or [DynamicBasalController] (V2).
+ * 4. **Safety Verification**: Enforces strict insulin ceilings via [trajectoryGuard] and [PkpdAbsorptionGuard].
+ *
+ * ### Medical Flow:
+ * - **T3C (Temporary 3-hour Control)**: Logic for managing nocturnal stability.
+ * - **Basal Pulse**: Proportional-Integral (PI) control for long-term drift.
+ * - **SMB (Super Micro Bolus)**: Aggressive correction for acute hyperglycemia or meals.
+ *
+ * @property profileUtil Utility for accessing user insulin profiles.
+ * @property preferences Access to user-defined settings and feature toggles.
+ * @property wCycleFacade Entry point for hormonal cycle-aware adjustments.
+ * @property autodriveEngine The next-generation MPC controller (iLet-like).
  */
 @Singleton
 class DetermineBasalaimiSMB2 @Inject constructor(
@@ -298,6 +308,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var dateUtil: DateUtil
     @Inject lateinit var profileFunction: ProfileFunction
     @Inject lateinit var iobCobCalculator: IobCobCalculator
+    @Inject lateinit var aimiLogger: app.aaps.plugins.aps.openAPSAIMI.utils.AimiLogger
     @Inject lateinit var activePlugin: ActivePlugin
     @Inject lateinit var basalDecisionEngine: BasalDecisionEngine
     @Inject
@@ -4424,6 +4435,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
 
+    /**
+     * 🏁 Main entry point for the medical decision loop.
+     * 
+     * Orchestrates the calculation of basal rates and SMB doses based on 
+     * physiological input and safety constraints.
+     *
+     * @param glucose_status Current glucose status including delta, shortAvgDelta, and longAvgDelta.
+     * @param currenttemp Current temporary basal rate active on the pump.
+     * @param iob_data_array Collection of IobTotal objects representing active insulin from different sources.
+     * @param profile The user's active OAPS profile (ISF, basal, target).
+     * @param autosens_data Results from autosens sensitivity analysis.
+     * @param mealData Current carb data (COB and recent meal announcements).
+     * @param microBolusAllowed Feature toggle: true if the pump supports and allows SMB.
+     * @param currentTime Current epoch timestamp in milliseconds.
+     * @param flatBGsDetected True if the sensor signals a period of unchanging glucose.
+     * @param dynIsfMode True if Dynamic ISF modulation is active.
+     * @param uiInteraction Interface for communicating status/warnings to the user interface.
+     * @param extraDebug Optional debug string injected from external gateways (e.g., Cosine Gate).
+     * @return [RT] (Result Type) containing the finalized basal and SMB instructions.
+     */
     @SuppressLint("NewApi", "DefaultLocale") fun determine_basal(
         glucose_status: GlucoseStatusAIMI, currenttemp: CurrentTemp, iob_data_array: Array<IobTotal>, profile: OapsProfileAimi, autosens_data: AutosensResult, mealData: MealData,
         microBolusAllowed: Boolean, currentTime: Long, flatBGsDetected: Boolean, dynIsfMode: Boolean, uiInteraction: UiInteraction,
