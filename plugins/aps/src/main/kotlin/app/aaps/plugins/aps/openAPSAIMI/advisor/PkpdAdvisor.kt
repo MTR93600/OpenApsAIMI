@@ -1,9 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor
 
-import app.aaps.core.keys.DoubleKey
-import app.aaps.core.keys.BooleanKey
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.openAPSAIMI.model.*
 import kotlin.math.min
 import kotlin.math.max
 
@@ -30,23 +29,19 @@ class PkpdAdvisor {
             // If control is poor, suggest enabling
             // TIR < 80%?
             if (metrics.tir70_180 < 0.80) {
-                val action = AdvisorAction.UpdatePreference(
-                    changes = listOf(
-                        AdvisorAction.Prediction(
-                            key = BooleanKey.OApsAIMIPkpdEnabled,
-                            keyName = rh.gs(R.string.aimi_pkpd_title_enable),
-                            oldValue = false, // False
-                            newValue = true, // True
-                            explanation = rh.gs(R.string.aimi_pkpd_advisor_disabled)
-                        )
-                    )
+                val action = AimiAction.PreferenceUpdate(
+                    key = app.aaps.core.keys.BooleanKey.OApsAIMIPkpdEnabled,
+                    newValue = true,
+                    reason = rh.gs(R.string.aimi_pkpd_advisor_disabled),
+                    domain = AimiDomain.Pkpd,
+                    priority = AimiPriority.High
                 )
 
                 suggestions += AimiRecommendation(
                     titleResId = R.string.aimi_pkpd_title_enable,
                     descriptionResId = R.string.aimi_pkpd_advisor_disabled,
-                    priority = RecommendationPriority.HIGH, // High priority if disabled and poorly controlled
-                    domain = RecommendationDomain.PKPD,
+                    priority = AimiPriority.High,
+                    domain = AimiDomain.Pkpd,
                     action = action
                 )
             }
@@ -62,23 +57,19 @@ class PkpdAdvisor {
                 val newDia = max(pkpd.boundsDiaMinH, pkpd.initialDiaH - 0.5)
                 val explanation = rh.gs(R.string.aimi_pkpd_hyper_dia, pkpd.initialDiaH.toString(), newDia.toString())
                 
-                val action = AdvisorAction.UpdatePreference(
-                    changes = listOf(
-                        AdvisorAction.Prediction(
-                            key = DoubleKey.OApsAIMIPkpdInitialDiaH,
-                            keyName = rh.gs(R.string.aimi_pkpd_title_dia),
-                            oldValue = pkpd.initialDiaH,
-                            newValue = newDia,
-                            explanation = explanation
-                        )
-                    )
+                val action = AimiAction.PreferenceUpdate(
+                    key = app.aaps.core.keys.DoubleKey.OApsAIMIPkpdInitialDiaH,
+                    newValue = newDia,
+                    reason = explanation,
+                    domain = AimiDomain.Pkpd,
+                    priority = AimiPriority.Medium
                 )
                 
                 suggestions += AimiRecommendation(
                      titleResId = R.string.aimi_pkpd_title_dia,
                      descriptionResId = R.string.aimi_pkpd_hyper_dia,
-                     priority = RecommendationPriority.MEDIUM,
-                     domain = RecommendationDomain.PKPD,
+                     priority = AimiPriority.Medium,
+                     domain = AimiDomain.Pkpd,
                      action = action,
                      descriptionArgs = listOf(pkpd.initialDiaH.toString(), newDia.toString())
                 )
@@ -89,23 +80,19 @@ class PkpdAdvisor {
                 val newPeak = max(pkpd.boundsPeakMinMin, pkpd.initialPeakMin - 5.0)
                 val explanation = rh.gs(R.string.aimi_pkpd_hyper_peak, newPeak.toString())
 
-                val action = AdvisorAction.UpdatePreference(
-                    changes = listOf(
-                        AdvisorAction.Prediction(
-                            key = DoubleKey.OApsAIMIPkpdInitialPeakMin,
-                            keyName = rh.gs(R.string.aimi_pkpd_title_peak),
-                            oldValue = pkpd.initialPeakMin,
-                            newValue = newPeak,
-                            explanation = explanation
-                        )
-                    )
+                val action = AimiAction.PreferenceUpdate(
+                    key = app.aaps.core.keys.DoubleKey.OApsAIMIPkpdInitialPeakMin,
+                    newValue = newPeak,
+                    reason = explanation,
+                    domain = AimiDomain.Pkpd,
+                    priority = AimiPriority.Medium
                 )
 
                 suggestions += AimiRecommendation(
                     titleResId = R.string.aimi_pkpd_title_peak,
                     descriptionResId = R.string.aimi_pkpd_hyper_peak,
-                    priority = RecommendationPriority.MEDIUM,
-                    domain = RecommendationDomain.PKPD,
+                    priority = AimiPriority.Medium,
+                    domain = AimiDomain.Pkpd,
                     action = action,
                     descriptionArgs = listOf(newPeak.toString())
                 )
@@ -116,23 +103,19 @@ class PkpdAdvisor {
                  val newFactor = min(2.0, pkpd.isfFusionMaxFactor + 0.1)
                  val explanation = rh.gs(R.string.aimi_pkpd_hyper_isf)
 
-                 val action = AdvisorAction.UpdatePreference(
-                    changes = listOf(
-                        AdvisorAction.Prediction(
-                            key = DoubleKey.OApsAIMIIsfFusionMaxFactor,
-                            keyName = rh.gs(R.string.aimi_pkpd_title_isf),
-                            oldValue = pkpd.isfFusionMaxFactor,
-                            newValue = newFactor,
-                            explanation = explanation
-                        )
-                    )
+                 val action = AimiAction.PreferenceUpdate(
+                    key = app.aaps.core.keys.DoubleKey.OApsAIMIIsfFusionMaxFactor,
+                    newValue = newFactor,
+                    reason = explanation,
+                    domain = AimiDomain.Pkpd,
+                    priority = AimiPriority.Medium
                  )
                  
                  suggestions += AimiRecommendation(
                     titleResId = R.string.aimi_pkpd_title_isf,
                     descriptionResId = R.string.aimi_pkpd_hyper_isf,
-                    priority = RecommendationPriority.MEDIUM,
-                    domain = RecommendationDomain.PKPD,
+                    priority = AimiPriority.Medium,
+                    domain = AimiDomain.Pkpd,
                     action = action,
                     descriptionArgs = listOf(newFactor.toString())
                  )
@@ -147,23 +130,19 @@ class PkpdAdvisor {
                 val newDia = min(pkpd.boundsDiaMaxH, pkpd.initialDiaH + 0.5)
                 val explanation = rh.gs(R.string.aimi_pkpd_hypo_dia, pkpd.initialDiaH.toString(), newDia.toString())
                 
-                val action = AdvisorAction.UpdatePreference(
-                    changes = listOf(
-                        AdvisorAction.Prediction(
-                            key = DoubleKey.OApsAIMIPkpdInitialDiaH,
-                            keyName = rh.gs(R.string.aimi_pkpd_title_dia),
-                            oldValue = pkpd.initialDiaH,
-                            newValue = newDia,
-                            explanation = explanation
-                        )
-                    )
+                val action = AimiAction.PreferenceUpdate(
+                    key = app.aaps.core.keys.DoubleKey.OApsAIMIPkpdInitialDiaH,
+                    newValue = newDia,
+                    reason = explanation,
+                    domain = AimiDomain.Pkpd,
+                    priority = AimiPriority.Critical
                 )
 
                 suggestions += AimiRecommendation(
                     titleResId = R.string.aimi_pkpd_title_dia,
                     descriptionResId = R.string.aimi_pkpd_hypo_dia,
-                    priority = RecommendationPriority.CRITICAL, // Safety
-                    domain = RecommendationDomain.PKPD,
+                    priority = AimiPriority.Critical,
+                    domain = AimiDomain.Pkpd,
                     action = action,
                     descriptionArgs = listOf(pkpd.initialDiaH.toString(), newDia.toString())
                 )
@@ -174,23 +153,19 @@ class PkpdAdvisor {
                 val newPeak = min(pkpd.boundsPeakMinMax, pkpd.initialPeakMin + 5.0)
                 val explanation = rh.gs(R.string.aimi_pkpd_hypo_peak, newPeak.toString())
 
-                val action = AdvisorAction.UpdatePreference(
-                    changes = listOf(
-                        AdvisorAction.Prediction(
-                            key = DoubleKey.OApsAIMIPkpdInitialPeakMin,
-                            keyName = rh.gs(R.string.aimi_pkpd_title_peak),
-                            oldValue = pkpd.initialPeakMin,
-                            newValue = newPeak,
-                            explanation = explanation
-                        )
-                    )
+                val action = AimiAction.PreferenceUpdate(
+                    key = app.aaps.core.keys.DoubleKey.OApsAIMIPkpdInitialPeakMin,
+                    newValue = newPeak,
+                    reason = explanation,
+                    domain = AimiDomain.Pkpd,
+                    priority = AimiPriority.Critical
                 )
 
                 suggestions += AimiRecommendation(
                     titleResId = R.string.aimi_pkpd_title_peak,
                     descriptionResId = R.string.aimi_pkpd_hypo_peak,
-                    priority = RecommendationPriority.CRITICAL,
-                    domain = RecommendationDomain.PKPD,
+                    priority = AimiPriority.Critical,
+                    domain = AimiDomain.Pkpd,
                     action = action,
                     descriptionArgs = listOf(newPeak.toString())
                 )
@@ -201,23 +176,19 @@ class PkpdAdvisor {
                 val newDamping = pkpd.smbTailDamping + 0.1
                 val explanation = rh.gs(R.string.aimi_pkpd_hypo_damping)
                 
-                val action = AdvisorAction.UpdatePreference(
-                    changes = listOf(
-                        AdvisorAction.Prediction(
-                            key = DoubleKey.OApsAIMISmbTailDamping,
-                            keyName = rh.gs(R.string.aimi_pkpd_title_damping),
-                            oldValue = pkpd.smbTailDamping,
-                            newValue = newDamping,
-                            explanation = explanation
-                        )
-                    )
+                val action = AimiAction.PreferenceUpdate(
+                    key = app.aaps.core.keys.DoubleKey.OApsAIMISmbTailDamping,
+                    newValue = newDamping,
+                    reason = explanation,
+                    domain = AimiDomain.Pkpd,
+                    priority = AimiPriority.Critical
                 )
 
                 suggestions += AimiRecommendation(
                     titleResId = R.string.aimi_pkpd_title_damping,
                     descriptionResId = R.string.aimi_pkpd_hypo_damping,
-                    priority = RecommendationPriority.CRITICAL,
-                    domain = RecommendationDomain.PKPD,
+                    priority = AimiPriority.Critical,
+                    domain = AimiDomain.Pkpd,
                     action = action,
                     descriptionArgs = listOf(newDamping.toString())
                 )

@@ -544,10 +544,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         private val pkpdIntegration: PkPdIntegration
     ) : PkpdPort {
 
-        private fun LoopContext.mealModeActive(): Boolean =
+        private fun app.aaps.plugins.aps.openAPSAIMI.model.LoopContext.mealModeActive(): Boolean =
             modes.meal || modes.breakfast || modes.lunch || modes.dinner || modes.highCarb || modes.snack
 
-        override fun snapshot(ctx: LoopContext): PkpdPort.Snapshot {
+        override fun snapshot(ctx: app.aaps.plugins.aps.openAPSAIMI.model.LoopContext): PkpdPort.Snapshot {
             val mealCtx = MealAggressionContext(
                 mealModeActive = ctx.mealModeActive(),
                 predictedBgMgdl = ctx.eventualBg,
@@ -578,7 +578,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
 
-        override fun dampSmb(units: Double, ctx: LoopContext, bypassDamping: Boolean): PkpdPort.DampingAudit {
+        override fun dampSmb(units: Double, ctx: app.aaps.plugins.aps.openAPSAIMI.model.LoopContext, bypassDamping: Boolean): PkpdPort.DampingAudit {
             val mealCtx = MealAggressionContext(
                 mealModeActive = ctx.mealModeActive(),
                 predictedBgMgdl = ctx.eventualBg,
@@ -621,7 +621,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
 
         override fun logCsv(
-            ctx: LoopContext,
+            ctx: app.aaps.plugins.aps.openAPSAIMI.model.LoopContext,
             pkpd: PkpdPort.Snapshot,
             smbProposed: Double,
             smbFinal: Double,
@@ -641,7 +641,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     diaH = pkpd.diaMin / 60.0,
                     peakMin = pkpd.peakMin.toDouble(),
                     fusedIsf = pkpd.fusedIsf,
-                    tddIsf = 1800.0 / (ctx.tdd24hU.coerceAtLeast(0.1)), // comme avant si tu l’utilises
+                    tddIsf = 1800.0 / (ctx.tdd24hU.coerceAtLeast(0.1)),
                     profileIsf = ctx.profile.isfMgdlPerU,
                     tailFrac = pkpd.tailFrac,
                     smbProposedU = smbProposed,

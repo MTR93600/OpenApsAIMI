@@ -33,36 +33,12 @@ data class AdvisorMetrics(
 )
 
 /**
- * Domain area for a recommendation.
- */
-enum class RecommendationDomain {
-    SAFETY,             // Hypo prevention priority
-    BASAL,              // Basal rate adjustments
-    ISF,                // Insulin Sensitivity Factor
-    TARGET,             // BG targets
-    SMB,                // SMB settings
-    MODES,              // Meal modes configuration
-    PKPD,               // Adaptive PK/PD settings
-    PROFILE_QUALITY     // General profile assessment
-}
-
-/**
- * Priority level for recommendations.
- */
-enum class RecommendationPriority {
-    CRITICAL,   // Safety issue, address immediately
-    HIGH,       // Significant improvement opportunity
-    MEDIUM,     // Worth considering
-    LOW         // Minor optimization
-}
-
-/**
  * Severity classification for the overall score.
  */
-enum class AdvisorSeverity {
-    GOOD,       // Score >= 7.0
-    WARNING,    // 4.0 <= Score < 7.0
-    CRITICAL    // Score < 4.0
+sealed class AdvisorSeverity {
+    object Good : AdvisorSeverity()
+    object Warning : AdvisorSeverity()
+    object Critical : AdvisorSeverity()
 }
 
 /**
@@ -92,47 +68,15 @@ interface AdvisorActionStrategy {
 }
 
 /**
- * Smart Actions
- */
-sealed class AdvisorAction : AdvisorActionStrategy {
-    // A single atomic change
-    data class Prediction(
-        val key: Any,        // PreferenceKey object
-        val keyName: String, // User friendly name or resource ID
-        val oldValue: Any,
-        val newValue: Any,
-        val explanation: String
-    ) : AdvisorActionStrategy {
-        override fun validate(): Boolean = true
-        override fun apply() { /* Logic to update preference */ }
-        override fun serialize(): String = "Prediction($keyName: $oldValue -> $newValue)"
-    }
-
-    // Action can now be a single update or a batch
-    data class UpdatePreference(
-        val changes: List<Prediction>
-    ) : AdvisorAction() {
-        override fun validate(): Boolean = changes.isNotEmpty() && changes.all { it.validate() }
-        override fun apply() { changes.forEach { it.apply() } }
-        override fun serialize(): String = "BatchUpdate(${changes.size} changes)"
-    }
-
-    // Fallback implementations for the sealed class base
-    override fun validate(): Boolean = true
-    override fun apply() {}
-    override fun serialize(): String = this.javaClass.simpleName
-}
-
-/**
  * A single recommendation from the advisor.
  * Uses Resource IDs for localization.
  */
 data class AimiRecommendation(
     val titleResId: Int,
     val descriptionResId: Int,
-    val priority: RecommendationPriority,
-    val domain: RecommendationDomain,
-    val action: AdvisorAction? = null,
+    val priority: app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority,
+    val domain: app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain,
+    val action: app.aaps.plugins.aps.openAPSAIMI.model.AimiAction? = null,
     val descriptionArgs: List<String> = emptyList() // For dynamic description formatting
 )
 

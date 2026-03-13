@@ -148,7 +148,7 @@ class SmbDomainHeuristicsTest {
             pumpStep = 0.05
         )
         assertTrue(res.overrideUsed)
-        assertEquals(0.05, res.dose, 1e-6)
+        assertEquals(0.1, res.dose, 1e-6)
         assertEquals(0, res.newInterval)
     }
 

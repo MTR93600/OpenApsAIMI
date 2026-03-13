@@ -53,9 +53,7 @@ class AutodriveSILTest {
         
         // Active manuellement l'Autodrive pour le test sans les préférences UI
         engine.setShadowMode(false)
-        val field = AutodriveEngine::class.java.getDeclaredField("isActive")
-        field.isAccessible = true
-        field.set(engine, true)
+        engine.setIsActive(true)
     }
 
     @Test

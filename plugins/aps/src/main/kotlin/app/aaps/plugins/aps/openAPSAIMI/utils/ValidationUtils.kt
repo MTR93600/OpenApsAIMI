@@ -1,52 +1,39 @@
 package app.aaps.plugins.aps.openAPSAIMI.utils
 
-import android.util.Log
-
 /**
- * Utilities for safe numeric operations and validation in the AIMI module.
+ * 🛡️ ValidationUtils
+ * 
+ * Enforces strict medical bounds for glucose data and predictions.
+ * Part of the advanced Kotlin refactoring for safety.
  */
 object ValidationUtils {
 
-    private const val TAG = "AIMI_Validation"
+    const val MIN_BG = 30.0
+    const val MAX_BG = 600.0
+    const val MIN_VELOCITY = -10.0
+    const val MAX_VELOCITY = 10.0
 
     /**
-     * Safely parse a Double from a string with a default fallback.
+     * Validates blood glucose value.
      */
-    @JvmStatic
-    fun safeParseDouble(value: String?, fallback: Double = 0.0): Double {
-        if (value == null) return fallback
-        return try {
-            value.toDouble()
-        } catch (e: NumberFormatException) {
-            Log.e(TAG, "Failed to parse Double from '$value', using fallback $fallback", e)
-            fallback
-        }
+    fun validateBg(bg: Double): Double {
+        return bg.coerceIn(MIN_BG, MAX_BG)
     }
 
     /**
-     * Safely perform division, avoiding division by zero and NaN results.
+     * Validates blood glucose velocity.
      */
-    @JvmStatic
-    fun safeDiv(numerator: Double, denominator: Double, fallback: Double = 0.0): Double {
-        if (denominator == 0.0 || denominator.isNaN()) {
-            Log.w(TAG, "Division by zero or NaN denominator. Returning fallback $fallback")
-            return fallback
-        }
-        val result = numerator / denominator
-        return if (result.isNaN() || result.isInfinite()) {
-            Log.w(TAG, "Division resulted in $result. Returning fallback $fallback")
-            fallback
-        } else {
-            result
-        }
+    fun validateVelocity(velocity: Double): Double {
+        return velocity.coerceIn(MIN_VELOCITY, MAX_VELOCITY)
     }
 
     /**
-     * Ensure a value is within a specified range, or return a default fallback if it's NaN.
+     * Validates a numeric type for a generic preference.
      */
-    @JvmStatic
-    fun safeClamp(value: Double, min: Double, max: Double, fallback: Double = min): Double {
-        if (value.isNaN()) return fallback
-        return value.coerceIn(min, max)
+    fun <T : Number> validatePreference(value: T, min: T, max: T): T {
+        // Simple numeric validation for basic types
+        return if (value.toDouble() < min.toDouble()) min 
+        else if (value.toDouble() > max.toDouble()) max
+        else value
     }
 }
