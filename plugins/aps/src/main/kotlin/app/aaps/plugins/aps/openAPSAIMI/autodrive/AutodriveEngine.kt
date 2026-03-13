@@ -12,8 +12,11 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataLake // 
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataBackfiller // 🧹 Backfiller
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.MechanismAttentionGate // 🚪 Attention Gate
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveAuditor // 👨‍🏫 Auditor
+import app.aaps.plugins.aps.openAPSAIMI.model.*
+import app.aaps.core.keys.interfaces.PreferenceKey
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 🧠 Autodrive Engine (iLet-like Architecture)
@@ -35,19 +38,34 @@ class AutodriveEngine @Inject constructor(
     private val attentionGate: MechanismAttentionGate
 ) {
 
-    private var isActive = false // Feature Toggle pour le monde réel
-    private var isShadowMode = true // Tourne silencieusement
+    private val systemState = AtomicReference<AimiState>(AimiState.Manual)
 
     fun setIsActive(enabled: Boolean) {
-        isActive = enabled
+        updateState(isActive = enabled)
     }
 
     fun setShadowMode(enabled: Boolean) {
-        isShadowMode = enabled
+        updateState(isShadowMode = enabled)
+    }
+
+    private fun updateState(isActive: Boolean? = null, isShadowMode: Boolean? = null) {
+        val current = systemState.get()
+        if (current is AimiState.AutoDrive) {
+            systemState.set(current.copy(
+                isActive = isActive ?: current.isActive,
+                isShadowMode = isShadowMode ?: current.isShadowMode
+            ))
+        } else {
+            systemState.set(AimiState.AutoDrive(
+                isActive = isActive ?: false,
+                isShadowMode = isShadowMode ?: true,
+                controllerType = AimiState.AutoDrive.ControllerType.Hybrid
+            ))
+        }
     }
 
     fun getAttentionMultiplier(): Double = attentionGate.lastAttentionMultiplier
-
+    
     fun getHealthScore(): Double = autodriveAuditor.lastHealthScore
 
     /**
@@ -63,7 +81,8 @@ class AutodriveEngine @Inject constructor(
         rhr: Int,
         currentEpochMs: Long = System.currentTimeMillis()
     ): AutoDriveCommand? {
-        if (!isActive && !isShadowMode) return null
+        val state = systemState.get() as? AimiState.AutoDrive ?: return null
+        if (!state.isActive && !state.isShadowMode) return null
 
         // On injecte les données physiologiques temps réel dans l'état avant traitement
         val stateWithContext = currentState.copy(
@@ -116,11 +135,11 @@ class AutodriveEngine @Inject constructor(
         )
 
         // 7. Logging & Shadow metrics
-        if (isShadowMode) {
+        if (state.isShadowMode) {
             logShadowDecision(currentState, auditedCommand, profileBasal)
         }
 
-        if (!isActive) return null
+        if (!state.isActive) return null
 
         // 8. Quiet Mode Handover (Rollback to AIMI V2 PI Controller)
         // Autodrive V3 (MPC) is mathematically aggressive by nature. For calm waters and slight upstream drifts, 
@@ -129,10 +148,10 @@ class AutodriveEngine @Inject constructor(
         val isHigh = estimatedState.bg > 130.0
         val needsSmb = auditedCommand.scheduledMicroBolus > 0.0
         val needsSafetyBrake = auditedCommand.temporaryBasalRate == 0.0
-
+        
         // 🚀 HYBRID SMOOTHING: Si la correction demandée est minime (ex: < 0.3 U/h d'écart), 
         // on laisse la V2 gérer la fluidité.
-        val tbrDelta = kotlin.math.abs(auditedCommand.temporaryBasalRate - profileBasal)
+        val tbrDelta = Math.abs(auditedCommand.temporaryBasalRate - profileBasal)
         val isStrongCorrection = tbrDelta > 0.3
 
         return if (isAggressiveRise || isHigh || needsSmb || needsSafetyBrake || isStrongCorrection) {
@@ -154,5 +173,44 @@ class AutodriveEngine @Inject constructor(
             "Autodrive dictates: TBR=${autodriveCommand.temporaryBasalRate} U/h, " +
             "SMB=${autodriveCommand.scheduledMicroBolus} U | Reason: ${autodriveCommand.reason}"
         )
+    }
+
+    /**
+     * Advanced Decoupled Execution: Applies verified verdicts to the system.
+     */
+    fun applyVerdicts(verdicts: List<AimiVerdict>): List<AimiState.SafetyIntervention> {
+        val interventions = mutableListOf<AimiState.SafetyIntervention>()
+        
+        verdicts.forEach { verdict ->
+            when (verdict) {
+                is AimiVerdict.Confirmed -> enactAction(verdict.action)
+                is AimiVerdict.Modified -> enactAction(verdict.modifiedAction)
+                is AimiVerdict.Rejected -> {
+                    aapsLogger.warn(LTag.APS, "🚫 Action rejected by Auditor: ${verdict.auditorReason}")
+                }
+            }
+        }
+        
+        return interventions
+    }
+
+    private fun enactAction(action: AimiAction) {
+        when (action) {
+            is AimiAction.TemporaryBasal -> {
+                aapsLogger.info(LTag.APS, "🚀 Enacting TBR: ${action.rate} U/h for ${action.durationMinutes}m")
+            }
+            is AimiAction.SMB -> {
+                aapsLogger.info(LTag.APS, "🚀 Enacting SMB: ${action.amount} U")
+            }
+            is AimiAction.Bolus -> {
+                aapsLogger.info(LTag.APS, "🚀 Enacting Bolus: ${action.amount} U")
+            }
+            is AimiAction.PreferenceUpdate -> {
+                aapsLogger.info(LTag.APS, "🚀 Updating Preference: ${action.key.key} -> ${action.newValue}")
+            }
+            is AimiAction.Notification -> {
+                aapsLogger.info(LTag.APS, "🚀 Sending Notification: ${action.title}")
+            }
+        }
     }
 }

@@ -22,6 +22,7 @@ object PerformanceScorer {
     /**
      * Calculate performance score from KPIs.
      */
+    @JvmStatic
     fun score(kpi: AlgorithmKpi): PerformanceScore {
         val safety = calculateSafetyScore(kpi)
         val control = calculateControlScore(kpi)
@@ -152,6 +153,7 @@ object PerformanceScorer {
     /**
      * Compare two algorithms and generate a summary.
      */
+    @JvmStatic
     fun compare(
         aimiKpi: AlgorithmKpi,
         smbKpi: AlgorithmKpi,

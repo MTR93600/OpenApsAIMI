@@ -38,6 +38,7 @@ object PkPdCsvLogger {
     private val PATH = File(externalDir, "oapsaimi_pkpd_records.csv")
     private const val TAG = "PkPdCsvLogger"
 
+    @JvmStatic
     fun append(row: PkPdLogRow) {
         val appendResult = runCatching {
             val line = listOf(

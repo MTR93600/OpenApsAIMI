@@ -22,6 +22,52 @@ data class AuditorUIState(
     val statusMessage: String,
     val timestampMs: Long
 ) {
+    /**
+     * Type-safe wrapper for a successfully validated AuditorUIState.
+     */
+    @JvmInline
+    value class ValidatedAuditorUIState(val state: AuditorUIState)
+
+    /**
+     * Performs exhaustive validation of the UI state.
+     * @return Result containing the validated state or an exception with details.
+     */
+    fun validate(): Result<ValidatedAuditorUIState> = runCatching {
+        // 1. Resource Validations
+        require(iconTintColor != 0) { "iconTintColor must be a valid @ColorRes (got 0)" }
+        require(badgeBackgroundColor != 0) { "badgeBackgroundColor must be a valid @ColorRes (got 0)" }
+
+        // 2. Textual Integrity
+        if (badgeVisible) {
+            require(badgeText.isNotEmpty()) { "badgeText cannot be empty when badgeVisible is true" }
+        }
+
+        // 3. Logic Consistency & Constraints
+        when (type) {
+            StateType.IDLE -> {
+                require(!badgeVisible) { "IDLE state cannot have a visible badge" }
+                require(!shouldAnimate) { "IDLE state should not animate" }
+            }
+            StateType.PROCESSING -> {
+                require(shouldAnimate) { "PROCESSING state must be animated" }
+                require(badgeVisible) { "PROCESSING state must have a visible badge (dots)" }
+            }
+            StateType.READY -> {
+                require(insightCount >= 0) { "insightCount cannot be negative" }
+                if (insightCount > 0) {
+                    require(badgeVisible) { "READY state with insights must show a badge" }
+                }
+            }
+            StateType.WARNING, StateType.ERROR -> {
+                require(badgeVisible) { "${type.name} state must always show a badge icon" }
+            }
+        }
+
+        // 4. Temporal Integrity
+        require(timestampMs > 0) { "timestampMs must be valid" }
+
+        ValidatedAuditorUIState(this)
+    }
     
     /**
      * UI State Types matching visual design
@@ -54,6 +100,7 @@ data class AuditorUIState(
         /**
          * Create IDLE state (default)
          */
+        @JvmStatic
         fun idle(): AuditorUIState = AuditorUIState(
             type = StateType.IDLE,
             iconTintColor = CoreR.color.deviationGrey,
@@ -70,6 +117,7 @@ data class AuditorUIState(
         /**
          * Create PROCESSING state
          */
+        @JvmStatic
         fun processing(): AuditorUIState = AuditorUIState(
             type = StateType.PROCESSING,
             iconTintColor = CoreR.color.examinedProfile,  // Blue
@@ -86,6 +134,8 @@ data class AuditorUIState(
         /**
          * Create READY state with insights
          */
+        @JvmStatic
+        @JvmOverloads
         fun ready(insightCount: Int, shouldNotify: Boolean = true): AuditorUIState = AuditorUIState(
             type = StateType.READY,
             iconTintColor = app.aaps.core.ui.R.color.inRange,  // Green
@@ -102,6 +152,8 @@ data class AuditorUIState(
         /**
          * Create WARNING state
          */
+        @JvmStatic
+        @JvmOverloads
         fun warning(message: String = "Warning"): AuditorUIState = AuditorUIState(
             type = StateType.WARNING,
             iconTintColor = CoreR.color.warning,  // Orange
@@ -118,6 +170,8 @@ data class AuditorUIState(
         /**
          * Create ERROR state
          */
+        @JvmStatic
+        @JvmOverloads
         fun error(message: String = "Error"): AuditorUIState = AuditorUIState(
             type = StateType.ERROR,
             iconTintColor = CoreR.color.high,  // Red

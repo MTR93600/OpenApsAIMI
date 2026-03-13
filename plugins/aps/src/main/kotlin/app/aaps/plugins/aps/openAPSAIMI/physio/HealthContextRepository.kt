@@ -46,11 +46,13 @@ class HealthContextRepository @Inject constructor(
         val rhrList = hcRepo.fetchMorningRHR(7)
         
         // 2. Fetch Real-Time Data (Unified Provider: Watch > Phone > HC)
+        val steps5Result = unifiedProvider.getStepsTotalSince(System.currentTimeMillis() - 5 * 60 * 1000)
         val steps15Result = unifiedProvider.getStepsTotalSince(System.currentTimeMillis() - 15 * 60 * 1000)
         val steps60Result = unifiedProvider.getStepsTotalSince(System.currentTimeMillis() - 60 * 60 * 1000)
         val hrResult = unifiedProvider.getLatestHeartRate(15 * 60 * 1000)
 
         // Extract values or defaults
+        val steps5: Int = steps5Result?.steps ?: 0
         val steps15: Int = steps15Result?.steps ?: 0
         val steps60: Int = steps60Result?.steps ?: 0
         val currentHR: Int = (hrResult?.bpm ?: 0.0).toInt()
@@ -82,6 +84,7 @@ class HealthContextRepository @Inject constructor(
         if (sleepData != null) confidence += 0.3
 
         val snapshot = HealthContextSnapshot(
+            stepsLast5m = steps5,
             stepsLast15m = steps15,
             stepsLast60m = steps60,
             activityState = if (steps15 > 1000) "ACTIVE" else "IDLE", 

@@ -32,10 +32,11 @@ class AutoDriveGater @Inject constructor(
         
         // 🏃 REFINED STEP BLOCK (User Request):
         // Only block if BG is already "fragile" (< 160) and we are moving fast (> 1000 steps in 15 min)
-        val activityBlock = bg < 160.0 && health.stepsLast15m > 1000
+        // EXCEPT if movement stopped (0 steps in 5 min) -> Immediate release to handle rise
+        val activityBlock = bg < 160.0 && health.stepsLast15m > 1000 && health.stepsLast5m > 0
         
         if (hardHRBlock || activityBlock) {
-            val reason = if (hardHRBlock) "❤️ HR High (${health.hrNow})" else "🏃 Activity (BG=$bg, Steps15m=${health.stepsLast15m})"
+            val reason = if (hardHRBlock) "❤️ HR High (${health.hrNow})" else "🏃 Activity (BG=$bg, Steps15m=${health.stepsLast15m}, Steps5m=${health.stepsLast5m})"
             return GatingResult(
                 engage = false,
                 reason = "🏃 Activity Prohibited: $reason"

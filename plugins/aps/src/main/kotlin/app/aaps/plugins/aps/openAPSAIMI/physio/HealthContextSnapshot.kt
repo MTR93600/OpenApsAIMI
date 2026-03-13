@@ -15,6 +15,7 @@ import org.json.JSONObject
  */
 data class HealthContextSnapshot(
     // 🏃 Activity (Real-time & Recent)
+    val stepsLast5m: Int = 0,
     val stepsLast15m: Int = 0,
     val stepsLast60m: Int = 0,
     val activityState: String = "IDLE", // IDLE, WALKING, RUNNING, SLEEPING
@@ -40,6 +41,7 @@ data class HealthContextSnapshot(
     val isValid: Boolean = false
 ) {
     fun toJSON(): JSONObject = JSONObject().apply {
+        put("steps5", stepsLast5m)
         put("steps15", stepsLast15m)
         put("steps60", stepsLast60m)
         put("hr", hrNow)

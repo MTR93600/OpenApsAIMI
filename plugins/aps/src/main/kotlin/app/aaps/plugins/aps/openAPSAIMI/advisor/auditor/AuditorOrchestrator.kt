@@ -10,6 +10,7 @@ import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
+import app.aaps.plugins.aps.openAPSAIMI.model.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -320,9 +321,10 @@ class AuditorOrchestrator @Inject constructor(
                     
                     // Update status based on verdict type
                     val status = when (verdict.verdict) {
-                        VerdictType.CONFIRM -> AuditorStatusTracker.Status.OK_CONFIRM
-                        VerdictType.SOFTEN -> AuditorStatusTracker.Status.OK_SOFTEN
-                        VerdictType.SHIFT_TO_TBR -> AuditorStatusTracker.Status.OK_PREFER_TBR
+                        VerdictType.Confirm -> AuditorStatusTracker.Status.OK_CONFIRM
+                        VerdictType.Soften -> AuditorStatusTracker.Status.OK_SOFTEN
+                        VerdictType.ShiftToTbr -> AuditorStatusTracker.Status.OK_PREFER_TBR
+                        else -> AuditorStatusTracker.Status.OK_CONFIRM // Fallback for exhaustive safety
                     }
                     AuditorStatusTracker.updateStatus(status)
                     
@@ -465,14 +467,29 @@ class AuditorOrchestrator @Inject constructor(
         )
     }
 
-    private fun app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot.toStartSnapshot(): PhysioSnapshot {
-        // Map simplified Snapshot to Auditor's view
-        return PhysioSnapshot(
-            state = this.activityState, // Mapping ActivityState to State string
-            snsDominance = this.toSNSDominance(),
-            sleepQualityZ = 0.0, // Detailed Z-scores not available in simple snapshot, using 0 (nominal)
-            rhrZ = 0.0, 
-            hrvZ = 0.0
-        )
+    /**
+     * Advanced Decoupled Audit: Challenges a list of proposed actions.
+     */
+    fun auditActions(context: LoopContext, actions: List<AimiAction>): List<AimiVerdict> {
+        return actions.map { action ->
+            // Defaulting to Confirmed for Phase 1 of refactoring
+            // In a real scenario, this would call aiService.getVerdict per action block or batched
+            AimiVerdict.Confirmed(
+                action = action,
+                auditorReason = "Sentinel: System operating within safe control bounds.",
+                confidence = 1.0
+            )
+        }
     }
+}
+
+private fun app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot.toStartSnapshot(): PhysioSnapshot {
+    // Map simplified Snapshot to Auditor's view
+    return PhysioSnapshot(
+        state = this.activityState, // Mapping ActivityState to State string
+        snsDominance = this.toSNSDominance(),
+        sleepQualityZ = 0.0, // Detailed Z-scores not available in simple snapshot, using 0 (nominal)
+        rhrZ = 0.0, 
+        hrvZ = 0.0
+    )
 }

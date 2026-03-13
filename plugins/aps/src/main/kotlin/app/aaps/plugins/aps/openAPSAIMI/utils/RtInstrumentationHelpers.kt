@@ -144,7 +144,7 @@ object RtInstrumentationHelpers {
                 val parts = mutableListOf<String>()
                 
                 // Verdict type
-                parts.add(verdict.verdict.name)
+                parts.add(verdict.verdict.javaClass.simpleName)
                 
                 // Confidence
                 parts.add("conf=${safeFmt(verdict.confidence, "%.2f")}")

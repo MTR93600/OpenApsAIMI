@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor
 
+import app.aaps.plugins.aps.openAPSAIMI.model.*
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
@@ -64,7 +65,8 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             rh = rh, 
             unifiedReactivityLearner = unifiedReactivityLearner,
             tddCalculator = tddCalculator,
-            tirCalculator = tirCalculator
+            tirCalculator = tirCalculator,
+            aapsLogger = aapsLogger
         )
         historyRepo = app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository(this)
         title = rh.gs(R.string.aimi_advisor_title)
@@ -117,8 +119,8 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                     rootLayout.addView(createMetricsGrid(report.metrics, cardColor))
                     
                     // 3. Section: Observations & Recommendations
-                    val standardRecs = report.recommendations.filter { it.domain != RecommendationDomain.PKPD }
-                    val pkpdRecs = report.recommendations.filter { it.domain == RecommendationDomain.PKPD }
+                    val standardRecs = report.recommendations.filter { it.domain != AimiDomain.Pkpd }
+                    val pkpdRecs = report.recommendations.filter { it.domain == AimiDomain.Pkpd }
 
                     if (standardRecs.isNotEmpty()) {
                         rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_obs)))
@@ -591,7 +593,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         })
         
         // Add dynamic actions overview if present
-        if (rec.action != null && rec.action is AdvisorAction.UpdatePreference) {
+        if (rec.action != null && rec.action is AimiAction.PreferenceUpdate) {
             val actionBtn = TextView(this).apply {
                 text = rh.gs(R.string.aimi_adv_apply_btn)
                 textSize = 14f
@@ -600,7 +602,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                 gravity = Gravity.END
                 setPadding(0, 16, 0, 0)
                 setOnClickListener {
-                    showApplyActionDialog(rec.action as AdvisorAction.UpdatePreference)
+                    showApplyActionDialog(rec.action as AimiAction.PreferenceUpdate)
                 }
             }
             textLayout.addView(actionBtn)
@@ -611,14 +613,13 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         return card
     }
 
-    private fun showApplyActionDialog(action: AdvisorAction.UpdatePreference) {
+    private fun showApplyActionDialog(action: AimiAction.PreferenceUpdate) {
         val sb = StringBuilder()
         sb.append(rh.gs(R.string.aimi_adv_apply_dialog_prefix))
         
-        action.changes.forEach { change ->
-             sb.append("• ${change.keyName}: ${change.oldValue} ➔ ${change.newValue}\n")
-             sb.append("  ${change.explanation}\n\n")
-        }
+        // Single preference update in the new model vs list in old
+        sb.append("• ${action.key.key}: ➔ ${action.newValue}\n")
+        sb.append("  ${action.reason}\n\n")
 
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(rh.gs(R.string.aimi_adv_apply_dialog_title))
@@ -630,34 +631,34 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             .show()
     }
 
-    private fun applyAction(action: AdvisorAction.UpdatePreference) {
+    private fun applyAction(action: AimiAction.PreferenceUpdate) {
         try {
-            var appliedCount = 0
-            
-            action.changes.forEach { change ->
-                var applied = false
-                if (change.newValue is Double && change.key is DoublePreferenceKey) {
-                     val key = change.key as DoublePreferenceKey
-                     preferences.put(key, change.newValue as Double)
-                     logAction(change)
-                     applied = true
-                } else if (change.newValue is Int && change.key is IntPreferenceKey) {
-                     val key = change.key as IntPreferenceKey
-                     preferences.put(key, change.newValue as Int)
-                     logAction(change)
-                     applied = true
-                } else if (change.newValue is Boolean && change.key is BooleanPreferenceKey) {
-                     val key = change.key as BooleanPreferenceKey
-                     preferences.put(key, change.newValue as Boolean)
-                     logAction(change)
-                     applied = true
+            var applied = false
+            val newValue = action.newValue
+            val key = action.key
+
+            when {
+                newValue is Double && key is DoublePreferenceKey -> {
+                    preferences.put(key, newValue)
+                    applied = true
                 }
-                
-                if (applied) appliedCount++
+                newValue is Int && key is IntPreferenceKey -> {
+                    preferences.put(key, newValue)
+                    applied = true
+                }
+                newValue is Boolean && key is BooleanPreferenceKey -> {
+                    preferences.put(key, newValue)
+                    applied = true
+                }
+                newValue is String && key is StringPreferenceKey -> {
+                    preferences.put(key, newValue)
+                    applied = true
+                }
             }
 
-            if (appliedCount > 0) {
-                 android.widget.Toast.makeText(this, rh.gs(R.string.aimi_adv_success_msg, appliedCount), android.widget.Toast.LENGTH_SHORT).show()
+            if (applied) {
+                 logAction(action)
+                 android.widget.Toast.makeText(this, rh.gs(R.string.aimi_adv_success_msg, 1), android.widget.Toast.LENGTH_SHORT).show()
                  recreate()
             } else {
                  android.widget.Toast.makeText(this, rh.gs(R.string.aimi_adv_no_change_msg), android.widget.Toast.LENGTH_SHORT).show()
@@ -668,16 +669,15 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         }
     }
 
-    private fun logAction(change: AdvisorAction.Prediction) {
-        // Extract key string from Key object if possible
-        val keyStr = (change.key as? app.aaps.core.keys.interfaces.PreferenceKey)?.key ?: change.keyName
+    private fun logAction(action: AimiAction.PreferenceUpdate) {
+        val keyStr = action.key.key
 
          historyRepo.logAction(
                 app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.ActionType.PREFERENCE_CHANGE,
                 keyStr, 
-                change.explanation,
-                change.oldValue.toString(),
-                change.newValue.toString()
+                action.reason,
+                "OLD", // New model doesn't strictly store old value, but we could find it if needed
+                action.newValue.toString()
             )
     }
 
@@ -852,16 +852,17 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     }
     
     private fun getScoreColor(severity: AdvisorSeverity): Int = when (severity) {
-        AdvisorSeverity.GOOD -> Color.parseColor("#4ADE80")  // Green
-        AdvisorSeverity.WARNING -> Color.parseColor("#FACC15")  // Warning
-        AdvisorSeverity.CRITICAL -> Color.parseColor("#F87171") // Red
+        AdvisorSeverity.Good -> Color.parseColor("#4ADE80")  // Green
+        AdvisorSeverity.Warning -> Color.parseColor("#FACC15")  // Warning
+        AdvisorSeverity.Critical -> Color.parseColor("#F87171") // Red
     }
     
-    private fun getPriorityEmoji(priority: RecommendationPriority): String = when (priority) {
-        RecommendationPriority.CRITICAL -> "⚠️"
-        RecommendationPriority.HIGH -> "📈"
-        RecommendationPriority.MEDIUM -> "ℹ️"
-        RecommendationPriority.LOW -> "✅"
+    private fun getPriorityEmoji(priority: AimiPriority): String = when (priority) {
+        AimiPriority.Critical -> "⚠️"
+        AimiPriority.High -> "📈"
+        AimiPriority.Medium -> "ℹ️"
+        AimiPriority.Low -> "✅"
+        else -> "ℹ️"
     }
     
     // Extension for dp to px

@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
 import kotlin.math.max
 import kotlin.math.min
+import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
 
 /**
  * ============================================================================
@@ -92,9 +93,9 @@ object DecisionModulator {
         // Apply modulation based on verdict
         val adj = verdict.boundedAdjustments
         
-        when (verdict.verdict) {
-            VerdictType.CONFIRM -> {
-                return ModulatedDecision(
+        return when (verdict.verdict) {
+            VerdictType.Confirm -> {
+                ModulatedDecision(
                     smbU = originalSmb,
                     tbrRate = originalTbrRate,
                     tbrMin = originalTbrMin,
@@ -105,7 +106,7 @@ object DecisionModulator {
                 )
             }
             
-            VerdictType.SOFTEN -> {
+            VerdictType.Soften -> {
                 // Apply SMB factor clamp (bounded 0.0-1.0)
                 val smbFactor = adj.smbFactorClamp.coerceIn(0.0, 1.0)
                 val modulatedSmb = originalSmb * smbFactor
@@ -127,7 +128,7 @@ object DecisionModulator {
                     }
                 }
                 
-                return ModulatedDecision(
+                ModulatedDecision(
                     smbU = modulatedSmb,
                     tbrRate = originalTbrRate,
                     tbrMin = originalTbrMin,
@@ -138,7 +139,7 @@ object DecisionModulator {
                 )
             }
             
-            VerdictType.SHIFT_TO_TBR -> {
+            VerdictType.ShiftToTbr -> {
                 // Very low SMB factor (0.0-0.3)
                 val smbFactor = adj.smbFactorClamp.coerceIn(0.0, 0.3)
                 val modulatedSmb = originalSmb * smbFactor
@@ -157,7 +158,7 @@ object DecisionModulator {
                     append(" - Prefer TBR enabled")
                 }
                 
-                return ModulatedDecision(
+                ModulatedDecision(
                     smbU = modulatedSmb,
                     tbrRate = modulatedTbrRate,
                     tbrMin = originalTbrMin,

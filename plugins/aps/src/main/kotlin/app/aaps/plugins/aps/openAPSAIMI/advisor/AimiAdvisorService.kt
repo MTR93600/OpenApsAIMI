@@ -26,6 +26,9 @@ class AimiAdvisorService {
     private val unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner?
     private val tddCalculator: app.aaps.core.interfaces.stats.TddCalculator?
     private val tirCalculator: app.aaps.core.interfaces.stats.TirCalculator?
+    private val rh: app.aaps.core.interfaces.resources.ResourceHelper?
+    private val aapsLogger: app.aaps.core.interfaces.logging.AAPSLogger?
+    private val pluginManager: app.aaps.plugins.aps.openAPSAIMI.plugins.AimiPluginManager
 
     // Constructor injection for dependencies
     constructor(
@@ -35,7 +38,9 @@ class AimiAdvisorService {
         rh: app.aaps.core.interfaces.resources.ResourceHelper? = null,
         unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner? = null,
         tddCalculator: app.aaps.core.interfaces.stats.TddCalculator? = null,
-        tirCalculator: app.aaps.core.interfaces.stats.TirCalculator? = null
+        tirCalculator: app.aaps.core.interfaces.stats.TirCalculator? = null,
+        pluginManager: app.aaps.plugins.aps.openAPSAIMI.plugins.AimiPluginManager? = null,
+        aapsLogger: app.aaps.core.interfaces.logging.AAPSLogger? = null
     ) {
         this.profileFunction = profileFunction
         this.persistenceLayer = persistenceLayer
@@ -44,9 +49,29 @@ class AimiAdvisorService {
         this.unifiedReactivityLearner = unifiedReactivityLearner
         this.tddCalculator = tddCalculator
         this.tirCalculator = tirCalculator
+        this.aapsLogger = aapsLogger
+        this.pluginManager = pluginManager ?: app.aaps.plugins.aps.openAPSAIMI.plugins.AimiPluginManager(aapsLogger ?: object : app.aaps.core.interfaces.logging.AAPSLogger {
+            override fun debug(message: String) {}
+            override fun debug(enable: Boolean, tag: app.aaps.core.interfaces.logging.LTag, message: String) {}
+            override fun debug(tag: app.aaps.core.interfaces.logging.LTag, message: String) {}
+            override fun debug(tag: app.aaps.core.interfaces.logging.LTag, accessor: () -> String) {}
+            override fun debug(tag: app.aaps.core.interfaces.logging.LTag, format: String, vararg arguments: Any?) {}
+            override fun warn(tag: app.aaps.core.interfaces.logging.LTag, message: String) {}
+            override fun warn(tag: app.aaps.core.interfaces.logging.LTag, format: String, vararg arguments: Any?) {}
+            override fun info(tag: app.aaps.core.interfaces.logging.LTag, message: String) {}
+            override fun info(tag: app.aaps.core.interfaces.logging.LTag, format: String, vararg arguments: Any?) {}
+            override fun error(tag: app.aaps.core.interfaces.logging.LTag, message: String) {}
+            override fun error(tag: app.aaps.core.interfaces.logging.LTag, message: String, throwable: Throwable) {}
+            override fun error(tag: app.aaps.core.interfaces.logging.LTag, format: String, vararg arguments: Any?) {}
+            override fun error(message: String) {}
+            override fun error(message: String, throwable: Throwable) {}
+            override fun error(format: String, vararg arguments: Any?) {}
+            override fun debug(className: String, methodName: String, lineNumber: Int, tag: app.aaps.core.interfaces.logging.LTag, message: String) {}
+            override fun info(className: String, methodName: String, lineNumber: Int, tag: app.aaps.core.interfaces.logging.LTag, message: String) {}
+            override fun warn(className: String, methodName: String, lineNumber: Int, tag: app.aaps.core.interfaces.logging.LTag, message: String) {}
+            override fun error(className: String, methodName: String, lineNumber: Int, tag: app.aaps.core.interfaces.logging.LTag, message: String) {}
+        })
     }
-
-    private val rh: app.aaps.core.interfaces.resources.ResourceHelper?
 
     /**
      * Generate a full advisor report for the specified period.
@@ -321,9 +346,9 @@ class AimiAdvisorService {
 
     private fun classifySeverity(score: Double): AdvisorSeverity {
         return when {
-            score >= 7.0 -> AdvisorSeverity.GOOD
-            score >= 4.0 -> AdvisorSeverity.WARNING
-            else -> AdvisorSeverity.CRITICAL
+            score >= 7.0 -> AdvisorSeverity.Good
+            score >= 4.0 -> AdvisorSeverity.Warning
+            else -> AdvisorSeverity.Critical
         }
     }
 
@@ -351,121 +376,65 @@ class AimiAdvisorService {
     }
 
     /**
-     * Generate recommendations based on Context (Rules Engine).
+     * Generate recommendations based on Context using the Plugin System.
      */
     fun generateRecommendations(ctx: AdvisorContext, history: List<app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.AdvisorActionLog>): List<AimiRecommendation> {
-        val recs = mutableListOf<AimiRecommendation>()
-        val metrics = ctx.metrics
-        val profile = ctx.profile
-        val prefs = ctx.prefs
+        val currentProfile = profileFunction?.getProfile()
+        
+        if (preferences == null) return emptyList()
 
+        val loopCtx = app.aaps.plugins.aps.openAPSAIMI.model.AimiPluginContext(
+            glucose = app.aaps.core.interfaces.aps.GlucoseStatusAIMI(glucose = ctx.metrics.meanBg),
+            profile = createDummyProfile(),
+            iob = emptyList(),
+            cob = 0.0,
+            preferences = preferences
+        )
 
-        // 1) CRITICAL: Hypos / Safety Aggression
-        // If hypos > 4% and MaxSMB is high -> suggest reduction
-        if (metrics.timeBelow70 > 0.04) {
-            var action: AdvisorAction? = null
-            
-            // Rule: Reduce MaxSMB if > 1.5U
-            if (prefs.maxSmb > 1.5) {
-                val newValue = (prefs.maxSmb * 0.8 * 10.0).roundToInt() / 10.0 // -20%, rounded
-                action = AdvisorAction.UpdatePreference(
-                    changes = listOf(
-                        AdvisorAction.Prediction(
-                            key = DoubleKey.OApsAIMIMaxSMB,
-                            keyName = "Max SMB",
-                            oldValue = prefs.maxSmb,
-                            newValue = newValue,
-                            explanation = rh!!.gs(R.string.aimi_adv_rec_hypos_desc, (metrics.timeBelow54 * 100).roundToInt(), metrics.severeHypoEvents) // Re-use desc for explanation? Or specific string.
-                        )
-                    )
-                )
-            }
+        // Collect actions from all plugins
+        val actions = pluginManager.collectActions(loopCtx)
 
-            val rec = AimiRecommendation(
-                titleResId = R.string.aimi_adv_rec_hypos_title,
-                descriptionResId = R.string.aimi_adv_rec_hypos_desc,
-                priority = RecommendationPriority.CRITICAL,
-                domain = RecommendationDomain.SAFETY,
+        // Map actions to recommendations for the UI
+        val recs = actions.map { action ->
+            AimiRecommendation(
+                titleResId = app.aaps.plugins.aps.R.string.aimi_advisor_recommendations_title,
+                descriptionResId = 0, // Should be dynamic
+                priority = action.priority,
+                domain = action.domain,
                 action = action
             )
-            
-            if (shouldShowRecommendation(rec, history)) {
-                recs += rec
-            }
-        }
-
-        // 2) HIGH: Poor Control (Low TIR but safe) -> Increase Basal
-        if (metrics.tir70_180 < 0.70 && metrics.timeBelow70 <= 0.03) {
-            
-            var action: AdvisorAction? = null
-
-            // Rule: Increase Lunch Factor if seemingly underdosed
-            if (prefs.lunchFactor < 1.2) {
-                 val newValue = (prefs.lunchFactor + 0.1 * 10.0).roundToInt() / 10.0
-                 action = AdvisorAction.UpdatePreference(
-                    changes = listOf(
-                        AdvisorAction.Prediction(
-                            key = DoubleKey.OApsAIMILunchFactor,
-                            keyName = "Lunch Factor",
-                            oldValue = prefs.lunchFactor,
-                            newValue = newValue,
-                            explanation = "Augmenter l'agressivité au déjeuner (+0.1)"
-                        )
-                    )
-                 )
-            }
-
-            val rec = AimiRecommendation(
-                titleResId = R.string.aimi_adv_rec_control_title,
-                descriptionResId = R.string.aimi_adv_rec_control_desc,
-                priority = RecommendationPriority.HIGH,
-                domain = RecommendationDomain.BASAL,
-                action = action
-            )
-             if (shouldShowRecommendation(rec, history)) {
-                recs += rec
-            }
-        }
-
-        // 3) MEDIUM: Hypers dominant
-        if (metrics.timeAbove180 > 0.20 && metrics.timeBelow70 <= 0.03) {
-            // No automatic action defined yet for general hypers beyond PKPD
-             val rec = AimiRecommendation(
-                titleResId = R.string.aimi_adv_rec_hypers_title,
-                descriptionResId = R.string.aimi_adv_rec_hypers_desc,
-                priority = RecommendationPriority.MEDIUM,
-                domain = RecommendationDomain.ISF,
-                action = null 
-            )
-            if (shouldShowRecommendation(rec, history)) {
-                recs += rec
-            }
-        }
-
-        // 4) MEDIUM: Basal dominance
-        if (metrics.basalPercent > 0.55) {
-             val rec = AimiRecommendation(
-                titleResId = R.string.aimi_adv_rec_basal_title,
-                descriptionResId = R.string.aimi_adv_rec_basal_desc,
-                priority = RecommendationPriority.MEDIUM,
-                domain = RecommendationDomain.BASAL,
-                action = null
-            )
-            recs += rec // Informational, always show? Or check history?
-        }
+        }.toMutableList()
 
         // 5) If nothing alarming -> positive message
         if (recs.isEmpty()) {
-            recs += AimiRecommendation(
-                titleResId = R.string.aimi_adv_rec_profile_ok_title,
-                descriptionResId = R.string.aimi_adv_rec_profile_ok_desc,
-                priority = RecommendationPriority.LOW,
-                domain = RecommendationDomain.PROFILE_QUALITY,
+            recs.add(AimiRecommendation(
+                titleResId = app.aaps.plugins.aps.R.string.aimi_adv_rec_profile_ok_title,
+                descriptionResId = app.aaps.plugins.aps.R.string.aimi_adv_rec_profile_ok_desc,
+                priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Low,
+                domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                 action = null
-            )
+            ))
         }
 
         return recs
+    }
+
+    private fun createDummyProfile(): app.aaps.core.interfaces.aps.OapsProfileAimi {
+        return app.aaps.core.interfaces.aps.OapsProfileAimi(
+            dia = 5.0, min_5m_carbimpact = 8.0, max_iob = 0.0, max_daily_basal = 0.0, max_basal = 0.0,
+            min_bg = 70.0, max_bg = 180.0, target_bg = 100.0, carb_ratio = 10.0, sens = 50.0,
+            autosens_adjust_targets = true, max_daily_safety_multiplier = 3.0, current_basal_safety_multiplier = 4.0,
+            high_temptarget_raises_sensitivity = true, low_temptarget_lowers_sensitivity = true,
+            sensitivity_raises_target = true, resistance_lowers_target = true, adv_target_adjustments = true,
+            exercise_mode = false, half_basal_exercise_target = 160, maxCOB = 120, skip_neutral_temps = true,
+            remainingCarbsCap = 90, enableUAM = true, A52_risk_enable = true, SMBInterval = 3,
+            enableSMB_with_COB = true, enableSMB_with_temptarget = true, allowSMB_with_high_temptarget = true,
+            enableSMB_always = true, enableSMB_after_carbs = true, maxSMBBasalMinutes = 120,
+            maxUAMSMBBasalMinutes = 120, bolus_increment = 0.05, carbsReqThreshold = 1,
+            current_basal = 1.0, temptargetSet = false, autosens_max = 1.2, out_units = "mg/dL",
+            lgsThreshold = 70, variable_sens = 1.0, insulinDivisor = 30, TDD = 40.0, peakTime = 75.0,
+            futureActivity = 0.0, sensorLagActivity = 0.0, historicActivity = 0.0, currentActivity = 0.0
+        )
     }
 
     private fun percent(value: Double): Int = (value * 100.0).roundToInt()
@@ -533,7 +502,7 @@ class AimiAdvisorService {
                 "smbTailDamping": ${context.pkpdPrefs.smbTailDamping}
               },
               "suggestions": [
-                ${report.recommendations.filter { it.domain == RecommendationDomain.PKPD }.joinToString(",") { "\"${try{rh?.gs(it.titleResId)}catch(e:Exception){it.descriptionResId}}\"" }}
+                ${report.recommendations.filter { it.domain is app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Pkpd }.joinToString(",") { "\"${try{rh?.gs(it.titleResId)}catch(e:Exception){it.descriptionResId}}\"" }}
               ]
             }
         """.trimIndent()
@@ -549,21 +518,10 @@ class AimiAdvisorService {
         if (rec.action == null) return true // Informational recs always shown (unless we want to suppress noise)
         
         // If action is UpdatePreference, check if any of the keys were modified recently
-        if (rec.action is AdvisorAction.UpdatePreference) {
-            val update = rec.action as AdvisorAction.UpdatePreference
+        if (rec.action is app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate) {
+            val update = rec.action as app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate
             // If ANY key in the proposal was modified in the last 48h, suppress it.
-            return update.changes.none { change ->
-                 wasRecentlyChanged(history, change.keyName) // We use keyName or we need the actual key string?
-                 // AdvisorHistoryRepository stores "key: String". 
-                 // change.key is 'Any' (PreferenceKey object). change.keyName is "Display Name".
-                 // We need the preference key STRING.
-                 // Let's assume prediction stores the technical key string implicitly or we need to extract it.
-                 // AdvisorAction.Prediction has (val key: Any).
-                 // We need to cast it to PreferenceKey to get .key string.
-                 
-                 val prefKey = change.key as? app.aaps.core.keys.interfaces.PreferenceKey
-                 prefKey?.let { wasRecentlyChanged(history, it.key) } ?: false
-            }
+            return wasRecentlyChanged(history, update.key.key)
         }
         return true
     }

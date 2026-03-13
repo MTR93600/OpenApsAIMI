@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
 import org.json.JSONArray
 import org.json.JSONObject
+import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
 
 /**
  * ============================================================================
@@ -296,9 +297,17 @@ data class AuditorVerdict(
          */
         fun fromJSON(json: JSONObject): AuditorVerdict {
             val adjustments = json.getJSONObject("boundedAdjustments")
+            val verdictStr = json.getString("verdict").uppercase()
+            
+            val verdict = when (verdictStr) {
+                "CONFIRM" -> VerdictType.Confirm
+                "SOFTEN" -> VerdictType.Soften
+                "SHIFT_TO_TBR" -> VerdictType.ShiftToTbr
+                else -> VerdictType.Confirm // Default safety
+            }
             
             return AuditorVerdict(
-                verdict = VerdictType.valueOf(json.getString("verdict")),
+                verdict = verdict,
                 confidence = json.getDouble("confidence"),
                 degradedMode = json.getBoolean("degradedMode"),
                 riskFlags = json.getJSONArray("riskFlags").let { arr ->
@@ -321,11 +330,6 @@ data class AuditorVerdict(
     }
 }
 
-enum class VerdictType {
-    CONFIRM,        // Keep decision as-is
-    SOFTEN,         // Reduce SMB + optionally increase interval
-    SHIFT_TO_TBR    // Minimal SMB + moderate TBR
-}
 
 /**
  * Bounded adjustments - NEVER free dosing

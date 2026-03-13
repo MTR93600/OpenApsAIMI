@@ -5,6 +5,7 @@ plugins {
     id("android-module-dependencies")
     id("test-module-dependencies")
     id("jacoco-module-dependencies")
+    alias(libs.plugins.dokka)
 }
 
 android {
@@ -47,4 +48,10 @@ dependencies {
 
     testImplementation("io.mockk:mockk:1.13.8")
     ksp(libs.com.google.dagger.android.processor)
+    
+    // Quality & Performance (Truth & JMH)
+    testImplementation(libs.com.google.truth)
+    
+    // 📺 Jitsi Screen Share: no SDK needed — handled via Android Intent deep-link
+    // The app opens meet.jit.si room via browser or the Jitsi Meet app if installed.
 }

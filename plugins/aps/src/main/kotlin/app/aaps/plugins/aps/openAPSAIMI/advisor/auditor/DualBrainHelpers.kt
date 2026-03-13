@@ -79,7 +79,7 @@ object DualBrainHelpers {
                 appliedExternal = false,
                 reason = "Sentinel: ${sentinel.reason}",
                 sentinelScore = sentinel.score,
-                sentinelTier = sentinel.tier.name,
+                sentinelTier = sentinel.tier.javaClass.simpleName,
                 externalConfidence = null,
                 externalRecommendation = null
             )
@@ -103,9 +103,9 @@ object DualBrainHelpers {
             appliedExternal = true,
             reason = "Sentinel(${sentinel.reason}) + External(${external.verdict})",
             sentinelScore = sentinel.score,
-            sentinelTier = sentinel.tier.name,
+            sentinelTier = sentinel.tier.javaClass.simpleName,
             externalConfidence = external.confidence,
-            externalRecommendation = external.verdict.name
+            externalRecommendation = external.verdict.javaClass.simpleName
         )
     }
 }

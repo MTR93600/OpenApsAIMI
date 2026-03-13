@@ -125,8 +125,10 @@ object IsfTddProvider {
     @Volatile
     private var isf: Double = 45.0
 
+    @JvmStatic
     fun isfTdd(): Double = isf
 
+    @JvmStatic
     fun set(valueMgDlPerU: Double) {
         isf = valueMgDlPerU
     }

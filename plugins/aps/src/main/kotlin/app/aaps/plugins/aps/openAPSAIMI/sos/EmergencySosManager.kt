@@ -42,6 +42,7 @@ object EmergencySosManager {
     private const val OBSERVATION_WINDOW_MS = 30 * 60 * 1000L // 30 minutes for first SOS
     private const val FOLLOWUP_INTERVAL_MS = 15 * 60 * 1000L   // 15 minutes between SMS/call after first SOS
 
+    @JvmStatic
     fun evaluateSosCondition(
         bg: Double,
         delta: Double,
