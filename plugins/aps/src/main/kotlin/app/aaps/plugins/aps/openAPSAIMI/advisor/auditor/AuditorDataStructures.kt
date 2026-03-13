@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 import org.json.JSONArray
 import org.json.JSONObject
 import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
+import app.aaps.plugins.aps.openAPSAIMI.model.AdvisorSeverity
 
 /**
  * ============================================================================
@@ -15,6 +16,46 @@ import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
  * Architecture: Cognitive Audit + Bounded Modulator
  * Mode: NEVER direct command - only bounded modulation
  */
+
+/**
+ * 📊 AuditorUIState
+ * 
+ * Represents the operational state of the Auditor UI and clinical verification loop.
+ * Enforces strict transition rules to maintain safety and visibility.
+ */
+sealed class AuditorUIState {
+    
+    /** Standard reset state. Loop is waiting for next tick. */
+    object Idle : AuditorUIState()
+
+    /** AI is currently processing the decision snapshot. */
+    object Processing : AuditorUIState()
+
+    /** Verdict received and validated. Applied to the loop. */
+    data class Ready(val lastVerdict: String) : AuditorUIState()
+
+    /** Clinical warning detected. Requires attention or Ready state to clear. */
+    data class Warning(val severity: AdvisorSeverity.Warning) : AuditorUIState()
+
+    /** System error or timeout. Must recover to Ready for reliable resumption. */
+    data class Error(val message: String) : AuditorUIState()
+
+    /**
+     * Validates if a transition to [nextState] is allowed according to business rules.
+     * 
+     * Rules:
+     * - IDLE → PROCESSING → READY (Linear loop flow)
+     * - WARNING cannot go directly to IDLE (Must be acknowledged via loop result)
+     * - ERROR requires a transition to READY/IDLE after recovery logic
+     */
+    fun canTransitionTo(nextState: AuditorUIState): Boolean = when (this) {
+        is Idle -> nextState is Processing || nextState is Error
+        is Processing -> nextState is Ready || nextState is Warning || nextState is Error
+        is Ready -> nextState is Idle || nextState is Processing || nextState is Warning || nextState is Error
+        is Warning -> nextState is Ready || nextState is Error // WARNING cannot go to IDLE directly
+        is Error -> nextState is Ready || nextState is Processing // ERROR must resolve before IDLE
+    }
+}
 
 // ============================================================================
 // INPUT: Data sent to LLM

@@ -57,7 +57,7 @@ data class AutoDriveState(
 ) {
     init {
         require(bg in 30.0..600.0) { "BG out of safe bounds: $bg" }
-        require(bgVelocity in -10.0..10.0) { "BG Velocity out of bounds: $bgVelocity" }
+        require(bgVelocity in -20.0..20.0) { "BG Velocity out of bounds: $bgVelocity" }
         require(iob >= 0.0) { "IOB cannot be negative: $iob" }
         require(cob >= 0.0) { "COB cannot be negative: $cob" }
         require(estimatedSI > 0.0) { "Estimated SI must be positive: $estimatedSI" }
@@ -94,7 +94,7 @@ data class AutoDriveState(
             return try {
                 AutoDriveState(
                     bg = bg.coerceIn(30.0, 600.0),
-                    bgVelocity = bgVelocity.coerceIn(-10.0, 10.0),
+                    bgVelocity = bgVelocity.coerceIn(-20.0, 20.0),
                     iob = iob.coerceAtLeast(0.0),
                     cob = cob.coerceAtLeast(0.0),
                     estimatedSI = estimatedSI.coerceAtLeast(0.1),
