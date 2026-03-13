@@ -74,7 +74,8 @@ data class RT(
     var trajectoryHealth: Int? = null,                 // Overall health: 0-100%
     var trajectoryModulationActive: Boolean = false,   // Was modulation applied?
     var trajectoryWarningsCount: Int? = null,          // Number of warnings generated
-    var trajectoryConvergenceETA: Int? = null          // Predicted minutes to stable orbit
+    var trajectoryConvergenceETA: Int? = null,          // Predicted minutes to stable orbit
+    var trajectoryRelevanceScore: Double? = null      // 🌀 Cosine Similarity score (0.0-1.0)
 ,
     // 🎯 Context Module fields
     var contextEnabled: Boolean = false,               // Context Module feature flag

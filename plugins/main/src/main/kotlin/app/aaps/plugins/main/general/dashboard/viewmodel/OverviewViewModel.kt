@@ -25,6 +25,8 @@ import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard // 🌀 Trajectory
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.AutodriveEngine // 🧠 Engine
+import app.aaps.core.interfaces.aps.RT
+import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventBucketedDataCreated
 import app.aaps.core.interfaces.rx.events.EventExtendedBolusChange
@@ -363,16 +365,20 @@ class OverviewViewModel(
         }
 
         // 12. AIMI Insights (Autodrive V3)
-        val t3cMinutes = trajectoryGuard.getLastAnalysis()?.predictedConvergenceTime ?: -1
+        val request = loop.lastRun?.request
+        val rt = request?.rawData() as? RT
+        
+        val t3cMinutes = rt?.trajectoryConvergenceETA ?: -1
         val insightT3c = if (t3cMinutes > 0) "🎯 ${t3cMinutes}m" else "🎯 --"
         
-        val classification = trajectoryGuard.getLastAnalysis()?.classification
+        val trajTypeName = rt?.trajectoryType
+        val classification = TrajectoryType.entries.find { it.name == trajTypeName }
         val insightManoeuvre = classification?.let { "${it.emoji()} ${it.name}" } ?: "🌀 --"
         
-        val factor = autodriveEngine.getAttentionMultiplier()
-        val insightFactor = "⚡ x${decimalFormatter.to1Decimal(factor)}"
+        val relevance = rt?.trajectoryRelevanceScore ?: 0.0
+        val insightFactor = "⚡ x${decimalFormatter.to1Decimal(relevance)}"
         
-        val healthScore = autodriveEngine.getHealthScore()
+        val healthScore = rt?.trajectoryHealth?.toDouble()?.div(100.0) ?: autodriveEngine.getHealthScore()
 
         val state = StatusCardState(
             glucoseText = glucoseText,
@@ -429,6 +435,7 @@ class OverviewViewModel(
             insightT3c = insightT3c,
             insightManoeuvre = insightManoeuvre,
             insightFactor = insightFactor,
+            trajectoryRelevanceScore = relevance,
             aimiHealthScore = healthScore
         )
         _statusCardState.postValue(state)
@@ -510,13 +517,17 @@ class OverviewViewModel(
             detailedReason = loop.lastRun?.request?.reason,
             isHypoRisk = loop.lastRun?.request?.isHypoRisk ?: false,
             // 🌀 Trajectory Visualization
-            trajectoryTitle = trajectoryGuard.getLastAnalysis()?.let { 
-                "${it.classification.emoji()} ${it.classification.name}" 
+            trajectoryTitle = (loop.lastRun?.request?.rawData() as? RT)?.trajectoryType?.let { name ->
+                val type = TrajectoryType.entries.find { it.name == name }
+                type?.let { "${it.emoji()} ${it.name}" } ?: name
             },
-            trajectoryAscii = trajectoryGuard.getLastAnalysis()?.classification?.asciiArt(),
-            trajectoryMetrics = trajectoryGuard.getLastAnalysis()?.metrics?.let {
-                "κ=%.3f  E=%.1fU  Θ=%.2f".format(it.curvature, it.energyBalance, it.openness)
-            }
+            trajectoryAscii = (loop.lastRun?.request?.rawData() as? RT)?.trajectoryType?.let { name ->
+                TrajectoryType.entries.find { it.name == name }?.asciiArt()
+            },
+            trajectoryMetrics = (loop.lastRun?.request?.rawData() as? RT)?.let { r ->
+                "κ=%.3f  E=%.1fU  Θ=%.2f  R=%.2f".format(r.trajectoryCurvature ?: 0.0, r.trajectoryEnergy ?: 0.0, r.trajectoryOpenness ?: 0.0, r.trajectoryRelevanceScore ?: 0.0)
+            },
+            trajectoryRelevance = (loop.lastRun?.request?.rawData() as? RT)?.trajectoryRelevanceScore
         )
         _adjustmentState.postValue(state)
     }
@@ -886,6 +897,7 @@ data class StatusCardState(
     val insightT3c: String? = null,
     val insightManoeuvre: String? = null,
     val insightFactor: String? = null,
+    val trajectoryRelevanceScore: Double? = null,
     val aimiHealthScore: Double? = null
 )
 
@@ -910,5 +922,6 @@ data class AdjustmentCardState(
     // 🌀 Trajectory Data
     val trajectoryTitle: String? = null,
     val trajectoryAscii: String? = null,
-    val trajectoryMetrics: String? = null
+    val trajectoryMetrics: String? = null,
+    val trajectoryRelevance: Double? = null
 ) : Serializable

@@ -4426,6 +4426,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     
                     rT.trajectoryEnabled = true
                     rT.trajectoryType = analysis.classification.name
+                    rT.trajectoryRelevanceScore = analysis.modulation.relevanceScore
                     rT.trajectoryCurvature = analysis.metrics.curvature
                     rT.trajectoryConvergence = analysis.metrics.convergenceVelocity
                     rT.trajectoryCoherence = analysis.metrics.coherence
