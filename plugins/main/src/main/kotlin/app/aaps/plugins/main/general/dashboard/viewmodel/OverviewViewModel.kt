@@ -373,7 +373,7 @@ class OverviewViewModel(
         
         val trajTypeName = rt?.trajectoryType
         val classification = TrajectoryType.entries.find { it.name == trajTypeName }
-        val insightManoeuvre = classification?.let { "${it.emoji()} ${it.name}" } ?: "🌀 --"
+        val insightManoeuvre = classification?.let { "${it.emoji()} ${it.description()}" } ?: "🌀 --"
         
         val relevance = rt?.trajectoryRelevanceScore ?: 0.0
         val insightFactor = "⚡ x${decimalFormatter.to1Decimal(relevance)}"
