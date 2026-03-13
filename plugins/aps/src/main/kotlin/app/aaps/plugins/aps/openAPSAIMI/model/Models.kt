@@ -72,45 +72,42 @@ enum class ActionKind {
 }
 
 sealed class DecisionResult {
+    abstract val reason: String
+    /** Decision confirmed and applied to the pump. Includes rollback context. */
     data class Applied(
         val source: String,
         val bolusU: Double? = null,
         val tbrUph: Double? = null,
         val tbrMin: Int? = null,
-        val reason: String,
-        // Rollback state
+        override val reason: String,
         val originalBasalRate: Double? = null,
         val originalBasalDuration: Int? = null,
         val timestampMs: Long = System.currentTimeMillis()
     ) : DecisionResult() {
-        /**
-         * Returns a Fallthrough decision that "undoes" this applied action
-         * by requesting a return to the original basal rate.
-         */
-        fun undo(undoReason: String = "Undo Applied Action"): Applied {
-            return copy(
-                tbrUph = originalBasalRate,
-                tbrMin = originalBasalDuration,
-                reason = "ROLLBACK ($source): $undoReason"
-            )
-        }
+        fun undo(undoReason: String = "Undo Applied Action"): Applied = copy(
+            tbrUph = originalBasalRate,
+            tbrMin = originalBasalDuration,
+            reason = "ROLLBACK ($source): $undoReason"
+        )
     }
 
-    data class Fallthrough(
-        val reason: String
-    ) : DecisionResult()
-
-    data class Cancelled(
+    /** Decision rejected by the Auditor or safety shield. Triggers optional rollback. */
+    data class Rejected(
         val source: String,
-        val reason: String,
+        override val reason: String,
+        val severity: AdvisorSeverity,
         val timestampMs: Long = System.currentTimeMillis()
     ) : DecisionResult()
 
+    /** Decision skipped as unnecessary or redundant (e.g., small correction below threshold). */
     data class Skipped(
         val source: String,
-        val reason: String,
+        override val reason: String,
         val timestampMs: Long = System.currentTimeMillis()
     ) : DecisionResult()
+
+    /** Legacy or internal signal to continue without AIMI intervention. */
+    data class Fallthrough(override val reason: String) : DecisionResult()
 }
 
 /**
@@ -121,19 +118,19 @@ fun processDecision(result: DecisionResult) {
     when (result) {
         is DecisionResult.Applied -> {
             // Logic for applying bolus and TBR (delegated to pump controller)
-            android.util.Log.i("AIMI_LOG", "✅ Decision APPLIED ($result.source): $result.reason")
+            android.util.Log.i("AIMI_LOG", "✅ Decision APPLIED (${result.source}): ${result.reason}")
         }
-        is DecisionResult.Cancelled -> {
+        is DecisionResult.Rejected -> {
             // Logic for rolling back or stopping active actions
-            android.util.Log.w("AIMI_LOG", "🛑 Decision CANCELLED ($result.source): $result.reason")
+            android.util.Log.w("AIMI_LOG", "🛑 Decision REJECTED (${result.source}): ${result.reason}")
         }
         is DecisionResult.Skipped -> {
             // Log skipping (no action needed)
-            android.util.Log.d("AIMI_LOG", "⏸ Decision SKIPPED ($result.source): $result.reason")
+            android.util.Log.d("AIMI_LOG", "⏸ Decision SKIPPED (${result.source}): ${result.reason}")
         }
         is DecisionResult.Fallthrough -> {
-            // Signal to legacy Loop components to continue as normal
-            android.util.Log.d("AIMI_LOG", "➡️ Decision FALLTHROUGH: $result.reason")
+            // Continue as-is
+            android.util.Log.d("AIMI_LOG", "💨 Decision FALLTHROUGH: ${result.reason}")
         }
     }
 }

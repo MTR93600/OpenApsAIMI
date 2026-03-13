@@ -2,6 +2,8 @@ package app.aaps.plugins.aps.openAPSAIMI.utils
 
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorStatusTracker
+import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdict
 import java.util.Locale
 
 /**
@@ -140,7 +142,7 @@ object RtInstrumentationHelpers {
                     ?: return "Auditor: ${status.message}"  // Fallback if cache empty
                 
                 val verdict = cached.verdict
-                val modulation = cached.modulation
+                val result = cached.result
                 val parts = mutableListOf<String>()
                 
                 // Verdict type
@@ -149,8 +151,8 @@ object RtInstrumentationHelpers {
                 // Confidence
                 parts.add("conf=${safeFmt(verdict.confidence, "%.2f")}")
                 
-                // SMB factor (if modulation applied)
-                if (modulation.appliedModulation) {
+                // Result details
+                if (result is DecisionResult.Applied) {
                     val smbFactor = verdict.boundedAdjustments.smbFactorClamp
                     if (smbFactor < 1.0) {
                         parts.add("smb×${safeFmt(smbFactor, "%.2f")}")
@@ -160,11 +162,10 @@ object RtInstrumentationHelpers {
                     if (intervalAdd > 0) {
                         parts.add("+${intervalAdd}m")
                     }
-                }
-                
-                // Prefer TBR
-                if (modulation.preferTbr) {
-                    parts.add("preferTBR")
+                    
+                    if (verdict.boundedAdjustments.preferTbr) {
+                        parts.add("preferTBR")
+                    }
                 }
                 
                 // Risk flags (max 2)

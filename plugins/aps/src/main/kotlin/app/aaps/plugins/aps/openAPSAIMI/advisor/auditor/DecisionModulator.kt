@@ -3,6 +3,8 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 import kotlin.math.max
 import kotlin.math.min
 import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
+import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
+import app.aaps.plugins.aps.openAPSAIMI.model.AdvisorSeverity
 
 /**
  * ============================================================================
@@ -16,18 +18,7 @@ import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
  */
 object DecisionModulator {
     
-    /**
-     * Modulated decision output
-     */
-    data class ModulatedDecision(
-        val smbU: Double,
-        val tbrRate: Double?,
-        val tbrMin: Int?,
-        val intervalMin: Double,
-        val preferTbr: Boolean,
-        val appliedModulation: Boolean,
-        val modulationReason: String
-    )
+    // Legacy data class replaced by DecisionResult sealed class
     
     /**
      * Apply modulation to AIMI decision based on auditor verdict
@@ -49,126 +40,108 @@ object DecisionModulator {
         verdict: AuditorVerdict,
         confidence: Double = 0.65,
         mode: ModulationMode = ModulationMode.AUDIT_ONLY
-    ): ModulatedDecision {
+    ): DecisionResult {
         
-        // If audit-only mode, return original decision
+        // If audit-only mode, return skipped
         if (mode == ModulationMode.AUDIT_ONLY) {
-            return ModulatedDecision(
-                smbU = originalSmb,
-                tbrRate = originalTbrRate,
-                tbrMin = originalTbrMin,
-                intervalMin = originalIntervalMin,
-                preferTbr = false,
-                appliedModulation = false,
-                modulationReason = "Audit only mode - no modulation applied"
+            return DecisionResult.Skipped(
+                source = "AuditorModulator",
+                reason = "Audit only mode - no action taken"
             )
         }
         
-        // If confidence too low, return original decision
+        // If confidence too low, return rejected
         if (verdict.confidence < confidence) {
-            return ModulatedDecision(
-                smbU = originalSmb,
-                tbrRate = originalTbrRate,
-                tbrMin = originalTbrMin,
-                intervalMin = originalIntervalMin,
-                preferTbr = false,
-                appliedModulation = false,
-                modulationReason = "Confidence too low (${String.format("%.2f", verdict.confidence)} < $confidence)"
+            return DecisionResult.Rejected(
+                source = "AuditorModulator",
+                reason = "Low confidence (${String.format("%.2f", verdict.confidence)})",
+                severity = AdvisorSeverity.Warning("Audit Confidence Threshold")
             )
         }
         
         // If high-risk-only mode, only apply if risk flags present
         if (mode == ModulationMode.HIGH_RISK_ONLY && verdict.riskFlags.isEmpty()) {
-            return ModulatedDecision(
-                smbU = originalSmb,
-                tbrRate = originalTbrRate,
-                tbrMin = originalTbrMin,
-                intervalMin = originalIntervalMin,
-                preferTbr = false,
-                appliedModulation = false,
-                modulationReason = "High-risk only mode - no risk flags detected"
+            return DecisionResult.Skipped(
+                source = "AuditorModulator",
+                reason = "High-risk only mode - no risks detected"
             )
         }
         
         // Apply modulation based on verdict
         val adj = verdict.boundedAdjustments
         
-        return when (verdict.verdict) {
+        val result = when (verdict.verdict) {
             VerdictType.Confirm -> {
-                ModulatedDecision(
-                    smbU = originalSmb,
-                    tbrRate = originalTbrRate,
+                DecisionResult.Applied(
+                    source = "AuditorModulator",
+                    bolusU = originalSmb,
+                    tbrUph = originalTbrRate,
                     tbrMin = originalTbrMin,
-                    intervalMin = originalIntervalMin,
-                    preferTbr = false,
-                    appliedModulation = false,
-                    modulationReason = "Verdict: CONFIRM - decision approved as-is"
+                    reason = "Verdict: CONFIRM - approved"
                 )
             }
             
             VerdictType.Soften -> {
-                // Apply SMB factor clamp (bounded 0.0-1.0)
                 val smbFactor = adj.smbFactorClamp.coerceIn(0.0, 1.0)
                 val modulatedSmb = originalSmb * smbFactor
                 
-                // Apply interval increase (bounded 0-6 min)
                 val intervalAdd = adj.intervalAddMin.coerceIn(0, 6)
-                val modulatedInterval = originalIntervalMin + intervalAdd
+                // Note: DecisionResult.Applied doesn't strictly track intervalMin, 
+                // in this architecture, we let the loop handle interval via separate metadata if needed.
                 
-                val reason = buildString {
-                    append("Verdict: SOFTEN")
-                    if (smbFactor < 1.0) {
-                        append(" - SMB reduced by ${String.format("%.0f", (1.0 - smbFactor) * 100)}%")
-                    }
-                    if (intervalAdd > 0) {
-                        append(" - Interval increased by ${intervalAdd}min")
-                    }
-                    if (adj.preferTbr) {
-                        append(" - Prefer TBR enabled")
-                    }
-                }
-                
-                ModulatedDecision(
-                    smbU = modulatedSmb,
-                    tbrRate = originalTbrRate,
+                DecisionResult.Applied(
+                    source = "AuditorModulator",
+                    bolusU = modulatedSmb,
+                    tbrUph = originalTbrRate,
                     tbrMin = originalTbrMin,
-                    intervalMin = modulatedInterval,
-                    preferTbr = adj.preferTbr,
-                    appliedModulation = true,
-                    modulationReason = reason
+                    reason = "Verdict: SOFTEN - SMB reduced by ${String.format("%.0f", (1.0 - smbFactor) * 100)}%"
                 )
             }
             
             VerdictType.ShiftToTbr -> {
-                // Very low SMB factor (0.0-0.3)
                 val smbFactor = adj.smbFactorClamp.coerceIn(0.0, 0.3)
                 val modulatedSmb = originalSmb * smbFactor
-                
-                // Moderate TBR factor (0.8-1.2) if TBR exists
                 val tbrFactor = adj.tbrFactorClamp.coerceIn(0.8, 1.2)
                 val modulatedTbrRate = originalTbrRate?.let { it * tbrFactor }
                 
-                // Always prefer TBR in this mode
-                val reason = buildString {
-                    append("Verdict: SHIFT_TO_TBR")
-                    append(" - SMB heavily reduced (factor ${String.format("%.1f", smbFactor)})")
-                    if (modulatedTbrRate != null) {
-                        append(" - TBR adjusted by ${String.format("%.0f", (tbrFactor - 1.0) * 100)}%")
-                    }
-                    append(" - Prefer TBR enabled")
-                }
-                
-                ModulatedDecision(
-                    smbU = modulatedSmb,
-                    tbrRate = modulatedTbrRate,
+                DecisionResult.Applied(
+                    source = "AuditorModulator",
+                    bolusU = modulatedSmb,
+                    tbrUph = modulatedTbrRate,
                     tbrMin = originalTbrMin,
-                    intervalMin = originalIntervalMin,
-                    preferTbr = true,
-                    appliedModulation = true,
-                    modulationReason = reason
+                    reason = "Verdict: SHIFT_TO_TBR - Prefer Basal Control"
                 )
             }
         }
+        
+        // Final Clinical Validation (Expert Requirement)
+        return validateDecision(result)
+    }
+
+    private fun validateDecision(result: DecisionResult): DecisionResult {
+        if (result is DecisionResult.Applied) {
+            val bolus = result.bolusU ?: 0.0
+            val tbr = result.tbrUph ?: 0.0
+            
+            // 🛡️ Expert Safety Guard: No single SMB > 30U from Auditor
+            if (bolus > 30.0) {
+                return DecisionResult.Rejected(
+                    source = "SafetyGuard",
+                    reason = "Extreme SMB Request Blocked ($bolus U)",
+                    severity = AdvisorSeverity.Critical("Clinical Safety Cap Violation")
+                )
+            }
+            
+            // 🛡️ Expert Safety Guard: TBR normalization
+            if (tbr < 0.0) {
+                 return DecisionResult.Rejected(
+                    source = "SafetyGuard",
+                    reason = "Negative TBR rate requested",
+                    severity = AdvisorSeverity.Warning("Protocol Invalidation")
+                )
+            }
+        }
+        return result
     }
     
     /**

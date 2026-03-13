@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
 import java.util.concurrent.ConcurrentHashMap
+import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
 
 /**
  * Thread-safe cache for AI Auditor verdicts
@@ -13,18 +14,18 @@ object AuditorVerdictCache {
     
     data class CachedVerdict(
         val verdict: AuditorVerdict,
-        val modulation: DecisionModulator.ModulatedDecision,
+        val result: DecisionResult,
         val timestamp: Long
     )
     
     @JvmStatic
-    fun update(verdict: AuditorVerdict, modulation: DecisionModulator.ModulatedDecision) {
-        update(DEFAULT_KEY, verdict, modulation)
+    fun update(verdict: AuditorVerdict, result: DecisionResult) {
+        update(DEFAULT_KEY, verdict, result)
     }
 
     @JvmStatic
-    fun update(key: String, verdict: AuditorVerdict, modulation: DecisionModulator.ModulatedDecision) {
-        cache[key] = CachedVerdict(verdict, modulation, System.currentTimeMillis())
+    fun update(key: String, verdict: AuditorVerdict, result: DecisionResult) {
+        cache[key] = CachedVerdict(verdict, result, System.currentTimeMillis())
     }
     
     @JvmStatic

@@ -46,6 +46,11 @@ class AuditorOrchestrator @Inject constructor(
     private val aapsLogger: AAPSLogger,
     private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR
 ) {
+    // 🔄 New State Transition Manager
+    private val stateManager = AimiStateTransitionManager(aapsLogger)
+    
+    // Performance Cache
+    private var cachedTimeBucket: Long = -1L
     
     // Coroutine scope for async operations
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -135,16 +140,20 @@ class AuditorOrchestrator @Inject constructor(
         predictedBg: Double?,
         eventualBg: Double?,
         inPrebolusWindow: Boolean,
-        callback: ((AuditorVerdict?, DecisionModulator.ModulatedDecision) -> Unit)? = null
+        callback: ((AuditorVerdict?, DecisionResult) -> Unit)? = null
     ) {
+        val now = System.currentTimeMillis()
         
         // Check if auditor is enabled
         if (!isAuditorEnabled()) {
             aapsLogger.debug(LTag.APS, "AI Auditor: Disabled")
-            AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OFF)
+            stateManager.transitionTo(AuditorUIState.Idle, "Auditor preference disabled")
             callback?.invoke(null, createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "Auditor disabled"))
             return
         }
+        
+        // Start processing
+        stateManager.transitionTo(AuditorUIState.Processing, "Audit tick started")
         
         // Check if should trigger (intelligent gating)
         val shouldTrigger = DecisionModulator.shouldTriggerAudit(
@@ -161,12 +170,21 @@ class AuditorOrchestrator @Inject constructor(
         
         if (!shouldTrigger) {
             aapsLogger.debug(LTag.APS, "AI Auditor: No trigger conditions met")
-            AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.SKIPPED_NO_TRIGGER)
+            stateManager.transitionTo(AuditorUIState.Idle, "Conditions not met")
             callback?.invoke(null, createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "No trigger"))
             return
         }
+
+        // Security: Freshness Check (15 min)
+        val dataAgeMs = now - (glucoseStatus?.date ?: 0L)
+        if (dataAgeMs > 15 * 60 * 1000L) {
+            aapsLogger.warn(LTag.APS, "AI Auditor: Data too stale (${dataAgeMs / 60000} min)")
+            stateManager.transitionTo(AuditorUIState.Error("Stale CGM Data"), "Security: Exceeded 15m threshold")
+            callback?.invoke(null, createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "Stale data"))
+            return
+        }
         
-        val now = System.currentTimeMillis()
+        // now already defined above
         
         // ================================================================
         // DUAL-BRAIN TIER 1: LOCAL SENTINEL (Offline, Always Active)
@@ -233,7 +251,7 @@ class AuditorOrchestrator @Inject constructor(
             AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OK_CONFIRM)
             
             val combined = DualBrainHelpers.combineAdvice(sentinelAdvice, null)
-            val modulated = combined.toModulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin)
+            val modulated = combined.toDecisionResult(smbProposed, tbrRate, tbrDuration, intervalMin)
             aapsLogger.info(LTag.APS, "✅ ${combined.toLogString()}")
             
             callback?.invoke(null, modulated)
@@ -256,7 +274,7 @@ class AuditorOrchestrator @Inject constructor(
             aapsLogger.info(LTag.APS, "🌐 External: Rate limited ($triggerType), using Sentinel only")
             AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.SKIPPED_RATE_LIMITED)
             val combined = DualBrainHelpers.combineAdvice(sentinelAdvice, null)
-            val modulated = combined.toModulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin)
+            val modulated = combined.toDecisionResult(smbProposed, tbrRate, tbrDuration, intervalMin)
             aapsLogger.info(LTag.APS, "✅ ${combined.toLogString()}")
             callback?.invoke(null, modulated)
             return
@@ -315,18 +333,13 @@ class AuditorOrchestrator @Inject constructor(
                 updateRateLimit(now, triggerType)
                 
                 if (verdict != null) {
-                    aapsLogger.info(LTag.APS, "AI Auditor: Verdict=${verdict.verdict}, Confidence=${String.format("%.2f", verdict.confidence)}")
-                    aapsLogger.info(LTag.APS, "AI Auditor: Evidence=${verdict.evidence}")
-                    aapsLogger.info(LTag.APS, "AI Auditor: RiskFlags=${verdict.riskFlags}")
+                    // Security: Validate Confidence Interval (0.0..1.0)
+                    val safeConfidence = verdict.confidence.coerceIn(0.0, 1.0)
                     
-                    // Update status based on verdict type
-                    val status = when (verdict.verdict) {
-                        VerdictType.Confirm -> AuditorStatusTracker.Status.OK_CONFIRM
-                        VerdictType.Soften -> AuditorStatusTracker.Status.OK_SOFTEN
-                        VerdictType.ShiftToTbr -> AuditorStatusTracker.Status.OK_PREFER_TBR
-                        else -> AuditorStatusTracker.Status.OK_CONFIRM // Fallback for exhaustive safety
-                    }
-                    AuditorStatusTracker.updateStatus(status)
+                    aapsLogger.info(LTag.APS, "AI Auditor: Verdict=${verdict.verdict}, Confidence=${String.format("%.2f", safeConfidence)}")
+                    
+                    // Transition to Ready
+                    stateManager.transitionTo(AuditorUIState.Ready(verdict.verdict.name), "Verdict received")
                     
                     // Apply modulation
                     val modulated = DecisionModulator.applyModulation(
@@ -339,7 +352,10 @@ class AuditorOrchestrator @Inject constructor(
                         mode = getModulationMode()
                     )
                     
-                    aapsLogger.info(LTag.APS, "AI Auditor: Modulation=${modulated.modulationReason}")
+                    // Clinical Validation for dose changes
+                    validateClinicalDoses(modulated)
+                    
+                    aapsLogger.info(LTag.APS, "AI Auditor: Modulation=${modulated.reason}")
                     
                     // Cache verdict (internal)
                     lastVerdict = verdict
@@ -351,7 +367,7 @@ class AuditorOrchestrator @Inject constructor(
                     callback?.invoke(verdict, modulated)
                 } else {
                     aapsLogger.warn(LTag.APS, "AI Auditor: No verdict received (timeout or error)")
-                    AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_TIMEOUT)
+                    stateManager.transitionTo(AuditorUIState.Error("Timeout: No verdict received"), "External timeout")
                     callback?.invoke(null, createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "No verdict"))
                 }
                 
@@ -455,15 +471,13 @@ class AuditorOrchestrator @Inject constructor(
         tbrMin: Int?,
         intervalMin: Double,
         reason: String
-    ): DecisionModulator.ModulatedDecision {
-        return DecisionModulator.ModulatedDecision(
-            smbU = smb,
-            tbrRate = tbrRate,
+    ): DecisionResult {
+        return DecisionResult.Applied(
+            source = "AuditorOrchestrator",
+            bolusU = smb,
+            tbrUph = tbrRate,
             tbrMin = tbrMin,
-            intervalMin = intervalMin,
-            preferTbr = false,
-            appliedModulation = false,
-            modulationReason = reason
+            reason = "Aimi confirmed (fallback: $reason)"
         )
     }
 
@@ -480,6 +494,36 @@ class AuditorOrchestrator @Inject constructor(
                 confidence = 1.0
             )
         }
+    }
+
+    /**
+     * Security: Explicit clinical validation for modulated doses
+     */
+    private fun validateClinicalDoses(result: DecisionResult) {
+        if (result !is DecisionResult.Applied) return
+        
+        val smb = result.bolusU ?: 0.0
+        val tbr = result.tbrUph ?: 0.0
+        
+        if (smb > 30.0) {
+            aapsLogger.error(LTag.APS, "🚨 SECURITY VIOLATION: Auditor allowed SMB > 30U ($smb)")
+            stateManager.transitionTo(AuditorUIState.Warning(AdvisorSeverity.Warning("Safety: SMB Cap Violated")), "Clinical Override")
+        }
+        
+        if (tbr > 15.0) { // Example arbitrary clinical cap
+             aapsLogger.warn(LTag.APS, "⚠️ Clinical: TBR rate seems high ($tbr U/h)")
+        }
+    }
+
+    /** 
+     * Performance: Cached bucket calculation 
+     */
+    private fun getCurrentTimeBucket(): Long {
+        val now = System.currentTimeMillis()
+        if (cachedTimeBucket == -1L || now - cachedTimeBucket > 300_000) {
+            cachedTimeBucket = now / (5 * 60 * 1000) * (5 * 60 * 1000)
+        }
+        return cachedTimeBucket
     }
 }
 

@@ -43,6 +43,7 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
 import app.aaps.core.data.model.HR
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdict
 import app.aaps.plugins.aps.openAPSAIMI.model.LoopContext
 import app.aaps.plugins.aps.openAPSAIMI.model.PumpCaps
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
@@ -7531,68 +7532,43 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         predictedBg = this.predictedBg?.toDouble(),
                         eventualBg = rT.eventualBG,
                         inPrebolusWindow = inPrebolusWindow
-                    ) { verdict, modulated ->
-                        // Callback executed when audit completes
+                    ) { verdict: AuditorVerdict?, result: DecisionResult ->
+                        // Callback executed when audit completes using expert sealed classes
                         
-                        if (modulated.appliedModulation) {
-                            // ✅ Modulation applied
-                            consoleLog.add(sanitizeForJson("🧠 AI Auditor: ${modulated.modulationReason}"))
-                            
-                            if (verdict != null) {
-                                consoleLog.add(sanitizeForJson("   Verdict: ${verdict.verdict}, Confidence: ${"%.2f".format(verdict.confidence)}"))
-                                
-                                // Log first 2 evidence items
-                                verdict.evidence.take(2).forEach { evidence ->
-                                    consoleLog.add(sanitizeForJson("   Evidence: $evidence"))
+                        when (result) {
+                            is DecisionResult.Applied -> {
+                                consoleLog.add(sanitizeForJson("🧠 AI Auditor: ✅ APPLIED - ${result.reason}"))
+                                if (verdict != null) {
+                                    consoleLog.add(sanitizeForJson("   Verdict: ${verdict.verdict}, Conf: ${"%.2f".format(verdict.confidence)}"))
                                 }
                                 
-                                if (verdict.riskFlags.isNotEmpty()) {
-                                    consoleLog.add(sanitizeForJson("   ⚠️ Risk Flags: ${verdict.riskFlags.joinToString(", ")}"))
+                                // Apply modulated decision to the loop result
+                                finalResult.units = result.bolusU ?: 0.0
+                                if (result.tbrUph != null) {
+                                    finalResult.rate = result.tbrUph
+                                }
+                                if (result.tbrMin != null) {
+                                    finalResult.duration = result.tbrMin
                                 }
                             }
-                            
-                            // Apply modulated decision
-                            finalResult.units = modulated.smbU
-                            if (modulated.tbrRate != null) {
-                                finalResult.rate = modulated.tbrRate
-                            }
-                            if (modulated.tbrMin != null) {
-                                finalResult.duration = modulated.tbrMin
-                            }
-                            
-                            // Log changes
-                            if (kotlin.math.abs((modulated.smbU ?: 0.0) - smbProposed) > 0.01) {
-                                consoleLog.add(sanitizeForJson("   SMB modulated: ${"%.2f".format(smbProposed)} → ${"%.2f".format(modulated.smbU)} U"))
-                            }
-                            if (kotlin.math.abs(modulated.intervalMin - intervalMin) > 0.1) {
-                                consoleLog.add(sanitizeForJson("   Interval modulated: ${intervalMin.toInt()} → ${modulated.intervalMin.toInt()} min"))
-                            }
-                            if (modulated.preferTbr) {
-                                consoleLog.add(sanitizeForJson("   Prefer TBR enabled"))
-                            }
-                            
-                            // 🎨 Populate RT fields for dashboard display
-                            finalResult.aiAuditorEnabled = true
-                            finalResult.aiAuditorVerdict = verdict?.verdict?.name
-                            finalResult.aiAuditorConfidence = verdict?.confidence
-                            finalResult.aiAuditorModulation = modulated.modulationReason
-                            finalResult.aiAuditorRiskFlags = verdict?.riskFlags?.joinToString(", ")
-                            
-                        } else {
-                            // ℹ️ No modulation (audit only, confidence too low, etc.)
-                            if (verdict != null) {
-                                consoleLog.add(sanitizeForJson("🧠 AI Auditor: ${modulated.modulationReason}"))
-                                consoleLog.add(sanitizeForJson("   AIMI decision confirmed (Verdict: ${verdict.verdict}, Conf: ${"%.2f".format(verdict.confidence)})"))
+                            is DecisionResult.Rejected -> {
+                                consoleLog.add(sanitizeForJson("🧠 AI Auditor: 🛑 REJECTED - ${result.reason}"))
+                                consoleLog.add(sanitizeForJson("   Severity: ${result.severity}"))
                                 
-                                // Still populate RT fields for audit tracking
-                                finalResult.aiAuditorEnabled = true
-                                finalResult.aiAuditorVerdict = verdict.verdict.name
-                                finalResult.aiAuditorConfidence = verdict.confidence
-                                finalResult.aiAuditorModulation = "Audit only (no modulation)"
-                                finalResult.aiAuditorRiskFlags = verdict.riskFlags.joinToString(", ")
+                                // Safety: Fallback to basal-only or zero SMB if rejected
+                                finalResult.units = 0.0
+                                finalResult.reason.setLength(0)
+                                finalResult.reason.append("Auditor Rejected: ${result.reason}")
                             }
+                            is DecisionResult.Skipped -> {
+                                // No modulation applied, keep original finalResult
+                                consoleLog.add(sanitizeForJson("🧠 AI Auditor: ⏸ SKIPPED - ${result.reason}"))
+                            }
+                            else -> {}
                         }
-                    }
+                    } // End of callback (closing result when)
+                    
+                    // AI Audit complete. Main loop will finalize decision context below.
                 } catch (e: Exception) {
                     consoleLog.add(sanitizeForJson("⚠️ AI Auditor error: ${e.message}"))
                     aapsLogger.error(LTag.APS, "AI Auditor exception", e)
