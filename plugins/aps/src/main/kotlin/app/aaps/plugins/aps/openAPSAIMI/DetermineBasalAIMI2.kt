@@ -5468,9 +5468,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🚦 [AUTODRIVE V3] ${gate.reason} - Engaging Control Loop...")
                 
                 val snapshot = physioAdapter.getLatestSnapshot()
-                val adState = app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState(
+                val adState = app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState.createSafe(
                     bg = glucose_status.glucose,
-                    bgVelocity = shortAvgDeltaAdj.toDouble(),
+                    bgVelocity = (shortAvgDeltaAdj.toDouble() / 5.0), 
                     iob = iob_data_array.firstOrNull()?.iob ?: 0.0,
                     cob = mealData.mealCOB,
                     estimatedSI = (variableSensitivity.toDouble() / 10000.0), 
