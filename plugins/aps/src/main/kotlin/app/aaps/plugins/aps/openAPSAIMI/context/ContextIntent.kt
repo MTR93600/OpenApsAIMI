@@ -44,11 +44,8 @@ sealed class ContextIntent : ContextIntentStrategy {
     
     val endTimeMs: Long get() = startTimeMs + durationMs
 
-    init {
-        require(confidence in 0.0f..1.0f) { "Confidence must be between 0.0 and 1.0: $confidence" }
-        require(durationMs >= 0) { "Duration cannot be negative: $durationMs" }
-        require(startTimeMs > 0) { "Invalid start time: $startTimeMs" }
-    }
+    // Validations moved to subclasses to ensure correct initialization order
+    // (Kotlin runs parent init before child fields are initialized)
     
     fun isActiveAt(timestampMs: Long): Boolean {
         return timestampMs in startTimeMs..endTimeMs
@@ -79,6 +76,11 @@ sealed class ContextIntent : ContextIntentStrategy {
         val activityType: ActivityType = ActivityType.CARDIO,
         val expectedDurationPostEffect: Duration = 4.hours  // Effet résiduel
     ) : ContextIntent() {
+        init {
+            require(confidence in 0.0f..1.0f) { "Confidence must be between 0.0 and 1.0: $confidence" }
+            require(durationMs >= 0) { "Duration cannot be negative: $durationMs" }
+            require(startTimeMs > 0) { "Invalid start time (Activity): $startTimeMs" }
+        }
         
         enum class ActivityType {
             CARDIO,        // Course, vélo, natation
@@ -102,6 +104,11 @@ sealed class ContextIntent : ContextIntentStrategy {
         override val confidence: Float = 1.0f,
         val symptomType: SymptomType = SymptomType.GENERAL
     ) : ContextIntent() {
+        init {
+            require(confidence in 0.0f..1.0f) { "Confidence must be between 0.0 and 1.0: $confidence" }
+            require(durationMs >= 0) { "Duration cannot be negative: $durationMs" }
+            require(startTimeMs > 0) { "Invalid start time (Illness): $startTimeMs" }
+        }
         
         enum class SymptomType {
             GENERAL,          // Rhume, grippe
@@ -123,7 +130,13 @@ sealed class ContextIntent : ContextIntentStrategy {
         override val intensity: Intensity,
         override val confidence: Float = 1.0f,
         val riskWindow: Duration = 6.hours
-    ) : ContextIntent()
+    ) : ContextIntent() {
+        init {
+            require(confidence in 0.0f..1.0f) { "Confidence must be between 0.0 and 1.0: $confidence" }
+            require(durationMs >= 0) { "Duration cannot be negative: $durationMs" }
+            require(startTimeMs > 0) { "Invalid start time (MealRisk): $startTimeMs" }
+        }
+    }
     
     /**
      * Stress émotionnel ou mental
@@ -138,6 +151,11 @@ sealed class ContextIntent : ContextIntentStrategy {
         override val confidence: Float = 1.0f,
         val stressType: StressType = StressType.EMOTIONAL
     ) : ContextIntent() {
+        init {
+            require(confidence in 0.0f..1.0f) { "Confidence must be between 0.0 and 1.0: $confidence" }
+            require(durationMs >= 0) { "Duration cannot be negative: $durationMs" }
+            require(startTimeMs > 0) { "Invalid start time (Stress): $startTimeMs" }
+        }
         
         enum class StressType {
             EMOTIONAL,  // Stress émotionnel
@@ -159,6 +177,11 @@ sealed class ContextIntent : ContextIntentStrategy {
         override val confidence: Float = 1.0f,
         val phase: CyclePhase
     ) : ContextIntent() {
+        init {
+            require(confidence in 0.0f..1.0f) { "Confidence must be between 0.0 and 1.0: $confidence" }
+            require(durationMs >= 0) { "Duration cannot be negative: $durationMs" }
+            require(startTimeMs > 0) { "Invalid start time (Cycle): $startTimeMs" }
+        }
         
         enum class CyclePhase {
             FOLLICULAR,   // Jours 1-14 (sensibilité normale)
@@ -180,7 +203,13 @@ sealed class ContextIntent : ContextIntentStrategy {
         override val intensity: Intensity,
         override val confidence: Float = 1.0f,
         val timezoneShiftHours: Int = 0
-    ) : ContextIntent()
+    ) : ContextIntent() {
+        init {
+            require(confidence in 0.0f..1.0f) { "Confidence must be between 0.0 and 1.0: $confidence" }
+            require(durationMs >= 0) { "Duration cannot be negative: $durationMs" }
+            require(startTimeMs > 0) { "Invalid start time (Travel): $startTimeMs" }
+        }
+    }
     
     /**
      * Alcool consommé
@@ -194,7 +223,13 @@ sealed class ContextIntent : ContextIntentStrategy {
         override val intensity: Intensity,
         override val confidence: Float = 1.0f,
         val units: Float = 0f  // Unités d'alcool
-    ) : ContextIntent()
+    ) : ContextIntent() {
+        init {
+            require(confidence in 0.0f..1.0f) { "Confidence must be between 0.0 and 1.0: $confidence" }
+            require(durationMs >= 0) { "Duration cannot be negative: $durationMs" }
+            require(startTimeMs > 0) { "Invalid start time (Alcohol): $startTimeMs" }
+        }
+    }
     
     /**
      * Intent custom / générique
@@ -208,7 +243,13 @@ sealed class ContextIntent : ContextIntentStrategy {
         override val confidence: Float,
         val description: String,
         val suggestedStrategy: String = ""
-    ) : ContextIntent()
+    ) : ContextIntent() {
+        init {
+            require(confidence in 0.0f..1.0f) { "Confidence must be between 0.0 and 1.0: $confidence" }
+            require(durationMs >= 0) { "Duration cannot be negative: $durationMs" }
+            require(startTimeMs > 0) { "Invalid start time (Custom): $startTimeMs" }
+        }
+    }
 }
 
 /**

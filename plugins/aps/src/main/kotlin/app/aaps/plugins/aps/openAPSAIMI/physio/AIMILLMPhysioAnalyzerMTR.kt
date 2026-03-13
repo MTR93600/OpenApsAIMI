@@ -66,7 +66,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         val prompt = buildPrompt(features, baseline, context)
         
         // 1. Try Preferred Model
-        val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-3-pro-preview")
+        val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-3-pro")
         
         try {
             return executeGeminiRequest(apiKey, prompt, primaryModel)
@@ -74,7 +74,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
             // 2. Fallback on Quota Exceeded (429)
             val msg = e.message?.lowercase() ?: ""
             if (msg.contains("429") || msg.contains("quota") || msg.contains("resource_exhausted")) {
-                val fallbackModel = "gemini-2.5-flash"
+                val fallbackModel = "gemini-3-flash"
                 android.util.Log.w(TAG, "Physio Quota Exceeded. Fallback to $fallbackModel")
                 return executeGeminiRequest(apiKey, prompt, fallbackModel)
             }
