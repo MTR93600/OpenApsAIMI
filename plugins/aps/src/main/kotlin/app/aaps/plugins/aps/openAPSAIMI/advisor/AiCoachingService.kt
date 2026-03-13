@@ -147,7 +147,7 @@ class AiCoachingService @Inject constructor() {
         val resolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
         
         // 1. Try Preferred Model (Efficient: Gemini 3 Flash)
-        val primaryModel = resolver.resolveGenerateContentModel(apiKey, "gemini-3-flash")
+        val primaryModel = resolver.resolveGenerateContentModel(apiKey, "gemini-3-flash-preview")
         
         try {
             return executeGeminiRequest(resolver, apiKey, prompt, primaryModel)
@@ -159,7 +159,7 @@ class AiCoachingService @Inject constructor() {
                 
                 // 3. Fallback to Efficient Model (High Quota: Gemini 3 Flash)
                 // Flash models typically have 15 RPM free tier vs 2 RPM for Pro
-                val fallbackModel = "gemini-3-flash" // Hardcoded safe fallback
+                val fallbackModel = "gemini-3-flash-preview" // Hardcoded safe fallback
                 android.util.Log.w("AIMI_GEMINI", "⚠️ Quota exceeded on $primaryModel. Auto-fallback to $fallbackModel")
                 
                 return executeGeminiRequest(resolver, apiKey, prompt, fallbackModel)
