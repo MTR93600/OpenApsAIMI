@@ -22,6 +22,52 @@ data class AuditorUIState(
     val statusMessage: String,
     val timestampMs: Long
 ) {
+    /**
+     * Type-safe wrapper for a successfully validated AuditorUIState.
+     */
+    @JvmInline
+    value class ValidatedAuditorUIState(val state: AuditorUIState)
+
+    /**
+     * Performs exhaustive validation of the UI state.
+     * @return Result containing the validated state or an exception with details.
+     */
+    fun validate(): Result<ValidatedAuditorUIState> = runCatching {
+        // 1. Resource Validations
+        require(iconTintColor != 0) { "iconTintColor must be a valid @ColorRes (got 0)" }
+        require(badgeBackgroundColor != 0) { "badgeBackgroundColor must be a valid @ColorRes (got 0)" }
+
+        // 2. Textual Integrity
+        if (badgeVisible) {
+            require(badgeText.isNotEmpty()) { "badgeText cannot be empty when badgeVisible is true" }
+        }
+
+        // 3. Logic Consistency & Constraints
+        when (type) {
+            StateType.IDLE -> {
+                require(!badgeVisible) { "IDLE state cannot have a visible badge" }
+                require(!shouldAnimate) { "IDLE state should not animate" }
+            }
+            StateType.PROCESSING -> {
+                require(shouldAnimate) { "PROCESSING state must be animated" }
+                require(badgeVisible) { "PROCESSING state must have a visible badge (dots)" }
+            }
+            StateType.READY -> {
+                require(insightCount >= 0) { "insightCount cannot be negative" }
+                if (insightCount > 0) {
+                    require(badgeVisible) { "READY state with insights must show a badge" }
+                }
+            }
+            StateType.WARNING, StateType.ERROR -> {
+                require(badgeVisible) { "${type.name} state must always show a badge icon" }
+            }
+        }
+
+        // 4. Temporal Integrity
+        require(timestampMs > 0) { "timestampMs must be valid" }
+
+        ValidatedAuditorUIState(this)
+    }
     
     /**
      * UI State Types matching visual design

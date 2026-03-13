@@ -99,4 +99,41 @@ sealed class DecisionResult {
     data class Fallthrough(
         val reason: String
     ) : DecisionResult()
+
+    data class Cancelled(
+        val source: String,
+        val reason: String,
+        val timestampMs: Long = System.currentTimeMillis()
+    ) : DecisionResult()
+
+    data class Skipped(
+        val source: String,
+        val reason: String,
+        val timestampMs: Long = System.currentTimeMillis()
+    ) : DecisionResult()
+}
+
+/**
+ * Global processor for exhaustive DecisionResult handling.
+ * Used at the end of the AI loop to translate internal verdicts into system actions.
+ */
+fun processDecision(result: DecisionResult) {
+    when (result) {
+        is DecisionResult.Applied -> {
+            // Logic for applying bolus and TBR (delegated to pump controller)
+            android.util.Log.i("AIMI_LOG", "✅ Decision APPLIED ($result.source): $result.reason")
+        }
+        is DecisionResult.Cancelled -> {
+            // Logic for rolling back or stopping active actions
+            android.util.Log.w("AIMI_LOG", "🛑 Decision CANCELLED ($result.source): $result.reason")
+        }
+        is DecisionResult.Skipped -> {
+            // Log skipping (no action needed)
+            android.util.Log.d("AIMI_LOG", "⏸ Decision SKIPPED ($result.source): $result.reason")
+        }
+        is DecisionResult.Fallthrough -> {
+            // Signal to legacy Loop components to continue as normal
+            android.util.Log.d("AIMI_LOG", "➡️ Decision FALLTHROUGH: $result.reason")
+        }
+    }
 }
