@@ -17,69 +17,93 @@ object ContextIntentDeserializer {
             val type = obj.getString("type")
             
             when (type) {
-                "Activity" -> Activity(
-                    startTimeMs = obj.getLong("start"),
-                    durationMs = obj.getLong("dur"),
-                    intensity = Intensity.valueOf(obj.getString("int")),
-                    confidence = obj.getDouble("conf").toFloat(),
-                    activityType = Activity.ActivityType.valueOf(obj.getString("act"))
-                )
+                "Activity" -> {
+                    val start = obj.optLong("start", 0L)
+                    Activity(
+                        startTimeMs = if (start > 0) start else System.currentTimeMillis(),
+                        durationMs = obj.getLong("dur"),
+                        intensity = Intensity.valueOf(obj.getString("int")),
+                        confidence = obj.getDouble("conf").toFloat(),
+                        activityType = Activity.ActivityType.valueOf(obj.getString("act"))
+                    )
+                }
                 
-                "Stress" -> Stress(
-                    startTimeMs = obj.getLong("start"),
-                    durationMs = obj.getLong("dur"),
-                    intensity = Intensity.valueOf(obj.getString("int")),
-                    confidence = obj.getDouble("conf").toFloat(),
-                    stressType = Stress.StressType.valueOf(obj.getString("stress"))
-                )
+                "Stress" -> {
+                    val start = obj.optLong("start", 0L)
+                    Stress(
+                        startTimeMs = if (start > 0) start else System.currentTimeMillis(),
+                        durationMs = obj.getLong("dur"),
+                        intensity = Intensity.valueOf(obj.getString("int")),
+                        confidence = obj.getDouble("conf").toFloat(),
+                        stressType = Stress.StressType.valueOf(obj.getString("stress"))
+                    )
+                }
                 
-                "Illness" -> Illness(
-                    startTimeMs = obj.getLong("start"),
-                    durationMs = obj.getLong("dur"),
-                    intensity = Intensity.valueOf(obj.getString("int")),
-                    confidence = obj.getDouble("conf").toFloat(),
-                    symptomType = Illness.SymptomType.valueOf(obj.getString("symptom"))
-                )
+                "Illness" -> {
+                    val start = obj.optLong("start", 0L)
+                    Illness(
+                        startTimeMs = if (start > 0) start else System.currentTimeMillis(),
+                        durationMs = obj.getLong("dur"),
+                        intensity = Intensity.valueOf(obj.getString("int")),
+                        confidence = obj.getDouble("conf").toFloat(),
+                        symptomType = Illness.SymptomType.valueOf(obj.getString("symptom"))
+                    )
+                }
                 
-                "UnannouncedMeal" -> UnannouncedMealRisk(
-                    startTimeMs = obj.getLong("start"),
-                    durationMs = obj.getLong("dur"),
-                    intensity = Intensity.MEDIUM,
-                    confidence = obj.getDouble("conf").toFloat()
-                )
+                "UnannouncedMeal", "UnannouncedMealRisk" -> {
+                    val start = obj.optLong("start", 0L)
+                    UnannouncedMealRisk(
+                        startTimeMs = if (start > 0) start else System.currentTimeMillis(),
+                        durationMs = obj.getLong("dur"),
+                        intensity = Intensity.MEDIUM,
+                        confidence = obj.getDouble("conf").toFloat()
+                    )
+                }
                 
-                "Alcohol" -> Alcohol(
-                    startTimeMs = obj.getLong("start"),
-                    durationMs = obj.getLong("dur"),
-                    intensity = Intensity.MEDIUM,
-                    confidence = obj.getDouble("conf").toFloat(),
-                    units = obj.getDouble("units").toFloat()
-                )
+                "Alcohol" -> {
+                    val start = obj.optLong("start", 0L)
+                    Alcohol(
+                        startTimeMs = if (start > 0) start else System.currentTimeMillis(),
+                        durationMs = obj.getLong("dur"),
+                        intensity = Intensity.MEDIUM,
+                        confidence = obj.getDouble("conf").toFloat(),
+                        units = obj.getDouble("units").toFloat()
+                    )
+                }
                 
-                "Travel" -> Travel(
-                    startTimeMs = obj.getLong("start"),
-                    durationMs = obj.getLong("dur"),
-                    intensity = Intensity.MEDIUM,
-                    confidence = obj.getDouble("conf").toFloat(),
-                    timezoneShiftHours = obj.getInt("tz")
-                )
+                "Travel" -> {
+                    val start = obj.optLong("start", 0L)
+                    Travel(
+                        startTimeMs = if (start > 0) start else System.currentTimeMillis(),
+                        durationMs = obj.getLong("dur"),
+                        intensity = Intensity.MEDIUM,
+                        confidence = obj.getDouble("conf").toFloat(),
+                        timezoneShiftHours = obj.getInt("tz")
+                    )
+                }
                 
-                "MenstrualCycle" -> MenstrualCycle(
-                    startTimeMs = obj.getLong("start"),
-                    durationMs = obj.getLong("dur"),
-                    intensity = Intensity.valueOf(obj.getString("int")),
-                    confidence = obj.getDouble("conf").toFloat(),
-                    phase = MenstrualCycle.CyclePhase.valueOf(obj.getString("phase"))
-                )
+                "MenstrualCycle" -> {
+                    val start = obj.optLong("start", 0L)
+                    MenstrualCycle(
+                        startTimeMs = if (start > 0) start else System.currentTimeMillis(),
+                        durationMs = obj.getLong("dur"),
+                        intensity = Intensity.valueOf(obj.getString("int")),
+                        confidence = obj.getDouble("conf").toFloat(),
+                        phase = MenstrualCycle.CyclePhase.valueOf(obj.getString("phase"))
+                    )
+                }
                 
-                "Custom" -> Custom(
-                    startTimeMs = obj.getLong("start"),
-                    durationMs = obj.getLong("dur"),
-                    intensity = Intensity.valueOf(obj.getString("int")),
-                    confidence = obj.getDouble("conf").toFloat(),
-                    description = obj.getString("desc"),
-                    suggestedStrategy = obj.optString("strat", "")
-                )
+                "Custom" -> {
+                    val start = obj.optLong("start", 0L)
+                    Custom(
+                        startTimeMs = if (start > 0) start else System.currentTimeMillis(),
+                        durationMs = obj.getLong("dur"),
+                        intensity = Intensity.valueOf(obj.getString("int")),
+                        confidence = obj.getDouble("conf").toFloat(),
+                        description = obj.getString("desc"),
+                        suggestedStrategy = obj.optString("strat", "")
+                    )
+                }
                 
                 else -> {
                     aapsLogger.warn(LTag.APS, "[ContextDeserializer] Unknown type: $type")
