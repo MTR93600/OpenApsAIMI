@@ -4348,9 +4348,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         currentTime: Long, bg: Double, delta: Double, bgacc: Double, iobActivityNow: Double,
         iob: Float, insulinActionState: app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionState,
         lastBolusAgeMinutes: Double, cob: Float, targetBg: Double, profile: OapsProfileAimi,
-        rT: RT, uiInteraction: UiInteraction
+        rT: RT, uiInteraction: UiInteraction,
+        relevanceScore: Double = 0.0 // 🌀 Relevance from Cosine Gate
     ) {
         val trajectoryFlagEnabled = preferences.get(BooleanKey.OApsAIMITrajectoryGuardEnabled)
+        
+        // 🌀 Cosine Relevance Filter (Primary Gate)
+        // If the relevance score is low (<= 0.5), it means current physiological signals
+        // (Stress, Activity, etc.) do not align with known trajectory patterns.
+        // We skip processing to avoid "noise-driven" trajectory adjustments.
+        if (trajectoryFlagEnabled && relevanceScore <= 0.5) {
+            consoleLog.add("🌀 Trajectory: ⏸ Filtered (Relevance ${"%.2f".format(relevanceScore)} <= 0.5)")
+            rT.trajectoryEnabled = false
+            return
+        }
+
         if (trajectoryFlagEnabled) {
             try {
                 val trajectoryHistory = trajectoryHistoryProvider.buildHistory(
@@ -5203,7 +5215,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             targetBg = targetBg.toDouble(),
             profile = profile,
             rT = rT,
-            uiInteraction = uiInteraction
+            uiInteraction = uiInteraction,
+            relevanceScore = physioMultipliers.trajectoryRelevanceScore
         )
 
         // ═══════════════════════════════════════════════════════════════════

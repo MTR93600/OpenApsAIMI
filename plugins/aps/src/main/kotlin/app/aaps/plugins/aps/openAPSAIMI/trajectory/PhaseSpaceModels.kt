@@ -209,6 +209,7 @@ data class TrajectoryModulation(
     val intervalStretch: Double,    // Multiply interval by this (1.0-2.0)
     val basalPreference: Double,    // 0=prefer SMB, 1=prefer temp basal
     val safetyMarginExpand: Double, // Multiply safety margins (0.9-1.3)
+    val relevanceScore: Double,     // 🌀 Cosine Similarity relevance (0.0 - 1.0)
     val reason: String              // Human-readable explanation
 ) {
     companion object {
@@ -220,6 +221,7 @@ data class TrajectoryModulation(
             intervalStretch = 1.0,
             basalPreference = 0.5,
             safetyMarginExpand = 1.0,
+            relevanceScore = 0.0,
             reason = "No trajectory modulation applied"
         )
     }

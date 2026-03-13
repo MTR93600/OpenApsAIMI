@@ -422,6 +422,7 @@ data class PhysioMultipliersMTR(
     val smbFactor: Double = 1.0,      // SMB multiplier (0.90 - 1.10)
     val reactivityFactor: Double = 1.0, // Reactivity modulation (0.90 - 1.10)
     val peakShiftMinutes: Int = 0,    // 🌀 Phase Shift (Cosine Gate)
+    val trajectoryRelevanceScore: Double = 0.0, // 🌀 Relevance Score (0.0 - 1.0)
     val confidence: Double = 0.0,     // Confidence in these multipliers
     val appliedCaps: String = "",     // Description of applied limits
     val source: String = "Deterministic", // "Deterministic" or "LLM-Assisted"
