@@ -9,6 +9,8 @@ import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.*
+import app.aaps.core.data.ue.Action
+import app.aaps.core.data.ue.Sources
 import io.reactivex.rxjava3.kotlin.plusAssign
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import javax.inject.Inject
@@ -195,6 +197,16 @@ class ContextManager @Inject constructor(
         if (removed != null) {
             aapsLogger.info(LTag.APS, "[ContextManager] Removed intent $id")
             saveToStorage()
+            
+            // Invalidate sync record in local DB and Nightscout
+            val disposable = CompositeDisposable()
+            disposable += persistenceLayer.invalidateTherapyEventsWithNote("AIMI_CONTEXT:$id", Action.TREATMENT, Sources.Aaps)
+                .subscribeOn(aapsSchedulers.io)
+                .subscribe(
+                    { aapsLogger.debug(LTag.APS, "[ContextManager] Synced invalidation for $id") },
+                    { e -> aapsLogger.error(LTag.APS, "[ContextManager] Failed to invalidate sync record for $id: ${e.message}") }
+                )
+            
             return true
         }
         aapsLogger.warn(LTag.APS, "[ContextManager] Intent $id not found")
@@ -229,6 +241,15 @@ class ContextManager @Inject constructor(
         activeIntents.clear()
         aapsLogger.info(LTag.APS, "[ContextManager] Cleared all intents (removed $count)")
         saveToStorage()
+        
+        // Invalidate ALL AIMI context sync records
+        val disposable = CompositeDisposable()
+        disposable += persistenceLayer.invalidateTherapyEventsWithNote("AIMI_CONTEXT:", Action.TREATMENT, Sources.Aaps)
+            .subscribeOn(aapsSchedulers.io)
+            .subscribe(
+                { aapsLogger.debug(LTag.APS, "[ContextManager] Synced invalidation for all contexts") },
+                { e -> aapsLogger.error(LTag.APS, "[ContextManager] Failed to invalidate all sync records: ${e.message}") }
+            )
     }
     
     /**
