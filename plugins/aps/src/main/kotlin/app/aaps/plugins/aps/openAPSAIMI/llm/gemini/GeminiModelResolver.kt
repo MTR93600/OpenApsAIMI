@@ -34,7 +34,7 @@ class GeminiModelResolver @Inject constructor(
 
         // Fallback fallback priority list
         private val FALLBACK_PRIORITY = listOf(
-            "gemini-3-flash",
+            "gemini-3-flash-preview",
             "gemini-3-pro",
             "gemini-2.0-flash",
             "gemini-1.5-flash-latest",
@@ -76,7 +76,7 @@ class GeminiModelResolver @Inject constructor(
 
         // 3. Last resort - Find anything that looks like "gemini" and "pro" or "flash"
         val fallback = availableModels.firstOrNull { it.contains("gemini") && (it.contains("pro") || it.contains("flash")) }
-            ?: "gemini-3-flash" // Hard fallback if everything fails (network down + no cache)
+            ?: "gemini-3-flash-preview" // Hard fallback if everything fails (network down + no cache)
 
         Log.w(TAG, "Using last resort fallback: $fallback")
         return fallback

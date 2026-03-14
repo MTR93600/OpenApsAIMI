@@ -74,7 +74,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
             // 2. Fallback on Quota Exceeded (429)
             val msg = e.message?.lowercase() ?: ""
             if (msg.contains("429") || msg.contains("quota") || msg.contains("resource_exhausted")) {
-                val fallbackModel = "gemini-3-flash"
+                val fallbackModel = "gemini-3-flash-preview"
                 android.util.Log.w(TAG, "Physio Quota Exceeded. Fallback to $fallbackModel")
                 return executeGeminiRequest(apiKey, prompt, fallbackModel)
             }

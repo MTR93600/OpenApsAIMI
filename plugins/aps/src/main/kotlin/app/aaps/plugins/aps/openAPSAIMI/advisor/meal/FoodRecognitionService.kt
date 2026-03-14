@@ -57,26 +57,18 @@ class FoodRecognitionService(
         val apiKey = getApiKey(provider.providerId)
         
         if (apiKey.isBlank()) {
-            return@withContext EstimationResult(
-                description = "API Key Missing",
-                carbsGrams = 0.0,
-                proteinGrams = 0.0,
-                fatGrams = 0.0,
-                fpuEquivalent = 0.0,
-                reasoning = "Please configure ${provider.displayName} API key in AIMI Preferences → Meal Advisor."
+            return@withContext FoodAnalysisPrompt.emptyErrorResult(
+                "API Key Missing",
+                "Please configure ${provider.displayName} API key in AIMI Preferences → Meal Advisor."
             )
         }
         
         try {
             return@withContext provider.estimateFromImage(bitmap, userDescription, apiKey)
         } catch (e: Exception) {
-            return@withContext EstimationResult(
-                description = "Error",
-                carbsGrams = 0.0,
-                proteinGrams = 0.0,
-                fatGrams = 0.0,
-                fpuEquivalent = 0.0,
-                reasoning = "${provider.displayName} Error: ${e.message}"
+            return@withContext FoodAnalysisPrompt.emptyErrorResult(
+                "Error",
+                "${provider.displayName} Error: ${e.message}"
             )
         }
     }

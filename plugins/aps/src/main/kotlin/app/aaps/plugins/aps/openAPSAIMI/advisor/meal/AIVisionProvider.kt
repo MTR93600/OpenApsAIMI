@@ -2,165 +2,200 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.meal
 
 import android.graphics.Bitmap
 import org.json.JSONObject
+import org.json.JSONArray
+import kotlin.math.round
 
 /**
  * Common interface for AI vision providers
- * All providers must implement this to estimate food macros from image
  */
 interface AIVisionProvider {
-    /**
-     * Estimate food macros from image bitmap
-     * @param bitmap The food image
-     * @param userDescription Optional text description from user
-     * @param apiKey The API key for this provider
-     * @return EstimationResult with food data
-     * @throws Exception on API errors
-     */
     suspend fun estimateFromImage(bitmap: Bitmap, userDescription: String, apiKey: String): EstimationResult
-    
-    /**
-     * Provider display name (e.g., "OpenAI GPT-4o")
-     */
     val displayName: String
-    
-    /**
-     * Provider identifier (e.g., "OPENAI")
-     */
     val providerId: String
 }
 
 /**
- * Common estimation result across all providers
+ * Refined Nutrition Models for V2
  */
-/**
- * Common estimation result across all providers
- */
+data class VisibleFoodItem(val name: String, val amountInfo: String)
+
+data class MacroRange(val estimate: Double, val min: Double, val max: Double)
+
 data class EstimationResult(
     val description: String,
-    val carbsGrams: Double,      // Best estimate
-    val carbsMin: Double = 0.0,
-    val carbsMax: Double = 0.0,
-    val proteinGrams: Double,
-    val fatGrams: Double,
-    val fpuEquivalent: Double,   // Calculated in Kotlin
-    val glycemicIndex: String = "MEDIUM", // LOW, MEDIUM, HIGH
-    val absorptionSpeed: String = "MIXED", // FAST, MIXED, SLOW
-    val confidence: String = "MEDIUM",     // LOW, MEDIUM, HIGH
-    val reasoning: String
+    val visibleItems: List<VisibleFoodItem>,
+    val uncertainItems: List<String>,
+    val carbs: MacroRange,
+    val protein: MacroRange,
+    val fat: MacroRange,
+    val fpuEquivalent: Double,
+    val glycemicIndex: String,
+    val absorptionSpeed: String,
+    val confidence: String,
+    val portionConfidence: String,
+    val hiddenCarbRisk: String,
+    val needsManualConfirmation: Boolean,
+    val insulinRelevantNotes: List<String>,
+    val reasoning: String,
+    val recommendedCarbsForDose: Double,
+    val recommendedCarbsReason: String
 )
 
 object FoodAnalysisPrompt {
     const val SYSTEM_PROMPT = """
-You are **Diaby**, AIMI's Advanced Vision Nutritionist and diabetic carb-counting expert.
-Your goal is to provide **precise, safety-focused** macronutrient estimation from food images to guide insulin dosing.
+You are a Clinical Nutritionist and Diabetic Carb-Counting expert.
+Analyze the meal image and return STRICT JSON ONLY.
 
-## IDENTITY & METHODOLOGY
-- **Persona**: Clinical, precise, and safety-conscious.
-- **Method**: 
-  1. **Identify**: Detect all visible food items.
-  2. **Volumetrics**: Estimate volume based on visual cues (plate size, cutlery reference, depth).
-  3. **Density**: Convert volume to mass (g) using food density knowledge.
-  4. **Macros**: Calculate Carbs, Protein, Fat using standard nutritional databases.
-  5. **Glycemic Impact**: Assess GI and absorption speed (fiber/fat content).
+## NUTRITION PROTOCOL
+1. Identify visible items and volume cues.
+2. Estimate mass (g) for Carbs, Protein, and Fat.
+3. Assess Glycemic Impact and confidence levels.
+4. If uncertain about volume or ingredients, lean conservative on 'estimate'.
+5. Protein/Fat: Do NOT hallucinate hidden oils; be realistic/conservative.
 
-## CRITICAL RULES
-1. **Safety First (Hypoglycemia Prevention)**: Your priority is avoiding dangerous insulin overdoes.
-   - If uncertain about volume or ingredients, your `estimate` MUST lean towards the **LOWER** end of the likely range.
-   - Use the `max` field to capture the uncertainty, but keep the primary `estimate` conservative.
-2. **Hidden Sugars**: Flag sauces/glazes in `rationale` but do not agressively pad the carb count unless visible evidence exists.
-3. **Chain of Thought**: You MUST reason step-by-step in the `rationale` field before finalizing numbers.
-   - *Example:* "Burger bun appears to be brioche (higher fat/sugar). Patty size approx 150g raw weight..."
-4. **JSON Only**: Output strict JSON. No markdown fencing if possible, no preamble.
-
-## OUTPUT JSON SCHEMA (Strict)
+## JSON SCHEMA
 {
-  "food_name": "Short descriptive title (e.g. 'Grilled Salmon with Quinoa')",
+  "food_name": "string",
+  "visible_items": [{"name": "string", "amount": "string"}],
+  "uncertain_items": ["string"],
   "carbs_g": { "estimate": number, "min": number, "max": number },
   "protein_g": { "estimate": number, "min": number, "max": number },
   "fat_g": { "estimate": number, "min": number, "max": number },
   "absorption_speed": "FAST" | "MIXED" | "SLOW",
   "glycemic_index": "LOW" | "MEDIUM" | "HIGH",
   "confidence": "LOW" | "MEDIUM" | "HIGH",
-  "rationale": "STEP-BY-STEP REASONING: 1. Item identification... 2. Volumetric estimation... 3. Macro calculation..."
+  "portion_confidence": "LOW" | "MEDIUM" | "HIGH",
+  "hidden_carb_risk": "LOW" | "MEDIUM" | "HIGH",
+  "needs_manual_confirmation": boolean,
+  "insulin_relevant_notes": ["concise notes on glazes, hidden sugars, or high fiber"],
+  "rationale": "concise nutrition summary"
 }
 """
 
-    fun cleanJsonResponse(rawJson: String): String {
-        return rawJson
-            .replace("```json", "")
-            .replace("```", "")
+    fun cleanJsonResponse(raw: String): String {
+        return raw.trim()
+            .removePrefix("```json").removePrefix("```")
+            .removeSuffix("```")
             .trim()
-            .let { cleaned ->
-                if (!cleaned.startsWith("{")) {
-                     val start = cleaned.indexOf('{')
-                     val end = cleaned.lastIndexOf('}')
-                     if (start >= 0 && end > start) cleaned.substring(start, end + 1) else cleaned
-                } else cleaned
-            }
+            .let { if (!it.startsWith("{")) it.substringAfter("{").let { s -> "{$s" }.substringBeforeLast("}").let { s -> "$s}" } else it }
     }
 
-    // --- Robust Parsing Helpers ---
-    
-    // Explicit FPU Calculation (Warsaw Method)
-    private fun computeFpu(fatG: Double, proteinG: Double): Double {
-        return (fatG * 9.0 + proteinG * 4.0) / 10.0
-    }
-    
-    // Clamp to valid physiological ranges (0 to 500g)
-    private fun clampMacro(x: Double): Double = when {
-        x.isNaN() || x.isInfinite() -> 0.0
-        x < 0.0 -> 0.0
-        x > 500.0 -> 500.0 // sanity check
-        else -> x
-    }
+    private fun roundToHalf(value: Double): Double = round(value * 2.0) / 2.0
 
-    // Flexible extraction (handles "45" string or 45 number)
-    private fun JSONObject.optDoubleFlexible(key: String, default: Double = 0.0): Double {
-        val v = opt(key)
-        return when (v) {
-            is Number -> v.toDouble()
-            is String -> v.toDoubleOrNull() ?: default
-            else -> default
-        }
-    }
+    private fun clamp(v: Double): Double = v.coerceIn(0.0, 500.0)
 
-    // Extract {estimate, min, max} object or fallback to simple number
-    private fun JSONObject.optRange(key: String): Triple<Double, Double, Double> {
+    private fun normalizeLevel(input: String?): String = input?.uppercase()?.let { 
+        if (it in listOf("LOW", "MEDIUM", "HIGH")) it else "MEDIUM" 
+    } ?: "MEDIUM"
+
+    private fun normalizeSpeed(input: String?): String = input?.uppercase()?.let { 
+        if (it in listOf("FAST", "MIXED", "SLOW")) it else "MIXED" 
+    } ?: "MIXED"
+
+    private fun JSONObject.optMacroRange(key: String): MacroRange {
         val obj = optJSONObject(key)
-        if (obj != null) {
-            val est = clampMacro(obj.optDoubleFlexible("estimate", 0.0))
-            val min = clampMacro(obj.optDoubleFlexible("min", est))
-            val max = clampMacro(obj.optDoubleFlexible("max", est))
-            return Triple(est, min.coerceAtMost(est), max.coerceAtLeast(est))
+        return if (obj != null) {
+            val est = clamp(obj.optDouble("estimate", 0.0))
+            val min = clamp(obj.optDouble("min", est))
+            val max = clamp(obj.optDouble("max", est))
+            MacroRange(est, min.coerceAtMost(est), max.coerceAtLeast(est))
+        } else {
+            val v = clamp(optDouble(key.removeSuffix("_g"), 0.0))
+            MacroRange(v, v, v)
         }
-        // Fallback: simple number
-        val est = clampMacro(optDoubleFlexible(key.removeSuffix("_g"), 0.0))
-        return Triple(est, est, est)
     }
 
-    fun parseJsonToResult(cleanedJson: String): EstimationResult {
-        val root = JSONObject(cleanedJson)
+    private fun JSONArray?.toStringList(): List<String> {
+        if (this == null) return emptyList()
+        val list = mutableListOf<String>()
+        for (i in 0 until length()) list.add(optString(i))
+        return list.filter { it.isNotBlank() }
+    }
+
+    private fun computeFpu(fat: Double, protein: Double): Double {
+        return roundToHalf((fat * 9.0 + protein * 4.0) / 10.0)
+    }
+
+    private fun computeRecommendedCarbs(carbs: MacroRange, confidence: String, hiddenRisk: String, manualConf: Boolean): Pair<Double, String> {
+        val conf = confidence.uppercase()
+        val risk = hiddenRisk.uppercase()
         
-        // Extract Macros with Ranges
-        val (carbsEst, carbsMin, carbsMax) = root.optRange("carbs_g")
-        val (protEst, _, _) = root.optRange("protein_g")
-        val (fatEst, _, _) = root.optRange("fat_g")
+        return when {
+            (conf == "LOW" && manualConf) || (conf == "LOW" && risk == "LOW") -> 
+                carbs.min to "Confidence LOW: using minimum to avoid over-bolusing."
+            conf == "LOW" && risk == "HIGH" -> 
+                carbs.estimate to "Confidence LOW but risk HIGH: using baseline estimate."
+            conf == "MEDIUM" && risk == "HIGH" -> 
+                roundToHalf((carbs.estimate + carbs.max) / 2.0) to "Medium confidence & High Risk: leaning towards max."
+            else -> 
+                carbs.estimate to "Stable estimate applied."
+        }
+    }
+
+    fun parseJsonToResult(json: String): EstimationResult {
+        val root = JSONObject(json)
         
-        // Independent Calculation of FPU
-        val fpuCalc = computeFpu(fatEst, protEst)
+        val carbs = root.optMacroRange("carbs_g")
+        val protein = root.optMacroRange("protein_g")
+        val fat = root.optMacroRange("fat_g")
+        
+        val confidence = normalizeLevel(root.optString("confidence"))
+        val risk = normalizeLevel(root.optString("hidden_carb_risk"))
+        val manualConf = root.optBoolean("needs_manual_confirmation", false)
+        
+        val fpu = computeFpu(fat.estimate, protein.estimate)
+        val (recCarbs, recReason) = computeRecommendedCarbs(carbs, confidence, risk, manualConf)
+
+        val visibleJson = root.optJSONArray("visible_items")
+        val visibleItems = mutableListOf<VisibleFoodItem>()
+        if (visibleJson != null) {
+            for (i in 0 until visibleJson.length()) {
+                val item = visibleJson.optJSONObject(i) ?: continue
+                visibleItems.add(VisibleFoodItem(item.optString("name"), item.optString("amount")))
+            }
+        }
 
         return EstimationResult(
-            description = root.optString("food_name", "Unknown food"),
-            carbsGrams = carbsEst,
-            carbsMin = carbsMin,
-            carbsMax = carbsMax,
-            proteinGrams = protEst,
-            fatGrams = fatEst,
-            fpuEquivalent = fpuCalc, // Source of Truth = Kotlin Calc
-            glycemicIndex = root.optString("glycemic_index", "MEDIUM"),
-            absorptionSpeed = root.optString("absorption_speed", "MIXED"),
-            confidence = root.optString("confidence", "MEDIUM"),
-            reasoning = root.optString("rationale", root.optString("reasoning", "No rationale"))
+            description = root.optString("food_name", "Unknown Food"),
+            visibleItems = visibleItems,
+            uncertainItems = root.optJSONArray("uncertain_items").toStringList(),
+            carbs = carbs,
+            protein = protein,
+            fat = fat,
+            fpuEquivalent = fpu,
+            glycemicIndex = normalizeLevel(root.optString("glycemic_index")),
+            absorptionSpeed = normalizeSpeed(root.optString("absorption_speed")),
+            confidence = confidence,
+            portionConfidence = normalizeLevel(root.optString("portion_confidence")),
+            hiddenCarbRisk = risk,
+            needsManualConfirmation = manualConf,
+            insulinRelevantNotes = root.optJSONArray("insulin_relevant_notes").toStringList(),
+            reasoning = root.optString("rationale", "No rationale provided."),
+            recommendedCarbsForDose = roundToHalf(recCarbs),
+            recommendedCarbsReason = recReason
+        )
+    }
+
+    fun emptyErrorResult(desc: String, reason: String): EstimationResult {
+        val zero = MacroRange(0.0, 0.0, 0.0)
+        return EstimationResult(
+            description = desc,
+            visibleItems = emptyList(),
+            uncertainItems = emptyList(),
+            carbs = zero,
+            protein = zero,
+            fat = zero,
+            fpuEquivalent = 0.0,
+            glycemicIndex = "MEDIUM",
+            absorptionSpeed = "MIXED",
+            confidence = "LOW",
+            portionConfidence = "LOW",
+            hiddenCarbRisk = "LOW",
+            needsManualConfirmation = true,
+            insulinRelevantNotes = emptyList(),
+            reasoning = reason,
+            recommendedCarbsForDose = 0.0,
+            recommendedCarbsReason = "Error recovery"
         )
     }
 }
