@@ -1,5 +1,5 @@
 YAML
-name: Jason's YAML
+name: JB-CI
 
 on:
   workflow_dispatch:
