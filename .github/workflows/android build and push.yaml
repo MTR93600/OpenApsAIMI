@@ -1,5 +1,5 @@
 YAML
-name: JB-CI
+name: JB CI
 
 on:
   workflow_dispatch:
