@@ -1386,163 +1386,175 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "AIMI_PKPD"
                     title = rh.gs(R.string.oaps_aimi_pkpd_section_title)
-                    addPreference(
-                        AdaptiveSwitchPreference(
-                            ctx = context,
-                            booleanKey = BooleanKey.OApsAIMIPkpdEnabled,
-                            summary = R.string.oaps_aimi_pkpd_enabled_summary,
-                            title = R.string.oaps_aimi_pkpd_enabled_title
+
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.aimi_category_pkpd_tuning)
+
+                        addPreference(
+                            AdaptiveSwitchPreference(
+                                ctx = context,
+                                booleanKey = BooleanKey.OApsAIMIPkpdEnabled,
+                                summary = R.string.oaps_aimi_pkpd_enabled_summary,
+                                title = R.string.oaps_aimi_pkpd_enabled_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMIPkpdInitialDiaH,
-                            dialogMessage = R.string.oaps_aimi_pkpd_initial_dia_summary,
-                            title = R.string.oaps_aimi_pkpd_initial_dia_title
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMIPkpdInitialDiaH,
+                                dialogMessage = R.string.oaps_aimi_pkpd_initial_dia_summary,
+                                title = R.string.oaps_aimi_pkpd_initial_dia_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMIPkpdInitialPeakMin,
-                            dialogMessage = R.string.oaps_aimi_pkpd_initial_peak_summary,
-                            title = R.string.oaps_aimi_pkpd_initial_peak_title
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMIPkpdInitialPeakMin,
+                                dialogMessage = R.string.oaps_aimi_pkpd_initial_peak_summary,
+                                title = R.string.oaps_aimi_pkpd_initial_peak_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMIPkpdBoundsDiaMinH,
-                            dialogMessage = R.string.oaps_aimi_pkpd_dia_min_summary,
-                            title = R.string.oaps_aimi_pkpd_dia_min_title
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMIPkpdBoundsDiaMinH,
+                                dialogMessage = R.string.oaps_aimi_pkpd_dia_min_summary,
+                                title = R.string.oaps_aimi_pkpd_dia_min_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMIPkpdBoundsDiaMaxH,
-                            dialogMessage = R.string.oaps_aimi_pkpd_dia_max_summary,
-                            title = R.string.oaps_aimi_pkpd_dia_max_title
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMIPkpdBoundsDiaMaxH,
+                                dialogMessage = R.string.oaps_aimi_pkpd_dia_max_summary,
+                                title = R.string.oaps_aimi_pkpd_dia_max_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMIPkpdBoundsPeakMinMin,
-                            dialogMessage = R.string.oaps_aimi_pkpd_peak_min_summary,
-                            title = R.string.oaps_aimi_pkpd_peak_min_title
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMIPkpdBoundsPeakMinMin,
+                                dialogMessage = R.string.oaps_aimi_pkpd_peak_min_summary,
+                                title = R.string.oaps_aimi_pkpd_peak_min_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMIPkpdBoundsPeakMinMax,
-                            dialogMessage = R.string.oaps_aimi_pkpd_peak_max_summary,
-                            title = R.string.oaps_aimi_pkpd_peak_max_title
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMIPkpdBoundsPeakMinMax,
+                                dialogMessage = R.string.oaps_aimi_pkpd_peak_max_summary,
+                                title = R.string.oaps_aimi_pkpd_peak_max_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH,
-                            dialogMessage = R.string.oaps_aimi_pkpd_max_dia_delta_summary,
-                            title = R.string.oaps_aimi_pkpd_max_dia_delta_title
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH,
+                                dialogMessage = R.string.oaps_aimi_pkpd_max_dia_delta_summary,
+                                title = R.string.oaps_aimi_pkpd_max_dia_delta_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin,
-                            dialogMessage = R.string.oaps_aimi_pkpd_max_peak_delta_summary,
-                            title = R.string.oaps_aimi_pkpd_max_peak_delta_title
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin,
+                                dialogMessage = R.string.oaps_aimi_pkpd_max_peak_delta_summary,
+                                title = R.string.oaps_aimi_pkpd_max_peak_delta_title
+                            )
                         )
-                    )
-                    val t3cBrittleMode = AdaptiveSwitchPreference(
-                        ctx = context,
-                        booleanKey = BooleanKey.OApsAIMIT3cBrittleMode,
-                        title = R.string.aimi_t3c_brittle_mode_title,
-                        summary = R.string.aimi_t3c_brittle_mode_summary
-                    )
-                    addPreference(t3cBrittleMode)
-                    
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMIT3cActivationThreshold,
-                            title = R.string.aimi_t3c_activation_threshold_title
-                        ).apply {
-                            setSummary(R.string.aimi_t3c_activation_threshold_summary)
-                            dependency = t3cBrittleMode.key
-                        }
-                    )
-                    
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMIT3cAggressiveness,
-                            title = R.string.aimi_t3c_aggressiveness_title
-                        ).apply {
-                            setSummary(R.string.aimi_t3c_aggressiveness_summary)
-                            dependency = t3cBrittleMode.key
-                        }
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMIIsfFusionMinFactor,
-                            dialogMessage = R.string.oaps_aimi_isf_fusion_min_summary,
-                            title = R.string.oaps_aimi_isf_fusion_min_title
+                    })
+
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.aimi_t3c_brittle_mode_title)
+
+                        addPreference(
+                            AdaptiveSwitchPreference(
+                                ctx = context,
+                                booleanKey = BooleanKey.OApsAIMIT3cBrittleMode,
+                                summary = R.string.aimi_t3c_brittle_mode_summary,
+                                title = R.string.aimi_t3c_brittle_mode_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMIIsfFusionMaxFactor,
-                            dialogMessage = R.string.oaps_aimi_isf_fusion_max_summary,
-                            title = R.string.oaps_aimi_isf_fusion_max_title
+
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMIT3cActivationThreshold,
+                                summary = R.string.aimi_t3c_activation_threshold_summary,
+                                title = R.string.aimi_t3c_activation_threshold_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMIIsfFusionMaxChangePerTick,
-                            dialogMessage = R.string.oaps_aimi_isf_fusion_slope_summary,
-                            title = R.string.oaps_aimi_isf_fusion_slope_title
+
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMIT3cAggressiveness,
+                                summary = R.string.aimi_t3c_aggressiveness_summary,
+                                title = R.string.aimi_t3c_aggressiveness_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMISmbTailThreshold,
-                            dialogMessage = R.string.oaps_aimi_smb_tail_threshold_summary,
-                            title = R.string.oaps_aimi_smb_tail_threshold_title
+                    })
+
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.aimi_category_isf_fusion_title)
+
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMIIsfFusionMinFactor,
+                                dialogMessage = R.string.oaps_aimi_isf_fusion_min_summary,
+                                title = R.string.oaps_aimi_isf_fusion_min_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMISmbTailDamping,
-                            dialogMessage = R.string.oaps_aimi_smb_tail_damping_summary,
-                            title = R.string.oaps_aimi_smb_tail_damping_title
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMIIsfFusionMaxFactor,
+                                dialogMessage = R.string.oaps_aimi_isf_fusion_max_summary,
+                                title = R.string.oaps_aimi_isf_fusion_max_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMISmbExerciseDamping,
-                            dialogMessage = R.string.oaps_aimi_smb_exercise_damping_summary,
-                            title = R.string.oaps_aimi_smb_exercise_damping_title
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMIIsfFusionMaxChangePerTick,
+                                dialogMessage = R.string.oaps_aimi_isf_fusion_slope_summary,
+                                title = R.string.oaps_aimi_isf_fusion_slope_title
+                            )
                         )
-                    )
-                    addPreference(
-                        AdaptiveDoublePreference(
-                            ctx = context,
-                            doubleKey = DoubleKey.OApsAIMISmbLateFatDamping,
-                            dialogMessage = R.string.oaps_aimi_smb_late_fat_damping_summary,
-                            title = R.string.oaps_aimi_smb_late_fat_damping_title
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMISmbTailThreshold,
+                                dialogMessage = R.string.oaps_aimi_smb_tail_threshold_summary,
+                                title = R.string.oaps_aimi_smb_tail_threshold_title
+                            )
                         )
-                    )
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMISmbTailDamping,
+                                dialogMessage = R.string.oaps_aimi_smb_tail_damping_summary,
+                                title = R.string.oaps_aimi_smb_tail_damping_title
+                            )
+                        )
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMISmbExerciseDamping,
+                                dialogMessage = R.string.oaps_aimi_smb_exercise_damping_summary,
+                                title = R.string.oaps_aimi_smb_exercise_damping_title
+                            )
+                        )
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.OApsAIMISmbLateFatDamping,
+                                dialogMessage = R.string.oaps_aimi_smb_late_fat_damping_summary,
+                                title = R.string.oaps_aimi_smb_late_fat_damping_title
+                            )
+                        )
+                    })
                 })
                 
                 // 🌀 Phase-Space Trajectory Control
