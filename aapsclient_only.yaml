@@ -1,0 +1,73 @@
+name: Build AAPS Client
+
+on:
+  workflow_dispatch:
+    inputs:
+      buildVariant:
+        description: 'Select Build Type'
+        required: true
+        default: 'Release'
+        type: choice
+        options: [Release, Debug]
+
+jobs:
+  build:
+    name: Build AAPS Client
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Decode Secrets and Keystore
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_SET }}" ]; then
+            DECODED=$(echo "${{ secrets.KEYSTORE_SET }}" | base64 -d)
+            echo "KEYSTORE_BASE64=$(echo "$DECODED" | cut -d'|' -f1)" >> $GITHUB_ENV
+            echo "KEYSTORE_PASSWORD=$(echo "$DECODED" | cut -d'|' -f2)" >> $GITHUB_ENV
+            echo "KEY_ALIAS=$(echo "$DECODED" | cut -d'|' -f3)" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=$(echo "$DECODED" | cut -d'|' -f4)" >> $GITHUB_ENV
+          fi
+          echo "GDRIVE_OAUTH2=${{ secrets.GDRIVE_OAUTH2 }}" >> $GITHUB_ENV
+
+      - name: Decode Keystore and GDrive Token
+        run: |
+          mkdir -p "$RUNNER_TEMP/keystore"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/keystore/keystore.jks"
+          DECODED_GD=$(echo "${{ secrets.GDRIVE_OAUTH2 }}" | base64 -d)
+          G_CLIENT_ID=$(echo "$DECODED_GD" | cut -d'|' -f1)
+          G_REFRESH_TOKEN=$(echo "$DECODED_GD" | cut -d'|' -f2)
+          TOKEN_RESPONSE=$(curl -s -X POST https://oauth2.googleapis.com/token -d client_id="$G_CLIENT_ID" -d refresh_token="$G_REFRESH_TOKEN" -d grant_type=refresh_token)
+          echo "ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r .access_token)" >> $GITHUB_ENV
+
+      - name: Build Client APK
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleAapsclient${{ github.event.inputs.buildVariant }} \
+            --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx5g" \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/keystore/keystore.jks" \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+
+      - name: Rename and Upload
+        run: |
+          mkdir -p out
+          VERSION=$(grep 'val appVersion' buildSrc/src/main/kotlin/Versions.kt | awk -F '"' '{print $2}')
+          TIMESTAMP=$(date +'%Y%m%d')
+          find . -name "*aapsclient*.apk" | while read -r file; do
+            NAME="Aapsclient-${VERSION}-${{ github.event.inputs.buildVariant }}_${TIMESTAMP}.apk"
+            cp "$file" "out/$NAME"
+          done
+          # Upload logic (Same as before)
+          AAPS_FOLDER_ID=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" "https://www.googleapis.com/drive/v3/files?q=name='AAPS'+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false" | jq -r '.files[0].id')
+          for f in out/*.apk; do
+            FN=$(basename "$f")
+            curl -s -X POST -H "Authorization: Bearer $ACCESS_TOKEN" -F "metadata={ \"name\": \"$FN\", \"parents\": [\"$AAPS_FOLDER_ID\"] };type=application/json" -F "file=@$f" "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
+          done
