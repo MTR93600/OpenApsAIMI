@@ -220,15 +220,29 @@ class DynamicBasalController @Inject constructor(
             isf: Double,
             duraISFminutes: Double,
             duraISFaverage: Double,
-            eventualBg: Double?
+            eventualBg: Double?,
+            activationThreshold: Double = 130.0,
+            aggressiveness: Double = 1.0
         ): Double {
             val effectiveIsf = isf.coerceAtLeast(10.0)
             val velocity = delta * 0.7f + shortAvgDelta.toFloat() * 0.3f
+
+            // 🧠 ML Brain Integration
+            val learningFactor = app.aaps.plugins.aps.openAPSAIMI.learning.T3cNeuralLearner.getAdjustmentFactor(bg, delta.toDouble(), accel, iob)
 
             // ── Safety Guard 1: Adaptive Immediate Zero Basal ──────────────
             // [Improvement 1]: Thresholds are now relative to targetBg
             val floor = (targetBg - 20.0).coerceAtLeast(70.0)
             val cushion = (targetBg - 5.0).coerceAtLeast(85.0)
+            
+            // T3C Specific Activator: Only correct if above threshold OR if rising very fast
+            if (bg < activationThreshold && velocity < 1.0f) {
+                // If we are below threshold and not rising fast, we just do target-based maintenance
+                if (bg < floor || (bg < cushion && delta < -1.0f) || (bg < targetBg && delta < -1.5f)) return 0.0
+                // Otherwise return base profile (maintenance)
+                return profileBasal.coerceAtMost(max(profileBasal, iob / effectiveIsf)) // Very simplified
+            }
+
             if (bg < floor || (bg < cushion && delta < -1.0f) || (bg < targetBg && delta < -1.5f)) return 0.0
 
             // ── Safety Guard 2: Resistance→Sensitivity transition ──────────
@@ -285,7 +299,7 @@ class DynamicBasalController @Inject constructor(
                 else -> 0.33
             }
             
-            val correctionRate = (requiredU / deliveryHorizonHours) * resistanceFactor * accelFactor
+            val correctionRate = (requiredU / deliveryHorizonHours) * resistanceFactor * accelFactor * aggressiveness * learningFactor
             
             // 7. Continuous Braking : Freinage linéaire basé sur la vitesse de chute
             val brakeFactor = (1.0 + velocity / 2.0).coerceIn(0.0, 1.0)

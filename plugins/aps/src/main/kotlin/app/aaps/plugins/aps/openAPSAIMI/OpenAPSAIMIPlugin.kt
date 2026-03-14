@@ -215,6 +215,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         try {
             val externalDir = java.io.File(android.os.Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
             app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer.loadModel(externalDir)
+            app.aaps.plugins.aps.openAPSAIMI.learning.T3cNeuralLearner.loadModel(externalDir)
             aapsLogger.info(LTag.APS, "✅ AimiSmbTrainer: model load requested (async)")
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "❌ AimiSmbTrainer: failed to request model load", e)
@@ -1457,13 +1458,34 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             title = R.string.oaps_aimi_pkpd_max_peak_delta_title
                         )
                     )
+                    val t3cBrittleMode = AdaptiveSwitchPreference(
+                        ctx = context,
+                        booleanKey = BooleanKey.OApsAIMIT3cBrittleMode,
+                        title = R.string.aimi_t3c_brittle_mode_title,
+                        summary = R.string.aimi_t3c_brittle_mode_summary
+                    )
+                    addPreference(t3cBrittleMode)
+                    
                     addPreference(
-                        AdaptiveSwitchPreference(
+                        AdaptiveDoublePreference(
                             ctx = context,
-                            booleanKey = BooleanKey.OApsAIMIT3cBrittleMode,
-                            title = R.string.aimi_t3c_brittle_mode_title,
-                            summary = R.string.aimi_t3c_brittle_mode_summary
-                        )
+                            doubleKey = DoubleKey.OApsAIMIT3cActivationThreshold,
+                            title = R.string.aimi_t3c_activation_threshold_title
+                        ).apply {
+                            setSummary(R.string.aimi_t3c_activation_threshold_summary)
+                            dependency = t3cBrittleMode.key
+                        }
+                    )
+                    
+                    addPreference(
+                        AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIT3cAggressiveness,
+                            title = R.string.aimi_t3c_aggressiveness_title
+                        ).apply {
+                            setSummary(R.string.aimi_t3c_aggressiveness_summary)
+                            dependency = t3cBrittleMode.key
+                        }
                     )
                     addPreference(
                         AdaptiveDoublePreference(

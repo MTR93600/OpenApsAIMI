@@ -5095,7 +5095,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 variableSensitivity = variableSensitivity.toDouble(),
                 maxIob = maxIob,
                 eventualBg = this.eventualBG.coerceAtLeast(40.0),
-                rT = rT
+                rT = rT,
+                activationThreshold = preferences.get(DoubleKey.OApsAIMIT3cActivationThreshold),
+                aggressiveness = preferences.get(DoubleKey.OApsAIMIT3cAggressiveness)
             )
         }
         val modesCondition = (!mealTime || mealruntime > 30) && (!lunchTime || lunchruntime > 30) && (!bfastTime || bfastruntime > 30) && (!dinnerTime || dinnerruntime > 30) && !sportTime && (!snackTime || snackrunTime > 30) && (!highCarbTime || highCarbrunTime > 30) && !sleepTime && !lowCarbTime
@@ -8188,7 +8190,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         variableSensitivity: Double,
         maxIob: Double,
         eventualBg: Double,
-        rT: RT
+        rT: RT,
+        activationThreshold: Double,
+        aggressiveness: Double
     ): RT {
         rT.reason = StringBuilder("")
         rT.deliverAt = System.currentTimeMillis()
@@ -8213,7 +8217,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             isf = variableSensitivity.coerceAtLeast(10.0),
             duraISFminutes = duraISFminutes,
             duraISFaverage = duraISFaverage,
-            eventualBg = if (eventualBg > 0) eventualBg else null
+            eventualBg = if (eventualBg > 0) eventualBg else null,
+            activationThreshold = activationThreshold,
+            aggressiveness = aggressiveness
         )
 
         // Safety cap applied from inside computeT3c, simply fallback to absolute upper bounds
