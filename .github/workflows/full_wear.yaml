@@ -1,10 +1,10 @@
-name: Build AAPS Full + Wear
+name: Build Full and Wear
 
 on:
   workflow_dispatch:
     inputs:
       buildVariant:
-        description: 'Build Type'
+        description: 'Select Build Type'
         required: true
         default: 'Release'
         type: choice
@@ -12,9 +12,10 @@ on:
 
 jobs:
   build:
+    name: Build Full and Wear
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout Source Code
         uses: actions/checkout@v4
 
       - name: Set up JDK 21
@@ -26,65 +27,67 @@ jobs:
 
       - name: Decode Secrets and Keystore
         run: |
-          DECODED=$(echo "${{ secrets.KEYSTORE_SET }}" | base64 -d)
-          echo "K_BASE64=$(echo "$DECODED" | cut -d'|' -f1)" >> $GITHUB_ENV
-          echo "K_PASS=$(echo "$DECODED" | cut -d'|' -f2)" >> $GITHUB_ENV
-          echo "K_ALIAS=$(echo "$DECODED" | cut -d'|' -f3)" >> $GITHUB_ENV
-          echo "K_ALIAS_PASS=$(echo "$DECODED" | cut -d'|' -f4)" >> $GITHUB_ENV
+          if [ -n "${{ secrets.KEYSTORE_SET }}" ]; then
+            DECODED=$(echo "${{ secrets.KEYSTORE_SET }}" | base64 -d)
+            echo "KEYSTORE_BASE64=$(echo "$DECODED" | cut -d'|' -f1)" >> $GITHUB_ENV
+            echo "KEYSTORE_PASSWORD=$(echo "$DECODED" | cut -d'|' -f2)" >> $GITHUB_ENV
+            echo "KEY_ALIAS=$(echo "$DECODED" | cut -d'|' -f3)" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=$(echo "$DECODED" | cut -d'|' -f4)" >> $GITHUB_ENV
+          fi
           echo "GDRIVE_OAUTH2=${{ secrets.GDRIVE_OAUTH2 }}" >> $GITHUB_ENV
 
-      - name: Decode Keystore File
+      - name: Decode Keystore and GDrive Token
         run: |
           mkdir -p "$RUNNER_TEMP/keystore"
-          echo "$K_BASE64" | base64 -d > "$RUNNER_TEMP/keystore/keystore.jks"
-
-      - name: Decode GDrive OAuth2 and Get Token
-        run: |
-          DECODED_GD=$(echo "${{ env.GDRIVE_OAUTH2 }}" | base64 -d)
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/keystore/keystore.jks"
+          DECODED_GD=$(echo "${{ secrets.GDRIVE_OAUTH2 }}" | base64 -d)
           G_CLIENT_ID=$(echo "$DECODED_GD" | cut -d'|' -f1)
           G_REFRESH_TOKEN=$(echo "$DECODED_GD" | cut -d'|' -f2)
           TOKEN_RESPONSE=$(curl -s -X POST https://oauth2.googleapis.com/token -d client_id="$G_CLIENT_ID" -d refresh_token="$G_REFRESH_TOKEN" -d grant_type=refresh_token)
-          echo "ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r .access_token)" >> $GITHUB_ENV
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r .access_token)
+          echo "::add-mask::$ACCESS_TOKEN"
+          echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
 
-      - name: Build Full & Wear
+      - name: Build Full App (Sequential)
+        # Building ONLY the app first to save RAM
         run: |
           chmod +x gradlew
           ./gradlew :app:assembleFull${{ github.event.inputs.buildVariant }} \
-                    :wear:assembleFull${{ github.event.inputs.buildVariant }} \
-            --no-daemon -Dorg.gradle.jvmargs="-Xmx5g" \
+            --no-daemon --max-workers=1 -Dorg.gradle.jvmargs="-Xmx4g" \
             -Pandroid.injected.signing.store.file="$RUNNER_TEMP/keystore/keystore.jks" \
-            -Pandroid.injected.signing.store.password="$K_PASS" \
-            -Pandroid.injected.signing.key.alias="$K_ALIAS" \
-            -Pandroid.injected.signing.key.password="$K_ALIAS_PASS"
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
 
-      - name: Rename APKs with Time
+      - name: Build Wear App (Sequential)
+        # Building ONLY the wear next
+        run: |
+          ./gradlew :wear:assembleFull${{ github.event.inputs.buildVariant }} \
+            --no-daemon --max-workers=1 -Dorg.gradle.jvmargs="-Xmx4g" \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/keystore/keystore.jks" \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+
+      - name: Organize APKs
         run: |
           mkdir -p out
           VERSION=$(grep 'val appVersion' buildSrc/src/main/kotlin/Versions.kt | awk -F '"' '{print $2}')
           [ -z "$VERSION" ] && VERSION="Unknown"
-          TIMESTAMP=$(date +'%Y%m%d_%H%M')
-          
-          # This find command is now "smart" - it grabs signed or unsigned files
-          find . -name "*.apk" -not -path "./out/*" | while read -r file; do
-            TYPE="Full"; [[ "$file" == *"wear"* ]] && TYPE="Wear"
-            SIG=""; [[ "$file" == *"unsigned"* ]] && SIG="-UNSIGNED"
-            NAME="${TYPE}-${VERSION}-${{ github.event.inputs.buildVariant }}${SIG}_${TIMESTAMP}.apk"
+          TIMESTAMP=$(date +'%Y%m%d')
+          find . -name "*.apk" | grep -v "out" | while read -r file; do
+            [[ "$file" == *"wear"* ]] && FLAVOR="Wear" || FLAVOR="Full"
+            NAME="${FLAVOR}-${VERSION}-${{ github.event.inputs.buildVariant }}_${TIMESTAMP}.apk"
             cp "$file" "out/$NAME"
-            echo "✅ Prepared: $NAME"
           done
 
       - name: Upload to Google Drive
         run: |
-          AAPS_FOLDER_ID=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" "https://www.googleapis.com/drive/v3/files?q=name='AAPS'+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false" | jq -r '.files[0].id')
-          if [ "$AAPS_FOLDER_ID" == "null" ] || [ -z "$AAPS_FOLDER_ID" ]; then
-            AAPS_FOLDER_ID=$(curl -s -X POST -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" -d '{"name": "AAPS", "mimeType": "application/vnd.google-apps.folder"}' "https://www.googleapis.com/drive/v3/files" | jq -r '.id')
-          fi
+          AAPS_FOLDER_ID="1gagz9B7PauzPm7xfixq9ZU2wLj-yDRvw"
           for file in out/*.apk; do
             FILENAME=$(basename "$file")
-            # Overwrite check for the exact same minute/name
-            EXISTING_ID=$(curl -s -G -H "Authorization: Bearer $ACCESS_TOKEN" "https://www.googleapis.com/drive/v3/files" --data-urlencode "q=name='$FILENAME' and '$AAPS_FOLDER_ID' in parents and trashed=false" | jq -r '.files[0].id')
-            if [ "$EXISTING_ID" != "null" ] && [ -n "$EXISTING_ID" ]; then
-              curl -s -X DELETE -H "Authorization: Bearer $ACCESS_TOKEN" "https://www.googleapis.com/drive/v3/files/$EXISTING_ID"
-            fi
-            curl -s -X POST -H "Authorization: Bearer $ACCESS_TOKEN" -F "metadata={ \"name\": \"$FILENAME\", \"parents\": [\"$AAPS_FOLDER_ID\"] };type=application/json;charset=UTF-8" -F "file=@$file;type=application/vnd.android.package-archive" "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
+            curl -s -X POST -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -F "metadata={ \"name\": \"$FILENAME\", \"parents\": [\"$AAPS_FOLDER_ID\"] };type=application/json;charset=UTF-8" \
+              -F "file=@$file;type=application/vnd.android.package-archive" \
+              "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
           done
