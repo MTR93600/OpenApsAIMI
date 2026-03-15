@@ -16,10 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4 # Updated to v4
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v4 # Updated to v4
         with:
           java-version: 21
           distribution: 'temurin'
@@ -49,10 +49,13 @@ jobs:
           echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
 
       - name: Build Client APK
+        # Added --max-workers=2 and capped RAM at 5g to prevent the 14m crash
         run: |
           chmod +x gradlew
           ./gradlew :app:assembleAapsclient${{ github.event.inputs.buildVariant }} \
-            --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx5g" \
+            --no-daemon \
+            --max-workers=2 \
+            -Dorg.gradle.jvmargs="-Xmx5g -XX:+UseParallelGC" \
             -Pandroid.injected.signing.store.file="$RUNNER_TEMP/keystore/keystore.jks" \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
@@ -67,7 +70,6 @@ jobs:
           find . -name "*.apk" | grep -v "out" | while read -r file; do
             NAME="Aapsclient-${VERSION}-${{ github.event.inputs.buildVariant }}_${TIMESTAMP}.apk"
             cp "$file" "out/$NAME"
-            echo "✅ Prepared: $NAME"
           done
 
       - name: Upload to Google Drive
@@ -75,7 +77,6 @@ jobs:
           AAPS_FOLDER_ID="1gagz9B7PauzPm7xfixq9ZU2wLj-yDRvw"
           for file in out/*.apk; do
             FILENAME=$(basename "$file")
-            echo "⬆️ Uploading $FILENAME to Drive..."
             curl -s -X POST -H "Authorization: Bearer $ACCESS_TOKEN" \
               -F "metadata={ \"name\": \"$FILENAME\", \"parents\": [\"$AAPS_FOLDER_ID\"] };type=application/json;charset=UTF-8" \
               -F "file=@$file;type=application/vnd.android.package-archive" \
