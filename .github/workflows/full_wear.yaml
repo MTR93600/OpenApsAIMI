@@ -1,23 +1,20 @@
-name: Build Full and Wear
+name: Build AAPS Full + Wear
 
 on:
   workflow_dispatch:
     inputs:
       buildVariant:
-        description: 'Select Build Type'
+        description: 'Build Type'
         required: true
         default: 'Release'
         type: choice
-        options:
-          - Release
-          - Debug
+        options: [Release, Debug]
 
 jobs:
   build:
-    name: Build Full and Wear
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Source Code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 21
@@ -27,76 +24,44 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Decode Secrets and Keystore
+      - name: Decode Secrets
         run: |
-          if [ -n "${{ secrets.KEYSTORE_SET }}" ]; then
-            DECODED=$(echo "${{ secrets.KEYSTORE_SET }}" | base64 -d)
-            echo "KEYSTORE_BASE64=$(echo "$DECODED" | cut -d'|' -f1)" >> $GITHUB_ENV
-            echo "KEYSTORE_PASSWORD=$(echo "$DECODED" | cut -d'|' -f2)" >> $GITHUB_ENV
-            echo "KEY_ALIAS=$(echo "$DECODED" | cut -d'|' -f3)" >> $GITHUB_ENV
-            echo "KEY_PASSWORD=$(echo "$DECODED" | cut -d'|' -f4)" >> $GITHUB_ENV
-          else
-            echo "KEYSTORE_BASE64=${{ secrets.KEYSTORE_BASE64 }}" >> $GITHUB_ENV
-            echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
-            echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
-            echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
-          fi
+          DECODED=$(echo "${{ secrets.KEYSTORE_SET }}" | base64 -d)
+          echo "KEY_BASE64=$(echo "$DECODED" | cut -d'|' -f1)" >> $GITHUB_ENV
+          echo "K_PASS=$(echo "$DECODED" | cut -d'|' -f2)" >> $GITHUB_ENV
+          echo "K_ALIAS=$(echo "$DECODED" | cut -d'|' -f3)" >> $GITHUB_ENV
+          echo "K_ALIAS_PASS=$(echo "$DECODED" | cut -d'|' -f4)" >> $GITHUB_ENV
           echo "GDRIVE_OAUTH2=${{ secrets.GDRIVE_OAUTH2 }}" >> $GITHUB_ENV
 
-      - name: Decode Keystore and GDrive Token
+      - name: Decode Keystore
         run: |
           mkdir -p "$RUNNER_TEMP/keystore"
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/keystore/keystore.jks"
-          DECODED_GD=$(echo "${{ secrets.GDRIVE_OAUTH2 }}" | base64 -d)
-          G_CLIENT_ID=$(echo "$DECODED_GD" | cut -d'|' -f1)
-          G_REFRESH_TOKEN=$(echo "$DECODED_GD" | cut -d'|' -f2)
-          TOKEN_RESPONSE=$(curl -s -X POST https://oauth2.googleapis.com/token -d client_id="$G_CLIENT_ID" -d refresh_token="$G_REFRESH_TOKEN" -d grant_type=refresh_token)
-          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r .access_token)
-          echo "::add-mask::$ACCESS_TOKEN"
-          echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
+          echo "$KEY_BASE64" | base64 -d > "$RUNNER_TEMP/keystore/keystore.jks"
 
-      - name: Build Full and Wear APKs
+      - name: Build Full & Wear
         run: |
           chmod +x gradlew
           ./gradlew :app:assembleFull${{ github.event.inputs.buildVariant }} \
                     :wear:assembleFull${{ github.event.inputs.buildVariant }} \
-            --no-daemon \
-            --max-workers=2 \
-            -Dorg.gradle.jvmargs="-Xmx5g -XX:+UseParallelGC" \
+            --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx5g" \
             -Pandroid.injected.signing.store.file="$RUNNER_TEMP/keystore/keystore.jks" \
-            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
-            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
-            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+            -Pandroid.injected.signing.store.password="$K_PASS" \
+            -Pandroid.injected.signing.key.alias="$K_ALIAS" \
+            -Pandroid.injected.signing.key.password="$K_ALIAS_PASS"
 
-      - name: Organize APKs
+      - name: Rename and Upload
+        # [Naming logic: Full-Version-Variant_Date.apk]
         run: |
           mkdir -p out
           VERSION=$(grep 'val appVersion' buildSrc/src/main/kotlin/Versions.kt | awk -F '"' '{print $2}')
-          [ -z "$VERSION" ] && VERSION="Unknown"
-          TIMESTAMP=$(date +'%Y%m%d')
-          GIT_HASH=$(git rev-parse --short HEAD)
-          
-          find . -name "*.apk" | grep -v "out" | while read -r file; do
-            if [[ "$file" == *"wear"* ]]; then FLAVOR="Wear";
-            else FLAVOR="Full"; fi
-            NAME="${FLAVOR}-${VERSION}-${{ github.event.inputs.buildVariant }}_${TIMESTAMP}_${GIT_HASH}.apk"
+          find . -name "*.apk" | while read -r file; do
+            TYPE="Full"; [[ "$file" == *"wear"* ]] && TYPE="Wear"
+            NAME="${TYPE}-${VERSION}-${{ github.event.inputs.buildVariant }}_$(date +'%Y%m%d').apk"
             cp "$file" "out/$NAME"
-            echo "✅ Prepared: $NAME"
           done
-
-      - name: Upload to Google Drive
-        run: |
-          AAPS_FOLDER_ID="1gagz9B7PauzPm7xfixq9ZU2wLj-yDRvw"
-          echo "📂 Uploading to Drive Folder: $AAPS_FOLDER_ID"
-          
-          for file in out/*.apk; do
-            FILENAME=$(basename "$file")
-            echo "⬆️ Uploading $FILENAME..."
-            
-            curl -s -X POST -H "Authorization: Bearer $ACCESS_TOKEN" \
-              -F "metadata={ \"name\": \"$FILENAME\", \"parents\": [\"$AAPS_FOLDER_ID\"] };type=application/json;charset=UTF-8" \
-              -F "file=@$file;type=application/vnd.android.package-archive" \
-              "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
-              
-            echo "✅ Finished uploading $FILENAME"
-          done
+      
+      - name: Archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: AAPS-Main-Build
+          path: out/*.apk
