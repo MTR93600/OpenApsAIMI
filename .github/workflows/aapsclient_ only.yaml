@@ -61,8 +61,8 @@ jobs:
           mkdir -p out
           VERSION=$(grep 'val appVersion' buildSrc/src/main/kotlin/Versions.kt | awk -F '"' '{print $2}')
           TIMESTAMP=$(date +'%Y%m%d_%H%M')
-          NAME="AAPSClient-${VERSION}-${{ github.event.inputs.buildVariant }}_${TIMESTAMP}.apk"
           find . -name "*.apk" -not -path "./out/*" | while read -r file; do
+            NAME="AAPSClient-${VERSION}-${{ github.event.inputs.buildVariant }}_${TIMESTAMP}.apk"
             cp "$file" "out/$NAME"
           done
 
