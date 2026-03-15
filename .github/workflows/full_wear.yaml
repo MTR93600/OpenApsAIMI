@@ -62,13 +62,15 @@ jobs:
           mkdir -p out
           VERSION=$(grep 'val appVersion' buildSrc/src/main/kotlin/Versions.kt | awk -F '"' '{print $2}')
           [ -z "$VERSION" ] && VERSION="Unknown"
-          # Format: YYYYMMDD_HHMM
           TIMESTAMP=$(date +'%Y%m%d_%H%M')
+          
+          # This find command is now "smart" - it grabs signed or unsigned files
           find . -name "*.apk" -not -path "./out/*" | while read -r file; do
             TYPE="Full"; [[ "$file" == *"wear"* ]] && TYPE="Wear"
-            NAME="${TYPE}-${VERSION}-${{ github.event.inputs.buildVariant }}_${TIMESTAMP}.apk"
+            SIG=""; [[ "$file" == *"unsigned"* ]] && SIG="-UNSIGNED"
+            NAME="${TYPE}-${VERSION}-${{ github.event.inputs.buildVariant }}${SIG}_${TIMESTAMP}.apk"
             cp "$file" "out/$NAME"
-            echo "✅ Created: $NAME"
+            echo "✅ Prepared: $NAME"
           done
 
       - name: Upload to Google Drive
@@ -79,11 +81,10 @@ jobs:
           fi
           for file in out/*.apk; do
             FILENAME=$(basename "$file")
-            # This logic stays to prevent Drive from creating duplicate named files if triggered at same minute
+            # Overwrite check for the exact same minute/name
             EXISTING_ID=$(curl -s -G -H "Authorization: Bearer $ACCESS_TOKEN" "https://www.googleapis.com/drive/v3/files" --data-urlencode "q=name='$FILENAME' and '$AAPS_FOLDER_ID' in parents and trashed=false" | jq -r '.files[0].id')
             if [ "$EXISTING_ID" != "null" ] && [ -n "$EXISTING_ID" ]; then
               curl -s -X DELETE -H "Authorization: Bearer $ACCESS_TOKEN" "https://www.googleapis.com/drive/v3/files/$EXISTING_ID"
             fi
             curl -s -X POST -H "Authorization: Bearer $ACCESS_TOKEN" -F "metadata={ \"name\": \"$FILENAME\", \"parents\": [\"$AAPS_FOLDER_ID\"] };type=application/json;charset=UTF-8" -F "file=@$file;type=application/vnd.android.package-archive" "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
           done
-
