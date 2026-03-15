@@ -1480,18 +1480,20 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             AdaptiveDoublePreference(
                                 ctx = context,
                                 doubleKey = DoubleKey.OApsAIMIT3cActivationThreshold,
-                                summary = R.string.aimi_t3c_activation_threshold_summary,
                                 title = R.string.aimi_t3c_activation_threshold_title
-                            )
+                            ).apply {
+                                setSummary(R.string.aimi_t3c_activation_threshold_summary)
+                            }
                         )
 
                         addPreference(
                             AdaptiveDoublePreference(
                                 ctx = context,
                                 doubleKey = DoubleKey.OApsAIMIT3cAggressiveness,
-                                summary = R.string.aimi_t3c_aggressiveness_summary,
                                 title = R.string.aimi_t3c_aggressiveness_title
-                            )
+                            ).apply {
+                                setSummary(R.string.aimi_t3c_aggressiveness_summary)
+                            }
                         )
                     })
 
