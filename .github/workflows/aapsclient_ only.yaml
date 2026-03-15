@@ -14,7 +14,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout Source
         uses: actions/checkout@v4
 
       - name: Set up JDK 21
@@ -24,7 +24,7 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Decode Secrets and Keystore
+      - name: Decode Secrets
         run: |
           DECODED=$(echo "${{ secrets.KEYSTORE_SET }}" | base64 -d)
           echo "K_BASE64=$(echo "$DECODED" | cut -d'|' -f1)" >> $GITHUB_ENV
@@ -33,12 +33,12 @@ jobs:
           echo "K_ALIAS_PASS=$(echo "$DECODED" | cut -d'|' -f4)" >> $GITHUB_ENV
           echo "GDRIVE_OAUTH2=${{ secrets.GDRIVE_OAUTH2 }}" >> $GITHUB_ENV
 
-      - name: Decode Keystore File
+      - name: Decode Keystore
         run: |
           mkdir -p "$RUNNER_TEMP/keystore"
           echo "$K_BASE64" | base64 -d > "$RUNNER_TEMP/keystore/keystore.jks"
 
-      - name: Decode GDrive OAuth2 and Get Token
+      - name: Get Google Drive Token
         run: |
           DECODED_GD=$(echo "${{ env.GDRIVE_OAUTH2 }}" | base64 -d)
           G_CLIENT_ID=$(echo "$DECODED_GD" | cut -d'|' -f1)
@@ -46,9 +46,10 @@ jobs:
           TOKEN_RESPONSE=$(curl -s -X POST https://oauth2.googleapis.com/token -d client_id="$G_CLIENT_ID" -d refresh_token="$G_REFRESH_TOKEN" -d grant_type=refresh_token)
           echo "ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r .access_token)" >> $GITHUB_ENV
 
-      - name: Build AAPSClient
+      - name: Build AAPSClient Only
         run: |
           chmod +x gradlew
+          # We only build the app module's AAPSClient flavor here
           ./gradlew :app:assembleAapsclient${{ github.event.inputs.buildVariant }} \
             --no-daemon -Dorg.gradle.jvmargs="-Xmx5g" \
             -Pandroid.injected.signing.store.file="$RUNNER_TEMP/keystore/keystore.jks" \
@@ -56,14 +57,17 @@ jobs:
             -Pandroid.injected.signing.key.alias="$K_ALIAS" \
             -Pandroid.injected.signing.key.password="$K_ALIAS_PASS"
 
-      - name: Rename APK with Time
+      - name: Rename APK
         run: |
           mkdir -p out
           VERSION=$(grep 'val appVersion' buildSrc/src/main/kotlin/Versions.kt | awk -F '"' '{print $2}')
+          [ -z "$VERSION" ] && VERSION="Unknown"
           TIMESTAMP=$(date +'%Y%m%d_%H%M')
-          find . -name "*.apk" -not -path "./out/*" | while read -r file; do
+          # Find only the AAPSClient APK
+          find . -name "*aapsclient*.apk" -not -path "./out/*" | while read -r file; do
             NAME="AAPSClient-${VERSION}-${{ github.event.inputs.buildVariant }}_${TIMESTAMP}.apk"
             cp "$file" "out/$NAME"
+            echo "✅ Prepared: $NAME"
           done
 
       - name: Upload to Google Drive
@@ -72,11 +76,16 @@ jobs:
           if [ "$AAPS_FOLDER_ID" == "null" ] || [ -z "$AAPS_FOLDER_ID" ]; then
             AAPS_FOLDER_ID=$(curl -s -X POST -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" -d '{"name": "AAPS", "mimeType": "application/vnd.google-apps.folder"}' "https://www.googleapis.com/drive/v3/files" | jq -r '.id')
           fi
+          
           for file in out/*.apk; do
             FILENAME=$(basename "$file")
+            # Overwrite check (only if exact same name/minute)
             EXISTING_ID=$(curl -s -G -H "Authorization: Bearer $ACCESS_TOKEN" "https://www.googleapis.com/drive/v3/files" --data-urlencode "q=name='$FILENAME' and '$AAPS_FOLDER_ID' in parents and trashed=false" | jq -r '.files[0].id')
             if [ "$EXISTING_ID" != "null" ] && [ -n "$EXISTING_ID" ]; then
               curl -s -X DELETE -H "Authorization: Bearer $ACCESS_TOKEN" "https://www.googleapis.com/drive/v3/files/$EXISTING_ID"
             fi
+            # Upload
             curl -s -X POST -H "Authorization: Bearer $ACCESS_TOKEN" -F "metadata={ \"name\": \"$FILENAME\", \"parents\": [\"$AAPS_FOLDER_ID\"] };type=application/json;charset=UTF-8" -F "file=@$file;type=application/vnd.android.package-archive" "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
+            echo "Uploaded $FILENAME to Google Drive"
           done
+       
