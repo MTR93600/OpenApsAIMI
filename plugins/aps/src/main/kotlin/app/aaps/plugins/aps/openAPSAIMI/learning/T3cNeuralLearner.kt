@@ -24,38 +24,71 @@ class T3cNeuralLearner @Inject constructor(
     private val log: AAPSLogger
 ) {
     private var internalAggressivenessFactor = 1.0
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
 
     /**
      * Estimates the adaptive factor based on recent performance.
-     * In a full implementation, this would load weights from a local model.
-     * For now, it provides a stable interface for the T3C logic.
      */
     fun getAdaptiveFactor(): Double {
-        // Fallback to manual preference if learner is disabled or not yet trained
         val baseAggressiveness = preferences.get(DoubleKey.OApsAIMIT3cAggressiveness)
         return baseAggressiveness * internalAggressivenessFactor
     }
 
     /**
-     * Updates the internal state based on observed outcome.
-     * Called by DetermineBasalAIMI2 after a T3C cycle to "learn" from the result.
+     * Updates the internal state and LOGS data for Neural Training.
      */
-    fun updateLearning(bgBefore: Double, bgAfter: Double, basalDelivered: Double, targetBg: Double) {
-        if (!preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)) return
-
+    fun updateLearning(
+        bgBefore: Double,
+        bgAfter: Double,
+        basalDelivered: Double,
+        targetBg: Double,
+        accel: Double,
+        duraISFminutes: Double,
+        duraISFaverage: Double,
+        iob: Double
+    ) {
+        val isT3cActive = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
         val delta = bgAfter - bgBefore
         
-        // Simple heuristic for POC:
-        // If we are high (>180) and delta is positive despite T3C basal -> we were too slow
-        if (bgBefore > 180.0 && delta >= 0) {
-            internalAggressivenessFactor = min(internalAggressivenessFactor + 0.05, 2.0)
+        // 1. Heuristic logic (Live adjustment)
+        if (isT3cActive) {
+            if (bgBefore > 180.0 && delta >= 0) {
+                internalAggressivenessFactor = min(internalAggressivenessFactor + 0.05, 2.0)
+            }
+            if (delta < -15.0) {
+                internalAggressivenessFactor = max(internalAggressivenessFactor - 0.1, 0.5)
+            }
+        }
+
+        // 2. Data Logging (Neural "Food")
+        // We log even if T3c is OFF for "Audit/Discovery" mode
+        scope.launch {
+            try {
+                logRecord(bgBefore, bgAfter, basalDelivered, targetBg, accel, duraISFminutes, duraISFaverage, iob)
+            } catch (e: Exception) {
+                log.error("T3C_LOG", "Failed to log T3C record: ${e.message}")
+            }
+        }
+    }
+
+    private fun logRecord(
+        bg: Double,
+        eventualBg: Double,
+        basal: Double,
+        target: Double,
+        accel: Double,
+        duraMin: Double,
+        duraAvg: Double,
+        iob: Double
+    ) {
+        val externalDir = android.os.Environment.getExternalFilesDir(android.os.Environment.DIRECTORY_DOCUMENTS + "/AAPS") ?: return
+        val file = java.io.File(externalDir, "t3c_records.csv")
+        
+        if (!file.exists()) {
+            file.writeText("timestamp,bg,eventualBg,basal,target,accel,duraMin,duraAvg,iob,currentAggFactor\n")
         }
         
-        // If we are dropping extremely fast (>15 mg/dL per 5min) -> we might be too aggressive
-        if (delta < -15.0) {
-            internalAggressivenessFactor = max(internalAggressivenessFactor - 0.1, 0.5)
-        }
-        
-        // If we hit target range and stabilized -> Reward (stay here)
+        val row = "${System.currentTimeMillis()},$bg,$eventualBg,$basal,$target,$accel,$duraMin,$duraAvg,$iob,$internalAggressivenessFactor\n"
+        file.appendText(row)
     }
 }

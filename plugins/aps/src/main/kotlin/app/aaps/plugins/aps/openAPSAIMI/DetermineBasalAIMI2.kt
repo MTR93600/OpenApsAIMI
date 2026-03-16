@@ -8235,7 +8235,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bgBefore = bg,
             bgAfter = eventualBg, // Using eventualBg as a proxy for the post-correction state in this tick
             basalDelivered = safeRate,
-            targetBg = targetBg
+            targetBg = targetBg,
+            accel = accel,
+            duraISFminutes = duraISFminutes,
+            duraISFaverage = duraISFaverage,
+            iob = iob.iob
         )
 
         consoleLog.add(rT.reason.toString())
