@@ -158,8 +158,4 @@ enum class DoubleKey(
     AimiCosineGateMinSensitivity("aimi_cosine_gate_min_sens", 0.7, 0.5, 1.0),
     AimiCosineGateMaxSensitivity("aimi_cosine_gate_max_sens", 1.3, 1.0, 2.0),
 
-    // 🛡️ T3C Enhancements
-    OApsAIMIT3cActivationThreshold(key = "OApsAIMIT3cActivationThreshold", 130.0, 70.0, 250.0),
-    OApsAIMIT3cAggressiveness(key = "OApsAIMIT3cAggressiveness", 1.0, 0.1, 5.0),
-
 }
