@@ -319,6 +319,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var comparator: AimiSmbComparator
     @Inject lateinit var basalLearner: app.aaps.plugins.aps.openAPSAIMI.learning.BasalLearner
     @Inject lateinit var unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner
+    @Inject lateinit var t3cNeuralLearner: app.aaps.plugins.aps.openAPSAIMI.learning.T3cNeuralLearner
     @Inject lateinit var storageHelper: AimiStorageHelper  // 🛡️ Restored StorageHelper
     
     // Helper to safely access learner (handles potential early access before injection)
@@ -8199,6 +8200,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Removed the maxBasal restrictor for T3c because T3c NEEDS the 1000% capability 
         // to act as a proper bolus replacement. It will be safely capped at 10x inside the compute function.
 
+        // Fetch T3C Preferences
+        val activationThreshold = preferences.get(DoubleKey.OApsAIMIT3cActivationThreshold)
+        val aggressiveness = t3cNeuralLearner.getAdaptiveFactor()
+
         // 🧠 Predictive PI Controller — 1000% scale, predictedBg as error term
         val computedRate = DynamicBasalController.computeT3c(
             bg = bg,
@@ -8213,7 +8218,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             isf = variableSensitivity.coerceAtLeast(10.0),
             duraISFminutes = duraISFminutes,
             duraISFaverage = duraISFaverage,
-            eventualBg = if (eventualBg > 0) eventualBg else null
+            eventualBg = if (eventualBg > 0) eventualBg else null,
+            activationThreshold = activationThreshold,
+            aggressiveness = aggressiveness
         )
 
         // Safety cap applied from inside computeT3c, simply fallback to absolute upper bounds
@@ -8221,7 +8228,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         rT.rate = safeRate
         rT.duration = 30
-        rT.reason.append("🛡️T3c | SMB=0 | PI Rate: ${"%.2f".format(safeRate)}U/h")
+        rT.reason.append("🛡️T3c | Thresh: ${activationThreshold.toInt()} | Agg: ${"%.1f".format(aggressiveness)} | PI: ${"%.2f".format(safeRate)}U/h")
+
+        // 🧬 Adaptive Learning Update
+        t3cNeuralLearner.updateLearning(
+            bgBefore = bg,
+            bgAfter = eventualBg, // Using eventualBg as a proxy for the post-correction state in this tick
+            basalDelivered = safeRate,
+            targetBg = targetBg
+        )
 
         consoleLog.add(rT.reason.toString())
         return rT

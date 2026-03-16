@@ -220,23 +220,22 @@ class DynamicBasalController @Inject constructor(
             isf: Double,
             duraISFminutes: Double,
             duraISFaverage: Double,
-            eventualBg: Double?
+            eventualBg: Double?,
+            activationThreshold: Double = 130.0,
+            aggressiveness: Double = 1.0
         ): Double {
             val effectiveIsf = isf.coerceAtLeast(10.0)
             val velocity = delta * 0.7f + shortAvgDelta.toFloat() * 0.3f
 
             // ── Safety Guard 1: Adaptive Immediate Zero Basal ──────────────
-            // [Improvement 1]: Thresholds are now relative to targetBg
             val floor = (targetBg - 20.0).coerceAtLeast(70.0)
             val cushion = (targetBg - 5.0).coerceAtLeast(85.0)
             if (bg < floor || (bg < cushion && delta < -1.0f) || (bg < targetBg && delta < -1.5f)) return 0.0
 
             // ── Safety Guard 2: Resistance→Sensitivity transition ──────────
-            // [Improvement 3]: Smooth progressive cut instead of binary 0.0
-            val wasChronicallyHigh = duraISFminutes > 20.0 && duraISFaverage > 140.0
+            val wasChronicallyHigh = duraISFminutes > 20.0 && duraISFaverage > activationThreshold
             val nowFalling = velocity < -0.2f
             val resTransitionMult = if (wasChronicallyHigh && nowFalling) {
-                // If velocity = -1.2 -> mult = 0.0. If velocity = -0.2 -> mult = 1.0
                 (1.0 + (velocity + 0.2) / 1.0).coerceIn(0.0, 1.0)
             } else 1.0
 
@@ -246,8 +245,7 @@ class DynamicBasalController @Inject constructor(
             // ── T3C V3: Parabolic & Adaptive ───────────────────────────────
             
             // 1. Parabolic Projection
-            // [Improvement 2]: Uses acceleration for better anticipation
-            // Formula: BG(t) = BG + v*t + 0.5*a*t^2
+            // USES activationThreshold instead of targetBg for engagement trigger
             val projectionMins = if (delta >= 3.0f && delta > shortAvgDelta) 40.0 else 30.0
             val t = projectionMins / 5.0
             val projectedBg = bg + (velocity * t) + (0.5 * accel * t * t)
@@ -259,14 +257,15 @@ class DynamicBasalController @Inject constructor(
                 profileBasal
             }
             
-            val projectedError = (projectedBg - targetBg).coerceAtLeast(0.0)
+            // Use activationThreshold as the reference for correction
+            val projectedError = (projectedBg - activationThreshold).coerceAtLeast(0.0)
             
             // 3. Calcul du Besoin Brut T3C
             val requiredU = projectedError / effectiveIsf
             
             // 4. Multiplicateur Anti-Résistance (Glucotoxicité)
-            val resistanceFactor = if (bg > 160.0) {
-                1.0 + ((bg - 160.0) / 100.0).coerceAtMost(1.0)
+            val resistanceFactor = if (bg > activationThreshold + 30.0) {
+                1.0 + ((bg - (activationThreshold + 30.0)) / 100.0).coerceAtMost(1.0)
             } else {
                 1.0
             }
@@ -281,11 +280,12 @@ class DynamicBasalController @Inject constructor(
             // 6. Horizon de Livraison Réactif
             val deliveryHorizonHours = when {
                 delta >= 3.0f || velocity >= 3.0f -> 0.16
-                projectedBg > 160.0 -> 0.25
+                projectedBg > activationThreshold + 30.0 -> 0.25
                 else -> 0.33
             }
             
-            val correctionRate = (requiredU / deliveryHorizonHours) * resistanceFactor * accelFactor
+            // Apply AGGRESSIVENESS here
+            val correctionRate = (requiredU / deliveryHorizonHours) * resistanceFactor * accelFactor * aggressiveness
             
             // 7. Continuous Braking : Freinage linéaire basé sur la vitesse de chute
             val brakeFactor = (1.0 + velocity / 2.0).coerceIn(0.0, 1.0)

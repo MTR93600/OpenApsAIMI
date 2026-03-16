@@ -1,6 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
-import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorSeverity
+import app.aaps.plugins.aps.openAPSAIMI.model.AdvisorSeverity
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model.AuditorUIState
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model.StateTransitionManager
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
@@ -39,7 +39,7 @@ class AuditorStateValidationTest {
     @Test
     fun `test allowed transition Good to Warning`() {
         val current = AuditorUIState.idle()
-        val next = StateTransitionManager.applyTransition(current, AdvisorSeverity.Warning)
+        val next = StateTransitionManager.applyTransition(current, AdvisorSeverity.Warning("Test Warning"))
         assertEquals(AuditorUIState.StateType.WARNING, next.type)
     }
 
@@ -56,7 +56,7 @@ class AuditorStateValidationTest {
         // This test ensures that the global function works for all types
         // (If a new type is added and not handled in when, this won't compile)
         processDecision(DecisionResult.Applied(source = "Test", reason = "Testing"))
-        processDecision(DecisionResult.Cancelled(source = "Test", reason = "User aborted"))
+        processDecision(DecisionResult.Rejected(source = "Test", reason = "User aborted", severity = AdvisorSeverity.Warning("User aborted")))
         processDecision(DecisionResult.Skipped(source = "Test", reason = "Redundant"))
         processDecision(DecisionResult.Fallthrough(reason = "No AI action"))
     }

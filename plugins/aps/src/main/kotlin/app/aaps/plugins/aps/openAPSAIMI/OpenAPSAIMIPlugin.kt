@@ -1458,14 +1458,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         )
                     )
                     addPreference(
-                        AdaptiveSwitchPreference(
-                            ctx = context,
-                            booleanKey = BooleanKey.OApsAIMIT3cBrittleMode,
-                            title = R.string.aimi_t3c_brittle_mode_title,
-                            summary = R.string.aimi_t3c_brittle_mode_summary
-                        )
-                    )
-                    addPreference(
                         AdaptiveDoublePreference(
                             ctx = context,
                             doubleKey = DoubleKey.OApsAIMIIsfFusionMinFactor,
@@ -1522,7 +1514,40 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         )
                     )
                 })
-                
+
+                // 🏥 T3c / Brittle Diabetes Section
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "AIMI_T3C"
+                    title = rh.gs(R.string.aimi_t3c_settings_title)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.aimi_t3c_brittle_mode_title)
+                    })
+                    addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.OApsAIMIT3cBrittleMode,
+                            title = R.string.aimi_t3c_brittle_mode_title,
+                            summary = R.string.aimi_t3c_brittle_mode_summary
+                        )
+                    )
+                    addPreference(
+                        AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIT3cActivationThreshold,
+                            title = R.string.aimi_t3c_activation_threshold_title,
+                            dialogMessage = R.string.aimi_t3c_activation_threshold_summary
+                        )
+                    )
+                    addPreference(
+                        AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIT3cAggressiveness,
+                            title = R.string.aimi_t3c_aggressiveness_title,
+                            dialogMessage = R.string.aimi_t3c_aggressiveness_summary
+                        )
+                    )
+                })
+
                 // 🌀 Phase-Space Trajectory Control
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "AIMI_Trajectory"

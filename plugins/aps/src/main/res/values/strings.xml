@@ -1365,5 +1365,10 @@
     <!-- T3c Brittle Mode -->
     <string name="aimi_t3c_brittle_mode_title">T3c / Brittle Diabetes Mode</string>
     <string name="aimi_t3c_brittle_mode_summary">Prioritize TBR over SMB. Disables SMB boost from ISF Fusion, and imposes strict Basal-First behavior on persistent rises.</string>
+    <string name="aimi_t3c_activation_threshold_title">T3C Activation Threshold (mg/dL)</string>
+    <string name="aimi_t3c_activation_threshold_summary">Corrections will engage above this level (Default: 130)</string>
+    <string name="aimi_t3c_aggressiveness_title">T3C Correction Aggressiveness</string>
+    <string name="aimi_t3c_aggressiveness_summary">Scales the intensity of basal adjustments (Default: 1.0)</string>
+    <string name="aimi_t3c_settings_title">T3C Brittle Mode Settings</string>
 
 </resources>
