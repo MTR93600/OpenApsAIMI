@@ -21,7 +21,6 @@ class AdaptiveDoublePreference(
     attrs: AttributeSet? = null,
     doubleKey: DoublePreferenceKey? = null,
     @StringRes dialogMessage: Int? = null,
-    @StringRes summary: Int? = null,
     @StringRes title: Int?,
 ) : EditTextPreference(ctx, attrs) {
 
@@ -40,7 +39,6 @@ class AdaptiveDoublePreference(
 
         doubleKey?.let { key = it.key }
         dialogMessage?.let { setDialogMessage(it) }
-        summary?.let { setSummary(it) }
         title?.let { dialogTitle = context.getString(it) }
         title?.let { this.title = context.getString(it) }
 
@@ -58,7 +56,6 @@ class AdaptiveDoublePreference(
             isVisible = false; isEnabled = false
         }
         preferenceKey.dependency?.let {
-            dependency = it.key
             if (!preferences.get(it))
                 isVisible = false
         }

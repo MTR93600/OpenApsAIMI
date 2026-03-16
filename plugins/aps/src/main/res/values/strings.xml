@@ -1370,8 +1370,4 @@
     <string name="aimi_t3c_aggressiveness_title">T3C Aggressiveness</string>
     <string name="aimi_t3c_aggressiveness_summary">Scaling factor for correction intensity (Default: 1.0).</string>
 
-    <!-- UI Categories -->
-    <string name="aimi_category_pkpd_tuning">Adaptive PK/PD Optimization</string>
-    <string name="aimi_category_isf_fusion_title">ISF Fusion &amp; SMB Adjustments</string>
-
 </resources>

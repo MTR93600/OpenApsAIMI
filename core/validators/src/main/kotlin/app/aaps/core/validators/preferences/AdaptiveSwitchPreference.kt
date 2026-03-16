@@ -46,14 +46,10 @@ class AdaptiveSwitchPreference(
             isVisible = false; isEnabled = false
         }
         preferenceKey.dependency?.let {
-            dependency = it.key
             if (!preferences.get(it))
                 isVisible = false
         }
         preferenceKey.negativeDependency?.let {
-            // Negative dependency usually means it's hidden if the other is ON
-            // The Preference class doesn't have a native 'negative dependency' field
-            // but we can at least handle the initial visibility
             if (preferences.get(it))
                 isVisible = false
         }
