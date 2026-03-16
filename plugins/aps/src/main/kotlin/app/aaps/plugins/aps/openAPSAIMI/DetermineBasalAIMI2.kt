@@ -319,7 +319,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var comparator: AimiSmbComparator
     @Inject lateinit var basalLearner: app.aaps.plugins.aps.openAPSAIMI.learning.BasalLearner
     @Inject lateinit var unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner
-    @Inject lateinit var t3cNeuralLearner: app.aaps.plugins.aps.openAPSAIMI.learning.T3cNeuralLearner
+    @Inject lateinit var basalNeuralLearner: app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
     @Inject lateinit var storageHelper: AimiStorageHelper  // 🛡️ Restored StorageHelper
     
     // Helper to safely access learner (handles potential early access before injection)
@@ -4499,6 +4499,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🤰 Gestational Autopilot Integration
         applyGestationalAutopilot(profile)
 
+        // 🧬 Physiological Summary for Neural Adapters
+        val duraISFminutes = glucose_status.duraISFminutes
+        val duraISFaverage = glucose_status.duraISFaverage
+        val iobObj = iob_data_array.firstOrNull() ?: IobTotal(currentTime)
+        val accel = glucose_status.bgAcceleration ?: 0.0
+
         // 🦋 Thyroid (Basedow) Module Integration
         applyThyroidModule(profile)
         
@@ -6668,6 +6674,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Apply basal boost if calculated (OVERLAY - don't block SMB)
         if (basalBoostApplied && rate != null) {
             rT.rate = rate.coerceAtLeast(0.0)
+            
+            // 🛡️ Universal Adaptive Basal Scaling
+            if (preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)) {
+                val adaptiveMult = basalNeuralLearner.getUniversalBasalMultiplier(
+                    bg = bg,
+                    basal = rate ?: 0.0,
+                    accel = accel,
+                    duraMin = duraISFminutes,
+                    duraAvg = duraISFaverage,
+                    iob = iobObj.iob
+                )
+                if (adaptiveMult != 1.0) {
+                    val originalRate = rT.rate ?: 0.0
+                    rT.rate = originalRate * adaptiveMult
+                    rT.reason.append(" | 🛡️AdaptiveBasal: ${"%.2f".format(adaptiveMult)}x (${originalRate.toFixed2()}->${(rT.rate ?: 0.0).toFixed2()}U/h)")
+                }
+            }
             rT.deliverAt = deliverAt
             rT.duration = 30
             consoleLog.add("BOOST_BASAL_APPLIED source=${basalBoostSource ?: "Unknown"} rate=${"%.2f".format(Locale.US, rate)}U/h")
@@ -8202,7 +8225,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // Fetch T3C Preferences
         val activationThreshold = preferences.get(DoubleKey.OApsAIMIT3cActivationThreshold)
-        val aggressiveness = t3cNeuralLearner.getAdaptiveFactor()
+        val aggressiveness = basalNeuralLearner.getT3cAdaptiveFactor(
+            bg = bg,
+            basal = baseBasal,
+            accel = accel,
+            duraMin = duraISFminutes,
+            duraAvg = duraISFaverage,
+            iob = iob.iob
+        )
 
         // 🧠 Predictive PI Controller — 1000% scale, predictedBg as error term
         val computedRate = DynamicBasalController.computeT3c(
@@ -8231,7 +8261,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT.reason.append("🛡️T3c | Thresh: ${activationThreshold.toInt()} | Agg: ${"%.1f".format(aggressiveness)} | PI: ${"%.2f".format(safeRate)}U/h")
 
         // 🧬 Adaptive Learning Update
-        t3cNeuralLearner.updateLearning(
+        basalNeuralLearner.updateLearning(
             bgBefore = bg,
             bgAfter = eventualBg, // Using eventualBg as a proxy for the post-correction state in this tick
             basalDelivered = safeRate,

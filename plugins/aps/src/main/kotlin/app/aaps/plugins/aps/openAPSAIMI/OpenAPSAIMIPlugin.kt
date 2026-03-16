@@ -1515,6 +1515,31 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     )
                 })
 
+                // 🛡️ Universal Adaptive Basal Section
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "AIMI_ADAPTIVE_BASAL"
+                    title = rh.gs(R.string.oaps_aimi_adaptive_basal_title)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.oaps_aimi_adaptive_basal_title)
+                    })
+                    addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled,
+                            title = R.string.oaps_aimi_adaptive_basal_title,
+                            summary = R.string.oaps_aimi_adaptive_basal_summary
+                        )
+                    )
+                    addPreference(
+                        AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIAdaptiveBasalMaxScaling,
+                            dialogMessage = R.string.oaps_aimi_adaptive_basal_max_scaling_summary,
+                            title = R.string.oaps_aimi_adaptive_basal_max_scaling_title
+                        )
+                    )
+                })
+
                 // 🏥 T3c / Brittle Diabetes Section
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "AIMI_T3C"

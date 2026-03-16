@@ -139,6 +139,8 @@ enum class BooleanKey(
     OApsAIMIhoneymoon("key_use_Aimi_honeymoon",false),
     OApsxdriponeminute(key = "key_use_Aimi_xdripOM",defaultValue = false),
     OApsAIMIautoDrive(key = "key_use_Aimi_autoDrive",defaultValue = false),
+    OApsAIMIT3cAdaptiveBasalEnabled("key_use_aimi_t3c_adaptive_basal", false),
+    OApsAIMIAutodriveV3EnhancedGater("key_use_aimi_autodrive_v3_enhanced_gater", false),
     OApsAIMIautoDriveActive(key = "key_use_aimi_autodrive_active", defaultValue = false),
     OApsAIMIwcycle(key = "key_use_Aimi_wcycle",defaultValue = false),
     OApsAIMIWCycleShadow("key_use_Aimi_wcycle_shadow", false),

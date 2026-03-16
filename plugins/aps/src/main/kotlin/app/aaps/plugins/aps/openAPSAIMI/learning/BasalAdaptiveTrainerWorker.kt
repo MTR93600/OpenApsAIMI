@@ -13,25 +13,21 @@ import kotlin.math.abs
 import kotlin.math.min
 
 /**
- * T3cNeuralTrainerWorker - Asynchronous background trainer for T3C Brittle Mode.
+ * BasalAdaptiveTrainerWorker - Asynchronous background trainer for Universal Adaptive Basal.
  * 
- * Goal: Learn the ideal "Aggressiveness Factor" for a given physiological context.
- * 
- * Labeling Logic:
- * If actualDelta > expectedDelta -> aggressiveness was too high.
- * If actualDelta < expectedDelta -> aggressiveness was too low.
+ * Goal: Learn the subtle "Basal Scaling Factor" for all users to optimize stability.
  */
-class T3cNeuralTrainerWorker(
+class BasalAdaptiveTrainerWorker(
     appContext: Context,
     workerParams: WorkerParameters
 ) : LoggingWorker(appContext, workerParams, Dispatchers.IO) {
 
     override suspend fun doWorkAndLog(): Result {
-        aapsLogger.debug(LTag.APS, "🧠 T3C Neural Trainer: Starting training session")
+        aapsLogger.debug(LTag.APS, "🧠 Basal Adaptive Trainer: Starting training session")
         
         val externalDir = applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS + "/AAPS") ?: applicationContext.filesDir
         val csvFile = File(externalDir, "basal_adaptive_records.csv")
-        val weightsFile = File(externalDir, "t3c_brain_weights.json")
+        val weightsFile = File(externalDir, "basal_adaptive_weights.json")
 
         if (!csvFile.exists()) {
             aapsLogger.debug(LTag.APS, "🧠 Basal Adaptive CSV not found. Aborting.")
@@ -39,8 +35,8 @@ class T3cNeuralTrainerWorker(
         }
 
         val allLines = csvFile.readLines()
-        if (allLines.size < 50) { // Minimum samples required
-            aapsLogger.debug(LTag.APS, "🧠 Insufficient T3C data (${allLines.size} rows). Need 50.")
+        if (allLines.size < 100) { // Standard basal needs more data for subtle patterns
+            aapsLogger.debug(LTag.APS, "🧠 Insufficient Basal data (${allLines.size} rows). Need 100.")
             return Result.success()
         }
 
@@ -59,13 +55,13 @@ class T3cNeuralTrainerWorker(
         val iDuraMin = header.indexOf("duraMin")
         val iDuraAvg = header.indexOf("duraAvg")
         val iIob = header.indexOf("iob")
-        val iCurrentAgg = header.indexOf("t3cAgg")
+        val iBasalScale = header.indexOf("basalScale")
 
         for (line in dataLines) {
             val cols = line.split(",")
             if (cols.size < header.size) continue
 
-            // 1. Prepare Inputs
+            // 1. Prepare Inputs (6 features)
             val inputFeatures = floatArrayOf(
                 cols[iBg].toFloat(),
                 cols[iBasal].toFloat(),
@@ -76,23 +72,23 @@ class T3cNeuralTrainerWorker(
             )
 
             // 2. Labeling (The "Target")
-            // How much should we have adjusted the aggressiveness to hit the target?
+            // Ideal Basal Scale calculation (more conservative than T3C)
             val bgBefore = cols[iBg].toDouble()
             val bgAfter = cols[iEventual].toDouble()
             val targetBg = cols[iTarget].toDouble()
-            val currentAgg = cols[iCurrentAgg].toDouble()
+            val currentScale = cols[iBasalScale].toDouble()
             
             val actualDelta = bgBefore - bgAfter
             val neededDelta = bgBefore - targetBg
             
-            // Label: Ideal Aggressiveness Factor
-            // If neededDelta is 50 and we only got 25 with agg 1.0, ideal was 2.0
-            // Clamped and smoothed to avoid noisy training
-            val weight = if (abs(neededDelta) < 5.0) 1.0 else (neededDelta / actualDelta.coerceAtLeast(1.0))
-            val idealAgg = (currentAgg * weight).coerceIn(0.5, 2.0)
+            // Label: Ideal Basal Scaling
+            // Use a dampening factor (0.5) for universal scaling to stay safe
+            val rawWeight = if (abs(neededDelta) < 3.0) 1.0 else (neededDelta / actualDelta.coerceAtLeast(1.0))
+            val adjustedWeight = 1.0 + (rawWeight - 1.0) * 0.5 
+            val idealScale = (currentScale * adjustedWeight).coerceIn(0.7, 1.5)
 
             inputs.add(inputFeatures)
-            targets.add(doubleArrayOf(idealAgg))
+            targets.add(doubleArrayOf(idealScale))
         }
 
         if (inputs.isEmpty()) return Result.success()
@@ -103,13 +99,12 @@ class T3cNeuralTrainerWorker(
             hiddenSize = 8,
             outputSize = 1,
             config = TrainingConfig(
-                learningRate = 0.001,
-                epochs = 300,
+                learningRate = 0.0005, // Slower learning for stability
+                epochs = 200,
                 patience = 20
             )
         )
 
-        // Split 80/20
         val split = (inputs.size * 0.8).toInt()
         net.trainWithValidation(
             inputs.subList(0, split), targets.subList(0, split),
@@ -118,7 +113,7 @@ class T3cNeuralTrainerWorker(
 
         // 4. Save Weights
         net.saveToFile(weightsFile)
-        aapsLogger.debug(LTag.APS, "🧠 T3C Neural Trainer: Training complete. Weights saved to t3c_brain_weights.json")
+        aapsLogger.debug(LTag.APS, "🧠 Basal Adaptive Trainer: Training complete. Weights saved to basal_adaptive_weights.json")
 
         return Result.success()
     }
