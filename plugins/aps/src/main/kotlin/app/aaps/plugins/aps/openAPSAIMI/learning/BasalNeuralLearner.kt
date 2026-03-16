@@ -29,6 +29,7 @@ import java.io.File
 class BasalNeuralLearner @Inject constructor(
     private val context: Context,
     private val preferences: Preferences,
+    private val storageHelper: app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper,
     private val log: AAPSLogger
 ) {
     private var internalAggressivenessFactor = 1.0 // Heuristic fallback for T3C
@@ -37,16 +38,13 @@ class BasalNeuralLearner @Inject constructor(
     private var neuralT3cNet: AimiNeuralNetwork? = null
     private var neuralBasalNet: AimiNeuralNetwork? = null
     
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
     init {
         loadModels()
     }
 
     private fun loadModels() {
-        val externalDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOCUMENTS + "/AAPS") ?: return
-        val t3cWeights = File(externalDir, "t3c_brain_weights.json")
-        val basalWeights = File(externalDir, "basal_adaptive_weights.json")
+        val t3cWeights = storageHelper.getAimiFile("t3c_brain_weights.json")
+        val basalWeights = storageHelper.getAimiFile("basal_adaptive_weights.json")
 
         if (t3cWeights.exists()) {
             neuralT3cNet = AimiNeuralNetwork.loadFromFile(t3cWeights)
@@ -131,13 +129,11 @@ class BasalNeuralLearner @Inject constructor(
             }
         }
 
-        // 3. Data Logging
-        scope.launch {
-            try {
-                logRecord(bgBefore, bgAfter, basalDelivered, targetBg, accel, duraISFminutes, duraISFaverage, iob)
-            } catch (e: Exception) {
-                log.error("BASAL_LOG", "Failed to log records: ${e.message}")
-            }
+        // 3. Data Logging (Synchronous for reliability in loop)
+        try {
+            logRecord(bgBefore, bgAfter, basalDelivered, targetBg, accel, duraISFminutes, duraISFaverage, iob)
+        } catch (e: Exception) {
+            log.error("LEARNER_LOG", "Failed to log records: ${e.message}")
         }
     }
 
@@ -151,8 +147,7 @@ class BasalNeuralLearner @Inject constructor(
         duraAvg: Double,
         iob: Double
     ) {
-        val externalDir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS + "/AAPS") ?: return
-        val file = File(externalDir, "basal_adaptive_records.csv")
+        val file = storageHelper.getAimiFile("basal_adaptive_records.csv")
         
         if (!file.exists()) {
             file.writeText("timestamp,bg,eventualBg,basal,target,accel,duraMin,duraAvg,iob,t3cAgg,basalScale\n")

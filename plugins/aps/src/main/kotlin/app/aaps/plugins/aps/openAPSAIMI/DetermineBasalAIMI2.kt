@@ -511,6 +511,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var currentThyroidEffects = app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidEffects()
     private var lastSmbFinal: Double = 0.0
     private var lastAutodriveState: AutodriveState = AutodriveState.IDLE
+    private var duraISFminutes: Double = 0.0
+    private var duraISFaverage: Double = 0.0
+    private var iobNet: Double = 0.0 // Corrected IOB for learning
     fun isAutodriveEngaged(): Boolean = lastAutodriveState == AutodriveState.ENGAGED
 
     private var internalLastSmbMillis: Long = 0L // Local Atomic Timestamp for Safety
@@ -4500,10 +4503,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         applyGestationalAutopilot(profile)
 
         // 🧬 Physiological Summary for Neural Adapters
-        val duraISFminutes = glucose_status.duraISFminutes
-        val duraISFaverage = glucose_status.duraISFaverage
+        this.duraISFminutes = glucose_status.duraISFminutes
+        this.duraISFaverage = glucose_status.duraISFaverage
         val iobObj = iob_data_array.firstOrNull() ?: IobTotal(currentTime)
+        this.iobNet = iobObj.iob
         val accel = glucose_status.bgAcceleration ?: 0.0
+        this.bgacc = accel
 
         // 🦋 Thyroid (Basedow) Module Integration
         applyThyroidModule(profile)
@@ -7666,7 +7671,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             } catch (e: Exception) {
                 consoleError.add("Failed to save AIMI Decision JSON: ${e.message}")
             }
-            
+
             return finalResult
         }
     }
@@ -7884,6 +7889,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🔧 FIX 4: Enhanced diagnostic logging with activity threshold
         val tdd24h = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: 30.0
         val activityThreshold = (tdd24h / 24.0) * 0.15
+        
+        // 🧬 Unified Learning Update (Centralized)
+        basalNeuralLearner.updateLearning(
+            bgBefore = bgValue,
+            bgAfter = eventual,
+            basalDelivered = tbr,
+            targetBg = targetBg.toDouble(),
+            accel = bgacc,
+            duraISFminutes = duraISFminutes,
+            duraISFaverage = duraISFaverage,
+            iob = iobNet
+        )
         
         val tickLine =
             "TICK ts=${System.currentTimeMillis()} bg=${bgValue.roundToInt()} d=${"%.1f".format(deltaValue)} iob=${"%.2f".format(iob)} act=${"%.3f".format(iobActivityNow)} th=${"%.3f".format(activityThreshold)} " +
