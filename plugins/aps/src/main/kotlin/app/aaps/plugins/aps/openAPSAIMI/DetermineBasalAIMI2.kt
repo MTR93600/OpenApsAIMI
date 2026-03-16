@@ -541,7 +541,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             .filter { it.code >= 32 || it in "\n\r\t" }  // Remove other control chars
     }
 
-    private fun Double.toFixed2(): String = DecimalFormat("0.00#").format(round(this, 2))
+    private fun Double.toFixed2(): String = "%.2f".format(Locale.US, this)
     private fun parseNgrTime(value: String, fallback: LocalTime): LocalTime =
         runCatching { LocalTime.parse(value, ngrTimeFormatter) }.getOrElse { fallback }
 
@@ -6680,22 +6680,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (basalBoostApplied && rate != null) {
             rT.rate = rate.coerceAtLeast(0.0)
             
-            // 🛡️ Universal Adaptive Basal Scaling
-            if (preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)) {
-                val adaptiveMult = basalNeuralLearner.getUniversalBasalMultiplier(
-                    bg = bg,
-                    basal = rate ?: 0.0,
-                    accel = accel,
-                    duraMin = duraISFminutes,
-                    duraAvg = duraISFaverage,
-                    iob = iobObj.iob
-                )
-                if (adaptiveMult != 1.0) {
-                    val originalRate = rT.rate ?: 0.0
-                    rT.rate = originalRate * adaptiveMult
-                    rT.reason.append(" | 🛡️AdaptiveBasal: ${"%.2f".format(adaptiveMult)}x (${originalRate.toFixed2()}->${(rT.rate ?: 0.0).toFixed2()}U/h)")
-                }
-            }
             rT.deliverAt = deliverAt
             rT.duration = 30
             consoleLog.add("BOOST_BASAL_APPLIED source=${basalBoostSource ?: "Unknown"} rate=${"%.2f".format(Locale.US, rate)}U/h")
@@ -6703,6 +6687,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // REMOVED: return rT (continue to SMB calculation)
         }
         // ================================================================
+        
+        // 🧬 Truly Universal Adaptive Basal Scaling
+        // Applied to either the Boosted rate or the Profile rate if no boost active.
+        if (preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)) {
+            val baseForScaling = rT.rate ?: profile.current_basal.toDouble()
+            val adaptiveMult = basalNeuralLearner.getUniversalBasalMultiplier(
+                bg = bg,
+                basal = baseForScaling,
+                accel = bgacc,
+                duraMin = duraISFminutes,
+                duraAvg = duraISFaverage,
+                iob = iobNet
+            )
+            
+            if (kotlin.math.abs(adaptiveMult - 1.0) > 0.001) {
+                val originalProposed = rT.rate ?: profile.current_basal.toDouble()
+                rT.rate = originalProposed * adaptiveMult
+                rT.duration = 30 // Ensure temp basal duration is set
+                rT.reason.append(" | 🛡️AdaptiveBasal: ${"%.2f".format(adaptiveMult)}x (${"%.2f".format(originalProposed)}->${"%.2f".format(rT.rate ?: 0.0)}U/h)")
+                
+                // If we were at profile (rate was null) and now have a scaled rate, we must finalize the decision
+                if ((rT.deliverAt ?: 0L) <= 0L) rT.deliverAt = System.currentTimeMillis()
+            }
+        }
 
 
         rT.reason.appendLine(
@@ -7861,9 +7869,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val smbUnits = rT.units ?: 0.0
         val tbr = (rT.rate ?: 0.0).coerceAtLeast(0.0)
         val dur = rT.duration ?: 0
-        val builder = StringBuilder("DECISION_FINAL[$tag]: smb=${"%.2f".format(smb)}U tbr=${"%.2f".format(tbr)}U/h dur=${dur}m")
+        val builder = StringBuilder("DECISION_FINAL[$tag]: smb=${"%.2f".format(Locale.US, smb)}U tbr=${"%.2f".format(Locale.US, tbr)}U/h dur=${dur}m")
         if (bg != null) builder.append(" bg=${bg.roundToInt()}")
-        if (delta != null) builder.append(" Δ=${"%.1f".format(delta)}")
+        if (delta != null) builder.append(" Δ=${"%.1f".format(Locale.US, delta)}")
         val reasonText = rT.reason.toString().replace("\n", " | ")
         builder.append(" reason=${reasonText.take(180)}")
         consoleLog.add(builder.toString())
@@ -7903,11 +7911,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         
         val tickLine =
-            "TICK ts=${System.currentTimeMillis()} bg=${bgValue.roundToInt()} d=${"%.1f".format(deltaValue)} iob=${"%.2f".format(iob)} act=${"%.3f".format(iobActivityNow)} th=${"%.3f".format(activityThreshold)} " +
-                "cob=${"%.1f".format(cob)} mode=$modeLabel autodriveState=$lastAutodriveState pred=$predChunk " +
-                "safety=$lastSafetySource ref=$refractoryStatus maxIOB=${"%.2f".format(maxIob)} maxSMB=${"%.2f".format(maxSMB)} " +
-                "smb=${"%.2f".format(lastSmbProposed)}->${"%.2f".format(lastSmbCapped)}->${"%.2f".format(smbFinalValue)} " +
-                "tbr=${"%.2f".format(tbr)} src=$lastDecisionSource"
+            "TICK ts=${System.currentTimeMillis()} bg=${bgValue.roundToInt()} d=${"%.1f".format(Locale.US, deltaValue)} iob=${"%.2f".format(Locale.US, iob)} act=${"%.3f".format(Locale.US, iobActivityNow)} th=${"%.3f".format(Locale.US, activityThreshold)} " +
+                "cob=${"%.1f".format(Locale.US, cob)} mode=$modeLabel autodriveState=$lastAutodriveState pred=$predChunk " +
+                "safety=$lastSafetySource ref=$refractoryStatus maxIOB=${"%.2f".format(Locale.US, maxIob)} maxSMB=${"%.2f".format(Locale.US, maxSMB)} " +
+                "smb=${"%.2f".format(Locale.US, lastSmbProposed)}->${"%.2f".format(Locale.US, lastSmbCapped)}->${"%.2f".format(Locale.US, smbFinalValue)} " +
+                "tbr=${"%.2f".format(Locale.US, tbr)} src=$lastDecisionSource"
         consoleLog.add(tickLine)
     } // 🛑 END OF determine_basal
 
