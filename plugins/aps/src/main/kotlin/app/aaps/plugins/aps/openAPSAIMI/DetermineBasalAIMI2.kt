@@ -1995,6 +1995,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         pkpdRuntime: PkPdRuntime? = null,
         exerciseFlag: Boolean = false,
         suspectedLateFatMeal: Boolean = false,
+        isConfirmedHighRise: Boolean = false,
         ignoreSafetyConditions: Boolean = false
     ): Float {
         var smbToGive = smbToGiveParam
@@ -2068,31 +2069,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
             )
         }
-        // 🔧 RESTORED: PKPD Tail Damping for Exercise & Late Fat Meals
-    // Apply PKPD-aware insulin tail considerations
-    if (pkpdRuntime != null && smbToGive > 0f) {
-        val tailDampingFactor = when {
-            // Exercise: reduce SMB if insulin tail is still active
-            exerciseFlag && pkpdRuntime.pkpdScale < 0.9 -> {
-                val factor = 0.7 // Conservative 30% reduction
-                reason?.appendLine("⚡ Exercise + PKPD Tail: SMB×${"%.2f".format(factor)}")
-                factor
-            }
-            // Suspected late fat meal: reduce SMB to avoid stacking before fat absorption
-            suspectedLateFatMeal && iob > maxSMB -> {
-                val factor = 0.6 // More conservative for fat meals
-                reason?.appendLine("🧈 Late Fat + High IOB: SMB×${"%.2f".format(factor)}")
-                factor
-            }
-            else -> 1.0
+        // 🛡️ PKPD Guard Integration
+        val guard = PkpdAbsorptionGuard.compute(
+            pkpdRuntime = pkpdRuntime,
+            windowSinceLastDoseMin = lastBolusAgeMinutes,
+            bg = bg,
+            delta = delta.toDouble(),
+            shortAvgDelta = shortAvgDelta.toDouble(),
+            targetBg = targetBg.toDouble(),
+            predBg = eventualBG,
+            isMealMode = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime,
+            isConfirmedHighRise = isConfirmedHighRise
+        )
+
+        val beforeGuard = smbToGive
+        smbToGive = (smbToGive * guard.factor.toFloat()).coerceAtLeast(0f)
+        if (smbToGive < beforeGuard) {
+             reason?.appendLine("🛡️ PKPD Guard (${guard.reason}): ${"%.2f".format(beforeGuard)} → ${"%.2f".format(smbToGive)} U")
         }
-        
-        if (tailDampingFactor < 1.0) {
-            val beforeTail = smbToGive
-            smbToGive = (smbToGive * tailDampingFactor.toFloat()).coerceAtLeast(0f)
-            consoleLog.add("PKPD_TAIL_DAMP: ${"%.2f".format(beforeTail)}→${"%.2f".format(smbToGive)} ex=$exerciseFlag fat=$suspectedLateFatMeal scale=${pkpdRuntime.pkpdScale}")
-        }
-    }
 
         // Finalisation
         val beforeFinalize = smbToGive
@@ -3961,7 +3955,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         profile: OapsProfileAimi, rT: RT,
         // Local determine_basal vars — not class fields
         combinedDeltaLocal: Float, glucoseStatusLocal: GlucoseStatusAIMI,
-        pumpAgeDaysLocal: Float, modelcalLocal: Double, profileCurrentBasalLocal: Double
+        pumpAgeDaysLocal: Float, modelcalLocal: Double, profileCurrentBasalLocal: Double,
+        isConfirmedHighRise: Boolean = false
     ): SmbInstructionExecutor.Result {
         return SmbInstructionExecutor.execute(
             SmbInstructionExecutor.Input(
@@ -3997,7 +3992,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 highBgOverrideUsed = highBgOverrideUsed,
                 profileCurrentBasal = profileCurrentBasalLocal,
                 cob = cob,
-                globalReactivityFactor = if (preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled)) safeReactivityFactor else 1.0
+                globalReactivityFactor = if (preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled)) {
+                    if (isConfirmedHighRise) max(safeReactivityFactor, 1.0) else safeReactivityFactor
+                } else 1.0,
+                isConfirmedHighRise = isConfirmedHighRise
             ),
             SmbInstructionExecutor.Hooks(
                 refineSmb = { combined, short, long, predicted, profileInput ->
@@ -4015,8 +4013,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 costFunction = { basalInput, bgInput, targetInput, horizon, sensitivity, candidate ->
                     costFunction(basalInput, bgInput, targetInput, horizon, sensitivity, candidate)
                 },
-                applySafety = { meal, smb, guard, reasonBuilder, runtime, exercise, suspected ->
-                    applySafetyPrecautions(meal, smb, guard ?: 0.0, reasonBuilder, runtime, exercise, suspected)
+                applySafety = { meal, smb, guard, reasonBuilder, runtime, exercise, suspected, confirmedRise ->
+                    applySafetyPrecautions(meal, smb, guard ?: 0.0, reasonBuilder, runtime, exercise, suspected, confirmedRise)
                 },
                 runtimeToMinutes = { runtimeToMinutes(it!!) },
                 computeHypoThreshold = { minBg, lgs -> computeHypoThreshold(minBg, lgs) },
@@ -4034,18 +4032,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun applyBasalFirstPolicy(
         bg: Double, delta: Float, combinedDelta: Float,
         mealData: MealData, autosens_data: AutosensResult,
-        isMealAdvisorOneShot: Boolean, targetBg: Double, rT: RT
+        isMealAdvisorOneShot: Boolean, targetBg: Double, rT: RT,
+        isConfirmedHighRise: Boolean = false
     ) {
         val learnerFactor = safeReactivityFactor
         val isFragileBg = bg < 110.0 && delta < 0.0
-        val autosensResistance = autosens_data.ratio > 1.2
+        val autosensResistance = autosens_data.ratio < 0.8
         val isLearnerPrudent = learnerFactor < 0.75 && !autosensResistance
         val basalFirstMealActive = mealData.mealCOB > 0.1
         val basalFirstHeavyMeal  = mealData.mealCOB > 20.0
         val isPersistentRise = bg > targetBg && combinedDelta >= 0.3f
         
-        val basalFirstActive = ((isLearnerPrudent && !basalFirstMealActive && !isPersistentRise)
-                || (isFragileBg && !basalFirstHeavyMeal)) && !isMealAdvisorOneShot
+        // 🛡️ Basal-First Policy: Bypassed if rise is confirmed
+        val basalFirstActive = (((isLearnerPrudent && !basalFirstMealActive && !isPersistentRise)
+                || (isFragileBg && !basalFirstHeavyMeal)) && !isMealAdvisorOneShot)
+                && !isConfirmedHighRise
         
         this.cachedBasalFirstActive = basalFirstActive
         this.cachedIsFragileBg = isFragileBg
@@ -4060,7 +4061,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(" [Basal-First: SMB OFF]")
         } else {
             if (autosensResistance && learnerFactor < 0.75)
-                consoleLog.add("⚡ RESISTANCE EXEMPTION: Autosens ${"%.2f".format(autosens_data.ratio)} > 1.2")
+                consoleLog.add("⚡ RESISTANCE EXEMPTION: Autosens ${"%.2f".format(autosens_data.ratio)} < 0.8")
             if (isLearnerPrudent && basalFirstMealActive)
                 consoleLog.add("🍕 MEAL EXEMPTION: COB=${"%.1f".format(mealData.mealCOB)}g")
             if (isLearnerPrudent && isPersistentRise)
@@ -4509,6 +4510,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.iobNet = iobObj.iob
         val accel = glucose_status.bgAcceleration ?: 0.0
         this.bgacc = accel
+
+        // 🚀 CONFIRMED HIGH RISE detection (Triple-Signal)
+        val isConfirmedHighRiseLocal = glucose_status.glucose > 150.0 && glucose_status.combinedDelta > 1.5 && (glucose_status.bgAcceleration ?: 0.0) > 0.4
 
         // 🦋 Thyroid (Basedow) Module Integration
         applyThyroidModule(profile)
@@ -5126,12 +5130,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🧠 FCL 7.0: Update Watchdog State
         
         // 🧠 FCL 8.0: Autosens Synergy
-        var autosensRatio = autosens_data.ratio
-        if (autosensRatio <= 0.1) autosensRatio = 1.0 // Safety fallback
-        
-        // Effective ISF = Profile ISF / Ratio
-        // Case: Resistant (Ratio 1.2) -> ISF 100 / 1.2 = 83 (Harder to move -> Stronger bolus needed)
-        // Case: Sensitive (Ratio 0.7) -> ISF 100 / 0.7 = 142 (Easier to move -> Weaker bolus needed)
+        // 🏥 Autosens Ratio Logic (Corrected - aligned with AAPS)
+        // Ratio < 1.0 => Resistant (ISF should be smaller)
+        // Ratio > 1.0 => Sensitive (ISF should be larger)
+        // Effective ISF = Profile ISF * Ratio
+        val autosensRatio = if (autosens_data.ratio != 1.0) autosens_data.ratio else 1.0
         
         // [FIX] Critical Math Inversion found during Deep Dive:
         // Previous: ISF * Ratio. 
@@ -5200,6 +5203,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             mealContext = pkpdMealContext,
             consoleLog = consoleLog
         )
+
         if (pkpdRuntimeTemp != null) {
             pkpdRuntime = pkpdRuntimeTemp
             
@@ -5208,7 +5212,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add("  │ DIA (learned): ${"%.2f".format(Locale.US, pkpdRuntime.params.diaHrs)}h")
             consoleLog.add("  │ Peak (learned): ${"%.0f".format(Locale.US, pkpdRuntime.params.peakMin)}min")
             consoleLog.add("  │ fusedISF: ${"%.1f".format(Locale.US, pkpdRuntime.fusedIsf)} mg/dL/U")
-            consoleLog.add("  │ pkpdScale: ${"%.3f".format(Locale.US, pkpdRuntime.pkpdScale)}")
+        
+            applyBasalFirstPolicy(
+                bg = bg, delta = delta.toFloat(), combinedDelta = combinedDelta.toFloat(),
+                mealData = mealData, autosens_data = autosens_data, isMealAdvisorOneShot = isExplicitAdvisorRun,
+                targetBg = targetBg.toDouble(), rT = rT, isConfirmedHighRise = isConfirmedHighRiseLocal
+            )
             consoleLog.add("  └ adaptiveMode: ${if (pkpdRuntime.params.diaHrs != 4.0 || pkpdRuntime.params.peakMin != 75.0) "ACTIVE" else "DEFAULT"}")
         }
         
@@ -5338,7 +5347,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         val profileISF_raw = if (profile.sens > 10) profile.sens else 50.0
         // 🔮 FCL 11.0 Fix: Use Dynamic 'sens' for Effective ISF to capture Resistance/Sensitivity
-        val effectiveISF = sens / autosens_data.ratio 
+        // 🏥 Effective ISF: Profile ISF * Ratio (Ratio < 1 = Resistant = Stronger ISF)
+        val effectiveISF = sens * autosens_data.ratio 
         // ⚡ FCL 12.0: Unified Learner Integration for Prebolus
         // [User Request]: Disabled for now. Prebolus should be raw / standard.
         // val useUnified = preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled)
@@ -5827,7 +5837,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             //consoleLog.add("Autosens ratio: $sensitivityRatio; ")
             consoleLog.add(context.getString(R.string.autosens_ratio_log, sensitivityRatio))
         }
-        basal = profile.current_basal * sensitivityRatio
+        basal = profile.current_basal / sensitivityRatio
         // WCycle Connectivity: Apply Basal Multiplier
         val wCycle = wCycleInfoForRun
         if (wCycle != null && wCycle.applied) {
@@ -5846,11 +5856,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             //consoleLog.add("Temp Target set, not adjusting with autosens")
             consoleLog.add(context.getString(R.string.console_temp_target_set))
         } else {
-            if (profile.sensitivity_raises_target && autosens_data.ratio < 1 || profile.resistance_lowers_target && autosens_data.ratio > 1) {
-                // with a target of 100, default 0.7-1.2 autosens min/max range would allow a 93-117 target range
-                min_bg = round((min_bg - 60) / autosens_data.ratio, 0) + 60
-                max_bg = round((max_bg - 60) / autosens_data.ratio, 0) + 60
-                var new_target_bg = round((target_bg - 60) / autosens_data.ratio, 0) + 60
+            if (profile.sensitivity_raises_target && autosens_data.ratio > 1 || profile.resistance_lowers_target && autosens_data.ratio < 1) {
+                // Adjust BG targets for autosens (AAPS Convention: Ratio < 1 = Resistant)
+                min_bg = round((min_bg - 60) * autosens_data.ratio, 0) + 60
+                max_bg = round((max_bg - 60) * autosens_data.ratio, 0) + 60
+                var new_target_bg = round((target_bg - 60) * autosens_data.ratio, 0) + 60
                 // don't allow target_bg below 80
                 new_target_bg = max(80.0, new_target_bg)
                 if (target_bg == new_target_bg)
@@ -6200,10 +6210,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.maxSMB = (this.maxSMB * physioMultipliers.smbFactor).coerceAtLeast(0.1)
 
         sens = variableSensitivity.toDouble()
+        val effectiveSens = sens * autosens_data.ratio
         val pkpdPredictions = computePkpdPredictions(
             currentBg = bg,
             iobArray = iob_data_array,
-            finalSensitivity = sens,
+            finalSensitivity = effectiveSens,
             cobG = mealData.mealCOB,
 
             profile = profile,
@@ -6213,8 +6224,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.eventualBG = pkpdPredictions.eventual
         this.predictedBg = pkpdPredictions.eventual.toFloat()
         rT.eventualBG = pkpdPredictions.eventual
-        //calculate BG impact: the amount BG "should" be rising or falling based on insulin activity alone
-        val bgi = round((-iob_data.activity * sens * 5), 2)
+        // calculate BG impact using effective sensitivity (including autosens)
+        val bgi = round((-iob_data.activity * effectiveSens * 5), 2)
         // project deviations for 30 minutes
         var deviation = round(30 / 5 * (minDelta - bgi))
         // don't overreact to a big negative delta: use minAvgDelta if deviation is negative
@@ -6375,12 +6386,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         val pkpdDiaMinutesOverride: Double? = pkpdRuntime?.params?.diaHrs?.let { it * 60.0 } // PKPD donne des heures → on passe en minutes
         val useLegacyDynamicsdia = pkpdDiaMinutesOverride == null
-        // 🛡️ BASAL-FIRST POLICY GATE
-        applyBasalFirstPolicy(
-            bg = bg, delta = delta.toFloat(), combinedDelta = combinedDelta.toFloat(),
-            mealData = mealData, autosens_data = autosens_data, isMealAdvisorOneShot = isMealAdvisorOneShot,
-            targetBg = target_bg, rT = rT
-        )
+        // Basal-First Policy already handled at loop start
 
         val smbExecution = executeSmbInstruction(
             bg = bg, delta = delta, iob = iob, basalaimi = basalaimi, basal = basal,
@@ -6399,7 +6405,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             profile = profile, rT = rT,
             combinedDeltaLocal = combinedDelta.toFloat(), glucoseStatusLocal = glucoseStatus,
             pumpAgeDaysLocal = pumpAgeDays, modelcalLocal = modelcal.toDouble(),
-            profileCurrentBasalLocal = profile_current_basal
+            profileCurrentBasalLocal = profile_current_basal,
+            isConfirmedHighRise = isConfirmedHighRiseLocal
         )
 
         predictedSMB = smbExecution.predictedSmb
@@ -6426,7 +6433,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Soft guard basé sur physiologie insuline : "Injecter → Laisser agir → Réévaluer"
         // Empêche surcorrection UAM sans bloquer vraies urgences
         // 🚀 ADVISOR BYPASS: Must propagate to this guard variable too, otherwise capSmbDose will clamp it back down!
-        val currentMaxSmb = if (isMealAdvisorOneShot) max(maxSMBHB, 10.0) else if ((bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0) || ((mealTime || lunchTime || dinnerTime || highCarbTime) && bg > 100)) maxSMBHB else maxSMB
+        val currentMaxSmb = if (isExplicitAdvisorRun) max(maxSMBHB, 10.0) else if ((bg > 120 && !honeymoon && mealData.slopeFromMinDeviation >= 1.0) || ((mealTime || lunchTime || dinnerTime || highCarbTime) && bg > 100)) maxSMBHB else maxSMB
         
         // Détecter si mode repas actif (ne pas freiner prebolus/TBR modes)
         val anyMealModeForGuard = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime
@@ -6440,7 +6447,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             shortAvgDelta = shortAvgDelta.toDouble(),
             targetBg = target_bg,
             predBg = predictedBg.toDouble().takeIf { it > 20 },
-            isMealMode = anyMealModeForGuard
+            isMealMode = anyMealModeForGuard,
+            isConfirmedHighRise = isConfirmedHighRiseLocal
         )
         
         // Appliquer guard sur SMB
@@ -7640,15 +7648,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     if (autosens_data.ratio != 1.0) {
                         add(AimiDecisionContext.Modifier(
                             source = "Autosensitivity",
-                            factor = 1.0 / autosens_data.ratio, // Ratio < 1 => Sensitive => ISF increases (Factor > 1)
+                            factor = autosens_data.ratio, // Ratio < 1 => Resistant => Factor < 1 => ISF decreases
                             clinical_reason = "Rolling avg sensitivity: ${"%.2f".format(autosens_data.ratio)}"
                         ))
                     }
                     // ISF Fusion
-                    if (abs(snapshotFusedIsf - (snapshotProfileIsf * (1.0/autosens_data.ratio))) > 1.0) {
+                    if (abs(snapshotFusedIsf - (snapshotProfileIsf * autosens_data.ratio)) > 1.0) {
                          add(AimiDecisionContext.Modifier(
                             source = "PkPd_Fusion",
-                            factor = snapshotFusedIsf / (snapshotProfileIsf * (1.0/autosens_data.ratio)),
+                            factor = snapshotFusedIsf / (snapshotProfileIsf * autosens_data.ratio),
                             clinical_reason = "Fusion with TDD & Profile"
                         ))
                     }

@@ -43,7 +43,8 @@ data class PkpdAbsorptionGuard(
             shortAvgDelta: Double,
             targetBg: Double,
             predBg: Double?,
-            isMealMode: Boolean
+            isMealMode: Boolean,
+            isConfirmedHighRise: Boolean = false
         ): PkpdAbsorptionGuard {
             
             // Pas de guard si PKPD absent ou modes repas (prebolus/TBR modes)
@@ -58,10 +59,10 @@ data class PkpdAbsorptionGuard(
             val baseGuard = when (activity.stage) {
                 InsulinActivityStage.PRE_ONSET -> 
                     PkpdAbsorptionGuard(
-                        factor = 0.5,
-                        intervalAddMin = 4,
-                        preferTbr = true,
-                        reason = "PRE_ONSET",
+                        factor = if (isConfirmedHighRise) 0.8 else 0.5,
+                        intervalAddMin = if (isConfirmedHighRise) 2 else 4,
+                        preferTbr = !isConfirmedHighRise,
+                        reason = if (isConfirmedHighRise) "PRE_ONSET_CONFIRMED" else "PRE_ONSET",
                         stage = activity.stage
                     )
                 
