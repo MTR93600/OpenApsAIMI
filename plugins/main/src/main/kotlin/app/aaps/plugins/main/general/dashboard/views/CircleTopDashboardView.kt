@@ -7,6 +7,8 @@ import android.view.View
 import android.widget.FrameLayout
 import androidx.viewbinding.ViewBinding
 import app.aaps.plugins.main.databinding.ComponentCircleTopStatusHybridBinding
+import java.util.TimeZone
+
 
 /**
  * CircleTopDashboardView - Modern Circle-Top Hybrid Dashboard
@@ -92,9 +94,9 @@ class CircleTopDashboardView @JvmOverloads constructor(
             val avg = getProp<Double>("avgBgMgdl") ?: Double.NaN
             val a1c = getProp<Double>("a1c") ?: Double.NaN
             if (!avg.isNaN() && !a1c.isNaN()) {
-                binding.tirStatsText.text = String.format("Avg %.0f • A1C %.1f%%", avg, a1c)
+                binding.tirStatsText.text = String.format("Auj: Avg %.0f • A1C %.1f%%", avg, a1c)
             } else {
-                binding.tirStatsText.text = "Avg -- • A1C --"
+                binding.tirStatsText.text = "Auj: Avg -- • A1C --"
             }
 
             val vl = getProp<Double>("tirVeryLow") ?: 0.0

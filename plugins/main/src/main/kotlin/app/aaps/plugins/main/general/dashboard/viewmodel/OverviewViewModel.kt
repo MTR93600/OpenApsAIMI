@@ -290,12 +290,12 @@ class OverviewViewModel(
             val now = System.currentTimeMillis()
             val from = dateUtil.beginOfDay(now) // Start of today (Midnight)
             
-            // --- 24H CLINICAL STATS COMPUTATION ---
-            val from24h = now - 24 * 60 * 60 * 1000
-            val bgs24h = persistenceLayer.getBgReadingsDataFromTimeToTime(from24h, now, true)
+            // --- TODAY CLINICAL STATS COMPUTATION ---
+            val bgsToday = persistenceLayer.getBgReadingsDataFromTimeToTime(from, now, true)
             
-            if (bgs24h.isNotEmpty()) {
-                val values = bgs24h.map { it.value }
+            if (bgsToday.isNotEmpty()) {
+                val values = bgsToday.map { it.value }
+
                 val count = values.size.toDouble()
                 
                 tirVeryLow = (values.count { it < 54.0 } / count) * 100.0
