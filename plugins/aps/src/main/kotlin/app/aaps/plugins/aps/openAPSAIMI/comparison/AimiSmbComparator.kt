@@ -36,7 +36,7 @@ class AimiSmbComparator @Inject constructor(
     private val constraintsChecker: ConstraintsChecker,
     private val profileFunction: ProfileFunction,
     private val aapsLogger: AAPSLogger,
-    // Removed specific ActivePlugin dependency to avoid cycle/injection failure
+    private val virtualGlucoseEngine: VirtualGlucoseEngine, // 🧪 NOUVEAU
     private val dateUtil: DateUtil          // Dependency for time
 ) {
     // 🧠 VIRTUAL PATIENT STATE (Lyra Reality System)
@@ -96,13 +96,42 @@ class AimiSmbComparator @Inject constructor(
             // Keep 6 hours of history (DIA + buffers)
             virtualReservoir.pruneOldData(currentTime - 6 * 60 * 60 * 1000L)
 
-            // 2. Calculate Virtual IOB
+            // 2. Calculate Virtual IOB AND Activity
+            val now = currentTime
+            val profileBasal = profileAimi.current_basal
+            
+            // Simulation logic: To be realistic, SMB must see the BG it *would* have caused.
+            // We use the real BG as anchor and add the virtual deviation.
+            val lastSimBg = virtualReservoir.virtualBg ?: glucoseStatus.glucose
+            
+            // Calculate activity for REAL insulin (that happened in the body)
+            // Note: This is an approximation since we don't have access to the full history 
+            // of real treatments here in the same format. We use the real IOB data provided.
+            val realTotalIob = iobData.firstOrNull() ?: IobTotal(now)
+            
+            // Calculate activity for SIMULATED insulin
+            val simTotalIob = virtualIobCalculator.calculateIobTotalForTime(now, profileSmb)
+            
+            // VIRTUAL GLUCOSE EVOLUTION
+            val virtualBg = virtualGlucoseEngine.calculateNextBg(
+                realBg = glucoseStatus.glucose,
+                lastSimBg = lastSimBg,
+                realActivity = realTotalIob.activity,
+                simActivity = simTotalIob.activity,
+                isf = profileAimi.sens,
+                tickMinutes = 5.0
+            )
+            
+            val virtualDelta = virtualBg - (virtualReservoir.virtualBg ?: virtualBg)
+            virtualReservoir.virtualBg = virtualBg
+            virtualReservoir.virtualDelta = virtualDelta
+            
             val smbIobArray = virtualIobCalculator.calculateIobArrayForSMB(
-                profileSmb, // Use mapped profile
+                profileSmb, 
                 autosens,
                 profileAimi.exercise_mode,
                 profileAimi.half_basal_exercise_target,
-                profileAimi.high_temptarget_raises_sensitivity || profileAimi.low_temptarget_lowers_sensitivity // isTempTarget
+                profileAimi.high_temptarget_raises_sensitivity || profileAimi.low_temptarget_lowers_sensitivity 
             )
             
             aapsLogger.debug(
@@ -112,14 +141,13 @@ class AimiSmbComparator @Inject constructor(
                 "maxIOB=${profileAimi.max_iob}, maxBasal=${profileAimi.max_basal}"
             )
 
-            // 🔧 FIX: Convert GlucoseStatusAIMI to GlucoseStatus (different types)
-            val smbGlucoseStatus = convertToSMBGlucoseStatus(glucoseStatus)
-
-            // ✅ Run SMB with SMB-specific parameters (not AIMI's)
+            // ✅ Run SMB with its own Virtual BG (not the real one)
+            val virtualSmbGlucoseStatus = convertToSMBGlucoseStatus(glucoseStatus, virtualBg, virtualDelta)
+            
             val smbResult = determineBasalSMB.determine_basal(
-                glucose_status = smbGlucoseStatus,  // ✅ Correct type
+                glucose_status = virtualSmbGlucoseStatus, 
                 currenttemp = currentTemp,
-                iob_data_array = smbIobArray,  // ✅ SMB-specific IOB calculation
+                iob_data_array = smbIobArray,
                 profile = profileSmb,
                 autosens_data = autosens,
                 meal_data = mealData,
@@ -211,14 +239,17 @@ class AimiSmbComparator @Inject constructor(
      * Converts GlucoseStatusAIMI to GlucoseStatus for SMB plugin.
      * SMB expects standard GlucoseStatus type, not AIMI-specific type.
      */
-    private fun convertToSMBGlucoseStatus(aimiStatus: GlucoseStatusAIMI): GlucoseStatus {
-        // Create anonymous object implementing GlucoseStatus interface
+    private fun convertToSMBGlucoseStatus(
+        aimiStatus: GlucoseStatusAIMI, 
+        virtualBg: Double, 
+        virtualDelta: Double
+    ): GlucoseStatus {
         return object : GlucoseStatus {
-            override val glucose = aimiStatus.glucose
+            override val glucose = virtualBg
             override val noise = aimiStatus.noise
-            override val delta = aimiStatus.delta
-            override val shortAvgDelta = aimiStatus.shortAvgDelta
-            override val longAvgDelta = aimiStatus.longAvgDelta
+            override val delta = virtualDelta
+            override val shortAvgDelta = virtualDelta // Approximation
+            override val longAvgDelta = virtualDelta // Approximation
             override val date = aimiStatus.date
         }
     }

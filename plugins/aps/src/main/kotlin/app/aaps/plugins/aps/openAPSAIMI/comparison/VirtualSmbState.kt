@@ -30,9 +30,13 @@ import kotlin.math.ceil
  * the insulin that SMB itself decided.
  */
 class VirtualInsulinReservoir {
-    // History of Virtual Decisions
     val virtualBoluses = mutableListOf<BS>()
     val virtualTempBasals = mutableListOf<TB>()
+    
+    // Persistent Simulation Trajectory
+    var virtualBg: Double? = null
+    var virtualDelta: Double? = null
+    var lastUpdate: Long = 0
 
     fun addDecision(decision: RT, timestamp: Long) {
         // 1. Convert SMB Micro-Bolus
@@ -112,6 +116,13 @@ class VirtualIobCalculator(
             array[pos] = iob
         }
         return array
+    }
+
+    /**
+     * Calculates a single IobTotal for the current time.
+     */
+    fun calculateIobTotalForTime(time: Long, profile: OapsProfile): IobTotal {
+        return calculateTotalIob(time, profile)
     }
 
     private fun calculateTotalIob(
