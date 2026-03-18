@@ -38,8 +38,6 @@ class MpcController @Inject constructor(
         // Optimisation Newton-Raphson 1D simplifiée ou Recherche Dichotomique pour trouver min(J)
         // La fonction J(u) est supposée convexe par rapport à la dose d'insuline injectée maintement.
         
-        var bestDose = 0.0
-        var minCost = Double.MAX_VALUE
 
         // 🌙 PROTECTION NOCTURNE ANTI-HYPO (Phase 3+)
         // La nuit, on dort : pas de repas en cours, la sensibilité est souvent stable.
