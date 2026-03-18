@@ -25,11 +25,13 @@ class ControlBarrierShield @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
     private val METABOLIC_SI_BASE = 0.0012 // Calibration factor (Phase 12)
+    
+    // État persistant pour le calcul de l'accélération
+    private var lastBgVelocity: Double? = null
 
     // Paramètres de Sécurité CBF
-    // Paramètres de Sécurité CBF
     private val bgDangerThreshold = 80.0 // Marge renforcée pour la limite absolue
-    private val gamma = 0.04 // Autorise environ -1.0 mg/dL/min quand h(x) = 25 (BG=105)
+    private val nominalGamma = 0.04       // Valeur de base (0.04 = ~1.0 mg/dL/min à h=25)
 
     /**
      * Vérifie et modifie si besoin la commande brute proposée par le MPC.
@@ -62,19 +64,34 @@ class ControlBarrierShield @Inject constructor(
         val lgh = - siMetabolic * state.bg
 
         // --- 3. Filtre CBF : Inéquation de sécurité ---
-        // On veut garantir : L_f(h) + L_g(h) * u >= - gamma * h
-        // Si cette inéquation est respectée, le MPC peut faire ce qu'il veut.
-        val safetyBoundary = -gamma * h
+        // L'accélération (a) détermine la rigidité de la barrière.
+        // Si la chute s'accélère (a < 0), on réduit gamma pour durcir le bouclier.
+        val currentVelocity = state.bgVelocity
+        val accel = lastBgVelocity?.let { (currentVelocity - it) / 5.0 } ?: 0.0
+        lastBgVelocity = currentVelocity
+        
+        val activeGamma = if (accel < -0.05 && currentVelocity < 0) {
+            // Accélération vers le bas détectée : On divise gamma par 2 (Bouclier Rigide)
+            nominalGamma * 0.5
+        } else {
+            nominalGamma
+        }
+
+        // On veut garantir : L_f(h) + L_g(h) * u >= - activeGamma * h
+        val safetyBoundary = -activeGamma * h
         val systemEvolution = lfh + (lgh * totalProposedDose)
 
         var currentReason = rawCommand.reason
+        if (activeGamma < nominalGamma) {
+            currentReason += " | [🛡️ ACCEL_GUARD]"
+        }
         
         var (finalTbr, finalSmb) = if (systemEvolution >= safetyBoundary) {
             // 🛡️ CBF SAFE
             Pair(rawCommand.temporaryBasalRate, rawCommand.scheduledMicroBolus)
         } else {
             // 🚨 CBF VIOLATION: Filtrage Actif
-            val safeU = (-gamma * h - lfh) / lgh
+            val safeU = (-activeGamma * h - lfh) / lgh
             
             val (cbfTbr, cbfSmb) = if (safeU <= 0.0) {
                 Pair(0.0, 0.0) // Suspension complète

@@ -121,9 +121,24 @@ class MpcController @Inject constructor(
         val maxTbrMultiplier = if (state.isNight) 5.0 else 3.0
         var tbrUph = min(bestDose * 12.0, profileBasal * maxTbrMultiplier)
         
-        // 🛡️ ANTI-SUSPENSION GUARD
-        if (state.bg > 100.0 && tbrUph < profileBasal) {
-            tbrUph = profileBasal
+        // 🛡️ DYNAMIC BASAL CUSHION (Amortisseur de Basale)
+        // On remplace le blocage brut à 100 mg/dL par un palier dépendant de la vélocité.
+        // Cela permet de couper la basale à 110-120 si on chute, tout en protégeant le profil si on est stable.
+        val floorMultiplier = when {
+            state.bg > 130.0 -> 1.0            // Zone haute : Basale profil maintenue
+            state.bg > 100.0 -> {
+                when {
+                    state.bgVelocity > -0.5 -> 1.0 // Stable/Montée : Garder 100%
+                    state.bgVelocity < -1.5 -> 0.0 // Chute rapide : Autoriser 0%
+                    else -> 0.5                     // Descente douce : Amortisseur à 50%
+                }
+            }
+            else -> 0.0                        // Zone < 100mg/dL : Liberté totale (0%)
+        }
+        
+        val floorTbr = profileBasal * floorMultiplier
+        if (tbrUph < floorTbr) {
+            tbrUph = floorTbr
         }
 
         val smbU = max(0.0, bestDose - (tbrUph / 12.0))
