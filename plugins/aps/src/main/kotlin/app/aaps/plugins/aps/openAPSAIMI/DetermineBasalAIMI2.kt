@@ -1382,7 +1382,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val night = hour <= 7 // (OK tel quel, utilisé pour l’autodrive)
         val predDelta = predictedDelta(getRecentDeltas()).toFloat()
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
-        val isEarlyAutodrive = !night && !isMealMode && autodrive &&
+        val isAutodriveV3Local = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
+        val isEarlyAutodrive = !night && !isMealMode && (autodrive || isAutodriveV3Local) &&
             bgNow > hypoGuard && bgNow > 110 && detectMealOnset(delta, predDelta, bgacc.toFloat(), predictedBg, profile.target_bg.toFloat())
 
         // 3) Tendance & ajustement dynamique
@@ -2871,9 +2872,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun isDroppingVeryFast(context: SafetyContext): Boolean =
         context.delta < -3.0
 
-    private fun isPrediction(context: SafetyContext): Boolean =
-        context.predictedBg < context.bg &&
-            context.delta < 0
+    private fun isPrediction(context: SafetyContext): Boolean {
+        val nearTargetThreshold = context.targetBg + 40.0
+        val isDeepHypoRisk = context.bg < 90.0 || context.predictedBg < 90.0
+        
+        return if (context.bg > nearTargetThreshold && !isDeepHypoRisk) {
+            // 🛡️ High BG: Only block if dropping VERY fast (Emergency Brake)
+            context.delta < -3.0
+        } else {
+            // 🛡️ Near target or Low BG: Standard conservative check (Brakes On)
+            context.predictedBg < context.bg && context.delta < 0
+        }
+    }
 
     private fun isBg90(context: SafetyContext): Boolean = context.bg < 90
 
@@ -4903,6 +4913,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             pkpdRuntime.params.peakMin
         }
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
+        val isAutodriveV3 = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
+        val autodriveDisplay = if (autodrive || isAutodriveV3) "✔" else "✘"
 
         val calendarInstance = Calendar.getInstance()
         this.hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
@@ -5466,7 +5478,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              }
              
              // Add Status Log (User Request)
-             rT.reason.appendLine(context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", "Meal Advisor"))
+             rT.reason.appendLine(context.getString(R.string.autodrive_status, autodriveDisplay, "Meal Advisor"))
              logDecisionFinal("MEAL_ADVISOR", rT, bg, delta)
              return rT // 🛑 HARD RETURN to ensure no other logic overrides this
         }
@@ -5498,10 +5510,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // ====================================================================================
         val isAutodriveConfigEnabled = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIautoDriveActive)
         if (isAutodriveConfigEnabled) {
-            // 🚦 Gating: Autodrive V3 takes over ONLY if BG > 120 and rising (using filtered combinedDelta)
+            // 🚦 Gating: Autodrive V3 takes over if BG > 150 or rising (using filtered combinedDelta)
             val gate = autodriveGater.shouldEngageV3(glucose_status.glucose, combinedDelta.toDouble())
             
             if (gate.engage) {
+                lastAutodriveState = AutodriveState.ENGAGED // 🚀 SYNC: Allow UI & Plugin to see V3 is active
                 aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🚦 [AUTODRIVE V3] ${gate.reason} - Engaging Control Loop...")
                 
                 val snapshot = physioAdapter.getLatestSnapshot()
@@ -5585,6 +5598,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val contextFactor = if (rT.contextEnabled && rT.contextIntentCount > 0) rT.contextModulation.toFloat() else 1.0f
         val contextPrefersBasal = (maxSMB == 0.0 && rT.contextEnabled && rT.contextIntentCount > 0)
         
+        // Restauration de l'état WATCHING par défaut si non ENGAGED par V3
+        if (lastAutodriveState != AutodriveState.ENGAGED) {
+             lastAutodriveState = AutodriveState.WATCHING 
+        }
+
         val autoRes = tryAutodrive(
             bg, delta, shortAvgDeltaAdj.toFloat(), profile, lastBolusTimeMs ?: 0L, predictedBg, mealData.slopeFromMinDeviation, targetBg, reason,
             preferences.get(BooleanKey.OApsAIMIautoDrive),
@@ -6723,7 +6741,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
 
         rT.reason.appendLine(
-             context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", activeModeName)
+             context.getString(R.string.autodrive_status, autodriveDisplay, activeModeName)
         )
         // Cleaned up Logging
 

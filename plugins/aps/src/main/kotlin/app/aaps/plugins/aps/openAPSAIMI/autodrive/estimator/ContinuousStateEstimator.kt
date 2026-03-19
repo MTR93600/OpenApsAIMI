@@ -44,8 +44,8 @@ class ContinuousStateEstimator @Inject constructor(
         val p1 = 0.015 // Efficacité du glucose à retourner à la basale
         val bgTarget = 100.0
         
-        // Dynamique naturelle attendue en mg/dL/min: G' = -p1(G-Gb) - SI*I*G + Ra
-        val expectedNaturalDelta = -p1 * (actualState.bg - bgTarget) - (actualState.estimatedSI * actualState.iob * actualState.bg)
+        // Dynamique naturelle attendue en mg/dL/min: G' = -p1(G-Gb) - (SI * multiplier)*I*G + Ra
+        val expectedNaturalDelta = -p1 * (actualState.bg - bgTarget) - (actualState.estimatedSI * 0.0012 * actualState.iob * actualState.bg)
         
         // 🚀 LEAD COMPENSATOR (Phase 10 - Hardware-Awareness)
         // Le capteur Dexcom G6 possède un lag matériel (lissage natif) qui écrase et retarde la dérivée.
