@@ -96,9 +96,8 @@ class AutodriveEngine @Inject constructor(
         // 0. Le Processus d'apprentissage en ligne s'exécute pour affiner les paramètres
         onlineLearner.learnAndUpdate(stateWithContext, currentEpochMs)
 
-        // On injecte le facteur appris dans l'état (Phase 2 -> Phase 5)
         val learningAdjustedState = stateWithContext.copy(
-            estimatedSI = stateWithContext.estimatedSI * onlineLearner.learnedResistanceFactor
+            estimatedSI = stateWithContext.estimatedSI * onlineLearner.learnedSensitivityFactor
         )
 
         // 1. Attention Gate (Phase 9 - ML On-Device)

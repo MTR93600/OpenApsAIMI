@@ -25,9 +25,9 @@ class OnlineLearner @Inject constructor(
     // Historique des prédictions (Pour comparer T-actuel avec T-30min)
     private val predictionHistory = mutableMapOf<Long, Double>()
     
-    // Hyperparamètre appris continuellement (ex: Basal Endogène / Résistance)
-    // On commence neutre (1.0)
-    var learnedResistanceFactor: Double = 1.0
+    // Hyperparamètre appris continuellement (Multiplicateur de Sensibilité / ISF)
+    // On commence neutre (1.0). Higher = More Sensitive.
+    var learnedSensitivityFactor: Double = 1.0
         private set
 
     private val learningRate = 0.005 // Descente de Gradient très lente (sécurité)
@@ -37,14 +37,13 @@ class OnlineLearner @Inject constructor(
      */
     fun learnAndUpdate(currentState: AutoDriveState, currentEpochMs: Long) {
         
-        // 🚀 EXERCISE RELEASE HEURISTIC (Phase 7)
         // Si la glycémie monte agressivement (> 4 mg/dL/5min soit > 0.8 mg/dL/min) 
-        // alors qu'on est en mode "sensible" (learnedFactor < 1.0), l'effet exercice est probablement fini.
+        // alors qu'on est en mode "sensible" (learnedFactor > 1.0), l'effet exercice est probablement fini.
         // On force un retour rapide vers 1.0.
-        if (currentState.bg > 140.0 && currentState.bgVelocity > 0.8 && learnedResistanceFactor < 1.0) {
+        if (currentState.bg > 140.0 && currentState.bgVelocity > 0.8 && learnedSensitivityFactor > 1.0) {
              val releaseStep = 0.1 // Retour très rapide en cas de repas fantôme
-             learnedResistanceFactor = Math.min(1.0, learnedResistanceFactor + releaseStep)
-             aapsLogger.info(LTag.APS, "🎓 [ONLINE_LEARNING] 🏃 Exercise Release Triggered! BG=${currentState.bg.toInt()} Vel=${"%.2f".format(currentState.bgVelocity)} -> Decay Factor to ${learnedResistanceFactor.format(3)}")
+             learnedSensitivityFactor = Math.max(1.0, learnedSensitivityFactor - releaseStep)
+             aapsLogger.info(LTag.APS, "🎓 [ONLINE_LEARNING] 🏃 Exercise Release Triggered! BG=${currentState.bg.toInt()} Vel=${"%.2f".format(currentState.bgVelocity)} -> Normalizing Sensitivity to ${learnedSensitivityFactor.format(3)}")
         }
 
         // 1. Enregistre une prédiction naïve pour le futur (Dans 30 minutes)
@@ -72,16 +71,17 @@ class OnlineLearner @Inject constructor(
             // Si on a fini plus BAS que prédit (error < 0), c'est qu'on est plus sensible
             val gradient = error * 0.001 // Normalisation de l'erreur
             
-            val previousFactor = learnedResistanceFactor
-            learnedResistanceFactor += (learningRate * gradient)
+            val previousFactor = learnedSensitivityFactor
+            // gradient > 0 means Rise > Predicted (Resistance) -> Decrease Sensitivity Multiplier
+            learnedSensitivityFactor -= (learningRate * gradient)
             
             // Saturation de la variance apprise (Max ±50% d'écart pour la sécurité)
-            learnedResistanceFactor = learnedResistanceFactor.coerceIn(0.5, 1.5)
+            learnedSensitivityFactor = learnedSensitivityFactor.coerceIn(0.5, 1.5)
 
             aapsLogger.debug(
                 LTag.APS,
                 "🎓 [ONLINE_LEARNING] Evaluation of T-30m pred: Pred=${pastPrediction.format(1)}, Act=${currentState.bg.format(1)} | " +
-                "Err=${error.format(1)} -> ResFactor updated: ${previousFactor.format(3)} -> ${learnedResistanceFactor.format(3)}"
+                "Err=${error.format(1)} -> SensFactor updated: ${previousFactor.format(3)} -> ${learnedSensitivityFactor.format(3)}"
             )
 
             // Nettoyage de l'entrée consommée
