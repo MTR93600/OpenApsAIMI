@@ -24,6 +24,7 @@ import kotlin.math.min
 class ControlBarrierShield @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
+    private val METABOLIC_SI_BASE = 0.0012 // Calibration factor (Phase 12)
 
     
     // État persistant pour le calcul de l'accélération
@@ -57,7 +58,7 @@ class ControlBarrierShield @Inject constructor(
         val totalProposedDose = proposedIobIncrement + tbrIncrement
         
         // Lie Derivative L_f(h) : Évolution naturelle sans insuline actionnée (Dose = 0)
-        val siMetabolic = state.estimatedSI // Utilisation directe de l'ISF mis à l'échelle (/10000)
+        val siMetabolic = state.estimatedSI * METABOLIC_SI_BASE
         val lfh = - p1 * (state.bg - 100.0) - (siMetabolic * state.iob * state.bg) + state.estimatedRa
 
         // Lie Derivative L_g(h) : Impact de l'action de contrôle (Dose_u)

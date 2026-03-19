@@ -1033,13 +1033,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
         val night = hour <= 7
-        val isAutodriveEnabled = preferences.get(BooleanKey.OApsAIMIautoDrive)
+        val isAutodriveEnabled = preferences.get(BooleanKey.OApsAIMIautoDrive) || preferences.get(BooleanKey.OApsAIMIautoDriveActive)
         val smb = glucoseStatusCalculatorAimi.getGlucoseStatusData(false) ?: return absoluteRate
 
         val isEarlyAutodrive = !night && !isMealMode && !isSportMode && isAutodriveEnabled &&
             determineBasalaimiSMB2.isAutodriveEngaged()
 
-        val isSpecialMode = isMealMode || isEarlyAutodrive
+        val isSpecialMode = isMealMode || isEarlyAutodrive || preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
 
         // ────────────────────────────────────────────────────
         // 2️⃣ On choisit la bonne pref en fonction du mode

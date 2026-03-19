@@ -22,6 +22,7 @@ import kotlin.math.min
 class MpcController @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
+    private val METABOLIC_SI_BASE = 0.0012 // Calibration factor (Phase 12)
 
 
     // Paramètres MPC
@@ -164,8 +165,8 @@ class MpcController @Inject constructor(
         // p1 = efficacité de base du glucose à se résorber seul (GEZI)
         val p1 = 0.015 
         
-        // La sensibilité est dynamique, estimée dans l'état, mise à l'échelle (/10000)
-        val si = startState.estimatedSI
+        // La sensibilité est dynamique, estimée dans l'état, mise à l'échelle métabolique
+        val si = startState.estimatedSI * METABOLIC_SI_BASE
 
         for (k in 1..targetSteps) {
             // -- Dynamique du Glucose (Simulation Euler sur 5 min) --

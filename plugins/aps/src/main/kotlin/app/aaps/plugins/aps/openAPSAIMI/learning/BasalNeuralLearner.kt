@@ -110,7 +110,7 @@ class BasalNeuralLearner @Inject constructor(
         // 1. T3C Heuristic (Aggressive)
         if (isT3cActive) {
             if (bgBefore > 180.0 && delta >= 0) {
-                internalAggressivenessFactor = min(internalAggressivenessFactor + 0.05, 2.0)
+                internalAggressivenessFactor = min(internalAggressivenessFactor + 0.05, 3.0)
             }
             if (delta < -15.0) {
                 internalAggressivenessFactor = max(internalAggressivenessFactor - 0.1, 0.5)
@@ -121,7 +121,7 @@ class BasalNeuralLearner @Inject constructor(
         if (isAdaptiveBasalActive) {
             // If BG is high (>140) and not dropping fast enough
             if (bgBefore > 140.0 && delta > -2.0) {
-                internalBasalScalingFactor = min(internalBasalScalingFactor + 0.01, 1.5)
+                internalBasalScalingFactor = min(internalBasalScalingFactor + 0.01, 3.0)
             }
             // If BG is low (<90) or dropping too fast
             if (bgBefore < 90.0 || delta < -8.0) {
