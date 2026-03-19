@@ -668,12 +668,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val tdd = (tddWeightedFromLast8H * 0.20) + (tdd2Days * 0.50) + (tddDaily * 0.30)
 
             // On récupère la glycémie et le delta actuel
-            val currentBG = glucoseStatusProvider.glucoseStatusData?.glucose
+            val gsData = glucoseStatusProvider.glucoseStatusData
+            val currentBG = gsData?.glucose
             if (currentBG == null) {
                 aapsLogger.error(LTag.APS, "Données de glycémie indisponibles, impossibilité de calculer l'ISF adaptatif.")
                 return
             }
-            val currentDelta = glucoseStatusProvider.glucoseStatusData?.delta
+            val currentDelta = gsData?.delta
             val recentDeltas = getRecentDeltas()
             val predictedDelta = predictedDelta(recentDeltas)
 
@@ -697,29 +698,35 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             
             aapsLogger.debug(LTag.APS, "Final adaptive ISF after clamping: $variableSensitivity")
 
-// 🔹 Création du résultat final
+// 🔹 Création du résultat final (Convention: Ratio < 1 = Résistant)
             autosensResult = AutosensResult(
-                ratio = tdd24Hrs / tdd2Days,
-                ratioFromTdd = tdd24Hrs / tdd2Days,
-                ratioFromCarbs = 1.0 // Peut être ajusté si nécessaire
+                ratio = tdd2Days / tdd24Hrs,
+                ratioFromTdd = tdd2Days / tdd24Hrs,
+                ratioFromCarbs = 1.0 
             )
 
             // 🧠 AIMI BRAIN INTEGRATION (UnifiedReactivityLearner)
             // "The Cognitive Bridge": Adjusts BOTH Sensitivity (ISF) and Resistance (Autosens Ratio)
             try {
-                unifiedReactivityLearner.processIfNeeded()
+                // 🚀 TRIPLE-SIGNAL CONFIRMATION for Confirmed Rise
+                val gsAimi = gsData as? GlucoseStatusAIMI
+                val accel = gsAimi?.bgAcceleration ?: 0.0
+                val combDelta = ((gsData?.delta ?: 0.0) + predictedDelta) / 2.0
+                val isConfirmedHighRise = (gsData?.glucose ?: 0.0) > 150.0 && combDelta > 1.5 && accel > 0.4
+
+                unifiedReactivityLearner.processIfNeeded(isConfirmedHighRise)
                 var brainFactor = unifiedReactivityLearner.getCombinedFactor()
                 
                 // 🚨 SAFETY OVERRIDE (FCL 10.3) - Refined for "Blind Spot" Removal:
                 // If we are in Hyper (>150) AND Rising/Stable, we MUST NOT be protective (<1.0).
                 // ANTI-LAG: Lower threshold to 110 if rising fast (delta > 3.0)
-                val isFastRise = glucoseStatus.delta > 3.0
+                val isFastRise = (gsData?.delta ?: 0.0) > 3.0
                 val overrideThreshold = if (isFastRise) 110.0 else 150.0
-                val isHyper = glucoseStatus.glucose > overrideThreshold
-                val isRising = glucoseStatus.delta > -0.5
+                val isHyper = (gsData?.glucose ?: 0.0) > overrideThreshold
+                val isRising = (gsData?.delta ?: 0.0) > -0.5
                 
                 if (isHyper && isRising && brainFactor < 1.0) {
-                    aapsLogger.debug(LTag.APS, "🧠 Brain Override: IGNORING protective factor ${"%.2f".format(brainFactor)} because BG ${glucoseStatus.glucose} is > $overrideThreshold & stable/rising.")
+                    aapsLogger.debug(LTag.APS, "🧠 Brain Override: IGNORING protective factor ${"%.2f".format(brainFactor)} because BG ${gsData?.glucose ?: 0.0} is > $overrideThreshold & stable/rising.")
                     brainFactor = 1.0
                 }
 
@@ -733,19 +740,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     val originalRatio = autosensResult.ratio
                     val originalISF = variableSensitivity
                     
-                    // 1. Modulate Autosens Ratio (Basal/Targets)
-                    // Factor > 1 (Aggressive) -> Ratio Increases (Higher Basal)
-                    // Factor < 1 (Protective) -> Ratio Decreases (Lower Basal)
-                    autosensResult.ratio = originalRatio * brainFactor
+                    // 1. Modulate Autosens Ratio (Basal/Targets/ISF)
+                    // High Brain Factor (Aggressive) -> Ratio decreases (e.g. 0.8 / 1.5 = 0.53) -> More Resistant
+                    autosensResult.ratio = originalRatio / brainFactor
                     
-                    // 2. Modulate Dynamic ISF (SMB)
-                    // Factor > 1 (Aggressive) -> ISF Decreases (Larger Bolus) -> ISF / Factor
-                    // Factor < 1 (Protective) -> ISF Increases (Smaller Bolus) -> ISF / Factor
-                    variableSensitivity /= brainFactor
+                    // 🚨 IMPORTANT: variableSensitivity (Dynamic ISF) is NO LONGER modulated here.
+                    // It will be modulated by autosensResult.ratio in DetermineBasalAIMI2.kt 
+                    // to ensure a single, consistent point of application for the "Resistance" multiplier.
                     
                     aapsLogger.debug(LTag.APS, "🧠 AIMI Brain Override: " +
-                        "Autosens ${"%.2f".format(originalRatio)}->${"%.2f".format(autosensResult.ratio)} | " +
-                        "ISF ${"%.0f".format(originalISF)}->${"%.0f".format(variableSensitivity)} " +
+                        "Autosens ${"%.2f".format(originalRatio)}->${"%.2f".format(autosensResult.ratio)} " +
                         "(Factor ${"%.2f".format(brainFactor)})")
                 }
             } catch (e: Exception) {

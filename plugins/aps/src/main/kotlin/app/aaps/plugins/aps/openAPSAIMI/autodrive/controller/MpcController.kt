@@ -22,10 +22,10 @@ import kotlin.math.min
 class MpcController @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
-    private val METABOLIC_SI_BASE = 0.0012 // Calibration factor (Phase 12)
+
 
     // Paramètres MPC
-    private val horizonMinutes = 60          // On vérifie sur 60 minutes
+    private val horizonMinutes = 180          // On vérifie sur 180 minutes (Weighted Horizon)
     private val stepMinutes = 5              // Pas de simulation
     private val steps = horizonMinutes / stepMinutes
     // Poids de base (Modifiés dynamiquement si Nuit/Jour)
@@ -38,8 +38,6 @@ class MpcController @Inject constructor(
         // Optimisation Newton-Raphson 1D simplifiée ou Recherche Dichotomique pour trouver min(J)
         // La fonction J(u) est supposée convexe par rapport à la dose d'insuline injectée maintement.
         
-        var bestDose = 0.0
-        var minCost = Double.MAX_VALUE
 
         // 🌙 PROTECTION NOCTURNE ANTI-HYPO (Phase 3+)
         // La nuit, on dort : pas de repas en cours, la sensibilité est souvent stable.
@@ -92,57 +90,84 @@ class MpcController @Inject constructor(
             .takeWhile { it <= maxSafeDoseU }
             .toList()
 
-        for (candidateDose in doseCandidates) {
-            val cost = simulateAndCost(candidateDose, state, activeTargetBg, activeRInsulin, lgsThreshold, state.isNight)
-            if (cost < minCost) {
-                minCost = cost
-                bestDose = candidateDose
+        // 📊 MULTI-HORIZON COMPARISON (Alignment Request)
+        // We find the optimal dose for each horizon to provide a comparative view in the logs.
+        val horizons = listOf(60, 120, 180)
+        val optimalDoses = mutableMapOf<Int, Double>()
+
+        for (h in horizons) {
+            var bestDoseForH = 0.0
+            var minCostForH = Double.MAX_VALUE
+            val hSteps = h / stepMinutes
+
+            for (candidateDose in doseCandidates) {
+                val cost = simulateAndCost(candidateDose, state, activeTargetBg, activeRInsulin, lgsThreshold, state.isNight, hSteps)
+                if (cost < minCostForH) {
+                    minCostForH = cost
+                    bestDoseForH = candidateDose
+                }
             }
+            optimalDoses[h] = bestDoseForH
         }
 
+        val bestDose = optimalDoses[180] ?: 0.0 // We act on the safest (180w) result
+        
         aapsLogger.debug(
             LTag.APS,
-            "🧮 [MPC] Optimal U=${bestDose.format(2)} found with Cost=${minCost.format(1)}"
+            "🧮 [MPC] Alignment Comparison: 60=${optimalDoses[60]!!.format(2)}U, 120=${optimalDoses[120]!!.format(2)}U, 180w=${bestDose.format(2)}U"
         )
 
         // Traitement de la sortie :
-        // Si la dose est minime, on s'oriente vers un ajustement basal lisse (TBR)
-        // La nuit, on autorise la TBR à répondre à des besoins plus grands (5x) pour éviter l'usage des micro-bolus
         val maxTbrMultiplier = if (state.isNight) 5.0 else 3.0
         var tbrUph = min(bestDose * 12.0, profileBasal * maxTbrMultiplier)
         
-        // 🛡️ ANTI-SUSPENSION GUARD (Emergency Fix)
-        // L'IA ne doit JAMAIS couper la basale quand on est en Hyper (> 130) 
-        // à cause d'une prédiction de chute lointaine, surtout après un bolus manuel.
-        if (state.bg > 100.0 && tbrUph < profileBasal) {
-            tbrUph = profileBasal
+        // 🛡️ DYNAMIC BASAL CUSHION (Amortisseur de Basale)
+        // On remplace le blocage brut à 100 mg/dL par un palier dépendant de la vélocité.
+        // Cela permet de couper la basale à 110-120 si on chute, tout en protégeant le profil si on est stable.
+        val floorMultiplier = when {
+            state.bg > 130.0 -> 1.0            // Zone haute : Basale profil maintenue
+            state.bg > 100.0 -> {
+                when {
+                    state.bgVelocity > -0.5 -> 1.0 // Stable/Montée : Garder 100%
+                    state.bgVelocity < -1.5 -> 0.0 // Chute rapide : Autoriser 0%
+                    else -> 0.5                     // Descente douce : Amortisseur à 50%
+                }
+            }
+            else -> 0.0                        // Zone < 100mg/dL : Liberté totale (0%)
+        }
+        
+        val floorTbr = profileBasal * floorMultiplier
+        if (tbrUph < floorTbr) {
+            tbrUph = floorTbr
         }
 
         val smbU = max(0.0, bestDose - (tbrUph / 12.0))
+        val comparisonStr = "H:[60:${optimalDoses[60]!!.format(2)}|120:${optimalDoses[120]!!.format(2)}|180:${bestDose.format(2)}]"
 
         return AutoDriveCommand(
             temporaryBasalRate = tbrUph,
             scheduledMicroBolus = smbU,
-            reason = "[MPC] Cost=${minCost.format(1)} | H=$horizonMinutes"
+            reason = "[MPC] $comparisonStr"
         )
     }
 
     /**
      * Simule la trajectoire pour une dose candidate U donnée et retourne le coût total J.
      */
-    private fun simulateAndCost(doseU: Double, startState: AutoDriveState, activeTargetBg: Double, activeRInsulin: Double, lgsThreshold: Double, isNight: Boolean): Double {
+    private fun simulateAndCost(doseU: Double, startState: AutoDriveState, activeTargetBg: Double, activeRInsulin: Double, lgsThreshold: Double, isNight: Boolean, customSteps: Int? = null): Double {
         var currentBg = startState.bg
         var currentIob = startState.iob + doseU
         var totalCost = 0.0
+        val targetSteps = customSteps ?: steps
 
         // Modèle Métabolique Simplifié EKF/UKF (Bergman Minimal Model paramétré par state)
         // p1 = efficacité de base du glucose à se résorber seul (GEZI)
         val p1 = 0.015 
         
-        // La sensibilité est dynamique, estimée dans l'état, mise à l'échelle métabolique
-        val si = startState.estimatedSI * METABOLIC_SI_BASE
+        // La sensibilité est dynamique, estimée dans l'état, mise à l'échelle (/10000)
+        val si = startState.estimatedSI
 
-        for (k in 1..steps) {
+        for (k in 1..targetSteps) {
             // -- Dynamique du Glucose (Simulation Euler sur 5 min) --
             // Formulation classique : dBG/dt = - [p1 + SI * IOB]*(BG) + p1*BG_Target + Ra
             // IMPORTANT : Limite biologique stricte à 0.0 pour empêcher l'explosion mathématique avec une IOB très négative
@@ -156,7 +181,16 @@ class MpcController @Inject constructor(
             // Décroissance de l'IOB selon un modèle à 1 compartiment (demi-vie ~ 50 min)
             currentIob *= 0.90 
 
-            // -- Évaluation du Coût --
+            // -- Évaluation du Coût (Weighted Horizon) --
+            // On applique une pondération temporelle (W_k) pour privilégier la réactivité court-terme
+            // tout en gardant une surveillance critique sur le stacking long-terme.
+            val currentTimeMin = k * stepMinutes
+            val timeWeight = when {
+                currentTimeMin <= 60 -> 1.0     // 0-60m : Pleine réactivité
+                currentTimeMin <= 120 -> 0.5    // 60-120m : Convergence stratégique
+                else -> 0.2                     // 120-180m : Sécurité anti-stacking
+            }
+
             // Pénalité asymétrique : l'hypo (BG < Cible) est lourdement pénalisée par rapport à l'hyper
             val errorBg = currentBg - activeTargetBg
             val scaledErrorBg = errorBg / 10.0 // Divide par 10 pour que le carré (divisé par 100) soit comparable au coût de RInsulin
@@ -164,17 +198,19 @@ class MpcController @Inject constructor(
             // 🚀 REACTIVITY BOOST: On triple le poids de l'erreur en hyper (>0) pour écraser le pic
             val qPenalty = if (errorBg < 0) qBg * 5.0 else qBg * 3.0
             
-            totalCost += (qPenalty * scaledErrorBg * scaledErrorBg)
+            totalCost += timeWeight * (qPenalty * scaledErrorBg * scaledErrorBg)
+            // 🛡️ LETHAL SAFETY FALLBACK (Check throughout the horizon)
+            // La simulation ne doit JAMAIS franchir le seuil létal absolu. 
+            // La nuit, on renforce la marge à +10 mg/dL pour forcer la coupure préventive.
+            val lgsBuffer = if (isNight) 10.0 else 5.0
+            if (currentBg < lgsThreshold + lgsBuffer) {
+                totalCost += 1_000_000.0
+            }
         }
 
         // Ajout du coût de régularisation R
         // On réintroduit un léger terme linéaire pour tuer les micro-bolus inutiles (bruit)
         totalCost += (activeRInsulin * doseU * doseU) + (activeRInsulin * 0.1 * doseU)
-
-        // Pénalité infinie si la simulation franchit le seuil létal absolu (Safety fallback intra-MPC)
-        // La nuit, on renforce la marge à +10 mg/dL pour forcer la coupure préventive des vagues de basales
-        val lgsBuffer = if (isNight) 10.0 else 5.0
-        if (currentBg < lgsThreshold + lgsBuffer) totalCost += 1_000_000.0
 
         return totalCost
     }

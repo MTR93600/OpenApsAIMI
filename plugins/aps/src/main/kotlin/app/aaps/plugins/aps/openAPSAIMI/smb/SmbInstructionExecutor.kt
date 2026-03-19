@@ -82,7 +82,8 @@ object SmbInstructionExecutor {
         val highBgOverrideUsed: Boolean,
         val profileCurrentBasal: Double,
         val cob: Float,
-        val globalReactivityFactor: Double  // 🎯 NEW: From UnifiedReactivityLearner
+        val globalReactivityFactor: Double,  // 🎯 NEW: From UnifiedReactivityLearner
+        val isConfirmedHighRise: Boolean = false // 🚀 NEW: For meal confirmation
     )
 
     data class Hooks(
@@ -90,7 +91,7 @@ object SmbInstructionExecutor {
         // ❌ adjustFactors REMOVED: UnifiedReactivityLearner replaces time-based factors
         val calculateAdjustedDia: (Float, Int, Int, Float, Float, Float, Double) -> Double,
         val costFunction: (Double, Double, Double, Int, Double, Double) -> Double,
-        val applySafety: (MealData, Float, Double?, StringBuilder?, PkPdRuntime?, Boolean, Boolean) -> Float,
+        val applySafety: (MealData, Float, Double?, StringBuilder?, PkPdRuntime?, Boolean, Boolean, Boolean) -> Float,
         val runtimeToMinutes: (Long?) -> Int,
         val computeHypoThreshold: (Double, Int?) -> Double,
         val isBelowHypo: (Double, Double, Double, Double, Double) -> Boolean,
@@ -391,7 +392,8 @@ object SmbInstructionExecutor {
             input.rT.reason,
             input.pkpdRuntime,
             input.sportTime,
-            suspectedLateFatMeal
+            suspectedLateFatMeal,
+            input.isConfirmedHighRise
         )
         input.rT.reason.appendLine(
             input.context.getString(R.string.smb_final, "%.2f".format(smbDecision))
