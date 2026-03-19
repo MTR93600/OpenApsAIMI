@@ -1039,7 +1039,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val isEarlyAutodrive = !night && !isMealMode && !isSportMode && isAutodriveEnabled &&
             determineBasalaimiSMB2.isAutodriveEngaged()
 
-        val isSpecialMode = isMealMode || isEarlyAutodrive
+        val isSpecialMode = isMealMode || isEarlyAutodrive || preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
 
         // ────────────────────────────────────────────────────
         // 2️⃣ On choisit la bonne pref en fonction du mode
