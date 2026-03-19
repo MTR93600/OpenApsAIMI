@@ -24,7 +24,7 @@ import kotlin.math.min
 class ControlBarrierShield @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
-    private val METABOLIC_SI_BASE = 0.0012 // Calibration factor (Phase 12)
+
     
     // État persistant pour le calcul de l'accélération
     private var lastBgVelocity: Double? = null
@@ -44,7 +44,7 @@ class ControlBarrierShield @Inject constructor(
 
         // --- 2. Dynamique Attendue (Dérivée de h) ---
         // dBG/dt = - (p1 + SI * IOB) * BG + p1 * Gb + Ra
-        val p1 = 0.01 // Efficacité de la clairance du glucose basal
+        val p1 = 0.015 // Efficacité de la clairance du glucose basal (Aligné sur PSE)
         
         // IOB courant. On inclut ici l'impact qu'aurait la dose microbolus proposée.
         // Remarque : Le microbolus s'ajoute à l'IOB net dans l'instant dt (simplification).
@@ -57,8 +57,8 @@ class ControlBarrierShield @Inject constructor(
         val totalProposedDose = proposedIobIncrement + tbrIncrement
         
         // Lie Derivative L_f(h) : Évolution naturelle sans insuline actionnée (Dose = 0)
-        val siMetabolic = state.estimatedSI * METABOLIC_SI_BASE
-        val lfh = - (p1 + siMetabolic * state.iob) * state.bg + (p1 * 100.0) + state.estimatedRa
+        val siMetabolic = state.estimatedSI // Utilisation directe de l'ISF mis à l'échelle (/10000)
+        val lfh = - p1 * (state.bg - 100.0) - (siMetabolic * state.iob * state.bg) + state.estimatedRa
 
         // Lie Derivative L_g(h) : Impact de l'action de contrôle (Dose_u)
         val lgh = - siMetabolic * state.bg

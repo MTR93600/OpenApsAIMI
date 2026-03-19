@@ -5511,7 +5511,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     iob = iob_data_array.firstOrNull()?.iob ?: 0.0,
                     cob = mealData.mealCOB,
                     estimatedSI = (variableSensitivity.toDouble() / 10000.0), 
-                    estimatedRa = 0.0,
+                    estimatedRa = continuousStateEstimator.getLastRa(),
                     patientWeightKg = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIweight),
                     physiologicalStressMask = doubleArrayOf(),
                     isNight = hourOfDay >= 23 || hourOfDay < 6,
@@ -5538,6 +5538,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val adCommand = autodriveEngine.tick(
                 currentState = adState,
                 profileBasal = profile.current_basal,
+                profileIsf = profile.sens,
                 lgsThreshold = min(90.0, threshold.toDouble()),
                 hour = hourOfDay,
                 steps = snapshot.stepsLast15m,

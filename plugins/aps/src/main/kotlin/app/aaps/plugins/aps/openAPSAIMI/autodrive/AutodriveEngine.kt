@@ -74,6 +74,7 @@ class AutodriveEngine @Inject constructor(
     fun tick(
         currentState: AutoDriveState,
         profileBasal: Double,
+        profileIsf: Double,
         lgsThreshold: Double,
         hour: Int,
         steps: Int,
@@ -119,7 +120,7 @@ class AutodriveEngine @Inject constructor(
         // 5. Explicabilité de l'IA (Auditor Traducteur)
         val auditedReason = autodriveAuditor.generateHumanReadableReason(
             state = estimatedState,
-            baseProfileIsf = profileBasal * 10.0, // Approximation relative pour l'auditeur
+            baseProfileIsf = profileIsf, // Utilisation de l'ISF réel du profil (Phase 7)
             rawCommand = rawCommand,
             safeCommand = safeCommand
         )

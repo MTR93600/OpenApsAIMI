@@ -37,6 +37,16 @@ class OnlineLearner @Inject constructor(
      */
     fun learnAndUpdate(currentState: AutoDriveState, currentEpochMs: Long) {
         
+        // 🚀 EXERCISE RELEASE HEURISTIC (Phase 7)
+        // Si la glycémie monte agressivement (> 4 mg/dL/5min soit > 0.8 mg/dL/min) 
+        // alors qu'on est en mode "sensible" (learnedFactor < 1.0), l'effet exercice est probablement fini.
+        // On force un retour rapide vers 1.0.
+        if (currentState.bg > 140.0 && currentState.bgVelocity > 0.8 && learnedResistanceFactor < 1.0) {
+             val releaseStep = 0.1 // Retour très rapide en cas de repas fantôme
+             learnedResistanceFactor = Math.min(1.0, learnedResistanceFactor + releaseStep)
+             aapsLogger.info(LTag.APS, "🎓 [ONLINE_LEARNING] 🏃 Exercise Release Triggered! BG=${currentState.bg.toInt()} Vel=${"%.2f".format(currentState.bgVelocity)} -> Decay Factor to ${learnedResistanceFactor.format(3)}")
+        }
+
         // 1. Enregistre une prédiction naïve pour le futur (Dans 30 minutes)
         // C'est un mock simple pour valider l'architecture. Le vrai système utiliserait
         // la trajectoire calculée par le MPC.
