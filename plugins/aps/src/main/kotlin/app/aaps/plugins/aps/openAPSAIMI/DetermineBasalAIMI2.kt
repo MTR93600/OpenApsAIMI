@@ -7775,15 +7775,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     if (autosens_data.ratio != 1.0) {
                         add(AimiDecisionContext.Modifier(
                             source = "Autosensitivity",
-                            factor = autosens_data.ratio, // Ratio < 1 => Resistant => Factor < 1 => ISF decreases
+                            // ⚠️ FIXED: ratio < 1 = SENSITIVE → ISF↑ (1/ratio) = LESS insulin
+                            factor = 1.0 / autosens_data.ratio, // Sensitive (ratio=0.8) → factor=1.25 → ISF↑
                             clinical_reason = "Rolling avg sensitivity: ${"%.2f".format(autosens_data.ratio)}"
                         ))
                     }
                     // ISF Fusion
-                    if (abs(snapshotFusedIsf - (snapshotProfileIsf * autosens_data.ratio)) > 1.0) {
+                    val autosensAdjIsf = snapshotProfileIsf * (1.0 / autosens_data.ratio)
+                     if (abs(snapshotFusedIsf - autosensAdjIsf) > 1.0) {
                          add(AimiDecisionContext.Modifier(
                             source = "PkPd_Fusion",
-                            factor = snapshotFusedIsf / (snapshotProfileIsf * autosens_data.ratio),
+                            factor = snapshotFusedIsf / autosensAdjIsf,
                             clinical_reason = "Fusion with TDD & Profile"
                         ))
                     }

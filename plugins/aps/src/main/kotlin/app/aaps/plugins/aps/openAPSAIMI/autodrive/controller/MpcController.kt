@@ -22,7 +22,12 @@ import kotlin.math.min
 class MpcController @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
-    private val METABOLIC_SI_BASE = 0.0012 // Calibration factor (Phase 12)
+    // ⚠️ CRITICAL SCALING NOTE:
+    // `estimatedSI` is already canonicalized to the Bergman space at the call site:
+    //   canonicalSI = fusedIsf / 10000.0   (e.g. ISF=80 → SI=0.008)
+    // DO NOT add an extra multiplier here. The Bergman model is correctly dimensioned with SI=1.0.
+    // A value < 1.0 blinds the solver to insulin effectiveness → forces max-SMB every tick.
+    private val METABOLIC_SI_BASE = 1.0 // Identity scale — SI already in Bergman units
 
 
     // Paramètres MPC

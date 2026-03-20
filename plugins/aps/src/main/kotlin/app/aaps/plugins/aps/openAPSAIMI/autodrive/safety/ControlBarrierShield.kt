@@ -24,7 +24,9 @@ import kotlin.math.min
 class ControlBarrierShield @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
-    private val METABOLIC_SI_BASE = 0.0012 // Calibration factor (Phase 12)
+    // ⚠️ Must stay in sync with MpcController.METABOLIC_SI_BASE
+    // See MpcController for detailed scaling rationale.
+    private val METABOLIC_SI_BASE = 1.0 // Identity scale — SI already in Bergman units
 
     
     // État persistant pour le calcul de l'accélération
