@@ -5148,7 +5148,52 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
                 consoleLog.add("🛡️ T3c pre-bolus BLOCKED: $reason — skipping applyLegacyMealModes")
             }
-            
+
+            // ── Fix #2: T3c DataLake Shadow Tick ───────────────────────────────────────
+            // Autodrive V3 is bypassed in T3c mode, but we still want the ML model to
+            // accumulate training data on high-resistance episodes. We run a Shadow-only
+            // tick (no commands issued) so the DataLake and OnlineLearner stay calibrated.
+            if (autodriveEngine != null) {
+                try {
+                    val snapshot = physioAdapter.getLatestSnapshot()
+                    val t3cShadowState = app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState.createSafe(
+                        bg = glucose_status.glucose,
+                        bgVelocity = (shortAvgDeltaAdj.toDouble() / 5.0),
+                        iob = iob_data_array.firstOrNull()?.iob ?: 0.0,
+                        cob = mealData.mealCOB,
+                        estimatedSI = (variableSensitivity.toDouble() / 10000.0),
+                        patientWeightKg = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIweight),
+                        physiologicalStressMask = doubleArrayOf(),
+                        isNight = hourOfDay >= 23 || hourOfDay < 6,
+                        hour = hourOfDay,
+                        steps = snapshot.stepsLast15m,
+                        hr = snapshot.hrNow,
+                        rhr = snapshot.rhrResting,
+                        sourceSensor = glucose_status.sourceSensor,
+                        maxIOB = this.maxIob,
+                        maxSMB = this.maxSMB,
+                        highBgMaxSMB = this.maxSMBHB
+                    )
+                    autodriveEngine.setShadowMode(true)
+                    autodriveEngine.setIsActive(false)
+                    autodriveEngine.tick(
+                        currentState = t3cShadowState,
+                        profileBasal = profile.current_basal,
+                        profileIsf = profile.sens,
+                        lgsThreshold = minOf(90.0, (profile.lgsThreshold?.toDouble() ?: 70.0).coerceAtLeast(70.0)),
+                        hour = hourOfDay,
+                        steps = snapshot.stepsLast15m,
+                        hr = snapshot.hrNow,
+                        rhr = snapshot.rhrResting
+                    ) // result is null (shadow mode) — only DataLake and OnlineLearner update
+                    consoleLog.add("👻 [T3c_SHADOW] DataLake tick fired for V3 ML continuity.")
+                } catch (e: Exception) {
+                    // Shadow tick must NEVER interfere with T3c delivery
+                    aapsLogger.warn(app.aaps.core.interfaces.logging.LTag.APS, "[T3c_SHADOW] Shadow tick failed silently: ${e.message}")
+                }
+            }
+            // ────────────────────────────────────────────────────────────────────────────
+
             return executeT3cBrittleMode(
                 bg = glucose_status.glucose,
                 delta = glucose_status.delta.toFloat(),
@@ -5559,12 +5604,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🚦 [AUTODRIVE V3] ${gate.reason} - Engaging Control Loop...")
                 
                 val snapshot = physioAdapter.getLatestSnapshot()
+                // Fix #3: Use PKPD fusedIsf as the canonical ISF source for the MPC.
+                // This eliminates the double ISF modulation (IsfFusion + MPC internal estimation).
+                // fusedIsf is in mg/dL/U; the MPC's estimatedSI space uses /10000 scaling.
+                // If PKPD is disabled, fall back to variableSensitivity / 10000.
+                val canonicalSI = if (pkpdRuntime != null) {
+                    pkpdRuntime.fusedIsf / 10000.0
+                } else {
+                    variableSensitivity.toDouble() / 10000.0
+                }
+
                 val adState = app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState.createSafe(
                     bg = glucose_status.glucose,
-                    bgVelocity = (shortAvgDeltaAdj.toDouble() / 5.0), 
+                    bgVelocity = (shortAvgDeltaAdj.toDouble() / 5.0),
                     iob = iob_data_array.firstOrNull()?.iob ?: 0.0,
                     cob = mealData.mealCOB,
-                    estimatedSI = (variableSensitivity.toDouble() / 10000.0), 
+                    estimatedSI = canonicalSI,
                     estimatedRa = continuousStateEstimator.getLastRa(),
                     patientWeightKg = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIweight),
                     physiologicalStressMask = doubleArrayOf(),
