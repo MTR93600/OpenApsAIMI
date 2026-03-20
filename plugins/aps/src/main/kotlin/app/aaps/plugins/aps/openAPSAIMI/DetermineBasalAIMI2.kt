@@ -72,6 +72,7 @@ import app.aaps.plugins.aps.openAPSAIMI.trajectory.WarningSeverity  // 🌀 Traj
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextMode  // 🎯 Context Mode
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.AutodriveEngine // 🧠 Autodrive
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState // 🧠 Autodrive
+import app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey
 import java.io.File
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -516,7 +517,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var iobNet: Double = 0.0 // Corrected IOB for learning
     fun isAutodriveEngaged(): Boolean = lastAutodriveState == AutodriveState.ENGAGED
 
-    private var internalLastSmbMillis: Long = 0L // Local Atomic Timestamp for Safety
+    // 🛡️ PERSISTENT PREBOLUS LOCKOUT (MTR Safety Patch)
+    // Survives instance re-creations and app restarts by combining Memory + SharedPreferences.
+    companion object {
+        private var lastSmbTimestampMem: Long = 0L
+    }
+
+    private var internalLastSmbMillis: Long
+        get() = Math.max(lastSmbTimestampMem, preferences.get(AimiLongKey.LastPrebolusTime))
+        set(value) {
+            lastSmbTimestampMem = value
+            preferences.put(AimiLongKey.LastPrebolusTime, value)
+        }
     private val nightGrowthResistanceMode = NightGrowthResistanceMode()
     private val ngrTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     private var zeroBasalAccumulatedMinutes: Int = 0
@@ -2559,45 +2571,35 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private fun isMealModeCondition(): Boolean {
-        val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
-        return mealruntime in 0..7 && lastBolusSMBUnit != pbolusM.toFloat() && mealTime
+        return mealruntime in 0..7 && mealTime
     }
     private fun isbfastModeCondition(): Boolean {
-        val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
-        return bfastruntime in 0..7 && lastBolusSMBUnit != pbolusbfast.toFloat() && bfastTime
+        return bfastruntime in 0..7 && bfastTime
     }
     private fun isbfast2ModeCondition(): Boolean {
-        val pbolusbfast2: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
-        return bfastruntime in 15..30 && lastBolusSMBUnit != pbolusbfast2.toFloat() && bfastTime
+        return bfastruntime in 15..30 && bfastTime
     }
     private fun isLunchModeCondition(): Boolean {
-        val pbolusLunch: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
-        return lunchruntime in 0..7 && lastBolusSMBUnit != pbolusLunch.toFloat() && lunchTime
+        return lunchruntime in 0..7 && lunchTime
     }
     private fun isLunch2ModeCondition(): Boolean {
-        val pbolusLunch2: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
-        return lunchruntime in 15..24 && lastBolusSMBUnit != pbolusLunch2.toFloat() && lunchTime
+        return lunchruntime in 15..24 && lunchTime
     }
     private fun isDinnerModeCondition(): Boolean {
-        val pbolusDinner: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
-        return dinnerruntime in 0..7 && lastBolusSMBUnit != pbolusDinner.toFloat() && dinnerTime
+        return dinnerruntime in 0..7 && dinnerTime
     }
     private fun isDinner2ModeCondition(): Boolean {
-        val pbolusDinner2: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
-        return dinnerruntime in 15..24 && lastBolusSMBUnit != pbolusDinner2.toFloat() && dinnerTime
+        return dinnerruntime in 15..24 && dinnerTime
     }
     private fun isHighCarbModeCondition(): Boolean {
-        val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
-        return highCarbrunTime in 0..7 && lastBolusSMBUnit != pbolusHC.toFloat() && highCarbTime
+        return highCarbrunTime in 0..7 && highCarbTime
     }
     private fun isHighCarb2ModeCondition(): Boolean {
-        val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
-        return highCarbrunTime in 15..23 && lastBolusSMBUnit != pbolusHC.toFloat() && highCarbTime
+        return highCarbrunTime in 15..23 && highCarbTime
     }
 
     private fun issnackModeCondition(): Boolean {
-        val pbolussnack: Double = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
-        return snackrunTime in 0..7 && lastBolusSMBUnit != pbolussnack.toFloat() && snackTime
+        return snackrunTime in 0..7 && snackTime
     }
     // --- Helpers "fenêtre repas 30 min" ---
     private fun runtimeToMinutes(rt: Long): Int {

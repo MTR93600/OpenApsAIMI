@@ -10,4 +10,7 @@ enum class AimiLongKey(
 
     // 🤰 Pregnancy Due Date (Timestamp MS)
     PregnancyDueDate("oa_aimi_pregnancy_due_date_ms", 0L),
+
+    // 💉 Last Manual Prebolus Timestamp (Timestamp MS)
+    LastPrebolusTime("oa_aimi_last_prebolus_time_ms", 0L)
 }
