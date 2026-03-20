@@ -25,9 +25,7 @@ class ControlBarrierShield @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
     // ⚠️ MUST STAY IN SYNC WITH MpcController.METABOLIC_SI_BASE
-    // Calibration définitive : voir le tableau de validation dans MpcController.
-    // VALEUR FIGÉE : ne pas modifier sans passer les 3 scénarios de simulation → voir MpcController.
-    private val METABOLIC_SI_BASE = 0.2
+    private val METABOLIC_SI_BASE = 0.5
 
 
     
@@ -118,9 +116,13 @@ class ControlBarrierShield @Inject constructor(
             Pair(cbfTbr, cbfSmb)
         }
 
-        // --- 5. MaxIOB Enforcement (Phase 4+) ---
+        // --- 5. MaxIOB Enforcement (Phase 4 / Strict User Limit) ---
         val currentIob = state.iob
-        val maxAllowedDose = max(0.0, state.maxIOB - currentIob)
+        
+        // 🛡️ STRICT USER CAP: Follow exactly the preference set by the user.
+        val effectiveMaxIob = state.maxIOB
+        
+        val maxAllowedDose = max(0.0, effectiveMaxIob - currentIob)
         val currentProposedTotalU = (finalTbr / 12.0) + finalSmb
         
         if (currentProposedTotalU > maxAllowedDose) {

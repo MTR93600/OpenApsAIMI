@@ -8415,8 +8415,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             aggressiveness = aggressiveness
         )
 
-        // Safety cap applied from inside computeT3c, simply fallback to absolute upper bounds
-        val safeRate = computedRate.coerceIn(0.0, baseBasal * 10.0)
+        // T3c Safety cap: allow up to 30x profile basal (max 10.0 U/h) 
+        // since T3c patients often require massive corrections to break glucotoxicity resistance.
+        val safeRate = computedRate.coerceIn(0.0, min(max(baseBasal * 30.0, 5.0), 10.0))
 
         rT.rate = safeRate
         rT.duration = 30
