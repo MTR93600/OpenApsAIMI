@@ -4083,6 +4083,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun applyLegacyMealModes(profile: OapsProfileAimi, rT: RT, currenttemp: CurrentTemp, modeTbrLimit: Double): RT? {
         fun rbf(key: DoubleKey) = preferences.get(key)
+        
+        // 🛡️ ONE-SHOT PREBOLUS GUARD (MTR Safety Patch)
+        // Ensure pre-boluses are not fired repeatedly every tick.
+        // Requires 15min lockout or 0.0 value.
+        val lockoutWindowMs = 15 * 60 * 1000L
+        val isLockedOut = (System.currentTimeMillis() - internalLastSmbMillis) < lockoutWindowMs
+
+        // 🛡️ IOB SAFETY GUARD
+        // Do not allow meal preboluses if IOB is already high.
+        // 🔒 Respect the USER'S maxIob setting. No hardcoded limits.
+        val iobGuard = iob.iob > this.maxIob
 
         // ─────────────────────────────────────────────────────────────────────
         // 📈 PROGRESSIVE MEAL TBR — active en permanence pendant le mode repas
@@ -4120,49 +4131,49 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
 
-        if (isMealModeCondition()) {
+        if (isMealModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(mealruntime)
             rT.units = rbf(DoubleKey.OApsAIMIMealPrebolus)
             rT.reason.append(context.getString(R.string.manual_meal_prebolus, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_MEAL P1=${"%.2f".format(rT.units)}U")
             return rT
         }
-        if (isbfastModeCondition()) {
+        if (isbfastModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(bfastruntime)
             rT.units = rbf(DoubleKey.OApsAIMIBFPrebolus)
             rT.reason.append(context.getString(R.string.reason_prebolus_bfast1, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_BFAST P1=${"%.2f".format(rT.units)}U")
             return rT
         }
-        if (isbfast2ModeCondition()) {
+        if (isbfast2ModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(bfastruntime)
             rT.units = rbf(DoubleKey.OApsAIMIBFPrebolus2)
             rT.reason.append(context.getString(R.string.reason_prebolus_bfast2, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_BFAST P2=${"%.2f".format(rT.units)}U")
             return rT
         }
-        if (isLunchModeCondition()) {
+        if (isLunchModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(lunchruntime)
             rT.units = rbf(DoubleKey.OApsAIMILunchPrebolus)
             rT.reason.append(context.getString(R.string.reason_prebolus_lunch1, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_LUNCH P1=${"%.2f".format(rT.units)}U")
             return rT
         }
-        if (isLunch2ModeCondition()) {
+        if (isLunch2ModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(lunchruntime)
             rT.units = rbf(DoubleKey.OApsAIMILunchPrebolus2)
             rT.reason.append(context.getString(R.string.reason_prebolus_lunch2, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_LUNCH P2=${"%.2f".format(rT.units)}U")
             return rT
         }
-        if (isDinnerModeCondition()) {
+        if (isDinnerModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(dinnerruntime)
             rT.units = rbf(DoubleKey.OApsAIMIDinnerPrebolus)
             rT.reason.append(context.getString(R.string.reason_prebolus_dinner1, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_DINNER P1=${"%.2f".format(rT.units)}U")
             return rT
         }
-        if (isDinner2ModeCondition()) {
+        if (isDinner2ModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(dinnerruntime)
             rT.units = rbf(DoubleKey.OApsAIMIDinnerPrebolus2)
             rT.reason.append(context.getString(R.string.reason_prebolus_dinner2, rT.units))
@@ -5098,24 +5109,45 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)) {
             consoleLog.add("⚡ T3c Brittle Mode Active: Bypassing standard AIMI algorithm.")
             
-            // 🛡️ T3c Pre-bolus Cap: max 2 SMBs within 20 minutes
-            // Without this cap, a 3rd meal-mode cycle can deliver an extra SMB that tips the patient
-            // into hypoglycemia — they have no glucagon to recover.
+            // 🛡️ T3c Pre-bolus Safety Guard
+            // Without robust one-shot guards, lag in database persistence can cause a 24U+ runaway (4U every 5min).
+            // We now use a triple-layer safety net:
+            // 1. Database History (including manual boluses)
+            // 2. Internal Memory (last suggested SMB time - lag-free)
+            // 3. Absolute IOB Cap (Emergency fallback)
+
             val t3cCapWindowMs = 20 * 60 * 1000L
             val t3cCapCutoff   = System.currentTimeMillis() - t3cCapWindowMs
-            val recentSmbCount = persistenceLayer
+            
+            // 1. Check Database (Harden: count ALL bolus types, not just SMB)
+            val recentBolusCount = persistenceLayer
                 .getBolusesFromTime(t3cCapCutoff, true)
                 .blockingGet()
-                .count { it.type == BS.Type.SMB }
+                .count { it.type == app.aaps.core.data.model.BS.Type.SMB || it.type == app.aaps.core.data.model.BS.Type.Bolus }
 
-            if (recentSmbCount < 2) {
+            // 2. Check Internal Memory (Ensures 1 tick = 1 dose max even if DB is slow)
+            val timeSinceInternalSmbMs = System.currentTimeMillis() - internalLastSmbMillis
+            val internalBlock = timeSinceInternalSmbMs < t3cCapWindowMs
+
+            // 3. Absolute IOB Guard (Safety Floor)
+            // 🔒 Respect the USER'S maxIob setting. No hardcoded limits.
+            val iobSafetyBlock = iob.iob > maxIob
+
+            if (recentBolusCount < 2 && !internalBlock && !iobSafetyBlock) {
                 // 🍱 Inject Legacy Meal Prebolus Support for T3c
-                // This safely calculates `rT.units` using Meal Mode buttons without applying full loop logic.
-                // Any TBR (rT.rate) mutated by this call will be safely overwritten in executeT3cBrittleMode.
                 applyLegacyMealModes(profile, rT, currenttemp, profile.max_basal.toDouble())
-                consoleLog.add("🍱 T3c pre-bolus allowed (recentSMB=$recentSmbCount < 2)")
+                
+                if (rT.units != null && rT.units!! > 0.0) {
+                    internalLastSmbMillis = System.currentTimeMillis()
+                    consoleLog.add("🍱 T3c pre-bolus allowed (${"%.2f".format(rT.units)}U, internalAge=${timeSinceInternalSmbMs/60000}m)")
+                }
             } else {
-                consoleLog.add("🛡️ T3c pre-bolus CAP: $recentSmbCount SMBs in last 20min — skipping applyLegacyMealModes")
+                val reason = when {
+                    iobSafetyBlock -> "IOB_LIMIT (${"%.2f".format(iob.iob)}U > MaxIOB)"
+                    internalBlock -> "INTERNAL_LOCKOUT (${timeSinceInternalSmbMs/60000}m < 20m)"
+                    else -> "DB_CAP ($recentBolusCount boluses in 20min)"
+                }
+                consoleLog.add("🛡️ T3c pre-bolus BLOCKED: $reason — skipping applyLegacyMealModes")
             }
             
             return executeT3cBrittleMode(
