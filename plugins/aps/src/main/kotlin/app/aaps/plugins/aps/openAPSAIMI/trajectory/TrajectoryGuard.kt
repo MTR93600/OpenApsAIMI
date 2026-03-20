@@ -215,7 +215,7 @@ class TrajectoryGuard @Inject constructor(
                     smbDamping = dampingStrength,
                     intervalStretch = 1.8,           // Wait much longer
                     basalPreference = 0.85,          // Strongly prefer temp basal
-                    safetyMarginExpand = 1.3,        // Expand safety margins significantly
+                    safetyMarginExpand = 0.7,        // REFINEMENT: Contract maxIOB to 70% to prevent over-stacking
                     relevanceScore = 1.0,            // High relevance for spiral
                     reason = "Trajectory compressed - over-correction risk (E=${"%.2f".format(metrics.energyBalance)}U, κ=${"%.3f".format(metrics.curvature)})"
                 )

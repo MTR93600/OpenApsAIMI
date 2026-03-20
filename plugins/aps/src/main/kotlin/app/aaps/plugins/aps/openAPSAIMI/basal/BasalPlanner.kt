@@ -28,7 +28,7 @@ class BasalPlanner @Inject constructor(
     private val ZERO_RESUME_MAX_MIN = 30
 
     private val HIGH_BG = 120.0
-    private val PLATEAU_DELTA_ABS = 3.0       // mg/dL/5min
+    private val PLATEAU_DELTA_ABS = 0.75       // mg/dL/5min (was 3.0, far too aggressive)
     private val KICK_FRAC = 0.15              // +15% profil
     private val KICK_MIN_UPH = 0.20
     private val KICK_MINUTES = 10
@@ -128,17 +128,22 @@ class BasalPlanner @Inject constructor(
             )
         }
 
-        // 3) Kicker plateau haut (BG élevé & plat)
-        val plateau = (abs(d5) <= PLATEAU_DELTA_ABS) && (abs(short) <= PLATEAU_DELTA_ABS) && (abs(long) <= PLATEAU_DELTA_ABS)
-        if (plateau && mgdl >= HIGH_BG) {
-            val baseKick = max(KICK_MIN_UPH, profileBasal * (1.0 + KICK_FRAC))
-            val rate = clampAndQuantize(baseKick, profileBasal, maxBasal, step)
-            val dur = max(minDur, KICK_MINUTES)
-            return BasalPlan(
-                rateUph = rate,
-                durationMin = dur,
-                reason = "High-flat kicker @${mgdl.toInt()}mg/dL (Δ≈0) → ${fmt2(rate)}U/h × ${dur}m"
-            )
+        // --------------------------------------------------------------------------
+        // 3. HIGH-FLAT KICKER: Rescue from stagnant high BG
+        // --------------------------------------------------------------------------
+        // TRIGGER: BG > 120, Delta is "flat" (< 0.75), and IOB < 1.5 units
+        // GUARD: Do NOT trigger if BG is clearly rising (Delta > 1.0 or AvgDelta > 0.6)
+        if (mgdl > HIGH_BG && abs(d5) < PLATEAU_DELTA_ABS && ctx.iobU < 1.5) {
+            val isRising = d5 > 1.0 || short > 0.6
+            if (!isRising) {
+                val roomToMax = (maxBasal - profileBasal).coerceAtLeast(0.0)
+                val rate = profileBasal + (roomToMax * KICK_FRAC)
+                return BasalPlan(
+                    rateUph = clampAndQuantize(rate, profileBasal, maxBasal, step),
+                    durationMin = 20,
+                    reason = "High-flat kicker (BG=${mgdl.toInt()}, Delta=${"%.2f".format(d5)})"
+                )
+            }
         }
 
         // 4) Anti-stall léger (Δ≈0 et pas franchement positif)

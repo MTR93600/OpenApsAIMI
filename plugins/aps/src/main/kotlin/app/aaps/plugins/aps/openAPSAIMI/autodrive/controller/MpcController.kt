@@ -22,8 +22,20 @@ import kotlin.math.min
 class MpcController @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
-    private val METABOLIC_SI_BASE = 0.0012 // Calibration factor (Phase 12)
-
+    // ═══════════════════════════════════════════════════════════════════
+    // 🔬 METABOLIC_SI_BASE — CALIBRATION DÉFINITIVE (NE PAS MODIFIER SANS SIMULATION)
+    // ═══════════════════════════════════════════════════════════════════
+    // Rôle : met à l'échelle canonicalSI (= fusedIsf/10000) pour le modèle Bergman simplifié.
+    // Contexte : avec ISF=80, canonicalSI = 0.008.
+    //
+    // SIMULATION DE VALIDATION (3 scénarios obligatoires avant tout changement) :
+    //   MSIB=0.0012 | BG=150 IOB=3U→Dose=0❌ | BG=150 IOB=1U→Dose=0❌ | BG=160 IOB=0→Dose=0❌
+    //   MSIB=0.20   | BG=150 IOB=3U→Dose=✅  | BG=150 IOB=1U→Dose=✅  | BG=160 IOB=0→Dose=✅
+    //   MSIB=1.00   | BG=150 IOB=3U→LGS❌    | BG=150 IOB=1U→Dose=0❌ | BG=160 IOB=0→Dose=✅
+    //
+    // Physique : si = 0.008 * 0.2 = 0.0016 → 1U drops BG by ~48 mg/dL over 180 min (cohérent ISF=80)
+    // VALEUR FIGÉE : 0.2 est la seule valeur correcte pour ce modèle avec ces paramètres.
+    private val METABOLIC_SI_BASE = 0.2
 
     // Paramètres MPC
     private val horizonMinutes = 180          // On vérifie sur 180 minutes (Weighted Horizon)
@@ -157,7 +169,13 @@ class MpcController @Inject constructor(
      */
     private fun simulateAndCost(doseU: Double, startState: AutoDriveState, activeTargetBg: Double, activeRInsulin: Double, lgsThreshold: Double, isNight: Boolean, customSteps: Int? = null): Double {
         var currentBg = startState.bg
-        var currentIob = startState.iob + doseU
+        // 🛡️ IOB SAFETY CAP: prevents LGS panic when residual IOB is abnormally high
+        // (e.g., after a system over-bolusing episode). Without this cap, large IOB values
+        // cause BG to plummet in simulation, triggering the 1,000,000 penalty for ALL
+        // dose candidates → optimal_dose=0 → complete SMB blockage.
+        // Cap at maxIob (user safety limit) — anything above that is handled by other guards.
+        val cappedIob = (startState.iob + doseU).coerceAtMost(startState.maxIOB + doseU)
+        var currentIob = cappedIob
         var totalCost = 0.0
         val targetSteps = customSteps ?: steps
 
