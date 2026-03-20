@@ -4135,74 +4135,81 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             progressiveMealTBR(mealruntime)
             rT.units = rbf(DoubleKey.OApsAIMIMealPrebolus)
             rT.reason.append(context.getString(R.string.manual_meal_prebolus, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_MEAL P1=${"%.2f".format(rT.units)}U")
+            consoleLog.add("🍱 LEGACY_MODE_MEAL P1=${"%.2f".format(rT.units ?: 0.0)}U")
+            internalLastSmbMillis = dateUtil.now()
             return rT
         }
         if (isbfastModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(bfastruntime)
             rT.units = rbf(DoubleKey.OApsAIMIBFPrebolus)
             rT.reason.append(context.getString(R.string.reason_prebolus_bfast1, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_BFAST P1=${"%.2f".format(rT.units)}U")
+            consoleLog.add("🍱 LEGACY_MODE_BFAST P1=${"%.2f".format(rT.units ?: 0.0)}U")
+            internalLastSmbMillis = dateUtil.now()
             return rT
         }
         if (isbfast2ModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(bfastruntime)
             rT.units = rbf(DoubleKey.OApsAIMIBFPrebolus2)
             rT.reason.append(context.getString(R.string.reason_prebolus_bfast2, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_BFAST P2=${"%.2f".format(rT.units)}U")
+            consoleLog.add("🍱 LEGACY_MODE_BFAST P2=${"%.2f".format(rT.units ?: 0.0)}U")
+            internalLastSmbMillis = dateUtil.now()
             return rT
         }
         if (isLunchModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(lunchruntime)
             rT.units = rbf(DoubleKey.OApsAIMILunchPrebolus)
             rT.reason.append(context.getString(R.string.reason_prebolus_lunch1, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_LUNCH P1=${"%.2f".format(rT.units)}U")
+            consoleLog.add("🍱 LEGACY_MODE_LUNCH P1=${"%.2f".format(rT.units ?: 0.0)}U")
+            internalLastSmbMillis = dateUtil.now()
             return rT
         }
         if (isLunch2ModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(lunchruntime)
             rT.units = rbf(DoubleKey.OApsAIMILunchPrebolus2)
             rT.reason.append(context.getString(R.string.reason_prebolus_lunch2, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_LUNCH P2=${"%.2f".format(rT.units)}U")
+            consoleLog.add("🍱 LEGACY_MODE_LUNCH P2=${"%.2f".format(rT.units ?: 0.0)}U")
+            internalLastSmbMillis = dateUtil.now()
             return rT
         }
         if (isDinnerModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(dinnerruntime)
             rT.units = rbf(DoubleKey.OApsAIMIDinnerPrebolus)
             rT.reason.append(context.getString(R.string.reason_prebolus_dinner1, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_DINNER P1=${"%.2f".format(rT.units)}U")
+            consoleLog.add("🍱 LEGACY_MODE_DINNER P1=${"%.2f".format(rT.units ?: 0.0)}U")
+            internalLastSmbMillis = dateUtil.now()
             return rT
         }
         if (isDinner2ModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(dinnerruntime)
             rT.units = rbf(DoubleKey.OApsAIMIDinnerPrebolus2)
             rT.reason.append(context.getString(R.string.reason_prebolus_dinner2, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_DINNER P2=${"%.2f".format(rT.units)}U")
+            consoleLog.add("🍱 LEGACY_MODE_DINNER P2=${"%.2f".format(rT.units ?: 0.0)}U")
+            internalLastSmbMillis = dateUtil.now()
             return rT
         }
-        if (isHighCarbModeCondition()) {
+        if (isHighCarbModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(highCarbrunTime)
             rT.units = rbf(DoubleKey.OApsAIMIHighCarbPrebolus)
             rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P1=${"%.2f".format(rT.units)}U")
+            consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P1=${"%.2f".format(rT.units ?: 0.0)}U")
+            internalLastSmbMillis = dateUtil.now()
             return rT
         }
-        if (isHighCarb2ModeCondition()) {
+        if (isHighCarb2ModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(highCarbrunTime)
             rT.units = rbf(DoubleKey.OApsAIMIHighCarbPrebolus2)
             rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P2=${"%.2f".format(rT.units)}U")
+            consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P2=${"%.2f".format(rT.units ?: 0.0)}U")
+            internalLastSmbMillis = dateUtil.now()
             return rT
         }
-        if (issnackModeCondition()) {
+        if (issnackModeCondition() && !isLockedOut && !iobGuard) {
             progressiveMealTBR(snackrunTime, overrideSafety = false)
             rT.units = rbf(DoubleKey.OApsAIMISnackPrebolus)
             rT.reason.append(context.getString(R.string.reason_prebolus_snack, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_SNACK P1=${"%.2f".format(rT.units)}U")
+            consoleLog.add("🍱 LEGACY_MODE_SNACK P1=${"%.2f".format(rT.units ?: 0.0)}U")
+            internalLastSmbMillis = dateUtil.now()
             return rT
-        }
-        if (rT.units != null && rT.units!! > 0.0) {
-            internalLastSmbMillis = System.currentTimeMillis()
         }
         return null
     }
@@ -5106,6 +5113,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.stable = if (delta > -3 && delta < 3 && shortAvgDelta > -3 && shortAvgDelta < 3 && longAvgDelta > -3 && longAvgDelta < 3) 1 else 0
         val nightbis = hourOfDay <= 7
         
+        // 🍱 MANUAL MEAL MODES (Priority 1: Explicit User Intent)
+        // Moved here to bypass automated silencing/caps from subsequent policies.
+        val mealLimitPref = preferences.get(DoubleKey.meal_modes_MaxBasal)
+        val modeTbrLimit = if (mealLimitPref > 0.1) mealLimitPref else profile.max_basal
+        
+        val activeModeName = when {
+            lunchTime -> "Lunch"
+            dinnerTime -> "Dinner"
+            bfastTime -> "Breakfast"
+            snackTime -> "Snack"
+            highCarbTime -> "HighCarb"
+            mealTime -> "Meal"
+            else -> "N/A"
+        }
+        
+        applyLegacyMealModes(profile, rT, currenttemp, modeTbrLimit.toDouble())?.let { return it }
+        
         // 🛡️ T3C BRITTLE MODE BRANCH (Moved here to capture `therapy` variables for Prebolus)
         // If the user has no pancreas and relies solely on basal shifts, we skip ALL
         // standard Autodrive/SMB/Meal logic and use the dedicated execution method.
@@ -5137,8 +5161,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val iobSafetyBlock = iob > maxIob
 
             if (recentBolusCount < 2 && !internalBlock && !iobSafetyBlock) {
-                // 🍱 Inject Legacy Meal Prebolus Support for T3c
-                applyLegacyMealModes(profile, rT, currenttemp, profile.max_basal.toDouble())
+                // 🍱 Legacy Meal Prebolus Support for T3c (Already handled by top-level call above)
                 // internalLastSmbMillis is now updated inside applyLegacyMealModes.
             } else {
                 val reason = when {
@@ -5475,20 +5498,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // ACTIVE MODE NAME CALCULATION (Visual)
         // -----------------------------------------------------
         
-        // 🍱 LEGACY MEAL MODES: Calculate TBR limit for all modes
-        val maxBasalmodePref = preferences.get(DoubleKey.meal_modes_MaxBasal)
-        val modeTbrLimit = if (maxBasalmodePref > 0.1) maxBasalmodePref else profile.max_basal
-        
-        val activeModeName = when {
-            lunchTime -> "Lunch"
-            dinnerTime -> "Dinner"
-            bfastTime -> "Breakfast"
-            snackTime -> "Snack"
-            highCarbTime -> "HighCarb"
-            mealTime -> "Meal"
-            else -> "N/A"
-        }
-        applyLegacyMealModes(profile, rT, currenttemp, modeTbrLimit)?.let { return it }
 
         // 🛡️ Hoisted Safety Variables for Autodrive & Early Terminators
         fun safe(v: Double) = if (v.isFinite()) v else Double.POSITIVE_INFINITY
