@@ -133,7 +133,7 @@ class BasalPlanner @Inject constructor(
         // --------------------------------------------------------------------------
         // TRIGGER: BG > 120, Delta is "flat" (< 0.75), and IOB < 1.5 units
         // GUARD: Do NOT trigger if BG is clearly rising (Delta > 1.0 or AvgDelta > 0.6)
-        if (mgdl > HIGH_BG && abs(d5) < PLATEAU_DELTA_ABS && ctx.iob.iob < 1.5) {
+        if (mgdl > HIGH_BG && abs(d5) < PLATEAU_DELTA_ABS && ctx.iobU < 1.5) {
             val isRising = d5 > 1.0 || short > 0.6
             if (!isRising) {
                 val roomToMax = (maxBasal - profileBasal).coerceAtLeast(0.0)
