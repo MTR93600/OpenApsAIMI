@@ -4418,9 +4418,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             consoleLog.add("    → Interval: ${orig}min → ${intervalsmb}min")
                         }
                         if (kotlin.math.abs(mod.safetyMarginExpand - 1.0) > 0.05) {
-                            val orig = maxIob
-                            maxIob *= mod.safetyMarginExpand
-                            consoleLog.add("    → MaxIOB: ${"%.2f".format(orig)}U → ${"%.2f".format(maxIob)}U")
+                            val origLimit = preferences.get(app.aaps.core.keys.DoubleKey.ApsSmbMaxIob)
+                            val floor = if (delta > 0.3) origLimit * 0.5 else 0.0
+                            val candidate = maxIob * mod.safetyMarginExpand
+                            val beforeMod = maxIob
+                            maxIob = max(candidate, floor)
+                            
+                            if (maxIob < beforeMod) {
+                                consoleLog.add("    → MaxIOB Modulation: ${"%.2f".format(beforeMod)}U → ${"%.2f".format(maxIob)}U (Floor=${"%.2f".format(floor)}U)")
+                            }
                         }
                     } else if (relevanceScore <= 0.4) {
                         consoleLog.add("  ⏸ Modulation Gated (Relevance ${"%.2f".format(relevanceScore)} <= 0.4)")
@@ -4914,7 +4920,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
         val isAutodriveV3 = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
-        val autodriveDisplay = if (autodrive || isAutodriveV3) "✔" else "✘"
+        val autodriveDisplay = when {
+            isAutodriveV3 -> "✔V3"
+            autodrive -> "✔V2"
+            else -> "✘"
+        }
 
         val calendarInstance = Calendar.getInstance()
         this.hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
@@ -7512,7 +7522,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (auditorEnabled) {
                 try {
                     // Collect all data for auditor
-                    val smbProposed = finalResult.units ?: 0.0
+                    // 🎯 FIX: Explicitly sync proposed units from RT before audit
+                    val smbProposed = (finalResult.units ?: rT.units ?: 0.0)
                     val tbrRate = finalResult.rate
                     val tbrDuration = finalResult.duration
                     val intervalMin = intervalsmb  // Current interval
