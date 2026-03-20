@@ -510,18 +510,26 @@ class AimiAdvisorService {
     
     /**
      * Determines if a recommendation should be shown based on history (48h cooldown).
+     * Fix #7: The original logic was INVERTED — it showed recs when a key was recently changed.
      */
     private fun shouldShowRecommendation(
         rec: AimiRecommendation,
         history: List<app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.AdvisorActionLog>
     ): Boolean {
-        if (rec.action == null) return true // Informational recs always shown (unless we want to suppress noise)
-        
-        // If action is UpdatePreference, check if any of the keys were modified recently
+        if (rec.action == null) return true // Informational recs always shown
+
+        // Fix #1b: PKPD adjustments (DIA/Peak) have no effect when T3c Brittle Mode is active.
+        // In T3c, the basal is driven by heuristics, not by the PKPD model. Suppress to avoid confusion.
+        if (rec.domain is app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Pkpd) {
+            val isT3cActive = preferences?.get(app.aaps.core.keys.BooleanKey.OApsAIMIT3cBrittleMode) ?: false
+            if (isT3cActive) return false
+        }
+
+        // Fix #7: If action is UpdatePreference, suppress if key was recently changed to avoid recommendation loops.
         if (rec.action is app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate) {
             val update = rec.action as app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate
-            // If ANY key in the proposal was modified in the last 48h, suppress it.
-            return wasRecentlyChanged(history, update.key.key)
+            // Suppress (return false) if this key was recently modified (48h cooldown)
+            return !wasRecentlyChanged(history, update.key.key)
         }
         return true
     }
