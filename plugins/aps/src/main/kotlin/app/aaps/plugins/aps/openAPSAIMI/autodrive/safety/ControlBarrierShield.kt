@@ -26,7 +26,7 @@ class ControlBarrierShield @Inject constructor(
 ) {
     // ⚠️ Must stay in sync with MpcController.METABOLIC_SI_BASE
     // See MpcController for detailed scaling rationale.
-    private val METABOLIC_SI_BASE = 1.0 // Identity scale — SI already in Bergman units
+    private val METABOLIC_SI_BASE = 0.2  // Must stay in sync with MpcController
 
     
     // État persistant pour le calcul de l'accélération

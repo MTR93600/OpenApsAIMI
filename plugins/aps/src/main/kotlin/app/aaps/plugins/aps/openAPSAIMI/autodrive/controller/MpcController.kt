@@ -27,7 +27,7 @@ class MpcController @Inject constructor(
     //   canonicalSI = fusedIsf / 10000.0   (e.g. ISF=80 → SI=0.008)
     // DO NOT add an extra multiplier here. The Bergman model is correctly dimensioned with SI=1.0.
     // A value < 1.0 blinds the solver to insulin effectiveness → forces max-SMB every tick.
-    private val METABOLIC_SI_BASE = 1.0 // Identity scale — SI already in Bergman units
+    private val METABOLIC_SI_BASE = 0.2  // Calibrated: ISF/10000 * 0.2 gives ~5 mg/dL/step physiological effect
 
 
     // Paramètres MPC
