@@ -4093,7 +4093,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🛡️ IOB SAFETY GUARD
         // Do not allow meal preboluses if IOB is already high.
         // 🔒 Respect the USER'S maxIob setting. No hardcoded limits.
-        val iobGuard = iob.iob > this.maxIob
+        val iobGuard = iob > this.maxIob
 
         // ─────────────────────────────────────────────────────────────────────
         // 📈 PROGRESSIVE MEAL TBR — active en permanence pendant le mode repas
@@ -4200,6 +4200,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(context.getString(R.string.reason_prebolus_snack, rT.units))
             consoleLog.add("🍱 LEGACY_MODE_SNACK P1=${"%.2f".format(rT.units)}U")
             return rT
+        }
+        if (rT.units != null && rT.units!! > 0.0) {
+            internalLastSmbMillis = System.currentTimeMillis()
         }
         return null
     }
@@ -4450,7 +4453,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             try { uiInteraction.addNotification(w.type.hashCode(), w.message, 2) } catch (e: Exception) {}
                         }
                     }
-                    
                     analysis.predictedConvergenceTime?.let {
                         consoleLog.add("  ⏱ Est. convergence: ${it}min")
                     }
@@ -4535,6 +4537,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.duraISFaverage = glucose_status.duraISFaverage
         val iobObj = iob_data_array.firstOrNull() ?: IobTotal(currentTime)
         this.iobNet = iobObj.iob
+        this.iob = iobObj.iob.toFloat() // 🛡️ Early Initialization for Safety Guards
         val accel = glucose_status.bgAcceleration ?: 0.0
         this.bgacc = accel
 
@@ -5123,7 +5126,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val recentBolusCount = persistenceLayer
                 .getBolusesFromTime(t3cCapCutoff, true)
                 .blockingGet()
-                .count { it.type == app.aaps.core.data.model.BS.Type.SMB || it.type == app.aaps.core.data.model.BS.Type.Bolus }
+                .count { it.type == BS.Type.SMB || it.type == BS.Type.NORMAL }
 
             // 2. Check Internal Memory (Ensures 1 tick = 1 dose max even if DB is slow)
             val timeSinceInternalSmbMs = System.currentTimeMillis() - internalLastSmbMillis
@@ -5131,19 +5134,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             // 3. Absolute IOB Guard (Safety Floor)
             // 🔒 Respect the USER'S maxIob setting. No hardcoded limits.
-            val iobSafetyBlock = iob.iob > maxIob
+            val iobSafetyBlock = iob > maxIob
 
             if (recentBolusCount < 2 && !internalBlock && !iobSafetyBlock) {
                 // 🍱 Inject Legacy Meal Prebolus Support for T3c
                 applyLegacyMealModes(profile, rT, currenttemp, profile.max_basal.toDouble())
-                
-                if (rT.units != null && rT.units!! > 0.0) {
-                    internalLastSmbMillis = System.currentTimeMillis()
-                    consoleLog.add("🍱 T3c pre-bolus allowed (${"%.2f".format(rT.units)}U, internalAge=${timeSinceInternalSmbMs/60000}m)")
-                }
+                // internalLastSmbMillis is now updated inside applyLegacyMealModes.
             } else {
                 val reason = when {
-                    iobSafetyBlock -> "IOB_LIMIT (${"%.2f".format(iob.iob)}U > MaxIOB)"
+                    iobSafetyBlock -> "IOB_LIMIT (${"%.2f".format(iob)}U > MaxIOB)"
                     internalBlock -> "INTERNAL_LOCKOUT (${timeSinceInternalSmbMs/60000}m < 20m)"
                     else -> "DB_CAP ($recentBolusCount boluses in 20min)"
                 }
@@ -5940,7 +5939,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          if (abs(this.iob - iob_data.iob.toFloat()) > 1.0) {
               consoleLog.add("⚠️ IOB Mismatch: Profiler=${this.iob} vs System=${iob_data.iob}")
          }
-         this.iob = iob_data.iob.toFloat() // FIX: Restore Official Net IOB for Safety Checks
+         // this.iob = iob_data.iob.toFloat() // Moved to start of determine_basal for early safety
         // if (iob_data.basaliob < 0) {
         //     iob2 = -iob_data.basaliob.toFloat() + iob
         //     this.iob = iob2
