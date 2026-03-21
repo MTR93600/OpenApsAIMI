@@ -41,9 +41,13 @@ class AutodriveAuditor @Inject constructor(
         val isfRatio = baseProfileIsf / currentIsfMgDl
 
         if (isfRatio > 1.3) {
-            explanations.add("🔥 Forte Résistance/Inflammation tractée")
+            val isBoost = state.combinedDelta > 1.5
+            val label = if (isBoost) "🚀 Velocity Boost" else "Forte Résistance"
+            explanations.add("🔥 $label")
         } else if (isfRatio < 0.7) {
-            explanations.add("🏃 Forte Sensibilité/Exercice détectée")
+            val isLikelyExercise = state.steps > 200 || state.hr > 110
+            val label = if (isLikelyExercise) "Exercice" else "Forte Sensibilité"
+            explanations.add("🏃 $label")
         }
 
         // 2. Analyse de l'Absorption (Ra) détectée par l'UKF

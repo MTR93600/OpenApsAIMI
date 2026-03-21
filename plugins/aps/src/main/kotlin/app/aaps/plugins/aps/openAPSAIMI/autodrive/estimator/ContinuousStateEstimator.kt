@@ -72,15 +72,21 @@ class ContinuousStateEstimator @Inject constructor(
         val rVariance = if (isDawnGuardActive) 10.0 else 2.0 // Scepticisme CGM élevé au réveil
         
         // 🚀 DYNAMIC MANEUVER DETECTION (Phase 11 - Agile Tracking)
+        // confirmation par combinedDelta si > 2.0 ou uamConfidence > 0.5
+        val risingConfirmed = actualState.combinedDelta > 2.0 || actualState.uamConfidence > 0.5
         val baseQ = when {
-            innovation > 3.0 -> 5.0   // Repas lourd confirmé
+            innovation > 3.0 || (innovation > 2.0 && risingConfirmed) -> 5.0   // Repas lourd confirmé
             innovation > 1.0 -> 0.5 + (innovation - 1.0) * 0.75
             innovation < -1.0 -> 1.0  // Désamorçage
             else -> 0.2
         }
         
+        // Boost Ra si UAM détecté par le cerveau ML
+        val uamBoost = if (actualState.uamConfidence > 0.7) 1.5 else 1.0
+        val finalBaseQ = baseQ * uamBoost
+
         // Sous Dawn Guard, on divise par 2.5 (x0.4) la vitesse à laquelle l'IA accepte que c'est un repas
-        val qRa = if (isDawnGuardActive && innovation > 0) baseQ * 0.4 else baseQ 
+        val qRa = if (isDawnGuardActive && innovation > 0) finalBaseQ * 0.4 else finalBaseQ 
         
         // 4. Prédiction de Covariance (P_k|k-1)
         pRa += qRa

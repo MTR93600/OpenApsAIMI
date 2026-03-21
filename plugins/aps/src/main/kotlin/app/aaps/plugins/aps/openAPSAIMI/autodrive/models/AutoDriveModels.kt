@@ -53,7 +53,9 @@ data class AutoDriveState(
     val sourceSensor: app.aaps.core.data.model.SourceSensor? = null,
     val maxIOB: Double = 3.0,
     val maxSMB: Double = 1.0,
-    val highBgMaxSMB: Double = 2.0
+    val highBgMaxSMB: Double = 2.0,
+    val combinedDelta: Double = 0.0,
+    val uamConfidence: Double = 0.0
 ) {
     init {
         require(bg in 30.0..600.0) { "BG out of safe bounds: $bg" }
@@ -89,7 +91,9 @@ data class AutoDriveState(
             sourceSensor: app.aaps.core.data.model.SourceSensor? = null,
             maxIOB: Double = 3.0,
             maxSMB: Double = 1.0,
-            highBgMaxSMB: Double = 2.0
+            highBgMaxSMB: Double = 2.0,
+            combinedDelta: Double = 0.0,
+            uamConfidence: Double = 0.0
         ): AutoDriveState {
             return try {
                 AutoDriveState(
@@ -109,7 +113,9 @@ data class AutoDriveState(
                     sourceSensor = sourceSensor,
                     maxIOB = maxIOB.coerceAtLeast(0.0),
                     maxSMB = maxSMB.coerceAtLeast(0.0),
-                    highBgMaxSMB = highBgMaxSMB.coerceAtLeast(0.0)
+                    highBgMaxSMB = highBgMaxSMB.coerceAtLeast(0.0),
+                    combinedDelta = combinedDelta,
+                    uamConfidence = uamConfidence.coerceIn(0.0, 1.0)
                 )
             } catch (e: Exception) {
                 AutoDriveState(

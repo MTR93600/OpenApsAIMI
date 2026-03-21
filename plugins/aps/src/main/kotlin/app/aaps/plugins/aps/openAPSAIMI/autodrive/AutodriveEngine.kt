@@ -144,7 +144,11 @@ class AutodriveEngine @Inject constructor(
         // 8. Quiet Mode Handover (Rollback to AIMI V2 PI Controller)
         // Autodrive V3 (MPC) is mathematically aggressive by nature. For calm waters and slight upstream drifts, 
         // the legacy proportional controller is superior. We yield control (return null) unless V3 is actively fighting.
-        val isAggressiveRise = estimatedState.estimatedRa > 0.5 || estimatedState.bgVelocity > 1.0
+        // 🚀 T9: Aggression boost based on UAM and CombinedDelta
+        val isAggressiveRise = estimatedState.estimatedRa > 0.5 
+            || estimatedState.bgVelocity > 1.0 
+            || estimatedState.uamConfidence > 0.6 
+            || estimatedState.combinedDelta > 3.0
         val isHigh = estimatedState.bg > 130.0
         val needsSmb = auditedCommand.scheduledMicroBolus > 0.0
         val needsSafetyBrake = auditedCommand.temporaryBasalRate == 0.0
