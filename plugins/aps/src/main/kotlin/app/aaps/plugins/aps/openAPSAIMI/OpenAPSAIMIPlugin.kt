@@ -849,7 +849,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 windowMin = 240,             // fenêtre standard (4h) – ajuste si besoin
                 exerciseFlag = false,        // remplace par ton flag 'sportTime' si dispo ICI
                 profileIsf = profileIsfRaw,  // ← **PROFIL BRUT, PAS getIsfMgdl()**
-                tdd24h = tdd24ForPk
+                tdd24h = tdd24ForPk,
+                combinedDelta = deltaNow,    // Fallback simple car combinedDelta non dispo ici
+                uamConfidence = AimiUamHandler.confidenceOrZero()
             )
 
             lastPkpdScale = pkpdRuntimeNow?.pkpdScale ?: 1.0

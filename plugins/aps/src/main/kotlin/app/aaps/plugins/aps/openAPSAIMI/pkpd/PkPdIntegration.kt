@@ -42,7 +42,9 @@ class PkPdIntegration(private val preferences: Preferences) {
         profileIsf: Double,
         tdd24h: Double,
         mealContext: MealAggressionContext? = null,
-        consoleLog: MutableList<String>? = null
+        consoleLog: MutableList<String>? = null,
+        combinedDelta: Double? = null,
+        uamConfidence: Double = 0.0
     ): PkPdRuntime? {
         val config = readConfig()
         // If the configuration changed, clear cached objects so they are rebuilt
@@ -109,7 +111,25 @@ class PkPdIntegration(private val preferences: Preferences) {
         val maxScale = if (mealContext?.mealModeActive == true) 1.5 else 1.4
         val pkpdScale = (1.0 + 0.12 * tailFraction + 0.22 * activityBlend + anticipatoryBoost + mealBoost)
             .coerceIn(minScale, maxScale)
-        val fusedIsf = fusion.fused(profileIsf, tddIsf, pkpdScale)
+            
+        // 🚀 CONFIRMATION DE MONTÉE : Priorité au combinedDelta si disponible
+        val effectiveDelta = combinedDelta ?: deltaMgDlPer5
+        val isRising = effectiveDelta > 0.5 // Seuil de montée pour verrouiller l'agression
+        
+        // 🚀 VELOCITY BOOST : Increase aggression (reduce ISF) based on effectiveDelta
+        var aggressionMultiplier = if (effectiveDelta > 1.5) {
+            val rawFactor = Math.exp(-0.04 * (effectiveDelta - 1.5))
+            rawFactor.coerceIn(0.60, 1.0)
+        } else 1.0
+
+        // 🧠 UAM BRAIN BOOST : If ML detects a meal, force more aggression
+        if (uamConfidence > 0.5) {
+            val uamBoost = 1.0 - (uamConfidence - 0.5) * 0.4 // extra up to 20% reduction
+            aggressionMultiplier *= uamBoost.coerceIn(0.8, 1.0)
+            consoleLog?.add("🧠 UAM detected (conf=${"%.2f".format(uamConfidence)}) -> Extra ISF Boost")
+        }
+        
+        val fusedIsf = fusion.fused(profileIsf, tddIsf, pkpdScale, isRising, aggressionMultiplier)
         return PkPdRuntime(
             params = params,
             tailFraction = tailFraction,

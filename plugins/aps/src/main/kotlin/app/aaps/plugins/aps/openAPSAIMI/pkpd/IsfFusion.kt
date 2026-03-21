@@ -11,14 +11,27 @@ class IsfFusion(
 ) {
     private var lastIsf: Double? = null
 
-    fun fused(profileIsf: Double, tddIsf: Double, pkpdScale: Double): Double {
+    fun fused(profileIsf: Double, tddIsf: Double, pkpdScale: Double, isRising: Boolean = false, aggressionMultiplier: Double = 1.0): Double {
         val pkpdIsf = (tddIsf * pkpdScale).coerceAtLeast(1.0)
         val candidates = listOf(profileIsf, tddIsf, pkpdIsf).sorted()
         var median = candidates[1]
-        median = median.coerceIn(tddIsf * bounds.minFactor, tddIsf * bounds.maxFactor)
+        
+        // 🛡️ SAFETY: If BG is rising, never let the ISF be weaker (larger) than profile ISF.
+        // If profile=5 and TDD=7, during rise we must use 5.
+        if (isRising && median > profileIsf) {
+            median = profileIsf
+        }
+
+        // 🚀 VELOCITY BOOST: Apply reduction factor for aggression
+        median *= aggressionMultiplier
+
+        // 🛡️ DYNAMIC BOUNDS: Allow more aggression during rise, but stay safe
+        val minSafeIsf = minOf(profileIsf, tddIsf * bounds.minFactor) * (if (isRising) 0.8 else 1.0)
+        median = median.coerceIn(minSafeIsf, tddIsf * (bounds.maxFactor * 1.5)) 
+
         lastIsf?.let { prev ->
             val maxUp = prev * (1.0 + bounds.maxChangePer5Min)
-            val maxDown = prev * (1.0 - bounds.maxChangePer5Min)
+            val maxDown = prev * (0.85 - bounds.maxChangePer5Min) // [MTR FIX] Slew rate: allow 15% drop per tick for massive meal response
             median = median.coerceIn(maxDown, maxUp)
         }
         lastIsf = median
