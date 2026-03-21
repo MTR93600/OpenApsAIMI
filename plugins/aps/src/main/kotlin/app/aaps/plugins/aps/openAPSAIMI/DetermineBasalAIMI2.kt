@@ -348,6 +348,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val inflammationAdjuster by lazy { 
         app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster(wCyclePreferences) 
     }
+    
+    private var adaptiveMult: Double = 1.0
 
     // 🦋 Thyroid (Basedow) Module
     private val thyroidPreferences by lazy { app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidPreferences(preferences) }
@@ -1350,7 +1352,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT: RT,
         currenttemp: CurrentTemp,
         overrideSafetyLimits: Boolean = false,
-        forceExact: Boolean = false
+        forceExact: Boolean = false,
+        adaptiveMultiplier: Double = 1.0
     ): RT {
         // 0) LGS kill-switch (sans récursion)
         val lgsPref = profile.lgsThreshold
@@ -1440,18 +1443,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 5) Application des limites
         val bypassSafety = (overrideSafetyLimits || isMealMode || isEarlyAutodrive) && bgNow > hypoGuard
 
-        // Même en bypass, on ne dépasse JAMAIS max_basal (hard cap)
+        // même en bypass, on ne dépasse JAMAIS max_basal (hard cap)
         var rate = when {
             bgNow <= hypoGuard -> 0.0
-            // [BASAL FLOOR] Rising & > 85 mg/dL -> Maintain floor (50%) instead of 0.0
+            // [BASAL FLOOR] Rising & > 85 mg/dL -> Maintain floor (ML-Aware) instead of 0.0
             // Only if prediction would otherwise set it to 0.0 (e.g. safety logic)
-            // We check this floor *inside* the safe zone (> hypoGuard).
-            rateAdjustment == 0.0 && bgNow > 85.0 && delta > 1.0 && !isMealMode && !isLgsEnabled -> {
-                 rT.reason.append(" [BASAL_FLOOR] ")
-                 profile.current_basal * 0.5
+            rateAdjustment == 0.0 && bgNow > 85.0 && 
+            (delta > (if (adaptiveMultiplier > 1.1) -0.5 else 1.0)) && 
+            !isMealMode && !isLgsEnabled -> {
+                 val baseFloor = profile.current_basal * 0.5
+                 val adaptiveFloor = baseFloor * adaptiveMultiplier
+                 rT.reason.append(" [BASAL_FLOOR: ${"%.2f".format(adaptiveFloor)}U/h (ML:${"%.2f".format(adaptiveMultiplier)}x)] ")
+                 adaptiveFloor
             }
             bypassSafety       -> rateAdjustment.coerceIn(0.0, profile.max_basal)
             else               -> rateAdjustment.coerceIn(0.0, maxSafe)
+        }
+
+        // Apply final Universal Adaptive Multiplier (only if > hypoGuard and not 0.0)
+        if (rate > 0.0 && Math.abs(adaptiveMultiplier - 1.0) > 0.01) {
+            val originalBeforeScaling = rate
+            rate = (rate * adaptiveMultiplier).coerceAtMost(if (bypassSafety) profile.max_basal else maxSafe)
+            rT.reason.append(" | 🧬AdaptiveBasal: ${"%.2f".format(adaptiveMultiplier)}x (${"%.2f".format(originalBeforeScaling)}->${"%.2f".format(rate)}U/h)")
         }
 
         // 6) Ajustements cycle féminin (conserve un cap)
@@ -4128,7 +4141,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             // ✅ TBR PERMANENTE — aucune condition sur delta
             // La résistance T3c s'installe silencieusement, avant tout signal glycémique visible.
-            setTempBasal(effectiveTbrRate, 5, profile, rT, currenttemp, overrideSafetyLimits = overrideSafety)
+            setTempBasal(effectiveTbrRate, 5, profile, rT, currenttemp, overrideSafetyLimits = overrideSafety, adaptiveMultiplier = adaptiveMult)
             val deltaTag = if (delta > 0f) "+%.1f".format(delta) else "%.1f".format(delta)
             consoleLog.add("📈 MEAL_TBR [${runtime/60}m]: BG=${bg.toInt()} Δ=$deltaTag → ${"%.2f".format(effectiveTbrRate)}U/h 🛡️anti-resist")
         }
@@ -4550,6 +4563,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.iob = iobObj.iob.toFloat() // 🛡️ Early Initialization for Safety Guards
         val accel = glucose_status.bgAcceleration ?: 0.0
         this.bgacc = accel
+        
+        // 🧬 Calculate Universal Adaptive Multiplier early to use in all setTempBasal calls
+        adaptiveMult = if (preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)) {
+            basalNeuralLearner.getUniversalBasalMultiplier(
+                bg = glucose_status.glucose,
+                basal = profile.current_basal,
+                accel = accel,
+                duraMin = glucose_status.duraISFminutes,
+                duraAvg = glucose_status.duraISFaverage,
+                iob = iobObj.iob
+            )
+        } else 1.0
 
         // 🚀 CONFIRMED HIGH RISE detection (Triple-Signal)
         val isConfirmedHighRiseLocal = glucose_status.glucose > 150.0 && glucose_status.combinedDelta > 1.5 && (glucose_status.bgAcceleration ?: 0.0) > 0.4
@@ -5525,7 +5550,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (safetyRes is DecisionResult.Applied) {
             consoleLog.add("SAFETY_APPLIED_TBR_ZERO intent=${safetyRes.tbrUph}")
             if (safetyRes.tbrUph != null) {
-                setTempBasal(safetyRes.tbrUph, safetyRes.tbrMin ?: 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+                setTempBasal(safetyRes.tbrUph, safetyRes.tbrMin ?: 30, profile, rT, currenttemp, overrideSafetyLimits = true, adaptiveMultiplier = adaptiveMult)
             }
             // Block all boluses
             rT.insulinReq = 0.0
@@ -5544,7 +5569,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              
              // 1. Apply TBR (Override Limits)
              if (advisorRes.tbrUph != null) {
-                  setTempBasal(advisorRes.tbrUph, advisorRes.tbrMin ?: 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+                  setTempBasal(advisorRes.tbrUph, advisorRes.tbrMin ?: 30, profile, rT, currenttemp, overrideSafetyLimits = true, adaptiveMultiplier = adaptiveMult)
              }
              
              // 2. Logic Split: Direct Send vs Standard Safety
@@ -5594,7 +5619,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add("🛑 HARD_BRAKE triggered: delta=$delta, short=$shortAvgDelta")
             rT.reason.append("🛑 Hard Brake: Falling Fast & Decelerating -> Zero Basal\n")
             // Force 0% for 30m
-            setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+            setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = true, adaptiveMultiplier = adaptiveMult)
             lastSafetySource = "HardBrake"
             logDecisionFinal("HARD_BRAKE", rT, bg, delta)
             return rT
@@ -5671,7 +5696,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 
                 val v3TbrRate = adCommand.temporaryBasalRate
                 if (v3TbrRate != null && v3TbrRate >= 0.0) {
-                    setTempBasal(v3TbrRate, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
+                    setTempBasal(v3TbrRate, 30, profile, rT, currenttemp, overrideSafetyLimits = true, adaptiveMultiplier = adaptiveMult)
                 }
 
                 val v3Smb = adCommand.scheduledMicroBolus ?: 0.0
@@ -5727,7 +5752,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (autoRes is DecisionResult.Applied) {
              // 1. Apply TBR (System Intent) if present
              if (autoRes.tbrUph != null) {
-                  setTempBasal(autoRes.tbrUph, autoRes.tbrMin ?: 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                  setTempBasal(autoRes.tbrUph, autoRes.tbrMin ?: 30, profile, rT, currenttemp, overrideSafetyLimits = false, adaptiveMultiplier = adaptiveMult)
              }
              
              // 2. Apply Bolus Intent (if present)
@@ -6824,31 +6849,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         // ================================================================
         
-        // 🧬 Truly Universal Adaptive Basal Scaling
-        // Applied to either the Boosted rate or the Profile rate if no boost active.
-        if (preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)) {
-            val baseForScaling = rT.rate ?: profile.current_basal.toDouble()
-            val adaptiveMult = basalNeuralLearner.getUniversalBasalMultiplier(
-                bg = bg,
-                basal = baseForScaling,
-                accel = bgacc,
-                duraMin = duraISFminutes,
-                duraAvg = duraISFaverage,
-                iob = iobNet
-            )
-            
-            if (kotlin.math.abs(adaptiveMult - 1.0) > 0.001) {
-                val originalProposed = rT.rate ?: profile.current_basal.toDouble()
-                rT.rate = originalProposed * adaptiveMult
-                rT.duration = 30 // Ensure temp basal duration is set
-                rT.reason.append(" | 🛡️AdaptiveBasal: ${"%.2f".format(adaptiveMult)}x (${"%.2f".format(originalProposed)}->${"%.2f".format(rT.rate ?: 0.0)}U/h)")
-                
-                // If we were at profile (rate was null) and now have a scaled rate, we must finalize the decision
-                if ((rT.deliverAt ?: 0L) <= 0L) rT.deliverAt = System.currentTimeMillis()
-            }
-        }
-
-
+        // Final Status & TIR Logging
         rT.reason.appendLine(
              context.getString(R.string.autodrive_status, autodriveDisplay, activeModeName)
         )
@@ -7008,7 +7009,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
 // -------- 1) sécurité hypo dure, avant tout
         if (safetyDecision.stopBasal) {
-            return setTempBasal(0.0, 30, profile, rT, currenttemp)
+            return setTempBasal(0.0, 30, profile, rT, currenttemp, adaptiveMultiplier = adaptiveMult)
         }
 
 // -------- 2) forçage IMMEDIAT début de repas (<= 2 min), AVANT le test IOB
@@ -7035,7 +7036,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
                 return setTempBasal(
                     forced, 30, profile, rT, currenttemp,
-                    overrideSafetyLimits = true    // bypass du plafond IOB pour le départ repas
+                    overrideSafetyLimits = true,    // bypass du plafond IOB pour le départ repas
+                    adaptiveMultiplier = adaptiveMult
                 )
             }
         }
@@ -7135,10 +7137,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 
                 if (floorRate > 0.0) {
                      rT.reason.append(context.getString(R.string.reason_bg_dropping_floor, delta, floorRate))
-                     setTempBasal(floorRate, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                     setTempBasal(floorRate, 30, profile, rT, currenttemp, overrideSafetyLimits = false, adaptiveMultiplier = adaptiveMult)
                 } else {
                      rT.reason.append(context.getString(R.string.reason_bg_dropping, delta))
-                     setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                     setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false, adaptiveMultiplier = adaptiveMult)
                 }
             } else if (currenttemp.duration > 15 && (roundBasal(basal) == roundBasal(currenttemp.rate))) {
                 rT.reason.append(", temp ${currenttemp.rate} ~ req ${round(basal, 2).withoutZeros()}U/hr. ")
@@ -7148,7 +7150,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // Apply floor here too just in case 'basal' itself is super low? (Unlikely if it came from profile, but possible)
                 val safeBasal = applyBasalFloor(basal, profile.current_basal, safetyDecision, cachedActivityContext ?: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext(), bg, delta.toDouble(), ((glucose_status as? GlucoseStatusAIMI)?.shortAvgDelta ?: 0.0).toDouble(), eventualBG.toDouble(), mealModeActive, getLgsThresholdSafe(profile))
                 rT.reason.append(context.getString(R.string.reason_set_temp_basal, round(safeBasal, 2)))
-                setTempBasal(safeBasal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                setTempBasal(safeBasal, 30, profile, rT, currenttemp, overrideSafetyLimits = false, adaptiveMultiplier = adaptiveMult)
             }
             comparator.compare(
                 aimiResult = finalResult,
@@ -7525,7 +7527,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 profile = profile,
                 rT = rT,
                 currenttemp = currenttemp,
-                overrideSafetyLimits = basalDecision.overrideSafety
+                overrideSafetyLimits = basalDecision.overrideSafety,
+                adaptiveMultiplier = adaptiveMult
             )
             comparator.compare(
                 aimiResult = finalResult,
