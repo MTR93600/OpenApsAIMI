@@ -23,9 +23,9 @@ class MpcController @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
     // 🔬 METABOLIC_SI_BASE — CALIBRATION
-    // 0.3 : Calibré pour une montée agressive à l'IOB (jusqu'à ton maxIOB)
-    // sans bloquer prématurément (comme 0.5) mais sans l'aveuglement du 0.12.
-    private val METABOLIC_SI_BASE = 0.3
+    // 0.05 : Augmente l'agressivité (perçu comme moins puissant par le solveur)
+    // pour permettre d'atteindre le maxIOB réel de l'utilisateur lors d'une montée.
+    private val METABOLIC_SI_BASE = 0.05
 
     // Paramètres MPC
     private val horizonMinutes = 180          // On vérifie sur 180 minutes (Weighted Horizon)

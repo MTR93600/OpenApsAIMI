@@ -4055,10 +4055,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val basalFirstHeavyMeal  = mealData.mealCOB > 20.0
         val isPersistentRise = bg > targetBg && combinedDelta >= 0.3f
         
-        // 🛡️ Basal-First Policy: Bypassed if rise is confirmed
+        // 🛡️ Basal-First Policy: Bypassed if rise is confirmed OR BG > 110
         val basalFirstActive = (((isLearnerPrudent && !basalFirstMealActive && !isPersistentRise)
                 || (isFragileBg && !basalFirstHeavyMeal)) && !isMealAdvisorOneShot)
                 && !isConfirmedHighRise
+                && bg < 110.0 // 🚀 REVISED: Never block SMBs when BG is above 110
         
         this.cachedBasalFirstActive = basalFirstActive
         this.cachedIsFragileBg = isFragileBg
@@ -5577,7 +5578,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              // Add Status Log (User Request)
              rT.reason.appendLine(context.getString(R.string.autodrive_status, autodriveDisplay, "Meal Advisor"))
              logDecisionFinal("MEAL_ADVISOR", rT, bg, delta)
-             return rT // 🛑 HARD RETURN to ensure no other logic overrides this
+             // Flow Restored: Meal Advisor no longer hard returns, allows further processing.
         }
 
 
@@ -5594,7 +5595,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append("🛑 Hard Brake: Falling Fast & Decelerating -> Zero Basal\n")
             // Force 0% for 30m
             setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = true)
-            lastSafetySource = "HardBrake" 
+            lastSafetySource = "HardBrake"
             logDecisionFinal("HARD_BRAKE", rT, bg, delta)
             return rT
         }
@@ -5609,11 +5610,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (isAutodriveConfigEnabled) {
             // 🚦 Gating: Autodrive V3 takes over if BG > 150 or rising (using filtered combinedDelta)
             val gate = autodriveGater.shouldEngageV3(glucose_status.glucose, combinedDelta.toDouble())
-            
+
             if (gate.engage) {
                 lastAutodriveState = AutodriveState.ENGAGED // 🚀 SYNC: Allow UI & Plugin to see V3 is active
                 aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🚦 [AUTODRIVE V3] ${gate.reason} - Engaging Control Loop...")
-                
+
                 val snapshot = physioAdapter.getLatestSnapshot()
                 // Fix #3: Use PKPD fusedIsf as the canonical ISF source for the MPC.
                 // This eliminates the double ISF modulation (IsfFusion + MPC internal estimation).
@@ -5690,7 +5691,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 
                 consoleLog.add("🚀 ${gate.reason} intent=$v3Smb actual=$effectiveBolus tbr=$v3TbrRate")
                 logDecisionFinal("AUTODRIVE_V3", rT, bg, delta)
-                return rT 
+                // Flow Restored: No early return.
+                // proceed to V2 fallback or shared finalization.
             } else {
                 consoleLog.add("🧘 ${gate.reason} (Falling back to Classic)")
                 aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🛑 [AUTODRIVE V3] Gated: ${gate.reason}")
@@ -5745,7 +5747,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  lastAutodriveActionTime = System.currentTimeMillis() // 🟢 Update Strict Cooldown
                  consoleLog.add("AUTODRIVE_APPLIED intent=${intentBolus} actual=$effectiveBolus")
                  logDecisionFinal("AUTODRIVE", rT, bg, delta)
-                 return rT
+                 // Flow Restored: No early return.
              } else {
                  consoleLog.add("AUTODRIVE_NOOP_FALLBACK reason=CappedToZero")
                  // Reset rT to clean state for Global Fallback?
