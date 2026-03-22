@@ -6731,6 +6731,36 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🔮 FCL 11.0: Preserve Predictions across reset
         val savedPredBGs = rT.predBGs
 
+        // 🌀 Preserve Trajectory fields across reset
+        val savedTrajEnabled = rT.trajectoryEnabled
+        val savedTrajType = rT.trajectoryType
+        val savedTrajCurv = rT.trajectoryCurvature
+        val savedTrajConv = rT.trajectoryConvergence
+        val savedTrajCoh = rT.trajectoryCoherence
+        val savedTrajEnergy = rT.trajectoryEnergy
+        val savedTrajOpen = rT.trajectoryOpenness
+        val savedTrajHealth = rT.trajectoryHealth
+        val savedTrajModActive = rT.trajectoryModulationActive
+        val savedTrajWarnCount = rT.trajectoryWarningsCount
+        val savedTrajETA = rT.trajectoryConvergenceETA
+        val savedTrajRelScore = rT.trajectoryRelevanceScore
+
+        // 🧠 Preserve AI Auditor fields across reset
+        val savedAuditorEnabled = rT.aiAuditorEnabled
+        val savedAuditorVerdict = rT.aiAuditorVerdict
+        val savedAuditorConf = rT.aiAuditorConfidence
+        val savedAuditorMod = rT.aiAuditorModulation
+        val savedAuditorRisk = rT.aiAuditorRiskFlags
+
+        // 🎯 Preserve Context fields across reset
+        val savedContextEnabled = rT.contextEnabled
+        val savedContextIntentCount = rT.contextIntentCount
+        val savedContextModulation = rT.contextModulation
+
+        // 📊 Preserve Learners Info and Hypo Risk
+        val savedLearnersInfo = rT.learnersInfo
+        val savedIsHypoRisk = rT.isHypoRisk
+
         rT = RT(
             algorithm = APSResult.Algorithm.AIMI,
             runningDynamicIsf = dynIsfMode,
@@ -6751,6 +6781,37 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         // 🔮 FCL 11.0: Restore preserved Predictions
         rT.predBGs = savedPredBGs ?: rT.predBGs
+        
+        // 🌀 Restore preserved Trajectory fields
+        rT.trajectoryEnabled = savedTrajEnabled
+        rT.trajectoryType = savedTrajType
+        rT.trajectoryCurvature = savedTrajCurv
+        rT.trajectoryConvergence = savedTrajConv
+        rT.trajectoryCoherence = savedTrajCoh
+        rT.trajectoryEnergy = savedTrajEnergy
+        rT.trajectoryOpenness = savedTrajOpen
+        rT.trajectoryHealth = savedTrajHealth
+        rT.trajectoryModulationActive = savedTrajModActive
+        rT.trajectoryWarningsCount = savedTrajWarnCount
+        rT.trajectoryConvergenceETA = savedTrajETA
+        rT.trajectoryRelevanceScore = savedTrajRelScore
+
+        // 🧠 Restore preserved AI Auditor fields
+        rT.aiAuditorEnabled = savedAuditorEnabled
+        rT.aiAuditorVerdict = savedAuditorVerdict
+        rT.aiAuditorConfidence = savedAuditorConf
+        rT.aiAuditorModulation = savedAuditorMod
+        rT.aiAuditorRiskFlags = savedAuditorRisk
+
+        // 🎯 Restore preserved Context fields
+        rT.contextEnabled = savedContextEnabled
+        rT.contextIntentCount = savedContextIntentCount
+        rT.contextModulation = savedContextModulation
+
+        // 📊 Restore preserved Learners Info and Hypo Risk
+        rT.learnersInfo = savedLearnersInfo
+        rT.isHypoRisk = savedIsHypoRisk
+
         ensurePredictionFallback(rT, bg)
         rT.reason.append(savedReason)
 
