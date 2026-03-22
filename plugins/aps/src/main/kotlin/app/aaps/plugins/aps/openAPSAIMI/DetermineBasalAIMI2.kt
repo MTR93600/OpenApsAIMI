@@ -6780,16 +6780,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bg = bg,
             tick = tick,
             eventualBG = eventualBG,
-            //targetBG = target_bg,
-            targetBG = "%.0f".format(target_bg).toDouble(),
+            targetBG = target_bg,
             insulinReq = 0.0,
-            deliverAt = deliverAt, // The time at which the microbolus should be delivered
-            //sensitivityRatio = sensitivityRatio, // autosens ratio (fraction of normal basal)
-            sensitivityRatio = "%.0f".format(sensitivityRatio).toDouble(),
+            deliverAt = deliverAt,
+            sensitivityRatio = sensitivityRatio,
             consoleLog = consoleLog,
             consoleError = consoleError,
-            //variable_sens = variableSensitivity.toDouble()
-            variable_sens = "%.0f".format(variableSensitivity.toDouble()).toDouble()
+            variable_sens = variableSensitivity.toDouble()
         )
         // 🔮 FCL 11.0: Restore preserved Predictions
         rT.predBGs = savedPredBGs ?: rT.predBGs
@@ -7639,20 +7636,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             val learnersSummary = learnersParts.joinToString(", ")
             
-            // 🛡️ PRIORITY TBR PROTECTION: If a priority boost is active (rT.rate > profile), protect it from being overwritten.
-            val finalProposedRate = if ((rT.rate ?: 0.0) > profile.current_basal && basalDecision.rate <= profile.current_basal) {
-                rT.rate!!
-            } else {
-                basalDecision.rate
-            }
+            // 🛡️ PRIORITY TBR PROTECTION: If a priority decision was already set (rT.rate != null),
+            // it MUST win. The background engine is for "Steady State" decision making.
+            val finalProposedRate = rT.rate ?: basalDecision.rate
+            val finalDuration = if (rT.rate != null) (rT.duration ?: 30) else maxOf(basalDecision.duration, 30)
 
             val finalResult = setTempBasal(
                 _rate = finalProposedRate,
-                duration = if (finalProposedRate == (rT.rate ?: -1.0)) (rT.duration ?: 30) else basalDecision.duration,
+                duration = finalDuration,
                 profile = profile,
                 rT = rT,
                 currenttemp = currenttemp,
-                overrideSafetyLimits = basalDecision.overrideSafety || (finalProposedRate == (rT.rate ?: -1.0)),
+                overrideSafetyLimits = basalDecision.overrideSafety || (rT.rate != null),
                 adaptiveMultiplier = adaptiveMult
             )
             comparator.compare(
