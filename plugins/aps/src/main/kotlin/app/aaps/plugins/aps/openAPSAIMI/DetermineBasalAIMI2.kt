@@ -4141,12 +4141,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     .coerceIn(profile.current_basal, 4.0)
             }
             val effectiveTbrRate = tbrRate.coerceAtMost(modeTbrLimit)
-
-            // ✅ TBR PERMANENTE — aucune condition sur delta
-            // La résistance T3c s'installe silencieusement, avant tout signal glycémique visible.
-            setTempBasal(effectiveTbrRate, 5, profile, rT, currenttemp, overrideSafetyLimits = overrideSafety, adaptiveMultiplier = 1.0)
+            
+            // ✅ TBR PERMANENTE — 🛡️ Increased to 30m for pump compatibility
+            setTempBasal(effectiveTbrRate, 30, profile, rT, currenttemp, overrideSafetyLimits = overrideSafety, adaptiveMultiplier = 1.0)
             val deltaTag = if (delta > 0f) "+%.1f".format(delta) else "%.1f".format(delta)
-            consoleLog.add("📈 MEAL_TBR [${runtime/60}m]: BG=${bg.toInt()} Δ=$deltaTag → ${"%.2f".format(effectiveTbrRate)}U/h 🛡️anti-resist")
+            consoleLog.add("📈 MEAL_TBR [${runtime/60}m]: BG=${bg.toInt()} Δ=$deltaTag → ${"%.2f".format(effectiveTbrRate)}U/h (30m) 🛡️anti-resist")
         }
 
 
@@ -6728,30 +6727,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(" | 🛡️ Cap: ${"%.2f".format(beforeCap)} → ${"%.2f".format(smbToGive)}")
         }
         val savedReason = rT.reason.toString()
-        // 🔮 FCL 11.0: Preserve Predictions across reset
         val savedPredBGs = rT.predBGs
+        val savedUnits = rT.units
+        val savedRate = rT.rate
+        val savedDuration = rT.duration
 
-        rT = RT(
-            algorithm = APSResult.Algorithm.AIMI,
-            runningDynamicIsf = dynIsfMode,
-            timestamp = currentTime,
-            bg = bg,
-            tick = tick,
-            eventualBG = eventualBG,
-            //targetBG = target_bg,
-            targetBG = "%.0f".format(target_bg).toDouble(),
-            insulinReq = 0.0,
-            deliverAt = deliverAt, // The time at which the microbolus should be delivered
-            //sensitivityRatio = sensitivityRatio, // autosens ratio (fraction of normal basal)
-            sensitivityRatio = "%.0f".format(sensitivityRatio).toDouble(),
-            consoleLog = consoleLog,
-            consoleError = consoleError,
-            //variable_sens = variableSensitivity.toDouble()
-            variable_sens = "%.0f".format(variableSensitivity.toDouble()).toDouble()
-        )
-        // 🔮 FCL 11.0: Restore preserved Predictions
+        rT.reason = StringBuilder("")
+        rT.units = null
+        rT.rate = null
+        rT.duration = null
+        rT.insulinReq = 0.0
+        rT.deliverAt = deliverAt
+        rT.targetBG = target_bg
+        rT.sensitivityRatio = sensitivityRatio
+        rT.variable_sens = variableSensitivity.toDouble()
+
+        // 🔮 FCL 11.0: Restore preserved Predictions (if needed by final engine)
         rT.predBGs = savedPredBGs ?: rT.predBGs
         ensurePredictionFallback(rT, bg)
+
+        // RESTORE PRIORITY COMMANDS (from early blocks)
+        rT.units = savedUnits
+        rT.rate = savedRate
+        rT.duration = savedDuration
         rT.reason.append(savedReason)
 
         // ====================================================================================
@@ -7547,9 +7545,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             val learnersSummary = learnersParts.joinToString(", ")
             
+            // 🛡️ PRIORITY PROTECTION (MTR Fix)
+            // If a priority rate was set earlier (e.g., Meal Mode / Advisor), 
+            // we preserve it unless the engine suggests a LOWER (safer) rate.
+            val engineRate = basalDecision.rate
+            val finalProposedRate = if (rT.rate != null) {
+                if (engineRate < rT.rate!!) engineRate else rT.rate!!
+            } else {
+                engineRate
+            }
+            
+            // Ensure minimum 30 min duration for all manual/priority TBRs
+            val finalDuration = if (rT.rate != null) {
+                maxOf(rT.duration ?: 30, 30)
+            } else {
+                maxOf(basalDecision.duration, 30)
+            }
+
             val finalResult = setTempBasal(
-                _rate = basalDecision.rate,
-                duration = basalDecision.duration,
+                _rate = finalProposedRate,
+                duration = finalDuration,
                 profile = profile,
                 rT = rT,
                 currenttemp = currenttemp,
