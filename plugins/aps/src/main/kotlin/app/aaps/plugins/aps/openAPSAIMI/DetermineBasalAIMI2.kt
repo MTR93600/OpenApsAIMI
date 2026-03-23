@@ -4524,7 +4524,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         extraDebug: String = "" // 🌀 Extensible Debug Channel (e.g. Cosine Gate)
     ): RT {
         consoleError = mutableListOf()
-    consoleLog = mutableListOf()
+        consoleLog = mutableListOf()
         
         if (extraDebug.isNotEmpty()) {
              // Append to log history AND consoleError for "Script Debug" visibility
