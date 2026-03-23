@@ -45,6 +45,9 @@ class PhysioMetabolicWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
+            val manager = AIMIPhysioManagerMTR.instance
+            if (manager == null) return@withContext Result.retry()
+
             manager.performUpdate(daysBack = 3, runLLM = false)
             Result.success()
         } catch (e: Exception) {
