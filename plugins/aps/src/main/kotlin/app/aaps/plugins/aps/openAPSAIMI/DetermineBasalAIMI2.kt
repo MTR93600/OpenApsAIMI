@@ -8452,8 +8452,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // rT.units is preserved for pre-bolus from applyLegacyMealModes
 
         val baseBasal = profile.current_basal
-        // Removed the maxBasal restrictor for T3c because T3c NEEDS the 1000% capability 
-        // to act as a proper bolus replacement. It will be safely capped at 10x inside the compute function.
+        // In T3C, we still honor the user's configured max basal ceiling.
+        val maxBasalCap = profile.max_basal.coerceAtLeast(baseBasal)
 
         // Fetch T3C Preferences
         val activationThreshold = preferences.get(DoubleKey.OApsAIMIT3cActivationThreshold)
@@ -8482,16 +8482,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             duraISFaverage = duraISFaverage,
             eventualBg = if (eventualBg > 0) eventualBg else null,
             activationThreshold = activationThreshold,
-            aggressiveness = aggressiveness
+            aggressiveness = aggressiveness,
+            maxBasalCap = maxBasalCap
         )
 
-        // T3c Safety cap: allow up to 30x profile basal (max 10.0 U/h) 
-        // since T3c patients often require massive corrections to break glucotoxicity resistance.
-        val safeRate = computedRate.coerceIn(0.0, min(max(baseBasal * 30.0, 5.0), 10.0))
+        // Progressive ramp: move toward target rate without abrupt jumps.
+        val targetRate = computedRate.coerceIn(0.0, maxBasalCap)
+        val prevRate = if (currenttemp.duration > 0) currenttemp.rate else baseBasal
+        val maxStepUp = max(0.30, prevRate * 0.20) // +20% or +0.30 U/h per 30-min tick
+        val safeRate = if (targetRate > prevRate) {
+            min(targetRate, prevRate + maxStepUp)
+        } else {
+            targetRate
+        }
 
         rT.rate = safeRate
         rT.duration = 30
-        rT.reason.append("🛡️T3c | Thresh: ${activationThreshold.toInt()} | Agg: ${"%.1f".format(aggressiveness)} | PI: ${"%.2f".format(safeRate)}U/h")
+        rT.reason.append(
+            "🛡️T3c | Thresh: ${activationThreshold.toInt()} | Agg: ${"%.1f".format(aggressiveness)} | " +
+                "PI: ${"%.2f".format(safeRate)}U/h (target=${"%.2f".format(targetRate)} cap=${"%.2f".format(maxBasalCap)} stepUp=${"%.2f".format(maxStepUp)})"
+        )
 
         // 🧬 Adaptive Learning Update
         basalNeuralLearner.updateLearning(

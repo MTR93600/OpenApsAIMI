@@ -222,7 +222,8 @@ class DynamicBasalController @Inject constructor(
             duraISFaverage: Double,
             eventualBg: Double?,
             activationThreshold: Double = 130.0,
-            aggressiveness: Double = 1.0
+            aggressiveness: Double = 1.0,
+            maxBasalCap: Double? = null
         ): Double {
             val effectiveIsf = isf.coerceAtLeast(10.0)
             val velocity = delta * 0.7f + shortAvgDelta.toFloat() * 0.3f
@@ -293,8 +294,10 @@ class DynamicBasalController @Inject constructor(
             // Apply BOTH brakeFactor AND resTransitionMult
             val totalRate = (baseToDeliver + correctionRate) * brakeFactor * resTransitionMult
 
-            // Cap at 10× profileBasal
-            return totalRate.coerceIn(0.0, profileBasal * 10.0)
+            // Cap at configured max basal (T3C should respect user-defined hard ceiling).
+            // Fallback keeps legacy behavior if cap is not provided.
+            val effectiveCap = (maxBasalCap ?: (profileBasal * 10.0)).coerceAtLeast(profileBasal)
+            return totalRate.coerceIn(0.0, effectiveCap)
         }
     }
 }
