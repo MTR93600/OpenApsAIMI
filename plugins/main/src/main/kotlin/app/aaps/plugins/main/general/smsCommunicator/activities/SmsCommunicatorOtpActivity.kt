@@ -132,12 +132,24 @@ class SmsCommunicatorOtpActivity : TranslatedDaggerAppCompatActivity() {
         val dim = (min(width, height) * 0.85).toInt()
         val provURI = otp.provisioningURI()
 
-        if (provURI != null) {
-            val myBitmap = QRCode.from(provURI).withErrorCorrection(ErrorCorrectionLevel.H).withSize(dim, dim).bitmap()
+        if (provURI.isNullOrBlank()) {
+            binding.otpProvisioning.visibility = View.GONE
+            return
+        }
+
+        try {
+            val myBitmap = QRCode.from(provURI)
+                .withErrorCorrection(ErrorCorrectionLevel.H)
+                .withSize(dim, dim)
+                .bitmap()
             binding.otpProvisioning.setImageBitmap(myBitmap)
             binding.otpProvisioning.visibility = View.VISIBLE
-        } else {
+        } catch (e: Exception) {
+            // Do not crash OTP setup screen if QR generation fails on a device/vendor stack.
+            fabricPrivacy.logException(e)
+            binding.otpProvisioning.setImageDrawable(null)
             binding.otpProvisioning.visibility = View.GONE
+            ToastUtils.Long.errorToast(this, rh.gs(R.string.wrong_format))
         }
     }
 }
