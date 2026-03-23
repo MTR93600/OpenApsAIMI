@@ -162,7 +162,12 @@ class AdaptiveSmoothingPlugin @Inject constructor(
     // ============================================================
 
     override fun smooth(data: MutableList<InMemoryGlucoseValue>): MutableList<InMemoryGlucoseValue> {
-        if (data.size < 2) return data // Need at least 2 points to start
+        if (data.size < 2) {
+            // Always provide a valid smoothed payload for downstream workers.
+            copyRawToSmoothed(data)
+            sanitizeOutput(data)
+            return data
+        }
 
         try {
             // 1. Check for Reset Conditions (Sensor Change, Gaps, Time Travel)
@@ -183,12 +188,14 @@ class AdaptiveSmoothingPlugin @Inject constructor(
             if (newDataProcessed) {
                 savePersistedParameters()
             }
-        
+
+            sanitizeOutput(data)
             return data
 
         } catch (e: Exception) {
             aapsLogger.error(LTag.GLUCOSE, "HybridSmoothing: Error, falling back to raw", e)
             copyRawToSmoothed(data)
+            sanitizeOutput(data)
             return data
         }
     }
@@ -619,6 +626,19 @@ class AdaptiveSmoothingPlugin @Inject constructor(
        }
     }
 
+    private fun sanitizeOutput(data: MutableList<InMemoryGlucoseValue>) {
+        data.forEach { gv ->
+            val smoothed = gv.smoothed
+            if (smoothed == null || !smoothed.isFinite()) {
+                gv.smoothed = gv.value.coerceIn(MIN_VALID_BG, MAX_VALID_BG)
+                if (gv.trendArrow == null) gv.trendArrow = TrendArrow.FLAT
+                return@forEach
+            }
+            gv.smoothed = smoothed.coerceIn(MIN_VALID_BG, MAX_VALID_BG)
+            if (gv.trendArrow == null) gv.trendArrow = TrendArrow.FLAT
+        }
+    }
+
     // ============================================================
     // PERSISTENCE & SENSOR MANAGEMENT
     // ============================================================
@@ -697,5 +717,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
     private companion object {
         // Keeps high performance while preventing DB-query storms from noisy TE change events.
         const val SENSOR_CHANGE_DEBOUNCE_SECONDS: Long = 10L
+        const val MIN_VALID_BG: Double = 39.0
+        const val MAX_VALID_BG: Double = 500.0
     }
 }
