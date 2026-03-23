@@ -24,10 +24,8 @@ class PhysioRealtimeWorker(
             val hcRepo = manager.repo.getHcRepo() // We need to expose this or add method in Repo
             // Ideally Repo handles everything.
             
-            // Trigger Snapshot Update (The Repo handles step/hr fetch internally if we moved logic there)
-            // But verify: HealthContextRepository.fetchSnapshot() currently calls hcRepo internally.
-            
-            manager.repo.fetchSnapshot()
+            // Trigger Snapshot Update
+            manager.performUpdate(daysBack = 1, runLLM = false)
             
             Result.success()
         } catch (e: Exception) {
@@ -47,10 +45,7 @@ class PhysioMetabolicWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            val manager = AIMIPhysioManagerMTR.instance
-            if (manager == null) return@withContext Result.retry()
-
-            manager.repo.fetchSnapshot()
+            manager.performUpdate(daysBack = 3, runLLM = false)
             Result.success()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -77,7 +72,7 @@ class PhysioDailyWorker(
             // For now, let's just fetchSnapshot, which does 1 day lookback.
             // If we want 7 days history updated, we need access to hcRepo.
             
-            manager.repo.forceHeavyRefresh()
+            manager.performUpdate(daysBack = 7, runLLM = true)
             
             Result.success()
         } catch (e: Exception) {

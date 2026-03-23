@@ -211,7 +211,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
         
         Thread {
             try {
-                performUpdate()
+                performUpdate(daysBack = 7, runLLM = true)
             } catch (e: Exception) {
                 aapsLogger.error(LTag.APS, "[$TAG] Manual update failed", e)
             }
@@ -224,7 +224,14 @@ class AIMIPhysioManagerMTR @Inject constructor(
      * Performs complete physiological analysis pipeline
      * Public for Worker access
      */
-    fun performUpdate(): Boolean {
+    /**
+     * Performs complete physiological analysis pipeline
+     * Public for Worker access
+     * 
+     * @param daysBack Window for historical data fetch (default 7)
+     * @param runLLM Whether to run the optional LLM analysis (default skip to save battery/API)
+     */
+    fun performUpdate(daysBack: Int = 7, runLLM: Boolean = false): Boolean {
         val startTime = System.currentTimeMillis()
         var fetchMs = 0L
         var extractMs = 0L
@@ -243,7 +250,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
             // Step 1: Fetch raw data
             val t0 = System.currentTimeMillis()
             val rawData = try {
-                dataRepository.fetchAllData(daysBack = 7)
+                dataRepository.fetchAllData(daysBack = daysBack)
             } catch (e: Exception) {
                 aapsLogger.error(LTag.APS, "[$TAG] ❌ Fetch error", e)
                 return false
@@ -271,7 +278,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
             analyzeMs = System.currentTimeMillis() - t2
             
             // 🤖 Step 4b: Cognitive Analysis (LLM - Optional)
-            if (isLLMEnabled()) {
+            if (runLLM && isLLMEnabled()) {
                 // Only run LLM if Data is valid to avoid hallucination on empty data
                 if (features.hasValidData) {
                     val narrative = llmAnalyzer.analyze(features, baseline, context)
