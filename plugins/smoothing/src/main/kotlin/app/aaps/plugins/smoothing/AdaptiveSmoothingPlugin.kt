@@ -22,6 +22,7 @@ import app.aaps.core.interfaces.sharedPreferences.SP
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
 import java.util.ArrayDeque
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -659,23 +660,42 @@ class AdaptiveSmoothingPlugin @Inject constructor(
     private fun subscribeToSensorChanges() {
         disposable += rxBus.toObservable(EventTherapyEventChange::class.java)
             .observeOn(aapsSchedulers.io)
-            .subscribe({ checkForSensorChange() }, {})
+            // Debounce because EventTherapyEventChange can be fired for many TE types.
+            .throttleFirst(SENSOR_CHANGE_DEBOUNCE_SECONDS, TimeUnit.SECONDS)
+            .subscribe(
+                { checkForSensorChange() },
+                { t ->
+                    aapsLogger.error(LTag.GLUCOSE, "AdaptiveSmoothing: sensor subscription error", t)
+                }
+            )
     }
 
     private fun loadLastSensorChange() {
+        // Ensure we don't stack multiple DB queries/subscriptions on frequent triggers.
+        sensorChangeDisposables.clear()
         sensorChangeDisposables += persistenceLayer.getTherapyEventDataFromTime(System.currentTimeMillis() - 30L*24*3600*1000, false)
             .observeOn(aapsSchedulers.io)
             .subscribe({ events ->
-                events.filter { it.type == TE.Type.SENSOR_CHANGE }.maxByOrNull { it.timestamp }?.let {
-                    lastSensorChangeTimestamp = it.timestamp
+                val latest = events
+                    .asSequence()
+                    .filter { it.type == TE.Type.SENSOR_CHANGE }
+                    .maxByOrNull { it.timestamp }
+
+                if (latest != null && latest.timestamp > lastSensorChangeTimestamp) {
+                    lastSensorChangeTimestamp = latest.timestamp
+                    resetRequested.set(true)
                 }
-            }, {})
+            }, { t ->
+                aapsLogger.error(LTag.GLUCOSE, "AdaptiveSmoothing: loadLastSensorChange error", t)
+            })
     }
     
     private fun checkForSensorChange() {
-        // Simple reliable check
         loadLastSensorChange()
-        // If changed, reset will trigger on next smooth call via timestamp check or forced flag
-        resetRequested.set(true)
+    }
+
+    private companion object {
+        // Keeps high performance while preventing DB-query storms from noisy TE change events.
+        const val SENSOR_CHANGE_DEBOUNCE_SECONDS: Long = 10L
     }
 }
