@@ -22,7 +22,14 @@ class AutoDriveGater @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
 
-    fun shouldEngageV3(bg: Double, combinedDelta: Double): GatingResult {
+    fun shouldEngageV3(
+        bg: Double,
+        combinedDelta: Double,
+        cob: Double = 0.0,
+        uamConfidence: Double = 0.0,
+        explicitMealMode: Boolean = false,
+        hasRecentMealEstimate: Boolean = false
+    ): GatingResult {
         // 1. Fetch real-time health data
         val health = healthRepo.fetchSnapshot()
         
@@ -43,22 +50,35 @@ class AutoDriveGater @Inject constructor(
             )
         }
 
-        // 🚀 REFINED GATING: Engage if...
-        // - BG is high enough to warrant Full Loop (High Plateau)
-        // - OR BG is rising significantly (Catch the peak)
+        // 3. Meal-awareness: explicit mode OR implicit meal-like context
+        val implicitMealContext =
+            explicitMealMode ||
+                hasRecentMealEstimate ||
+                cob > 8.0 ||
+                (cob > 3.0 && uamConfidence >= 0.35)
+
+        // 4. Refined glycemic entry thresholds
         val isHighPlateau = bg > 150.0
-        val isActivelyRising = combinedDelta > 0.1
-        
-        val shouldEngage = isHighPlateau || isActivelyRising
+        val isActivelyRising = combinedDelta > 0.8
+        val isMealRising = implicitMealContext && combinedDelta > 0.25
+
+        val shouldEngage = isHighPlateau || isActivelyRising || isMealRising
 
         if (!shouldEngage) {
-            val reason = "BG Stable and < 150 mg/dL (BG=$bg, Trend=$combinedDelta)"
+            val reason =
+                "BG stable (<150) and rise too weak " +
+                    "(BG=$bg, Trend=$combinedDelta, COB=$cob, UAM=$uamConfidence, mealCtx=$implicitMealContext)"
             return GatingResult(engage = false, reason = "🧘 $reason")
         }
 
+        val engageReason = when {
+            isHighPlateau -> "High plateau"
+            isMealRising -> "Meal-aware rise"
+            else -> "Strong rise"
+        }
         return GatingResult(
             engage = true,
-            reason = "🚀 V3 ENGAGED (BG=$bg, Trend=$combinedDelta)"
+            reason = "🚀 V3 ENGAGED [$engageReason] (BG=$bg, Trend=$combinedDelta, COB=$cob, UAM=$uamConfidence)"
         )
     }
 

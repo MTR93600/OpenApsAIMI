@@ -5645,9 +5645,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🧠 AUTODRIVE V3 MULTI-VARIABLES INJECTION (The "Super-iLet" implementation)
         // ====================================================================================
         val isAutodriveConfigEnabled = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIautoDriveActive)
+        var v3AppliedAction = false
         if (isAutodriveConfigEnabled) {
             // 🚦 Gating: Autodrive V3 takes over if BG > 150 or rising (using filtered combinedDelta)
-            val gate = autodriveGater.shouldEngageV3(glucose_status.glucose, combinedDelta.toDouble())
+            val recentEstimateCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
+            val recentEstimateTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
+            val estimateAgeMinutes = if (recentEstimateTime > 0L) {
+                (System.currentTimeMillis() - recentEstimateTime) / 60000.0
+            } else {
+                Double.MAX_VALUE
+            }
+            val hasRecentMealEstimate = recentEstimateCarbs > 10.0 && estimateAgeMinutes in 0.0..45.0
+
+            val gate = autodriveGater.shouldEngageV3(
+                bg = glucose_status.glucose,
+                combinedDelta = combinedDelta.toDouble(),
+                cob = mealData.mealCOB,
+                uamConfidence = AimiUamHandler.confidenceOrZero(),
+                explicitMealMode = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime,
+                hasRecentMealEstimate = hasRecentMealEstimate
+            )
 
             if (gate.engage) {
                 lastAutodriveState = AutodriveState.ENGAGED // 🚀 SYNC: Allow UI & Plugin to see V3 is active
@@ -5728,6 +5745,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
 
                 val effectiveBolus = rT.insulinReq ?: 0.0
+                val effectiveTbr = rT.rate ?: profile.current_basal
+                val effectiveDuration = rT.duration ?: 0
+                v3AppliedAction = effectiveBolus > 0.01 || (effectiveDuration > 0 && kotlin.math.abs(effectiveTbr - profile.current_basal) > 0.01)
                 
                 consoleLog.add("🚀 ${gate.reason} intent=$v3Smb actual=$effectiveBolus tbr=$v3TbrRate")
                 logDecisionFinal("AUTODRIVE_V3", rT, bg, delta)
@@ -5746,13 +5766,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val mealRising = cob > 0.5 || mealTime || lunchTime || dinnerTime || bfastTime || snackTime
         val contextFactor = if (rT.contextEnabled && rT.contextIntentCount > 0) rT.contextModulation.toFloat() else 1.0f
         val contextPrefersBasal = (maxSMB == 0.0 && rT.contextEnabled && rT.contextIntentCount > 0)
+
+        if (v3AppliedAction) {
+            consoleLog.add("AUTODRIVE_V3_LOCKOUT: Skipping V2 fallback this tick (action already applied).")
+        }
         
         // Restauration de l'état WATCHING par défaut si non ENGAGED par V3
         if (lastAutodriveState != AutodriveState.ENGAGED) {
              lastAutodriveState = AutodriveState.WATCHING 
         }
 
-        val autoRes = tryAutodrive(
+        val autoRes = if (!v3AppliedAction) tryAutodrive(
             bg, delta, shortAvgDeltaAdj.toFloat(), profile, lastBolusTimeMs ?: 0L, predictedBg, mealData.slopeFromMinDeviation, targetBg, reason,
             preferences.get(BooleanKey.OApsAIMIautoDrive),
             dynamicPbolusLarge, dynamicPbolusSmall,
@@ -5762,7 +5786,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             combinedDeltaG6 = combinedDelta,  // 📡 GAP1: inject G6-compensated combinedDelta
             contextFactor = contextFactor,
             contextPrefersBasal = contextPrefersBasal
-        )
+        ) else DecisionResult.Fallthrough("V2 skipped: V3 already applied this tick")
         
         if (autoRes is DecisionResult.Applied) {
              // 1. Apply TBR (System Intent) if present

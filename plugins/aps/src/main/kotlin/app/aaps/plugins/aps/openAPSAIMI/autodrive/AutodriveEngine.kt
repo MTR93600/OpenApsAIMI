@@ -39,6 +39,11 @@ class AutodriveEngine @Inject constructor(
 ) {
 
     private val systemState = AtomicReference<AimiState>(AimiState.Manual)
+    private var aggressiveWindowUntilEpochMs: Long = 0L
+
+    private companion object {
+        const val AGGRESSIVE_HOLD_MS: Long = 12 * 60 * 1000L
+    }
 
     fun setIsActive(enabled: Boolean) {
         updateState(isActive = enabled)
@@ -144,12 +149,17 @@ class AutodriveEngine @Inject constructor(
         // 8. Quiet Mode Handover (Rollback to AIMI V2 PI Controller)
         // Autodrive V3 (MPC) is mathematically aggressive by nature. For calm waters and slight upstream drifts, 
         // the legacy proportional controller is superior. We yield control (return null) unless V3 is actively fighting.
-        // 🚀 T9: Aggression boost based on UAM and CombinedDelta
-        val isAggressiveRise = estimatedState.estimatedRa > 0.5 
-            || estimatedState.bgVelocity > 1.0 
-            || estimatedState.uamConfidence > 0.6 
-            || estimatedState.combinedDelta > 3.0
-        val isHigh = estimatedState.bg > 130.0
+        // 🚀 T9: Aggression boost based on UAM and CombinedDelta with hysteresis window.
+        val aggressiveSignal = estimatedState.estimatedRa > 0.6 ||
+            estimatedState.bgVelocity > 1.1 ||
+            estimatedState.uamConfidence > 0.65 ||
+            estimatedState.combinedDelta > 3.2
+        if (aggressiveSignal) {
+            aggressiveWindowUntilEpochMs = currentEpochMs + AGGRESSIVE_HOLD_MS
+        }
+        val inAggressiveWindow = currentEpochMs < aggressiveWindowUntilEpochMs
+
+        val isHigh = estimatedState.bg > 145.0
         val needsSmb = auditedCommand.scheduledMicroBolus > 0.0
         val needsSafetyBrake = auditedCommand.temporaryBasalRate == 0.0
         
@@ -157,9 +167,9 @@ class AutodriveEngine @Inject constructor(
         // let V2 handle the fine-tuning fluidity.
         // Fix #6: Lowered from 0.3 to 0.1 to allow V3 to engage more often and collect ML data.
         val tbrDelta = Math.abs(auditedCommand.temporaryBasalRate - profileBasal)
-        val isStrongCorrection = tbrDelta > 0.1
+        val isStrongCorrection = tbrDelta > 0.15
 
-        return if (isAggressiveRise || isHigh || needsSmb || needsSafetyBrake || isStrongCorrection) {
+        return if (inAggressiveWindow || isHigh || needsSmb || needsSafetyBrake || isStrongCorrection) {
             auditedCommand
         } else {
             aapsLogger.debug(

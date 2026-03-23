@@ -194,6 +194,13 @@ object SmbInstructionExecutor {
         fun resolveFactor(manualFactor: Double, learnerFactor: Double, modeName: String): Double {
             // 1. If Manual Mode is Neutral (1.0), fully trust Learner
             if (kotlin.math.abs(manualFactor - 1.0) < 0.01) {
+                input.consoleLog.add(
+                    String.format(
+                        java.util.Locale.US,
+                        "🧠 React: mode=%s manual=%.2f learner=%.2f => resolved=%.2f (neutral-manual)",
+                        modeName, manualFactor, learnerFactor, learnerFactor
+                    )
+                )
                 return learnerFactor
             }
 
@@ -248,7 +255,37 @@ object SmbInstructionExecutor {
             input.snackTime -> snackfactor
             input.sleepTime -> sleepfactor
             else -> defaultFactor
+        }.coerceIn(0.60, 1.60)
+
+        val manualSelected = when {
+            input.highCarbTime -> hcfRaw
+            input.mealTime -> mealRaw
+            input.bfastTime -> bfRaw
+            input.lunchTime -> lunchRaw
+            input.dinnerTime -> dinRaw
+            input.snackTime -> snackRaw
+            input.sleepTime -> sleepRaw
+            else -> 1.0
         }
+        input.consoleLog.add(
+            String.format(
+                java.util.Locale.US,
+                "🧠 ReactTrace: mode=%s manual=%.2f learner=%.2f resolved=%.2f",
+                when {
+                    input.highCarbTime -> "HighCarb"
+                    input.mealTime -> "Meal"
+                    input.bfastTime -> "Breakfast"
+                    input.lunchTime -> "Lunch"
+                    input.dinnerTime -> "Dinner"
+                    input.snackTime -> "Snack"
+                    input.sleepTime -> "Sleep"
+                    else -> "Default"
+                },
+                manualSelected,
+                input.globalReactivityFactor,
+                factors
+            )
+        )
 
         fun Float.atLeast(min: Float) = if (this < min) min else this
 
@@ -301,7 +338,9 @@ object SmbInstructionExecutor {
             (input.glucoseStatus.delta + actCurr * input.sens).coerceIn(0.0, 35.0),
             1
         )
-        val actTarget = deltaGross / input.sens * factors.toFloat()  // ✅ Now includes reactivity!
+        // Avoid over-amplifying by applying a softened factor in act-target path.
+        val actTargetFactor = (1.0 + (factors - 1.0) * 0.5).coerceIn(0.80, 1.30)
+        val actTarget = deltaGross / input.sens * actTargetFactor.toFloat()
         var actMissing: Double
         var deltaScore = 0.5
 
