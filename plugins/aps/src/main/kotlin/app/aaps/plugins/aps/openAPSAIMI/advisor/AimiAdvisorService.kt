@@ -19,6 +19,20 @@ import org.json.JSONObject
  * =============================================================================
  */
 class AimiAdvisorService {
+    data class BasalHourProposal(
+        val hour: Int,
+        val current: Double,
+        val proposed: Double
+    )
+
+    data class BasalProfileProposal(
+        val generatedAt: Long,
+        val periodDays: Int,
+        val strategy: String,
+        val scalingFactor: Double,
+        val rationale: String,
+        val rows: List<BasalHourProposal>
+    )
 
     private val profileFunction: app.aaps.core.interfaces.profile.ProfileFunction?
     private val persistenceLayer: app.aaps.core.interfaces.db.PersistenceLayer?
@@ -405,6 +419,85 @@ class AimiAdvisorService {
             )
         }.toMutableList()
 
+        // Pragmatic SMB/PKPD governance recommendations
+        if (preferences != null) {
+            val reliefEnabled = preferences.get(BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled)
+            val reliefMinFactor = preferences.get(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor)
+            val redCarpetRestore = preferences.get(DoubleKey.OApsAIMIRedCarpetRestoreThreshold)
+            val maxIobFactor = preferences.get(DoubleKey.OApsAIMIPriorityMaxIobFactor)
+            val maxIobExtra = preferences.get(DoubleKey.OApsAIMIPriorityMaxIobExtraU)
+
+            if (!reliefEnabled && ctx.metrics.timeAbove180 > 0.25 && ctx.metrics.timeBelow70 < 0.04) {
+                recs.add(
+                    AimiRecommendation(
+                        titleResId = R.string.aimi_adv_rec_pkpd_relief_enable_title,
+                        descriptionResId = R.string.aimi_adv_rec_pkpd_relief_enable_desc,
+                        priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
+                        domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Pkpd,
+                        action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
+                            key = BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled,
+                            newValue = true,
+                            reason = "Enable pragmatic relief to avoid excessive soft damping in explicit meal/high-rise contexts."
+                        )
+                    )
+                )
+            }
+
+            if (reliefEnabled && reliefMinFactor < 0.70 && ctx.metrics.timeAbove180 > 0.25) {
+                recs.add(
+                    AimiRecommendation(
+                        titleResId = R.string.aimi_adv_rec_pkpd_relief_factor_title,
+                        descriptionResId = R.string.aimi_adv_rec_pkpd_relief_factor_desc,
+                        priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
+                        domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Pkpd,
+                        action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
+                            key = DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor,
+                            newValue = 0.75,
+                            reason = "Increase minimum PKPD factor to preserve SMB intent in priority contexts."
+                        ),
+                        descriptionArgs = listOf(String.format(java.util.Locale.US, "%.2f", reliefMinFactor))
+                    )
+                )
+            }
+
+            if (reliefEnabled && redCarpetRestore < 0.65 && ctx.metrics.timeAbove180 > 0.25) {
+                recs.add(
+                    AimiRecommendation(
+                        titleResId = R.string.aimi_adv_rec_redcarpet_restore_title,
+                        descriptionResId = R.string.aimi_adv_rec_redcarpet_restore_desc,
+                        priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
+                        domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
+                        action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
+                            key = DoubleKey.OApsAIMIRedCarpetRestoreThreshold,
+                            newValue = 0.75,
+                            reason = "Raise restore threshold to avoid excessive final SMB collapse."
+                        ),
+                        descriptionArgs = listOf(String.format(java.util.Locale.US, "%.2f", redCarpetRestore))
+                    )
+                )
+            }
+
+            if (reliefEnabled && (maxIobFactor < 1.10 || maxIobExtra < 1.0) && ctx.metrics.timeAbove180 > 0.30 && ctx.metrics.timeBelow70 < 0.04) {
+                recs.add(
+                    AimiRecommendation(
+                        titleResId = R.string.aimi_adv_rec_priority_maxiob_title,
+                        descriptionResId = R.string.aimi_adv_rec_priority_maxiob_desc,
+                        priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
+                        domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
+                        action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
+                            key = DoubleKey.OApsAIMIPriorityMaxIobFactor,
+                            newValue = 1.20,
+                            reason = "Increase priority MaxIOB headroom factor in explicit aggressive contexts."
+                        ),
+                        descriptionArgs = listOf(
+                            String.format(java.util.Locale.US, "%.2f", maxIobFactor),
+                            String.format(java.util.Locale.US, "%.2f", maxIobExtra)
+                        )
+                    )
+                )
+            }
+        }
+
         // 5) If nothing alarming -> positive message
         if (recs.isEmpty()) {
             recs.add(AimiRecommendation(
@@ -506,6 +599,80 @@ class AimiAdvisorService {
               ]
             }
         """.trimIndent()
+    }
+
+    fun generateBasalProfileProposal(periodDays: Int = 7): BasalProfileProposal {
+        val metrics = calculateMetrics(periodDays)
+        val profile = profileFunction?.getProfile()
+        if (profile == null) {
+            return BasalProfileProposal(
+                generatedAt = System.currentTimeMillis(),
+                periodDays = periodDays,
+                strategy = "NO_PROFILE",
+                scalingFactor = 1.0,
+                rationale = "Profile unavailable",
+                rows = emptyList()
+            )
+        }
+
+        val (factor, strategy, rationale) = computeBasalProposalFactor(metrics)
+        val rows = (0 until 24).map { hour ->
+            val current = profile.getBasal((hour * 3600).toLong())
+            val proposed = (current * factor).coerceIn(current * 0.85, current * 1.15)
+            BasalHourProposal(
+                hour = hour,
+                current = current,
+                proposed = proposed
+            )
+        }
+
+        return BasalProfileProposal(
+            generatedAt = System.currentTimeMillis(),
+            periodDays = periodDays,
+            strategy = strategy,
+            scalingFactor = factor,
+            rationale = rationale,
+            rows = rows
+        )
+    }
+
+    fun exportBasalProfileProposalText(proposal: BasalProfileProposal): String {
+        val header = buildString {
+            appendLine("AIMI BASAL PROPOSAL (NOT APPLIED)")
+            appendLine("generatedAt=${proposal.generatedAt}")
+            appendLine("periodDays=${proposal.periodDays}")
+            appendLine("strategy=${proposal.strategy}")
+            appendLine("scalingFactor=${"%.3f".format(java.util.Locale.US, proposal.scalingFactor)}")
+            appendLine("rationale=${proposal.rationale}")
+            appendLine("hour,current,proposed,deltaPct")
+        }
+
+        val lines = proposal.rows.joinToString(separator = "\n") { row ->
+            val deltaPct = if (row.current > 0.0) ((row.proposed / row.current) - 1.0) * 100.0 else 0.0
+            String.format(
+                java.util.Locale.US,
+                "%02d,%.3f,%.3f,%+.1f",
+                row.hour,
+                row.current,
+                row.proposed,
+                deltaPct
+            )
+        }
+        return header + lines + "\n"
+    }
+
+    private fun computeBasalProposalFactor(metrics: AdvisorMetrics): Triple<Double, String, String> {
+        return when {
+            metrics.timeBelow54 >= 0.01 || metrics.timeBelow70 >= 0.06 -> {
+                Triple(0.95, "SAFETY_REDUCTION", "Hypo pressure detected in lookback window")
+            }
+            metrics.timeAbove180 >= 0.35 && metrics.tir70_180 < 0.60 && metrics.timeBelow70 <= 0.03 -> {
+                Triple(1.06, "GENTLE_INCREASE", "Persistent hyperglycemia with low hypo pressure")
+            }
+            else -> {
+                Triple(1.00, "HOLD_BASELINE", "No robust pattern for profile-level shift")
+            }
+        }
     }
     
     /**

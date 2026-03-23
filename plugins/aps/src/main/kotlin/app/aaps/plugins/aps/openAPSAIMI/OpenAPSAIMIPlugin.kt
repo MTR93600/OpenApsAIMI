@@ -1504,6 +1504,46 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         )
                     )
                     addPreference(
+                        AdaptiveSwitchPreference(
+                            ctx = context,
+                            booleanKey = BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled,
+                            summary = R.string.oaps_aimi_pkpd_relief_enabled_summary,
+                            title = R.string.oaps_aimi_pkpd_relief_enabled_title
+                        )
+                    )
+                    addPreference(
+                        AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor,
+                            dialogMessage = R.string.oaps_aimi_pkpd_relief_factor_summary,
+                            title = R.string.oaps_aimi_pkpd_relief_factor_title
+                        )
+                    )
+                    addPreference(
+                        AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIRedCarpetRestoreThreshold,
+                            dialogMessage = R.string.oaps_aimi_redcarpet_restore_summary,
+                            title = R.string.oaps_aimi_redcarpet_restore_title
+                        )
+                    )
+                    addPreference(
+                        AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIPriorityMaxIobFactor,
+                            dialogMessage = R.string.oaps_aimi_priority_max_iob_factor_summary,
+                            title = R.string.oaps_aimi_priority_max_iob_factor_title
+                        )
+                    )
+                    addPreference(
+                        AdaptiveDoublePreference(
+                            ctx = context,
+                            doubleKey = DoubleKey.OApsAIMIPriorityMaxIobExtraU,
+                            dialogMessage = R.string.oaps_aimi_priority_max_iob_extra_summary,
+                            title = R.string.oaps_aimi_priority_max_iob_extra_title
+                        )
+                    )
+                    addPreference(
                         AdaptiveDoublePreference(
                             ctx = context,
                             doubleKey = DoubleKey.OApsAIMISmbExerciseDamping,

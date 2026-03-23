@@ -28,6 +28,7 @@ import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.keys.interfaces.StringPreferenceKey
 import android.content.Intent
+import java.util.Locale
 
 
 /**
@@ -224,7 +225,83 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                 }
             }
             addView(settingsBtn)
+
+            // Basal Proposal Button (Preview/Export only, no auto-apply)
+            val basalProposalBtn = TextView(this@AimiProfileAdvisorActivity).apply {
+                text = "🧪"
+                textSize = 22f
+                setPadding(24, 0, 0, 0)
+                setOnClickListener {
+                    showBasalProposalDialog()
+                }
+            }
+            addView(basalProposalBtn)
         }
+    }
+
+    private fun showBasalProposalDialog() {
+        android.widget.Toast.makeText(this, "Generating basal proposal...", android.widget.Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val proposal = advisorService.generateBasalProfileProposal(periodDays = 7)
+                val preview = buildBasalProposalPreview(proposal)
+                val exportText = advisorService.exportBasalProfileProposalText(proposal)
+
+                withContext(Dispatchers.Main) {
+                    androidx.appcompat.app.AlertDialog.Builder(this@AimiProfileAdvisorActivity)
+                        .setTitle("Basal Proposal (Preview)")
+                        .setMessage(preview)
+                        .setPositiveButton("Export") { _, _ ->
+                            shareBasalProposal(exportText)
+                        }
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        this@AimiProfileAdvisorActivity,
+                        "Basal proposal failed: ${e.localizedMessage}",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun buildBasalProposalPreview(proposal: AimiAdvisorService.BasalProfileProposal): String {
+        if (proposal.rows.isEmpty()) {
+            return "No profile data available.\nNo proposal generated."
+        }
+        val firstRows = proposal.rows.take(6).joinToString("\n") { row ->
+            val deltaPct = if (row.current > 0.0) ((row.proposed / row.current) - 1.0) * 100.0 else 0.0
+            String.format(
+                Locale.US,
+                "%02dh  %.2f -> %.2f U/h (%+.1f%%)",
+                row.hour,
+                row.current,
+                row.proposed,
+                deltaPct
+            )
+        }
+        return buildString {
+            appendLine("This is a proposal only. No automatic profile update.")
+            appendLine("Strategy: ${proposal.strategy}")
+            appendLine("Factor: ${"%.3f".format(Locale.US, proposal.scalingFactor)}")
+            appendLine("Rationale: ${proposal.rationale}")
+            appendLine()
+            appendLine("Preview (first 6 hours):")
+            appendLine(firstRows)
+        }
+    }
+
+    private fun shareBasalProposal(content: String) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "AIMI Basal Proposal")
+            putExtra(Intent.EXTRA_TEXT, content)
+        }
+        startActivity(Intent.createChooser(intent, "Export basal proposal"))
     }
 
     private fun showSupportDialog() {

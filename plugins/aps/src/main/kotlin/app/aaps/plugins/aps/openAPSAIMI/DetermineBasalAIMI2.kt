@@ -6649,16 +6649,50 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         
         // Appliquer guard sur SMB
+        // Pragmatic relief:
+        // In explicit aggressive contexts (meal/advisor/confirmed high rise), keep PKPD guard
+        // but prevent overly heavy soft damping. Hard caps (MaxIOB/MaxSMB/pump) still apply later.
+        val isAggressivePriorityContext = isMealAdvisorOneShot || anyMealModeForGuard || isConfirmedHighRiseLocal
+        val pkpdReliefEnabled = preferences.get(BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled)
+        val pkpdReliefMinFactor = preferences.get(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor).coerceIn(0.50, 1.0)
+        val redCarpetRestoreThresholdPref = preferences.get(DoubleKey.OApsAIMIRedCarpetRestoreThreshold).coerceIn(0.50, 0.95).toFloat()
+        val priorityMaxIobFactor = preferences.get(DoubleKey.OApsAIMIPriorityMaxIobFactor).coerceIn(1.0, 1.6)
+        val priorityMaxIobExtraU = preferences.get(DoubleKey.OApsAIMIPriorityMaxIobExtraU).coerceIn(0.0, 5.0)
+        val effectiveMaxIobForPriority = if (pkpdReliefEnabled && isAggressivePriorityContext) {
+            // Pragmatic headroom in explicit aggressive contexts:
+            // configurable uplift, still bounded by a hard absolute ceiling.
+            val uplift = (this.maxIob * priorityMaxIobFactor).coerceAtMost(this.maxIob + priorityMaxIobExtraU)
+            uplift.coerceAtMost(25.0)
+        } else {
+            this.maxIob
+        }
         if (pkpdGuard.isActive()) {
             val beforeGuard = smbToGive
-            smbToGive = (smbToGive * pkpdGuard.factor.toFloat()).coerceAtLeast(0f)
+            val guardFactor = if (isAggressivePriorityContext) {
+                if (pkpdReliefEnabled) max(pkpdGuard.factor, pkpdReliefMinFactor) else pkpdGuard.factor
+            } else {
+                pkpdGuard.factor
+            }
+            smbToGive = (smbToGive * guardFactor.toFloat()).coerceAtLeast(0f)
             
             // Logs détaillés
             consoleError.add(pkpdGuard.toLogString())
             consoleLog.add("SMB_GUARDED: ${"%.2f".format(beforeGuard)}U → ${"%.2f".format(smbToGive)}U")
+            if (isAggressivePriorityContext && pkpdReliefEnabled && guardFactor > pkpdGuard.factor) {
+                consoleLog.add(
+                    "PKPD_RELIEF: factor ${"%.2f".format(pkpdGuard.factor)} -> ${"%.2f".format(guardFactor)} " +
+                        "(meal/advisor/high-rise priority)"
+                )
+            }
+            if (effectiveMaxIobForPriority > this.maxIob) {
+                consoleLog.add(
+                    "MAXIOB_RELIEF: ${"%.2f".format(this.maxIob)} -> ${"%.2f".format(effectiveMaxIobForPriority)} " +
+                        "(priority context)"
+                )
+            }
             
             // Ajouter au reason (visible utilisateur)
-            rT.reason.append(" | ${pkpdGuard.reason} x${"%.2f".format(pkpdGuard.factor)}")
+            rT.reason.append(" | ${pkpdGuard.reason} x${"%.2f".format(guardFactor)}")
             
             // Augmenter intervalle si nécessaire
             if (pkpdGuard.intervalAddMin > 0) {
@@ -6687,7 +6721,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Note: isMealAdvisorOneShot included via "Explicit User Action" equivalent
         val isExplicitAction = isMealAdvisorOneShot
         
-        val isRedCarpetSituation = isExplicitAction || anyMealModeForGuard || (isMealChaos && smbExecution.finalSmb > 0.5)
+        val isRedCarpetSituation =
+            isExplicitAction || anyMealModeForGuard || isConfirmedHighRiseLocal || (isMealChaos && smbExecution.finalSmb > 0.5)
 
         val gatedUnits = smbToGive
         val proposedUnits = smbExecution.finalSmb.toFloat()
@@ -6695,7 +6730,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (isRedCarpetSituation && proposedUnits > 0.0) {
             
             // 1. Restore demand if minor safeties (guards) killed it (>40% reduction)
-            val candidateUnits = if (gatedUnits < proposedUnits * 0.6f) { 
+            val baseRestoreThreshold = 0.60f
+            val restoreThreshold = if (isAggressivePriorityContext && pkpdReliefEnabled) {
+                max(baseRestoreThreshold, redCarpetRestoreThresholdPref)
+            } else {
+                baseRestoreThreshold
+            }
+            val candidateUnits = if (gatedUnits <= proposedUnits * restoreThreshold) {
                 consoleLog.add("✨ RED CARPET: Restoring meal bolus blocked by minor safety (Proposed=${"%.2f".format(proposedUnits)} vs Gated=${"%.2f".format(gatedUnits)})")
                  proposedUnits
             } else {
@@ -6710,7 +6751,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             var mealBolus = min(candidateUnits.toDouble(), redCarpetMaxSmb).toFloat()
 
             // b. Cap MaxIOB (Ultimate Safety)
-            val iobSpace = (this.maxIob - this.iob).coerceAtLeast(0.0)
+            val iobSpace = (effectiveMaxIobForPriority - this.iob).coerceAtLeast(0.0)
             
             if (mealBolus > iobSpace.toFloat()) {
                 consoleLog.add("🛡️ RED CARPET: Clamped by MaxIOB (Need=${"%.2f".format(mealBolus)}, Space=${"%.2f".format(iobSpace)})")
@@ -6744,7 +6785,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 bg = bg,
                 maxSmbConfig = currentMaxSmb,
                 iob = iob.toDouble(),
-                maxIob = this.maxIob
+                maxIob = effectiveMaxIobForPriority
             )
         }
         if (smbToGive < beforeCap) {
@@ -8116,6 +8157,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             duraISFaverage = duraISFaverage,
             iob = iobNet
         )
+        val gov = basalNeuralLearner.getGovernanceSnapshot()
+        consoleLog.add(
+            "🧭 BASAL_GOV: action=${gov.action} conf=${"%.2f".format(Locale.US, gov.confidence)} " +
+                "n=${gov.sampleCount} hypo=${"%.2f".format(Locale.US, gov.hypoRate)} high=${"%.2f".format(Locale.US, gov.highRate)} " +
+                "mae=${"%.1f".format(Locale.US, gov.meanAbsTargetError)} reason=${gov.reason}"
+        )
         
         val tickLine =
             "TICK ts=${System.currentTimeMillis()} bg=${bgValue.roundToInt()} d=${"%.1f".format(Locale.US, deltaValue)} iob=${"%.2f".format(Locale.US, iob)} act=${"%.3f".format(Locale.US, iobActivityNow)} th=${"%.3f".format(Locale.US, activityThreshold)} " +
@@ -8513,6 +8560,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             duraISFminutes = duraISFminutes,
             duraISFaverage = duraISFaverage,
             iob = iob.iob
+        )
+        val gov = basalNeuralLearner.getGovernanceSnapshot()
+        consoleLog.add(
+            "🧭 BASAL_GOV[T3C]: action=${gov.action} conf=${"%.2f".format(Locale.US, gov.confidence)} " +
+                "n=${gov.sampleCount} hypo=${"%.2f".format(Locale.US, gov.hypoRate)} high=${"%.2f".format(Locale.US, gov.highRate)} " +
+                "mae=${"%.1f".format(Locale.US, gov.meanAbsTargetError)} reason=${gov.reason}"
         )
 
         consoleLog.add(rT.reason.toString())

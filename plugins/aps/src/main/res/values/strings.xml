@@ -324,6 +324,25 @@
     <string name="oaps_aimi_smb_tail_threshold_summary">Fraction of remaining IOB that triggers SMB damping.</string>
     <string name="oaps_aimi_smb_tail_damping_title">Tail damping factor</string>
     <string name="oaps_aimi_smb_tail_damping_summary">Multiplier applied to SMB when tail IOB is high.</string>
+    <string name="oaps_aimi_pkpd_relief_enabled_title">Enable PKPD pragmatic relief</string>
+    <string name="oaps_aimi_pkpd_relief_enabled_summary">ON by default. Keep ON if SMB intent is often over-reduced in explicit meal/high-rise contexts. Turn OFF only if you observe recurrent over-corrections despite hard caps.</string>
+    <string name="oaps_aimi_pkpd_relief_factor_title">PKPD relief minimum factor</string>
+    <string name="oaps_aimi_pkpd_relief_factor_summary">Range 0.50-1.00 (default 0.75). Increase (0.80-0.90) if SMB is still too damped in explicit meal/high-rise contexts. Decrease (0.65-0.70) if post-meal drops are too fast.</string>
+    <string name="oaps_aimi_redcarpet_restore_title">Red Carpet restore threshold</string>
+    <string name="oaps_aimi_redcarpet_restore_summary">Range 0.50-0.95 (default 0.75). Increase to restore SMB earlier (more correction). Decrease to stay more conservative. Suggested tuning step: +/-0.05, then observe 24-48h.</string>
+    <string name="oaps_aimi_priority_max_iob_factor_title">Priority MaxIOB factor</string>
+    <string name="oaps_aimi_priority_max_iob_factor_summary">Range 1.00-1.60 (default 1.20). Increase if final SMB is repeatedly clipped by MaxIOB in explicit high-rise/meal contexts. Decrease if you see insulin stacking risk or late hypoglycemia.</string>
+    <string name="oaps_aimi_priority_max_iob_extra_title">Priority MaxIOB extra (U)</string>
+    <string name="oaps_aimi_priority_max_iob_extra_summary">Range 0.0-5.0U (default 2.0U). Increase when correction remains insufficient after raising factor; decrease if lows appear in the 1-3h post-correction window.</string>
+
+    <string name="aimi_adv_rec_pkpd_relief_enable_title">Enable PKPD pragmatic relief</string>
+    <string name="aimi_adv_rec_pkpd_relief_enable_desc">Hyper pattern with low hypo pressure detected. Enabling pragmatic relief helps preserve SMB intent in explicit meal/high-rise contexts.</string>
+    <string name="aimi_adv_rec_pkpd_relief_factor_title">Increase PKPD relief minimum factor</string>
+    <string name="aimi_adv_rec_pkpd_relief_factor_desc">Current minimum PKPD factor is %1$s. Consider ~0.75 to reduce excessive SMB damping in priority contexts.</string>
+    <string name="aimi_adv_rec_redcarpet_restore_title">Increase Red Carpet restore threshold</string>
+    <string name="aimi_adv_rec_redcarpet_restore_desc">Current restore threshold is %1$s. Consider ~0.75 so explicit contexts recover proposed SMB before hard caps.</string>
+    <string name="aimi_adv_rec_priority_maxiob_title">Increase priority MaxIOB headroom</string>
+    <string name="aimi_adv_rec_priority_maxiob_desc">Current priority MaxIOB settings are factor=%1$s and extra=%2$sU. Consider ~1.20 and +2.0U in explicit aggressive contexts.</string>
     <string name="pkpd_runtime_log">PK/PD: DIA %1$.1fh, peak %2$.0fmin, fused ISF %3$.0f mg/dL/U (scale ×%4$.2f, tail %5$.0f%%)\n</string>
     <string name="pkpd_runtime_fallback">PK/PD disabled → profile DIA %1$.1fh, peak %2$.0fmin\n</string>
     <string name="oaps_aimi_smb_exercise_damping_title">Exercise damping factor</string>
