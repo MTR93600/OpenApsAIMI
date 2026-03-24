@@ -65,6 +65,7 @@ data class ComparisonDecision(
     val bgMgdl: Double,
     val smbU: Double,
     val basalRateUph: Double,
+    val profileBasalUph: Double,
     val tempBasalDurationMin: Int,
     val eventualBg: Double?,
     val predictedBg: Double?,
@@ -139,13 +140,20 @@ data class PerformanceScore(
     val safetyScore: Double,         // 0-10, heavily penalized by hypos
     val controlScore: Double,        // 0-10, based on TIR and time >180
     val smoothnessScore: Double,     // 0-10, based on CV and TBR changes
-    val totalScore: Double           // Weighted: 50% safety + 30% control + 20% smoothness
+    val totalScore: Double,          // Weighted by scoring mode
+    val mode: ScoringMode = ScoringMode.BALANCED
 ) {
     companion object {
         const val WEIGHT_SAFETY = 0.50
         const val WEIGHT_CONTROL = 0.30
         const val WEIGHT_SMOOTHNESS = 0.20
     }
+}
+
+enum class ScoringMode {
+    BALANCED,
+    POSTPRANDIAL,
+    OVERNIGHT
 }
 
 // ============================================================================

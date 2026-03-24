@@ -245,6 +245,7 @@ class DualEngineSimulator @Inject constructor(
             bgMgdl = tick.glucoseStatus.glucose,
             smbU = result.units ?: 0.0,
             basalRateUph = result.rate ?: 0.0,
+            profileBasalUph = tick.profileAimi.current_basal,
             tempBasalDurationMin = result.duration ?: 0,
             eventualBg = result.eventualBG,
             predictedBg = result.predBGs?.IOB?.lastOrNull()?.toDouble(),

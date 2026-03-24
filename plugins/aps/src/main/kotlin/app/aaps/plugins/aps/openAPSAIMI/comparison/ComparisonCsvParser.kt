@@ -337,19 +337,28 @@ class ComparisonCsvParser {
     fun generateRecommendation(
         stats: ComparisonStats,
         safety: SafetyMetrics,
-        impact: ClinicalImpact
+        impact: ClinicalImpact,
+        mode: ScoringMode = ScoringMode.BALANCED
     ): Recommendation {
+        val modeShift = when (mode) {
+            ScoringMode.BALANCED -> 0.0
+            ScoringMode.POSTPRANDIAL -> 1.0
+            ScoringMode.OVERNIGHT -> -1.0
+        }
+
         val aggressivenessRatio = if (stats.aimiWinRate > 0) {
             stats.smbWinRate / stats.aimiWinRate
         } else {
             stats.smbWinRate / 1.0
         }
 
+        val smbBiasThreshold = 2.0 + modeShift
+        val aimiBiasThreshold = -2.0 + modeShift
         val preferredAlgorithm = when {
             stats.agreementRate > 70 -> "Équivalent"
-            impact.cumulativeDiff > 2.0 -> "SMB" // AIMI delivered significantly more
-            impact.cumulativeDiff < -2.0 && safety.variabilityScore < 50 -> "AIMI" // SMB more aggressive but stable
-            impact.cumulativeDiff < -2.0 && safety.variabilityScore >= 50 -> "AIMI" // SMB more aggressive and variable
+            impact.cumulativeDiff > smbBiasThreshold -> "SMB" // AIMI delivered significantly more
+            impact.cumulativeDiff < aimiBiasThreshold && safety.variabilityScore < 50 -> "AIMI" // SMB more aggressive but stable
+            impact.cumulativeDiff < aimiBiasThreshold && safety.variabilityScore >= 50 -> "AIMI" // SMB more aggressive and variable
             else -> "Équivalent"
         }
 
@@ -385,12 +394,12 @@ class ComparisonCsvParser {
             safetyNote = safetyNote
         )
     }
-    fun analyze(entries: List<ComparisonEntry>): FullComparisonReport {
+    fun analyze(entries: List<ComparisonEntry>, mode: ScoringMode = ScoringMode.BALANCED): FullComparisonReport {
         val stats = calculateStats(entries)
         val safety = calculateSafetyMetrics(entries)
         val impact = calculateClinicalImpact(entries)
         val criticalMoments = findCriticalMoments(entries)
-        val recommendation = generateRecommendation(stats, safety, impact)
+        val recommendation = generateRecommendation(stats, safety, impact, mode)
 
         // Calculate TIR
         val actualTir = calculateTimeInRange(entries, 70.0, 180.0)
@@ -428,10 +437,12 @@ class ComparisonCsvParser {
         safety: SafetyMetrics,
         impact: ClinicalImpact,
         criticalMoments: List<CriticalMoment>,
-        recommendation: Recommendation
+        recommendation: Recommendation,
+        mode: ScoringMode = ScoringMode.BALANCED
     ): String {
         val sb = StringBuilder()
         sb.append("=== AIMI vs SMB Comparison Report ($periodLabel) ===\n\n")
+        sb.append("Scoring mode: ${mode.name}\n\n")
 
         sb.append("## 1. Global Performance\n")
         sb.append("- Agreement Rate: %.1f%%\n".format(stats.agreementRate))

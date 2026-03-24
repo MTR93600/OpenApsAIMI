@@ -258,7 +258,8 @@ object KpiCalculator {
         var tbrChanges = 0
         var zeroBasalMinutes = 0.0
         var lastRate: Double? = null
-        val ratePercents = mutableListOf<Double>()
+        var weightedRatioSum = 0.0
+        var weightedMinutes = 0.0
         
         for (i in decisions.indices) {
             val decision = decisions[i]
@@ -282,17 +283,21 @@ object KpiCalculator {
                 zeroBasalMinutes += durationMinutes
             }
             
-            // For average percent, we'd need profile basal. Approximate with rate if available.
-            // Here we just store rates and compute average
-            ratePercents.add(decision.basalRateUph)
+            // Weighted temp-basal percent vs profile basal reference.
+            val profileBasal = decision.profileBasalUph
+            val ratioPercent = if (profileBasal > 0.01) {
+                (decision.basalRateUph / profileBasal) * 100.0
+            } else {
+                100.0
+            }
+            weightedRatioSum += ratioPercent * durationMinutes
+            weightedMinutes += durationMinutes
         }
-        
-        // Avg temp basal percent is approximate (would need profile basal to be accurate)
-        val avgRate = if (ratePercents.isNotEmpty()) ratePercents.average() else 0.0
+        val avgTempBasalPercent = if (weightedMinutes > 0.0) weightedRatioSum / weightedMinutes else 100.0
         
         return LoopResult(
             tbrChangesCount = tbrChanges,
-            avgTempBasalPercent = avgRate * 100.0, // Placeholder, ideally rate/profileRate * 100
+            avgTempBasalPercent = avgTempBasalPercent,
             zeroBasalMinutes = zeroBasalMinutes
         )
     }

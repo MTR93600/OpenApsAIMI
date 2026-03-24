@@ -50,6 +50,8 @@
     <string name="comparator_rate_chart_desc">AIMI vs SMB - Débits Basaux (U/h)</string>
     <string name="comparator_smb_chart_title">SMB Comparés</string>
     <string name="comparator_smb_chart_desc">AIMI vs SMB - Super Micro Bolus (U)</string>
+    <string name="comparator_bg_chart_title">Profil glycémique</string>
+    <string name="comparator_bg_chart_desc">Glycémie réelle avec seuils cliniques (mg/dL)</string>
     
     <!-- Safety Analysis -->
     <string name="comparator_safety_title">Analyse de Sécurité</string>
@@ -71,6 +73,33 @@
     <string name="comparator_recommendation_title">Recommandation</string>
     <string name="comparator_recommended_algorithm">Algorithme recommandé: %1$s</string>
     <string name="comparator_confidence">Confiance: %1$s</string>
+    <string name="comparator_scoring_mode_balanced">Balanced</string>
+    <string name="comparator_scoring_mode_post_meal">Post-meal</string>
+    <string name="comparator_scoring_mode_overnight">Overnight</string>
+    <string name="comparator_export_llm_summary">Export LLM Summary</string>
+    <string name="comparator_storage_permission_required">Please allow access to all files to read the comparison data</string>
+    <string name="comparator_window_global">Global</string>
+    <string name="comparator_window_24h">24h</string>
+    <string name="comparator_window_7d">7d</string>
+    <string name="comparator_no_data_for_period">No data for this period</string>
+    <string name="comparator_period_last_24h">Last 24h</string>
+    <string name="comparator_period_last_7d">Last 7 Days</string>
+    <string name="comparator_period_global_history">Global History</string>
+    <string name="comparator_summary_copied">Summary copied to clipboard!</string>
+    <string name="comparator_export_using">Export using...</string>
+    <string name="comparator_chart_no_data">No chart data available</string>
+    <string name="comparator_dataset_aimi">AIMI</string>
+    <string name="comparator_dataset_smb">SMB</string>
+    <string name="comparator_dataset_aimi_smb">AIMI SMB</string>
+    <string name="comparator_dataset_smb_smb">SMB SMB</string>
+    <string name="comparator_dataset_bg_actual">BG réel</string>
+    <string name="comparator_dataset_bg_low">BG &lt; 70</string>
+    <string name="comparator_dataset_bg_in_range">BG 70-180</string>
+    <string name="comparator_dataset_bg_high">BG &gt; 180</string>
+    <string name="comparator_bg_threshold_54">&lt;54 sévère</string>
+    <string name="comparator_bg_threshold_70">70 hypo</string>
+    <string name="comparator_bg_threshold_180">180 haut</string>
+    <string name="comparator_bg_threshold_250">250 hyper</string>
 
 
 </resources>

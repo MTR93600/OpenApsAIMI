@@ -1,7 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.comparison
 
 import android.content.Context
-import android.os.Environment
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
 import app.aaps.core.interfaces.aps.GlucoseStatus
@@ -19,6 +18,7 @@ import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.objects.constraints.ConstraintObject
 import app.aaps.plugins.aps.openAPSSMB.DetermineBasalSMB
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
@@ -37,8 +37,12 @@ class AimiSmbComparator @Inject constructor(
     private val profileFunction: ProfileFunction,
     private val aapsLogger: AAPSLogger,
     private val virtualGlucoseEngine: VirtualGlucoseEngine, // 🧪 NOUVEAU
-    private val dateUtil: DateUtil          // Dependency for time
+    private val dateUtil: DateUtil,          // Dependency for time
+    private val storageHelper: AimiStorageHelper
 ) {
+    private companion object {
+        const val CSV_SCHEMA_VERSION = "3"
+    }
     // 🧠 VIRTUAL PATIENT STATE (Lyra Reality System)
     // Allows SMB to run "Counter-Factually" (deciding based on its own past, not AIMI's)
     private val virtualReservoir = VirtualInsulinReservoir()
@@ -49,15 +53,11 @@ class AimiSmbComparator @Inject constructor(
     private var cumulativeDiff = 0.0
 
     private val logFile by lazy {
-        val externalDir = File(
-            Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS"
-        )
-        File(externalDir, "comparison_aimi_smb.csv").apply {
+        storageHelper.getAimiFile("comparison_aimi_smb.csv").apply {
             parentFile?.mkdirs()
             if (!exists()) {
-                // Ajout des colonnes UAM
                 writeText(
-                    "Timestamp,Date,BG,Delta,ShortAvgDelta,LongAvgDelta,IOB,COB," +
+                    "SchemaVersion,Timestamp,Date,BG,Delta,ShortAvgDelta,LongAvgDelta,IOB,COB," +
                         "AIMI_Rate,AIMI_SMB,AIMI_Duration,AIMI_EventualBG,AIMI_TargetBG," +
                         "SMB_Rate,SMB_SMB,SMB_Duration,SMB_EventualBG,SMB_TargetBG," +
                         "Diff_Rate,Diff_SMB,Diff_EventualBG," +
@@ -66,9 +66,16 @@ class AimiSmbComparator @Inject constructor(
                         "AIMI_Active,SMB_Active,Both_Active," +
                         "AIMI_UAM_Last,SMB_UAM_Last," +
                         "Verdict,Artifact_Flag,Diff_Sign," +
+                        "AIMI_Flag_MealPriority,AIMI_Flag_Refractory,AIMI_Flag_Throttle,AIMI_Flag_CBF," +
+                        "SMB_Flag_Refractory,SMB_Flag_Throttle,SMB_Flag_CBF," +
+                        "Context_MealRise,Context_COB_Active,Context_UAM_Bias,SMB_LastBolusAgeMin," +
                         "Reason_AIMI,Reason_SMB\n"
                 )
             }
+        }.also {
+            val (status, path, error) = storageHelper.getStorageStatus()
+            aapsLogger.info(LTag.APS, "SMB Comparator CSV ready at ${it.absolutePath}")
+            aapsLogger.info(LTag.APS, "SMB Comparator storage status=$status path=${path ?: "n/a"} error=${error ?: "none"}")
         }
     }
 
@@ -122,7 +129,18 @@ class AimiSmbComparator @Inject constructor(
                 tickMinutes = 5.0
             )
             
+            val prevVirtualDelta = virtualReservoir.virtualDelta
             val virtualDelta = virtualBg - (virtualReservoir.virtualBg ?: virtualBg)
+            val virtualShortAvgDelta = computeVirtualShortDelta(
+                currentVirtualDelta = virtualDelta,
+                previousVirtualDelta = prevVirtualDelta,
+                realShortDelta = glucoseStatus.shortAvgDelta
+            )
+            val virtualLongAvgDelta = computeVirtualLongDelta(
+                currentVirtualDelta = virtualDelta,
+                virtualShortAvgDelta = virtualShortAvgDelta,
+                realLongDelta = glucoseStatus.longAvgDelta
+            )
             virtualReservoir.virtualBg = virtualBg
             virtualReservoir.virtualDelta = virtualDelta
             
@@ -142,7 +160,13 @@ class AimiSmbComparator @Inject constructor(
             )
 
             // ✅ Run SMB with its own Virtual BG (not the real one)
-            val virtualSmbGlucoseStatus = convertToSMBGlucoseStatus(glucoseStatus, virtualBg, virtualDelta)
+            val virtualSmbGlucoseStatus = convertToSMBGlucoseStatus(
+                aimiStatus = glucoseStatus,
+                virtualBg = virtualBg,
+                virtualDelta = virtualDelta,
+                virtualShortAvgDelta = virtualShortAvgDelta,
+                virtualLongAvgDelta = virtualLongAvgDelta
+            )
             
             val smbResult = determineBasalSMB.determine_basal(
                 glucose_status = virtualSmbGlucoseStatus, 
@@ -242,16 +266,38 @@ class AimiSmbComparator @Inject constructor(
     private fun convertToSMBGlucoseStatus(
         aimiStatus: GlucoseStatusAIMI, 
         virtualBg: Double, 
-        virtualDelta: Double
+        virtualDelta: Double,
+        virtualShortAvgDelta: Double,
+        virtualLongAvgDelta: Double
     ): GlucoseStatus {
         return object : GlucoseStatus {
             override val glucose = virtualBg
             override val noise = aimiStatus.noise
             override val delta = virtualDelta
-            override val shortAvgDelta = virtualDelta // Approximation
-            override val longAvgDelta = virtualDelta // Approximation
+            override val shortAvgDelta = virtualShortAvgDelta
+            override val longAvgDelta = virtualLongAvgDelta
             override val date = aimiStatus.date
         }
+    }
+
+    private fun computeVirtualShortDelta(
+        currentVirtualDelta: Double,
+        previousVirtualDelta: Double?,
+        realShortDelta: Double
+    ): Double {
+        val prev = previousVirtualDelta ?: currentVirtualDelta
+        val blended = (0.65 * currentVirtualDelta) + (0.35 * prev)
+        val anchored = (0.85 * blended) + (0.15 * realShortDelta)
+        return anchored.coerceIn(-25.0, 25.0)
+    }
+
+    private fun computeVirtualLongDelta(
+        currentVirtualDelta: Double,
+        virtualShortAvgDelta: Double,
+        realLongDelta: Double
+    ): Double {
+        val blended = (0.35 * currentVirtualDelta) + (0.45 * virtualShortAvgDelta) + (0.20 * realLongDelta)
+        return blended.coerceIn(-20.0, 20.0)
     }
 
     private fun logComparison(
@@ -315,6 +361,26 @@ class AimiSmbComparator @Inject constructor(
             .replace("\n", " | ")
             .replace(",", ";")
             .replace("\"", "'")
+        val smbLastBolusAgeMin = extractLastBolusAgeMinutes(smbReason)
+
+        val contextMealRise =
+            glucoseStatus.glucose >= 145.0 &&
+                (glucoseStatus.delta >= 1.8 || glucoseStatus.shortAvgDelta >= 1.5)
+        val contextCobActive = cob >= 6.0
+        val contextUamBias =
+            aimiReason.contains("UAM", ignoreCase = true) || smbReason.contains("UAM", ignoreCase = true)
+
+        // Context flags to explain divergences across safety layers.
+        val aimiFlagMealPriority = aimiReason.contains("MEAL_PRIORITY_CONTEXT", ignoreCase = true) ||
+            aimiReason.contains("MEAL_PRIORITY_CHAIN", ignoreCase = true) ||
+            aimiReason.contains("MEAL_PRIORITY_RELAX", ignoreCase = true)
+        val aimiFlagRefractory = aimiReason.contains("REFRACTORY", ignoreCase = true)
+        val aimiFlagThrottle = aimiReason.contains("PKPD_THROTTLE", ignoreCase = true)
+        val aimiFlagCbf = aimiReason.contains("CBF", ignoreCase = true)
+        val smbFlagRefractory = smbReason.contains("SMB interval=", ignoreCase = true) ||
+            smbReason.contains("lastBolusAge=", ignoreCase = true)
+        val smbFlagThrottle = smbReason.contains("THROTTLE", ignoreCase = true)
+        val smbFlagCbf = smbReason.contains("CBF", ignoreCase = true)
 
         // 🧠 INTERPRETATION LOGIC (Lyra Expert Analysis)
         
@@ -336,15 +402,31 @@ class AimiSmbComparator @Inject constructor(
         val isBigDiff = absDiff > 0.5
         val ratio = if (aimiInsulinStep > 0.05) smbInsulinStep / aimiInsulinStep else 100.0 // Avoid div/0
         
-        val artifactFlag = if (verdict == "AIMI_CONSERVATIVE" && isHighBg && isBigDiff && ratio > 2.0) {
-            "SCREAMING_SHADOW" // "Ignorer la magnitude, noter juste le signe"
+        val artifactFlag = if (
+            verdict == "AIMI_CONSERVATIVE" &&
+            isHighBg &&
+            isBigDiff &&
+            ratio > 2.0 &&
+            !contextMealRise &&
+            !contextCobActive &&
+            !contextUamBias &&
+            (smbLastBolusAgeMin == null || smbLastBolusAgeMin >= 18.0)
+        ) {
+            "SCREAMING_SHADOW"
+        } else if (
+            verdict == "AIMI_CONSERVATIVE" &&
+            isHighBg &&
+            (contextMealRise || contextCobActive || contextUamBias)
+        ) {
+            "MEAL_CATCHUP_VALID"
         } else if (verdict == "AIMI_AGGRESSIVE" && glucoseStatus.glucose < 80) {
-            "SAFETY_RISK?" // AIMI force alors qu'on est bas ?
+            "SAFETY_RISK?"
         } else {
             "VALID"
         }
 
         val line = listOf(
+            CSV_SCHEMA_VERSION,
             timestamp,
             date,
             "%.1f".format(Locale.US, glucoseStatus.glucose),
@@ -388,6 +470,17 @@ class AimiSmbComparator @Inject constructor(
             verdict,
             artifactFlag,
             diffSign,
+            if (aimiFlagMealPriority) "1" else "0",
+            if (aimiFlagRefractory) "1" else "0",
+            if (aimiFlagThrottle) "1" else "0",
+            if (aimiFlagCbf) "1" else "0",
+            if (smbFlagRefractory) "1" else "0",
+            if (smbFlagThrottle) "1" else "0",
+            if (smbFlagCbf) "1" else "0",
+            if (contextMealRise) "1" else "0",
+            if (contextCobActive) "1" else "0",
+            if (contextUamBias) "1" else "0",
+            smbLastBolusAgeMin?.let { "%.1f".format(Locale.US, it) } ?: "",
             // Raisons
             "\"$aimiReason\"",
             "\"$smbReason\""
@@ -399,5 +492,11 @@ class AimiSmbComparator @Inject constructor(
             aapsLogger.error(LTag.APS, "SMB Comparator log error: " + e.message)
             e.printStackTrace()
         }
+    }
+
+    private fun extractLastBolusAgeMinutes(reason: String): Double? {
+        val match = Regex("lastBolusAge=([0-9]+(?:\\.[0-9]+)?)", RegexOption.IGNORE_CASE).find(reason)
+            ?: return null
+        return match.groupValues.getOrNull(1)?.toDoubleOrNull()
     }
 }

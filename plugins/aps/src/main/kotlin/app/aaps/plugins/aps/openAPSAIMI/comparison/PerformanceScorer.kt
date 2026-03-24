@@ -18,26 +18,33 @@ import kotlin.math.max
  * =============================================================================
  */
 object PerformanceScorer {
+    private data class ScoreWeights(
+        val safety: Double,
+        val control: Double,
+        val smoothness: Double
+    )
     
     /**
      * Calculate performance score from KPIs.
      */
     @JvmStatic
-    fun score(kpi: AlgorithmKpi): PerformanceScore {
+    fun score(kpi: AlgorithmKpi, mode: ScoringMode = ScoringMode.BALANCED): PerformanceScore {
         val safety = calculateSafetyScore(kpi)
         val control = calculateControlScore(kpi)
         val smoothness = calculateSmoothnessScore(kpi)
-        
-        val total = safety * PerformanceScore.WEIGHT_SAFETY +
-                   control * PerformanceScore.WEIGHT_CONTROL +
-                   smoothness * PerformanceScore.WEIGHT_SMOOTHNESS
+
+        val weights = weightsForMode(mode)
+        val total = safety * weights.safety +
+            control * weights.control +
+            smoothness * weights.smoothness
         
         return PerformanceScore(
             algo = kpi.algo,
             safetyScore = safety,
             controlScore = control,
             smoothnessScore = smoothness,
-            totalScore = total
+            totalScore = total,
+            mode = mode
         )
     }
     
@@ -157,10 +164,11 @@ object PerformanceScorer {
     fun compare(
         aimiKpi: AlgorithmKpi,
         smbKpi: AlgorithmKpi,
-        periodLabel: String
+        periodLabel: String,
+        mode: ScoringMode = ScoringMode.BALANCED
     ): AlgorithmsComparison {
-        val aimiScore = score(aimiKpi)
-        val smbScore = score(smbKpi)
+        val aimiScore = score(aimiKpi, mode)
+        val smbScore = score(smbKpi, mode)
         
         // Determine winner (null if tie within 0.3 points)
         val winner = when {
@@ -172,6 +180,7 @@ object PerformanceScorer {
         // Generate summary
         val summary = buildString {
             append("$periodLabel:\n")
+            append("• Score mode: ${mode.name}\n")
             append("• TIR 70-180: ${f1(aimiKpi.tir70_180)}% vs ${f1(smbKpi.tir70_180)}%\n")
             append("• Time <70: ${f1(aimiKpi.timeBelow70)}% vs ${f1(smbKpi.timeBelow70)}%\n")
             append("• TDD: ${f1(aimiKpi.tdd)}U vs ${f1(smbKpi.tdd)}U\n")
@@ -212,6 +221,26 @@ object PerformanceScorer {
             summary = summary,
             recommendation = recommendation
         )
+    }
+
+    private fun weightsForMode(mode: ScoringMode): ScoreWeights {
+        return when (mode) {
+            ScoringMode.BALANCED -> ScoreWeights(
+                safety = PerformanceScore.WEIGHT_SAFETY,
+                control = PerformanceScore.WEIGHT_CONTROL,
+                smoothness = PerformanceScore.WEIGHT_SMOOTHNESS
+            )
+            ScoringMode.POSTPRANDIAL -> ScoreWeights(
+                safety = 0.40,
+                control = 0.45,
+                smoothness = 0.15
+            )
+            ScoringMode.OVERNIGHT -> ScoreWeights(
+                safety = 0.60,
+                control = 0.25,
+                smoothness = 0.15
+            )
+        }
     }
     
     private fun f1(value: Double) = "%.1f".format(java.util.Locale.US, value)
