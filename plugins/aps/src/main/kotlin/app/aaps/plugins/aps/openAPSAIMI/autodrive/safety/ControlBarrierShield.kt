@@ -34,6 +34,8 @@ class ControlBarrierShield @Inject constructor(
     // Paramètres de Sécurité CBF
     private val bgDangerThreshold = 80.0 // Marge renforcée pour la limite absolue
     private val nominalGamma = 0.04       // Valeur de base (0.04 = ~1.0 mg/dL/min à h=25)
+    private val mealRiseGammaBoost = 1.35
+    private val mealRiseGammaBoostMax = 0.07
 
     /**
      * Vérifie et modifie si besoin la commande brute proposée par le MPC.
@@ -72,11 +74,29 @@ class ControlBarrierShield @Inject constructor(
         val accel = lastBgVelocity?.let { (currentVelocity - it) / 5.0 } ?: 0.0
         lastBgVelocity = currentVelocity
         
-        val activeGamma = if (accel < -0.05 && currentVelocity < 0) {
+        var activeGamma = if (accel < -0.05 && currentVelocity < 0) {
             // Accélération vers le bas détectée : On divise gamma par 2 (Bouclier Rigide)
             nominalGamma * 0.5
         } else {
             nominalGamma
+        }
+
+        // Meal-priority context relaxation:
+        // confirmed rise can start before 180 mg/dL; avoid over-braking while keeping hard bounds.
+        val strongMealRiseContext =
+            state.bg >= 145.0 &&
+                state.bgVelocity >= 0.2 &&
+                (state.cob >= 6.0 || state.uamConfidence >= 0.45 || state.combinedDelta >= 2.0)
+
+        if (strongMealRiseContext && activeGamma >= nominalGamma) {
+            val boosted = (activeGamma * mealRiseGammaBoost).coerceAtMost(mealRiseGammaBoostMax)
+            if (boosted > activeGamma) {
+                activeGamma = boosted
+                aapsLogger.debug(
+                    LTag.APS,
+                    "🛡️ [CBF SHIELD] Meal-priority relaxation active. Gamma=${activeGamma.format(3)} BG=${state.bg.format(1)} dBG=${state.bgVelocity.format(2)} COB=${state.cob.format(1)} UAM=${state.uamConfidence.format(2)} cΔ=${state.combinedDelta.format(2)}"
+                )
+            }
         }
 
         // On veut garantir : L_f(h) + L_g(h) * u >= - activeGamma * h

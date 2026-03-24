@@ -1680,6 +1680,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val proposedFloat = effectiveProposed.toFloat()
         lastDecisionSource = decisionSource
         lastSmbProposed = effectiveProposed
+        val uamConfidence = AimiUamHandler.confidenceOrZero()
+        val mealPriorityContext =
+            !isExplicitUserAction &&
+                (isMealActive || mealData.mealCOB >= 6.0 || uamConfidence >= 0.45) &&
+                (this.bg >= 145.0) &&
+                (this.delta.toDouble() >= 1.8 || this.shortAvgDelta.toDouble() >= 1.5) &&
+                (this.iob.toDouble() < this.maxIob * 0.75)
+        if (mealPriorityContext) {
+            consoleLog.add(
+                "🍽️ MEAL_PRIORITY_CONTEXT ON (BG=${"%.0f".format(this.bg)} Δ=${"%.1f".format(this.delta)} " +
+                    "sΔ=${"%.1f".format(this.shortAvgDelta)} COB=${"%.1f".format(mealData.mealCOB)} " +
+                    "UAM=${"%.2f".format(uamConfidence)} IOB=${"%.2f".format(this.iob)}/${"%.2f".format(this.maxIob)})"
+            )
+        }
+        var chainBaseLimit = 0.0
+        var chainSafetyCapped = 0f
+        var chainAfterRefractory = 0f
+        var chainAfterThrottle = 0f
+        var chainFinal = 0.0
+        var chainIntervalAdd = 0
+        var chainThrottleFactor = 1.0
         
         // 🛡️ SAFETY NET: Dynamic SMB Limit (Zones & Trajectory)
         // Replaces simple "React Over 120" with a smart, amplified range logic.
@@ -1700,8 +1721,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             maxSmbLow = this.maxSMB,
             maxSmbHigh = this.maxSMBHB,
             isExplicitUserAction = isExplicitUserAction,
-            auditorConfidence = auditorLastConfidence
+            auditorConfidence = auditorLastConfidence,
+            mealPriorityContext = mealPriorityContext
         )
+        chainBaseLimit = baseLimit
 
          // 🔒 FCL Safety: Enforce Safety Precautions (Dropping Fast, Hypo Risk, etc)
          // finalizeAndCapSMB often handles forced boluses, but they MUST yield to critical physical safety.
@@ -1718,6 +1741,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             suspectedLateFatMeal = lateFatRiseFlag, // Pass late fat flag
             ignoreSafetyConditions = isExplicitUserAction
          ).coerceAtMost(baseLimit.toFloat()) // Apply the SafetyNet limit immediately
+         chainSafetyCapped = safetyCappedUnits
 
          if (safetyCappedUnits < proposedFloat) {
               consoleLog.add("Safety Precautions reduced SMB: $proposedFloat -> $safetyCappedUnits (BaseLimit=${"%.2f".format(baseLimit)})")
@@ -1763,19 +1787,35 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              }
          }
 
-         if (refractoryBlocked) {
-             gatedUnits = 0f
-             consoleLog.add("⏸️ REFRACTORY_BLOCK sinceBolus=${"%.1f".format(sinceBolus)}m window=${"%.1f".format(refractoryWindow)}m (SMB blocked)")
+        if (refractoryBlocked) {
+            if (mealPriorityContext) {
+                val before = gatedUnits
+                // Progressive refractory relaxation for confirmed meal rise:
+                // - Very early after bolus: keep conservative partial block
+                // - Near end of refractory window: allow stronger release
+                val refractoryProgress = (sinceBolus / refractoryWindow).coerceIn(0.0, 1.0)
+                val relaxFactor = (0.35 + 0.35 * refractoryProgress).coerceIn(0.35, 0.70)
+                gatedUnits = (gatedUnits * relaxFactor.toFloat()).coerceAtLeast(0f)
+                consoleLog.add(
+                    "⏸️➡️ REFRACTORY_RELAX_MEAL_PRIORITY sinceBolus=${"%.1f".format(sinceBolus)}m " +
+                        "window=${"%.1f".format(refractoryWindow)}m progress=${"%.2f".format(refractoryProgress)} " +
+                        "factor=${"%.2f".format(relaxFactor)} SMB ${"%.2f".format(before)}→${"%.2f".format(gatedUnits)}U"
+                )
+            } else {
+                gatedUnits = 0f
+                consoleLog.add("⏸️ REFRACTORY_BLOCK sinceBolus=${"%.1f".format(sinceBolus)}m window=${"%.1f".format(refractoryWindow)}m (SMB blocked)")
+            }
          } else if (sinceBolus < refractoryWindow && isExplicitUserAction) {
              // Modes repas bypassent explicitement le refractory
              consoleLog.add("✅ REFRACTORY_BYPASS sinceBolus=${"%.1f".format(sinceBolus)}m window=${"%.1f".format(refractoryWindow)}m (Meal mode override)")
          }
+        chainAfterRefractory = gatedUnits
 
          // 🔧 FIX 2: Adaptive AbsorptionGuard threshold (pediatric-safe)
          val tdd24h = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: 30.0
          val activityThreshold = (tdd24h / 24.0) * 0.15 // 15% of hourly TDD
          
-         if (sinceBolus < 20.0 && iobActivityNow > activityThreshold && !isExplicitUserAction) {
+        if (sinceBolus < 20.0 && iobActivityNow > activityThreshold && !isExplicitUserAction && !mealPriorityContext) {
              absorptionFactor = if (bg > targetBg + 60 && delta > 0) 0.75 else 0.5
              gatedUnits = (gatedUnits * absorptionFactor.toFloat()).coerceAtLeast(0f)
          }
@@ -1807,13 +1847,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  currentBg = this.bg
              )
              
-             // Apply throttle
+            // Apply throttle
+            val effectiveSmbFactor = if (mealPriorityContext) throttle.smbFactor.coerceAtLeast(0.80) else throttle.smbFactor
+            val effectiveIntervalAdd = if (mealPriorityContext) min(throttle.intervalAddMin, 1) else throttle.intervalAddMin
+            chainThrottleFactor = effectiveSmbFactor
+            chainIntervalAdd = effectiveIntervalAdd
              val originalGated = gatedUnits
-             gatedUnits = (gatedUnits * throttle.smbFactor.toFloat()).coerceAtLeast(0f)
+            gatedUnits = (gatedUnits * effectiveSmbFactor.toFloat()).coerceAtLeast(0f)
              
              // Log
-             if (throttle.smbFactor < 1.0 || throttle.preferTbr) {
-                 consoleLog.add("PKPD_THROTTLE smbFactor=${"%.2f".format(throttle.smbFactor)} intervalAdd=${throttle.intervalAddMin} preferTbr=${throttle.preferTbr} reason=${throttle.reason}")
+            if (effectiveSmbFactor < 1.0 || throttle.preferTbr) {
+                consoleLog.add(
+                    "PKPD_THROTTLE smbFactor=${"%.2f".format(effectiveSmbFactor)} intervalAdd=${effectiveIntervalAdd} " +
+                        "preferTbr=${throttle.preferTbr} reason=${throttle.reason}" +
+                        if (mealPriorityContext) " [MEAL_PRIORITY_RELAX]" else ""
+                )
                  if (originalGated > 0f && gatedUnits < originalGated * 0.6f) {
                      consoleLog.add("  ⚠️ SMB reduced ${"%2f".format(originalGated)} → ${"%.2f".format(gatedUnits)}U (PKPD throttle)")
                  }
@@ -1825,13 +1873,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              }
              
              // 🚀 Stocker les valeurs pour interval SMB et TBR boost
-             pkpdThrottleIntervalAdd = throttle.intervalAddMin
+            pkpdThrottleIntervalAdd = effectiveIntervalAdd
              pkpdPreferTbrBoost = if (throttle.preferTbr) 1.15 else 1.0  // +15% TBR si preferTbr
          } else {
              // Reset si explicit user action (modes repas)
              pkpdThrottleIntervalAdd = 0
              pkpdPreferTbrBoost = 1.0
          }
+        chainAfterThrottle = gatedUnits
 
          val safeCap = capSmbDose(
              proposedSmb = gatedUnits, // Use the safety-reduced amount as base
@@ -1904,6 +1953,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Comportement standard (Pas de repas ou demande nulle)
             finalUnits = safeCap.toDouble()
         }
+        chainFinal = finalUnits
         
         lastSmbCapped = finalUnits
         lastSmbFinal = finalUnits
@@ -1934,6 +1984,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              if (safeCap == 0f && this.iob >= this.maxIob) {
                  consoleLog.add("  -> BLOCK: IOB_SATURATION (IOB ${this.iob} >= MaxIOB ${this.maxIob})")
              }
+        }
+        if (mealPriorityContext) {
+            val chainLine =
+                "🍽️ MEAL_PRIORITY_CHAIN proposed=${"%.2f".format(proposedFloat)} " +
+                    "baseLimit=${"%.2f".format(chainBaseLimit)} safety=${"%.2f".format(chainSafetyCapped)} " +
+                    "refr=${"%.2f".format(chainAfterRefractory)} throttle=${"%.2f".format(chainAfterThrottle)} " +
+                    "tf=${"%.2f".format(chainThrottleFactor)} iAdd=+${chainIntervalAdd} " +
+                    "final=${"%.2f".format(chainFinal)}"
+            consoleLog.add(chainLine)
+            rT.reason.append(" | $chainLine")
         }
     }
 
@@ -4433,17 +4493,39 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     // 3. Apply Modulation (The "Safety" Gate)
                     // We only modify insulin delivery if relevance is sufficient (> 0.4)
                     val mod = analysis.modulation
+                    val uamConfidence = AimiUamHandler.confidenceOrZero()
+                    val strongMealRiseContext =
+                        bg >= 145.0 &&
+                            delta >= 1.8 &&
+                            (cob >= 6.0 || uamConfidence >= 0.45)
                     if (relevanceScore > 0.4 && mod.isSignificant()) {
-                        consoleLog.add("  🎛 Modulation: SMB×${"%.2f".format(mod.smbDamping)} Int×${"%.2f".format(mod.intervalStretch)} (${mod.reason})")
+                        val effectiveSmbDamping = if (strongMealRiseContext) {
+                            mod.smbDamping.coerceAtLeast(0.70)
+                        } else {
+                            mod.smbDamping
+                        }
+                        val effectiveIntervalStretch = if (strongMealRiseContext) {
+                            mod.intervalStretch.coerceAtMost(1.10)
+                        } else {
+                            mod.intervalStretch
+                        }
+                        if (strongMealRiseContext && (effectiveSmbDamping != mod.smbDamping || effectiveIntervalStretch != mod.intervalStretch)) {
+                            consoleLog.add(
+                                "  🚀 TRAJ_RELAX meal-rise: SMB×${"%.2f".format(mod.smbDamping)}→${"%.2f".format(effectiveSmbDamping)} " +
+                                    "Int×${"%.2f".format(mod.intervalStretch)}→${"%.2f".format(effectiveIntervalStretch)} " +
+                                    "(BG=${"%.0f".format(bg)} Δ=${"%.1f".format(delta)} COB=${"%.1f".format(cob)} UAM=${"%.2f".format(uamConfidence)})"
+                            )
+                        }
+                        consoleLog.add("  🎛 Modulation: SMB×${"%.2f".format(effectiveSmbDamping)} Int×${"%.2f".format(effectiveIntervalStretch)} (${mod.reason})")
                         
-                        if (kotlin.math.abs(mod.smbDamping - 1.0) > 0.05) {
+                        if (kotlin.math.abs(effectiveSmbDamping - 1.0) > 0.05) {
                             val orig = maxSMB
-                            maxSMB *= mod.smbDamping; maxSMBHB *= mod.smbDamping
+                            maxSMB *= effectiveSmbDamping; maxSMBHB *= effectiveSmbDamping
                             consoleLog.add("    → SMB: ${"%.2f".format(orig)}U → ${"%.2f".format(maxSMB)}U")
                         }
-                        if (kotlin.math.abs(mod.intervalStretch - 1.0) > 0.05) {
+                        if (kotlin.math.abs(effectiveIntervalStretch - 1.0) > 0.05) {
                             val orig = intervalsmb
-                            intervalsmb = (intervalsmb * mod.intervalStretch).toInt().coerceIn(1, 20)
+                            intervalsmb = (intervalsmb * effectiveIntervalStretch).toInt().coerceIn(1, 20)
                             consoleLog.add("    → Interval: ${orig}min → ${intervalsmb}min")
                         }
                         if (kotlin.math.abs(mod.safetyMarginExpand - 1.0) > 0.05) {
@@ -5424,11 +5506,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val curvature = lastTraj.metrics.curvature
                 val iobNow = iob_data.iob
 
+                val uamConfidence = AimiUamHandler.confidenceOrZero()
+                val strongMealRiseContext =
+                    bg >= 145.0 &&
+                        delta >= 1.8 &&
+                        (cob >= 6.0 || uamConfidence >= 0.45)
+
                 // Escalade selon l'énergie accumulée
                 // > 3.5 U → situation critique, réduction forte
                 // > 2.5 U → stacking modéré, réduction intermédiaire
                 // > 1.5 U → début de spirale, réduction douce
                 val basalFraction = when {
+                    strongMealRiseContext && energy > 3.5 -> 0.70
+                    strongMealRiseContext && energy > 2.5 -> 0.85
+                    strongMealRiseContext && energy > 1.5 -> 0.95
                     energy > 3.5 -> 0.25  // Critique : 25% basale (évite l'hypo sévère)
                     energy > 2.5 -> 0.50  // Modéré   : 50% basale
                     energy > 1.5 -> 0.70  // Léger    : 70% basale
@@ -5447,7 +5538,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 if (effectiveFraction < 1.0) {
                     val proactiveBasal = profile.current_basal * effectiveFraction
                     val cgateNote = if (cgateAmplified) " [CGate ISF↑ → amplification]" else ""
-                    val reason = "TRAJ_TIGHT_SPIRAL: E=${String.format("%.1f", energy)}U κ=${String.format("%.2f", curvature)} IOB=${String.format("%.2f", iobNow)}U → Basale proactive ${(effectiveFraction * 100).toInt()}%$cgateNote"
+                    val mealNote = if (strongMealRiseContext) " [MEAL_PRIORITY_RELAX]" else ""
+                    val reason = "TRAJ_TIGHT_SPIRAL: E=${String.format("%.1f", energy)}U κ=${String.format("%.2f", curvature)} IOB=${String.format("%.2f", iobNow)}U → Basale proactive ${(effectiveFraction * 100).toInt()}%$cgateNote$mealNote"
 
                     consoleLog.add("🌀🛡️ TRAJECTORY_SAFETY_BRIDGE: $reason")
 

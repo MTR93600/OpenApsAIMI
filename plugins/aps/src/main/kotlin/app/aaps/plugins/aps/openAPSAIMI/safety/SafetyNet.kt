@@ -40,10 +40,27 @@ object SafetyNet {
         maxSmbLow: Double,
         maxSmbHigh: Double,
         isExplicitUserAction: Boolean,
-        auditorConfidence: Double? = null
+        auditorConfidence: Double? = null,
+        mealPriorityContext: Boolean = false
     ): Double {
         // 1. Manual Override: Full Trust
         if (isExplicitUserAction) return maxSmbHigh
+
+        // 1.5 Meal Priority Context (non-announced/announced meal rise harmonization)
+        // Keep safety but avoid under-delivery when rise is confirmed early.
+        if (mealPriorityContext) {
+            return when {
+                bg < 120.0 -> maxSmbLow * 0.70
+                bg < 140.0 -> maxSmbLow * 0.90
+                bg < 170.0 -> {
+                    val progress = (bg - 130.0) / (170.0 - 130.0)
+                    val boosted = max(progress, 0.75)
+                    val range = maxSmbHigh - maxSmbLow
+                    maxSmbLow + (range * boosted)
+                }
+                else -> maxSmbHigh
+            }
+        }
 
         // 2. ZONE 0.5: SOFT LANDING (Target → Target+15)
         // Purpose: Prevent "plateau effect" 10-20 mg/dL above target
