@@ -99,6 +99,8 @@ class SWDefinition @Inject constructor(
     private val screens: MutableList<SWScreen> = ArrayList()
 
     private fun requireActivity() = activity ?: error("Activity is null")
+    private fun requiresLegacyStoragePermission(): Boolean =
+        android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU
 
     fun getScreens(): List<SWScreen> {
         if (screens.isEmpty()) {
@@ -203,11 +205,11 @@ class SWDefinition @Inject constructor(
                      .visibility { androidPermission.permissionNotGranted(context, Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) }
                     .action { androidPermission.askForPermission(requireActivity(), Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) })
             .add(swBreakProvider.get())
-            .add(swInfoTextProvider.get().label(rh.gs(R.string.need_storage_permission)))
+            .add(swInfoTextProvider.get().label(rh.gs(R.string.need_storage_permission)).visibility { requiresLegacyStoragePermission() })
             .add(
                 swButtonProvider.get()
                      .text(R.string.askforpermission)
-                    .visibility { androidPermission.permissionNotGranted(requireActivity(), Manifest.permission.READ_EXTERNAL_STORAGE) }
+                    .visibility { requiresLegacyStoragePermission() && androidPermission.permissionNotGranted(requireActivity(), Manifest.permission.READ_EXTERNAL_STORAGE) }
                     .action { androidPermission.askForPermission(requireActivity(), Manifest.permission.READ_EXTERNAL_STORAGE) })
             .add(swBreakProvider.get())
             .add(swInfoTextProvider.get().label(rh.gs(R.string.select_aaps_directory)))
@@ -225,13 +227,13 @@ class SWDefinition @Inject constructor(
             .visibility {
                 !Settings.canDrawOverlays(requireActivity()) ||
                     androidPermission.permissionNotGranted(requireActivity(), Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) ||
-                    androidPermission.permissionNotGranted(requireActivity(), Manifest.permission.READ_EXTERNAL_STORAGE) ||
+                    (requiresLegacyStoragePermission() && androidPermission.permissionNotGranted(requireActivity(), Manifest.permission.READ_EXTERNAL_STORAGE)) ||
                     preferences.getIfExists(StringKey.AapsDirectoryUri) == null
             }
             .validator {
                 Settings.canDrawOverlays(requireActivity()) &&
                     !androidPermission.permissionNotGranted(requireActivity(), Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) &&
-                    !androidPermission.permissionNotGranted(requireActivity(), Manifest.permission.READ_EXTERNAL_STORAGE) &&
+                    (!requiresLegacyStoragePermission() || !androidPermission.permissionNotGranted(requireActivity(), Manifest.permission.READ_EXTERNAL_STORAGE)) &&
                     !preferences.getIfExists(StringKey.AapsDirectoryUri).isNullOrEmpty()
             }
 
@@ -261,7 +263,7 @@ class SWDefinition @Inject constructor(
             .add(swInfoTextProvider.get().label(R.string.storedsettingsfound))
             .add(swBreakProvider.get())
             .add(swButtonProvider.get().text(R.string.import_setting).action { importExportPrefs.importSharedPreferences(requireActivity()) })
-            .visibility { importExportPrefs.prefsFileExists() && !androidPermission.permissionNotGranted(requireActivity(), Manifest.permission.READ_EXTERNAL_STORAGE) }
+            .visibility { importExportPrefs.prefsFileExists() && (!requiresLegacyStoragePermission() || !androidPermission.permissionNotGranted(requireActivity(), Manifest.permission.READ_EXTERNAL_STORAGE)) }
 
     private val screenNsClient
         get() = swScreenProvider.get().with(R.string.configbuilder_sync)
