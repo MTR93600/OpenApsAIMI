@@ -12,6 +12,7 @@ import app.aaps.plugins.main.general.dashboard.viewmodel.AdjustmentCardState
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.ui.toast.ToastUtils
 import javax.inject.Inject
 
@@ -23,6 +24,7 @@ class AdjustmentDetailsActivity : TranslatedDaggerAppCompatActivity() {
 
     @Inject lateinit var loop: Loop
     @Inject lateinit var aapsLogger: AAPSLogger
+    @Inject lateinit var resourceHelper: ResourceHelper
 
     private lateinit var binding: ActivityAdjustmentDetailsBinding
 
@@ -69,7 +71,7 @@ class AdjustmentDetailsActivity : TranslatedDaggerAppCompatActivity() {
         renderDecisions(state.adjustments)
 
         binding.runLoopButton.setOnClickListener {
-            ToastUtils.infoToast(this, "Loop run requested")
+            ToastUtils.infoToast(this, resourceHelper.gs(R.string.dashboard_loop_run_requested))
             Thread {
                 try {
                     loop.invoke("AdjustmentDetails", true)

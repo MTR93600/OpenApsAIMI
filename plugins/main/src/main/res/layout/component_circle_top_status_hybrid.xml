@@ -8,7 +8,7 @@
         android:layout_height="wrap_content"
         android:background="@drawable/dashboard_card_surface"
         android:orientation="vertical"
-        android:padding="10dp">
+        android:padding="@dimen/dashboard_card_inner_padding">
 
         <!-- ═══════════════════════════════════════════════════ -->
         <!-- TOP SECTION: Circle + Badges + Trend               -->
@@ -108,7 +108,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:layout_marginTop="-75dp"
-            android:layout_marginBottom="4dp">
+            android:layout_marginBottom="@dimen/dashboard_row_spacing_small">
 
             <!-- LEFT COLUMN -->
             <LinearLayout
@@ -132,14 +132,14 @@
                         android:layout_height="18dp"
                         android:layout_marginEnd="6dp"
                         app:srcCompat="@drawable/ic_dashboard_shoe"
-                        app:tint="#AAFFFFFF" />
+                        app:tint="@color/dashboard_on_surface_muted" />
 
                     <TextView
                         android:id="@+id/steps_text"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="--"
-                        android:textColor="#AAFFFFFF"
+                        android:textColor="@color/dashboard_on_surface"
                         android:textSize="14sp"
                         android:textStyle="bold" />
                 </LinearLayout>
@@ -181,16 +181,15 @@
                         android:layout_height="18dp"
                         android:layout_marginEnd="6dp"
                         app:srcCompat="@drawable/ic_cp_bolus_carbs"
-                        app:tint="#FFC107" />
+                        app:tint="@color/dashboard_metric_attention" />
 
                     <TextView
                         android:id="@+id/cob_text"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="0g"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-                        android:textColor="#FFC107"
-                        android:textStyle="bold" />
+                        android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetricValue"
+                        android:textColor="@color/dashboard_metric_attention" />
                 </LinearLayout>
 
                 <!-- CV (Coefficient of Variation) -->
@@ -265,14 +264,14 @@
                         android:layout_height="18dp"
                         android:layout_marginEnd="6dp"
                         app:srcCompat="@drawable/ic_cp_heart_rate"
-                        app:tint="#AAFFFFFF" />
+                        app:tint="@color/dashboard_on_surface_muted" />
 
                     <TextView
                         android:id="@+id/hr_text"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="--"
-                        android:textColor="#AAFFFFFF"
+                        android:textColor="@color/dashboard_on_surface"
                         android:textSize="14sp"
                         android:textStyle="bold" />
                 </LinearLayout>
@@ -290,16 +289,15 @@
                         android:layout_height="18dp"
                         android:layout_marginEnd="6dp"
                         app:srcCompat="@drawable/ic_dashboard_droplet"
-                        app:tint="#42A5F5" />
+                        app:tint="@color/dashboard_metric_info" />
 
                     <TextView
                         android:id="@+id/last_sensor_value_text"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="--"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-                        android:textColor="#42A5F5"
-                        android:textStyle="bold" />
+                        android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetricValue"
+                        android:textColor="@color/dashboard_metric_info" />
                 </LinearLayout>
 
                 <!-- TBR Rate & % -->
@@ -315,16 +313,15 @@
                         android:layout_height="18dp"
                         android:layout_marginEnd="6dp"
                         app:srcCompat="@drawable/ic_sensor_reading"
-                        app:tint="#AB47BC" />
+                        app:tint="@color/dashboard_metric_warning" />
 
                     <TextView
                         android:id="@+id/tbr_rate_text"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="0.00 U/h"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-                        android:textColor="#AB47BC"
-                        android:textStyle="bold" />
+                        android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetricValue"
+                        android:textColor="@color/dashboard_metric_warning" />
                 </LinearLayout>
 
                 <!-- Basal Profile -->
@@ -385,11 +382,11 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="4dp"
-            android:padding="6dp"
+            android:layout_marginTop="@dimen/dashboard_section_spacing"
+            android:layout_marginBottom="@dimen/dashboard_row_spacing_small"
+            android:padding="8dp"
             android:background="@drawable/dashboard_chip_background"
-            android:alpha="0.85">
+            android:alpha="0.92">
 
             <!-- T3c (Time to Control) -->
             <TextView
@@ -397,7 +394,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="🎯 --"
-                android:textSize="11sp"
+                android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetaLabel"
                 android:textColor="@color/dashboard_on_surface"
                 android:layout_marginEnd="16dp" />
 
@@ -407,7 +404,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="🌀 --"
-                android:textSize="11sp"
+                android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetaLabel"
                 android:textColor="@color/dashboard_on_surface"
                 android:layout_marginEnd="16dp" />
 
@@ -417,7 +414,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="⚡ x1.0"
-                android:textSize="11sp"
+                android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetaLabel"
                 android:textColor="@color/dashboard_on_surface" />
 
         </LinearLayout>
@@ -429,8 +426,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="12dp">
+            android:layout_marginTop="@dimen/dashboard_section_spacing"
+            android:layout_marginBottom="@dimen/dashboard_block_spacing">
             
             <LinearLayout
                 android:layout_width="match_parent"
@@ -441,55 +438,55 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="TIME IN RANGE — TODAY"
-                    android:textSize="10sp"
+                    android:text="@string/dashboard_tir_today"
+                    android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetaLabel"
                     android:textAllCaps="true"
                     android:letterSpacing="0.1"
-                    android:textColor="#88FFFFFF" />
+                    android:textColor="@color/dashboard_on_surface_muted" />
                 <TextView
                     android:id="@+id/tir_stats_text"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Avg -- • A1C --"
-                    android:textSize="10sp"
-                    android:textColor="#FFFFFF" />
+                    android:text="@string/dashboard_tir_stats_placeholder"
+                    android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetaLabel"
+                    android:textColor="@color/dashboard_on_surface" />
             </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="8dp"
                 android:orientation="horizontal"
-                android:background="#22FFFFFF">
+                android:background="@color/dashboard_tir_track">
                 <View
                     android:id="@+id/tir_very_low_bar"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_weight="0.01"
-                    android:background="#D50000" />
+                    android:background="@color/dashboard_tir_very_low" />
                 <View
                     android:id="@+id/tir_low_bar"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_weight="0.04"
-                    android:background="#FF6D00" />
+                    android:background="@color/dashboard_tir_low" />
                 <View
                     android:id="@+id/tir_in_range_bar"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_weight="0.75"
-                    android:background="#00C853" />
+                    android:background="@color/dashboard_tir_in_range" />
                 <View
                     android:id="@+id/tir_high_bar"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_weight="0.15"
-                    android:background="#FFD600" />
+                    android:background="@color/dashboard_tir_high" />
                 <View
                     android:id="@+id/tir_very_high_bar"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_weight="0.05"
-                    android:background="#D50000" />
+                    android:background="@color/dashboard_tir_very_low" />
             </LinearLayout>
             
             <LinearLayout
@@ -499,11 +496,11 @@
                 android:layout_marginTop="2dp"
                 android:baselineAligned="false">
                 <!-- Percentage Labels -->
-                <TextView android:id="@+id/tir_very_low_label" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="0.05" android:text="" android:textSize="9sp" android:textColor="#D50000" android:gravity="start"/>
-                <TextView android:id="@+id/tir_low_label" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="0.2" android:text="" android:textSize="9sp" android:textColor="#FF6D00" android:gravity="start"/>
-                <TextView android:id="@+id/tir_in_range_label" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="0.5" android:text="" android:textSize="9sp" android:textColor="#00C853" android:gravity="center"/>
-                <TextView android:id="@+id/tir_high_label" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="0.2" android:text="" android:textSize="9sp" android:textColor="#FFD600" android:gravity="end"/>
-                <TextView android:id="@+id/tir_very_high_label" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="0.05" android:text="" android:textSize="9sp" android:textColor="#D50000" android:gravity="end"/>
+                <TextView android:id="@+id/tir_very_low_label" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="0.05" android:text="" android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetaLabel" android:textColor="@color/dashboard_tir_very_low" android:gravity="start"/>
+                <TextView android:id="@+id/tir_low_label" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="0.2" android:text="" android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetaLabel" android:textColor="@color/dashboard_tir_low" android:gravity="start"/>
+                <TextView android:id="@+id/tir_in_range_label" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="0.5" android:text="" android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetaLabel" android:textColor="@color/dashboard_tir_in_range" android:gravity="center"/>
+                <TextView android:id="@+id/tir_high_label" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="0.2" android:text="" android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetaLabel" android:textColor="@color/dashboard_tir_high" android:gravity="end"/>
+                <TextView android:id="@+id/tir_very_high_label" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="0.05" android:text="" android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetaLabel" android:textColor="@color/dashboard_tir_very_low" android:gravity="end"/>
             </LinearLayout>
         </LinearLayout>
 
@@ -520,34 +517,52 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
+                app:chipSpacingHorizontal="@dimen/dashboard_chip_spacing"
+                app:chipSpacingVertical="@dimen/dashboard_row_spacing_small"
                 app:singleSelection="false">
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_aimi_advisor"
-                    style="@style/Widget.MaterialComponents.Chip.Action"
+                    style="@style/Widget.AAPS.Dashboard.ActionChip"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:contentDescription="@string/dashboard_cd_chip_aimi_advisor"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:importantForAccessibility="yes"
                     android:text="@string/advisor_button" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_adjust"
-                    style="@style/Widget.MaterialComponents.Chip.Action"
+                    style="@style/Widget.AAPS.Dashboard.ActionChip"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:contentDescription="@string/dashboard_cd_chip_adjust"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:importantForAccessibility="yes"
                     android:text="@string/adjust_button" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_aimi_pref"
-                    style="@style/Widget.MaterialComponents.Chip.Action"
+                    style="@style/Widget.AAPS.Dashboard.ActionChip"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:contentDescription="@string/dashboard_cd_chip_meal_mode"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:importantForAccessibility="yes"
                     android:text="@string/dashboard_mode_meal" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_stat"
-                    style="@style/Widget.MaterialComponents.Chip.Action"
+                    style="@style/Widget.AAPS.Dashboard.ActionChip"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:contentDescription="@string/dashboard_cd_chip_aimi_context"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:importantForAccessibility="yes"
                     android:text="@string/aimi_context" />
             </com.google.android.material.chip.ChipGroup>
         </HorizontalScrollView>

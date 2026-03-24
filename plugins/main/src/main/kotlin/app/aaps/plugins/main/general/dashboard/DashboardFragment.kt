@@ -219,7 +219,7 @@ class DashboardFragment : DaggerFragment() {
             openAdjustmentDetails()
         }
         binding.adjustmentStatus.setOnRunLoopClickListener {
-            app.aaps.core.ui.toast.ToastUtils.infoToast(context, "Loop run requested")
+            app.aaps.core.ui.toast.ToastUtils.infoToast(context, resourceHelper.gs(R.string.dashboard_loop_run_requested))
             Thread {
                 try {
                     loop.invoke("Dashboard", true)

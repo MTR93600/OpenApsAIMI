@@ -3,7 +3,15 @@
     <dimen name="dashboard_card_corner_large">24dp</dimen>
     <dimen name="dashboard_card_corner_small">18dp</dimen>
     <dimen name="dashboard_card_elevation">8dp</dimen>
-    <dimen name="dashboard_block_spacing">5dp</dimen>
+    <dimen name="dashboard_block_spacing">12dp</dimen>
+    <dimen name="dashboard_content_padding">14dp</dimen>
+    <dimen name="dashboard_notification_padding">10dp</dimen>
+    <dimen name="dashboard_notification_margin">4dp</dimen>
+    <dimen name="dashboard_graph_height">320dp</dimen>
+    <dimen name="dashboard_card_inner_padding">16dp</dimen>
+    <dimen name="dashboard_section_spacing">10dp</dimen>
+    <dimen name="dashboard_row_spacing_small">4dp</dimen>
+    <dimen name="dashboard_row_spacing_medium">6dp</dimen>
     <dimen name="dashboard_chip_padding_vertical">8dp</dimen>
     <dimen name="dashboard_chip_padding_horizontal">14dp</dimen>
     <dimen name="dashboard_chip_spacing">8dp</dimen>

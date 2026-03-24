@@ -17,4 +17,50 @@
         <item name="cornerSizeBottomRight">@dimen/dashboard_card_corner_large</item>
         <item name="cornerSizeBottomLeft">@dimen/dashboard_card_corner_small</item>
     </style>
+
+    <style name="TextAppearance.AAPS.Dashboard.SectionTitle" parent="@style/TextAppearance.MaterialComponents.Subtitle1">
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/dashboard_on_surface</item>
+        <item name="android:letterSpacing">0.01</item>
+    </style>
+
+    <style name="TextAppearance.AAPS.Dashboard.PrimaryLine" parent="@style/TextAppearance.MaterialComponents.Body2">
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/dashboard_on_surface</item>
+    </style>
+
+    <style name="TextAppearance.AAPS.Dashboard.SecondaryLine" parent="@style/TextAppearance.MaterialComponents.Caption">
+        <item name="android:textColor">@color/dashboard_on_surface</item>
+    </style>
+
+    <style name="TextAppearance.AAPS.Dashboard.MetricValue" parent="@style/TextAppearance.MaterialComponents.Caption">
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/dashboard_on_surface</item>
+    </style>
+
+    <style name="TextAppearance.AAPS.Dashboard.MetaLabel" parent="@style/TextAppearance.MaterialComponents.Caption">
+        <item name="android:textColor">@color/dashboard_on_surface_muted</item>
+        <item name="android:textSize">10sp</item>
+    </style>
+
+    <style name="Widget.AAPS.Dashboard.RunLoopButton" parent="@style/Widget.MaterialComponents.Button.OutlinedButton">
+        <item name="android:textColor">@color/dashboard_on_surface</item>
+        <item name="strokeColor">@color/dashboard_on_surface</item>
+        <item name="cornerRadius">14dp</item>
+    </style>
+
+    <style name="Widget.AAPS.Dashboard.ActionChip" parent="@style/Widget.MaterialComponents.Chip.Action">
+        <item name="chipBackgroundColor">@color/dashboard_chip_bg_selector</item>
+        <item name="chipStrokeColor">@color/dashboard_chip_stroke_selector</item>
+        <item name="chipStrokeWidth">1dp</item>
+        <item name="android:textColor">@color/dashboard_chip_text_selector</item>
+        <item name="chipCornerRadius">14dp</item>
+        <item name="chipMinHeight">34dp</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:letterSpacing">0.01</item>
+        <item name="rippleColor">@color/dashboard_ripple</item>
+        <item name="closeIconVisible">false</item>
+        <item name="android:checkable">true</item>
+        <item name="checkedIconVisible">false</item>
+    </style>
 </resources>

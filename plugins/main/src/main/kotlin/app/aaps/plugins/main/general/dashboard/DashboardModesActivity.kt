@@ -35,7 +35,7 @@ class DashboardModesActivity : TranslatedDaggerAppCompatActivity() {
         binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
         // Add AIMI Modes Settings button
-        val settingsItem = binding.toolbar.menu.add(0, 1, 0, "Settings")
+        val settingsItem = binding.toolbar.menu.add(0, 1, 0, resourceHelper.gs(R.string.dashboard_nav_settings))
         settingsItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
         settingsItem.setIcon(app.aaps.core.ui.R.drawable.ic_settings)
         

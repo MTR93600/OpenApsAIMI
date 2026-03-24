@@ -7,9 +7,12 @@
     android:id="@+id/cv"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="1dp"
-    app:cardCornerRadius="4dp"
-    app:contentPadding="2dp"
+    android:layout_margin="@dimen/dashboard_notification_margin"
+    app:cardCornerRadius="10dp"
+    app:contentPadding="@dimen/dashboard_notification_padding"
+    app:cardElevation="2dp"
+    app:strokeWidth="1dp"
+    app:strokeColor="@color/dashboard_chip_border_warning"
     android:layout_gravity="center"
     app:cardBackgroundColor="?attr/notificationUrgent">
 
@@ -23,10 +26,11 @@
             android:id="@+id/text"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="5dp"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="10dp"
             android:layout_weight="1"
-            android:textColor="?attr/colorOnError"
-            android:maxLines="4"
+            android:textColor="?attr/colorOnSurface"
+            android:maxLines="5"
             android:textStyle="bold"
             android:text="Notification text. Notification text. Notification text. Notification text. Notification text. Notification text. "
             tools:ignore="HardcodedText" />
@@ -37,6 +41,9 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
             android:text="@string/dismiss" />
 
     </LinearLayout>

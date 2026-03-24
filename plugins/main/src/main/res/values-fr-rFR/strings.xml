@@ -305,4 +305,16 @@
     <string name="overview_show_steps">Pas</string>
     <string name="steps_shortname">PAS</string>
     <string name="simple_mode_enabled">Mode simple activé</string>
+    <string name="dashboard_cd_chip_aimi_advisor">Ouvrir les recommandations AIMI Advisor</string>
+    <string name="dashboard_cd_chip_adjust">Ouvrir les ajustements et actions de boucle</string>
+    <string name="dashboard_cd_chip_meal_mode">Ouvrir le mode repas et les préférences associées</string>
+    <string name="dashboard_cd_chip_aimi_context">Ouvrir le contexte AIMI et les statistiques</string>
+    <string name="dashboard_chip_state_selected">sélectionné</string>
+    <string name="dashboard_chip_state_not_selected">non sélectionné</string>
+    <string name="dashboard_chip_announced_advisor_opened">Advisor ouvert</string>
+    <string name="dashboard_chip_announced_adjust_opened">Ajustements ouverts</string>
+    <string name="dashboard_chip_announced_meal_mode_opened">Mode repas ouvert</string>
+    <string name="dashboard_chip_announced_context_opened">Contexte AIMI ouvert</string>
+    <string name="dashboard_loop_run_requested">Exécution de la boucle demandée</string>
+    <string name="dashboard_tir_stats_format">Moy %1$.0f - A1C %2$.1f%%</string>
 </resources>

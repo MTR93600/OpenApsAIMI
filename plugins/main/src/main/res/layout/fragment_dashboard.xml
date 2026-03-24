@@ -17,7 +17,11 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="@dimen/dashboard_block_spacing">
+            android:paddingStart="@dimen/dashboard_content_padding"
+            android:paddingEnd="@dimen/dashboard_content_padding"
+            android:paddingTop="@dimen/dashboard_content_padding"
+            android:paddingBottom="@dimen/dashboard_content_padding"
+            android:clipToPadding="false">
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/overview_notifications"
@@ -38,7 +42,7 @@
             <app.aaps.plugins.main.general.dashboard.views.GlucoseGraphView
                 android:id="@+id/glucose_graph"
                 android:layout_width="match_parent"
-                android:layout_height="300dp"
+                android:layout_height="@dimen/dashboard_graph_height"
                 android:layout_marginBottom="@dimen/dashboard_block_spacing"
                 style="@style/Widget.AAPS.Dashboard.Card" />
 

@@ -6,7 +6,18 @@
     <color name="dashboard_surface_start">#24364F</color>
     <color name="dashboard_surface_end">#1E2A43</color>
     <color name="dashboard_chip_background">#2F3C5C</color>
+    <color name="dashboard_chip_background_active">#3E5B93</color>
     <color name="dashboard_chip_border">#4C6AA6</color>
+    <color name="dashboard_chip_text">#F3F6FF</color>
     <color name="dashboard_chip_border_warning">#E57373</color>
     <color name="dashboard_on_surface">#E7ECFF</color>
+    <color name="dashboard_on_surface_muted">#B7C2E6</color>
+    <color name="dashboard_metric_info">#42A5F5</color>
+    <color name="dashboard_metric_attention">#FFC107</color>
+    <color name="dashboard_metric_warning">#AB47BC</color>
+    <color name="dashboard_tir_very_low">#D50000</color>
+    <color name="dashboard_tir_low">#FF6D00</color>
+    <color name="dashboard_tir_in_range">#00C853</color>
+    <color name="dashboard_tir_high">#FFD600</color>
+    <color name="dashboard_tir_track">#22FFFFFF</color>
 </resources>
