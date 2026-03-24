@@ -10,6 +10,7 @@ import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.RM
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.TrendArrow
+import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.aps.GlucoseStatus
@@ -364,8 +365,14 @@ class OverviewViewModel(
              e.printStackTrace()
         }
 
+        val lastApsRequest = loop.lastRun?.request
+        val aimiPulseTitle = buildAimiPulseTitle(loop.lastRun?.lastAPSRun)
+        val aimiPulseSummary = buildAimiPulseSummary(lastApsRequest)
+        val aimiPulseMeta = buildAimiPulseMeta(lastApsRequest)
+        val aimiPulseHypoRisk = lastApsRequest?.isHypoRisk == true
+
         // 12. AIMI Insights (Autodrive V3)
-        val request = loop.lastRun?.request
+        val request = lastApsRequest
         val rt = request?.rawData() as? RT
         
         val t3cMinutes = rt?.trajectoryConvergenceETA ?: -1
@@ -436,7 +443,12 @@ class OverviewViewModel(
             insightManoeuvre = insightManoeuvre,
             insightFactor = insightFactor,
             trajectoryRelevanceScore = relevance,
-            aimiHealthScore = healthScore
+            aimiHealthScore = healthScore,
+
+            aimiPulseTitle = aimiPulseTitle,
+            aimiPulseSummary = aimiPulseSummary,
+            aimiPulseMeta = aimiPulseMeta,
+            aimiPulseHypoRisk = aimiPulseHypoRisk
         )
         _statusCardState.postValue(state)
     }
@@ -603,6 +615,54 @@ class OverviewViewModel(
         val smbText = decimalFormatter.to2Decimal(request.smb)
         val basalText = if (request.rate == -1.0) "---" else decimalFormatter.to2Decimal(request.rate)
         return resourceHelper.gs(R.string.dashboard_adjustment_decision, smbText, basalText)
+    }
+
+    private fun buildAimiPulseTitle(lastApsRunMillis: Long?): String {
+        val ts = lastApsRunMillis ?: return resourceHelper.gs(R.string.dashboard_aimi_pulse_title)
+        if (ts <= 0L) return resourceHelper.gs(R.string.dashboard_aimi_pulse_title)
+        val elapsed = (dateUtil.now() - ts).coerceAtLeast(0L)
+        val age = dateUtil.age(elapsed, true, resourceHelper).trim()
+        return resourceHelper.gs(R.string.dashboard_aimi_pulse_title_with_age, age)
+    }
+
+    private fun plainTextFromAimiReason(raw: String): String {
+        if (raw.isBlank()) return ""
+        return raw.replace(Regex("<[^>]+>"), " ")
+            .replace("&nbsp;", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    private fun clipAimiReasonForPulse(plain: String, maxLen: Int = 220): String {
+        val singleLine = plain.replace('\n', ' ').replace(Regex("\\s+"), " ").trim()
+        if (singleLine.length <= maxLen) return singleLine
+        return singleLine.take(maxLen - 1).trimEnd() + "…"
+    }
+
+    private fun buildAimiPulseSummary(request: APSResult?): String {
+        if (request == null) return resourceHelper.gs(R.string.dashboard_aimi_pulse_summary_none)
+        val plain = plainTextFromAimiReason(request.reason)
+        val core = when {
+            plain.isNotBlank() -> clipAimiReasonForPulse(plain)
+            else -> {
+                val smbText = decimalFormatter.to2Decimal(request.smb)
+                val basalText = if (request.rate == -1.0) "—" else decimalFormatter.to2Decimal(request.rate)
+                resourceHelper.gs(R.string.dashboard_aimi_pulse_fallback, smbText, basalText)
+            }
+        }
+        return if (request.isHypoRisk) {
+            resourceHelper.gs(R.string.dashboard_aimi_pulse_hypo_prefix) + " " + core
+        } else {
+            core
+        }
+    }
+
+    private fun buildAimiPulseMeta(request: APSResult?): String {
+        if (request == null) return ""
+        val smb = decimalFormatter.to2Decimal(request.smb)
+        val basalDisplay = if (request.rate == -1.0) "—" else decimalFormatter.to2Decimal(request.rate) + " U/h"
+        val sens = decimalFormatter.to0Decimal((request.autosensResult?.ratio ?: 1.0) * 100.0)
+        return resourceHelper.gs(R.string.dashboard_aimi_pulse_meta, smb, basalDisplay, sens)
     }
 
     private fun buildPumpLine(now: Long): String {
@@ -898,7 +958,13 @@ data class StatusCardState(
     val insightManoeuvre: String? = null,
     val insightFactor: String? = null,
     val trajectoryRelevanceScore: Double? = null,
-    val aimiHealthScore: Double? = null
+    val aimiHealthScore: Double? = null,
+
+    /** Narrative layer: plain-text excerpt of last APS `reason` + timing (AIMI pulse card). */
+    val aimiPulseTitle: String = "",
+    val aimiPulseSummary: String = "",
+    val aimiPulseMeta: String = "",
+    val aimiPulseHypoRisk: Boolean = false
 )
 
 data class AdjustmentCardState(

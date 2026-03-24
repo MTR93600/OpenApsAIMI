@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Share of NestedScrollView viewport height used for the glucose graph (clamped by min/max dimens). -->
+    <fraction name="dashboard_graph_viewport_fraction">30%</fraction>
+</resources>

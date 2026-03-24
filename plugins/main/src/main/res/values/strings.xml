@@ -427,6 +427,16 @@
     <string name="dashboard_chip_announced_adjust_opened">Adjustments opened</string>
     <string name="dashboard_chip_announced_meal_mode_opened">Meal mode opened</string>
     <string name="dashboard_chip_announced_context_opened">AIMI context opened</string>
+    <string name="dashboard_aimi_pulse_title">Last AIMI run</string>
+    <string name="dashboard_aimi_pulse_title_with_age">Last AIMI run · %1$s</string>
+    <string name="dashboard_aimi_pulse_summary_none">No APS output yet. Run the loop or wait for the next glucose reading.</string>
+    <string name="dashboard_aimi_pulse_fallback">SMB %1$s U · scheduled basal %2$s U/h</string>
+    <string name="dashboard_aimi_pulse_hypo_prefix">Hypo risk —</string>
+    <string name="dashboard_aimi_pulse_meta">SMB %1$s U · demand %2$s · AutoSens %3$s%%</string>
+    <string name="dashboard_aimi_pulse_hint">Tap for full rationale and trajectory</string>
+    <string name="dashboard_aimi_telemetry_label">Trajectory layer</string>
+    <string name="dashboard_cd_aimi_pulse">Last AIMI loop summary. Double tap to open full details.</string>
+    <string name="dashboard_chip_announced_aimi_pulse_details">Loop details opened</string>
     <string name="closed_loop">Closed Loop</string>
     <string name="trend">Trend</string>
     <string name="aimi_context">AIMI Context</string>

@@ -17,10 +17,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingStart="@dimen/dashboard_content_padding"
-            android:paddingEnd="@dimen/dashboard_content_padding"
-            android:paddingTop="@dimen/dashboard_content_padding"
-            android:paddingBottom="@dimen/dashboard_content_padding"
+            android:paddingStart="@dimen/dashboard_scroll_padding_horizontal"
+            android:paddingEnd="@dimen/dashboard_scroll_padding_horizontal"
+            android:paddingTop="@dimen/dashboard_scroll_padding_vertical"
+            android:paddingBottom="@dimen/dashboard_scroll_padding_vertical"
             android:clipToPadding="false">
 
             <androidx.recyclerview.widget.RecyclerView
@@ -32,26 +32,54 @@
                 tools:listitem="@layout/overview_notification_item"
                 tools:visibility="visible" />
 
-            <app.aaps.plugins.main.general.dashboard.views.CircleTopDashboardView
-                android:id="@+id/status_card"
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/dashboard_hero_card"
+                style="@style/Widget.AAPS.Dashboard.Card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/dashboard_block_spacing"
-                style="@style/Widget.AAPS.Dashboard.Card" />
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                app:contentPadding="0dp">
 
-            <app.aaps.plugins.main.general.dashboard.views.GlucoseGraphView
-                android:id="@+id/glucose_graph"
-                android:layout_width="match_parent"
-                android:layout_height="@dimen/dashboard_graph_height"
-                android:layout_marginBottom="@dimen/dashboard_block_spacing"
-                style="@style/Widget.AAPS.Dashboard.Card" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingBottom="@dimen/dashboard_hero_bottom_inset"
+                    android:clipChildren="false">
+
+                    <app.aaps.plugins.main.general.dashboard.views.CircleTopDashboardView
+                        android:id="@+id/status_card"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginStart="@dimen/dashboard_card_inner_padding"
+                        android:layout_marginEnd="@dimen/dashboard_card_inner_padding"
+                        android:background="@color/dashboard_card_stroke" />
+
+                    <app.aaps.plugins.main.general.dashboard.views.GlucoseGraphView
+                        android:id="@+id/glucose_graph"
+                        android:layout_width="match_parent"
+                        android:layout_height="@dimen/dashboard_graph_height"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        app:cardBackgroundColor="@android:color/transparent"
+                        app:cardCornerRadius="0dp"
+                        app:cardElevation="0dp"
+                        app:strokeWidth="0dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
             <app.aaps.plugins.main.general.dashboard.views.AdjustmentStatusView
                 android:id="@+id/adjustment_status"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="@dimen/dashboard_block_spacing"
-                style="@style/Widget.AAPS.Dashboard.Card" />
+                android:visibility="gone"
+                tools:visibility="gone" />
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

@@ -6,7 +6,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/dashboard_card_surface"
+        android:background="@android:color/transparent"
         android:orientation="vertical"
         android:padding="@dimen/dashboard_card_inner_padding">
 
@@ -22,10 +22,10 @@
             <!-- GlucoseRingView (Center) -->
             <app.aaps.core.ui.views.GlucoseRingView
                 android:id="@+id/glucose_ring"
-                android:layout_width="149dp"
-                android:layout_height="149dp"
+                android:layout_width="132dp"
+                android:layout_height="132dp"
                 android:elevation="3dp"
-                app:ringStrokeWidth="5dp"
+                app:ringStrokeWidth="4dp"
                 app:glucoseRingUseSteppedColors="true"
                 app:glucoseRingStep1MaxMgdl="100"
                 app:glucoseRingStep2MaxMgdl="160"
@@ -107,7 +107,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="-75dp"
+            android:layout_marginTop="-58dp"
             android:layout_marginBottom="@dimen/dashboard_row_spacing_small">
 
             <!-- LEFT COLUMN -->
@@ -117,7 +117,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:orientation="vertical"
-                android:layout_marginEnd="8dp">
+                android:layout_marginEnd="6dp">
 
                 <!-- STEPS (First Item) -->
                 <LinearLayout
@@ -125,7 +125,7 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginBottom="6dp">
+                    android:layout_marginBottom="4dp">
 
                     <ImageView
                         android:layout_width="18dp"
@@ -150,7 +150,7 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginBottom="6dp">
+                    android:layout_marginBottom="4dp">
 
                     <ImageView
                         android:layout_width="18dp"
@@ -174,7 +174,7 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginBottom="6dp">
+                    android:layout_marginBottom="4dp">
 
                     <ImageView
                         android:layout_width="18dp"
@@ -198,7 +198,7 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginBottom="6dp">
+                    android:layout_marginBottom="4dp">
 
                     <ImageView
                         android:layout_width="18dp"
@@ -249,7 +249,7 @@
                 android:layout_weight="1"
                 android:orientation="vertical"
                 android:gravity="end"
-                android:layout_marginStart="8dp">
+                android:layout_marginStart="6dp">
 
                 <!-- HEART RATE (First Item) -->
                 <LinearLayout
@@ -257,7 +257,7 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginBottom="6dp">
+                    android:layout_marginBottom="4dp">
 
                     <ImageView
                         android:layout_width="18dp"
@@ -282,7 +282,7 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginBottom="6dp">
+                    android:layout_marginBottom="4dp">
 
                     <ImageView
                         android:layout_width="18dp"
@@ -306,7 +306,7 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginBottom="6dp">
+                    android:layout_marginBottom="4dp">
 
                     <ImageView
                         android:layout_width="18dp"
@@ -353,7 +353,7 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginTop="6dp">
+                    android:layout_marginTop="3dp">
 
                     <ImageView
                         android:layout_width="18dp"
@@ -374,6 +374,74 @@
         </LinearLayout>
 
         <!-- ═══════════════════════════════════════════════════ -->
+        <!-- AIMI PULSE — last APS reason + facts (tap → details) -->
+        <!-- ═══════════════════════════════════════════════════ -->
+        <LinearLayout
+            android:id="@+id/aimi_pulse_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="@dimen/dashboard_section_spacing"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:background="@drawable/dashboard_chip_background"
+            android:foreground="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true">
+
+            <TextView
+                android:id="@+id/aimi_pulse_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="@style/TextAppearance.AAPS.Dashboard.SectionTitle"
+                android:textSize="12sp"
+                android:text="@string/dashboard_aimi_pulse_title" />
+
+            <TextView
+                android:id="@+id/aimi_pulse_summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textAppearance="@style/TextAppearance.AAPS.Dashboard.PrimaryLine"
+                android:textSize="13sp"
+                android:lineSpacingMultiplier="1.02"
+                android:maxLines="4"
+                android:ellipsize="end"
+                tools:text="OpenAPS reason excerpt…" />
+
+            <TextView
+                android:id="@+id/aimi_pulse_meta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetaLabel"
+                android:textColor="@color/dashboard_on_surface_muted"
+                tools:text="SMB 0.1 U · basal 0.9 U/h · AutoSens 100%" />
+
+            <TextView
+                android:id="@+id/aimi_pulse_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/dashboard_aimi_pulse_hint"
+                android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetaLabel"
+                android:textSize="9sp"
+                android:alpha="0.75" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/dashboard_row_spacing_small"
+            android:text="@string/dashboard_aimi_telemetry_label"
+            android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetaLabel"
+            android:textAllCaps="true"
+            android:letterSpacing="0.08" />
+
+        <!-- ═══════════════════════════════════════════════════ -->
         <!-- AIMI INSIGHTS (T3c, Manoeuvre, AI Factor)           -->
         <!-- ═══════════════════════════════════════════════════ -->
         <LinearLayout
@@ -382,9 +450,12 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center"
-            android:layout_marginTop="@dimen/dashboard_section_spacing"
+            android:layout_marginTop="2dp"
             android:layout_marginBottom="@dimen/dashboard_row_spacing_small"
-            android:padding="8dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:paddingTop="5dp"
+            android:paddingBottom="5dp"
             android:background="@drawable/dashboard_chip_background"
             android:alpha="0.92">
 
@@ -396,7 +467,7 @@
                 android:text="🎯 --"
                 android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetaLabel"
                 android:textColor="@color/dashboard_on_surface"
-                android:layout_marginEnd="16dp" />
+                android:layout_marginEnd="8dp" />
 
             <!-- Manoeuvre (Trajectory Type) -->
             <TextView
@@ -406,7 +477,7 @@
                 android:text="🌀 --"
                 android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetaLabel"
                 android:textColor="@color/dashboard_on_surface"
-                android:layout_marginEnd="16dp" />
+                android:layout_marginEnd="8dp" />
 
             <!-- Cosinus Factor (IA Attention) -->
             <TextView
@@ -427,13 +498,13 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:layout_marginTop="@dimen/dashboard_section_spacing"
-            android:layout_marginBottom="@dimen/dashboard_block_spacing">
+            android:layout_marginBottom="6dp">
             
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:layout_marginBottom="4dp">
+                android:layout_marginBottom="2dp">
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -454,7 +525,7 @@
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="8dp"
+                android:layout_height="6dp"
                 android:orientation="horizontal"
                 android:background="@color/dashboard_tir_track">
                 <View
