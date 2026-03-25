@@ -669,6 +669,15 @@ class LoopPlugin @Inject constructor(
                                         applySMBRequest(resultAfterConstraints, object : Callback() {
                                             override fun run() {
                                                 // Callback is only called if a bolus was actually requested
+                                                aapsLogger.debug(
+                                                    LTag.APS,
+                                                    "SMB enact result: requested=%.2fU enacted=%s success=%s comment=%s".format(
+                                                        resultAfterConstraints.smb,
+                                                        result.enacted,
+                                                        result.success,
+                                                        result.comment ?: ""
+                                                    )
+                                                )
                                                 if (result.enacted || result.success) {
                                                     lastRun.smbSetByPump = result
                                                     lastRun.lastSMBRequest = lastRun.lastAPSRun
@@ -897,8 +906,19 @@ class LoopPlugin @Inject constructor(
     private fun applySMBRequest(request: APSResult, callback: Callback?) {
         val pump = activePlugin.activePump
         val lastBolusTime = persistenceLayer.getNewestBolus()?.timestamp ?: 0L
-        if (lastBolusTime != 0L && lastBolusTime + T.mins(preferences.get(IntKey.ApsMaxSmbFrequency).toLong()).msecs() > dateUtil.now()) {
-            aapsLogger.debug(LTag.APS, "SMB requested but still in ${preferences.get(IntKey.ApsMaxSmbFrequency)} min interval")
+        val now = dateUtil.now()
+        val smbIntervalMin = preferences.get(IntKey.ApsMaxSmbFrequency)
+        val lastBolusAgeSec = if (lastBolusTime > 0L) ((now - lastBolusTime).coerceAtLeast(0L) / 1000.0) else Double.NaN
+        if (lastBolusTime != 0L && lastBolusTime + T.mins(smbIntervalMin.toLong()).msecs() > now) {
+            aapsLogger.debug(
+                LTag.APS,
+                "SMB blocked by interval: requested=%.2fU lastBolusAge=%.0fs interval=%dm deliverAt=%s".format(
+                    request.smb,
+                    lastBolusAgeSec,
+                    smbIntervalMin,
+                    request.deliverAt?.let { dateUtil.dateAndTimeAndSecondsString(it) } ?: "n/a"
+                )
+            )
             callback?.result(
                 pumpEnactResultProvider.get()
                     .comment(R.string.smb_frequency_exceeded)
@@ -916,7 +936,15 @@ class LoopPlugin @Inject constructor(
             callback?.result(pumpEnactResultProvider.get().comment(app.aaps.core.ui.R.string.pumpsuspended).enacted(false).success(false))?.run()
             return
         }
-        aapsLogger.debug(LTag.APS, "applySMBRequest: $request")
+        aapsLogger.debug(
+            LTag.APS,
+            "applySMBRequest: requested=%.2fU deliverAt=%s lastBolusAge=%.0fs pumpStep=%.3fU".format(
+                request.smb,
+                request.deliverAt?.let { dateUtil.dateAndTimeAndSecondsString(it) } ?: "n/a",
+                lastBolusAgeSec,
+                pump.pumpDescription.bolusStep
+            )
+        )
 
         // deliver SMB
         val detailedBolusInfo = DetailedBolusInfo()

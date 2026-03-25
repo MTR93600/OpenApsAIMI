@@ -36,6 +36,8 @@ class ControlBarrierShield @Inject constructor(
     private val nominalGamma = 0.04       // Valeur de base (0.04 = ~1.0 mg/dL/min à h=25)
     private val mealRiseGammaBoost = 1.35
     private val mealRiseGammaBoostMax = 0.07
+    // Higher cap used only when meal is strongly confirmed (high Ra) and BG is high/rising.
+    private val mealRiseGammaBoostMaxHigh = 0.12
 
     /**
      * Vérifie et modifie si besoin la commande brute proposée par le MPC.
@@ -88,13 +90,45 @@ class ControlBarrierShield @Inject constructor(
                 state.bgVelocity >= 0.2 &&
                 (state.cob >= 6.0 || state.uamConfidence >= 0.45 || state.combinedDelta >= 2.0)
 
+        // Extra confirmation: high Ra + rising fast.
+        // We intentionally trigger BEFORE BG is very high by projecting ahead.
+        //
+        // Rationale:
+        // - Glucose absorption (Ra) can outpace insulin action (especially in adipose tissue).
+        // - When Ra is high, we must anticipate the rise earlier (longer "lead" time).
+        // - We keep accel guard: if the system is accelerating downward, do NOT relax.
+        val carbLeadMin = when {
+            state.estimatedRa >= 4.0 -> 45.0
+            state.estimatedRa >= 3.0 -> 40.0
+            state.estimatedRa >= 2.0 -> 35.0
+            else -> 28.0
+        }
+        val accelAdjMin = when {
+            accel > 0.06 && currentVelocity > 0.5 -> 6.0   // rise is accelerating → anticipate more
+            accel > 0.03 && currentVelocity > 0.3 -> 3.0
+            else -> 0.0
+        }
+        val anticipationHorizonMin = (carbLeadMin + accelAdjMin).coerceIn(25.0, 55.0)
+        val projectedBgAtHorizon = state.bg + state.bgVelocity * anticipationHorizonMin
+        val isHighRiseMeal =
+            strongMealRiseContext &&
+                state.estimatedRa >= 2.0 &&
+                state.bgVelocity >= 0.6 &&
+                // Either already above a moderate threshold, or likely to cross into dangerous hyper range soon.
+                (state.bg >= 150.0 || projectedBgAtHorizon >= 185.0) &&
+                !(accel < -0.05 && currentVelocity < 0)
+
         if (strongMealRiseContext && activeGamma >= nominalGamma) {
-            val boosted = (activeGamma * mealRiseGammaBoost).coerceAtMost(mealRiseGammaBoostMax)
+            val maxCap = if (isHighRiseMeal) mealRiseGammaBoostMaxHigh else mealRiseGammaBoostMax
+            val boosted = (activeGamma * mealRiseGammaBoost).coerceAtMost(maxCap)
             if (boosted > activeGamma) {
                 activeGamma = boosted
                 aapsLogger.debug(
                     LTag.APS,
-                    "🛡️ [CBF SHIELD] Meal-priority relaxation active. Gamma=${activeGamma.format(3)} BG=${state.bg.format(1)} dBG=${state.bgVelocity.format(2)} COB=${state.cob.format(1)} UAM=${state.uamConfidence.format(2)} cΔ=${state.combinedDelta.format(2)}"
+                    "🛡️ [CBF SHIELD] Meal-priority relaxation active. " +
+                        "Gamma=${activeGamma.format(3)} BG=${state.bg.format(1)} dBG=${state.bgVelocity.format(2)} " +
+                        "Ra=${state.estimatedRa.format(2)} COB=${state.cob.format(1)} UAM=${state.uamConfidence.format(2)} cΔ=${state.combinedDelta.format(2)}" +
+                        (if (isHighRiseMeal) " [HIGH_RISE_MEAL]" else "")
                 )
             }
         }
@@ -120,8 +154,17 @@ class ControlBarrierShield @Inject constructor(
             } else if (safeU <= 0.2) {
                 Pair(min(safeU * 12.0, rawCommand.temporaryBasalRate), 0.0)
             } else {
-                val tbr = min(profileBasal, rawCommand.temporaryBasalRate)
-                val smb = min(safeU - (tbr / 12.0), rawCommand.scheduledMicroBolus)
+                // In strongly confirmed meal-rise (high BG, rising, high Ra), prioritize SMB over TBR
+                // to avoid "CBF blocks almost everything" while still respecting the barrier constraint (safeU budget).
+                val preferSmb = isHighRiseMeal && rawCommand.scheduledMicroBolus > 0.0
+                val tbr = if (preferSmb) {
+                    // keep some basal support if requested, but free most of the safeU budget for SMB
+                    min(profileBasal * 0.2, rawCommand.temporaryBasalRate)
+                } else {
+                    min(profileBasal, rawCommand.temporaryBasalRate)
+                }
+                val smbBudget = safeU - (tbr / 12.0)
+                val smb = min(smbBudget, rawCommand.scheduledMicroBolus)
                 Pair(tbr, max(0.0, smb))
             }
             

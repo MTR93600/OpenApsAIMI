@@ -6758,6 +6758,41 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else {
             this.maxIob
         }
+
+        // 🚀 OPTION 2 (Meal debridage): compute a target IOB band from rise intensity,
+        // then allow maxIOB headroom *within* the configured priority uplift.
+        //
+        // Key properties:
+        // - Deterministic & local (does not depend on external auditor, which can be rate limited).
+        // - Still bounded by hard ceilings and pump quantization later in the pipeline.
+        val isAggressiveRise =
+            (bg >= 140.0 && (delta >= 15.0 || shortAvgDelta >= 10.0)) &&
+                (predictedBg.toDouble() >= 160.0 || eventualBG >= 160.0)
+
+        val iobTargetU: Double? =
+            if (pkpdReliefEnabled && isAggressivePriorityContext && isAggressiveRise) {
+                val base = when {
+                    bg >= 250.0 -> 10.0
+                    bg >= 200.0 -> 9.0
+                    bg >= 170.0 -> 8.0
+                    else -> 6.0
+                }
+                val velocityBonus = when {
+                    delta >= 30.0 || shortAvgDelta >= 20.0 -> 2.0
+                    delta >= 22.0 || shortAvgDelta >= 15.0 -> 1.0
+                    else -> 0.0
+                }
+                (base + velocityBonus).coerceIn(5.0, 12.0)
+            } else {
+                null
+            }
+
+        val effectiveMaxIobForDebridage: Double =
+            if (iobTargetU != null) {
+                max(effectiveMaxIobForPriority, iobTargetU).coerceAtMost(25.0)
+            } else {
+                effectiveMaxIobForPriority
+            }
         if (pkpdGuard.isActive()) {
             val beforeGuard = smbToGive
             val guardFactor = if (isAggressivePriorityContext) {
@@ -6780,6 +6815,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add(
                     "MAXIOB_RELIEF: ${"%.2f".format(this.maxIob)} -> ${"%.2f".format(effectiveMaxIobForPriority)} " +
                         "(priority context)"
+                )
+            }
+            if (effectiveMaxIobForDebridage > effectiveMaxIobForPriority + 0.01) {
+                consoleLog.add(
+                    "MEAL_DEBRIDAGE_MAXIOB: ${"%.2f".format(effectiveMaxIobForPriority)} -> ${"%.2f".format(effectiveMaxIobForDebridage)} " +
+                        "(target=${iobTargetU?.let { "%.2f".format(it) } ?: "n/a"}U, BG=${"%.0f".format(bg)}, Δ=${"%.1f".format(delta)})"
                 )
             }
             
@@ -6843,7 +6884,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             var mealBolus = min(candidateUnits.toDouble(), redCarpetMaxSmb).toFloat()
 
             // b. Cap MaxIOB (Ultimate Safety)
-            val iobSpace = (effectiveMaxIobForPriority - this.iob).coerceAtLeast(0.0)
+            val iobSpace = (effectiveMaxIobForDebridage - this.iob).coerceAtLeast(0.0)
             
             if (mealBolus > iobSpace.toFloat()) {
                 consoleLog.add("🛡️ RED CARPET: Clamped by MaxIOB (Need=${"%.2f".format(mealBolus)}, Space=${"%.2f".format(iobSpace)})")
@@ -6877,7 +6918,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 bg = bg,
                 maxSmbConfig = currentMaxSmb,
                 iob = iob.toDouble(),
-                maxIob = effectiveMaxIobForPriority
+                maxIob = effectiveMaxIobForDebridage
             )
         }
         if (smbToGive < beforeCap) {
