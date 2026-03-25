@@ -327,4 +327,15 @@
     <string name="dashboard_aimi_telemetry_label">Couche trajectoire</string>
     <string name="dashboard_cd_aimi_pulse">Résumé du dernier passage AIMI. Double appui pour tout le détail.</string>
     <string name="dashboard_chip_announced_aimi_pulse_details">Détails boucle ouverts</string>
+
+    <!-- Adaptive Smoothing Quality badge (phase 1 informational) -->
+    <string name="adaptive_smoothing_quality_badge_a11y">Qualité du lissage adaptatif</string>
+    <string name="adaptive_smoothing_quality_badge_ok">Confiance du lissage adaptatif : OK</string>
+    <string name="adaptive_smoothing_quality_badge_uncertain">Confiance du lissage adaptatif : incertaine</string>
+    <string name="adaptive_smoothing_quality_badge_bad">Confiance du lissage adaptatif : faible</string>
+
+    <string name="adaptive_smoothing_quality_dialog_title">Confiance du lissage adaptatif</string>
+    <string name="adaptive_smoothing_quality_dialog_ok">Confiance du lissage adaptatif : OK (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
+    <string name="adaptive_smoothing_quality_dialog_uncertain">Confiance du lissage adaptatif : incertaine (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
+    <string name="adaptive_smoothing_quality_dialog_bad">Confiance du lissage adaptatif : faible (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
 </resources>

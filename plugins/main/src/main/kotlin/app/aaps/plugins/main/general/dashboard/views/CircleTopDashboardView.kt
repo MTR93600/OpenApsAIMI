@@ -13,6 +13,7 @@ import androidx.core.view.isGone
 import com.google.android.material.chip.Chip
 import app.aaps.plugins.main.databinding.ComponentCircleTopStatusHybridBinding
 import app.aaps.plugins.main.general.dashboard.viewmodel.StatusCardState
+import app.aaps.core.ui.dialogs.OKDialog
 import java.util.Locale
 import java.util.TimeZone
 
@@ -93,6 +94,53 @@ class CircleTopDashboardView @JvmOverloads constructor(
             // 3. Right Column Metrics
             // ═══════════════════════════════════════════════════════════════
             binding.lastSensorValueText.text = getProp<String>("lastSensorValueText") ?: "--"
+
+            // Adaptive Smoothing Quality badge (informational, phase 1)
+            if (state is StatusCardState) {
+                val tier = state.adaptiveSmoothingQualityTier
+                binding.adaptiveSmoothingQualityBadge.isGone = tier == null
+                if (tier != null) {
+                    val bgRes = when (tier) {
+                        app.aaps.core.interfaces.rx.events.AdaptiveSmoothingQualityTier.OK ->
+                            app.aaps.plugins.main.R.drawable.dashboard_chip_background_quality_ok
+                        app.aaps.core.interfaces.rx.events.AdaptiveSmoothingQualityTier.UNCERTAIN ->
+                            app.aaps.plugins.main.R.drawable.dashboard_chip_background_quality_uncertain
+                        app.aaps.core.interfaces.rx.events.AdaptiveSmoothingQualityTier.BAD ->
+                            app.aaps.plugins.main.R.drawable.dashboard_chip_background_quality_bad
+                    }
+                    binding.adaptiveSmoothingQualityBadge.setBackgroundResource(bgRes)
+
+                    val tintRes = when (tier) {
+                        app.aaps.core.interfaces.rx.events.AdaptiveSmoothingQualityTier.OK ->
+                            app.aaps.plugins.main.R.color.dashboard_on_surface_muted
+                        app.aaps.core.interfaces.rx.events.AdaptiveSmoothingQualityTier.UNCERTAIN ->
+                            app.aaps.plugins.main.R.color.dashboard_metric_attention
+                        app.aaps.core.interfaces.rx.events.AdaptiveSmoothingQualityTier.BAD ->
+                            app.aaps.plugins.main.R.color.dashboard_chip_border_warning
+                    }
+                    binding.adaptiveSmoothingQualityIcon.setColorFilter(
+                        context.getColor(tintRes)
+                    )
+
+                    binding.adaptiveSmoothingQualityBadge.contentDescription = state.adaptiveSmoothingQualityBadgeText
+                    binding.adaptiveSmoothingQualityBadge.setOnClickListener {
+                        it.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                        if (state.adaptiveSmoothingQualityDialogMessage.isNotBlank()) {
+                            OKDialog.show(
+                                context,
+                                context.getString(app.aaps.plugins.main.R.string.adaptive_smoothing_quality_dialog_title),
+                                state.adaptiveSmoothingQualityDialogMessage
+                            )
+                        }
+
+                        val manager = accessibilityManager
+                        if (manager != null && manager.isEnabled && manager.isTouchExplorationEnabled) {
+                            announceForAccessibility(state.adaptiveSmoothingQualityBadgeText)
+                        }
+                    }
+                }
+            }
+
             binding.tbrRateText.text = getProp<String>("tbrRateText") ?: "0.00 U/h"
             binding.basalText.text = getProp<String>("basalText") ?: "--"
 

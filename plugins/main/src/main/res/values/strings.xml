@@ -447,5 +447,16 @@
     <string name="last_sensor_value">Last sensor</string>
     <string name="activity_pct">Activity</string>
     <string name="basal">Basal</string>
+
+    <!-- Adaptive Smoothing Quality badge (phase 1 informational) -->
+    <string name="adaptive_smoothing_quality_badge_a11y">Adaptive smoothing quality</string>
+    <string name="adaptive_smoothing_quality_badge_ok">Adaptive smoothing confidence: OK</string>
+    <string name="adaptive_smoothing_quality_badge_uncertain">Adaptive smoothing confidence: uncertain</string>
+    <string name="adaptive_smoothing_quality_badge_bad">Adaptive smoothing confidence: low</string>
+
+    <string name="adaptive_smoothing_quality_dialog_title">Adaptive smoothing confidence</string>
+    <string name="adaptive_smoothing_quality_dialog_ok">Adaptive smoothing confidence: OK (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
+    <string name="adaptive_smoothing_quality_dialog_uncertain">Adaptive smoothing confidence: uncertain (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
+    <string name="adaptive_smoothing_quality_dialog_bad">Adaptive smoothing confidence: low (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
 </resources>
 

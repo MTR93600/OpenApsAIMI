@@ -15,6 +15,9 @@ import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventTherapyEventChange
+import app.aaps.core.interfaces.rx.events.EventAdaptiveSmoothingQuality
+import app.aaps.core.interfaces.rx.events.AdaptiveSmoothingQualitySnapshot
+import app.aaps.core.interfaces.rx.events.AdaptiveSmoothingQualityTier
 import app.aaps.core.interfaces.smoothing.Smoothing
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
@@ -72,6 +75,8 @@ class AdaptiveSmoothingPlugin @Inject constructor(
     aapsLogger, rh
 ), Smoothing {
 
+    override fun lastAdaptiveSmoothingQualitySnapshot(): AdaptiveSmoothingQualitySnapshot? = lastQualitySnapshot
+
     // ============================================================
     // UKF CONFIGURATION & PARAMETERS
     // ============================================================
@@ -112,6 +117,14 @@ class AdaptiveSmoothingPlugin @Inject constructor(
     private var lastProcessedTimestamp: Long = 0
     private var lastSensorChangeTimestamp: Long = 0
     private var sensorSessionId: Int = 0
+
+    // UI-facing informational quality (sent over RxBus, throttled to avoid spam)
+    private var lastAdaptiveSmoothingQualityTier: AdaptiveSmoothingQualityTier? = null
+    private var lastAdaptiveSmoothingQualityEventAt: Long = 0L
+
+    /** Read by dashboard on each status refresh; always updated synchronously in [smooth] / segment processing. */
+    @Volatile
+    private var lastQualitySnapshot: AdaptiveSmoothingQualitySnapshot? = null
 
     // Events
     private val resetRequested = AtomicBoolean(false)
@@ -166,6 +179,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
             // Always provide a valid smoothed payload for downstream workers.
             copyRawToSmoothed(data)
             sanitizeOutput(data)
+            refreshSnapshotAfterShortOrRawPass()
             return data
         }
 
@@ -196,8 +210,29 @@ class AdaptiveSmoothingPlugin @Inject constructor(
             aapsLogger.error(LTag.GLUCOSE, "HybridSmoothing: Error, falling back to raw", e)
             copyRawToSmoothed(data)
             sanitizeOutput(data)
+            val now = System.currentTimeMillis()
+            lastQualitySnapshot = AdaptiveSmoothingQualitySnapshot(
+                tier = AdaptiveSmoothingQualityTier.BAD,
+                learnedR = learnedR,
+                outlierRate = 1.0,
+                compressionRate = 0.0,
+                updatedAtMillis = now
+            )
             return data
         }
+    }
+
+    /** When fewer than 2 points are smoothed, keep UI in sync using last tier / current learned R. */
+    private fun refreshSnapshotAfterShortOrRawPass() {
+        val now = System.currentTimeMillis()
+        val tier = lastAdaptiveSmoothingQualityTier ?: AdaptiveSmoothingQualityTier.OK
+        lastQualitySnapshot = AdaptiveSmoothingQualitySnapshot(
+            tier = tier,
+            learnedR = learnedR,
+            outlierRate = 0.0,
+            compressionRate = 0.0,
+            updatedAtMillis = now
+        )
     }
 
     private fun processHybridSegment(
@@ -213,6 +248,11 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         val x = doubleArrayOf(data[startIdx].value, 0.0) // Initial state [G, 0]
         val P = doubleArrayOf(16.0, 0.0, 0.0, 1.0)       // Initial Covariance
         var R = learnedR
+
+        // Quality counters for UI badge (informational only).
+        var processedPoints = 0
+        var compressionPoints = 0
+        var outlierPoints = 0
         
         // Prepare storage for RTS Smoother
         val forwardStates = ArrayList<FilterState>(data.size)
@@ -222,6 +262,8 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         for (i in startIdx downTo 0) {
             val z = data[i].value
             val timestamp = data[i].timestamp
+
+            processedPoints++
             
             // Calculate dt (Time since last step)
             // If i == startIdx (oldest), dt is 0 or estimated.
@@ -239,6 +281,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
             
             // Check for Blocking Artifacts (Compression Lows)
             val isCompression = isCompressionArtifactCandidate(ctx, data, i)
+            if (isCompression) compressionPoints++
             
             // Check for Hypo Safety Bypass
             val isHypoCritical = ctx.currentBg < 70.0
@@ -303,6 +346,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
                 
                 // Outlier Check (Statistical)
                 val isStatisticalOutlier = isOutlier(innovation, innovationVariance, P)
+                if (isStatisticalOutlier) outlierPoints++
                 
                 // Adapt R (Noise)
                 R = adaptMeasurementNoise(R, innovations, rawInnovationVariance)
@@ -365,6 +409,36 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         
         // Update learned R globally
         learnedR = R
+
+        // Send a lightweight, informational quality estimate to the dashboard.
+        // (Phase 1: no control logic changes, only UI.)
+        val compressionRate = if (processedPoints > 0) compressionPoints.toDouble() / processedPoints.toDouble() else 0.0
+        val outlierRate = if (processedPoints > 0) outlierPoints.toDouble() / processedPoints.toDouble() else 0.0
+
+        val tier = when {
+            compressionRate >= 0.15 || outlierRate >= 0.25 || learnedR >= 70.0 -> AdaptiveSmoothingQualityTier.BAD
+            learnedR >= 45.0 || outlierRate >= 0.10 || compressionRate >= 0.07 -> AdaptiveSmoothingQualityTier.UNCERTAIN
+            else -> AdaptiveSmoothingQualityTier.OK
+        }
+
+        val now = System.currentTimeMillis()
+        // Dashboard reads this synchronously — must update every pass (do not tie to Rx throttle).
+        lastQualitySnapshot = AdaptiveSmoothingQualitySnapshot(
+            tier = tier,
+            learnedR = learnedR,
+            outlierRate = outlierRate,
+            compressionRate = compressionRate,
+            updatedAtMillis = now
+        )
+
+        val shouldSend = lastAdaptiveSmoothingQualityTier != tier ||
+            (now - lastAdaptiveSmoothingQualityEventAt) >= QUALITY_EVENT_THROTTLE_MS
+
+        if (shouldSend) {
+            lastAdaptiveSmoothingQualityTier = tier
+            lastAdaptiveSmoothingQualityEventAt = now
+            rxBus.send(EventAdaptiveSmoothingQuality(tier, learnedR, outlierRate, compressionRate))
+        }
 
         // --- BACKWARD PASS (RTS SMOOTHER) ---
         // Retrospectively improves history. Important for loop learning.
@@ -673,6 +747,8 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         innovations.clear()
         rawInnovationVariance.clear()
         sensorSessionId++
+        lastAdaptiveSmoothingQualityTier = null
+        lastQualitySnapshot = null
         aapsLogger.info(LTag.GLUCOSE, "HybridSmoothing: Learning Reset. R=$R_INIT")
         savePersistedParameters()
     }
@@ -719,5 +795,8 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         const val SENSOR_CHANGE_DEBOUNCE_SECONDS: Long = 10L
         const val MIN_VALID_BG: Double = 39.0
         const val MAX_VALID_BG: Double = 500.0
+
+        // Throttle UI events to keep the dashboard responsive.
+        const val QUALITY_EVENT_THROTTLE_MS: Long = 30_000L
     }
 }

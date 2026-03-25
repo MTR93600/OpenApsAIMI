@@ -298,6 +298,27 @@
                         android:text="--"
                         android:textAppearance="@style/TextAppearance.AAPS.Dashboard.MetricValue"
                         android:textColor="@color/dashboard_metric_info" />
+
+                    <FrameLayout
+                        android:id="@+id/adaptive_smoothing_quality_badge"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:layout_marginStart="6dp"
+                        android:layout_gravity="center_vertical"
+                        android:background="@drawable/dashboard_chip_background_quality_ok"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:visibility="gone"
+                        android:contentDescription="@string/adaptive_smoothing_quality_badge_a11y">
+
+                        <ImageView
+                            android:id="@+id/adaptive_smoothing_quality_icon"
+                            android:layout_width="14dp"
+                            android:layout_height="14dp"
+                            android:layout_gravity="center"
+                            app:srcCompat="@drawable/ic_dashboard_wave"
+                            app:tint="@color/dashboard_on_surface_muted" />
+                    </FrameLayout>
                 </LinearLayout>
 
                 <!-- TBR Rate & % -->
