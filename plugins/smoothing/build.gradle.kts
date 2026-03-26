@@ -18,6 +18,9 @@ dependencies {
     implementation(project(":core:ui"))
     implementation(project(":core:keys"))
 
+    testImplementation(project(":shared:tests"))
+    testImplementation(project(":implementation"))
+
     ksp(libs.com.google.dagger.compiler)
     ksp(libs.com.google.dagger.android.processor)
 }

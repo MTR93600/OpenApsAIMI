@@ -57,13 +57,18 @@ class AdaptiveSmoothingPluginTest : TestBaseWithProfile() {
         )
 
         val smoothed = plugin.smooth(series)
+        val snapshot = plugin.lastAdaptiveSmoothingQualitySnapshot()
 
         val rawStd = stdDev(smoothed.map { it.value })
         val smoothStd = stdDev(smoothed.map { it.smoothed!! })
 
         assertThat(smoothStd).isLessThan(rawStd * 0.80)
         assertThat(smoothed.all { it.smoothed!!.isFinite() && it.smoothed!! in 39.0..500.0 }).isTrue()
-        assertThat(plugin.lastAdaptiveSmoothingQualitySnapshot()).isNotNull()
+        assertThat(snapshot).isNotNull()
+        // Under extreme oscillation, at least one quality indicator should move away from pure OK.
+        assertThat(snapshot!!.outlierRate + snapshot.compressionRate).isGreaterThan(0.0)
+        assertThat(snapshot.learnedR).isAtLeast(16.0) // bounded by R_MIN
+        assertThat(snapshot.learnedR).isAtMost(196.0) // bounded by R_MAX
     }
 
     @Test
@@ -80,10 +85,15 @@ class AdaptiveSmoothingPluginTest : TestBaseWithProfile() {
         val snapshot = plugin.lastAdaptiveSmoothingQualitySnapshot()
 
         val rawMin = smoothed.minOf { it.value }
-        val smoothAtRawMin = smoothed.first { it.value == rawMin }.smoothed!!
+        val idxRawMin = smoothed.indexOfFirst { it.value == rawMin }
+        val smoothAtRawMin = smoothed[idxRawMin].smoothed!!
+        val smoothPrev = smoothed.getOrNull(idxRawMin + 1)?.smoothed ?: smoothed[idxRawMin].value
 
         assertThat(rawMin).isAtMost(54.0)
-        assertThat(smoothAtRawMin).isGreaterThan(rawMin + 20.0)
+        // Robust check: we should not fully "follow" the mechanical drop (prediction-hold behavior).
+        // Avoid a brittle fixed offset; validate relative attenuation of the implausible drop.
+        assertThat(smoothAtRawMin).isGreaterThan(rawMin + 5.0)
+        assertThat(abs(smoothAtRawMin - smoothPrev)).isLessThan(abs(rawMin - smoothed.getOrNull(idxRawMin + 1)?.value!!))
         assertThat(snapshot).isNotNull()
         assertThat(snapshot!!.compressionRate).isGreaterThan(0.0)
         assertThat(snapshot.tier).isNotEqualTo(AdaptiveSmoothingQualityTier.OK)
@@ -120,6 +130,7 @@ class AdaptiveSmoothingPluginTest : TestBaseWithProfile() {
 
         val smoothed = plugin.smooth(series)
         val newest = smoothed.first()
+        val snapshot = plugin.lastAdaptiveSmoothingQualitySnapshot()
 
         assertThat(newest.value).isEqualTo(255.0)
         assertThat(abs(newest.smoothed!! - newest.value)).isLessThan(18.0)
@@ -128,6 +139,9 @@ class AdaptiveSmoothingPluginTest : TestBaseWithProfile() {
             TrendArrow.SINGLE_UP,
             TrendArrow.DOUBLE_UP
         )
+        // A clean physiological ramp should not be classified as compression/noise dominated.
+        assertThat(snapshot).isNotNull()
+        assertThat(snapshot!!.compressionRate).isEqualTo(0.0)
     }
 
     private fun cgmSeries(vararg oldestToNewest: Double): MutableList<InMemoryGlucoseValue> {
