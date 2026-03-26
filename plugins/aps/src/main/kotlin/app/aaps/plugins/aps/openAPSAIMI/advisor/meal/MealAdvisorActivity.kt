@@ -16,6 +16,8 @@ import androidx.lifecycle.lifecycleScope
 import app.aaps.core.ui.activities.TranslatedDaggerAppCompatActivity
 import app.aaps.plugins.aps.R
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.logging.LTag
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
@@ -32,6 +34,7 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     @Inject lateinit var persistenceLayer: app.aaps.core.interfaces.db.PersistenceLayer
     @Inject lateinit var profileFunction: app.aaps.core.interfaces.profile.ProfileFunction
     @Inject lateinit var dateUtil: app.aaps.core.interfaces.utils.DateUtil
+    @Inject lateinit var aapsLogger: AAPSLogger
     
     private lateinit var recognitionService: FoodRecognitionService
     private val REQUEST_IMAGE_CAPTURE = 1
@@ -376,6 +379,12 @@ class MealAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             
             preferences.put(app.aaps.core.keys.BooleanKey.OApsAIMIMealAdvisorTrigger, true)
             preferences.put(DoubleKey.OApsAIMILastEstimatedCarbs, valCarbs)
+            val nowMs = System.currentTimeMillis()
+            preferences.put(DoubleKey.OApsAIMILastEstimatedCarbTime, nowMs.toDouble())
+            aapsLogger.debug(
+                LTag.APS,
+                "MEAL_ADVISOR_TRACE confirmInjection carbs=${"%.1f".format(valCarbs)}g trigger=true estimateTimeMs=$nowMs"
+            )
             
             withContext(Dispatchers.Main) {
                 Toast.makeText(this@MealAdvisorActivity, "Carbs recorded. SMB active.", Toast.LENGTH_SHORT).show()

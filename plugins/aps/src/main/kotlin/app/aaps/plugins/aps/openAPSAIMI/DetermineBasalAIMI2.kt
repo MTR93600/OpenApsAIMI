@@ -5671,6 +5671,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val advisorRes = tryMealAdvisor(bg, delta, iob_data, profile, lastBolusTimeMs ?: 0L, modesCondition, isExplicitAdvisorRun)
         if (advisorRes is DecisionResult.Applied) {
              consoleLog.add("MEAL_ADVISOR_APPLIED source=${advisorRes.source} bolus=${advisorRes.bolusU}")
+             aapsLogger.debug(
+                 app.aaps.core.interfaces.logging.LTag.APS,
+                 "MEAL_ADVISOR_TRACE applied source=${advisorRes.source} explicit=$isExplicitAdvisorRun bolusU=${advisorRes.bolusU} tbrUph=${advisorRes.tbrUph}"
+             )
              
              // 1. Apply TBR (Override Limits)
              if (advisorRes.tbrUph != null) {
@@ -5708,7 +5712,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              // Add Status Log (User Request)
              rT.reason.appendLine(context.getString(R.string.autodrive_status, autodriveDisplay, "Meal Advisor"))
              logDecisionFinal("MEAL_ADVISOR", rT, bg, delta)
-             // Flow Restored: Meal Advisor no longer hard returns, allows further processing.
+            aapsLogger.debug(
+                app.aaps.core.interfaces.logging.LTag.APS,
+                "MEAL_ADVISOR_TRACE final_return rT.units=${rT.units} insulinReq=${rT.insulinReq} reasonTail=${rT.reason.takeLast(120)}"
+            )
+            // Keep Meal Advisor behavior aligned with explicit meal modes:
+            // once applied, return immediately so later SMB/TBR stages cannot override prebolus intent.
+            return rT
         }
 
 
@@ -8411,11 +8421,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // If > 20 mins, we assume the meal is either consumed or handled by standard COB logic.
         // Re-calculating "Carbs/IC - IOB" after 90 mins with decayed IOB causes massive dangerous boluses.
         val maxPassiveWindow = if (isExplicitTrigger) 120.0 else 20.0
+        aapsLogger.debug(
+            app.aaps.core.interfaces.logging.LTag.APS,
+            "MEAL_ADVISOR_TRACE gate carbs=${"%.1f".format(estimatedCarbs)} timeSinceMin=${"%.1f".format(timeSinceEstimateMin)} maxWindow=$maxPassiveWindow bg=${"%.1f".format(bg)} explicit=$isExplicitTrigger modesCondition=$modesCondition"
+        )
 
         if (estimatedCarbs > 10.0 && timeSinceEstimateMin in 0.0..maxPassiveWindow && bg >= 60) {
             // Refractory Check (Safety)
             // 🚀 BYPASS if Explicit Trigger (User clicked Snap&Go)
             if (!isExplicitTrigger && hasReceivedRecentBolus(45, lastBolusTime)) {
+                aapsLogger.debug(
+                    app.aaps.core.interfaces.logging.LTag.APS,
+                    "MEAL_ADVISOR_TRACE blocked refractory=true explicit=$isExplicitTrigger lastBolusTime=$lastBolusTime"
+                )
                 return DecisionResult.Fallthrough("Advisor Refractory (Recent Bolus <45m)")
             }
             
@@ -8474,8 +8492,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     )
             } else {
                 consoleLog.add("ADVISOR_SKIP reason=modesCondition_false (legacy mode active)")
+                aapsLogger.debug(
+                    app.aaps.core.interfaces.logging.LTag.APS,
+                    "MEAL_ADVISOR_TRACE blocked modesCondition=false"
+                )
             }
         }
+        aapsLogger.debug(
+            app.aaps.core.interfaces.logging.LTag.APS,
+            "MEAL_ADVISOR_TRACE fallthrough no_active_request carbs=${"%.1f".format(estimatedCarbs)} timeSinceMin=${"%.1f".format(timeSinceEstimateMin)} bg=${"%.1f".format(bg)}"
+        )
         return DecisionResult.Fallthrough("No active Meal Advisor request")
     }
 
