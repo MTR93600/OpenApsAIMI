@@ -570,6 +570,8 @@
     <string name="oaps_aimi_AutodriveDeviation_title">Minimum BG deviation for pre-bolus delivery</string>
     <string name="oaps_aimi_AutodriveAcceleration_summary">BG acceleration: if it is above this value, the condition for autodrive pre-bolus is true</string>
     <string name="oaps_aimi_AutodriveAcceleration_title">Minimum BG acceleration for pre-bolus delivery</string>
+    <string name="aimi_mpc_u_per_kg_title">Autodrive MPC: insulin per kg (5 min)</string>
+    <string name="aimi_mpc_u_per_kg_summary">Upper bound for each 5-minute MPC dose search: this value × AIMI body weight (kg). Still limited by Max SMB / High BG Max SMB. Default 0.065 U/kg (previously hardcoded 0.05). Increase carefully — hypo risk.</string>
 
     <string name="prebolussmall_autodrive_mode_summaryMorning"><![CDATA[Used for early meal detection: BG > 100, predicted BG > 180. The idea is that when early detection occurs, a small SMB is sent to avoid negative IOB or late correction. This can be a good approach for a small snack.]]></string>
     <string name="prebolussmall_autodrive_mode_titleMorning">Light snack pre-bolus</string>

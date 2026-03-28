@@ -2,6 +2,8 @@ package app.aaps.plugins.aps.openAPSAIMI.autodrive.controller
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveCommand
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import javax.inject.Inject
@@ -20,7 +22,8 @@ import kotlin.math.min
  */
 @Singleton
 class MpcController @Inject constructor(
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    private val preferences: Preferences
 ) {
     // 🔬 METABOLIC_SI_BASE — CALIBRATION
     // 0.05 : Augmente l'agressivité (perçu comme moins puissant par le solveur)
@@ -81,10 +84,10 @@ class MpcController @Inject constructor(
         }
 
         // 🛡️ WEIGHT-AWARENESS SAFETY CAP (Phase 7)
-        // L'agressivité mathématique du solver est physiquement bridée par le poids du corps.
-        // Un adulte de 70kg ne pourra jamais recevoir une dose supérieure à 3.5U (0.05 * 70kg) sur 5 minutes.
-        // Un enfant de 20kg sera physiquement bloqué à 1.0U max.
-        val maxSafeDoseU = min(activeMaxSmb, state.patientWeightKg * 0.05)
+        // Bridle le domaine de recherche MPC : min(plafond SMB actif, poids × coeff).
+        // Coeff configurable (OApsAIMIMpcInsulinUPerKgPerStep), défaut 0.065 U/kg/5min (~+30% vs ancien 0.05 fixe).
+        val uPerKg = preferences.get(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep)
+        val maxSafeDoseU = min(activeMaxSmb, state.patientWeightKg * uPerKg)
 
         // Résolution via balayage fin sur le domaine praticable Sécurisé [0.0 , maxSafeDoseU]
         // Un pas de 0.005U sur 5 min équivaut à un ajustement basal lisse de 0.06 U/h

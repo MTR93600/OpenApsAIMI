@@ -1,6 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.autodrive
 
 import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.controller.MpcController
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstimator
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.OnlineLearner
@@ -18,6 +20,7 @@ import io.mockk.unmockkAll
 class AutodriveSILTest {
 
     private val logger: AAPSLogger = mockk(relaxed = true)
+    private val preferences: Preferences = mockk(relaxed = true)
     private val auditor: app.aaps.plugins.aps.openAPSAIMI.autodrive.advisor.AutodriveAuditor = mockk(relaxed = true)
     private val dataLake: app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataLake = mockk(relaxed = true)
     private val backfiller: app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataBackfiller = mockk(relaxed = true)
@@ -31,8 +34,9 @@ class AutodriveSILTest {
 
     @BeforeEach
     fun setUp() {
+        every { preferences.get(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep) } returns 0.065
         stateEstimator = ContinuousStateEstimator(logger)
-        mpcController = MpcController(logger)
+        mpcController = MpcController(logger, preferences)
         safetyShield = ControlBarrierShield(logger)
         onlineLearner = OnlineLearner(logger)
 
