@@ -20,11 +20,8 @@ class PhysioRealtimeWorker(
         try {
             val manager = AIMIPhysioManagerMTR.instance
             if (manager == null) return@withContext Result.retry()
-            
-            val hcRepo = manager.repo.getHcRepo() // We need to expose this or add method in Repo
-            // Ideally Repo handles everything.
-            
-            // Trigger Snapshot Update
+
+            // performUpdate() ends with HealthContextRepository.fetchSnapshot() (FC/steps from DB + HC merge)
             manager.performUpdate(daysBack = 1, runLLM = false)
             
             Result.success()
@@ -69,11 +66,6 @@ class PhysioDailyWorker(
         try {
             val manager = AIMIPhysioManagerMTR.instance
             if (manager == null) return@withContext Result.retry()
-            
-            // We need access to underlying HC repo to force heavy fetch
-            // Or add a "forceRefresh" method to HealthContextRepository
-            // For now, let's just fetchSnapshot, which does 1 day lookback.
-            // If we want 7 days history updated, we need access to hcRepo.
             
             manager.performUpdate(daysBack = 7, runLLM = true)
             

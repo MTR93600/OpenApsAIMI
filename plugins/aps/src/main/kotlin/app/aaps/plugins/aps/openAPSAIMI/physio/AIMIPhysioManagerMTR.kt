@@ -232,13 +232,26 @@ class AIMIPhysioManagerMTR @Inject constructor(
      * @param runLLM Whether to run the optional LLM analysis (default skip to save battery/API)
      */
     fun performUpdate(daysBack: Int = 7, runLLM: Boolean = false): Boolean {
+        return try {
+            runPhysioPipeline(daysBack, runLLM)
+        } finally {
+            // Restores pre–Mar 23 behavior: workers had fetchSnapshot(); pipeline alone never updated getLastSnapshot().
+            try {
+                repo.fetchSnapshot()
+            } catch (e: Exception) {
+                aapsLogger.warn(LTag.APS, "[$TAG] Merged health snapshot refresh failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun runPhysioPipeline(daysBack: Int, runLLM: Boolean): Boolean {
         val startTime = System.currentTimeMillis()
         var fetchMs = 0L
         var extractMs = 0L
         var analyzeMs = 0L
-        
-        aapsLogger.info(LTag.APS, "[$TAG] 🔄 Pipeline Start (Window: 7 days)")
-        
+
+        aapsLogger.info(LTag.APS, "[$TAG] 🔄 Pipeline Start (daysBack=$daysBack runLLM=$runLLM)")
+
         try {
             // Check Health Connect availability first
             val isHCAvailable = dataRepository.isAvailable()
@@ -246,7 +259,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
                 aapsLogger.error(LTag.APS, "[$TAG] ❌ Health Connect client unavailable")
                 return false
             }
-            
+
             // Step 1: Fetch raw data
             val t0 = System.currentTimeMillis()
             val rawData = try {
@@ -256,58 +269,57 @@ class AIMIPhysioManagerMTR @Inject constructor(
                 return false
             }
             fetchMs = System.currentTimeMillis() - t0
-            
+
             if (!rawData.hasAnyData()) {
                 aapsLogger.warn(LTag.APS, "[$TAG] ⚠️ No physiological data available")
                 // Don't wipe context immediately, maybe transient
                 return false
             }
-            
+
             // Step 2: Extract features
             val t1 = System.currentTimeMillis()
             val features = featureExtractor.extractFeatures(rawData, previousFeatures)
             previousFeatures = features
             extractMs = System.currentTimeMillis() - t1
-            
+
             // Step 3: Update baseline
             val baseline = baselineModel.updateBaseline(features)
-            
+
             // Step 4: Analyze context
             val t2 = System.currentTimeMillis()
             var context = contextEngine.analyze(features, baseline)
             analyzeMs = System.currentTimeMillis() - t2
-            
+
             // 🤖 Step 4b: Cognitive Analysis (LLM - Optional)
             if (runLLM && isLLMEnabled()) {
                 // Only run LLM if Data is valid to avoid hallucination on empty data
                 if (features.hasValidData) {
                     val narrative = llmAnalyzer.analyze(features, baseline, context)
                     if (narrative.isNotBlank()) {
-                         context = context.copy(narrative = narrative)
-                         aapsLogger.info(LTag.APS, "[$TAG] 🤖 LLM Insight: $narrative")
+                        context = context.copy(narrative = narrative)
+                        aapsLogger.info(LTag.APS, "[$TAG] 🤖 LLM Insight: $narrative")
                     }
                 }
             }
 
             // Step 5: Store
             contextStore.updateContext(context, baseline)
-            
+
             lastUpdateTime = System.currentTimeMillis()
             sp.putLong(PREF_KEY_LAST_UPDATE, lastUpdateTime)
-            
+
             val totalMs = System.currentTimeMillis() - startTime
-            
+
             // STRUCTURED LOG (Production Level)
             aapsLogger.info(
                 LTag.APS,
-                "[$TAG] ✅ RUN COMPLETE | State: ${context.state} | Conf: ${(context.confidence*100).toInt()}% | " +
-                "Qual: ${(features.dataQuality*100).toInt()}% | " +
-                "Counts: Sleep=${if (rawData.sleep?.hasValidData() == true) "Yes" else "No"}, HRV=${rawData.hrv.size}, RHR=${rawData.rhr.size}, Steps=${if (rawData.steps > 0) "Yes" else "No"} | " +
-                "Timings: Fetch=${fetchMs}ms, Extr=${extractMs}ms, Analysis=${analyzeMs}ms (Total: ${totalMs}ms)"
+                "[$TAG] ✅ RUN COMPLETE | State: ${context.state} | Conf: ${(context.confidence * 100).toInt()}% | " +
+                    "Qual: ${(features.dataQuality * 100).toInt()}% | " +
+                    "Counts: Sleep=${if (rawData.sleep?.hasValidData() == true) "Yes" else "No"}, HRV=${rawData.hrv.size}, RHR=${rawData.rhr.size}, Steps=${if (rawData.steps > 0) "Yes" else "No"} | " +
+                    "Timings: Fetch=${fetchMs}ms, Extr=${extractMs}ms, Analysis=${analyzeMs}ms (Total: ${totalMs}ms)"
             )
-            
+
             return true
-            
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "[$TAG] ❌ Pipeline CRASH", e)
             return false
