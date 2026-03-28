@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.safety
 
-import kotlin.math.min
 import kotlin.math.max
 
 /**
@@ -11,8 +10,8 @@ import kotlin.math.max
  * 
  * Zone Architecture:
  * - Zone 0.5: Soft Landing (Target → Target+15) - Gentle convergence boost
- * - Zone 1: Strict Guard (< 130) - Hypo prevention with UAM bypass
- * - Zone 2: Buffer (130-170) - Progressive SMB scaling
+ * - Zone 1: Strict Guard (< 120) - Hypo prevention with UAM bypass
+ * - Zone 2: Buffer (120-170) - Progressive SMB scaling
  * - Zone 3: Reactor (> 170) - Full aggression
  */
 object SafetyNet {
@@ -47,13 +46,14 @@ object SafetyNet {
         if (isExplicitUserAction) return maxSmbHigh
 
         // 1.5 Meal Priority Context (non-announced/announced meal rise harmonization)
-        // Keep safety but avoid under-delivery when rise is confirmed early.
+        // Below 120: stay on the conservative (low) max — user expectation for hypo band.
+        // From 120 upward: ramp toward high-BG max so the second SMB limit is actually used
+        // once the rise is confirmed (the old 120–140 branch capped at 0.9× low only).
         if (mealPriorityContext) {
             return when {
                 bg < 120.0 -> maxSmbLow * 0.70
-                bg < 140.0 -> maxSmbLow * 0.90
                 bg < 170.0 -> {
-                    val progress = (bg - 130.0) / (170.0 - 130.0)
+                    val progress = ((bg - 120.0) / (170.0 - 120.0)).coerceIn(0.0, 1.0)
                     val boosted = max(progress, 0.75)
                     val range = maxSmbHigh - maxSmbLow
                     maxSmbLow + (range * boosted)
@@ -90,13 +90,13 @@ object SafetyNet {
             }
         }
 
-        // 3. ZONE 1: STRICT GUARD (< 130 mg/dL)
-        // [TIR 70-140 OPTIMIZATION] Limit extended to 130 to protect the 140 ceiling
-        // Standard: Clamp to 50% to prevent deep hypos
-        // Exception: UAM ROCKET BYPASS
+        // 3. ZONE 1: STRICT GUARD (< 120 mg/dL)
+        // Conservative cap and half-dose rule apply only in this hypo-near band; from 120 mg/dL
+        // onward use buffer/reactor scaling so the high-BG max SMB can engage when appropriate.
+        // Exception: UAM ROCKET BYPASS (sharp rise while still below 120)
         val isUamRise = delta > 6.0 || shortAvgDelta > 6.0
 
-        if (bg < 130.0) {
+        if (bg < 120.0) {
             if (isUamRise) {
                 // 🚀 ROCKET BYPASS: Meal detected early
                 return maxSmbLow
@@ -107,20 +107,21 @@ object SafetyNet {
             return maxSmbLow * strictFactor
         }
 
-        // 4. ZONE 2: BUFFER / TRANSITION (130 - 170 mg/dL)
+        // 4. ZONE 2: BUFFER / TRANSITION (120 - 170 mg/dL)
         if (bg < 170.0) {
-            // Predictive Check
-            if (eventualBg < 130.0) {
+            // Predictive check: clamp to low max only if trajectory heads clearly below 120,
+            // not merely below 130 (which blocked the high max too often during real meals).
+            if (eventualBg < 120.0) {
                 return maxSmbLow
             }
             
-            // Linear interpolation
-            val progress = (bg - 130.0) / (170.0 - 130.0)
+            // Linear interpolation from 120 → 170
+            val progress = ((bg - 120.0) / (170.0 - 120.0)).coerceIn(0.0, 1.0)
             val range = maxSmbHigh - maxSmbLow
             return maxSmbLow + (range * progress)
         }
 
-        // 5. ZONE 3: REACTOR MAX (> 160 mg/dL)
+        // 5. ZONE 3: REACTOR MAX (BG >= 170 mg/dL)
         return maxSmbHigh
     }
 }

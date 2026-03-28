@@ -48,11 +48,11 @@ class AutoDrivePipelineTest {
         )
         
         // Relaxed match for all arguments to avoid signature change breakages
-        every { 
-            engine.tick(any(), any(), any(), any(), any(), any(), any(), any()) 
+        every {
+            engine.tick(any(), any(), any(), any(), any(), any(), any(), any(), any())
         } returns command
 
-        val result = engine.tick(state, 0.5, 80.0, 14, 0, 70, 60)
+        val result = engine.tick(state, 0.5, 50.0, 80.0, 14, 0, 70, 60)
 
         // 4. Assert: Verify outcome
         com.google.common.truth.Truth.assertThat(result).isNotNull()

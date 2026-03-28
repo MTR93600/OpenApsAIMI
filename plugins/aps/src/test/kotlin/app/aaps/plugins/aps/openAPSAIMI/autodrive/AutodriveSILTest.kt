@@ -73,7 +73,7 @@ class AutodriveSILTest {
             physiologicalStressMask = doubleArrayOf()
         )
 
-        val command = engine.tick(currentState = state, profileBasal = 1.0, lgsThreshold = 80.0, hour = 12, steps = 0, hr = 70, rhr = 60)
+        val command = engine.tick(currentState = state, profileBasal = 1.0, profileIsf = 50.0, lgsThreshold = 80.0, hour = 12, steps = 0, hr = 70, rhr = 60)
         assertThat(command).isNotNull()
         
         // La dose calculée par le MPC (ou le mock temporaire) doit réagir de manière agressive.
@@ -94,7 +94,7 @@ class AutodriveSILTest {
             physiologicalStressMask = doubleArrayOf()
         )
 
-        val command = engine.tick(currentState = state, profileBasal = 1.0, lgsThreshold = 80.0, hour = 12, steps = 2000, hr = 120, rhr = 60)
+        val command = engine.tick(currentState = state, profileBasal = 1.0, profileIsf = 50.0, lgsThreshold = 80.0, hour = 12, steps = 2000, hr = 120, rhr = 60)
         assertThat(command).isNotNull()
         
         // Le CBF (ou le mock) doit couper l'insuline violemment pour amortir.
@@ -116,8 +116,9 @@ class AutodriveSILTest {
         )
 
         val command = engine.tick(
-            currentState = state, 
-            profileBasal = 1.0, 
+            currentState = state,
+            profileBasal = 1.0,
+            profileIsf = 50.0,
             lgsThreshold = 80.0,
             hour = 12,
             steps = 0,
