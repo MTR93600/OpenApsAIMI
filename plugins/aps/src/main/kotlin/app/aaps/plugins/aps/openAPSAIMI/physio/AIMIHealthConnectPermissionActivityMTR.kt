@@ -90,6 +90,8 @@ class AIMIHealthConnectPermissionActivityMTR : AppCompatActivity() {
         Log.i(TAG, "HC: runtime packageName=$packageName appId=${applicationInfo.processName} sdk=${android.os.Build.VERSION.SDK_INT}")
 
         setupButtons()
+        // Cold start: HC may launch this activity with ACTION_SHOW_PERMISSIONS_RATIONALE (not only onNewIntent)
+        handleRationaleIntent(intent)
         checkInitialStatus()
     }
 

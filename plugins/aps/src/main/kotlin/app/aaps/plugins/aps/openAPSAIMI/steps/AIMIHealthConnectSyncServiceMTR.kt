@@ -69,7 +69,9 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
             private set
             
         private const val TAG = "HealthConnectSync"
-        private const val SYNC_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
+        private const val SYNC_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes (steps windows anchor)
+        /** HR must use a wide lookback: periodic sync runs every 4h; a 5min window often contains zero samples. */
+        private const val HR_LOOKBACK_MS = 24 * 60 * 60 * 1000L
         private const val SOURCE_DEVICE = "HealthConnect"
         private const val PREF_KEY_ENABLED = "aimi_health_connect_steps_enable"
         private const val PREF_KEY_LAST_SYNC = "aimi_health_connect_last_sync_ms"
@@ -161,7 +163,7 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
         }
 
         val now = System.currentTimeMillis()
-        val syncStart = now - SYNC_INTERVAL_MS // Last 5 minutes
+        val syncStart = now - SYNC_INTERVAL_MS // Last 5 minutes (steps)
 
         // Audit existing data (for logging only, NOT for skipping)
         logExistingSources(syncStart, now)
@@ -172,8 +174,8 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
             // 1. Sync Steps
             syncSteps(client, now)
             
-            // 2. Sync Heart Rate
-            syncHeartRate(client, now, syncStart)
+            // 2. Sync Heart Rate (wide window — see HR_LOOKBACK_MS)
+            syncHeartRate(client, now, now - HR_LOOKBACK_MS)
 
             lastSyncTimestamp = now
             sp.putLong(PREF_KEY_LAST_SYNC, now)
@@ -311,16 +313,12 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
                     )
                     
                     val response = client.readRecords(request)
-                    // Aggregate samples
                     val allSamples = response.records.flatMap { it.samples }
-                    
-                    if (allSamples.isNotEmpty()) {
-                        val avgBpm = allSamples.map { it.beatsPerMinute }.average()
-                        val lastSampleTime = allSamples.maxOf { it.time }.toEpochMilli()
-                        
+                    val latest = allSamples.maxByOrNull { it.time }
+                    if (latest != null) {
                         AIMIHeartRateDataMTR(
-                             bpm = avgBpm,
-                             timestamp = lastSampleTime
+                            bpm = latest.beatsPerMinute.toDouble(),
+                            timestamp = latest.time.toEpochMilli()
                         )
                     } else {
                         null
