@@ -64,8 +64,8 @@ class AIMIPhysioFeatureExtractorMTR @Inject constructor(
         // Extract RHR features
         val rhrFeatures = extractRHRFeatures(rawData.rhr)
         
-        // Extract activity features
-        val activityFeatures = extractActivityFeatures(rawData.steps, previousFeatures)
+        val stepsSignal = maxOf(rawData.steps, rawData.ambientStepsAggregated)
+        val activityFeatures = extractActivityFeatures(stepsSignal, previousFeatures)
         
         // Calculate data quality score
         val dataQuality = calculateDataQuality(rawData)
@@ -293,12 +293,18 @@ class AIMIPhysioFeatureExtractorMTR @Inject constructor(
             score += 0.2 * completeness
         }
         
-        // Steps data (10% weight)
+        // Steps data (10% weight) — HC aggregate or unified DB window
         maxScore += 0.1
-        if (rawData.steps > 0) {
+        if (rawData.steps > 0 || rawData.ambientStepsAggregated > 0) {
             score += 0.1
         }
-        
+
+        // Ambient HR from Wear / DB (10% weight) when HC RHR series missing
+        maxScore += 0.1
+        if (rawData.ambientHeartRateBpm > 0) {
+            score += 0.1
+        }
+
         return if (maxScore > 0) (score / maxScore).coerceIn(0.0, 1.0) else 0.0
     }
     

@@ -101,19 +101,21 @@ class DataLayerListenerServiceMobile : WearableListenerService() {
     override fun onMessageReceived(messageEvent: MessageEvent) {
         super.onMessageReceived(messageEvent)
 
-        if (wearPlugin.isEnabled()) {
-            when (messageEvent.path) {
-                rxPath          -> {
-                    aapsLogger.debug(LTag.WEAR, "onMessageReceived rxPath: ${String(messageEvent.data)}")
-                    val command = EventData.deserialize(String(messageEvent.data))
-                    rxBus.send(command.also { it.sourceNodeId = messageEvent.sourceNodeId })
-                }
+        if (!wearPlugin.isEnabled()) {
+            aapsLogger.warn(LTag.WEAR, "Wear message ignored: Wear plugin disabled on phone (path=${messageEvent.path})")
+            return
+        }
+        when (messageEvent.path) {
+            rxPath          -> {
+                aapsLogger.debug(LTag.WEAR, "onMessageReceived rxPath: ${String(messageEvent.data)}")
+                val command = EventData.deserialize(String(messageEvent.data))
+                rxBus.send(command.also { it.sourceNodeId = messageEvent.sourceNodeId })
+            }
 
-                rxWatchfacePath -> {
-                    aapsLogger.debug(LTag.WEAR, "onMessageReceived rxDataPath: ${messageEvent.data.size}")
-                    val command = EventData.deserializeByte(messageEvent.data)
-                    rxBus.send(command.also { it.sourceNodeId = messageEvent.sourceNodeId })
-                }
+            rxWatchfacePath -> {
+                aapsLogger.debug(LTag.WEAR, "onMessageReceived rxDataPath: ${messageEvent.data.size}")
+                val command = EventData.deserializeByte(messageEvent.data)
+                rxBus.send(command.also { it.sourceNodeId = messageEvent.sourceNodeId })
             }
         }
     }

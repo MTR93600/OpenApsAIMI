@@ -11,6 +11,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.keys.BooleanKey
+import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -39,6 +40,8 @@ class AIMIPhysioManagerMTR @Inject constructor(
     private val contextEngine: AIMIPhysioContextEngineMTR,
     private val contextStore: AIMIPhysioContextStoreMTR,
     private val llmAnalyzer: AIMILLMPhysioAnalyzerMTR, // Optional
+    private val unifiedActivityProvider: UnifiedActivityProviderMTR,
+    private val pipelineWatchdog: AIMIPhysioPipelineWatchdogMTR,
     private val sp: SP,
     private val aapsLogger: AAPSLogger
 ) {
@@ -82,7 +85,15 @@ class AIMIPhysioManagerMTR @Inject constructor(
         
         // Schedule periodic updates
         schedulePeriodicWork()
-        
+
+        Thread {
+            try {
+                pipelineWatchdog.runCheckAndRecover()
+            } catch (e: Exception) {
+                aapsLogger.warn(LTag.APS, "[$TAG] Initial pipeline watchdog failed: ${e.message}")
+            }
+        }.start()
+
         isRunning.set(true)
         
         // Log current context status
@@ -165,8 +176,18 @@ class AIMIPhysioManagerMTR @Inject constructor(
                 ExistingPeriodicWorkPolicy.KEEP, // Don't replace if existing, to maintain schedule
                 dailyRequest
             )
-            
-            aapsLogger.info(LTag.APS, "[$TAG] ✅ Periodic work scheduled (Realtime 15m, Metabolic 30m, Daily 24h)")
+
+            val watchdogRequest = PeriodicWorkRequestBuilder<PhysioPipelineWatchdogWorker>(6, TimeUnit.HOURS)
+                .setConstraints(constraints)
+                .addTag("AIMI_PHYSIO_WATCHDOG")
+                .build()
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                PhysioPipelineWatchdogWorker.WORK_NAME,
+                ExistingPeriodicWorkPolicy.UPDATE,
+                watchdogRequest
+            )
+
+            aapsLogger.info(LTag.APS, "[$TAG] ✅ Periodic work scheduled (Realtime 15m, Metabolic 30m, Daily 24h, Watchdog 6h)")
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "[$TAG] Failed to schedule work", e)
         }
@@ -253,17 +274,15 @@ class AIMIPhysioManagerMTR @Inject constructor(
         aapsLogger.info(LTag.APS, "[$TAG] 🔄 Pipeline Start (daysBack=$daysBack runLLM=$runLLM)")
 
         try {
-            // Check Health Connect availability first
-            val isHCAvailable = dataRepository.isAvailable()
-            if (!isHCAvailable) {
-                aapsLogger.error(LTag.APS, "[$TAG] ❌ Health Connect client unavailable")
-                return false
+            val hcReady = dataRepository.isAvailable()
+            if (!hcReady) {
+                aapsLogger.warn(LTag.APS, "[$TAG] Health Connect SDK/client not fully available — HC reads may be empty; Wear/phone DB can still feed the pipeline")
             }
 
-            // Step 1: Fetch raw data
+            // Step 1: Fetch raw data (HC) + optional enrichment from unified DB (Wear / HC sync rows)
             val t0 = System.currentTimeMillis()
             val rawData = try {
-                dataRepository.fetchAllData(daysBack = daysBack)
+                enrichRawFromUnifiedIfNeeded(dataRepository.fetchAllData(daysBack = daysBack))
             } catch (e: Exception) {
                 aapsLogger.error(LTag.APS, "[$TAG] ❌ Fetch error", e)
                 return false
@@ -325,7 +344,21 @@ class AIMIPhysioManagerMTR @Inject constructor(
             return false
         }
     }
-    
+
+    /**
+     * When Health Connect returns no usable series but Wear / phone / HC-sync rows exist in the DB,
+     * merge those vitals so the pipeline and context store can still update (Mar 23 regression fix).
+     */
+    private fun enrichRawFromUnifiedIfNeeded(raw: RawPhysioDataMTR): RawPhysioDataMTR {
+        if (raw.hasAnyData()) return raw
+        val now = System.currentTimeMillis()
+        val hr = unifiedActivityProvider.getLatestHeartRate(60 * 60 * 1000L)?.bpm?.toInt() ?: 0
+        val stepsWin = unifiedActivityProvider.getStepsTotalSince(now - 24 * 60 * 60 * 1000L)?.steps ?: 0
+        if (hr <= 0 && stepsWin <= 0) return raw
+        aapsLogger.info(LTag.APS, "[$TAG] Enriched physio input from unified DB: ambientHr=$hr ambientSteps24hWindow=$stepsWin")
+        return raw.copy(ambientHeartRateBpm = hr, ambientStepsAggregated = stepsWin)
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // PREFERENCES
     // ═══════════════════════════════════════════════════════════════════════

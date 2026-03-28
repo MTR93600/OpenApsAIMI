@@ -86,7 +86,10 @@ class HeartRateListener(
     val currentHeartRateBpm get() = sampler.currentBpm?.roundToInt()
 
     @VisibleForTesting
-    var sendHeartRate: (EventData.ActionHeartRate) -> Unit = { hr -> ctx.startService(IntentWearToMobile(ctx, hr)) }
+    var sendHeartRate: (EventData.ActionHeartRate) -> Unit = { hr ->
+        // Match StepCountListener: startForegroundService keeps delivery reliable on recent Wear OS / Android.
+        ctx.startForegroundService(IntentWearToMobile(ctx, hr))
+    }
 
     override fun isDisposed() = schedule == null
 

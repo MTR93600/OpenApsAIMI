@@ -77,3 +77,27 @@ class PhysioDailyWorker(
     }
 }
 
+/**
+ * Verifies DB + HC + merged snapshot; triggers HC sync and physio refresh when degraded.
+ */
+class PhysioPipelineWatchdogWorker(
+    context: Context,
+    params: WorkerParameters
+) : CoroutineWorker(context, params) {
+
+    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        try {
+            val watchdog = AIMIPhysioPipelineWatchdogMTR.instance
+            if (watchdog == null) return@withContext Result.retry()
+            watchdog.runCheckAndRecover()
+            Result.success()
+        } catch (e: Exception) {
+            return@withContext if (runAttemptCount < 3) Result.retry() else Result.failure()
+        }
+    }
+
+    companion object {
+        const val WORK_NAME = "AIMI_PHYSIO_PIPELINE_WATCHDOG"
+    }
+}
+
