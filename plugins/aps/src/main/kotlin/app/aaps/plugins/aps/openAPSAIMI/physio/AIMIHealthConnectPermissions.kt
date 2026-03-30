@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.physio
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 
@@ -23,7 +24,9 @@ object AIMIHealthConnectPermissions {
     val PHYSIO_REQUIRED_PERMISSIONS = setOf(
         HealthPermission.getReadPermission(SleepSessionRecord::class),
         HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
-        HealthPermission.getReadPermission(HeartRateRecord::class)
+        HealthPermission.getReadPermission(HeartRateRecord::class),
+        // Garmin / plusieurs apps écrivent la FC repos comme type dédié (pas seulement min FC le matin)
+        HealthPermission.getReadPermission(RestingHeartRateRecord::class)
     )
     
     /**
@@ -47,6 +50,7 @@ object AIMIHealthConnectPermissions {
         HealthPermission.getReadPermission(SleepSessionRecord::class) to "Sleep Sessions",
         HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class) to "Heart Rate Variability (HRV)",
         HealthPermission.getReadPermission(HeartRateRecord::class) to "Heart Rate",
+        HealthPermission.getReadPermission(RestingHeartRateRecord::class) to "Resting Heart Rate",
         HealthPermission.getReadPermission(StepsRecord::class) to "Steps"
     )
     

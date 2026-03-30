@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
@@ -232,9 +233,10 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                         // The response window is 'yesterday' to 'now' (48h). 
                         // To get "Last Night" specifically, we should look for the most recent generic block.
                         
-                        // Simple robust logic: Sum all sleep ending in the last 24h
-                        val oneDayAgo = now.minusSeconds(24 * 60 * 60)
-                        val recentSessions = response.records.filter { it.endTime.isAfter(oneDayAgo) }
+                        // Inclure les nuits qui se terminent dans la même fenêtre que la lecture (48h).
+                        // Un filtre 24h seulement excluait des sessions Garmin valides (décalage fuseau / fin de nuit).
+                        val windowCutoff = now.minusSeconds(48 * 60 * 60)
+                        val recentSessions = response.records.filter { it.endTime.isAfter(windowCutoff) }
 
                         if (recentSessions.isNotEmpty()) {
                             // Sum durations
@@ -378,6 +380,37 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
     // ═══════════════════════════════════════════════════════════════════════
     // RESTING HEART RATE (RHR)
     // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * FC « repos » telle qu’écrite par Garmin Connect et d’autres apps (type HC dédié).
+     */
+    private suspend fun readRestingHeartRateRecordsAsRhr(
+        client: HealthConnectClient,
+        daysBack: Int,
+        now: Instant
+    ): List<RHRDataMTR> {
+        return try {
+            val start = now.minusSeconds((daysBack * 24 * 60 * 60).toLong())
+            val request = ReadRecordsRequest(
+                recordType = RestingHeartRateRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, now)
+            )
+            val response = client.readRecords(request)
+            response.records.mapNotNull { rec ->
+                val bpm = rec.beatsPerMinute.toInt()
+                if (bpm in 35..120) {
+                    RHRDataMTR(
+                        timestamp = rec.time.toEpochMilli(),
+                        bpm = bpm,
+                        source = "HealthConnect(RestingHR:${rec.metadata.dataOrigin.packageName})"
+                    )
+                } else null
+            }.sortedBy { it.timestamp }
+        } catch (e: Exception) {
+            aapsLogger.warn(LTag.APS, "[$TAG] RestingHeartRateRecord read failed: ${e.message}")
+            emptyList()
+        }
+    }
     
     /**
      * Fetches morning Resting Heart Rate for last N days
@@ -436,7 +469,11 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                         }
                         
                         // Sort by timestamp (oldest first usually, but list is irrelevant)
-                        val sortedRHR = rhrList.sortedBy { it.timestamp }
+                        var sortedRHR = rhrList.sortedBy { it.timestamp }
+
+                        if (sortedRHR.isEmpty()) {
+                            sortedRHR = readRestingHeartRateRecordsAsRhr(client, daysBack, now)
+                        }
 
                         cache[cacheKey] = CachedData(sortedRHR, System.currentTimeMillis())
                         
@@ -444,7 +481,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                             val avgRHR = sortedRHR.map { it.bpm }.average()
                             aapsLogger.info(
                                 LTag.APS,
-                                "[$TAG] ✅ RHR: ${sortedRHR.size} daily points, avg=${avgRHR.toInt()} bpm"
+                                "[$TAG] ✅ RHR: ${sortedRHR.size} points, avg=${avgRHR.toInt()} bpm (aggregate morning min and/or RestingHeartRateRecord)"
                             )
                         }
                         
@@ -464,14 +501,17 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
 
     /**
      * Fetches steps for last 7 days (daily totals)
+     *
+     * @param ignoreUnifiedSourceMode si true, lit quand même Health Connect (ex. pipeline Physio quand
+     *        les pas Garmin sont dans HC mais le mode UI est « préférer la montre »).
      */
-    fun fetchStepsData(daysBack: Int = 7): Int {
-        // Check preference first
-        val mode = app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR.getMode(context)
-        if (mode == app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR.MODE_PREFER_WEAR || 
-            mode == app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR.MODE_DISABLED) {
-            // Steps handled by Wear/Plugin directly, or disabled
-            return 0
+    fun fetchStepsData(daysBack: Int = 7, ignoreUnifiedSourceMode: Boolean = false): Int {
+        if (!ignoreUnifiedSourceMode) {
+            val mode = app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR.getMode(context)
+            if (mode == app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR.MODE_PREFER_WEAR ||
+                mode == app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR.MODE_DISABLED) {
+                return 0
+            }
         }
 
         val cacheKey = "steps_${daysBack}days"
@@ -560,7 +600,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
             val rhr = fetchMorningRHR(daysBack)
             aapsLogger.info(LTag.APS, "[$TAG] 📊 FETCH RESULT - RHR: ${rhr.size} samples ${if (rhr.isEmpty()) "(empty - no morning HR data)" else ""}")
             
-            val steps = fetchStepsData(daysBack)
+            val steps = fetchStepsData(daysBack, ignoreUnifiedSourceMode = true)
             aapsLogger.info(LTag.APS, "[$TAG] 📊 FETCH RESULT - Steps: $steps avg/day ${if (steps == 0) "(no steps data)" else ""}")
             
             val elapsed = System.currentTimeMillis() - startTime
