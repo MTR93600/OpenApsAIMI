@@ -58,7 +58,7 @@ class OneTimePassword @Inject constructor(
         } else {
             keyBytes = Base64.decode(strSecret, Base64.DEFAULT)
         }
-        key = SecretKeySpec(keyBytes, 0, keyBytes.size, "SHA1")
+        key = SecretKeySpec(keyBytes, 0, keyBytes.size, totp.algorithm)
     }
 
     private fun configure() {
@@ -66,7 +66,12 @@ class OneTimePassword @Inject constructor(
             ensureKey()
         } catch (_: Exception) {
             preferences.put(StringKey.SmsOtpPassword, "")
-            ensureKey()
+            preferences.put(StringNonKey.SmsOtpSecret, "")
+            try {
+                ensureKey()
+            } catch (_: Exception) {
+                key = null
+            }
         }
         pin = preferences.get(StringKey.SmsOtpPassword).trim()
     }

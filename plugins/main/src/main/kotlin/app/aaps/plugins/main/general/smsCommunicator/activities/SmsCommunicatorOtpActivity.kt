@@ -124,30 +124,36 @@ class SmsCommunicatorOtpActivity : TranslatedDaggerAppCompatActivity() {
     }
 
     private fun updateGui() {
-        val displayMetrics = Resources.getSystem().displayMetrics
-        val width = displayMetrics.widthPixels
-        val height = displayMetrics.heightPixels
-
-        // ensure QRCode is big enough to fit on screen
-        val dim = (min(width, height) * 0.85).toInt()
-        val provURI = otp.provisioningURI()
-
-        if (provURI.isNullOrBlank()) {
-            binding.otpProvisioning.visibility = View.GONE
-            return
-        }
-
         try {
-            val myBitmap = QRCode.from(provURI)
-                .withErrorCorrection(ErrorCorrectionLevel.H)
-                .withSize(dim, dim)
-                .bitmap()
-            binding.otpProvisioning.setImageBitmap(myBitmap)
-            binding.otpProvisioning.visibility = View.VISIBLE
+            val displayMetrics = Resources.getSystem().displayMetrics
+            val width = displayMetrics.widthPixels
+            val height = displayMetrics.heightPixels
+
+            // ensure QRCode is big enough to fit on screen
+            val dim = (min(width, height) * 0.85).coerceAtLeast(1)
+            val provURI = otp.provisioningURI()
+
+            if (provURI.isNullOrBlank()) {
+                binding.otpProvisioning.visibility = View.GONE
+                return
+            }
+
+            try {
+                val myBitmap = QRCode.from(provURI)
+                    .withErrorCorrection(ErrorCorrectionLevel.H)
+                    .withSize(dim, dim)
+                    .bitmap()
+                binding.otpProvisioning.setImageBitmap(myBitmap)
+                binding.otpProvisioning.visibility = View.VISIBLE
+            } catch (e: Exception) {
+                // Do not crash OTP setup screen if QR generation fails on a device/vendor stack.
+                fabricPrivacy.logException(e)
+                binding.otpProvisioning.setImageDrawable(null)
+                binding.otpProvisioning.visibility = View.GONE
+                ToastUtils.Long.errorToast(this, rh.gs(R.string.wrong_format))
+            }
         } catch (e: Exception) {
-            // Do not crash OTP setup screen if QR generation fails on a device/vendor stack.
             fabricPrivacy.logException(e)
-            binding.otpProvisioning.setImageDrawable(null)
             binding.otpProvisioning.visibility = View.GONE
             ToastUtils.Long.errorToast(this, rh.gs(R.string.wrong_format))
         }
