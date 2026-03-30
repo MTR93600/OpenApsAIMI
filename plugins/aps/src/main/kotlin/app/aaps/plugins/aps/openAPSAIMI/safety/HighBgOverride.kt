@@ -28,8 +28,11 @@ object HighBgOverride {
         iob: Double,
         maxSmb: Double,
         currentDose: Double,
-        pumpStep: Double
+        pumpStep: Double,
+        exerciseInsulinLockout: Boolean = false
     ): Result {
+        if (exerciseInsulinLockout) return Result(currentDose, false, null)
+
         val highBgOverride =
             (bg >= Constants.HIGH_BG_OVERRIDE_BG_STRONG ||
                 (bg >= Constants.HIGH_BG_OVERRIDE_BG_MIN && delta >= 1.5)) &&

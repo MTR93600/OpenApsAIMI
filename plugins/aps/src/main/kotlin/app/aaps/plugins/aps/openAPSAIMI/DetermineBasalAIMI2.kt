@@ -482,6 +482,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var ci = 0.0f
     private var sleepTime = false
     private var sportTime = false
+    /** Intent contexte AIMI : activité déclarée (snapshot.hasActivity). */
+    private var aimiContextActivityActive = false
+    /** Sport thérapie OU activité AIMI : SMB off ; basale off si BG ≤ [EXERCISE_BASAL_RESUME_BG_MGDL], sauf T3c/standard si BG > seuil. */
+    private var exerciseInsulinLockoutActive = false
     private var snackTime = false
     private var lowCarbTime = false
     private var highCarbTime = false
@@ -523,6 +527,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // Survives instance re-creations and app restarts by combining Memory + SharedPreferences.
     companion object {
         private var lastSmbTimestampMem: Long = 0L
+        /** Glycémie (mg/dL) au-dessus de laquelle la basale peut corriger malgré sport / contexte activité (SMB toujours off). */
+        const val EXERCISE_BASAL_RESUME_BG_MGDL: Double = 220.0
     }
 
     private var internalLastSmbMillis: Long
@@ -2985,9 +2991,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun isSportSafetyCondition(): Boolean {
         // [User Request]: Immediate release if steps stopped (0 steps in 5 min)
         // This allows AIMI to resume SMBs immediately after a walk to handle the meal rise.
-        if (recentSteps5Minutes == 0 && !sportTime) return false
+        if (recentSteps5Minutes == 0 && !sportTime && !aimiContextActivityActive) return false
 
-        val manualSport = sportTime
+        val manualSport = sportTime || aimiContextActivityActive
         
         // Assouplissement des seuils : ne détecter que des VRAIS sports intenses
         // Anciens seuils : 200 pas/5min, 500 pas/10min → Trop sensible (marche normale)
@@ -4055,7 +4061,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Local determine_basal vars — not class fields
         combinedDeltaLocal: Float, glucoseStatusLocal: GlucoseStatusAIMI,
         pumpAgeDaysLocal: Float, modelcalLocal: Double, profileCurrentBasalLocal: Double,
-        isConfirmedHighRise: Boolean = false
+        isConfirmedHighRise: Boolean = false,
+        exerciseInsulinLockout: Boolean = false
     ): SmbInstructionExecutor.Result {
         return SmbInstructionExecutor.execute(
             SmbInstructionExecutor.Input(
@@ -4083,7 +4090,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 maxIob = preferences.get(DoubleKey.ApsSmbMaxIob),
                 predictedSmb = predictedSMB, modelValue = modelcalLocal.toFloat(),
                 mealData = mealData, pkpdRuntime = pkpdRuntime,
-                sportTime = sportTime, lateFatRiseFlag = lateFatRiseFlag,
+                sportTime = sportTime || exerciseInsulinLockout,
+                exerciseInsulinLockout = exerciseInsulinLockout,
+                lateFatRiseFlag = lateFatRiseFlag,
                 highCarbRunTime = highCarbrunTime, threshold = threshold,
                 dateUtil = dateUtil, currentTime = currentTime,
                 windowSinceDoseInt = windowSinceDoseInt, currentInterval = intervalsmb,
@@ -4322,6 +4331,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
+    private fun refreshAimiContextActivityFlag(nowMs: Long = System.currentTimeMillis()) {
+        aimiContextActivityActive = false
+        if (!preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIContextEnabled)) return
+        try {
+            val snap = contextManager.getSnapshot(nowMs)
+            aimiContextActivityActive = snap.hasActivity && snap.intentCount > 0
+        } catch (_: Exception) {
+            aimiContextActivityActive = false
+        }
+    }
+
     private fun applyContextModule(
         bg: Double, iob: Double, cob: Double, rT: RT
     ): Double? {
@@ -4332,6 +4352,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add("═══ CONTEXT MODULE ═══")
                 val contextSnapshot = contextManager.getSnapshot(System.currentTimeMillis())
                 if (contextSnapshot.intentCount > 0) {
+                    aimiContextActivityActive = contextSnapshot.hasActivity
                     val modeStr = preferences.get(app.aaps.core.keys.StringKey.ContextMode)
                     val contextMode = when (modeStr) {
                         "CONSERVATIVE" -> app.aaps.plugins.aps.openAPSAIMI.context.ContextMode.CONSERVATIVE
@@ -4360,6 +4381,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     if (contextInfluence.preferBasal) {
                         consoleLog.add("  ⚠️ Prefers TEMP BASAL over SMB (SMB Disabled)")
                         maxSMB = 0.0
+                        maxSMBHB = 0.0
                         if (contextSnapshot.hasActivity) {
                             contextTargetOverride = 150.0
                             consoleLog.add("  🎯 Sport Target Override -> 150 mg/dL")
@@ -4373,6 +4395,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     rT.contextModulation = contextInfluence.smbFactorClamp.toDouble()
                 } else {
                     consoleLog.add("🎯 Context: No active intents")
+                    aimiContextActivityActive = false
                     rT.contextEnabled = true
                     rT.contextIntentCount = 0
                 }
@@ -4383,6 +4406,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         } else {
             rT.contextEnabled = false
+        }
+        exerciseInsulinLockoutActive = sportTime || aimiContextActivityActive
+        if (exerciseInsulinLockoutActive) {
+            maxSMB = 0.0
+            maxSMBHB = 0.0
         }
         consoleLog.add("═══════════════════════════════════")
         return contextTargetOverride
@@ -4607,6 +4635,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): RT {
         consoleError = mutableListOf()
         consoleLog = mutableListOf()
+        exerciseInsulinLockoutActive = false
+        aimiContextActivityActive = false
         
         if (extraDebug.isNotEmpty()) {
              // Append to log history AND consoleError for "Script Debug" visibility
@@ -5234,6 +5264,37 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.decceleratingDown = if (delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta)) 1 else 0
         this.stable = if (delta > -3 && delta < 3 && shortAvgDelta > -3 && shortAvgDelta < 3 && longAvgDelta > -3 && longAvgDelta < 3) 1 else 0
         val nightbis = hourOfDay <= 7
+
+        refreshAimiContextActivityFlag()
+        exerciseInsulinLockoutActive = sportTime || aimiContextActivityActive
+        if (exerciseInsulinLockoutActive) {
+            this.maxSMB = 0.0
+            this.maxSMBHB = 0.0
+            consoleLog.add(
+                "🏃 EXERCISE_LOCKOUT[therapy]: SMB off (sportTime=$sportTime aimiActivity=$aimiContextActivityActive) " +
+                    "| basale autorisée seulement si BG>${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()} (T3c PI ou flux standard)"
+            )
+        }
+
+        val t3cBrittle = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
+        if (t3cBrittle && exerciseInsulinLockoutActive && bg <= EXERCISE_BASAL_RESUME_BG_MGDL) {
+            rT.reason.append(
+                "🏃 T3c + sport/contexte activité : basale & SMB arrêtés (BG≤${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()}).\n"
+            )
+            consoleLog.add("🏃 T3c EXERCISE: return 0 U/h basal (BG=${bg.toInt()} ≤ ${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()})")
+            rT.units = 0.0
+            logDecisionFinal("T3C_EXERCISE_LOCKOUT", rT, bg, delta)
+            return setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false, adaptiveMultiplier = adaptiveMult)
+        }
+        if (!t3cBrittle && exerciseInsulinLockoutActive && bg <= EXERCISE_BASAL_RESUME_BG_MGDL) {
+            rT.reason.append(
+                "🏃 Sport / contexte AIMI activité : basale & SMB arrêtés (BG≤${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()}).\n"
+            )
+            consoleLog.add("🏃 EXERCISE_LOCKOUT: flux standard interrompu → 0 U/h (BG=${bg.toInt()})")
+            rT.units = 0.0
+            logDecisionFinal("EXERCISE_LOCKOUT", rT, bg, delta)
+            return setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false, adaptiveMultiplier = adaptiveMult)
+        }
         
         // 🍱 MANUAL MEAL MODES (Priority 1: Explicit User Intent)
         // Moved here to bypass automated silencing/caps from subsequent policies.
@@ -5974,7 +6035,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             // [FIX] Force-Enable SMB for Drift Terminator if blocked by Basal First
             // Prudent Learner (<0.75) may have triggered Basal-First (MaxSMB=0), but Drift Terminator needs to act.
-            if (this.maxSMB < 0.1) {
+            if (this.maxSMB < 0.1 && !exerciseInsulinLockoutActive) {
                 this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
                 // Fallback safe if preference is also zero/missing
                 if (this.maxSMB < 0.1) this.maxSMB = 0.5
@@ -6506,7 +6567,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🏥 Apply Physiological Multipliers (AFTER all other ISF/basal calculations)
         this.variableSensitivity = (this.variableSensitivity * physioMultipliers.isfFactor).toFloat()
         profile.max_daily_basal = profile.max_daily_basal * physioMultipliers.basalFactor
-        this.maxSMB = (this.maxSMB * physioMultipliers.smbFactor).coerceAtLeast(0.1)
+        if (exerciseInsulinLockoutActive) {
+            this.maxSMB = 0.0
+            this.maxSMBHB = 0.0
+        } else {
+            this.maxSMB = (this.maxSMB * physioMultipliers.smbFactor).coerceAtLeast(0.1)
+        }
 
         sens = variableSensitivity.toDouble()
         val effectiveSens = sens * autosens_data.ratio
@@ -6663,7 +6729,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         // 🚀 MEAL ADVISOR ONE-SHOT TRIGGER (MTR Request)
         val isMealAdvisorOneShot = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
-        if (isMealAdvisorOneShot) {
+        if (isMealAdvisorOneShot && !exerciseInsulinLockoutActive) {
              preferences.put(BooleanKey.OApsAIMIMealAdvisorTrigger, false)
              
              // 🔓 SAFETY BYPASS: Temporarily lift MaxSMB limits to allow full Advisor Bolus
@@ -6674,6 +6740,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              
              consoleLog.add("🚀 MEAL ADVISOR ONE-SHOT: Forcing Aggression. MaxSMB raised to 30U.")
              rT.reason.append("🚀 Advisor Trigger: MaxSMB Bypass Active. ")
+        } else if (isMealAdvisorOneShot && exerciseInsulinLockoutActive) {
+             preferences.put(BooleanKey.OApsAIMIMealAdvisorTrigger, false)
+             consoleLog.add("🚀 MEAL ADVISOR ONE-SHOT ignoré (sport / contexte activité).")
+             rT.reason.append("🚀 Advisor Trigger ignoré (exercice). ")
         }
 
         consoleLog.add(
@@ -6705,7 +6775,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             combinedDeltaLocal = combinedDelta.toFloat(), glucoseStatusLocal = glucoseStatus,
             pumpAgeDaysLocal = pumpAgeDays, modelcalLocal = modelcal.toDouble(),
             profileCurrentBasalLocal = profile_current_basal,
-            isConfirmedHighRise = isConfirmedHighRiseLocal
+            isConfirmedHighRise = isConfirmedHighRiseLocal,
+            exerciseInsulinLockout = exerciseInsulinLockoutActive
         )
 
         predictedSMB = smbExecution.predictedSmb
@@ -8656,6 +8727,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT.deliverAt = System.currentTimeMillis()
         // maxSMB = 0.0 is enforced: this function ONLY sets TBR, never rT.units
         // rT.units is preserved for pre-bolus from applyLegacyMealModes
+
+        if (exerciseInsulinLockoutActive && bg > EXERCISE_BASAL_RESUME_BG_MGDL) {
+            consoleLog.add(
+                "🏃 T3c + exercice: BG ${bg.toInt()} > ${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()} → basale PI activee, SMB=0"
+            )
+            rT.reason.append(
+                "🏃 Exercice : BG>${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()} → basale T3c pour freiner l'hyper (SMB=0).\n"
+            )
+        }
 
         val baseBasal = profile.current_basal
         // In T3C, we still honor the user's configured max basal ceiling.

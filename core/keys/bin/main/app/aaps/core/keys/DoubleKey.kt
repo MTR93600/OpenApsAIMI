@@ -65,7 +65,6 @@ enum class DoubleKey(
     OApsAIMIHighBGMaxSMB("key_openapsaimi_high_bg_max_smb", 1.0, 0.05, 15.0),
 
     OApsAIMIweight("key_aimiweight", 50.0, 1.0, 200.0),
-    OApsAIMIMpcInsulinUPerKgPerStep("aimi_mpc_insulin_u_per_kg_per_5min", 0.065, 0.03, 0.12),
     /** MPC: max insulin (U) per kg body weight per 5-minute dose search; combined with Max SMB / High BG SMB caps. */
     OApsAIMIMpcInsulinUPerKgPerStep("aimi_mpc_insulin_u_per_kg_per_5min", 0.065, 0.03, 0.12),
     OApsAIMICHO("key_cho", 50.0, 1.0, 150.0),

@@ -71,6 +71,8 @@ object SmbInstructionExecutor {
         val mealData: MealData,
         val pkpdRuntime: PkPdRuntime?,
         val sportTime: Boolean,
+        /** Sport thérapie ou activité AIMI : pas de HighBgOverride ni SMB forcé par override. */
+        val exerciseInsulinLockout: Boolean = false,
         val lateFatRiseFlag: Boolean,
         val highCarbRunTime: Long?,
         val threshold: Double?,
@@ -503,7 +505,8 @@ object SmbInstructionExecutor {
             iob = input.iob.toDouble(),
             maxSmb = input.maxSmb,
             currentDose = smbAfterDamping,
-            pumpStep = input.insulinStep.toDouble()
+            pumpStep = input.insulinStep.toDouble(),
+            exerciseInsulinLockout = input.exerciseInsulinLockout
         ).also { res ->
             smbAfterDamping = res.dose
             if (res.overrideUsed) {

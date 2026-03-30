@@ -1,10 +1,10 @@
 package app.aaps.plugins.aps.openAPSAIMI.safety
 
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 class HighBgOverrideTest {
 
@@ -77,5 +77,23 @@ class HighBgOverrideTest {
             pumpStep = 0.05
         )
         assertFalse(result.overrideUsed)
+    }
+
+    @Test
+    fun `exercise insulin lockout skips override even at high BG`() {
+        val result = HighBgOverride.apply(
+            bg = 250.0,
+            delta = 0.0,
+            predictedBg = 250.0,
+            eventualBg = 250.0,
+            hypoGuard = 70.0,
+            iob = 0.0,
+            maxSmb = 2.0,
+            currentDose = 0.0,
+            pumpStep = 0.05,
+            exerciseInsulinLockout = true
+        )
+        assertFalse(result.overrideUsed)
+        assertEquals(0.0, result.dose, 0.0)
     }
 }
