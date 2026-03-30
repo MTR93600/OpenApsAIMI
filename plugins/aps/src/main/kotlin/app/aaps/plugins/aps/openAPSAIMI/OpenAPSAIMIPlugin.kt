@@ -89,7 +89,7 @@ import dagger.android.HasAndroidInjector
 import org.json.JSONObject
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
-import io.reactivex.disposables.Disposable
+import io.reactivex.rxjava3.disposables.Disposable
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton

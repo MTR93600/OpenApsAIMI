@@ -130,7 +130,7 @@ class SmsCommunicatorOtpActivity : TranslatedDaggerAppCompatActivity() {
             val height = displayMetrics.heightPixels
 
             // ensure QRCode is big enough to fit on screen
-            val dim = (min(width, height) * 0.85).coerceAtLeast(1)
+            val dim = (min(width, height) * 0.85).toInt().coerceAtLeast(1)
             val provURI = otp.provisioningURI()
 
             if (provURI.isNullOrBlank()) {
