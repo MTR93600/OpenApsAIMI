@@ -443,11 +443,8 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
                 modernCard.findViewById<View>(R.id.aimi_context_indicator)?.visibility = hasContext.toVisibility()
             }
             
-            // 🔄 EXPERT FIX: Switch Dashboard based on AIMI status
-            val aimiEnabled = try {
-                 androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
-                    .getBoolean("AimiPhysioAssistantEnable", false)
-            } catch (e: Exception) { false }
+            // Dashboard modern vs classique : même source que le switch Physio (BooleanKey)
+            val aimiEnabled = preferences.get(BooleanKey.AimiPhysioAssistantEnable)
 
             val infoCard = _binding?.root?.findViewById<View>(R.id.infoCard)
 

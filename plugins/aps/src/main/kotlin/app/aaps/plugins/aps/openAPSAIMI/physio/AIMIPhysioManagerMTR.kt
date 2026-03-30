@@ -71,8 +71,10 @@ class AIMIPhysioManagerMTR @Inject constructor(
     fun start() {
         val enabled = isEnabled()
         aapsLogger.info(LTag.APS, "[$TAG] 🚀 Starting AIMI Physiological Manager (Enabled: $enabled)")
-        
+
         if (!enabled) {
+            cancelScheduledWork()
+            isRunning.set(false)
             return
         }
         
@@ -212,14 +214,29 @@ class AIMIPhysioManagerMTR @Inject constructor(
     }
     
     /**
-     * Stops the manager
-     * Called by OpenAPSAIMIPlugin.onStop()
+     * Stops the manager and cancels periodic physio WorkManager jobs.
+     * Called by OpenAPSAIMIPlugin.onStop() or when the user disables Physio in preferences.
      */
     fun stop() {
-        // We generally don't stop WorkManager tasks on simple stop, 
-        // they should persist. But flag checks prevent execution if plugin disabled.
+        cancelScheduledWork()
         isRunning.set(false)
-        aapsLogger.info(LTag.APS, "[$TAG] Manager stopped (WorkManager implementation)")
+        aapsLogger.info(LTag.APS, "[$TAG] Manager stopped; WorkManager physio jobs cancelled")
+    }
+
+    /** Used by workers to no-op when Physio is off (avoids work after stop/cancel races). */
+    fun isPhysioAssistantEnabled(): Boolean = isEnabled()
+
+    private fun cancelScheduledWork() {
+        try {
+            val wm = WorkManager.getInstance(context)
+            wm.cancelUniqueWork("AIMI_PHYSIO_REALTIME")
+            wm.cancelUniqueWork("AIMI_PHYSIO_METABOLIC")
+            wm.cancelUniqueWork("AIMI_PHYSIO_DAILY")
+            wm.cancelUniqueWork(PhysioPipelineWatchdogWorker.WORK_NAME)
+            wm.cancelAllWorkByTag("AIMI_PHYSIO_BOOTSTRAP")
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "[$TAG] cancelScheduledWork failed", e)
+        }
     }
     
     /**

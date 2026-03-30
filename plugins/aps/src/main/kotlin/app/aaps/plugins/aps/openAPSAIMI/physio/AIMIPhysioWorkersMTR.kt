@@ -20,6 +20,7 @@ class PhysioRealtimeWorker(
         try {
             val manager = AIMIPhysioManagerMTR.instance
             if (manager == null) return@withContext Result.retry()
+            if (!manager.isPhysioAssistantEnabled()) return@withContext Result.success()
 
             // performUpdate() ends with HealthContextRepository.fetchSnapshot() (FC/steps from DB + HC merge)
             manager.performUpdate(daysBack = 1, runLLM = false)
@@ -44,6 +45,7 @@ class PhysioMetabolicWorker(
         try {
             val manager = AIMIPhysioManagerMTR.instance
             if (manager == null) return@withContext Result.retry()
+            if (!manager.isPhysioAssistantEnabled()) return@withContext Result.success()
 
             manager.performUpdate(daysBack = 3, runLLM = false)
             Result.success()
@@ -66,7 +68,8 @@ class PhysioDailyWorker(
         try {
             val manager = AIMIPhysioManagerMTR.instance
             if (manager == null) return@withContext Result.retry()
-            
+            if (!manager.isPhysioAssistantEnabled()) return@withContext Result.success()
+
             manager.performUpdate(daysBack = 7, runLLM = true)
             
             Result.success()
@@ -87,6 +90,10 @@ class PhysioPipelineWatchdogWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
+            val manager = AIMIPhysioManagerMTR.instance
+            if (manager == null) return@withContext Result.retry()
+            if (!manager.isPhysioAssistantEnabled()) return@withContext Result.success()
+
             val watchdog = AIMIPhysioPipelineWatchdogMTR.instance
             if (watchdog == null) return@withContext Result.retry()
             watchdog.runCheckAndRecover()

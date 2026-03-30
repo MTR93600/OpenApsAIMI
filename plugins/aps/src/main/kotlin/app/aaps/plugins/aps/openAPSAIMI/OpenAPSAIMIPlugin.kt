@@ -47,6 +47,7 @@ import app.aaps.core.interfaces.profiling.Profiler
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventAPSCalculationFinished
+import app.aaps.core.interfaces.rx.events.EventPreferenceChange
 import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
@@ -88,6 +89,7 @@ import dagger.android.HasAndroidInjector
 import org.json.JSONObject
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
+import io.reactivex.disposables.Disposable
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -172,6 +174,23 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "❌ Failed to start AIMI Physiological Manager", e)
         }
+
+        physioPreferenceDisposable?.dispose()
+        physioPreferenceDisposable = rxBus.toObservable(EventPreferenceChange::class.java).subscribe(
+            { event ->
+                if (!event.isChanged(BooleanKey.AimiPhysioAssistantEnable.key)) return@subscribe
+                try {
+                    if (preferences.get(BooleanKey.AimiPhysioAssistantEnable)) {
+                        physioManager.start()
+                    } else {
+                        physioManager.stop()
+                    }
+                } catch (e: Exception) {
+                    aapsLogger.error(LTag.APS, "Physio preference toggle handling failed", e)
+                }
+            },
+            { t -> aapsLogger.error(LTag.APS, "Physio preference Rx error", t) }
+        )
         
         // 🧠 Start AIMI Neural Trainer
         try {
@@ -224,6 +243,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         glucoseStatusCalculatorAimi.getGlucoseStatusData(allowOldData)
     override fun onStop() {
         super.onStop()
+
+        physioPreferenceDisposable?.dispose()
+        physioPreferenceDisposable = null
         
         // 🏃 Stop AIMI Steps Manager
         try {
@@ -263,6 +285,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val isfBlender = IsfBlender()
     // top-level (à côté de isfBlender / pkpdIntegration)
     private val isfAdjEngine = IsfAdjustmentEngine()
+
+    /** Réagit au switch Physio sans redémarrer l’app (planifie / annule WorkManager). */
+    private var physioPreferenceDisposable: Disposable? = null
 
     // état EMA persistant (clé Prefs à créer si tu veux le garder entre runs)
     private var tddEma: Double? = null
