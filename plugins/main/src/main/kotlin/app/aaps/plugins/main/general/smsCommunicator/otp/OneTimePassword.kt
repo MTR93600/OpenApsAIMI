@@ -2,6 +2,8 @@ package app.aaps.plugins.main.general.smsCommunicator.otp
 
 import android.util.Base64
 import app.aaps.core.data.configuration.Constants
+import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.StringKey
@@ -21,7 +23,8 @@ import javax.inject.Singleton
 class OneTimePassword @Inject constructor(
     private val preferences: Preferences,
     private val rh: ResourceHelper,
-    private val dateUtil: DateUtil
+    private val dateUtil: DateUtil,
+    private val aapsLogger: AAPSLogger
 ) {
 
     private var key: SecretKey? = null
@@ -64,20 +67,49 @@ class OneTimePassword @Inject constructor(
     private fun configure() {
         try {
             ensureKey()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            aapsLogger.warn(LTag.SMS, "SmsOtp: ensureKey failed (${e.javaClass.simpleName}: ${e.message}) — clearing secret+pin and retrying once")
             preferences.put(StringKey.SmsOtpPassword, "")
             preferences.put(StringNonKey.SmsOtpSecret, "")
             try {
                 ensureKey()
-            } catch (_: Exception) {
+            } catch (e2: Exception) {
+                aapsLogger.error(LTag.SMS, "SmsOtp: recovery ensureKey failed (${e2.javaClass.simpleName}: ${e2.message})")
                 key = null
             }
         }
         pin = preferences.get(StringKey.SmsOtpPassword).trim()
     }
 
+    enum class ProvisioningKeyStatus { READY, REGENERATED_SECRET, FAILED }
+
+    /**
+     * À appeler avant d’afficher le QR : [configure] puis, si la clé est encore absente,
+     * régénère uniquement le secret stocké (le PIN utilisateur est conservé).
+     *
+     * [REGENERATED_SECRET] : l’ancien secret était illisible ; un nouveau a été créé (réimporter l’authenticator).
+     */
+    fun ensureProvisioningKeyLoaded(): ProvisioningKeyStatus {
+        configure()
+        if (key != null) return ProvisioningKeyStatus.READY
+        aapsLogger.warn(LTag.SMS, "SmsOtp: key null after configure — generating new secret (PIN unchanged)")
+        return try {
+            preferences.put(StringNonKey.SmsOtpSecret, "")
+            ensureKey(false)
+            if (key != null) {
+                aapsLogger.info(LTag.SMS, "SmsOtp: new secret generated for provisioning")
+                ProvisioningKeyStatus.REGENERATED_SECRET
+            } else {
+                ProvisioningKeyStatus.FAILED
+            }
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.SMS, "SmsOtp: failed to generate provisioning secret", e)
+            ProvisioningKeyStatus.FAILED
+        }
+    }
+
     private fun generateOneTimePassword(counter: Long): String =
-        key?.let { String.format(Locale.getDefault(), "%06d", totp.generateOneTimePassword(key, counter)) } ?: ""
+        key?.let { k -> String.format(Locale.getDefault(), "%06d", totp.generateOneTimePassword(k, counter)) } ?: ""
 
     /**
      * Check if given OTP+PIN is valid

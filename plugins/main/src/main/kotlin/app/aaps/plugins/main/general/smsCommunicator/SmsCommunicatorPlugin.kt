@@ -1336,7 +1336,7 @@ class SmsCommunicatorPlugin @Inject constructor(
                     ctx = context,
                     intentKey = IntentKey.SmsOtpSetup,
                     title = R.string.smscommunicator_tab_otp_label,
-                    intent = Intent().apply { action = SmsCommunicatorOtpActivity::class.java.name }
+                    intent = Intent(context, SmsCommunicatorOtpActivity::class.java)
                 )
             )
             addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.SmsReportPumpUnreachable, summary = R.string.smscommunicator_report_pump_unreachable_summary, title = R.string.smscommunicator_pump_unreachable))

@@ -11,6 +11,8 @@ import android.view.View
 import android.view.WindowManager
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
+import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.smsCommunicator.SmsCommunicator
@@ -22,18 +24,24 @@ import app.aaps.plugins.main.R
 import app.aaps.plugins.main.databinding.SmscommunicatorActivityOtpBinding
 import app.aaps.plugins.main.general.smsCommunicator.otp.OneTimePassword
 import app.aaps.plugins.main.general.smsCommunicator.otp.OneTimePasswordValidationResult
-import com.google.common.primitives.Ints.min
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import net.glxn.qrgen.android.QRCode
 import javax.inject.Inject
 
 class SmsCommunicatorOtpActivity : TranslatedDaggerAppCompatActivity() {
 
+    companion object {
+        private const val TAG = "SmsOtpActivity"
+        /** Avoid huge bitmaps / main-thread stalls on high-resolution displays (can look like black screen then exit). */
+        private const val MAX_QR_EDGE_PX = 768
+    }
+
     @Inject lateinit var fabricPrivacy: FabricPrivacy
     @Inject lateinit var smsCommunicator: SmsCommunicator
     @Inject lateinit var otp: OneTimePassword
     @Inject lateinit var uel: UserEntryLogger
     @Inject lateinit var rh: ResourceHelper
+    @Inject lateinit var aapsLogger: AAPSLogger
 
     private lateinit var binding: SmscommunicatorActivityOtpBinding
     private var otpTextWatcher: TextWatcher? = null
@@ -124,19 +132,35 @@ class SmsCommunicatorOtpActivity : TranslatedDaggerAppCompatActivity() {
     }
 
     private fun updateGui() {
+        when (val keyStatus = otp.ensureProvisioningKeyLoaded()) {
+            OneTimePassword.ProvisioningKeyStatus.FAILED -> {
+                aapsLogger.error(LTag.SMS, "$TAG: crypto/key unavailable — cannot show QR")
+                binding.otpProvisioning.setImageDrawable(null)
+                binding.otpProvisioning.visibility = View.GONE
+                ToastUtils.Long.errorToast(this, rh.gs(R.string.smscommunicator_otp_key_load_failed))
+                return
+            }
+            OneTimePassword.ProvisioningKeyStatus.REGENERATED_SECRET ->
+                ToastUtils.Long.infoToast(this, rh.gs(R.string.smscommunicator_otp_secret_auto_repaired))
+            OneTimePassword.ProvisioningKeyStatus.READY -> Unit
+        }
+
         try {
             val displayMetrics = Resources.getSystem().displayMetrics
             val width = displayMetrics.widthPixels
             val height = displayMetrics.heightPixels
-
-            // ensure QRCode is big enough to fit on screen
-            val dim = (min(width, height) * 0.85).toInt().coerceAtLeast(1)
+            val shortEdge = minOf(width, height, MAX_QR_EDGE_PX)
+            val dim = (shortEdge * 0.85).toInt().coerceAtLeast(1)
             val provURI = otp.provisioningURI()
 
             if (provURI.isNullOrBlank()) {
+                aapsLogger.warn(LTag.SMS, "$TAG: provisioningURI blank after ensureProvisioningKeyLoaded (unexpected)")
                 binding.otpProvisioning.visibility = View.GONE
+                ToastUtils.Long.errorToast(this, rh.gs(R.string.smscommunicator_otp_uri_build_failed))
                 return
             }
+
+            aapsLogger.debug(LTag.SMS, "$TAG: building QR dim=$dim uriLength=${provURI.length}")
 
             try {
                 val myBitmap = QRCode.from(provURI)
@@ -146,16 +170,17 @@ class SmsCommunicatorOtpActivity : TranslatedDaggerAppCompatActivity() {
                 binding.otpProvisioning.setImageBitmap(myBitmap)
                 binding.otpProvisioning.visibility = View.VISIBLE
             } catch (e: Exception) {
-                // Do not crash OTP setup screen if QR generation fails on a device/vendor stack.
+                aapsLogger.error(LTag.SMS, "$TAG: QR bitmap failed dim=$dim", e)
                 fabricPrivacy.logException(e)
                 binding.otpProvisioning.setImageDrawable(null)
                 binding.otpProvisioning.visibility = View.GONE
-                ToastUtils.Long.errorToast(this, rh.gs(R.string.wrong_format))
+                ToastUtils.Long.errorToast(this, rh.gs(R.string.smscommunicator_otp_qr_generation_failed))
             }
         } catch (e: Exception) {
+            aapsLogger.error(LTag.SMS, "$TAG: updateGui failed before QR", e)
             fabricPrivacy.logException(e)
             binding.otpProvisioning.visibility = View.GONE
-            ToastUtils.Long.errorToast(this, rh.gs(R.string.wrong_format))
+            ToastUtils.Long.errorToast(this, rh.gs(R.string.smscommunicator_otp_uri_build_failed))
         }
     }
 }

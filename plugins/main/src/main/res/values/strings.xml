@@ -99,6 +99,10 @@
     <string name="smscommunicator_set_closed_loop_reply_with_code">In order to switch Loop mode to Closed loop reply with code %1$s</string>
     <string name="smscommunicator_current_loop_mode">Current loop mode: %1$s</string>
     <string name="wrong_format">Wrong format</string>
+    <string name="smscommunicator_otp_key_load_failed">Could not create OTP secret. Try again or use Reset Authenticator.</string>
+    <string name="smscommunicator_otp_uri_build_failed">Could not build provisioning link for QR. Check patient name in settings and try Reset Authenticator.</string>
+    <string name="smscommunicator_otp_qr_generation_failed">Could not draw QR code on this device. Use long-press on the QR area to copy the secret manually.</string>
+    <string name="smscommunicator_otp_secret_auto_repaired">OTP secret was reset because stored data was invalid. Scan the new QR code — old authenticator entries no longer work.</string>
     <string name="sms_actual_bg">BG:</string>
     <string name="sms_last_bg">Last BG:</string>
     <string name="sms_delta">Delta:</string>
