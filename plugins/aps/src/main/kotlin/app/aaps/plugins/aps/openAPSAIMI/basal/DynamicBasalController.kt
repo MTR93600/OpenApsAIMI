@@ -223,7 +223,8 @@ class DynamicBasalController @Inject constructor(
             eventualBg: Double?,
             activationThreshold: Double = 130.0,
             aggressiveness: Double = 1.0,
-            maxBasalCap: Double? = null
+            maxBasalCap: Double? = null,
+            trajectory: T3cTrajectoryContext? = null
         ): Double {
             val effectiveIsf = isf.coerceAtLeast(10.0)
             val velocity = delta * 0.7f + shortAvgDelta.toFloat() * 0.3f
@@ -297,7 +298,71 @@ class DynamicBasalController @Inject constructor(
             // Cap at configured max basal (T3C should respect user-defined hard ceiling).
             // Fallback keeps legacy behavior if cap is not provided.
             val effectiveCap = (maxBasalCap ?: (profileBasal * 10.0)).coerceAtLeast(profileBasal)
-            return totalRate.coerceIn(0.0, effectiveCap)
+            var out = totalRate.coerceIn(0.0, effectiveCap)
+            trajectory?.let { ctx ->
+                out = applyT3cTrajectoryHypoBrake(
+                    rate = out,
+                    profileBasal = profileBasal,
+                    targetBg = targetBg,
+                    ctx = ctx
+                )
+            }
+            // eventualBg is folded into [T3cTrajectoryContext.eventualPredBg] on the real T3C path only;
+            // when trajectory is null, behavior matches pre-trajectory T3C (tests / legacy callers).
+            return out.coerceIn(0.0, effectiveCap)
+        }
+
+        /**
+         * Reduces T3c basal when the prediction curve or trajectory metrics anticipate hypo
+         * before current BG reflects it (isolated from main AIMI; used only with [T3cTrajectoryContext]).
+         */
+        private fun applyT3cTrajectoryHypoBrake(
+            rate: Double,
+            profileBasal: Double,
+            targetBg: Double,
+            ctx: T3cTrajectoryContext
+        ): Double {
+            val guard = T3cTrajectoryContext.guardBg(ctx)
+            if (!guard.isFinite()) return rate
+            val lgs = ctx.lgsThresholdMgdl
+            var out = rate
+
+            if (guard <= lgs) {
+                return min(profileBasal * 0.05, out)
+            }
+            if (guard <= lgs + 10.0) {
+                out = min(out, profileBasal * 0.12)
+            }
+
+            if (guard < targetBg) {
+                val span = (targetBg - lgs).coerceAtLeast(12.0)
+                val headroom = ((guard - lgs) / span).coerceIn(0.0, 1.0)
+                out *= (headroom * headroom).coerceIn(0.08, 1.0)
+            }
+
+            val energy = ctx.energyBalance
+            if (energy != null && energy > 1.5) {
+                val energyCap = when {
+                    energy > 3.5 -> profileBasal * 0.25
+                    energy > 2.5 -> profileBasal * 0.50
+                    else -> profileBasal * 0.70
+                }
+                out = min(out, energyCap)
+            }
+
+            if (ctx.trajectoryAnalysisActive &&
+                ctx.trajectoryTypeName == "TIGHT_SPIRAL" &&
+                guard < targetBg + 30.0
+            ) {
+                out = min(out, profileBasal * 0.65)
+            }
+
+            val conv = ctx.convergenceVelocity
+            if (ctx.trajectoryAnalysisActive && conv != null && conv > 0.18 && guard < targetBg) {
+                out *= 0.82
+            }
+
+            return out.coerceAtLeast(0.0)
         }
     }
 }

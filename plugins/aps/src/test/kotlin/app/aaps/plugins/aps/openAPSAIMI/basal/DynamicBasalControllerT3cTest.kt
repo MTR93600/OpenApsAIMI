@@ -126,4 +126,29 @@ class DynamicBasalControllerT3cTest {
         // brakeFactor = (1.0 + (-4.0)/2.0) = 1.0 - 2.0 = -1.0 -> coerced to 0.0
         assertEquals(0.0, rate, 0.01)
     }
+
+    @Test
+    fun `computeT3c eventualBg does not change rate without T3cTrajectoryContext`() {
+        fun rateWithEventual(ev: Double?) = DynamicBasalController.computeT3c(
+            bg = 150.0,
+            targetBg = 100.0,
+            delta = 2.0f,
+            shortAvgDelta = 2.0,
+            longAvgDelta = 2.0,
+            accel = 0.0,
+            iob = 0.0,
+            maxIob = 3.0,
+            profileBasal = 1.0,
+            isf = 50.0,
+            duraISFminutes = 30.0,
+            duraISFaverage = 145.0,
+            eventualBg = ev,
+            activationThreshold = 130.0,
+            aggressiveness = 1.0,
+            trajectory = null
+        )
+        val rHigh = rateWithEventual(200.0)
+        val rLow = rateWithEventual(70.0)
+        assertEquals(rHigh, rLow, 1e-9)
+    }
 }

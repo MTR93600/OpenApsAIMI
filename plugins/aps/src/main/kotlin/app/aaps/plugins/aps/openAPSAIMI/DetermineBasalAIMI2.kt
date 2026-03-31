@@ -37,6 +37,7 @@ import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
+import app.aaps.plugins.aps.openAPSAIMI.basal.T3cTrajectoryContext
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
@@ -5400,6 +5401,64 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
             // ────────────────────────────────────────────────────────────────────────────
 
+            // 🔮 T3c + trajectory / advanced predictions (isolated path — same engines as main loop)
+            val iobRowT3c = iob_data_array.firstOrNull() ?: IobTotal(currentTime)
+            val lastBolusAgeT3c = if (iobRowT3c.lastBolusTime > 0L || internalLastSmbMillis > 0L) {
+                val tEff = kotlin.math.max(iobRowT3c.lastBolusTime, internalLastSmbMillis)
+                ((currentTime - tEff) / 60000.0).coerceAtLeast(0.0)
+            } else {
+                0.0
+            }
+            val dynSensT3c = profile.variable_sens.takeIf { it > 0.0 } ?: profile.sens
+            val fusedT3c = pkpdRuntime?.fusedIsf
+            val sensForT3cPred = (
+                when {
+                    fusedT3c != null && dynSensT3c > 0.0 -> kotlin.math.min(fusedT3c, dynSensT3c)
+                    fusedT3c != null -> fusedT3c
+                    else -> dynSensT3c
+                }.coerceAtLeast(10.0) * autosens_data.ratio.coerceIn(0.25, 4.0)
+                )
+            applyAdvancedPredictions(
+                bg = bg,
+                delta = delta,
+                sens = sensForT3cPred,
+                iob_data_array = iob_data_array,
+                mealData = mealData,
+                profile = profile,
+                rT = rT
+            )
+            applyTrajectoryAnalysis(
+                currentTime = currentTime,
+                bg = bg,
+                delta = delta.toDouble(),
+                bgacc = bgacc,
+                iobActivityNow = iobActivityNow,
+                iob = iob,
+                insulinActionState = insulinActionState,
+                lastBolusAgeMinutes = lastBolusAgeT3c,
+                cob = cob,
+                targetBg = originalProfile.target_bg,
+                profile = profile,
+                rT = rT,
+                uiInteraction = uiInteraction,
+                relevanceScore = physioMultipliers.trajectoryRelevanceScore
+            )
+            val lgsT3c = kotlin.math.min(90.0, (profile.lgsThreshold?.toDouble() ?: 70.0).coerceAtLeast(70.0))
+            val minPredT3c = rT.predBGs?.IOB?.minOrNull()?.toDouble() ?: bg
+            val eventualT3c = rT.eventualBG?.takeIf { it.isFinite() } ?: this.eventualBG.coerceAtLeast(40.0)
+            val t3cTrajCtx = T3cTrajectoryContext.build(
+                minPredBg = minPredT3c,
+                eventualPredBg = eventualT3c,
+                bg = bg,
+                lgsThresholdMgdl = lgsT3c,
+                trajectoryEnabled = rT.trajectoryEnabled == true,
+                lastAnalysis = trajectoryGuard.getLastAnalysis()
+            )
+            consoleLog.add(
+                "🛡️ T3c predict+traj: min=${minPredT3c.toInt()} ev=${eventualT3c.toInt()} LGS=${lgsT3c.toInt()} " +
+                    "traj=${t3cTrajCtx.trajectoryTypeName ?: "—"} E=${t3cTrajCtx.energyBalance?.let { String.format("%.1f", it) } ?: "—"}"
+            )
+
             return executeT3cBrittleMode(
                 bg = glucose_status.glucose,
                 delta = glucose_status.delta.toFloat(),
@@ -5414,8 +5473,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 targetBg = originalProfile.target_bg,
                 variableSensitivity = variableSensitivity.toDouble(),
                 maxIob = maxIob,
-                eventualBg = this.eventualBG.coerceAtLeast(40.0),
-                rT = rT
+                eventualBg = eventualT3c.coerceAtLeast(40.0),
+                rT = rT,
+                trajectoryContext = t3cTrajCtx
             )
         }
         val modesCondition = (!mealTime || mealruntime > 30) && (!lunchTime || lunchruntime > 30) && (!bfastTime || bfastruntime > 30) && (!dinnerTime || dinnerruntime > 30) && !sportTime && (!snackTime || snackrunTime > 30) && (!highCarbTime || highCarbrunTime > 30) && !sleepTime && !lowCarbTime
@@ -8721,7 +8781,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         variableSensitivity: Double,
         maxIob: Double,
         eventualBg: Double,
-        rT: RT
+        rT: RT,
+        trajectoryContext: T3cTrajectoryContext? = null
     ): RT {
         rT.reason = StringBuilder("")
         rT.deliverAt = System.currentTimeMillis()
@@ -8769,7 +8830,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             eventualBg = if (eventualBg > 0) eventualBg else null,
             activationThreshold = activationThreshold,
             aggressiveness = aggressiveness,
-            maxBasalCap = maxBasalCap
+            maxBasalCap = maxBasalCap,
+            trajectory = trajectoryContext
         )
 
         // Progressive ramp: move toward target rate without abrupt jumps.
