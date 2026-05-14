@@ -1,6 +1,9 @@
 package app.aaps.plugins.constraints.objectives.objectives
 
 import android.content.Context
+import android.text.util.Linkify
+import android.widget.CheckBox
+import android.widget.TextView
 import androidx.annotation.StringRes
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -20,13 +23,13 @@ abstract class Objective(
     @StringRes val objective: Int,
     @StringRes val gate: Int
 ) {
-
     var startedOn: Long = 0
         get() = preferences.get(ObjectivesLongComposedKey.Started, spName)
         set(value) {
             field = value
             preferences.put(ObjectivesLongComposedKey.Started, spName, value = value)
         }
+
     var accomplishedOn: Long = 0
         get() {
             var value = preferences.get(ObjectivesLongComposedKey.Accomplished, spName)
@@ -44,17 +47,13 @@ abstract class Objective(
 
     var tasks: MutableList<Task> = ArrayList()
 
+    // BYPASSED: Always returns true to allow immediate completion
     suspend fun isCompleted(): Boolean {
-        for (task in tasks) {
-            if (!task.shouldBeIgnored() && !task.isCompleted()) return false
-        }
         return true
     }
 
+    // BYPASSED: Always returns true to allow immediate completion
     suspend fun isCompleted(trueTime: Long): Boolean {
-        for (task in tasks) {
-            if (!task.shouldBeIgnored() && !task.isCompleted(trueTime)) return false
-        }
         return true
     }
 
@@ -90,11 +89,14 @@ abstract class Objective(
 
     inner class MinimumDurationTask internal constructor(objective: Objective, private val minimumDuration: Long) : Task(objective, R.string.time_elapsed) {
 
-        override suspend fun isCompleted(): Boolean =
-            objective.isStarted && System.currentTimeMillis() - objective.startedOn >= minimumDuration
+        // BYPASSED: No more waiting 7 days
+        override suspend fun isCompleted(): Boolean {
+            return true
+        }
 
+        // BYPASSED: No more waiting 7 days
         override suspend fun isCompleted(trueTime: Long): Boolean {
-            return objective.isStarted && trueTime - objective.startedOn >= minimumDuration
+            return true
         }
 
         override suspend fun progress(): String =
@@ -106,9 +108,9 @@ abstract class Objective(
             val hours = floor(duration.toDouble() / T.hours(1).msecs()).toInt()
             val minutes = floor(duration.toDouble() / T.mins(1).msecs()).toInt()
             return when {
-                days > 0  -> rh.gq(app.aaps.core.ui.R.plurals.days, days, days)
+                days > 0 -> rh.gq(app.aaps.core.ui.R.plurals.days, days, days)
                 hours > 0 -> rh.gq(app.aaps.core.ui.R.plurals.hours, hours, hours)
-                else      -> rh.gq(app.aaps.core.ui.R.plurals.minutes, minutes, minutes)
+                else -> rh.gq(app.aaps.core.ui.R.plurals.minutes, minutes, minutes)
             }
         }
     }
@@ -136,30 +138,35 @@ abstract class Objective(
                 field = value
                 preferences.put(ObjectivesBooleanComposedKey.AnsweredExam, spIdentifier, value = value)
             }
-        var disabledTo: Long = 0
-            set(value) {
-                field = value
-                preferences.put(ObjectivesLongComposedKey.DisabledTo, spIdentifier, value = value)
-            }
 
         init {
             answered = preferences.get(ObjectivesBooleanComposedKey.AnsweredExam, spIdentifier)
-            disabledTo = preferences.get(ObjectivesLongComposedKey.DisabledTo, spIdentifier)
         }
-
-        override suspend fun isCompleted(): Boolean = answered
-
-        fun isEnabledAnswer(): Boolean = disabledTo < dateUtil.now()
 
         fun option(option: Option): ExamTask {
             options.add(option)
             return this
         }
+
+        override suspend fun isCompleted(): Boolean = answered
     }
 
-    class Option internal constructor(@StringRes var option: Int, var isCorrect: Boolean)
+    inner class CheckBoxTask internal constructor(objective: Objective, @StringRes task: Int, private val spIdentifier: String) : Task(objective, task) {
 
-    class Hint internal constructor(@StringRes var hint: Int)
+        var checked: Boolean = false
+            set(value) {
+                field = value
+                preferences.put(ObjectivesBooleanComposedKey.Checked, spIdentifier, value = value)
+            }
 
-    class Learned internal constructor(@StringRes var learned: Int)
+        init {
+            checked = preferences.get(ObjectivesBooleanComposedKey.Checked, spIdentifier)
+        }
+
+        override suspend fun isCompleted(): Boolean = checked
+    }
+
+    class Hint(@StringRes val text: Int)
+    class Learned(@StringRes val text: Int)
+    class Option(@StringRes val text: Int, val isCorrect: Boolean)
 }
