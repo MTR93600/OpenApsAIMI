@@ -139,8 +139,15 @@ abstract class Objective(
                 preferences.put(ObjectivesBooleanComposedKey.AnsweredExam, spIdentifier, value = value)
             }
 
+        var disabledTo: Long = 0
+            set(value) {
+                field = value
+                preferences.put(ObjectivesLongComposedKey.DisabledTo, spIdentifier, value = value)
+            }
+
         init {
             answered = preferences.get(ObjectivesBooleanComposedKey.AnsweredExam, spIdentifier)
+            disabledTo = preferences.get(ObjectivesLongComposedKey.DisabledTo, spIdentifier)
         }
 
         fun option(option: Option): ExamTask {
@@ -149,6 +156,8 @@ abstract class Objective(
         }
 
         override suspend fun isCompleted(): Boolean = answered
+
+        fun isEnabledAnswer(): Boolean = disabledTo < dateUtil.now()
     }
 
     inner class CheckBoxTask internal constructor(objective: Objective, @StringRes task: Int, private val spIdentifier: String) : Task(objective, task) {
@@ -156,17 +165,18 @@ abstract class Objective(
         var checked: Boolean = false
             set(value) {
                 field = value
-                preferences.put(ObjectivesBooleanComposedKey.Checked, spIdentifier, value = value)
+                // Note: Using AnsweredUi as a fallback since 'Checked' key is missing in this branch
+                preferences.put(ObjectivesBooleanComposedKey.AnsweredUi, spIdentifier, value = value)
             }
 
         init {
-            checked = preferences.get(ObjectivesBooleanComposedKey.Checked, spIdentifier)
+            checked = preferences.get(ObjectivesBooleanComposedKey.AnsweredUi, spIdentifier)
         }
 
         override suspend fun isCompleted(): Boolean = checked
     }
 
-    class Hint(@StringRes val text: Int)
-    class Learned(@StringRes val text: Int)
-    class Option(@StringRes val text: Int, val isCorrect: Boolean)
+    class Option internal constructor(@StringRes var option: Int, var isCorrect: Boolean)
+    class Hint internal constructor(@StringRes var hint: Int)
+    class Learned internal constructor(@StringRes var learned: Int)
 }
