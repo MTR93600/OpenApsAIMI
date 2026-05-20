@@ -174,12 +174,10 @@ android {
     signingConfigs {
         // On peut l'appeler "release" ou un autre nom
         create("release") {
-            // Seule storeFile attend un File
-            storeFile = file(System.getenv("KEYSTORE_FILE") ?: "dummy.jks")
-            // Les autres sont des Strings
-            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "dummy"
-            keyAlias = System.getenv("KEY_ALIAS") ?: "dummy"
-            keyPassword = System.getenv("KEY_PASSWORD") ?: "dummy"
+            storeFile file(System.getenv("SIGNING_STORE_FILE") ?: 'dummy.jks')
+        storePassword System.getenv("SIGNING_STORE_PASSWORD") ?: ''
+        keyAlias System.getenv("SIGNING_KEY_ALIAS") ?: ''
+        keyPassword System.getenv("SIGNING_KEY_PASSWORD") ?: ''
         }
     }
 
