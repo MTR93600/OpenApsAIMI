@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.aaps.core.ui.R
 import app.aaps.core.ui.compose.statusLevelToColor
+import app.aaps.ui.R as UiR
 
 /**
  * Status rows content — sensor/insulin/cannula/battery with optional action buttons.
@@ -37,13 +38,20 @@ internal fun StatusSectionContent(
     insulinStatus: StatusItem?,
     cannulaStatus: StatusItem?,
     batteryStatus: StatusItem?,
+    // Transient CGM rows, shown right below the sensor they belong to. Null for sources that do not
+    // report them, which keeps the section unchanged for everyone else.
+    warmUpStatus: StatusItem? = null,
+    secondSensorStatus: StatusItem? = null,
     onSensorInsertClick: (() -> Unit)? = null,
     onFillClick: (() -> Unit)? = null,
     onInsulinChangeClick: (() -> Unit)? = null,
-    onBatteryChangeClick: (() -> Unit)? = null
+    onBatteryChangeClick: (() -> Unit)? = null,
+    // Only non-null once the second sensor has settled, so the switch cannot be offered too early.
+    onPromoteSecondSensorClick: (() -> Unit)? = null
 ) {
     val addLabel = stringResource(R.string.add)
     val fillLabel = stringResource(R.string.prime_fill)
+    val switchLabel = stringResource(UiR.string.overview_second_sensor_promote)
 
     cannulaStatus?.let {
         StatusRow(item = it, actionLabel = fillLabel, onActionClick = onFillClick)
@@ -60,7 +68,15 @@ internal fun StatusSectionContent(
     sensorStatus?.let {
         StatusRow(item = it, actionLabel = addLabel, onActionClick = onSensorInsertClick)
     }
-    if (sensorStatus != null && batteryStatus != null) {
+    warmUpStatus?.let {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        StatusRow(item = it)
+    }
+    secondSensorStatus?.let {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        StatusRow(item = it, actionLabel = switchLabel, onActionClick = onPromoteSecondSensorClick)
+    }
+    if ((sensorStatus != null || warmUpStatus != null || secondSensorStatus != null) && batteryStatus != null) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
     batteryStatus?.let {

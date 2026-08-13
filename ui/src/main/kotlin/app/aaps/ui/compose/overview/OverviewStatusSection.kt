@@ -48,10 +48,12 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.ui.compose.dialogs.OkCancelDialog
+import app.aaps.core.ui.compose.dialogs.OkDialog
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.compose.preference.PreferenceSheetContent
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.core.ui.compose.statusLevelToColor
+import app.aaps.ui.R as UiR
 import app.aaps.ui.compose.overview.statusLights.StatusItem
 import app.aaps.ui.compose.overview.statusLights.StatusSectionContent
 
@@ -66,6 +68,15 @@ fun OverviewStatusSection(
     insulinStatus: StatusItem?,
     cannulaStatus: StatusItem?,
     batteryStatus: StatusItem?,
+    // Only present while a CGM source reports a warm-up, or holds a second sensor warming up next
+    // to the one in use. Both default to null so nothing changes for the other sources.
+    warmUpStatus: StatusItem? = null,
+    secondSensorStatus: StatusItem? = null,
+    // Switching the loop over to the second sensor. Null while it has not settled, so the button is
+    // simply absent rather than present and refused.
+    onPromoteSecondSensor: (() -> Unit)? = null,
+    promotionMessage: String? = null,
+    onDismissPromotionMessage: () -> Unit = {},
     showFill: Boolean,
     showPumpBatteryChange: Boolean,
     // The status-row action buttons (fill / sensor insert / battery change) open mutating screens — hidden on an
@@ -78,11 +89,12 @@ fun OverviewStatusSection(
     onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val items = listOfNotNull(cannulaStatus, insulinStatus, sensorStatus, batteryStatus)
+    val items = listOfNotNull(cannulaStatus, insulinStatus, sensorStatus, warmUpStatus, secondSensorStatus, batteryStatus)
     if (items.isEmpty()) return
     val compactItems = items.filter { it.compactAge || (it.compactLevel && it.level != null) }
 
     var showSettingsSheet by rememberSaveable { mutableStateOf(false) }
+    var showPromoteDialog by rememberSaveable { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ElevatedCard(
@@ -161,6 +173,8 @@ fun OverviewStatusSection(
                         insulinStatus = insulinStatus,
                         cannulaStatus = cannulaStatus,
                         batteryStatus = batteryStatus,
+                        warmUpStatus = warmUpStatus,
+                        secondSensorStatus = secondSensorStatus,
                         onSensorInsertClick = if (commandsAllowed) {
                             { onNavigate(NavigationRequest.Element(ElementType.SENSOR_INSERT)) }
                         } else null,
@@ -172,11 +186,36 @@ fun OverviewStatusSection(
                         } else null,
                         onBatteryChangeClick = if (showPumpBatteryChange && commandsAllowed) {
                             { onNavigate(NavigationRequest.Element(ElementType.BATTERY_CHANGE)) }
+                        } else null,
+                        onPromoteSecondSensorClick = if (onPromoteSecondSensor != null && commandsAllowed) {
+                            { showPromoteDialog = true }
                         } else null
                     )
                 }
             }
         }
+    }
+
+    // Changing where the loop reads glucose from deserves a confirmation, and the result deserves
+    // more than a message that fades away — a refusal has a reason the user needs to read.
+    if (showPromoteDialog) {
+        OkCancelDialog(
+            title = stringResource(UiR.string.overview_second_sensor_label),
+            message = stringResource(UiR.string.overview_second_sensor_promote_confirm),
+            onConfirm = {
+                showPromoteDialog = false
+                onPromoteSecondSensor?.invoke()
+            },
+            onDismiss = { showPromoteDialog = false }
+        )
+    }
+
+    promotionMessage?.let { message ->
+        OkDialog(
+            title = stringResource(UiR.string.overview_second_sensor_label),
+            message = message,
+            onDismiss = onDismissPromotionMessage
+        )
     }
 
     if (showSettingsSheet) {

@@ -15,6 +15,11 @@ import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventInitializationChanged
 import app.aaps.core.interfaces.rx.events.EventNsClientStatusUpdated
 import app.aaps.core.interfaces.rx.events.EventPumpStatusChanged
+import app.aaps.core.interfaces.source.CgmSensorStatusProvider
+import app.aaps.core.interfaces.source.CgmWarmupProvider
+import app.aaps.core.interfaces.source.PromotionRejectReason
+import app.aaps.core.interfaces.source.PromotionResult
+import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
@@ -25,10 +30,12 @@ import app.aaps.core.ui.R
 import app.aaps.core.ui.compose.StatusLevel
 import app.aaps.core.ui.compose.icons.IcCannulaChange
 import app.aaps.core.ui.compose.icons.IcCgmInsert
+import app.aaps.core.ui.compose.icons.IcGenericCgm
 import app.aaps.core.ui.compose.icons.IcPatchPump
 import app.aaps.core.ui.compose.icons.IcPumpBattery
 import app.aaps.core.ui.compose.icons.IcPumpCartridge
 import app.aaps.core.ui.compose.pump.tickerFlow
+import app.aaps.ui.R as UiR
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -79,6 +86,20 @@ class StatusViewModel @Inject constructor(
             .onEach { refreshState() }.launchIn(viewModelScope)
         tickerFlow(60_000L)
             .onEach { refreshState() }.launchIn(viewModelScope)
+        // A warm-up countdown and a settling second sensor both move by the minute and only exist
+        // for a short while. The shared 60 s tick is too slow to feel live, so add a light tick that
+        // costs two StateFlow reads and does nothing at all unless a source reports one of them.
+        tickerFlow(10_000L)
+            .onEach { if (hasTransientCgmStatus()) refreshState() }.launchIn(viewModelScope)
+    }
+
+    /** True while the active source reports a warm-up or holds a second (staging) sensor. */
+    private fun hasTransientCgmStatus(): Boolean {
+        val source = activePlugin.activeBgSource
+        val warming = (source as? CgmWarmupProvider)?.warmupStatus?.value?.active == true
+        val staging = (source as? CgmSensorStatusProvider)?.stagingState?.value != null &&
+            (source as? CgmSensorStatusProvider)?.stagingState?.value != StagingState.ABSENT
+        return warming || staging
     }
 
     fun refreshState() {
@@ -90,6 +111,8 @@ class StatusViewModel @Inject constructor(
 
             // Build status items (without expensive TDD calculation)
             val sensorStatus = buildSensorStatus()
+            val warmUpStatus = buildWarmUpStatus()
+            val secondSensorStatus = buildSecondSensorStatus()
             val insulinStatus = buildInsulinStatus(isPatchPump, pumpDescription.maxReservoirReading.toDouble())
             val cannulaStatus = buildCannulaStatus(isPatchPump, includeTddCalculation = false)
             val batteryStatus = if (!isPatchPump || pumpDescription.useHardwareLink) {
@@ -99,6 +122,9 @@ class StatusViewModel @Inject constructor(
             _uiState.update { state ->
                 state.copy(
                     sensorStatus = sensorStatus,
+                    warmUpStatus = warmUpStatus,
+                    secondSensorStatus = secondSensorStatus,
+                    canPromoteSecondSensor = secondSensorStatus != null && canPromoteSecondSensor(),
                     insulinStatus = insulinStatus,
                     // Preserve previous cannula level while TDD recalculates
                     cannulaStatus = state.cannulaStatus?.let { prev ->
@@ -146,6 +172,128 @@ class StatusViewModel @Inject constructor(
             icon = IcCgmInsert,
             compactLevel = false // Overview: sensor battery not shown
         )
+    }
+
+    /**
+     * Countdown while the CGM warms up, for any source that reports it. Null for every other source
+     * and as soon as the warm-up ends, so the row simply disappears.
+     *
+     * The remaining time is taken from the wall-clock end time when the protocol gave one, because a
+     * stored countdown goes stale between two radio windows.
+     *
+     * Internal so [StatusViewModelTest] can check the countdown without driving a whole refresh.
+     */
+    internal fun buildWarmUpStatus(): StatusItem? {
+        val status = (activePlugin.activeBgSource as? CgmWarmupProvider)?.warmupStatus?.value ?: return null
+        if (!status.active) return null
+
+        val remainingMs = status.endsAtEpochMs?.let { (it - dateUtil.now()).coerceAtLeast(0L) } ?: status.remainingMs
+        val age = remainingMs
+            ?.let { rh.gs(R.string.format_mins, TimeUnit.MILLISECONDS.toMinutes(it + MINUTE_ROUND_UP_MS).toInt()) }
+            ?: rh.gs(UiR.string.overview_cgm_warmup_waiting)
+        // Fraction of the warm-up already done, so the bar fills up as the sensor gets ready.
+        val total = status.totalMs
+        val percent = if (total != null && total > 0L && remainingMs != null) {
+            ((total - remainingMs).toFloat() / total).coerceIn(0f, 1f)
+        } else -1f
+
+        return StatusItem(
+            label = rh.gs(UiR.string.overview_cgm_warmup_label),
+            age = age,
+            ageStatus = StatusLevel.UNSPECIFIED,
+            agePercent = percent,
+            icon = IcCgmInsert,
+            compactLevel = false
+        )
+    }
+
+    /**
+     * Second sensor warming up next to the one in use, for any source that supports the overlap.
+     * Shows how far the settling has gone and how many readings prove the sensor is really alive.
+     *
+     * Internal so [StatusViewModelTest] can check each staging state without driving a whole refresh.
+     */
+    internal fun buildSecondSensorStatus(): StatusItem? {
+        val source = activePlugin.activeBgSource as? CgmSensorStatusProvider ?: return null
+        val state = source.stagingState.value
+        if (state == StagingState.ABSENT) return null
+
+        val evidence = source.stagingEvidence.value
+        // The source owns the settle rule and publishes what is left of it.
+        val settleRemainingMs = source.stagingSettleRemainingMs.value
+        val age = when (state) {
+            StagingState.WARMUP   -> rh.gs(UiR.string.overview_second_sensor_warmup)
+            StagingState.READY    -> rh.gs(UiR.string.overview_second_sensor_ready)
+            StagingState.SETTLING ->
+                settleRemainingMs
+                    // Ceil to whole hours so it reads "ready in 1 h" until the last minutes, never "0 h".
+                    ?.let { rh.gs(UiR.string.overview_second_sensor_ready_in, ((it + HOUR_MS - 1L) / HOUR_MS).toInt()) }
+                    ?: rh.gs(UiR.string.overview_second_sensor_ready)
+
+            StagingState.ABSENT   -> return null
+        }
+        val ageMs = source.stagingLifecycle.value?.ageMs
+        val percent = if (state == StagingState.SETTLING && settleRemainingMs != null && ageMs != null) {
+            (ageMs.toFloat() / (ageMs + settleRemainingMs)).coerceIn(0f, 1f)
+        } else -1f
+
+        return StatusItem(
+            label = rh.gs(UiR.string.overview_second_sensor_label),
+            age = age,
+            ageStatus = if (state == StagingState.READY) StatusLevel.NORMAL else StatusLevel.UNSPECIFIED,
+            agePercent = percent,
+            level = evidence?.let { rh.gs(UiR.string.overview_second_sensor_readings, it.validCount) },
+            icon = IcGenericCgm,
+            compactLevel = false
+        )
+    }
+
+    /**
+     * The second sensor has settled and may now feed the loop.
+     *
+     * Internal so [StatusViewModelTest] can check it for every staging state.
+     */
+    internal fun canPromoteSecondSensor(): Boolean =
+        (activePlugin.activeBgSource as? CgmSensorStatusProvider)?.stagingState?.value == StagingState.READY
+
+    /**
+     * Hand the loop over to the second sensor. This is the only action here that changes where
+     * glucose comes from, so the source re-checks its own gates and may still refuse; either way the
+     * outcome is reported back through [StatusUiState.promotionMessage].
+     *
+     * A refused attempt changes nothing, so there is no rollback to do.
+     */
+    fun promoteSecondSensor() {
+        val source = activePlugin.activeBgSource as? CgmSensorStatusProvider ?: return
+        viewModelScope.launch {
+            val message = promotionMessage(source.promoteStagingToProduction())
+            _uiState.update { it.copy(promotionMessage = message) }
+            refreshState()
+        }
+    }
+
+    /**
+     * What to tell the user after a switch attempt: done, or the reason it was refused.
+     *
+     * Internal so [StatusViewModelTest] can check every reason has its own wording — a refusal the
+     * user cannot explain is worse than no button at all.
+     */
+    internal fun promotionMessage(result: PromotionResult): String = when (result) {
+        is PromotionResult.Ok       -> rh.gs(UiR.string.overview_second_sensor_promote_ok)
+        is PromotionResult.Rejected -> rh.gs(rejectionMessage(result.reason))
+    }
+
+    /** Drop the last switch result once the user has read it. */
+    fun clearPromotionMessage() {
+        _uiState.update { it.copy(promotionMessage = null) }
+    }
+
+    private fun rejectionMessage(reason: PromotionRejectReason): Int = when (reason) {
+        PromotionRejectReason.STAGING_ABSENT            -> UiR.string.overview_second_sensor_promote_rejected_absent
+        PromotionRejectReason.STAGING_NOT_SETTLED       -> UiR.string.overview_second_sensor_promote_rejected_not_settled
+        PromotionRejectReason.STAGING_NO_VALID_GLUCOSE  -> UiR.string.overview_second_sensor_promote_rejected_no_glucose
+        PromotionRejectReason.STAGING_NO_RECENT_GLUCOSE -> UiR.string.overview_second_sensor_promote_rejected_no_recent_glucose
+        PromotionRejectReason.LOOP_BUSY                 -> UiR.string.overview_second_sensor_promote_rejected_loop_busy
     }
 
     private suspend fun buildInsulinStatus(isPatchPump: Boolean, maxReading: Double): StatusItem {
@@ -290,5 +438,13 @@ class StatusViewModel @Inject constructor(
             level <= warn     -> StatusLevel.WARNING
             else              -> StatusLevel.NORMAL
         }
+    }
+
+    companion object {
+
+        private const val HOUR_MS = 60L * 60L * 1000L
+
+        /** Added before truncating to minutes, so a countdown reads "1 min" until it really hits zero. */
+        private const val MINUTE_ROUND_UP_MS = 59_999L
     }
 }
