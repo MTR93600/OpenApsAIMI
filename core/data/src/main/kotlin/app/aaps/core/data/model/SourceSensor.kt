@@ -4,6 +4,7 @@ enum class SourceSensor(val text: String) {
     DEXCOM_NATIVE_UNKNOWN("AAPS-Dexcom"),
     DEXCOM_G6_NATIVE("AAPS-DexcomG6"),
     DEXCOM_G7_NATIVE("AAPS-DexcomG7"),
+    DEXCOM_ONEPLUS_NATIVE("AAPS-DexcomOnePlus"),
     MEDTRUM_A6("Medtrum A6"),
     DEXCOM_G6_NATIVE_XDRIP("G6 Native"),
     DEXCOM_G7_NATIVE_XDRIP("G7 Native"),

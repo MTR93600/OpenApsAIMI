@@ -69,6 +69,7 @@ data class GlucoseValue(
         DEXCOM_NATIVE_UNKNOWN,
         DEXCOM_G6_NATIVE,
         DEXCOM_G7_NATIVE,
+        DEXCOM_ONEPLUS_NATIVE,
         MEDTRUM_A6,
         DEXCOM_G6_NATIVE_XDRIP,
         DEXCOM_G7_NATIVE_XDRIP,

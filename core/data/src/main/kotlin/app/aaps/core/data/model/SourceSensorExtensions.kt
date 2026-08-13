@@ -6,6 +6,7 @@ private val ADVANCED_FILTERING_SENSORS = setOf(
     SourceSensor.DEXCOM_NATIVE_UNKNOWN,
     SourceSensor.DEXCOM_G6_NATIVE,
     SourceSensor.DEXCOM_G7_NATIVE,
+    SourceSensor.DEXCOM_ONEPLUS_NATIVE,
     SourceSensor.DEXCOM_G6_NATIVE_XDRIP,
     SourceSensor.DEXCOM_G7_NATIVE_XDRIP,
     SourceSensor.DEXCOM_G7_XDRIP,

@@ -8,6 +8,7 @@ fun GlucoseValue.SourceSensor.fromDb(): SourceSensor =
         GlucoseValue.SourceSensor.DEXCOM_NATIVE_UNKNOWN  -> SourceSensor.DEXCOM_NATIVE_UNKNOWN
         GlucoseValue.SourceSensor.DEXCOM_G6_NATIVE       -> SourceSensor.DEXCOM_G6_NATIVE
         GlucoseValue.SourceSensor.DEXCOM_G7_NATIVE       -> SourceSensor.DEXCOM_G7_NATIVE
+        GlucoseValue.SourceSensor.DEXCOM_ONEPLUS_NATIVE  -> SourceSensor.DEXCOM_ONEPLUS_NATIVE
         GlucoseValue.SourceSensor.MEDTRUM_A6             -> SourceSensor.MEDTRUM_A6
         GlucoseValue.SourceSensor.DEXCOM_G6_NATIVE_XDRIP -> SourceSensor.DEXCOM_G6_NATIVE_XDRIP
         GlucoseValue.SourceSensor.DEXCOM_G7_NATIVE_XDRIP -> SourceSensor.DEXCOM_G7_NATIVE_XDRIP
@@ -53,6 +54,7 @@ fun SourceSensor.toDb(): GlucoseValue.SourceSensor =
         SourceSensor.DEXCOM_NATIVE_UNKNOWN  -> GlucoseValue.SourceSensor.DEXCOM_NATIVE_UNKNOWN
         SourceSensor.DEXCOM_G6_NATIVE       -> GlucoseValue.SourceSensor.DEXCOM_G6_NATIVE
         SourceSensor.DEXCOM_G7_NATIVE       -> GlucoseValue.SourceSensor.DEXCOM_G7_NATIVE
+        SourceSensor.DEXCOM_ONEPLUS_NATIVE  -> GlucoseValue.SourceSensor.DEXCOM_ONEPLUS_NATIVE
         SourceSensor.MEDTRUM_A6             -> GlucoseValue.SourceSensor.MEDTRUM_A6
         SourceSensor.DEXCOM_G6_NATIVE_XDRIP -> GlucoseValue.SourceSensor.DEXCOM_G6_NATIVE_XDRIP
         SourceSensor.DEXCOM_G7_NATIVE_XDRIP -> GlucoseValue.SourceSensor.DEXCOM_G7_NATIVE_XDRIP
