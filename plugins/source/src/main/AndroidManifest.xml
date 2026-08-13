@@ -3,10 +3,26 @@
 
     <uses-permission android:name="com.dexcom.cgm.EXTERNAL_PERMISSION" />
 
+    <!-- Dexcom ONE+ / G7 native BLE source -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+
     <application>
 
         <activity
             android:name=".activities.RequestDexcomPermissionActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".activities.DexcomOnePlusStatusActivity"
+            android:exported="false" />
+        <activity
+            android:name=".activities.DexcomOnePlusStartActivity"
+            android:exported="false" />
+        <activity
+            android:name=".activities.DexcomOnePlusWarmupActivity"
             android:exported="false" />
 
         <service

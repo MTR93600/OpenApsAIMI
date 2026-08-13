@@ -6,6 +6,9 @@ import app.aaps.core.interfaces.source.XDripSource
 import app.aaps.plugins.source.DexcomPlugin
 import app.aaps.plugins.source.NSClientSourcePlugin
 import app.aaps.plugins.source.XdripSourcePlugin
+import app.aaps.plugins.source.activities.DexcomOnePlusStartActivity
+import app.aaps.plugins.source.activities.DexcomOnePlusStatusActivity
+import app.aaps.plugins.source.activities.DexcomOnePlusWarmupActivity
 import app.aaps.plugins.source.activities.RequestDexcomPermissionActivity
 import app.aaps.plugins.source.notificationreader.NotificationCollectorService
 import dagger.Binds
@@ -25,6 +28,9 @@ abstract class SourceModule {
 
     // All BG-source workers migrated to @HiltWorker (constructed by HiltWorkerFactory).
     @ContributesAndroidInjector abstract fun contributesRequestDexcomPermissionActivity(): RequestDexcomPermissionActivity
+    @ContributesAndroidInjector abstract fun contributesDexcomOnePlusStatusActivity(): DexcomOnePlusStatusActivity
+    @ContributesAndroidInjector abstract fun contributesDexcomOnePlusStartActivity(): DexcomOnePlusStartActivity
+    @ContributesAndroidInjector abstract fun contributesDexcomOnePlusWarmupActivity(): DexcomOnePlusWarmupActivity
     @ContributesAndroidInjector abstract fun contributesNotificationCollectorService(): NotificationCollectorService
 
     @Module
