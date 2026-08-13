@@ -27,6 +27,11 @@ dependencies {
     implementation(project(":core:utils"))
     implementation(project(":ui"))
 
+    // KEKS / J-PAKE authentication for the Dexcom ONE+ / G7 native BLE source. Vendored third
+    // party Java (GPL-3.0) kept in its own module so it stays unmodified from its upstream pin.
+    // See NOTICE.
+    implementation(project(":plugins:libkeks"))
+
     // Compose
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material3)
