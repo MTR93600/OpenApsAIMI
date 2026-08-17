@@ -1,5 +1,6 @@
 package app.aaps.plugins.source.dexcomoneplus.scan
 
+import android.bluetooth.le.ScanCallback
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
@@ -51,6 +52,29 @@ class OnePlusBleScannerAndroidTest {
 
         assertThat(state.silentScans).isEqualTo(0)
         assertThat(state.backOff).isFalse()
+    }
+
+    @Test
+    fun `filtered silence does not itself request a probe until five windows`() {
+        assertThat(OnePlusBleScannerAndroid.shouldRunUnfilteredThrottleProbe(0)).isFalse()
+        assertThat(OnePlusBleScannerAndroid.shouldRunUnfilteredThrottleProbe(2)).isFalse()
+        assertThat(OnePlusBleScannerAndroid.shouldRunUnfilteredThrottleProbe(4)).isFalse()
+        assertThat(OnePlusBleScannerAndroid.shouldRunUnfilteredThrottleProbe(5)).isTrue()
+        assertThat(OnePlusBleScannerAndroid.shouldRunUnfilteredThrottleProbe(10)).isTrue()
+    }
+
+    @Test
+    fun `scan-failed back-off is the OS refusal codes only`() {
+        assertThat(
+            OnePlusBleScannerAndroid.shouldBackOffOnScanFailed(
+                ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED,
+            ),
+        ).isTrue()
+        assertThat(
+            OnePlusBleScannerAndroid.shouldBackOffOnScanFailed(
+                ScanCallback.SCAN_FAILED_ALREADY_STARTED,
+            ),
+        ).isFalse()
     }
 
     @Test

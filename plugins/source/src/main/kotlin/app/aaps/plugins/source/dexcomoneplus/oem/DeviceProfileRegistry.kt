@@ -95,7 +95,7 @@ object DeviceProfileRegistry {
             "$LOG_MARKER id=${profile.id} manufacturer=$manufacturer model=$model " +
                 "override=$override connectTimeoutMs=${profile.connectTimeoutMs} " +
                 "retry=${profile.connectRetryCount} mtu=${profile.preferredMtu} " +
-                "fgs=${profile.useForegroundService} aggressiveReconnect=${profile.aggressiveReconnect} " +
+                "fgsFlag=${profile.useForegroundService} (not wired) aggressiveReconnect=${profile.aggressiveReconnect} " +
                 "settleMs=${profile.postCloseSettleMs} preScanMs=${profile.preConnectScanMs} " +
                 "mtuOnConnect=${profile.requestMtuOnConnect} autoConnectFrom=${profile.autoConnectFromAttempt} " +
                 "requireAdv=${profile.requireAdvBeforeConnect}",

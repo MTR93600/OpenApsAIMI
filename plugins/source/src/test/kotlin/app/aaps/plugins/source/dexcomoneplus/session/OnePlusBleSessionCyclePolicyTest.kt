@@ -72,11 +72,14 @@ class OnePlusBleSessionCyclePolicyTest {
     }
 
     @Test
-    fun `stale MAC is only suspected when another ONE+ is heard and ours stayed silent long enough`() {
+    fun `stale MAC is suspected from silence alone — a foreign ONE+ is not required`() {
         val threshold = OnePlusBleSessionCyclePolicy.STALE_MAC_SUSPICION_AFTER_MS
 
         assertThat(
             OnePlusBleSessionCyclePolicy.suspectStaleMac(continuousAdvSilenceMs = threshold, foreignSightings = 0),
+        ).isTrue()
+        assertThat(
+            OnePlusBleSessionCyclePolicy.suspectStaleMac(continuousAdvSilenceMs = threshold - 1, foreignSightings = 0),
         ).isFalse()
         assertThat(
             OnePlusBleSessionCyclePolicy.suspectStaleMac(continuousAdvSilenceMs = threshold - 1, foreignSightings = 1),
@@ -226,6 +229,89 @@ class OnePlusBleSessionCyclePolicyTest {
             OnePlusBleSessionCyclePolicy.allowConnection(
                 restoredSessionMode = false,
                 advertisementFresh = false,
+            ),
+        ).isTrue()
+    }
+
+    @Test
+    fun `persistent failure raises the strategy index instead of pinning it at 1`() {
+        assertThat(OnePlusBleSessionCyclePolicy.nextPersistentAttempt(1)).isEqualTo(2)
+        assertThat(OnePlusBleSessionCyclePolicy.nextPersistentAttempt(2)).isEqualTo(3)
+    }
+
+    @Test
+    fun `Samsung still parks autoConnect on attempt 1 when there is no fresh ADV`() {
+        // SamsungDefault.autoConnectFromAttempt = 0. This is the field-proven park; do not change it.
+        assertThat(
+            OnePlusBleSessionCyclePolicy.useAutoConnect(
+                advFresh = false,
+                attempt = 1,
+                autoConnectFromAttempt = 0,
+            ),
+        ).isTrue()
+        assertThat(
+            OnePlusBleSessionCyclePolicy.useAutoConnect(
+                advFresh = true,
+                attempt = 1,
+                autoConnectFromAttempt = 0,
+            ),
+        ).isFalse()
+    }
+
+    @Test
+    fun `Generic reaches autoConnect on attempt 2, not on the pinned attempt 1`() {
+        assertThat(
+            OnePlusBleSessionCyclePolicy.useAutoConnect(
+                advFresh = false,
+                attempt = 1,
+                autoConnectFromAttempt = 2,
+            ),
+        ).isFalse()
+        assertThat(
+            OnePlusBleSessionCyclePolicy.useAutoConnect(
+                advFresh = false,
+                attempt = 2,
+                autoConnectFromAttempt = 2,
+            ),
+        ).isTrue()
+    }
+
+    @Test
+    fun `Generic skips the ADV wait after a failed hard connect so autoConnect can run now`() {
+        assertThat(
+            OnePlusBleSessionCyclePolicy.skipAdvWaitAfterFailedConnect(
+                lastConnectUsedAutoConnect = false,
+                nextAttempt = 2,
+                autoConnectFromAttempt = 2,
+            ),
+        ).isTrue()
+    }
+
+    @Test
+    fun `Samsung does not skip the ADV wait after a failed autoConnect — no GATT storm`() {
+        assertThat(
+            OnePlusBleSessionCyclePolicy.skipAdvWaitAfterFailedConnect(
+                lastConnectUsedAutoConnect = true,
+                nextAttempt = 2,
+                autoConnectFromAttempt = 0,
+            ),
+        ).isFalse()
+    }
+
+    @Test
+    fun `a second blind connect waits a full silence window after the last one`() {
+        val silence = OnePlusBleSessionCyclePolicy.BLIND_CONNECT_AFTER_ADV_SILENCE_MS
+
+        assertThat(
+            OnePlusBleSessionCyclePolicy.authorizeBlindConnect(
+                continuousAdvSilenceMs = silence,
+                msSinceLastBlindConnect = 30_000L,
+            ),
+        ).isFalse()
+        assertThat(
+            OnePlusBleSessionCyclePolicy.authorizeBlindConnect(
+                continuousAdvSilenceMs = silence + silence,
+                msSinceLastBlindConnect = silence,
             ),
         ).isTrue()
     }

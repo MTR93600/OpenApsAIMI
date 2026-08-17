@@ -46,6 +46,12 @@ data class OnePlusConnectPrep(
     val foreignAdv: String? = null,
 )
 
+/** Next persistent-ADV retry: raised strategy index plus the connect prep to use. */
+private data class PersistentRetry(
+    val attempt: Int,
+    val prep: OnePlusConnectPrep?,
+)
+
 /**
  * Pure decisions for the post-Control-loop transition, kept separate from Android BLE calls so the
  * normal duty-cycle behavior can be unit tested.
@@ -60,7 +66,7 @@ internal object OnePlusBleSessionCyclePolicy {
      */
     const val BLIND_CONNECT_AFTER_ADV_SILENCE_MS = 4L * 60_000L
 
-    /** Continuous ADV silence after which a foreign ONE+ sighting is reported as a stale-MAC suspicion. */
+    /** Continuous ADV silence after which a stale stored MAC is reported. */
     const val STALE_MAC_SUSPICION_AFTER_MS = 6L * 60_000L
 
     /**
@@ -127,13 +133,80 @@ internal object OnePlusBleSessionCyclePolicy {
         blindFallbackAuthorized: Boolean = false,
     ): Boolean = !restoredSessionMode || advertisementFresh || blindFallbackAuthorized
 
-    /** The persistent wait has been silent long enough to try a connect without a sighting. */
-    fun authorizeBlindConnect(continuousAdvSilenceMs: Long): Boolean =
-        continuousAdvSilenceMs >= BLIND_CONNECT_AFTER_ADV_SILENCE_MS
+    /**
+     * Long enough silence on the stored MAC to suspect it is stale.
+     *
+     * A foreign ONE+ sighting **strengthens** the log line; it must not **gate** the diagnosis.
+     * Under the pre-connect MAC+FEBC filter, a house with one sensor never sees a foreign ADV, so
+     * requiring one made this check unreachable (CUBOT field log 2026-08-16).
+     */
+    fun suspectStaleMac(continuousAdvSilenceMs: Long, foreignSightings: Int): Boolean {
+        // [foreignSightings] is logged at the call site; it must not gate the diagnosis.
+        return continuousAdvSilenceMs >= STALE_MAC_SUSPICION_AFTER_MS
+    }
 
-    /** Another ONE+ is advertising while ours never does → the stored MAC is probably not ours. */
-    fun suspectStaleMac(continuousAdvSilenceMs: Long, foreignSightings: Int): Boolean =
-        foreignSightings > 0 && continuousAdvSilenceMs >= STALE_MAC_SUSPICION_AFTER_MS
+    /**
+     * Strategy index after a persistent-ADV retryable failure. This must **rise**, not reset to
+     * [POST_COLLECTION_RECONNECT_ATTEMPT]: Generic/Pixel only enable `autoConnect` from attempt 2,
+     * and pinning at 1 made that park unreachable. The failure **budget** stays separate
+     * ([applyFailureBudget] is still false while a post-collection wait is prepared).
+     */
+    fun nextPersistentAttempt(currentAttempt: Int): Int =
+        currentAttempt + 1
+
+    /**
+     * Fresh ADV → hard connect (fail-fast). Otherwise the OEM `autoConnectFromAttempt` park.
+     * Samsung uses `autoConnectFromAttempt = 0`, so a quiet sensor still parks a background connect
+     * on attempt 1. That path must stay as-is.
+     */
+    fun useAutoConnect(
+        advFresh: Boolean,
+        attempt: Int,
+        autoConnectFromAttempt: Int,
+    ): Boolean = when {
+        advFresh -> false
+        autoConnectFromAttempt < 0 -> false
+        else -> attempt >= autoConnectFromAttempt
+    }
+
+    /**
+     * After a failed connect in persistent-ADV mode, skip the next ADV wait only when the failed
+     * attempt was a **hard** connect and the next one would use `autoConnect`.
+     *
+     * Generic CUBOT log: attempt 1 `autoConnect=false` → 133 in 30 s. The next attempt (2) is the
+     * first park and should run now, not after another 4 min of filtered scanning.
+     *
+     * Samsung: attempt 1 already used `autoConnect=true`. Immediate retry would GATT-storm after
+     * 133. Return false so Samsung keeps the ADV wait and the 4 min blind cooldown.
+     */
+    fun skipAdvWaitAfterFailedConnect(
+        lastConnectUsedAutoConnect: Boolean,
+        nextAttempt: Int,
+        autoConnectFromAttempt: Int,
+    ): Boolean {
+        if (lastConnectUsedAutoConnect) return false
+        return useAutoConnect(
+            advFresh = false,
+            attempt = nextAttempt,
+            autoConnectFromAttempt = autoConnectFromAttempt,
+        )
+    }
+
+    /**
+     * One blind connect after [BLIND_CONNECT_AFTER_ADV_SILENCE_MS] of silence, then not again until
+     * another full silence window has passed **since that blind**. The silence clock itself must
+     * keep running (stale-MAC at 6 min); only the escape is rate-limited.
+     *
+     * [msSinceLastBlindConnect] null means no blind has been issued in this silence episode.
+     */
+    fun authorizeBlindConnect(
+        continuousAdvSilenceMs: Long,
+        msSinceLastBlindConnect: Long? = null,
+    ): Boolean {
+        if (continuousAdvSilenceMs < BLIND_CONNECT_AFTER_ADV_SILENCE_MS) return false
+        val sinceBlind = msSinceLastBlindConnect ?: Long.MAX_VALUE
+        return sinceBlind >= BLIND_CONNECT_AFTER_ADV_SILENCE_MS
+    }
 
     /** Whole minutes of silence — the granularity at which the wait re-emits a warm-up state. */
     fun advSilenceMinutes(continuousAdvSilenceMs: Long): Long =
@@ -216,6 +289,25 @@ class OnePlusBleSessionSkeleton(
     @Volatile
     private var everProvedControlChannel = false
 
+    /**
+     * Start of the current ADV-silence episode. 0 = not in an episode.
+     * Reset only on a real target sighting (or a proven healthy cycle), never on a failed connect.
+     */
+    private var advSilenceStartedMs = 0L
+
+    /** Wall-clock of the last blind-connect escape in this silence episode. 0 = none yet. */
+    private var lastBlindConnectAtMs = 0L
+
+    /** Stale-MAC [onError] already posted for this silence episode. */
+    private var staleMacReportedThisSilence = false
+
+    /**
+     * Whether the connect that just failed used `autoConnect=true`.
+     * Used so Generic can skip the ADV wait to reach the autoConnect park, while Samsung
+     * (which already parked) does not GATT-storm after status 133.
+     */
+    private var lastConnectUsedAutoConnect = false
+
     override fun startWithPairingCode(deviceAddress: String, pairingCode: String) {
         val codeError = OnePlusSessionStart.validationError(pairingCode)
         if (codeError != null) {
@@ -252,6 +344,8 @@ class OnePlusBleSessionSkeleton(
         }
         setWarmup(OnePlusWarmupState(phase = OnePlusWarmupState.Phase.PAIRING, message = "pairing"))
 
+        resetAdvSilenceTracking()
+        lastConnectUsedAutoConnect = false
         var attempt = 0
         var preparedConnect: OnePlusConnectPrep? = null
         // A restored session must never fall back to a blind connect while the transmitter sleeps.
@@ -297,10 +391,15 @@ class OnePlusBleSessionSkeleton(
                         return
                     }
                 } else {
+                    val bypassReason = when {
+                        preparedConnect?.advFresh == true -> "fresh_adv"
+                        preparedConnect?.blindFallback == true -> "blind_escape"
+                        else -> "prepared_connect"
+                    }
                     Log.i(
                         OnePlusLogMarkers.TAG,
-                        "${OnePlusLogMarkers.RECONNECT}: [$slot] fresh ADV ready — bypass retry delay " +
-                            "attempt=$attempt profile=${profile.id}",
+                        "${OnePlusLogMarkers.RECONNECT}: [$slot] bypass retry delay " +
+                            "reason=$bypassReason attempt=$attempt profile=${profile.id}",
                     )
                 }
             } else {
@@ -329,6 +428,7 @@ class OnePlusBleSessionSkeleton(
                 CycleOutcome.Stopped -> return
                 CycleOutcome.HealthyCycleThenExited -> {
                     persistentAdvertisementMode = true
+                    resetAdvSilenceTracking()
                     preparedConnect = preparePostCollectionReconnect(
                         deviceAddress = deviceAddress,
                         reason = "egv_cycle_complete_waiting_for_adv",
@@ -343,12 +443,14 @@ class OnePlusBleSessionSkeleton(
                             persistentAdvertisementMode,
                         )
                     ) {
-                        preparedConnect = preparePostCollectionReconnect(
+                        val retry = persistentRetryAfterFailure(
                             deviceAddress = deviceAddress,
+                            currentAttempt = attempt,
                             reason = "egv_loop_exit_waiting_for_adv",
                         )
-                        if (!running || preparedConnect == null) return
-                        attempt = OnePlusBleSessionCyclePolicy.POST_COLLECTION_RECONNECT_ATTEMPT
+                        if (!running || retry.prep == null) return
+                        attempt = retry.attempt
+                        preparedConnect = retry.prep
                     } else {
                         // Drop before the first usable EGV: retain bounded failure retries.
                         up = false
@@ -370,12 +472,14 @@ class OnePlusBleSessionSkeleton(
                             persistentAdvertisementMode,
                         )
                     ) {
-                        preparedConnect = preparePostCollectionReconnect(
+                        val retry = persistentRetryAfterFailure(
                             deviceAddress = deviceAddress,
+                            currentAttempt = attempt,
                             reason = "cycle_failure_waiting_for_adv",
                         )
-                        if (!running || preparedConnect == null) return
-                        attempt = OnePlusBleSessionCyclePolicy.POST_COLLECTION_RECONNECT_ATTEMPT
+                        if (!running || retry.prep == null) return
+                        attempt = retry.attempt
+                        preparedConnect = retry.prep
                     } else {
                         up = false
                         try {
@@ -464,11 +568,12 @@ class OnePlusBleSessionSkeleton(
         // Fresh ADV in hand → fast direct connect (fail-fast status 133 → quick retry). Otherwise fall
         // back to the OEM autoConnect policy (Samsung parks a background connect when the sensor is
         // quiet — that park cost ~48 s in the field log; the handoff avoids it when a sighting exists).
-        val useAutoConnect = when {
-            prep.advFresh -> false
-            profile.autoConnectFromAttempt < 0 -> false
-            else -> attempt >= profile.autoConnectFromAttempt
-        }
+        val useAutoConnect = OnePlusBleSessionCyclePolicy.useAutoConnect(
+            advFresh = prep.advFresh,
+            attempt = attempt,
+            autoConnectFromAttempt = profile.autoConnectFromAttempt,
+        )
+        lastConnectUsedAutoConnect = useAutoConnect
         Log.i(
             OnePlusLogMarkers.TAG,
             "${OnePlusLogMarkers.SESSION}: [$slot] connect decision advFresh=${prep.advFresh} " +
@@ -620,6 +725,46 @@ class OnePlusBleSessionSkeleton(
     }
 
     /**
+     * Persistent-ADV failure: raise the strategy index (so Generic/Pixel can reach autoConnect)
+     * without touching the failure budget. Samsung already parked on attempt 1, so it keeps the
+     * ADV wait instead of a tight GATT retry after status 133.
+     */
+    private fun persistentRetryAfterFailure(
+        deviceAddress: String,
+        currentAttempt: Int,
+        reason: String,
+    ): PersistentRetry {
+        val nextAttempt = OnePlusBleSessionCyclePolicy.nextPersistentAttempt(currentAttempt)
+        if (OnePlusBleSessionCyclePolicy.skipAdvWaitAfterFailedConnect(
+                lastConnectUsedAutoConnect = lastConnectUsedAutoConnect,
+                nextAttempt = nextAttempt,
+                autoConnectFromAttempt = profile.autoConnectFromAttempt,
+            )
+        ) {
+            Log.i(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.RECONNECT}: [$slot] skip ADV wait — previous was hard connect, " +
+                    "retry autoConnect attempt=$nextAttempt profile=${profile.id}",
+            )
+            lastBlindConnectAtMs = System.currentTimeMillis()
+            return PersistentRetry(
+                attempt = nextAttempt,
+                prep = OnePlusConnectPrep(advFresh = false, blindFallback = true),
+            )
+        }
+        return PersistentRetry(
+            attempt = nextAttempt,
+            prep = preparePostCollectionReconnect(deviceAddress, reason),
+        )
+    }
+
+    private fun resetAdvSilenceTracking() {
+        advSilenceStartedMs = 0L
+        lastBlindConnectAtMs = 0L
+        staleMacReportedThisSilence = false
+    }
+
+    /**
      * Ends the current successful duty cycle and waits for the next transmitter radio window.
      * Watcher exceptions are isolated so they cannot terminate the persistent BLE loop.
      */
@@ -670,17 +815,19 @@ class OnePlusBleSessionSkeleton(
      * - after [OnePlusBleSessionCyclePolicy.BLIND_CONNECT_AFTER_ADV_SILENCE_MS] it returns a
      *   `blindFallback` prep so the cycle may connect without a sighting (a sensor whose ADV the
      *   phone can no longer hear is otherwise never retried);
-     * - if another ONE+ is heard while ours never is, the stale-MAC suspicion is surfaced through
-     *   [onError] once per wait.
+     * - if the stored MAC stays silent long enough, the stale-MAC suspicion is surfaced through
+     *   [onError] once per silence episode (a foreign ONE+ sighting only enriches the message).
      *
      * ⚠️ ASYNC IMPACT: blocks bleExecutor in bounded scan calls; [stop] clears [running], so this
      * loop exits as soon as the current bounded pre-connect scan returns.
      */
     private fun awaitFreshAdvertisement(deviceAddress: String): OnePlusConnectPrep? {
-        val silenceStartedMs = System.currentTimeMillis()
+        if (advSilenceStartedMs == 0L) {
+            advSilenceStartedMs = System.currentTimeMillis()
+        }
+        val silenceStartedMs = advSilenceStartedMs
         var lastEmittedMinute = -1L
         var lastEmittedStale = false
-        var staleMacReported = false
         var foreignEverSeen: String? = null
         while (running) {
             val prep = try {
@@ -701,23 +848,31 @@ class OnePlusBleSessionSkeleton(
                     OnePlusLogMarkers.TAG,
                     "${OnePlusLogMarkers.SCAN}: [$slot] next-cycle target ADV acquired",
                 )
+                resetAdvSilenceTracking()
                 return prep
             }
 
-            val silenceMs = System.currentTimeMillis() - silenceStartedMs
+            val nowMs = System.currentTimeMillis()
+            val silenceMs = nowMs - silenceStartedMs
             val silenceMinutes = OnePlusBleSessionCyclePolicy.advSilenceMinutes(silenceMs)
             // A transmitter only advertises in short windows, so a foreign sighting is sporadic:
             // remember it for the whole wait instead of requiring it in the same 8 s scan as the
             // suspicion threshold.
             prep.foreignAdv?.let { foreignEverSeen = it }
+            val foreignCount = if (foreignEverSeen != null) 1 else 0
 
-            if (!staleMacReported &&
-                OnePlusBleSessionCyclePolicy.suspectStaleMac(silenceMs, if (foreignEverSeen != null) 1 else 0)
+            if (!staleMacReportedThisSilence &&
+                OnePlusBleSessionCyclePolicy.suspectStaleMac(silenceMs, foreignCount)
             ) {
-                staleMacReported = true
-                val message = "ONEPLUS_ADV_STALE_MAC: target ${redactAddress(deviceAddress)} silent " +
-                    "${silenceMinutes}min while another ONE+ advertises ($foreignEverSeen) — " +
-                    "sensor replaced or started in the other slot?"
+                staleMacReportedThisSilence = true
+                val message = if (foreignEverSeen != null) {
+                    "ONEPLUS_ADV_STALE_MAC: target ${redactAddress(deviceAddress)} silent " +
+                        "${silenceMinutes}min while another ONE+ advertises ($foreignEverSeen) — " +
+                        "sensor replaced or started in the other slot?"
+                } else {
+                    "ONEPLUS_ADV_STALE_MAC: target ${redactAddress(deviceAddress)} silent " +
+                        "${silenceMinutes}min with no advertisement — stored MAC may be stale"
+                }
                 Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: [$slot] $message")
                 try {
                     onError(message, false)
@@ -725,25 +880,28 @@ class OnePlusBleSessionSkeleton(
                 }
             }
 
-            if (OnePlusBleSessionCyclePolicy.authorizeBlindConnect(silenceMs)) {
+            val msSinceLastBlind =
+                if (lastBlindConnectAtMs == 0L) null else nowMs - lastBlindConnectAtMs
+            if (OnePlusBleSessionCyclePolicy.authorizeBlindConnect(silenceMs, msSinceLastBlind)) {
                 Log.w(
                     OnePlusLogMarkers.TAG,
                     "${OnePlusLogMarkers.SCAN}: [$slot] ADV silent ${silenceMinutes}min — " +
                         "authorising one blind connect (escape from persistent wait)",
                 )
+                lastBlindConnectAtMs = nowMs
                 return prep.copy(blindFallback = true)
             }
 
             // One state per whole minute (and immediately when the stale-MAC suspicion appears):
             // enough for the UI / ongoing notification to show progress, rare enough not to churn
             // the notification or the warm-up basal guard every 8 s.
-            if (silenceMinutes != lastEmittedMinute || staleMacReported != lastEmittedStale) {
+            if (silenceMinutes != lastEmittedMinute || staleMacReportedThisSilence != lastEmittedStale) {
                 lastEmittedMinute = silenceMinutes
-                lastEmittedStale = staleMacReported
+                lastEmittedStale = staleMacReportedThisSilence
                 enterReconnecting(
                     message = "waiting_for_adv",
                     advSilenceMinutes = silenceMinutes,
-                    staleMacSuspected = staleMacReported,
+                    staleMacSuspected = staleMacReportedThisSilence,
                 )
                 if (!running) return null
             }

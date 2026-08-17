@@ -6,7 +6,8 @@ package app.aaps.plugins.source.dexcomoneplus.oem
  */
 data class OemDeviceProfile(
     val id: OemProfileId,
-    /** GATT connect attempt timeout. */
+    /** GATT connect attempt timeout. Values above ~30 s only bind when autoConnect=true;
+     *  Android's hard connect (autoConnect=false) gives up around 30 s. */
     val connectTimeoutMs: Long,
     /** Max connect attempts before surfacing failure. */
     val connectRetryCount: Int,
@@ -14,7 +15,7 @@ data class OemDeviceProfile(
     val connectRetryDelayMs: Long,
     /** Preferred ATT MTU request (OS may negotiate lower). */
     val preferredMtu: Int,
-    /** Keep BLE session behind a foreground service when true. */
+    /** Intended to keep BLE behind a foreground service. Not wired yet — logged only. */
     val useForegroundService: Boolean,
     /** Faster / denser reconnect backoff when true. */
     val aggressiveReconnect: Boolean,
