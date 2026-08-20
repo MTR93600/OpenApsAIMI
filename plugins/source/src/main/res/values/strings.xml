@@ -188,4 +188,71 @@
     <string name="dexcom_oneplus_staging_promote_rejected_no_recent_glucose">Staging sensor has not sent a reading in the last minutes. Wait until it reads again before switching to it.</string>
     <string name="dexcom_oneplus_staging_promote_rejected_loop_busy">The loop is busy right now — try again in a moment.</string>
 
+    <!-- Libre 3 / Libre 3 Plus native BLE source -->
+    <string name="libre3_native">Libre 3 / Libre 3 Plus</string>
+    <string name="libre3_short">Libre3</string>
+    <string name="description_source_libre3_native">Native Libre 3 and Libre 3 Plus Bluetooth in AAPS. Scan the sensor once with NFC, then wait about 60 minutes of warm-up before loop glucose.</string>
+    <string name="libre3_plugin_summary">Status, sensor start by NFC, and warm-up</string>
+    <string name="libre3_aaps_directory_access_lost">Access to the AAPS folder has been lost. Open Maintenance, select the Documents/AAPS folder and grant permission again.</string>
+    <string name="libre3_aaps_directory_select">Select folder</string>
+    <string name="libre3_status_title">Libre 3 status</string>
+    <string name="libre3_status_summary">Sensor, session phase and connection status</string>
+    <string name="libre3_start_title">Start sensor</string>
+    <string name="libre3_start_summary">Apply sensor, hold the phone on it to scan, then about 60 min warm-up</string>
+    <string name="libre3_warmup_title">Sensor warm-up</string>
+    <string name="libre3_warmup_summary">About 60 minute warm-up countdown</string>
+    <string name="libre3_use_real_skeleton">Use real Bluetooth driver (engineering)</string>
+    <string name="libre3_use_real_skeleton_summary">Routes to the real Libre 3 driver. Off by default. Turning it on is not a claim that the driver works.</string>
+    <string name="libre3_nav_back">Back</string>
+    <string name="libre3_family_three">Libre 3</string>
+    <string name="libre3_family_plus">Libre 3 Plus</string>
+    <string name="libre3_phase_idle">Idle</string>
+    <string name="libre3_phase_pairing">Pairing</string>
+    <string name="libre3_phase_connecting">Connecting</string>
+    <string name="libre3_phase_reconnecting">Reconnecting</string>
+    <string name="libre3_phase_warming">Warming up</string>
+    <string name="libre3_phase_ready">Active</string>
+    <string name="libre3_phase_failed">Failed</string>
+    <string name="libre3_nfc_not_a_sensor">That is not a Libre 3 sensor. Hold the phone on the sensor itself.</string>
+    <string name="libre3_nfc_sensor_refused">The sensor did not accept the scan. Wait a moment and try again.</string>
+    <string name="libre3_nfc_link_lost">Hold the phone still on the sensor until the scan finishes.</string>
+    <string name="libre3_nfc_storage_failed">This phone could not save the sensor. Free some storage and try again.</string>
+    <string name="libre3_start_steps">How to start:\n1. Put the sensor on your arm.\n2. Stop the Abbott app and Juggluco. Only one app can hold a sensor.\n3. Hold the top of your phone on the sensor until the scan finishes.\n4. Allow Bluetooth if you are asked.\n5. Warm-up takes about 60 minutes for a new sensor. A sensor that is already running can send glucose sooner.</string>
+    <string name="libre3_start_scan_hint">Hold the top of your phone flat on the sensor. Do not move until the screen changes.</string>
+    <string name="libre3_start_conflict_warning">Stop the Abbott app and Juggluco before you scan. A sensor answers only one app, and the last one to scan takes it over.</string>
+    <string name="libre3_start_nfc_off">NFC is switched off on this phone. Turn it on in the Android settings, then come back.</string>
+    <string name="libre3_start_scan_waiting">Waiting for the sensor…</string>
+    <string name="libre3_start_scanned" comment="%1$s=sensor serial, %2$s=sensor family. Example: Sensor 0RRC989AQ · Libre 3 Plus">Sensor %1$s · %2$s</string>
+    <string name="libre3_start_connect">Connect to the sensor</string>
+    <string name="libre3_start_done_note">You can leave this screen. The countdown also shows on the dashboard.</string>
+    <string name="libre3_request_permissions">Allow Bluetooth</string>
+    <string name="libre3_permissions_needed">Bluetooth permission is needed before the sensor can be used.</string>
+    <string name="libre3_status_heading">Sensor</string>
+    <string name="libre3_status_serial" comment="%1$s=sensor serial. Example: Serial: 0RRC989AQ">Serial: %1$s</string>
+    <string name="libre3_status_family" comment="%1$s=sensor family. Example: Family: Libre 3 Plus">Family: %1$s</string>
+    <string name="libre3_status_address" comment="%1$s=Bluetooth address. Example: Address: CC:22:DF:B8:F9:58">Address: %1$s</string>
+    <string name="libre3_status_phase" comment="%1$s=phase name. Example: Phase: Warming up">Phase: %1$s</string>
+    <string name="libre3_status_session" comment="%1$s=up or down. Example: Session: Down">Session: %1$s</string>
+    <string name="libre3_status_session_up">Up</string>
+    <string name="libre3_status_session_down">Down</string>
+    <string name="libre3_status_no_sensor">No sensor has been scanned on this phone yet.</string>
+    <string name="libre3_status_connect">Connect to the sensor</string>
+    <string name="libre3_status_disconnect">Disconnect</string>
+    <string name="libre3_status_driver_blocked" comment="%1$s=short reason from the driver. Example: Real driver not in use: the engineering switch is off">Real driver not in use: %1$s</string>
+    <string name="libre3_warmup_heading">Sensor starting</string>
+    <string name="libre3_warmup_countdown" comment="%1$s=minutes and seconds left. Example: Time left: 29:45">Time left: %1$s</string>
+    <string name="libre3_warmup_countdown_unknown">—</string>
+    <string name="libre3_warmup_done">Warm-up finished. The sensor is active.</string>
+    <string name="libre3_warmup_note">Keep the phone near the sensor while it warms up.</string>
+    <string name="libre3_notif_title">Libre 3</string>
+    <string name="libre3_notif_channel_name">Libre 3 sensor status</string>
+    <string name="libre3_notif_channel_desc">Shows the connection and the warm-up of the sensor.</string>
+    <string name="libre3_notif_pairing">Pairing with the sensor…</string>
+    <string name="libre3_notif_connecting">Connecting to the sensor…</string>
+    <string name="libre3_notif_reconnecting">Reconnecting…</string>
+    <string name="libre3_notif_warming_title">Sensor warming up</string>
+    <string name="libre3_notif_warming_text">Keep the phone near the sensor</string>
+    <string name="libre3_notif_failed_title">Sensor start interrupted</string>
+    <string name="libre3_notif_failed_text">Open AAPS and scan the sensor again</string>
+
 </resources>
