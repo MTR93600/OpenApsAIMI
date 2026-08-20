@@ -42,13 +42,19 @@ object Libre3RuntimeTables {
     fun load(name: String): ByteArray? =
         Libre3RuntimeTables::class.java.getResourceAsStream("$FOLDER/$name")?.use { it.readBytes() }
 
+    /**
+     * True when a table file really ships with this build.
+     *
+     * This asks the class loader for the entry only. It does **not** read the bytes, because some
+     * of these files are hundreds of kilobytes and the answer is needed on every session start.
+     */
+    fun isPresent(name: String): Boolean = Libre3RuntimeTables::class.java.getResource("$FOLDER/$name") != null
+
     /** True when every file the pairing needs is really in this build. */
     fun pairingTablesPresent(): Boolean =
-        load(PHONE_CERT) != null &&
-            load(PHASE5_KEY_SCHEDULE) != null &&
-            LIB_AES_TABLES.all { load(it) != null }
+        isPresent(PHONE_CERT) && isPresent(PHASE5_KEY_SCHEDULE) && LIB_AES_TABLES.all { isPresent(it) }
 
     /** Names of the files that are missing, for a clear message instead of a silent failure. */
     fun missingTables(): List<String> =
-        (listOf(PHONE_CERT, PHASE5_KEY_SCHEDULE) + LIB_AES_TABLES).filter { load(it) == null }
+        (listOf(PHONE_CERT, PHASE5_KEY_SCHEDULE) + LIB_AES_TABLES).filterNot { isPresent(it) }
 }

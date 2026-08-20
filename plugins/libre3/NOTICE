@@ -136,6 +136,16 @@ Sources/LibreCRKit/Resources/RuntimeTables):
   sent during first pairing. The sibling phone_cert_firstpair.bin (prefix 03 00)
   is rejected by live sensors and must not be used.
   libaes_*.bin — the table banks for the Phase 5 wire block primitive.
+  phase5_keysched_region_274000.bin — the static region the Phase 5 key
+  schedule reads.
+  sbox_19bit_lib_986819.bin and child23_ttable_b_ext_976ea8_100000.bin — the two
+  large lookup tables that every step of the first pairing scheme reads.
+  firstpair_*.bin (23 files) — the tables of the first pairing scheme: the four
+  small programs, the lane and selector tables, the low seed and low loop
+  statics, the 63c278 word and fold tables, the 633fa8 tail and null tables, the
+  process2(5) public tables, the shared caller context and its interleaved loop
+  table, the 679f48 seed tables, the df80 round tables, the finalizer tables and
+  the 67ea28 nibble table.
 
 Upstream states that these tables were produced by clean-room research on
 Abbott's own library and that they are fixed across users and installs. See
