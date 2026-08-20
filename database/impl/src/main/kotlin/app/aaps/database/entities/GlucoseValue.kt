@@ -88,6 +88,7 @@ data class GlucoseValue(
         LIBRE_2,
         LIBRE_2_NATIVE,
         LIBRE_3,
+        LIBRE_3_NATIVE,
         POCTECH_NATIVE,
         GLUNOVO_NATIVE,
         INTELLIGO_NATIVE,

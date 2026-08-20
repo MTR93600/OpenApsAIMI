@@ -30,6 +30,7 @@ enum class Sources {
     Aidex,
     Dexcom,
     DexcomOnePlus,
+    Libre3Native,
     Eversense,
     Glimp,
     MM640g,

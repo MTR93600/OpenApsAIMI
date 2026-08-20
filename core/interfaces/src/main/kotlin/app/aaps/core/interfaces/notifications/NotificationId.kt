@@ -181,7 +181,15 @@ enum class NotificationId(
     SCENE_CHAIN_ERROR(IMPORTANT, AUTOMATION, allowMultiple = true),
 
     /** Bolus succeeded but the accompanying carbs could not be persisted — the user must re-enter them. */
-    CARBS_STORE_FAILED(URGENT, PUMP);
+    CARBS_STORE_FAILED(URGENT, PUMP),
+
+    /**
+     * The AAPS directory can no longer be reached, so the Libre 3 engineering marker file cannot
+     * be checked. Distinct from a merely absent marker file, which stays silent. Appended last on
+     * purpose — the system notification id is the ordinal, so inserting mid-enum would renumber
+     * every entry after it.
+     */
+    LIBRE3_DIR_ACCESS_LOST(NORMAL, SYSTEM);
 
     companion object {
 

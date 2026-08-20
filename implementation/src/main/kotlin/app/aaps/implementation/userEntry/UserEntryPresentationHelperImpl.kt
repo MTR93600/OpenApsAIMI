@@ -137,6 +137,7 @@ class UserEntryPresentationHelperImpl @Inject constructor(
         Sources.Insulin             -> IcPluginInsulin
         Sources.InsulinDialog       -> IcBolus
         Sources.Intelligo           -> IcPluginIntelligo
+        Sources.Libre3Native        -> IcGenericCgm
         Sources.LocalProfile        -> IcProfile
         Sources.Loop                -> IcLoopClosed
         Sources.LoopDialog          -> IcLoopClosed
@@ -225,6 +226,7 @@ class UserEntryPresentationHelperImpl @Inject constructor(
         Sources.Insulin             -> ElementType.INSULIN_MANAGEMENT.color()
         Sources.InsulinDialog       -> ElementType.INSULIN.color()
         Sources.Intelligo           -> ElementType.CGM_DEX.color()
+        Sources.Libre3Native        -> ElementType.CGM_DEX.color()
         Sources.LocalProfile        -> ElementType.PROFILE_MANAGEMENT.color()
         Sources.Loop                -> ElementType.LOOP.color()
         Sources.LoopDialog          -> ElementType.LOOP.color()

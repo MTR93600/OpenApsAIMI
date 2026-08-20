@@ -27,6 +27,7 @@ fun GlucoseValue.SourceSensor.fromDb(): SourceSensor =
         GlucoseValue.SourceSensor.LIBRE_2                -> SourceSensor.LIBRE_2
         GlucoseValue.SourceSensor.LIBRE_2_NATIVE         -> SourceSensor.LIBRE_2_NATIVE
         GlucoseValue.SourceSensor.LIBRE_3                -> SourceSensor.LIBRE_3
+        GlucoseValue.SourceSensor.LIBRE_3_NATIVE         -> SourceSensor.LIBRE_3_NATIVE
         GlucoseValue.SourceSensor.POCTECH_NATIVE         -> SourceSensor.POCTECH_NATIVE
         GlucoseValue.SourceSensor.GLUNOVO_NATIVE         -> SourceSensor.GLUNOVO_NATIVE
         GlucoseValue.SourceSensor.INTELLIGO_NATIVE       -> SourceSensor.INTELLIGO_NATIVE
@@ -73,6 +74,7 @@ fun SourceSensor.toDb(): GlucoseValue.SourceSensor =
         SourceSensor.LIBRE_2                -> GlucoseValue.SourceSensor.LIBRE_2
         SourceSensor.LIBRE_2_NATIVE         -> GlucoseValue.SourceSensor.LIBRE_2_NATIVE
         SourceSensor.LIBRE_3                -> GlucoseValue.SourceSensor.LIBRE_3
+        SourceSensor.LIBRE_3_NATIVE         -> GlucoseValue.SourceSensor.LIBRE_3_NATIVE
         SourceSensor.POCTECH_NATIVE         -> GlucoseValue.SourceSensor.POCTECH_NATIVE
         SourceSensor.GLUNOVO_NATIVE         -> GlucoseValue.SourceSensor.GLUNOVO_NATIVE
         SourceSensor.INTELLIGO_NATIVE       -> GlucoseValue.SourceSensor.INTELLIGO_NATIVE
