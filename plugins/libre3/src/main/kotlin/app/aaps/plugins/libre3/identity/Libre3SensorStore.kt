@@ -27,6 +27,40 @@ interface Libre3IdentityStore {
 }
 
 /**
+ * The part of the store that one Bluetooth session needs.
+ *
+ * It exists for the same reason as [Libre3IdentityStore]: so the whole session, including the
+ * rule that a first pairing must store its key before it may report success, can be unit tested
+ * with a simple fake and no Android context.
+ */
+interface Libre3SessionStore {
+
+    /**
+     * The sensor this phone last took over, or null when there is none.
+     *
+     * An implementation must only ever return a sensor whose PIN write really finished. The
+     * session leans on that: it treats "a sensor is stored" as "its PIN is safely on the disk",
+     * and hard ban 8 of the plan says no connect may start before that write has landed. An
+     * implementation that returned a half written sensor would break that rule silently.
+     */
+    fun loadIdentity(): Libre3SensorIdentity?
+
+    /** The keys of that sensor. Any of them may be missing. */
+    fun loadSessionKeys(): Libre3SessionKeys
+
+    /**
+     * Writes the pairing key of a first pairing and waits for it to reach the disk.
+     *
+     * @return true only when the write really finished. A false here must fail the pairing: a
+     *   sensor that is paired but whose key was not written can never be reconnected to.
+     */
+    fun savePhase5RawKeyAndWait(phase5RawKey: ByteArray): Boolean
+
+    /** Stores the keys of the session that just started. */
+    fun saveSessionKeys(kEnc: ByteArray, ivEnc: ByteArray)
+}
+
+/**
  * Keeps the sensor identity, the session keys and the ingest high-water mark on disk.
  *
  * A private SharedPreferences file is used, not the exportable AAPS settings, so the PIN and the
@@ -36,7 +70,7 @@ interface Libre3IdentityStore {
  * must really be on disk before any connect starts, so a crash in the middle can never leave a
  * sensor that was taken over but whose PIN is lost.
  */
-class Libre3SensorStore(context: Context) : Libre3IdentityStore {
+class Libre3SensorStore(context: Context) : Libre3IdentityStore, Libre3SessionStore {
 
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -102,7 +136,7 @@ class Libre3SensorStore(context: Context) : Libre3IdentityStore {
     }
 
     /** The stored sensor, or null when no sensor was ever scanned. */
-    fun loadIdentity(): Libre3SensorIdentity? {
+    override fun loadIdentity(): Libre3SensorIdentity? {
         val serial = prefs.getString(KEY_SERIAL, null)?.takeIf { it.isNotBlank() } ?: return null
         val mac = prefs.getString(KEY_MAC, null)?.takeIf { it.isNotBlank() } ?: return null
         val pin = decode(prefs.getString(KEY_PIN, null))?.takeIf { it.size == PIN_SIZE } ?: return null
@@ -122,7 +156,7 @@ class Libre3SensorStore(context: Context) : Libre3IdentityStore {
     fun isReadyForBle(): Boolean = loadIdentity() != null
 
     /** Session keys of the stored sensor. All three parts may be null. */
-    fun loadSessionKeys(): Libre3SessionKeys =
+    override fun loadSessionKeys(): Libre3SessionKeys =
         Libre3SessionKeys(
             phase5RawKey = decode(prefs.getString(KEY_PHASE5_RAW_KEY, null))?.takeIf { it.size == PHASE5_KEY_SIZE },
             kEnc = decode(prefs.getString(KEY_K_ENC, null))?.takeIf { it.size == K_ENC_SIZE },
@@ -134,12 +168,12 @@ class Libre3SensorStore(context: Context) : Libre3IdentityStore {
      * reconnect, so it must survive the app being killed.
      */
     @Synchronized
-    fun savePhase5RawKeyAndWait(phase5RawKey: ByteArray): Boolean =
+    override fun savePhase5RawKeyAndWait(phase5RawKey: ByteArray): Boolean =
         prefs.edit().putString(KEY_PHASE5_RAW_KEY, encode(phase5RawKey)).commit()
 
     /** Stores the keys of the current session. A new handshake replaces them. */
     @Synchronized
-    fun saveSessionKeys(kEnc: ByteArray, ivEnc: ByteArray) {
+    override fun saveSessionKeys(kEnc: ByteArray, ivEnc: ByteArray) {
         prefs.edit()
             .putString(KEY_K_ENC, encode(kEnc))
             .putString(KEY_IV_ENC, encode(ivEnc))
