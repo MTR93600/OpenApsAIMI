@@ -239,6 +239,12 @@
     <string name="libre3_status_connect">Connect to the sensor</string>
     <string name="libre3_status_disconnect">Disconnect</string>
     <string name="libre3_status_driver_blocked" comment="%1$s=short reason from the driver. Example: Real driver not in use: the engineering switch is off">Real driver not in use: %1$s</string>
+    <string name="libre3_forget_sensor">Forget this sensor</string>
+    <string name="libre3_forget_sensor_title">Forget this sensor?</string>
+    <string name="libre3_forget_sensor_explain">AAPS will drop the link and throw away everything it knows about this sensor: the address, the PIN and the pairing key. The sensor itself is not stopped and keeps running. To use it again, scan it with NFC from the Start sensor screen.\n\nUse this when the sensor is stored but every connection keeps failing.</string>
+    <string name="libre3_forget_sensor_confirm">Forget</string>
+    <string name="libre3_forget_sensor_cancel">Keep it</string>
+    <string name="libre3_forget_sensor_done">The sensor was forgotten. Scan it again to use it.</string>
     <string name="libre3_warmup_heading">Sensor starting</string>
     <string name="libre3_warmup_countdown" comment="%1$s=minutes and seconds left. Example: Time left: 29:45">Time left: %1$s</string>
     <string name="libre3_warmup_countdown_unknown">—</string>

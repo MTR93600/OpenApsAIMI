@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -17,8 +18,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -35,8 +38,10 @@ import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.LocalPreferences
+import app.aaps.plugins.libre3.Libre3CgmDriver
 import app.aaps.plugins.libre3.Libre3CgmDrivers
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
+import app.aaps.plugins.source.Libre3Ingest
 import app.aaps.plugins.source.R
 import app.aaps.plugins.source.compose.Libre3UiLabels
 import dagger.hilt.android.AndroidEntryPoint
@@ -71,6 +76,8 @@ internal fun Libre3StatusScreen(onBack: () -> Unit, modifier: Modifier = Modifie
     var phase by remember { mutableStateOf(driver.warmupState().phase) }
     var sessionUp by remember { mutableStateOf(driver.isSessionUp()) }
     var blockedReason by remember { mutableStateOf(Libre3CgmDrivers.realDriverBlockedReason()) }
+    var askingToForget by remember { mutableStateOf(false) }
+    var forgotten by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -155,8 +162,62 @@ internal fun Libre3StatusScreen(onBack: () -> Unit, modifier: Modifier = Modifie
                     )
                 }
             }
+
+            // The way out of a sensor that is stored but can never be reached. Without it the only
+            // escape would be clearing the whole app, because a stored pairing key sends every
+            // later attempt down the short reconnect path, and a fresh scan of the same sensor
+            // keeps that key.
+            if (stored != null) {
+                OutlinedButton(onClick = { askingToForget = true }) {
+                    Text(stringResource(R.string.libre3_forget_sensor))
+                }
+            }
+            if (forgotten) Text(stringResource(R.string.libre3_forget_sensor_done))
         }
     }
+
+    if (askingToForget) {
+        AlertDialog(
+            onDismissRequest = { askingToForget = false },
+            title = { Text(stringResource(R.string.libre3_forget_sensor_title)) },
+            text = { Text(stringResource(R.string.libre3_forget_sensor_explain)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        askingToForget = false
+                        forgetSensor(driver, store)
+                        identity = null
+                        sessionUp = false
+                        forgotten = true
+                    }
+                ) {
+                    Text(stringResource(R.string.libre3_forget_sensor_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { askingToForget = false }) {
+                    Text(stringResource(R.string.libre3_forget_sensor_cancel))
+                }
+            },
+        )
+    }
+}
+
+/**
+ * Throws away everything this phone knows about the sensor it is holding.
+ *
+ * The three steps have to go together. Dropping the link first, so no session keeps running on
+ * material that is about to disappear. Then the store, which is what makes the next attempt start
+ * a fresh pairing instead of reusing a key that does not work. Then the ingest mark, because the
+ * next sensor counts its own minutes from zero and a leftover mark would refuse every reading of
+ * it as already seen.
+ *
+ * The sensor itself is left alone. No command is sent to it, and it keeps running.
+ */
+private fun forgetSensor(driver: Libre3CgmDriver, store: Libre3SensorStore) {
+    driver.disconnect()
+    store.clear()
+    Libre3Ingest.reset()
 }
 
 @Preview
