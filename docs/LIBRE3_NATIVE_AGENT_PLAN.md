@@ -633,54 +633,69 @@ Until native is user-confirmed, Libre 3 in AIMI stays **Juggluco / xDrip → `Xd
 
 ## 10.0 START HERE for the next session
 
-**Where this stands on 2026-08-20.** Lots A1 to A4 and A6 to A12 are done and committed. Lot A5 is
-two thirds done. One piece is missing, and it is the only thing between this driver and a real
-sensor test.
+**Where this stands on 2026-08-20.** Every lot, A1 to A12, is now code complete. Lot A5, the last
+one, is finished: the first pairing ephemeral and the Phase 5 source are ported and proven against
+the published vectors. Nothing is confirmed on a real sensor.
 
-### The one job left
+### What is left to do
 
-Port `FirstPairSourceSlice` from LibreCRKit, the part a **first pairing** needs.
+1. **Test it on a real sensor.** That is the only thing between this driver and a verdict. Until
+   the user does it, the status of this whole feature is **not user-confirmed**.
+2. Decide the two questions left open below.
 
-- Source: `/tmp/LibreCRKit/Sources/LibreCRKit/Crypto/FirstPairSourceSlice.swift` (15011 lines).
-- **Only 79 members, about 2774 lines, are reachable** from the first pairing. The rest of the file
-  is other branches. Reachable from these five entry points:
-  - `builder633fa8NullScalarWindowFromEntropySource`
-  - `builderProcess2P5PublicKey65FromEntropy`
-  - `builder633fa8NullScalarWindowFromEntropy`
-  - `builder633fa8StaticScalarWindowFromEntrySource`
-  - `builder6388f0FirstPairStreamSeedsFromScalarsAndSensorPoints`
-- Also needed: `Pairing/SessionKey.swift` (`makeFirstPairNativeEphemeral`, `deriveFirstPairPhase5Material`)
-  and `Pairing/EphemeralExchange.swift`.
-- **All 23 tables it needs are already committed** under `plugins/libre3/src/main/resources/libre3/`.
-- **Vectors: 64 test functions** in `/tmp/LibreCRKit/Tests/LibreCRKitTests/FirstPairSourceSliceTests.swift`,
-  one set per builder. This is what makes the port safe: do one builder, port its vectors, run them,
-  move on. Do not write a large block and hope.
+### What was done in the last session
 
-### The method that worked twice
+`FirstPairSourceSlice.swift` was ported in full. The plan used to say "79 members, about 2774
+lines" were reachable; the real figure is **1362 members and about 13000 lines**, because five of
+the six entry points pull in almost the whole file. Do not trust the old figure.
 
-`Libre3LibAes` and `Libre3Phase5KeySchedule` were both right the first time, by doing this:
+The port lives in `plugins/libre3/src/main/kotlin/app/aaps/plugins/libre3/crypto/firstpair/`, in
+twenty files. It keeps the upstream lower camel case names for about 930 constants and 400
+functions, on purpose: they are addresses in the sensor maker's library, and keeping them is what
+lets a reviewer read the Kotlin next to the Swift.
 
-1. Read the Swift for one unit only.
-2. Write the Kotlin with `UInt` where the Swift uses `UInt32`, so the wrapping matches.
-3. Port that unit's published vectors as a test **before** moving on.
-4. Run. If it is green, the unit is done; nothing further can silently break it.
+Two things the old text got wrong, both now fixed:
 
-### When the port lands, wire these three things
+- **Two MIT tables were missing from the tree.** `firstpair_6388f0_shared_context_2cdae1.bin` and
+  `firstpair_6388f0_caller_loop_interleaved_2cdfa9.bin`. The count is **25** tables for the first
+  pairing scheme, and 36 files in `src/main/resources/libre3/` in all. Every one of the 36 is byte
+  for byte identical to the MIT clone at pin `a86b92f`.
+- **The Swift point multiply was not ported limb for limb.** It uses `BigInteger` instead. Same
+  point of the same curve, and the published vector on the curve generator proves it.
 
-1. `Libre3FirstPairEphemeral.make()` must return the real key pair, and `isAvailable` become true.
-2. `Libre3BleSession.openOrFail`, the `FIRST_PAIR` branch: run `Libre3SessionAuth.runFirstPair`,
-   then derive the source, then `Libre3Phase5KeySchedule.deriveRawKey`, and then **store the key
-   with `Libre3SensorStore.savePhase5RawKeyAndWait`**. Without that last step a reconnect can never
-   happen, even after a first pairing that worked.
-3. `Libre3PhoneCert.bundled()` already returns the real certificate, and
-   `Libre3PairingBlocks.factory()` already returns the real block maker. Nothing to do there.
+### How the port was checked
 
-### What is already proven, so do not re-do it
+- **63 of the 64 published vector sets** now have a Kotlin test. The one that does not,
+  `phase5RawKeyFrom67cc18Sources`, is a Swift convenience wrapper that was not ported because
+  nothing calls it; both of its expected keys are asserted anyway, by joining the two pieces it
+  wraps.
+- **All 2793 distinct hexadecimal literals** of the reachable Swift appear in the Kotlin, and the
+  Kotlin has exactly 2793 of them: the two sets are equal. No mistyped digit, no dropped constant,
+  no invented one.
+- **All 15 wrapping subtractions and all 6 masking shifts** of the reachable Swift have their
+  Kotlin counterpart in the right place, on unsigned types.
+- **All 13 closed ranges and all 4 inclusive strides** were checked one by one against the Kotlin.
+- The strongest vectors: the **two captured Android traces** join a draw of entropy to the exact
+  sixty five bytes that went out on the wire, and the end to end vector runs all **118 caller rows**
+  and matches an exact 66 byte source and 16 byte key.
+- **Agent P ran and returned PASS.** It found one real hole, now closed: the `BLOCKED` arm of the
+  session was the one way out after a link was opened that did not drop it. It was unreachable,
+  but it was there. Two earlier runs of P died on a spend limit, so keep a P brief small: no more
+  than a dozen files, partial reads, and never the 15000 line Swift file.
+- **One gap versus the reference was found while answering P and is now closed.** The reference
+  refuses a sensor certificate whose signature does not check out (`PairingFlow.swift:220`, which
+  throws). This driver did not look at the signature at all. It does now, against both of the
+  sensor maker's signing keys, and a certificate that fails ends the pairing there.
 
-- The pairing block maker reproduces the live capture of 2026-05-06 exactly.
-- The Phase 5 key schedule matches all six published vectors and produces the key that capture used.
-- The NFC step matches every published byte vector.
-- The command clock, the framing, the channel rules and the safety policies are pinned by tests.
+### The three things that are now wired
+
+1. `Libre3FirstPairEphemeral.make()` returns the real key pair. `isAvailable` is true when the
+   tables **and** the phone certificate ship with the build.
+2. The `FIRST_PAIR` branch of `Libre3BleSession` runs the whole clock and **stores the key with
+   `Libre3SensorStore.savePhase5RawKeyAndWait` before the last two steps**. A failed write fails
+   the pairing. A test pins that order, and the order was checked by moving the write to the end
+   and watching the test go red.
+3. `Libre3PhoneCert.bundled()` and `Libre3PairingBlocks.factory()` were already real.
 
 ### Traps already found and fixed. Do not reintroduce them
 
@@ -691,16 +706,28 @@ Port `FirstPairSourceSlice` from LibreCRKit, the part a **first pairing** needs.
   sample at all may be built while that moment is unknown.
 - The repeat guard must be reset when a different sensor is scanned.
 - Teardown must not be queued on the executor that the read loop owns.
+- A first pairing key pair has **no ordinary shared secret**: the point it sends is the scheme's
+  own and does not belong to its private scalar. `sharedSecret` refuses it rather than returning a
+  number that looks fine and means nothing.
+- Asking "can this build pair a new sensor?" must **not** read the tables. It used to read 1.9 MB
+  on every session start, including reconnects that need none of it.
+- The sensor certificate must be **checked against the sensor maker's signing keys** before its
+  point is used. Skipping it builds a key from a point nobody vouched for, and the pairing then
+  fails several steps later for a reason no log can explain.
 
-### How to check your work at the end
+### Two questions left for the user
 
-Run the three suites, then re-run the two review agents from section 8 and the whole system
-verification agent. The last full run was: `:plugins:libre3` 175 tests green, `:plugins:source`
-Libre 3 tests green, `:plugins:aps` green, `:app` compiles. Note that `:plugins:source` also has 18
-failures in `GlunovoPluginTest` and `IntelligoPluginTest` which are **pre-existing and unrelated**:
-those plugins build an Android `Uri` in their constructor, which is null in a plain unit test.
+- `notActionable` readings are inserted as ordinary readings, because §2.13 says so. The reference
+  marks them display only.
+- The app UUID sits in the app private settings file, not the Keystore (§1 row), and the PIN and
+  `phase5RawKey` are Base64 in that same file. The Keystore stores keys, not free text.
 
-Status stays **not user-confirmed** until the user runs it on a real sensor.
+### How to check the work
+
+Run the three suites. The last full run was: `:plugins:libre3` **237 tests green**,
+`:plugins:aps` 1462 green, `:app` compiles. `:plugins:source` has 339 tests with **18 failures that
+are pre-existing and unrelated**: `GlunovoPluginTest` and `IntelligoPluginTest` build an Android
+`Uri` in their constructor, which is null in a plain unit test. Every Libre 3 test there is green.
 
 ## 10.1 Final verification (agent, 2026-08-20)
 
@@ -741,7 +768,7 @@ the pairing key on a successful first pairing.
 | A2 | 2026-08-19 | PASS | skip | PASS | `:plugins:libre3` created: gradle + manifest (NFC `required=false`) + 7 stub façade files. `settings.gradle` include added next to dexcom_oneplus, nothing dropped. `MERGE_CONSTRAINT_LIBRE3.md` seeded. `compileFullDebugKotlin` BUILD SUCCESSFUL (`/tmp/libre3-a2.log`). R: no must-fix. |
 | A3 | 2026-08-19 | PASS | skip | PASS | Enums (`LIBRE_3_NATIVE`, `Sources.Libre3Native`), DB entity + both converter directions, `NotificationId.LIBRE3_DIR_ACCESS_LOST` appended last, `ComposeMainActivity` picker branch, `@IntKey(447)`, stub plugin + availability gate + ingest frame + keys + 3 activity stubs + EN strings + 2 tests (21 green). Also needed: `UserEntry.Sources` + `SourcesExtension` + `UserEntryPresentationHelperImpl` rows (exhaustive `when`). `:plugins:source`, `:app` compile; persistence + core data tests green. R: no must-fix. |
 | A4 | 2026-08-20 | PASS (after one rework) | PASS | PASS | NFC ISO 15693: `Libre3NfcUids`, `Libre3NfcCommands` (CRC, receiver id, frames, parsers), `Libre3NfcSession` (persist before BLE), `Libre3NfcReader` (own thread, reader only while resumed), `Libre3SensorStore` + identity. 30 tests green on the MIT vectors. **P first pass FAILED**: `activatedAt` was stamped `now` even on A8, which would put every sample of a sensor taken over mid-life into the future; the A8 answer already carries the sensor's own activation epoch and it was being thrown away. Fixed, plus wire time `now-1` read once, `check(written)` on the receiver id, `commit` on the life counter. R items also applied: `Libre3NfcReader.shutdown()`, typed `Libre3NfcFailure` instead of raw English to the screen, narrowed and logged catches. **Carry-forward:** A6 must gate its first connect on `readyForBle`; A7 must treat `activatedAtMs == 0` as unknown and derive it from the first `lifeCount`, and keep the LibreLoop self-heal when the anchor disagrees by more than 30 min. **Open with the user:** the app UUID sits in the app private settings file, not the Keystore (§1 row), and the PIN / `phase5RawKey` are Base64 in that same file. |
-| A5 | 2026-08-20 | PART DONE, two of three crypto ports finished and vector proven | pending | pending | Green: `Libre3AesCcm` (RFC 3610), `Libre3DataPlaneCrypto`, `Libre3PairingMessages`, `Libre3PhoneCert` (real 162 B `03 03` blob now ships and parses), `Libre3EphemeralKeys`, `Libre3RuntimeTables`. **`Libre3LibAes`**: the pairing block maker, ported and right first time. The three published block vectors pass, and the live capture of 2026-05-06 is reproduced exactly, key, nonce, plain text and all 40 bytes. A test also proves it is not ordinary AES. **`Libre3Phase5KeySchedule`**: all six published vectors pass, and a joining test shows the two ports meet, the schedule making the very key that reproduces the live capture. 34 table files now ship, about 1.8 MB. **Still missing:** the first pairing ephemeral, 79 members and about 2774 lines of the 15011 line slicer, with 23 tables (all copied) and 64 sets of vectors that allow it to be ported and checked one builder at a time. Until it lands, a first pairing cannot run, so no key is stored and a reconnect has nothing to reuse. |
+| A5 | 2026-08-20 | PASS | PASS (after one rework) | PASS (after one rework) | **Finished.** Green: `Libre3AesCcm` (RFC 3610), `Libre3DataPlaneCrypto`, `Libre3PairingMessages`, `Libre3PhoneCert` (real 162 B `03 03` blob), `Libre3EphemeralKeys`, `Libre3RuntimeTables`, `Libre3LibAes` (right first time; the three published block vectors pass and the live capture of 2026-05-06 is reproduced exactly), `Libre3Phase5KeySchedule` (all six vectors). **The first pairing ephemeral is now ported too**, and it was far bigger than this plan said: not 79 members and 2774 lines but **1362 members and about 13000 lines**, in twenty Kotlin files under `crypto/firstpair/`. Proven by **63 of the 64 published vector sets**, including the two captured Android traces (entropy → the exact 65 byte point on the wire) and the end to end run of all **118 caller rows** (→ the exact 66 byte source and 16 byte key). Also checked by sweep: **all 2793 distinct hex literals of the reachable Swift are in the Kotlin and the sets are equal**; all 15 wrapping subtractions and 6 masking shifts match; all 13 closed ranges and 4 inclusive strides match. **Two MIT tables were missing from the tree** (`firstpair_6388f0_shared_context_2cdae1.bin`, `firstpair_6388f0_caller_loop_interleaved_2cdfa9.bin`) and were copied; all 36 shipped files are now byte identical to the clone and the NOTICE lists them. The P-256 multiply uses `BigInteger` rather than the Swift's four limb field; the published vector on the curve generator proves the substitution. **Wired:** `make()` is real, `isAvailable` needs the tables **and** the certificate, and the `FIRST_PAIR` branch stores the key with `savePhase5RawKeyAndWait` **before** the last two steps, with a test that was proven to bite by moving the write to the end. **R found no critical item** and seven important ones, all fixed: a build side failure was reported as a pairing the sensor refused, which would have sent the user to rescan for a fault a scan cannot fix; `sharedSecret` answered a first pairing key pair instead of refusing it; asking whether a first pairing is possible read 1.9 MB on every session start; the store contract lived in a comment on one caller instead of the interface; the main test asserted nothing that could fail; a half started session left its crypto plane behind. **Agent P returned PASS** on the fourth attempt (it stalled once and died twice on a spend limit; a small brief of a dozen files with partial reads is what let it finish). P found one real hole, now closed: the `BLOCKED` arm of the session was the only exit after a link was opened that did not drop it, unreachable but present. **Answering P also turned up one gap versus the reference, now closed**: `PairingFlow.swift:220` refuses a sensor certificate whose signature does not verify, and this driver did not look at the signature at all. It now checks it against both of the sensor maker's signing keys, with the key list injectable exactly as `PairingFlow.init(sensorCertSigningKeys:)` does it, and a pairing stops at the certificate when it fails. **237 tests green** in `:plugins:libre3`. |
 | A6 | 2026-08-20 | PASS for everything reachable | pending | PASS (after one rework) | `Libre3BluetoothUuids` (all §3.2 identifiers, the three pairing channels that must listen first, and the seven data channels in LibreLoop's order), the three pure policies, `Libre3SessionAuth` (the whole §3.3 command clock, played against a scripted sensor), `Libre3BleFraming`, `Libre3GattClientAndroid` (one operation at a time, indicate or notify chosen from what the channel offers, every waiter woken on a dropped link), `Libre3BleScannerAndroid`, `Libre3BleSession` (policy, then pairing channels, then handshake, then the seven data channels off and on) and `Libre3CgmDriverReal` (own executor, gated `toSampleOrNull` is the only path to a sample). 36 tests, no Bluetooth needed. Proven: a stored key can never lead to `0x01`; a refused reconnect stops; no reason lets a command reach the sensor's control channel. The first pairing branch returns a clear refusal until A5 is finished. **R FAILED first, three real defects:** the read loop held the driver's only executor for the whole session, so a `disconnect` or `shutdown` queued on that same executor could never run while a sensor was connected; a single latch let a late answer from a timed out step finish the next step with the old result; and a wait that started after the link had already gone sat for its whole timeout. All three fixed: teardown now runs on the caller's thread and drops the link to wake the loop, an owed-answer count swallows late answers, and a `linkDown` flag makes a new wait give up at once. |
 | A7 | 2026-08-20 | PASS (after one rework) | PASS | PASS | Parsers and ingest: `Libre3GlucoseParser` (29 B), `Libre3PatchStatusParser` (12 B), `Libre3GlucoseFrameAssembler` (15+20 join), `Libre3WarmupClock`, `Libre3Ingest`, `Libre3WarmupMapper`. 151 tests green in the driver module, 40 in source. **R FAILED first**: `Libre3Ingest.seed`/`reset` had no production caller, so a sensor swap without an app restart would have refused every reading of the new sensor for its whole life, silently. **P FAILED first**: `isUsable` had no caller and no bridge, and `anchorLooksWrong` took a parameter named `sampleTimeMs` that, if fed that function's own output, made the repair a permanent no-op. Fixed: gated `toSampleOrNull` is now the only way a reading becomes a sample, `wearMinutes` has no default, `receivedAtMs` renamed with the trap pinned in a test, ingest seeded and reset and its high-water persisted, and a test now pins the value to byte 15 rather than the packed word. **Carry-forward:** A8 must call `Libre3NativePlugin.onSensorChanged()` on the NFC path. |
 | A8 | 2026-08-20 | PASS | pending | PASS (after one rework) | Three screens: Start (NFC only, no typing, reader on only while the screen is up, calls `onSensorChanged`), Status (sensor, family, address, phase, session) and Warm-up (countdown from the sensor only, a dash when unknown). Plus `Libre3BlePermissionHelper` (code 44701, Bluetooth only), `Libre3UiLabels` (every driver value turned into a string resource, so no English from the driver can reach a screen), `Libre3WarmupCountdown` with 8 tests. EN strings only. **R FAILED first:** the NFC reader was turned on once at first drawing and off on pause, so the screen went silently dead after the user switched apps and came back. It now follows the screen lifecycle. Also fixed: `modifier` moved after the required parameters on all three screens, and the warm-up notification listed in the plan was missing and has been added. |
@@ -752,18 +779,40 @@ the pairing key on a successful first pairing.
 
 ---
 
-## 12. First message Claude should run
+## 12. First message for a new session
+
+The message below is the whole brief. Everything else it needs is in this file.
 
 ```text
-Read docs/LIBRE3_NATIVE_AGENT_PLAN.md in full. It is the only mission file.
-You are C0. Scope is Libre 3 and Libre 3 Plus only. Existing LIBRE_2 / LIBRE_3 follower code stays.
-Locked IDs are §1. Do not invent names, IntKeys, NotificationId ordinals, certs, or receiverIDs.
-Clone LibreCRKit and LibreLoop to /tmp if missing.
-Clone One+ files only when a lot lists them. Do not clone staging, GS1, WarmupBasalGuard, or libkeks.
-Follow §4.1 sequence: A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8 → A9 → A10 → A12 → A11.
-After each lot: run P/R as §0.1, fill §11, then send yourself §0.2.
-Stop on hard ban, same compile error twice, missing MIT vector, or when A11 and §9 (Claude boxes) are done.
-Do not install. Do not connectedAndroidTest. Do not commit unless I asked.
-Do not mark working. School English. Explicit imports.
-Start lot A1 now.
+Read docs/LIBRE3_NATIVE_AGENT_PLAN.md, section 10.0 first, then sections 1, 2, 3 and 8.
+It is the only mission file. You are C0.
+
+STATE. Every lot, A1 to A12, is code complete on branch dev_OAPSAIMI_Libre3. Lot A5
+is finished: the first pairing ephemeral and the Phase 5 source are ported and proven
+against 63 of the 64 published vector sets, including the two captured Android traces
+and the end to end run of all 118 caller rows. 237 tests are green in :plugins:libre3,
+1462 in :plugins:aps, and the app compiles. :plugins:source has 18 failures that are
+pre-existing and unrelated (Glunovo and Intelligo build an Android Uri in a JVM test).
+
+NOTHING IS CONFIRMED ON A REAL SENSOR. The status of this feature is not user-confirmed
+and must stay that way until the user says otherwise.
+
+YOUR JOB depends on what the user asks. There is no lot left to write. The likely work
+is one of these:
+- The user tested it on a sensor and it did not work. Read the logcat with the LIBRE3_
+  markers, and start from section 10.0, which lists the traps already found and fixed so
+  you do not chase one of them again.
+- The user wants one of the two open questions of section 10.0 settled: the notActionable
+  readings, or where the app UUID and the PIN are kept.
+- The user wants a review. Both P and R ran in the last session and both passed; what
+  they found is written up in section 10.0 and in the A5 row of section 11. If you run
+  a fresh P, keep its brief small or it will die on a spend limit: a dozen files at
+  most, partial reads, and never the 15000 line FirstPairSourceSlice.swift.
+
+RULES. Hard bans in section 2 still apply. Do not reintroduce the traps listed in
+section 10.0. Do not invent identifiers; section 1 is locked. Do not delete or rename
+LIBRE_2, LIBRE_2_NATIVE, LIBRE_3, Glimp or Tomato. Never cd && in bash. Do not install
+the app. Do not run connectedAndroidTest. Do not commit unless asked. Do not claim the
+feature works.
+School English, explicit imports.
 ```
