@@ -32,6 +32,9 @@ dependencies {
     // See NOTICE.
     implementation(project(":plugins:libkeks"))
 
+    // Native Libre 3 / Libre 3 Plus BLE driver, in its own module.
+    implementation(project(":plugins:libre3"))
+
     // Compose
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material3)

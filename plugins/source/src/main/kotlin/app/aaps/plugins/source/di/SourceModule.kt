@@ -9,6 +9,9 @@ import app.aaps.plugins.source.XdripSourcePlugin
 import app.aaps.plugins.source.activities.DexcomOnePlusStartActivity
 import app.aaps.plugins.source.activities.DexcomOnePlusStatusActivity
 import app.aaps.plugins.source.activities.DexcomOnePlusWarmupActivity
+import app.aaps.plugins.source.activities.Libre3StartActivity
+import app.aaps.plugins.source.activities.Libre3StatusActivity
+import app.aaps.plugins.source.activities.Libre3WarmupActivity
 import app.aaps.plugins.source.activities.RequestDexcomPermissionActivity
 import app.aaps.plugins.source.notificationreader.NotificationCollectorService
 import dagger.Binds
@@ -31,6 +34,9 @@ abstract class SourceModule {
     @ContributesAndroidInjector abstract fun contributesDexcomOnePlusStatusActivity(): DexcomOnePlusStatusActivity
     @ContributesAndroidInjector abstract fun contributesDexcomOnePlusStartActivity(): DexcomOnePlusStartActivity
     @ContributesAndroidInjector abstract fun contributesDexcomOnePlusWarmupActivity(): DexcomOnePlusWarmupActivity
+    @ContributesAndroidInjector abstract fun contributesLibre3StatusActivity(): Libre3StatusActivity
+    @ContributesAndroidInjector abstract fun contributesLibre3StartActivity(): Libre3StartActivity
+    @ContributesAndroidInjector abstract fun contributesLibre3WarmupActivity(): Libre3WarmupActivity
     @ContributesAndroidInjector abstract fun contributesNotificationCollectorService(): NotificationCollectorService
 
     @Module
