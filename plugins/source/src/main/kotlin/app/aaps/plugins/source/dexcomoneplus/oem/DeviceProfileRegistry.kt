@@ -1,7 +1,7 @@
 package app.aaps.plugins.source.dexcomoneplus.oem
 
 import android.os.Build
-import android.util.Log
+import app.aaps.plugins.source.dexcomoneplus.OnePlusLog
 
 /**
  * Resolves OEM BLE defaults from [Build.MANUFACTURER] / [Build.MODEL].
@@ -90,8 +90,7 @@ object DeviceProfileRegistry {
             isSamsung(manufacturer) -> SamsungDefault
             else -> GenericFallback
         }
-        Log.i(
-            LOG_MARKER,
+        OnePlusLog.i(
             "$LOG_MARKER id=${profile.id} manufacturer=$manufacturer model=$model " +
                 "override=$override connectTimeoutMs=${profile.connectTimeoutMs} " +
                 "retry=${profile.connectRetryCount} mtu=${profile.preferredMtu} " +

@@ -1,7 +1,6 @@
 package app.aaps.plugins.libre3
 
 import android.content.Context
-import android.util.Log
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -37,9 +36,9 @@ class Libre3CgmDriverStub : Libre3CgmDriver {
             message = message
         )
         sessionUp = false
-        Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SESSION}: stub connect, result FAILED")
-        Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.WARMUP}: phase=${warmup.phase} remainingMs=null")
-        Log.e(Libre3LogMarkers.TAG, "${Libre3LogMarkers.ERROR}: $message fatal=false")
+        Libre3Log.i("${Libre3LogMarkers.SESSION}: stub connect, result FAILED")
+        Libre3Log.i("${Libre3LogMarkers.WARMUP}: phase=${warmup.phase} remainingMs=null")
+        Libre3Log.e("${Libre3LogMarkers.ERROR}: $message fatal=false")
         watchers.forEach { it.onWarmup(warmup) }
         watchers.forEach { it.onError(message, false) }
         watchers.forEach { it.onSession(false, message) }
@@ -48,14 +47,14 @@ class Libre3CgmDriverStub : Libre3CgmDriver {
     override fun disconnect() {
         sessionUp = false
         warmup = Libre3WarmupState(phase = Libre3WarmupState.Phase.IDLE)
-        Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SESSION}: stub disconnect")
+        Libre3Log.i("${Libre3LogMarkers.SESSION}: stub disconnect")
         watchers.forEach { it.onSession(false, "disconnect") }
     }
 
     override fun shutdown() {
         disconnect()
         watchers.clear()
-        Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SESSION}: stub shutdown")
+        Libre3Log.i("${Libre3LogMarkers.SESSION}: stub shutdown")
     }
 
     override fun warmupState(): Libre3WarmupState = warmup

@@ -1,7 +1,6 @@
 package app.aaps.plugins.source.dexcomoneplus
 
 import android.content.Context
-import android.util.Log
 import app.aaps.plugins.source.dexcomoneplus.scan.OnePlusScanListener
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -30,11 +29,11 @@ class OnePlusCgmDriverStub : OnePlusCgmDriver {
     }
 
     override fun startScan(listener: OnePlusScanListener) {
-        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: stub start (no LE scan)")
+        OnePlusLog.i("${OnePlusLogMarkers.SCAN}: stub start (no LE scan)")
     }
 
     override fun stopScan() {
-        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: stub stop")
+        OnePlusLog.i("${OnePlusLogMarkers.SCAN}: stub stop")
     }
 
     override fun connect(deviceAddress: String, pairingCode: String) {
@@ -44,12 +43,11 @@ class OnePlusCgmDriverStub : OnePlusCgmDriver {
             message = msg,
         )
         sessionUp = false
-        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: stub connect → FAILED")
-        Log.i(
-            OnePlusLogMarkers.TAG,
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: stub connect → FAILED")
+        OnePlusLog.i(
             "${OnePlusLogMarkers.WARMUP}: phase=${warmup.phase} remainingMs=null msg=${warmup.message}",
         )
-        Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg fatal=false")
+        OnePlusLog.e("${OnePlusLogMarkers.ERROR}: $msg fatal=false")
         watchers.forEach { it.onWarmup(warmup) }
         watchers.forEach { it.onError(msg, fatal = false) }
         watchers.forEach { it.onSession(false, msg) }
@@ -58,14 +56,14 @@ class OnePlusCgmDriverStub : OnePlusCgmDriver {
     override fun disconnect() {
         sessionUp = false
         warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.IDLE)
-        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: stub disconnect")
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: stub disconnect")
         watchers.forEach { it.onSession(false, "disconnect") }
     }
 
     override fun shutdown() {
         disconnect()
         watchers.clear()
-        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: stub shutdown")
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: stub shutdown")
     }
 
     override fun warmupState(): OnePlusWarmupState = warmup

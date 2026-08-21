@@ -1,6 +1,6 @@
 package app.aaps.plugins.libre3.nfc
 
-import android.util.Log
+import app.aaps.plugins.libre3.Libre3Log
 import app.aaps.plugins.libre3.Libre3LogMarkers
 import app.aaps.plugins.libre3.identity.Libre3IdentityStore
 import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
@@ -57,8 +57,7 @@ class Libre3NfcSession(
         // A tag that is not a Libre 3 either refuses this command or answers something that is not
         // a patch info frame. Both end here, before any activation command can be sent.
         val patchInfo = Libre3NfcCommands.parsePatchInfo(transceiver.transceive(Libre3NfcCommands.patchInfoFrame()))
-        Log.i(
-            Libre3LogMarkers.TAG,
+        Libre3Log.i(
             "${Libre3LogMarkers.NFC}: sensor read serial=${patchInfo.serialNumber} " +
                 "generation=${patchInfo.generation} state=${"0x%02X".format(patchInfo.state)} " +
                 "warmupMinutes=${patchInfo.warmupMinutes} wearMinutes=${patchInfo.wearDurationMinutes}",
@@ -83,8 +82,7 @@ class Libre3NfcSession(
         val timeSeconds = maxOf(0L, startedAtMs / 1000L - 1L)
         val frame = Libre3NfcCommands.activationFrame(command, timeSeconds, receiverId)
         val activation = Libre3NfcCommands.parseActivationResponse(transceiver.transceive(frame))
-        Log.i(
-            Libre3LogMarkers.TAG,
+        Libre3Log.i(
             "${Libre3LogMarkers.NFC}: command=${"0x%02X".format(command)} answered, " +
                 "address=${activation.bleAddressDisplay}",
         )
@@ -113,7 +111,7 @@ class Libre3NfcSession(
         // Write first, then say that Bluetooth may start. Never the other way round.
         val stored = store.saveIdentityAndWait(identity)
         if (!stored) {
-            Log.e(Libre3LogMarkers.TAG, "${Libre3LogMarkers.ERROR}: sensor could not be stored, Bluetooth stays blocked")
+            Libre3Log.e("${Libre3LogMarkers.ERROR}: sensor could not be stored, Bluetooth stays blocked")
         }
         return Libre3NfcScanResult(
             patchInfo = patchInfo,

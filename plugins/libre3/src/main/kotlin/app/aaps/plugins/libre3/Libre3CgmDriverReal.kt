@@ -1,7 +1,6 @@
 package app.aaps.plugins.libre3
 
 import android.content.Context
-import android.util.Log
 import app.aaps.plugins.libre3.crypto.Libre3FirstPairEphemeral
 import app.aaps.plugins.libre3.gatt.Libre3BluetoothUuids
 import app.aaps.plugins.libre3.gatt.Libre3GattClientAndroid
@@ -154,8 +153,7 @@ class Libre3CgmDriverReal(
                     if (fatal) Libre3WarmupState.Phase.FAILED else Libre3WarmupState.Phase.RECONNECTING,
                     message = result.reason,
                 )
-                Log.w(
-                    Libre3LogMarkers.TAG,
+                Libre3Log.w(
                     "${Libre3LogMarkers.RECONNECT}: attempt $failedAttempts failed, next action $action",
                 )
                 watchers.forEach { it.onError(result.reason, fatal) }
@@ -205,15 +203,15 @@ class Libre3CgmDriverReal(
                 val plaintext = crypto.decryptTryingAllKinds(frame.encrypted, frame.sequenceNumber).plaintext
                 handlePlaintext(plaintext, isGlucose, identity, sensorStore)
             } catch (e: Libre3ParseException) {
-                Log.w(Libre3LogMarkers.TAG, "${Libre3LogMarkers.BG}: unreadable message dropped, ${e.message}")
+                Libre3Log.w("${Libre3LogMarkers.BG}: unreadable message dropped, ${e.message}")
             } catch (e: Exception) {
-                Log.w(Libre3LogMarkers.TAG, "${Libre3LogMarkers.BG}: message dropped, ${e.javaClass.simpleName}")
+                Libre3Log.w("${Libre3LogMarkers.BG}: message dropped, ${e.javaClass.simpleName}")
             }
         }
         // The loop only ends when the link is gone or a stop was asked for. Either way the session
         // is over, and the executor is free again for the next attempt.
         if (sessionUp) stopSession(Libre3DisconnectPolicy.Reason.LINK_LOST)
-        Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SESSION}: reading stopped")
+        Libre3Log.i("${Libre3LogMarkers.SESSION}: reading stopped")
     }
 
     /**

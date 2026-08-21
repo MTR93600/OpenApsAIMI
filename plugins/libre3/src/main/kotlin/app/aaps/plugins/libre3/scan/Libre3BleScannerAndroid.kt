@@ -6,7 +6,7 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
-import android.util.Log
+import app.aaps.plugins.libre3.Libre3Log
 import app.aaps.plugins.libre3.Libre3LogMarkers
 import app.aaps.plugins.libre3.gatt.Libre3BluetoothUuids
 import android.os.ParcelUuid
@@ -54,13 +54,13 @@ class Libre3BleScannerAndroid : Libre3BleScanner {
 
             override fun onScanFailed(errorCode: Int) {
                 scanning = false
-                Log.w(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SCAN}: the search failed, code=$errorCode")
+                Libre3Log.w("${Libre3LogMarkers.SCAN}: the search failed, code=$errorCode")
             }
         }
         callback = scanCallback
         scanning = true
         scanner.startScan(filters, settings, scanCallback)
-        Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SCAN}: looking for the stored sensor")
+        Libre3Log.i("${Libre3LogMarkers.SCAN}: looking for the stored sensor")
         return true
     }
 
@@ -70,7 +70,7 @@ class Libre3BleScannerAndroid : Libre3BleScanner {
             try {
                 scanner?.stopScan(current)
             } catch (e: Exception) {
-                Log.w(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SCAN}: stopping the search failed, ${e.javaClass.simpleName}")
+                Libre3Log.w("${Libre3LogMarkers.SCAN}: stopping the search failed, ${e.javaClass.simpleName}")
             }
         }
         callback = null

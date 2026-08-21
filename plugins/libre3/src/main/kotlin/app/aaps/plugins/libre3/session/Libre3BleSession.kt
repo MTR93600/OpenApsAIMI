@@ -1,6 +1,6 @@
 package app.aaps.plugins.libre3.session
 
-import android.util.Log
+import app.aaps.plugins.libre3.Libre3Log
 import app.aaps.plugins.libre3.Libre3LogMarkers
 import app.aaps.plugins.libre3.crypto.Libre3AesBlock
 import app.aaps.plugins.libre3.crypto.Libre3CryptoException
@@ -112,7 +112,7 @@ class Libre3BleSession(
         )
         if (decision.start == Libre3SessionStart.BLOCKED || identity == null) {
             val refusal = decision.refusal ?: Libre3StartRefusal.NO_SENSOR_STORED
-            Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SESSION}: nothing sent, $refusal")
+            Libre3Log.i("${Libre3LogMarkers.SESSION}: nothing sent, $refusal")
             return Result.Refused(refusal)
         }
         // Everything a first pairing needs from this build is made ready first, while no link is
@@ -123,7 +123,7 @@ class Libre3BleSession(
             try {
                 prepareFirstPair()
             } catch (e: Libre3CryptoException) {
-                Log.e(Libre3LogMarkers.TAG, "${Libre3LogMarkers.ERROR}: no first pairing is possible, ${e.message}")
+                Libre3Log.e("${Libre3LogMarkers.ERROR}: no first pairing is possible, ${e.message}")
                 return Result.Failed(
                     e.message ?: "a first pairing is not possible in this build",
                     handshakeReached = false,
@@ -154,12 +154,12 @@ class Libre3BleSession(
                 Libre3SessionStart.CACHED_RECONNECT -> {
                     val pairingKey = keys.phase5RawKey
                         ?: return failed("the stored pairing key disappeared", handshakeReached = false)
-                    Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.PAIRING}: short reconnect")
+                    Libre3Log.i("${Libre3LogMarkers.PAIRING}: short reconnect")
                     auth.runCachedReconnect(identity.blePin, pairingBlocks.blockFor(pairingKey), phoneR2)
                 }
 
                 Libre3SessionStart.FIRST_PAIR       -> {
-                    Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.PAIRING}: first pairing")
+                    Libre3Log.i("${Libre3LogMarkers.PAIRING}: first pairing")
                     val setup = firstPairSetup
                         ?: return failed("the first pairing was not made ready", handshakeReached = false)
                     runFirstPair(auth, setup, identity.blePin, phoneR2)
@@ -174,11 +174,11 @@ class Libre3BleSession(
                     return failed("the start policy blocked the session after the link was open", handshakeReached = false)
             }
         } catch (e: Libre3HandshakeException) {
-            Log.e(Libre3LogMarkers.TAG, "${Libre3LogMarkers.ERROR}: pairing failed, ${e.message}")
+            Libre3Log.e("${Libre3LogMarkers.ERROR}: pairing failed, ${e.message}")
             // The sensor answered and then refused, so the stored key is no longer good.
             return failed(e.message ?: "the pairing failed", handshakeReached = true)
         } catch (e: Libre3CryptoException) {
-            Log.e(Libre3LogMarkers.TAG, "${Libre3LogMarkers.ERROR}: pairing message could not be read, ${e.message}")
+            Libre3Log.e("${Libre3LogMarkers.ERROR}: pairing message could not be read, ${e.message}")
             return failed(e.message ?: "the pairing failed", handshakeReached = true)
         }
 
@@ -193,7 +193,7 @@ class Libre3BleSession(
         if (!armDataChannels()) {
             return failed("the sensor did not open its data channels", handshakeReached = true)
         }
-        Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SESSION}: session up, data channels open")
+        Libre3Log.i("${Libre3LogMarkers.SESSION}: session up, data channels open")
         return Result.Up(material)
     }
 
@@ -258,10 +258,10 @@ class Libre3BleSession(
         )
 
         if (!store.savePhase5RawKeyAndWait(phase5.rawKey)) {
-            Log.e(Libre3LogMarkers.TAG, "${Libre3LogMarkers.ERROR}: the new pairing key did not reach the disk")
+            Libre3Log.e("${Libre3LogMarkers.ERROR}: the new pairing key did not reach the disk")
             return null
         }
-        Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.PAIRING}: pairing key stored, a reconnect is now possible")
+        Libre3Log.i("${Libre3LogMarkers.PAIRING}: pairing key stored, a reconnect is now possible")
 
         return auth.sendPhase5AndReadPhase6(
             sensorR1 = preamble.sensorR1,
@@ -307,7 +307,7 @@ class Libre3BleSession(
         // next one.
         glucoseFrames.reset()
         gatt.disconnect()
-        Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SESSION}: session closed, reason=$reason")
+        Libre3Log.i("${Libre3LogMarkers.SESSION}: session closed, reason=$reason")
     }
 
     /** Turns the seven data channels off and then on again, in the order the sensor expects. */
@@ -315,7 +315,7 @@ class Libre3BleSession(
         for (channel in Libre3BluetoothUuids.DATA_PLANE_CHANNELS) {
             gatt.setNotify(channel, false)
             if (!gatt.setNotify(channel, true)) {
-                Log.w(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SESSION}: channel $channel stayed shut")
+                Libre3Log.w("${Libre3LogMarkers.SESSION}: channel $channel stayed shut")
                 return false
             }
         }

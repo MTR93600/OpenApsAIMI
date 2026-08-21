@@ -11,7 +11,7 @@ import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
 import android.content.Context
 import android.os.Build
-import android.util.Log
+import app.aaps.plugins.libre3.Libre3Log
 import app.aaps.plugins.libre3.Libre3LogMarkers
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -78,12 +78,12 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
 
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SESSION}: link up, discovering channels")
+                Libre3Log.i("${Libre3LogMarkers.SESSION}: link up, discovering channels")
                 gatt.discoverServices()
             } else {
                 connected = false
                 linkDown = true
-                Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SESSION}: link down, status=$status")
+                Libre3Log.i("${Libre3LogMarkers.SESSION}: link down, status=$status")
                 // Everything that is waiting must be woken, otherwise the driver thread would sit
                 // on a queue that can never fill again.
                 releaseWaiters()
@@ -92,7 +92,7 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             connected = status == BluetoothGatt.GATT_SUCCESS
-            Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SESSION}: channels discovered, ok=$connected")
+            Libre3Log.i("${Libre3LogMarkers.SESSION}: channels discovered, ok=$connected")
             finishOperation(connected)
         }
 
@@ -148,7 +148,7 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
             current?.disconnect()
             current?.close()
         } catch (e: Exception) {
-            Log.w(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SESSION}: closing the link failed, ${e.javaClass.simpleName}")
+            Libre3Log.w("${Libre3LogMarkers.SESSION}: closing the link failed, ${e.javaClass.simpleName}")
         }
         releaseWaiters()
     }
@@ -218,7 +218,7 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
                 // A piece was lost, so anything built from here would be wrong. The rest of that
                 // message is left in the queue, which is harmless: the failure ends the session
                 // attempt, and the next attempt builds a new client with empty queues.
-                Log.w(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SESSION}: ${e.message}")
+                Libre3Log.w("${Libre3LogMarkers.SESSION}: ${e.message}")
                 return null
             }
             if (assembler.availableBytes >= exactly) return assembler.take(exactly)
@@ -268,7 +268,7 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
         for (service in gattRef.services) {
             service.getCharacteristic(uuid)?.let { return it }
         }
-        Log.w(Libre3LogMarkers.TAG, "${Libre3LogMarkers.SESSION}: the sensor has no channel $uuid")
+        Libre3Log.w("${Libre3LogMarkers.SESSION}: the sensor has no channel $uuid")
         return null
     }
 

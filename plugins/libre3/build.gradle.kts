@@ -16,4 +16,5 @@ dependencies {
     // androidx.core, and exporting it changed how `String.toUri()` resolves in :plugins:source,
     // which made IntelligoPluginTest and GlunovoPluginTest fail on Uri.parse returning null.
     implementation(libs.androidx.core)
+    implementation(libs.org.slf4j.api)
 }

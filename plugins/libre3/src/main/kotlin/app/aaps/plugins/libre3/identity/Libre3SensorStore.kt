@@ -1,7 +1,7 @@
 package app.aaps.plugins.libre3.identity
 
 import android.content.Context
-import android.util.Log
+import app.aaps.plugins.libre3.Libre3Log
 import app.aaps.plugins.libre3.Libre3LogMarkers
 import app.aaps.plugins.libre3.nfc.Libre3NfcCommands
 import java.util.Base64
@@ -97,7 +97,7 @@ class Libre3SensorStore(context: Context) : Libre3IdentityStore, Libre3SessionSt
         // Sending an id that was not stored would bind the sensor to a number this phone can never
         // build again, and the sensor would stop answering us.
         check(written) { "the receiver id of this phone could not be stored" }
-        Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.NFC}: new receiver id created for this install")
+        Libre3Log.i("${Libre3LogMarkers.NFC}: new receiver id created for this install")
         return receiverId
     }
 
@@ -128,8 +128,7 @@ class Libre3SensorStore(context: Context) : Libre3IdentityStore, Libre3SessionSt
                 .remove(KEY_IV_ENC)
         }
         val written = editor.commit()
-        Log.i(
-            Libre3LogMarkers.TAG,
+        Libre3Log.i(
             "${Libre3LogMarkers.NFC}: sensor stored serialChanged=$serialChanged written=$written",
         )
         return written
@@ -196,8 +195,7 @@ class Libre3SensorStore(context: Context) : Libre3IdentityStore, Libre3SessionSt
         if (stored <= 0 || lifeCountMinutes < stored) return stored
         val extended = lifeCountMinutes + WEAR_EXTENSION_MINUTES
         prefs.edit().putInt(KEY_WEAR_MINUTES, extended).commit()
-        Log.i(
-            Libre3LogMarkers.TAG,
+        Libre3Log.i(
             "${Libre3LogMarkers.SESSION}: the sensor is still sending past its stored end, " +
                 "wear time moved from $stored to $extended minutes",
         )

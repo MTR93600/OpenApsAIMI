@@ -2,7 +2,7 @@ package app.aaps.plugins.source.dexcomoneplus.identity
 
 import android.content.Context
 import android.util.Base64
-import android.util.Log
+import app.aaps.plugins.source.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.source.dexcomoneplus.OnePlusLogMarkers
 
 /**
@@ -57,8 +57,7 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
         // milliseconds later, so the soak clock restarted from the first reading instead of from the
         // moment the sensor was applied.
         if (serialChanged) clearLastIngest()
-        Log.i(
-            OnePlusLogMarkers.TAG,
+        OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: sensor identity saved serial=${identity.serial ?: "-"} serialChanged=$serialChanged",
         )
     }
@@ -155,8 +154,7 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
             .putLong(KEY_SESSION_START, epochMs)
             .putString(KEY_SESSION_START_MAC, address)
             .apply()
-        Log.i(
-            OnePlusLogMarkers.TAG,
+        OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: sensor session start recorded startMs=$epochMs",
         )
         return true
@@ -180,8 +178,7 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
         prefs.edit()
             .putString(KEY_SHARED, Base64.encodeToString(key, Base64.NO_WRAP))
             .apply()
-        Log.i(
-            OnePlusLogMarkers.TAG,
+        OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: KEKS shared key persisted (16b)",
         )
     }
@@ -218,7 +215,7 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
             session.lastMac?.let { edit.putString(KEY_SESSION_START_MAC, it.uppercase()) }
         }
         edit.apply()
-        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: adopted promoted sensor serial=${session.identity.serial ?: "-"}")
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: adopted promoted sensor serial=${session.identity.serial ?: "-"}")
     }
 
     companion object {

@@ -1,7 +1,7 @@
 package app.aaps.plugins.source.dexcomoneplus.session
 
-import android.util.Log
 import app.aaps.plugins.source.dexcomoneplus.OnePlusGlucoseSample
+import app.aaps.plugins.source.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.source.dexcomoneplus.OnePlusLogMarkers
 import app.aaps.plugins.source.dexcomoneplus.gatt.OnePlusGattClient
 import app.aaps.plugins.source.dexcomoneplus.parse.OnePlusBackFillControlRx
@@ -37,8 +37,7 @@ class OnePlusBackfillSession(
     ): Int {
         if (!gatt.isConnected() || !shouldContinue()) return 0
         if (currentDexTimeSeconds < 1) {
-            Log.w(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.w(
                 "${OnePlusLogMarkers.SESSION}: backfill skipped — no dexTime",
             )
             return 0
@@ -48,8 +47,7 @@ class OnePlusBackfillSession(
         val endDex = currentDexTimeSeconds
         val startDex = (currentDexTimeSeconds - lookbackSec).coerceAtLeast(1)
         if (startDex >= endDex) {
-            Log.w(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.w(
                 "${OnePlusLogMarkers.SESSION}: backfill skipped — empty window",
             )
             return 0
@@ -59,7 +57,7 @@ class OnePlusBackfillSession(
             gatt.enableBackfillNotifications()
         } catch (t: Throwable) {
             val msg = t.message ?: "ONEPLUS_BACKFILL_CCCD_FAILED"
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg", t)
+            OnePlusLog.e("${OnePlusLogMarkers.ERROR}: $msg", t)
             onError(msg, false)
             return 0
         }
@@ -73,14 +71,13 @@ class OnePlusBackfillSession(
         val tx = OnePlusBackFillTx.build(startDex, endDex)
         try {
             gatt.writeControl(tx)
-            Log.i(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.i(
                 "${OnePlusLogMarkers.SESSION}: wrote BackFillTx2 opcode=0x59 " +
                     "start=$startDex end=$endDex",
             )
         } catch (t: Throwable) {
             val msg = t.message ?: "ONEPLUS_BACKFILL_WRITE_FAILED"
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg", t)
+            OnePlusLog.e("${OnePlusLogMarkers.ERROR}: $msg", t)
             onError(msg, false)
             return 0
         }
@@ -88,10 +85,9 @@ class OnePlusBackfillSession(
         // Optional Control ACK (same opcode 0x59).
         val ack = gatt.awaitControlNotify(ACK_TIMEOUT_MS)
         if (ack != null && OnePlusBackFillControlRx.isAck(ack)) {
-            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: BackFillControlRx ACK")
+            OnePlusLog.i("${OnePlusLogMarkers.SESSION}: BackFillControlRx ACK")
         } else if (ack != null) {
-            Log.d(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.d(
                 "${OnePlusLogMarkers.SESSION}: backfill Control notify non-ACK op=0x" +
                     (ack[0].toInt() and 0xff).toString(16),
             )
@@ -114,8 +110,7 @@ class OnePlusBackfillSession(
             }
             stream.pushG7(packet)
             lastPacketMs = System.currentTimeMillis()
-            Log.d(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.d(
                 "${OnePlusLogMarkers.SESSION}: backfill chunk ${packet.size}b total=${stream.byteCount()}",
             )
         }
@@ -123,14 +118,12 @@ class OnePlusBackfillSession(
         val nowMs = System.currentTimeMillis()
         val samples = stream.decode(currentDexTimeSeconds, nowMs)
         for (sample in samples) {
-            Log.i(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.i(
                 "${OnePlusLogMarkers.BG}: backfill mgdl=${sample.mgdl} ts=${sample.timestampMs}",
             )
             onGlucose(sample)
         }
-        Log.i(
-            OnePlusLogMarkers.TAG,
+        OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: backfill done samples=${samples.size} bytes=${stream.byteCount()}",
         )
         return samples.size

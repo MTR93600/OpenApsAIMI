@@ -4,7 +4,7 @@ import android.app.Activity
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.tech.NfcV
-import android.util.Log
+import app.aaps.plugins.libre3.Libre3Log
 import app.aaps.plugins.libre3.Libre3LogMarkers
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -51,7 +51,7 @@ class Libre3NfcReader(private val session: Libre3NfcSession) {
             NfcAdapter.FLAG_READER_NFC_V or NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK,
             null,
         )
-        Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.NFC}: reader on")
+        Libre3Log.i("${Libre3LogMarkers.NFC}: reader on")
         return true
     }
 
@@ -61,11 +61,11 @@ class Libre3NfcReader(private val session: Libre3NfcSession) {
             try {
                 it.disableReaderMode(activity)
             } catch (e: Exception) {
-                Log.w(Libre3LogMarkers.TAG, "${Libre3LogMarkers.NFC}: reader could not be turned off, ${e.javaClass.simpleName}")
+                Libre3Log.w("${Libre3LogMarkers.NFC}: reader could not be turned off, ${e.javaClass.simpleName}")
             }
         }
         adapter = null
-        Log.i(Libre3LogMarkers.TAG, "${Libre3LogMarkers.NFC}: reader off")
+        Libre3Log.i("${Libre3LogMarkers.NFC}: reader off")
     }
 
     /**
@@ -88,16 +88,16 @@ class Libre3NfcReader(private val session: Libre3NfcSession) {
             onResult(result)
         } catch (e: Libre3NfcException) {
             // The message is for the log and for support, never for the screen.
-            Log.e(Libre3LogMarkers.TAG, "${Libre3LogMarkers.ERROR}: NFC scan failed, ${e.message}")
+            Libre3Log.e("${Libre3LogMarkers.ERROR}: NFC scan failed, ${e.message}")
             onError(e.failure)
         } catch (e: Exception) {
-            Log.e(Libre3LogMarkers.TAG, "${Libre3LogMarkers.ERROR}: NFC link failed, ${e.javaClass.simpleName}")
+            Libre3Log.e("${Libre3LogMarkers.ERROR}: NFC link failed, ${e.javaClass.simpleName}")
             onError(Libre3NfcFailure.LINK_LOST)
         } finally {
             try {
                 nfcV.close()
             } catch (e: Exception) {
-                Log.w(Libre3LogMarkers.TAG, "${Libre3LogMarkers.NFC}: tag could not be closed, ${e.javaClass.simpleName}")
+                Libre3Log.w("${Libre3LogMarkers.NFC}: tag could not be closed, ${e.javaClass.simpleName}")
             }
         }
     }

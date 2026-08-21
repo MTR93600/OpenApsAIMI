@@ -1,6 +1,6 @@
 package app.aaps.plugins.source.dexcomoneplus.session
 
-import android.util.Log
+import app.aaps.plugins.source.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.source.dexcomoneplus.OnePlusLogMarkers
 import app.aaps.plugins.source.dexcomoneplus.gatt.OnePlusGattClient
 import app.aaps.plugins.source.dexcomoneplus.gatt.OnePlusKeksNotifySource
@@ -51,22 +51,19 @@ class OnePlusSessionAuthKeks(
         val usedShortAuthPreload = preload != null
         if (preload != null) {
             plugin.setPersistence(2, preload.copyOf())
-            Log.i(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.i(
                 "${OnePlusLogMarkers.SESSION}: KEKS saved shared key preloaded " +
                     "bonded=${gatt.isBonded()} (short-auth path if RoundStart)",
             )
         } else {
-            Log.i(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.i(
                 "${OnePlusLogMarkers.SESSION}: KEKS full J-PAKE path " +
                     "(no preload, in-memory key cleared) bonded=${gatt.isBonded()}",
             )
         }
 
         plugin.amConnected()
-        Log.i(
-            OnePlusLogMarkers.TAG,
+        OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: KEKS amConnected bonded=${gatt.isBonded()} " +
                 "preload=${usedShortAuthPreload} savedKeyInCtx=${plugin.context.savedKey != null}",
         )
@@ -143,8 +140,7 @@ class OnePlusSessionAuthKeks(
             }
 
             if (shouldEmit) {
-                Log.d(
-                    OnePlusLogMarkers.TAG,
+                OnePlusLog.d(
                     "${OnePlusLogMarkers.SESSION}: KEKS emit after ${notify.source} " +
                         "${notify.payload.size}b step=$step",
                 )
@@ -155,8 +151,7 @@ class OnePlusSessionAuthKeks(
             // context.savedKey via getShortSharedKey and poison the next RoundStart.
             if (!sawSharedKey && plugin.context.savedKey != null) {
                 sawSharedKey = true
-                Log.i(
-                    OnePlusLogMarkers.TAG,
+                OnePlusLog.i(
                     "${OnePlusLogMarkers.SESSION}: KEKS context.savedKey present " +
                         "(${plugin.context.savedKey!!.size}b) step=$step",
                 )
@@ -208,8 +203,7 @@ class OnePlusSessionAuthKeks(
         usedShortAuthPreload: Boolean,
     ): AuthResult? {
         val status = OnePlusAuthStatusRx.parse(payload) ?: return null
-        Log.i(
-            OnePlusLogMarkers.TAG,
+        OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: AuthStatus authenticated=${status.authenticated} " +
                 "bonded=${status.bonded} localBonded=${gatt.isBonded()} preload=$usedShortAuthPreload",
         )
@@ -229,16 +223,14 @@ class OnePlusSessionAuthKeks(
             // Hard recovery: full J-PAKE already failed with local bond → removeBond.
             val viaShort = usedShortAuthPreload
             if (viaShort) {
-                Log.i(
-                    OnePlusLogMarkers.TAG,
+                OnePlusLog.i(
                     "${OnePlusLogMarkers.SESSION}: soft key refresh after short-auth " +
                         "auth=${status.authenticated} — keep OS bond, full J-PAKE next",
                 )
             } else {
                 dropOsBondIfPresent("full-pair auth=${status.authenticated}")
             }
-            Log.e(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.e(
                 "${OnePlusLogMarkers.ERROR}: AuthStatus rejected authenticated=${status.authenticated} " +
                     "(need ${OnePlusAuthStatusRx.AUTHENTICATED_OK}) " +
                     if (viaShort) "— soft short-auth key refresh (no removeBond)"
@@ -274,8 +266,7 @@ class OnePlusSessionAuthKeks(
             )
         }
         if (next == null) {
-            Log.d(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.d(
                 "${OnePlusLogMarkers.SESSION}: KEKS aNext null — wait for more notifies",
             )
             return null
@@ -286,8 +277,7 @@ class OnePlusSessionAuthKeks(
                 // Control/EGV path owns post-auth traffic.
                 val key = plugin.getPersistence(1)
                 val keyBytes = if (key != null && key.isNotEmpty()) key.size else 0
-                Log.i(
-                    OnePlusLogMarkers.TAG,
+                OnePlusLog.i(
                     "${OnePlusLogMarkers.SESSION}: KEKS auth complete (aNext length=1, key=${keyBytes}b)",
                 )
                 if (keyBytes == 0) {
@@ -319,13 +309,13 @@ class OnePlusSessionAuthKeks(
         if (gatt.isBonded()) return true
         return try {
             if (!gatt.createBond()) {
-                Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: createBond returned false")
+                OnePlusLog.e("${OnePlusLogMarkers.ERROR}: createBond returned false")
                 return false
             }
             // Juggluco: BroadcastReceiver + CCCD teardown/restore (not a bare isBonded poll).
             gatt.awaitBondComplete(bondWaitMs)
         } catch (t: Throwable) {
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: createBond ${t.message}", t)
+            OnePlusLog.e("${OnePlusLogMarkers.ERROR}: createBond ${t.message}", t)
             false
         }
     }
@@ -341,11 +331,10 @@ class OnePlusSessionAuthKeks(
         val ok = try {
             gatt.removeBond()
         } catch (t: Throwable) {
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: removeBond $reason ${t.message}", t)
+            OnePlusLog.e("${OnePlusLogMarkers.ERROR}: removeBond $reason ${t.message}", t)
             false
         }
-        Log.i(
-            OnePlusLogMarkers.TAG,
+        OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: Juggluco-style removeBond after $reason ok=$ok",
         )
     }

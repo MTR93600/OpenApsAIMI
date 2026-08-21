@@ -1,7 +1,7 @@
 package app.aaps.plugins.source.dexcomoneplus.session
 
 import android.util.Base64
-import android.util.Log
+import app.aaps.plugins.source.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.source.dexcomoneplus.OnePlusLogMarkers
 import jamorham.keks.Plugin
 
@@ -29,8 +29,7 @@ object OnePlusKeksGuideCerts {
         plugin.setPersistence(8, partA.copyOf())
         plugin.setPersistence(9, partB.copyOf())
         plugin.setPersistence(10, partC.copyOf())
-        Log.i(
-            OnePlusLogMarkers.TAG,
+        OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: KEKS guide certs installed " +
                 "p1=${partA.size}b p2=${partB.size}b p3=${partC.size}b",
         )

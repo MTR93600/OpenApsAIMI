@@ -17,7 +17,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.util.Log
+import app.aaps.plugins.source.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.source.dexcomoneplus.OnePlusLogMarkers
 import app.aaps.plugins.source.dexcomoneplus.oem.DeviceProfileRegistry
 import app.aaps.plugins.source.dexcomoneplus.oem.OemDeviceProfile
@@ -98,19 +98,18 @@ class OnePlusGattClientAndroid(
             val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
             when (state) {
                 BluetoothDevice.BOND_BONDING -> {
-                    Log.i(
-                        OnePlusLogMarkers.TAG,
+                    OnePlusLog.i(
                         "${OnePlusLogMarkers.SESSION}: BOND_BONDING — request KEKS CCCD teardown (Juggluco)",
                     )
                     // Do not touch GATT from the receiver thread — bleExecutor performs teardown.
                     requestKeksTeardown = true
                 }
                 BluetoothDevice.BOND_BONDED -> {
-                    Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: BOND_BONDED (receiver)")
+                    OnePlusLog.i("${OnePlusLogMarkers.SESSION}: BOND_BONDED (receiver)")
                     bondCompleteLatch?.countDown()
                 }
                 BluetoothDevice.BOND_NONE -> {
-                    Log.w(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: BOND_NONE during wait")
+                    OnePlusLog.w("${OnePlusLogMarkers.SESSION}: BOND_NONE during wait")
                 }
             }
         }
@@ -119,14 +118,12 @@ class OnePlusGattClientAndroid(
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             if (!isCurrentGatt(g)) {
-                Log.d(
-                    OnePlusLogMarkers.TAG,
+                OnePlusLog.d(
                     "${OnePlusLogMarkers.SESSION}: ignore stale gatt state=$newState status=$status",
                 )
                 return
             }
-            Log.i(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.i(
                 "${OnePlusLogMarkers.SESSION}: gatt state=$newState status=$status",
             )
             if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
@@ -143,8 +140,7 @@ class OnePlusGattClientAndroid(
                 // Juggluco: wait out BOND_BONDING before discoverServices.
                 val bond = g.device?.bondState ?: BluetoothDevice.BOND_NONE
                 if (bond == BluetoothDevice.BOND_BONDING) {
-                    Log.i(
-                        OnePlusLogMarkers.TAG,
+                    OnePlusLog.i(
                         "${OnePlusLogMarkers.SESSION}: wait BOND_BONDING before discover",
                     )
                     scheduleDiscoverWhenBondReady(g)
@@ -161,7 +157,7 @@ class OnePlusGattClientAndroid(
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
             if (!isCurrentGatt(g)) return
-            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: mtu=$mtu status=$status")
+            OnePlusLog.i("${OnePlusLogMarkers.SESSION}: mtu=$mtu status=$status")
             if (pendingPostReadyMtu) {
                 pendingPostReadyMtu = false
                 return
@@ -177,8 +173,7 @@ class OnePlusGattClientAndroid(
             }
             val delayMs = profile.postDiscoverDelayMs
             if (delayMs > 0L) {
-                Log.d(
-                    OnePlusLogMarkers.TAG,
+                OnePlusLog.d(
                     "${OnePlusLogMarkers.SESSION}: post-discover settle ${delayMs}ms",
                 )
                 // Never sleep on the binder thread — schedule CCCD after Ob1-style pause.
@@ -194,8 +189,7 @@ class OnePlusGattClientAndroid(
             status: Int,
         ) {
             if (!isCurrentGatt(g)) return
-            Log.d(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.d(
                 "${OnePlusLogMarkers.SESSION}: descriptorWrite uuid=${descriptor.uuid} status=$status phase=$cccdPhase",
             )
             // bleExecutor-driven CCCD (Control / Backfill / bond teardown) uses the op latch.
@@ -219,8 +213,7 @@ class OnePlusGattClientAndroid(
                 CccdPhase.AUTH -> {
                     cccdPhase = CccdPhase.DONE
                     readyLatch.complete()
-                    Log.i(
-                        OnePlusLogMarkers.TAG,
+                    OnePlusLog.i(
                         "${OnePlusLogMarkers.SESSION}: gatt ready control=${controlChar != null} " +
                             "backfill=${backfillChar != null}",
                     )
@@ -236,8 +229,7 @@ class OnePlusGattClientAndroid(
             status: Int,
         ) {
             if (!isCurrentGatt(g)) return
-            Log.d(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.d(
                 "${OnePlusLogMarkers.SESSION}: charWrite uuid=${characteristic.uuid} status=$status",
             )
             completePendingOp(status)
@@ -295,8 +287,7 @@ class OnePlusGattClientAndroid(
         }
         val handoff = profile.scanHandoffMs.coerceAtLeast(0L)
         if (handoff > 0L) {
-            Log.d(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.d(
                 "${OnePlusLogMarkers.SESSION}: scan→connect handoff ${handoff}ms",
             )
             sleepQuiet(handoff)
@@ -307,8 +298,7 @@ class OnePlusGattClientAndroid(
             error("ONEPLUS_GATT: invalid address")
         }
         device = remote
-        Log.i(
-            OnePlusLogMarkers.TAG,
+        OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: connectGatt autoConnect=$autoConnect " +
                 "mtuOnConnect=${profile.requestMtuOnConnect}",
         )
@@ -395,10 +385,9 @@ class OnePlusGattClientAndroid(
         // try notify first, fall back to indicate if the stack rejects it.
         try {
             runBlockingDescriptorWrite(g, c, indicate = false)
-            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: Control notifications enabled")
+            OnePlusLog.i("${OnePlusLogMarkers.SESSION}: Control notifications enabled")
         } catch (t: Throwable) {
-            Log.w(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.w(
                 "${OnePlusLogMarkers.SESSION}: Control NOTIFY failed (${t.message}) — INDICATE fallback",
             )
             enableControlIndications()
@@ -409,7 +398,7 @@ class OnePlusGattClientAndroid(
         val g = gatt ?: error("ONEPLUS_GATT: not connected")
         val c = controlChar ?: error("ONEPLUS_GATT: Control characteristic missing")
         runBlockingDescriptorWrite(g, c, indicate = true)
-        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: Control indications enabled")
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: Control indications enabled")
     }
 
     override fun enableBackfillNotifications() {
@@ -417,7 +406,7 @@ class OnePlusGattClientAndroid(
         val c = backfillChar ?: error("ONEPLUS_GATT: ProbablyBackfill characteristic missing")
         // Ob1 uses notifications (not indications) on ProbablyBackfill.
         runBlockingDescriptorWrite(g, c, indicate = false)
-        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: Backfill notifications enabled")
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: Backfill notifications enabled")
     }
 
     override fun isBonded(): Boolean {
@@ -434,12 +423,12 @@ class OnePlusGattClientAndroid(
             bondCompleteLatch = CountDownLatch(1)
         }
         if (d.bondState == BluetoothDevice.BOND_BONDED) {
-            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: already bonded")
+            OnePlusLog.i("${OnePlusLogMarkers.SESSION}: already bonded")
             bondCompleteLatch?.countDown()
             return true
         }
         // Juggluco: createBond(TRANSPORT_LE) via reflection — critical on Samsung.
-        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: createBond TRANSPORT_LE")
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: createBond TRANSPORT_LE")
         return createBondLe(d)
     }
 
@@ -451,20 +440,18 @@ class OnePlusGattClientAndroid(
             return false
         }
         if (state == BluetoothDevice.BOND_NONE) {
-            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: removeBond no-op (already BOND_NONE)")
+            OnePlusLog.i("${OnePlusLogMarkers.SESSION}: removeBond no-op (already BOND_NONE)")
             return true
         }
         return try {
             val method = d.javaClass.getMethod("removeBond")
             val ok = method.invoke(d) as Boolean
-            Log.i(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.i(
                 "${OnePlusLogMarkers.SESSION}: removeBond (hidden API) result=$ok wasState=$state",
             )
             ok
         } catch (t: Throwable) {
-            Log.e(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.e(
                 "${OnePlusLogMarkers.ERROR}: removeBond unavailable: ${t.message}",
                 t,
             )
@@ -478,7 +465,7 @@ class OnePlusGattClientAndroid(
 
         // Already bonded (including race where BOND_BONDED arrived before this call).
         if (isBonded()) {
-            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: Android bond already complete")
+            OnePlusLog.i("${OnePlusLogMarkers.SESSION}: Android bond already complete")
             return finishBondWithKeksCccdRestore()
         }
 
@@ -496,8 +483,7 @@ class OnePlusGattClientAndroid(
         try {
             while (SystemClock.elapsedRealtime() < deadline) {
                 if (!isConnected()) {
-                    Log.e(
-                        OnePlusLogMarkers.TAG,
+                    OnePlusLog.e(
                         "${OnePlusLogMarkers.ERROR}: GATT disconnected during bond wait",
                     )
                     return false
@@ -524,7 +510,7 @@ class OnePlusGattClientAndroid(
         }
 
         if (bonded && isConnected()) {
-            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: Android bond complete — restore KEKS CCCDs")
+            OnePlusLog.i("${OnePlusLogMarkers.SESSION}: Android bond complete — restore KEKS CCCDs")
             return finishBondWithKeksCccdRestore()
         }
 
@@ -532,8 +518,7 @@ class OnePlusGattClientAndroid(
         if (isConnected() && keksCccdTornDown) {
             restoreKeksSubscriptionsAfterBond()
         }
-        Log.e(
-            OnePlusLogMarkers.TAG,
+        OnePlusLog.e(
             "${OnePlusLogMarkers.ERROR}: bond wait timed out / not bonded after ${timeoutMs}ms",
         )
         return false
@@ -544,8 +529,7 @@ class OnePlusGattClientAndroid(
         if (!keksCccdTornDown) return true
         val restored = restoreKeksSubscriptionsAfterBond()
         if (!restored) {
-            Log.e(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.e(
                 "${OnePlusLogMarkers.ERROR}: bond OK but KEKS CCCD restore failed",
             )
         }
@@ -592,8 +576,7 @@ class OnePlusGattClientAndroid(
             val method = device.javaClass.getMethod("createBond", intType)
             val ok = method.invoke(device, BluetoothDevice.TRANSPORT_LE) as Boolean
             if (!ok) {
-                Log.w(
-                    OnePlusLogMarkers.TAG,
+                OnePlusLog.w(
                     "${OnePlusLogMarkers.SESSION}: createBond(TRANSPORT_LE) returned false — fallback",
                 )
                 device.createBond()
@@ -601,8 +584,7 @@ class OnePlusGattClientAndroid(
                 true
             }
         } catch (t: Throwable) {
-            Log.w(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.w(
                 "${OnePlusLogMarkers.SESSION}: createBond(TRANSPORT_LE) unavailable: ${t.message}",
             )
             device.createBond()
@@ -620,9 +602,9 @@ class OnePlusGattClientAndroid(
                 appContext.registerReceiver(bondReceiver, filter)
             }
             bondReceiverRegistered = true
-            Log.d(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: bond receiver registered")
+            OnePlusLog.d("${OnePlusLogMarkers.SESSION}: bond receiver registered")
         } catch (t: Throwable) {
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: bond receiver ${t.message}", t)
+            OnePlusLog.e("${OnePlusLogMarkers.ERROR}: bond receiver ${t.message}", t)
         }
     }
 
@@ -657,10 +639,9 @@ class OnePlusGattClientAndroid(
             authChar?.let { runBlockingDescriptorDisable(g, it) }
             extraChar?.let { runBlockingDescriptorDisable(g, it) }
             keksCccdTornDown = true
-            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: KEKS CCCDs torn down for bonding")
+            OnePlusLog.i("${OnePlusLogMarkers.SESSION}: KEKS CCCDs torn down for bonding")
         } catch (t: Throwable) {
-            Log.e(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.e(
                 "${OnePlusLogMarkers.ERROR}: KEKS CCCD teardown failed: ${t.message}",
                 t,
             )
@@ -690,14 +671,12 @@ class OnePlusGattClientAndroid(
             }
             keksQueue.clear()
             keksCccdTornDown = false
-            Log.i(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.i(
                 "${OnePlusLogMarkers.SESSION}: KEKS CCCDs restored after bond",
             )
             true
         } catch (t: Throwable) {
-            Log.e(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.e(
                 "${OnePlusLogMarkers.ERROR}: restore KEKS CCCDs after bond: ${t.message}",
                 t,
             )
@@ -808,8 +787,7 @@ class OnePlusGattClientAndroid(
         if (!g.requestMtu(mtu)) {
             pendingPostReadyMtu = false
         } else {
-            Log.d(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.d(
                 "${OnePlusLogMarkers.SESSION}: post-ready requestMtu=$mtu",
             )
         }
@@ -821,8 +799,7 @@ class OnePlusGattClientAndroid(
         val elapsed = SystemClock.elapsedRealtime() - lastCloseElapsedMs
         val remaining = settle - elapsed
         if (remaining > 0L) {
-            Log.d(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.d(
                 "${OnePlusLogMarkers.SESSION}: post-close settle ${remaining}ms (floor=${settle}ms)",
             )
             sleepQuiet(remaining)
@@ -834,9 +811,9 @@ class OnePlusGattClientAndroid(
         try {
             val method = BluetoothGatt::class.java.getMethod("refresh")
             val ok = method.invoke(g) as? Boolean ?: false
-            Log.d(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: gatt.refresh()=$ok")
+            OnePlusLog.d("${OnePlusLogMarkers.SESSION}: gatt.refresh()=$ok")
         } catch (t: Throwable) {
-            Log.d(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: gatt.refresh unavailable: ${t.message}")
+            OnePlusLog.d("${OnePlusLogMarkers.SESSION}: gatt.refresh unavailable: ${t.message}")
         }
     }
 
@@ -962,7 +939,7 @@ class OnePlusGattClientAndroid(
             if (cbStatus != BluetoothGatt.GATT_SUCCESS) {
                 error("ONEPLUS_GATT: write $label callback status=$cbStatus")
             }
-            Log.d(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: wrote $label ${payload.size}b")
+            OnePlusLog.d("${OnePlusLogMarkers.SESSION}: wrote $label ${payload.size}b")
         }
     }
 

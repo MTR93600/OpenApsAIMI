@@ -9,7 +9,7 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
 import android.os.SystemClock
-import android.util.Log
+import app.aaps.plugins.source.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.source.dexcomoneplus.OnePlusLogMarkers
 import app.aaps.plugins.source.dexcomoneplus.gatt.OnePlusBluetoothUuids
 import app.aaps.plugins.source.dexcomoneplus.identity.OnePlusAdvCandidate
@@ -72,7 +72,7 @@ class OnePlusBleScannerAndroid(
         }
 
         override fun onScanFailed(errorCode: Int) {
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] failed errorCode=$errorCode")
+            OnePlusLog.e("${OnePlusLogMarkers.SCAN}: [$slot] failed errorCode=$errorCode")
             scanning.set(false)
         }
     }
@@ -81,7 +81,7 @@ class OnePlusBleScannerAndroid(
         val adapter = bluetoothManager.adapter
         val leScanner = adapter?.bluetoothLeScanner
         if (adapter == null || !adapter.isEnabled || leScanner == null) {
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] adapter unavailable")
+            OnePlusLog.e("${OnePlusLogMarkers.SCAN}: [$slot] adapter unavailable")
             return
         }
         stopScan()
@@ -95,7 +95,7 @@ class OnePlusBleScannerAndroid(
         OnePlusScanBudget.record(SystemClock.elapsedRealtime())
         leScanner.startScan(null, settings, callback)
         scanning.set(true)
-        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] started")
+        OnePlusLog.i("${OnePlusLogMarkers.SCAN}: [$slot] started")
     }
 
     override fun stopScan() {
@@ -106,7 +106,7 @@ class OnePlusBleScannerAndroid(
         }
         scanning.set(false)
         listener = null
-        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] stopped")
+        OnePlusLog.i("${OnePlusLogMarkers.SCAN}: [$slot] stopped")
     }
 
     override fun isScanning(): Boolean = scanning.get()
@@ -127,7 +127,7 @@ class OnePlusBleScannerAndroid(
         val adapter = bluetoothManager.adapter
         val leScanner = adapter?.bluetoothLeScanner
         if (adapter == null || !adapter.isEnabled || leScanner == null) {
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget adapter unavailable")
+            OnePlusLog.e("${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget adapter unavailable")
             return OnePlusAdvWaitResult()
         }
         val target = normalizeTargetAddress(address)
@@ -165,14 +165,12 @@ class OnePlusBleScannerAndroid(
             override fun onScanFailed(errorCode: Int) {
                 if (shouldBackOffOnScanFailed(errorCode)) {
                     OnePlusScanBudget.blockFor(SystemClock.elapsedRealtime(), OnePlusScanBudget.WINDOW_MS)
-                    Log.w(
-                        OnePlusLogMarkers.TAG,
+                    OnePlusLog.w(
                         "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget failed errorCode=$errorCode — " +
                             "OS refused the scan; backing off one budget window",
                     )
                 } else {
-                    Log.e(
-                        OnePlusLogMarkers.TAG,
+                    OnePlusLog.e(
                         "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget failed errorCode=$errorCode",
                     )
                 }
@@ -192,8 +190,7 @@ class OnePlusBleScannerAndroid(
                 .setServiceUuid(ParcelUuid(OnePlusBluetoothUuids.Advertisement))
                 .build()
             leScanner.startScan(listOf(targetFilter, familyFilter), settings, cb)
-            Log.i(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.i(
                 "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget filtered started " +
                     "mac=***${target.takeLast(5)} timeoutMs=$timeoutMs",
             )
@@ -202,14 +199,14 @@ class OnePlusBleScannerAndroid(
             noteFilteredWindowOutcome(heardAnything = heardAnything.get(), foundTarget = result.target != null)
             result
         } catch (t: Throwable) {
-            Log.w(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget ${t.message}")
+            OnePlusLog.w("${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget ${t.message}")
             OnePlusAdvWaitResult(foreign = foreign.values.toList())
         } finally {
             try {
                 leScanner.stopScan(cb)
             } catch (_: Throwable) {
             }
-            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget stopped")
+            OnePlusLog.i("${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget stopped")
         }
     }
 
@@ -259,8 +256,7 @@ class OnePlusBleScannerAndroid(
             override fun onScanFailed(errorCode: Int) {
                 if (shouldBackOffOnScanFailed(errorCode)) {
                     OnePlusScanBudget.blockFor(SystemClock.elapsedRealtime(), OnePlusScanBudget.WINDOW_MS)
-                    Log.w(
-                        OnePlusLogMarkers.TAG,
+                    OnePlusLog.w(
                         "${OnePlusLogMarkers.SCAN}: [$slot] unfiltered probe failed errorCode=$errorCode — " +
                             "backing off one budget window",
                     )
@@ -275,14 +271,13 @@ class OnePlusBleScannerAndroid(
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
                 .build()
             leScanner.startScan(null, settings, cb)
-            Log.i(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.i(
                 "${OnePlusLogMarkers.SCAN}: [$slot] unfiltered throttle probe started timeoutMs=$timeoutMs",
             )
             latch.await(timeoutMs.coerceAtLeast(1L), TimeUnit.MILLISECONDS)
             heard.get()
         } catch (t: Throwable) {
-            Log.w(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] unfiltered probe ${t.message}")
+            OnePlusLog.w("${OnePlusLogMarkers.SCAN}: [$slot] unfiltered probe ${t.message}")
             false
         } finally {
             try {
@@ -300,8 +295,7 @@ class OnePlusBleScannerAndroid(
         val next = nextSilentScanState(silentScans, heardAnything)
         silentScans = next.silentScans
         if (!next.backOff) return
-        Log.w(
-            OnePlusLogMarkers.TAG,
+        OnePlusLog.w(
             "${OnePlusLogMarkers.SCAN}: [$slot] $SILENT_SCANS_BEFORE_BACKOFF silent unfiltered probes " +
                 "(${timeoutMs}ms each, no advertisement at all) — the OS may be refusing our scans " +
                 "(\"scanning too frequently\"); backing off one budget window",
@@ -320,8 +314,7 @@ class OnePlusBleScannerAndroid(
             val wait = OnePlusScanBudget.reserve(SystemClock.elapsedRealtime())
             if (wait <= 0L) return
             if (!logged) {
-                Log.i(
-                    OnePlusLogMarkers.TAG,
+                OnePlusLog.i(
                     "${OnePlusLogMarkers.SCAN}: [$slot] scan budget full — deferring startScan ${wait}ms",
                 )
                 logged = true
@@ -356,8 +349,7 @@ class OnePlusBleScannerAndroid(
         val previous = seen.put(address, hit)
         if (previous == null || previous.rssi != hit.rssi || previous.name != hit.name) {
             val score = OnePlusAdvCandidate.rankScore(name, address, hit.rssi, hint)
-            Log.d(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.d(
                 "${OnePlusLogMarkers.SCAN}: [$slot] device name=${name ?: "?"} rssi=${hit.rssi} " +
                     "score=$score addr=***${address.takeLast(5)}",
             )
