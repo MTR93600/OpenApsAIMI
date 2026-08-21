@@ -1,5 +1,6 @@
 package app.aaps.plugins.source.activities
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
@@ -44,6 +45,7 @@ import app.aaps.plugins.libre3.identity.Libre3SensorStore
 import app.aaps.plugins.source.Libre3Ingest
 import app.aaps.plugins.source.R
 import app.aaps.plugins.source.compose.Libre3UiLabels
+import app.aaps.plugins.source.logs.DriverLogFilter
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import javax.inject.Inject
@@ -59,7 +61,15 @@ class Libre3StatusActivity : AppCompatActivity() {
         setContent {
             CompositionLocalProvider(LocalPreferences provides preferences) {
                 AapsTheme {
-                    Libre3StatusScreen(onBack = { finish() })
+                    Libre3StatusScreen(
+                        onBack = { finish() },
+                        onOpenLog = {
+                            startActivity(
+                                Intent(this, CgmDriverLogActivity::class.java)
+                                    .putExtra(CgmDriverLogActivity.EXTRA_FILTER, DriverLogFilter.LIBRE3.name)
+                            )
+                        },
+                    )
                 }
             }
         }
@@ -68,7 +78,7 @@ class Libre3StatusActivity : AppCompatActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun Libre3StatusScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
+internal fun Libre3StatusScreen(onBack: () -> Unit, onOpenLog: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val store = remember { Libre3SensorStore(context) }
     val driver = remember { Libre3CgmDrivers.default() }
@@ -163,6 +173,11 @@ internal fun Libre3StatusScreen(onBack: () -> Unit, modifier: Modifier = Modifie
                 }
             }
 
+            // The way to see what the driver did, without exporting the whole log folder first.
+            OutlinedButton(onClick = onOpenLog) {
+                Text(stringResource(R.string.cgm_driver_log_open))
+            }
+
             // The way out of a sensor that is stored but can never be reached. Without it the only
             // escape would be clearing the whole app, because a stored pairing key sends every
             // later attempt down the short reconnect path, and a fresh scan of the same sensor
@@ -224,6 +239,6 @@ private fun forgetSensor(driver: Libre3CgmDriver, store: Libre3SensorStore) {
 @Composable
 private fun Libre3StatusScreenPreview() {
     MaterialTheme {
-        Libre3StatusScreen(onBack = {})
+        Libre3StatusScreen(onBack = {}, onOpenLog = {})
     }
 }

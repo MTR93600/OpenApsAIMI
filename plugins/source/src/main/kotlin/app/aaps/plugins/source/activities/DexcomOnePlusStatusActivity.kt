@@ -50,6 +50,7 @@ import app.aaps.plugins.source.DexcomOnePlusPlugin
 import app.aaps.plugins.source.DexcomOnePlusStaging
 import app.aaps.plugins.source.R
 import app.aaps.plugins.source.compose.DexcomOnePlusUiLabels
+import app.aaps.plugins.source.logs.DriverLogFilter
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.delay
@@ -82,6 +83,12 @@ class DexcomOnePlusStatusActivity : AppCompatActivity() {
                         onOpenWarmup = {
                             startActivity(Intent(this, DexcomOnePlusWarmupActivity::class.java))
                         },
+                        onOpenLog = {
+                            startActivity(
+                                Intent(this, CgmDriverLogActivity::class.java)
+                                    .putExtra(CgmDriverLogActivity.EXTRA_FILTER, DriverLogFilter.DEXCOM_ONE_PLUS.name)
+                            )
+                        },
                         stagingStateFlow = dexcomOnePlusPlugin.stagingState,
                         stagingEvidenceFlow = dexcomOnePlusPlugin.stagingEvidence,
                         formatGlucose = { mgdl -> profileUtil.fromMgdlToStringWithUnits(mgdl) },
@@ -101,6 +108,7 @@ private fun DexcomOnePlusStatusScreen(
     onBack: () -> Unit,
     onOpenStart: () -> Unit,
     onOpenWarmup: () -> Unit,
+    onOpenLog: () -> Unit,
     stagingStateFlow: StateFlow<StagingState>,
     stagingEvidenceFlow: StateFlow<CgmStagingEvidence?>,
     formatGlucose: (Double) -> String,
@@ -197,6 +205,13 @@ private fun DexcomOnePlusStatusScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(stringResource(R.string.dexcom_oneplus_warmup_open))
+            }
+            // The way to see what the driver did, without exporting the whole log folder first.
+            OutlinedButton(
+                onClick = onOpenLog,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.cgm_driver_log_open))
             }
 
             HorizontalDivider()

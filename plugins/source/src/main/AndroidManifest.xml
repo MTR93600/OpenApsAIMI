@@ -33,6 +33,9 @@
         <activity
             android:name=".activities.Libre3WarmupActivity"
             android:exported="false" />
+        <activity
+            android:name=".activities.CgmDriverLogActivity"
+            android:exported="false" />
 
         <service
             android:name=".notificationreader.NotificationCollectorService"

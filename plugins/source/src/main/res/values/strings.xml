@@ -245,6 +245,18 @@
     <string name="libre3_forget_sensor_confirm">Forget</string>
     <string name="libre3_forget_sensor_cancel">Keep it</string>
     <string name="libre3_forget_sensor_done">The sensor was forgotten. Scan it again to use it.</string>
+
+    <!-- Driver log screen, shared by the native Libre 3 and Dexcom ONE+/G7 drivers -->
+    <string name="cgm_driver_log_title">Sensor driver log</string>
+    <string name="cgm_driver_log_refresh">Refresh</string>
+    <string name="cgm_driver_log_share">Share the log</string>
+    <string name="cgm_driver_log_filter_all">All</string>
+    <string name="cgm_driver_log_filter_libre3">Libre 3</string>
+    <string name="cgm_driver_log_filter_oneplus">Dexcom ONE+/G7</string>
+    <string name="cgm_driver_log_empty">Nothing yet. Lines appear here as soon as the driver starts working.</string>
+    <string name="cgm_driver_log_count" comment="%1$d=how many lines are shown. Example: 320 lines">%1$d lines</string>
+    <string name="cgm_driver_log_open">Driver log</string>
+
     <string name="libre3_warmup_heading">Sensor starting</string>
     <string name="libre3_warmup_countdown" comment="%1$s=minutes and seconds left. Example: Time left: 29:45">Time left: %1$s</string>
     <string name="libre3_warmup_countdown_unknown">—</string>
