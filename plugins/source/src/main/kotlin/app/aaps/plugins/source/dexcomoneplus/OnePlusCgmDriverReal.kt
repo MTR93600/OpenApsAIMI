@@ -359,7 +359,7 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
             },
             // Auto-resume always passes false; only an explicit new-sensor connect may start.
             requestNewSensorStart = requestNewSensorStart,
-            beforeConnect = { address, attempt -> prepareConnect(address, attempt) },
+            beforeConnect = { address, attempt, scanMs -> prepareConnect(address, attempt, scanMs) },
             savedSharedKeyProvider = { store?.load()?.sharedKey },
             onAuthSuccess = { address, key ->
                 ifCurrentOperation(generation) {
@@ -405,7 +405,12 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
      *
      * ⚠️ ASYNC IMPACT: blocks bleExecutor; binder delivers ADV into awaitTarget.
      */
-    private fun prepareConnect(deviceAddress: String, attempt: Int): OnePlusConnectPrep {
+    private fun prepareConnect(
+        deviceAddress: String,
+        attempt: Int,
+        /** Overrides [app.aaps.plugins.source.dexcomoneplus.oem.OemDeviceProfile.preConnectScanMs]; null keeps the profile value. */
+        scanMsOverride: Long? = null,
+    ): OnePlusConnectPrep {
         val target = deviceAddress.uppercase()
         val sightingAgeMs =
             if (pendingAdvSightingElapsedMs > 0L) {
@@ -421,7 +426,9 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
             return OnePlusConnectPrep(advFresh = true)
         }
 
-        val scanMs = profile.preConnectScanMs
+        // A long window costs the same single scan registration as a short one but hears the ADV the
+        // moment it arrives, so the persistent wait overrides the profile value here.
+        val scanMs = scanMsOverride ?: profile.preConnectScanMs
         if (scanMs <= 0L) return OnePlusConnectPrep(advFresh = false)
         // UI Connect just selected this ADV → don't hard-fail if re-scan misses briefly.
         val uiJustSelected = !pendingDeviceName.isNullOrBlank()

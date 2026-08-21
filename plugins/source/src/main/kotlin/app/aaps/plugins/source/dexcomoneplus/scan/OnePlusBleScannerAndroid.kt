@@ -8,6 +8,7 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
+import android.os.PowerManager
 import android.os.SystemClock
 import app.aaps.plugins.source.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.source.dexcomoneplus.OnePlusLogMarkers
@@ -47,6 +48,10 @@ class OnePlusBleScannerAndroid(
     private val appContext = context.applicationContext
     private val bluetoothManager =
         appContext.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+
+    /** Screen state — the unfiltered throttle probe is only meaningful while the screen is on. */
+    private val powerManager =
+        appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
 
     private val scanning = AtomicBoolean(false)
     private val seen = ConcurrentHashMap<String, OnePlusScanResult>()
@@ -195,11 +200,12 @@ class OnePlusBleScannerAndroid(
                     "mac=***${target.takeLast(5)} timeoutMs=$timeoutMs",
             )
             latch.await(timeoutMs.coerceAtLeast(1L), TimeUnit.MILLISECONDS)
-            val result = OnePlusAdvWaitResult(target = found.get(), foreign = foreign.values.toList())
-            noteFilteredWindowOutcome(heardAnything = heardAnything.get(), foundTarget = result.target != null)
-            result
+            OnePlusAdvWaitResult(target = found.get(), foreign = foreign.values.toList())
         } catch (t: Throwable) {
             OnePlusLog.w("${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget ${t.message}")
+            // An exception is not evidence about the OS, so do not let it feed the throttle
+            // heuristic: claim we heard something and leave the counters alone.
+            heardAnything.set(true)
             OnePlusAdvWaitResult(foreign = foreign.values.toList())
         } finally {
             try {
@@ -207,6 +213,15 @@ class OnePlusBleScannerAndroid(
             } catch (_: Throwable) {
             }
             OnePlusLog.i("${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget stopped")
+        }.also { result ->
+            // Deliberately after the `finally`: the probe below starts its own scanner, and running
+            // it while this one is still registered doubled the registration pressure at exactly the
+            // moment the platform quota was tightest (CUBOT field log 2026-08-20, "unfiltered
+            // throttle probe started" logged before the matching "awaitTarget stopped").
+            noteFilteredWindowOutcome(
+                heardAnything = heardAnything.get(),
+                foundTarget = result.target != null,
+            )
         }
     }
 
@@ -228,6 +243,20 @@ class OnePlusBleScannerAndroid(
         consecutiveFilteredSilent = nextFilteredSilentWindows(consecutiveFilteredSilent)
         if (!shouldRunUnfilteredThrottleProbe(consecutiveFilteredSilent)) return
         consecutiveFilteredSilent = 0
+        // AOSP ScanManager suspends UNFILTERED scans while the screen is off ("Cannot start
+        // unfiltered scan in screen-off. This scan will be resumed later"), so with the screen off
+        // the probe can only ever report silence and the back-off would fire on a premise the OS
+        // guarantees false. CUBOT field log 2026-08-20: 16 probes, 16 refusals, 0 valid samples —
+        // the probe was causing the very throttling it was meant to detect.
+        if (!powerManager.isInteractive) {
+            OnePlusLog.i(
+                "${OnePlusLogMarkers.SCAN}: [$slot] throttle probe skipped — screen off " +
+                    "(the OS suspends unfiltered scans, so silence would prove nothing)",
+            )
+            // Do not carry half a count into the next screen-on period.
+            silentScans = 0
+            return
+        }
         val heardOpen = probeUnfiltered(UNFILTERED_THROTTLE_PROBE_MS)
         noteScanOutcome(heardOpen, UNFILTERED_THROTTLE_PROBE_MS)
     }

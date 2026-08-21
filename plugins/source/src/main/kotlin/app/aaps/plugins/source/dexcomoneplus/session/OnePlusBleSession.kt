@@ -70,6 +70,44 @@ internal object OnePlusBleSessionCyclePolicy {
     const val STALE_MAC_SUSPICION_AFTER_MS = 6L * 60_000L
 
     /**
+     * Quiet period after a **successful** EGV cycle before the next ADV wait may start.
+     *
+     * The transmitter keeps radiating the tail of its current advertising burst for a few hundred
+     * milliseconds after it closes the link. Re-arming the wait immediately latches that residual
+     * burst, reports "next-cycle target ADV acquired" and connects into a sensor that is already
+     * going to sleep. CUBOT field log 2026-08-20: cycle down 17:10:14.012 → ADV at 17:10:14.139
+     * (+127 ms) → `connectGatt` → status 133 after 30 s → autoConnect retry → 60 s timeout. That is
+     * 97 s of a 300 s cycle spent on a connect that could not succeed, and the silence clock only
+     * starts once it ends, so the blind-connect escape is late for the real next window too.
+     *
+     * The next genuine burst is a whole duty cycle away (~5 min), so a guard of this size cannot
+     * hide it. Applies to the healthy-cycle path only: after a *failed* connect the sensor may
+     * legitimately still be advertising and that sighting is worth catching.
+     */
+    const val POST_CYCLE_ADV_GUARD_MS = 10_000L
+
+    /**
+     * Length of one filtered ADV window during the persistent wait.
+     *
+     * Android's throttle counts scan **registrations** (5 per 30 s), not scan time, so a few long
+     * windows are far cheaper than many short ones *and* hear the advertisement the moment it
+     * arrives instead of at the next poll. The per-OEM [OemDeviceProfile.preConnectScanMs] stays
+     * what it is for the normal pre-connect rescan; only this open-ended wait uses the long window.
+     *
+     * Sized so that two slots (production + staging) polling together stay under the platform quota
+     * with room to spare for the UI discovery scan: 20 s + [ADV_WAIT_RESTART_DELAY_MS] ≈ 3 starts
+     * per minute per slot, against the 10 per minute the platform allows. It is also the worst-case
+     * lag between `stop` and the wait loop noticing it, which is why it is not longer still.
+     */
+    const val PERSISTENT_ADV_SCAN_MS = 20_000L
+
+    /**
+     * Pause between two ADV windows of the persistent wait. Only long enough to keep `stop`
+     * responsive between windows — the scan-start rate is governed by [PERSISTENT_ADV_SCAN_MS].
+     */
+    const val ADV_WAIT_RESTART_DELAY_MS = 250L
+
+    /**
      * A cycle that proved the link works ends in the persistent ADV wait instead of the bounded
      * failure budget.
      *
@@ -239,10 +277,16 @@ class OnePlusBleSessionSkeleton(
     /**
      * Ob1-style pre-connect: LE rescan / handoff before [OnePlusGattClient.connect].
      * Runs on bleExecutor; must not touch UI. Returns [OnePlusConnectPrep] (ADV freshness).
+     *
+     * `scanMs` overrides [OemDeviceProfile.preConnectScanMs] for this call; null keeps the profile
+     * value. The persistent ADV wait passes
+     * [OnePlusBleSessionCyclePolicy.PERSISTENT_ADV_SCAN_MS] so an open-ended wait costs few scan
+     * registrations instead of one every few seconds.
+     *
      * Default no-op (tests / stub).
      */
-    private val beforeConnect: (deviceAddress: String, attempt: Int) -> OnePlusConnectPrep =
-        { _, _ -> OnePlusConnectPrep() },
+    private val beforeConnect: (deviceAddress: String, attempt: Int, scanMs: Long?) -> OnePlusConnectPrep =
+        { _, _, _ -> OnePlusConnectPrep() },
     /** Juggluco-style reconnect: preload 16-byte KEKS shared key when available. */
     private val savedSharedKeyProvider: () -> ByteArray? = { null },
     /** Persist MAC + shared key after successful auth. */
@@ -425,6 +469,7 @@ class OnePlusBleSessionSkeleton(
                     preparedConnect = preparePostCollectionReconnect(
                         deviceAddress = deviceAddress,
                         reason = "egv_cycle_complete_waiting_for_adv",
+                        postCycleQuietMs = OnePlusBleSessionCyclePolicy.POST_CYCLE_ADV_GUARD_MS,
                     )
                     if (!running || preparedConnect == null) return
                     // Attempt 1 suppresses SessionStart and reports a reconnect, while the prepared
@@ -524,7 +569,7 @@ class OnePlusBleSessionSkeleton(
         setWarmup(OnePlusWarmupState(phase = connectingPhase, message = "connect_attempt_$attempt"))
 
         val prep = preparedConnect ?: try {
-            beforeConnect(deviceAddress, attempt)
+            beforeConnect(deviceAddress, attempt, null)
         } catch (t: Throwable) {
             val msg = t.message ?: "ONEPLUS_BEFORE_CONNECT_FAILED"
             OnePlusLog.e(
@@ -756,6 +801,13 @@ class OnePlusBleSessionSkeleton(
     private fun preparePostCollectionReconnect(
         deviceAddress: String,
         reason: String,
+        /**
+         * Quiet period before the first ADV window, so the transmitter's residual advertising burst
+         * is not mistaken for the next cycle — see
+         * [OnePlusBleSessionCyclePolicy.POST_CYCLE_ADV_GUARD_MS]. Only the healthy-cycle path passes
+         * a value; after a failure the sensor may still be advertising for real.
+         */
+        postCycleQuietMs: Long = 0L,
     ): OnePlusConnectPrep? {
         if (!running) return null
         up = false
@@ -783,6 +835,13 @@ class OnePlusBleSessionSkeleton(
         OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: [$slot] cycle down reason=$reason — wait persistently for next ADV",
         )
+        if (postCycleQuietMs > 0L) {
+            OnePlusLog.i(
+                "${OnePlusLogMarkers.SCAN}: [$slot] post-cycle ADV guard ${postCycleQuietMs}ms — " +
+                    "ignoring the residual advertising burst of the cycle that just closed",
+            )
+            if (!sleepWhileRunning(postCycleQuietMs)) return null
+        }
         return awaitFreshAdvertisement(deviceAddress)
     }
 
@@ -816,6 +875,7 @@ class OnePlusBleSessionSkeleton(
                 beforeConnect(
                     deviceAddress,
                     OnePlusBleSessionCyclePolicy.POST_COLLECTION_RECONNECT_ATTEMPT,
+                    OnePlusBleSessionCyclePolicy.PERSISTENT_ADV_SCAN_MS,
                 )
             } catch (t: Throwable) {
                 OnePlusLog.w(
@@ -888,7 +948,7 @@ class OnePlusBleSessionSkeleton(
                 "${OnePlusLogMarkers.SCAN}: [$slot] target ADV absent — remain waiting " +
                     "silentMs=$silenceMs foreign=${foreignEverSeen ?: "-"}",
             )
-            if (!sleepWhileRunning(ADV_WAIT_RESTART_DELAY_MS)) return null
+            if (!sleepWhileRunning(OnePlusBleSessionCyclePolicy.ADV_WAIT_RESTART_DELAY_MS)) return null
         }
         return null
     }
@@ -973,6 +1033,5 @@ class OnePlusBleSessionSkeleton(
          * Juggluco uses an unbounded wake lock for the whole connection; we bound it.
          */
         private const val AUTH_WAKE_LOCK_MS = 600_000L
-        private const val ADV_WAIT_RESTART_DELAY_MS = 250L
     }
 }

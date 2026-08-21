@@ -1,6 +1,7 @@
 package app.aaps.plugins.source.dexcomoneplus.session
 
 import app.aaps.plugins.source.dexcomoneplus.OnePlusWarmupState
+import app.aaps.plugins.source.dexcomoneplus.scan.OnePlusScanBudget
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
@@ -314,5 +315,33 @@ class OnePlusBleSessionCyclePolicyTest {
                 msSinceLastBlindConnect = silence,
             ),
         ).isTrue()
+    }
+
+    @Test
+    fun `the persistent ADV wait stays inside the platform scan quota with both slots running`() {
+        val cycleMs = OnePlusBleSessionCyclePolicy.PERSISTENT_ADV_SCAN_MS +
+            OnePlusBleSessionCyclePolicy.ADV_WAIT_RESTART_DELAY_MS
+        val startsPerWindowPerSlot = OnePlusScanBudget.WINDOW_MS.toDouble() / cycleMs
+        val bothSlots = 2 * startsPerWindowPerSlot
+
+        // The regression this guards: the wait used OemDeviceProfile.preConnectScanMs (3 s on
+        // Generic, 2 s on Pixel) plus a 250 ms pause, i.e. a 3.25 s / 2.25 s cycle. That is 18 and
+        // 27 scan starts per minute against a platform allowance of 10 — a single slot was over
+        // quota on its own, and the app throttled itself blind trying to compensate.
+        assertThat(bothSlots).isLessThan(OnePlusScanBudget.MAX_STARTS_PER_WINDOW.toDouble())
+        assertThat(startsPerWindowPerSlot).isLessThan(
+            OnePlusScanBudget.MAX_STARTS_PER_WINDOW_PLATFORM.toDouble() / 2,
+        )
+    }
+
+    @Test
+    fun `the post-cycle guard outlasts a residual burst but never hides the next duty cycle`() {
+        val guard = OnePlusBleSessionCyclePolicy.POST_CYCLE_ADV_GUARD_MS
+
+        // Field log 2026-08-20: the residual advertisement arrived 127 ms after the cycle closed.
+        assertThat(guard).isGreaterThan(1_000L)
+        // A G7 duty cycle is ~5 min, and the blind-connect escape fires at 4 min; the guard must be
+        // far below both so it can never swallow a genuine window or delay the escape.
+        assertThat(guard).isLessThan(OnePlusBleSessionCyclePolicy.BLIND_CONNECT_AFTER_ADV_SILENCE_MS / 10)
     }
 }
