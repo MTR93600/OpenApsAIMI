@@ -3,20 +3,149 @@
     <!-- MedtrumPump -->
     <string name="medtrum">Medtrum</string>
     <string name="medtrum_pump_shortname">MT</string>
-    <string name="medtrum_pump_setting">Configurações da Bomba Medtrum</string>
-    <string name="pump_error">Erro da Bomba: %1$s !! </string>
-    <string name="pump_is_suspended">Bomba suspensa</string>
-    <string name="pump_is_suspended_hour_max">Bomba está suspensa devido a insulina máxima horária excedida</string>
-    <string name="pump_is_suspended_day_max">A bomba é suspensa devido à insulina máxima diária excedida</string>
-    <string name="patch_not_active">Patch não ativado</string>
-    <string name="pump_setting_failed">Falha ao definir as configurações do usuário para a bomba!</string>
+    <string name="medtrum_pump_description">Integração de bomba para Medtrum Nano e Medtrum 300U</string>
+    <string name="medtrum_pump_setting">Configurações da bomba Medtrum</string>
+    <string name="pump_error">Erro da bomba: %1$s !! </string>
+    <string name="pump_warning">Aviso da bomba: %1$s </string>
+    <string name="pump_is_suspended">A bomba está suspensa</string>
+    <string name="pump_is_suspended_hour_max">A bomba está suspensa devido ao excedimento do limite máximo de insulina por hora</string>
+    <string name="pump_is_suspended_day_max">A bomba está suspensa devido ao excedimento do limite máximo de insulina por dia</string>
+    <string name="patch_not_active">Apatch (adesivo) não ativado</string>
+    <string name="pump_setting_failed">Falha ao definir as configurações de usuário na bomba!</string>
+    <string name="pump_sync_error">Erro ao sincronizar o histórico da bomba, um registro foi ignorado. Verifique a aba de tratamentos para ver se o bolus foi sincronizado corretamente. Adie (snooze) o alerta e, se o erro continuar ocorrendo, troque o patch ou a base da bomba.</string>
+    <string name="patch_reset_after_primed_error">Reinicialização do patch detectada após o preenchimento (prime)! Remova o patch e inicie um novo patch.</string>
+
     <!-- overview fragment -->
-    <string name="pump_state_label">Estado da Bomba</string>
+    <string name="active_bolus_label">Bolus ativo</string>
+    <string name="pump_state_label">Estado da bomba</string>
     <string name="active_alarms_label">Alarmes ativos</string>
+    <string name="basal_type_label">Tipo de basal</string>
+    <string name="pump_type_label">Tipo de bomba</string>
+    <string name="fw_version_label">Versão do FW</string>
+    <string name="patch_no_label">Nº do patch</string>
+    <string name="patch_expiry_label">Validade do patch</string>
+    <string name="patch_activation_time_label">Ativação</string>
+    <string name="reset_alarms_label">Redefinir alarmes</string>
+    <string name="change_patch_label">Trocar Patch</string>
+    <string name="requested_by_user" comment="26 characters max for translation">Solicitado pelo usuário</string>
+    <string name="expiry_not_enabled">Não ativado</string>
+
     <!-- Alarm strings -->
+    <string name="alarm_none">Nenhum</string>
+    <string name="alarm_pump_low_battery">Bateria da bomba baixa</string>
+    <string name="alarm_pump_low_reservoir">Reservatório da bomba baixo</string>
+    <string name="alarm_pump_expires_soon">A bomba expira em breve</string>
+    <string name="alarm_low_bg_suspended">Suspenso por glicose baixa</string>
+    <string name="alarm_low_bg_suspended2">Suspenso por glicose baixa 2</string>
+    <string name="alarm_auto_suspended">Suspenso automaticamente</string>
+    <string name="alarm_hourly_max_suspended">suspenso pelo máximo por hora</string>
+    <string name="alarm_daily_max_suspended">suspenso pelo máximo diário</string>
+    <string name="alarm_suspended">Suspenso</string>
+    <string name="alarm_paused">Pausado</string>
+    <string name="alarm_occlusion">Oclusão</string>
+    <string name="alarm_expired">Expirado</string>
+    <string name="alarm_reservoir_empty">Reservatório vazio</string>
+    <string name="alarm_patch_fault">Falha no patch</string>
+    <string name="alarm_base_fault">Falha na base</string>
+    <string name="alarm_battery_out">Bateria esgotada</string>
+    <string name="alarm_no_calibration">Sem calibração</string>
+    <string name="pump_time_update_failed">Falha ao atualizar o fuso horário da bomba; adie a mensagem e atualize manualmente.</string>
+    <string name="bolus_error">Erro de bolus</string>
+
     <!-- Status strings -->
+    <string name="status_idle">Ocioso</string>
+    <string name="status_filled">Preenchido</string>
+    <string name="status_priming">Preenchendo (Priming)</string>
+    <string name="status_primed">Preenchido (Primed)</string>
+    <string name="status_ejecting">Ejetando</string>
+    <string name="status_ejected">Ejetado</string>
+    <string name="status_active">Ativo</string>
+    <string name="status_stopped">Parado</string>
+
     <!-- wizard-->
+    <string name="retry">Tentar novamente</string>
+
+    <string name="step_prepare_patch">Ativar Patch</string>
+    <string name="step_prepare_patch_connect">Conectar e Preencher</string>
+    <string name="step_select_insulin">Selecionar Insulina</string>
+    <string name="step_prime">Preencher (Prime)</string>
+    <string name="step_priming">Preenchendo</string>
+    <string name="step_priming_complete">Preenchimento Concluído</string>
+    <string name="step_attach">Fixar Patch</string>
+    <string name="step_activate">Ativando...</string>
+    <string name="step_activate_complete">Ativação Concluída</string>
+    <string name="step_deactivate">Desativar Patch</string>
+    <string name="step_deactivating">Desativando...</string>
+    <string name="step_deactivate_complete">Patch desativado</string>
+    <string name="unpair_confirm_message">Isso limpará o número de série da bomba armazenado e desconectará. Ative um novo patch para procurar por uma bomba.</string>
+    <string name="step_retry_activation">Ativação em andamento</string>
+    <string name="unexpected_state">Estado inesperado: %1$s</string>
+    <string name="ble_scan_connect_pump_base_first">Conecte a base da bomba a um patch novo para ligá-la e, em seguida, selecione-a na lista abaixo.</string>
+    <string name="patch_begin_activation">Nenhum patch ativo. Pressione <b>Avançar</b> para iniciar o processo de ativação.</string>
+    <string name="connect_pump_base">Certifique-se de que a base da bomba esteja conectada ao patch, remova o ar residual e preencha com insulina, depois pressione <b>Avançar</b>.</string>
+    <string name="note_min_70_units">Nota: É necessário um mínimo de 70 unidades para a ativação.</string>
+    <string name="reservoir_text_and_level">Reservatório: %.2f U</string>
+    <string name="do_not_attach_to_body">Não fixe o patch ao corpo ainda.</string>
+    <string name="half_press_needle">Pressione pela metade o botão da agulha. Em seguida, toque em <b>Avançar</b> para iniciar o preenchimento.</string>
+    <string name="wait_for_priming">Aguarde a conclusão do preenchimento.</string>
+    <string name="press_next">Pressione <b>Avançar</b> para continuar.</string>
+    <string name="press_next_to_start_activation">Pressione <b>Avançar</b> para iniciar a ativação.</string>
+    <string name="remove_safety_lock">Remova o lacre de segurança. Fixe a bomba ao corpo. Pressione o botão da agulha.</string>
+    <string name="activating_pump">Ativando a bomba e definindo a taxa basal inicial. Aguarde.</string>
+    <string name="activating_complete">Novo patch ativado. %.2f unidades restantes.</string>
+    <string name="can_export_settings">Você pode exportar as configurações para poder recuperar esta sessão do patch mais tarde.</string>
+    <string name="press_OK_to_return">Pressione <b>OK</b> para retornar à tela principal.</string>
+
+    <string name="deactivate_sure">Tem certeza de que deseja desativar o patch atual?</string>
+    <string name="cancel_sure">Tem certeza de que deseja cancelar a ativação?</string>
+    <string name="medtrum_deactivate_pump_confirm">Tem certeza? Esta ação não pode ser desfeita!!</string>
+    <string name="press_next_or_cancel">Pressione <b>Avançar</b> para desativar ou <b>Cancelar</b> para retornar à tela principal.</string>
+    <string name="deactivating_pump">Desativando o patch. Aguarde.</string>
+    <string name="deactivating_error">Falha ao desativar, pressione <b>Descartar</b> para esquecer o patch.</string>
+    <string name="retract_needle">Retraia a agulha. Remova o patch do corpo.</string>
+    <string name="remove_base_discard_patch">Remova a base da bomba e descarte o patch usado adequadamente.</string>
+    <string name="press_next_or_OK">Pressione <b>OK</b> para retornar à tela principal. Pressione <b>Avançar</b> para iniciar a ativação de um novo patch.</string>
+
+    <string name="activation_in_progress">Ops! Algo deu errado, parece que já há uma ativação em andamento.</string>
+    <string name="press_retry_or_discard">Pressione <b>Avançar</b> para retomar a ativação ou <b>Descartar</b> para redefinir o status de ativação.</string>
+    <string name="reading_activation_status">Aguarde, lendo o status de ativação da bomba.</string>
+
     <!-- settings-->
+    <string name="alarm_setting_title">Configurações de Alarme</string>
+    <string name="alarm_setting_summary">Selecione suas configurações preferidas de alarme da bomba.</string>
+    <string name="alarm_setting_light_vibrate_beep">Luz, vibração e bipe</string>
+    <string name="alarm_setting_light_vibrate">Luz e vibração</string>
+    <string name="alarm_setting_light_beep">Luz e bipe</string>
+    <string name="alarm_setting_light">Luz</string>
+    <string name="alarm_setting_vibrate_beep">Vibração e bipe</string>
+    <string name="alarm_setting_vibrate">Vibração</string>
+    <string name="alarm_setting_beep">Bipe</string>
+    <string name="alarm_setting_silent">Silencioso</string>
+    <string name="pump_warning_notification_title">Notificação em avisos da bomba</string>
+    <string name="pump_warning_notification_summary">Exibir notificação em avisos não críticos da bomba: bateria baixa, reservatório baixo (20 unidades) e expira em breve. É recomendável deixar ativado quando os alarmes da bomba estiverem definidos como silenciosos.</string>
+    <string name="pump_warning_expiry_hour_title">Aviso de expiração da bomba [horas]</string>
+    <string name="pump_warning_expiry_hour_summary">Exibir notificação na hora especificada após a ativação.</string>
+    <string name="patch_expiration_title">Validade do Patch</string>
+    <string name="patch_expiration_summary">Quando ativado, o patch expirará após 3 dias, com um período de carência de 8 horas após esse prazo.</string>
+    <string name="hourly_max_insulin_title">Insulina Máxima por Hora [Unidades]</string>
+    <string name="hourly_max_insulin_summary">Especifique o máximo de unidades de insulina permitidas por hora. Se excedido, a bomba será suspensa.</string>
+    <string name="daily_max_insulin_title">Insulina Máxima Diária [Unidades]</string>
+    <string name="daily_max_insulin_summary">Especifique o máximo de unidades de insulina permitidas por dia. Se excedido, a bomba será suspensa.</string>
+    <string name="scan_on_connection_error_title">Escanear em caso de erro de conexão</string>
+    <string name="scan_on_connection_error_summary">AVISO: Ative apenas se tiver problemas de conexão. Se ativado, o driver procura pela bomba novamente antes de tentar se reconectar a ela. Certifique-se de configurar a permissão de Localização como \"Permitir o tempo todo\" </string>
+
     <!-- treatment state-->
+    <string name="getting_pump_status">Obtendo status da bomba</string>
+    <string name="syncing_records">Sincronizando registros, restam %1$d</string>
+    <string name="getting_bolus_status">Obtendo status do bolus</string>
+    <string name="getting_temp_basal_status">Obtendo status da basal temporária</string>
+    <string name="setting_pump_settings">Definindo opções do usuário</string>
+
     <!-- bolus-->
+    <string name="bolus_error_reason_user">Bolus cancelado pelo usuário</string>
+    <string name="bolus_error_reason_not_connected">Bomba não conectada</string>
+    <string name="bolus_error_reason_already_in_progress">Bolus já em andamento</string>
+    <string name="bolus_error_reason_unable_to_send_command">Não foi possível enviar o comando de bolus</string>
+    <string name="bolus_error_reason_communication_lost">Tempo limite esgotado ao obter o status do bolus</string>
+    <string name="bolus_error_reason_pump_error">Erro da bomba</string>
 </resources>

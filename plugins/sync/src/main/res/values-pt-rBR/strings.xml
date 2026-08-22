@@ -2,88 +2,280 @@
 <resources>
     <!-- AAPSClient -->
     <!-- ns_wifi_ssids moved to core:keys module -->
-    <string name="connection_settings_title">Definições de ligação</string>
+    <string name="connection_settings_title">Configurações de conexão</string>
     <!-- ns_wifi_ssids_summary moved to core:keys module -->
     <string name="description_ns_client_v3">Sincroniza seus dados com o Nightscout usando a API v3</string>
     <string name="blocked_by_charging">Bloqueado pelas opções de carregamento</string>
     <string name="blocked_by_connectivity">Bloqueado pelas opções de conectividade</string>
-    <string name="unsupported_ns_version">Versão não suportada do Nightscout</string>
+    <string name="no_connectivity">Sem conectividade</string>
+    <string name="unsupported_ns_version">Versão do Nightscout não suportada</string>
+
     <!-- AAPSClient -->
+    <string name="ns_client_v3_short_name">NSv3</string>
+
     <!-- Authorized clients (paired devices that can issue signed commands) -->
+    <string name="authorized_clients_title">Clientes autorizados</string>
+    <string name="authorized_clients_add">Adicionar cliente</string>
+    <string name="authorized_clients_comm_switch_title">Permitir controle do cliente</string>
+    <string name="authorized_clients_comm_switch_summary">Permitir que clientes emparelhados enviem comandos assinados pelo Nightscout. Desative para interromper a comunicação sem removê-los.</string>
+    <string name="authorized_clients_needs_websocket">Os WebSockets estão desativados, portanto, os comandos dos clientes não podem ser recebidos. Os clientes verão este mestre como não aceitando comandos até que você ative os WebSockets.</string>
+    <string name="authorized_clients_state_active">Ativo</string>
+    <string name="authorized_clients_state_pending">Pendente</string>
+    <string name="authorized_clients_last_seen">Visto pela última vez em %1$s</string>
+    <string name="authorized_clients_never_seen">Nunca utilizado</string>
+    <string name="authorized_clients_pending_expires_in">O emparelhamento expira em %1$ss</string>
+    <string name="authorized_clients_empty_title">Nenhum cliente autorizado</string>
+    <string name="authorized_clients_empty_subtitle">Emparelhe um dispositivo cliente para permitir que ele envie comandos assinados para este mestre.</string>
+    <string name="authorized_clients_name_dialog_title">Novo cliente</string>
+    <string name="authorized_clients_name_placeholder">Nome do dispositivo</string>
+    <string name="authorized_clients_delete_dialog_title">Revogar acesso?</string>
+    <string name="authorized_clients_delete_dialog_message">%1$s não poderá mais enviar comandos.</string>
+    <string name="authorized_clients_pin_dialog_title">Emparelhar cliente</string>
+    <string name="authorized_clients_pin_instructions">Insira este PIN no dispositivo cliente. O código é válido para apenas um emparelhamento.</string>
+    <string name="authorized_clients_pin_expires_in">Expira em %1$ss</string>
+    <string name="authorized_clients_pin_done">Concluído</string>
+    <string name="authorized_clients_pin_publishing">Enviando oferta de emparelhamento para o Nightscout…</string>
+    <string name="authorized_clients_pin_published">Oferta de emparelhamento pronta no Nightscout.</string>
+    <string name="authorized_clients_pin_publish_failed">Não foi possível enviar a oferta de emparelhamento para o Nightscout.</string>
+    <string name="authorized_clients_pin_retry">Tentar novamente</string>
+
     <!-- Pair with master (client side PIN entry) -->
+    <string name="pair_with_master_title">Emparelhar com o mestre</string>
+    <string name="pair_with_master_pin_entry_title">Insira o PIN de emparelhamento</string>
+    <string name="pair_with_master_pin_entry_message">Abra \"Clientes autorizados\" no dispositivo mestre e adicione este cliente. Digite o PIN de 8 dígitos exibido lá.</string>
+    <string name="pair_with_master_pin_entry_label">PIN de 8 dígitos</string>
+    <string name="pair_with_master_pin_entry_submit">Emparelhar</string>
+    <string name="pair_with_master_fetching">Buscando emparelhamento…</string>
+    <string name="pair_with_master_confirm_title">Emparelhar com este mestre?</string>
+    <string name="pair_with_master_confirm_master">Mestre: %1$s</string>
+    <string name="pair_with_master_confirm_warning">Após o emparelhamento, este mestre poderá enviar comandos assinados para este dispositivo.</string>
+    <string name="pair_with_master_confirm_pair">Emparelhar</string>
+    <string name="pair_with_master_error_title">Não é possível emparelhar</string>
+    <string name="pair_with_master_error_wrong_pin">Nenhum emparelhamento encontrado para esse PIN. Verifique o PIN no mestre e tente novamente.</string>
+    <string name="pair_with_master_error_ambiguous_pin">Vários emparelhamentos corresponderam a esse PIN. Peça ao mestre para gerar um novo e tente novamente.</string>
+    <string name="pair_with_master_error_expired">Este emparelhamento expirou. Gere um novo PIN no mestre.</string>
+    <string name="pair_with_master_error_network">Não foi possível alcançar o Nightscout. Verifique a conexão e tente novamente.</string>
+    <string name="pair_with_master_retry">Tentar novamente</string>
+    <string name="pair_with_master_already_paired_title">Já emparelhado</string>
+    <string name="pair_with_master_already_paired_master">Atualmente emparelhado com o mestre %1$s. Desemparelhe primeiro para inserir um novo PIN.</string>
+    <string name="pair_with_master_unpair">Desemparelhar</string>
+    <string name="pair_with_master_sending">Enviando mensagem de emparelhamento…</string>
+
     <!-- Client-control orphan notification (master no longer recognises this client) -->
+    <string name="clientcontrol_orphan_notification">O AAPS mestre não reconhece mais este dispositivo. Abra a tela de gerenciamento → Emparelhar com o mestre para reemparelhar.</string>
+    <string name="ns_client">NSClient</string>
     <string name="ns_client_url">URL:</string>
+    <string name="ns_client_v3_title">NSClientV3</string>
     <string name="deliver_now">Entregar agora</string>
     <string name="queue">Fila:</string>
-    <string name="clear_log">Limpar registros</string>
+    <string name="status_label">Status:</string>
+    <string name="clear_log">Limpar registro</string>
+    <string name="restart">Reiniciar</string>
     <string name="full_sync">Sincronização completa</string>
-    <string name="full_sync_comment">Sincronização completa? O processo pode levar muitas horas e durante esse período você não verá novos dados no NS.</string>
+    <string name="full_sync_comment">Sincronização completa? Pode levar muitas horas e, até terminar, você não verá novos dados no NS.</string>
     <string name="ns_sync_options">Sincronização</string>
-    <string name="ns_alarm_options">Opções Alarme</string>
+    <string name="ns_alarm_options">Opções de alarme</string>
+    <string name="ns_remote_control_options">Controle remoto</string>
+
     <!-- Tidepool -->
+    <string name="summary_tidepool_dev_servers">Se ativado, os uploads irão para servidores de teste em vez dos regulares</string>
     <string name="title_tidepool_dev_servers">Usar servidores de integração (teste)</string>
     <string name="tidepool">Tidepool</string>
     <string name="tidepool_shortname">TDP</string>
-    <string name="description_tidepool">Enviar dados para Tidepool</string>
+    <string name="description_tidepool">Envia dados para o Tidepool</string>
     <string name="upload_now">Enviar agora</string>
+    <string name="tidepool_purge_data">Excluir todos os dados</string>
+    <string name="tidepool_purge_data_confirm">Excluir TODOS os dados que o AAPS enviou para o Tidepool? Isso não pode ser desfeito. Use para remover dados corrompidos por uma versão mais antiga e, em seguida, execute \"Sincronização completa\" para reenviar.</string>
     <string name="not_connected">Não conectado</string>
     <string name="read_only">Somente leitura</string>
     <string name="working">Trabalhando</string>
+
     <!-- Xdrip StatusLine -->
     <string name="xdrip">xDrip+</string>
     <string name="xdrip_shortname">XD</string>
-    <string name="description_xdrip">Enviar dados de glicemia para xDrip+</string>
-    <string name="xdrip_status_settings">linha do estado do Xdrip+ (relógio)</string>
-    <string name="xdrip_not_installed">xDrip+ não está instalado</string>
+    <string name="description_xdrip">Enviar dados para o xDrip+</string>
+    <string name="xdrip_status_settings">Linha de Status Avançada do xDrip+</string>
+    <string name="xdrip_not_installed">xDrip+ não instalado</string>
     <string name="calibration_sent">Calibração enviada para o xDrip+</string>
-    <string name="xdrip_local_broadcasts_summary">Enviar dados de glicose e tratamentos para xDrip+. A fonte de dados \"xDrip+ Sync Seguidor\" deve ser selecionada e a aceitação de dados deve estar ativada nas configurações - Configurações entre apps - Aceitar Glucose/Tratamentos</string>
-    <string name="xdrip_local_broadcasts_title">Ativar transmissões para xDrip+.</string>
+    <string name="xdrip_local_broadcasts_summary">Envia dados de glicose e tratamentos para o xDrip+. A fonte de dados \"xDrip+ Sync Follower\" deve estar selecionada e a aceitação de dados deve estar ativada em Configurações - Configurações entre aplicativos - Aceitar Glicose/Tratamentos</string>
+    <string name="xdrip_local_broadcasts_title">Ativar transmissões para o xDrip+.</string>
+
     <!--    DataBroadcast-->
+    <string name="tizen">Aplicativos Complementares Externos</string>
+    <string name="tizen_short">CAB</string>
+    <string name="tizen_description">Ativa a transmissão de dados para vários aplicativos complementares externos</string>
+
     <!-- GarminPlugin -->
+    <string name="garmin">Garmin</string>
+    <string name="garmin_description">Conexão com o dispositivo Garmin (Fenix, Edge, …)</string>
+    <string name="garmin_local_http_server_port">Porta do servidor HTTP local</string>
+    <string name="garmin_local_http_server">Servidor HTTP local</string>
+
     <!--    Wear-->
-    <string name="description_wear">Monitore e controle AndroidAPS usando seu relógio WearOS.</string>
-    <string name="no_watch_connected">(Nenhum relógio conectado)</string>
-    <string name="pump_status">Estado da Bomba</string>
+    <string name="wear_shortname">WEAR</string>
+    <string name="description_wear">Monitore e controle o AAPS usando seu relógio WearOS.</string>
+    <string name="no_watch_connected">(Nenhum Relógio Conectado)</string>
+    <string name="pump_status">Status da bomba</string>
     <string name="loop_status">Status do loop</string>
-    <string name="wear_action_tempt_unit_error">Unidades diferentes usadas no relógio e telefone!</string>
-    <string name="wear_action_tempt_min_bg_error">Glicemia mínima fora do alvo!</string>
-    <string name="wear_action_tempt_max_bg_error">Glicemia maxima fora da meta!</string>
-    <string name="wear_wizard_settings_summary">Resultado cálculos incluídos no Assistente:</string>
-    <string name="wear_general_settings">Configurações gerais</string>
-    <string name="wear_custom_watchface_settings">Configurações personalizadas de Watchface</string>
-    <string name="wear_custom_watchface">Watchface Personalizado: %1$s</string>
-    <string name="wear_load_watchface">Carregar Watchface</string>
-    <string name="wear_infos_watchface">Infos Watchface</string>
+    <string name="user_action_not_available">A ação do usuário selecionada %1$s não está mais disponível, atualize seu bloco (tile)</string>
+    <string name="scene_not_available">A cena %1$s não está mais disponível, atualize seu bloco (tile)</string>
+    <string name="wear_remote_insulin_not_allowed_in_client">Comandos remotos de insulina estão desativados no modo cliente</string>
+    <string name="wear_action_tempt_unit_error">Unidades diferentes usadas no relógio e no telefone!</string>
+    <string name="wear_action_tempt_min_bg_error">Glicemia mínima fora do intervalo!</string>
+    <string name="wear_action_tempt_max_bg_error">Glicemia máxima fora do intervalo!</string>
+    <string name="wear_action_tempt_range_error">Intervalo inválido: O alvo inferior (%1$s) não pode ser maior que o alvo superior (%2$s)</string>
+    <string name="wear_wizard_settings_summary">Cálculos incluídos no resultado do Assistente:</string>
+    <string name="wear_general_settings">Configurações Gerais</string>
+    <string name="wear_custom_watchface_settings">Configurações de Mostrador Personalizado</string>
+    <string name="wear_custom_watchface">Mostrador Personalizado: %1$s</string>
+    <string name="wear_load_watchface">Carregar Mostrador</string>
+    <string name="wear_infos_watchface">Informações do Mostrador</string>
     <string name="wear_export_watchface">Exportar modelo</string>
-    <string name="wear_new_custom_watchface_exported">Modelo de watchface personalizado exportado</string>
+    <string name="wear_new_custom_watchface_exported">Modelo de mostrador personalizado exportado</string>
+    <string name="wear_link_to_more_cwf_doc">https://androidaps.readthedocs.io/en/latest/ExchangeSiteCustomWatchfaces/index.html</string>
     <string name="resend_all_data">Reenviar Todos os Dados</string>
-    <string name="open_settings_on_wear">Abrir Definições em Wear</string>
-    <string name="cwf_infos_pref_locked">Lista de preferências bloqueadas pela Watchface</string>
-    <string name="cwf_infos_pref_required">Lista de preferências solicitadas pela Watchface</string>
-    <string name="cwf_infos_view_title">Lista de campos incluídos na Watchface</string>
-    <string name="pump_fetching_data">tentando buscar dados da Bomba.</string>
-    <string name="pump_old_data">TDD: Dados ainda antigos! Não é possível carregar da bomba.</string>
+    <string name="open_settings_on_wear">Abrir Configurações no Wear</string>
+    <string name="wear_import_custom_watchface_title">Selecionar Mostrador Personalizado</string>
+    <string name="cwf_infos_pref_locked">Lista de preferências bloqueadas pelo mostrador</string>
+    <string name="cwf_infos_pref_required">Lista de preferências necessárias para o mostrador</string>
+    <string name="cwf_infos_view_title">Lista de campos incluídos no mostrador</string>
+    <string name="enabled">Ativado</string>
+    <string name="disabled">Desativado</string>
+    <string name="pump_fetching_data">tentando buscar dados da bomba.</string>
+    <string name="pump_old_data">Dose Diária Total (TDD): Ainda são dados antigos! Não é possível carregar da bomba.</string>
     <string name="units_short">U</string>
     <string name="hour_short">h</string>
-    <string name="no_active_profile">Nenhum perfil ativo definido!</string>
-    <string name="target_only_aps_mode">Alvos só se aplicam no modo APS!</string>
-    <string name="no_history">Nenhum dado no histórico!</string>
-    <string name="temp_target">Alvos Temporários</string>
+    <string name="no_active_profile">Nenhuma troca de perfil ativa!</string>
+    <string name="target_only_aps_mode">Os alvos só se aplicam no modo APS!</string>
+    <string name="no_history">Sem dados de histórico!</string>
+    <string name="temp_target">Alvo Temporário</string>
     <string name="until">até</string>
-    <string name="default_range">DEFAULT RANGE</string>
+    <string name="default_range">INTERVALO PADRÃO</string>
     <string name="target">alvo</string>
-    <string name="rate_duration">Taxa: %1$.2fU/h (%2$.2f%%) \nDuração %3$d min</string>
-    <string name="no_profile">Nenhum perfil selecionado</string>
-    <string name="aps_only">Aplique somente no modo APS!</string>
+    <string name="rate_duration">Taxa: %1$.2fU/h (%2$.2f%%) \nDuração: %3$d min</string>
+    <string name="no_profile">Nenhum perfil carregado</string>
+    <string name="aps_only">Aplicar apenas no modo APS!</string>
     <string name="last_aps_result_na">Último resultado indisponível!</string>
     <string name="loop_status_closed">LOOP FECHADO</string>
     <string name="loop_status_open">LOOP ABERTO</string>
+    <string name="loop_status_lgs">LGS (Suspensão por Glicemia Baixa)</string>
     <string name="loop_status_disabled">LOOP DESATIVADO</string>
     <string name="aps">APS</string>
     <string name="last_run">Última execução</string>
-    <string name="last_enact">Ultima execução</string>
-    <string name="tdd_line">%1$.2f / %1$.0f U%%</string>
+    <string name="last_enact">Última aplicação</string>
+    <string name="tdd_line">%1$.2fU %1$.0f%%</string>
     <string name="today">Hoje</string>
     <string name="weighted">ponderado</string>
+    <string name="full_xdrip_sync_comment">Sincronização completa? Pode demorar um pouco e, até que termine, você não verá novos dados no xDrip+.</string>
+
+    <string name="wear_action_loop_state_unauthorized">Tente novamente.</string>
+    <string name="wear_action_loop_state_invalid">Estado do loop solicitado inválido</string>
+
+    <string name="wear_action_running_mode_title">Modo de execução</string>
+
+    <string name="garmin_request_key">Solicitar Chave</string>
+
     <!-- SMS Communicator & OTP Authenticator -->
+
+    <string name="smscommunicator">Comunicador SMS</string>
+    <string name="smscommunicator_shortname">SMS</string>
+    <string name="description_sms_communicator">Controle o AAPS remotamente usando comandos por SMS.</string>
+    <string name="smscommunicator_code_from_authenticator_for" comment="This is continuation of sentence: To [ACTION] reply with code">do aplicativo Autenticador para: %1$s seguido pelo PIN</string>
+    <string name="smscommunicator_tab_otp_label">Configuração do Autenticador</string>
+    <string name="smscommunicator_code_verify_label">Código para verificar:</string>
+    <string name="smscommunicator_code_verify_hint">OTP + PIN</string>
+    <string name="smscommunicator_code_verify_info">O código de verificação consiste em 6 dígitos exibidos pelo aplicativo Autenticador (conhecido como OTP) seguidos por 3 ou mais dígitos do PIN obrigatório.</string>
+    <string name="smscommunicator_otp_reset_btn">Redefinir Autenticadores</string>
+    <string name="smscommunicator_otp_reset_title">Redefinir Chave do Autenticador</string>
+    <string name="smscommunicator_otp_reset_prompt">Tem certeza de que deseja redefinir a chave do Autenticador? Isso invalidará todos os Autenticadores configurados atualmente, e você precisará configurá-los novamente.</string>
+    <string name="smscommunicator_otp_step1_install_header">1. Instalar o Autenticador</string>
+    <string name="smscommunicator_otp_step2_provisioning_header">2. Escanear o código para configurar os códigos OTP do AAPS</string>
+    <string name="smscommunicator_otp_step3_test_header">3. Testar a Senha de Uso Único (OTP)</string>
+    <string name="smscommunicator_otp_reset_header">Redefinir Autenticadores</string>
+    <string name="smscommunicator_otp_install_info">Em cada telefone seguidor, instale um aplicativo Autenticador que suporte tokens TOTP RFC 6238. Aplicativos gratuitos populares são:\n • Authy\n • Google Authenticator\n • LastPass Authenticator\n • FreeOTP Authenticator</string>
+    <string name="smscommunicator_otp_reset_warning">Ao redefinir o autenticador, você invalida todos os autenticadores já provisionados. Você precisará configurá-los novamente!</string>
+    <string name="smscommunicator_otp_verification_ok">OK</string>
+    <string name="smscommunicator_otp_verification_ivalid_size">TAMANHO INVÁLIDO!</string>
+    <string name="smscommunicator_otp_verification_wrong_pin">PIN INCORRETO</string>
+    <string name="smscommunicator_otp_verification_wrong_otp">OTP INCORRETO</string>
+    <string name="smscommunicator_otp_key_load_failed">Não foi possível carregar a chave de provisionamento OTP. A configuração por QR code está indisponível.</string>
+    <string name="smscommunicator_otp_secret_auto_repaired">O segredo OTP foi reparado automaticamente. Escaneie o QR code novamente, se necessário.</string>
+    <string name="smscommunicator_otp_uri_build_failed">Não foi possível criar o link de configuração OTP. Tente redefinir os autenticadores nas configurações.</string>
+    <string name="smscommunicator_otp_qr_generation_failed">Não foi possível gerar o QR code para a configuração OTP.</string>
+    <string name="sms_wrong_code">Código incorreto. Comando cancelado.</string>
+    <string name="sms_timeout_while_waiting">Tempo limite esgotado enquanto aguardava o término da comunicação anterior com a bomba</string>
+    <string name="smscommunicator_bolus_reply_with_code">Para entregar um bolus de %1$.2fU, responda com o código %2$s</string>
+    <string name="smscommunicator_meal_bolus_reply_with_code">Para entregar um bolus de refeição de %1$.2fU, responda com o código %2$s</string>
+    <string name="smscommunicator_temptarget_with_code">Para definir o Alvo Temporário %1$s, responda com o código %2$s</string>
+    <string name="smscommunicator_temptarget_cancel">Para cancelar o Alvo Temporário, responda com o código %1$s</string>
+    <string name="smscommunicator_stops_ns_with_code">Para desativar o Serviço Remoto por SMS, responda com o código %1$s.\n\nLembre-se de que você só poderá reativá-lo diretamente no smartphone mestre do AAPS.</string>
+    <string name="smscommunicator_stopped_sms">Serviço Remoto por SMS interrompido. Para reativá-lo, use o AAPS no smartphone mestre.</string>
+    <string name="smscommunicator_calibration_reply_with_code">Para enviar a calibração %1$.2f, responda com o código %2$s</string>
+    <string name="smscommunicator_bolus_failed">O bolus falhou. Verifique o estado real antes de enviar outro comando!</string>
+    <string name="smscommunicator_bolus_delivered">Bolus de %1$.2f U entregue com sucesso</string>
+    <string name="smscommunicator_meal_bolus_delivered">Bolus de Refeição de %1$.2f U entregue com sucesso</string>
+    <string name="smscommunicator_meal_bolus_delivered_tt">Alvo %1$s por %2$d minutos</string>
+    <string name="smscommunicator_tt_set">Alvo %1$s definido com sucesso por %2$d minutos</string>
+    <string name="smscommunicator_tt_canceled">Alvo Temporário cancelado com sucesso</string>
+    <string name="smscommunicator_loop_has_been_disabled">O loop foi desativado</string>
+    <string name="smscommunicator_loop_is_enabled">O loop está ativado</string>
+    <string name="smscommunicator_pump_connect_with_code">Para conectar a bomba, responda com o código %1$s</string>
+    <string name="smscommunicator_pump_connect_fail">A conexão com a bomba falhou</string>
+    <string name="smscommunicator_pump_disconnect_with_code">Para desconectar a bomba por %1$d minutos, responda com o código %2$s</string>
+    <string name="smscommunicator_pump_disconnected">Bomba desconectada</string>
+    <string name="smscommunicator_reconnect">Bomba reconectada</string>
+    <string name="smscommunicator_remote_command_not_allowed">O comando remoto não é permitido</string>
+    <string name="smscommunicator_remote_command_not_possible">O comando remoto não é possível</string>
+    <string name="smscommunicator_remote_bolus_not_allowed">Bolus remoto indisponível. Tente novamente mais tarde.</string>
+    <string name="smscommunicator_basal_reply_with_code">Para iniciar a basal de %1$.2f U/h por %2$d min, responda com o código %3$s</string>
+    <string name="smscommunicator_profile_reply_with_code">Para alternar o perfil para %1$s %2$d%%, responda com o código %3$s</string>
+    <string name="smscommunicator_extended_reply_with_code">Para iniciar o bolus estendido de %1$.2f U por %2$d min, responda com o código %3$s</string>
+    <string name="smscommunicator_carbs_reply_with_code">Para inserir %1$dg às %2$s, responda com o código %3$s</string>
+    <string name="smscommunicator_basal_pct_reply_with_code">Para iniciar a basal a %1$d%% por %2$d min, responda com o código %3$s</string>
+    <string name="smscommunicator_suspend_reply_with_code">Para suspender o loop por %1$d minutos, responda com o código %2$s</string>
+    <string name="smscommunicator_loop_resume_reply_with_code">Para retomar o loop, responda com o código %1$s</string>
+    <string name="smscommunicator_loop_disable_reply_with_code">Para desativar o loop, responda com o código %1$s</string>
+    <string name="smscommunicator_restart_reply_with_code">Para reiniciar o AAPS, responda com o código %1$s</string>
+    <string name="smscommunicator_restarting">O AAPS está reiniciando</string>
+    <string name="smscommunicator_tempbasal_set">Basal temporária de %1$.2fU/h iniciada com sucesso por %2$d min</string>
+    <string name="smscommunicator_extended_set">Bolus estendido de %1$.2fU iniciado com sucesso por %2$d min</string>
+    <string name="smscommunicator_carbs_set">%1$d g de carboidratos inseridos com sucesso</string>
+    <string name="smscommunicator_carbs_failed">A inserção de %1$dg de carboidratos falhou</string>
+    <string name="smscommunicator_tempbasal_set_percent">Basal temporária de %1$d%% iniciada com sucesso por %2$d min</string>
+    <string name="smscommunicator_tempbasal_failed">Falha ao iniciar a basal temporária</string>
+    <string name="smscommunicator_extended_failed">Falha ao iniciar o bolus estendido</string>
+    <string name="smscommunicator_basal_stop_reply_with_code">Para interromper a basal temporária, responda com o código %1$s</string>
+    <string name="smscommunicator_extended_stop_reply_with_code">Para interromper o bolus estendido, responda com o código %1$s</string>
+    <string name="smscommunicator_tempbasal_canceled">Basal temporária cancelada</string>
+    <string name="smscommunicator_extended_canceled">Bolus estendido cancelado</string>
+    <string name="smscommunicator_tempbasal_cancel_failed">Falha ao cancelar a basal temporária</string>
+    <string name="smscommunicator_extended_cancel_failed">Falha ao cancelar o bolus estendido</string>
+    <string name="smscommunicator_unknown_command">Comando desconhecido ou resposta incorreta</string>
+    <string name="smscommunicator_another_bolus_in_queue">Há outro bolus na fila. Tente novamente mais tarde.</string>
+    <string name="smscommunicator_wrong_duration">Duração incorreta</string>
+    <string name="smscommunicator_loop_suspended">Loop suspenso</string>
+    <string name="smscommunicator_loop_resumed">Loop retomado</string>
+    <string name="smscommunicator_invalid_phone_number">Número de telefone de SMS inválido</string>
+    <string name="smscommunicator_calibration_sent">Calibração enviada. O recebimento deve estar ativado no xDrip+.</string>
+    <string name="smscommunicator_calibration_failed">O xDrip+ não está recebendo calibrações</string>
+    <string name="smscommunicator_message_body">Corpo da mensagem inválido</string>
+    <string name="smscommunicator_set_lgs_reply_with_code">Para alterar o modo do Loop para LGS (Suspensão por Glicemia Baixa), responda com o código %1$s</string>
+    <string name="smscommunicator_set_closed_loop_reply_with_code">Para alterar o modo do Loop para Loop Fechado, responda com o código %1$s</string>
+    <string name="smscommunicator_current_loop_mode">Modo de execução atual: %1$s</string>
+    <string name="wrong_format">Formato incorreto</string>
+    <string name="sms_actual_bg">Glicemia:</string>
+    <string name="sms_last_bg">Última Glicemia:</string>
+    <string name="sms_delta">Variação (Delta):</string>
+    <string name="sms_iob">Insulina Ativa (IOB):</string>
+    <string name="sms_bolus">Bolus:</string>
+    <string name="sms_basal">Basal:</string>
+    <string name="sms_min_ago">há %1$d min</string>
+    <string name="sms_loop_suspended_for">Suspenso (%1$d m)</string>
+    <string name="sms_read_status_failed">Falha ao ler o status</string>
+    <string name="sms_profile_switch_created">Troca de perfil criada</string>
+    <string name="sms_wrong_tbr_duration">A duração da taxa basal temporária (TBR) deve ser um múltiplo de %1$d minutos e maior que 0.</string>
+    <string name="a11y_otp_qr_code">QR Code para configurar a senha de uso único</string>
+    <string name="permission_sms_title">SMS</string>
+    <string name="permission_sms_description">O aplicativo precisa de permissão de SMS para controle remoto via mensagens de texto</string>
+
 </resources>
