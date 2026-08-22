@@ -23,12 +23,13 @@ object Libre3FirstPairPhase5Source {
     class Material(val source66: ByteArray, val rawKey: ByteArray)
 
     /**
-     * The scalar of the static branch.
+     * The scalar of the static branch when the certificate does not bring its own.
      *
      * It comes from a fixed entry source, so it is the same for every sensor and every pairing.
-     * Working it out costs three rounds of the low seed path, so it is done once.
+     * Working it out costs three rounds of the low seed path, so it is done once. It is only the
+     * fallback, see the override parameter of [derive].
      */
-    private val staticScalarWindow: ByteArray by lazy {
+    private val staticScalarWindowFromEntrySource: ByteArray by lazy {
         builder633fa8StaticScalarWindowFromEntrySource(bundled6388f0LowSeedEntrySource)
     }
 
@@ -36,12 +37,17 @@ object Libre3FirstPairPhase5Source {
      * @param material what [Libre3FirstPairEphemeral.make] returned for this pairing.
      * @param sensorEphemeralPublicKey65 the sensor's session point, 65 bytes, starting with `0x04`.
      * @param sensorStaticPublicKey65 the point in the sensor's certificate, same shape.
+     * @param staticScalarWindowOverride the static scalar that belongs to the phone certificate of
+     *   this pairing, from `Libre3PhoneCert.phase5StaticScalarWindowOverride`. The `03 03` family
+     *   brings its own and a live sensor only accepts that one; null falls back to the entry
+     *   source, which is what the `03 00` family uses.
      * @throws Libre3CryptoException when a point is the wrong shape, or a table is missing.
      */
     fun derive(
         material: Libre3FirstPairMaterial,
         sensorEphemeralPublicKey65: ByteArray,
         sensorStaticPublicKey65: ByteArray,
+        staticScalarWindowOverride: ByteArray? = null,
     ): Material {
         val row0Point = pointXYBigEndian(sensorEphemeralPublicKey65, "the sensor session point")
         val row59Point = pointXYBigEndian(sensorStaticPublicKey65, "the sensor certificate point")
@@ -50,7 +56,7 @@ object Libre3FirstPairPhase5Source {
         val seeds = builder6388f0FirstPairStreamSeedsFromScalarsAndSensorPoints(
             entrySource = entrySource,
             nullScalarWindow = material.scalarWindow,
-            staticScalarWindow = staticScalarWindow,
+            staticScalarWindow = staticScalarWindowOverride ?: staticScalarWindowFromEntrySource,
             row0SensorPointXYBE = row0Point,
             row59SensorPointXYBE = row59Point,
             nullEntropy11A = material.entropy11A,

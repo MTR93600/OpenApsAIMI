@@ -777,6 +777,44 @@ mind here:
 - **A build that has none of this on the phone will keep showing `status=147`.** The 09:19 log came
   from `4.0.0.0-dev.AIMI.210826-e019fee`, which predates all of it.
 
+### The third run, 2026-08-22 10:01: the static scalar window
+
+The scan fix works. `LIBRE3_SCAN: seen 40:69:18:A0:1C:E8 rssi=-81`, then the link came up, the whole
+clock ran, and the trace shows every step. The failure moved back to Phase 5, and this time the
+trace names the cause:
+
+```
+10:01:49.836  LIBRE3_TRACE: pairing key derived +230ms
+10:01:49.907  LIBRE3_TRACE: sensor challenge read +2ms      (R1 and nonce)
+10:01:49.907  LIBRE3_TRACE: phase 5 built +0ms
+10:01:50.156  onClientConnectionState() status=19           (+249 ms, the sensor hung up)
+```
+
+**Hypothesis B is dead.** The whole gap between reading the challenge and sending Phase 5 is 0 ms:
+the key is derived long before, and the disk write costs 1 ms. The sensor is not refusing a late
+answer, it is refusing a wrong one. Do not spend time on the ordering of §10.0 again.
+
+**The cause was the static scalar window of the first pairing.** The reference does not always work
+that scalar out of the entry source. `PhoneCert.phase5StaticScalarWindowOverride` returns
+`FirstPairStaticScalarWindow.firstPairIndex1` for the **`03 03`** certificate family, and only a
+`03 00` certificate falls back to the entry source. This build ships `phone_cert_162b.bin`, which
+starts `03 03`, so every first pairing this port ever attempted used the fallback scalar, built a
+key the sensor could not know, and was refused at the only step where the sensor judges the key.
+
+No unit test could have caught it. Every test of the source path passes the window in as a
+parameter, and the 63 published vectors do the same, so all of them stayed green while production
+was wired to the wrong branch. `Libre3PhoneCertTest` now pins where the window comes from, and
+`Libre3BleSessionFirstPairTest` derives its expected key through the certificate, like the session.
+
+Two more things the reference header states plainly, both worth keeping in mind:
+
+- *"A random ephemeral does not pair."* The phone ephemeral and the Phase 5 source must come from
+  **one** draw of native entropy. This port already does that: `Libre3FirstPairEphemeral.make` uses
+  the accepted `entropy11A` for both the wire point and the source.
+- The reference calls the handshake with `maxEntropyAttempts: 1`, while this port allows 64 and
+  feeds the attempt count into the seed builder. When the first draw is accepted the two agree, so
+  this is not the failure seen here, but it is a difference and it is not settled.
+
 ### Traps already found and fixed. Do not reintroduce them
 
 - A command must be written **raw**; framing it turns `0x11` into `00 00 11`.

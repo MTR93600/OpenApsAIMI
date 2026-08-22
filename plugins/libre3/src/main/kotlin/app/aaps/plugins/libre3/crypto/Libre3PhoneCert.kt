@@ -24,6 +24,23 @@ class Libre3PhoneCert private constructor(val raw: ByteArray) {
     val isAcceptedFamily: Boolean
         get() = raw[0] == ACCEPTED_FAMILY[0] && raw[1] == ACCEPTED_FAMILY[1]
 
+    /**
+     * The scalar of the static branch that goes with **this** certificate, or null.
+     *
+     * This is the piece that a first pairing cannot work without, and the piece this port used to
+     * miss. The scheme does not always work the static scalar out of the entry source: for the
+     * `03 03` family it is a fixed window that belongs to the certificate. The reference reads it
+     * from the certificate the same way (`PhoneCert.phase5StaticScalarWindowOverride`, which
+     * returns `FirstPairStaticScalarWindow.firstPairIndex1` for `03 03` and null otherwise), and
+     * only the null case falls back to the entry source.
+     *
+     * Nothing in a unit test could catch a mistake here, because every test of the source path
+     * passes the window in as a parameter. Only a live sensor can tell, and it tells by refusing
+     * Phase 5 and dropping the link.
+     */
+    val phase5StaticScalarWindowOverride: ByteArray?
+        get() = if (isAcceptedFamily) Libre3FirstPairStaticScalarWindow.firstPairIndex1() else null
+
     companion object {
 
         const val TOTAL_SIZE = 162
@@ -76,4 +93,36 @@ class Libre3PhoneCert private constructor(val raw: ByteArray) {
             }
         }
     }
+}
+
+/**
+ * The fixed static scalar window of the `03 03` certificate family.
+ *
+ * Ported from LibreCRKit `Pairing/PhoneCert.swift` at pin `a86b92f`,
+ * `FirstPairStaticScalarWindow.firstPairIndex1`: the row 59 static scalar window of the sensor
+ * maker's certificate private index 1. Thirty two bytes, then thirty eight zeros, seventy in all,
+ * which is the window size the whole first pairing scheme uses.
+ */
+object Libre3FirstPairStaticScalarWindow {
+
+    /** How long a scalar window is in this scheme. */
+    const val WINDOW_SIZE = 70
+
+    /**
+     * The thirty two bytes of the scalar, as they are written in the reference.
+     *
+     * Kept as text so the digits can be read against `FirstPairStaticScalarWindow` line by line.
+     * These are not a secret: the constant is the same in every build of the reference and belongs
+     * to the public certificate this app ships.
+     */
+    private const val PREFIX_HEX =
+        "978d11ed646ee3559336d5feba587ce9" +
+            "84123198cd9e880d34bad0fac8a997bf"
+
+    private val PREFIX: ByteArray by lazy {
+        ByteArray(PREFIX_HEX.length / 2) { PREFIX_HEX.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+    }
+
+    /** A fresh copy, so no caller can change the constant of another pairing. */
+    fun firstPairIndex1(): ByteArray = PREFIX + ByteArray(WINDOW_SIZE - PREFIX.size)
 }

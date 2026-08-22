@@ -207,7 +207,12 @@ class Libre3BleSession(
     }
 
     /** What a first pairing needs from this build, all of it ready before any link is opened. */
-    private class FirstPairSetup(val phoneCert: ByteArray, val ephemeral: Libre3FirstPairMaterial)
+    private class FirstPairSetup(
+        val phoneCert: ByteArray,
+        val ephemeral: Libre3FirstPairMaterial,
+        /** The static scalar that belongs to this certificate, or null when it brings none. */
+        val staticScalarWindowOverride: ByteArray?,
+    )
 
     /**
      * Gets everything a first pairing needs out of this build.
@@ -218,7 +223,11 @@ class Libre3BleSession(
     private fun prepareFirstPair(): FirstPairSetup {
         val phoneCert = Libre3PhoneCert.bundled()
             ?: throw Libre3CryptoException("the phone certificate does not ship with this build")
-        return FirstPairSetup(phoneCert.raw, Libre3FirstPairEphemeral.make(random))
+        return FirstPairSetup(
+            phoneCert = phoneCert.raw,
+            ephemeral = Libre3FirstPairEphemeral.make(random),
+            staticScalarWindowOverride = phoneCert.phase5StaticScalarWindowOverride,
+        )
     }
 
     /**
@@ -267,8 +276,15 @@ class Libre3BleSession(
             material = ephemeral,
             sensorEphemeralPublicKey65 = afterEph.sensorEphemeralPublicKey,
             sensorStaticPublicKey65 = sensorCert.staticPublicKey,
+            staticScalarWindowOverride = setup.staticScalarWindowOverride,
         )
-        trace.mark("pairing key derived")
+        trace.mark(
+            if (setup.staticScalarWindowOverride != null) {
+                "pairing key derived, static scalar from the certificate"
+            } else {
+                "pairing key derived, static scalar from the entry source"
+            }
+        )
         trace.secret("key derivation source", phase5.source66)
         trace.secret("pairing key", phase5.rawKey)
 

@@ -4,6 +4,7 @@ import app.aaps.plugins.libre3.crypto.Libre3AesCcm
 import app.aaps.plugins.libre3.crypto.Libre3EphemeralKeyPair
 import app.aaps.plugins.libre3.crypto.Libre3FirstPairEphemeral
 import app.aaps.plugins.libre3.crypto.Libre3FirstPairPhase5Source
+import app.aaps.plugins.libre3.crypto.Libre3PhoneCert
 import app.aaps.plugins.libre3.crypto.Libre3Phase6Response
 import app.aaps.plugins.libre3.crypto.Libre3SensorCert
 import app.aaps.plugins.libre3.gatt.Libre3BluetoothUuids
@@ -240,8 +241,13 @@ class Libre3BleSessionFirstPairTest {
         // The sensor's two points. Any real point of the curve will do for this test.
         val sensorEphemeralPoint = Libre3EphemeralKeyPair.randomForReconnect().publicKey65
         val sensorStaticPoint = Libre3EphemeralKeyPair.randomForReconnect().publicKey65
+        // The same static scalar the session uses, which for the `03 03` certificate this build
+        // ships is the one the certificate brings, not the one worked out from the entry source.
         val expectedKey = Libre3FirstPairPhase5Source.derive(
-            ephemeral, sensorEphemeralPoint, sensorStaticPoint,
+            material = ephemeral,
+            sensorEphemeralPublicKey65 = sensorEphemeralPoint,
+            sensorStaticPublicKey65 = sensorStaticPoint,
+            staticScalarWindowOverride = Libre3PhoneCert.bundled()?.phase5StaticScalarWindowOverride,
         ).rawKey
 
         val link = ScriptedSensorLink(sensorCertWith(sensorStaticPoint), sensorEphemeralPoint)
