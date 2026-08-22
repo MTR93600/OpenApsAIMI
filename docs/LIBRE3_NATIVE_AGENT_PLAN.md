@@ -633,7 +633,9 @@ Until native is user-confirmed, Libre 3 in AIMI stays **Juggluco / xDrip → `Xd
 
 ## 10.0 START HERE for the next session
 
-**Where this stands on 2026-08-20.** Every lot, A1 to A12, is now code complete. Lot A5, the last
+**Where this stands on 2026-08-22.** One first pairing was tried on a real sensor and failed; what
+that log proves is in *What the first run on a real sensor said* below. Every lot, A1 to A12, is
+code complete. Lot A5, the last
 one, is finished: the first pairing ephemeral and the Phase 5 source are ported and proven against
 the published vectors. Nothing is confirmed on a real sensor.
 
@@ -695,7 +697,53 @@ Two things the old text got wrong, both now fixed:
    `Libre3SensorStore.savePhase5RawKeyAndWait` before the last two steps**. A failed write fails
    the pairing. A test pins that order, and the order was checked by moving the write to the end
    and watching the test go red.
+
+   Since 2026-08-22 that rule has a second half: **when the sensor refuses the Phase 5 answer, the
+   key is dropped again** with `clearPhase5RawKeyAndWait`. A refusal means the sensor never
+   authorised this phone, so it never learned that key; keeping it would send every later attempt
+   down the short `0x11` path with a key the sensor has never seen, and no NFC scan could get out
+   of that. The refusal is told apart from every other failure by `Libre3Phase5RefusedException`,
+   which covers the write of Phase 5, its acknowledgement, and the wait for Phase 6. A failure
+   *after* Phase 6 has arrived keeps the key, because there the sensor did authorise us. Both
+   halves are pinned by tests in `Libre3BleSessionFirstPairTest`.
 3. `Libre3PhoneCert.bundled()` and `Libre3PairingBlocks.factory()` were already real.
+
+### What the first run on a real sensor said, 2026-08-22
+
+Still **not user-confirmed**. One first pairing was attempted on a real Libre 3 Plus, serial ending
+`TD6`, and it failed. What the log proves, and what it does not:
+
+- **The whole command clock was accepted.** Phone certificate accepted, sensor certificate read and
+  its signature verified, both ephemeral points exchanged, `0x11` accepted, sensor challenge read.
+  Each of those steps has its own error message and none of them appeared.
+- **The sensor hung up right after our Phase 5 answer.** `status=19`, which is
+  `GATT_CONN_TERMINATE_PEER_USER`: the sensor cut the link, not the Android stack and not a radio
+  timeout. So the failure is at the first and only step where the sensor judges our derived key.
+- **Two causes are still open, and the log cannot tell them apart.** Either the Phase 5 material is
+  wrong by a byte, or we were simply too slow: 2841 ms passed between `first pairing` and
+  `pairing key stored`, and the blocking disk write sits on the critical path between reading the
+  challenge and answering it. There was no timestamp anywhere in between.
+- **So the trace was added.** `Libre3PairingTrace` writes one `LIBRE3_TRACE` line per step with the
+  time that step took and the time since the attempt began, plus the bytes of the sensor
+  certificate, both ephemeral points, the sensor's static point, R1, the nonce, the Phase 5 message
+  on the wire and the Phase 6 answer. `TRACE_SECRETS` also writes the 66 byte derivation source and
+  the 16 byte key, which is what a comparison with a reference trace needs. **It is on. A log taken
+  with it on carries key material and must not be shared outside the people debugging the sensor.
+  Turn it off once the first pairing works.**
+- **Do not move the disk write yet.** Now that a refused Phase 5 drops the key again, the early
+  write is still the right order: the app could die between the sensor accepting and our write, and
+  that case has no way back. Let the `pairing key written to disk` mark say what the write really
+  costs before touching the order.
+- **The NFC state byte moved from `0x02` to `0x04`** between the scan before the attempt and the
+  one after it. Do not read anything into that yet: `Libre3PatchInfo` only claims `0x01` means
+  "never activated" and anything else means "running", and the reference makes no finer claim
+  either. The Libre 2 convention where `0x04` means "expired" is **not** what this parser assumes
+  and is unverified here.
+- **There is no automatic retry, and this is a real gap.** `Libre3ReconnectPolicy.nextDelayMs` is
+  never called in production, and `RETRY_CACHED_RECONNECT` is logged as the next action while
+  nothing acts on it. The only production caller of `Libre3CgmDriverReal.connect` is the button in
+  `Libre3StatusActivity`. The two extra attempts in the 2026-08-22 log were two taps of that
+  button, ten seconds apart, serialised by the driver's single thread executor. Undecided.
 
 ### Traps already found and fixed. Do not reintroduce them
 

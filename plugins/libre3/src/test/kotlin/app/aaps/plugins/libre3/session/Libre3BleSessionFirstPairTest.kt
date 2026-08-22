@@ -56,6 +56,7 @@ class Libre3BleSessionFirstPairTest {
         /** Set when the key was written. Used to prove the write happened before Phase 5 went out. */
         var phase5WireAtWriteTime: ByteArray? = null
         var writeSeen = false
+        var clearSeen = false
         var linkAtWriteTime: (() -> ByteArray?)? = null
 
         override fun loadIdentity(): Libre3SensorIdentity = identity
@@ -67,6 +68,12 @@ class Libre3BleSessionFirstPairTest {
             phase5WireAtWriteTime = linkAtWriteTime?.invoke()
             if (!pairingKeyWriteWorks) return false
             savedPairingKey = phase5RawKey
+            return true
+        }
+
+        override fun clearPhase5RawKeyAndWait(): Boolean {
+            clearSeen = true
+            savedPairingKey = null
             return true
         }
 
@@ -88,6 +95,9 @@ class Libre3BleSessionFirstPairTest {
         var disconnects = 0
         var phase5Wire: ByteArray? = null
         var phase6Wire: ByteArray = ByteArray(0)
+
+        /** When set, the sensor answers the Phase 5 message with anything but "accepted". */
+        var refusePhase5 = false
 
         private val certQueue = ArrayDeque(listOf(sensorCert, sensorEphemeral))
 
@@ -123,7 +133,8 @@ class Libre3BleSessionFirstPairTest {
                 Libre3SessionAuth.GET_CERTIFICATE            -> Libre3SessionAuth.CERTIFICATE_READY
                 Libre3SessionAuth.SEND_EPHEMERAL_DONE        -> Libre3SessionAuth.EPHEMERAL_READY
                 Libre3SessionAuth.START_AUTHORIZATION        -> Libre3SessionAuth.CHALLENGE_LOAD_DONE
-                Libre3SessionAuth.SEND_CHALLENGE_LOAD_DONE   -> Libre3SessionAuth.CHALLENGE_LOAD_DONE
+                Libre3SessionAuth.SEND_CHALLENGE_LOAD_DONE   ->
+                    if (refusePhase5) 0x00 else Libre3SessionAuth.CHALLENGE_LOAD_DONE
                 else                                         -> 0x00
             }
             return byteArrayOf(answer)
@@ -321,6 +332,40 @@ class Libre3BleSessionFirstPairTest {
         assertThat(store.writeSeen).isFalse()
         assertThat(store.savedPairingKey).isNull()
         assertThat(link.phase5Wire).isNull()
+        assertThat(link.isConnected()).isFalse()
+    }
+
+    /**
+     * The other half of the §10.0 rule.
+     *
+     * The key is written before Phase 5 goes out, and the test above pins that. But a sensor that
+     * then refuses Phase 5 never authorised this phone, so that key is worthless. If it stayed on
+     * the disk, every later attempt would take the short reconnect path with a key the sensor has
+     * never seen, and no NFC scan could get out of it. So it has to be dropped again.
+     */
+    @Test
+    fun `a key is dropped again when the sensor refuses the phase 5 answer`() {
+        val sensorEphemeralPoint = Libre3EphemeralKeyPair.randomForReconnect().publicKey65
+        val sensorStaticPoint = Libre3EphemeralKeyPair.randomForReconnect().publicKey65
+        val link = ScriptedSensorLink(sensorCertWith(sensorStaticPoint), sensorEphemeralPoint)
+        link.refusePhase5 = true
+        val store = FakeStore().also { it.identity = identity }
+        val session = Libre3BleSession(
+            gatt = link,
+            store = store,
+            pairingBlocks = { key -> Libre3AesCcm.standardAes(key) },
+            random = FixedRandom(capturedEntropy),
+            sensorCertSigningKeys = listOf(certSignerPoint),
+        )
+
+        val result = session.open(firstPairAvailable = true)
+
+        assertThat(result).isInstanceOf(Libre3BleSession.Result.Failed::class.java)
+        // Written, then dropped again: the next attempt starts a first pairing, not a reconnect.
+        assertThat(store.writeSeen).isTrue()
+        assertThat(store.clearSeen).isTrue()
+        assertThat(store.savedPairingKey).isNull()
+        assertThat(store.savedKEnc).isNull()
         assertThat(link.isConnected()).isFalse()
     }
 

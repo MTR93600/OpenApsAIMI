@@ -32,7 +32,18 @@ interface Libre3HandshakeTransport {
 }
 
 /** Raised when the sensor answers something the handshake did not ask for. */
-class Libre3HandshakeException(message: String) : Exception(message)
+open class Libre3HandshakeException(message: String) : Exception(message)
+
+/**
+ * Raised when the sensor refused our Phase 5 answer, or dropped the link before answering it.
+ *
+ * It is told apart from every other handshake failure for one reason: at this point the sensor has
+ * not authorised this phone. A pairing key written to the disk just before is therefore a key the
+ * sensor knows nothing about, and keeping it would send every later attempt down the short
+ * reconnect path with a key that was never accepted. A failure after Phase 6 has arrived is a
+ * different thing: there the sensor did authorise us, so the key stays.
+ */
+class Libre3Phase5RefusedException(message: String) : Libre3HandshakeException(message)
 
 /**
  * The pairing command clock.
@@ -49,7 +60,11 @@ class Libre3HandshakeException(message: String) : Exception(message)
  * - [runFirstPair] is the full clock and starts with `0x01`. It is only for a sensor that this
  *   phone has never paired.
  */
-class Libre3SessionAuth(private val transport: Libre3HandshakeTransport) {
+class Libre3SessionAuth(
+    private val transport: Libre3HandshakeTransport,
+    /** Where every step and every value of this attempt is written down. */
+    private val trace: Libre3PairingTrace = Libre3PairingTrace(),
+) {
 
     /**
      * Short reconnect. Sends `0x11`, reads the sensor's random part, answers with Phase 5 built
@@ -67,8 +82,10 @@ class Libre3SessionAuth(private val transport: Libre3HandshakeTransport) {
         require(blePin.size == 4) { "the PIN must be 4 bytes" }
         require(phoneR2.size == 16) { "R2 must be 16 bytes" }
 
+        trace.mark("short reconnect starts")
         transport.writeCommand(START_AUTHORIZATION)
         expectCommandAnswer(CHALLENGE_LOAD_DONE, "the sensor did not accept the start of the reconnect")
+        trace.mark("0x11 accepted")
         val (sensorR1, nonce) = readSensorChallenge()
 
         return sendPhase5AndReadPhase6(sensorR1, phoneR2, blePin, nonce, phase5Block)
@@ -91,24 +108,32 @@ class Libre3SessionAuth(private val transport: Libre3HandshakeTransport) {
             "the public point must be padded to 72 bytes"
         }
 
+        trace.mark("first pairing starts")
         transport.writeCommand(START_AUTHENTICATION)
         transport.writeCommand(LOAD_CERTIFICATE)
         transport.write(Libre3HandshakeChannel.CERT, phoneCert)
         transport.writeCommand(SEND_CERTIFICATE_LOAD_DONE)
         expectCommandAnswer(CERTIFICATE_ACCEPTED, "the sensor did not accept the certificate of this phone")
+        trace.mark("phone certificate accepted")
 
         transport.writeCommand(GET_CERTIFICATE)
         expectCommandAnswer(CERTIFICATE_READY, "the sensor did not offer its own certificate")
         val sensorCert = transport.awaitNotify(Libre3HandshakeChannel.CERT, sensorCertSize)
+        trace.mark("sensor certificate read")
+        trace.bytes("sensor certificate", sensorCert)
 
         transport.writeCommand(VALIDATE_CERTIFICATE)
         transport.write(Libre3HandshakeChannel.CERT, phoneEphemeralPublicKey72)
         transport.writeCommand(SEND_EPHEMERAL_DONE)
         expectCommandAnswer(EPHEMERAL_READY, "the sensor did not accept the key of this session")
+        trace.bytes("phone ephemeral point", phoneEphemeralPublicKey72)
         val sensorEphemeral = transport.awaitNotify(Libre3HandshakeChannel.CERT, PUBLIC_KEY_SIZE)
+        trace.mark("sensor ephemeral point read")
+        trace.bytes("sensor ephemeral point", sensorEphemeral)
 
         transport.writeCommand(START_AUTHORIZATION)
         expectCommandAnswer(CHALLENGE_LOAD_DONE, "the sensor did not start the last pairing step")
+        trace.mark("0x11 accepted")
         val (sensorR1, nonce) = readSensorChallenge()
 
         return Libre3FirstPairPreamble(sensorCert, sensorEphemeral, sensorR1, nonce)
@@ -129,12 +154,25 @@ class Libre3SessionAuth(private val transport: Libre3HandshakeTransport) {
     ): Libre3SessionMaterial {
         val plaintext = Libre3Phase5Challenge.plaintext(sensorR1, phoneR2, blePin)
         val phase5 = Libre3Phase5Challenge.encrypt(plaintext, nonce, phase5Block)
-        transport.write(Libre3HandshakeChannel.CHALLENGE, phase5.wireBytes)
+        trace.secret("phase 5 plain text", plaintext)
+        trace.bytes("phase 5 on the wire", phase5.wireBytes)
+        trace.mark("phase 5 built")
 
-        transport.writeCommand(SEND_CHALLENGE_LOAD_DONE)
-        expectCommandAnswer(CHALLENGE_LOAD_DONE, "the sensor did not accept the answer of this phone")
-
-        val phase6Raw = transport.awaitNotify(Libre3HandshakeChannel.CHALLENGE, Libre3Phase6Response.WIRE_SIZE)
+        // Everything up to the moment Phase 6 arrives is one block, because every way it can fail
+        // means the same thing: the sensor did not authorise this phone. See
+        // [Libre3Phase5RefusedException].
+        val phase6Raw = try {
+            transport.write(Libre3HandshakeChannel.CHALLENGE, phase5.wireBytes)
+            transport.writeCommand(SEND_CHALLENGE_LOAD_DONE)
+            expectCommandAnswer(CHALLENGE_LOAD_DONE, "the sensor did not accept the answer of this phone")
+            trace.mark("phase 5 accepted")
+            transport.awaitNotify(Libre3HandshakeChannel.CHALLENGE, Libre3Phase6Response.WIRE_SIZE)
+        } catch (e: Libre3HandshakeException) {
+            trace.mark("phase 5 refused")
+            throw Libre3Phase5RefusedException(e.message ?: "the sensor refused the answer of this phone")
+        }
+        trace.mark("phase 6 read")
+        trace.bytes("phase 6 on the wire", phase6Raw)
         val phase6 = Libre3Phase6Response.decode(phase6Raw)
         return try {
             phase6.decrypt(phase5Block, expectedPhoneR2 = phoneR2, expectedSensorR1 = sensorR1)
@@ -149,7 +187,12 @@ class Libre3SessionAuth(private val transport: Libre3HandshakeTransport) {
         if (wire.size != CHALLENGE_SIZE) {
             throw Libre3HandshakeException("the sensor challenge must be 23 bytes, not ${wire.size}")
         }
-        return wire.copyOfRange(0, 16) to wire.copyOfRange(16, CHALLENGE_SIZE)
+        val sensorR1 = wire.copyOfRange(0, 16)
+        val nonce = wire.copyOfRange(16, CHALLENGE_SIZE)
+        trace.mark("sensor challenge read")
+        trace.bytes("sensor R1", sensorR1)
+        trace.bytes("nonce", nonce)
+        return sensorR1 to nonce
     }
 
     private fun expectCommandAnswer(expectedFirstByte: Byte, whatWentWrong: String) {

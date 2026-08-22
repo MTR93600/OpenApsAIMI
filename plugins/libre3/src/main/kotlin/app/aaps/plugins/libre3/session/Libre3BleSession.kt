@@ -146,7 +146,10 @@ class Libre3BleSession(
             }
         }
 
-        val auth = Libre3SessionAuth(Libre3GattHandshakeTransport(gatt))
+        // One trace per attempt. It is what tells a refused answer apart from an answer that came
+        // too late, which the ordinary log cannot do.
+        val trace = Libre3PairingTrace()
+        val auth = Libre3SessionAuth(Libre3GattHandshakeTransport(gatt), trace)
         val phoneR2 = ByteArray(16).also { random.nextBytes(it) }
 
         val material = try {
@@ -162,7 +165,7 @@ class Libre3BleSession(
                     Libre3Log.i("${Libre3LogMarkers.PAIRING}: first pairing")
                     val setup = firstPairSetup
                         ?: return failed("the first pairing was not made ready", handshakeReached = false)
-                    runFirstPair(auth, setup, identity.blePin, phoneR2)
+                    runFirstPair(auth, setup, identity.blePin, phoneR2, trace)
                         ?: return failed("the first pairing key could not be stored", handshakeReached = true)
                 }
 
@@ -237,6 +240,7 @@ class Libre3BleSession(
         setup: FirstPairSetup,
         blePin: ByteArray,
         phoneR2: ByteArray,
+        trace: Libre3PairingTrace,
     ): Libre3SessionMaterial? {
         val ephemeral = setup.ephemeral
         val preamble = auth.runFirstPair(
@@ -251,25 +255,42 @@ class Libre3BleSession(
         if (!sensorCert.isSignedByKnownKey(sensorCertSigningKeys)) {
             throw Libre3HandshakeException("the certificate of this sensor is not signed by a key we know")
         }
+        trace.bytes("sensor static point", sensorCert.staticPublicKey)
         val phase5 = Libre3FirstPairPhase5Source.derive(
             material = ephemeral,
             sensorEphemeralPublicKey65 = preamble.sensorEphemeralPublicKey,
             sensorStaticPublicKey65 = sensorCert.staticPublicKey,
         )
+        trace.mark("pairing key derived")
+        trace.secret("key derivation source", phase5.source66)
+        trace.secret("pairing key", phase5.rawKey)
 
         if (!store.savePhase5RawKeyAndWait(phase5.rawKey)) {
             Libre3Log.e("${Libre3LogMarkers.ERROR}: the new pairing key did not reach the disk")
             return null
         }
+        trace.mark("pairing key written to disk")
         Libre3Log.i("${Libre3LogMarkers.PAIRING}: pairing key stored, a reconnect is now possible")
 
-        return auth.sendPhase5AndReadPhase6(
-            sensorR1 = preamble.sensorR1,
-            phoneR2 = phoneR2,
-            blePin = blePin,
-            nonce = preamble.nonce,
-            phase5Block = pairingBlocks.blockFor(phase5.rawKey),
-        )
+        return try {
+            auth.sendPhase5AndReadPhase6(
+                sensorR1 = preamble.sensorR1,
+                phoneR2 = phoneR2,
+                blePin = blePin,
+                nonce = preamble.nonce,
+                phase5Block = pairingBlocks.blockFor(phase5.rawKey),
+            )
+        } catch (e: Libre3Phase5RefusedException) {
+            // The sensor never authorised this phone, so the key just written is worthless. It is
+            // dropped again, otherwise the next attempt would take the short reconnect path with a
+            // key the sensor has never seen, and no scan could ever get out of that.
+            val dropped = store.clearPhase5RawKeyAndWait()
+            Libre3Log.w(
+                "${Libre3LogMarkers.PAIRING}: the sensor refused the answer of this phone, " +
+                    "so the new pairing key was dropped again, write finished=$dropped",
+            )
+            throw e
+        }
     }
 
     /** Ends a failed attempt: the session state is undone, the link is dropped, then the reason. */

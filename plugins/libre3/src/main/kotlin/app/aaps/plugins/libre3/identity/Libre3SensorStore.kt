@@ -56,6 +56,18 @@ interface Libre3SessionStore {
      */
     fun savePhase5RawKeyAndWait(phase5RawKey: ByteArray): Boolean
 
+    /**
+     * Drops the stored pairing key and waits for that to reach the disk.
+     *
+     * Only for the one case where the key is known to be worthless: the sensor refused our Phase 5
+     * answer, so it never authorised this phone and never learned this key. Keeping it would make
+     * every later attempt take the short reconnect path with a key the sensor does not have, which
+     * can only fail, and the driver would then ask for an NFC scan that cannot help either.
+     *
+     * @return true only when the change really finished.
+     */
+    fun clearPhase5RawKeyAndWait(): Boolean
+
     /** Stores the keys of the session that just started. */
     fun saveSessionKeys(kEnc: ByteArray, ivEnc: ByteArray)
 }
@@ -169,6 +181,11 @@ class Libre3SensorStore(context: Context) : Libre3IdentityStore, Libre3SessionSt
     @Synchronized
     override fun savePhase5RawKeyAndWait(phase5RawKey: ByteArray): Boolean =
         prefs.edit().putString(KEY_PHASE5_RAW_KEY, encode(phase5RawKey)).commit()
+
+    /** Drops the pairing key of a pairing the sensor refused. */
+    @Synchronized
+    override fun clearPhase5RawKeyAndWait(): Boolean =
+        prefs.edit().remove(KEY_PHASE5_RAW_KEY).commit()
 
     /** Stores the keys of the current session. A new handshake replaces them. */
     @Synchronized

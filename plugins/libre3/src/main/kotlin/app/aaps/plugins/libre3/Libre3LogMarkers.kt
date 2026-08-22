@@ -18,5 +18,8 @@ object Libre3LogMarkers {
     const val ERROR = "LIBRE3_ERROR"
     const val SCAN = "LIBRE3_SCAN"
     const val RECONNECT = "LIBRE3_RECONNECT"
+
+    /** Step by step trace of one pairing attempt. See `Libre3PairingTrace`. */
+    const val TRACE = "LIBRE3_TRACE"
     const val STUB = "LIBRE3_DRIVER_STUB"
 }
