@@ -1,0 +1,31 @@
+[33m8435d5e10e[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mdev_OAPSAIMI[m[33m, [m[1;31morigin/dev_OAPSAIMI[m[33m)[m HEAD@{0}: commit: feat: restaura minhas traduções pt-rBR
+[33m4cbd985753[m[33m ([m[1;31mupstream/dev_OAPSAIMI_Libre3[m[33m, [m[1;31mupstream/dev_OAPSAIMI[m[33m)[m HEAD@{1}: reset: moving to upstream/dev_OAPSAIMI
+[33m74c6c3a6e3[m HEAD@{2}: commit: chore: remove o arquivo auto-translate.yml
+[33m7c70adf6b6[m HEAD@{3}: commit: fix: restaura workflows originais do upstream
+[33m7c1d30a867[m HEAD@{4}: commit: fix: restaura workflows do github oficialmente
+[33m3188a4a559[m HEAD@{5}: pull origin dev_OAPSAIMI: Merge made by the 'ort' strategy.
+[33m91ca3adbdf[m HEAD@{6}: pull origin dev_OAPSAIMI --no-rebase: Merge made by the 'ort' strategy.
+[33m3ffddc8972[m HEAD@{7}: rebase (finish): returning to refs/heads/dev_OAPSAIMI
+[33m3ffddc8972[m HEAD@{8}: rebase (pick): Dispara processamento com sobreposição
+[33m6cab21c779[m HEAD@{9}: rebase (pick): Dispara processamento completo do app
+[33md6d0d883d1[m HEAD@{10}: rebase (pick): Habilita traducao total de todas as pastas sem limite de lote
+[33m814ce874fa[m HEAD@{11}: rebase (pick): Dispara lote inicial limpo
+[33mf5d0cbac3c[m HEAD@{12}: rebase (pick): Corrige sintaxe do fechamento do arquivo EOF
+[33m7d5355fc1a[m HEAD@{13}: rebase (pick): Dispara lote inicial estável
+[33m80b04dc824[m HEAD@{14}: rebase (pick): Ajusta traducao para rodar em lotes fracionados
+[33mf1b24d6cbe[m HEAD@{15}: rebase (pick): Dispara traducao forçada
+[33me8ed586b06[m HEAD@{16}: rebase (pick): Força motor a sobrescrever chaves de tradução antigas
+[33m2423896242[m HEAD@{17}: rebase (pick): Corrige duplicacao de comandos no workflow
+[33m27c41caea4[m HEAD@{18}: rebase (pick): Configura assinatura real do commit para corrigir erro 128
+[33m9af20061ac[m HEAD@{19}: rebase (pick): Libera permissao de escrita para o robo de traducao
+[33maf89b5a914[m HEAD@{20}: rebase (pick): Forca disparo do script de traducao corrigido
+[33m927faed11f[m HEAD@{21}: rebase (pick): Limpeza definitiva de workflows antigos
+[33m5c0d4bc3c5[m HEAD@{22}: rebase (pick): Adiciona motor de traducao inteligente com script js
+[33m23aceb5f45[m HEAD@{23}: rebase (pick): Cria workflow de traducao automatica do zero
+[33m066938325f[m HEAD@{24}: rebase (pick): Adiciona traduções em português para os módulos do AAPS AIMI
+[33m4cbd985753[m[33m ([m[1;31mupstream/dev_OAPSAIMI_Libre3[m[33m, [m[1;31mupstream/dev_OAPSAIMI[m[33m)[m HEAD@{25}: rebase (start): checkout upstream/dev_OAPSAIMI
+[33m15dc359eb2[m HEAD@{26}: checkout: moving from dev_OAPSAIMI to dev_OAPSAIMI
+[33m15dc359eb2[m HEAD@{27}: commit (merge): Adiciona traduções em português para os drivers e menus de bombas no AAPS AIMI
+[33mb33a1c3b03[m HEAD@{28}: commit: Adiciona traduções em português para os módulos do AAPS AIMI
+[33m187366941e[m HEAD@{29}: checkout: moving from master to dev_OAPSAIMI
+[33m2fd4d5f218[m[33m ([m[1;31mupstream/master[m[33m, [m[1;31morigin/master[m[33m, [m[1;32mmaster[m[33m)[m HEAD@{30}: clone: from https://github.com/MTR93600/OpenApsAIMI.git
