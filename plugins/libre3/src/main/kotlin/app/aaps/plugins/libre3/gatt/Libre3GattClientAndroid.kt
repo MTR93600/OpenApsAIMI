@@ -9,6 +9,10 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
+import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.Build
 import app.aaps.plugins.libre3.Libre3Log
@@ -19,6 +23,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * The real Bluetooth link.
@@ -74,6 +79,14 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
     @Volatile
     private var linkDown = false
 
+    /** True when [disconnect] ran during a search or a connect, so this attempt must stop. */
+    @Volatile
+    private var cancelled = false
+
+    /** Counted down when a search should stop, so a newer connect is not stuck behind it. */
+    @Volatile
+    private var scanLatch: CountDownLatch? = null
+
     private val callback = object : BluetoothGattCallback() {
 
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
@@ -126,8 +139,25 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
     }
 
     override fun connect(deviceAddress: String) {
+        cancelled = false
         val adapter = BluetoothAdapter.getDefaultAdapter() ?: return
-        val device = adapter.getRemoteDevice(deviceAddress)
+        // LibreLoop connects the device that was just seen on the air. A connect by stored MAC
+        // alone is the classic Android 147 on this phone: the stack never finds the sensor.
+        val scanned = awaitAdvertisedDevice(adapter, deviceAddress, SCAN_TIMEOUT_MS)
+        if (cancelled) return
+        val device = scanned ?: try {
+            adapter.getRemoteDevice(deviceAddress)
+        } catch (_: IllegalArgumentException) {
+            Libre3Log.e("${Libre3LogMarkers.ERROR}: stored address is not a Bluetooth address")
+            return
+        }
+        if (scanned != null) {
+            Libre3Log.i("${Libre3LogMarkers.SCAN}: sensor seen, connecting that device")
+            sleepQuiet(SCAN_HANDOFF_MS)
+            if (cancelled) return
+        } else {
+            Libre3Log.w("${Libre3LogMarkers.SCAN}: sensor was not seen, connecting by stored address")
+        }
         inboxes.clear()
         dataPlaneInbox.clear()
         linkDown = false
@@ -138,8 +168,76 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
         waitForOperation(CONNECT_TIMEOUT_MS)
     }
 
+    /**
+     * Waits until the stored sensor advertises, then returns that [BluetoothDevice].
+     *
+     * The filter is the address only. Adding the service UUID as well matches nothing when the
+     * UUID lives in the scan response, which is how a Libre 3 often advertises.
+     */
+    private fun awaitAdvertisedDevice(
+        adapter: BluetoothAdapter,
+        address: String,
+        timeoutMs: Long,
+    ): BluetoothDevice? {
+        val scanner = adapter.bluetoothLeScanner ?: return null
+        val found = AtomicReference<BluetoothDevice?>(null)
+        val latch = CountDownLatch(1)
+        scanLatch = latch
+        val callback = object : ScanCallback() {
+
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+                val device = result.device ?: return
+                if (!device.address.equals(address, ignoreCase = true)) return
+                if (found.compareAndSet(null, device)) {
+                    Libre3Log.i("${Libre3LogMarkers.SCAN}: seen ${device.address} rssi=${result.rssi}")
+                    latch.countDown()
+                }
+            }
+
+            override fun onScanFailed(errorCode: Int) {
+                Libre3Log.w("${Libre3LogMarkers.SCAN}: the search failed, code=$errorCode")
+                latch.countDown()
+            }
+        }
+        val filter = try {
+            ScanFilter.Builder().setDeviceAddress(address).build()
+        } catch (_: IllegalArgumentException) {
+            Libre3Log.e("${Libre3LogMarkers.ERROR}: stored address is not a Bluetooth address")
+            return null
+        }
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+        try {
+            scanner.startScan(listOf(filter), settings, callback)
+            Libre3Log.i("${Libre3LogMarkers.SCAN}: looking for $address")
+            latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+        } catch (e: Exception) {
+            Libre3Log.w("${Libre3LogMarkers.SCAN}: the search threw ${e.javaClass.simpleName}")
+        } finally {
+            scanLatch = null
+            try {
+                scanner.stopScan(callback)
+            } catch (e: Exception) {
+                Libre3Log.w("${Libre3LogMarkers.SCAN}: stopping the search failed, ${e.javaClass.simpleName}")
+            }
+        }
+        return found.get()
+    }
+
+    private fun sleepQuiet(durationMs: Long) {
+        if (durationMs <= 0L) return
+        try {
+            Thread.sleep(durationMs)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+    }
+
     override fun disconnect() {
         // Link level only. No command is ever written to the sensor here.
+        cancelled = true
+        scanLatch?.countDown()
         val current = gatt
         gatt = null
         connected = false
@@ -355,6 +453,12 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
     companion object {
 
         const val CONNECT_TIMEOUT_MS = 30_000L
+
+        /** How long to look for the sensor on the air before falling back to the stored address. */
+        const val SCAN_TIMEOUT_MS = 20_000L
+
+        /** Pause after the scan stops, so the radio can switch to a connect. */
+        const val SCAN_HANDOFF_MS = 400L
 
         /**
          * How long one write or one channel change may take.

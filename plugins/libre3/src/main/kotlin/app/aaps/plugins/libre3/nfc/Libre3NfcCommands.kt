@@ -202,7 +202,10 @@ object Libre3NfcCommands {
     fun parsePatchInfo(raw: ByteArray): Libre3PatchInfo {
         val frame = normalizePatchInfo(raw)
         if (frame.size < PATCH_INFO_MIN_LENGTH || frame[0] != 0x00.toByte() || frame[1] != 0xA5.toByte()) {
-            throw Libre3NfcException("patch info not readable, ${raw.size} bytes", Libre3NfcFailure.NOT_A_LIBRE3_SENSOR)
+            throw Libre3NfcException(
+                "patch info not readable, ${raw.size} bytes ${hexHead(raw)}",
+                Libre3NfcFailure.NOT_A_LIBRE3_SENSOR,
+            )
         }
         val serialBytes = frame.copyOfRange(18, 27)
         return Libre3PatchInfo(
@@ -243,6 +246,8 @@ object Libre3NfcCommands {
     private fun normalizePatchInfo(raw: ByteArray): ByteArray {
         var frame = raw
         if (frame.isNotEmpty() && frame[0] == 0xA5.toByte()) frame = byteArrayOf(0x00) + frame
+        val prefixAt = indexOfPatchInfoPrefix(frame)
+        if (prefixAt > 0) frame = frame.copyOfRange(prefixAt, frame.size)
         if (frame.size >= 2 && frame[0] == 0x00.toByte() && frame[1] == 0xA5.toByte()) {
             var bodyStart = 2
             while (bodyStart < frame.size && frame[bodyStart] == 0xA5.toByte()) bodyStart++
@@ -250,6 +255,21 @@ object Libre3NfcCommands {
         }
         return frame
     }
+
+    /**
+     * Some readers put extra ISO 15693 bytes in front of the real `00 A5` body. A 65 byte answer
+     * that still contains that prefix is accepted by slicing from the first match.
+     */
+    private fun indexOfPatchInfoPrefix(frame: ByteArray): Int {
+        if (frame.size < 2) return -1
+        for (index in 0 until frame.size - 1) {
+            if (frame[index] == 0x00.toByte() && frame[index + 1] == 0xA5.toByte()) return index
+        }
+        return -1
+    }
+
+    private fun hexHead(raw: ByteArray, maxBytes: Int = 40): String =
+        raw.take(maxBytes).joinToString("") { "%02x".format(it) }
 
     private fun normalizeActivationResponse(raw: ByteArray): ByteArray {
         if (raw.size >= 2 && raw[0] == 0x00.toByte() && raw[1] == 0xA5.toByte()) return raw

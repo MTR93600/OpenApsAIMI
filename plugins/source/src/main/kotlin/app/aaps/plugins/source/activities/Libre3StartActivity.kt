@@ -77,12 +77,15 @@ class Libre3StartActivity : AppCompatActivity() {
                         activity = this,
                         reader = nfcReader,
                         onBack = { finish() },
-                        onSensorScanned = {
+                        onSensorScanned = { result ->
                             // A different sensor counts its own minutes from zero, so the repeat
                             // guard has to start again. Without this every reading of the new
                             // sensor would be refused as "already seen".
                             plugin.onSensorChanged()
                             plugin.syncDriverFromPrefs()
+                            if (result.readyForBle) {
+                                plugin.connectStoredSensor(result.identity.bleAddress)
+                            }
                         },
                     )
                 }
@@ -103,7 +106,7 @@ internal fun Libre3StartScreen(
     activity: AppCompatActivity,
     reader: Libre3NfcReader,
     onBack: () -> Unit,
-    onSensorScanned: () -> Unit,
+    onSensorScanned: (Libre3NfcScanResult) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var scanned by remember { mutableStateOf<Libre3NfcScanResult?>(null) }
@@ -123,7 +126,7 @@ internal fun Libre3StartScreen(
                         onResult = { result ->
                             failure = null
                             scanned = result
-                            onSensorScanned()
+                            onSensorScanned(result)
                         },
                         onError = { reason -> failure = reason },
                     )

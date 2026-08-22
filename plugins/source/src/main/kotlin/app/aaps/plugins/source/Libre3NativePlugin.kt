@@ -202,6 +202,9 @@ class Libre3NativePlugin @Inject constructor(
             "${Libre3LogMarkers.SESSION}: plugin start realDriver=${Libre3CgmDrivers.useRealSkeleton} " +
                 "lastLifeCount=${sensorStore.loadLastLifeCount()} storedReadings=${recentTimestamps.size}",
         )
+        sensorStore.loadIdentity()?.let { identity ->
+            connectStoredSensor(identity.bleAddress)
+        }
     }
 
     /**
@@ -214,6 +217,24 @@ class Libre3NativePlugin @Inject constructor(
     fun onSensorChanged() {
         Libre3Ingest.reset()
         aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: new sensor, ingest starts counting again")
+    }
+
+    /**
+     * Starts Bluetooth after the NFC step has stored the sensor, or when the plugin comes back
+     * with a sensor that is already stored.
+     *
+     * Nothing is sent when the real driver is not selected. The stub would only report a fake
+     * failure and hide the fact that the engineering switch is still off.
+     */
+    fun connectStoredSensor(deviceAddress: String) {
+        syncDriverFromPrefs()
+        val blocked = Libre3CgmDrivers.realDriverBlockedReason()
+        if (blocked != null) {
+            aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: BLE not started, $blocked")
+            return
+        }
+        aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: BLE connect requested")
+        driver.connect(deviceAddress)
     }
 
     override suspend fun onStop() {

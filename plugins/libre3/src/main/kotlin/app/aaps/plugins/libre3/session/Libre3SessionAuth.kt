@@ -54,11 +54,12 @@ class Libre3Phase5RefusedException(message: String) : Libre3HandshakeException(m
  * There are two paths and they must never be mixed:
  *
  * - [runCachedReconnect] sends `0x11` and nothing else. It is used whenever a pairing key is
- *   stored. If it fails, the driver asks for a new NFC scan. It must never fall back to the other
- *   path: a running sensor refuses the first pairing command late in the handshake, so the fall
- *   back cannot work and only hides the real cause.
- * - [runFirstPair] is the full clock and starts with `0x01`. It is only for a sensor that this
- *   phone has never paired.
+ *   stored. If it fails, the driver retries the same short path, then asks for a new NFC scan.
+ *   It must never fall back to the other path: a running sensor refuses the first pairing
+ *   command late in the handshake, so the fall back cannot work and only hides the real cause.
+ * - [runFirstPairUntilEphemeral] is the full clock up to the two public points, and starts with
+ *   `0x01`. It is only for a sensor that this phone has never paired. The pairing key is written
+ *   next, then [runAuthorization] sends `0x11` with no pause.
  */
 class Libre3SessionAuth(
     private val transport: Libre3HandshakeTransport,
@@ -83,26 +84,27 @@ class Libre3SessionAuth(
         require(phoneR2.size == 16) { "R2 must be 16 bytes" }
 
         trace.mark("short reconnect starts")
-        transport.writeCommand(START_AUTHORIZATION)
-        expectCommandAnswer(CHALLENGE_LOAD_DONE, "the sensor did not accept the start of the reconnect")
-        trace.mark("0x11 accepted")
-        val (sensorR1, nonce) = readSensorChallenge()
-
-        return sendPhase5AndReadPhase6(sensorR1, phoneR2, blePin, nonce, phase5Block)
+        return runAuthorization(blePin, phase5Block, phoneR2)
     }
 
     /**
-     * Full first pairing. Only for a sensor with no stored pairing key.
+     * Full first pairing, up to the two public points and **not** including `0x11`.
+     *
+     * The pairing key is derived from those two points and from this phone's ephemeral key. It
+     * does not need the sensor's later challenge. Building the key here, writing it, then sending
+     * `0x11` without a pause is what keeps the sensor from dropping the link while the phone is
+     * still busy. See LibreCRKit `PairingFlow` at pin `a86b92f`: the challenge is only needed for
+     * Phase 5, not for the key itself.
      *
      * @param phoneCert the 162 byte certificate of this phone.
      * @param phoneEphemeralPublicKey72 the public point of this session, padded to 72 bytes.
      * @param sensorCertSize how many bytes the sensor's certificate has.
      */
-    fun runFirstPair(
+    fun runFirstPairUntilEphemeral(
         phoneCert: ByteArray,
         phoneEphemeralPublicKey72: ByteArray,
         sensorCertSize: Int = SENSOR_CERT_SIZE,
-    ): Libre3FirstPairPreamble {
+    ): Libre3FirstPairAfterEph {
         require(phoneCert.size == PHONE_CERT_SIZE) { "the phone certificate must be 162 bytes" }
         require(phoneEphemeralPublicKey72.size == PADDED_PUBLIC_KEY_SIZE) {
             "the public point must be padded to 72 bytes"
@@ -131,12 +133,28 @@ class Libre3SessionAuth(
         trace.mark("sensor ephemeral point read")
         trace.bytes("sensor ephemeral point", sensorEphemeral)
 
+        return Libre3FirstPairAfterEph(sensorCert, sensorEphemeral)
+    }
+
+    /**
+     * Sends `0x11`, reads the 23 byte challenge, answers with Phase 5, then reads Phase 6.
+     *
+     * Shared by the short reconnect and by the last part of a first pairing, so the two paths
+     * cannot drift apart.
+     */
+    fun runAuthorization(
+        blePin: ByteArray,
+        phase5Block: Libre3AesBlock,
+        phoneR2: ByteArray,
+    ): Libre3SessionMaterial {
+        require(blePin.size == 4) { "the PIN must be 4 bytes" }
+        require(phoneR2.size == 16) { "R2 must be 16 bytes" }
+
         transport.writeCommand(START_AUTHORIZATION)
         expectCommandAnswer(CHALLENGE_LOAD_DONE, "the sensor did not start the last pairing step")
         trace.mark("0x11 accepted")
         val (sensorR1, nonce) = readSensorChallenge()
-
-        return Libre3FirstPairPreamble(sensorCert, sensorEphemeral, sensorR1, nonce)
+        return sendPhase5AndReadPhase6(sensorR1, phoneR2, blePin, nonce, phase5Block)
     }
 
     /**
@@ -230,27 +248,22 @@ class Libre3SessionAuth(
     }
 }
 
-/** What the first part of a first pairing produced. */
-data class Libre3FirstPairPreamble(
+/** What the first pairing has after the two public points, before `0x11`. */
+data class Libre3FirstPairAfterEph(
     val sensorCert: ByteArray,
     val sensorEphemeralPublicKey: ByteArray,
-    val sensorR1: ByteArray,
-    val nonce: ByteArray,
 ) {
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
-        if (other !is Libre3FirstPairPreamble) return false
+        if (other !is Libre3FirstPairAfterEph) return false
         return sensorCert.contentEquals(other.sensorCert) &&
-            sensorEphemeralPublicKey.contentEquals(other.sensorEphemeralPublicKey) &&
-            sensorR1.contentEquals(other.sensorR1) && nonce.contentEquals(other.nonce)
+            sensorEphemeralPublicKey.contentEquals(other.sensorEphemeralPublicKey)
     }
 
     override fun hashCode(): Int {
         var result = sensorCert.contentHashCode()
         result = 31 * result + sensorEphemeralPublicKey.contentHashCode()
-        result = 31 * result + sensorR1.contentHashCode()
-        result = 31 * result + nonce.contentHashCode()
         return result
     }
 }

@@ -55,9 +55,11 @@ class Libre3BleSessionFirstPairTest {
 
         /** Set when the key was written. Used to prove the write happened before Phase 5 went out. */
         var phase5WireAtWriteTime: ByteArray? = null
+        var commandsAtWriteTime: List<Byte>? = null
         var writeSeen = false
         var clearSeen = false
         var linkAtWriteTime: (() -> ByteArray?)? = null
+        var commandsAtWriteTimeSource: (() -> List<Byte>)? = null
 
         override fun loadIdentity(): Libre3SensorIdentity = identity
 
@@ -66,6 +68,7 @@ class Libre3BleSessionFirstPairTest {
         override fun savePhase5RawKeyAndWait(phase5RawKey: ByteArray): Boolean {
             writeSeen = true
             phase5WireAtWriteTime = linkAtWriteTime?.invoke()
+            commandsAtWriteTime = commandsAtWriteTimeSource?.invoke()
             if (!pairingKeyWriteWorks) return false
             savedPairingKey = phase5RawKey
             return true
@@ -245,6 +248,7 @@ class Libre3BleSessionFirstPairTest {
         val store = FakeStore().also {
             it.identity = identity
             it.linkAtWriteTime = { link.phase5Wire }
+            it.commandsAtWriteTimeSource = { link.commandsSent.toList() }
         }
         val session = Libre3BleSession(
             gatt = link,
@@ -263,11 +267,14 @@ class Libre3BleSessionFirstPairTest {
         assertThat(store.savedPairingKey).isEqualTo(expectedKey)
         assertThat(link.commandsSent.first()).isEqualTo(Libre3SessionAuth.START_AUTHENTICATION)
 
-        // And it was written BEFORE Phase 5 went out, not after the pairing had finished. If the
-        // write were moved to the end, this would be the 54 byte Phase 5 message instead of null.
+        // And it was written BEFORE 0x11 and Phase 5 went out, not after the pairing had finished.
+        // If the write were moved to the end, this would be the 54 byte Phase 5 message instead of
+        // null, and 0x11 would already have been sent.
         assertThat(store.writeSeen).isTrue()
         assertThat(store.phase5WireAtWriteTime).isNull()
+        assertThat(store.commandsAtWriteTime).doesNotContain(Libre3SessionAuth.START_AUTHORIZATION)
         assertThat(link.phase5Wire).isNotNull()
+        assertThat(link.commandsSent).contains(Libre3SessionAuth.START_AUTHORIZATION)
     }
 
     @Test
@@ -289,6 +296,7 @@ class Libre3BleSessionFirstPairTest {
         assertThat(result).isInstanceOf(Libre3BleSession.Result.Failed::class.java)
         assertThat(store.savedPairingKey).isNull()
         assertThat(store.savedKEnc).isNull()
+        assertThat(link.commandsSent).doesNotContain(Libre3SessionAuth.START_AUTHORIZATION)
         // The link must not be left open behind a failed pairing.
         assertThat(link.isConnected()).isFalse()
     }

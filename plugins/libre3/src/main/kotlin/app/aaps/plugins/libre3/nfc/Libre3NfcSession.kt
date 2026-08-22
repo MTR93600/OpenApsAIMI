@@ -54,6 +54,19 @@ class Libre3NfcSession(
      * @throws Libre3NfcException when the tag is not a Libre 3, or an answer cannot be read.
      */
     fun scan(transceiver: Libre3NfcTransceiver): Libre3NfcScanResult {
+        // The sensor binds itself to the receiver id it is given, so an id that could not be stored
+        // must never be sent. The next scan would build a different one and the sensor would then
+        // no longer answer this phone. The id is loaded before the tag is touched, so the gap
+        // between A1 and A8 stays as short as the radio itself.
+        val receiverId = try {
+            store.receiverId()
+        } catch (e: IllegalStateException) {
+            throw Libre3NfcException(
+                "this phone could not store its receiver id, ${e.message}",
+                Libre3NfcFailure.PHONE_STORAGE_FAILED,
+            )
+        }
+
         // A tag that is not a Libre 3 either refuses this command or answers something that is not
         // a patch info frame. Both end here, before any activation command can be sent.
         val patchInfo = Libre3NfcCommands.parsePatchInfo(transceiver.transceive(Libre3NfcCommands.patchInfoFrame()))
@@ -64,17 +77,6 @@ class Libre3NfcSession(
         )
 
         val command = patchInfo.recommendedCommand
-        // The sensor binds itself to the receiver id it is given, so an id that could not be stored
-        // must never be sent. The next scan would build a different one and the sensor would then
-        // no longer answer this phone.
-        val receiverId = try {
-            store.receiverId()
-        } catch (e: IllegalStateException) {
-            throw Libre3NfcException(
-                "this phone could not store its receiver id, ${e.message}",
-                Libre3NfcFailure.PHONE_STORAGE_FAILED,
-            )
-        }
         val startedAtMs = nowMs()
         // The sensor keeps the time it is given, so it must be phone time in whole seconds. One
         // second is taken off, like the upstream code, so the sensor never gets a time that is at

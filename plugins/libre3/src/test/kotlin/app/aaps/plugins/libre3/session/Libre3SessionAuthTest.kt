@@ -136,7 +136,31 @@ class Libre3SessionAuthTest {
     }
 
     @Test
-    fun `the first pairing follows the full command order`() {
+    fun `the first pairing follows the command order up to the two public points`() {
+        val sensor = ScriptedSensor()
+            .answerCommand(Libre3SessionAuth.CERTIFICATE_ACCEPTED)
+            .answerCommand(Libre3SessionAuth.CERTIFICATE_READY)
+            .answerCert(ByteArray(140))
+            .answerCommand(Libre3SessionAuth.EPHEMERAL_READY)
+            .answerCert(ByteArray(65))
+
+        val afterEph = Libre3SessionAuth(sensor).runFirstPairUntilEphemeral(ByteArray(162), ByteArray(72))
+
+        assertThat(sensor.commandsSent).containsExactly(
+            Libre3SessionAuth.START_AUTHENTICATION,
+            Libre3SessionAuth.LOAD_CERTIFICATE,
+            Libre3SessionAuth.SEND_CERTIFICATE_LOAD_DONE,
+            Libre3SessionAuth.GET_CERTIFICATE,
+            Libre3SessionAuth.VALIDATE_CERTIFICATE,
+            Libre3SessionAuth.SEND_EPHEMERAL_DONE,
+        ).inOrder()
+        assertThat(sensor.commandsSent).doesNotContain(Libre3SessionAuth.START_AUTHORIZATION)
+        assertThat(afterEph.sensorCert).hasLength(140)
+        assertThat(afterEph.sensorEphemeralPublicKey).hasLength(65)
+    }
+
+    @Test
+    fun `after the two public points the last step is the short 0x11 path`() {
         val sensor = ScriptedSensor()
             .answerCommand(Libre3SessionAuth.CERTIFICATE_ACCEPTED)
             .answerCommand(Libre3SessionAuth.CERTIFICATE_READY)
@@ -145,8 +169,12 @@ class Libre3SessionAuthTest {
             .answerCert(ByteArray(65))
             .answerCommand(Libre3SessionAuth.CHALLENGE_LOAD_DONE)
             .answerChallenge(sensorR1 + nonce)
+            .answerCommand(Libre3SessionAuth.CHALLENGE_LOAD_DONE)
+            .answerChallenge(phase6Wire())
 
-        val preamble = Libre3SessionAuth(sensor).runFirstPair(ByteArray(162), ByteArray(72))
+        val auth = Libre3SessionAuth(sensor)
+        auth.runFirstPairUntilEphemeral(ByteArray(162), ByteArray(72))
+        auth.runAuthorization(blePin, phase5Block, phoneR2)
 
         assertThat(sensor.commandsSent).containsExactly(
             Libre3SessionAuth.START_AUTHENTICATION,
@@ -156,9 +184,8 @@ class Libre3SessionAuthTest {
             Libre3SessionAuth.VALIDATE_CERTIFICATE,
             Libre3SessionAuth.SEND_EPHEMERAL_DONE,
             Libre3SessionAuth.START_AUTHORIZATION,
+            Libre3SessionAuth.SEND_CHALLENGE_LOAD_DONE,
         ).inOrder()
-        assertThat(preamble.sensorR1).isEqualTo(sensorR1)
-        assertThat(preamble.nonce).isEqualTo(nonce)
     }
 
     @Test
@@ -169,10 +196,8 @@ class Libre3SessionAuthTest {
             .answerCert(ByteArray(140))
             .answerCommand(Libre3SessionAuth.EPHEMERAL_READY)
             .answerCert(ByteArray(65))
-            .answerCommand(Libre3SessionAuth.CHALLENGE_LOAD_DONE)
-            .answerChallenge(sensorR1 + nonce)
 
-        Libre3SessionAuth(sensor).runFirstPair(ByteArray(162), ByteArray(72))
+        Libre3SessionAuth(sensor).runFirstPairUntilEphemeral(ByteArray(162), ByteArray(72))
 
         assertThat(sensor.writes).containsExactly(
             Libre3HandshakeChannel.CERT to 162,
@@ -185,7 +210,7 @@ class Libre3SessionAuthTest {
         val sensor = ScriptedSensor().answerCommand(0x06)
 
         assertThrows<Libre3HandshakeException> {
-            Libre3SessionAuth(sensor).runFirstPair(ByteArray(162), ByteArray(72))
+            Libre3SessionAuth(sensor).runFirstPairUntilEphemeral(ByteArray(162), ByteArray(72))
         }
 
         assertThat(sensor.commandsSent).containsExactly(
@@ -200,10 +225,10 @@ class Libre3SessionAuthTest {
         val sensor = ScriptedSensor()
 
         assertThrows<IllegalArgumentException> {
-            Libre3SessionAuth(sensor).runFirstPair(ByteArray(161), ByteArray(72))
+            Libre3SessionAuth(sensor).runFirstPairUntilEphemeral(ByteArray(161), ByteArray(72))
         }
         assertThrows<IllegalArgumentException> {
-            Libre3SessionAuth(sensor).runFirstPair(ByteArray(162), ByteArray(65))
+            Libre3SessionAuth(sensor).runFirstPairUntilEphemeral(ByteArray(162), ByteArray(65))
         }
         assertThat(sensor.commandsSent).isEmpty()
     }

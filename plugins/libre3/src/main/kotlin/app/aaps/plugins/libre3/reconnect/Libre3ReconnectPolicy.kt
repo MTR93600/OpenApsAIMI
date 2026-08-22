@@ -40,12 +40,13 @@ object Libre3ReconnectPolicy {
     }
 
     /**
-     * @param handshakeReached true when the sensor answered the first pairing message. A sensor
-     *   that answers and then refuses is telling us that the stored key is no longer good, so
-     *   there is no point in trying the same key many more times.
+     * @param handshakeReached true when the sensor answered the first pairing message. Kept for
+     *   logs and tests. It no longer short-circuits retries: a drop after `0x11` is often the
+     *   phone being slow, not a dead key, and LibreLoop retries the short reconnect several times
+     *   before it asks for another NFC scan.
      */
+    @Suppress("UNUSED_PARAMETER")
     fun actionAfterFailure(attempt: Int, handshakeReached: Boolean): Libre3RecoveryAction {
-        if (handshakeReached) return Libre3RecoveryAction.ASK_FOR_NFC_SCAN
         if (attempt >= MAX_ATTEMPTS) return Libre3RecoveryAction.ASK_FOR_NFC_SCAN
         return Libre3RecoveryAction.RETRY_CACHED_RECONNECT
     }

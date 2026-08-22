@@ -31,17 +31,17 @@ class Libre3ReconnectPolicyTest {
     }
 
     @Test
-    fun `a sensor that answered and then refused is not retried with the same key`() {
+    fun `a sensor that answered and then dropped is still retried with the same key`() {
         val action = Libre3ReconnectPolicy.actionAfterFailure(attempt = 1, handshakeReached = true)
 
-        assertThat(action).isEqualTo(Libre3RecoveryAction.ASK_FOR_NFC_SCAN)
+        assertThat(action).isEqualTo(Libre3RecoveryAction.RETRY_CACHED_RECONNECT)
     }
 
     @Test
-    fun `after enough failures the user is asked to scan the sensor again`() {
+    fun `after enough failures the user is asked to scan the sensor again even if it had answered`() {
         val action = Libre3ReconnectPolicy.actionAfterFailure(
             attempt = Libre3ReconnectPolicy.MAX_ATTEMPTS,
-            handshakeReached = false,
+            handshakeReached = true,
         )
 
         assertThat(action).isEqualTo(Libre3RecoveryAction.ASK_FOR_NFC_SCAN)

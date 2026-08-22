@@ -739,11 +739,43 @@ Still **not user-confirmed**. One first pairing was attempted on a real Libre 3 
   "never activated" and anything else means "running", and the reference makes no finer claim
   either. The Libre 2 convention where `0x04` means "expired" is **not** what this parser assumes
   and is unverified here.
-- **There is no automatic retry, and this is a real gap.** `Libre3ReconnectPolicy.nextDelayMs` is
-  never called in production, and `RETRY_CACHED_RECONNECT` is logged as the next action while
-  nothing acts on it. The only production caller of `Libre3CgmDriverReal.connect` is the button in
-  `Libre3StatusActivity`. The two extra attempts in the 2026-08-22 log were two taps of that
-  button, ten seconds apart, serialised by the driver's single thread executor. Undecided.
+- **The two extra attempts in that log were two taps of the button**, ten seconds apart, serialised
+  by the driver's single thread executor. There was no automatic retry at the time:
+  `Libre3ReconnectPolicy.nextDelayMs` was never called and `RETRY_CACHED_RECONNECT` was logged while
+  nothing acted on it. A retry with a generation guard now exists in `Libre3CgmDriverReal`.
+
+### The second run, later on 2026-08-22: the link itself
+
+A second log, taken after a "forget this sensor" and a fresh NFC scan of the same sensor, never
+reached the handshake at all. `LIBRE3_NFC` shows `state=0x04`, `command=0xA8 answered`,
+`serialChanged=true`, so the sensor was stored again. Then:
+
+```
+09:19:31.110  connect() - device: XX:XX:XX:XX:1C:E8, auto: false
+09:19:41.116  onClientConnectionState() - status=147 connected=false     (+10.0 s)
+09:19:41.122  LIBRE3_RECONNECT: attempt 1 failed
+```
+
+`status=147` is `GATT_CONNECTION_TIMEOUT`: the sensor never answered the connection request. No
+`LIBRE3_PAIRING` line and no `LIBRE3_TRACE` line appear, so **this log says nothing about Phase 5**.
+The cause is one layer lower: a Libre 3 is only connectable while it advertises, and the driver
+fired a connect at a stored address without ever looking for the sensor on the air.
+
+Both references resolve the sensor before they connect. `LibreLoopPairingService` cannot do
+otherwise on iOS, and bounds the search: *"Final fallback: scan. Bounded so we don't burn the radio
+forever waiting for a sensor that might never show up."* It filters on **nothing** and matches the
+peripheral by identity.
+
+`Libre3GattClientAndroid.connect` now looks for the advertisement first and connects the device it
+saw, falling back to the stored address only after the search window. Two traps are worth keeping in
+mind here:
+
+- **Do not add the service UUID to the scan filter.** A Libre 3 often carries that UUID in the scan
+  response rather than the advertisement, so an address plus service filter can match nothing, in
+  silence. The address alone is unique. `scan/Libre3BleScannerAndroid` had that filter and it was
+  removed for the same reason; note that this class is not the one the driver uses.
+- **A build that has none of this on the phone will keep showing `status=147`.** The 09:19 log came
+  from `4.0.0.0-dev.AIMI.210826-e019fee`, which predates all of it.
 
 ### Traps already found and fixed. Do not reintroduce them
 

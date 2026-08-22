@@ -125,6 +125,18 @@ class Libre3NfcCommandsTest {
     }
 
     @Test
+    fun `patch info is read when extra bytes sit in front of the real frame`() {
+        val padded = ByteArray(36) { 0x11 } +
+            bytes("00a50001000200010060541e020401040c04305252433938394151c6ca")
+
+        val info = Libre3NfcCommands.parsePatchInfo(padded)
+
+        assertThat(padded.size).isEqualTo(65)
+        assertThat(info.serialNumber).isEqualTo("0RRC989AQ")
+        assertThat(info.state).isEqualTo(0x04.toByte())
+    }
+
+    @Test
     fun `a patch info answer that is too short is refused`() {
         assertThrows<Libre3NfcException> { Libre3NfcCommands.parsePatchInfo(bytes("00a50001")) }
     }

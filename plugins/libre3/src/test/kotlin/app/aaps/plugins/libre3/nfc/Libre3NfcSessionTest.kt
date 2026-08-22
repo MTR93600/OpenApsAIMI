@@ -155,8 +155,11 @@ class Libre3NfcSessionTest {
 
         assertThrows<Libre3NfcException> { session(store).scan(tag) }
 
-        // Only the read command went out. No sensor was bound to an id we cannot rebuild.
-        assertThat(tag.sent).hasSize(1)
+        // Nothing at all went out. The receiver id is read before the tag is touched, so a phone
+        // that cannot store its id never even sends the patch info read, and no sensor is bound to
+        // an id we could not rebuild. This used to be one frame, the A1 read, before the id was
+        // moved ahead of it to keep the gap between A1 and A8 short.
+        assertThat(tag.sent).isEmpty()
         assertThat(store.saveCount).isEqualTo(0)
     }
 

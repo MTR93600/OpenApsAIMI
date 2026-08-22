@@ -63,6 +63,13 @@ class Libre3CgmDriverReal(
     @Volatile
     private var failedAttempts = 0
 
+    /**
+     * Raised on every new [connect] and every [stopSession], so a retry that was already queued
+     * cannot start after the user asked to stop, or after a newer connect has begun.
+     */
+    @Volatile
+    private var connectGeneration = 0
+
     override fun setContext(context: Context) {
         this.context = context.applicationContext
         this.store = Libre3SensorStore(context.applicationContext)
@@ -77,7 +84,11 @@ class Libre3CgmDriverReal(
     }
 
     override fun connect(deviceAddress: String) {
-        bleExecutor.execute { openSession() }
+        failedAttempts = 0
+        val generation = synchronized(this) { ++connectGeneration }
+        // Drop a connect that is already waiting, so a new NFC scan is not stuck behind it.
+        gatt?.disconnect()
+        bleExecutor.execute { openSession(generation) }
     }
 
     override fun disconnect() {
@@ -108,6 +119,7 @@ class Libre3CgmDriverReal(
         check(!Libre3DisconnectPolicy.mayWriteSensorCommand(reason)) {
             "no reason may ever write a command to the sensor"
         }
+        synchronized(this) { connectGeneration++ }
         sessionUp = false
         val current = session
         session = null
@@ -121,7 +133,8 @@ class Libre3CgmDriverReal(
 
     override fun isSessionUp(): Boolean = sessionUp
 
-    private fun openSession() {
+    private fun openSession(generation: Int) {
+        if (generation != connectGeneration) return
         val appContext = context ?: return
         val sensorStore = store ?: return
         val client = Libre3GattClientAndroid(appContext)
@@ -154,10 +167,37 @@ class Libre3CgmDriverReal(
                     message = result.reason,
                 )
                 Libre3Log.w(
-                    "${Libre3LogMarkers.RECONNECT}: attempt $failedAttempts failed, next action $action",
+                    "${Libre3LogMarkers.RECONNECT}: attempt $failedAttempts failed, " +
+                        "handshakeReached=${result.handshakeReached}, next action $action",
                 )
                 watchers.forEach { it.onError(result.reason, fatal) }
+                if (action == Libre3RecoveryAction.RETRY_CACHED_RECONNECT) {
+                    scheduleRetry(generation)
+                }
             }
+        }
+    }
+
+    /**
+     * Waits then opens the same stored sensor again, unless a newer [connect] or a stop has
+     * cancelled this generation.
+     *
+     * ⚠️ ASYNC IMPACT: the wait runs on [bleExecutor]. A stop interrupts it through
+     * [ExecutorService.shutdownNow].
+     */
+    private fun scheduleRetry(generation: Int) {
+        val delayMs = Libre3ReconnectPolicy.nextDelayMs(failedAttempts)
+        Libre3Log.i("${Libre3LogMarkers.RECONNECT}: retry in ${delayMs}ms")
+        bleExecutor.execute {
+            try {
+                Thread.sleep(delayMs)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return@execute
+            }
+            if (generation != connectGeneration) return@execute
+            if (sessionUp) return@execute
+            openSession(generation)
         }
     }
 

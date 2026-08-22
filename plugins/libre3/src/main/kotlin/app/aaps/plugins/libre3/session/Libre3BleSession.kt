@@ -135,9 +135,17 @@ class Libre3BleSession(
 
         // From here on the link may be opened, so every way out has to close it again.
 
+        // One trace per attempt. It is what tells a refused answer apart from an answer that came
+        // too late, which the ordinary log cannot do.
+        val trace = Libre3PairingTrace()
+
         glucoseFrames.reset()
+
+        // The link layer looks for the sensor on the air before it connects, so this call also
+        // covers the time the sensor took to show up.
         gatt.connect(identity.bleAddress)
         if (!gatt.isConnected()) return failed("the sensor could not be reached", handshakeReached = false)
+        trace.mark("link up")
 
         // The three pairing channels have to listen first, or the answers are lost.
         for (channel in Libre3BluetoothUuids.HANDSHAKE_CHANNELS) {
@@ -145,10 +153,8 @@ class Libre3BleSession(
                 return failed("a pairing channel could not be opened", handshakeReached = false)
             }
         }
+        trace.mark("pairing channels open")
 
-        // One trace per attempt. It is what tells a refused answer apart from an answer that came
-        // too late, which the ordinary log cannot do.
-        val trace = Libre3PairingTrace()
         val auth = Libre3SessionAuth(Libre3GattHandshakeTransport(gatt), trace)
         val phoneR2 = ByteArray(16).also { random.nextBytes(it) }
 
@@ -220,9 +226,10 @@ class Libre3BleSession(
      *
      * The key this makes is the only way back to the sensor. If it is not written to the disk, a
      * reconnect has nothing to reuse and the user has to scan the sensor again, so a failed write
-     * is treated as a failed pairing rather than quietly ignored. The write happens **before** the
-     * last two steps of the clock, so that a sensor which is about to be paired can always be
-     * reached again, even if the app dies in the middle.
+     * is treated as a failed pairing rather than quietly ignored. The write happens **before**
+     * `0x11` and Phase 5, so the heavy key work is done while the sensor is not yet waiting for
+     * the last answer. A sensor that drops the link in that wait used to do so after the phone
+     * had already sent `0x11` and then paused to derive the key.
      *
      * That order also settles what a later attempt must do, and it is worth writing down:
      *
@@ -243,12 +250,12 @@ class Libre3BleSession(
         trace: Libre3PairingTrace,
     ): Libre3SessionMaterial? {
         val ephemeral = setup.ephemeral
-        val preamble = auth.runFirstPair(
+        val afterEph = auth.runFirstPairUntilEphemeral(
             phoneCert = setup.phoneCert,
             phoneEphemeralPublicKey72 = ephemeral.keyPair.publicKeyPadded72,
         )
 
-        val sensorCert = Libre3SensorCert.parse(preamble.sensorCert)
+        val sensorCert = Libre3SensorCert.parse(afterEph.sensorCert)
         // The reference refuses a certificate whose signature does not check out, and so does
         // this. Going on would build a key from a point nobody vouched for, and the pairing would
         // fail several steps later for a reason no log could explain.
@@ -258,7 +265,7 @@ class Libre3BleSession(
         trace.bytes("sensor static point", sensorCert.staticPublicKey)
         val phase5 = Libre3FirstPairPhase5Source.derive(
             material = ephemeral,
-            sensorEphemeralPublicKey65 = preamble.sensorEphemeralPublicKey,
+            sensorEphemeralPublicKey65 = afterEph.sensorEphemeralPublicKey,
             sensorStaticPublicKey65 = sensorCert.staticPublicKey,
         )
         trace.mark("pairing key derived")
@@ -273,12 +280,10 @@ class Libre3BleSession(
         Libre3Log.i("${Libre3LogMarkers.PAIRING}: pairing key stored, a reconnect is now possible")
 
         return try {
-            auth.sendPhase5AndReadPhase6(
-                sensorR1 = preamble.sensorR1,
-                phoneR2 = phoneR2,
+            auth.runAuthorization(
                 blePin = blePin,
-                nonce = preamble.nonce,
                 phase5Block = pairingBlocks.blockFor(phase5.rawKey),
+                phoneR2 = phoneR2,
             )
         } catch (e: Libre3Phase5RefusedException) {
             // The sensor never authorised this phone, so the key just written is worthless. It is

@@ -8,14 +8,15 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import app.aaps.plugins.libre3.Libre3Log
 import app.aaps.plugins.libre3.Libre3LogMarkers
-import app.aaps.plugins.libre3.gatt.Libre3BluetoothUuids
-import android.os.ParcelUuid
 
 /**
  * Looks for one known sensor, and stops as soon as it is seen.
  *
- * The search is narrowed by the sensor's own address and by the service every Libre 3 offers, so
- * the phone is not woken by every other device nearby.
+ * The search is narrowed by the sensor's own address, which is unique, and by nothing else. The
+ * service UUID used to be part of the filter as well, and that was a trap: a filter on a service
+ * UUID only matches when the sensor puts that UUID in its advertisement, and a sensor that does not
+ * is then never seen, in silence. `LibreLoopPairingService` filters on nothing at all and matches
+ * the peripheral by identity, so the narrower filter had no reference behind it.
  *
  * ⚠️ ASYNC IMPACT: Android answers on a binder thread. The listener is called from there, so it
  * must not do slow work.
@@ -34,7 +35,6 @@ class Libre3BleScannerAndroid : Libre3BleScanner {
         val filters = listOf(
             ScanFilter.Builder()
                 .setDeviceAddress(address)
-                .setServiceUuid(ParcelUuid(Libre3BluetoothUuids.SERVICE))
                 .build()
         )
         val settings = ScanSettings.Builder()
