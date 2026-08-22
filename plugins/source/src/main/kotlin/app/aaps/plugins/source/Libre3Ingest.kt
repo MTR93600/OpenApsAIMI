@@ -21,8 +21,20 @@ import kotlin.math.abs
  */
 internal object Libre3Ingest {
 
-    /** Two readings closer than this in time are treated as the same reading. */
-    const val DEDUP_WINDOW_MS: Long = 240L * 1000L
+    /**
+     * Two readings closer than this in time are treated as the same reading.
+     *
+     * A Libre 3 speaks **once a minute**, and every one of those readings is a new measurement, not
+     * a repeat. What protects against a repeat is the sensor's own life counter a few lines below:
+     * a reading whose counter is not higher than the last accepted one can never be inserted. This
+     * window is only there for the case where the very same reading arrives twice within seconds,
+     * for instance when a message is delivered again after a hiccup on the link.
+     *
+     * It used to be four minutes, which threw away three readings out of four: the log of
+     * 2026-08-22 shows 75, then 74, then 73 mg/dL dropped as "repeated" between two inserts. Keep
+     * it well under a minute, or the driver quietly becomes a five minute sensor again.
+     */
+    const val DEDUP_WINDOW_MS: Long = 30L * 1000L
 
     private const val RECENT_CAP: Int = 64
 

@@ -37,6 +37,8 @@ import app.aaps.plugins.source.keys.Libre3BooleanKey
 import app.aaps.plugins.source.keys.Libre3IntentKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -91,6 +93,16 @@ class Libre3NativePlugin @Inject constructor(
 ), BgSource, Libre3GlucoseWatcher, CgmSensorStatusProvider {
 
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * The last resort that brings a sensor back.
+     *
+     * The driver has its own ladder of retries and it is the one that should do the work. This is
+     * the safety net for the case where that ladder itself stops, whatever the reason: as long as a
+     * sensor is stored and the session is down, the plugin asks for a connection again. Without it
+     * the only way back is a hand held over the sensor, which is what the log of 2026-08-22 shows.
+     */
+    private var reconnectWatchdog: Job? = null
 
     private val driver
         get() = Libre3CgmDrivers.default()
@@ -238,6 +250,7 @@ class Libre3NativePlugin @Inject constructor(
     }
 
     override suspend fun onStop() {
+        cancelReconnectWatchdog()
         driver.removeWatcher(this)
         driver.shutdown()
         warmupNotification.cancel()
@@ -306,6 +319,33 @@ class Libre3NativePlugin @Inject constructor(
 
     override fun onSession(up: Boolean, reason: String?) {
         aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: up=$up reason=$reason")
+        if (up) cancelReconnectWatchdog() else armReconnectWatchdog()
+    }
+
+    /**
+     * Asks for a connection again when the session has been down for a while.
+     *
+     * One watch at a time: a new one replaces the old, so a session that goes up and down does not
+     * leave a queue of them behind. It does nothing when the driver has already brought the session
+     * back by itself, which is the normal case.
+     */
+    private fun armReconnectWatchdog() {
+        reconnectWatchdog?.cancel()
+        reconnectWatchdog = ioScope.launch {
+            delay(RECONNECT_WATCHDOG_MS)
+            if (driver.isSessionUp()) return@launch
+            val identity = sensorStore.loadIdentity() ?: return@launch
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "${Libre3LogMarkers.SESSION}: session still down after ${RECONNECT_WATCHDOG_MS / 60_000} min, asking again",
+            )
+            connectStoredSensor(identity.bleAddress)
+        }
+    }
+
+    private fun cancelReconnectWatchdog() {
+        reconnectWatchdog?.cancel()
+        reconnectWatchdog = null
     }
 
     override fun onError(message: String, fatal: Boolean) {
@@ -316,5 +356,13 @@ class Libre3NativePlugin @Inject constructor(
 
         /** How far back stored readings are read to rebuild the repeat guard after a restart. */
         private const val INGEST_SEED_WINDOW_MS = 6L * 60L * 60L * 1000L
+
+        /**
+         * How long a session may stay down before the plugin asks for a connection itself.
+         *
+         * Long enough that the driver's own ladder has had every chance first, short enough that a
+         * user is not left without glucose for a quarter of an hour.
+         */
+        private const val RECONNECT_WATCHDOG_MS = 5L * 60L * 1000L
     }
 }

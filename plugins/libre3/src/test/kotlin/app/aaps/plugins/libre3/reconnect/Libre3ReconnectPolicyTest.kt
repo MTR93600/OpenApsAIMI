@@ -12,14 +12,34 @@ class Libre3ReconnectPolicyTest {
     }
 
     @Test
-    fun `waits grow but never pass the upper bound`() {
+    fun `waits grow, and the quick ladder never passes its upper bound`() {
         var previous = 0L
-        for (attempt in 1..20) {
+        for (attempt in 1 until Libre3ReconnectPolicy.MAX_ATTEMPTS) {
             val delay = Libre3ReconnectPolicy.nextDelayMs(attempt)
 
             assertThat(delay).isAtMost(Libre3ReconnectPolicy.MAX_DELAY_MS)
             assertThat(delay).isAtLeast(previous)
             previous = delay
+        }
+    }
+
+    @Test
+    fun `once the quick ladder is spent the driver keeps knocking at a slow pace`() {
+        for (attempt in Libre3ReconnectPolicy.MAX_ATTEMPTS..40) {
+            assertThat(Libre3ReconnectPolicy.nextDelayMs(attempt))
+                .isEqualTo(Libre3ReconnectPolicy.SLOW_RETRY_MS)
+        }
+    }
+
+    /**
+     * The heart of the 2026-08-22 fix. A link that dies to a busy radio says nothing about the
+     * stored key, so no number of failures may end in "hold your phone on the sensor again".
+     */
+    @Test
+    fun `a sensor that never answered is retried for ever, never given up on`() {
+        for (attempt in 1..100) {
+            assertThat(Libre3ReconnectPolicy.actionAfterFailure(attempt, handshakeReached = false))
+                .isEqualTo(Libre3RecoveryAction.RETRY_CACHED_RECONNECT)
         }
     }
 

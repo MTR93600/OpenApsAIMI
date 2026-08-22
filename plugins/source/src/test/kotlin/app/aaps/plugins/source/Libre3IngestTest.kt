@@ -59,19 +59,26 @@ class Libre3IngestTest {
     }
 
     @Test
-    fun `two readings closer than four minutes are treated as one`() {
+    fun `the same reading delivered twice within seconds is treated as one`() {
         Libre3Ingest.shouldAccept(sample(lifeCount = 100, timestampMs = startMs))
 
-        val tooClose = sample(lifeCount = 101, timestampMs = startMs + 239_000L)
+        val tooClose = sample(lifeCount = 101, timestampMs = startMs + 29_000L)
         assertThat(Libre3Ingest.shouldAccept(tooClose)).isFalse()
     }
 
+    /**
+     * The sensor speaks once a minute and every one of those readings must reach the loop. This is
+     * the test that keeps the driver from quietly becoming a five minute sensor again.
+     */
     @Test
-    fun `a reading four minutes later is accepted`() {
-        Libre3Ingest.shouldAccept(sample(lifeCount = 100, timestampMs = startMs))
+    fun `every reading of a sensor that speaks once a minute is accepted`() {
+        var accepted = 0
+        for (minute in 0 until 20) {
+            val reading = sample(lifeCount = 100 + minute, timestampMs = startMs + minute * 60_000L)
+            if (Libre3Ingest.shouldAccept(reading)) accepted++
+        }
 
-        val next = sample(lifeCount = 105, timestampMs = startMs + 240_000L)
-        assertThat(Libre3Ingest.shouldAccept(next)).isTrue()
+        assertThat(accepted).isEqualTo(20)
     }
 
     @Test

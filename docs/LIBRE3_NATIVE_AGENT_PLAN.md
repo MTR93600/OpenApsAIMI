@@ -815,6 +815,36 @@ Two more things the reference header states plainly, both worth keeping in mind:
   feeds the attempt count into the seed builder. When the first draw is accepted the two agree, so
   this is not the failure seen here, but it is a difference and it is not settled.
 
+### The first working session, 2026-08-22 17:53 to 18:13
+
+The support package `AndroidAPS._2026-08-22_14-54-47_.34` is the first log in which this driver
+**runs a session**: short reconnect, `phase 5 accepted`, `phase 6 read`, `session up, data channels
+open`, and glucose in the database. It also settles two questions.
+
+**The sensor speaks once a minute.** `lifeCount` grows by one every sixty seconds, without a gap,
+for twenty minutes. What was reaching the loop was one reading every four minutes, and the reason
+was ours: `Libre3Ingest.DEDUP_WINDOW_MS` was four minutes, so three readings out of four were logged
+as `repeated reading dropped` and thrown away — 75, then 74, then 73 mg/dL, three different
+measurements. The life counter is what protects against a real repeat; the time window only has to
+catch the same message delivered twice within seconds. It is now thirty seconds, and a test walks
+twenty minutes of a once a minute sensor and asks for twenty inserts.
+
+**A lost link used to end everything.** At 18:13:52 the log shows `link down, status=8`, a
+supervision timeout: nobody hung up, the packets simply stopped, in a radio busy with the pump, a
+car and a pair of glasses. The driver then wrote `reading stopped` and did nothing for six minutes,
+until the user held the phone over the sensor. `startReading` ended with `stopSession(LINK_LOST)`,
+which raises the generation and so cancels any retry, and the ladder of retries only ever ran for
+failures inside `openSession`. Three things changed:
+
+- `endSessionAfterLinkLoss` replaces `stopSession` on that path. It tears the session down the same
+  way but **keeps the generation**, so the retry it starts is not cancelled by its own teardown.
+- `Libre3ReconnectPolicy` no longer gives up on a sensor that never answered. A link that dies to a
+  busy radio says nothing about the stored key, so after the quick ladder it keeps knocking every
+  sixty seconds. `ASK_FOR_NFC_SCAN` is kept for the one case where a scan is the only way out: a
+  sensor that answered and went on refusing us.
+- `Libre3NativePlugin` carries a watch of its own. If the session is still down five minutes later
+  and a sensor is stored, it asks for a connection again, whatever state the driver's ladder is in.
+
 ### Traps already found and fixed. Do not reintroduce them
 
 - A command must be written **raw**; framing it turns `0x11` into `00 00 11`.
