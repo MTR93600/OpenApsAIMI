@@ -951,10 +951,9 @@ class ComposeMainActivity : AppCompatActivity() {
             NotificationId.MASTER_PASSWORD_NOT_SET ->
                 navController.navigate(AppRoute.PreferenceScreen.createRoute("protection", StringKey.ProtectionMasterPassword.key))
 
-            // Both of these mean "restore access to the AAPS directory", so they open the directory
-            // picker — the same control Maintenance offers, one tap closer.
-            NotificationId.AAPS_DIR_NOT_SELECTED,
-            NotificationId.LIBRE3_DIR_ACCESS_LOST  ->
+            // "Restore access to the AAPS directory", so it opens the directory picker — the same
+            // control Maintenance offers, one tap closer.
+            NotificationId.AAPS_DIR_NOT_SELECTED   ->
                 try {
                     accessTree?.launch(null)
                 } catch (_: Exception) {

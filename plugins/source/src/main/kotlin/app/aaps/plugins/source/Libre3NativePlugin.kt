@@ -68,7 +68,6 @@ class Libre3NativePlugin @Inject constructor(
     config: Config,
     private val context: Context,
     private val persistenceLayer: PersistenceLayer,
-    private val availabilityProvider: Libre3AvailabilityProvider,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -159,20 +158,6 @@ class Libre3NativePlugin @Inject constructor(
 
     override suspend fun promoteStagingToProduction(allowEarly: Boolean): PromotionResult =
         PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT)
-
-    /**
-     * Libre 3 native is only offered when the engineering marker file is present in the AAPS
-     * `extra` directory. See [Libre3AvailabilityProvider], the only place that decides this.
-     *
-     * `showInList` is the project's own availability mechanism: it is what
-     * [app.aaps.core.interfaces.plugin.ActivePlugin.getSpecificPluginsVisibleInList] filters on, so
-     * hiding here removes the plugin from Config Builder, the Setup Wizard, search and Quick Launch
-     * at the same time.
-     *
-     * On purpose this is **not** wired into `specialEnableCondition`: a plugin that is already
-     * selected must keep feeding glucose exactly as before.
-     */
-    override fun specialShowInListCondition(): Boolean = availabilityProvider.isAvailable()
 
     override fun getPreferenceScreenContent() = PreferenceSubScreenDef(
         key = "libre3_settings",

@@ -6,20 +6,16 @@ import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,7 +29,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import app.aaps.core.data.model.GV
+import app.aaps.core.data.model.SourceSensor
+import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.profile.ProfileUtil
+import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.source.CgmSensorLifecycle
 import app.aaps.core.interfaces.source.CgmStagingEvidence
 import app.aaps.core.interfaces.source.PromotionRejectReason
 import app.aaps.core.interfaces.source.PromotionResult
@@ -42,14 +43,22 @@ import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
-import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.plugins.source.dexcomoneplus.OnePlusCgmDrivers
-import app.aaps.plugins.source.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.source.DexcomOnePlusPlugin
 import app.aaps.plugins.source.DexcomOnePlusStaging
 import app.aaps.plugins.source.R
+import app.aaps.plugins.source.compose.CgmCard
+import app.aaps.plugins.source.compose.CgmCardHeader
+import app.aaps.plugins.source.compose.CgmCardTone
+import app.aaps.plugins.source.compose.CgmKeyValueRow
+import app.aaps.plugins.source.compose.CgmLazyColumn
+import app.aaps.plugins.source.compose.CgmScaffold
+import app.aaps.plugins.source.compose.CgmStateChip
+import app.aaps.plugins.source.compose.CgmStepTimeline
+import app.aaps.plugins.source.compose.CgmUiState
 import app.aaps.plugins.source.compose.DexcomOnePlusUiLabels
+import app.aaps.plugins.source.compose.toUiState
 import app.aaps.plugins.source.logs.DriverLogFilter
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -58,8 +67,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Daily status skeleton for Dexcom ONE+ native BG source.
- * Opens from the plugin preferences.
+ * Daily status of the native Dexcom ONE+ / G7 source.
+ *
+ * The screen answers two questions that used to share one flat list of text lines: what is the
+ * sensor feeding the loop doing, and what is the pre-soak sensor doing. Each gets its own card, so
+ * a reading belongs to a visible subject. Everything sits in one scrolling list — the old
+ * non-scrolling column pushed the promote button, the one action that switches the loop's glucose
+ * source, past the bottom edge as soon as a staging sensor was present.
  */
 @AndroidEntryPoint
 class DexcomOnePlusStatusActivity : AppCompatActivity() {
@@ -68,6 +82,8 @@ class DexcomOnePlusStatusActivity : AppCompatActivity() {
     @Inject lateinit var preferences: Preferences
     @Inject lateinit var profileUtil: ProfileUtil
     @Inject lateinit var dateUtil: DateUtil
+    @Inject lateinit var rh: ResourceHelper
+    @Inject lateinit var persistenceLayer: PersistenceLayer
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,8 +107,11 @@ class DexcomOnePlusStatusActivity : AppCompatActivity() {
                         },
                         stagingStateFlow = dexcomOnePlusPlugin.stagingState,
                         stagingEvidenceFlow = dexcomOnePlusPlugin.stagingEvidence,
+                        lifecycleFlow = dexcomOnePlusPlugin.lifecycle,
                         formatGlucose = { mgdl -> profileUtil.fromMgdlToStringWithUnits(mgdl) },
                         formatTime = { epochMs -> dateUtil.timeString(epochMs) },
+                        formatAge = { millis -> dateUtil.age(millis, false, rh) },
+                        lastGlucose = { persistenceLayer.getLastGlucoseValue() },
                         onCancelStaging = { dexcomOnePlusPlugin.cancelStaging() },
                         onPromote = { allowEarly -> dexcomOnePlusPlugin.promoteStagingToProduction(allowEarly) },
                     )
@@ -102,7 +121,9 @@ class DexcomOnePlusStatusActivity : AppCompatActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** How often the screen goes back to the database for the newest reading. */
+private const val GLUCOSE_REFRESH_MILLIS = 30_000L
+
 @Composable
 private fun DexcomOnePlusStatusScreen(
     onBack: () -> Unit,
@@ -111,16 +132,21 @@ private fun DexcomOnePlusStatusScreen(
     onOpenLog: () -> Unit,
     stagingStateFlow: StateFlow<StagingState>,
     stagingEvidenceFlow: StateFlow<CgmStagingEvidence?>,
+    lifecycleFlow: StateFlow<CgmSensorLifecycle?>,
     formatGlucose: (Double) -> String,
     formatTime: (Long) -> String,
+    formatAge: (Long) -> String,
+    lastGlucose: suspend () -> GV?,
     onCancelStaging: () -> Unit,
     onPromote: suspend (Boolean) -> PromotionResult,
 ) {
     val driver = remember { OnePlusCgmDrivers.default() }
     var state by remember { mutableStateOf(driver.warmupState()) }
     var sessionUp by remember { mutableStateOf(driver.isSessionUp()) }
+    var newestGlucose by remember { mutableStateOf<GV?>(null) }
     val stagingState by stagingStateFlow.collectAsState()
     val stagingEvidence by stagingEvidenceFlow.collectAsState()
+    val lifecycle by lifecycleFlow.collectAsState()
     val scope = rememberCoroutineScope()
     var showPromoteConfirm by remember { mutableStateOf(false) }
     var promoteEarly by remember { mutableStateOf(false) }
@@ -149,165 +175,102 @@ private fun DexcomOnePlusStatusScreen(
             delay(1_000L)
         }
     }
+    // A reading arrives every five minutes, so the database is asked far less often than the driver
+    // state is polled.
+    LaunchedEffect(Unit) {
+        while (true) {
+            newestGlucose = lastGlucose()
+            delay(GLUCOSE_REFRESH_MILLIS)
+        }
+    }
 
-    Scaffold(
-        topBar = {
-            AapsTopAppBar(
-                title = { Text(stringResource(R.string.dexcom_oneplus_status_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.dexcom_oneplus_nav_back),
-                        )
-                    }
-                },
-            )
+    CgmScaffold(
+        title = stringResource(R.string.dexcom_oneplus_status_title),
+        onNavigate = onBack,
+        actions = {
+            IconButton(onClick = onOpenLog) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.List,
+                    contentDescription = stringResource(R.string.cgm_driver_log_open),
+                )
+            }
         },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(AapsSpacing.extraLarge),
-            verticalArrangement = Arrangement.spacedBy(AapsSpacing.large),
-        ) {
-            Text(
-                text = stringResource(R.string.dexcom_oneplus_status_phase, DexcomOnePlusUiLabels.phaseLabel(state.phase)),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = stringResource(
-                    R.string.dexcom_oneplus_status_session,
-                    if (sessionUp) {
-                        stringResource(R.string.dexcom_oneplus_session_up)
-                    } else {
-                        stringResource(R.string.dexcom_oneplus_session_down)
+    ) {
+        CgmLazyColumn {
+            item(key = "production") {
+                ProductionCard(
+                    phaseLabel = DexcomOnePlusUiLabels.phaseLabel(state.phase),
+                    phaseState = state.phase.toUiState(),
+                    sessionUp = sessionUp,
+                    message = DexcomOnePlusUiLabels.userMessage(state.message),
+                    lifecycle = lifecycle,
+                    newestGlucose = newestGlucose,
+                    formatGlucose = formatGlucose,
+                    formatTime = formatTime,
+                    formatAge = formatAge,
+                )
+            }
+            // Prompt for a pre-soak exactly when it is useful: the sensor in use is near its end and
+            // no replacement is warming up yet.
+            if (lifecycle?.endOfLife == true && stagingState == StagingState.ABSENT) {
+                item(key = "endOfLife") {
+                    CgmCard(tone = CgmCardTone.Warning) {
+                        CgmCardHeader(stringResource(R.string.dexcom_oneplus_end_of_life_title))
+                        Text(
+                            text = stringResource(R.string.dexcom_oneplus_end_of_life_text),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        OutlinedButton(onClick = onOpenStart) {
+                            Text(stringResource(R.string.dexcom_oneplus_start_presoak))
+                        }
+                    }
+                }
+            }
+            item(key = "staging") {
+                StagingCard(
+                    stagingState = stagingState,
+                    stagingEvidence = stagingEvidence,
+                    earlyPromoteOffered = earlyPromoteOffered,
+                    formatGlucose = formatGlucose,
+                    formatTime = formatTime,
+                    onPromoteClick = { early ->
+                        promoteEarly = early
+                        showPromoteConfirm = true
                     },
-                ),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                text = stringResource(
-                    R.string.dexcom_oneplus_status_message,
-                    DexcomOnePlusUiLabels.userMessage(state.message),
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Button(
-                onClick = onOpenStart,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.dexcom_oneplus_start_action))
-            }
-            Button(
-                onClick = onOpenWarmup,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.dexcom_oneplus_warmup_open))
-            }
-            // The way to see what the driver did, without exporting the whole log folder first.
-            OutlinedButton(
-                onClick = onOpenLog,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.cgm_driver_log_open))
-            }
-
-            HorizontalDivider()
-
-            // Dual-sensor (staging / pre-soak) management. The staging sensor is collect-only until
-            // the user promotes it — promotion is the ONLY action that switches the loop source.
-            Text(
-                text = stringResource(R.string.dexcom_oneplus_staging_heading),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            val stagingStateLabel = when (stagingState) {
-                StagingState.ABSENT   -> stringResource(R.string.dexcom_oneplus_staging_state_absent)
-                StagingState.WARMUP   -> stringResource(R.string.dexcom_oneplus_staging_state_warmup)
-                StagingState.SETTLING -> stringResource(R.string.dexcom_oneplus_staging_state_settling)
-                StagingState.READY    -> stringResource(R.string.dexcom_oneplus_staging_state_ready)
-            }
-            Text(
-                text = stringResource(R.string.dexcom_oneplus_staging_state, stagingStateLabel),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            if (stagingState == StagingState.ABSENT) {
-                Text(
-                    text = stringResource(R.string.dexcom_oneplus_staging_none_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                // Evidence the staging sensor is really alive: without it the user only sees a state
-                // label and cannot tell "settling with data" from "settling with a dead radio".
-                Text(
-                    text = stringResource(R.string.dexcom_oneplus_staging_readings, stagingEvidence?.validCount ?: 0),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                val lastValue = stagingEvidence?.lastValueMgdl
-                val lastAt = stagingEvidence?.lastValueAtEpochMs
-                if (lastValue != null && lastAt != null) {
-                    Text(
-                        text = stringResource(
-                            R.string.dexcom_oneplus_staging_last_reading,
-                            formatGlucose(lastValue),
-                            formatTime(lastAt),
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.dexcom_oneplus_staging_no_reading_yet),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (stagingState == StagingState.READY) {
-                    Button(
-                        onClick = {
-                            promoteEarly = false
-                            showPromoteConfirm = true
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(stringResource(R.string.dexcom_oneplus_staging_promote))
-                    }
-                } else if (earlyPromoteOffered) {
-                    // Way out when the production sensor stops before the soak ends. Deliberately an
-                    // outlined button with its own warning dialog: it gives up sensor quality, so it
-                    // must never look like the normal path.
-                    OutlinedButton(
-                        onClick = {
-                            promoteEarly = true
-                            showPromoteConfirm = true
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(stringResource(R.string.dexcom_oneplus_staging_promote_early))
-                    }
-                    Text(
-                        text = stringResource(R.string.dexcom_oneplus_staging_promote_early_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                OutlinedButton(
-                    onClick = {
+                    onCancelStaging = {
                         onCancelStaging()
                         promoteResultText = null
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.dexcom_oneplus_staging_cancel))
+                    onOpenStart = onOpenStart,
+                )
+            }
+            promoteResultText?.let { message ->
+                item(key = "promoteResult") {
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
-            promoteResultText?.let { msg ->
-                Text(
-                    text = msg,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            item(key = "actions") {
+                CgmCard {
+                    CgmCardHeader(stringResource(R.string.cgm_actions_heading))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
+                    ) {
+                        OutlinedButton(onClick = onOpenStart, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.dexcom_oneplus_start_action))
+                        }
+                        OutlinedButton(onClick = onOpenWarmup, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.dexcom_oneplus_step_warmup))
+                        }
+                    }
+                    OutlinedButton(onClick = onOpenLog, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.cgm_driver_log_open))
+                    }
+                }
             }
         }
     }
@@ -358,3 +321,167 @@ private fun DexcomOnePlusStatusScreen(
     }
 }
 
+/** The sensor that feeds the loop. Accented so it is never confused with the pre-soak card. */
+@Composable
+private fun ProductionCard(
+    phaseLabel: String,
+    phaseState: CgmUiState,
+    sessionUp: Boolean,
+    message: String,
+    lifecycle: CgmSensorLifecycle?,
+    newestGlucose: GV?,
+    formatGlucose: (Double) -> String,
+    formatTime: (Long) -> String,
+    formatAge: (Long) -> String,
+) {
+    CgmCard(accent = true) {
+        CgmCardHeader(stringResource(R.string.dexcom_oneplus_production_heading)) {
+            CgmStateChip(state = phaseState, label = phaseLabel)
+        }
+        // Only this driver's own readings are shown here: the newest value in the database can come
+        // from another source, and labelling someone else's reading as this sensor's would be a lie.
+        val ownReading = newestGlucose?.takeIf { it.sourceSensor == SourceSensor.DEXCOM_ONEPLUS_NATIVE }
+        if (ownReading != null) {
+            Text(
+                text = stringResource(
+                    R.string.dexcom_oneplus_staging_last_reading,
+                    formatGlucose(ownReading.value),
+                    formatTime(ownReading.timestamp),
+                ),
+                style = MaterialTheme.typography.titleMedium,
+            )
+        } else {
+            Text(
+                text = stringResource(R.string.dexcom_oneplus_production_no_reading),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        CgmKeyValueRow(
+            label = stringResource(R.string.cgm_session_label),
+            value = stringResource(
+                if (sessionUp) R.string.dexcom_oneplus_session_up else R.string.dexcom_oneplus_session_down,
+            ),
+        )
+        lifecycle?.ageMs?.let { age ->
+            Text(
+                text = stringResource(R.string.dexcom_oneplus_sensor_age, formatAge(age)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * The collect-only second sensor.
+ *
+ * Promotion stays the only full width button in the card it belongs to, so it does not compete with
+ * the navigation buttons that used to sit above it at the same visual weight.
+ */
+@Composable
+private fun StagingCard(
+    stagingState: StagingState,
+    stagingEvidence: CgmStagingEvidence?,
+    earlyPromoteOffered: Boolean,
+    formatGlucose: (Double) -> String,
+    formatTime: (Long) -> String,
+    onPromoteClick: (Boolean) -> Unit,
+    onCancelStaging: () -> Unit,
+    onOpenStart: () -> Unit,
+) {
+    val stagingStateLabel = when (stagingState) {
+        StagingState.ABSENT   -> stringResource(R.string.dexcom_oneplus_staging_state_absent)
+        StagingState.WARMUP   -> stringResource(R.string.dexcom_oneplus_staging_state_warmup)
+        StagingState.SETTLING -> stringResource(R.string.dexcom_oneplus_staging_state_settling)
+        StagingState.READY    -> stringResource(R.string.dexcom_oneplus_staging_state_ready)
+    }
+    CgmCard {
+        CgmCardHeader(stringResource(R.string.dexcom_oneplus_staging_heading_short)) {
+            CgmStateChip(state = stagingState.toUiState(), label = stagingStateLabel)
+        }
+        if (stagingState == StagingState.ABSENT) {
+            // An empty state that explains what the slot is for and offers the way in, instead of
+            // just reporting "None".
+            Text(
+                text = stringResource(R.string.dexcom_oneplus_staging_none_short),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(onClick = onOpenStart) {
+                Text(stringResource(R.string.dexcom_oneplus_start_presoak))
+            }
+        } else {
+            CgmStepTimeline(
+                labels = listOf(
+                    stringResource(R.string.dexcom_oneplus_staging_state_warmup),
+                    stringResource(R.string.dexcom_oneplus_staging_state_settling),
+                    stringResource(R.string.dexcom_oneplus_staging_state_ready),
+                ),
+                reached = when (stagingState) {
+                    StagingState.ABSENT   -> -1
+                    StagingState.WARMUP   -> 0
+                    StagingState.SETTLING -> 1
+                    StagingState.READY    -> 2
+                },
+            )
+            // Evidence the staging sensor is really alive: without it the user only sees a state
+            // label and cannot tell "settling with data" from "settling with a dead radio".
+            CgmKeyValueRow(
+                label = stringResource(R.string.dexcom_oneplus_staging_readings_label),
+                value = (stagingEvidence?.validCount ?: 0).toString(),
+            )
+            val lastValue = stagingEvidence?.lastValueMgdl
+            val lastAt = stagingEvidence?.lastValueAtEpochMs
+            if (lastValue != null && lastAt != null) {
+                CgmKeyValueRow(
+                    label = stringResource(R.string.dexcom_oneplus_staging_last_label),
+                    value = stringResource(
+                        R.string.dexcom_oneplus_staging_last_reading,
+                        formatGlucose(lastValue),
+                        formatTime(lastAt),
+                    ),
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.dexcom_oneplus_staging_no_reading_yet),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (stagingState == StagingState.READY) {
+                Button(
+                    onClick = { onPromoteClick(false) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.dexcom_oneplus_staging_promote))
+                }
+            } else if (earlyPromoteOffered) {
+                // Way out when the production sensor stops before the soak ends. Deliberately an
+                // outlined button with its own warning dialog: it gives up sensor quality, so it
+                // must never look like the normal path.
+                Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.small)) {
+                    OutlinedButton(
+                        onClick = { onPromoteClick(true) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.dexcom_oneplus_staging_promote_early))
+                    }
+                    Text(
+                        text = stringResource(R.string.dexcom_oneplus_staging_promote_early_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            TextButton(onClick = onCancelStaging, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.dexcom_oneplus_staging_cancel))
+            }
+        }
+    }
+}

@@ -100,9 +100,32 @@ internal object DexcomOnePlusIngest {
             value = sample.mgdl,
             raw = null,
             noise = null,
-            trendArrow = TrendArrow.fromString(sample.trendArrowRaw),
+            trendArrow = trendArrowFor(sample.trendSlopeMgdlPerMin),
             sourceSensor = SourceSensor.DEXCOM_ONEPLUS_NATIVE,
         )
+
+    /**
+     * Turns the sensor's rate of change into the arrow AAPS stores and draws.
+     *
+     * The sensor reports a slope in mg/dL per minute, not an arrow name. This used to be handed
+     * straight to `TrendArrow.fromString`, which compares against labels like "Flat" and
+     * "FortyFiveUp": a number never matched one, so every ONE+ reading was stored as
+     * [TrendArrow.NONE] and the glucose history drew the invalid-arrow icon on all of them.
+     *
+     * Thresholds are the usual Dexcom ones: one arrow step per mg/dL/min, doubling above three.
+     * A null slope (the sensor's own invalid marker) stays [TrendArrow.NONE] — honest, since no
+     * direction was measured.
+     */
+    fun trendArrowFor(slopeMgdlPerMin: Double?): TrendArrow = when {
+        slopeMgdlPerMin == null   -> TrendArrow.NONE
+        slopeMgdlPerMin >= 3.0    -> TrendArrow.DOUBLE_UP
+        slopeMgdlPerMin >= 2.0    -> TrendArrow.SINGLE_UP
+        slopeMgdlPerMin >= 1.0    -> TrendArrow.FORTY_FIVE_UP
+        slopeMgdlPerMin > -1.0    -> TrendArrow.FLAT
+        slopeMgdlPerMin > -2.0    -> TrendArrow.FORTY_FIVE_DOWN
+        slopeMgdlPerMin > -3.0    -> TrendArrow.SINGLE_DOWN
+        else                      -> TrendArrow.DOUBLE_DOWN
+    }
 
     /**
      * Reset all dedup state (in-memory windows + persistent sequence floor). Call when the loop's

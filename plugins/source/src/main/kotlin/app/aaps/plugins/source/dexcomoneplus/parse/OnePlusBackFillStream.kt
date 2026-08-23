@@ -66,7 +66,7 @@ class OnePlusBackFillStream {
                 val sample = OnePlusGlucoseParser.toSample(
                     mgdl = glucose.toDouble(),
                     timestampMs = ts,
-                    trendArrowRaw = trendToRaw(trend),
+                    trendSlopeMgdlPerMin = trendToSlope(trend),
                 ) ?: continue
                 out.add(sample)
             }
@@ -85,9 +85,6 @@ class OnePlusBackFillStream {
         fun fromDexTime(dexTime: Int, currentDexTimeSeconds: Int, nowMs: Long): Long =
             nowMs - (currentDexTimeSeconds.toLong() - dexTime.toLong()) * 1000L
 
-        private fun trendToRaw(trend: Int): String? {
-            if (trend == OnePlusGlucoseParser.TREND_INVALID) return null
-            return (trend / 10.0).toString()
-        }
+        private fun trendToSlope(trend: Int): Double? = OnePlusGlucoseParser.trendToSlope(trend)
     }
 }

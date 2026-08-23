@@ -23,11 +23,11 @@ class OnePlusGlucoseParserTest {
     @Test
     fun `toSample drops out of range`() {
         assertThat(OnePlusGlucoseParser.toSample(10.0, timestampMs = 1L)).isNull()
-        val ok = OnePlusGlucoseParser.toSample(120.0, timestampMs = 2L, trendArrowRaw = "Flat", sequence = 7L)
+        val ok = OnePlusGlucoseParser.toSample(120.0, timestampMs = 2L, trendSlopeMgdlPerMin = 0.0, sequence = 7L)
         requireNotNull(ok)
         assertThat(ok.mgdl).isEqualTo(120.0)
         assertThat(ok.timestampMs).isEqualTo(2L)
-        assertThat(ok.trendArrowRaw).isEqualTo("Flat")
+        assertThat(ok.trendSlopeMgdlPerMin).isEqualTo(0.0)
         assertThat(ok.sequence).isEqualTo(7L)
     }
 
@@ -58,7 +58,7 @@ class OnePlusGlucoseParserTest {
         assertThat(sample.mgdl).isEqualTo(120.0)
         assertThat(sample.timestampMs).isEqualTo(now - 30_000L)
         assertThat(sample.sequence).isEqualTo(42L)
-        assertThat(sample.trendArrowRaw).isEqualTo("1.2")
+        assertThat(sample.trendSlopeMgdlPerMin).isEqualTo(1.2)
         assertThat(OnePlusGlucoseParser.parse(packet, now)).isEqualTo(sample)
     }
 
@@ -72,7 +72,7 @@ class OnePlusGlucoseParserTest {
         requireNotNull(parsed)
         assertThat(parsed.glucoseIsDisplayOnly).isTrue()
         assertThat(parsed.sample?.mgdl).isEqualTo(120.0)
-        assertThat(parsed.sample?.trendArrowRaw).isNull()
+        assertThat(parsed.sample?.trendSlopeMgdlPerMin).isNull()
     }
 
     @Test
@@ -117,7 +117,7 @@ class OnePlusGlucoseParserTest {
         assertThat(sample.mgdl).isEqualTo(100.0)
         assertThat(sample.timestampMs).isEqualTo(now)
         assertThat(sample.sequence).isEqualTo(7L)
-        assertThat(sample.trendArrowRaw).isEqualTo("0.0")
+        assertThat(sample.trendSlopeMgdlPerMin).isEqualTo(0.0)
     }
 
     @Test
@@ -139,7 +139,7 @@ class OnePlusGlucoseParserTest {
         val packet = buildEgv2(trend = -5) // -0.5 mg/dL/min
         val sample = OnePlusGlucoseParser.parse(packet, nowMs = 10_000L)
         requireNotNull(sample)
-        assertThat(sample.trendArrowRaw).isEqualTo("-0.5")
+        assertThat(sample.trendSlopeMgdlPerMin).isEqualTo(-0.5)
     }
 
     private fun buildEgv2(
