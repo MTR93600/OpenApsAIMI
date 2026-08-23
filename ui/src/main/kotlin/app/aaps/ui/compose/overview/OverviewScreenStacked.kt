@@ -144,13 +144,6 @@ fun OverviewScreenStacked(
             insulinStatus = statusState.insulinStatus,
             cannulaStatus = statusState.cannulaStatus,
             batteryStatus = statusState.batteryStatus,
-            warmUpStatus = statusState.warmUpStatus,
-            secondSensorStatus = statusState.secondSensorStatus,
-            onPromoteSecondSensor = if (statusState.canPromoteSecondSensor) {
-                { statusViewModel.promoteSecondSensor() }
-            } else null,
-            promotionMessage = statusState.promotionMessage,
-            onDismissPromotionMessage = { statusViewModel.clearPromotionMessage() },
             showFill = statusState.showFill,
             showPumpBatteryChange = statusState.showPumpBatteryChange,
             commandsAllowed = commandsAllowed,

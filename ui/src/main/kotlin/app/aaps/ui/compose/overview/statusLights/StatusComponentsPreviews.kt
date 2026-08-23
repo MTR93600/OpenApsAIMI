@@ -9,7 +9,6 @@ import androidx.compose.ui.unit.dp
 import app.aaps.core.ui.compose.StatusLevel
 import app.aaps.core.ui.compose.icons.IcCannulaChange
 import app.aaps.core.ui.compose.icons.IcCgmInsert
-import app.aaps.core.ui.compose.icons.IcGenericCgm
 import app.aaps.core.ui.compose.icons.IcPumpBattery
 import app.aaps.core.ui.compose.icons.IcPumpCartridge
 
@@ -60,50 +59,6 @@ internal fun StatusSectionContentPreview() {
                 onFillClick = {},
                 onInsulinChangeClick = {},
                 onBatteryChangeClick = {}
-            )
-        }
-    }
-}
-
-/**
- * The two transient CGM rows: a sensor still warming up, and a second sensor settling next to the
- * one in use. Both only exist for sources that report them.
- *
- * @see StatusSectionContent
- */
-@Preview(showBackground = true)
-@Composable
-internal fun StatusSectionContentCgmTransientsPreview() {
-    MaterialTheme {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatusSectionContent(
-                sensorStatus = StatusItem(
-                    label = "Sensor",
-                    age = "9d 4h",
-                    ageStatus = StatusLevel.WARNING,
-                    agePercent = 0.9f,
-                    icon = IcCgmInsert,
-                    compactLevel = false
-                ),
-                insulinStatus = null,
-                cannulaStatus = null,
-                batteryStatus = null,
-                warmUpStatus = StatusItem(
-                    label = "Warm-up",
-                    age = "23 min",
-                    agePercent = 0.24f,
-                    icon = IcCgmInsert,
-                    compactLevel = false
-                ),
-                secondSensorStatus = StatusItem(
-                    label = "New sensor",
-                    age = "Ready to switch",
-                    ageStatus = StatusLevel.NORMAL,
-                    level = "72 readings",
-                    icon = IcGenericCgm,
-                    compactLevel = false
-                ),
-                onPromoteSecondSensorClick = {}
             )
         }
     }
