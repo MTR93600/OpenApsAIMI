@@ -1,121 +1,118 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="disabled_loop">Boucle désactivée</string>
-    <string name="calculator_label">Assistant</string>
-    <string name="nav_history_browser">Historique</string>
-    <string name="sensor_label">Capteur</string>
-    <string name="age_label">âge:</string>
-    <string name="level_label">niveau:</string>
-    <string name="insulin_label">Insuline</string>
-    <string name="pb_label">Pile pompe</string>
-    <string name="cannula">Canule</string>
-    <string name="statuslights_cannula_age">âge canule</string>
-    <string name="statuslights_patch_pump_age">âge pompe patch</string>
-    <string name="patch_pump">Pompe patch</string>
-    <!-- Overview -->
-    <string name="graph_scale_6h">6h</string>
-    <string name="graph_scale_12h">12h</string>
-    <string name="graph_scale_18h">18h</string>
-    <string name="graph_scale_24h">24h</string>
-    <string name="graph_long_scale_6h">6 heures</string>
-    <string name="graph_long_scale_12h">12 heures</string>
-    <string name="graph_long_scale_18h">18 heures</string>
-    <string name="graph_long_scale_24h">24 heures</string>
-    <string name="a11y_graph">graphique</string>
-    <string name="a11y_graph_scale">choisir l\'échelle du graph.</string>
-    <string name="a11y_graph_scale_6h">échelle du graphique 6 heures</string>
-    <string name="a11y_graph_scale_12h">échelle du graphique 12 heures</string>
-    <string name="a11y_graph_scale_18h">échelle du graphique 18 heures</string>
-    <string name="a11y_graph_scale_24h">échelle du graphique 24 heures</string>
-    <string name="a11y_insulin_label">insuline</string>
-    <string name="chart_menu">Menu graphique</string>
-    <string name="a11y_bg_quality">qualité de la glycémie</string>
-    <string name="a11y_blood_glucose">glycémie</string>
-    <string name="a11y_bg_outdated">obsolète</string>
-    <string name="set_basal_question">Accepter nouveau basal temp. :</string>
-    <!-- overview moved to core:ui module -->
-    <string name="overview_shortname">ACCUEIL</string>
-    <string name="description_overview">Affiche l’état actuel de votre boucle et des boutons d’actions les plus courantes</string>
-    <string name="data_status">État des données Gly</string>
-    <string name="run_question">Exécuter %s?</string>
-    <!--    OverviewMenu-->
-    <string name="overview_show_predictions">Prédictions</string>
-    <string name="overview_show_treatments">Traitements</string>
-    <string name="overview_show_heartRate">Fréquence Cardiaque</string>
-    <string name="overview_show_deviation_slope">Pente de déviations</string>
-    <string name="overview_show_activity">Activité</string>
-    <string name="overview_show_bgi">Impact glycémique</string>
-    <string name="overview_show_sensitivity">AutoSens</string>
-    <string name="overview_show_deviations">Déviations</string>
-    <string name="overview_show_cob">Glucides actifs</string>
-    <string name="overview_show_iob">Insuline Active</string>
-    <string name="overview_show_basals">Basals</string>
-    <string name="overview_show_abs_insulin">Insuline absolue</string>
-    <string name="overview_show_variable_sens">SI variable</string>
-    <string name="prediction_shortname">PRED</string>
-    <string name="basal_shortname">BAS</string>
-    <string name="treatments_shortname">TRAIT</string>
-    <string name="graph_scale">Échelle du graph.</string>
-    <string name="graph_menu_divider_header">Graph</string>
-    <string name="temp_basal_overview_short_name">T:</string>
-    <string name="cannula_usage">utilisation:</string>
-    <!--    Iob-->
-    <!--    PersistentNotification-->
-    <string name="description_persistent_notification">Affiche une notification en cours avec un bref aperçu de ce que fait votre Boucle</string>
-    <string name="old_data">DONNÉES ANCIENNES</string>
-    <string name="overview_show_steps">Pas</string>
-    <string name="simple_mode_enabled">Mode simple activé</string>
-    <string name="dashboard_cd_chip_aimi_advisor">Ouvrir les recommandations AIMI Advisor</string>
-    <string name="dashboard_cd_chip_adjust">Ouvrir les ajustements et actions de boucle</string>
-    <string name="dashboard_cd_chip_meal_mode">Ouvrir le mode repas et les préférences associées</string>
-    <string name="dashboard_cd_chip_aimi_context">Ouvrir le contexte AIMI et les statistiques</string>
-    <string name="dashboard_chip_state_selected">sélectionné</string>
-    <string name="dashboard_chip_state_not_selected">non sélectionné</string>
-    <string name="dashboard_chip_announced_advisor_opened">Advisor ouvert</string>
-    <string name="dashboard_chip_announced_adjust_opened">Ajustements ouverts</string>
-    <string name="dashboard_chip_announced_meal_mode_opened">Mode repas ouvert</string>
-    <string name="dashboard_chip_announced_context_opened">Contexte AIMI ouvert</string>
-    <string name="dashboard_loop_run_requested">Exécution de la boucle demandée</string>
-    <string name="dashboard_tir_stats_format">Moy %1$s - A1C %2$.1f%%</string>
-    <string name="dashboard_pump_pill_reservoir">Rés. %1$s</string>
-    <string name="dashboard_pump_pill_battery">Batt. %1$s</string>
-    <string name="dashboard_pump_pill_site">Site %1$s</string>
-    <string name="dashboard_pump_pill_reservoir_a11y">Réservoir %1$s</string>
-    <string name="dashboard_pump_pill_battery_a11y">Batterie pompe %1$s</string>
-    <string name="dashboard_pump_pill_site_a11y">Âge du site d\'infusion %1$s</string>
-    <string name="dashboard_pump_pill_sensor">Cap. %1$s</string>
-    <string name="dashboard_pump_pill_sensor_a11y">Âge du capteur %1$s</string>
-    <string name="dashboard_aimi_pulse_title">Dernière exécution AIMI</string>
-    <string name="dashboard_aimi_pulse_title_with_age">Dernière exécution AIMI · %1$s</string>
-    <string name="dashboard_aimi_pulse_summary_none">Pas encore de sortie APS. Lancez la boucle ou attendez la prochaine glycémie.</string>
-    <string name="dashboard_aimi_pulse_fallback">SMB %1$s U · basal programmé %2$s U/h</string>
-    <string name="dashboard_aimi_pulse_hypo_prefix">Risque d\'hypo —</string>
-    <string name="dashboard_aimi_pulse_meta">SMB %1$s U · consigne %2$s · AutoSens %3$s%%</string>
-    <string name="dashboard_aimi_pulse_hint">Appui pour le détail et raison complète</string>
-    <string name="dashboard_aimi_telemetry_label">Couche trajectoire</string>
-    <string name="dashboard_aimi_ml_confidence_title">Signaux AIMI</string>
-    <string name="dashboard_aimi_ml_strip_separator"> · </string>
-    <string name="dashboard_aimi_ml_strip_part_sensor">Capteur %1$s</string>
-    <string name="dashboard_aimi_ml_strip_relevance">Pertinence %1$d%%</string>
-    <string name="dashboard_aimi_ml_strip_health">Santé trajectoire %1$d%%</string>
-    <string name="dashboard_aimi_ml_sensor_ok">OK</string>
-    <string name="dashboard_aimi_ml_sensor_uncertain">incertain</string>
-    <string name="dashboard_aimi_ml_sensor_low">faible</string>
-    <string name="dashboard_cd_aimi_pulse">Résumé du dernier passage AIMI. Double appui pour tout le détail.</string>
-    <string name="dashboard_chip_announced_aimi_pulse_details">Détails boucle ouverts</string>
-    <string name="overview_show_hybrid_aimi_pulse_title">Carte « dernière exécution AIMI » sur le tableau de bord</string>
-    <string name="overview_show_hybrid_aimi_pulse_summary">Si activé, affiche le bloc sous le cercle glycémie (dernier passage, SMB, etc.). Désactivé par défaut pour laisser plus de place au graphique.</string>
-
-    <!-- Adaptive Smoothing Quality badge (phase 1 informational) -->
-    <string name="adaptive_smoothing_quality_badge_a11y">Qualité du lissage adaptatif</string>
-    <string name="adaptive_smoothing_quality_badge_ok">Confiance du lissage adaptatif : OK</string>
-    <string name="adaptive_smoothing_quality_badge_uncertain">Confiance du lissage adaptatif : incertaine</string>
-    <string name="adaptive_smoothing_quality_badge_bad">Confiance du lissage adaptatif : faible</string>
-
-    <string name="adaptive_smoothing_quality_dialog_title">Confiance du lissage adaptatif</string>
-    <string name="adaptive_smoothing_quality_dialog_ok">Confiance du lissage adaptatif : OK (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
-    <string name="adaptive_smoothing_quality_dialog_uncertain">Confiance du lissage adaptatif : incertaine (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
-    <string name="adaptive_smoothing_quality_dialog_bad">Confiance du lissage adaptatif : faible (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
-
-    <string name="notification_iob_short">%1$.1f U</string>
+  <string name="disabled_loop">Boucle désactivée</string>
+  <string name="calculator_label">Assistant</string>
+  <string name="nav_history_browser">Historique</string>
+  <string name="sensor_label">Capteur</string>
+  <string name="age_label">âge:</string>
+  <string name="level_label">niveau:</string>
+  <string name="insulin_label">Insuline</string>
+  <string name="pb_label">Pile pompe</string>
+  <string name="cannula">Canule</string>
+  <string name="statuslights_cannula_age">âge canule</string>
+  <string name="statuslights_patch_pump_age">âge pompe patch</string>
+  <string name="patch_pump">Pompe patch</string>
+  <!-- Overview -->
+  <string name="graph_scale_6h">6h</string>
+  <string name="graph_scale_12h">12h</string>
+  <string name="graph_scale_18h">18h</string>
+  <string name="graph_scale_24h">24h</string>
+  <string name="graph_long_scale_6h">6 heures</string>
+  <string name="graph_long_scale_12h">12 heures</string>
+  <string name="graph_long_scale_18h">18 heures</string>
+  <string name="graph_long_scale_24h">24 heures</string>
+  <string name="a11y_graph">graphique</string>
+  <string name="a11y_graph_scale">choisir l\'échelle du graph.</string>
+  <string name="a11y_graph_scale_6h">échelle du graphique 6 heures</string>
+  <string name="a11y_graph_scale_12h">échelle du graphique 12 heures</string>
+  <string name="a11y_graph_scale_18h">échelle du graphique 18 heures</string>
+  <string name="a11y_graph_scale_24h">échelle du graphique 24 heures</string>
+  <string name="a11y_insulin_label">insuline</string>
+  <string name="chart_menu">Menu graphique</string>
+  <string name="a11y_bg_quality">qualité de la glycémie</string>
+  <string name="a11y_blood_glucose">glycémie</string>
+  <string name="a11y_bg_outdated">obsolète</string>
+  <string name="set_basal_question">Accepter nouveau basal temp. :</string>
+  <!-- overview moved to core:ui module -->
+  <string name="overview_shortname">ACCUEIL</string>
+  <string name="description_overview">Affiche l’état actuel de votre boucle et des boutons d’actions les plus courantes</string>
+  <string name="data_status">État des données Gly</string>
+  <string name="run_question">Exécuter %s?</string>
+  <!--    OverviewMenu-->
+  <string name="overview_show_predictions">Prédictions</string>
+  <string name="overview_show_treatments">Traitements</string>
+  <string name="overview_show_heartRate">Fréquence Cardiaque</string>
+  <string name="overview_show_deviation_slope">Pente de déviations</string>
+  <string name="overview_show_activity">Activité</string>
+  <string name="overview_show_bgi">Impact glycémique</string>
+  <string name="overview_show_sensitivity">AutoSens</string>
+  <string name="overview_show_deviations">Déviations</string>
+  <string name="overview_show_cob">Glucides actifs</string>
+  <string name="overview_show_iob">Insuline Active</string>
+  <string name="overview_show_basals">Basals</string>
+  <string name="overview_show_abs_insulin">Insuline absolue</string>
+  <string name="overview_show_variable_sens">SI variable</string>
+  <string name="prediction_shortname">PRED</string>
+  <string name="basal_shortname">BAS</string>
+  <string name="treatments_shortname">TRAIT</string>
+  <string name="graph_scale">Échelle du graph.</string>
+  <string name="graph_menu_divider_header">Graph</string>
+  <string name="temp_basal_overview_short_name">T:</string>
+  <string name="cannula_usage">utilisation:</string>
+  <!--    Iob-->
+  <!--    PersistentNotification-->
+  <string name="description_persistent_notification">Affiche une notification en cours avec un bref aperçu de ce que fait votre Boucle</string>
+  <string name="old_data">DONNÉES ANCIENNES</string>
+  <string name="overview_show_steps">Pas</string>
+  <string name="simple_mode_enabled">Mode simple activé</string>
+  <string name="dashboard_cd_chip_aimi_advisor">Ouvrir les recommandations AIMI Advisor</string>
+  <string name="dashboard_cd_chip_adjust">Ouvrir les ajustements et actions de boucle</string>
+  <string name="dashboard_cd_chip_meal_mode">Ouvrir le mode repas et les préférences associées</string>
+  <string name="dashboard_cd_chip_aimi_context">Ouvrir le contexte AIMI et les statistiques</string>
+  <string name="dashboard_chip_state_selected">sélectionné</string>
+  <string name="dashboard_chip_state_not_selected">non sélectionné</string>
+  <string name="dashboard_chip_announced_advisor_opened">Advisor ouvert</string>
+  <string name="dashboard_chip_announced_adjust_opened">Ajustements ouverts</string>
+  <string name="dashboard_chip_announced_meal_mode_opened">Mode repas ouvert</string>
+  <string name="dashboard_chip_announced_context_opened">Contexte AIMI ouvert</string>
+  <string name="dashboard_loop_run_requested">Exécution de la boucle demandée</string>
+  <string name="dashboard_tir_stats_format" formatted="false">Moy %1$s - A1C %2$.1f%%</string>
+  <string name="dashboard_pump_pill_reservoir">Rés. %1$s</string>
+  <string name="dashboard_pump_pill_battery">Batt. %1$s</string>
+  <string name="dashboard_pump_pill_site">Site %1$s</string>
+  <string name="dashboard_pump_pill_reservoir_a11y">Réservoir %1$s</string>
+  <string name="dashboard_pump_pill_battery_a11y">Batterie pompe %1$s</string>
+  <string name="dashboard_pump_pill_site_a11y">Âge du site d\'infusion %1$s</string>
+  <string name="dashboard_pump_pill_sensor">Cap. %1$s</string>
+  <string name="dashboard_pump_pill_sensor_a11y">Âge du capteur %1$s</string>
+  <string name="dashboard_aimi_pulse_title">Dernière exécution AIMI</string>
+  <string name="dashboard_aimi_pulse_title_with_age">Dernière exécution AIMI · %1$s</string>
+  <string name="dashboard_aimi_pulse_summary_none">Pas encore de sortie APS. Lancez la boucle ou attendez la prochaine glycémie.</string>
+  <string name="dashboard_aimi_pulse_fallback" formatted="false">SMB %1$s U · basal programmé %2$s U/h</string>
+  <string name="dashboard_aimi_pulse_hypo_prefix">Risque d\'hypo —</string>
+  <string name="dashboard_aimi_pulse_meta" formatted="false">SMB %1$s U · consigne %2$s · AutoSens %3$s%%</string>
+  <string name="dashboard_aimi_pulse_hint">Appui pour le détail et raison complète</string>
+  <string name="dashboard_aimi_telemetry_label">Couche trajectoire</string>
+  <string name="dashboard_aimi_ml_confidence_title">Signaux AIMI</string>
+  <string name="dashboard_aimi_ml_strip_separator"> · </string>
+  <string name="dashboard_aimi_ml_strip_part_sensor">Capteur %1$s</string>
+  <string name="dashboard_aimi_ml_strip_relevance" formatted="false">Pertinence %1$d%%</string>
+  <string name="dashboard_aimi_ml_strip_health" formatted="false">Santé trajectoire %1$d%%</string>
+  <string name="dashboard_aimi_ml_sensor_ok">OK</string>
+  <string name="dashboard_aimi_ml_sensor_uncertain">incertain</string>
+  <string name="dashboard_aimi_ml_sensor_low">faible</string>
+  <string name="dashboard_cd_aimi_pulse">Résumé du dernier passage AIMI. Double appui pour tout le détail.</string>
+  <string name="dashboard_chip_announced_aimi_pulse_details">Détails boucle ouverts</string>
+  <string name="overview_show_hybrid_aimi_pulse_title">Carte « dernière exécution AIMI » sur le tableau de bord</string>
+  <string name="overview_show_hybrid_aimi_pulse_summary">Si activé, affiche le bloc sous le cercle glycémie (dernier passage, SMB, etc.). Désactivé par défaut pour laisser plus de place au graphique.</string>
+  <!-- Adaptive Smoothing Quality badge (phase 1 informational) -->
+  <string name="adaptive_smoothing_quality_badge_a11y">Qualité du lissage adaptatif</string>
+  <string name="adaptive_smoothing_quality_badge_ok">Confiance du lissage adaptatif : OK</string>
+  <string name="adaptive_smoothing_quality_badge_uncertain">Confiance du lissage adaptatif : incertaine</string>
+  <string name="adaptive_smoothing_quality_badge_bad">Confiance du lissage adaptatif : faible</string>
+  <string name="adaptive_smoothing_quality_dialog_title">Confiance du lissage adaptatif</string>
+  <string name="adaptive_smoothing_quality_dialog_ok" formatted="false">Confiance du lissage adaptatif : OK (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
+  <string name="adaptive_smoothing_quality_dialog_uncertain" formatted="false">Confiance du lissage adaptatif : incertaine (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
+  <string name="adaptive_smoothing_quality_dialog_bad" formatted="false">Confiance du lissage adaptatif : faible (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
+  <string name="notification_iob_short">%1$.1f U</string>
 </resources>

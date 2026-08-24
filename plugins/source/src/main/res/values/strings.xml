@@ -1,5 +1,6 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
+<<<<<<< HEAD
     <!-- Source -->
     <string name="ns_client_bg">NSClient BG</string>
     <string name="ns_client_bg_short">NS BG</string>
@@ -418,3 +419,347 @@
 
 
 
+=======
+  <!-- Source -->
+  <string name="ns_client_bg">NSClient BG</string>
+  <string name="ns_client_bg_short">NS BG</string>
+  <string name="description_source_ns_client">Downloads BG data from Nightscout</string>
+  <string name="source_xdrip">xDrip+ BG</string>
+  <string name="description_source_xdrip">Receive BG values from xDrip+ and compatible apps (Juggluco etc.).</string>
+  <string name="dexcom_app_patched">BYODA</string>
+  <string name="dexcom_short">BYODA</string>
+  <string name="description_source_dexcom">Receive BG values from the \'Build Your Own Dexcom App\'.</string>
+  <string name="dexcom_oneplus_native">Dexcom ONE+ / G7</string>
+  <string name="dexcom_oneplus_short">ONE+/G7</string>
+  <string name="description_source_dexcom_oneplus_native">Native Dexcom ONE+ and G7 Bluetooth in AAPS. Apply the sensor, enter the pairing code immediately, then wait ~30 min warm-up before loop glucose.</string>
+  <string name="dexcom_oneplus_plugin_summary">Status, connect with pairing code, and warm-up</string>
+  <string name="dexcom_oneplus_aaps_directory_access_lost">Access to the AAPS folder has been lost. Open Maintenance, select the Documents/AAPS folder and grant permission again.</string>
+  <string name="dexcom_oneplus_aaps_directory_select">Select folder</string>
+  <string name="dexcom_oneplus_status_title">ONE+ / G7 status</string>
+  <string name="dexcom_oneplus_status_summary">Session phase and connection status</string>
+  <string name="dexcom_oneplus_start_title">Start sensor</string>
+  <string name="dexcom_oneplus_start_summary">Apply sensor → enter code now → connect → ~30 min warm-up</string>
+  <string name="dexcom_oneplus_start_steps">How to start:\n1. Apply the sensor on your body.\n2. Paste the applicator Data Matrix (GS1) or enter the 4-digit pairing code — do not wait until after warm-up.\n3. Stop Dexcom, xDrip, and Juggluco Direct (only one Bluetooth master).\n4. Allow Bluetooth, Scan, select the highlighted sensor, then Connect / follow.\n5. Accept the Android Bluetooth pairing prompt if shown.\n6. Warm-up ~30 min for a new sensor; attaching to a running sensor can deliver EGVs sooner.</string>
+  <string name="dexcom_oneplus_step_prepare">Prepare</string>
+  <string name="dexcom_oneplus_step_code">Code</string>
+  <string name="dexcom_oneplus_step_connect">Connect</string>
+  <string name="dexcom_oneplus_step_warmup">Warm-up</string>
+  <string name="dexcom_oneplus_start_return_warmup">Connect adopts the selected sensor and opens the warm-up screen. The countdown also shows on the dashboard and in the ongoing notification — you do not have to stay on that screen.</string>
+  <string name="dexcom_oneplus_applicator_gs1_label">Applicator Data Matrix (GS1) or 4-digit PIN</string>
+  <string name="dexcom_oneplus_applicator_gs1_hint">Paste the full Data Matrix text from a QR scanner, or type the 4-digit PIN. Serial is stored for reconnect matching.</string>
+  <string name="dexcom_oneplus_applicator_parsed" comment="%1$s=PIN, %2$s=serial or dash. Example: PIN 1234 · serial ABCD" formatted="false">Parsed PIN %1$s · serial %2$s</string>
+  <string name="dexcom_oneplus_applicator_serial_none">—</string>
+  <string name="dexcom_oneplus_last_mac_hint" comment="%1$s=last MAC. Example: AA:BB:…:FF">Last successful MAC: %1$s</string>
+  <string name="dexcom_oneplus_warmup_title">Sensor warm-up</string>
+  <string name="dexcom_oneplus_warmup_summary">~30 minute warm-up countdown</string>
+  <string name="dexcom_oneplus_nav_back">Back</string>
+  <string name="dexcom_oneplus_permissions_hint">Before pairing: allow nearby Bluetooth devices (and notifications if prompted). Keep the phone near the sensor during start and warm-up.</string>
+  <string name="dexcom_oneplus_scan_hint">Scan for nearby ONE+ / G7-family sensors (DX02 / DX01 / DXCM / Dex, or FEBC). Prefer the highlighted match when a prior MAC/name is stored. Stop other Dexcom / xDrip / Juggluco Direct apps first.</string>
+  <string name="dexcom_oneplus_scan_start">Scan</string>
+  <string name="dexcom_oneplus_scan_stop">Stop</string>
+  <string name="dexcom_oneplus_scan_scanning">Scanning…</string>
+  <string name="dexcom_oneplus_scan_idle" comment="%1$d=number of devices found. Example: 2">Devices found: %1$d</string>
+  <string name="dexcom_oneplus_scan_unnamed">Unnamed Dexcom device</string>
+  <string name="dexcom_oneplus_scan_device_line" comment="%1$s=Bluetooth MAC, %2$d=RSSI. Example: AA:BB:CC:DD:EE:FF · −67 dBm" formatted="false">%1$s · %2$d dBm</string>
+  <string name="dexcom_oneplus_device_required">Select a sensor from the scan list</string>
+  <string name="dexcom_oneplus_new_sensor_code_warning">This is a different sensor from the paired one, but the pairing code has not changed. Paste the new applicator code — or press Connect again to keep the current one.</string>
+  <string name="dexcom_oneplus_real_skeleton_hint">Engineering: enable “Use Real BLE skeleton” in plugin prefs before Start if you want GATT+KEKS (otherwise Stub fails closed after connect).</string>
+  <string name="dexcom_oneplus_real_skeleton_required">Enable “Use Real BLE skeleton” (engineering) in ONE+ / G7 plugin settings before connecting.</string>
+  <string name="dexcom_oneplus_dexcom_recovery_warning">Stop the Dexcom app and xDrip first (one Bluetooth master). This build attaches to an existing sensor session and does not stop it. Returning to the Dexcom app afterward is not guaranteed — prefer a spare sensor for testing.</string>
+  <string name="dexcom_oneplus_connect_follow">Connect / follow sensor</string>
+  <string name="dexcom_oneplus_pairing_code_label">Sensor pairing code</string>
+  <string name="dexcom_oneplus_pairing_code_required">Enter the sensor pairing code</string>
+  <string name="dexcom_oneplus_pairing_code_invalid">Enter a valid 4-digit sensor pairing code</string>
+  <string name="dexcom_oneplus_request_permissions">Allow Bluetooth</string>
+  <string name="dexcom_oneplus_permissions_needed">Bluetooth permission is required before starting the sensor</string>
+  <string name="dexcom_oneplus_use_real_skeleton">Use Real BLE skeleton (engineering)</string>
+  <string name="dexcom_oneplus_use_real_skeleton_summary">Routes to the Real GATT+KEKS+EGV driver (default on). Disable only to force the Stub. Not a production BLE claim until device-confirmed.</string>
+  <string name="dexcom_oneplus_start_sensor">Start sensor</string>
+  <string name="dexcom_oneplus_start_action">Start / new sensor</string>
+  <string name="dexcom_oneplus_warmup_open">Open warm-up screen</string>
+  <string name="dexcom_oneplus_status_phase" comment="%1$s=warm-up phase label. Example: Warming up">Phase: %1$s</string>
+  <string name="dexcom_oneplus_status_session" comment="%1$s=up or down. Example: Down">Session: %1$s</string>
+  <string name="dexcom_oneplus_status_message" comment="%1$s=driver message or none. Example: (none)">Message: %1$s</string>
+  <string name="dexcom_oneplus_status_message_none">(none)</string>
+  <string name="dexcom_oneplus_session_up">Up</string>
+  <string name="dexcom_oneplus_session_down">Down</string>
+  <string name="dexcom_oneplus_phase_idle">Idle</string>
+  <string name="dexcom_oneplus_phase_pairing">Pairing</string>
+  <string name="dexcom_oneplus_phase_connecting">Connecting</string>
+  <string name="dexcom_oneplus_phase_reconnecting">Reconnecting</string>
+  <string name="dexcom_oneplus_phase_warming">Warming up</string>
+  <string name="dexcom_oneplus_phase_ready">Active</string>
+  <string name="dexcom_oneplus_phase_failed">Failed</string>
+  <string name="dexcom_oneplus_warmup_heading">Sensor starting</string>
+  <string name="dexcom_oneplus_warmup_phase" comment="%1$s=localized phase label. Example: Warming up">Phase: %1$s</string>
+  <string name="dexcom_oneplus_warmup_countdown" comment="%1$s=mm:ss remaining. Example: 29:45">Time remaining: %1$s</string>
+  <string name="dexcom_oneplus_warmup_countdown_unknown">—</string>
+  <string name="dexcom_oneplus_warmup_ends_at" comment="%1$s=localized time. Example: 3:45 PM">Estimated end: %1$s</string>
+  <string name="dexcom_oneplus_warmup_local_fallback_note">Showing a local ~30 min timer because the sensor did not provide remaining time yet.</string>
+  <string name="dexcom_oneplus_warmup_connecting_note">Establishing the Bluetooth link — keep the app open and stay close to the sensor. This can take up to a minute.</string>
+  <string name="dexcom_oneplus_warmup_no_loop_bg">No loop glucose yet — wait until warm-up finishes.</string>
+  <string name="dexcom_oneplus_warmup_session_up">Bluetooth session active — keep the phone near the sensor.</string>
+  <string name="dexcom_oneplus_warmup_session_down">Bluetooth session not active. Use Connect / follow if needed.</string>
+  <string name="dexcom_oneplus_msg_pairing">Pairing with sensor…</string>
+  <string name="dexcom_oneplus_msg_auth_ok">Authenticated — starting glucose session…</string>
+  <string name="dexcom_oneplus_msg_tx_session">Sensor session detected on transmitter.</string>
+  <string name="dexcom_oneplus_msg_session_down">Session ended or disconnected.</string>
+  <string name="dexcom_oneplus_error_auth_bond">Authentication or Bluetooth pairing failed. Accept the system pairing prompt and retry.</string>
+  <string name="dexcom_oneplus_error_connection">Connection or sensor session error. Check logcat (DEXCOM_ONEPLUS) and retry.</string>
+  <string name="dexcom_oneplus_status_message_generic">See status details in logcat if problems persist.</string>
+  <string name="dexcom_oneplus_warmup_done">Warm-up complete — source active</string>
+  <string name="dexcom_oneplus_warmup_failed" comment="%1$s=error detail. Example: BLE session not ported">Warm-up failed: %1$s</string>
+  <string name="dexcom_oneplus_notif_title">Dexcom ONE+ / G7</string>
+  <string name="dexcom_oneplus_notif_channel_name">Dexcom ONE+ / G7 status</string>
+  <string name="dexcom_oneplus_notif_channel_desc">Ongoing sensor connection and warm-up status.</string>
+  <string name="dexcom_oneplus_notif_pairing">Pairing…</string>
+  <string name="dexcom_oneplus_notif_connecting">Connecting to sensor…</string>
+  <string name="dexcom_oneplus_notif_reconnecting">Reconnecting…</string>
+  <string name="dexcom_oneplus_notif_waiting_adv" comment="%1$d = whole minutes the sensor has been silent. Example: No signal from the sensor for 7 min">No signal from the sensor for %1$d min — keep the phone close</string>
+  <string name="dexcom_oneplus_notif_stale_mac_title">Wrong sensor?</string>
+  <string name="dexcom_oneplus_notif_stale_mac_text">Another Dexcom ONE+ / G7 sensor is nearby but the paired one stays silent. Start the sensor again to pair the new one.</string>
+  <string name="dexcom_oneplus_notif_warming_title">Sensor warming up</string>
+  <string name="dexcom_oneplus_notif_warming_text">Keep the phone near the sensor</string>
+  <string name="dexcom_oneplus_notif_failed_title">Warm-up interrupted</string>
+  <string name="dexcom_oneplus_notif_failed_text">Open the app to retry</string>
+  <!-- Dual-sensor (staging / pre-soak) start + management -->
+  <string name="dexcom_oneplus_slot_production">Start as production</string>
+  <string name="dexcom_oneplus_slot_staging">Start in staging (pre-soak)</string>
+  <string name="dexcom_oneplus_slot_hint">Production feeds the loop after warm-up. Staging (pre-soak) warms a second sensor alongside the one you are currently using — it is collect-only and never feeds the loop until you promote it from the status screen.</string>
+  <string name="dexcom_oneplus_staging_connect">Start staging sensor</string>
+  <string name="dexcom_oneplus_staging_return_note">The staging sensor collects readings in the background and does not feed the loop. Return to the dashboard; promote it later from the ONE+ / G7 status screen once it is ready.</string>
+  <string name="dexcom_oneplus_staging_heading">Staging sensor (pre-soak)</string>
+  <string name="dexcom_oneplus_staging_state" comment="%1$s=staging state label. Example: Ready to promote">Staging state: %1$s</string>
+  <string name="dexcom_oneplus_staging_state_absent">None</string>
+  <string name="dexcom_oneplus_staging_state_warmup">Warming up</string>
+  <string name="dexcom_oneplus_staging_state_settling">Settling</string>
+  <string name="dexcom_oneplus_staging_state_ready">Ready to promote</string>
+  <string name="dexcom_oneplus_staging_none_hint">No staging sensor. Start one from Start / new sensor, then choose \"Start in staging (pre-soak)\".</string>
+  <string name="dexcom_oneplus_staging_readings" comment="%1$d=how many valid glucose readings the staging sensor has sent so far. Example: Readings collected: 4">Readings collected: %1$d</string>
+  <string name="dexcom_oneplus_staging_last_reading" comment="%1$s=glucose value with unit, %2$s=time. Example: Last reading: 5.6 mmol/l at 14:32" formatted="false">Last reading: %1$s at %2$s</string>
+  <string name="dexcom_oneplus_staging_no_reading_yet">No reading yet. The staging sensor is still warming up or out of range.</string>
+  <string name="dexcom_oneplus_staging_cancel">Cancel staging</string>
+  <string name="dexcom_oneplus_staging_promote">Promote to production</string>
+  <string name="dexcom_oneplus_staging_promote_confirm_title">Promote staging sensor?</string>
+  <string name="dexcom_oneplus_staging_promote_confirm_message">This switches the loop\'s glucose source to the staging sensor and retires the sensor currently in use. This cannot be undone.</string>
+  <string name="dexcom_oneplus_staging_promote_early">Switch to it now (not settled)</string>
+  <string name="dexcom_oneplus_staging_promote_early_hint">Use this only if the sensor in use has stopped or has to be replaced now. The new sensor is reading, but it has not finished its 12 hour settling time.</string>
+  <string name="dexcom_oneplus_staging_promote_early_confirm_title">Switch to a sensor that is not settled?</string>
+  <string name="dexcom_oneplus_staging_promote_early_confirm_message">The new sensor is sending readings, but it has not finished its 12 hour settling time. Its readings can be less accurate for the first hours, so the loop may dose on values that are too high or too low. Only do this if the sensor in use has stopped or must be replaced now. This switches the loop\'s glucose source and cannot be undone.</string>
+  <string name="dexcom_oneplus_staging_promote_confirm">Promote</string>
+  <string name="dexcom_oneplus_staging_promote_dismiss">Cancel</string>
+  <string name="dexcom_oneplus_staging_promote_ok">Staging sensor promoted — it now feeds the loop.</string>
+  <string name="dexcom_oneplus_staging_promote_rejected_absent">No staging sensor to promote.</string>
+  <string name="dexcom_oneplus_staging_promote_rejected_not_settled">Staging sensor has not settled long enough to promote yet.</string>
+  <string name="dexcom_oneplus_staging_promote_rejected_no_glucose">Staging sensor has not produced enough valid glucose yet.</string>
+  <string name="dexcom_oneplus_staging_promote_rejected_no_recent_glucose">Staging sensor has not sent a reading in the last minutes. Wait until it reads again before switching to it.</string>
+  <string name="dexcom_oneplus_staging_promote_rejected_loop_busy">The loop is busy right now — try again in a moment.</string>
+  <!-- Libre 3 / Libre 3 Plus native BLE source -->
+  <string name="libre3_native">Libre 3 / Libre 3 Plus</string>
+  <string name="libre3_short">Libre3</string>
+  <string name="description_source_libre3_native">Native Libre 3 and Libre 3 Plus Bluetooth in AAPS. Scan the sensor once with NFC, then wait about 60 minutes of warm-up before loop glucose.</string>
+  <string name="libre3_plugin_summary">Status, sensor start by NFC, and warm-up</string>
+  <string name="libre3_aaps_directory_access_lost">Access to the AAPS folder has been lost. Open Maintenance, select the Documents/AAPS folder and grant permission again.</string>
+  <string name="libre3_aaps_directory_select">Select folder</string>
+  <string name="libre3_status_title">Libre 3 status</string>
+  <string name="libre3_status_summary">Sensor, session phase and connection status</string>
+  <string name="libre3_start_title">Start sensor</string>
+  <string name="libre3_start_summary">Apply sensor, hold the phone on it to scan, then about 60 min warm-up</string>
+  <string name="libre3_warmup_title">Sensor warm-up</string>
+  <string name="libre3_warmup_summary">About 60 minute warm-up countdown</string>
+  <string name="libre3_use_real_skeleton">Use real Bluetooth driver (engineering)</string>
+  <string name="libre3_use_real_skeleton_summary">Routes to the real Libre 3 driver. Off by default. Turning it on is not a claim that the driver works.</string>
+  <string name="libre3_nav_back">Back</string>
+  <string name="libre3_family_three">Libre 3</string>
+  <string name="libre3_family_plus">Libre 3 Plus</string>
+  <string name="libre3_phase_idle">Idle</string>
+  <string name="libre3_phase_pairing">Pairing</string>
+  <string name="libre3_phase_connecting">Connecting</string>
+  <string name="libre3_phase_reconnecting">Reconnecting</string>
+  <string name="libre3_phase_warming">Warming up</string>
+  <string name="libre3_phase_ready">Active</string>
+  <string name="libre3_phase_failed">Failed</string>
+  <string name="libre3_nfc_not_a_sensor">That is not a Libre 3 sensor. Hold the phone on the sensor itself.</string>
+  <string name="libre3_nfc_sensor_refused">The sensor did not accept the scan. Wait a moment and try again.</string>
+  <string name="libre3_nfc_link_lost">Hold the phone still on the sensor until the scan finishes.</string>
+  <string name="libre3_nfc_storage_failed">This phone could not save the sensor. Free some storage and try again.</string>
+  <string name="libre3_start_steps">How to start:\n1. Put the sensor on your arm.\n2. Stop the Abbott app and Juggluco. Only one app can hold a sensor.\n3. Hold the top of your phone on the sensor until the scan finishes.\n4. Allow Bluetooth if you are asked.\n5. Warm-up takes about 60 minutes for a new sensor. A sensor that is already running can send glucose sooner.</string>
+  <string name="libre3_start_scan_hint">Hold the top of your phone flat on the sensor. Do not move until the screen changes.</string>
+  <string name="libre3_start_conflict_warning">Stop the Abbott app and Juggluco before you scan. A sensor answers only one app, and the last one to scan takes it over.</string>
+  <string name="libre3_start_nfc_off">NFC is switched off on this phone. Turn it on in the Android settings, then come back.</string>
+  <string name="libre3_start_scan_waiting">Waiting for the sensor…</string>
+  <string name="libre3_start_scanned" comment="%1$s=sensor serial, %2$s=sensor family. Example: Sensor 0RRC989AQ · Libre 3 Plus" formatted="false">Sensor %1$s · %2$s</string>
+  <string name="libre3_start_connect">Connect to the sensor</string>
+  <string name="libre3_start_done_note">You can leave this screen. The countdown also shows on the dashboard.</string>
+  <string name="libre3_request_permissions">Allow Bluetooth</string>
+  <string name="libre3_permissions_needed">Bluetooth permission is needed before the sensor can be used.</string>
+  <string name="libre3_status_heading">Sensor</string>
+  <string name="libre3_status_serial" comment="%1$s=sensor serial. Example: Serial: 0RRC989AQ">Serial: %1$s</string>
+  <string name="libre3_status_family" comment="%1$s=sensor family. Example: Family: Libre 3 Plus">Family: %1$s</string>
+  <string name="libre3_status_address" comment="%1$s=Bluetooth address. Example: Address: CC:22:DF:B8:F9:58">Address: %1$s</string>
+  <string name="libre3_status_phase" comment="%1$s=phase name. Example: Phase: Warming up">Phase: %1$s</string>
+  <string name="libre3_status_session" comment="%1$s=up or down. Example: Session: Down">Session: %1$s</string>
+  <string name="libre3_status_session_up">Up</string>
+  <string name="libre3_status_session_down">Down</string>
+  <string name="libre3_status_no_sensor">No sensor has been scanned on this phone yet.</string>
+  <string name="libre3_status_connect">Connect to the sensor</string>
+  <string name="libre3_status_disconnect">Disconnect</string>
+  <string name="libre3_status_driver_blocked" comment="%1$s=short reason from the driver. Example: Real driver not in use: the engineering switch is off">Real driver not in use: %1$s</string>
+  <string name="libre3_forget_sensor">Forget this sensor</string>
+  <string name="libre3_forget_sensor_title">Forget this sensor?</string>
+  <string name="libre3_forget_sensor_explain">AAPS will drop the link and throw away everything it knows about this sensor: the address, the PIN and the pairing key. The sensor itself is not stopped and keeps running. To use it again, scan it with NFC from the Start sensor screen.\n\nUse this when the sensor is stored but every connection keeps failing.</string>
+  <string name="libre3_forget_sensor_confirm">Forget</string>
+  <string name="libre3_forget_sensor_cancel">Keep it</string>
+  <string name="libre3_forget_sensor_done">The sensor was forgotten. Scan it again to use it.</string>
+  <!-- Driver log screen, shared by the native Libre 3 and Dexcom ONE+/G7 drivers -->
+  <string name="cgm_driver_log_title">Sensor driver log</string>
+  <string name="cgm_driver_log_refresh">Refresh</string>
+  <string name="cgm_driver_log_share">Share the log</string>
+  <string name="cgm_driver_log_filter_all">All</string>
+  <string name="cgm_driver_log_filter_libre3">Libre 3</string>
+  <string name="cgm_driver_log_filter_oneplus">Dexcom ONE+/G7</string>
+  <string name="cgm_driver_log_empty">Nothing yet. Lines appear here as soon as the driver starts working.</string>
+  <string name="cgm_driver_log_count" comment="%1$d=how many lines are shown. Example: 320 lines">%1$d lines</string>
+  <string name="cgm_driver_log_open">Driver log</string>
+  <string name="libre3_warmup_heading">Sensor starting</string>
+  <string name="libre3_warmup_countdown" comment="%1$s=minutes and seconds left. Example: Time left: 29:45">Time left: %1$s</string>
+  <string name="libre3_warmup_countdown_unknown">—</string>
+  <string name="libre3_warmup_done">Warm-up finished. The sensor is active.</string>
+  <string name="libre3_warmup_note">Keep the phone near the sensor while it warms up.</string>
+  <string name="libre3_notif_title">Libre 3</string>
+  <string name="libre3_notif_channel_name">Libre 3 sensor status</string>
+  <string name="libre3_notif_channel_desc">Shows the connection and the warm-up of the sensor.</string>
+  <string name="libre3_notif_pairing">Pairing with the sensor…</string>
+  <string name="libre3_notif_connecting">Connecting to the sensor…</string>
+  <string name="libre3_notif_reconnecting">Reconnecting…</string>
+  <string name="libre3_notif_warming_title">Sensor warming up</string>
+  <string name="libre3_notif_warming_text">Keep the phone near the sensor</string>
+  <string name="libre3_notif_failed_title">Sensor start interrupted</string>
+  <string name="libre3_notif_failed_text">Open AAPS and scan the sensor again</string>
+  <string name="glimp">Glimp</string>
+  <string name="description_source_glimp">Receive BG values from Glimp.</string>
+  <string name="mm640g">MM640g</string>
+  <string name="description_source_mm640g">Receive BG values from the 600SeriesAndroidUploader.</string>
+  <string name="poctech">Poctech</string>
+  <string name="description_source_poctech">Receive BG values from Poctech app</string>
+  <string name="glunovo">Glunovo</string>
+  <string name="description_source_glunovo">Receive values from Glunovo app</string>
+  <string name="intelligo">Intelligo</string>
+  <string name="description_source_intelligo">Receive values from Intelligo app</string>
+  <string name="tomato">Tomato (MiaoMiao)</string>
+  <string name="tomato_short">Tomato</string>
+  <string name="description_source_tomato">Receive BG values from Tomato app (MiaoMiao device)</string>
+  <string name="random_bg">Random BG</string>
+  <string name="description_source_random_bg">Generate random BG data (Demo mode only)</string>
+  <string name="random_bg_short">BG</string>
+  <!-- Patched Syai Tag App -->
+  <string name="syai_tag_app">Syai</string>
+  <string name="description_source_patched_syai_tag_app">Receive glucose data from Syai/Ottai App.</string>
+  <!-- Patched SI App -->
+  <string name="patched_si_app">SI App</string>
+  <string name="description_source_patched_si_app">Receive glucose data from Patched Sibionic SI App.</string>
+  <!-- Patched Sino App -->
+  <string name="patched_sino_app">Sino App</string>
+  <string name="description_source_patched_sino_app">Receive glucose data from Patched Sino App.</string>
+  <!-- Patched Ottai App -->
+  <string name="ottai_app">Ottai</string>
+  <string name="description_source_patched_ottai_app">Receive glucose data from Ottai App.</string>
+  <!-- Instara App -->
+  <string name="instara_app">Instara</string>
+  <string name="description_source_instara_app">Receive BG values from the Instara App.</string>
+  <!-- Instara preferences -->
+  <string name="pref_title_instara_history_request">Instara historical data request</string>
+  <string name="pref_summary_instara_history_request">Request possible missing historical data in background</string>
+  <!-- Notification Reader -->
+  <string name="notification_reader">Notification Reader</string>
+  <string name="description_source_notification_reader">Read glucose values from notifications posted by official CGM apps (Dexcom, Medtronic, Eversense, etc.).</string>
+  <!-- Permission rationales -->
+  <string name="permission_dexcom_title">Dexcom CGM</string>
+  <string name="permission_dexcom_description">Application needs permission to receive CGM data from Dexcom app</string>
+  <string name="permission_notification_listener_title">Notification Access</string>
+  <string name="permission_notification_listener_description">Required to read glucose values from CGM app notifications</string>
+  <!-- Eversense plugin -->
+  <string name="source_eversense">Eversense</string>
+  <string name="description_source_eversense">Native BLE driver for Eversense E3 (180-day) and E365 (365-day) transmitters. Pair in Config Builder, set 365 cloud credentials if needed, calibrate from Status. Works with AIMI loop, adaptive smoothing, and unified AAPS alarms.</string>
+  <string name="eversense_plugin_summary">Native CGM over BLE — not the notification reader. Supports E3/E365, calibration, placement guide, optional cloud upload, and coexistence with the official Eversense app.</string>
+  <string name="eversense_about_title">About Eversense in OpenApsAIMI</string>
+  <string name="eversense_about_summary">Tap for setup notes, AIMI integration, and alarm behaviour.</string>
+  <string name="eversense_about_detail">Setup: enable this source in Config Builder, scan and pair your transmitter, open Status for battery and sync, use Calibration when ready, and Placement if signal is weak.\n\nE365: enter DMS username/password under Credentials for cloud-backed readings.\n\nAIMI: glucose flows into the AIMI loop like any CGM; no extra AIMI preference is required. Physio assistant uses Health Connect separately (not Eversense BLE).\n\nAlarms: sensor/placement/credential issues use unified AAPS notifications (EVERSENSE_* ids). Hypo-risk while looping is handled by AIMI HYPO_RISK_ALARM, not the Eversense driver.\n\nCoexistence / Release: optional modes let the official Eversense app connect periodically.</string>
+  <string name="eversense_information_title">Information</string>
+  <string name="eversense_information_connected">Connected</string>
+  <string name="eversense_information_battery">Battery percentage</string>
+  <string name="eversense_information_insertion_date">Insertion date</string>
+  <string name="eversense_information_last_sync">Last synchronisation</string>
+  <string name="eversense_calibration_title">Calibration</string>
+  <string name="eversense_calibration_phase">Phase</string>
+  <string name="eversense_calibration_last">Last calibration</string>
+  <string name="eversense_calibration_next">Next calibration</string>
+  <string name="eversense_calibration_action">Calibrate transmitter</string>
+  <string name="eversense_calibration_too_soon">Too soon — calibration already done in the past 2 hours</string>
+  <string name="eversense_sign_out">Sign out</string>
+  <string name="eversense_credentials_missing">Eversense 365: credentials not set — please sign in to enable cloud sync and readings</string>
+  <string name="eversense_status_title">Eversense Status &amp; Connection</string>
+  <string name="eversense_cloud_upload_enabled">Enable Eversense cloud upload</string>
+  <string name="eversense_cloud_upload_toast">Show cloud upload result</string>
+  <!-- Credentials section for Eversense 365 DMS login -->
+  <string name="eversense_not_connected">Not connected</string>
+  <string name="eversense_credentials_title">Eversense 365 credentials</string>
+  <string name="eversense_credentials_username">Username</string>
+  <string name="eversense_credentials_password">Password</string>
+  <string name="eversense_credentials_not_set">Not set</string>
+  <string name="eversense_credentials_password_set">Set (hidden)</string>
+  <!-- Device scan dialog -->
+  <string name="eversense_scan_title">Select Eversense transmitter</string>
+  <string name="eversense_scan_cancel">Cancel</string>
+  <string name="eversense_scan_unknown_device">Unknown device</string>
+  <!-- Calibration activity -->
+  <string name="eversense_calibration_ready">Ready to calibrate</string>
+  <string name="eversense_calibration_status">Calibration status</string>
+  <string name="eversense_calibration_bg_value">Blood glucose value</string>
+  <string name="eversense_calibration_bg_hint">Enter BG value</string>
+  <string name="eversense_calibration_submit">Submit calibration</string>
+  <string name="eversense_calibration_invalid_value">Please enter a valid blood glucose value</string>
+  <string name="eversense_calibration_not_supported">Calibration submission is not yet supported by the Eversense SDK</string>
+  <string name="eversense_calibration_not_supported_notice">Note: Calibration submission requires a future SDK update. The UI is ready but the submit action is not yet functional.</string>
+  <string name="eversense_calibration_success">Calibration submitted successfully</string>
+  <string name="eversense_calibration_failed">Failed to submit calibration. Make sure the transmitter is connected and ready.</string>
+  <string name="eversense_information_last_sync_tap">Tap to trigger a full sync</string>
+  <string name="eversense_placement_signal">Placement signal</string>
+  <string name="eversense_placement_title">Transmitter Placement</string>
+  <string name="eversense_placement_guide_heading">Transmitter Placement Guide</string>
+  <string name="eversense_placement_guide_subtitle">Adjust your transmitter position\nto improve signal strength</string>
+  <string name="eversense_signal_excellent">Excellent</string>
+  <string name="eversense_signal_good">Good</string>
+  <string name="eversense_signal_fair">Fair</string>
+  <string name="eversense_signal_weak">Weak</string>
+  <string name="eversense_signal_poor">Poor</string>
+  <string name="eversense_placement_instruction_excellent">Great placement! Keep the transmitter in this position.</string>
+  <string name="eversense_placement_instruction_good">Good placement. Signal is strong.</string>
+  <string name="eversense_placement_instruction_fair">Signal is acceptable. Try moving the transmitter slightly for a better reading.</string>
+  <string name="eversense_placement_instruction_weak">Weak signal. Reposition the transmitter closer to the sensor.</string>
+  <string name="eversense_placement_instruction_poor">Poor signal. Make sure the transmitter is placed directly over the sensor site.</string>
+  <string name="eversense_placement_instruction_not_connected">Connect to your transmitter to view signal strength.</string>
+  <string name="eversense_placement_last_update">Last update: %1$s</string>
+  <string name="eversense_placement_reading">Reading…</string>
+  <string name="eversense_placement_connected">Transmitter Connected</string>
+  <string name="eversense_placement_connected_instruction">Your transmitter is connected. Make sure it is positioned directly over your sensor site and secured with the adhesive patch.</string>
+  <string name="eversense_calibration_sending">Sending calibration…</string>
+  <string name="eversense_release_for_official_app">Release for Official App</string>
+  <string name="eversense_release_summary">Disconnect so the official Eversense app can connect. AAPS will reconnect every 5 minutes automatically.</string>
+  <string name="eversense_release_active">Released — AAPS reconnecting every 5 minutes…</string>
+  <string name="eversense_coexistence_mode">Coexistence Mode</string>
+  <string name="eversense_coexistence_summary">Automatically disconnect after each sync to give the official Eversense app time to connect and upload data</string>
+  <string name="eversense_transmitter_not_placed">Eversense transmitter not detecting — check placement</string>
+  <string name="eversense_transmitter_not_placed_summary">Make sure the transmitter is placed directly over the sensor site and secured with the adhesive patch.</string>
+  <string name="eversense_reconnecting">Reconnecting…</string>
+  <!-- Aidex CGM source (upstream) -->
+  <string name="aidex">MicroTech CGM App</string>
+  <string name="aidex_short">CGM App</string>
+  <string name="description_source_aidex">Receive CGM values from LinX, LinX vista, Equil G. Smart 2, Diaexpert 2 etc.</string>
+  <string name="aidex_sensor_expired">Sensor expired, please replace with a new sensor</string>
+  <string name="aidex_sensor_error">Sensor error, please check the sensor status</string>
+  <string name="aidex_sensor_stabilizing">The sensor is stabilizing, please wait…</string>
+  <string name="aidex_sensor_replace">Sensor replacement required, please replace with a new sensor as soon as possible</string>
+  <string name="aidex_signal_lost">Sensor signal lost, please check the connection</string>
+</resources>
+>>>>>>> 3c717ee944 (feat: adiciona e atualiza traduções pt-rBR)

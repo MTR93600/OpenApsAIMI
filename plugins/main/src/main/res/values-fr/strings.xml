@@ -1,27 +1,27 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="dashboard_aimi_telemetry_label">Couche trajectoire</string>
-    <string name="dashboard_telemetry_inner_ring_summary">L’anneau intérieur fin est un arc télémétrie AIMI : il combine la pertinence de trajectoire, la santé de trajectoire et (si dispo) un indicateur de qualité du lissage capteur. Ce n’est pas un interrupteur « ML oui/non ».</string>
-    <string name="dashboard_glucose_ring_content_description">Glycémie %1$s. %2$s. Anneau extérieur : zone. Triangle : tendance. Arc intérieur : confiance AIMI (pertinence et santé trajectoire).</string>
-    <string name="overview_dashboard_extended_metrics_title">Tableau de bord : affichage étendu</string>
-    <string name="overview_dashboard_extended_metrics_summary">Grille à deux colonnes et bande trajectoire AIMI. Désactivé = ligne compacte (pas, IOB, FC, TBR).</string>
-    <string name="dashboard_metrics_mode_simple">Simple</string>
-    <string name="dashboard_metrics_mode_extended">Étendu</string>
-    <string name="dashboard_compact_label_steps">Pas</string>
-    <string name="dashboard_compact_label_iob">IOB</string>
-    <string name="dashboard_compact_label_hr">FC</string>
-    <string name="dashboard_compact_label_tbr">TBR</string>
-    <string name="dashboard_aimi_ml_confidence_title">Signaux AIMI</string>
-    <string name="dashboard_aimi_ml_strip_separator"> · </string>
-    <string name="dashboard_aimi_ml_strip_part_sensor">Capteur %1$s</string>
-    <string name="dashboard_aimi_ml_strip_relevance">Pertinence %1$d%%</string>
-    <string name="dashboard_aimi_ml_strip_health">Santé trajectoire %1$d%%</string>
-    <string name="dashboard_aimi_ml_sensor_ok">OK</string>
-    <string name="dashboard_aimi_ml_sensor_uncertain">incertain</string>
-    <string name="dashboard_aimi_ml_sensor_low">faible</string>
-    <string name="dashboard_activity_tbr_basal_delivery_stopped">Basal arrêté (TBR 0 U/h)</string>
-    <string name="dashboard_hero_status_reading_line">Lecture · %1$s</string>
-    <string name="dashboard_hero_status_sensor_line">Capteur · %1$s</string>
-    <string name="dashboard_extended_section_left">Activité &amp; réserves</string>
-    <string name="dashboard_extended_section_right">Insuline &amp; débits</string>
+  <string name="dashboard_aimi_telemetry_label">Couche trajectoire</string>
+  <string name="dashboard_telemetry_inner_ring_summary">L’anneau intérieur fin est un arc télémétrie AIMI : il combine la pertinence de trajectoire, la santé de trajectoire et (si dispo) un indicateur de qualité du lissage capteur. Ce n’est pas un interrupteur « ML oui/non ».</string>
+  <string name="dashboard_glucose_ring_content_description" formatted="false">Glycémie %1$s. %2$s. Anneau extérieur : zone. Triangle : tendance. Arc intérieur : confiance AIMI (pertinence et santé trajectoire).</string>
+  <string name="overview_dashboard_extended_metrics_title">Tableau de bord : affichage étendu</string>
+  <string name="overview_dashboard_extended_metrics_summary">Grille à deux colonnes et bande trajectoire AIMI. Désactivé = ligne compacte (pas, IOB, FC, TBR).</string>
+  <string name="dashboard_metrics_mode_simple">Simple</string>
+  <string name="dashboard_metrics_mode_extended">Étendu</string>
+  <string name="dashboard_compact_label_steps">Pas</string>
+  <string name="dashboard_compact_label_iob">IOB</string>
+  <string name="dashboard_compact_label_hr">FC</string>
+  <string name="dashboard_compact_label_tbr">TBR</string>
+  <string name="dashboard_aimi_ml_confidence_title">Signaux AIMI</string>
+  <string name="dashboard_aimi_ml_strip_separator"> · </string>
+  <string name="dashboard_aimi_ml_strip_part_sensor">Capteur %1$s</string>
+  <string name="dashboard_aimi_ml_strip_relevance" formatted="false">Pertinence %1$d%%</string>
+  <string name="dashboard_aimi_ml_strip_health" formatted="false">Santé trajectoire %1$d%%</string>
+  <string name="dashboard_aimi_ml_sensor_ok">OK</string>
+  <string name="dashboard_aimi_ml_sensor_uncertain">incertain</string>
+  <string name="dashboard_aimi_ml_sensor_low">faible</string>
+  <string name="dashboard_activity_tbr_basal_delivery_stopped">Basal arrêté (TBR 0 U/h)</string>
+  <string name="dashboard_hero_status_reading_line">Lecture · %1$s</string>
+  <string name="dashboard_hero_status_sensor_line">Capteur · %1$s</string>
+  <string name="dashboard_extended_section_left">Activité &amp; réserves</string>
+  <string name="dashboard_extended_section_right">Insuline &amp; débits</string>
 </resources>

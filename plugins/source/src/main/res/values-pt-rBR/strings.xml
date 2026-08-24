@@ -1,265 +1,262 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Source -->
-    <string name="ns_client_bg">Glicemia NSClient</string>
-    <string name="ns_client_bg_short">Glicemia NS</string>
-    <string name="description_source_ns_client">Baixa dados de glicemia do Nightscout</string>
-    <string name="source_xdrip">Glicemia xDrip+</string>
-    <string name="description_source_xdrip">Recebe valores de glicemia do xDrip+ e aplicativos compatíveis (Juggluco, etc.).</string>
-    <string name="dexcom_app_patched">BYODA</string>
-    <string name="dexcom_short">BYODA</string>
-    <string name="description_source_dexcom">Recebe valores de glicemia do aplicativo \'Build Your Own Dexcom App\' (BYODA).</string>
-    <string name="dexcom_oneplus_native">Dexcom ONE+ / G7</string>
-    <string name="dexcom_oneplus_short">ONE+/G7</string>
-    <string name="description_source_dexcom_oneplus_native">Bluetooth nativo do Dexcom ONE+ e G7 no AAPS. Aplique o sensor, insira o código de emparelhamento imediatamente e aguarde cerca de 30 min de aquecimento antes da glicemia do loop.</string>
-    <string name="dexcom_oneplus_plugin_summary">Status, conexão com código de emparelhamento e aquecimento</string>
-    <string name="dexcom_oneplus_aaps_directory_access_lost">O acesso à pasta do AAPS foi perdido. Abra a Manutenção, selecione a pasta Documents/AAPS e conceda permissão novamente.</string>
-    <string name="dexcom_oneplus_aaps_directory_select">Selecionar pasta</string>
-    <string name="dexcom_oneplus_status_title">Status do ONE+ / G7</string>
-    <string name="dexcom_oneplus_status_summary">Fase da sessão e status de conexão</string>
-    <string name="dexcom_oneplus_start_title">Iniciar sensor</string>
-    <string name="dexcom_oneplus_start_summary">Aplicar sensor → inserir código agora → conectar → ~30 min de aquecimento</string>
-    <string name="dexcom_oneplus_start_steps">Como iniciar:\n1. Aplique o sensor no seu corpo.\n2. Cole o código de barras (Data Matrix/GS1) do aplicador ou digite o PIN de 4 dígitos — não espere até depois do aquecimento.\n3. Encerre o Dexcom, xDrip e o Juggluco Direct (apenas um mestre Bluetooth).\n4. Permita o Bluetooth, escaneie, selecione o sensor destacado e toque em Conectar / seguir.\n5. Aceite a solicitação de emparelhamento Bluetooth do Android, se exibida.\n6. Aquecimento de ~30 min para um sensor novo; conectar a um sensor em andamento pode fornecer valores de glicemia (EGVs) mais cedo.</string>
-    <string name="dexcom_oneplus_step_prepare">Preparar</string>
-    <string name="dexcom_oneplus_step_code">Código</string>
-    <string name="dexcom_oneplus_step_connect">Conectar</string>
-    <string name="dexcom_oneplus_step_warmup">Aquecimento</string>
-    <string name="dexcom_oneplus_start_return_warmup">A opção Conectar adota o sensor selecionado e abre a tela de aquecimento. A contagem regressiva também é exibida no painel e na notificação contínua — você não precisa permanecer nessa tela.</string>
-    <string name="dexcom_oneplus_applicator_gs1_label">Data Matrix do aplicador (GS1) ou PIN de 4 dígitos</string>
-    <string name="dexcom_oneplus_applicator_gs1_hint">Cole o texto completo do Data Matrix de um leitor de QR code ou digite o PIN de 4 dígitos. O número de série é armazenado para correspondência de reconexão.</string>
-    <string name="dexcom_oneplus_applicator_parsed" comment="%1$s=PIN, %2$s=serial or dash. Example: PIN 1234 · serial ABCD">PIN analisado %1$s · série %2$s</string>
-    <string name="dexcom_oneplus_applicator_serial_none">—</string>
-    <string name="dexcom_oneplus_last_mac_hint" comment="%1$s=last MAC. Example: AA:BB:…:FF">Último MAC bem-sucedido: %1$s</string>
-    <string name="dexcom_oneplus_warmup_title">Aquecimento do sensor</string>
-    <string name="dexcom_oneplus_warmup_summary">Contagem regressiva de aquecimento de ~30 minutos</string>
-    <string name="dexcom_oneplus_nav_back">Voltar</string>
-    <string name="dexcom_oneplus_permissions_hint">Antes de emparelhar: permita dispositivos Bluetooth próximos (e notificações, se solicitado). Mantenha o telefone perto do sensor durante o início e o aquecimento.</string>
-    <string name="dexcom_oneplus_scan_hint">Procurar por sensores próximos da família ONE+ / G7 (DX02 / DX01 / DXCM / Dex ou FEBC). Prefira a correspondência destacada quando houver um MAC/nome anterior armazenado. Encerre outros aplicativos Dexcom / xDrip / Juggluco Direct primeiro.</string>
-    <string name="dexcom_oneplus_scan_start">Escanear</string>
-    <string name="dexcom_oneplus_scan_stop">Parar</string>
-    <string name="dexcom_oneplus_scan_scanning">Escaneando…</string>
-    <string name="dexcom_oneplus_scan_idle" comment="%1$d=number of devices found. Example: 2">Dispositivos encontrados: %1$d</string>
-    <string name="dexcom_oneplus_scan_unnamed">Dispositivo Dexcom sem nome</string>
-    <string name="dexcom_oneplus_scan_device_line" comment="%1$s=Bluetooth MAC, %2$d=RSSI. Example: AA:BB:CC:DD:EE:FF · −67 dBm">%1$s · %2$d dBm</string>
-    <string name="dexcom_oneplus_device_required">Selecione um sensor na lista de escaneamento</string>
-    <string name="dexcom_oneplus_new_sensor_code_warning">Este é um sensor diferente do emparelhado, mas o código de emparelhamento não mudou. Cole o novo código do aplicador — ou pressione Conectar novamente para manter o atual.</string>
-    <string name="dexcom_oneplus_real_skeleton_hint">Engenharia: ative “Usar esqueleto BLE real” nas preferências do plugin antes de iniciar, caso queira GATT+KEKS (caso contrário, o Stub falha e fecha após a conexão).</string>
-    <string name="dexcom_oneplus_real_skeleton_required">Ative “Usar esqueleto BLE real” (engenharia) nas configurações do plugin ONE+ / G7 antes de conectar.</string>
-    <string name="dexcom_oneplus_dexcom_recovery_warning">Encerre o aplicativo Dexcom e o xDrip primeiro (apenas um mestre Bluetooth). Esta versão conecta-se a uma sessão de sensor existente e não a encerra. Retornar ao aplicativo Dexcom posteriormente não é garantido — prefira um sensor sobressalente para testes.</string>
-    <string name="dexcom_oneplus_connect_follow">Conectar / acompanhar sensor</string>
-    <string name="dexcom_oneplus_pairing_code_label">Código de emparelhamento do sensor</string>
-    <string name="dexcom_oneplus_pairing_code_required">Insira o código de emparelhamento do sensor</string>
-    <string name="dexcom_oneplus_pairing_code_invalid">Insira um código de emparelhamento de sensor válido com 4 dígitos</string>
-    <string name="dexcom_oneplus_request_permissions">Permitir Bluetooth</string>
-    <string name="dexcom_oneplus_permissions_needed">A permissão de Bluetooth é necessária antes de iniciar o sensor</string>
-    <string name="dexcom_oneplus_use_real_skeleton">Usar esqueleto BLE real (engenharia)</string>
-    <string name="dexcom_oneplus_use_real_skeleton_summary">Direciona para o driver real GATT+KEKS+EGV (ativado por padrão). Desative apenas para forçar o Stub. Não é um recurso BLE de produção até ser confirmado pelo dispositivo.</string>
-    <string name="dexcom_oneplus_start_sensor">Iniciar sensor</string>
-    <string name="dexcom_oneplus_start_action">Iniciar / novo sensor</string>
-    <string name="dexcom_oneplus_warmup_open">Abrir tela de aquecimento</string>
-    <string name="dexcom_oneplus_status_phase" comment="%1$s=warm-up phase label. Example: Warming up">Fase: %1$s</string>
-    <string name="dexcom_oneplus_status_session" comment="%1$s=up or down. Example: Down">Sessão: %1$s</string>
-    <string name="dexcom_oneplus_status_message" comment="%1$s=driver message or none. Example: (none)">Mensagem: %1$s</string>
-    <string name="dexcom_oneplus_status_message_none">(nenhuma)</string>
-    <string name="dexcom_oneplus_session_up">Ativa</string>
-    <string name="dexcom_oneplus_session_down">Inativa</string>
-    <string name="dexcom_oneplus_phase_idle">Ocioso</string>
-    <string name="dexcom_oneplus_phase_pairing">Emparelhando</string>
-    <string name="dexcom_oneplus_phase_connecting">Conectando</string>
-    <string name="dexcom_oneplus_phase_reconnecting">Reconectando</string>
-    <string name="dexcom_oneplus_phase_warming">Aquecendo</string>
-    <string name="dexcom_oneplus_phase_ready">Ativo</string>
-    <string name="dexcom_oneplus_phase_failed">Falhou</string>
-    <string name="dexcom_oneplus_warmup_heading">Iniciando sensor</string>
-    <string name="dexcom_oneplus_warmup_phase" comment="%1$s=localized phase label. Example: Warming up">Fase: %1$s</string>
-    <string name="dexcom_oneplus_warmup_countdown" comment="%1$s=mm:ss remaining. Example: 29:45">Tempo restante: %1$s</string>
-    <string name="dexcom_oneplus_warmup_countdown_unknown">—</string>
-    <string name="dexcom_oneplus_warmup_ends_at" comment="%1$s=localized time. Example: 3:45 PM">Término estimado: %1$s</string>
-    <string name="dexcom_oneplus_warmup_local_fallback_note">Exibindo um cronômetro local de ~30 min porque o sensor ainda não forneceu o tempo restante.</string>
-    <string name="dexcom_oneplus_warmup_connecting_note">Estabelecendo o link Bluetooth — mantenha o aplicativo aberto e fique perto do sensor. Isso pode levar até um minuto.</string>
-    <string name="dexcom_oneplus_warmup_no_loop_bg">Ainda sem glicemia para o loop — aguarde o término do aquecimento.</string>
-    <string name="dexcom_oneplus_warmup_session_up">Sessão Bluetooth ativa — mantenha o telefone próximo ao sensor.</string>
-    <string name="dexcom_oneplus_warmup_session_down">Sessão Bluetooth inativa. Use Conectar / acompanhar se necessário.</string>
-    <string name="dexcom_oneplus_msg_pairing">Emparelhando com o sensor…</string>
-    <string name="dexcom_oneplus_msg_auth_ok">Autenticado — iniciando sessão de glicemia…</string>
-    <string name="dexcom_oneplus_msg_tx_session">Sessão de sensor detectada no transmissor.</string>
-    <string name="dexcom_oneplus_msg_session_down">Sessão encerrada ou desconectada.</string>
-    <string name="dexcom_oneplus_error_auth_bond">Falha na autenticação ou no emparelhamento Bluetooth. Aceite a solicitação de emparelhamento do sistema e tente novamente.</string>
-    <string name="dexcom_oneplus_error_connection">Erro de conexão ou na sessão do sensor. Verifique o logcat (DEXCOM_ONEPLUS) e tente novamente.</string>
-    <string name="dexcom_oneplus_status_message_generic">Consulte os detalhes do status no logcat caso os problemas persistam.</string>
-    <string name="dexcom_oneplus_warmup_done">Aquecimento concluído — fonte ativa</string>
-    <string name="dexcom_oneplus_warmup_failed" comment="%1$s=error detail. Example: BLE session not ported">Aquecimento falhou: %1$s</string>
-    <string name="dexcom_oneplus_notif_title">Dexcom ONE+ / G7</string>
-    <string name="dexcom_oneplus_notif_channel_name">Status do Dexcom ONE+ / G7</string>
-    <string name="dexcom_oneplus_notif_channel_desc">Status contínuo de conexão do sensor e aquecimento.</string>
-    <string name="dexcom_oneplus_notif_pairing">Emparelhando…</string>
-    <string name="dexcom_oneplus_notif_connecting">Conectando ao sensor…</string>
-    <string name="dexcom_oneplus_notif_reconnecting">Reconectando…</string>
-    <string name="dexcom_oneplus_notif_waiting_adv" comment="%1$d = whole minutes the sensor has been silent. Example: No signal from the sensor for 7 min">Sem sinal do sensor há %1$d min — mantenha o telefone por perto</string>
-    <string name="dexcom_oneplus_notif_stale_mac_title">Sensor errado?</string>
-    <string name="dexcom_oneplus_notif_stale_mac_text">Outro sensor Dexcom ONE+ / G7 está próximo, mas o emparelhado permanece em silêncio. Inicie o sensor novamente para emparelhar o novo.</string>
-    <string name="dexcom_oneplus_notif_warming_title">Sensor aquecendo</string>
-    <string name="dexcom_oneplus_notif_warming_text">Mantenha o telefone perto do sensor</string>
-    <string name="dexcom_oneplus_notif_failed_title">Aquecimento interrompido</string>
-    <string name="dexcom_oneplus_notif_failed_text">Abra o aplicativo para tentar novamente</string>
-    <!-- Dual-sensor (staging / pre-soak) start + management -->
-    <string name="dexcom_oneplus_slot_production">Iniciar como produção</string>
-    <string name="dexcom_oneplus_slot_staging">Iniciar em estágio (pré-imersão / pre-soak)</string>
-    <string name="dexcom_oneplus_slot_hint">A produção alimenta o loop após o aquecimento. O estágio (pré-imersão) aquece um segundo sensor junto ao que você está usando atualmente — ele coleta apenas dados e nunca alimenta o loop até que você o promova na tela de status.</string>
-    <string name="dexcom_oneplus_staging_connect">Iniciar sensor em estágio</string>
-    <string name="dexcom_oneplus_staging_return_note">O sensor em estágio coleta leituras em segundo plano e não alimenta o loop. Retorne ao painel; promova-o mais tarde na tela de status do ONE+ / G7 assim que estiver pronto.</string>
-    <string name="dexcom_oneplus_staging_heading">Sensor em estágio (pré-imersão)</string>
-    <string name="dexcom_oneplus_staging_state" comment="%1$s=staging state label. Example: Ready to promote">Estado do estágio: %1$s</string>
-    <string name="dexcom_oneplus_staging_state_absent">Nenhum</string>
-    <string name="dexcom_oneplus_staging_state_warmup">Aquecendo</string>
-    <string name="dexcom_oneplus_staging_state_settling">Estabilizando</string>
-    <string name="dexcom_oneplus_staging_state_ready">Pronto para promover</string>
-    <string name="dexcom_oneplus_staging_none_hint">Nenhum sensor em estágio. Inicie um em Iniciar / novo sensor e escolha \"Iniciar em estágio (pré-imersão)\".</string>
-    <string name="dexcom_oneplus_staging_readings" comment="%1$d=how many valid glucose readings the staging sensor has sent so far. Example: Readings collected: 4">Leituras coletadas: %1$d</string>
-    <string name="dexcom_oneplus_staging_last_reading" comment="%1$s=glucose value with unit, %2$s=time. Example: Last reading: 5.6 mmol/l at 14:32">Última leitura: %1$s às %2$s</string>
-    <string name="dexcom_oneplus_staging_no_reading_yet">Nenhuma leitura ainda. O sensor em estágio ainda está aquecendo ou fora de alcance.</string>
-    <string name="dexcom_oneplus_staging_cancel">Cancelar estágio</string>
-    <string name="dexcom_oneplus_staging_promote">Promover para produção</string>
-    <string name="dexcom_oneplus_staging_promote_confirm_title">Promover sensor em estágio?</string>
-    <string name="dexcom_oneplus_staging_promote_confirm_message">Isso altera a fonte de glicose do loop para o sensor em estágio e desativa o sensor atualmente em uso. Esta ação não pode ser desfeita.</string>
-    <string name="dexcom_oneplus_staging_promote_early">Mudar para ele agora (não estabilizado)</string>
-    <string name="dexcom_oneplus_staging_promote_early_hint">Use isto apenas se o sensor em uso parou ou precisar ser substituído agora. O novo sensor está fazendo leituras, mas não concluiu o tempo de estabilização de 12 horas.</string>
-    <string name="dexcom_oneplus_staging_promote_early_confirm_title">Mudar para um sensor que não está estabilizado?</string>
-    <string name="dexcom_oneplus_staging_promote_early_confirm_message">O novo sensor está enviando leituras, mas não concluiu o tempo de estabilização de 12 horas. Suas leituras podem ser menos precisas nas primeiras horas, portanto, o loop pode dosar com base em valores muito altos ou muito baixos. Faça isso apenas se o sensor em uso tiver parado ou precisar ser substituído agora. Isso altera a fonte de glicose do loop e não pode ser desfeito.</string>
-    <string name="dexcom_oneplus_staging_promote_confirm">Promover</string>
-    <string name="dexcom_oneplus_staging_promote_dismiss">Cancelar</string>
-    <string name="dexcom_oneplus_staging_promote_ok">Sensor em estágio promovido — agora ele alimenta o loop.</string>
-    <string name="dexcom_oneplus_staging_promote_rejected_absent">Nenhum sensor em estágio para promover.</string>
-    <string name="dexcom_oneplus_staging_promote_rejected_not_settled">O sensor em estágio ainda não se estabilizou por tempo suficiente para ser promovido.</string>
-    <string name="dexcom_oneplus_staging_promote_rejected_no_glucose">O sensor em estágio ainda não produziu glicoses válidas suficientes.</string>
-    <string name="dexcom_oneplus_staging_promote_rejected_no_recent_glucose">O sensor em estágio não envia uma leitura há alguns minutos. Aguarde até que ele faça uma leitura novamente antes de mudar para ele.</string>
-    <string name="dexcom_oneplus_staging_promote_rejected_loop_busy">O loop está ocupado no momento — tente novamente em instantes.</string>
-    <string name="glimp">Glimp</string>
-    <string name="description_source_glimp">Recebe valores de glicemia do Glimp.</string>
-    <string name="mm640g">MM640g</string>
-    <string name="description_source_mm640g">Recebe valores de glicemia do 600SeriesAndroidUploader.</string>
-    <string name="poctech">Poctech</string>
-    <string name="description_source_poctech">Recebe valores de glicemia do aplicativo Poctech</string>
-    <string name="glunovo">Glunovo</string>
-    <string name="description_source_glunovo">Recebe valores do aplicativo Glunovo</string>
-    <string name="intelligo">Intelligo</string>
-    <string name="description_source_intelligo">Recebe valores do aplicativo Intelligo</string>
-    <string name="tomato">Tomato (MiaoMiao)</string>
-    <string name="tomato_short">Tomato</string>
-    <string name="description_source_tomato">Recebe valores de glicemia do aplicativo Tomato (dispositivo MiaoMiao)</string>
-    <string name="random_bg">Glicemia Aleatória</string>
-    <string name="description_source_random_bg">Gera dados de glicemia aleatórios (Apenas modo de demonstração)</string>
-    <string name="random_bg_short">Glicemia</string>
-
-    <!-- Patched Syai Tag App -->
-    <string name="syai_tag_app">Syai</string>
-    <string name="description_source_patched_syai_tag_app">Recebe dados de glicose do aplicativo Syai/Ottai.</string>
-    <!-- Patched SI App -->
-    <string name="patched_si_app">Aplicativo SI</string>
-    <string name="description_source_patched_si_app">Recebe dados de glicose do aplicativo Sibionic SI modificado.</string>
-    <!-- Patched Sino App -->
-    <string name="patched_sino_app">Aplicativo Sino</string>
-    <string name="description_source_patched_sino_app">Recebe dados de glicose do aplicativo Sino modificado.</string>
-
-    <!-- Patched Ottai App -->
-    <string name="ottai_app">Ottai</string>
-    <string name="description_source_patched_ottai_app">Recebe dados de glicose do aplicativo Ottai.</string>
-    <!-- Instara App -->
-    <string name="instara_app">Instara</string>
-    <string name="description_source_instara_app">Recebe valores de glicemia do aplicativo Instara.</string>
-    <!-- Instara preferences -->
-    <string name="pref_title_instara_history_request">Solicitação de dados históricos do Instara</string>
-    <string name="pref_summary_instara_history_request">Solicitar possíveis dados históricos ausentes em segundo plano</string>
-    <!-- Notification Reader -->
-    <string name="notification_reader">Leitor de Notificações</string>
-    <string name="description_source_notification_reader">Lê valores de glicose de notificações publicadas por aplicativos oficiais de MCG (Dexcom, Medtronic, Eversense, etc.).</string>
-    <!-- Permission rationales -->
-    <string name="permission_dexcom_title">Dexcom MCG</string>
-    <string name="permission_dexcom_description">O aplicativo precisa de permissão para receber dados de MCG do aplicativo Dexcom</string>
-    <string name="permission_notification_listener_title">Acesso a Notificações</string>
-    <string name="permission_notification_listener_description">Necessário para ler valores de glicose das notificações do aplicativo de MCG</string>
-    <!-- Eversense plugin -->
-    <string name="source_eversense">Eversense</string>
-    <string name="description_source_eversense">Driver BLE nativo para transmissores Eversense E3 (180 dias) e E365 (365 dias). Emparelhe no Construtor de Configuração (Config Builder), defina as credenciais de nuvem para o 365, se necessário, e faça a calibração no Status. Funciona com o loop AIMI, suavização adaptativa e alarmes unificados do AAPS.</string>
-    <string name="eversense_plugin_summary">MCG nativo via BLE — não é o leitor de notificações. Suporta E3/E365, calibração, guia de posicionamento, upload opcional para a nuvem e coexistência com o aplicativo oficial da Eversense.</string>
-    <string name="eversense_about_title">Sobre o Eversense no OpenApsAIMI</string>
-    <string name="eversense_about_summary">Toque para ver notas de configuração, integração com o AIMI e comportamento dos alarmes.</string>
-    <string name="eversense_about_detail">Configuração: ative esta fonte no Construtor de Configuração, escaneie e emparelhe seu transmissor, abra o Status para ver bateria e sincronização, use Calibração quando estiver pronto e Posicionamento se o sinal estiver fraco.\n\nE365: insira o nome de usuário/senha do DMS em Credenciais para leituras sincronizadas na nuvem.\n\nAIMI: a glicose flui para o loop AIMI como qualquer MCG; nenhuma preferência adicional do AIMI é necessária. O assistente físico usa o Health Connect separadamente (não o BLE do Eversense).\n\nAlarmes: problemas de sensor/posicionamento/credenciais usam notificações unificadas do AAPS (IDs EVERSENSE_*). O risco de hipoglicemia durante o loop é tratado pelo AIMI HYPO_RISK_ALARM, e não pelo driver do Eversense.\n\nCoexistência / Liberação: os modos opcionais permitem que o aplicativo oficial da Eversense se conecte periodicamente.</string>
-    <string name="eversense_information_title">Informação</string>
-    <string name="eversense_information_connected">Conectado</string>
-    <string name="eversense_information_battery">Porcentagem da bateria</string>
-    <string name="eversense_information_insertion_date">Data de inserção</string>
-    <string name="eversense_information_last_sync">Última sincronização</string>
-    <string name="eversense_calibration_title">Calibração</string>
-    <string name="eversense_calibration_phase">Fase</string>
-    <string name="eversense_calibration_last">Última calibração</string>
-    <string name="eversense_calibration_next">Próxima calibração</string>
-    <string name="eversense_calibration_action">Calibrar transmissor</string>
-    <string name="eversense_calibration_too_soon">Muito cedo — calibração já realizada nas últimas 2 horas</string>
-    <string name="eversense_sign_out">Sair</string>
-    <string name="eversense_credentials_missing">Eversense 365: credenciais não definidas — faça login para ativar a sincronização na nuvem e as leituras</string>
-    <string name="eversense_status_title">Status e Conexão do Eversense</string>
-    <string name="eversense_cloud_upload_enabled">Ativar upload para a nuvem do Eversense</string>
-    <string name="eversense_cloud_upload_toast">Mostrar resultado do upload para a nuvem</string>
-    <!-- Credentials section for Eversense 365 DMS login -->
-    <string name="eversense_not_connected">Não conectado</string>
-    <string name="eversense_credentials_title">Credenciais do Eversense 365</string>
-    <string name="eversense_credentials_username">Nome de usuário</string>
-    <string name="eversense_credentials_password">Senha</string>
-    <string name="eversense_credentials_not_set">Não definido</string>
-    <string name="eversense_credentials_password_set">Definido (oculto)</string>
-    <!-- Device scan dialog -->
-    <string name="eversense_scan_title">Selecionar transmissor Eversense</string>
-    <string name="eversense_scan_cancel">Cancelar</string>
-    <string name="eversense_scan_unknown_device">Dispositivo desconhecido</string>
-    <!-- Calibration activity -->
-    <string name="eversense_calibration_ready">Pronto para calibrar</string>
-    <string name="eversense_calibration_status">Status da calibração</string>
-    <string name="eversense_calibration_bg_value">Valor da glicemia</string>
-    <string name="eversense_calibration_bg_hint">Insira o valor da glicemia</string>
-    <string name="eversense_calibration_submit">Enviar calibração</string>
-    <string name="eversense_calibration_invalid_value">Insira um valor de glicemia válido</string>
-    <string name="eversense_calibration_not_supported">O envio de calibração ainda não é suportado pelo SDK do Eversense</string>
-    <string name="eversense_calibration_not_supported_notice">Nota: O envio de calibração requer uma atualização futura do SDK. A interface está pronta, mas a ação de envio ainda não é funcional.</string>
-    <string name="eversense_calibration_success">Calibração enviada com sucesso</string>
-    <string name="eversense_calibration_failed">Falha ao enviar a calibração. Certifique-se de que o transmissor está conectado e pronto.</string>
-    <string name="eversense_information_last_sync_tap">Toque para iniciar uma sincronização completa</string>
-    <string name="eversense_placement_signal">Sinal de posicionamento</string>
-    <string name="eversense_placement_title">Posicionamento do Transmissor</string>
-    <string name="eversense_placement_guide_heading">Guia de Posicionamento do Transmissor</string>
-    <string name="eversense_placement_guide_subtitle">Ajuste a posição do seu transmissor\npara melhorar a intensidade do sinal</string>
-    <string name="eversense_signal_excellent">Excelente</string>
-    <string name="eversense_signal_good">Bom</string>
-    <string name="eversense_signal_fair">Razoável</string>
-    <string name="eversense_signal_weak">Fraco</string>
-    <string name="eversense_signal_poor">Ruim</string>
-    <string name="eversense_placement_instruction_excellent">Ótimo posicionamento! Mantenha o transmissor nesta posição.</string>
-    <string name="eversense_placement_instruction_good">Bom posicionamento. O sinal está forte.</string>
-    <string name="eversense_placement_instruction_fair">O sinal está aceitável. Tente mover o transmissor levemente para obter uma leitura melhor.</string>
-    <string name="eversense_placement_instruction_weak">Sinal fraco. Reposicione o transmissor mais perto do sensor.</string>
-    <string name="eversense_placement_instruction_poor">Sinal ruim. Certifique-se de que o transmissor esteja posicionado diretamente sobre o local do sensor.</string>
-    <string name="eversense_placement_instruction_not_connected">Conecte-se ao seu transmissor para ver a intensidade do sinal.</string>
-    <string name="eversense_placement_last_update">Última atualização: %1$s</string>
-    <string name="eversense_placement_reading">Lendo&#8230;</string>
-    <string name="eversense_placement_connected">Transmissor Conectado</string>
-    <string name="eversense_placement_connected_instruction">Seu transmissor está conectado. Certifique-se de que ele esteja posicionado diretamente sobre o local do sensor e fixado com o adesivo.</string>
-    <string name="eversense_calibration_sending">Enviando calibração&#8230;</string>
-    <string name="eversense_release_for_official_app">Liberar para o aplicativo oficial</string>
-    <string name="eversense_release_summary">Desconecte para que o aplicativo oficial da Eversense possa se conectar. O AAPS se reconectará a cada 5 minutos automaticamente.</string>
-    <string name="eversense_release_active">Liberado — AAPS reconectando a cada 5 minutos…</string>
-    <string name="eversense_coexistence_mode">Modo de Coexistência</string>
-    <string name="eversense_coexistence_summary">Desconectar automaticamente após cada sincronização para dar tempo ao aplicativo oficial da Eversense se conectar e enviar os dados</string>
-    <string name="eversense_transmitter_not_placed">Transmissor Eversense não detectado — verifique o posicionamento</string>
-    <string name="eversense_transmitter_not_placed_summary">Certifique-se de que o transmissor esteja posicionado diretamente sobre o local do sensor e fixado com o adesivo.</string>
-    <string name="eversense_reconnecting">Reconectando…</string>
-
-    <!-- Aidex CGM source (upstream) -->
-    <string name="aidex">Aplicativo MicroTech MCG</string>
-    <string name="aidex_short">Aplicativo MCG</string>
-    <string name="description_source_aidex">Recebe valores de MCG do LinX, LinX vista, Equil G. Smart 2, Diaexpert 2, etc.</string>
-    <string name="aidex_sensor_expired">Sensor expirado, substitua por um novo sensor</string>
-    <string name="aidex_sensor_error">Erro no sensor, verifique o status do sensor</string>
-    <string name="aidex_sensor_stabilizing">O sensor está se estabilizando, aguarde…</string>
-    <string name="aidex_sensor_replace">Substituição do sensor necessária, substitua por um novo sensor o mais rápido possível</string>
-    <string name="aidex_signal_lost">Sinal do sensor perdido, verifique a conexão</string>
+  <!-- Source -->
+  <string name="ns_client_bg">Glicemia NSClient</string>
+  <string name="ns_client_bg_short">Glicemia NS</string>
+  <string name="description_source_ns_client">Baixa dados de glicemia do Nightscout</string>
+  <string name="source_xdrip">Glicemia xDrip+</string>
+  <string name="description_source_xdrip">Recebe valores de glicemia do xDrip+ e aplicativos compatíveis (Juggluco, etc.).</string>
+  <string name="dexcom_app_patched">BYODA</string>
+  <string name="dexcom_short">BYODA</string>
+  <string name="description_source_dexcom">Recebe valores de glicemia do aplicativo \'Build Your Own Dexcom App\' (BYODA).</string>
+  <string name="dexcom_oneplus_native">Dexcom ONE+ / G7</string>
+  <string name="dexcom_oneplus_short">ONE+/G7</string>
+  <string name="description_source_dexcom_oneplus_native">Bluetooth nativo do Dexcom ONE+ e G7 no AAPS. Aplique o sensor, insira o código de emparelhamento imediatamente e aguarde cerca de 30 min de aquecimento antes da glicemia do loop.</string>
+  <string name="dexcom_oneplus_plugin_summary">Status, conexão com código de emparelhamento e aquecimento</string>
+  <string name="dexcom_oneplus_aaps_directory_access_lost">O acesso à pasta do AAPS foi perdido. Abra a Manutenção, selecione a pasta Documents/AAPS e conceda permissão novamente.</string>
+  <string name="dexcom_oneplus_aaps_directory_select">Selecionar pasta</string>
+  <string name="dexcom_oneplus_status_title">Status do ONE+ / G7</string>
+  <string name="dexcom_oneplus_status_summary">Fase da sessão e status de conexão</string>
+  <string name="dexcom_oneplus_start_title">Iniciar sensor</string>
+  <string name="dexcom_oneplus_start_summary">Aplicar sensor → inserir código agora → conectar → ~30 min de aquecimento</string>
+  <string name="dexcom_oneplus_start_steps">Como iniciar:\n1. Aplique o sensor no seu corpo.\n2. Cole o código de barras (Data Matrix/GS1) do aplicador ou digite o PIN de 4 dígitos — não espere até depois do aquecimento.\n3. Encerre o Dexcom, xDrip e o Juggluco Direct (apenas um mestre Bluetooth).\n4. Permita o Bluetooth, escaneie, selecione o sensor destacado e toque em Conectar / seguir.\n5. Aceite a solicitação de emparelhamento Bluetooth do Android, se exibida.\n6. Aquecimento de ~30 min para um sensor novo; conectar a um sensor em andamento pode fornecer valores de glicemia (EGVs) mais cedo.</string>
+  <string name="dexcom_oneplus_step_prepare">Preparar</string>
+  <string name="dexcom_oneplus_step_code">Código</string>
+  <string name="dexcom_oneplus_step_connect">Conectar</string>
+  <string name="dexcom_oneplus_step_warmup">Aquecimento</string>
+  <string name="dexcom_oneplus_start_return_warmup">A opção Conectar adota o sensor selecionado e abre a tela de aquecimento. A contagem regressiva também é exibida no painel e na notificação contínua — você não precisa permanecer nessa tela.</string>
+  <string name="dexcom_oneplus_applicator_gs1_label">Data Matrix do aplicador (GS1) ou PIN de 4 dígitos</string>
+  <string name="dexcom_oneplus_applicator_gs1_hint">Cole o texto completo do Data Matrix de um leitor de QR code ou digite o PIN de 4 dígitos. O número de série é armazenado para correspondência de reconexão.</string>
+  <string name="dexcom_oneplus_applicator_parsed" comment="%1$s=PIN, %2$s=serial or dash. Example: PIN 1234 · serial ABCD" formatted="false">PIN analisado %1$s · série %2$s</string>
+  <string name="dexcom_oneplus_applicator_serial_none">—</string>
+  <string name="dexcom_oneplus_last_mac_hint" comment="%1$s=last MAC. Example: AA:BB:…:FF">Último MAC bem-sucedido: %1$s</string>
+  <string name="dexcom_oneplus_warmup_title">Aquecimento do sensor</string>
+  <string name="dexcom_oneplus_warmup_summary">Contagem regressiva de aquecimento de ~30 minutos</string>
+  <string name="dexcom_oneplus_nav_back">Voltar</string>
+  <string name="dexcom_oneplus_permissions_hint">Antes de emparelhar: permita dispositivos Bluetooth próximos (e notificações, se solicitado). Mantenha o telefone perto do sensor durante o início e o aquecimento.</string>
+  <string name="dexcom_oneplus_scan_hint">Procurar por sensores próximos da família ONE+ / G7 (DX02 / DX01 / DXCM / Dex ou FEBC). Prefira a correspondência destacada quando houver um MAC/nome anterior armazenado. Encerre outros aplicativos Dexcom / xDrip / Juggluco Direct primeiro.</string>
+  <string name="dexcom_oneplus_scan_start">Escanear</string>
+  <string name="dexcom_oneplus_scan_stop">Parar</string>
+  <string name="dexcom_oneplus_scan_scanning">Escaneando…</string>
+  <string name="dexcom_oneplus_scan_idle" comment="%1$d=number of devices found. Example: 2">Dispositivos encontrados: %1$d</string>
+  <string name="dexcom_oneplus_scan_unnamed">Dispositivo Dexcom sem nome</string>
+  <string name="dexcom_oneplus_scan_device_line" comment="%1$s=Bluetooth MAC, %2$d=RSSI. Example: AA:BB:CC:DD:EE:FF · −67 dBm" formatted="false">%1$s · %2$d dBm</string>
+  <string name="dexcom_oneplus_device_required">Selecione um sensor na lista de escaneamento</string>
+  <string name="dexcom_oneplus_new_sensor_code_warning">Este é um sensor diferente do emparelhado, mas o código de emparelhamento não mudou. Cole o novo código do aplicador — ou pressione Conectar novamente para manter o atual.</string>
+  <string name="dexcom_oneplus_real_skeleton_hint">Engenharia: ative “Usar esqueleto BLE real” nas preferências do plugin antes de iniciar, caso queira GATT+KEKS (caso contrário, o Stub falha e fecha após a conexão).</string>
+  <string name="dexcom_oneplus_real_skeleton_required">Ative “Usar esqueleto BLE real” (engenharia) nas configurações do plugin ONE+ / G7 antes de conectar.</string>
+  <string name="dexcom_oneplus_dexcom_recovery_warning">Encerre o aplicativo Dexcom e o xDrip primeiro (apenas um mestre Bluetooth). Esta versão conecta-se a uma sessão de sensor existente e não a encerra. Retornar ao aplicativo Dexcom posteriormente não é garantido — prefira um sensor sobressalente para testes.</string>
+  <string name="dexcom_oneplus_connect_follow">Conectar / acompanhar sensor</string>
+  <string name="dexcom_oneplus_pairing_code_label">Código de emparelhamento do sensor</string>
+  <string name="dexcom_oneplus_pairing_code_required">Insira o código de emparelhamento do sensor</string>
+  <string name="dexcom_oneplus_pairing_code_invalid">Insira um código de emparelhamento de sensor válido com 4 dígitos</string>
+  <string name="dexcom_oneplus_request_permissions">Permitir Bluetooth</string>
+  <string name="dexcom_oneplus_permissions_needed">A permissão de Bluetooth é necessária antes de iniciar o sensor</string>
+  <string name="dexcom_oneplus_use_real_skeleton">Usar esqueleto BLE real (engenharia)</string>
+  <string name="dexcom_oneplus_use_real_skeleton_summary">Direciona para o driver real GATT+KEKS+EGV (ativado por padrão). Desative apenas para forçar o Stub. Não é um recurso BLE de produção até ser confirmado pelo dispositivo.</string>
+  <string name="dexcom_oneplus_start_sensor">Iniciar sensor</string>
+  <string name="dexcom_oneplus_start_action">Iniciar / novo sensor</string>
+  <string name="dexcom_oneplus_warmup_open">Abrir tela de aquecimento</string>
+  <string name="dexcom_oneplus_status_phase" comment="%1$s=warm-up phase label. Example: Warming up">Fase: %1$s</string>
+  <string name="dexcom_oneplus_status_session" comment="%1$s=up or down. Example: Down">Sessão: %1$s</string>
+  <string name="dexcom_oneplus_status_message" comment="%1$s=driver message or none. Example: (none)">Mensagem: %1$s</string>
+  <string name="dexcom_oneplus_status_message_none">(nenhuma)</string>
+  <string name="dexcom_oneplus_session_up">Ativa</string>
+  <string name="dexcom_oneplus_session_down">Inativa</string>
+  <string name="dexcom_oneplus_phase_idle">Ocioso</string>
+  <string name="dexcom_oneplus_phase_pairing">Emparelhando</string>
+  <string name="dexcom_oneplus_phase_connecting">Conectando</string>
+  <string name="dexcom_oneplus_phase_reconnecting">Reconectando</string>
+  <string name="dexcom_oneplus_phase_warming">Aquecendo</string>
+  <string name="dexcom_oneplus_phase_ready">Ativo</string>
+  <string name="dexcom_oneplus_phase_failed">Falhou</string>
+  <string name="dexcom_oneplus_warmup_heading">Iniciando sensor</string>
+  <string name="dexcom_oneplus_warmup_phase" comment="%1$s=localized phase label. Example: Warming up">Fase: %1$s</string>
+  <string name="dexcom_oneplus_warmup_countdown" comment="%1$s=mm:ss remaining. Example: 29:45">Tempo restante: %1$s</string>
+  <string name="dexcom_oneplus_warmup_countdown_unknown">—</string>
+  <string name="dexcom_oneplus_warmup_ends_at" comment="%1$s=localized time. Example: 3:45 PM">Término estimado: %1$s</string>
+  <string name="dexcom_oneplus_warmup_local_fallback_note">Exibindo um cronômetro local de ~30 min porque o sensor ainda não forneceu o tempo restante.</string>
+  <string name="dexcom_oneplus_warmup_connecting_note">Estabelecendo o link Bluetooth — mantenha o aplicativo aberto e fique perto do sensor. Isso pode levar até um minuto.</string>
+  <string name="dexcom_oneplus_warmup_no_loop_bg">Ainda sem glicemia para o loop — aguarde o término do aquecimento.</string>
+  <string name="dexcom_oneplus_warmup_session_up">Sessão Bluetooth ativa — mantenha o telefone próximo ao sensor.</string>
+  <string name="dexcom_oneplus_warmup_session_down">Sessão Bluetooth inativa. Use Conectar / acompanhar se necessário.</string>
+  <string name="dexcom_oneplus_msg_pairing">Emparelhando com o sensor…</string>
+  <string name="dexcom_oneplus_msg_auth_ok">Autenticado — iniciando sessão de glicemia…</string>
+  <string name="dexcom_oneplus_msg_tx_session">Sessão de sensor detectada no transmissor.</string>
+  <string name="dexcom_oneplus_msg_session_down">Sessão encerrada ou desconectada.</string>
+  <string name="dexcom_oneplus_error_auth_bond">Falha na autenticação ou no emparelhamento Bluetooth. Aceite a solicitação de emparelhamento do sistema e tente novamente.</string>
+  <string name="dexcom_oneplus_error_connection">Erro de conexão ou na sessão do sensor. Verifique o logcat (DEXCOM_ONEPLUS) e tente novamente.</string>
+  <string name="dexcom_oneplus_status_message_generic">Consulte os detalhes do status no logcat caso os problemas persistam.</string>
+  <string name="dexcom_oneplus_warmup_done">Aquecimento concluído — fonte ativa</string>
+  <string name="dexcom_oneplus_warmup_failed" comment="%1$s=error detail. Example: BLE session not ported">Aquecimento falhou: %1$s</string>
+  <string name="dexcom_oneplus_notif_title">Dexcom ONE+ / G7</string>
+  <string name="dexcom_oneplus_notif_channel_name">Status do Dexcom ONE+ / G7</string>
+  <string name="dexcom_oneplus_notif_channel_desc">Status contínuo de conexão do sensor e aquecimento.</string>
+  <string name="dexcom_oneplus_notif_pairing">Emparelhando…</string>
+  <string name="dexcom_oneplus_notif_connecting">Conectando ao sensor…</string>
+  <string name="dexcom_oneplus_notif_reconnecting">Reconectando…</string>
+  <string name="dexcom_oneplus_notif_waiting_adv" comment="%1$d = whole minutes the sensor has been silent. Example: No signal from the sensor for 7 min">Sem sinal do sensor há %1$d min — mantenha o telefone por perto</string>
+  <string name="dexcom_oneplus_notif_stale_mac_title">Sensor errado?</string>
+  <string name="dexcom_oneplus_notif_stale_mac_text">Outro sensor Dexcom ONE+ / G7 está próximo, mas o emparelhado permanece em silêncio. Inicie o sensor novamente para emparelhar o novo.</string>
+  <string name="dexcom_oneplus_notif_warming_title">Sensor aquecendo</string>
+  <string name="dexcom_oneplus_notif_warming_text">Mantenha o telefone perto do sensor</string>
+  <string name="dexcom_oneplus_notif_failed_title">Aquecimento interrompido</string>
+  <string name="dexcom_oneplus_notif_failed_text">Abra o aplicativo para tentar novamente</string>
+  <!-- Dual-sensor (staging / pre-soak) start + management -->
+  <string name="dexcom_oneplus_slot_production">Iniciar como produção</string>
+  <string name="dexcom_oneplus_slot_staging">Iniciar em estágio (pré-imersão / pre-soak)</string>
+  <string name="dexcom_oneplus_slot_hint">A produção alimenta o loop após o aquecimento. O estágio (pré-imersão) aquece um segundo sensor junto ao que você está usando atualmente — ele coleta apenas dados e nunca alimenta o loop até que você o promova na tela de status.</string>
+  <string name="dexcom_oneplus_staging_connect">Iniciar sensor em estágio</string>
+  <string name="dexcom_oneplus_staging_return_note">O sensor em estágio coleta leituras em segundo plano e não alimenta o loop. Retorne ao painel; promova-o mais tarde na tela de status do ONE+ / G7 assim que estiver pronto.</string>
+  <string name="dexcom_oneplus_staging_heading">Sensor em estágio (pré-imersão)</string>
+  <string name="dexcom_oneplus_staging_state" comment="%1$s=staging state label. Example: Ready to promote">Estado do estágio: %1$s</string>
+  <string name="dexcom_oneplus_staging_state_absent">Nenhum</string>
+  <string name="dexcom_oneplus_staging_state_warmup">Aquecendo</string>
+  <string name="dexcom_oneplus_staging_state_settling">Estabilizando</string>
+  <string name="dexcom_oneplus_staging_state_ready">Pronto para promover</string>
+  <string name="dexcom_oneplus_staging_none_hint">Nenhum sensor em estágio. Inicie um em Iniciar / novo sensor e escolha \"Iniciar em estágio (pré-imersão)\".</string>
+  <string name="dexcom_oneplus_staging_readings" comment="%1$d=how many valid glucose readings the staging sensor has sent so far. Example: Readings collected: 4">Leituras coletadas: %1$d</string>
+  <string name="dexcom_oneplus_staging_last_reading" comment="%1$s=glucose value with unit, %2$s=time. Example: Last reading: 5.6 mmol/l at 14:32" formatted="false">Última leitura: %1$s às %2$s</string>
+  <string name="dexcom_oneplus_staging_no_reading_yet">Nenhuma leitura ainda. O sensor em estágio ainda está aquecendo ou fora de alcance.</string>
+  <string name="dexcom_oneplus_staging_cancel">Cancelar estágio</string>
+  <string name="dexcom_oneplus_staging_promote">Promover para produção</string>
+  <string name="dexcom_oneplus_staging_promote_confirm_title">Promover sensor em estágio?</string>
+  <string name="dexcom_oneplus_staging_promote_confirm_message">Isso altera a fonte de glicose do loop para o sensor em estágio e desativa o sensor atualmente em uso. Esta ação não pode ser desfeita.</string>
+  <string name="dexcom_oneplus_staging_promote_early">Mudar para ele agora (não estabilizado)</string>
+  <string name="dexcom_oneplus_staging_promote_early_hint">Use isto apenas se o sensor em uso parou ou precisar ser substituído agora. O novo sensor está fazendo leituras, mas não concluiu o tempo de estabilização de 12 horas.</string>
+  <string name="dexcom_oneplus_staging_promote_early_confirm_title">Mudar para um sensor que não está estabilizado?</string>
+  <string name="dexcom_oneplus_staging_promote_early_confirm_message">O novo sensor está enviando leituras, mas não concluiu o tempo de estabilização de 12 horas. Suas leituras podem ser menos precisas nas primeiras horas, portanto, o loop pode dosar com base em valores muito altos ou muito baixos. Faça isso apenas se o sensor em uso tiver parado ou precisar ser substituído agora. Isso altera a fonte de glicose do loop e não pode ser desfeito.</string>
+  <string name="dexcom_oneplus_staging_promote_confirm">Promover</string>
+  <string name="dexcom_oneplus_staging_promote_dismiss">Cancelar</string>
+  <string name="dexcom_oneplus_staging_promote_ok">Sensor em estágio promovido — agora ele alimenta o loop.</string>
+  <string name="dexcom_oneplus_staging_promote_rejected_absent">Nenhum sensor em estágio para promover.</string>
+  <string name="dexcom_oneplus_staging_promote_rejected_not_settled">O sensor em estágio ainda não se estabilizou por tempo suficiente para ser promovido.</string>
+  <string name="dexcom_oneplus_staging_promote_rejected_no_glucose">O sensor em estágio ainda não produziu glicoses válidas suficientes.</string>
+  <string name="dexcom_oneplus_staging_promote_rejected_no_recent_glucose">O sensor em estágio não envia uma leitura há alguns minutos. Aguarde até que ele faça uma leitura novamente antes de mudar para ele.</string>
+  <string name="dexcom_oneplus_staging_promote_rejected_loop_busy">O loop está ocupado no momento — tente novamente em instantes.</string>
+  <string name="glimp">Glimp</string>
+  <string name="description_source_glimp">Recebe valores de glicemia do Glimp.</string>
+  <string name="mm640g">MM640g</string>
+  <string name="description_source_mm640g">Recebe valores de glicemia do 600SeriesAndroidUploader.</string>
+  <string name="poctech">Poctech</string>
+  <string name="description_source_poctech">Recebe valores de glicemia do aplicativo Poctech</string>
+  <string name="glunovo">Glunovo</string>
+  <string name="description_source_glunovo">Recebe valores do aplicativo Glunovo</string>
+  <string name="intelligo">Intelligo</string>
+  <string name="description_source_intelligo">Recebe valores do aplicativo Intelligo</string>
+  <string name="tomato">Tomato (MiaoMiao)</string>
+  <string name="tomato_short">Tomato</string>
+  <string name="description_source_tomato">Recebe valores de glicemia do aplicativo Tomato (dispositivo MiaoMiao)</string>
+  <string name="random_bg">Glicemia Aleatória</string>
+  <string name="description_source_random_bg">Gera dados de glicemia aleatórios (Apenas modo de demonstração)</string>
+  <string name="random_bg_short">Glicemia</string>
+  <!-- Patched Syai Tag App -->
+  <string name="syai_tag_app">Syai</string>
+  <string name="description_source_patched_syai_tag_app">Recebe dados de glicose do aplicativo Syai/Ottai.</string>
+  <!-- Patched SI App -->
+  <string name="patched_si_app">Aplicativo SI</string>
+  <string name="description_source_patched_si_app">Recebe dados de glicose do aplicativo Sibionic SI modificado.</string>
+  <!-- Patched Sino App -->
+  <string name="patched_sino_app">Aplicativo Sino</string>
+  <string name="description_source_patched_sino_app">Recebe dados de glicose do aplicativo Sino modificado.</string>
+  <!-- Patched Ottai App -->
+  <string name="ottai_app">Ottai</string>
+  <string name="description_source_patched_ottai_app">Recebe dados de glicose do aplicativo Ottai.</string>
+  <!-- Instara App -->
+  <string name="instara_app">Instara</string>
+  <string name="description_source_instara_app">Recebe valores de glicemia do aplicativo Instara.</string>
+  <!-- Instara preferences -->
+  <string name="pref_title_instara_history_request">Solicitação de dados históricos do Instara</string>
+  <string name="pref_summary_instara_history_request">Solicitar possíveis dados históricos ausentes em segundo plano</string>
+  <!-- Notification Reader -->
+  <string name="notification_reader">Leitor de Notificações</string>
+  <string name="description_source_notification_reader">Lê valores de glicose de notificações publicadas por aplicativos oficiais de MCG (Dexcom, Medtronic, Eversense, etc.).</string>
+  <!-- Permission rationales -->
+  <string name="permission_dexcom_title">Dexcom MCG</string>
+  <string name="permission_dexcom_description">O aplicativo precisa de permissão para receber dados de MCG do aplicativo Dexcom</string>
+  <string name="permission_notification_listener_title">Acesso a Notificações</string>
+  <string name="permission_notification_listener_description">Necessário para ler valores de glicose das notificações do aplicativo de MCG</string>
+  <!-- Eversense plugin -->
+  <string name="source_eversense">Eversense</string>
+  <string name="description_source_eversense">Driver BLE nativo para transmissores Eversense E3 (180 dias) e E365 (365 dias). Emparelhe no Construtor de Configuração (Config Builder), defina as credenciais de nuvem para o 365, se necessário, e faça a calibração no Status. Funciona com o loop AIMI, suavização adaptativa e alarmes unificados do AAPS.</string>
+  <string name="eversense_plugin_summary">MCG nativo via BLE — não é o leitor de notificações. Suporta E3/E365, calibração, guia de posicionamento, upload opcional para a nuvem e coexistência com o aplicativo oficial da Eversense.</string>
+  <string name="eversense_about_title">Sobre o Eversense no OpenApsAIMI</string>
+  <string name="eversense_about_summary">Toque para ver notas de configuração, integração com o AIMI e comportamento dos alarmes.</string>
+  <string name="eversense_about_detail">Configuração: ative esta fonte no Construtor de Configuração, escaneie e emparelhe seu transmissor, abra o Status para ver bateria e sincronização, use Calibração quando estiver pronto e Posicionamento se o sinal estiver fraco.\n\nE365: insira o nome de usuário/senha do DMS em Credenciais para leituras sincronizadas na nuvem.\n\nAIMI: a glicose flui para o loop AIMI como qualquer MCG; nenhuma preferência adicional do AIMI é necessária. O assistente físico usa o Health Connect separadamente (não o BLE do Eversense).\n\nAlarmes: problemas de sensor/posicionamento/credenciais usam notificações unificadas do AAPS (IDs EVERSENSE_*). O risco de hipoglicemia durante o loop é tratado pelo AIMI HYPO_RISK_ALARM, e não pelo driver do Eversense.\n\nCoexistência / Liberação: os modos opcionais permitem que o aplicativo oficial da Eversense se conecte periodicamente.</string>
+  <string name="eversense_information_title">Informação</string>
+  <string name="eversense_information_connected">Conectado</string>
+  <string name="eversense_information_battery">Porcentagem da bateria</string>
+  <string name="eversense_information_insertion_date">Data de inserção</string>
+  <string name="eversense_information_last_sync">Última sincronização</string>
+  <string name="eversense_calibration_title">Calibração</string>
+  <string name="eversense_calibration_phase">Fase</string>
+  <string name="eversense_calibration_last">Última calibração</string>
+  <string name="eversense_calibration_next">Próxima calibração</string>
+  <string name="eversense_calibration_action">Calibrar transmissor</string>
+  <string name="eversense_calibration_too_soon">Muito cedo — calibração já realizada nas últimas 2 horas</string>
+  <string name="eversense_sign_out">Sair</string>
+  <string name="eversense_credentials_missing">Eversense 365: credenciais não definidas — faça login para ativar a sincronização na nuvem e as leituras</string>
+  <string name="eversense_status_title">Status e Conexão do Eversense</string>
+  <string name="eversense_cloud_upload_enabled">Ativar upload para a nuvem do Eversense</string>
+  <string name="eversense_cloud_upload_toast">Mostrar resultado do upload para a nuvem</string>
+  <!-- Credentials section for Eversense 365 DMS login -->
+  <string name="eversense_not_connected">Não conectado</string>
+  <string name="eversense_credentials_title">Credenciais do Eversense 365</string>
+  <string name="eversense_credentials_username">Nome de usuário</string>
+  <string name="eversense_credentials_password">Senha</string>
+  <string name="eversense_credentials_not_set">Não definido</string>
+  <string name="eversense_credentials_password_set">Definido (oculto)</string>
+  <!-- Device scan dialog -->
+  <string name="eversense_scan_title">Selecionar transmissor Eversense</string>
+  <string name="eversense_scan_cancel">Cancelar</string>
+  <string name="eversense_scan_unknown_device">Dispositivo desconhecido</string>
+  <!-- Calibration activity -->
+  <string name="eversense_calibration_ready">Pronto para calibrar</string>
+  <string name="eversense_calibration_status">Status da calibração</string>
+  <string name="eversense_calibration_bg_value">Valor da glicemia</string>
+  <string name="eversense_calibration_bg_hint">Insira o valor da glicemia</string>
+  <string name="eversense_calibration_submit">Enviar calibração</string>
+  <string name="eversense_calibration_invalid_value">Insira um valor de glicemia válido</string>
+  <string name="eversense_calibration_not_supported">O envio de calibração ainda não é suportado pelo SDK do Eversense</string>
+  <string name="eversense_calibration_not_supported_notice">Nota: O envio de calibração requer uma atualização futura do SDK. A interface está pronta, mas a ação de envio ainda não é funcional.</string>
+  <string name="eversense_calibration_success">Calibração enviada com sucesso</string>
+  <string name="eversense_calibration_failed">Falha ao enviar a calibração. Certifique-se de que o transmissor está conectado e pronto.</string>
+  <string name="eversense_information_last_sync_tap">Toque para iniciar uma sincronização completa</string>
+  <string name="eversense_placement_signal">Sinal de posicionamento</string>
+  <string name="eversense_placement_title">Posicionamento do Transmissor</string>
+  <string name="eversense_placement_guide_heading">Guia de Posicionamento do Transmissor</string>
+  <string name="eversense_placement_guide_subtitle">Ajuste a posição do seu transmissor\npara melhorar a intensidade do sinal</string>
+  <string name="eversense_signal_excellent">Excelente</string>
+  <string name="eversense_signal_good">Bom</string>
+  <string name="eversense_signal_fair">Razoável</string>
+  <string name="eversense_signal_weak">Fraco</string>
+  <string name="eversense_signal_poor">Ruim</string>
+  <string name="eversense_placement_instruction_excellent">Ótimo posicionamento! Mantenha o transmissor nesta posição.</string>
+  <string name="eversense_placement_instruction_good">Bom posicionamento. O sinal está forte.</string>
+  <string name="eversense_placement_instruction_fair">O sinal está aceitável. Tente mover o transmissor levemente para obter uma leitura melhor.</string>
+  <string name="eversense_placement_instruction_weak">Sinal fraco. Reposicione o transmissor mais perto do sensor.</string>
+  <string name="eversense_placement_instruction_poor">Sinal ruim. Certifique-se de que o transmissor esteja posicionado diretamente sobre o local do sensor.</string>
+  <string name="eversense_placement_instruction_not_connected">Conecte-se ao seu transmissor para ver a intensidade do sinal.</string>
+  <string name="eversense_placement_last_update">Última atualização: %1$s</string>
+  <string name="eversense_placement_reading">Lendo…</string>
+  <string name="eversense_placement_connected">Transmissor Conectado</string>
+  <string name="eversense_placement_connected_instruction">Seu transmissor está conectado. Certifique-se de que ele esteja posicionado diretamente sobre o local do sensor e fixado com o adesivo.</string>
+  <string name="eversense_calibration_sending">Enviando calibração…</string>
+  <string name="eversense_release_for_official_app">Liberar para o aplicativo oficial</string>
+  <string name="eversense_release_summary">Desconecte para que o aplicativo oficial da Eversense possa se conectar. O AAPS se reconectará a cada 5 minutos automaticamente.</string>
+  <string name="eversense_release_active">Liberado — AAPS reconectando a cada 5 minutos…</string>
+  <string name="eversense_coexistence_mode">Modo de Coexistência</string>
+  <string name="eversense_coexistence_summary">Desconectar automaticamente após cada sincronização para dar tempo ao aplicativo oficial da Eversense se conectar e enviar os dados</string>
+  <string name="eversense_transmitter_not_placed">Transmissor Eversense não detectado — verifique o posicionamento</string>
+  <string name="eversense_transmitter_not_placed_summary">Certifique-se de que o transmissor esteja posicionado diretamente sobre o local do sensor e fixado com o adesivo.</string>
+  <string name="eversense_reconnecting">Reconectando…</string>
+  <!-- Aidex CGM source (upstream) -->
+  <string name="aidex">Aplicativo MicroTech MCG</string>
+  <string name="aidex_short">Aplicativo MCG</string>
+  <string name="description_source_aidex">Recebe valores de MCG do LinX, LinX vista, Equil G. Smart 2, Diaexpert 2, etc.</string>
+  <string name="aidex_sensor_expired">Sensor expirado, substitua por um novo sensor</string>
+  <string name="aidex_sensor_error">Erro no sensor, verifique o status do sensor</string>
+  <string name="aidex_sensor_stabilizing">O sensor está se estabilizando, aguarde…</string>
+  <string name="aidex_sensor_replace">Substituição do sensor necessária, substitua por um novo sensor o mais rápido possível</string>
+  <string name="aidex_signal_lost">Sinal do sensor perdido, verifique a conexão</string>
 </resources>

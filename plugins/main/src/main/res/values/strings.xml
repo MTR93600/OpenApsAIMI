@@ -1,435 +1,412 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
-
-    <string name="disabled_loop">Loop Disabled</string>
-    <string name="calculator_label">Calculator</string>
-
-    <!-- Profile -->
-    <!-- localprofile moved to core:ui module -->
-    <string name="localprofile_shortname">LP</string>
-    <string name="description_profile_local">Define a profile describing your insulin needs.</string>
-    <string name="a11y_add_new_to_list">add new to list</string>
-    <string name="do_you_want_switch_profile">Do you want to switch profile and discard changes made to current profile?</string>
-    <string name="save_or_reset_changes_first">Save or reset current changes first</string>
-    <string name="delete_current_profile">Delete current profile?</string>
-    <string name="units_colon">Units:</string>
-    <string name="missing_profile_name">Missing profile name</string>
-    <string name="error_in_ic_values">Error in IC values</string>
-    <string name="error_in_basal_values">Error in basal values</string>
-    <string name="error_in_target_values">Error in target values</string>
-    <string name="error_in_isf_values">Error in ISF values</string>
-    <string name="profile_name_contains_dot">Some of profile names contains dots.\nThis is not supported by NS.\nProfiles will not be uploaded to NS.</string>
-    <string name="invalid_profile_not_accepted">Invalid profile %1$s not accepted from NS</string>
-    <string name="view">View</string>
-    <string name="errors">Errors</string>
-    <string name="select_profile">Select profile to edit</string>
-    <string name="profile_name">Profile name:</string>
-    <string name="a11y_add_new_profile">add new profile</string>
-    <string name="a11y_clone_profile">clone current profile</string>
-
-    <!-- Dashboard -->
-    <string name="graph_menu_divider_header">Graph</string>
-    <string name="statuslights_cannula_age">cannula age</string>
-    <string name="statuslights_patch_pump_age">patch pump age</string>
-    <string name="dashboard_nav_home">Home</string>
-    <string name="dashboard_nav_history">History</string>
-    <string name="dashboard_nav_bolus">Bolus/Carbs</string>
-    <string name="dashboard_nav_adjustments">Adjustments</string>
-    <string name="dashboard_nav_modes">Modes</string>
-    <string name="dashboard_modes_description">Manage your personalized modes and trigger their actions instantly.</string>
-    <string name="dashboard_modes_list_title">Available modes</string>
-    <string name="dashboard_modes_empty">No user actions are available right now.</string>
-    <string name="dashboard_adjustments_details_title">Adjustments</string>
-    <string name="dashboard_adjustments_details_decisions">Loop decisions</string>
-    <string name="dashboard_adjustments_details_empty">No active adjustments.</string>
-    <string name="dashboard_nav_settings">Settings</string>
-    <string name="dashboard_adjustments">Active adjustments</string>
-    <string name="dashboard_no_adjustments">No active adjustments</string>
-    <string name="dashboard_graph_placeholder">Glucose graph placeholder</string>
-    <string name="dashboard_graph_updated">Graph updated at %1$s</string>
-    <string name="dashboard_adjustment_temp_basal">Temp basal: %1$s</string>
-    <string name="dashboard_adjustment_temp_target">Temp target: %1$s (%2$s)</string>
-    <string name="dashboard_adjustment_extended_bolus">Extended bolus: %1$s</string>
-    <string name="dashboard_adjustment_glycemia">Glycemia: %1$s %2$s (Δ %3$s/min)</string>
-    <string name="dashboard_adjustment_prediction">Prediction: %1$s %2$s in %3$s</string>
-    <string name="dashboard_adjustment_scenario_projection">Scenario %1$s · Floor %2$s (+%3$s min)</string>
-    <string name="dashboard_adjustment_prediction_unavailable">Prediction: unavailable</string>
-    <string name="dashboard_adjustment_minutes">%1$d min</string>
-    <string name="dashboard_adjustment_iob_activity">IOB: %1$s | Activity: %2$s%%</string>
-    <string name="dashboard_adjustment_decision">AIMI decision: SMB %1$s U | Basal %2$s U/h</string>
-    <string name="dashboard_adjustment_decision_unavailable">AIMI decision: unavailable</string>
-    <string name="dashboard_adjustment_mode">Mode: %1$s (%2$s)</string>
-    <string name="dashboard_adjustment_pump">Pump: Reservoir %1$s | Site %2$s | Sensor %3$s</string>
-    <string name="dashboard_adjustment_safety">Safety: %1$s (%2$s)</string>
-    <string name="dashboard_adjustment_safety_unknown">Safety: unavailable</string>
-    <string name="dashboard_adjustment_safety_level_normal">Neutral</string>
-    <string name="dashboard_adjustment_safety_level_limited">Limited</string>
-    <string name="dashboard_adjustment_safety_level_critical">Critical</string>
-    <string name="dashboard_adjustment_reason_low">BG %1$s</string>
-    <string name="dashboard_adjustment_reason_high">BG %1$s</string>
-    <string name="dashboard_adjustment_reason_trend">%1$s trend</string>
-    <string name="dashboard_adjustment_reason_unknown">no recent data</string>
-    <string name="dashboard_adjustment_trend_rising">rising</string>
-    <string name="dashboard_adjustment_trend_falling">falling</string>
-    <string name="dashboard_adjustment_trend_stable">stable</string>
-    <string name="dashboard_mode_meal">Meal</string>
-    <string name="dashboard_mode_breakfast">Breakfast</string>
-    <string name="dashboard_mode_lunch">Lunch</string>
-    <string name="dashboard_mode_dinner">Dinner</string>
-    <string name="dashboard_mode_highcarb">High carb</string>
-    <string name="dashboard_mode_lowcarb">Low carb</string>
-    <string name="dashboard_mode_snack">Snack</string>
-    <string name="dashboard_mode_sport">Sport</string>
-    <string name="dashboard_mode_sleep">Sleep</string>
-    <string name="dashboard_user_actions_empty">No automation actions available</string>
-    <string name="run_question">Run %1$s?</string>
-    <string name="set_basal_question">Accept new temp basal:</string>
-    <string name="dashboard_iob_label">IOB</string>
-    <string name="dashboard_cob_label">COB</string>
-    <string name="dashboard_loop_label">Loop</string>
-    <string name="dashboard_trend">Trend</string>
-    <string name="dashboard_unicorn_status">AIMI status indicator</string>
-    <string name="a11y_delete_current_profile">delete current profile</string>
-    <string name="dia_short">DIA</string>
-    <string name="target_short">TARG</string>
-    <string name="basal_short">BAS</string>
-    <string name="isf_dynamic_label_warning">Your algorithm can provide dynamic calculation of ISF. Values below can be used only as a fallback in case of missing data or as a reference value only</string>
-    <string name="ic_dynamic_label_warning">Your algorithm can provide dynamic calculation of IC. Values below cen be used only as a fallback in case of missing data or as a reference value only</string>
-
-    <!-- Actions -->
-    <string name="actions">Actions</string>
-    <!-- manage moved to core:ui module -->
-    <string name="description_actions">Some buttons to quickly access common features</string>
-    <string name="actions_shortname">ACT</string>
-    <string name="status">Status</string>
-    <string name="pump_actions">Pump actions</string>
-    <string name="tempbasal_button">TempBasal</string>
-    <string name="extended_bolus_button">Extended Bolus</string>
-    <string name="extended_bolus_cancel_button">Cancel Extended Bolus</string>
-    <string name="tools">Tools</string>
-    <string name="nav_history_browser">History browser</string>
-    <string name="sensor_label">Sensor</string>
-    <string name="age_label">age:</string>
-    <string name="level_label">level:</string>
-    <string name="insulin_label">Insulin</string>
-    <string name="pb_label">Pump battery</string>
-    <string name="cannula">Cannula</string>
-    <string name="patch_pump">Patch pump</string>
-
-    <!-- Overview -->
-    <string name="graph_scale_6h">6h</string>
-    <string name="graph_scale_9h">9h</string>
-    <string name="graph_scale_12h">12h</string>
-    <string name="graph_scale_18h">18h</string>
-    <string name="graph_scale_24h">24h</string>
-    <string name="graph_long_scale_6h">6 hours</string>
-    <string name="graph_long_scale_9h">9 hours</string>
-    <string name="graph_long_scale_12h">12 hours</string>
-    <string name="graph_long_scale_18h">18 hours</string>
-    <string name="graph_long_scale_24h">24 hours</string>
-    <string name="graph_live">Live</string>
-    <string name="graph_following">Following</string>
-    <string name="graph_fixed">Fixed</string>
-    <string name="graph_no_data">No data</string>
-    <string name="graph_refresh_unknown">Refresh status unavailable</string>
-    <string name="graph_refresh_now">Updated just now</string>
-    <string name="graph_refresh_minutes_ago">Updated %1$d min ago</string>
-    <string name="a11y_graph">graph</string>
-    <string name="chart_menu">Chart menu</string>
-    <string name="a11y_graph_scale">select graph scale</string>
-    <string name="a11y_graph_scale_6h">graph scale 6 hours</string>
-    <string name="a11y_graph_scale_9h">graph scale 9 hours</string>
-    <string name="a11y_graph_scale_12h">graph scale 12 hours</string>
-    <string name="a11y_graph_scale_18h">graph scale 18 hours</string>
-    <string name="a11y_graph_scale_24h">graph scale 24 hours</string>
-    <string name="a11y_insulin_label">insulin</string>
-    <string name="a11y_bg_quality">blood glucose quality</string>
-    <string name="a11y_blood_glucose">blood glucose</string>
-    <string name="a11y_bg_outdated">outdated</string>
-
-    <!-- overview moved to core:ui module -->
-    <string name="overview_shortname">HOME</string>
-    <string name="description_overview">Displays the current state of your loop and buttons for most common actions</string>
-    <string name="overview_buttons_selection">Buttons</string>
-    <string name="overview_use_dashboard_title">Use dashboard as home</string>
-    <string name="overview_use_dashboard_summary">Use the AIMI hybrid dashboard as the main home content. In the modern (Compose) UI, search, Manage and the bottom bar stay available; in classic UI this switches the Home tab between dashboard and legacy overview.</string>
-    <string name="overview_show_hybrid_aimi_pulse_title">Show last AIMI run on dashboard</string>
-    <string name="overview_show_hybrid_aimi_pulse_summary">When enabled, shows the summary card under the glucose ring (last loop, SMB, etc.). Off by default to leave more room for the graph.</string>
-    <string name="overview_dashboard_extended_metrics_title">Dashboard: extended metrics</string>
-    <string name="overview_dashboard_extended_metrics_summary">Full two-column stats and AIMI trajectory strip. Off = compact row (steps, IOB, heart rate, TBR).</string>
-    <string name="dashboard_metrics_mode_simple">Simple</string>
-    <string name="dashboard_metrics_mode_extended">Extended</string>
-    <string name="dashboard_compact_label_steps">Pas</string>
-    <string name="dashboard_compact_label_iob">IOB</string>
-    <string name="dashboard_compact_label_hr">FC</string>
-    <string name="dashboard_compact_label_tbr">TBR</string>
-    <string name="show_calibration_button_summary">Sends a calibration to xDrip+ (ensure \'Accept Calibrations\' is enabled in xDrip+ under Inter-App settings).</string>
-    <string name="show_cgm_button_summary">Opens xDrip+ or Dexcom App (you can use back button to return to AAPS).</string>
-    <string name="not_available_full">Not available</string>
-    <string name="smscommunicator_pump_disconnected">Pump disconnected</string>
-    <string name="data_status">BG data status</string>
-
-    <!--    OverviewMenu-->
-    <string name="overview_show_predictions">Predictions</string>
-    <string name="overview_show_treatments">Treatments</string>
-    <string name="overview_show_heartRate">Heart Rate</string>
-    <string name="overview_show_deviation_slope">Deviation slope</string>
-    <string name="overview_show_activity">Activity</string>
-    <string name="overview_show_bgi">Blood Glucose Impact</string>
-    <string name="overview_show_sensitivity">Sensitivity change</string>
-    <string name="overview_show_deviations">Deviations</string>
-    <string name="overview_show_cob">Carbs On Board</string>
-    <string name="overview_show_iob">Insulin On Board</string>
-    <string name="overview_show_basals">Basals</string>
-    <string name="overview_show_abs_insulin">Absolute insulin</string>
-    <string name="overview_show_variable_sens">Variable sensitivity</string>
-    <string name="prediction_shortname">PRED</string>
-    <string name="basal_shortname">BAS</string>
-    <string name="treatments_shortname">TREAT</string>
-
-    <string name="cannula_usage">usage:</string>
-
-    <!--    Iob-->
-    <string name="iob_cob_calculator" translatable="false">IobCobCalculator</string>
-
-    <!--    PersistentNotification-->
-    <string name="ongoingnotificaction" translatable="false">Ongoing Notification</string>
-    <string name="description_persistent_notification">Shows an ongoing notification with a short overview of what your loop is doing</string>
-    <string name="old_data">OLD DATA</string>
-    <string name="overview_show_steps">Steps</string>
-    <string name="simple_mode_enabled">Simple mode enabled</string>
-    <string name="classic_description">Original skin</string>
-    <string name="lowres_description">Low Resolution skin</string>
-    <string name="buttonson_description">Buttons are always displayed on bottom of screen</string>
-    <string name="largedisplay_description">Large display</string>
-    <string name="minimal_skin_description">New skin dashboard</string>
-    <string name="notification_iob_short">%1$.1fU</string>
-
-    <string name="suspendloopfor1h">Suspend loop for 1h</string>
-    <string name="suspendloopfor2h">Suspend loop for 2h</string>
-    <string name="suspendloopfor3h">Suspend loop for 3h</string>
-    <string name="suspendloopfor10h">Suspend loop for 10 h</string>
-    <string name="disconnectpump">Disconnect pump</string>
-    <string name="disconnectpumpfor15m">Disconnect pump for 15 min</string>
-    <string name="disconnectpumpfor30m">Disconnect pump for 30 min</string>
-    <string name="disconnectpumpfor1h">Disconnect pump for 1 h</string>
-    <string name="disconnectpumpfor2h">Disconnect pump for 2 h</string>
-    <string name="disconnectpumpfor3h">Disconnect pump for 3 h</string>
-    <string name="resume">Resume</string>
-    <string name="reconnect">Reconnect Pump</string>
-
-    <string name="hypo_risk_notification_title">Hypo Risk</string>
-    <string name="hypo_risk_notification_text">Hypo risk: rapid drop detected. Check your glucose now.</string>
-    <string name="graph_range_updated">Graph range: %1$d hours</string>
-
-    <!-- Circle-Top Hybrid Dashboard -->
-    <string name="advisor_button">Advisor</string>
-    <string name="adjust_button">Adjust</string>
-    <string name="dashboard_run_loop">Run loop</string>
-    <string name="dashboard_loop_run_requested">Loop run requested</string>
-    <string name="dashboard_tir_today">Time in range - today</string>
-    <string name="dashboard_tir_stats_placeholder">Avg -- - A1C --</string>
-    <string name="dashboard_tir_stats_format">Avg %1$s - A1C %2$.1f%%</string>
-    <string name="prefs_button">Prefs</string>
-    <string name="stats_button">Stats</string>
-    <string name="dashboard_cd_chip_aimi_advisor">Open AIMI advisor recommendations</string>
-    <string name="dashboard_cd_chip_adjust">Open adjustment controls and loop actions</string>
-    <string name="dashboard_cd_chip_meal_mode">Open meal mode and preferences</string>
-    <string name="dashboard_cd_chip_aimi_context">Open AIMI context and statistics</string>
-    <string name="dashboard_chip_state_selected">selected</string>
-    <string name="dashboard_chip_state_not_selected">not selected</string>
-    <string name="dashboard_chip_announced_advisor_opened">Advisor opened</string>
-    <string name="dashboard_chip_announced_adjust_opened">Adjustments opened</string>
-    <string name="dashboard_chip_announced_meal_mode_opened">Meal mode opened</string>
-    <string name="dashboard_chip_announced_context_opened">AIMI context opened</string>
-    <string name="dashboard_aimi_pulse_title">Last AIMI run</string>
-    <string name="dashboard_aimi_pulse_title_with_age">Last AIMI run · %1$s</string>
-    <string name="dashboard_aimi_pulse_summary_none">No APS output yet. Run the loop or wait for the next glucose reading.</string>
-    <string name="dashboard_aimi_pulse_fallback">SMB %1$s U · scheduled basal %2$s U/h</string>
-    <string name="dashboard_aimi_pulse_hypo_prefix">Hypo risk —</string>
-    <string name="dashboard_aimi_pulse_meta">SMB %1$s U · demand %2$s · AutoSens %3$s%%</string>
-    <string name="dashboard_aimi_pulse_hint">Tap for full rationale and trajectory</string>
-    <string name="dashboard_aimi_telemetry_label">Trajectory layer</string>
-    <string name="dashboard_telemetry_inner_ring_summary">The thin inner ring is an AIMI telemetry arc: it blends trajectory relevance, trajectory health, and (if available) adaptive sensor-quality hint. It is not a separate “machine learning on/off” indicator.</string>
-    <string name="dashboard_glucose_ring_content_description">Glucose %1$s. %2$s. Outer ring: glucose range. Triangle: trend. Inner arc: AIMI trajectory relevance and health blend.</string>
-    <string name="dashboard_aimi_ml_confidence_title">AIMI signals</string>
-    <string name="dashboard_aimi_ml_strip_separator"> · </string>
-    <string name="dashboard_aimi_ml_strip_part_sensor">Sensor %1$s</string>
-    <string name="dashboard_aimi_ml_strip_relevance">Relevance %1$d%%</string>
-    <string name="dashboard_aimi_ml_strip_health">Trajectory health %1$d%%</string>
-    <string name="dashboard_aimi_ml_sensor_ok">OK</string>
-    <string name="dashboard_aimi_ml_sensor_uncertain">uncertain</string>
-    <string name="dashboard_aimi_ml_sensor_low">low</string>
-    <string name="dashboard_activity_tbr_basal_delivery_stopped">Basal off (TBR 0 U/h)</string>
-    <string name="dashboard_hero_status_reading_line">Reading · %1$s</string>
-    <string name="dashboard_hero_status_sensor_line">Sensor · %1$s</string>
-    <string name="dashboard_hero_status_reading_sensor_one_line">%1$s · %2$s</string>
-    <string name="dashboard_pump_pill_reservoir">Res. %1$s</string>
-    <string name="dashboard_pump_pill_battery">Batt. %1$s</string>
-    <string name="dashboard_pump_pill_site">Site %1$s</string>
-    <string name="dashboard_pump_pill_reservoir_a11y">Reservoir %1$s</string>
-    <string name="dashboard_pump_pill_battery_a11y">Pump battery %1$s</string>
-    <string name="dashboard_pump_pill_site_a11y">Infusion site age %1$s</string>
-    <string name="dashboard_pump_pill_sensor">Sens. %1$s</string>
-    <string name="dashboard_pump_pill_sensor_a11y">Sensor age %1$s</string>
-    <string name="dashboard_hero_sensor_badge_short">CGM %1$s</string>
-    <string name="dashboard_hero_sensor_dialog_title">CGM</string>
-    <!-- CGM warm-up hero ring (shown on the dashboard circle-top while the active sensor is warming up / (re)connecting and no fresh glucose is available). -->
-    <string name="dashboard_warmup_label">WARM-UP</string>
-    <string name="dashboard_warmup_phase_connecting">Connecting…</string>
-    <string name="dashboard_warmup_phase_reconnecting">Reconnecting…</string>
-    <string name="dashboard_warmup_phase_pairing">Pairing…</string>
-    <string name="dashboard_warmup_ends_at" comment="%1$s = local end-of-warm-up time, e.g. 14:05. Shown under the countdown.">Ends %1$s</string>
-    <string name="dashboard_warmup_a11y">Sensor warm-up in progress</string>
-    <!-- CGM sensor beginning-of-life / end-of-life subtext under the normal glucose hero. -->
-    <string name="dashboard_sensor_early_life" comment="%1$d = 1-based day of the sensor session, %2$d = whole hours since it started. Example: Day 1 · settling · 6 h">Day %1$d · settling · %2$d h</string>
-    <string name="dashboard_sensor_end_of_life" comment="%1$d = whole hours until the sensor expires. Example: Expires in 4 h">Expires in %1$d h</string>
-    <!-- Dashboard "new sensor" (staging) card, shown only while a second sensor is warmed up over the current one. -->
-    <string name="dashboard_staging_title_warmup">New sensor · warming up</string>
-    <string name="dashboard_staging_warmup_countdown" comment="%1$d = whole minutes remaining in the new sensor warm-up. Example: Ready in 25 min">Ready in %1$d min</string>
-    <string name="dashboard_staging_title_settling" comment="%1$d = whole hours until the new sensor has stabilised enough to switch to. Example: New sensor · stabilising · ready in 8 h">New sensor · stabilising · ready in %1$d h</string>
-    <string name="dashboard_staging_readings" comment="%1$d = how many glucose readings the new (staging) sensor has sent so far. Example: Readings collected: 12">Readings collected: %1$d</string>
-    <string name="dashboard_staging_ready">Ready to switch</string>
-    <string name="dashboard_staging_promote_button">Switch</string>
-    <string name="dashboard_staging_promote_ok">New sensor is now active</string>
-    <string name="dashboard_staging_promote_rejected_absent">No new sensor to switch to</string>
-    <string name="dashboard_staging_promote_rejected_not_settled">New sensor is not stabilised yet</string>
-    <string name="dashboard_staging_promote_rejected_no_glucose">New sensor has no valid reading yet</string>
-    <string name="dashboard_staging_promote_rejected_no_recent_glucose">New sensor has not sent a reading in the last minutes</string>
-    <string name="dashboard_staging_promote_rejected_loop_busy">Loop is busy — try again in a moment</string>
-    <string name="dashboard_hero_sensor_dialog_message">%1$s\n\n%2$s</string>
-    <string name="graph_legend_smb">SMB</string>
-    <string name="graph_legend_scenario_floor">Floor</string>
-    <string name="graph_legend_scenario_best">Scenario</string>
-    <string name="graph_scenario_near_bg_hint">Scenario near current BG (equilibrium / weak signal)</string>
-    <string name="dashboard_graph_smb_toast">SMB · %1$s</string>
-    <string name="dashboard_metrics_overflow_a11y">Dashboard layout options</string>
-    <string name="graph_legend_tbr">TBR</string>
-    <string name="graph_legend_activity">Activity</string>
-    <string name="dashboard_hero_cgm_smoothing_chip_two">%1$s · %2$s</string>
-    <string name="dashboard_hero_cgm_smoothing_dialog_title">Sensor &amp; smoothing</string>
-    <string name="dashboard_notifications_compact_header">%1$d× %2$s</string>
-    <string name="dashboard_extended_section_left">Activity &amp; stock</string>
-    <string name="dashboard_extended_section_right">Insulin &amp; delivery</string>
-    <string name="dashboard_cd_aimi_pulse">Last AIMI loop summary. Double tap to open full details.</string>
-    <string name="dashboard_chip_announced_aimi_pulse_details">Loop details opened</string>
-    <string name="closed_loop">Closed Loop</string>
-    <string name="trend">Trend</string>
-    <string name="aimi_context">AIMI Context</string>
-    <string name="reservoir_short">Reservoir</string>
-    <string name="infusion_age">Infusion Age</string>
-    <string name="sensor_age">Sensor Age</string>
-    <string name="pump_battery">Pump Battery</string>
-    <string name="last_sensor_value">Last sensor</string>
-    <string name="activity_pct">Activity</string>
-    <string name="basal">Basal</string>
-
-    <!-- Adaptive Smoothing Quality badge (phase 1 informational) -->
-    <string name="adaptive_smoothing_quality_badge_a11y">Adaptive smoothing quality</string>
-    <string name="adaptive_smoothing_quality_badge_ok">Adaptive smoothing confidence: OK</string>
-    <string name="adaptive_smoothing_quality_badge_uncertain">Adaptive smoothing confidence: uncertain</string>
-    <string name="adaptive_smoothing_quality_badge_bad">Adaptive smoothing confidence: low</string>
-
-    <string name="adaptive_smoothing_quality_dialog_title">Adaptive smoothing confidence</string>
-    <string name="adaptive_smoothing_quality_dialog_ok">Adaptive smoothing confidence: OK (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
-    <string name="adaptive_smoothing_quality_dialog_uncertain">Adaptive smoothing confidence: uncertain (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
-    <string name="adaptive_smoothing_quality_dialog_bad">Adaptive smoothing confidence: low (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
-
-    <!-- AIMI adaptation status -->
-    <string name="aimi_adaptation_status_title">AIMI adaptation status</string>
-    <string name="aimi_adaptation_status_no_data">Waiting for AIMI adaptation status. Results will appear after an AIMI loop run.</string>
-    <string name="aimi_adaptation_status_counts" comment="%1$d=active modules, %2$d=ready modules, %3$d=waiting or learning modules, %4$d=blocked or stale modules. Example: Active 2 · Ready 1 · Waiting/learning 5 · Attention 1">Active %1$d · Ready %2$d · Waiting/learning %3$d · Attention %4$d</string>
-    <string name="dashboard_aimi_adaptation_label">Adaptation</string>
-    <string name="dashboard_aimi_adaptation_no_data">Waiting for AIMI adaptation status</string>
-    <string name="dashboard_aimi_adaptation_a11y" comment="%1$s=the localized adaptation count summary. Example: AIMI adaptation status. Active 2 · Ready 1 · Waiting/learning 5 · Attention 1">AIMI adaptation status. %1$s</string>
-
-    <string name="aimi_adaptation_module_basal_neural_governance">Basal neural governance</string>
-    <string name="aimi_adaptation_module_unified_reactivity">Unified reactivity</string>
-    <string name="aimi_adaptation_module_basal_multi_scale">Basal multi-scale learner</string>
-    <string name="aimi_adaptation_module_pkpd">Adaptive PK/PD</string>
-    <string name="aimi_adaptation_module_online_learner">Online learner</string>
-    <string name="aimi_adaptation_module_night_growth_resistance">Night growth resistance</string>
-    <string name="aimi_adaptation_module_wcycle">Cycle adaptation</string>
-    <string name="aimi_adaptation_module_peak_governor">Peak governor</string>
-    <string name="aimi_adaptation_module_dia_governor">DIA governor</string>
-
-    <string name="aimi_adaptation_phase_disabled">Disabled</string>
-    <string name="aimi_adaptation_phase_waiting">Waiting</string>
-    <string name="aimi_adaptation_phase_learning">Learning</string>
-    <string name="aimi_adaptation_phase_ready">Ready</string>
-    <string name="aimi_adaptation_phase_active">Active</string>
-    <string name="aimi_adaptation_phase_stale">Stale</string>
-    <string name="aimi_adaptation_phase_blocked">Blocked</string>
-
-    <string name="aimi_adaptation_reason_feature_disabled">Feature is disabled</string>
-    <string name="aimi_adaptation_reason_waiting_for_samples">Waiting for enough samples</string>
-    <string name="aimi_adaptation_reason_waiting_for_events">Waiting for qualifying events</string>
-    <string name="aimi_adaptation_reason_waiting_for_feedbacks">Waiting for evaluated feedback</string>
-    <string name="aimi_adaptation_reason_waiting_for_observations">Waiting for observations</string>
-    <string name="aimi_adaptation_reason_warmup">Warm-up in progress</string>
-    <string name="aimi_adaptation_reason_learning_in_progress">Learning in progress</string>
-    <string name="aimi_adaptation_reason_ready">Ready to adapt</string>
-    <string name="aimi_adaptation_reason_active">Adaptation is active</string>
-    <string name="aimi_adaptation_reason_data_stale">Adaptation data is stale</string>
-    <string name="aimi_adaptation_reason_safety_hold">Held by a safety rule</string>
-    <string name="aimi_adaptation_reason_context_blocked">Blocked by the current context</string>
-    <string name="aimi_adaptation_reason_dependency_disabled">A required dependency is disabled</string>
-    <string name="aimi_adaptation_reason_no_result">No adaptation result yet</string>
-
-    <string name="aimi_adaptation_last_update_format" comment="%1$s=localized date and time, %2$s=localized freshness. Example: Last update: 7/24/26, 23:10 · 4 min ago">Last update: %1$s · %2$s</string>
-    <string name="aimi_adaptation_freshness_now">just now</string>
-    <string name="aimi_adaptation_freshness_minutes" comment="%1$d=whole minutes since the update. Example: 4 min ago">%1$d min ago</string>
-    <string name="aimi_adaptation_freshness_hours" comment="%1$d=whole hours since the update. Example: 2 h ago">%1$d h ago</string>
-    <string name="aimi_adaptation_no_module_update">No learner update yet</string>
-    <string name="aimi_adaptation_progress_format" comment="%1$s=evidence type, %2$d=completed evidence count, %3$d=required evidence count. Example: Samples: 4 / 12">%1$s: %2$d / %3$d</string>
-    <string name="aimi_adaptation_evidence_samples">Samples</string>
-    <string name="aimi_adaptation_evidence_events">Events</string>
-    <string name="aimi_adaptation_evidence_feedbacks">Feedback</string>
-    <string name="aimi_adaptation_evidence_observations">Observations</string>
-    <string name="aimi_adaptation_metrics_title">Metrics</string>
-
-    <string name="aimi_adaptation_metric_sample_count">Samples</string>
-    <string name="aimi_adaptation_metric_short_buffer_count">Short buffer</string>
-    <string name="aimi_adaptation_metric_medium_buffer_count">Medium buffer</string>
-    <string name="aimi_adaptation_metric_fasting_sample_count">Fasting samples</string>
-    <string name="aimi_adaptation_metric_short_update_count">Short updates</string>
-    <string name="aimi_adaptation_metric_medium_update_count">Medium updates</string>
-    <string name="aimi_adaptation_metric_long_update_count">Long updates</string>
-    <string name="aimi_adaptation_metric_short_analysis_count">Short analyses</string>
-    <string name="aimi_adaptation_metric_long_analysis_count">Long analyses</string>
-    <string name="aimi_adaptation_metric_pending_prediction_count">Pending predictions</string>
-    <string name="aimi_adaptation_metric_evaluated_feedback_count">Evaluated feedback</string>
-    <string name="aimi_adaptation_metric_release_count">Exercise-release corrections</string>
-    <string name="aimi_adaptation_metric_accepted_update_count">Accepted updates</string>
-    <string name="aimi_adaptation_metric_short_multiplier">Short multiplier</string>
-    <string name="aimi_adaptation_metric_medium_multiplier">Medium multiplier</string>
-    <string name="aimi_adaptation_metric_long_multiplier">Long multiplier</string>
-    <string name="aimi_adaptation_metric_combined_multiplier">Combined multiplier</string>
-    <string name="aimi_adaptation_metric_global_factor">Global factor</string>
-    <string name="aimi_adaptation_metric_short_factor">Short factor</string>
-    <string name="aimi_adaptation_metric_segment_factor">Segment factor</string>
-    <string name="aimi_adaptation_metric_sensitivity_factor">Sensitivity factor</string>
-    <string name="aimi_adaptation_metric_last_error">Last prediction error</string>
-    <string name="aimi_adaptation_metric_dia">DIA</string>
-    <string name="aimi_adaptation_metric_peak">Peak time</string>
-    <string name="aimi_adaptation_metric_tir">Time in range</string>
-    <string name="aimi_adaptation_metric_cv">Glucose variability</string>
-    <string name="aimi_adaptation_metric_confidence">Confidence</string>
-    <string name="aimi_adaptation_metric_smb_multiplier">SMB multiplier</string>
-    <string name="aimi_adaptation_metric_basal_multiplier">Basal multiplier</string>
-    <string name="aimi_adaptation_metric_extra_iob_headroom">Extra IOB headroom</string>
-    <string name="aimi_adaptation_metric_day_in_cycle">Day in cycle</string>
-    <string name="aimi_adaptation_metric_ic_multiplier">IC multiplier</string>
-    <string name="aimi_adaptation_metric_effective_value">Effective value</string>
-    <string name="aimi_adaptation_metric_prior_value">Prior value</string>
-    <string name="aimi_adaptation_metric_learned_value">Learned value</string>
-
-    <string name="aimi_adaptation_metric_value_count" comment="%1$.0f=a whole-number count. Example: 12">%1$.0f</string>
-    <string name="aimi_adaptation_metric_value_number" comment="%1$.3f=a decimal metric value. Example: 1.025">%1$.3f</string>
-    <string name="aimi_adaptation_metric_value_hours" comment="%1$.1f=a duration in hours. Example: 6.0 h">%1$.1f h</string>
-    <string name="aimi_adaptation_metric_value_minutes" comment="%1$.0f=a duration in minutes. Example: 55 min">%1$.0f min</string>
-    <string name="aimi_adaptation_metric_value_percent" comment="%1$.1f=a percentage value. Example: 82.5%">%1$.1f%%</string>
-    <string name="aimi_adaptation_metric_value_units" comment="%1$.2f=insulin units. Example: 0.50 U">%1$.2f U</string>
-    <string name="aimi_adaptation_metric_value_mgdl" comment="%1$.1f=a glucose prediction error in mg/dL. Example: 12.5 mg/dL">%1$.1f mg/dL</string>
+  <string name="disabled_loop">Loop Disabled</string>
+  <string name="calculator_label">Calculator</string>
+  <!-- Profile -->
+  <!-- localprofile moved to core:ui module -->
+  <string name="localprofile_shortname">LP</string>
+  <string name="description_profile_local">Define a profile describing your insulin needs.</string>
+  <string name="a11y_add_new_to_list">add new to list</string>
+  <string name="do_you_want_switch_profile">Do you want to switch profile and discard changes made to current profile?</string>
+  <string name="save_or_reset_changes_first">Save or reset current changes first</string>
+  <string name="delete_current_profile">Delete current profile?</string>
+  <string name="units_colon">Units:</string>
+  <string name="missing_profile_name">Missing profile name</string>
+  <string name="error_in_ic_values">Error in IC values</string>
+  <string name="error_in_basal_values">Error in basal values</string>
+  <string name="error_in_target_values">Error in target values</string>
+  <string name="error_in_isf_values">Error in ISF values</string>
+  <string name="profile_name_contains_dot">Some of profile names contains dots.\nThis is not supported by NS.\nProfiles will not be uploaded to NS.</string>
+  <string name="invalid_profile_not_accepted">Invalid profile %1$s not accepted from NS</string>
+  <string name="view">View</string>
+  <string name="errors">Errors</string>
+  <string name="select_profile">Select profile to edit</string>
+  <string name="profile_name">Profile name:</string>
+  <string name="a11y_add_new_profile">add new profile</string>
+  <string name="a11y_clone_profile">clone current profile</string>
+  <!-- Dashboard -->
+  <string name="graph_menu_divider_header">Graph</string>
+  <string name="statuslights_cannula_age">cannula age</string>
+  <string name="statuslights_patch_pump_age">patch pump age</string>
+  <string name="dashboard_nav_home">Home</string>
+  <string name="dashboard_nav_history">History</string>
+  <string name="dashboard_nav_bolus">Bolus/Carbs</string>
+  <string name="dashboard_nav_adjustments">Adjustments</string>
+  <string name="dashboard_nav_modes">Modes</string>
+  <string name="dashboard_modes_description">Manage your personalized modes and trigger their actions instantly.</string>
+  <string name="dashboard_modes_list_title">Available modes</string>
+  <string name="dashboard_modes_empty">No user actions are available right now.</string>
+  <string name="dashboard_adjustments_details_title">Adjustments</string>
+  <string name="dashboard_adjustments_details_decisions">Loop decisions</string>
+  <string name="dashboard_adjustments_details_empty">No active adjustments.</string>
+  <string name="dashboard_nav_settings">Settings</string>
+  <string name="dashboard_adjustments">Active adjustments</string>
+  <string name="dashboard_no_adjustments">No active adjustments</string>
+  <string name="dashboard_graph_placeholder">Glucose graph placeholder</string>
+  <string name="dashboard_graph_updated">Graph updated at %1$s</string>
+  <string name="dashboard_adjustment_temp_basal">Temp basal: %1$s</string>
+  <string name="dashboard_adjustment_temp_target" formatted="false">Temp target: %1$s (%2$s)</string>
+  <string name="dashboard_adjustment_extended_bolus">Extended bolus: %1$s</string>
+  <string name="dashboard_adjustment_glycemia" formatted="false">Glycemia: %1$s %2$s (Δ %3$s/min)</string>
+  <string name="dashboard_adjustment_prediction" formatted="false">Prediction: %1$s %2$s in %3$s</string>
+  <string name="dashboard_adjustment_scenario_projection" formatted="false">Scenario %1$s · Floor %2$s (+%3$s min)</string>
+  <string name="dashboard_adjustment_prediction_unavailable">Prediction: unavailable</string>
+  <string name="dashboard_adjustment_minutes">%1$d min</string>
+  <string name="dashboard_adjustment_iob_activity" formatted="false">IOB: %1$s | Activity: %2$s%%</string>
+  <string name="dashboard_adjustment_decision" formatted="false">AIMI decision: SMB %1$s U | Basal %2$s U/h</string>
+  <string name="dashboard_adjustment_decision_unavailable">AIMI decision: unavailable</string>
+  <string name="dashboard_adjustment_mode" formatted="false">Mode: %1$s (%2$s)</string>
+  <string name="dashboard_adjustment_pump" formatted="false">Pump: Reservoir %1$s | Site %2$s | Sensor %3$s</string>
+  <string name="dashboard_adjustment_safety" formatted="false">Safety: %1$s (%2$s)</string>
+  <string name="dashboard_adjustment_safety_unknown">Safety: unavailable</string>
+  <string name="dashboard_adjustment_safety_level_normal">Neutral</string>
+  <string name="dashboard_adjustment_safety_level_limited">Limited</string>
+  <string name="dashboard_adjustment_safety_level_critical">Critical</string>
+  <string name="dashboard_adjustment_reason_low">BG %1$s</string>
+  <string name="dashboard_adjustment_reason_high">BG %1$s</string>
+  <string name="dashboard_adjustment_reason_trend">%1$s trend</string>
+  <string name="dashboard_adjustment_reason_unknown">no recent data</string>
+  <string name="dashboard_adjustment_trend_rising">rising</string>
+  <string name="dashboard_adjustment_trend_falling">falling</string>
+  <string name="dashboard_adjustment_trend_stable">stable</string>
+  <string name="dashboard_mode_meal">Meal</string>
+  <string name="dashboard_mode_breakfast">Breakfast</string>
+  <string name="dashboard_mode_lunch">Lunch</string>
+  <string name="dashboard_mode_dinner">Dinner</string>
+  <string name="dashboard_mode_highcarb">High carb</string>
+  <string name="dashboard_mode_lowcarb">Low carb</string>
+  <string name="dashboard_mode_snack">Snack</string>
+  <string name="dashboard_mode_sport">Sport</string>
+  <string name="dashboard_mode_sleep">Sleep</string>
+  <string name="dashboard_user_actions_empty">No automation actions available</string>
+  <string name="run_question">Run %1$s?</string>
+  <string name="set_basal_question">Accept new temp basal:</string>
+  <string name="dashboard_iob_label">IOB</string>
+  <string name="dashboard_cob_label">COB</string>
+  <string name="dashboard_loop_label">Loop</string>
+  <string name="dashboard_trend">Trend</string>
+  <string name="dashboard_unicorn_status">AIMI status indicator</string>
+  <string name="a11y_delete_current_profile">delete current profile</string>
+  <string name="dia_short">DIA</string>
+  <string name="target_short">TARG</string>
+  <string name="basal_short">BAS</string>
+  <string name="isf_dynamic_label_warning">Your algorithm can provide dynamic calculation of ISF. Values below can be used only as a fallback in case of missing data or as a reference value only</string>
+  <string name="ic_dynamic_label_warning">Your algorithm can provide dynamic calculation of IC. Values below cen be used only as a fallback in case of missing data or as a reference value only</string>
+  <!-- Actions -->
+  <string name="actions">Actions</string>
+  <!-- manage moved to core:ui module -->
+  <string name="description_actions">Some buttons to quickly access common features</string>
+  <string name="actions_shortname">ACT</string>
+  <string name="status">Status</string>
+  <string name="pump_actions">Pump actions</string>
+  <string name="tempbasal_button">TempBasal</string>
+  <string name="extended_bolus_button">Extended Bolus</string>
+  <string name="extended_bolus_cancel_button">Cancel Extended Bolus</string>
+  <string name="tools">Tools</string>
+  <string name="nav_history_browser">History browser</string>
+  <string name="sensor_label">Sensor</string>
+  <string name="age_label">age:</string>
+  <string name="level_label">level:</string>
+  <string name="insulin_label">Insulin</string>
+  <string name="pb_label">Pump battery</string>
+  <string name="cannula">Cannula</string>
+  <string name="patch_pump">Patch pump</string>
+  <!-- Overview -->
+  <string name="graph_scale_6h">6h</string>
+  <string name="graph_scale_9h">9h</string>
+  <string name="graph_scale_12h">12h</string>
+  <string name="graph_scale_18h">18h</string>
+  <string name="graph_scale_24h">24h</string>
+  <string name="graph_long_scale_6h">6 hours</string>
+  <string name="graph_long_scale_9h">9 hours</string>
+  <string name="graph_long_scale_12h">12 hours</string>
+  <string name="graph_long_scale_18h">18 hours</string>
+  <string name="graph_long_scale_24h">24 hours</string>
+  <string name="graph_live">Live</string>
+  <string name="graph_following">Following</string>
+  <string name="graph_fixed">Fixed</string>
+  <string name="graph_no_data">No data</string>
+  <string name="graph_refresh_unknown">Refresh status unavailable</string>
+  <string name="graph_refresh_now">Updated just now</string>
+  <string name="graph_refresh_minutes_ago">Updated %1$d min ago</string>
+  <string name="a11y_graph">graph</string>
+  <string name="chart_menu">Chart menu</string>
+  <string name="a11y_graph_scale">select graph scale</string>
+  <string name="a11y_graph_scale_6h">graph scale 6 hours</string>
+  <string name="a11y_graph_scale_9h">graph scale 9 hours</string>
+  <string name="a11y_graph_scale_12h">graph scale 12 hours</string>
+  <string name="a11y_graph_scale_18h">graph scale 18 hours</string>
+  <string name="a11y_graph_scale_24h">graph scale 24 hours</string>
+  <string name="a11y_insulin_label">insulin</string>
+  <string name="a11y_bg_quality">blood glucose quality</string>
+  <string name="a11y_blood_glucose">blood glucose</string>
+  <string name="a11y_bg_outdated">outdated</string>
+  <!-- overview moved to core:ui module -->
+  <string name="overview_shortname">HOME</string>
+  <string name="description_overview">Displays the current state of your loop and buttons for most common actions</string>
+  <string name="overview_buttons_selection">Buttons</string>
+  <string name="overview_use_dashboard_title">Use dashboard as home</string>
+  <string name="overview_use_dashboard_summary">Use the AIMI hybrid dashboard as the main home content. In the modern (Compose) UI, search, Manage and the bottom bar stay available; in classic UI this switches the Home tab between dashboard and legacy overview.</string>
+  <string name="overview_show_hybrid_aimi_pulse_title">Show last AIMI run on dashboard</string>
+  <string name="overview_show_hybrid_aimi_pulse_summary">When enabled, shows the summary card under the glucose ring (last loop, SMB, etc.). Off by default to leave more room for the graph.</string>
+  <string name="overview_dashboard_extended_metrics_title">Dashboard: extended metrics</string>
+  <string name="overview_dashboard_extended_metrics_summary">Full two-column stats and AIMI trajectory strip. Off = compact row (steps, IOB, heart rate, TBR).</string>
+  <string name="dashboard_metrics_mode_simple">Simple</string>
+  <string name="dashboard_metrics_mode_extended">Extended</string>
+  <string name="dashboard_compact_label_steps">Pas</string>
+  <string name="dashboard_compact_label_iob">IOB</string>
+  <string name="dashboard_compact_label_hr">FC</string>
+  <string name="dashboard_compact_label_tbr">TBR</string>
+  <string name="show_calibration_button_summary">Sends a calibration to xDrip+ (ensure \'Accept Calibrations\' is enabled in xDrip+ under Inter-App settings).</string>
+  <string name="show_cgm_button_summary">Opens xDrip+ or Dexcom App (you can use back button to return to AAPS).</string>
+  <string name="not_available_full">Not available</string>
+  <string name="smscommunicator_pump_disconnected">Pump disconnected</string>
+  <string name="data_status">BG data status</string>
+  <!--    OverviewMenu-->
+  <string name="overview_show_predictions">Predictions</string>
+  <string name="overview_show_treatments">Treatments</string>
+  <string name="overview_show_heartRate">Heart Rate</string>
+  <string name="overview_show_deviation_slope">Deviation slope</string>
+  <string name="overview_show_activity">Activity</string>
+  <string name="overview_show_bgi">Blood Glucose Impact</string>
+  <string name="overview_show_sensitivity">Sensitivity change</string>
+  <string name="overview_show_deviations">Deviations</string>
+  <string name="overview_show_cob">Carbs On Board</string>
+  <string name="overview_show_iob">Insulin On Board</string>
+  <string name="overview_show_basals">Basals</string>
+  <string name="overview_show_abs_insulin">Absolute insulin</string>
+  <string name="overview_show_variable_sens">Variable sensitivity</string>
+  <string name="prediction_shortname">PRED</string>
+  <string name="basal_shortname">BAS</string>
+  <string name="treatments_shortname">TREAT</string>
+  <string name="cannula_usage">usage:</string>
+  <!--    Iob-->
+  <string name="iob_cob_calculator" translatable="false">IobCobCalculator</string>
+  <!--    PersistentNotification-->
+  <string name="ongoingnotificaction" translatable="false">Ongoing Notification</string>
+  <string name="description_persistent_notification">Shows an ongoing notification with a short overview of what your loop is doing</string>
+  <string name="old_data">OLD DATA</string>
+  <string name="overview_show_steps">Steps</string>
+  <string name="simple_mode_enabled">Simple mode enabled</string>
+  <string name="classic_description">Original skin</string>
+  <string name="lowres_description">Low Resolution skin</string>
+  <string name="buttonson_description">Buttons are always displayed on bottom of screen</string>
+  <string name="largedisplay_description">Large display</string>
+  <string name="minimal_skin_description">New skin dashboard</string>
+  <string name="notification_iob_short">%1$.1fU</string>
+  <string name="suspendloopfor1h">Suspend loop for 1h</string>
+  <string name="suspendloopfor2h">Suspend loop for 2h</string>
+  <string name="suspendloopfor3h">Suspend loop for 3h</string>
+  <string name="suspendloopfor10h">Suspend loop for 10 h</string>
+  <string name="disconnectpump">Disconnect pump</string>
+  <string name="disconnectpumpfor15m">Disconnect pump for 15 min</string>
+  <string name="disconnectpumpfor30m">Disconnect pump for 30 min</string>
+  <string name="disconnectpumpfor1h">Disconnect pump for 1 h</string>
+  <string name="disconnectpumpfor2h">Disconnect pump for 2 h</string>
+  <string name="disconnectpumpfor3h">Disconnect pump for 3 h</string>
+  <string name="resume">Resume</string>
+  <string name="reconnect">Reconnect Pump</string>
+  <string name="hypo_risk_notification_title">Hypo Risk</string>
+  <string name="hypo_risk_notification_text">Hypo risk: rapid drop detected. Check your glucose now.</string>
+  <string name="graph_range_updated">Graph range: %1$d hours</string>
+  <!-- Circle-Top Hybrid Dashboard -->
+  <string name="advisor_button">Advisor</string>
+  <string name="adjust_button">Adjust</string>
+  <string name="dashboard_run_loop">Run loop</string>
+  <string name="dashboard_loop_run_requested">Loop run requested</string>
+  <string name="dashboard_tir_today">Time in range - today</string>
+  <string name="dashboard_tir_stats_placeholder">Avg -- - A1C --</string>
+  <string name="dashboard_tir_stats_format" formatted="false">Avg %1$s - A1C %2$.1f%%</string>
+  <string name="prefs_button">Prefs</string>
+  <string name="stats_button">Stats</string>
+  <string name="dashboard_cd_chip_aimi_advisor">Open AIMI advisor recommendations</string>
+  <string name="dashboard_cd_chip_adjust">Open adjustment controls and loop actions</string>
+  <string name="dashboard_cd_chip_meal_mode">Open meal mode and preferences</string>
+  <string name="dashboard_cd_chip_aimi_context">Open AIMI context and statistics</string>
+  <string name="dashboard_chip_state_selected">selected</string>
+  <string name="dashboard_chip_state_not_selected">not selected</string>
+  <string name="dashboard_chip_announced_advisor_opened">Advisor opened</string>
+  <string name="dashboard_chip_announced_adjust_opened">Adjustments opened</string>
+  <string name="dashboard_chip_announced_meal_mode_opened">Meal mode opened</string>
+  <string name="dashboard_chip_announced_context_opened">AIMI context opened</string>
+  <string name="dashboard_aimi_pulse_title">Last AIMI run</string>
+  <string name="dashboard_aimi_pulse_title_with_age">Last AIMI run · %1$s</string>
+  <string name="dashboard_aimi_pulse_summary_none">No APS output yet. Run the loop or wait for the next glucose reading.</string>
+  <string name="dashboard_aimi_pulse_fallback" formatted="false">SMB %1$s U · scheduled basal %2$s U/h</string>
+  <string name="dashboard_aimi_pulse_hypo_prefix">Hypo risk —</string>
+  <string name="dashboard_aimi_pulse_meta" formatted="false">SMB %1$s U · demand %2$s · AutoSens %3$s%%</string>
+  <string name="dashboard_aimi_pulse_hint">Tap for full rationale and trajectory</string>
+  <string name="dashboard_aimi_telemetry_label">Trajectory layer</string>
+  <string name="dashboard_telemetry_inner_ring_summary">The thin inner ring is an AIMI telemetry arc: it blends trajectory relevance, trajectory health, and (if available) adaptive sensor-quality hint. It is not a separate “machine learning on/off” indicator.</string>
+  <string name="dashboard_glucose_ring_content_description" formatted="false">Glucose %1$s. %2$s. Outer ring: glucose range. Triangle: trend. Inner arc: AIMI trajectory relevance and health blend.</string>
+  <string name="dashboard_aimi_ml_confidence_title">AIMI signals</string>
+  <string name="dashboard_aimi_ml_strip_separator"> · </string>
+  <string name="dashboard_aimi_ml_strip_part_sensor">Sensor %1$s</string>
+  <string name="dashboard_aimi_ml_strip_relevance" formatted="false">Relevance %1$d%%</string>
+  <string name="dashboard_aimi_ml_strip_health" formatted="false">Trajectory health %1$d%%</string>
+  <string name="dashboard_aimi_ml_sensor_ok">OK</string>
+  <string name="dashboard_aimi_ml_sensor_uncertain">uncertain</string>
+  <string name="dashboard_aimi_ml_sensor_low">low</string>
+  <string name="dashboard_activity_tbr_basal_delivery_stopped">Basal off (TBR 0 U/h)</string>
+  <string name="dashboard_hero_status_reading_line">Reading · %1$s</string>
+  <string name="dashboard_hero_status_sensor_line">Sensor · %1$s</string>
+  <string name="dashboard_hero_status_reading_sensor_one_line" formatted="false">%1$s · %2$s</string>
+  <string name="dashboard_pump_pill_reservoir">Res. %1$s</string>
+  <string name="dashboard_pump_pill_battery">Batt. %1$s</string>
+  <string name="dashboard_pump_pill_site">Site %1$s</string>
+  <string name="dashboard_pump_pill_reservoir_a11y">Reservoir %1$s</string>
+  <string name="dashboard_pump_pill_battery_a11y">Pump battery %1$s</string>
+  <string name="dashboard_pump_pill_site_a11y">Infusion site age %1$s</string>
+  <string name="dashboard_pump_pill_sensor">Sens. %1$s</string>
+  <string name="dashboard_pump_pill_sensor_a11y">Sensor age %1$s</string>
+  <string name="dashboard_hero_sensor_badge_short">CGM %1$s</string>
+  <string name="dashboard_hero_sensor_dialog_title">CGM</string>
+  <!-- CGM warm-up hero ring (shown on the dashboard circle-top while the active sensor is warming up / (re)connecting and no fresh glucose is available). -->
+  <string name="dashboard_warmup_label">WARM-UP</string>
+  <string name="dashboard_warmup_phase_connecting">Connecting…</string>
+  <string name="dashboard_warmup_phase_reconnecting">Reconnecting…</string>
+  <string name="dashboard_warmup_phase_pairing">Pairing…</string>
+  <string name="dashboard_warmup_ends_at" comment="%1$s = local end-of-warm-up time, e.g. 14:05. Shown under the countdown.">Ends %1$s</string>
+  <string name="dashboard_warmup_a11y">Sensor warm-up in progress</string>
+  <!-- CGM sensor beginning-of-life / end-of-life subtext under the normal glucose hero. -->
+  <string name="dashboard_sensor_early_life" comment="%1$d = 1-based day of the sensor session, %2$d = whole hours since it started. Example: Day 1 · settling · 6 h" formatted="false">Day %1$d · settling · %2$d h</string>
+  <string name="dashboard_sensor_end_of_life" comment="%1$d = whole hours until the sensor expires. Example: Expires in 4 h">Expires in %1$d h</string>
+  <!-- Dashboard "new sensor" (staging) card, shown only while a second sensor is warmed up over the current one. -->
+  <string name="dashboard_staging_title_warmup">New sensor · warming up</string>
+  <string name="dashboard_staging_warmup_countdown" comment="%1$d = whole minutes remaining in the new sensor warm-up. Example: Ready in 25 min">Ready in %1$d min</string>
+  <string name="dashboard_staging_title_settling" comment="%1$d = whole hours until the new sensor has stabilised enough to switch to. Example: New sensor · stabilising · ready in 8 h">New sensor · stabilising · ready in %1$d h</string>
+  <string name="dashboard_staging_readings" comment="%1$d = how many glucose readings the new (staging) sensor has sent so far. Example: Readings collected: 12">Readings collected: %1$d</string>
+  <string name="dashboard_staging_ready">Ready to switch</string>
+  <string name="dashboard_staging_promote_button">Switch</string>
+  <string name="dashboard_staging_promote_ok">New sensor is now active</string>
+  <string name="dashboard_staging_promote_rejected_absent">No new sensor to switch to</string>
+  <string name="dashboard_staging_promote_rejected_not_settled">New sensor is not stabilised yet</string>
+  <string name="dashboard_staging_promote_rejected_no_glucose">New sensor has no valid reading yet</string>
+  <string name="dashboard_staging_promote_rejected_no_recent_glucose">New sensor has not sent a reading in the last minutes</string>
+  <string name="dashboard_staging_promote_rejected_loop_busy">Loop is busy — try again in a moment</string>
+  <string name="dashboard_hero_sensor_dialog_message" formatted="false">%1$s\n\n%2$s</string>
+  <string name="graph_legend_smb">SMB</string>
+  <string name="graph_legend_scenario_floor">Floor</string>
+  <string name="graph_legend_scenario_best">Scenario</string>
+  <string name="graph_scenario_near_bg_hint">Scenario near current BG (equilibrium / weak signal)</string>
+  <string name="dashboard_graph_smb_toast">SMB · %1$s</string>
+  <string name="dashboard_metrics_overflow_a11y">Dashboard layout options</string>
+  <string name="graph_legend_tbr">TBR</string>
+  <string name="graph_legend_activity">Activity</string>
+  <string name="dashboard_hero_cgm_smoothing_chip_two" formatted="false">%1$s · %2$s</string>
+  <string name="dashboard_hero_cgm_smoothing_dialog_title">Sensor &amp; smoothing</string>
+  <string name="dashboard_notifications_compact_header" formatted="false">%1$d× %2$s</string>
+  <string name="dashboard_extended_section_left">Activity &amp; stock</string>
+  <string name="dashboard_extended_section_right">Insulin &amp; delivery</string>
+  <string name="dashboard_cd_aimi_pulse">Last AIMI loop summary. Double tap to open full details.</string>
+  <string name="dashboard_chip_announced_aimi_pulse_details">Loop details opened</string>
+  <string name="closed_loop">Closed Loop</string>
+  <string name="trend">Trend</string>
+  <string name="aimi_context">AIMI Context</string>
+  <string name="reservoir_short">Reservoir</string>
+  <string name="infusion_age">Infusion Age</string>
+  <string name="sensor_age">Sensor Age</string>
+  <string name="pump_battery">Pump Battery</string>
+  <string name="last_sensor_value">Last sensor</string>
+  <string name="activity_pct">Activity</string>
+  <string name="basal">Basal</string>
+  <!-- Adaptive Smoothing Quality badge (phase 1 informational) -->
+  <string name="adaptive_smoothing_quality_badge_a11y">Adaptive smoothing quality</string>
+  <string name="adaptive_smoothing_quality_badge_ok">Adaptive smoothing confidence: OK</string>
+  <string name="adaptive_smoothing_quality_badge_uncertain">Adaptive smoothing confidence: uncertain</string>
+  <string name="adaptive_smoothing_quality_badge_bad">Adaptive smoothing confidence: low</string>
+  <string name="adaptive_smoothing_quality_dialog_title">Adaptive smoothing confidence</string>
+  <string name="adaptive_smoothing_quality_dialog_ok" formatted="false">Adaptive smoothing confidence: OK (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
+  <string name="adaptive_smoothing_quality_dialog_uncertain" formatted="false">Adaptive smoothing confidence: uncertain (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
+  <string name="adaptive_smoothing_quality_dialog_bad" formatted="false">Adaptive smoothing confidence: low (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
+  <!-- AIMI adaptation status -->
+  <string name="aimi_adaptation_status_title">AIMI adaptation status</string>
+  <string name="aimi_adaptation_status_no_data">Waiting for AIMI adaptation status. Results will appear after an AIMI loop run.</string>
+  <string name="aimi_adaptation_status_counts" comment="%1$d=active modules, %2$d=ready modules, %3$d=waiting or learning modules, %4$d=blocked or stale modules. Example: Active 2 · Ready 1 · Waiting/learning 5 · Attention 1" formatted="false">Active %1$d · Ready %2$d · Waiting/learning %3$d · Attention %4$d</string>
+  <string name="dashboard_aimi_adaptation_label">Adaptation</string>
+  <string name="dashboard_aimi_adaptation_no_data">Waiting for AIMI adaptation status</string>
+  <string name="dashboard_aimi_adaptation_a11y" comment="%1$s=the localized adaptation count summary. Example: AIMI adaptation status. Active 2 · Ready 1 · Waiting/learning 5 · Attention 1">AIMI adaptation status. %1$s</string>
+  <string name="aimi_adaptation_module_basal_neural_governance">Basal neural governance</string>
+  <string name="aimi_adaptation_module_unified_reactivity">Unified reactivity</string>
+  <string name="aimi_adaptation_module_basal_multi_scale">Basal multi-scale learner</string>
+  <string name="aimi_adaptation_module_pkpd">Adaptive PK/PD</string>
+  <string name="aimi_adaptation_module_online_learner">Online learner</string>
+  <string name="aimi_adaptation_module_night_growth_resistance">Night growth resistance</string>
+  <string name="aimi_adaptation_module_wcycle">Cycle adaptation</string>
+  <string name="aimi_adaptation_module_peak_governor">Peak governor</string>
+  <string name="aimi_adaptation_module_dia_governor">DIA governor</string>
+  <string name="aimi_adaptation_phase_disabled">Disabled</string>
+  <string name="aimi_adaptation_phase_waiting">Waiting</string>
+  <string name="aimi_adaptation_phase_learning">Learning</string>
+  <string name="aimi_adaptation_phase_ready">Ready</string>
+  <string name="aimi_adaptation_phase_active">Active</string>
+  <string name="aimi_adaptation_phase_stale">Stale</string>
+  <string name="aimi_adaptation_phase_blocked">Blocked</string>
+  <string name="aimi_adaptation_reason_feature_disabled">Feature is disabled</string>
+  <string name="aimi_adaptation_reason_waiting_for_samples">Waiting for enough samples</string>
+  <string name="aimi_adaptation_reason_waiting_for_events">Waiting for qualifying events</string>
+  <string name="aimi_adaptation_reason_waiting_for_feedbacks">Waiting for evaluated feedback</string>
+  <string name="aimi_adaptation_reason_waiting_for_observations">Waiting for observations</string>
+  <string name="aimi_adaptation_reason_warmup">Warm-up in progress</string>
+  <string name="aimi_adaptation_reason_learning_in_progress">Learning in progress</string>
+  <string name="aimi_adaptation_reason_ready">Ready to adapt</string>
+  <string name="aimi_adaptation_reason_active">Adaptation is active</string>
+  <string name="aimi_adaptation_reason_data_stale">Adaptation data is stale</string>
+  <string name="aimi_adaptation_reason_safety_hold">Held by a safety rule</string>
+  <string name="aimi_adaptation_reason_context_blocked">Blocked by the current context</string>
+  <string name="aimi_adaptation_reason_dependency_disabled">A required dependency is disabled</string>
+  <string name="aimi_adaptation_reason_no_result">No adaptation result yet</string>
+  <string name="aimi_adaptation_last_update_format" comment="%1$s=localized date and time, %2$s=localized freshness. Example: Last update: 7/24/26, 23:10 · 4 min ago" formatted="false">Last update: %1$s · %2$s</string>
+  <string name="aimi_adaptation_freshness_now">just now</string>
+  <string name="aimi_adaptation_freshness_minutes" comment="%1$d=whole minutes since the update. Example: 4 min ago">%1$d min ago</string>
+  <string name="aimi_adaptation_freshness_hours" comment="%1$d=whole hours since the update. Example: 2 h ago">%1$d h ago</string>
+  <string name="aimi_adaptation_no_module_update">No learner update yet</string>
+  <string name="aimi_adaptation_progress_format" comment="%1$s=evidence type, %2$d=completed evidence count, %3$d=required evidence count. Example: Samples: 4 / 12" formatted="false">%1$s: %2$d / %3$d</string>
+  <string name="aimi_adaptation_evidence_samples">Samples</string>
+  <string name="aimi_adaptation_evidence_events">Events</string>
+  <string name="aimi_adaptation_evidence_feedbacks">Feedback</string>
+  <string name="aimi_adaptation_evidence_observations">Observations</string>
+  <string name="aimi_adaptation_metrics_title">Metrics</string>
+  <string name="aimi_adaptation_metric_sample_count">Samples</string>
+  <string name="aimi_adaptation_metric_short_buffer_count">Short buffer</string>
+  <string name="aimi_adaptation_metric_medium_buffer_count">Medium buffer</string>
+  <string name="aimi_adaptation_metric_fasting_sample_count">Fasting samples</string>
+  <string name="aimi_adaptation_metric_short_update_count">Short updates</string>
+  <string name="aimi_adaptation_metric_medium_update_count">Medium updates</string>
+  <string name="aimi_adaptation_metric_long_update_count">Long updates</string>
+  <string name="aimi_adaptation_metric_short_analysis_count">Short analyses</string>
+  <string name="aimi_adaptation_metric_long_analysis_count">Long analyses</string>
+  <string name="aimi_adaptation_metric_pending_prediction_count">Pending predictions</string>
+  <string name="aimi_adaptation_metric_evaluated_feedback_count">Evaluated feedback</string>
+  <string name="aimi_adaptation_metric_release_count">Exercise-release corrections</string>
+  <string name="aimi_adaptation_metric_accepted_update_count">Accepted updates</string>
+  <string name="aimi_adaptation_metric_short_multiplier">Short multiplier</string>
+  <string name="aimi_adaptation_metric_medium_multiplier">Medium multiplier</string>
+  <string name="aimi_adaptation_metric_long_multiplier">Long multiplier</string>
+  <string name="aimi_adaptation_metric_combined_multiplier">Combined multiplier</string>
+  <string name="aimi_adaptation_metric_global_factor">Global factor</string>
+  <string name="aimi_adaptation_metric_short_factor">Short factor</string>
+  <string name="aimi_adaptation_metric_segment_factor">Segment factor</string>
+  <string name="aimi_adaptation_metric_sensitivity_factor">Sensitivity factor</string>
+  <string name="aimi_adaptation_metric_last_error">Last prediction error</string>
+  <string name="aimi_adaptation_metric_dia">DIA</string>
+  <string name="aimi_adaptation_metric_peak">Peak time</string>
+  <string name="aimi_adaptation_metric_tir">Time in range</string>
+  <string name="aimi_adaptation_metric_cv">Glucose variability</string>
+  <string name="aimi_adaptation_metric_confidence">Confidence</string>
+  <string name="aimi_adaptation_metric_smb_multiplier">SMB multiplier</string>
+  <string name="aimi_adaptation_metric_basal_multiplier">Basal multiplier</string>
+  <string name="aimi_adaptation_metric_extra_iob_headroom">Extra IOB headroom</string>
+  <string name="aimi_adaptation_metric_day_in_cycle">Day in cycle</string>
+  <string name="aimi_adaptation_metric_ic_multiplier">IC multiplier</string>
+  <string name="aimi_adaptation_metric_effective_value">Effective value</string>
+  <string name="aimi_adaptation_metric_prior_value">Prior value</string>
+  <string name="aimi_adaptation_metric_learned_value">Learned value</string>
+  <string name="aimi_adaptation_metric_value_count" comment="%1$.0f=a whole-number count. Example: 12">%1$.0f</string>
+  <string name="aimi_adaptation_metric_value_number" comment="%1$.3f=a decimal metric value. Example: 1.025">%1$.3f</string>
+  <string name="aimi_adaptation_metric_value_hours" comment="%1$.1f=a duration in hours. Example: 6.0 h">%1$.1f h</string>
+  <string name="aimi_adaptation_metric_value_minutes" comment="%1$.0f=a duration in minutes. Example: 55 min">%1$.0f min</string>
+  <string name="aimi_adaptation_metric_value_percent" comment="%1$.1f=a percentage value. Example: 82.5%" formatted="false">%1$.1f%%</string>
+  <string name="aimi_adaptation_metric_value_units" comment="%1$.2f=insulin units. Example: 0.50 U">%1$.2f U</string>
+  <string name="aimi_adaptation_metric_value_mgdl" comment="%1$.1f=a glucose prediction error in mg/dL. Example: 12.5 mg/dL">%1$.1f mg/dL</string>
 </resources>
-
