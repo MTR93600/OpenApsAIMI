@@ -1,5 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
+
     <!-- Fonte -->
     <string name="ns_client_bg">Glicemia NSClient</string>
     <string name="ns_client_bg_short">NS BG</string>
