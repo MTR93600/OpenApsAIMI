@@ -69,7 +69,6 @@ import app.aaps.plugins.source.dexcomoneplus.identity.OnePlusAdvCandidate
 import app.aaps.plugins.source.dexcomoneplus.identity.OnePlusGs1ApplicatorParser
 import app.aaps.plugins.source.dexcomoneplus.identity.OnePlusSensorIdentity
 import app.aaps.plugins.source.dexcomoneplus.identity.OnePlusSensorStore
-import app.aaps.plugins.source.dexcomoneplus.identity.OnePlusStoredSession
 import app.aaps.plugins.source.dexcomoneplus.scan.OnePlusBleScannerAndroid
 import app.aaps.plugins.source.dexcomoneplus.scan.OnePlusScanResult
 import app.aaps.plugins.source.dexcomoneplus.session.OnePlusSessionStart
@@ -205,17 +204,31 @@ private fun DexcomOnePlusStartScreen(
 
     // Re-seed the whole form from the slot's own store, on first composition and on every slot
     // switch, so what is shown always belongs to the sensor being started.
+    //
+    // The selection is not seeded here: it follows the code on screen, in the effect below.
     LaunchedEffect(slot) {
-        scanner.sessionHint = storedSession
         applicatorInput = storedSession?.identity?.rawGs1 ?: storedSession?.identity?.pin.orEmpty()
         parsedIdentity = storedSession?.identity ?: OnePlusGs1ApplicatorParser.parse(applicatorInput)
-        selected = storedSession?.lastMac?.let { mac ->
-            OnePlusScanResult(address = mac, name = storedSession.lastDeviceName, rssi = 0)
-        }
+        selected = null
         deviceChosenByUser = false
         devices.clear()
         errorText = null
         newSensorConfirmPending = false
+    }
+
+    // Rank this scan from the identity ON SCREEN, not from the store. As soon as the code belongs to
+    // another sensor, the stored MAC and ADV name lose their boost — see OnePlusAdvCandidate.
+    val scanHint = remember(storedSession, parsedIdentity) {
+        OnePlusAdvCandidate.scanHintFor(storedSession, parsedIdentity)
+    }
+    // The selection follows the code: the stored sensor stays pre-selected while its own code is on
+    // screen (a reconnect needs no choosing), and the moment the code becomes another sensor's the
+    // pre-selection goes, because from there on only the user knows which transmitter is theirs.
+    LaunchedEffect(scanHint) {
+        scanner.sessionHint = scanHint
+        if (!deviceChosenByUser) {
+            selected = OnePlusBleScannerAndroid.autoSelect(devices, scanHint)
+        }
     }
 
     val codeRequired = stringResource(R.string.dexcom_oneplus_pairing_code_required)
@@ -343,19 +356,18 @@ private fun DexcomOnePlusStartScreen(
         }
         devices.clear()
         deviceChosenByUser = false
-        scanner.sessionHint = sensorStore.load()
+        scanner.sessionHint = scanHint
+        selected = OnePlusBleScannerAndroid.autoSelect(devices, scanHint)
         scanner.startScan { hit ->
             mainHandler.post {
                 val idx = devices.indexOfFirst { it.address == hit.address }
                 if (idx >= 0) devices[idx] = hit else devices.add(hit)
-                // Only a suggestion, and only while the user has not chosen: the ranking scores a
-                // match with the STORED sensor far above everything else, so on a re-scan it kept
-                // pulling the selection back to the sensor already in use instead of the new one
-                // the user tapped.
+                // The live hint, not the one captured when this lambda was built: the user may type
+                // another code while the scan runs. One sensor in range may be selected for them,
+                // two or more may not. This is an assignment on purpose — when a second sensor turns
+                // up, the single-hit suggestion has to go, and Connect goes with it.
                 if (!deviceChosenByUser) {
-                    autoSelectBest(devices, scanner.sessionHint)?.let { best ->
-                        selected = best
-                    }
+                    selected = OnePlusBleScannerAndroid.autoSelect(devices, scanner.sessionHint)
                 }
             }
         }
@@ -376,7 +388,7 @@ private fun DexcomOnePlusStartScreen(
     }
 
     val rankedDevices = devices.sortedByDescending {
-        OnePlusAdvCandidate.rankScore(it.name, it.address, it.rssi, scanner.sessionHint)
+        OnePlusAdvCandidate.rankScore(it.name, it.address, it.rssi, scanHint)
     }
     val connectAction: @Composable ColumnScope.() -> Unit = {
         ConnectAction(
@@ -710,6 +722,12 @@ private fun ScanHeader(
                 Text(stringResource(R.string.dexcom_oneplus_scan_stop))
             }
         }
+        // Why every nearby sensor is listed, and why the app cannot choose for the user.
+        Text(
+            text = stringResource(R.string.dexcom_oneplus_scan_pick_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -877,15 +895,5 @@ private fun ColumnScope.ConnectAction(
                 stringResource(R.string.dexcom_oneplus_connect_follow)
             },
         )
-    }
-}
-
-private fun autoSelectBest(
-    devices: List<OnePlusScanResult>,
-    session: OnePlusStoredSession?,
-): OnePlusScanResult? {
-    if (devices.isEmpty()) return null
-    return devices.maxByOrNull {
-        OnePlusAdvCandidate.rankScore(it.name, it.address, it.rssi, session)
     }
 }

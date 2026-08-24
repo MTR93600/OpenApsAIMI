@@ -34,6 +34,11 @@ import java.util.concurrent.atomic.AtomicReference
  * The known-MAC pre-connect wait uses a platform [ScanFilter], allowing delivery while the screen
  * is off on Android/Samsung.
  *
+ * The 4-digit pairing code plays no part on this path. It is the KEKS password and is checked at
+ * Connect only. It is not carried in the advertisement, so the scan can narrow the list down to the
+ * G7/ONE+ family and rank it, and no further: telling two ONE+ apart is the user's call — see
+ * [autoSelectSingle].
+ *
  * ⚠️ ASYNC IMPACT: [OnePlusScanListener.onDevice] on binder thread — hop to main for Compose.
  */
 @SuppressLint("MissingPermission")
@@ -371,7 +376,10 @@ class OnePlusBleScannerAndroid(
         val febcOk = hasAdvUuid && !g6MarketingName
         if (!candidate && !febcOk && !nameMatches(name)) return
         // When we have a sticky session, drop weak unrelated FEBC noise unless name/MAC matches.
-        if (hint != null && !candidate && febcOk && !nameMatches(name)) return
+        // "Sticky" means the hint really knows a transmitter. A hint that only carries the code on
+        // screen knows none, and must not hide the nameless FEBC advertisement of a new sensor.
+        val sticky = !hint?.lastMac.isNullOrBlank() || !hint?.lastDeviceName.isNullOrBlank()
+        if (sticky && !candidate && febcOk && !nameMatches(name)) return
 
         val hit = OnePlusScanResult(address = address, name = name, rssi = result.rssi)
             .apply { seenElapsedMs = SystemClock.elapsedRealtime() }
@@ -438,6 +446,39 @@ class OnePlusBleScannerAndroid(
         }
 
         fun nameMatches(name: String?): Boolean = OnePlusAdvCandidate.nameMatchesSoft(name)
+
+        /**
+         * The sensor a screen may select on its own, out of what the scan heard.
+         *
+         * Exactly one hit, and only then. The 4-digit code is the KEKS password and is not in the
+         * advertisement, so with two ONE+ in range no score can tell which one the user just
+         * applied: the strongest signal may be the neighbour's, and the best ranked one may be the
+         * sensor being replaced. Picking either would send the user into a five minute connect with
+         * the wrong transmitter. Two or more is a question, and the user answers it by tapping a row.
+         *
+         * Nothing heard means nothing to connect to, so that answer is null as well.
+         */
+        fun autoSelectSingle(devices: List<OnePlusScanResult>): OnePlusScanResult? = devices.singleOrNull()
+
+        /**
+         * The transmitter the start screen may select on its own, given what the scan heard so far.
+         *
+         * Two cases, and the code on screen is what tells them apart:
+         * - The code belongs to the stored sensor, so this is a reconnect or a repair of the session
+         *   already running. That sensor is the answer, even among several: the user is not choosing
+         *   anything new. A live sighting of it is preferred over the stored one, because it carries
+         *   the fresh ADV the driver connects in-window with.
+         * - The code belongs to another sensor. Nothing sticky may apply then, and only a single hit
+         *   may be selected — see [autoSelectSingle].
+         *
+         * Feed it the session from `OnePlusAdvCandidate.scanHintFor`, which is what drops the stored
+         * MAC as soon as the code on screen is another sensor.
+         */
+        fun autoSelect(devices: List<OnePlusScanResult>, hint: OnePlusStoredSession?): OnePlusScanResult? {
+            val storedMac = hint?.lastMac?.takeIf { it.isNotBlank() } ?: return autoSelectSingle(devices)
+            return devices.firstOrNull { it.address.equals(storedMac, ignoreCase = true) }
+                ?: OnePlusScanResult(address = storedMac, name = hint.lastDeviceName, rssi = 0)
+        }
 
         internal fun normalizeTargetAddress(address: String): String = address.uppercase()
 

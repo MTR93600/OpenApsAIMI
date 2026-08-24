@@ -88,7 +88,8 @@
     <string name="dexcom_oneplus_warmup_summary">~30 minute warm-up countdown</string>
     <string name="dexcom_oneplus_nav_back">Back</string>
     <string name="dexcom_oneplus_permissions_hint">Before pairing: allow nearby Bluetooth devices (and notifications if prompted). Keep the phone near the sensor during start and warm-up.</string>
-    <string name="dexcom_oneplus_scan_hint">Scan for nearby ONE+ / G7-family sensors (DX02 / DX01 / DXCM / Dex, or FEBC). Prefer the highlighted match when a prior MAC/name is stored. Stop other Dexcom / xDrip / Juggluco Direct apps first.</string>
+    <string name="dexcom_oneplus_scan_hint">Scan for nearby ONE+ / G7-family sensors (DX02 / DX01 / DXCM, or FEBC). Stop other Dexcom / xDrip / Juggluco Direct apps first.</string>
+    <string name="dexcom_oneplus_scan_pick_hint">Every ONE+ / G7 sensor in range is listed. The 4-digit code is not sent in the Bluetooth signal, so the app cannot use it to find your sensor. Pick the one you have just applied. The code is checked when you press Connect.</string>
     <string name="dexcom_oneplus_scan_start">Scan</string>
     <string name="dexcom_oneplus_scan_stop">Stop</string>
     <string name="dexcom_oneplus_scan_scanning">Scanning…</string>
