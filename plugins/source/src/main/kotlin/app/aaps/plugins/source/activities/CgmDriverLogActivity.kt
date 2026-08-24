@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -34,6 +36,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -183,7 +186,14 @@ internal fun CgmDriverLogScreen(
                 .padding(horizontal = AapsSpacing.medium),
             verticalArrangement = Arrangement.spacedBy(AapsSpacing.small),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(AapsSpacing.small)) {
+            // The chips scroll sideways. Three of them just fit a 360 dp phone today; a fourth
+            // driver would have pushed one off the edge with no way to reach it.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(AapsSpacing.small),
+            ) {
                 FilterChip(
                     selected = filter == DriverLogFilter.ALL,
                     onClick = { filter = DriverLogFilter.ALL },
@@ -203,10 +213,26 @@ internal fun CgmDriverLogScreen(
             if (lines.isEmpty()) {
                 Text(stringResource(R.string.cgm_driver_log_empty))
             } else {
-                Text(
-                    text = stringResource(R.string.cgm_driver_log_count, lines.size),
-                    style = MaterialTheme.typography.labelMedium,
-                )
+                // How many lines, and whether the screen is still following the end of the file.
+                // "Is it still moving?" is the question this screen is opened to answer.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.cgm_driver_log_count, lines.size),
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (atEnd) {
+                        Text(
+                            text = stringResource(R.string.cgm_driver_log_follow),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
                 SelectionContainer {
                     LazyColumn(
                         state = listState,

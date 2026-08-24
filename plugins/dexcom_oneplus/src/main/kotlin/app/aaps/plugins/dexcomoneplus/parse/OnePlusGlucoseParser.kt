@@ -44,14 +44,14 @@ object OnePlusGlucoseParser {
     fun toSample(
         mgdl: Double,
         timestampMs: Long,
-        trendArrowRaw: String? = null,
+        trendSlopeMgdlPerMin: Double? = null,
         sequence: Long? = null,
     ): OnePlusGlucoseSample? {
         val safe = sanitizeMgdl(mgdl) ?: return null
         return OnePlusGlucoseSample(
             mgdl = safe,
             timestampMs = timestampMs,
-            trendArrowRaw = trendArrowRaw,
+            trendSlopeMgdlPerMin = trendSlopeMgdlPerMin,
             sequence = sequence,
         )
     }
@@ -110,7 +110,7 @@ object OnePlusGlucoseParser {
             toSample(
                 mgdl = glucose.toDouble(),
                 timestampMs = nowMs,
-                trendArrowRaw = trendToRaw(trend),
+                trendSlopeMgdlPerMin = trendToSlope(trend),
                 sequence = sequence,
             )
         } else {
@@ -161,7 +161,7 @@ object OnePlusGlucoseParser {
             toSample(
                 mgdl = glucose.toDouble(),
                 timestampMs = ts,
-                trendArrowRaw = trendToRaw(trend),
+                trendSlopeMgdlPerMin = trendToSlope(trend),
                 sequence = sequence,
             )
         } else {
@@ -179,10 +179,13 @@ object OnePlusGlucoseParser {
         )
     }
 
-    /** Upstream: `trend != 127 ? trend / 10.0 : NaN` → string for [OnePlusGlucoseSample.trendArrowRaw]. */
-    private fun trendToRaw(trend: Int): String? {
+    /**
+     * Upstream: `trend != 127 ? trend / 10.0 : NaN`. The EGV trend byte is a signed rate scaled by
+     * ten, so dividing by ten gives mg/dL per minute — see [OnePlusGlucoseSample.trendSlopeMgdlPerMin].
+     */
+    internal fun trendToSlope(trend: Int): Double? {
         if (trend == TREND_INVALID) return null
-        return (trend / 10.0).toString()
+        return trend / 10.0
     }
 
     /** Matches `cgm/dex/g7/BaseMessage.getUnsignedInt`. */

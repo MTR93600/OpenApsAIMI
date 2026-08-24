@@ -1,19 +1,25 @@
 package app.aaps.plugins.source.activities
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -22,28 +28,43 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
-import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.plugins.libre3.Libre3CgmDrivers
+import app.aaps.plugins.libre3.Libre3WarmupState
 import app.aaps.plugins.source.R
+import app.aaps.plugins.source.compose.CgmCard
+import app.aaps.plugins.source.compose.CgmCardHeader
+import app.aaps.plugins.source.compose.CgmCardTone
+import app.aaps.plugins.source.compose.CgmLazyColumn
+import app.aaps.plugins.source.compose.CgmScaffold
+import app.aaps.plugins.source.compose.CgmStateChip
+import app.aaps.plugins.source.compose.CgmWarmupRing
 import app.aaps.plugins.source.compose.Libre3UiLabels
 import app.aaps.plugins.source.compose.Libre3WarmupCountdown
+import app.aaps.plugins.source.compose.rememberCgmWindow
+import app.aaps.plugins.source.compose.toUiState
+import app.aaps.plugins.source.logs.DriverLogFilter
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.delay
 import javax.inject.Inject
+import kotlinx.coroutines.delay
+import java.text.DateFormat
+import java.util.Date
 
 /**
- * The warm-up countdown.
+ * Warm-up countdown for the Libre 3 session.
  *
- * The number only ever comes from the sensor. When the sensor has not said how long is left, a
- * dash is shown rather than a guess, because a made up countdown that runs out would tell the user
- * that glucose is coming when it is not.
+ * Same layout rule as the ONE+ warm-up screen: in portrait the ring is the subject and the details
+ * sit under it; on a short screen (phone in landscape) the ring moves beside them, which is the only
+ * arrangement that fits about 360 dp of height. The screen scrolls either way — the previous plain
+ * `Column` drew whatever did not fit past the bottom edge, where it could not be reached.
  */
 @AndroidEntryPoint
 class Libre3WarmupActivity : AppCompatActivity() {
@@ -55,16 +76,28 @@ class Libre3WarmupActivity : AppCompatActivity() {
         setContent {
             CompositionLocalProvider(LocalPreferences provides preferences) {
                 AapsTheme {
-                    Libre3WarmupScreen(onBack = { finish() })
+                    Libre3WarmupScreen(
+                        onBack = { finish() },
+                        onOpenLog = {
+                            startActivity(
+                                Intent(this, CgmDriverLogActivity::class.java)
+                                    .putExtra(CgmDriverLogActivity.EXTRA_FILTER, DriverLogFilter.LIBRE3.name)
+                            )
+                        },
+                    )
                 }
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun Libre3WarmupScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
+internal fun Libre3WarmupScreen(
+    onBack: () -> Unit,
+    onOpenLog: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val window = rememberCgmWindow()
     val driver = remember { Libre3CgmDrivers.default() }
     var state by remember { mutableStateOf(driver.warmupState()) }
     var remainingMs by remember { mutableStateOf<Long?>(null) }
@@ -80,46 +113,155 @@ internal fun Libre3WarmupScreen(onBack: () -> Unit, modifier: Modifier = Modifie
         }
     }
 
-    Scaffold(
+    CgmScaffold(
+        title = stringResource(R.string.libre3_warmup_title),
+        onNavigate = onBack,
         modifier = modifier,
-        topBar = {
-            AapsTopAppBar(
-                title = { Text(stringResource(R.string.libre3_warmup_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.libre3_nav_back),
-                        )
-                    }
-                },
-            )
-        },
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(AapsSpacing.medium),
-            verticalArrangement = Arrangement.spacedBy(AapsSpacing.small),
-        ) {
-            Text(
-                text = stringResource(R.string.libre3_warmup_heading),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(stringResource(R.string.libre3_status_phase, Libre3UiLabels.phaseLabel(state.phase)))
-            Text(
-                stringResource(
-                    R.string.libre3_warmup_countdown,
-                    remainingMs?.let { Libre3WarmupCountdown.format(it) }
-                        ?: stringResource(R.string.libre3_warmup_countdown_unknown),
+        actions = {
+            IconButton(onClick = onOpenLog) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.List,
+                    contentDescription = stringResource(R.string.cgm_driver_log_open),
                 )
-            )
-            if (finished) {
-                Text(stringResource(R.string.libre3_warmup_done))
-            } else {
-                Text(stringResource(R.string.libre3_warmup_note))
             }
+        },
+        constrainWidth = !window.isShort,
+    ) {
+        if (window.isShort) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(AapsSpacing.extraLarge),
+                horizontalArrangement = Arrangement.spacedBy(AapsSpacing.xxLarge),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CgmWarmupRing(
+                    // Libre 3 never reports a total, only what is left, so a fraction cannot be
+                    // drawn honestly. The full ring says "running" without inventing progress.
+                    progress = null,
+                    state = state.phase.toUiState(),
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .aspectRatio(1f),
+                ) {
+                    RingCenter(state, remainingMs)
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(AapsSpacing.large),
+                ) {
+                    PhaseChip(state)
+                    WarmupDetails(state = state, finished = finished)
+                }
+            }
+        } else {
+            CgmLazyColumn {
+                item(key = "ring") {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(AapsSpacing.large),
+                    ) {
+                        PhaseChip(state)
+                        CgmWarmupRing(
+                            progress = null,
+                            state = state.phase.toUiState(),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            RingCenter(state, remainingMs)
+                        }
+                    }
+                }
+                item(key = "details") {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(AapsSpacing.large),
+                    ) {
+                        WarmupDetails(state = state, finished = finished)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PhaseChip(state: Libre3WarmupState) {
+    CgmStateChip(
+        state = state.phase.toUiState(),
+        label = Libre3UiLabels.phaseLabel(state.phase),
+    )
+}
+
+@Composable
+private fun RingCenter(state: Libre3WarmupState, remainingMs: Long?) {
+    val countdown = remainingMs?.let { Libre3WarmupCountdown.format(it) }
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(AapsSpacing.extraSmall),
+    ) {
+        Text(
+            text = countdown ?: stringResource(R.string.libre3_warmup_countdown_unknown),
+            style = MaterialTheme.typography.headlineMedium,
+            color = if (state.phase == Libre3WarmupState.Phase.FAILED) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+            textAlign = TextAlign.Center,
+        )
+        if (countdown != null) {
+            Text(
+                text = stringResource(R.string.cgm_warmup_remaining_label),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.WarmupDetails(state: Libre3WarmupState, finished: Boolean) {
+    // A landmark the user can plan around, shown whenever the driver knows it.
+    state.endsAtEpochMs?.let { endsAt ->
+        Text(
+            text = stringResource(
+                R.string.cgm_warmup_ends_at,
+                DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(endsAt)),
+            ),
+            style = MaterialTheme.typography.titleMedium,
+        )
+    }
+    when {
+        state.phase == Libre3WarmupState.Phase.FAILED -> {
+            CgmCard(tone = CgmCardTone.Warning) {
+                CgmCardHeader(stringResource(R.string.cgm_warmup_what_happened))
+                Text(
+                    text = state.message ?: stringResource(R.string.libre3_phase_failed),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+
+        finished                                      -> {
+            Text(
+                text = stringResource(R.string.libre3_warmup_done),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+
+        else                                          -> {
+            Text(
+                text = stringResource(R.string.libre3_warmup_note),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
@@ -128,6 +270,6 @@ internal fun Libre3WarmupScreen(onBack: () -> Unit, modifier: Modifier = Modifie
 @Composable
 private fun Libre3WarmupScreenPreview() {
     MaterialTheme {
-        Libre3WarmupScreen(onBack = {})
+        Libre3WarmupScreen(onBack = {}, onOpenLog = {})
     }
 }

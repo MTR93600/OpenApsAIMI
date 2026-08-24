@@ -135,6 +135,51 @@
     <string name="dexcom_oneplus_staging_promote_rejected_no_recent_glucose">Staging sensor has not sent a reading in the last minutes. Wait until it reads again before switching to it.</string>
     <string name="dexcom_oneplus_staging_promote_rejected_loop_busy">The loop is busy right now — try again in a moment.</string>
 
+    <!-- Responsive screen frame: navigation, collapsible help, section headings -->
+    <string name="cgm_nav_close">Close</string>
+    <string name="cgm_help_expand">Show more</string>
+    <string name="cgm_help_collapse">Show less</string>
+    <string name="cgm_step_counter" comment="%1$d=current step number, %2$d=how many steps in total. Example: Step 2 of 4">Step %1$d of %2$d</string>
+    <string name="dexcom_oneplus_slot_production_short">Production</string>
+    <string name="dexcom_oneplus_slot_staging_short">Pre-soak</string>
+    <string name="dexcom_oneplus_help_how_to_start">How to start — 6 steps</string>
+    <string name="dexcom_oneplus_help_before_pairing">Before you pair — read this first</string>
+    <string name="dexcom_oneplus_help_permissions">Bluetooth permission and range</string>
+    <string name="dexcom_oneplus_help_slot">Production or pre-soak?</string>
+    <string name="dexcom_oneplus_section_pairing_code">Pairing code</string>
+    <string name="dexcom_oneplus_section_sensors_nearby">Sensors nearby</string>
+    <string name="dexcom_oneplus_scan_rescan">Rescan</string>
+    <string name="dexcom_oneplus_scan_last_used">last used</string>
+    <string name="dexcom_oneplus_scan_signal" comment="%1$d=signal strength in dBm, always negative. Example: Signal −67 dBm">Signal %1$d dBm</string>
+    <string name="dexcom_oneplus_scan_empty">No sensor found yet. Press Scan and keep the phone right next to the sensor.</string>
+    <string name="dexcom_oneplus_connect_target" comment="%1$s=sensor name or Bluetooth address. Example: Connect adopts DX02ABCD and opens warm-up.">Connect adopts %1$s and opens warm-up.</string>
+
+    <!-- Warm-up screen -->
+    <string name="cgm_warmup_remaining_label">remaining</string>
+    <string name="cgm_warmup_ends_at" comment="%1$s=localized time. Example: Ends at 3:45 PM">Ends at %1$s</string>
+    <string name="cgm_warmup_what_happened">What happened</string>
+    <string name="dexcom_oneplus_warmup_retry">Try connecting again</string>
+    <string name="dexcom_oneplus_warmup_start_other">Start another sensor</string>
+    <string name="dexcom_oneplus_warmup_stopped">stopped</string>
+    <string name="cgm_sensor_heading">Sensor</string>
+    <string name="cgm_sensor_name">Name</string>
+    <string name="cgm_sensor_address">Address</string>
+    <string name="dexcom_oneplus_open_status">Status</string>
+
+    <!-- Status screen -->
+    <string name="dexcom_oneplus_production_heading">Production sensor</string>
+    <string name="dexcom_oneplus_staging_heading_short">Pre-soak sensor</string>
+    <string name="cgm_actions_heading">Actions</string>
+    <string name="cgm_session_label">Bluetooth session</string>
+    <string name="dexcom_oneplus_sensor_age" comment="%1$s=already formatted duration. Example: Started 3 days ago">Started %1$s ago</string>
+    <string name="dexcom_oneplus_production_no_reading">No reading received yet.</string>
+    <string name="dexcom_oneplus_staging_readings_label">Readings collected</string>
+    <string name="dexcom_oneplus_staging_last_label">Last reading</string>
+    <string name="dexcom_oneplus_end_of_life_title">Sensor is near its end</string>
+    <string name="dexcom_oneplus_end_of_life_text">Starting a pre-soak sensor now means the next one is already warm when this one stops.</string>
+    <string name="dexcom_oneplus_start_presoak">Start a pre-soak sensor</string>
+    <string name="dexcom_oneplus_staging_none_short">A pre-soak sensor collects readings alongside the one in use. It never feeds the loop until you promote it here.</string>
+
     <!-- Libre 3 / Libre 3 Plus native BLE source -->
     <string name="libre3_native">Libre 3 / Libre 3 Plus</string>
     <string name="libre3_short">Libre3</string>
@@ -203,12 +248,31 @@
     <string name="cgm_driver_log_empty">Nothing yet. Lines appear here as soon as the driver starts working.</string>
     <string name="cgm_driver_log_count" comment="%1$d=how many lines are shown. Example: 320 lines">%1$d lines</string>
     <string name="cgm_driver_log_open">Driver log</string>
+    <string name="cgm_driver_log_follow">Follow</string>
+    <string name="cgm_driver_log_last_line" comment="%1$s=how long ago the newest line was read. Example: newest 5 s ago">newest %1$s ago</string>
 
     <string name="libre3_warmup_heading">Sensor starting</string>
     <string name="libre3_warmup_countdown" comment="%1$s=minutes and seconds left. Example: Time left: 29:45">Time left: %1$s</string>
     <string name="libre3_warmup_countdown_unknown">—</string>
     <string name="libre3_warmup_done">Warm-up finished. The sensor is active.</string>
     <string name="libre3_warmup_note">Keep the phone near the sensor while it warms up.</string>
+
+    <!-- Responsive Libre 3 screens: steps, section headings, collapsible help -->
+    <string name="libre3_step_permissions">Allow</string>
+    <string name="libre3_step_nfc">NFC</string>
+    <string name="libre3_step_scan">Scan</string>
+    <string name="libre3_step_warmup">Warm-up</string>
+    <string name="libre3_help_how_to_start">How to start — 5 steps</string>
+    <string name="libre3_help_before_scanning">Before you scan — read this first</string>
+    <string name="libre3_scan_heading">Scan the sensor</string>
+    <string name="libre3_scan_ready">Sensor scanned</string>
+    <string name="libre3_scan_waiting_chip">Waiting</string>
+    <string name="libre3_scan_problem">Scan did not work</string>
+    <string name="libre3_scan_retry_hint">Hold the phone flat on the sensor again. Nothing was saved, so there is nothing to undo.</string>
+    <string name="libre3_label_serial">Serial</string>
+    <string name="libre3_label_family">Family</string>
+    <string name="libre3_status_open_start">Scan a sensor</string>
+    <string name="libre3_status_driver_blocked_heading">Real driver is not in use</string>
     <string name="libre3_notif_title">Libre 3</string>
     <string name="libre3_notif_channel_name">Libre 3 sensor status</string>
     <string name="libre3_notif_channel_desc">Shows the connection and the warm-up of the sensor.</string>

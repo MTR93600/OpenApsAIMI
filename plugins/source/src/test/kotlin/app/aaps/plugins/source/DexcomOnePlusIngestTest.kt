@@ -20,7 +20,7 @@ class DexcomOnePlusIngestTest {
         val sample = OnePlusGlucoseSample(
             mgdl = 118.0,
             timestampMs = 1_700_000_000_000L,
-            trendArrowRaw = "FortyFiveUp",
+            trendSlopeMgdlPerMin = 1.2,
             sequence = 42L,
         )
 
@@ -35,11 +35,46 @@ class DexcomOnePlusIngestTest {
     }
 
     @Test
-    fun `mapToGv defaults unknown trend to NONE`() {
+    fun `mapToGv keeps NONE when the sensor sent no usable trend`() {
         val gv = DexcomOnePlusIngest.mapToGv(
-            OnePlusGlucoseSample(mgdl = 90.0, timestampMs = 1L, trendArrowRaw = null)
+            OnePlusGlucoseSample(mgdl = 90.0, timestampMs = 1L, trendSlopeMgdlPerMin = null)
         )
         assertThat(gv.trendArrow).isEqualTo(TrendArrow.NONE)
+    }
+
+    /**
+     * The regression this covers: the parser reports a slope in mg/dL per minute, and that used to
+     * be matched against arrow *names*. Nothing matched, so every reading arrived as NONE and the
+     * glucose history showed the invalid-arrow icon for the whole ONE+ list.
+     */
+    @Test
+    fun `a slope the parser really produces never degrades to NONE`() {
+        listOf(-5.0, -2.5, -1.4, -0.5, 0.0, 0.9, 1.2, 2.4, 4.0).forEach { slope ->
+            val gv = DexcomOnePlusIngest.mapToGv(
+                OnePlusGlucoseSample(mgdl = 118.0, timestampMs = 1L, trendSlopeMgdlPerMin = slope)
+            )
+            assertThat(gv.trendArrow).isNotEqualTo(TrendArrow.NONE)
+        }
+    }
+
+    @Test
+    fun `trendArrowFor maps slope to arrow at every boundary`() {
+        assertThat(DexcomOnePlusIngest.trendArrowFor(null)).isEqualTo(TrendArrow.NONE)
+        assertThat(DexcomOnePlusIngest.trendArrowFor(4.0)).isEqualTo(TrendArrow.DOUBLE_UP)
+        assertThat(DexcomOnePlusIngest.trendArrowFor(3.0)).isEqualTo(TrendArrow.DOUBLE_UP)
+        assertThat(DexcomOnePlusIngest.trendArrowFor(2.9)).isEqualTo(TrendArrow.SINGLE_UP)
+        assertThat(DexcomOnePlusIngest.trendArrowFor(2.0)).isEqualTo(TrendArrow.SINGLE_UP)
+        assertThat(DexcomOnePlusIngest.trendArrowFor(1.9)).isEqualTo(TrendArrow.FORTY_FIVE_UP)
+        assertThat(DexcomOnePlusIngest.trendArrowFor(1.0)).isEqualTo(TrendArrow.FORTY_FIVE_UP)
+        assertThat(DexcomOnePlusIngest.trendArrowFor(0.9)).isEqualTo(TrendArrow.FLAT)
+        assertThat(DexcomOnePlusIngest.trendArrowFor(0.0)).isEqualTo(TrendArrow.FLAT)
+        assertThat(DexcomOnePlusIngest.trendArrowFor(-0.9)).isEqualTo(TrendArrow.FLAT)
+        assertThat(DexcomOnePlusIngest.trendArrowFor(-1.0)).isEqualTo(TrendArrow.FORTY_FIVE_DOWN)
+        assertThat(DexcomOnePlusIngest.trendArrowFor(-1.9)).isEqualTo(TrendArrow.FORTY_FIVE_DOWN)
+        assertThat(DexcomOnePlusIngest.trendArrowFor(-2.0)).isEqualTo(TrendArrow.SINGLE_DOWN)
+        assertThat(DexcomOnePlusIngest.trendArrowFor(-2.9)).isEqualTo(TrendArrow.SINGLE_DOWN)
+        assertThat(DexcomOnePlusIngest.trendArrowFor(-3.0)).isEqualTo(TrendArrow.DOUBLE_DOWN)
+        assertThat(DexcomOnePlusIngest.trendArrowFor(-5.0)).isEqualTo(TrendArrow.DOUBLE_DOWN)
     }
 
     @Test

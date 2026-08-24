@@ -5,19 +5,9 @@ import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -28,14 +18,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
-import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
 import app.aaps.plugins.libre3.nfc.Libre3NfcFailure
@@ -45,7 +34,19 @@ import app.aaps.plugins.libre3.nfc.Libre3NfcSession
 import app.aaps.plugins.source.Libre3BlePermissionHelper
 import app.aaps.plugins.source.Libre3NativePlugin
 import app.aaps.plugins.source.R
+import app.aaps.plugins.source.compose.CgmCard
+import app.aaps.plugins.source.compose.CgmCardHeader
+import app.aaps.plugins.source.compose.CgmCardTone
+import app.aaps.plugins.source.compose.CgmHelpCard
+import app.aaps.plugins.source.compose.CgmLazyColumn
+import app.aaps.plugins.source.compose.CgmNavIcon
+import app.aaps.plugins.source.compose.CgmScaffold
+import app.aaps.plugins.source.compose.CgmStateChip
+import app.aaps.plugins.source.compose.CgmStepper
+import app.aaps.plugins.source.compose.CgmUiState
+import app.aaps.plugins.source.compose.CgmWidth
 import app.aaps.plugins.source.compose.Libre3UiLabels
+import app.aaps.plugins.source.compose.rememberCgmWindow
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -55,6 +56,11 @@ import javax.inject.Inject
  * There is nothing to type. The user holds the phone on the sensor, the NFC step reads it, stores
  * it, and only then may Bluetooth start. The reader runs only while this screen is in front of the
  * user, so a phone in a pocket never scans.
+ *
+ * Unlike the ONE+ start screen this one never splits into two panes: pairing is a single NFC tap,
+ * so there is no list of candidates and nothing to put in a second column. One column at every
+ * size is the honest layout here — the value of the redesign is that the screen scrolls, that the
+ * help folds away, and that the current step is always named.
  */
 @AndroidEntryPoint
 class Libre3StartActivity : AppCompatActivity() {
@@ -100,7 +106,6 @@ class Libre3StartActivity : AppCompatActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun Libre3StartScreen(
     activity: AppCompatActivity,
@@ -109,6 +114,7 @@ internal fun Libre3StartScreen(
     onSensorScanned: (Libre3NfcScanResult) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val window = rememberCgmWindow()
     var scanned by remember { mutableStateOf<Libre3NfcScanResult?>(null) }
     var failure by remember { mutableStateOf<Libre3NfcFailure?>(null) }
     var nfcAvailable by remember { mutableStateOf(true) }
@@ -143,74 +149,139 @@ internal fun Libre3StartScreen(
         }
     }
 
-    Scaffold(
+    // Allow → NFC on → hold the phone on the sensor → warming up. The same four-step shape as the
+    // ONE+ flow, with the content this one actually has.
+    val currentStep = when {
+        !permissionsGranted -> 0
+        !nfcAvailable       -> 1
+        scanned == null     -> 2
+        else                -> 3
+    }
+
+    CgmScaffold(
+        title = stringResource(R.string.libre3_start_title),
+        onNavigate = onBack,
         modifier = modifier,
-        topBar = {
-            AapsTopAppBar(
-                title = { Text(stringResource(R.string.libre3_start_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.libre3_nav_back),
+        // A task the user either completes by scanning or abandons — see the AapsTopAppBar convention.
+        navIcon = CgmNavIcon.Close,
+    ) {
+        CgmLazyColumn {
+            item(key = "stepper") {
+                CgmStepper(
+                    currentStep = currentStep,
+                    labels = listOf(
+                        stringResource(R.string.libre3_step_permissions),
+                        stringResource(R.string.libre3_step_nfc),
+                        stringResource(R.string.libre3_step_scan),
+                        stringResource(R.string.libre3_step_warmup),
+                    ),
+                    compact = window.width == CgmWidth.Compact,
+                )
+            }
+
+            item(key = "state") {
+                val result = scanned
+                val problem = failure
+                when {
+                    result != null       -> CgmCard(accent = true) {
+                        CgmCardHeader(stringResource(R.string.libre3_scan_ready)) {
+                            CgmStateChip(
+                                state = CgmUiState.Ready,
+                                label = stringResource(R.string.libre3_phase_ready),
+                            )
+                        }
+                        Text(
+                            text = stringResource(
+                                R.string.libre3_start_scanned,
+                                result.identity.serialNumber,
+                                Libre3UiLabels.generationLabel(result.identity.generation),
+                            ),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            text = stringResource(R.string.libre3_start_done_note),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                },
-            )
-        },
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(AapsSpacing.medium),
-            verticalArrangement = Arrangement.spacedBy(AapsSpacing.small),
-        ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-            ) {
-                Column(
-                    modifier = Modifier.padding(AapsSpacing.medium),
-                    verticalArrangement = Arrangement.spacedBy(AapsSpacing.small),
-                ) {
-                    Text(stringResource(R.string.libre3_start_steps))
-                    Text(stringResource(R.string.libre3_start_conflict_warning))
+
+                    problem != null      -> CgmCard(tone = CgmCardTone.Warning) {
+                        CgmCardHeader(stringResource(R.string.libre3_scan_problem))
+                        Text(
+                            text = Libre3UiLabels.nfcFailureLabel(problem),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        // Nothing was written, so saying so removes the fear of having half-paired
+                        // a sensor and makes retrying the obvious next move.
+                        Text(
+                            text = stringResource(R.string.libre3_scan_retry_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    !permissionsGranted  -> CgmCard {
+                        CgmCardHeader(stringResource(R.string.libre3_scan_heading))
+                        Text(
+                            text = stringResource(R.string.libre3_permissions_needed),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Button(
+                            onClick = {
+                                Libre3BlePermissionHelper.requestMissing(activity)
+                                permissionsGranted = Libre3BlePermissionHelper.hasAll(activity)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.libre3_request_permissions))
+                        }
+                    }
+
+                    !nfcAvailable        -> CgmCard(tone = CgmCardTone.Warning) {
+                        CgmCardHeader(stringResource(R.string.libre3_scan_heading))
+                        Text(
+                            text = stringResource(R.string.libre3_start_nfc_off),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+
+                    else                 -> CgmCard {
+                        CgmCardHeader(stringResource(R.string.libre3_scan_heading)) {
+                            CgmStateChip(
+                                state = CgmUiState.Working,
+                                label = stringResource(R.string.libre3_scan_waiting_chip),
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.libre3_start_scan_hint),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            text = stringResource(R.string.libre3_start_scan_waiting),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
 
-            if (!permissionsGranted) {
-                Text(stringResource(R.string.libre3_permissions_needed))
-                Button(
-                    onClick = {
-                        Libre3BlePermissionHelper.requestMissing(activity)
-                        permissionsGranted = Libre3BlePermissionHelper.hasAll(activity)
-                    }
-                ) {
-                    Text(stringResource(R.string.libre3_request_permissions))
-                }
-            }
-
-            if (!nfcAvailable) Text(stringResource(R.string.libre3_start_nfc_off))
-
-            val result = scanned
-            val problem = failure
-            when {
-                result != null  -> {
-                    Text(
-                        stringResource(
-                            R.string.libre3_start_scanned,
-                            result.identity.serialNumber,
-                            Libre3UiLabels.generationLabel(result.identity.generation),
+            item(key = "help") {
+                Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.large)) {
+                    CgmHelpCard(title = stringResource(R.string.libre3_help_how_to_start)) {
+                        Text(
+                            text = stringResource(R.string.libre3_start_steps),
+                            style = MaterialTheme.typography.bodyMedium,
                         )
-                    )
-                    Text(stringResource(R.string.libre3_start_done_note))
-                }
-
-                problem != null -> Text(Libre3UiLabels.nfcFailureLabel(problem))
-                nfcAvailable    -> {
-                    Text(stringResource(R.string.libre3_start_scan_hint))
-                    Text(stringResource(R.string.libre3_start_scan_waiting))
+                    }
+                    CgmHelpCard(
+                        title = stringResource(R.string.libre3_help_before_scanning),
+                        tone = CgmCardTone.Warning,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.libre3_start_conflict_warning),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
             }
         }
