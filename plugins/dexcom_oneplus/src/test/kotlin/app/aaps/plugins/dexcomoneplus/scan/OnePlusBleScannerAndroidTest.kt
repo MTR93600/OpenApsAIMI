@@ -1,6 +1,8 @@
 package app.aaps.plugins.dexcomoneplus.scan
 
 import android.bluetooth.le.ScanCallback
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorIdentity
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
@@ -111,5 +113,95 @@ class OnePlusBleScannerAndroidTest {
 
         assertThat(result.strongestForeign()).isEqualTo(strong)
         assertThat(OnePlusAdvWaitResult().strongestForeign()).isNull()
+    }
+
+    // ------------ autoSelectSingle(): what the screen may decide on its own ------------
+
+    @Test
+    fun `nothing heard is nothing to connect to`() {
+        assertThat(OnePlusBleScannerAndroid.autoSelectSingle(emptyList())).isNull()
+    }
+
+    @Test
+    fun `one sensor in range may be selected for the user`() {
+        val only = OnePlusScanResult(address = "AA:BB:CC:DD:EE:01", name = "DX021H", rssi = -60)
+
+        assertThat(OnePlusBleScannerAndroid.autoSelectSingle(listOf(only))).isEqualTo(only)
+    }
+
+    @Test
+    fun `two sensors in range are a question for the user, not a score`() {
+        // The 4-digit code is not in the advertisement, so nothing here can tell them apart.
+        val near = OnePlusScanResult(address = "AA:BB:CC:DD:EE:01", name = "DX021H", rssi = -45)
+        val far = OnePlusScanResult(address = "AA:BB:CC:DD:EE:02", name = "DX02aS", rssi = -85)
+
+        assertThat(OnePlusBleScannerAndroid.autoSelectSingle(listOf(near, far))).isNull()
+    }
+
+    @Test
+    fun `the sensor being replaced is not picked again when another one answers`() {
+        // Old sensor still on the arm and loud, new sensor just applied and quiet. Selecting the
+        // loud one would connect the user back to the sensor they are replacing.
+        val storedSensor = OnePlusScanResult(address = "AA:BB:CC:DD:EE:FF", name = "DX02aS", rssi = -45)
+        val newSensor = OnePlusScanResult(address = "11:22:33:44:55:66", name = "DX021H", rssi = -80)
+
+        assertThat(OnePlusBleScannerAndroid.autoSelectSingle(listOf(storedSensor, newSensor))).isNull()
+    }
+
+    // ------------ autoSelect(): the code on screen decides whether anything is sticky ------------
+
+    @Test
+    fun `a new code selects nothing while two sensors answer`() {
+        // scanHintFor drops the stored MAC when the code is another sensor's, so nothing is sticky.
+        val hintForNewSensor = OnePlusStoredSession(identity = OnePlusSensorIdentity(pin = "5678"))
+        val first = OnePlusScanResult(address = STORED_MAC, name = "DX02aS", rssi = -45)
+        val second = OnePlusScanResult(address = "11:22:33:44:55:66", name = "DX021H", rssi = -80)
+
+        assertThat(OnePlusBleScannerAndroid.autoSelect(listOf(first, second), hintForNewSensor)).isNull()
+    }
+
+    @Test
+    fun `a new code still takes the single sensor that answers`() {
+        val hintForNewSensor = OnePlusStoredSession(identity = OnePlusSensorIdentity(pin = "5678"))
+        val only = OnePlusScanResult(address = "11:22:33:44:55:66", name = "DX021H", rssi = -70)
+
+        assertThat(OnePlusBleScannerAndroid.autoSelect(listOf(only), hintForNewSensor)).isEqualTo(only)
+    }
+
+    @Test
+    fun `the stored sensor stays selected while its own code is on screen`() {
+        // A reconnect: the user is not choosing a sensor, so it is theirs even among several, and
+        // even before the scan has heard it.
+        val reconnect = storedSession()
+        val neighbour = OnePlusScanResult(address = "11:22:33:44:55:66", name = "DX021H", rssi = -50)
+
+        val beforeAnyScan = OnePlusBleScannerAndroid.autoSelect(emptyList(), reconnect)!!
+        assertThat(beforeAnyScan.address).isEqualTo(STORED_MAC)
+        assertThat(beforeAnyScan.name).isEqualTo("DX02aS")
+
+        val amongOthers = OnePlusBleScannerAndroid.autoSelect(listOf(neighbour), reconnect)!!
+        assertThat(amongOthers.address).isEqualTo(STORED_MAC)
+    }
+
+    @Test
+    fun `a live sighting of the stored sensor wins over the stored one`() {
+        // The live hit carries the fresh ADV the driver connects in-window with.
+        val live = OnePlusScanResult(address = STORED_MAC, name = "DX02aS", rssi = -62)
+        val neighbour = OnePlusScanResult(address = "11:22:33:44:55:66", name = "DX021H", rssi = -50)
+
+        val picked = OnePlusBleScannerAndroid.autoSelect(listOf(neighbour, live), storedSession())
+
+        assertThat(picked).isSameInstanceAs(live)
+    }
+
+    private fun storedSession() = OnePlusStoredSession(
+        identity = OnePlusSensorIdentity(pin = "1234"),
+        lastMac = STORED_MAC,
+        lastDeviceName = "DX02aS",
+    )
+
+    private companion object {
+
+        const val STORED_MAC = "AA:BB:CC:DD:EE:FF"
     }
 }

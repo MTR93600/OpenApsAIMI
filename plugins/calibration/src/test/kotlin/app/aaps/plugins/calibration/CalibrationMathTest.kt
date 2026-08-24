@@ -1,6 +1,9 @@
 package app.aaps.plugins.calibration
 
 import app.aaps.core.data.model.CAL
+import app.aaps.core.data.model.GV
+import app.aaps.core.data.model.SourceSensor
+import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.data.time.T
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
@@ -161,6 +164,127 @@ class CalibrationMathTest {
         assertThat(fit.mode).isEqualTo(FitMode.OffsetOnly)
         assertThat(fit.offset).isWithin(0.01).of(4.0)
     }
+
+    // ------------ sensorValueForPairing() ------------
+
+    @Test
+    fun sensorValueForPairing_noReadings_returnsNull() {
+        assertThat(sensorValueForPairing(emptyList(), now)).isNull()
+    }
+
+    @Test
+    fun sensorValueForPairing_singleReading_returnsThatReading() {
+        // A five minute sensor rarely has more than one reading in the window: the median must
+        // then behave exactly like the older code, which took that one reading.
+        assertThat(sensorValueForPairing(listOf(reading(now, 145.0)), now)!!).isWithin(0.01).of(145.0)
+    }
+
+    @Test
+    fun sensorValueForPairing_oddCount_returnsMiddleValue() {
+        val readings = listOf(reading(now, 150.0), reading(now - 60_000L, 140.0), reading(now - 120_000L, 145.0))
+        assertThat(sensorValueForPairing(readings, now)!!).isWithin(0.01).of(145.0)
+    }
+
+    @Test
+    fun sensorValueForPairing_evenCount_returnsMeanOfMiddleTwo() {
+        val readings = listOf(reading(now, 150.0), reading(now - 60_000L, 140.0))
+        assertThat(sensorValueForPairing(readings, now)!!).isWithin(0.01).of(145.0)
+    }
+
+    @Test
+    fun sensorValueForPairing_ignoresSingleNoisyReading() {
+        // One minute readings carry more noise per reading. A single spike must not become the
+        // sensor side of a calibration pair, which is what taking the newest reading would do.
+        val readings = listOf(
+            reading(now, 118.0), // the spike, and the newest
+            reading(now - 60_000L, 140.0),
+            reading(now - 120_000L, 142.0),
+            reading(now - 180_000L, 141.0),
+            reading(now - 240_000L, 139.0)
+        )
+        assertThat(sensorValueForPairing(readings, now)!!).isWithin(0.01).of(140.0)
+    }
+
+    @Test
+    fun sensorValueForPairing_usesOnlyTheNearestReadings() {
+        // Six readings, only the five nearest count. The far one is 60 mg/dL away and must not
+        // move the answer.
+        val readings = listOf(
+            reading(now, 140.0),
+            reading(now - 60_000L, 141.0),
+            reading(now - 120_000L, 142.0),
+            reading(now - 180_000L, 143.0),
+            reading(now - 240_000L, 144.0),
+            reading(now - 600_000L, 200.0)
+        )
+        assertThat(sensorValueForPairing(readings, now)!!).isWithin(0.01).of(142.0)
+    }
+
+    @Test
+    fun sensorValueForPairing_ordersByDistanceNotByListOrder() {
+        // The caller may hand the readings over in any order.
+        val readings = listOf(
+            reading(now - 600_000L, 200.0),
+            reading(now - 120_000L, 142.0),
+            reading(now, 140.0)
+        )
+        assertThat(sensorValueForPairing(readings, now, maxSamples = 1)!!).isWithin(0.01).of(140.0)
+    }
+
+    // ------------ newestGapMidpoint() ------------
+
+    @Test
+    fun newestGapMidpoint_continuousReadings_returnsNull() {
+        val readings = (0 until 10).map { reading(now - it * 60_000L, 140.0) }
+        assertThat(newestGapMidpoint(readings, T.mins(30).msecs())).isNull()
+    }
+
+    @Test
+    fun newestGapMidpoint_breakLongerThanThreshold_returnsMiddleOfBreak() {
+        val readings = listOf(
+            reading(now, 140.0),
+            reading(now - T.mins(60).msecs(), 140.0),
+            reading(now - T.mins(61).msecs(), 140.0)
+        )
+        assertThat(newestGapMidpoint(readings, T.mins(30).msecs())).isEqualTo(now - T.mins(30).msecs())
+    }
+
+    @Test
+    fun newestGapMidpoint_breakShorterThanThreshold_returnsNull() {
+        val readings = listOf(
+            reading(now, 140.0),
+            reading(now - T.mins(20).msecs(), 140.0),
+            reading(now - T.mins(21).msecs(), 140.0)
+        )
+        assertThat(newestGapMidpoint(readings, T.mins(30).msecs())).isNull()
+    }
+
+    @Test
+    fun newestGapMidpoint_stopsAtSessionStart() {
+        // The break belongs to the sensor before this one, so it is not reported again: the search
+        // stops as soon as the readings are older than the start of the running session.
+        val sessionStart = now - T.mins(30).msecs()
+        val readings = (0..7).map { reading(now - it * T.mins(5).msecs(), 140.0) } +
+            reading(now - T.mins(200).msecs(), 140.0)
+        assertThat(newestGapMidpoint(readings, T.mins(30).msecs(), notBefore = sessionStart)).isNull()
+        // Without that limit the same break is found.
+        assertThat(newestGapMidpoint(readings, T.mins(30).msecs())).isNotNull()
+    }
+
+    @Test
+    fun newestGapMidpoint_fewerThanTwoReadings_returnsNull() {
+        assertThat(newestGapMidpoint(emptyList(), T.mins(30).msecs())).isNull()
+        assertThat(newestGapMidpoint(listOf(reading(now, 140.0)), T.mins(30).msecs())).isNull()
+    }
+
+    private fun reading(timestamp: Long, value: Double): GV = GV(
+        timestamp = timestamp,
+        value = value,
+        raw = null,
+        noise = null,
+        trendArrow = TrendArrow.NONE,
+        sourceSensor = SourceSensor.UNKNOWN
+    )
 
     private fun entry(sensor: Double, fs: Double, ageDays: Long = 0L): CAL =
         CAL(

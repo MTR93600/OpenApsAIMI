@@ -30,6 +30,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
@@ -55,6 +56,8 @@ class LinearCalibrationPluginTest : TestBase() {
         whenever(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)).thenReturn(sensorChange(defaultSessionStart))
         whenever(persistenceLayer.getTherapyEventDataFromToTime(any(), any())).thenReturn(emptyList())
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(emptyList())
+        // Gap detection reads the stored readings, so every calibrate() touches this.
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(emptyList())
         plugin = LinearCalibrationPlugin(
             aapsLogger, rh, dateUtil, persistenceLayer, notificationManager, glucoseStatusProvider, rxBus
         )
@@ -195,13 +198,10 @@ class LinearCalibrationPluginTest : TestBase() {
     @Test
     fun calibrate_gapDetected_postsNotification() = runTest {
         whenever(rh.gs(any<Int>(), any())).thenReturn("Possible sensor change")
-        // Gap of 60min between data[0] and data[1]; default sessionStart is 12h ago so gap is within session
-        val data = mutableListOf(
-            value(now, 150.0),
-            value(now - T.mins(60).msecs(), 150.0),
-            value(now - T.mins(65).msecs(), 150.0)
-        )
-        plugin.calibrate(data, CalibrationContext.NONE)
+        // The break must be looked for in the STORED readings: bucketed data is filled in for every
+        // five minute slot, so a break can never be seen there.
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
         verify(notificationManager).post(
             eq(NotificationId.SENSOR_CHANGE_DETECTED),
             any<String>(),
@@ -214,10 +214,9 @@ class LinearCalibrationPluginTest : TestBase() {
     }
 
     @Test
-    fun calibrate_gapWithNearbySensorChange_skipsNotification() = runTest {
-        whenever(persistenceLayer.getTherapyEventDataFromToTime(any(), any())).thenReturn(
-            listOf(sensorChange(now - T.mins(35).msecs()))
-        )
+    fun calibrate_bucketedDataOnly_neverDetectsGap() = runTest {
+        // Guards the whole point of the fix: a gap-free reading table means no notification, even
+        // when the caller's bucketed data looks like it has a hole in it.
         val data = mutableListOf(
             value(now, 150.0),
             value(now - T.mins(60).msecs(), 150.0),
@@ -236,16 +235,55 @@ class LinearCalibrationPluginTest : TestBase() {
     }
 
     @Test
+    fun calibrate_sameGapTwice_notifiesOnce() = runTest {
+        whenever(rh.gs(any<Int>(), any())).thenReturn("Possible sensor change")
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        verify(notificationManager, times(1)).post(
+            any<NotificationId>(),
+            any<String>(),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            any<List<NotificationAction>>(),
+            anyOrNull()
+        )
+    }
+
+    @Test
+    fun calibrate_repeatedCalls_scanReadingsOnlyOncePerInterval() = runTest {
+        // On a one minute sensor calibrate() runs five times more often than it was written for.
+        // The scan must not read the database on every one of those runs.
+        repeat(5) { plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE) }
+        verify(persistenceLayer, times(1)).getBgReadingsDataFromTimeToTime(any(), any(), any())
+    }
+
+    @Test
+    fun calibrate_gapWithNearbySensorChange_skipsNotification() = runTest {
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
+        whenever(persistenceLayer.getTherapyEventDataFromToTime(any(), any())).thenReturn(
+            listOf(sensorChange(now - T.mins(35).msecs()))
+        )
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        verify(notificationManager, never()).post(
+            any<NotificationId>(),
+            any<String>(),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            any<List<NotificationAction>>(),
+            anyOrNull()
+        )
+    }
+
+    @Test
     fun calibrate_notificationAction_insertsSensorChange() = runTest {
         whenever(rh.gs(any<Int>(), any())).thenReturn("Possible sensor change")
         whenever(persistenceLayer.insertPumpTherapyEventIfNewByTimestamp(any(), any(), any(), any(), any(), any()))
             .thenReturn(PersistenceLayer.TransactionResult())
-        val data = mutableListOf(
-            value(now, 150.0),
-            value(now - T.mins(60).msecs(), 150.0),
-            value(now - T.mins(65).msecs(), 150.0)
-        )
-        plugin.calibrate(data, CalibrationContext.NONE)
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
 
         val actionsCaptor = argumentCaptor<List<NotificationAction>>()
         verify(notificationManager).post(
@@ -274,6 +312,26 @@ class LinearCalibrationPluginTest : TestBase() {
         val result = plugin.addEntry(bgMgdl = 150.0, timestamp = now)
         assertThat(result).isEqualTo(AddEntryResult.Accepted)
         verify(persistenceLayer).insertOrUpdateCalibrationEntry(eq(CAL(timestamp = now, fingerstickMgdl = 150.0, sensorMgdlAtPairing = 145.0)))
+    }
+
+    @Test
+    fun addEntry_oneMinuteReadings_pairsWithMedianNotWithTheNewest() = runTest {
+        // A one minute sensor is noisier per reading. Pairing on the newest reading alone would
+        // write the spike (118) into the entry and bend the fit; the median holds at 140.
+        whenever(glucoseStatusProvider.glucoseStatusData).thenReturn(glucoseStatus(shortAvgDelta = 0.5))
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), eq(false))).thenReturn(
+            listOf(
+                bgReading(now, 118.0),
+                bgReading(now - T.mins(1).msecs(), 140.0),
+                bgReading(now - T.mins(2).msecs(), 142.0),
+                bgReading(now - T.mins(3).msecs(), 141.0),
+                bgReading(now - T.mins(4).msecs(), 139.0)
+            )
+        )
+        assertThat(plugin.addEntry(bgMgdl = 150.0, timestamp = now)).isEqualTo(AddEntryResult.Accepted)
+        verify(persistenceLayer).insertOrUpdateCalibrationEntry(
+            eq(CAL(timestamp = now, fingerstickMgdl = 150.0, sensorMgdlAtPairing = 140.0))
+        )
     }
 
     @Test
@@ -428,6 +486,13 @@ class LinearCalibrationPluginTest : TestBase() {
 
     private fun glucoseStatus(shortAvgDelta: Double): GlucoseStatusSMB =
         GlucoseStatusSMB(glucose = 150.0, shortAvgDelta = shortAvgDelta, date = now)
+
+    /** Stored readings, newest first, with a 60 minute break inside the running session. */
+    private fun readingsWithGap(): List<GV> = listOf(
+        bgReading(now, 150.0),
+        bgReading(now - T.mins(60).msecs(), 150.0),
+        bgReading(now - T.mins(61).msecs(), 150.0)
+    )
 
     private fun bgReading(timestamp: Long, value: Double): GV = GV(
         timestamp = timestamp,

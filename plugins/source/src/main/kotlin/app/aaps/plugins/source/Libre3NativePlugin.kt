@@ -29,6 +29,8 @@ import app.aaps.plugins.libre3.Libre3GlucoseWatcher
 import app.aaps.plugins.libre3.Libre3LogMarkers
 import app.aaps.plugins.libre3.Libre3WarmupState
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
+import app.aaps.plugins.libre3.nfc.Libre3NfcSession
+import app.aaps.plugins.libre3.warmup.Libre3WarmupClock
 import app.aaps.plugins.source.activities.Libre3StartActivity
 import app.aaps.plugins.source.activities.Libre3StatusActivity
 import app.aaps.plugins.source.activities.Libre3WarmupActivity
@@ -180,7 +182,8 @@ class Libre3NativePlugin @Inject constructor(
             Libre3IntentKey.Start.withActivity(Libre3StartActivity::class.java),
             Libre3IntentKey.Warmup.withActivity(Libre3WarmupActivity::class.java),
             Libre3BooleanKey.UseRealSkeleton,
-            // Sensor age on the dashboard comes from the SENSOR_CHANGE therapy event this writes.
+            // The sensor age on the dashboard and the calibration session both come from the
+            // SENSOR_CHANGE therapy event written by `logSensorChangeOnce`.
             BooleanKey.BgSourceCreateSensorChange,
         ),
         icon = pluginDescription.icon,
@@ -225,7 +228,54 @@ class Libre3NativePlugin @Inject constructor(
      */
     fun onSensorChanged() {
         Libre3Ingest.reset()
+        // The scan has already stored when this sensor was started, so the sensor change can be
+        // written now instead of waiting for the first reading an hour later. That matters for the
+        // calibration plugin: its own warm-up window is counted from this event, so anchoring it on
+        // the real start means the user may calibrate as soon as the sensor is really settled.
+        logSensorChangeOnce(sensorStore.loadIdentity()?.activatedAtMs ?: Libre3NfcSession.UNKNOWN_ACTIVATION_TIME)
         aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: new sensor, ingest starts counting again")
+    }
+
+    /**
+     * Writes the `SENSOR_CHANGE` therapy event of the running sensor, once per sensor.
+     *
+     * Two things read that event, and both were left empty by this source until now: the sensor age
+     * on the dashboard, and the calibration plugin, which refuses to fit anything without a session
+     * to fit it in. [Libre3SensorChange] holds the rule and keeps it unique per sensor; this method
+     * only carries it out. It follows [BooleanKey.BgSourceCreateSensorChange], like every other
+     * source, and the check comes first so switching the setting on later still writes the event.
+     *
+     * Called on every accepted reading as well as after a scan, so a sensor that was started by an
+     * older build is repaired by itself. The database refuses a second event with the same moment,
+     * so the worst a repeat can cost is one insert that changes nothing.
+     *
+     * @param activatedAtMs when the sensor was started, in phone time; zero when it is not known.
+     */
+    private fun logSensorChangeOnce(activatedAtMs: Long) {
+        if (activatedAtMs <= Libre3NfcSession.UNKNOWN_ACTIVATION_TIME) return
+        if (!preferences.get(BooleanKey.BgSourceCreateSensorChange)) return
+        ioScope.launch {
+            val serial = Libre3SensorChange.serialToLog(
+                loggedSerial = sensorStore.loadSensorChangeLoggedSerial(),
+                serialNumber = sensorStore.loadIdentity()?.serialNumber,
+                activatedAtMs = activatedAtMs,
+                nowMs = System.currentTimeMillis(),
+            ) ?: return@launch
+            val result = persistenceLayer.insertCgmSourceData(
+                Sources.Libre3Native,
+                emptyList(),
+                emptyList(),
+                sensorInsertionTime = activatedAtMs,
+            )
+            // Marked only after the event really reached the database, so a failure in between
+            // leaves the sensor without a mark and the next reading tries again.
+            sensorStore.saveSensorChangeLoggedSerial(serial)
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "${Libre3LogMarkers.SESSION}: sensor change written activatedAtMs=$activatedAtMs " +
+                    "inserted=${result.sensorInsertionsInserted.size}",
+            )
+        }
     }
 
     /**
@@ -295,6 +345,10 @@ class Libre3NativePlugin @Inject constructor(
             )
             return
         }
+        // Self-healing net for a sensor that was started before this build, or whose scan happened
+        // while the setting was off. The sensor's own minute counter is the honest start: the
+        // reading time is built from it, so this gives back exactly the stored activation moment.
+        logSensorChangeOnce(Libre3WarmupClock.activationTimeFromReading(sample.timestampMs, sample.lifeCount))
         val glucoseValues = listOf(Libre3Ingest.mapToGv(sample))
         ioScope.launch {
             val result = persistenceLayer.insertCgmSourceData(
