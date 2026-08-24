@@ -133,11 +133,13 @@ class Libre3SensorStore(context: Context) : Libre3IdentityStore, Libre3SessionSt
             .putLong(KEY_ACTIVATED_AT, identity.activatedAtMs)
         if (serialChanged) {
             // A different sensor starts its own life counter and needs its own keys. Keeping the old
-            // ones would either block every new reading as "already seen" or send a stale key.
+            // ones would either block every new reading as "already seen" or send a stale key. The
+            // sensor change mark goes too, so a sensor that is put back on later is written again.
             editor.remove(KEY_LAST_LIFE_COUNT)
                 .remove(KEY_PHASE5_RAW_KEY)
                 .remove(KEY_K_ENC)
                 .remove(KEY_IV_ENC)
+                .remove(KEY_SENSOR_CHANGE_SERIAL)
         }
         val written = editor.commit()
         Libre3Log.i(
@@ -232,6 +234,26 @@ class Libre3SensorStore(context: Context) : Libre3IdentityStore, Libre3SessionSt
         prefs.edit().putInt(KEY_LAST_LIFE_COUNT, lifeCount).commit()
     }
 
+    /**
+     * Serial of the sensor whose start was already written as a sensor change, or null when none
+     * was written yet. It is what keeps that event unique per sensor across restarts.
+     */
+    fun loadSensorChangeLoggedSerial(): String? =
+        prefs.getString(KEY_SENSOR_CHANGE_SERIAL, null)?.takeIf { it.isNotBlank() }
+
+    /**
+     * Remembers that the start of [serialNumber] has been written as a sensor change.
+     *
+     * `apply` is enough here, unlike the writes the Bluetooth work depends on: the therapy event
+     * itself is already in the database and a second write of the same moment is refused there, so
+     * a lost mark can only cost one repeated and harmless insert.
+     */
+    @Synchronized
+    fun saveSensorChangeLoggedSerial(serialNumber: String) {
+        if (serialNumber.isBlank()) return
+        prefs.edit().putString(KEY_SENSOR_CHANGE_SERIAL, serialNumber).apply()
+    }
+
     /** Forgets the sensor and its keys. Used when the user starts a different sensor. */
     @Synchronized
     fun clear() {
@@ -248,6 +270,7 @@ class Libre3SensorStore(context: Context) : Libre3IdentityStore, Libre3SessionSt
             .remove(KEY_PHASE5_RAW_KEY)
             .remove(KEY_K_ENC)
             .remove(KEY_IV_ENC)
+            .remove(KEY_SENSOR_CHANGE_SERIAL)
             .commit()
     }
 
@@ -278,6 +301,7 @@ class Libre3SensorStore(context: Context) : Libre3IdentityStore, Libre3SessionSt
         private const val KEY_WEAR_MINUTES = "wear_minutes"
         private const val KEY_ACTIVATED_AT = "activated_at"
         private const val KEY_LAST_LIFE_COUNT = "last_life_count"
+        private const val KEY_SENSOR_CHANGE_SERIAL = "sensor_change_logged_serial"
         private const val KEY_PHASE5_RAW_KEY = "phase5_raw_key"
         private const val KEY_K_ENC = "k_enc"
         private const val KEY_IV_ENC = "iv_enc"
