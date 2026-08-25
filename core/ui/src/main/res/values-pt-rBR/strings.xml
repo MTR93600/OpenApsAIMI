@@ -245,7 +245,7 @@
   <string name="invalid">INVÁLIDO</string>
   <string name="login">Entrar</string>
   <string name="logout">Sair</string>
-  <string name="prime_fill">Preencher/Expurgar</string>
+  <string name="prime_fill">Preencher/Purgar</string>
   <string name="site_rotation">Rotação de local</string>
   <string name="edit_site">Editar</string>
   <string name="select_arrow">Selecionar seta</string>
@@ -513,7 +513,7 @@
   <string name="treatment_sensor_insert_desc">Registrar inserção do sensor CGM</string>
   <string name="treatment_battery_change_desc">Registrar troca de bateria da bomba</string>
   <string name="treatment_cannula_change_desc">Registrar troca de cânula/conjunto de infusão</string>
-  <string name="treatment_fill_desc">Expurgar e preencher a cânula</string>
+  <string name="treatment_fill_desc">Purgar e preencher a cânula</string>
   <string name="temp_basal">Basal temp.</string>
   <string name="user_entry">Entrada do usuário</string>
   <string name="aaps">AAPS</string>

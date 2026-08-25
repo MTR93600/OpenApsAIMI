@@ -49,7 +49,16 @@ android {
 
         buildConfigField("String", "BUILDVERSION", "\"${generateGitBuild()}-${generateDate()}\"")
     }
+    defaultConfig {
+        minSdk = Versions.wearMinSdk
+        targetSdk = Versions.wearTargetSdk
 
+        buildConfigField("String", "BUILDVERSION", "\"${generateGitBuild()}-${generateDate()}\"")
+
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+        }
+    }
     android {
         buildTypes {
             debug {
