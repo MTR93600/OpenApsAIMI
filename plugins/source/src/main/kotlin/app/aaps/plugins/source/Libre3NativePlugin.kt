@@ -4,6 +4,7 @@ import android.content.Context
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.ue.Sources
+import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -30,6 +31,7 @@ import app.aaps.plugins.libre3.Libre3LogMarkers
 import app.aaps.plugins.libre3.Libre3WarmupState
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
 import app.aaps.plugins.libre3.nfc.Libre3NfcSession
+import app.aaps.plugins.libre3.session.Libre3DisconnectPolicy
 import app.aaps.plugins.libre3.warmup.Libre3WarmupClock
 import app.aaps.plugins.source.activities.Libre3StartActivity
 import app.aaps.plugins.source.activities.Libre3StatusActivity
@@ -71,6 +73,7 @@ class Libre3NativePlugin @Inject constructor(
     private val context: Context,
     private val persistenceLayer: PersistenceLayer,
     private val availabilityProvider: Libre3AvailabilityProvider,
+    private val bleRadioPriority: BleRadioPriority,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -105,6 +108,9 @@ class Libre3NativePlugin @Inject constructor(
      * the only way back is a hand held over the sensor, which is what the log of 2026-08-22 shows.
      */
     private var reconnectWatchdog: Job? = null
+
+    /** Watches who owns the radio, so the driver backs off while a pump setup runs. */
+    private var radioLeaseWatcher: Job? = null
 
     private val driver
         get() = Libre3CgmDrivers.default()
@@ -214,8 +220,39 @@ class Libre3NativePlugin @Inject constructor(
             "${Libre3LogMarkers.SESSION}: plugin start realDriver=${Libre3CgmDrivers.useRealSkeleton} " +
                 "lastLifeCount=${sensorStore.loadLastLifeCount()} storedReadings=${recentTimestamps.size}",
         )
+        watchRadioLease()
         sensorStore.loadIdentity()?.let { identity ->
             connectStoredSensor(identity.bleAddress)
+        }
+    }
+
+    /**
+     * Gives the radio up while a pump setup holds it, and comes back when it is free.
+     *
+     * The link is kept and only its share of the radio is made smaller, so readings keep arriving
+     * through a pump change. The reconnect below is for the one case where the link had already
+     * gone before the lease was taken: the driver was held off the air while it was lent out, so
+     * somebody has to ask again once it is not.
+     */
+    private fun watchRadioLease() {
+        radioLeaseWatcher?.cancel()
+        radioLeaseWatcher = ioScope.launch {
+            var wasLentOut = false
+            bleRadioPriority.owner.collect { owner ->
+                val lentOut = owner != null
+                aapsLogger.info(
+                    LTag.BGSOURCE,
+                    "${Libre3LogMarkers.SESSION}: radio lease owner=$owner, backing off=$lentOut",
+                )
+                driver.setRadioBackOff(lentOut)
+                // Only a lease that has just ended needs a session asked for again. The first value
+                // of the flow is the state as it already is, and onStart connects for that one, so
+                // reacting to it here as well would ask for two sessions at start up.
+                if (wasLentOut && !lentOut && !driver.isSessionUp()) {
+                    sensorStore.loadIdentity()?.let { connectStoredSensor(it.bleAddress) }
+                }
+                wasLentOut = lentOut
+            }
         }
     }
 
@@ -297,6 +334,8 @@ class Libre3NativePlugin @Inject constructor(
     }
 
     override suspend fun onStop() {
+        radioLeaseWatcher?.cancel()
+        radioLeaseWatcher = null
         cancelReconnectWatchdog()
         driver.removeWatcher(this)
         driver.shutdown()
@@ -370,7 +409,15 @@ class Libre3NativePlugin @Inject constructor(
 
     override fun onSession(up: Boolean, reason: String?) {
         aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: up=$up reason=$reason")
-        if (up) cancelReconnectWatchdog() else armReconnectWatchdog()
+        // Only a link that died on its own deserves the net. Every other reason is somebody asking
+        // for the session to end, and asking for it again a few minutes later is not a safety net,
+        // it is a bug: it would undo a plugin switch, and it would take the radio back from a pump
+        // setup in the middle of the setup.
+        when {
+            up                                                     -> cancelReconnectWatchdog()
+            reason == Libre3DisconnectPolicy.Reason.LINK_LOST.name -> armReconnectWatchdog()
+            else                                                  -> cancelReconnectWatchdog()
+        }
     }
 
     /**

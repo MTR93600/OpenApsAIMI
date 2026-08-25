@@ -2,6 +2,8 @@ package app.aaps.plugins.dexcomoneplus
 
 import android.content.Context
 import android.os.SystemClock
+import app.aaps.core.interfaces.ble.BleRadioPriority
+import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClient
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClientAndroid
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorIdentity
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
@@ -11,6 +13,7 @@ import app.aaps.plugins.dexcomoneplus.oem.OemDeviceProfile
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerAndroid
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerStub
+import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanBudget
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanListener
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanResult
 import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSession
@@ -81,6 +84,17 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
      */
     @Volatile
     private var pendingAdvSightingElapsedMs: Long = 0L
+
+    /**
+     * The link of the running session, kept only so its connection interval can be changed while
+     * the session itself is busy. Never used to send anything.
+     */
+    @Volatile
+    private var currentGatt: OnePlusGattClient? = null
+
+    /** True while another job on the same radio must not be disturbed. See [setRadioBackOff]. */
+    @Volatile
+    private var radioBackOff = false
 
     override fun setContext(context: Context) {
         val app = context.applicationContext
@@ -320,6 +334,26 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
         OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] shutdown")
     }
 
+    /**
+     * ⚠️ ASYNC IMPACT: called from the thread that watches the lease, not from the BLE executor. It
+     * sets a flag, asks for an interval and books a hold on the scan budget, none of which waits,
+     * so it does not have to queue behind a running session.
+     */
+    override fun setRadioBackOff(backOff: Boolean) {
+        if (radioBackOff == backOff) return
+        radioBackOff = backOff
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] radio back off = $backOff")
+        currentGatt?.setLowPower(backOff)
+        // A scan is the greedy part, so it is the part that has to wait. The budget already knows
+        // how to hold every start back; the hold is sized to the longest a lease can live and it is
+        // lifted as soon as the lease really ends.
+        if (backOff) {
+            OnePlusScanBudget.lendRadioOut(SystemClock.elapsedRealtime(), BleRadioPriority.MAX_HOLD_MS)
+        } else {
+            OnePlusScanBudget.takeRadioBack()
+        }
+    }
+
     override fun warmupState(): OnePlusWarmupState =
         session?.warmupState() ?: OnePlusWarmupState(phase = OnePlusWarmupState.Phase.IDLE)
 
@@ -331,6 +365,9 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
     ): OnePlusBleSession {
         val ctx = context ?: error("ONEPLUS_SESSION: setContext required")
         val gatt = OnePlusGattClientAndroid(ctx, profile)
+        currentGatt = gatt
+        // The lease may have been taken while this session was being built.
+        if (radioBackOff) gatt.setLowPower(true)
         val auth = OnePlusSessionAuthKeks(gatt)
         val store = sensorStore
         val created = OnePlusBleSessionSkeleton(

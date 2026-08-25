@@ -4,6 +4,7 @@ import android.content.Context
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.ue.Sources
+import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -67,6 +68,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     private val persistenceLayer: PersistenceLayer,
     private val warmupBasalGuard: DexcomOnePlusWarmupBasalGuard,
     private val availabilityProvider: DexcomOnePlusAvailabilityProvider,
+    private val bleRadioPriority: BleRadioPriority,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -91,6 +93,9 @@ class DexcomOnePlusPlugin @Inject constructor(
 ), BgSource, OnePlusGlucoseWatcher, CgmSensorStatusProvider {
 
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Watches who owns the radio, so both slots back off while a pump setup runs. */
+    private var radioLeaseWatcher: Job? = null
 
     private val driver
         get() = OnePlusCgmDrivers.default()
@@ -245,6 +250,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         // is available, revert the pump to profile basal (option b: only cancel a high residual temp).
         // Driven by the warm-up state on ioScope so it works in standby without any Activity; stops
         // forcing the moment warm-up ends (status → null), letting the normal loop reclaim dosing.
+        watchRadioLease()
         warmupGuardJob?.cancel()
         warmupGuardJob = ioScope.launch {
             warmupStatus.collect { status ->
@@ -259,7 +265,28 @@ class DexcomOnePlusPlugin @Inject constructor(
         }
     }
 
+    /**
+     * Gives the radio up while a pump setup holds it, and takes the usual share back after.
+     *
+     * Both slots obey it: the staging slot is a second link on the same radio, so leaving it alone
+     * would give away most of what the production slot just gave up. The links are kept and only
+     * their share of the radio is made smaller, so a pump change costs no readings.
+     */
+    private fun watchRadioLease() {
+        radioLeaseWatcher?.cancel()
+        radioLeaseWatcher = ioScope.launch {
+            bleRadioPriority.owner.collect { owner ->
+                val lentOut = owner != null
+                aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_SESSION: radio lease owner=$owner, backing off=$lentOut")
+                runCatching { driver.setRadioBackOff(lentOut) }
+                runCatching { stagingDriver.setRadioBackOff(lentOut) }
+            }
+        }
+    }
+
     override suspend fun onStop() {
+        radioLeaseWatcher?.cancel()
+        radioLeaseWatcher = null
         warmupGuardJob?.cancel()
         warmupGuardJob = null
         driver.removeWatcher(this)

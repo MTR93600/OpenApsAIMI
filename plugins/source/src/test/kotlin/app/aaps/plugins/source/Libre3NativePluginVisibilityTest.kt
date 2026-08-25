@@ -3,6 +3,7 @@ package app.aaps.plugins.source
 import android.content.Context
 import androidx.documentfile.provider.DocumentFile
 import app.aaps.core.data.plugin.PluginType
+import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.maintenance.FileListProvider
@@ -40,6 +41,7 @@ class Libre3NativePluginVisibilityTest : TestBase() {
 
     private val extraDir: DocumentFile = mock()
     private val markerFile: DocumentFile = mock()
+    private val bleRadioPriority: BleRadioPriority = mock()
 
     private lateinit var plugin: Libre3NativePlugin
 
@@ -52,7 +54,7 @@ class Libre3NativePluginVisibilityTest : TestBase() {
         whenever(extraDir.findFile(LIBRE3_ACCESS_FILE_NAME)).thenReturn(markerFile)
         val availabilityProvider =
             Libre3AvailabilityProvider(aapsLogger, Lazy { fileListProvider }, preferences, notificationManager, dateUtil)
-        plugin = Libre3NativePlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, availabilityProvider)
+        plugin = Libre3NativePlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority)
     }
 
     @Test

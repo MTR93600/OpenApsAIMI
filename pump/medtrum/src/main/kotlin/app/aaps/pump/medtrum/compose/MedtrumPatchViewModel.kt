@@ -10,6 +10,7 @@ import app.aaps.core.data.time.T
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.data.ue.ValueWithUnit
+import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.insulin.InsulinManager
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -73,7 +74,8 @@ class MedtrumPatchViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val preferences: Preferences,
     private val persistenceLayer: PersistenceLayer,
-    private val bleTransport: MedtrumBleTransport
+    private val bleTransport: MedtrumBleTransport,
+    private val bleRadioPriority: BleRadioPriority
 ) : ViewModel(), SiteLocationStepHost, ProfileGateStepHost {
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -225,6 +227,9 @@ class MedtrumPatchViewModel @Inject constructor(
                         }
 
                         state == MedtrumPumpState.ACTIVE || state == MedtrumPumpState.ACTIVE_ALT -> {
+                            // The patch runs, so the setup has what it needed: give the radio back
+                            // here rather than when the screen closes, which can be much later.
+                            releaseRadio("patch active")
                             updateSetupStep(SetupStep.ACTIVATED)
                         }
 
@@ -243,7 +248,32 @@ class MedtrumPatchViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        releaseRadio("view model cleared")
         scope.cancel()
+    }
+
+    /**
+     * Keeps the radio lease in step with the step the wizard is on.
+     *
+     * Only the steps that really talk to the pump take it. The steps where the user is reading a
+     * screen or attaching the patch give it back, because those can last minutes and there is no
+     * reason to keep the CGM on a smaller share of the radio while nothing is being sent.
+     *
+     * A refused lease is not an error: the setup simply carries on the way it did before this
+     * existed.
+     */
+    private fun updateRadioLease(newStep: PatchStep) {
+        if (newStep in RADIO_HUNGRY_STEPS) {
+            bleRadioPriority.acquire(RADIO_OWNER)
+        } else {
+            releaseRadio("step $newStep")
+        }
+    }
+
+    private fun releaseRadio(reason: String) {
+        if (bleRadioPriority.owner.value != RADIO_OWNER) return
+        aapsLogger.info(LTag.PUMP, "releaseRadio: $reason")
+        bleRadioPriority.release(RADIO_OWNER)
     }
 
     fun moveStep(newPatchStep: PatchStep) {
@@ -313,6 +343,7 @@ class MedtrumPatchViewModel @Inject constructor(
     }
 
     fun handleCancel() {
+        releaseRadio("wizard cancelled")
         if (oldPatchStep !in listOf(
                 PatchStep.PROFILE_GATE,
                 PatchStep.PREPARE_PATCH,
@@ -347,6 +378,7 @@ class MedtrumPatchViewModel @Inject constructor(
 
     fun handleComplete() {
         medtrumService?.disconnect("Complete")
+        releaseRadio("wizard complete")
         _events.tryEmit(PatchEvent.Finish)
     }
 
@@ -695,6 +727,7 @@ class MedtrumPatchViewModel @Inject constructor(
         }
 
         _patchStep.value = newStep
+        updateRadioLease(newStep)
         _canGoBack.value = newStep in listOf(
             PatchStep.BLE_SCAN,
             PatchStep.PROFILE_GATE,
@@ -798,5 +831,30 @@ class MedtrumPatchViewModel @Inject constructor(
 
     enum class SetupStep {
         INITIAL, FILLED, PRIMING, PRIMED, ACTIVATED, ERROR, START_DEACTIVATION, STOPPED
+    }
+
+    companion object {
+
+        /** The name this wizard is known by while it holds the radio. */
+        private const val RADIO_OWNER = "MedtrumPatchWizard"
+
+        /**
+         * The steps that really talk to the pump, and so need the radio to themselves.
+         *
+         * A new base has never been seen before, so finding it needs the fastest scan the platform
+         * offers, and every step here either does that scan or sends a command over the link that
+         * came out of it. The steps left out are the ones where the user is reading a screen or
+         * attaching the patch: nothing is sent then, and they can last minutes.
+         */
+        private val RADIO_HUNGRY_STEPS = setOf(
+            PatchStep.BLE_SCAN,
+            PatchStep.PREPARE_PATCH_CONNECT,
+            PatchStep.RETRY_ACTIVATION_CONNECT,
+            PatchStep.PRIME,
+            PatchStep.PRIMING,
+            PatchStep.ACTIVATE,
+            PatchStep.DEACTIVATE,
+            PatchStep.FORCE_DEACTIVATION,
+        )
     }
 }

@@ -63,6 +63,10 @@ class Libre3CgmDriverReal(
     @Volatile
     private var failedAttempts = 0
 
+    /** True while another job on the same radio must not be disturbed. See [setRadioBackOff]. */
+    @Volatile
+    private var radioBackOff = false
+
     /**
      * Raised on every new [connect] and every [stopSession], so a retry that was already queued
      * cannot start after the user asked to stop, or after a newer connect has begun.
@@ -99,6 +103,18 @@ class Libre3CgmDriverReal(
         stopSession(Libre3DisconnectPolicy.Reason.USER_STOPPED_PLUGIN)
         watchers.clear()
         bleExecutor.shutdownNow()
+    }
+
+    /**
+     * ⚠️ ASYNC IMPACT: called from the thread that watches the lease, not from [bleExecutor]. It
+     * only sets a flag and asks the platform for an interval, neither of which waits on anything,
+     * so it does not have to be queued behind a running session.
+     */
+    override fun setRadioBackOff(backOff: Boolean) {
+        if (radioBackOff == backOff) return
+        radioBackOff = backOff
+        Libre3Log.i("${Libre3LogMarkers.SESSION}: radio back off = $backOff")
+        gatt?.setLowPower(backOff)
     }
 
     /**
@@ -161,6 +177,13 @@ class Libre3CgmDriverReal(
 
     private fun openSession(generation: Int) {
         if (generation != connectGeneration) return
+        // Opening a session begins with a scan, so it waits for the radio to come back. The sensor
+        // is not given up: the retry keeps knocking at the slow pace until the lease ends.
+        if (radioBackOff) {
+            Libre3Log.i("${Libre3LogMarkers.SESSION}: not opening a session, the radio is lent out")
+            scheduleRetry(generation)
+            return
+        }
         val appContext = context ?: return
         val sensorStore = store ?: return
         val client = Libre3GattClientAndroid(appContext)
@@ -173,6 +196,9 @@ class Libre3CgmDriverReal(
             is Libre3BleSession.Result.Up      -> {
                 failedAttempts = 0
                 sessionUp = true
+                // The back off may have been asked for while this link was still coming up, and
+                // the interval is only settable once there is a link to set it on.
+                if (radioBackOff) client.setLowPower(true)
                 watchers.forEach { it.onSession(true, null) }
                 startReading(newSession, client, sensorStore, generation)
             }
@@ -212,8 +238,11 @@ class Libre3CgmDriverReal(
      * [ExecutorService.shutdownNow].
      */
     private fun scheduleRetry(generation: Int) {
-        val delayMs = Libre3ReconnectPolicy.nextDelayMs(failedAttempts)
-        Libre3Log.i("${Libre3LogMarkers.RECONNECT}: retry in ${delayMs}ms")
+        // A retry means a scan, and a scan is the one thing a backed off driver must not do. So the
+        // wait is stretched to the slow pace and the ladder is not climbed, which keeps this driver
+        // off the air without giving the sensor up.
+        val delayMs = if (radioBackOff) Libre3ReconnectPolicy.SLOW_RETRY_MS else Libre3ReconnectPolicy.nextDelayMs(failedAttempts)
+        Libre3Log.i("${Libre3LogMarkers.RECONNECT}: retry in ${delayMs}ms, backOff=$radioBackOff")
         bleExecutor.execute {
             try {
                 Thread.sleep(delayMs)
@@ -223,6 +252,10 @@ class Libre3CgmDriverReal(
             }
             if (generation != connectGeneration) return@execute
             if (sessionUp) return@execute
+            if (radioBackOff) {
+                scheduleRetry(generation)
+                return@execute
+            }
             openSession(generation)
         }
     }

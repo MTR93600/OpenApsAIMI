@@ -180,6 +180,13 @@ class MedtrumBleTransportImpl @Inject constructor(
                 bluetoothAdapter?.getRemoteDevice(cachedDeviceAddress)?.let { connectGatt(it) }
             }
 
+            // The wizard retries on every disconnect and the command queue calls connect() on its
+            // own, and both land here while the service state machine is still Idle. Without this,
+            // each of them starts one more scan for the same pump.
+            connectionScanCallback != null && cachedDeviceSN == deviceSN -> {
+                aapsLogger.debug(LTag.PUMPBTCOMM, "Connection scan for SN $deviceSN already running ($from)")
+            }
+
             else                                                      -> {
                 aapsLogger.debug(LTag.PUMPBTCOMM, "No cached address, scanning for deviceSN: $deviceSN")
                 cachedDeviceAddress = null
@@ -660,6 +667,11 @@ class MedtrumBleTransportImpl @Inject constructor(
     private fun startConnectionScan(deviceSN: Long) {
         if (!hasPermission(Manifest.permission.BLUETOOTH_SCAN)) return
         aapsLogger.debug(LTag.PUMPBTCOMM, "startConnectionScan for SN: $deviceSN")
+        // Never overwrite a running scan. The old callback is the only handle the platform accepts
+        // for stopScan, so losing it leaves a SCAN_MODE_LOW_LATENCY scan registered until the
+        // process dies. A few of those and Android silently stops delivering results to this app,
+        // which looks exactly like a pump that cannot be found any more.
+        stopConnectionScan()
         connectionScanCallback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 val mfData = result.scanRecord?.getManufacturerSpecificData(MANUFACTURER_ID)?.let { ManufacturerData(it) }

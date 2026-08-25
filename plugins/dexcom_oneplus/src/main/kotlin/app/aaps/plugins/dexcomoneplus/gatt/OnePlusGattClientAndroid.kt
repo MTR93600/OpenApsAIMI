@@ -335,6 +335,21 @@ class OnePlusGattClientAndroid(
 
     override fun isConnected(): Boolean = connected && gatt != null
 
+    override fun setLowPower(enabled: Boolean) {
+        val g = gatt ?: return
+        val priority = if (enabled) {
+            BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER
+        } else {
+            BluetoothGatt.CONNECTION_PRIORITY_BALANCED
+        }
+        try {
+            val asked = g.requestConnectionPriority(priority)
+            OnePlusLog.i("${OnePlusLogMarkers.SESSION}: link low power=$enabled asked=$asked")
+        } catch (e: Throwable) {
+            OnePlusLog.w("${OnePlusLogMarkers.SESSION}: link low power=$enabled failed, ${e.javaClass.simpleName}")
+        }
+    }
+
     override fun writeAuthentication(payload: ByteArray?) {
         // Ob1: Authentication uses WRITE_TYPE_DEFAULT.
         writeChar(

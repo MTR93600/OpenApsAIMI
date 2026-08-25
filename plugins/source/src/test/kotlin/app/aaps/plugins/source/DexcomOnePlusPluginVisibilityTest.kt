@@ -3,6 +3,7 @@ package app.aaps.plugins.source
 import android.content.Context
 import androidx.documentfile.provider.DocumentFile
 import app.aaps.core.data.plugin.PluginType
+import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.maintenance.FileListProvider
@@ -41,6 +42,7 @@ class DexcomOnePlusPluginVisibilityTest : TestBase() {
 
     private val extraDir: DocumentFile = mock()
     private val markerFile: DocumentFile = mock()
+    private val bleRadioPriority: BleRadioPriority = mock()
 
     private lateinit var plugin: DexcomOnePlusPlugin
 
@@ -53,7 +55,7 @@ class DexcomOnePlusPluginVisibilityTest : TestBase() {
         whenever(extraDir.findFile(ONE_PLUS_ACCESS_FILE_NAME)).thenReturn(markerFile)
         val availabilityProvider =
             DexcomOnePlusAvailabilityProvider(aapsLogger, Lazy { fileListProvider }, preferences, notificationManager, dateUtil)
-        plugin = DexcomOnePlusPlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider)
+        plugin = DexcomOnePlusPlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority)
     }
 
     @Test
