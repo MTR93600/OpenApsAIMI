@@ -54,3 +54,5 @@ build-xdrip-tree.json
 
 # AIMI replay: private corpus kept outside the repo (see docs/adr/0001-replay-harness.md)
 aimi-corpus/
+
+.idea/
