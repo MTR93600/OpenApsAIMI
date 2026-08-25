@@ -105,6 +105,52 @@ class OnePlusScanBudgetTest {
     }
 
     @Test
+    fun `a lent out radio holds back starts even when the quota is free`() {
+        OnePlusScanBudget.lendRadioOut(nowMs = 1_000L, maxDurationMs = 5_000L)
+
+        assertThat(OnePlusScanBudget.waitMsFor(1_000L)).isEqualTo(5_000L)
+        assertThat(OnePlusScanBudget.reserve(1_000L)).isGreaterThan(0L)
+        assertThat(OnePlusScanBudget.startsInWindow(1_000L)).isEqualTo(0)
+    }
+
+    @Test
+    fun `taking the radio back frees the starts at once`() {
+        OnePlusScanBudget.lendRadioOut(nowMs = 1_000L, maxDurationMs = 300_000L)
+
+        OnePlusScanBudget.takeRadioBack()
+
+        assertThat(OnePlusScanBudget.waitMsFor(1_000L)).isEqualTo(0L)
+    }
+
+    @Test
+    fun `taking the radio back leaves a platform throttle block alone`() {
+        OnePlusScanBudget.blockFor(nowMs = 1_000L, durationMs = 30_000L)
+        OnePlusScanBudget.lendRadioOut(nowMs = 1_000L, maxDurationMs = 300_000L)
+
+        OnePlusScanBudget.takeRadioBack()
+
+        // The pump is done, but the platform was refusing our scans and that window must still run.
+        assertThat(OnePlusScanBudget.waitMsFor(1_000L)).isEqualTo(30_000L)
+    }
+
+    @Test
+    fun `the later of the two holds is the one that counts`() {
+        OnePlusScanBudget.blockFor(nowMs = 1_000L, durationMs = 5_000L)
+        OnePlusScanBudget.lendRadioOut(nowMs = 1_000L, maxDurationMs = 60_000L)
+
+        assertThat(OnePlusScanBudget.waitMsFor(1_000L)).isEqualTo(60_000L)
+    }
+
+    @Test
+    fun `reset clears a lent out radio`() {
+        OnePlusScanBudget.lendRadioOut(nowMs = 1_000L, maxDurationMs = 300_000L)
+
+        OnePlusScanBudget.reset()
+
+        assertThat(OnePlusScanBudget.waitMsFor(1_000L)).isEqualTo(0L)
+    }
+
+    @Test
     fun `a negative block duration is treated as no block`() {
         OnePlusScanBudget.blockFor(nowMs = 1_000L, durationMs = -5_000L)
 

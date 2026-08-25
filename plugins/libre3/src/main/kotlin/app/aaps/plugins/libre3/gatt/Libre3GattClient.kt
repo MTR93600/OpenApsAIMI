@@ -25,6 +25,22 @@ interface Libre3GattClient {
 
     fun isConnected(): Boolean
 
+    /**
+     * Asks the platform for a slower, or for the usual, connection interval on this link.
+     *
+     * This does not change how often the sensor sends. The sensor decides that, and it is once a
+     * minute whatever we ask for. What changes is how often our own radio has to wake up for this
+     * link, which is what another job on the same radio, a pump setup, is short of.
+     *
+     * The peer may refuse the change and the platform may round it, so nothing here is guaranteed.
+     * Nothing breaks when it is refused: the link simply keeps the interval it had.
+     *
+     * Default is to do nothing, so a link that has no say in this does not have to say so.
+     *
+     * @param enabled true to ask for the low power interval, false to go back to the usual one.
+     */
+    fun setLowPower(enabled: Boolean) = Unit
+
     /** Turns a channel on or off, and waits for the sensor to confirm. */
     fun setNotify(characteristic: UUID, enabled: Boolean): Boolean
 

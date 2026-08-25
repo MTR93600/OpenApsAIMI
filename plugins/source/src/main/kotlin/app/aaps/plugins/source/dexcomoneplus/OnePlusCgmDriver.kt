@@ -21,6 +21,18 @@ interface OnePlusCgmDriver {
     fun connect(deviceAddress: String, pairingCode: String)
     fun disconnect()
     fun shutdown()
+
+    /**
+     * Take a smaller share of the radio, or give the usual share back.
+     *
+     * Asked for while another job on the same radio must not be disturbed, which today means a pump
+     * setup — see [app.aaps.core.interfaces.ble.BleRadioPriority]. While it is on, the driver asks
+     * the platform for a slower connection interval and holds its scans back. The link is kept and
+     * readings keep arriving: this is not a disconnect.
+     *
+     * Default is a no-op, which is right for a driver with no radio of its own.
+     */
+    fun setRadioBackOff(backOff: Boolean) = Unit
     fun warmupState(): OnePlusWarmupState
     fun isSessionUp(): Boolean
 }

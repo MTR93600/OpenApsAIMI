@@ -2,6 +2,7 @@ package app.aaps.plugins.source
 
 import android.content.Context
 import app.aaps.core.data.plugin.PluginType
+import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.maintenance.FileListProvider
@@ -38,12 +39,13 @@ class Libre3NativePluginVisibilityTest : TestBase() {
     @Mock lateinit var context: Context
     @Mock lateinit var persistenceLayer: PersistenceLayer
     @Mock lateinit var fileListProvider: FileListProvider
+    @Mock lateinit var bleRadioPriority: BleRadioPriority
 
     private lateinit var plugin: Libre3NativePlugin
 
     @BeforeEach
     fun setup() {
-        plugin = Libre3NativePlugin(rh, aapsLogger, preferences, config, context, persistenceLayer)
+        plugin = Libre3NativePlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, bleRadioPriority)
     }
 
     @Test

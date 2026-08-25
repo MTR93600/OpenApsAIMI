@@ -46,6 +46,9 @@ object OnePlusScanBudget {
     /** Elapsed-time until which no start is granted at all — see [blockFor]. */
     private var blockedUntilMs = 0L
 
+    /** Elapsed-time until which the radio belongs to another job — see [lendRadioOut]. */
+    private var lentOutUntilMs = 0L
+
     /**
      * Hold every scan start back for [durationMs], on top of the normal quota.
      *
@@ -60,6 +63,28 @@ object OnePlusScanBudget {
     }
 
     /**
+     * Hold every scan start back while the radio is lent to another job, which today means a pump
+     * setup — see [app.aaps.core.interfaces.ble.BleRadioPriority].
+     *
+     * Kept apart from [blockFor] on purpose. That one is the answer to the platform refusing our
+     * scans and it has to run its whole window; this one ends the moment the other job says it is
+     * done. One variable for both reasons would let either one cut the other short.
+     *
+     * @param maxDurationMs a safety net only: the hold also ends on [takeRadioBack], and it must
+     *   never outlive the longest lease.
+     */
+    @Synchronized
+    fun lendRadioOut(nowMs: Long, maxDurationMs: Long) {
+        lentOutUntilMs = nowMs + maxDurationMs.coerceAtLeast(0L)
+    }
+
+    /** The other job has given the radio back. Any [blockFor] hold is left alone. */
+    @Synchronized
+    fun takeRadioBack() {
+        lentOutUntilMs = 0L
+    }
+
+    /**
      * Milliseconds to wait before another `startScan` may be issued (0 = free slot available now).
      * Pure function of the recorded history — safe to call from any thread.
      */
@@ -67,7 +92,9 @@ object OnePlusScanBudget {
     fun waitMsFor(nowMs: Long): Long {
         prune(nowMs)
         val blocked = (blockedUntilMs - nowMs).coerceAtLeast(0L)
-        if (blocked > 0L) return blocked
+        val lentOut = (lentOutUntilMs - nowMs).coerceAtLeast(0L)
+        val held = maxOf(blocked, lentOut)
+        if (held > 0L) return held
         if (starts.size < MAX_STARTS_PER_WINDOW) return 0L
         val oldest = starts.first()
         return (WINDOW_MS - (nowMs - oldest)).coerceAtLeast(0L)
@@ -105,6 +132,7 @@ object OnePlusScanBudget {
     fun reset() {
         starts.clear()
         blockedUntilMs = 0L
+        lentOutUntilMs = 0L
     }
 
     private fun prune(nowMs: Long) {

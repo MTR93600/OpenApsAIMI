@@ -253,6 +253,21 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
 
     override fun isConnected(): Boolean = connected
 
+    override fun setLowPower(enabled: Boolean) {
+        val gattRef = gatt ?: return
+        val priority = if (enabled) {
+            BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER
+        } else {
+            BluetoothGatt.CONNECTION_PRIORITY_BALANCED
+        }
+        try {
+            val asked = gattRef.requestConnectionPriority(priority)
+            Libre3Log.i("${Libre3LogMarkers.SESSION}: link low power=$enabled asked=$asked")
+        } catch (e: Exception) {
+            Libre3Log.w("${Libre3LogMarkers.SESSION}: link low power=$enabled failed, ${e.javaClass.simpleName}")
+        }
+    }
+
     /**
      * Turns a channel on or off.
      *

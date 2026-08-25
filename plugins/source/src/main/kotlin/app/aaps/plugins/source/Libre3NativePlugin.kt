@@ -4,6 +4,7 @@ import android.content.Context
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.ue.Sources
+import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -29,6 +30,7 @@ import app.aaps.plugins.libre3.Libre3GlucoseWatcher
 import app.aaps.plugins.libre3.Libre3LogMarkers
 import app.aaps.plugins.libre3.Libre3WarmupState
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
+import app.aaps.plugins.libre3.session.Libre3DisconnectPolicy
 import app.aaps.plugins.libre3.nfc.Libre3NfcSession
 import app.aaps.plugins.libre3.warmup.Libre3WarmupClock
 import app.aaps.plugins.source.activities.Libre3StartActivity
@@ -70,6 +72,7 @@ class Libre3NativePlugin @Inject constructor(
     config: Config,
     private val context: Context,
     private val persistenceLayer: PersistenceLayer,
+    private val bleRadioPriority: BleRadioPriority,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -104,6 +107,9 @@ class Libre3NativePlugin @Inject constructor(
      * the only way back is a hand held over the sensor, which is what the log of 2026-08-22 shows.
      */
     private var reconnectWatchdog: Job? = null
+
+    /** Watches who owns the radio, so the driver backs off while a pump setup runs. */
+    private var radioLeaseWatcher: Job? = null
 
     private val driver
         get() = Libre3CgmDrivers.default()
@@ -179,6 +185,7 @@ class Libre3NativePlugin @Inject constructor(
 
     override suspend fun onStart() {
         super.onStart()
+        watchRadioLease()
         syncDriverFromPrefs()
         // Rebuild what ingest already knows BEFORE a reconnect can deliver anything. Without this,
         // an app restart would offer readings that are already in the database, and the loop treats
@@ -285,6 +292,8 @@ class Libre3NativePlugin @Inject constructor(
     }
 
     override suspend fun onStop() {
+        radioLeaseWatcher?.cancel()
+        radioLeaseWatcher = null
         cancelReconnectWatchdog()
         driver.removeWatcher(this)
         driver.shutdown()
@@ -368,6 +377,36 @@ class Libre3NativePlugin @Inject constructor(
      * leave a queue of them behind. It does nothing when the driver has already brought the session
      * back by itself, which is the normal case.
      */
+    /**
+     * Gives the radio up while a pump setup holds it, and comes back when it is free.
+     *
+     * The link is kept and only its share of the radio is made smaller, so readings keep arriving
+     * through a pump change. The reconnect below is for the one case where the link had already
+     * gone before the lease was taken: the driver was held off the air while it was lent out, so
+     * somebody has to ask again once it is not.
+     */
+    private fun watchRadioLease() {
+        radioLeaseWatcher?.cancel()
+        radioLeaseWatcher = ioScope.launch {
+            var wasLentOut = false
+            bleRadioPriority.owner.collect { owner ->
+                val lentOut = owner != null
+                aapsLogger.info(
+                    LTag.BGSOURCE,
+                    "${Libre3LogMarkers.SESSION}: radio lease owner=$owner, backing off=$lentOut",
+                )
+                driver.setRadioBackOff(lentOut)
+                // Only a lease that has just ended needs a session asked for again. The first value
+                // of the flow is the state as it already is, and onStart connects for that one, so
+                // reacting to it here as well would ask for two sessions at start up.
+                if (wasLentOut && !lentOut && !driver.isSessionUp()) {
+                    sensorStore.loadIdentity()?.let { connectStoredSensor(it.bleAddress) }
+                }
+                wasLentOut = lentOut
+            }
+        }
+    }
+
     private fun armReconnectWatchdog() {
         reconnectWatchdog?.cancel()
         reconnectWatchdog = ioScope.launch {

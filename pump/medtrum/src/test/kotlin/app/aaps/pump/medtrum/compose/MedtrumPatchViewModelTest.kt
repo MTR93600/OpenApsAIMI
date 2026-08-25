@@ -2,6 +2,7 @@ package app.aaps.pump.medtrum.compose
 
 import app.aaps.core.data.model.ICfg
 import app.aaps.core.data.model.TE
+import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.insulin.InsulinManager
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -53,6 +54,7 @@ internal class MedtrumPatchViewModelTest {
     private val medtrumPlugin: MedtrumPlugin = mock()
     private val medtrumPump: MedtrumPump = mock()
     private val bleTransport: MedtrumBleTransport = mock()
+    private val bleRadioPriority: BleRadioPriority = mock()
 
     private lateinit var sut: MedtrumPatchViewModel
 
@@ -64,10 +66,13 @@ internal class MedtrumPatchViewModelTest {
         // init{} launches two collectors that read these non-null StateFlow getters.
         whenever(medtrumPump.connectionStateFlow).thenReturn(MutableStateFlow(ConnectionState.DISCONNECTED))
         whenever(medtrumPump.pumpStateFlow).thenReturn(MutableStateFlow(MedtrumPumpState.NONE))
+        // The step funnel asks the lease who owns the radio, so this getter must not be null.
+        whenever(bleRadioPriority.owner).thenReturn(MutableStateFlow(null))
 
         sut = MedtrumPatchViewModel(
             aapsLogger, medtrumPlugin, commandQueue, medtrumPump, insulinManager,
-            profileFunction, profileRepository, preferences, persistenceLayer, bleTransport
+            profileFunction, profileRepository, preferences, persistenceLayer, bleTransport,
+            bleRadioPriority
         )
     }
 

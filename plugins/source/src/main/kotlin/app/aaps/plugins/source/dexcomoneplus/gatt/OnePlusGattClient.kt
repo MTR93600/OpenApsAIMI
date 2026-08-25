@@ -21,6 +21,18 @@ interface OnePlusGattClient {
     fun disconnect()
     fun isConnected(): Boolean
 
+    /**
+     * Ask the platform for a slower, or the usual, connection interval on this link.
+     *
+     * Used while another job on the same radio must not be disturbed — a pump setup, see
+     * [app.aaps.core.interfaces.ble.BleRadioPriority]. The sensor keeps its own sending rate; only
+     * how often our radio wakes for this link changes. The peer may refuse, and nothing breaks
+     * when it does.
+     *
+     * Default is a no-op, so a link with no say in this need not say so.
+     */
+    fun setLowPower(enabled: Boolean) = Unit
+
     fun writeAuthentication(payload: ByteArray?)
     fun writeExtraData(payload: ByteArray?)
     fun writeControl(payload: ByteArray?)

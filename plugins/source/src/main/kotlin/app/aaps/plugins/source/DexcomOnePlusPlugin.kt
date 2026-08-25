@@ -4,6 +4,7 @@ import android.content.Context
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.ue.Sources
+import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -67,6 +68,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     config: Config,
     private val context: Context,
     private val persistenceLayer: PersistenceLayer,
+    private val bleRadioPriority: BleRadioPriority,
     private val warmupBasalGuard: DexcomOnePlusWarmupBasalGuard,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
@@ -138,6 +140,9 @@ class DexcomOnePlusPlugin @Inject constructor(
      * this; ONE+ did not, and without it the only way back was a hand held over the sensor.
      */
     private var reconnectWatchdog: Job? = null
+
+    /** Watches who owns the radio, so the drivers back off while a pump setup runs. */
+    private var radioLeaseWatcher: Job? = null
 
     // ---- Dual-sensor (staging / pre-soak) state — see docs/ONEPLUS_G7_MIGRATION.md ----
 
@@ -232,6 +237,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         reconcileSlotsOnSameSensor()
         val autoResumeQueued = (driver as? OnePlusCgmDriverReal)?.resumeStoredSession() == true
         val stagingResumeQueued = resumeStagingSessionIfStored()
+        watchRadioLease()
         warmupPhase = driver.warmupState().phase
         // The privilege the OEM profiles have been asking for since they were written. Only when a
         // sensor is actually stored: no session wanted, no service, no notification.
@@ -268,6 +274,8 @@ class DexcomOnePlusPlugin @Inject constructor(
 
     override suspend fun onStop() {
         cancelReconnectWatchdog()
+        radioLeaseWatcher?.cancel()
+        radioLeaseWatcher = null
         warmupGuardJob?.cancel()
         warmupGuardJob = null
         driver.removeWatcher(this)
@@ -421,6 +429,25 @@ class DexcomOnePlusPlugin @Inject constructor(
      * queue behind. It does nothing when the driver has already brought the session back by itself,
      * which is the normal case, and nothing when no sensor is stored.
      */
+    /**
+     * Gives the radio up while a pump setup holds it, and takes the usual share back after.
+     *
+     * Both slots obey it: the staging slot is a second link on the same radio, so leaving it alone
+     * would give away most of what the production slot just gave up. The links are kept and only
+     * their share of the radio is made smaller, so a pump change costs no readings.
+     */
+    private fun watchRadioLease() {
+        radioLeaseWatcher?.cancel()
+        radioLeaseWatcher = ioScope.launch {
+            bleRadioPriority.owner.collect { owner ->
+                val lentOut = owner != null
+                aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_SESSION: radio lease owner=$owner, backing off=$lentOut")
+                runCatching { driver.setRadioBackOff(lentOut) }
+                runCatching { stagingDriver.setRadioBackOff(lentOut) }
+            }
+        }
+    }
+
     private fun armReconnectWatchdog() {
         reconnectWatchdog?.cancel()
         reconnectWatchdog = ioScope.launch {

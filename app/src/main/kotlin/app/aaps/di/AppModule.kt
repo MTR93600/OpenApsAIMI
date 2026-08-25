@@ -2,6 +2,7 @@ package app.aaps.di
 
 import android.content.Context
 import android.content.SharedPreferences
+import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.di.APS
 import app.aaps.core.interfaces.di.AllConfigs
@@ -11,6 +12,7 @@ import app.aaps.core.interfaces.di.PumpDriver
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.history.HistoryBrowserData
+import app.aaps.implementations.BleRadioPriorityImpl
 import app.aaps.implementations.ConfigImpl
 import app.aaps.implementations.UiInteractionImpl
 import app.aaps.ui.compose.history.HistoryScope
@@ -90,6 +92,8 @@ abstract class AppModule {
         @Binds fun bindActivityNames(activityNames: UiInteractionImpl): UiInteraction
 
         @Binds @Singleton fun bindHistoryScope(impl: HistoryBrowserData): HistoryScope
+
+        @Binds @Singleton fun bindBleRadioPriority(impl: BleRadioPriorityImpl): BleRadioPriority
     }
 }
 
