@@ -68,5 +68,6 @@ data class OemDeviceProfile(
 enum class OemProfileId {
     PIXEL,
     SAMSUNG,
+    MOTOROLA,
     GENERIC_FALLBACK,
 }

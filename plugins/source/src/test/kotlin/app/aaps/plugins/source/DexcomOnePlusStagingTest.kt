@@ -187,4 +187,33 @@ class DexcomOnePlusStagingTest {
 
         assertThat(state).isEqualTo(StagingState.READY)
     }
+
+    // ---- isSameTransmitter: the cross-slot guard's rule ----
+
+    @Test
+    fun `same transmitter whatever the case the mac was stored in`() {
+        assertThat(DexcomOnePlusStaging.isSameTransmitter("c8:4e:07:b2:31:1f", "C8:4E:07:B2:31:1F")).isTrue()
+        assertThat(DexcomOnePlusStaging.isSameTransmitter("C8:4E:07:B2:31:1F", "c8:4e:07:b2:31:1f")).isTrue()
+        assertThat(DexcomOnePlusStaging.isSameTransmitter(" C8:4E:07:B2:31:1F ", "C8:4E:07:B2:31:1F")).isTrue()
+    }
+
+    @Test
+    fun `different transmitters are not the same`() {
+        assertThat(DexcomOnePlusStaging.isSameTransmitter("C8:4E:07:B2:31:1F", "D1:22:9C:4E:80:74")).isFalse()
+    }
+
+    @Test
+    fun `an empty slot never claims a transmitter`() {
+        // A slot with nothing stored must not block a start: that would make the guard refuse the
+        // first pairing of every sensor.
+        assertThat(DexcomOnePlusStaging.isSameTransmitter(null, "C8:4E:07:B2:31:1F")).isFalse()
+        assertThat(DexcomOnePlusStaging.isSameTransmitter("", "C8:4E:07:B2:31:1F")).isFalse()
+        assertThat(DexcomOnePlusStaging.isSameTransmitter("   ", "C8:4E:07:B2:31:1F")).isFalse()
+    }
+
+    @Test
+    fun `a blank target never matches a stored sensor`() {
+        assertThat(DexcomOnePlusStaging.isSameTransmitter("C8:4E:07:B2:31:1F", "")).isFalse()
+        assertThat(DexcomOnePlusStaging.isSameTransmitter("C8:4E:07:B2:31:1F", "  ")).isFalse()
+    }
 }

@@ -129,6 +129,30 @@ class OnePlusSessionAuthKeks(
                     ),
                     plugin,
                 )
+            } catch (aioobe: ArrayIndexOutOfBoundsException) {
+                // libkeks `Calc.challenger` copies 16 bytes from offset 2 with no length check, so a
+                // short packet where a challenge was expected throws instead of failing auth. The
+                // field log of 2026-08-25 hit this with a 3-byte AuthStatus arriving mid-handshake.
+                // Upstream is vendored third party and stays untouched: the wrapper turns it into an
+                // auth failure so the session retry machinery takes over.
+                return finalizeAuthResult(
+                    AuthResult(
+                        ok = false,
+                        message = "ONEPLUS_AUTH: KEKS short packet ${aioobe.message} (out-of-step handshake)",
+                    ),
+                    plugin,
+                )
+            } catch (ise: IllegalStateException) {
+                // BouncyCastle "Invalid result" from validateZeroKnowledgeProof: the round-1 packet
+                // did not decode to a point on the curve. Same root cause as above — bytes from
+                // another handshake — and same treatment.
+                return finalizeAuthResult(
+                    AuthResult(
+                        ok = false,
+                        message = "ONEPLUS_AUTH: KEKS proof rejected ${ise.message} (out-of-step handshake)",
+                    ),
+                    plugin,
+                )
             } catch (npe: NullPointerException) {
                 return finalizeAuthResult(
                     AuthResult(

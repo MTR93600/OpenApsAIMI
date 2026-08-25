@@ -337,4 +337,14 @@
     <string name="libre3_status_open_start">Scan a sensor</string>
     <string name="libre3_status_driver_blocked_heading">Real driver is not in use</string>
 
+    <string name="dexcom_oneplus_notif_session_alive">Keeping the sensor connected</string>
+
+    <!-- Cross-slot conflict: the same sensor cannot run in both slots at once -->
+    <string name="dexcom_oneplus_slot_conflict_title">This sensor is already soaking</string>
+    <string name="dexcom_oneplus_slot_conflict_message">It is running as your pre-soak sensor. One sensor cannot be paired twice at the same time: both sessions would talk over each other and the pairing fails for both.\n\nIf it is ready, promote it — that keeps everything it has collected. Otherwise cancel the pre-soak, which throws that away, and start it here instead.</string>
+    <string name="dexcom_oneplus_slot_conflict_promote">Promote it instead</string>
+    <string name="dexcom_oneplus_slot_conflict_restart">Cancel pre-soak and start here</string>
+    <string name="dexcom_oneplus_slot_conflict_dismiss">Leave it soaking</string>
+    <string name="dexcom_oneplus_staging_is_production">This sensor already feeds the loop. Start it from Production, not as a pre-soak.</string>
+
 </resources>

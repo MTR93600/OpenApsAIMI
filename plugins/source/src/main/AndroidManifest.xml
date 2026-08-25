@@ -37,6 +37,14 @@
             android:name=".activities.CgmDriverLogActivity"
             android:exported="false" />
 
+        <!-- Keeps the ONE+ / G7 Bluetooth session alive with the screen off. The type is what grants
+             the privilege on Android 14+; "dataSync" (the persistent-notification service) grants
+             nothing for Bluetooth. -->
+        <service
+            android:name=".DexcomOnePlusSessionService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
         <service
             android:name=".notificationreader.NotificationCollectorService"
             android:exported="true"

@@ -28,6 +28,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -139,6 +141,19 @@ class DexcomOnePlusStartActivity : AppCompatActivity() {
                             finish()
                         },
                         onBeginStaging = { address -> dexcomOnePlusPlugin.beginStaging(address) },
+                        onIsStagingSensor = { address -> dexcomOnePlusPlugin.isStagingSensor(address) },
+                        onIsProductionSensor = { address -> dexcomOnePlusPlugin.isProductionSensor(address) },
+                        onCancelStaging = { dexcomOnePlusPlugin.cancelStaging() },
+                        // Promotion has its own gates and its own confirmation, and they live on the
+                        // status screen. Sending the user there is honest; re-implementing the gate
+                        // here would be a second place to get a loop source switch wrong.
+                        onOpenPromote = {
+                            startActivity(
+                                Intent(this, DexcomOnePlusStatusActivity::class.java)
+                                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                            )
+                            finish()
+                        },
                         onStagingDriver = { dexcomOnePlusPlugin.stagingDriverForConnect() },
                         onSensorSessionStarted = { address, previousMac ->
                             dexcomOnePlusPlugin.onSensorSessionStarted(address, previousMac)
@@ -163,7 +178,13 @@ private fun DexcomOnePlusStartScreen(
     onActivatePlugin: () -> Unit,
     onStarted: (SensorSlot) -> Unit,
     /** STAGING only: the user started this sensor now — anchors the pre-soak clock on its MAC. */
-    onBeginStaging: (String) -> Unit,
+    onBeginStaging: (String) -> Boolean,
+    /** True when that address is the sensor the pre-soak slot holds. */
+    onIsStagingSensor: (String) -> Boolean,
+    /** True when that address is the sensor already feeding the loop. */
+    onIsProductionSensor: (String) -> Boolean,
+    onCancelStaging: () -> Unit,
+    onOpenPromote: () -> Unit,
     onStagingDriver: () -> OnePlusCgmDriverReal,
     /**
      * PRODUCTION only: the user started this sensor now → anchor its age and log a sensor change.
@@ -201,6 +222,8 @@ private fun DexcomOnePlusStartScreen(
     // fails and the slot keeps a session start that is not this sensor's. Warn once, then let the
     // user proceed (a re-typed identical code is legitimate, if unlikely).
     var newSensorConfirmPending by remember { mutableStateOf(false) }
+    /** Set when Connect targets the sensor the pre-soak slot is already running — see the dialog. */
+    var slotConflictAddress by remember { mutableStateOf<String?>(null) }
 
     // Re-seed the whole form from the slot's own store, on first composition and on every slot
     // switch, so what is shown always belongs to the sensor being started.
@@ -238,6 +261,7 @@ private fun DexcomOnePlusStartScreen(
     val realSkeletonRequired = stringResource(R.string.dexcom_oneplus_real_skeleton_required)
     val serialNone = stringResource(R.string.dexcom_oneplus_applicator_serial_none)
     val newSensorCodeWarning = stringResource(R.string.dexcom_oneplus_new_sensor_code_warning)
+    val stagingIsProduction = stringResource(R.string.dexcom_oneplus_staging_is_production)
     var connectRequested by remember { mutableStateOf(false) }
 
     // Guided-flow progress for the stepper: Prepare → Code → Connect → Warm-up.
@@ -299,12 +323,24 @@ private fun DexcomOnePlusStartScreen(
         connectRequested = true
         // Hand off the freshest live sighting (carries seenElapsedMs) so the driver
         // connects in-window instead of blindly re-scanning.
-        val sighting = devices.firstOrNull { it.address == address } ?: selected
+        //
+        // Only a sighting that was really heard is handed over. The pre-selection may be a stored
+        // entry the scan never confirmed; passing that pretends an advertisement arrived, which both
+        // misses the driver's fast path anyway and talks it out of requiring an ADV. null is the
+        // honest answer, and the driver then scans for the sensor itself.
+        val sighting = devices.firstOrNull { it.address == address }
+            ?: selected?.takeIf { it.seenElapsedMs > 0L }
         if (slot == SensorSlot.STAGING) {
             // Staging: collect-only. Never write the production store, never activate the
             // plugin, never switch the AAPS active BG source — just drive scan/connect on
             // the dedicated staging driver and return to the dashboard.
-            onBeginStaging(address)
+            //
+            // Soaking the sensor that already feeds the loop would put two KEKS handshakes on one
+            // link and break both. The plugin refuses it too; this is the message the user reads.
+            if (!onBeginStaging(address)) {
+                errorText = stagingIsProduction
+                return@onConnectClick
+            }
             val stagingDriver = onStagingDriver()
             stagingDriver.setContext(context.applicationContext)
             stagingDriver.saveIdentity(identity.copy(pin = code))
@@ -314,6 +350,13 @@ private fun DexcomOnePlusStartScreen(
                 sighting = sighting,
             )
             onStarted(SensorSlot.STAGING)
+            return@onConnectClick
+        }
+        // Production start on the sensor that is soaking in the other slot: the same collision, from
+        // the other side. Ask rather than act — cancelling the pre-soak silently would throw away a
+        // soak clock that is often many hours old, and promoting is usually what the user wants.
+        if (onIsStagingSensor(address)) {
+            slotConflictAddress = address
             return@onConnectClick
         }
         // Production: adopting a different transmitter with the pre-filled code of the previous one
@@ -538,6 +581,58 @@ private fun DexcomOnePlusStartScreen(
             }
         }
     }
+
+    slotConflictAddress?.let { conflicting ->
+        SlotConflictDialog(
+            onPromote = {
+                slotConflictAddress = null
+                onOpenPromote()
+            },
+            onCancelStagingAndStart = {
+                slotConflictAddress = null
+                // The soak is given up knowingly. Connect is not re-run for the user: the store has
+                // just changed under it, so they press it again on a screen that now tells the truth.
+                onCancelStaging()
+                errorText = null
+            },
+            onDismiss = { slotConflictAddress = null },
+        )
+    }
+}
+
+/**
+ * Asked when Connect targets the sensor that is soaking in the pre-soak slot.
+ *
+ * Promote is the primary action on purpose: it is what the user usually means, and it keeps the soak
+ * the sensor has already earned. Cancelling throws that away, so it is the quieter choice, and it
+ * says so.
+ */
+@Composable
+private fun SlotConflictDialog(
+    onPromote: () -> Unit,
+    onCancelStagingAndStart: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dexcom_oneplus_slot_conflict_title)) },
+        text = { Text(stringResource(R.string.dexcom_oneplus_slot_conflict_message)) },
+        confirmButton = {
+            TextButton(onClick = onPromote) {
+                Text(stringResource(R.string.dexcom_oneplus_slot_conflict_promote))
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.dexcom_oneplus_slot_conflict_dismiss))
+                }
+                TextButton(onClick = onCancelStagingAndStart) {
+                    Text(stringResource(R.string.dexcom_oneplus_slot_conflict_restart))
+                }
+            }
+        },
+    )
 }
 
 /** The stepper, slot choice, permission prompt, code field and help — everything but the scan. */
