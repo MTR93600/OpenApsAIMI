@@ -2,11 +2,7 @@ package app.aaps.implementation.maintenance
 
 import android.content.Context
 import android.provider.Settings
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.documentfile.provider.DocumentFile
-import androidx.hilt.work.HiltWorker
-import androidx.lifecycle.lifecycleScope
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
@@ -38,7 +34,6 @@ import app.aaps.core.interfaces.protection.ExportPasswordDataStore
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventDiaconnG8PumpLogReset
-import app.aaps.core.interfaces.rx.events.EventShowDialog
 import app.aaps.core.interfaces.rx.events.EventShowSnackbar
 import app.aaps.core.interfaces.rx.weardata.CwfData
 import app.aaps.core.interfaces.rx.weardata.CwfMetadataKey
@@ -55,6 +50,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.objects.crypto.CryptoUtil
 import app.aaps.core.objects.extensions.asSettingsExport
 import app.aaps.core.objects.workflow.LoggingWorker
+import app.aaps.core.objects.workflow.MetroWorkerCreator
 import app.aaps.core.utils.receivers.DataInbox
 import app.aaps.core.utils.receivers.Inbox
 import app.aaps.implementation.R
@@ -66,9 +62,9 @@ import app.aaps.implementation.maintenance.data.PrefsFormat
 import app.aaps.implementation.maintenance.data.PrefsStatusImpl
 import app.aaps.implementation.maintenance.formats.EncryptedPrefsFormat
 import app.aaps.shared.impl.weardata.ZipWatchfaceFormat
-import dagger.Reusable
-import dagger.assisted.Assisted
-import dagger.assisted.AssistedInject
+import dev.zacsweers.metro.Assisted
+import dev.zacsweers.metro.AssistedFactory
+import dev.zacsweers.metro.AssistedInject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -80,6 +76,9 @@ import java.io.FileNotFoundException
 import java.io.IOException
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesBinding
+import dev.zacsweers.metro.SingleIn
 import javax.inject.Inject
 
 /**
@@ -89,7 +88,8 @@ import javax.inject.Inject
 private fun filenameTimestamp(): String =
     LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmmss"))
 
-@Reusable
+@ContributesBinding(AppScope::class)
+@SingleIn(AppScope::class)
 class ImportExportPrefsImpl @Inject constructor(
     private var aapsLogger: AAPSLogger,
     private val rh: ResourceHelper,
@@ -699,7 +699,7 @@ class ImportExportPrefsImpl @Inject constructor(
         }
     }
 
-    @HiltWorker
+
     class CsvExportWorker @AssistedInject constructor(
         @Assisted private val context: Context,
         @Assisted params: WorkerParameters,
@@ -714,6 +714,13 @@ class ImportExportPrefsImpl @Inject constructor(
         private val preferences: Preferences,
         private val rxBus: RxBus
     ) : LoggingWorker(context, params, Dispatchers.IO, aapsLogger, fabricPrivacy) {
+
+        /** Metro builds this worker; the parameter names must match [MetroWorkerCreator]. */
+        @AssistedFactory
+        fun interface Factory : MetroWorkerCreator {
+
+            override fun create(context: Context, params: WorkerParameters): CsvExportWorker
+        }
 
         override suspend fun doWorkAndLog(): Result {
             aapsLogger.info(LTag.CORE, "${CloudConstants.LOG_PREFIX} CSV_EXPORT doWorkAndLog started")
@@ -839,7 +846,7 @@ class ImportExportPrefsImpl @Inject constructor(
         dataInbox.putAndEnqueue(ApsExportInbox, ApsResultExportWorker.ApsResultData(algorithm, input, output))
     }
 
-    @HiltWorker
+
     class ApsResultExportWorker @AssistedInject constructor(
         @Assisted context: Context,
         @Assisted params: WorkerParameters,
@@ -850,6 +857,13 @@ class ImportExportPrefsImpl @Inject constructor(
         private val config: Config,
         private val dataInbox: DataInbox
     ) : LoggingWorker(context, params, Dispatchers.IO, aapsLogger, fabricPrivacy) {
+
+        /** Metro builds this worker; the parameter names must match [MetroWorkerCreator]. */
+        @AssistedFactory
+        fun interface Factory : MetroWorkerCreator {
+
+            override fun create(context: Context, params: WorkerParameters): ApsResultExportWorker
+        }
 
         /** [input] and [output] are already serialised JSON documents. */
         data class ApsResultData(val algorithm: String?, val input: String, val output: String?)

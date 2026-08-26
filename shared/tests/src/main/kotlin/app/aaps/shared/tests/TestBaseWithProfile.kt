@@ -1,5 +1,6 @@
 package app.aaps.shared.tests
 
+import android.app.Application
 import android.content.res.Resources
 import android.content.res.TypedArray
 import app.aaps.core.data.model.EPS
@@ -31,11 +32,11 @@ import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.BooleanNonPreferenceKey
 import app.aaps.core.keys.interfaces.DoubleNonPreferenceKey
-import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.keys.interfaces.IntNonPreferenceKey
 import app.aaps.core.keys.interfaces.LongNonPreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.StringNonPreferenceKey
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.keys.interfaces.UnitDoublePreferenceKey
 import app.aaps.core.objects.extensions.pureProfileFromJson
 import app.aaps.core.objects.profile.ProfileSealed
@@ -48,9 +49,7 @@ import app.aaps.implementation.utils.DecimalFormatterImpl
 import app.aaps.plugins.aps.openAPS.DeltaCalculator
 import app.aaps.plugins.aps.openAPSSMB.GlucoseStatusCalculatorSMB
 import app.aaps.shared.impl.utils.DateUtilImpl
-import dagger.android.AndroidInjector
-import dagger.android.DaggerApplication
-import dagger.android.HasAndroidInjector
+import app.aaps.core.interfaces.di.MetroMemberInjector
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -62,8 +61,8 @@ import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mock
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.kotlin.any
-import org.mockito.kotlin.anyVararg
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.anyVararg
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.spy
 import org.mockito.kotlin.whenever
@@ -79,7 +78,7 @@ open class TestBaseWithProfile : TestBase() {
     @Mock lateinit var fabricPrivacy: FabricPrivacy
     @Mock lateinit var profileFunction: ProfileFunction
     @Mock lateinit var config: Config
-    @Mock lateinit var context: DaggerApplication
+    @Mock lateinit var context: Application
     @Mock lateinit var preferences: Preferences
     @Mock lateinit var constraintsChecker: ConstraintsChecker
     @Mock lateinit var notificationManager: NotificationManager
@@ -113,10 +112,9 @@ open class TestBaseWithProfile : TestBase() {
         injectors.add(fn)
     }
 
-    val injector = HasAndroidInjector {
-        AndroidInjector {
+    val injector = MetroMemberInjector {
             injectors.forEach { fn -> fn(it) }
-        }
+            true
     }
 
     private lateinit var validProfileJSON: String
@@ -146,7 +144,6 @@ open class TestBaseWithProfile : TestBase() {
         testPumpPlugin = TestPumpPlugin(rh)
         hardLimits = HardLimitsMock(preferences, rh)
         whenever(context.applicationContext).thenReturn(context)
-        whenever(context.androidInjector()).thenReturn(injector.androidInjector())
         whenever(context.theme).thenReturn(theme)
         whenever(context.obtainStyledAttributes(anyOrNull(), any(), any(), any())).thenReturn(typedArray)
         whenever(dateUtil.now()).thenReturn(now)

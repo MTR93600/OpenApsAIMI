@@ -5,9 +5,12 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.workflow.CalculationWorkflow.Companion.HISTORY_CALCULATION
 import app.aaps.core.interfaces.workflow.CalculationWorkflow.Companion.MAIN_CALCULATION
 import app.aaps.core.interfaces.workflow.CalculationWorkflow.Companion.UPDATE_PREDICTIONS
+import app.aaps.workflow.WorkflowChainData.Companion.GEN_KEY
+import app.aaps.workflow.WorkflowChainData.Companion.JOB_KEY
 import java.util.concurrent.atomic.AtomicLong
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.SingleIn
 import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * Holds the input data for in-flight calculation chains.
@@ -33,7 +36,7 @@ import javax.inject.Singleton
  * superseded chain dispatches in the narrow window between slot overwrite and
  * WorkManager's REPLACE-cancel taking effect.
  */
-@Singleton
+@SingleIn(AppScope::class)
 class WorkflowChainData @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {

@@ -9,7 +9,6 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.HR
 import app.aaps.core.data.model.SC
@@ -22,6 +21,7 @@ import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginBaseWithPreferences
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.Profile
@@ -44,12 +44,13 @@ import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.ui.extensions.generateCOBString
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.objects.extensions.round
-import app.aaps.core.ui.extensions.toStringShort
 import app.aaps.core.objects.profile.ProfileSealed
 import app.aaps.core.ui.compose.icons.IcXDrip
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
+import app.aaps.core.ui.extensions.generateCOBString
+import app.aaps.core.ui.extensions.toStringShort
 import app.aaps.plugins.sync.R
 import app.aaps.plugins.sync.xdrip.compose.XdripComposeContent
 import app.aaps.plugins.sync.xdrip.compose.XdripMvvmRepository
@@ -72,10 +73,20 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesBinding
+import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.IntKey
+import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.binding
 import javax.inject.Inject
-import javax.inject.Singleton
 
-@Singleton
+@ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
+// Also the app-wide XDripBroadcast. It was a second @Binds in SyncModule to this same class, so one
+// object served both roles - keep it that way rather than letting the two split apart.
+@ContributesBinding(AppScope::class, binding = binding<XDripBroadcast>())
+@IntKey(330)
+@SingleIn(AppScope::class)
 class XdripPlugin @Inject constructor(
     aapsLogger: AAPSLogger,
     override val rh: ResourceHelper,

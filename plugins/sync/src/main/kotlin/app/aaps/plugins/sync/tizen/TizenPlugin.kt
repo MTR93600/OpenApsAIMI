@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ResolveInfo
 import android.os.Bundle
-import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.data.model.durationInMinutes
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.configuration.Config
@@ -32,10 +32,10 @@ import app.aaps.core.interfaces.rx.events.EventLoopUpdateGui
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.data.model.durationInMinutes
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.objects.extensions.round
-import app.aaps.core.ui.extensions.toStringFull
 import app.aaps.core.ui.compose.icons.IcPluginTizen
+import app.aaps.core.ui.extensions.toStringFull
 import app.aaps.plugins.sync.R
 import app.aaps.shared.impl.extensions.safeQueryBroadcastReceivers
 import kotlinx.coroutines.CoroutineScope
@@ -44,10 +44,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.IntKey
+import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.binding
 import javax.inject.Inject
-import javax.inject.Singleton
 
-@Singleton
+@ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
+@IntKey(360)
+@SingleIn(AppScope::class)
 class TizenPlugin @Inject constructor(
     aapsLogger: AAPSLogger,
     override val rh: ResourceHelper,

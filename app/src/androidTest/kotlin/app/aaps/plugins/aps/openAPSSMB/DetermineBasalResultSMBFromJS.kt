@@ -1,18 +1,18 @@
 package app.aaps.plugins.aps.openAPSSMB
 
+import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.core.interfaces.aps.Predictions
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.plugins.aps.openAPS.APSResultObject
-import dagger.android.HasAndroidInjector
-import org.json.JSONException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import org.json.JSONException
 import org.json.JSONObject
 import javax.inject.Inject
 
-class DetermineBasalResultSMBFromJS private constructor(injector: HasAndroidInjector) : APSResultObject(injector) {
+class DetermineBasalResultSMBFromJS private constructor(injector: MetroMemberInjector) : APSResultObject(injector) {
 
     @Inject lateinit var dateUtil: DateUtil
 
@@ -22,7 +22,7 @@ class DetermineBasalResultSMBFromJS private constructor(injector: HasAndroidInje
     private var snoozeBG = 0.0
     override var variableSens: Double? = null
 
-    internal constructor(injector: HasAndroidInjector, result: JSONObject) : this(injector) {
+    internal constructor(injector: MetroMemberInjector, result: JSONObject) : this(injector) {
         date = dateUtil.now()
         json = result
         try {

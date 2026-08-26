@@ -5,8 +5,8 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import app.aaps.core.interfaces.aps.AutosensData
 import app.aaps.core.interfaces.aps.AutosensDataStore
-import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.aps.Sensitivity
+import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
@@ -29,7 +29,6 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import javax.inject.Provider
 import kotlin.test.assertIs
 
 class PrepareGraphDataWorkerTest : TestBaseWithProfile() {
@@ -47,7 +46,7 @@ class PrepareGraphDataWorkerTest : TestBaseWithProfile() {
     @Mock lateinit var signals: CalculationSignalsEmitter
     @Mock lateinit var workerParameters: WorkerParameters
 
-    private val autosensDataProvider = Provider { mock<AutosensData>() }
+    private val autosensDataProvider = { mock<AutosensData>() }
 
     private fun worker() =
         PrepareGraphDataWorker(
