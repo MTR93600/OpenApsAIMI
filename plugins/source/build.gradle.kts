@@ -36,6 +36,7 @@ dependencies {
     implementation(project(":core:ui"))
     implementation(project(":core:utils"))
     implementation(project(":ui"))
+    implementation(project(":plugins:dexcom_oneplus"))
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))

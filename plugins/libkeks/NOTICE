@@ -1,0 +1,24 @@
+THIRD-PARTY NOTICE — :plugins:libkeks
+=====================================
+
+This module vendors the KEKS J-PAKE / ExtraData authentication sources from
+NightscoutFoundation/xDrip (GNU GPL v3.0), pin commit
+1e86d9a2a52577ed2c30fbf7b69d75fd56e6918f (tag 2026.07.15).
+
+Upstream paths:
+  - libkeks/src/main/java/jamorham/**
+  - ipluginda/src/main/java/com/eveningoutpost/dexdrip/plugin/IPluginDA.java
+
+Authorship per upstream comments: JamOrHam / jamorham. Upstream files carry no
+formal per-file "Copyright (C) <year> <name>" line; see the git history of the
+pin commit for authorship. No copyright holder is invented here.
+
+Each vendored .java file carries an "SPDX-License-Identifier: GPL-3.0-only"
+header naming this upstream and pin. Sources are not knowingly modified from the
+pin (verify with a diff against the pin commit before any wide distribution).
+
+The combined OpenApsAIMI APK is distributed under AGPL-3.0-or-later; GPL-3.0
+obligations are honoured for these derived parts (GPLv3 §13 AGPL compatibility).
+
+Transitive dependency: org.bouncycastle bcpkix / bcprov (Bouncy Castle MIT-style
+licence) — pulled via Gradle, not vendored here.

@@ -8,6 +8,7 @@ fun GlucoseValue.SourceSensor.fromDb(): SourceSensor =
         GlucoseValue.SourceSensor.DEXCOM_NATIVE_UNKNOWN  -> SourceSensor.DEXCOM_NATIVE_UNKNOWN
         GlucoseValue.SourceSensor.DEXCOM_G6_NATIVE       -> SourceSensor.DEXCOM_G6_NATIVE
         GlucoseValue.SourceSensor.DEXCOM_G7_NATIVE       -> SourceSensor.DEXCOM_G7_NATIVE
+        GlucoseValue.SourceSensor.DEXCOM_ONEPLUS_NATIVE  -> SourceSensor.DEXCOM_ONEPLUS_NATIVE
         GlucoseValue.SourceSensor.MEDTRUM_A6             -> SourceSensor.MEDTRUM_A6
         GlucoseValue.SourceSensor.DEXCOM_G6_NATIVE_XDRIP -> SourceSensor.DEXCOM_G6_NATIVE_XDRIP
         GlucoseValue.SourceSensor.DEXCOM_G7_NATIVE_XDRIP -> SourceSensor.DEXCOM_G7_NATIVE_XDRIP
@@ -26,12 +27,15 @@ fun GlucoseValue.SourceSensor.fromDb(): SourceSensor =
         GlucoseValue.SourceSensor.LIBRE_2                -> SourceSensor.LIBRE_2
         GlucoseValue.SourceSensor.LIBRE_2_NATIVE         -> SourceSensor.LIBRE_2_NATIVE
         GlucoseValue.SourceSensor.LIBRE_3                -> SourceSensor.LIBRE_3
+        GlucoseValue.SourceSensor.LIBRE_3_NATIVE         -> SourceSensor.LIBRE_3_NATIVE
         GlucoseValue.SourceSensor.POCTECH_NATIVE         -> SourceSensor.POCTECH_NATIVE
         GlucoseValue.SourceSensor.GLUNOVO_NATIVE         -> SourceSensor.GLUNOVO_NATIVE
         GlucoseValue.SourceSensor.INTELLIGO_NATIVE       -> SourceSensor.INTELLIGO_NATIVE
         GlucoseValue.SourceSensor.MM_600_SERIES          -> SourceSensor.MM_600_SERIES
         GlucoseValue.SourceSensor.MM_SIMPLERA            -> SourceSensor.MM_SIMPLERA
         GlucoseValue.SourceSensor.EVERSENSE              -> SourceSensor.EVERSENSE
+        GlucoseValue.SourceSensor.EVERSENSE_E3           -> SourceSensor.EVERSENSE_E3
+        GlucoseValue.SourceSensor.EVERSENSE_365          -> SourceSensor.EVERSENSE_365
         GlucoseValue.SourceSensor.AIDEX                  -> SourceSensor.AIDEX
         GlucoseValue.SourceSensor.RANDOM                 -> SourceSensor.RANDOM
         GlucoseValue.SourceSensor.UNKNOWN                -> SourceSensor.UNKNOWN
@@ -53,6 +57,7 @@ fun SourceSensor.toDb(): GlucoseValue.SourceSensor =
         SourceSensor.DEXCOM_NATIVE_UNKNOWN  -> GlucoseValue.SourceSensor.DEXCOM_NATIVE_UNKNOWN
         SourceSensor.DEXCOM_G6_NATIVE       -> GlucoseValue.SourceSensor.DEXCOM_G6_NATIVE
         SourceSensor.DEXCOM_G7_NATIVE       -> GlucoseValue.SourceSensor.DEXCOM_G7_NATIVE
+        SourceSensor.DEXCOM_ONEPLUS_NATIVE  -> GlucoseValue.SourceSensor.DEXCOM_ONEPLUS_NATIVE
         SourceSensor.MEDTRUM_A6             -> GlucoseValue.SourceSensor.MEDTRUM_A6
         SourceSensor.DEXCOM_G6_NATIVE_XDRIP -> GlucoseValue.SourceSensor.DEXCOM_G6_NATIVE_XDRIP
         SourceSensor.DEXCOM_G7_NATIVE_XDRIP -> GlucoseValue.SourceSensor.DEXCOM_G7_NATIVE_XDRIP
@@ -71,12 +76,15 @@ fun SourceSensor.toDb(): GlucoseValue.SourceSensor =
         SourceSensor.LIBRE_2                -> GlucoseValue.SourceSensor.LIBRE_2
         SourceSensor.LIBRE_2_NATIVE         -> GlucoseValue.SourceSensor.LIBRE_2_NATIVE
         SourceSensor.LIBRE_3                -> GlucoseValue.SourceSensor.LIBRE_3
+        SourceSensor.LIBRE_3_NATIVE         -> GlucoseValue.SourceSensor.LIBRE_3_NATIVE
         SourceSensor.POCTECH_NATIVE         -> GlucoseValue.SourceSensor.POCTECH_NATIVE
         SourceSensor.GLUNOVO_NATIVE         -> GlucoseValue.SourceSensor.GLUNOVO_NATIVE
         SourceSensor.INTELLIGO_NATIVE       -> GlucoseValue.SourceSensor.INTELLIGO_NATIVE
         SourceSensor.MM_600_SERIES          -> GlucoseValue.SourceSensor.MM_600_SERIES
         SourceSensor.MM_SIMPLERA            -> GlucoseValue.SourceSensor.MM_SIMPLERA
         SourceSensor.EVERSENSE              -> GlucoseValue.SourceSensor.EVERSENSE
+        SourceSensor.EVERSENSE_E3           -> GlucoseValue.SourceSensor.EVERSENSE_E3
+        SourceSensor.EVERSENSE_365          -> GlucoseValue.SourceSensor.EVERSENSE_365
         SourceSensor.AIDEX                  -> GlucoseValue.SourceSensor.AIDEX
         SourceSensor.RANDOM                 -> GlucoseValue.SourceSensor.RANDOM
         SourceSensor.UNKNOWN                -> GlucoseValue.SourceSensor.UNKNOWN

@@ -24,7 +24,9 @@ internal class SourceSensorExtensionTest {
     @Test
     fun `representative mappings map by name`() {
         assertThat(SourceSensor.DEXCOM_G6_NATIVE.toDb()).isEqualTo(GlucoseValue.SourceSensor.DEXCOM_G6_NATIVE)
+        assertThat(SourceSensor.DEXCOM_ONEPLUS_NATIVE.toDb()).isEqualTo(GlucoseValue.SourceSensor.DEXCOM_ONEPLUS_NATIVE)
         assertThat(GlucoseValue.SourceSensor.LIBRE_2_NATIVE.fromDb()).isEqualTo(SourceSensor.LIBRE_2_NATIVE)
+        assertThat(GlucoseValue.SourceSensor.LIBRE_3_NATIVE.fromDb()).isEqualTo(SourceSensor.LIBRE_3_NATIVE)
         assertThat(SourceSensor.UNKNOWN.toDb()).isEqualTo(GlucoseValue.SourceSensor.UNKNOWN)
         assertThat(GlucoseValue.SourceSensor.ZT_PREDICTION.fromDb()).isEqualTo(SourceSensor.ZT_PREDICTION)
     }

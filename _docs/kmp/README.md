@@ -1,14 +1,21 @@
 # Dossier de décision — migration AIMI vers KMP/iOS
 
-> **Référence AIMI :** `dev_OAPSAIMI` @ `06e7bc5021ca8fdd976505d1fefb03cc88681c19`  
-> **Référence KMP :** `kmp` @ `4957c26eb85a71103e649498e7e991cb473e3098`  
-> **Date d'audit :** 2026-08-25
+> **Référence AIMI gelée :** tag `aimi-baseline-2026-08-26` = `dev_OAPSAIMI` @ `1ae418e106`  
+> **Audit initial AIMI :** `06e7bc5021ca8fdd976505d1fefb03cc88681c19` (25 août 2026)  
+> **Référence KMP (audit) :** `kmp` @ `4957c26eb85a71103e649498e7e991cb473e3098`  
+> **Date d'audit :** 2026-08-25 · **plan d'exécution :** 2026-08-26
 
-## Document à lire en premier
+## Document à exécuter
 
-[`AIMI_KMP_MIGRATION_BLUEPRINT.md`](AIMI_KMP_MIGRATION_BLUEPRINT.md) est le document directeur.
-Il définit la décision d'architecture, la parité recherchée, la frontière stateful, les modules,
-les gates et le budget consolidé.
+[`AIMI_KMP_EXECUTION_PLAN.md`](AIMI_KMP_EXECUTION_PLAN.md) dit quoi faire maintenant
+(semaines 1–8, One+/Libre 3, contrat KMP, go/no-go).  
+[`adr-g0-defaults.md`](adr-g0-defaults.md) fige hôte Trio, CGM One+/G7 d'abord, VirtualPump jusqu'à W8.
+
+## Document d'architecture
+
+[`AIMI_KMP_MIGRATION_BLUEPRINT.md`](AIMI_KMP_MIGRATION_BLUEPRINT.md) reste le document directeur
+d'architecture (parité, frontière stateful, modules, gates, budget). En cas de conflit sur
+*la prochaine action*, le plan d'exécution et l'ADR G0 l'emportent.
 
 [`AIMI_KMP_IMPLEMENTATION_BACKLOG.md`](AIMI_KMP_IMPLEMENTATION_BACKLOG.md) transforme cette décision
 en milestones M0 à M12, tâches propriétaires et critères de sortie vérifiables.
@@ -28,6 +35,7 @@ blueprint et ces annexes spécialisées font autorité sur `AIMI_KMP_MIGRATION_S
 | Orchestrateur état/replay | [`annex-8-state-replay-and-extraction-contract.md`](annex-8-state-replay-and-extraction-contract.md) | snapshot, état durable, commit, replay exécutable, extraction DetermineBasal |
 | Orchestrateur produit | [`annex-9-product-advisor-ui-and-optional-surfaces.md`](annex-9-product-advisor-ui-and-optional-surfaces.md) | Advisor, Auditor, TPO, Meal Advisor, UI, LLM, SOS, outils |
 | Orchestrateur programme | [`AIMI_KMP_IMPLEMENTATION_BACKLOG.md`](AIMI_KMP_IMPLEMENTATION_BACKLOG.md) | ordre d'exécution M0–M12, dépendances, owners et gates d'acceptation |
+| Plan exécutable + ADR G0 | [`AIMI_KMP_EXECUTION_PLAN.md`](AIMI_KMP_EXECUTION_PLAN.md), [`adr-g0-defaults.md`](adr-g0-defaults.md) | W1–W8, CGM One+/Libre 3, défauts produit |
 
 ## Études initiales conservées comme preuves
 
@@ -61,27 +69,36 @@ blueprint et ces annexes spécialisées font autorité sur `AIMI_KMP_MIGRATION_S
 
 ## Ordre de lecture recommandé
 
-1. blueprint ;
-2. annexe 8 pour comprendre la frontière et le replay ;
-3. annexe 6 pour le protocole Tree → Harmonia → RBT → safety ;
-4. annexe 5 pour les modèles et learners ;
-5. annexe 7 pour l'intégration iOS ;
-6. annexe 9 pour les fonctions produit adjacentes ;
-7. annexes 1 à 4 pour les preuves historiques et métriques.
+1. [`AIMI_KMP_EXECUTION_PLAN.md`](AIMI_KMP_EXECUTION_PLAN.md) et [`adr-g0-defaults.md`](adr-g0-defaults.md) ;
+2. blueprint ;
+3. annexe 8 pour comprendre la frontière et le replay ;
+4. annexe 6 pour le protocole Tree → Harmonia → RBT → safety ;
+5. annexe 5 pour les modèles et learners ;
+6. annexe 7 pour l'intégration iOS ;
+7. annexe 9 pour les fonctions produit adjacentes ;
+8. annexes 1 à 4 pour les preuves historiques et métriques.
 
-## Questions qui exigent une décision produit
+## Questions encore ouvertes (ne bloquent pas W1–W8)
 
-- application hôte iOS et première paire pompe/CGM ;
+Les défauts G0 (Trio, One+/G7, VirtualPump, TFLite conservé, défauts Android reproduits)
+sont dans [`adr-g0-defaults.md`](adr-g0-defaults.md). Restent ouverts :
+
+- pompe iOS après W8 (Dana-i vs Medtrum) ;
 - modèle UAM uniquement embarqué ou import utilisateur versionné ;
-- correction des défauts Android connus avant gel de la baseline ;
-- politique de persistence/reconstruction des mémoires après restart ;
+- persistence/reconstruction des mémoires après restart ;
 - corpus privé et critères de shadow ;
-- fonctionnalités v1 : core-only, learners, HealthKit, Hormonitor, Advisor/TPO ;
-- politique de distribution et d'entitlements Apple ;
-- seuil de parité interne et règle exacte après quantification pompe.
+- extras v1 : learners, HealthKit, Hormonitor viewer, Advisor/TPO ;
+- distribution Apple et entitlement Critical Alerts ;
+- seuil de parité interne après quantification pompe.
 
 ## Règle de mise à jour
 
-Tout changement de décision doit modifier le blueprint et l'annexe propriétaire dans le même lot.
+Tout changement de **prochaine action** (W1–W8, hôte, CGM, pompe virtuelle) doit modifier
+[`AIMI_KMP_EXECUTION_PLAN.md`](AIMI_KMP_EXECUTION_PLAN.md) et [`adr-g0-defaults.md`](adr-g0-defaults.md)
+dans le même lot.
+
+Tout changement d'architecture (parité, ports, modules) doit modifier le blueprint et l'annexe
+propriétaire dans le même lot.
+
 Un changement de comportement thérapeutique exige un ADR, un replay avant/après et une justification
 distincte du refactor KMP.

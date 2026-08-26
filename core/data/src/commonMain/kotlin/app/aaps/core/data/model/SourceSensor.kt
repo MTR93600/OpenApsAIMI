@@ -4,6 +4,8 @@ enum class SourceSensor(val text: String) {
     DEXCOM_NATIVE_UNKNOWN("AAPS-Dexcom"),
     DEXCOM_G6_NATIVE("AAPS-DexcomG6"),
     DEXCOM_G7_NATIVE("AAPS-DexcomG7"),
+    /** Native BLE plugin in AAPS (not BYODA / not xDrip). Dexcom ONE+ and G7 Direct family. */
+    DEXCOM_ONEPLUS_NATIVE("AAPS-DexcomOnePlus"),
     MEDTRUM_A6("Medtrum A6"),
     DEXCOM_G6_NATIVE_XDRIP("G6 Native"),
     DEXCOM_G7_NATIVE_XDRIP("G7 Native"),
@@ -22,6 +24,8 @@ enum class SourceSensor(val text: String) {
     LIBRE_2("Libre2"),
     LIBRE_2_NATIVE("Libre2 Native"),
     LIBRE_3("Libre3"),
+    /** Native BLE plugin in AAPS (not Juggluco / not xDrip). Libre 3 and Libre 3 Plus. */
+    LIBRE_3_NATIVE("AAPS-Libre3"),
     POCTECH_NATIVE("Poctech"),
     GLUNOVO_NATIVE("Glunovo"),
     INTELLIGO_NATIVE("Intelligo"),
@@ -31,6 +35,8 @@ enum class SourceSensor(val text: String) {
     SIBIONIC("SI App"),
     SINO("Sino App"),
     EVERSENSE("Eversense"),
+    EVERSENSE_E3("Eversense E3"),
+    EVERSENSE_365("Eversense 365"),
     AIDEX("GlucoRx Aidex"),
     SYAI_TAG("Syai Tag"),
     INSTARA("Instara"),

@@ -185,7 +185,10 @@ enum class NotificationId(
     SCENE_CHAIN_ERROR(IMPORTANT, AUTOMATION, allowMultiple = true),
 
     /** Bolus succeeded but the accompanying carbs could not be persisted — the user must re-enter them. */
-    CARBS_STORE_FAILED(URGENT, PUMP);
+    CARBS_STORE_FAILED(URGENT, PUMP),
+
+    /** The AAPS folder grant used to look up the ONE+ engineering marker is gone. */
+    DEXCOM_ONEPLUS_DIR_ACCESS_LOST(NORMAL, SYSTEM);
 
     companion object {
 

@@ -45,4 +45,19 @@ object AapsSpacing {
     val chipHeight = 35.dp
     val chipIconSize = 24.dp
     val chipProgressHeight = 3.dp
+
+    /** Widest column a form or status screen should occupy on a tablet. */
+    val readableContentMaxWidth = 560.dp
+
+    /** Shortest height of a tappable list row (sensor scan result, etc.). */
+    val listRowMinHeight = 56.dp
+
+    /** Below this width a screen keeps one column instead of splitting into two panes. */
+    val paneMinWidth = 360.dp
+
+    /** Smallest usable CGM warm-up ring. */
+    val warmupRingMin = 120.dp
+
+    /** Largest CGM warm-up ring, so it does not swallow a tablet pane. */
+    val warmupRingMax = 240.dp
 }
