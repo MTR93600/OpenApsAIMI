@@ -1,13 +1,14 @@
 package app.aaps.plugins.source.keys
 
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.plugins.source.R
 
 enum class Libre3BooleanKey(
     override val key: String,
     override val defaultValue: Boolean,
-    override val titleResId: Int,
-    override val summaryResId: Int? = null,
+    private val titleResId: Int,
+    private val summaryResId: Int? = null,
     override val defaultedBySM: Boolean = false,
     override val calculatedDefaultValue: Boolean = false,
     override val engineeringModeOnly: Boolean = false,
@@ -21,7 +22,7 @@ enum class Libre3BooleanKey(
 ) : BooleanPreferenceKey {
 
     /**
-     * Routes `app.aaps.plugins.libre3.Libre3CgmDrivers.default` to the real driver instead of the
+     * Routes [app.aaps.plugins.libre3.Libre3CgmDrivers.default] to the real driver instead of the
      * stub. Default off on purpose: the real driver must stay unreachable until the NFC step and
      * the crypto vectors are proven, and until the user has confirmed it on a real sensor.
      */
@@ -32,5 +33,9 @@ enum class Libre3BooleanKey(
         summaryResId = R.string.libre3_use_real_skeleton_summary,
         engineeringModeOnly = true,
         exportable = false,
-    ),
+    )
+    ;
+
+    override val title: TextRef = TextRef.AndroidRes(titleResId)
+    override val summary: TextRef? = summaryResId?.let { TextRef.AndroidRes(it) }
 }

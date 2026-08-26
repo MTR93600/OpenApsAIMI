@@ -1,0 +1,29 @@
+---
+description: Android and Gradle development rules
+globs:
+  - "**/*.kt"
+  - "**/*.kts"
+  - "**/build.gradle"
+  - "**/build.gradle.kts"
+alwaysApply: false
+---
+
+Before introducing a dependency, verify whether the repository already
+contains an equivalent dependency.
+
+Do not upgrade Gradle, AGP, Kotlin, Java, Android SDK, or dependencies
+unless explicitly required.
+
+Use existing build conventions.
+
+Prefer compiling the smallest affected module before attempting a
+full repository build.
+
+For Kotlin changes:
+- preserve null-safety
+- follow existing coroutine patterns
+- reuse dependency injection conventions
+- avoid unnecessary allocation in frequently executed paths
+
+Never suppress compiler warnings merely to make a build pass unless the
+reason is understood and justified.

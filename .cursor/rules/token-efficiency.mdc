@@ -1,0 +1,33 @@
+---
+description: Context and token efficiency
+alwaysApply: true
+---
+
+Use repository context economically.
+
+Do not read the whole repository by default.
+
+Start with targeted search based on the request.
+
+Read full files only when required.
+
+Do not repeatedly read unchanged content.
+
+Do not restate large blocks of source code in reasoning.
+
+Prefer diffs and targeted excerpts.
+
+Do not launch multiple agents for trivial tasks.
+
+Use subagents only when parallel or independent reasoning provides
+real value.
+
+Do not produce long progress reports.
+
+Spend reasoning budget on:
+- architecture
+- difficult bugs
+- safety-critical behavior
+- ambiguous behavior
+
+Use minimal reasoning for mechanical edits.

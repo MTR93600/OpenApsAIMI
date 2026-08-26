@@ -9,9 +9,9 @@ import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.interfaces.TextRef
 import dagger.Lazy
 import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * Outcome of the Libre 3 availability check.
@@ -55,7 +55,6 @@ sealed interface Libre3Availability {
  * [app.aaps.core.interfaces.plugin.ActivePlugin.getSpecificPluginsVisibleInList] filters on, so
  * Config Builder, the Setup Wizard, search and Quick Launch all inherit the gate from one place.
  */
-@Singleton
 class Libre3AvailabilityProvider @Inject constructor(
     private val aapsLogger: AAPSLogger,
     // Lazy on purpose: FileListProvider pulls in Config, Preferences and Storage, and this provider
@@ -162,8 +161,10 @@ class Libre3AvailabilityProvider @Inject constructor(
                 accessNotificationPosted = true
                 notificationManager.post(
                     id = NotificationId.LIBRE3_DIR_ACCESS_LOST,
-                    textRes = R.string.libre3_aaps_directory_access_lost,
-                    actions = listOf(NotificationAction(R.string.libre3_aaps_directory_select) {})
+                    textRef = TextRef.AndroidRes(R.string.libre3_aaps_directory_access_lost),
+                    actions = listOf(
+                        NotificationAction(TextRef.AndroidRes(R.string.libre3_aaps_directory_select)) {}
+                    )
                 )
             }
         } else if (accessNotificationPosted) {

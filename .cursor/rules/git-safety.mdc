@@ -1,0 +1,31 @@
+---
+description: Repository and git safety
+alwaysApply: true
+---
+
+Before making repository changes:
+
+1. Verify repository root.
+2. Run git status.
+3. Identify current branch.
+4. Check for existing uncommitted user changes.
+
+Never overwrite user changes.
+
+Never modify another repository.
+
+Never run destructive git operations unless explicitly requested.
+
+Forbidden without explicit authorization:
+- git reset --hard
+- git clean
+- git checkout .
+- git restore .
+- force push
+- history rewriting
+- deleting branches
+- changing repositories
+
+Do not commit or push unless explicitly requested.
+
+After implementing the task, inspect git diff.

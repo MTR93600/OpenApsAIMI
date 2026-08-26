@@ -1,0 +1,60 @@
+---
+description: Test and verification rules for KMP Android and iOS
+globs:
+  - "**/*Test.kt"
+  - "**/*Tests.kt"
+  - "**/commonTest/**"
+  - "**/androidHostTest/**"
+  - "**/androidTest/**"
+  - "**/iosTest/**"
+alwaysApply: false
+---
+
+Never declare work complete because the code looks correct.
+
+After a logic change:
+1. inspect the diff
+2. compile the smallest affected module
+3. run the relevant tests for that module
+4. fix failures caused by the change
+5. inspect the final diff again
+
+Prefer the smallest test task, not a full repository build.
+
+Use `./gradlew` with `--no-daemon`. Redirect output to a log file.
+Do not pipe to `tail` when you need the real Gradle exit code.
+
+## Where tests live
+
+- Shared KMP logic belongs in `commonTest` so it can run on JVM and Native.
+- Most KMP modules still use `androidHostTest`. That is JVM-only. Do not claim
+  iOS coverage unless a `commonTest` actually ran on the simulator.
+- Today only `:core:data` has a real `commonTest` on iOS simulator.
+- AIMI dosing, ML, and snapshot contracts must gain `commonTest` as they move
+  into `commonMain`. Do not leave safety-critical logic testable only inside
+  the Android app.
+
+## Host limits
+
+| Task | Windows | macOS |
+|---|---|---|
+| `jvmTest`, `testFullDebugUnitTest` | runs | runs |
+| `mingwX64Test` | runs | skipped |
+| `iosSimulatorArm64Test` | skipped | runs |
+
+Do not claim Native is fully tested from one machine.
+
+## Forbidden without explicit user permission
+
+- `connectedAndroidTest` (it uninstalls the app)
+- installing the app automatically
+- instrumented tests on a device
+
+## AIMI / CGM
+
+Treat dosing output, glucose input, and crypto/session as safety-critical.
+
+A change in AIMI, Libre 3, or Dexcom One+ needs tests on the affected module
+before it is called done.
+
+Distinguish clearly: implemented, tested, not tested, blocked.

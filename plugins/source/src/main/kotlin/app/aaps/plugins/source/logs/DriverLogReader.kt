@@ -1,20 +1,18 @@
 package app.aaps.plugins.source.logs
 
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
+import app.aaps.plugins.libre3.Libre3LogMarkers
 import java.io.File
 import java.io.RandomAccessFile
-
-/** Logcat logger name used by the Libre 3 driver. Keep in step with `Libre3LogMarkers.TAG` in W4. */
-private const val LIBRE3_LOG_TAG = "LIBRE3"
 
 /** Which driver the log screen is showing. */
 enum class DriverLogFilter(val loggerNames: Set<String>) {
 
     /** Both native sensor drivers at once. */
-    ALL(setOf(LIBRE3_LOG_TAG, OnePlusLogMarkers.TAG)),
+    ALL(setOf(Libre3LogMarkers.TAG, OnePlusLogMarkers.TAG)),
 
-    /** The native Libre 3 / Libre 3 Plus driver. The tag is inlined until W4 lands `:plugins:libre3`. */
-    LIBRE3(setOf(LIBRE3_LOG_TAG)),
+    /** The native Libre 3 / Libre 3 Plus driver. */
+    LIBRE3(setOf(Libre3LogMarkers.TAG)),
 
     /** The native Dexcom ONE+ / G7 driver. */
     DEXCOM_ONE_PLUS(setOf(OnePlusLogMarkers.TAG)),

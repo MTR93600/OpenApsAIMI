@@ -34,7 +34,7 @@ class Libre3WarmupNotification(private val context: Context) {
 
         val ongoing = state.phase != Libre3WarmupState.Phase.FAILED
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(CoreUiR.drawable.ic_shield)
+            .setSmallIcon(CoreUiR.drawable.notif_icon)
             .setContentTitle(context.getString(R.string.libre3_notif_title))
             .setOnlyAlertOnce(true)
             .setOngoing(ongoing)

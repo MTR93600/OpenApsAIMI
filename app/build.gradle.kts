@@ -239,7 +239,12 @@ dependencies {
     // Feature plugins self-register into the Hilt plugin map (see e.g. :plugins:smoothing SmoothingModule).
     // Adding/removing a plugin is therefore just an include in settings.gradle — no edit needed here.
     rootProject.subprojects
-        .filter { it.path.startsWith(":plugins:") && it.buildFile.exists() }
+        .filter {
+            it.path.startsWith(":plugins:") &&
+                it.buildFile.exists() &&
+                // Empty AIMI KMP shells have no Android variant. They are not feature plugins.
+                !it.path.startsWith(":plugins:aimi-")
+        }
         .forEach { implementation(project(it.path)) }
     implementation(project(":implementation"))
     implementation(project(":database:impl"))

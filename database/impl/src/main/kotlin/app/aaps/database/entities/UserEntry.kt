@@ -162,6 +162,7 @@ data class UserEntry(
         Aidex,
         Dexcom,
         DexcomOnePlus,
+        Libre3Native,
         Eversense,
         Glimp,
         MM640g,

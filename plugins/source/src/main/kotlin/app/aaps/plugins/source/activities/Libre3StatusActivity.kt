@@ -3,7 +3,6 @@ package app.aaps.plugins.source.activities
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -29,6 +28,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalPreferences
+import app.aaps.core.ui.compose.MetroAppCompatActivity
 import app.aaps.plugins.libre3.Libre3CgmDriver
 import app.aaps.plugins.libre3.Libre3CgmDrivers
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
@@ -44,7 +44,6 @@ import app.aaps.plugins.source.compose.CgmStateChip
 import app.aaps.plugins.source.compose.Libre3UiLabels
 import app.aaps.plugins.source.compose.toUiState
 import app.aaps.plugins.source.logs.DriverLogFilter
-import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 
@@ -56,8 +55,7 @@ import kotlinx.coroutines.delay
  * push "Forget this sensor" — the only escape from a sensor that can never connect — off the bottom
  * of a short screen.
  */
-@AndroidEntryPoint
-class Libre3StatusActivity : AppCompatActivity() {
+class Libre3StatusActivity : MetroAppCompatActivity() {
 
     @Inject lateinit var preferences: Preferences
 

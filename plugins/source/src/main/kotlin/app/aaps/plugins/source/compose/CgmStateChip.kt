@@ -19,6 +19,7 @@ import androidx.compose.ui.semantics.contentDescription
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
+import app.aaps.plugins.libre3.Libre3WarmupState
 
 /**
  * What a state means for the user, stripped of protocol detail.
@@ -51,6 +52,23 @@ fun OnePlusWarmupState.Phase.toUiState(): CgmUiState = when (this) {
     OnePlusWarmupState.Phase.CONNECTING,
     OnePlusWarmupState.Phase.RECONNECTING,
     OnePlusWarmupState.Phase.WARMING      -> CgmUiState.Working
+}
+
+/**
+ * Maps a Libre 3 driver phase to what it means for the user.
+ *
+ * The two drivers happen to describe the same seven phases, so the meaning is identical; only the
+ * enum they come from differs. Two small extensions onto one shared [CgmUiState] keep the chip and
+ * the ring driver-agnostic.
+ */
+fun Libre3WarmupState.Phase.toUiState(): CgmUiState = when (this) {
+    Libre3WarmupState.Phase.READY        -> CgmUiState.Ready
+    Libre3WarmupState.Phase.FAILED       -> CgmUiState.Failed
+    Libre3WarmupState.Phase.IDLE         -> CgmUiState.Waiting
+    Libre3WarmupState.Phase.PAIRING,
+    Libre3WarmupState.Phase.CONNECTING,
+    Libre3WarmupState.Phase.RECONNECTING,
+    Libre3WarmupState.Phase.WARMING      -> CgmUiState.Working
 }
 
 /** Maps a staging slot state to what it means for the user. */

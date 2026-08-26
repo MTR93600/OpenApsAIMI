@@ -1,0 +1,86 @@
+---
+description: Superpowers workflow scaled by change size; plan first for non-trivial work; never spawn agents by default
+alwaysApply: false
+---
+
+Ajoute cette fonctionnalité.
+
+Utilise Superpowers.
+
+Commence par comprendre l'architecture existante et les contraintes
+du projet.
+
+Avant toute modification non triviale, présente-moi le plan.
+
+N'implémente rien avant validation du plan.
+
+## Reasoning flow
+
+```
+Grok 4.6
+    │
+    ▼
+analyse demande
+    │
+    ▼
+exploration
+    │
+    ▼
+brainstorming
+    │
+    ▼
+plan
+    │
+    ├── architecture
+    ├── tests
+    └── code
+    │
+    ▼
+implémentation
+    │
+    ▼
+tests
+    │
+    ▼
+review
+    │
+    ▼
+vérification
+```
+
+Do not run this full pipeline for every task.
+
+Do not launch 5 agents by default.
+
+Use subagents only when they can work on independent subjects
+and that split provides real value.
+
+## Scale the workflow
+
+### Banale modification
+
+Grok → code → test
+
+No brainstorming ceremony. No extra agents. Keep it lightweight.
+
+### Feature importante
+
+Grok:
+- analyse architecture
+- implémentation
+- review
+
+Present the plan first. Wait for validation before coding.
+
+### Gros changement
+
+Specialized roles, only when the work is large and independent:
+
+- Architecte
+- Sécurité / reviewer
+- Implémenteur
+- Tests
+- Validation finale
+
+Launch those agents only when parallel independent work is real.
+Do not invent workstreams to fill the diagram.

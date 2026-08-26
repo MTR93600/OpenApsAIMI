@@ -3,7 +3,6 @@ package app.aaps.plugins.source.activities
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -37,6 +36,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalPreferences
+import app.aaps.core.ui.compose.MetroAppCompatActivity
 import app.aaps.plugins.libre3.Libre3CgmDrivers
 import app.aaps.plugins.libre3.Libre3WarmupState
 import app.aaps.plugins.source.R
@@ -52,7 +52,6 @@ import app.aaps.plugins.source.compose.Libre3WarmupCountdown
 import app.aaps.plugins.source.compose.rememberCgmWindow
 import app.aaps.plugins.source.compose.toUiState
 import app.aaps.plugins.source.logs.DriverLogFilter
-import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import java.text.DateFormat
@@ -66,8 +65,7 @@ import java.util.Date
  * arrangement that fits about 360 dp of height. The screen scrolls either way — the previous plain
  * `Column` drew whatever did not fit past the bottom edge, where it could not be reached.
  */
-@AndroidEntryPoint
-class Libre3WarmupActivity : AppCompatActivity() {
+class Libre3WarmupActivity : MetroAppCompatActivity() {
 
     @Inject lateinit var preferences: Preferences
 

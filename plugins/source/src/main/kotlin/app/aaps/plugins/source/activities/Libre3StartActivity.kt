@@ -1,8 +1,8 @@
 package app.aaps.plugins.source.activities
 
+import android.app.Activity
 import android.os.Bundle
 import androidx.activity.compose.setContent
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,6 +26,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalPreferences
+import app.aaps.core.ui.compose.MetroAppCompatActivity
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
 import app.aaps.plugins.libre3.nfc.Libre3NfcFailure
 import app.aaps.plugins.libre3.nfc.Libre3NfcReader
@@ -47,7 +48,6 @@ import app.aaps.plugins.source.compose.CgmUiState
 import app.aaps.plugins.source.compose.CgmWidth
 import app.aaps.plugins.source.compose.Libre3UiLabels
 import app.aaps.plugins.source.compose.rememberCgmWindow
-import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
 /**
@@ -62,8 +62,7 @@ import javax.inject.Inject
  * size is the honest layout here — the value of the redesign is that the screen scrolls, that the
  * help folds away, and that the current step is always named.
  */
-@AndroidEntryPoint
-class Libre3StartActivity : AppCompatActivity() {
+class Libre3StartActivity : MetroAppCompatActivity() {
 
     @Inject lateinit var preferences: Preferences
 
@@ -108,7 +107,7 @@ class Libre3StartActivity : AppCompatActivity() {
 
 @Composable
 internal fun Libre3StartScreen(
-    activity: AppCompatActivity,
+    activity: Activity,
     reader: Libre3NfcReader,
     onBack: () -> Unit,
     onSensorScanned: (Libre3NfcScanResult) -> Unit,

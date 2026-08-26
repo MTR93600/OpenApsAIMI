@@ -188,7 +188,10 @@ enum class NotificationId(
     CARBS_STORE_FAILED(URGENT, PUMP),
 
     /** The AAPS folder grant used to look up the ONE+ engineering marker is gone. */
-    DEXCOM_ONEPLUS_DIR_ACCESS_LOST(NORMAL, SYSTEM);
+    DEXCOM_ONEPLUS_DIR_ACCESS_LOST(NORMAL, SYSTEM),
+
+    /** The AAPS folder grant used to look up the Libre 3 engineering marker is gone. */
+    LIBRE3_DIR_ACCESS_LOST(NORMAL, SYSTEM);
 
     companion object {
 

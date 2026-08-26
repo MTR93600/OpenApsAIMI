@@ -1,6 +1,7 @@
 package app.aaps.plugins.source
 
 import android.content.Context
+import android.content.Intent
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.ue.Sources
@@ -9,6 +10,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.BgSource
@@ -21,7 +23,8 @@ import app.aaps.core.interfaces.source.PromotionResult
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.keys.interfaces.withActivity
+import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.keys.interfaces.withClick
 import app.aaps.core.ui.compose.icons.IcPluginByoda
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.plugins.libre3.Libre3CgmDrivers
@@ -39,6 +42,11 @@ import app.aaps.plugins.source.activities.Libre3WarmupActivity
 import app.aaps.plugins.source.compose.BgSourceComposeContent
 import app.aaps.plugins.source.keys.Libre3BooleanKey
 import app.aaps.plugins.source.keys.Libre3IntentKey
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.IntKey
+import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -52,7 +60,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * Native Libre 3 and Libre 3 Plus BG source, driven by an in process BLE driver.
@@ -63,8 +70,12 @@ import javax.inject.Singleton
  * production path.
  *
  * See docs/LIBRE3_NATIVE_AGENT_PLAN.md.
+ *
+ * Registers itself into the plugin list. Scoped with Metro's own [SingleIn], not javax `@Singleton`.
  */
-@Singleton
+@ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
+@IntKey(447)
+@SingleIn(AppScope::class)
 class Libre3NativePlugin @Inject constructor(
     rh: ResourceHelper,
     aapsLogger: AAPSLogger,
@@ -77,20 +88,17 @@ class Libre3NativePlugin @Inject constructor(
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
-        .composeContent {
+        .composeContent { plugin ->
             BgSourceComposeContent(
                 title = rh.gs(R.string.libre3_native),
             )
         }
         .icon(IcPluginByoda)
-        .pluginName(R.string.libre3_native)
-        .shortName(R.string.libre3_short)
+        .pluginName(TextRef.AndroidRes(R.string.libre3_native))
+        .shortName(TextRef.AndroidRes(R.string.libre3_short))
         .preferencesVisibleInSimpleMode(false)
-        .description(R.string.description_source_libre3_native),
-    ownPreferences = listOf(
-        Libre3IntentKey::class.java,
-        Libre3BooleanKey::class.java,
-    ),
+        .description(TextRef.AndroidRes(R.string.description_source_libre3_native)),
+    ownPreferences = Libre3IntentKey.entries + Libre3BooleanKey.entries,
     aapsLogger,
     rh,
     preferences,
@@ -184,9 +192,24 @@ class Libre3NativePlugin @Inject constructor(
         titleResId = R.string.libre3_native,
         summaryResId = R.string.libre3_plugin_summary,
         items = listOf(
-            Libre3IntentKey.Status.withActivity(Libre3StatusActivity::class.java),
-            Libre3IntentKey.Start.withActivity(Libre3StartActivity::class.java),
-            Libre3IntentKey.Warmup.withActivity(Libre3WarmupActivity::class.java),
+            Libre3IntentKey.Status.withClick {
+                context.startActivity(
+                    Intent(context, Libre3StatusActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            },
+            Libre3IntentKey.Start.withClick {
+                context.startActivity(
+                    Intent(context, Libre3StartActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            },
+            Libre3IntentKey.Warmup.withClick {
+                context.startActivity(
+                    Intent(context, Libre3WarmupActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            },
             Libre3BooleanKey.UseRealSkeleton,
             // The sensor age on the dashboard and the calibration session both come from the
             // SENSOR_CHANGE therapy event written by `logSensorChangeOnce`.
