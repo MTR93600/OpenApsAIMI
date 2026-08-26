@@ -226,7 +226,7 @@ W1 freeze + SourceSensor + lifecycle APIs
 | **W3** | Copy One+ from freeze tag. Metro `@IntKey(446)`. `fullDebug` APK | DEVICE |
 | **W4** | `:plugins:libre3` compiles (Stub default). Empty `:plugins:aimi-contracts` (JVM + iosSimulatorArm64) | DEVICE, ARCH |
 | **W5** | Snapshot **interfaces** only. Swift harness links `hello()` | ARCH, IOS |
-| **W6** | M1 read-registry on freeze tag (docs + capture, not rewrite). One+ smoke if hardware | ARCH, CORE, DEVICE |
+| **W6** | M1 read-registry on freeze tag (docs + capture, not rewrite). One+ smoke if hardware. Inventory: [`w6-m1-read-registry.md`](w6-m1-read-registry.md) | ARCH, CORE, DEVICE |
 | **W7** | Empty `:plugins:aimi-engine` + forbidden-import check. Libre 3 NFC Android or explicit flag | ARCH, DEVICE |
 | **W8** | APK: One+ selectable + VirtualPump. CI: iOS compile of empty modules. Go/no-go note | ARCH, SAFETY |
 

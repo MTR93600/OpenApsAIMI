@@ -1,0 +1,54 @@
+token,hits,destination,sample_lines
+persistenceLayer,18,AimiInputSnapshot or cache,L1293; L1415; L1439; L1503; L1506; L1508; L1512; L1615; L1665; L1684; L1698; L1722; +6 more
+tddCalculator,9,AimiInputSnapshot or cache,L1294; L1574; L1594; L7402; L9689; L9768; L10290; L10297; L10302
+tirCalculator,18,AimiInputSnapshot or cache,L1295; L1457; L1461; L1462; L1463; L1464; L1465; L1466; L1467; L1468; L1469; L1470; +6 more
+physioAdapter,37,AimiInputSnapshot or cache,L1328; L2147; L2154; L2292; L2318; L2320; L3012; L3405; L3406; L3494; L3538; L3731; +25 more
+iobCobCalculator,5,AimiInputSnapshot or cache,L1298; L9050; L11893; L12122; L15090
+profileFunction,3,AimiInputSnapshot or cache,L1297; L1740; L1791
+activePlugin,5,AimiInputSnapshot or cache,L1300; L2279; L2280; L5684; L10100
+storageHelper,10,TELEMETRY / files. Engine must not open files.,L1311; L3277; L3770; L3776; L3791; L10322; L10325; L10326; L10328; L15663
+dateUtil,71,AimiInputSnapshot or cache,L1296; L1397; L2122; L2150; L2189; L2342; L2355; L2360; L3105; L3270; L3278; L3447; +59 more
+aapsLogger,49,AimiDecisionTrace,L1322; L1335; L1836; L2116; L2298; L3015; L3078; L3115; L5241; L5426; L5858; L5860; +37 more
+aimiLogger,1,AimiDecisionTrace,L1299
+activityManager,2,AimiInputSnapshot or cache,L1304; L16283
+glucoseStatusCalculatorAimi,9,AimiInputSnapshot or cache,L1305; L2202; L2211; L3756; L3843; L4218; L7411; L11467; L16980
+autodriveEngine,22,AimiInputSnapshot or cache,L1274; L1290; L3006; L4357; L5118; L5119; L5120; L5121; L5122; L5136; L5138; L5139; +10 more
+autodriveGater,3,AimiInputSnapshot or cache,L1303; L4831; L5218
+auditorOrchestrator,6,"next-tick advice, not mutate tick N",L1282; L8480; L8926; L9419; L9420; L9421
+tpoOrchestrator,6,"next-tick advice, not mutate tick N",L1332; L2149; L2150; L3452; L3456; L3467
+contextManager,5,AimiInputSnapshot or cache,L1326; L3500; L4270; L16327; L16473
+contextInfluenceEngine,2,AimiInputSnapshot or cache,L1327; L16485
+basalLearner,16,AimiModelBundle / learner stores,L1307; L1631; L1652; L1912; L4121; L4122; L4123; L8478; L8497; L8509; L8510; L8511; +4 more
+unifiedReactivityLearner,12,AimiModelBundle / learner stores,L1308; L1320; L5974; L6038; L6049; L8515; L8518; L8524; L8651; L8837; L12423; L12424
+basalNeuralLearner,10,AimiModelBundle / learner stores,L1309; L1924; L1974; L3842; L3935; L12417; L12418; L18010; L18027; L18575
+basalMlTrainingCoordinator,3,AimiModelBundle / learner stores,L1310; L18099; L18101
+basalDecisionEngine,4,AimiInputSnapshot or cache,L1301; L5974; L6004; L7996
+trajectoryGuard,15,AimiInputSnapshot or cache,L1264; L1324; L2998; L3200; L3892; L4211; L4371; L4493; L4758; L9571; L9589; L10023; +3 more
+trajectoryHistoryProvider,2,AimiInputSnapshot or cache,L1325; L1794
+straightLineTubeAdvisor,2,AimiInputSnapshot or cache,L1329; L10515
+sensitivityRatioEstimator,5,AimiInputSnapshot or cache,L1330; L2093; L2095; L2097; L9084
+continuousStateEstimator,17,AimiInputSnapshot or cache,L1331; L2089; L2283; L2375; L3349; L5088; L5089; L5090; L5174; L5179; L5181; L5226; +5 more
+notificationManager,5,EFFECT events,L1284; L7424; L15471; L16015; L16775
+uiInteraction,7,EFFECT events,L1283; L2980; L9907; L16675; L17693; L17701; L17721
+wCycleFacade,11,AimiInputSnapshot or cache,L1273; L1285; L8539; L8541; L8853; L8854; L8921; L8922; L12723; L13943; L15442
+wCycleLearner,2,AimiModelBundle / learner stores,L1287; L15492
+wCyclePreferences,27,AimiInputSnapshot or cache,L1286; L1339; L3237; L3238; L3570; L8538; L8852; L9338; L9339; L9344; L12438; L12725; +15 more
+gestationalAutopilot,3,AimiInputSnapshot or cache,L1281; L15723; L15724
+pumpCapabilityValidator,2,AimiInputSnapshot or cache,L1288; L5692
+dynamicBasalController,2,AimiInputSnapshot or cache,L1289; L12618
+insulinObserver,4,AimiInputSnapshot or cache,L2141; L2180; L11294; L13317
+pkpdIntegration,12,AimiInputSnapshot or cache,L2353; L2359; L3831; L6227; L9721; L9798; L9805; L10339; L11319; L11337; L11374; L12432
+determineIoScope,14,forbidden inside evaluate(); capture before tick,L1371; L1412; L1437; L1455; L1498; L1572; L1592; L1612; L1662; L1681; L1695; L1720; +2 more
+hormonitorStudyExporter,12,AimiDecisionTrace,L1838; L1887; L2110; L7687; L9309; L9379; L9380; L9381; L9752; L10333; L17733; L17746
+comparator,5,AimiInputSnapshot or cache,L1306; L7731; L8479; L8815; L17650
+persistenceLayer.getTherapyEventDataFromTime,1,AimiInputSnapshot / history,"L1415: val siteChanges = persistenceLayer.getTherapyEventDataFromTime(fromTime, TE.Type.CANNULA_CHANGE, true)"
+persistenceLayer.getNewestBolusOfType,1,AimiInputSnapshot / history,L1439: cachedLastSmb = persistenceLayer.getNewestBolusOfType(BS.Type.SMB)
+persistenceLayer.getMostRecentCarbByDate,1,AimiInputSnapshot / history,L1503: lastCarbTimestamp = persistenceLayer.getMostRecentCarbByDate() ?: oneDayAgoIfNotFound
+persistenceLayer.getFutureCob,1,AimiInputSnapshot / history,L1506: val future = persistenceLayer.getFutureCob().toFloat()
+persistenceLayer.getMostRecentCarbAmount,1,AimiInputSnapshot / history,L1508: persistenceLayer.getMostRecentCarbAmount()?.toFloat() ?: 0.0f
+persistenceLayer.getUserEntryDataFromTime,1,AimiInputSnapshot / history,L1512: val recentNotesLocal = persistenceLayer.getUserEntryDataFromTime(nowMs - TimeUnit.HOURS.toMillis(4))
+persistenceLayer.getTherapyEventDataFromTime,1,AimiInputSnapshot / history,"L1615: val events = persistenceLayer.getTherapyEventDataFromTime(fromTime, TE.Type.SENSOR_CHANGE, true)"
+persistenceLayer.getStepsCountFromTimeToTime,1,AimiInputSnapshot / history,"L1665: stepsSnapshotRef.set(persistenceLayer.getStepsCountFromTimeToTime(start, now))"
+persistenceLayer.getHeartRatesFromTimeToTime,1,AimiInputSnapshot / history,"L1684: heartRatesSnapshotRef.set(persistenceLayer.getHeartRatesFromTimeToTime(start, now))"
+persistenceLayer.getTemporaryBasalsStartingFromTime,1,AimiInputSnapshot / history,"L1698: persistenceLayer.getTemporaryBasalsStartingFromTime(fromMillis, ascending = false)"
+persistenceLayer.getBolusesFromTime,1,AimiInputSnapshot / history,"L1722: bolusSnapshotRef.set(persistenceLayer.getBolusesFromTime(startTime, ascending))"

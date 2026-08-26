@@ -1,8 +1,12 @@
 package app.aaps.plugins.aimicontracts
 
 /**
- * Empty W4 shell for shared AIMI types.
+ * Public KMP façade for `:plugins:aimi-contracts`.
  *
- * W5 fills snapshot interfaces here. Do not put the tick or the engine in this module.
+ * [hello] proves Kotlin common code can be called from Swift through the Native framework.
+ * It does not run AIMI. Snapshot types live beside this object; they are not computed here.
  */
-object AimiContracts
+object AimiContracts {
+
+    fun hello(): String = "aimi-contracts"
+}

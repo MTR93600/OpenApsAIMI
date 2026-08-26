@@ -1,0 +1,74 @@
+line,name,class,stateful_hint,note,declaration
+1278,profileUtil,UNASSIGNED,no,,"private val profileUtil: ProfileUtil,"
+1279,fabricPrivacy,UNASSIGNED,no,,"private val fabricPrivacy: FabricPrivacy,"
+1280,preferences,UNASSIGNED,no,,"private val preferences: Preferences,"
+1281,gestationalAutopilot,UNASSIGNED,no,,"private val gestationalAutopilot: app.aaps.plugins.aps.openAPSAIMI.advisor.gestation.GestationalAutopilot,"
+1282,auditorOrchestrator,UNASSIGNED,no,,"private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator,"
+1283,uiInteraction,UNASSIGNED,no,,"private val uiInteraction: UiInteraction,"
+1284,notificationManager,UNASSIGNED,no,,"private val notificationManager: app.aaps.core.interfaces.notifications.NotificationManager,"
+1285,wCycleFacade,UNASSIGNED,no,,"private val wCycleFacade: WCycleFacade,"
+1286,wCyclePreferences,UNASSIGNED,no,,"private val wCyclePreferences: WCyclePreferences,"
+1287,wCycleLearner,LEARNER_STATE,no,Learner / observer owned by the class.,"private val wCycleLearner: WCycleLearner,"
+1288,pumpCapabilityValidator,UNASSIGNED,no,,"private val pumpCapabilityValidator: app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator,"
+1289,dynamicBasalController,UNASSIGNED,no,,"private val dynamicBasalController: app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController,"
+1290,autodriveEngine,UNASSIGNED,no,,"private val autodriveEngine: AutodriveEngine,"
+1291,context,UNASSIGNED,no,,private val context: Context
+1314,safeReactivityFactor,UNASSIGNED,no,,private val safeReactivityFactor: Double
+1335,endoAdjuster,UNASSIGNED,yes,Looks stateful. CORE must assign class.,"private val endoAdjuster by lazy { app.aaps.plugins.aps.openAPSAIMI.wcycle.EndometriosisAdjuster(preferences, aapsLogger) }"
+1338,inflammationAdjuster,UNASSIGNED,yes,Looks stateful. CORE must assign class.,private val inflammationAdjuster by lazy {
+1344,pumpAgeRefreshInFlight,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val pumpAgeRefreshInFlight = AtomicBoolean(false)
+1346,lastSmbRefreshInFlight,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val lastSmbRefreshInFlight = AtomicBoolean(false)
+1347,tirWarmupSnapshotRef,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val tirWarmupSnapshotRef = AtomicReference<TirWarmupSnapshot?>(null)
+1348,tirWarmupRefreshInFlight,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val tirWarmupRefreshInFlight = AtomicBoolean(false)
+1349,carbContextSnapshotRef,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val carbContextSnapshotRef = AtomicReference<CarbContextSnapshot?>(null)
+1350,carbContextRefreshInFlight,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val carbContextRefreshInFlight = AtomicBoolean(false)
+1351,tdd2DaysRef,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val tdd2DaysRef = AtomicReference<Float?>(null)
+1352,tdd2DaysRefreshInFlight,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val tdd2DaysRefreshInFlight = AtomicBoolean(false)
+1353,tdd30DaysRef,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val tdd30DaysRef = AtomicReference<Double?>(null)
+1354,tdd30DaysRefreshInFlight,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val tdd30DaysRefreshInFlight = AtomicBoolean(false)
+1355,sensorInsertionMsRef,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val sensorInsertionMsRef = AtomicReference<Long?>(null)
+1356,sensorInsertionRefreshInFlight,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val sensorInsertionRefreshInFlight = AtomicBoolean(false)
+1359,stepsSnapshotRef,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val stepsSnapshotRef = AtomicReference<List<SC>>(emptyList())
+1360,stepsRefreshInFlight,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val stepsRefreshInFlight = AtomicBoolean(false)
+1361,heartRatesSnapshotRef,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val heartRatesSnapshotRef = AtomicReference<List<HR>>(emptyList())
+1362,heartRatesRefreshInFlight,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val heartRatesRefreshInFlight = AtomicBoolean(false)
+1363,tempBasalsSnapshotRef,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val tempBasalsSnapshotRef = AtomicReference<List<TB>>(emptyList())
+1364,tempBasalsRefreshInFlight,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val tempBasalsRefreshInFlight = AtomicBoolean(false)
+1365,bolusSnapshotRef,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val bolusSnapshotRef = AtomicReference<List<BS>>(emptyList())
+1366,bolusRefreshInFlight,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val bolusRefreshInFlight = AtomicBoolean(false)
+1368,effectiveProfileRefreshInFlight,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val effectiveProfileRefreshInFlight = AtomicBoolean(false)
+1369,trajectoryHistoryRef,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val trajectoryHistoryRef = AtomicReference<List<app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState>>(emptyList())
+1370,trajectoryHistoryRefreshInFlight,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val trajectoryHistoryRefreshInFlight = AtomicBoolean(false)
+1371,determineIoScope,UNASSIGNED,yes,Looks stateful. CORE must assign class.,private val determineIoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+1377,thyroidPreferences,UNASSIGNED,yes,Looks stateful. CORE must assign class.,private val thyroidPreferences by lazy { app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidPreferences(preferences) }
+1378,thyroidStateEstimator,UNASSIGNED,no,,private val thyroidStateEstimator = app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidStateEstimator()
+1379,thyroidEffectModel,UNASSIGNED,no,,private val thyroidEffectModel = app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidEffectModel()
+1380,thyroidSafetyGates,UNASSIGNED,no,,private val thyroidSafetyGates = app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidSafetyGates()
+1402,EPS_FALL,UNASSIGNED,no,,private val EPS_FALL = 0.3      // mg/dL/5min : seuil de baisse
+1403,EPS_ACC,UNASSIGNED,no,,private val EPS_ACC  = 0.2      // mg/dL/5min : seuil d'écart short vs long
+1818,HYPO_RELEASE_MARGIN,UNASSIGNED,no,,private val HYPO_RELEASE_MARGIN   = 5.0      // mg/dL au-dessus du seuil
+1819,HYPO_RELEASE_HOLD_MIN,UNASSIGNED,no,,private val HYPO_RELEASE_HOLD_MIN = 5        // minutes à rester > seuil+margin
+1821,INSULIN_STEP,UNASSIGNED,no,,private val INSULIN_STEP = Constants.DEFAULT_INSULIN_STEP_U.toFloat()
+1824,determineBasalInvocationCaches,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val determineBasalInvocationCaches = DetermineBasalInvocationCaches()
+1825,bolusQueryCache,CACHE,yes,Looks stateful. CORE must assign class.,"private val bolusQueryCache = mutableMapOf<Pair<Long, Boolean>, List<BS>>()"
+5035,smbPostSealRaiseAllowedOwners,UNASSIGNED,no,,"private val smbPostSealRaiseAllowedOwners = setOf(""MealAdvisor"")"
+10322,externalDir,TELEMETRY,yes,File / export handle.,private val externalDir by lazy { storageHelper.getAimiDirectory() }
+10325,csvfile,TELEMETRY,yes,File / export handle.,"private val csvfile by lazy { storageHelper.getAimiFile(""oapsaimiML2_records.csv"") }"
+10326,csvfile2,TELEMETRY,yes,File / export handle.,"private val csvfile2 by lazy { storageHelper.getAimiFile(""oapsaimi2_records.csv"") }"
+10327,appExternalFallbackDir,TELEMETRY,yes,File / export handle.,private val appExternalFallbackDir by lazy {
+10333,hormonitorStudyExporter,TELEMETRY,yes,File / export handle.,private val hormonitorStudyExporter: AimiHormonitorStudyExporterMTR? by lazy {
+10339,pkpdIntegration,UNASSIGNED,yes,Looks stateful. CORE must assign class.,private val pkpdIntegration = PkPdIntegration(preferences)
+10754,auditorFollowupAppendInProgress,CACHE,yes,Acquisition cache. Snapshot the value; do not port the Atomic into KMP.,private val auditorFollowupAppendInProgress = AtomicBoolean(false)
+10758,patternCapHold,ENGINE_STATE,yes,Annex 8 PatternCapHold.,private val patternCapHold = PatternCapHold()
+11050,slowCarbEarlyBudgetU,UNASSIGNED,no,,private val slowCarbEarlyBudgetU = 2.0
+11124,legacyPrebolusFiredAtMem,UNASSIGNED,yes,Looks stateful. CORE must assign class.,"private val legacyPrebolusFiredAtMem = HashMap<String, Long>()"
+11131,legacyPrebolusMissAlertedAtMem,UNASSIGNED,yes,Looks stateful. CORE must assign class.,"private val legacyPrebolusMissAlertedAtMem = HashMap<String, Long>()"
+11290,nightGrowthResistanceMode,UNASSIGNED,no,,private val nightGrowthResistanceMode = NightGrowthResistanceMode()
+11291,ngrTimeFormatter,UNASSIGNED,no,,"private val ngrTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern(""HH:mm"")"
+11293,MAX_ZERO_BASAL_DURATION,UNASSIGNED,no,,private val MAX_ZERO_BASAL_DURATION = 60  // Durée maximale autorisée en minutes à 0 basal
+11294,insulinObserver,LEARNER_STATE,yes,Learner / observer owned by the class.,private val insulinObserver = app.aaps.plugins.aps.openAPSAIMI.pkpd.RealTimeInsulinObserver()  // 🚀 Real-Time Insulin Observer
+11319,pkpdIntegration,UNASSIGNED,yes,Looks stateful. CORE must assign class.,"private val pkpdIntegration: PkPdIntegration,"
+11320,patientWeightKgProvider,UNASSIGNED,no,,"private val patientWeightKgProvider: () -> Double = { 70.0 },"
+11321,physioLatentStateProvider,UNASSIGNED,no,,"private val physioLatentStateProvider: () -> PhysioLatentState? = { null },"
+11322,estimatedRaProvider,UNASSIGNED,no,,"private val estimatedRaProvider: () -> Double? = { null },"
+11453,nightGrowthLearner,LEARNER_STATE,yes,Learner / observer owned by the class.,private val nightGrowthLearner = NightGrowthResistanceLearner()

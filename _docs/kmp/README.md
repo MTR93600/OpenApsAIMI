@@ -72,11 +72,12 @@ blueprint et ces annexes spécialisées font autorité sur `AIMI_KMP_MIGRATION_S
 1. [`AIMI_KMP_EXECUTION_PLAN.md`](AIMI_KMP_EXECUTION_PLAN.md) et [`adr-g0-defaults.md`](adr-g0-defaults.md) ;
 2. blueprint ;
 3. annexe 8 pour comprendre la frontière et le replay ;
-4. annexe 6 pour le protocole Tree → Harmonia → RBT → safety ;
-5. annexe 5 pour les modèles et learners ;
-6. annexe 7 pour l'intégration iOS ;
-7. annexe 9 pour les fonctions produit adjacentes ;
-8. annexes 1 à 4 pour les preuves historiques et métriques.
+4. [`w6-m1-read-registry.md`](w6-m1-read-registry.md) — freeze field and service-read inventory (W6, not a rewrite) ;
+5. annexe 6 pour le protocole Tree → Harmonia → RBT → safety ;
+6. annexe 5 pour les modèles et learners ;
+7. annexe 7 pour l'intégration iOS ;
+8. annexe 9 pour les fonctions produit adjacentes ;
+9. annexes 1 à 4 pour les preuves historiques et métriques.
 
 ## Questions encore ouvertes (ne bloquent pas W1–W8)
 

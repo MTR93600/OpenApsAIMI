@@ -1,0 +1,43 @@
+line,source,name,type
+1278,constructor,profileUtil,ProfileUtil
+1279,constructor,fabricPrivacy,FabricPrivacy
+1280,constructor,preferences,Preferences
+1281,constructor,gestationalAutopilot,app.aaps.plugins.aps.openAPSAIMI.advisor.gestation.GestationalAutopilot
+1282,constructor,auditorOrchestrator,app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator
+1283,constructor,uiInteraction,UiInteraction
+1284,constructor,notificationManager,app.aaps.core.interfaces.notifications.NotificationManager
+1285,constructor,wCycleFacade,WCycleFacade
+1286,constructor,wCyclePreferences,WCyclePreferences
+1287,constructor,wCycleLearner,WCycleLearner
+1288,constructor,pumpCapabilityValidator,app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator
+1289,constructor,dynamicBasalController,app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
+1290,constructor,autodriveEngine,AutodriveEngine
+1291,constructor,context,Context
+1293,field_inject,persistenceLayer,PersistenceLayer
+1294,field_inject,tddCalculator,TddCalculator
+1295,field_inject,tirCalculator,TirCalculator
+1296,field_inject,dateUtil,DateUtil
+1297,field_inject,profileFunction,ProfileFunction
+1298,field_inject,iobCobCalculator,IobCobCalculator
+1299,field_inject,aimiLogger,app.aaps.plugins.aps.openAPSAIMI.utils.AimiLogger
+1300,field_inject,activePlugin,ActivePlugin
+1301,field_inject,basalDecisionEngine,BasalDecisionEngine
+1303,field_inject,autodriveGater,app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.AutoDriveGater
+1304,field_inject,activityManager,app.aaps.plugins.aps.openAPSAIMI.activity.ActivityManager // Agnostic injection
+1305,field_inject,glucoseStatusCalculatorAimi,GlucoseStatusCalculatorAimi
+1306,field_inject,comparator,AimiSmbComparator
+1307,field_inject,basalLearner,app.aaps.plugins.aps.openAPSAIMI.learning.BasalLearner
+1308,field_inject,unifiedReactivityLearner,app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner
+1309,field_inject,basalNeuralLearner,app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
+1310,field_inject,basalMlTrainingCoordinator,app.aaps.plugins.aps.openAPSAIMI.learning.BasalMlTrainingCoordinator
+1311,field_inject,storageHelper,AimiStorageHelper  // 🛡️ Restored StorageHelper
+1322,field_inject,aapsLogger,AAPSLogger  // 📊 Logger for health monitoring
+1324,field_inject,trajectoryGuard,app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard
+1325,field_inject,trajectoryHistoryProvider,app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryHistoryProvider
+1326,field_inject,contextManager,app.aaps.plugins.aps.openAPSAIMI.context.ContextManager  // 🎯 Context Module
+1327,field_inject,contextInfluenceEngine,app.aaps.plugins.aps.openAPSAIMI.context.ContextInfluenceEngine  // 🎯 Context Influence
+1328,field_inject,physioAdapter,app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR  // 🏥 Physiological Modulation
+1329,field_inject,straightLineTubeAdvisor,StraightLineTubeAdvisor  // 📐 MPC-lite hypo tube + SMB-cap smoothing
+1330,field_inject,sensitivityRatioEstimator,SensitivityRatioEstimator
+1331,field_inject,continuousStateEstimator,app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstimator
+1332,field_inject,tpoOrchestrator,TpoOrchestrator
