@@ -612,20 +612,25 @@ class OnePlusBleSessionSkeleton(
             "${OnePlusLogMarkers.SESSION}: [$slot] connect decision advFresh=${prep.advFresh} " +
                 "autoConnect=$useAutoConnect attempt=$attempt profile=${profile.id}",
         )
-        try {
-            gatt.connect(deviceAddress, autoConnect = useAutoConnect)
-        } catch (t: Throwable) {
-            val msg = t.message ?: "ONEPLUS_GATT_FAILED"
-            OnePlusLog.e("${OnePlusLogMarkers.ERROR}: [$slot] $msg attempt=$attempt", t)
-            onError(msg, false)
-            enterReconnecting(msg)
-            return if (running) CycleOutcome.RetryableFailure else CycleOutcome.Stopped
-        }
-
-        if (!running) return CycleOutcome.Stopped
-
+        // Hold the CPU awake through settle, scan→connect handoff, connectGatt and discovery.
+        // Thread.sleep uses CLOCK_MONOTONIC, which freezes under suspend: field log 26/08/2026
+        // showed a 500 ms handoff taking 27.7 s with the screen off, so the in-window connect
+        // missed the ADV the wait had just caught. The lock used to start only after connect
+        // returned, which was too late.
         val wakeLock = acquireAuthWakeLock()
         try {
+            try {
+                gatt.connect(deviceAddress, autoConnect = useAutoConnect)
+            } catch (t: Throwable) {
+                val msg = t.message ?: "ONEPLUS_GATT_FAILED"
+                OnePlusLog.e("${OnePlusLogMarkers.ERROR}: [$slot] $msg attempt=$attempt", t)
+                onError(msg, false)
+                enterReconnecting(msg)
+                return if (running) CycleOutcome.RetryableFailure else CycleOutcome.Stopped
+            }
+
+            if (!running) return CycleOutcome.Stopped
+
             val authResult = auth.authenticate(pairingCode, savedSharedKeyProvider())
             if (!running) return CycleOutcome.Stopped
             if (!authResult.ok) {
@@ -708,7 +713,7 @@ class OnePlusBleSessionSkeleton(
                 else -> CycleOutcome.EgvExited
             }
         } finally {
-            // Juggluco holds wake for the whole connection; we keep it through first EGV cycle.
+            // Held from before connect through the first EGV cycle; Juggluco holds it unbounded.
             releaseWakeLock(wakeLock)
         }
     }
@@ -720,6 +725,7 @@ class OnePlusBleSessionSkeleton(
             pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "OpenApsAIMI::DexcomOnePlusAuth").apply {
                 setReferenceCounted(false)
                 acquire(AUTH_WAKE_LOCK_MS)
+                OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] wakeLock acquired ${AUTH_WAKE_LOCK_MS}ms")
             }
         } catch (t: Throwable) {
             OnePlusLog.w("${OnePlusLogMarkers.SESSION}: [$slot] wakeLock ${t.message}")
@@ -1029,7 +1035,8 @@ class OnePlusBleSessionSkeleton(
 
     companion object {
         /**
-         * Cover KEKS + bond prompt + first Control/EGV cycle.
+         * Cover settle, scan→connect handoff, connectGatt + discovery, KEKS, bond, first EGV.
+         * Must be held before those Thread.sleeps: CLOCK_MONOTONIC freezes under CPU suspend.
          * Juggluco uses an unbounded wake lock for the whole connection; we bound it.
          */
         private const val AUTH_WAKE_LOCK_MS = 600_000L

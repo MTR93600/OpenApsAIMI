@@ -15,7 +15,7 @@ data class OemDeviceProfile(
     val connectRetryDelayMs: Long,
     /** Preferred ATT MTU request (OS may negotiate lower). */
     val preferredMtu: Int,
-    /** Intended to keep BLE behind a foreground service. Not wired yet — logged only. */
+    /** When true, `DexcomOnePlusSessionService` runs as a connectedDevice foreground service. */
     val useForegroundService: Boolean,
     /** Faster / denser reconnect backoff when true. */
     val aggressiveReconnect: Boolean,
