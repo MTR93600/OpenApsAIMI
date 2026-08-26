@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -20,6 +21,8 @@ jobs:
 
       - name: Sync with upstream
         run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/MTR93600/OpenApsAIMI.git
           git fetch upstream dev_OAPSAIMI
           git checkout dev_OAPSAIMI
