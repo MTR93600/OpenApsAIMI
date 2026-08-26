@@ -2,9 +2,8 @@ name: Auto Sync Upstream Branch
 
 on:
   schedule:
-    # Executa a cada 6 horas (4 vezes ao dia)
     - cron: '0 */6 * * *'
-  workflow_dispatch: # Permite rodar manualmente pelo painel do GitHub
+  workflow_dispatch:
 
 jobs:
   sync:
