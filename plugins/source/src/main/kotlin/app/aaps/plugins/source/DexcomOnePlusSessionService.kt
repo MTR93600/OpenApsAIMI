@@ -18,12 +18,12 @@ import app.aaps.core.ui.R as CoreUiR
  * Keeps the Dexcom ONE+ / G7 Bluetooth session alive while the screen is off.
  *
  * Why this exists: the OEM profiles have carried `useForegroundService = true` since they were
- * written, and the profile log line admitted `(not wired)` — nothing ever started a service. The
- * driver ran on whatever else in the app happened to be alive, and the only foreground service in
- * the process is the persistent-notification one, declared `dataSync`. Since the app targets
- * Android 14 the foreground service **type** is what grants a privilege, and `dataSync` grants
- * nothing for Bluetooth: a GATT link owned by no `connectedDevice` service is exactly what an
- * aggressive OEM tears down when the phone goes to sleep.
+ * written, but nothing started a service until this class. The driver ran on whatever else in the
+ * app happened to be alive, and the only foreground service in the process is the
+ * persistent-notification one, declared `dataSync`. Since the app targets Android 14 the
+ * foreground service **type** is what grants a privilege, and `dataSync` grants nothing for
+ * Bluetooth: a GATT link owned by no `connectedDevice` service is exactly what an aggressive OEM
+ * tears down when the phone goes to sleep.
  *
  * The service holds no logic and owns no driver. It exists so the platform sees a `connectedDevice`
  * foreground service for as long as a sensor session is wanted, and it disappears the moment it is
