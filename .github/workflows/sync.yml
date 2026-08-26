@@ -1,0 +1,27 @@
+name: Auto Sync Upstream Branch
+
+on:
+  schedule:
+    # Executa a cada 6 horas (4 vezes ao dia)
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Permite rodar manualmente pelo painel do GitHub
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: dev_OAPSAIMI
+          fetch-depth: 0
+
+      - name: Sync with upstream
+        run: |
+          git remote add upstream https://github.com/MTR93600/OpenApsAIMI.git
+          git fetch upstream dev_OAPSAIMI
+          git checkout dev_OAPSAIMI
+          git merge upstream/dev_OAPSAIMI --no-edit || true
+          git push origin dev_OAPSAIMI
