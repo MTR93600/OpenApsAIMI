@@ -51,27 +51,70 @@ object DeviceProfileRegistry {
         requireAdvBeforeConnect = true,
     )
 
-    /** Unknown OEM — conservative timeouts, safer MTU, FGS on. */
+    /**
+     * Motorola — same failure as Samsung, and it used to land on [GenericFallback].
+     *
+     * The fallback connects on attempt 0 even when the pre-connect scan hears nothing
+     * (`requireAdvBeforeConnect` defaults to false) and only reaches for `autoConnect` from the third
+     * attempt. That is the exact combination the Samsung profile exists to avoid: a blind hard
+     * connect without a fresh advertisement fails, and the retry ladder then costs minutes. So this
+     * profile takes the two settings that fixed Samsung — wait for the ADV, and let the platform
+     * hold the connection with `autoConnect` from the first attempt — with a scan window long enough
+     * to actually hear a sensor that advertises on its own duty cycle.
+     *
+     * MTU stays at the safe 185: there is no field measurement on this stack yet, and
+     * [OemDeviceProfile.requestMtuOnConnect] is false anyway.
+     */
+    val MotorolaDefault: OemDeviceProfile = OemDeviceProfile(
+        id = OemProfileId.MOTOROLA,
+        connectTimeoutMs = 45_000L,
+        connectRetryCount = 5,
+        connectRetryDelayMs = 8_000L,
+        preferredMtu = 185,
+        useForegroundService = true,
+        aggressiveReconnect = true,
+        postCloseSettleMs = 4_000L,
+        scanHandoffMs = 500L,
+        preConnectScanMs = 8_000L,
+        requestMtuOnConnect = false,
+        useGattRefresh = true,
+        autoConnectFromAttempt = 0,
+        postDiscoverDelayMs = 1_000L,
+        requireAdvBeforeConnect = true,
+    )
+
+    /**
+     * Unknown OEM — conservative everywhere, including the advertisement gate.
+     *
+     * It used to be conservative on timeouts only: `requireAdvBeforeConnect` was left at its false
+     * default and `autoConnectFromAttempt` at 2, so an unknown phone connected blind on the first two
+     * attempts after a 3 s scan. That is the combination the Samsung profile exists to avoid, and two
+     * independent field logs landed on it — a Motorola and a CUBOT KING KONG MINI 3 — because this is
+     * where every phone that is not a Pixel or a Samsung ends up. Being the default, it has to be the
+     * safest of the three, not the boldest.
+     */
     val GenericFallback: OemDeviceProfile = OemDeviceProfile(
         id = OemProfileId.GENERIC_FALLBACK,
         connectTimeoutMs = 60_000L,
         connectRetryCount = 5,
-        connectRetryDelayMs = 5_000L,
+        connectRetryDelayMs = 8_000L,
         preferredMtu = 185,
         useForegroundService = true,
         aggressiveReconnect = true,
-        postCloseSettleMs = 3_000L,
+        postCloseSettleMs = 4_000L,
         scanHandoffMs = 500L,
-        preConnectScanMs = 3_000L,
+        preConnectScanMs = 8_000L,
         requestMtuOnConnect = false,
         useGattRefresh = true,
-        autoConnectFromAttempt = 2,
-        postDiscoverDelayMs = 0L,
+        autoConnectFromAttempt = 0,
+        postDiscoverDelayMs = 1_000L,
+        requireAdvBeforeConnect = true,
     )
 
     fun byId(id: OemProfileId): OemDeviceProfile = when (id) {
         OemProfileId.PIXEL -> PixelDefault
         OemProfileId.SAMSUNG -> SamsungDefault
+        OemProfileId.MOTOROLA -> MotorolaDefault
         OemProfileId.GENERIC_FALLBACK -> GenericFallback
     }
 
@@ -88,6 +131,7 @@ object DeviceProfileRegistry {
             override != null -> byId(override)
             isPixel(manufacturer) -> PixelDefault
             isSamsung(manufacturer) -> SamsungDefault
+            isMotorola(manufacturer) -> MotorolaDefault
             else -> GenericFallback
         }
         OnePlusLog.i(
@@ -110,5 +154,11 @@ object DeviceProfileRegistry {
     private fun isSamsung(manufacturer: String): Boolean {
         val m = manufacturer.lowercase()
         return m.contains("samsung")
+    }
+
+    /** `Build.MANUFACTURER` stays "motorola" on these phones, whoever owns the brand. */
+    private fun isMotorola(manufacturer: String): Boolean {
+        val m = manufacturer.lowercase()
+        return m.contains("motorola")
     }
 }

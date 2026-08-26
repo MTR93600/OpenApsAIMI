@@ -17,6 +17,7 @@ import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanBudget
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanListener
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanResult
 import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSession
+import app.aaps.plugins.dexcomoneplus.session.OnePlusMacArbiter
 import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSessionSkeleton
 import app.aaps.plugins.dexcomoneplus.session.OnePlusConnectPrep
 import app.aaps.plugins.dexcomoneplus.session.OnePlusSessionAuthKeks
@@ -134,6 +135,15 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
         OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: [$slot] connect requested (Real GATT+KEKS+EGV)",
         )
+        // The transmitter has one owner — see OnePlusMacArbiter. Refused means the other slot is on
+        // this sensor, and opening a second session would corrupt both KEKS handshakes. Nothing is
+        // written to the store on a refusal: the slot must stay exactly as it was.
+        if (!OnePlusMacArbiter.claim(deviceAddress, slot)) {
+            watchers.forEach {
+                it.onError("ONEPLUS_SESSION: sensor already in use by the other slot", false)
+            }
+            return
+        }
         scanner.stopScan()
         // Stop any in-flight reconnect loop (may still be targeting a previous MAC).
         val previousSession: OnePlusBleSession?
@@ -214,6 +224,14 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
             return false
         }
         val deviceAddress = stored?.lastMac ?: return false
+        // The path that reproduced the collision on every plugin start for an install whose two
+        // stores already held the same MAC. Claim before queueing anything.
+        if (!OnePlusMacArbiter.claim(deviceAddress, slot)) {
+            OnePlusLog.w(
+                "${OnePlusLogMarkers.SESSION}: [$slot] auto-resume skipped — the other slot owns this sensor",
+            )
+            return false
+        }
         val pairingCode = stored.identity.pin
         val generation: Long
         val executor: ExecutorService
@@ -308,6 +326,7 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
             session.also { session = null }
         }
         previousSession?.stop("disconnect")
+        OnePlusMacArbiter.release(slot)
     }
 
     override fun shutdown() {
@@ -331,6 +350,7 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
         }
         watchers.clear()
         previousExecutor.shutdownNow()
+        OnePlusMacArbiter.release(slot)
         OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] shutdown")
     }
 
@@ -468,7 +488,13 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
         val scanMs = scanMsOverride ?: profile.preConnectScanMs
         if (scanMs <= 0L) return OnePlusConnectPrep(advFresh = false)
         // UI Connect just selected this ADV → don't hard-fail if re-scan misses briefly.
-        val uiJustSelected = !pendingDeviceName.isNullOrBlank()
+        //
+        // A name alone is not enough. The start screen may pre-select a sensor it has only ever read
+        // from the store, and that entry carries the stored ADV name with no sighting behind it. Such
+        // an entry used to claim "the UI just selected this", which switched off
+        // [OemDeviceProfile.requireAdvBeforeConnect] — the one guard that stops a blind connect. The
+        // timestamp is what separates a real sighting from a remembered name.
+        val uiJustSelected = !pendingDeviceName.isNullOrBlank() && pendingAdvSightingElapsedMs > 0L
         val hardRequireAdv =
             profile.requireAdvBeforeConnect && attempt == 0 && !uiJustSelected
         OnePlusLog.i(

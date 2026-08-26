@@ -15,6 +15,23 @@ internal object DexcomOnePlusStaging {
 
     private const val HOUR_MS = 60L * 60L * 1000L
 
+    /**
+     * Whether a slot's stored MAC describes the transmitter at [deviceAddress].
+     *
+     * The rule the cross-slot guard rests on. One sensor must never be paired in both slots at once:
+     * the two GATT clients share a single ACL link, both subscribe to the same Auth and ExtraData
+     * characteristics, and the transmitter sees one interleaved stream of two KEKS handshakes. The
+     * field log of 2026-08-25 shows both sides dying inside libkeks 1.6 s after the second connect.
+     *
+     * Case-insensitive because a MAC reaches the stores from several places — a live scan hit, an
+     * applicator parse, a restored session — and only some of them upper-case it.
+     */
+    fun isSameTransmitter(storedMac: String?, deviceAddress: String): Boolean {
+        val stored = storedMac?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        val target = deviceAddress.trim().takeIf { it.isNotEmpty() } ?: return false
+        return stored.equals(target, ignoreCase = true)
+    }
+
     /** Nominal ONE+/G7 sensor life. */
     const val SENSOR_LIFE_MS = 10L * 24L * HOUR_MS
 

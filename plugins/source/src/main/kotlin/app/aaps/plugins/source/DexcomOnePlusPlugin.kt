@@ -27,6 +27,7 @@ import app.aaps.core.ui.compose.icons.IcPluginByoda
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverReal
+import app.aaps.plugins.dexcomoneplus.oem.DeviceProfileRegistry
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseWatcher
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
@@ -39,6 +40,7 @@ import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
 import app.aaps.plugins.source.keys.DexcomOnePlusIntentKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -96,6 +98,16 @@ class DexcomOnePlusPlugin @Inject constructor(
 
     /** Watches who owns the radio, so both slots back off while a pump setup runs. */
     private var radioLeaseWatcher: Job? = null
+
+    /**
+     * The last resort that brings a sensor back.
+     *
+     * The driver has its own ladder of retries and it is the one that should do the work. This is
+     * the net for the case where that ladder itself stops, whatever the reason: as long as a sensor
+     * is stored and the session is down, the plugin asks for a connection again. Libre 3 already had
+     * this; ONE+ did not, and without it the only way back was a hand held over the sensor.
+     */
+    private var reconnectWatchdog: Job? = null
 
     private val driver
         get() = OnePlusCgmDrivers.default()
@@ -233,9 +245,17 @@ class DexcomOnePlusPlugin @Inject constructor(
         }
         DexcomOnePlusIngest.seed(sensorStore.loadLastIngestSequence(), recentTs)
         refreshProductionLifecycle()
+        // Before either slot resumes: an install that hit the cross-slot collision was left with the
+        // same MAC in both stores, and the two resumes below would recreate it on every start.
+        reconcileSlotsOnSameSensor()
         val autoResumeQueued = (driver as? OnePlusCgmDriverReal)?.resumeStoredSession() == true
         val stagingResumeQueued = resumeStagingSessionIfStored()
         warmupPhase = driver.warmupState().phase
+        // The privilege the OEM profiles have been asking for since they were written. Only when a
+        // sensor is actually stored: no session wanted, no service, no notification.
+        if (profileWantsForegroundService() && sensorStore.load() != null) {
+            DexcomOnePlusSessionService.start(context.applicationContext)
+        }
         // Reconcile a warm-up notification that survived a process restart with the driver's current
         // state — cancels it when warm-up is already READY/IDLE (otherwise nothing clears the stale
         // status-bar notification until the next onWarmup event, which may never arrive after restart).
@@ -285,6 +305,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     }
 
     override suspend fun onStop() {
+        cancelReconnectWatchdog()
         radioLeaseWatcher?.cancel()
         radioLeaseWatcher = null
         warmupGuardJob?.cancel()
@@ -295,6 +316,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         runCatching { stagingDriver.removeWatcher(stagingWatcher) }
         runCatching { stagingDriver.shutdown() }
         warmupNotification.cancel()
+        DexcomOnePlusSessionService.stop(context.applicationContext)
         aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_SESSION: plugin stop")
         super.onStop()
     }
@@ -395,6 +417,11 @@ class DexcomOnePlusPlugin @Inject constructor(
         previousMac: String?,
         startMs: Long = System.currentTimeMillis(),
     ) {
+        // A first pairing happens after onStart, when nothing was stored yet and so no service was
+        // asked for. Before the early return: adopting the same sensor again is still a session.
+        if (profileWantsForegroundService()) {
+            DexcomOnePlusSessionService.start(context.applicationContext)
+        }
         if (!sensorStore.startSessionForSensor(deviceAddress, startMs, previousMac)) return
         refreshProductionLifecycle()
         logSensorChange(startMs)
@@ -423,7 +450,50 @@ class DexcomOnePlusPlugin @Inject constructor(
 
     override fun onSession(up: Boolean, reason: String?) {
         aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_SESSION: up=$up reason=$reason")
+        // A session that ended because someone asked for it must stay ended. Everything else — a
+        // lost link, an error, the EGV loop falling out — is a candidate for the watchdog.
+        when {
+            up                            -> cancelReconnectWatchdog()
+            reason in DELIBERATE_STOPS    -> cancelReconnectWatchdog()
+            else                          -> armReconnectWatchdog()
+        }
     }
+
+    /**
+     * Asks for a connection again when the session has been down for a while.
+     *
+     * One watch at a time: a new one replaces the old, so a session that flaps does not leave a
+     * queue behind. It does nothing when the driver has already brought the session back by itself,
+     * which is the normal case, and nothing when no sensor is stored.
+     */
+    private fun armReconnectWatchdog() {
+        reconnectWatchdog?.cancel()
+        reconnectWatchdog = ioScope.launch {
+            delay(RECONNECT_WATCHDOG_MS)
+            if (driver.isSessionUp()) return@launch
+            val real = driver as? OnePlusCgmDriverReal ?: return@launch
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "DEXCOM_ONEPLUS_SESSION: session still down after ${RECONNECT_WATCHDOG_MS / 60_000} min, asking again",
+            )
+            real.setContext(context.applicationContext)
+            real.resumeStoredSession()
+        }
+    }
+
+    private fun cancelReconnectWatchdog() {
+        reconnectWatchdog?.cancel()
+        reconnectWatchdog = null
+    }
+
+    /**
+     * Whether this phone's OEM profile asks for a foreground service.
+     *
+     * Every profile says true today, which is why the flag looked dead. It is read rather than
+     * assumed so a future profile can opt out on a stack where the service costs more than it buys.
+     */
+    private fun profileWantsForegroundService(): Boolean =
+        DeviceProfileRegistry.resolve().useForegroundService
 
     override fun onError(message: String, fatal: Boolean) {
         aapsLogger.error(LTag.BGSOURCE, "DEXCOM_ONEPLUS_ERROR: fatal=$fatal $message")
@@ -435,7 +505,76 @@ class DexcomOnePlusPlugin @Inject constructor(
      * Start watching the STAGING sensor (collect-only, never published to the loop). The caller (Start
      * UI) then drives scan/connect on [stagingDriverForConnect]. Safe to call while production runs.
      */
-    fun beginStaging(deviceAddress: String) {
+    /**
+     * Undoes a poisoned pair of stores: the same transmitter recorded in both slots.
+     *
+     * The arbiter stops a second session being opened, but it cannot decide *which* slot was the
+     * mistake, and it would leave the loser of the race silently unable to connect for the rest of
+     * the run. So the ambiguity is resolved here, once, before anything connects.
+     *
+     * Production wins on purpose. It is the sensor the loop is dosing on, its store carries the
+     * session start the dashboard sensor age reads, and a pre-soak is by definition the disposable
+     * one. The staging slot is cleared the same way an explicit cancel clears it, so a later pre-soak
+     * starts from a genuine fresh soak clock rather than inheriting a start time it did not earn.
+     */
+    private fun reconcileSlotsOnSameSensor() {
+        val productionMac = sensorStore.load()?.lastMac ?: return
+        if (!DexcomOnePlusStaging.isSameTransmitter(stagingStore.load()?.lastMac, productionMac)) return
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_STAGING: both slots hold the same sensor — clearing the pre-soak slot, " +
+                "production keeps it (cross-slot collision recovery)",
+        )
+        runCatching { stagingDriver.removeWatcher(stagingWatcher) }
+        runCatching { stagingDriver.disconnect() }
+        runCatching { stagingDriver.shutdown() }
+        runCatching { stagingStore.clearAll() }
+        stagingPresent = false
+        stagingPublishesToLoop = false
+        stagingWarmupDone = false
+        stagingValidEgvCount = 0
+        stagingLastValueMgdl = null
+        stagingLastValueAtMs = null
+        synchronized(stagingBuffer) { stagingBuffer.clear() }
+        _stagingWarmup.value = null
+        _stagingLifecycle.value = null
+        refreshStagingState()
+        refreshStagingEvidence()
+    }
+
+    /**
+     * Whether [deviceAddress] is the sensor the pre-soak slot holds.
+     *
+     * The one thing the dual-slot design cannot separate is the sensor itself. Two slots on one MAC
+     * means two KEKS handshakes over a single ACL link: both GATT clients subscribe to the same Auth
+     * and ExtraData characteristics, so each receives the other's notifications and the transmitter
+     * sees one interleaved write stream. The field log of 2026-08-25 shows both sides dying inside
+     * libkeks within 1.6 s of the second connect, on a handshake that had just reported
+     * `authenticated=1`. It is not a race that sometimes bites — it is certain.
+     */
+    fun isStagingSensor(deviceAddress: String): Boolean =
+        DexcomOnePlusStaging.isSameTransmitter(stagingStore.load()?.lastMac, deviceAddress)
+
+    /** Whether [deviceAddress] is the sensor currently feeding the loop — see [isStagingSensor]. */
+    fun isProductionSensor(deviceAddress: String): Boolean =
+        DexcomOnePlusStaging.isSameTransmitter(sensorStore.load()?.lastMac, deviceAddress)
+
+    /**
+     * Starts a pre-soak on [deviceAddress].
+     *
+     * @return false when the request was refused because that sensor already feeds the loop. The
+     *   caller must not connect the staging driver in that case. Refusing here rather than only in
+     *   the UI keeps the invariant for every future call site.
+     */
+    fun beginStaging(deviceAddress: String): Boolean {
+        if (isProductionSensor(deviceAddress)) {
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "DEXCOM_ONEPLUS_STAGING: refused — this sensor already feeds the loop, a pre-soak on it " +
+                    "would run a second KEKS handshake on the same link",
+            )
+            return false
+        }
         stagingDriver.setContext(context)
         stagingDriver.addWatcher(stagingWatcher)
         stagingPublishesToLoop = false
@@ -471,6 +610,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         refreshStagingState()
         refreshStagingEvidence()
         aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: begin")
+        return true
     }
 
     /**
@@ -723,5 +863,14 @@ class DexcomOnePlusPlugin @Inject constructor(
 
         /** Staging QA buffer cap (~24 h at 5-min cadence). */
         private const val STAGING_BUFFER_CAP = 288
+
+        /** How long the session may stay down before the plugin asks for a connection again. */
+        private const val RECONNECT_WATCHDOG_MS = 5L * 60L * 1000L
+
+        /**
+         * Session-end reasons the user or the app asked for. The watchdog must not undo those; every
+         * other reason is a link that went away on its own and is worth chasing.
+         */
+        private val DELIBERATE_STOPS = setOf("disconnect", "shutdown", "cancelled")
     }
 }

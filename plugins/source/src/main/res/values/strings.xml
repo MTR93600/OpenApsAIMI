@@ -94,6 +94,15 @@
     <string name="dexcom_oneplus_notif_title">Dexcom ONE+ / G7</string>
     <string name="dexcom_oneplus_notif_channel_name">Dexcom ONE+ / G7 status</string>
     <string name="dexcom_oneplus_notif_channel_desc">Ongoing sensor connection and warm-up status.</string>
+    <string name="dexcom_oneplus_notif_session_alive">Keeping the sensor connected</string>
+
+    <!-- Cross-slot conflict: the same sensor cannot run in both slots at once -->
+    <string name="dexcom_oneplus_slot_conflict_title">This sensor is already soaking</string>
+    <string name="dexcom_oneplus_slot_conflict_message">It is running as your pre-soak sensor. One sensor cannot be paired twice at the same time: both sessions would talk over each other and the pairing fails for both.\n\nIf it is ready, promote it — that keeps everything it has collected. Otherwise cancel the pre-soak, which throws that away, and start it here instead.</string>
+    <string name="dexcom_oneplus_slot_conflict_promote">Promote it instead</string>
+    <string name="dexcom_oneplus_slot_conflict_restart">Cancel pre-soak and start here</string>
+    <string name="dexcom_oneplus_slot_conflict_dismiss">Leave it soaking</string>
+    <string name="dexcom_oneplus_staging_is_production">This sensor already feeds the loop. Start it from Production, not as a pre-soak.</string>
     <string name="dexcom_oneplus_notif_pairing">Pairing…</string>
     <string name="dexcom_oneplus_notif_connecting">Connecting to sensor…</string>
     <string name="dexcom_oneplus_notif_reconnecting">Reconnecting…</string>

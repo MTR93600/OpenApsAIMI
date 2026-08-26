@@ -12,6 +12,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.SnapshotStateMap
+import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.keys.interfaces.BooleanNonPreferenceKey
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
@@ -550,12 +551,13 @@ fun rememberUnitDoublePreferenceState(
     val profileUtil = LocalProfileUtil.current
     val sharedStates = LocalSharedPreferenceStates.current
 
-    // Format the current stored value for display
+    // Format the current stored value for display.
+    // `preferences.get(key)` already returns the value in the units the user selected, so it must
+    // not be converted again here. The number of decimals comes from the selected unit: mg/dL is a
+    // whole number, mmol/L needs one decimal so values like 4.5 survive.
     fun formatForDisplay(): String {
-        val storedValue = preferences.get(key)
-        val displayValue = profileUtil.valueInCurrentUnitsDetect(storedValue)
-        val isMgdl = displayValue == storedValue || (storedValue > 0 && displayValue / storedValue > 0.9)
-        val precision = if (isMgdl) 0 else 1
+        val displayValue = preferences.get(key)
+        val precision = if (profileUtil.units == GlucoseUnit.MGDL) 0 else 1
         return BigDecimal(displayValue).setScale(precision, RoundingMode.HALF_UP).toPlainString()
     }
 
