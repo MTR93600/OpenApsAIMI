@@ -1884,4 +1884,223 @@
 <string name="aimi_hormonitor_composite_min">Composite min</string>
 
 <string name="aimi_hormonitor_mean">mean</string>
+<string name="folder_documents">Documents</string>
+<string name="uam_model_status"> 📦 UAM model: %1$s (%2$s, %3$s)</string>
+<string name="log_smb_cache_cleared">SMB cache cleared</string>
+<string name="log_interpreter_closed">Interpreter closed</string>
+<string name="log_error_closing_interpreter">Error closing interpreter: %1$s</string>
+<string name="sanitize_info"> 🧹 Sanitize: %1$d incomplete values -> 0</string>
+<string name="cache_hit"> ⚡ Cache HIT → %1$s U</string>
+<string name="cache_hit_invalid"> ⚠️ Cache HIT not usable (NaN/Inf), recalculating…</string>
+<string name="uam_unavailable"> ❌ UAM model unavailable → SMB=0</string>
+<string name="tflite_failed"> 💥 TFLite execution failed: %1$s → SMB=0</string>
+<string name="log_tflite_failed">TFLite run failed: %1$s</string>
+<string name="uam_executed"> ✔ UAM executed → %1$s U</string>
+<string name="uam_invalid"> ⚠️ Result not usable (raw=%1$f) → SMB=0</string>
+<string name="model_missing"> ❌ Model file not found: %1$s</string>
+<string name="log_model_file_not_found">Model file not found: %1$s</string>
+<string name="model_loaded"> 📦 Model loaded ✓ : %1$s (%2$s KB)</string>
+<string name="log_interpreter_initialized">Interpreter initialized from %1$s (%2$s)</string>
+<string name="model_load_failed"> ❌ Model load failed: %1$s</string>
+<string name="log_failed_init_uam">Failed to init UAM model: %1$s</string>
+
+<!-- Dump R.string names that were missing from kmp English. Copied from freeze plugins/aps values/strings.xml. -->
+<string name="adjustments_smb">🎛️ Adjustments: %1$.2f → %2$.2f U</string>
+<string name="autodrive_max_basal_title">Fixed basal 30 min if meal detected (U/h)</string>
+<string name="autodrive_prebolus_variables">Prebolus limits and conditions</string>
+<string name="autodrive_preferences">Autodrive</string>
+<string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Snack/prebolus mode: %2$s | </string>
+<string name="autosens_ratio_log">Autosense ratio: %.2f;</string>
+<string name="bg_80_90_fall">BG 80&#8211;90 &amp; free fall → basal to 0.\n</string>
+<string name="bg_80_90_stable">BG 80&#8211;90 stable → basal x0.2.\n</string>
+<string name="bg_90_100_slight_gain">BG 90&#8211;100 &amp; slight increase → basal x0.5.\n</string>
+<string name="bg_combined_delta_high">Combined delta high (%1$.2f), dynamic multiplier applied; </string>
+<string name="bg_combined_delta_moderate">Combined delta moderate (%1$.2f), reduction x0.8; </string>
+<string name="bg_combined_delta_weak">Combined delta very weak (%1$.2f), reduction x0.6; </string>
+<string name="bg_delta">  • BG: %1$.0f, Delta: %2$.2f\n</string>
+<string name="bg_drop_high_critical">CRITICAL drop below 85 (%1$.1f mg/dL/h), BASAL STOP;</string>
+<string name="bg_drop_high_warning">Moderate drop below 110 (%1$.1f mg/dL/h), basal reduced 50%%;</string>
+<string name="bg_near_target">Predicted BG (%1$.1f) near target (%2$.1f), reduction x0.5; </string>
+<string name="bg_near_target_but_rising">Predicted BG (%1$.1f) near target (%2$.1f) but rising detected (Δ=%3$.1f, combined=%4$.1f) → no reduction; </string>
+<string name="bg_note_less_aggressive">less aggressive</string>
+<string name="bg_note_low_treatment">low treatment</string>
+<string name="bg_note_more_aggressive">more aggressive</string>
+<string name="bg_note_normal">normal</string>
+<string name="bg_note_too_aggressive">too aggressive</string>
+<string name="bg_over_180_stable_basal_factor">BG&gt;180 stable → basal x adjustment factor.</string>
+<string name="bg_rapid_rise">Rapid rise detected (delta %1$.0f mg/dL), applying emergency mode; </string>
+<string name="bg_stable_high_delta_low">BG stable &gt;160 &amp; Combined delta&lt;1, reduction x0.8; </string>
+<string name="bg_trend_analysis">→ BG Trend Analysis\n</string>
+<string name="calc_dynamic_peaktime">🧠 Calculation Dynamic PeakTime\n</string>
+<string name="calculated_trend">  • Calculated trend: %1$.1f mg/dL/interval\n</string>
+<string name="calm_meal_and_timing">Calm meal &amp; timing → basal x1.5.</string>
+<string name="condition_acceleratingdown">BG accel. downward</string>
+<string name="condition_belowminthreshold">BG&lt;60 below minimum threshold</string>
+<string name="condition_belowtarget_dropping">BG below target and dropping</string>
+<string name="condition_belowtarget_stable_nocob">BG below target stable without COB</string>
+<string name="condition_bg90">BG&lt;90</string>
+<string name="condition_droppingfast">BG dropping fast</string>
+<string name="condition_droppingfastathigh">fast drop from BG&gt;180</string>
+<string name="condition_droppingveryfast">BG dropping very fast</string>
+<string name="condition_fasting">fasting</string>
+<string name="condition_honeysmb">SMB in "honeymoon" mode</string>
+<string name="condition_hypoguard">hypoglycemia protection</string>
+<string name="condition_negdelta">negative delta</string>
+<string name="condition_newcalibration">new sensor calibration</string>
+<string name="condition_nosmb">no microbolus needed</string>
+<string name="condition_prediction">BG prediction</string>
+<string name="console_adjust_basal">Adjusting basal from %.2f to %.2f; </string>
+<string name="console_basal_unchanged">Basal unchanged: %.2f; </string>
+<string name="console_carb_impact">Carb Impact: %.0f mg/dL per 5m; CI Duration: %.1f hours; remaining CI (~2h peak): %.1f mg/dL per 5m</string>
+<string name="console_dia_adjusted">DIA Adjusted (in minutes) : %.0f</string>
+<string name="console_limiting_carb_impact">Limiting carb impact from %.0f to %.0f mg/dL/5m ( %d g/h )</string>
+<string name="console_max_bg_adjusted">max_bg from %.2f to %.2f</string>
+<string name="console_max_bg_unchanged">max_bg unchanged: %.2f</string>
+<string name="console_min_bg_adjusted">Adjusting targets for high BG: min_bg from %.2f to %.2f; </string>
+<string name="console_min_bg_unchanged">min_bg unchanged: %.2f; </string>
+<string name="console_profile_sens">Sensitivity profile: %.0f, sens: %.0f, CSF: %.0f</string>
+<string name="console_target_bg_adjusted">target_bg from %.2f to %.2f; </string>
+<string name="console_target_bg_changed">target_bg from %.2f to %.2f; </string>
+<string name="console_target_bg_unchanged">target_bg unchanged: %.2f; </string>
+<string name="console_temp_target_set">Temp Target set, not adjusting with autosens</string>
+<string name="context_patient_state_empty">No AIMI understanding yet. It updates on each loop tick and when body signals or user context change.</string>
+<string name="context_title">AIMI Context</string>
+<string name="dia_base_info">Base DIA: %1$f h = %2$f min\n</string>
+<string name="dia_calculation_details">DIA Calculation Details:</string>
+<string name="endo_enable_title">Enable Endometriosis Logic</string>
+<string name="endo_preferences_title">Endometriosis Settings</string>
+<string name="eventual_bg_over_110_hyper_factor">Eventual BG&gt;110 &amp; hyper → factor adjustment.</string>
+<string name="file_too_short">The file contains 200 lines or fewer, no deletion performed.</string>
+<string name="final_dia_constrained">Final DIA constrained to [180, 720] min: %1$.0fmin</string>
+<string name="finalization_smb">🧩 Finalization: %1$.2f → %2$.2f U</string>
+<string name="first_bg_value">  • First glucose : %1$.1f mg/dL\n</string>
+<string name="heart_rate">&#160;| HR=%1$s bpm</string>
+<string name="honeymoon_bg_140_169_profile">Honeymoon BG 140&#8211;169 → profile.</string>
+<string name="honeymoon_bg_over_170_adjustment">Honeymoon BG&gt;170 → adjustment.</string>
+<string name="honeymoon_delta_over_2_bg_90_119_profile">Honeymoon Δ&gt;2 &amp; BG 90&#8211;119 → profile.</string>
+<string name="honeymoon_meal_slope">Honeymoon meal slope.</string>
+<string name="honeymoon_mixed_correction">Honeymoon mixed correction.</string>
+<string name="honeymoon_plus_meal_detection">Honeymoon + meal detection.</string>
+<string name="honeymoon_small_slope">Honeymoon small slope.</string>
+<string name="hypo_risk_notification_text">Hypo risk: rapid drop detected. Check your glucose now.</string>
+<string name="hypo_risk_notification_title">Hypo Risk</string>
+<string name="insulin_effect">Insulin effect: %1$.2f</string>
+<string name="iob_high_reduction">High IOB (%1$.2f U), reduction x0.85; </string>
+<string name="last_200_deleted">The last 200 lines have been deleted. The original file was saved as \'%1$s\'.</string>
+<string name="last_bg_value">  • Last glucose : %1$.1f mg/dL\n</string>
+<string name="lgs_triggered">🛑 LGS: BG=%1$s ≤ %2$s → TBR 0U/h (30m)\n</string>
+<string name="lgs_triggered_min_pred">🛑 LGS: minPred=%1$s mg/dL ≤ %2$s (current BG above threshold) → TBR 0U/h (30m)\n</string>
+<string name="lgs_triggered_predicted">🛑 LGS: pred=%1$s eventual=%2$s ≤ %3$s → TBR 0U/h (30m)\n</string>
+<string name="limits_smb">🧱 Limits: %1$.2f → %2$.2f U</string>
+<string name="manual_basal_override">Forced basal → %1$.2f U/h (%2$dmin). Manual meal mode %3$s\n</string>
+<string name="manual_meal_prebolus">&#160;Microbolusing Meal Mode %1$.2fU.</string>
+<string name="meal_dinner_maintain">Dinner mode maintain (%.1f floor)</string>
+<string name="meal_mode_first_30">Manual modes meal 0&#8211;30m [%1$s] → forced basal at %2$.2f U/h (override).\n</string>
+<string name="meal_modes_max_basal_title">Fixed basal 30 min at meal start (U/h)</string>
+<string name="meal_snack_30_60m_rising_basal_delta">Meal/snack 30&#8211;60m &amp; rising → basal Δ.</string>
+<string name="meal_snack_under_30m_basal_10">Meal/snack &lt;30m → basal x10.</string>
+<string name="morning_adjustment">Morning adjustment (6&#8211;10h): DIA reduced by 20%</string>
+<string name="morning_rise_profile_basal">Morning rise → profile basal.</string>
+<string name="night_adjustment">Night adjustment (22&#8211;23h &amp; 0&#8211;5h): DIA increased by 20%</string>
+<string name="no_bg_history">✘ No recent glucose history available.\n</string>
+<string name="no_conditions_met_2">No conditions met</string>
+<string name="number_of_values">  • Number of values : %1$d\n</string>
+<string name="original_file_missing">The original file does not exist.</string>
+<string name="peak_time">  → 🕒 PeakTime=%1$s min | BG=%2$s Δ%3$s</string>
+<string name="prebolus_autodrive_mode_title">Meal Pre-bolus</string>
+<string name="prebolussmall_autodrive_mode_title">Light snack pre-bolus</string>
+<string name="profile_peak_time">  • Profile peak: %1$.0f\n</string>
+<string name="pump_age_adjustment">Pump age (%1$.0f days): DIA increased by %2$.0f%%</string>
+<string name="reason_activity_cap">Activity SMB Cap (%.2f)</string>
+<string name="reason_activity_ratio">  • Activity ratio: %1$.2f ➝ factor %2$.2f\n</string>
+<string name="reason_additional_carbs">%d add\'l carbs req w/in %dmin;</string>
+<string name="reason_ai_file">🧠 A.I. file: %1$s Prediction : %2$s U</string>
+<string name="reason_autodrive_v3_authoritative_blender_skipped">🛡️ Autodrive V3 authoritative: legacy MPC/PI blender skipped</string>
+<string name="reason_bg_data_old">If current system time %1$d is correct, then BG data is too old. The last BG data was read %2$.0f minutes ago at %3$d</string>
+<string name="reason_bg_dropping">, BG is dropping (delta %1$.0f), setting basal to 0.</string>
+<string name="reason_bg_dropping_floor">Drop (Δ%.1f), safety floor (%.2f)</string>
+<string name="reason_bio_sync_flow">  • 🟢 Bio-Sync FLOW (Steps %1$d, HR %2$d) ➝ Peak faster x%3$.2f\n</string>
+<string name="reason_bio_sync_stress">  • 🔴 Bio-Sync STRESS (HR %1$d, Steps %2$d) ➝ Peak slowed x1.25\n</string>
+<string name="reason_boost_hyper">⚡ Hyper boost: x1.7 (BG=%1$d, Δ=%2$.1f)</string>
+<string name="reason_boost_hyper_2">⚡ Hyper boost: x1.5 (BG=%1$d, Δ=%2$.1f)</string>
+<string name="reason_cgm_calibrating">CGM is calibrating, in ??? state, or noise is high</string>
+<string name="reason_cgm_flat">Error: CGM data is unchanged for the past ~45m</string>
+<string name="reason_data_removed">The values for date %1$s have been deleted because TIR1DAYIR is lower than 85%%.</string>
+<string name="reason_deletion_time_restricted">The deletion can only be executed between 00:05 and 00:10.</string>
+<string name="reason_early_meal">Early meal detected → TBR forced to %1$.2fU/h x30 (override).\n</string>
+<string name="reason_eventual_bg">Eventual BG %1$s >= %2$s, </string>
+<string name="reason_hyper_correction">  • Hyperglycemia factor: %1$.2f\n</string>
+<string name="reason_hypo_guard">🛑 Hypo protection + safety margin: minBG=%1$s ≤ Threshold=%2$s (BG=%3$s, predicted=%4$s, eventual=%5$s) → SMB=0</string>
+<string name="reason_insulin_required"> insulin required %1$.2f</string>
+<string name="reason_iob_adjustment_inverted">  • IOB Activity Acceleration: -%1$.1f min\n</string>
+<string name="reason_iob_max">IOB %.2f > maxIOB %.2f</string>
+<string name="reason_max_iob">Adjustments : MaxIob %.2f U </string>
+<string name="reason_max_smb">; maxBolus %1$.2f</string>
+<string name="reason_maxsmb">&#160;| MaxSMB %.1f U&#160;\n</string>
+<string name="reason_meal_aggression_boost">🍽️ Meal weighting: %1$.2fU → %2$.2fU (x%3$.2f)</string>
+<string name="reason_meal_high_iob_relaxed">Meal mode rising: IOB %1$.2f &gt; max %2$.2f → SMB damped to %3$d%%.</string>
+<string name="reason_meal_hold_profile_basal">Meal mode rising: IOB %1$.2f &gt; max %2$.2f → basal kept at profile minimum.\n</string>
+<string name="reason_microbolus">Microbolusing %1$.2fU.</string>
+<string name="reason_ml_training">🗃️ ML training: dataset insufficient, no refinement\n</string>
+<string name="reason_mpc_pi">🎛️ MPC predictive model: %.2f U (%.0f%%) | PI physiological model: %.2f U (%.0f%%)</string>
+<string name="reason_prebolus_bfast1">&#160;Microbolusing 1/2 Breakfast Mode %.2fU.</string>
+<string name="reason_prebolus_bfast2">&#160;Microbolusing 2/2 Breakfast Mode %.2fU. </string>
+<string name="reason_prebolus_dinner1">&#160;Microbolusing 1/2 Dinner Mode %.2fU.</string>
+<string name="reason_prebolus_dinner2">&#160;Microbolusing 2/2 Dinner Mode %.2fU.</string>
+<string name="reason_prebolus_highcarb">&#160;Microbolusing 1/2 High Carb Mode %.2fU.</string>
+<string name="reason_prebolus_lunch1">&#160;Microbolusing 1/2 Lunch Mode %.2fU.</string>
+<string name="reason_prebolus_lunch2">&#160;Microbolusing 2/2 Lunch Mode %.2fU.</string>
+<string name="reason_prebolus_snack">&#160;Microbolusing Snack Mode %.2fU.</string>
+<string name="reason_safety_sport_meal_reduction">🏃‍♂️ Sport safety softened by meal: %1$.2fU → %2$.2fU</string>
+<string name="reason_sensor_lag">  • SensorLag > Historic ➝ x0.85\n</string>
+<string name="reason_sensor_lag_lower">  • SensorLag &lt; Historic ➝ x1.2\n</string>
+<string name="reason_set_temp_basal">; setting current basal of %1$.2f as temp.</string>
+<string name="reason_strong_rise_basal">Strong rise (Δmax=%1$.1f) → basal x%2$.2f.</string>
+<string name="reason_wait_microbolus">Waiting %1$.0fmin %2$.0fs to microbolus again.</string>
+<string name="safety_condition">Safety condition %1$s : %2$s</string>
+<string name="safety_cut_tbr">Safety cut: predicted BG&lt;100 or IOB>%1$.2f → basal to 0.\n</string>
+<string name="safety_sport_smb_zero">🏃‍♂️ Safety sport → SMB=0</string>
+<string name="sensitivity_ratio_temp_target">Sensitivity ratio set to %.2f based on temp target of %.0f;</string>
+<string name="slow_rise_proportional_adjustment">Slow rise → proportional adjustment.</string>
+<string name="smb_disabled">SMB disabled (!microBolusAllowed)</string>
+<string name="smb_disabled_high_target">SMB disabled due to high temptarget of %1$.0f</string>
+<string name="smb_disabled_no_pref_or_condition">SMB disabled (no enableSMB preferences active or no condition satisfied)</string>
+<string name="smb_enabled_after_carb_entry">SMB enabled for 6h after carb entry</string>
+<string name="smb_enabled_always">SMB enabled due to enableSMB_always</string>
+<string name="smb_enabled_for_cob">SMB enabled for COB of %1$.1f</string>
+<string name="smb_enabled_for_temp_target">SMB enabled for temp target of %1$s</string>
+<string name="smb_enabled_meal_mode">SMB enabled: meal mode rising (BG %1$s, Δ=%2$.1f, eventual %3$s)</string>
+<string name="smb_final">✅ Final SMB: %1$s U</string>
+<string name="sos_log_error_send">SOS SMS send failed</string>
+<string name="sos_log_monitoring_start">BG dropped below threshold (%1$.1f &lt; %2$.1f). Starting 30 min monitoring.</string>
+<string name="sos_log_sending">Sending SOS SMS (BG: %1$.1f, Delta: %2$s)</string>
+<string name="sos_sms_footer_critical">\nTAKE ACTION NOW!</string>
+<string name="sos_sms_footer_low">\nWAITING FOR RECOVERY OR USER ACTION</string>
+<string name="sos_sms_footer_recovery">\nBLOOD SUGAR IS RISING — WAIT FOR CONFIRMATION</string>
+<string name="sos_sms_footer_stale">\nCHECK SENSOR CONNECTION.</string>
+<string name="sos_sms_label_bg">BLOOD SUGAR</string>
+<string name="sos_sms_label_iob">ACTIVE INSULIN</string>
+<string name="sos_sms_label_last_bg">LAST BG</string>
+<string name="sos_sms_label_pos">Pos</string>
+<string name="sos_sms_label_time">TIME</string>
+<string name="sos_sms_label_trend">TREND</string>
+<string name="sos_sms_pos_not_available">Not available</string>
+<string name="sos_sms_title_critical">SOS: CRITICAL HYPO</string>
+<string name="sos_sms_title_low">SOS LOW BLOOD SUGAR ALERT</string>
+<string name="sos_sms_title_recovery">SOS HYPO: RECOVERY PHASE</string>
+<string name="sos_sms_title_stale">AAPS: MISSING SENSOR DATA</string>
+<string name="steps">&#160;| Steps=%1$d</string>
+<string name="tdd_per_hour_high">High TDD/h (%1$.2f U/h), reduction x0.8; </string>
+<string name="temp_basal_pose">Temp basal %1$s U/h for %2$d minutes\n</string>
+<string name="tir_high">High TIR (%1$.1f%%), reduction x0.5;</string>
+<string name="training_ml_breakfast_modes_preferences">Breakfast</string>
+<string name="training_ml_dinner_modes_preferences">Dinner</string>
+<string name="training_ml_generic_meal_modes_preferences">Generic Meal</string>
+<string name="training_ml_high_carb_modes_preferences">High Carb</string>
+<string name="training_ml_lunch_modes_preferences">Lunch</string>
+<string name="training_ml_modes_preferences">Manual Mode</string>
+<string name="training_ml_sleep_modes_preferences">Rest</string>
+<string name="training_ml_snack_modes_preferences">Snack</string>
+<string name="user_preferences">Preferences user</string>
+<string name="zero_basal_forced">Zero basal duration (%1$d min) exceeded, forcing minimal basal; </string>
 </resources>

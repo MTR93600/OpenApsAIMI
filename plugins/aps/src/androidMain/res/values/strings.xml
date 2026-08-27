@@ -114,4 +114,20 @@
     <string name="autoISF_settings_title">AutoISF settings</string>
     <string name="smb_delivery_settings_title">SMB delivery settings</string>
 
+    <!-- AIMI intent preferences (ApsIntentKey). Unique names so lot K aimi_strings.xml can keep freeze ids. -->
+    <string name="pref_title_aimi_control_center">AIMI Control Center</string>
+    <string name="pref_summary_aimi_control_center">See how AIMI interprets your current settings before simplifying them into behavior families.</string>
+    <string name="pref_title_aimi_sos_permissions">Grant SMS and location permissions</string>
+    <string name="pref_summary_aimi_sos_permissions">Tap to authorize AAPS to send SOS SMS and access location for emergencies. Automatic phone calls are not used.</string>
+    <string name="pref_title_aimi_hypo_risk_alarm_info">Hypo Risk</string>
+    <string name="pref_summary_aimi_hypo_risk_alarm_info">AIMI posts a unified urgent alarm with AAPS alarm sound. Snooze or dismiss from the notification list or dashboard dialog.</string>
+    <string name="pref_title_aimi_physio_pattern_catalog_info">Physiological pattern catalog</string>
+    <string name="pref_summary_aimi_physio_pattern_catalog_info">28 hysteresis-gated patterns (sleep, HRV, meals, stress, cycle). Tap for details.</string>
+    <string name="pref_title_aimi_health_connect_permissions">Health Connect permissions</string>
+    <string name="pref_summary_aimi_health_connect_permissions">Open the screen to grant sleep, HRV, and heart rate access via Health Connect.</string>
+    <string name="pref_title_hormonitor_viewer">Hormonitor study data</string>
+    <string name="pref_summary_hormonitor_viewer">Browse the exported study data day by day: time-in-range, decisions, and how the tree, Harmonia, physio and hormonal context were deployed.</string>
+    <string name="pref_title_pkpd_setup">PK/PD setup</string>
+    <string name="pref_summary_pkpd_setup">Guided presets, comfort tuning, and expert parameters in one screen</string>
+
 </resources>

@@ -65,4 +65,10 @@ interface TirCalculator {
      * @return TIR object with aggregated counts from all days
      */
     fun averageTIR(tirs: LongSparseArray<TIR>): TIR
+
+    /** Last 60 minutes. AIMI freeze API; sync wrapper around persistence. */
+    fun calculateHour(lowMgdl: Double, highMgdl: Double): LongSparseArray<TIR>
+
+    /** Today from midnight to now. AIMI freeze API; sync wrapper around persistence. */
+    fun calculateDaily(lowMgdl: Double, highMgdl: Double): LongSparseArray<TIR>
 }

@@ -3,6 +3,7 @@ package app.aaps.core.interfaces.logging
 enum class LTag(val tag: String, val defaultValue: Boolean = true, val requiresRestart: Boolean = false) {
     CORE("CORE"),
     APS("APS"),
+    AIMI("AIMI"),
     AUTOSENS("AUTOSENS", defaultValue = false),
     AUTOMATION("AUTOMATION"),
     AUTOTUNE("AUTOTUNE", defaultValue = false),

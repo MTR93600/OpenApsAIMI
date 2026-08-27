@@ -7,6 +7,7 @@ import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -43,9 +44,43 @@ data class RT(
     var IOB: Double? = null,
     var variable_sens: Double? = null,
     var isfMgdlForCarbs: Double? = null, // used to pass to AAPS client
+    @Serializable(with = StringBuilderSerializer::class)
+    var aimilog: StringBuilder = StringBuilder(),
 
     var consoleLog: MutableList<String>? = null,
-    var consoleError: MutableList<String>? = null
+    var consoleError: MutableList<String>? = null,
+    var isHypoRisk: Boolean = false,
+
+    // AI decision auditor
+    var aiAuditorEnabled: Boolean = false,
+    var aiAuditorVerdict: String? = null, // CONFIRM, SOFTEN, SHIFT_TO_TBR
+    var aiAuditorConfidence: Double? = null, // 0.0 to 1.0
+    var aiAuditorModulation: String? = null, // modulation applied
+    var aiAuditorRiskFlags: String? = null, // comma-separated risk flags
+
+    // Learner state shown on RT
+    var learnersInfo: String? = null, // example: "Basal x 1.05, ISF:42, React:0.95x"
+
+    // Phase-space trajectory control for graphs
+    var trajectoryEnabled: Boolean = false, // feature flag
+    var trajectoryType: String? = null, // OPEN_DIVERGING, CLOSING_CONVERGING, TIGHT_SPIRAL, STABLE_ORBIT
+    var trajectoryCurvature: Double? = null, // kappa: 0-1+ (above 0.3 is a tight spiral)
+    var trajectoryConvergence: Double? = null, // mg/dL per min (positive means converging)
+    var trajectoryCoherence: Double? = null, // -1 to 1 (above 0.6 is a good response)
+    var trajectoryEnergy: Double? = null, // insulin units (above 2 is stacking)
+    var trajectoryOpenness: Double? = null, // 0-1 (above 0.7 is diverging)
+    var trajectoryHealth: Int? = null, // overall health 0-100
+    var trajectoryModulationActive: Boolean = false, // true when modulation was applied
+    var trajectoryWarningsCount: Int? = null, // warning count
+    var trajectoryConvergenceETA: Int? = null, // predicted minutes to a stable orbit
+    var trajectoryRelevanceScore: Double? = null, // cosine similarity 0.0-1.0
+
+    // Context module
+    var contextEnabled: Boolean = false, // feature flag
+    var contextIntentCount: Int = 0, // number of active context intents
+    var contextModulation: Double = 1.0, // SMB modulation factor (0.5-1.1)
+    @Transient
+    var aimiAdaptationStatus: AimiAdaptationStatus? = null
 ) {
 
     fun serialize() = Json.encodeToString(serializer(), this)

@@ -25,4 +25,8 @@ class TirImpl(override val date: Long, override val lowThreshold: Double, overri
     override fun above() {
         above++; count++
     }
+
+    override fun belowPct() = if (count > 0) below.toDouble() / count * 100.0 else 0.0
+    override fun inRangePct() = if (count > 0) 100 - belowPct() - abovePct() else 0.0
+    override fun abovePct() = if (count > 0) above.toDouble() / count * 100.0 else 0.0
 }

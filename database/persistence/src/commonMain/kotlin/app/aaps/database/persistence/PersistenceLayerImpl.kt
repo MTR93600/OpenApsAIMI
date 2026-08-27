@@ -2463,6 +2463,10 @@ class PersistenceLayerImpl(
         repository.getUserEntryFilteredDataFromTime(timestamp).map { it.fromDb() }.toList()
     }
 
+    override suspend fun deleteLastEventMatchingKeyword(noteKeyword: String) {
+        repository.deleteLastEventMatchingKeyword(noteKeyword)
+    }
+
     // TDD
     override suspend fun clearCachedTddData(timestamp: Long) = withContext(aapsIoDispatcher) { repository.clearCachedTddData(timestamp) }
 

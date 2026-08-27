@@ -562,6 +562,10 @@ class AppRepository internal constructor(
     suspend fun getLastTherapyEventId(): Long? =
         database.therapyEventDao.getLastId()
 
+    suspend fun deleteLastEventMatchingKeyword(noteKeyword: String) {
+        database.therapyEventDao.deleteLastEventMatchingKeyword(noteKeyword)
+    }
+
     // FOOD
     /*
        * returns a Pair of the next entity to sync and the ID of the "update".

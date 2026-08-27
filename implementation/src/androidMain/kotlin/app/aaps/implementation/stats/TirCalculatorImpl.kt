@@ -1,6 +1,7 @@
 package app.aaps.implementation.stats
 
 import androidx.collection.LongSparseArray
+import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.stats.TIR
 import app.aaps.core.interfaces.stats.TirCalculator
@@ -97,6 +98,52 @@ class TirCalculatorImpl @Inject constructor(
             if (tir == null) {
                 tir = TirImpl(midnight, lowMgdl, highMgdl)
                 result.append(midnight, tir)
+            }
+            if (bg.value < 39) tir.error()
+            if (bg.value >= 39 && bg.value < lowMgdl) tir.below()
+            if (bg.value in lowMgdl..highMgdl) tir.inRange()
+            if (bg.value > highMgdl) tir.above()
+        }
+        return result
+    }
+
+    /**
+     * ⚠️ ASYNC IMPACT: freeze AIMI called these from a sync tick. Persistence is suspend, so this
+     * blocks like the freeze `runBlocking` wrappers.
+     */
+    override fun calculateHour(lowMgdl: Double, highMgdl: Double): LongSparseArray<TIR> {
+        if (lowMgdl < 39) throw RuntimeException("Low below 39")
+        if (lowMgdl > highMgdl) throw RuntimeException("Low > High")
+        val startTime = dateUtil.now() - T.hours(hour = 1).msecs()
+        val endTime = dateUtil.now()
+        val bgReadings = runBlocking { persistenceLayer.getBgReadingsDataFromTimeToTime(startTime, endTime, true) }
+        val result = LongSparseArray<TIR>()
+        for (bg in bgReadings) {
+            var tir = result[startTime]
+            if (tir == null) {
+                tir = TirImpl(startTime, lowMgdl, highMgdl)
+                result.append(startTime, tir)
+            }
+            if (bg.value < 39) tir.error()
+            if (bg.value >= 39 && bg.value < lowMgdl) tir.below()
+            if (bg.value in lowMgdl..highMgdl) tir.inRange()
+            if (bg.value > highMgdl) tir.above()
+        }
+        return result
+    }
+
+    override fun calculateDaily(lowMgdl: Double, highMgdl: Double): LongSparseArray<TIR> {
+        if (lowMgdl < 39) throw RuntimeException("Low below 39")
+        if (lowMgdl > highMgdl) throw RuntimeException("Low > High")
+        val startTime = MidnightTime.calc(dateUtil.now())
+        val endTime = dateUtil.now()
+        val bgReadings = runBlocking { persistenceLayer.getBgReadingsDataFromTimeToTime(startTime, endTime, true) }
+        val result = LongSparseArray<TIR>()
+        for (bg in bgReadings) {
+            var tir = result[startTime]
+            if (tir == null) {
+                tir = TirImpl(startTime, lowMgdl, highMgdl)
+                result.append(startTime, tir)
             }
             if (bg.value < 39) tir.error()
             if (bg.value >= 39 && bg.value < lowMgdl) tir.below()

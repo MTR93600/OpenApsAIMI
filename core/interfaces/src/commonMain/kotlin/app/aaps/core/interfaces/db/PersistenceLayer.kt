@@ -1473,6 +1473,8 @@ interface PersistenceLayer {
 
     suspend fun getUserEntryFilteredDataFromTime(timestamp: Long): List<UE>
 
+    suspend fun deleteLastEventMatchingKeyword(noteKeyword: String)
+
     // TDD
 
     /**
@@ -1550,6 +1552,14 @@ interface PersistenceLayer {
      */
     suspend fun insertOrUpdateStepsCounts(stepsCounts: List<SC>): TransactionResult<SC>
 
+    /**
+     * Insert or update a single step counts record. Delegates to [insertOrUpdateStepsCounts].
+     *
+     * @param stepsCount record
+     */
+    suspend fun insertOrUpdateStepsCount(stepsCount: SC): TransactionResult<SC> =
+        insertOrUpdateStepsCounts(listOf(stepsCount))
+
     // VersionChange
 
     /**
@@ -1572,6 +1582,37 @@ interface PersistenceLayer {
      * @return List of arrays of records
      */
     suspend fun collectNewEntriesSince(since: Long, until: Long, limit: Int, offset: Int): NE
+
+    /**
+     * Timestamp of the most recent carb record at or before now, or null if none.
+     */
+    suspend fun getMostRecentCarbByDate(): Long? {
+        val now = Clock.System.now().toEpochMilliseconds()
+        return getCarbsFromTime(now, false)
+            .maxByOrNull { it.timestamp }
+            ?.timestamp
+    }
+
+    /**
+     * Amount of the most recent carb record at or before now, or null if none.
+     */
+    suspend fun getMostRecentCarbAmount(): Double? {
+        val now = Clock.System.now().toEpochMilliseconds()
+        return getCarbsFromTime(now, false)
+            .maxByOrNull { it.timestamp }
+            ?.amount
+    }
+
+    /**
+     * Sum of carb amounts with timestamp after now.
+     */
+    suspend fun getFutureCob(): Double {
+        val now = Clock.System.now().toEpochMilliseconds()
+        return getCarbsFromTime(now, true)
+            .filter { it.timestamp > now }
+            .sumOf { it.amount }
+    }
+
     class TransactionResult<T> {
 
         val inserted = mutableListOf<T>()

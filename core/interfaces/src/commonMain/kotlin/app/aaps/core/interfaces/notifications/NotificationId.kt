@@ -191,7 +191,13 @@ enum class NotificationId(
     DEXCOM_ONEPLUS_DIR_ACCESS_LOST(NORMAL, SYSTEM),
 
     /** The AAPS folder grant used to look up the Libre 3 engineering marker is gone. */
-    LIBRE3_DIR_ACCESS_LOST(NORMAL, SYSTEM);
+    LIBRE3_DIR_ACCESS_LOST(NORMAL, SYSTEM),
+
+    /** AIMI predicted hypo risk. Urgent loop alarm. Multiple can be posted. */
+    HYPO_RISK_ALARM(URGENT, LOOP, allowMultiple = true),
+
+    /** AIMI AI Decision Auditor — new insight available (in-app + optional system notification). */
+    AIMI_AUDITOR_INSIGHT(INFO, LOOP);
 
     companion object {
 

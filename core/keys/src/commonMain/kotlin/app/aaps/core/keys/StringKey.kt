@@ -207,6 +207,53 @@ enum class StringKey(
         validator = StringValidator.minLength(17)
     ),
 
+    // AIMI keys ported from freeze aimi-baseline-2026-08-26
+    OApsAIMIWCycleTrackingMode("key_oaps_aimi_wcycle_tracking_mode", "FIXED_28", preferenceType = PreferenceType.LIST, title = KeysStrings.pref_title_oaps_aimi_w_cycle_tracking_mode),
+    OApsAIMIWCycleContraceptive("key_oaps_aimi_wcycle_contraceptive", "NONE", preferenceType = PreferenceType.LIST, title = KeysStrings.pref_title_oaps_aimi_w_cycle_contraceptive),
+    OApsAIMIWCycleThyroid("key_oaps_aimi_wcycle_thyroid", "EUTHYROID", preferenceType = PreferenceType.LIST, title = KeysStrings.pref_title_oaps_aimi_w_cycle_thyroid),
+    OApsAIMIWCycleVerneuil("key_oaps_aimi_wcycle_verneuil", "NONE", preferenceType = PreferenceType.LIST, title = KeysStrings.pref_title_oaps_aimi_w_cycle_verneuil),
+    OApsAIMINightGrowthStart("key_oaps_aimi_ngr_night_start", "22:00", title = KeysStrings.pref_title_oaps_aimi_night_growth_start),
+    OApsAIMINightGrowthEnd("key_oaps_aimi_ngr_night_end", "06:00", title = KeysStrings.pref_title_oaps_aimi_night_growth_end),
+    AimiAdvisorOpenAIKey("aimi_advisor_openai_key", "", isPassword = true, title = KeysStrings.pref_title_aimi_advisor_open_ai_key),
+    AimiAdvisorGeminiKey("aimi_advisor_gemini_key", "", isPassword = true, title = KeysStrings.pref_title_aimi_advisor_gemini_key),
+    AimiAdvisorDeepSeekKey("aimi_advisor_deepseek_key", "", isPassword = true, title = KeysStrings.pref_title_aimi_advisor_deep_seek_key),
+    AimiAdvisorClaudeKey("aimi_advisor_claude_key", "", isPassword = true, title = KeysStrings.pref_title_aimi_advisor_claude_key),
+    AimiAdvisorProvider("aimi_advisor_provider", "OPENAI", preferenceType = PreferenceType.LIST, title = KeysStrings.pref_title_aimi_advisor_provider),
+    /** Last tuning context selected in AIMI Profile Advisor (AimiTuningContext enum name). */
+    AimiTuningContextSelection("aimi_tuning_context_selection", "AUTO_BALANCE", title = KeysStrings.pref_title_aimi_tuning_context_selection),
+    AimiAuditorMode("aimi_auditor_mode", "AUDIT_ONLY", preferenceType = PreferenceType.LIST, title = KeysStrings.pref_title_aimi_auditor_mode), // resolved via withEntries in plugin
+    // Context Module (dedicated provider for flexibility)
+    ContextLLMProvider("aimi_context_llm_provider", "OPENAI", title = KeysStrings.pref_title_context_llm_provider),
+    ContextLLMOpenAIKey("aimi_context_llm_openai_key", "", isPassword = true, title = KeysStrings.pref_title_context_llm_open_ai_key),
+    ContextLLMGeminiKey("aimi_context_llm_gemini_key", "", isPassword = true, title = KeysStrings.pref_title_context_llm_gemini_key),
+    ContextLLMDeepSeekKey("aimi_context_llm_deepseek_key", "", isPassword = true, title = KeysStrings.pref_title_context_llm_deep_seek_key),
+    ContextLLMClaudeKey("aimi_context_llm_claude_key", "", isPassword = true, title = KeysStrings.pref_title_context_llm_claude_key),
+    ContextMode("aimi_context_mode", "BALANCED", title = KeysStrings.pref_title_context_mode), // CONSERVATIVE, BALANCED, AGGRESSIVE
+    OApsAIMIUnstableModeState("key_oaps_aimi_mode_state", "", title = KeysStrings.pref_title_oaps_aimi_unstable_mode_state),
+    OApsAIMIContextStorage("aimi_context_storage", "", exportable = false, title = KeysStrings.pref_title_oaps_aimi_context_storage),
+    // 🏥 AIMI Physiological Assistant (MTR)
+    AimiPhysioLLMProvider("aimi_physio_llm_provider", "gpt4", title = KeysStrings.pref_title_aimi_physio_llm_provider),
+    // 🦋 Thyroid / Basedow Module (MTR)
+    OApsAIMIThyroidMode("key_aimi_thyroid_mode", "MANUAL", preferenceType = PreferenceType.LIST, title = KeysStrings.pref_title_oaps_aimi_thyroid_mode),
+    OApsAIMIThyroidManualStatus("key_aimi_thyroid_manual_status", "EUTHYROID", preferenceType = PreferenceType.LIST, title = KeysStrings.pref_title_oaps_aimi_thyroid_manual_status),
+    OApsAIMIThyroidTreatmentPhase("key_aimi_thyroid_treatment_phase", "NONE", preferenceType = PreferenceType.LIST, title = KeysStrings.pref_title_oaps_aimi_thyroid_treatment_phase),
+    OApsAIMIThyroidGuardLevel("key_aimi_thyroid_guard_level", "HIGH", preferenceType = PreferenceType.LIST, title = KeysStrings.pref_title_oaps_aimi_thyroid_guard_level),
+    // Emergency SOS (Hypo) — SMS-only advanced manager
+    AimiEmergencySosPhone(
+        key = "aimi_emergency_sos_phone",
+        defaultValue = "",
+        title = KeysStrings.pref_title_aimi_sos_phone,
+        summary = KeysStrings.pref_summary_aimi_sos_phone,
+        dependency = BooleanKey.AimiEmergencySosEnable,
+    ),
+    AimiEmergencySosPhone2(
+        key = "aimi_emergency_sos_phone2",
+        defaultValue = "",
+        title = KeysStrings.pref_title_aimi_sos_phone2,
+        summary = KeysStrings.pref_summary_aimi_sos_phone2,
+        dependency = BooleanKey.AimiEmergencySosEnable,
+    ),
+
     ;
 
     override val entries: Map<String, TextRef> =

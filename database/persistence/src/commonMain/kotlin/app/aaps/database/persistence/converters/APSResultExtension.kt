@@ -3,11 +3,13 @@ package app.aaps.database.persistence.converters
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
+import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.GlucoseStatusAutoIsf
 import app.aaps.core.interfaces.aps.GlucoseStatusSMB
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.OapsProfile
+import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.OapsProfileAutoIsf
 import app.aaps.core.interfaces.aps.RT
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -53,6 +55,21 @@ fun app.aaps.database.entities.APSResult.fromDb(apsResultProvider: () -> APSResu
                 result.autosensResult = this.autosensDataJson?.let { Json.decodeFromString(it) }
             }
 
+        app.aaps.database.entities.APSResult.Algorithm.AIMI     ->
+            apsResultProvider().with(rtJson.decodeFromString(this.resultJson)).also { result ->
+                result.date = this.timestamp
+                result.glucoseStatus = try {
+                    this.glucoseStatusJson?.let { Json.decodeFromString(GlucoseStatusAIMI.serializer(), it) }
+                } catch (_: Exception) {
+                    null
+                }
+                result.currentTemp = this.currentTempJson?.let { Json.decodeFromString(it) }
+                result.iobData = this.iobDataJson?.let { Json.decodeFromString(it) }
+                result.oapsProfileAimi = this.profileJson?.let { Json.decodeFromString(OapsProfileAimi.serializer(), it) }
+                result.mealData = this.mealDataJson?.let { Json.decodeFromString(it) }
+                result.autosensResult = this.autosensDataJson?.let { Json.decodeFromString(it) }
+            }
+
         else                                                    -> error("Unsupported")
     }
 
@@ -86,6 +103,19 @@ fun APSResult.toDb(): app.aaps.database.entities.APSResult =
                 resultJson = rtJson.encodeToString(RT.serializer(), this.rawData() as RT)
             )
 
+        APSResult.Algorithm.AIMI     ->
+            app.aaps.database.entities.APSResult(
+                timestamp = this.date,
+                algorithm = this.algorithm.toDb(),
+                glucoseStatusJson = this.glucoseStatus?.let { Json.encodeToString(GlucoseStatusAIMI.serializer(), it as GlucoseStatusAIMI) },
+                currentTempJson = this.currentTemp?.let { Json.encodeToString(CurrentTemp.serializer(), it) },
+                iobDataJson = this.iobData?.let { Json.encodeToString(ArraySerializer(IobTotal.serializer()), it) },
+                profileJson = this.oapsProfileAimi?.let { Json.encodeToString(OapsProfileAimi.serializer(), it) },
+                mealDataJson = this.mealData?.let { Json.encodeToString(MealData.serializer(), it) },
+                autosensDataJson = this.autosensResult?.let { Json.encodeToString(AutosensResult.serializer(), it) },
+                resultJson = rtJson.encodeToString(RT.serializer(), this.rawData() as RT)
+            )
+
         else                         -> error("Unsupported")
     }
 
@@ -94,6 +124,7 @@ fun app.aaps.database.entities.APSResult.Algorithm.fromDb(): APSResult.Algorithm
         app.aaps.database.entities.APSResult.Algorithm.AMA      -> APSResult.Algorithm.AMA
         app.aaps.database.entities.APSResult.Algorithm.SMB      -> APSResult.Algorithm.SMB
         app.aaps.database.entities.APSResult.Algorithm.AUTO_ISF -> APSResult.Algorithm.AUTO_ISF
+        app.aaps.database.entities.APSResult.Algorithm.AIMI     -> APSResult.Algorithm.AIMI
         else                                                    -> error("Unsupported")
     }
 
@@ -102,5 +133,6 @@ fun APSResult.Algorithm.toDb(): app.aaps.database.entities.APSResult.Algorithm =
         APSResult.Algorithm.AMA      -> app.aaps.database.entities.APSResult.Algorithm.AMA
         APSResult.Algorithm.SMB      -> app.aaps.database.entities.APSResult.Algorithm.SMB
         APSResult.Algorithm.AUTO_ISF -> app.aaps.database.entities.APSResult.Algorithm.AUTO_ISF
+        APSResult.Algorithm.AIMI     -> app.aaps.database.entities.APSResult.Algorithm.AIMI
         else                         -> error("Unsupported")
     }

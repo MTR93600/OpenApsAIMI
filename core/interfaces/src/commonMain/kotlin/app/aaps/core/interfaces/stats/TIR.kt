@@ -14,4 +14,8 @@ interface TIR {
     fun below()
     fun inRange()
     fun above()
+
+    fun belowPct(): Double
+    fun inRangePct(): Double
+    fun abovePct(): Double
 }
