@@ -2,8 +2,11 @@ name: Auto Sync Upstream Branch
 
 on:
   schedule:
-    - cron: '42 1 * * *'
+    - cron: '50 1 * * *'
   workflow_dispatch:
+  push:
+    branches:
+      - dev_OAPSAIMI
 
 jobs:
   sync:
