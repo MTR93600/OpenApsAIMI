@@ -9,7 +9,7 @@ package app.aaps.plugins.aimicontracts
  * This W5 shape is the envelope and the fields we already know are required. It is not the full
  * annex-8 v1 DTO. Deferred on purpose (do not invent them here):
  * - 109 typed config keys (stay in the Android/iOS shell until listed)
- * - `AimiEngineState`, model bundle, replay envelope (W7+)
+ * - replay envelope (`engine-replay-v1`)
  * - glucose features such as duraISF / parabola
  * - TDD windows, TIR quality, COB future, site age
  * - full physio windows (steps 5–180 min, sleep, SpO2)

@@ -110,4 +110,10 @@ class AimiContractsTest {
         )
         assertEquals(snap, snap.copy())
     }
+
+    @Test
+    fun hold_command_carries_stable_reason() {
+        val hold = AimiTherapyCommand.Hold("ENGINE_NOT_EXTRACTED")
+        assertEquals("ENGINE_NOT_EXTRACTED", hold.reasonCode)
+    }
 }
