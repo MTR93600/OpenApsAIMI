@@ -29,15 +29,20 @@ Strategy is **S2 extract**. Do not rebase `dev_OAPSAIMI` onto `kmp`.
 
 ## 1. Current truth (do not use the 25 Aug SHAs as live tips)
 
-| Item | Audit 25 Aug | Truth 26 Aug |
+Truth below is **2026-08-28** after merge `903d725489` + AIMI APIs `9a9292513d` + staging `45f91c9407`. Freeze tag is unchanged.
+
+| Item | Audit 25 Aug | Truth 28 Aug |
 |---|---|---|
-| Study branch | `kmp` @ `4957c26eb8` | `kmp-aimi-migration-study` @ merge of later `kmp` (Metro) |
-| AIMI | `06e7bc5021` | **`1ae418e106`** (+6; One+ BLE hardening) |
-| AIMI code on this branch | planned | **absent** (docs only, until extract) |
-| One+ / Libre 3 git sources | “free to port” | **missing** (leftover `build/` dirs are not source) |
-| DI | Hilt assumed | **Metro is the law** |
-| Tick class | docs say `DetermineBasalAIMI2` | class is **`DetermineBasalaimiSMB2`** in `DetermineBasalAIMI2.kt` |
+| Study branch | `kmp` @ `4957c26eb8` | `kmp-aimi-migration-study` @ `45f91c9407` (kmp merge + AIMI APIs + parked dump) |
+| AIMI freeze | `06e7bc5021` | **`aimi-baseline-2026-08-26`** = `1ae418e106` |
+| AIMI code on this branch | planned | **present, not shipping.** 119 kt in `:plugins:aps` `commonMain`. 324 kt parked in `_docs/kmp/staging/openAPSAIMI-android-wip/`. Plugin / tick **not** in `androidMain`. No `@IntKey(225)`. |
+| One+ / Libre 3 git sources | “free to port” | **on Android.** `DexcomOnePlusPlugin` `@IntKey(446)`, `Libre3NativePlugin` `@IntKey(447)`, Metro (not Hilt). Drivers in `:plugins:dexcom_oneplus` / `:plugins:libre3` (`src/main`). Not on iOS. |
+| DI | Hilt assumed | **Metro is the law** in `:plugins:aps` `commonMain`. Do not copy `:plugins:source` gradle (merge leftover still has Hilt + `com.android.library` while sources sit in `androidMain`). |
+| Tick class | docs say `DetermineBasalAIMI2` | class is **`DetermineBasalaimiSMB2`** in parked `DetermineBasalAIMI2.kt` |
 | Tick map | blueprint S0–S6 | AIMI has a **45-step** map (see §5) |
+| Milos copy rules | — | `TextResolver` + `ApsStrings`/`KeysStrings`, `kotlin.time.Clock.System`, `OrgJsonCompat`, `LTag`/`AAPSLogger`, append-only `NotificationId`. See [`staging/lots/PIPELINE.md`](staging/lots/PIPELINE.md) and [`staging/lots/report-merge-kmp.md`](staging/lots/report-merge-kmp.md). |
+
+A `commonMain` compile is **not** “AIMI runs on iOS”.
 
 UAM model (frozen):
 
