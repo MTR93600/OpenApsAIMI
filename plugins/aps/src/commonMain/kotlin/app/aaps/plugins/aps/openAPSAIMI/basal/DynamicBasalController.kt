@@ -441,25 +441,3 @@ class DynamicBasalController @Inject constructor(
         }
     }
 }
-
-/**
- * Snapshot used by T3c basal braking.
- *
- * `build()` is not here: it needs `TrajectoryAnalysis`, which is still dump-only.
- * A later T1 wave should replace this with dump `T3cTrajectoryContext.kt`.
- */
-data class T3cTrajectoryContext(
-    val minPredBg: Double,
-    val eventualPredBg: Double,
-    val lgsThresholdMgdl: Double,
-    val trajectoryAnalysisActive: Boolean,
-    val convergenceVelocity: Double?,
-    val energyBalance: Double?,
-    val trajectoryTypeName: String?
-) {
-    companion object {
-        /** Lowest credible BG among prediction curve and eventual BG. */
-        fun guardBg(ctx: T3cTrajectoryContext): Double =
-            min(ctx.minPredBg, ctx.eventualPredBg)
-    }
-}
