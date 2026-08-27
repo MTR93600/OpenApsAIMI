@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="calibration_shortname">CAL</string>
+    <string name="no_calibration_name">Sem calibração</string>
+    <string name="description_no_calibration">"Nenhuma calibração personalizada aplicada[cite: 2]. Os valores do sensor são usados como estão[cite: 2]. Use isto quando o sensor já estiver calibrado de fábrica e preciso[cite: 2]."</string>
+    <string name="linear_calibration_name">Calibração linear</string>
+    <string name="description_linear_calibration">"Calibração linear personalizada por sensor (inclinação e desvio) calculada a partir dos seus registros de glicemia capilar[cite: 2]. Registros recentes têm maior peso[cite: 2]. A calibração é aplicada após o início da sessão atual do sensor; as primeiras 2 horas são ignoradas como aquecimento[cite: 2]."</string>
+    <string name="sensor_change_detected_text">Possível troca de sensor detectada às %1$s[cite: 2]. Marcar como novo sensor?[cite: 2]</string>
+    <string name="sensor_change_detected_action">Marcar troca de sensor</string>
+    <!-- Calibration management screen -->
+    <string name="cal_status_no_session">Registre uma troca de sensor para ativar a calibração.</string>
+    <string name="cal_status_warmup">Aquecimento do sensor — calibração ativa após %1$s.</string>
+    <string name="cal_status_need_more_entries">São necessários pelo menos 2 registros de glicemia capilar (atualmente %1$d).</string>
+    <string name="cal_status_unsafe_fit">Ajuste fora do intervalo seguro — calibração não aplicada.</string>
+    <string name="cal_status_applied">Calibração aplicada.</string>
+    <string name="cal_status_applied_offset_only">Calibração aplicada apenas por desvio (offset) — intervalo do sensor muito estreito para inclinação (slope).</string>
+    <string name="cal_status_applied_slope_clamped">Calibração aplicada — inclinação (slope) ajustada para um intervalo seguro[cite: 2]. Adicione mais registros para flexibilizar[cite: 2].</string>
+    <string name="cal_slope_offset" formatted="false">Inclinação %1$.2f, correção de meio de escala %2$s</string>
+    <string name="cal_session_started">Sessão iniciada: %1$s</string>
+    <string name="cal_mark_sensor_change_now">Registrar troca de sensor</string>
+    <string name="cal_add_calibration">Adicionar calibração</string>
+    <string name="cal_entries_header">Registros de glicemia capilar (%1$d)</string>
+    <string name="cal_no_entries">Nenhum registro de glicemia capilar ainda.</string>
+    <string name="cal_entry_pair" formatted="false">Glicemia capilar %1$s → sensor %2$s (Δ %3$s)</string>
+    <string name="cal_remove_entry_title">Remover registro?</string>
+    <string name="cal_remove_entry_message">Isso invalidará o registro[cite: 2]. O ajuste será recalculado[cite: 2].</string>
+    <string name="cal_chart_entry_readout" formatted="false">Registro %1$d/%2$d · %3$s · sensor %4$s → glicemia %5$s</string>
+</resources>
