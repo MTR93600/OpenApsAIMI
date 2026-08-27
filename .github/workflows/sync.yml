@@ -2,8 +2,8 @@ name: Auto Sync Upstream Branch
 
 on:
   schedule:
-- cron: '35 1 * * *'
-workflow_dispatch:
+    - cron: '42 1 * * *'
+  workflow_dispatch:
 
 jobs:
   sync:
