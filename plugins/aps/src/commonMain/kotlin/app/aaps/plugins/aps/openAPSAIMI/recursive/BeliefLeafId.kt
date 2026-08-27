@@ -1,0 +1,174 @@
+package app.aaps.plugins.aps.openAPSAIMI.recursive
+
+/**
+ * Leaf identifiers for Recursive Belief Tree — see docs/AIMI_RECURSIVE_BELIEF.md §15.10.
+ */
+enum class BeliefLeafId {
+    // τ = 15 min (micro)
+    DELTA_NOW,
+    DELTA_SHORT,
+    DELTA_COMBINED,
+    ACCEL,
+    BG_DERIV,
+    INSULIN_STAGE,
+    PKPD_TAIL,
+    STACK_SURV,
+    STACK_SIGNALS,
+    HYPO_GUARD,
+    COMPRESSION,
+    MEAL_PHASE,
+    MEAL_AGGR,
+    LOCAL_SENTINEL,
+    DECISION_MOD,
+    HIGH_BG_OVR,
+    TUBE_ADVISOR,
+    IOB_CONSENSUS,
+    REALTIME_IOB,
+    STEPS_15M,
+    ACTIVITY_INT,
+    UAM_CONF,
+
+    // τ = 60 min (meso)
+    PKPD_IOB,
+    PKPD_BEST,
+    PKPD_UAM,
+    PKPD_COB,
+    PKPD_ZT,
+    PKPD_HYBRID,
+    SCEN_TRAJ_RISE,
+    SCEN_TRAJ_SPIRAL,
+    SCEN_TRAJ_CONV,
+    SCEN_MEAL_CTX,
+    SCEN_ADVISOR_COB,
+    SCEN_ACTIVITY,
+    SCEN_PHYSIO,
+    SCEN_PHASE_CAP,
+    SCEN_CONTEXT,
+    SCEN_TARGET_BLEND,
+    TRAJ_GEOM,
+    TRAJ_MOD,
+    TRAJ_BRIDGE,
+    TRAJ_SPIRAL_CAP,
+    COSINE_GATE,
+    HTR_TIER,
+    HTR_RELEASE,
+    HTC_HYPO,
+    RISK_ENVELOPE,
+    SAFETY_TERMINALS,
+    MPC_IMPLIED,
+    MPC_FEEDFWD,
+    AUTODRIVE_GATE,
+    CBF_SHIELD,
+    MEAL_MEMORY,
+    ENDOG_BRIDGE,
+    T3C_ACTIVE,
+    T3C_BASAL_DEMAND,
+    T3C_ANTICIP,
+    T3C_POST_HYPO_BLOCK,
+    T3C_MEAL_CONFLICT,
+    T3C_GOVERNANCE_FLOOR,
+    HARMONIA_ACTIVE,
+    HARMONIA_BASAL_DEMAND,
+    HARMONIA_MEAL_SUPPORT,
+    HARMONIA_PROTECTIVE_REDUCTION,
+    HARMONIA_SAFETY_BLOCK,
+    POST_HYPO,
+    MEAL_ADVISOR,
+
+    // τ = 180 min (macro)
+    MPC_HORIZON,
+    PKPD_LEARNED,
+    ISF_FUSION,
+    KALMAN_ISF,
+    DYN_ISF_TRAJ,
+    PKPD_TAIL_DAMP,
+    PEAK_BIAS,
+    PEAK_MISMATCH,
+    CORR_AGGRESS,
+    PHYSIO_FUSION,
+    PHYSIO_MULT,
+    ENDOG_DETECT,
+    HORMONAL_CAP,
+    BEHAVIORAL,
+    NGR,
+    INFLAMMATION,
+    BASAL_ADAPT,
+    DYN_BASAL,
+
+    // τ = 480 min (meta)
+    PHYSIO_PHASE,
+    CHRONO_PRIOR,
+    CTX_INTENTS,
+    CTX_MANAGER,
+    WCYCLE,
+    ENDOMETRIOSIS,
+    THYROID,
+    THYROID_GUARD,
+    GESTATION,
+    BASAL_LEARNER,
+    REACTIVITY,
+    ONLINE_LEARN,
+    ATTENTION,
+    EXERCISE_LOCK,
+
+    // Meta — wearable / pattern catalog (τ=480)
+    SLEEP_QUALITY,
+    HRV_DEVIATION,
+    SLEEP_DEBT,
+    SLEEP_LIVE,
+    PHYSIO_MTR_STATE,
+    PATTERN_RISK,
+
+    // Shadow (export only)
+    SHADOW_COMPARATOR,
+    SHADOW_VIRTUAL_BG,
+    SHADOW_AUDITOR,
+    SHADOW_SENTINEL_VERDICT,
+    SHADOW_ORCH,
+    SHADOW_TUNING,
+    SHADOW_VISION,
+    SHADOW_ML_TRAIN,
+    ;
+
+    companion object {
+        private val MICRO_NAMES = setOf(
+            "DELTA_NOW", "DELTA_SHORT", "DELTA_COMBINED", "ACCEL", "BG_DERIV",
+            "INSULIN_STAGE", "PKPD_TAIL", "STACK_SURV", "STACK_SIGNALS",
+            "HYPO_GUARD", "COMPRESSION", "MEAL_PHASE", "MEAL_AGGR",
+            "LOCAL_SENTINEL", "DECISION_MOD", "HIGH_BG_OVR", "TUBE_ADVISOR",
+            "IOB_CONSENSUS", "REALTIME_IOB", "STEPS_15M", "ACTIVITY_INT", "UAM_CONF",
+        )
+        private val MESO_NAMES = setOf(
+            "PKPD_IOB", "PKPD_BEST", "PKPD_UAM", "PKPD_COB", "PKPD_ZT", "PKPD_HYBRID",
+            "SCEN_TRAJ_RISE", "SCEN_TRAJ_SPIRAL", "SCEN_TRAJ_CONV",
+            "SCEN_MEAL_CTX", "SCEN_ADVISOR_COB", "SCEN_ACTIVITY", "SCEN_PHYSIO",
+            "SCEN_PHASE_CAP", "SCEN_CONTEXT", "SCEN_TARGET_BLEND",
+            "TRAJ_GEOM", "TRAJ_MOD", "TRAJ_BRIDGE", "TRAJ_SPIRAL_CAP", "COSINE_GATE",
+            "HTR_TIER", "HTR_RELEASE", "HTC_HYPO", "RISK_ENVELOPE", "SAFETY_TERMINALS",
+            "MPC_IMPLIED", "MPC_FEEDFWD", "AUTODRIVE_GATE", "CBF_SHIELD",
+            "MEAL_MEMORY", "ENDOG_BRIDGE", "T3C_ACTIVE", "T3C_BASAL_DEMAND",
+            "T3C_ANTICIP", "T3C_POST_HYPO_BLOCK", "T3C_MEAL_CONFLICT",
+            "T3C_GOVERNANCE_FLOOR", "HARMONIA_ACTIVE", "HARMONIA_BASAL_DEMAND",
+            "HARMONIA_MEAL_SUPPORT", "HARMONIA_PROTECTIVE_REDUCTION", "HARMONIA_SAFETY_BLOCK",
+            "POST_HYPO", "MEAL_ADVISOR",
+        )
+        private val MACRO_NAMES = setOf(
+            "MPC_HORIZON", "PKPD_LEARNED", "ISF_FUSION", "KALMAN_ISF", "DYN_ISF_TRAJ",
+            "PKPD_TAIL_DAMP", "PEAK_BIAS", "PEAK_MISMATCH", "CORR_AGGRESS",
+            "PHYSIO_FUSION", "PHYSIO_MULT", "ENDOG_DETECT", "HORMONAL_CAP",
+            "BEHAVIORAL", "NGR", "INFLAMMATION", "BASAL_ADAPT", "DYN_BASAL",
+        )
+        private val META_NAMES = setOf(
+            "PHYSIO_PHASE", "CHRONO_PRIOR", "CTX_INTENTS", "CTX_MANAGER",
+            "WCYCLE", "ENDOMETRIOSIS", "THYROID", "THYROID_GUARD", "GESTATION",
+            "BASAL_LEARNER", "REACTIVITY", "ONLINE_LEARN", "ATTENTION", "EXERCISE_LOCK",
+            "SLEEP_QUALITY", "HRV_DEVIATION", "SLEEP_DEBT", "SLEEP_LIVE", "PHYSIO_MTR_STATE", "PATTERN_RISK",
+        )
+
+        val MICRO: Set<BeliefLeafId> = entries.filter { it.name in MICRO_NAMES }.toSet()
+        val MESO: Set<BeliefLeafId> = entries.filter { it.name in MESO_NAMES }.toSet()
+        val MACRO: Set<BeliefLeafId> = entries.filter { it.name in MACRO_NAMES }.toSet()
+        val META: Set<BeliefLeafId> = entries.filter { it.name in META_NAMES }.toSet()
+        val SHADOW: Set<BeliefLeafId> = entries.filter { it.name.startsWith("SHADOW_") }.toSet()
+    }
+}
