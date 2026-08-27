@@ -73,11 +73,13 @@ blueprint et ces annexes spécialisées font autorité sur `AIMI_KMP_MIGRATION_S
 2. blueprint ;
 3. annexe 8 pour comprendre la frontière et le replay ;
 4. [`w6-m1-read-registry.md`](w6-m1-read-registry.md) — freeze field and service-read inventory (W6, not a rewrite) ;
-5. annexe 6 pour le protocole Tree → Harmonia → RBT → safety ;
-6. annexe 5 pour les modèles et learners ;
-7. annexe 7 pour l'intégration iOS ;
-8. annexe 9 pour les fonctions produit adjacentes ;
-9. annexes 1 à 4 pour les preuves historiques et métriques.
+5. [`w8-go-nogo.md`](w8-go-nogo.md) — W8 GO/NO-GO for empty AIMI KMP shells ;
+6. [`aimi-kmp-port-ledger.md`](aimi-kmp-port-ledger.md) — folder-by-folder AIMI port (Milos SMB pattern) ;
+7. annexe 6 pour le protocole Tree → Harmonia → RBT → safety ;
+8. annexe 5 pour les modèles et learners ;
+9. annexe 7 pour l'intégration iOS ;
+10. annexe 9 pour les fonctions produit adjacentes ;
+11. annexes 1 à 4 pour les preuves historiques et métriques.
 
 ## Questions encore ouvertes (ne bloquent pas W1–W8)
 
