@@ -2,13 +2,15 @@ package app.aaps.di.metro
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.telephony.SmsManager
 import app.aaps.core.utils.receivers.DataInbox
+import app.aaps.shared.impl.sharedPreferences.defaultPreferences
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.ContributesTo
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
-import app.aaps.shared.impl.sharedPreferences.defaultPreferences
 
 /**
  * Android framework objects the graph builds itself, rather than borrowing from Dagger.
@@ -25,6 +27,14 @@ import app.aaps.shared.impl.sharedPreferences.defaultPreferences
 @BindingContainer
 object AppAndroidBindings {
 
+    /**
+     * Hilt's qualifier, read now that interop is on. The same Context as the unqualified binding
+     * `AppRootGraph.Factory` takes; Dagger consumers ask for the qualified one.
+     */
+    @Provides
+    @ApplicationContext
+    fun appContext(context: Context): Context = context
+
     /** Same file and mode as the Dagger provider this replaces - it must be the same preferences file. */
     @Provides
     @SingleIn(AppScope::class)
@@ -39,4 +49,14 @@ object AppAndroidBindings {
     @Provides
     @SingleIn(AppScope::class)
     fun dataInbox(context: Context): DataInbox = DataInbox(context)
+
+    /**
+     * The SMS service, which is null on a device without telephony.
+     *
+     * Metro needs its own copy now that it builds `SmsCommunicatorPlugin` - the Dagger provider in
+     * `CoreObjectsModule` only ever served the Dagger graph.
+     */
+    @Suppress("DEPRECATION")
+    @Provides
+    fun smsManager(context: Context): SmsManager? = context.getSystemService(SmsManager::class.java)
 }

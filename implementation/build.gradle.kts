@@ -89,8 +89,17 @@ kotlin {
                 implementation(project(":core:interfaces"))
                 implementation(project(":core:keys"))
                 implementation(project(":core:objects"))
-                // For UiStrings: the command queue names its user text instead of numbering it.
+                // For CoreUiStrings: the command queue names its user text instead of numbering it.
                 implementation(project(":core:ui"))
+            }
+        }
+
+        // Tests for commonMain classes belong here, not in androidHostTest: a test that only runs on
+        // the JVM says nothing about the target the code was moved to common for.
+        commonTest {
+            dependencies {
+                implementation(kotlin("test"))
+                implementation(libs.kotlinx.coroutines.test)
             }
         }
 
