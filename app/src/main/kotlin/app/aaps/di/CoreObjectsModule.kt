@@ -70,7 +70,11 @@ import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.pump.PumpStatusProvider
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.TemporaryBasalStorage
+import app.aaps.core.interfaces.maintenance.CloudStorageProvider
 import app.aaps.core.interfaces.queue.CommandQueue
+import app.aaps.database.AppRepository
+import app.aaps.database.di.DatabaseConfig
+import app.aaps.ui.search.BuiltInSearchables
 import app.aaps.core.interfaces.receivers.ReceiverStatusStore
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.AapsSchedulers
@@ -103,6 +107,7 @@ import app.aaps.core.interfaces.utils.Translator
 import app.aaps.core.interfaces.utils.TrendCalculator
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.interfaces.versionChecker.VersionCheckerUtils
+import app.aaps.core.interfaces.workflow.CalculationSignals
 import app.aaps.core.interfaces.workflow.CalculationSignalsEmitter
 import app.aaps.core.interfaces.workflow.CalculationWorkflow
 import app.aaps.core.keys.interfaces.Preferences
@@ -126,9 +131,12 @@ import app.aaps.plugins.sync.nsclientV3.clientcontrol.PairingOfferFetcher
 import app.aaps.plugins.sync.smsCommunicator.compose.SmsCommunicatorRepository
 import app.aaps.plugins.sync.tidepool.compose.TidepoolRepository
 import app.aaps.plugins.sync.xdrip.compose.XdripMvvmRepository
+import app.aaps.plugins.sync.nsclientV3.ReceiverDelegate
+import app.aaps.plugins.sync.tidepool.utils.RateLimit
 import app.aaps.plugins.sync.nsclientV3.NSClientV3Plugin
 import app.aaps.plugins.sync.smsCommunicator.SmsCommunicatorPlugin
 import app.aaps.implementation.plugin.PluginStore
+import app.aaps.implementation.profile.ProfileSwitchSilentGate
 import app.aaps.di.metro.AapsLeaves
 import app.aaps.di.metro.MetroGraphs
 import app.aaps.implementation.maintenance.cloud.CloudStorageManager
@@ -282,6 +290,28 @@ class CoreObjectsModule {
     @Provides @Singleton fun provideDataInbox(graphs: MetroGraphs): DataInbox = graphs.dataInbox
     // Unscoped on purpose - a fresh value object per caller, as the @Binds it replaces was.
     @Provides fun provideAutosensData(graphs: MetroGraphs): AutosensData = graphs.autosensData
+    @Provides @Singleton fun provideCommandQueue(graphs: MetroGraphs): CommandQueue = graphs.commandQueue
+    @Provides @Singleton fun provideLocalAlertUtils(graphs: MetroGraphs): LocalAlertUtils = graphs.localAlertUtils
+    @Provides @Singleton fun provideBolusProgressData(graphs: MetroGraphs): BolusProgressData = graphs.bolusProgressData
+    @Provides @Singleton fun providePersistenceLayer(graphs: MetroGraphs): PersistenceLayer = graphs.persistenceLayer
+    @Provides @Singleton fun provideCloudStorageManager(graphs: MetroGraphs): CloudStorageManager = graphs.cloudStorageManager
+    @Provides @Singleton fun provideOverviewDataCache(graphs: MetroGraphs): OverviewDataCache = graphs.overviewDataCache
+    @Provides @Singleton fun provideCalculationSignals(graphs: MetroGraphs): CalculationSignals = graphs.calculationSignals
+    @Provides @Singleton fun provideCalculationSignalsEmitter(graphs: MetroGraphs): CalculationSignalsEmitter = graphs.calculationSignalsEmitter
+    @Provides @Singleton fun provideAppRepository(graphs: MetroGraphs): AppRepository = graphs.appRepository
+    @Provides @Singleton fun provideCloudStorageProviders(graphs: MetroGraphs): Set<CloudStorageProvider> = graphs.cloudStorageProviders
+    @Provides @Singleton fun provideConstraintsChecker(graphs: MetroGraphs): ConstraintsChecker = graphs.constraintsChecker
+    @Provides @Singleton fun provideNSClientRepository(graphs: MetroGraphs): NSClientRepository = graphs.nsClientRepository
+    // ComposeMainActivity field-injects the concrete class through Hilt, so Dagger needs Metro's one.
+    @Provides @Singleton fun provideBuiltInSearchables(graphs: MetroGraphs): BuiltInSearchables = graphs.builtInSearchables
+    // Unscoped on purpose - result objects, one per call, as the @Binds they replace were.
+    @Provides fun provideAPSResult(graphs: MetroGraphs): APSResult = graphs.apsResult
+    @Provides fun providePumpEnactResult(graphs: MetroGraphs): PumpEnactResult = graphs.pumpEnactResult
+    // One flag, two frameworks: SceneExecutor (Metro) marks it, CommandQueueImplementation (Dagger)
+    // consumes it. Without this they get one each and the mark is never seen.
+    @Provides @Singleton fun provideProfileSwitchSilentGate(graphs: MetroGraphs): ProfileSwitchSilentGate = graphs.profileSwitchSilentGate
+    @Provides @Singleton fun provideRunningConfiguration(graphs: MetroGraphs): RunningConfiguration = graphs.runningConfiguration
+    @Provides @Singleton fun provideRunningConfigurationKeys(graphs: MetroGraphs): RunningConfigurationKeys = graphs.runningConfigurationKeys
     @Provides @Singleton fun provideActivePlugin(graphs: MetroGraphs): ActivePlugin = graphs.activePlugin
     @Provides @Singleton fun providePluginPermissions(graphs: MetroGraphs): PluginPermissions = graphs.pluginPermissions
     // MainApp injects the concrete class to hand it the merged plugin list, and the androidTest
@@ -440,33 +470,21 @@ class CoreObjectsModule {
     @Suppress("LongParameterList")
     fun provideAapsLeaves(
         metroMemberInjectorProvider: Provider<MetroMemberInjector>,
-        nsClientRepositoryProvider: Provider<NSClientRepository>,
-        runningConfigurationProvider: Provider<RunningConfiguration>,
-        nsClientSourceProvider: Provider<NSClientSource>,
-        runningConfigurationKeysProvider: Provider<RunningConfigurationKeys>,
         @ApplicationScope appScopeProvider: Provider<CoroutineScope>,
         fabricPrivacyProvider: Provider<FabricPrivacy>,
-        localAlertUtilsProvider: Provider<LocalAlertUtils>,
-        persistenceLayerProvider: Provider<PersistenceLayer>,
         configProvider: Provider<Config>,
-        calculationSignalsEmitterProvider: Provider<CalculationSignalsEmitter>,
-        apsResultProvider: Provider<APSResult>,
+        databaseConfigProvider: Provider<DatabaseConfig>,
         authFlowOutProvider: Provider<AuthFlowOut>,
         tidepoolUploaderProvider: Provider<TidepoolUploader>,
         profileFunctionProvider: Provider<ProfileFunction>,
-        commandQueueProvider: Provider<CommandQueue>,
         rhProvider: Provider<ResourceHelper>,
-        dstHelperProvider: Provider<DstHelper>,
         workManagerProvider: Provider<WorkManager>,
         notificationManagerProvider: Provider<NotificationManager>,
-        cloudStorageManagerProvider: Provider<CloudStorageManager>,
         overviewDataCacheFactoryProvider: Provider<OverviewDataCacheFactory>,
-        constraintsCheckerProvider: Provider<ConstraintsChecker>,
         automationProvider: Provider<Automation>,
         contextProvider: Provider<Context>,
         uiInteractionProvider: Provider<UiInteraction>,
         versionCheckerUtilsProvider: Provider<VersionCheckerUtils>,
-        searchableProvidersProvider: Provider<Set<SearchableProvider>>,
         permissionProvidersProvider: Provider<Set<PermissionProvider>>,
         smsCommunicatorPluginProvider: Provider<SmsCommunicatorPlugin>,
         nsClientV3PluginProvider: Provider<NSClientV3Plugin>,
@@ -479,43 +497,30 @@ class CoreObjectsModule {
         smsCommunicatorRepositoryProvider: Provider<SmsCommunicatorRepository>,
         tidepoolRepositoryProvider: Provider<TidepoolRepository>,
         xdripMvvmRepositoryProvider: Provider<XdripMvvmRepository>,
-        bolusProgressDataProvider: Provider<BolusProgressData>,
-        pumpEnactResultProvider: Provider<PumpEnactResult>,
+        receiverDelegateProvider: Provider<ReceiverDelegate>,
+        rateLimitProvider: Provider<RateLimit>,
         historyScopeProvider: Provider<HistoryScope>,
-        overviewDataCacheProvider: Provider<OverviewDataCache>,
         @ApplicationContext appContextProvider: Provider<Context>,
         nsClientProvider: Provider<NsClient>,
         clientControlActionDispatcherProvider: Provider<ClientControlActionDispatcher>,
         sntpClientProvider: Provider<SntpClient>
     ): AapsLeaves = AapsLeaves(
         metroMemberInjectorProvider,
-        nsClientRepositoryProvider,
-        runningConfigurationProvider,
-        nsClientSourceProvider,
-        runningConfigurationKeysProvider,
         appScopeProvider,
         fabricPrivacyProvider,
-        localAlertUtilsProvider,
-        persistenceLayerProvider,
         configProvider,
-        calculationSignalsEmitterProvider,
-        apsResultProvider,
+        databaseConfigProvider,
         authFlowOutProvider,
         tidepoolUploaderProvider,
         profileFunctionProvider,
-        commandQueueProvider,
         rhProvider,
-        dstHelperProvider,
         workManagerProvider,
         notificationManagerProvider,
-        cloudStorageManagerProvider,
         overviewDataCacheFactoryProvider,
-        constraintsCheckerProvider,
         automationProvider,
         contextProvider,
         uiInteractionProvider,
         versionCheckerUtilsProvider,
-        searchableProvidersProvider,
         permissionProvidersProvider,
         smsCommunicatorPluginProvider,
         nsClientV3PluginProvider,
@@ -528,10 +533,9 @@ class CoreObjectsModule {
         smsCommunicatorRepositoryProvider,
         tidepoolRepositoryProvider,
         xdripMvvmRepositoryProvider,
-        bolusProgressDataProvider,
-        pumpEnactResultProvider,
+        receiverDelegateProvider,
+        rateLimitProvider,
         historyScopeProvider,
-        overviewDataCacheProvider,
         appContextProvider,
         nsClientProvider,
         clientControlActionDispatcherProvider,

@@ -20,6 +20,7 @@ import app.aaps.core.ui.compose.ScreenMode
 import app.aaps.ui.events.EventQuickWizardChange
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.CoroutineStart
@@ -38,7 +39,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import javax.inject.Inject
 
 /**
  * ViewModel for QuickWizardManagementScreen managing QuickWizard entries and editing.
@@ -160,18 +160,18 @@ class QuickWizardManagementViewModel @Inject constructor(
             editorCarbTime = entry.carbTime(),
             editorValidFrom = entry.validFrom(),
             editorValidTo = entry.validTo(),
-            editorUseBG = entry.useBG() == QuickWizardEntry.YES,
-            editorUseCOB = entry.useCOB() == QuickWizardEntry.YES,
-            editorUseIOB = entry.useIOB() == QuickWizardEntry.YES,
-            editorUsePositiveIOBOnly = entry.usePositiveIOBOnly() == QuickWizardEntry.YES,
+            editorUseBG = entry.useBG() == QuickWizardEntry.ALWAYS,
+            editorUseCOB = entry.useCOB() == QuickWizardEntry.ALWAYS,
+            editorUseIOB = entry.useIOB() == QuickWizardEntry.ALWAYS,
+            editorUsePositiveIOBOnly = entry.usePositiveIOBOnly() == QuickWizardEntry.ALWAYS,
             editorUseTrend = entry.useTrend().toTrendOption(),
-            editorUseSuperBolus = entry.useSuperBolus() == QuickWizardEntry.YES,
-            editorUseTempTarget = entry.useTempTarget() == QuickWizardEntry.YES,
-            editorUseAlarm = entry.useAlarm() == QuickWizardEntry.YES,
+            editorUseSuperBolus = entry.useSuperBolus() == QuickWizardEntry.ALWAYS,
+            editorUseTempTarget = entry.useTempTarget() == QuickWizardEntry.ALWAYS,
+            editorUseAlarm = entry.useAlarm() == QuickWizardEntry.ALWAYS,
             editorPercentage = entry.percentage(),
             editorDevicePhone = entry.device() == QuickWizardEntry.DEVICE_PHONE || entry.device() == QuickWizardEntry.DEVICE_ALL,
             editorDeviceWatch = entry.device() == QuickWizardEntry.DEVICE_WATCH || entry.device() == QuickWizardEntry.DEVICE_ALL,
-            editorUseEcarbs = entry.useEcarbs() == QuickWizardEntry.YES,
+            editorUseEcarbs = entry.useEcarbs() == QuickWizardEntry.ALWAYS,
             editorTime = entry.time(),
             editorDuration = entry.duration(),
             editorCarbs2 = entry.carbs2(),

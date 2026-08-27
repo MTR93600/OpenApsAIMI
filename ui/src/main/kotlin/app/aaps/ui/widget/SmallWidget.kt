@@ -14,11 +14,10 @@ import app.aaps.core.interfaces.di.injectMetroMembers
 import app.aaps.ui.R
 import app.aaps.ui.widget.glance.WidgetDependencies
 import app.aaps.ui.widget.glance.resolveClientColor
-import dagger.hilt.android.EntryPointAccessors
+import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 /**
  * Classic [AppWidgetProvider] using RemoteViews/XML — not Glance — so vendor
@@ -43,20 +42,17 @@ class SmallWidget : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         val pendingResult = goAsync()
-        val deps = EntryPointAccessors.fromApplication(
-            context.applicationContext,
-            WidgetDependencies::class.java
-        )
+        val deps = WidgetDependencies.from(context)
 
         CoroutineScope(Dispatchers.Default).launch {
             try {
                 for (appWidgetId in appWidgetIds) {
-                    val state = deps.widgetStateLoader().loadState(appWidgetId)
+                    val state = deps.widgetStateLoader.loadState(appWidgetId)
 
                     val views = RemoteViews(context.packageName, R.layout.small_widget_layout)
 
                     views.setTextViewText(R.id.profile_name, state.profileText)
-                    views.setTextColor(R.id.profile_name, resolveClientColor(deps.config()))
+                    views.setTextColor(R.id.profile_name, resolveClientColor(deps.config))
                     views.setViewVisibility(
                         R.id.profile_name,
                         if (state.profileText.isNotBlank()) View.VISIBLE else View.GONE

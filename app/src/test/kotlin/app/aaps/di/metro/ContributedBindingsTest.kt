@@ -84,6 +84,29 @@ class ContributedBindingsTest {
         // The inbox the broadcast receivers hand data to - two of them means dropped readings.
         assertThat(root.dataInbox).isSameInstanceAs(root.dataInbox)
         assertThat(root.activePlugin).isSameInstanceAs(root.activePlugin)
+        assertThat(root.runningConfiguration).isSameInstanceAs(root.runningConfiguration)
+        // One object bound to two interfaces, as the two @Binds were. It holds the config it read from
+        // Nightscout, so a second copy would answer from an empty one.
+        assertThat(root.runningConfigurationKeys).isSameInstanceAs(root.runningConfiguration)
+        // SceneExecutor (Metro) marks the flag, CommandQueueImplementation (Dagger) consumes it. Two
+        // instances means the mark is never seen and a scene profile switch shows the notification the
+        // gate exists to suppress - which is exactly what happened when SceneExecutor moved to Metro.
+        assertThat(root.profileSwitchSilentGate).isSameInstanceAs(root.profileSwitchSilentGate)
+        // Holds the queue of pending pump commands and the one being performed. A second copy would
+        // accept commands that the copy the pump driver reads never sees.
+        assertThat(root.commandQueue).isSameInstanceAs(root.commandQueue)
+        assertThat(root.localAlertUtils).isSameInstanceAs(root.localAlertUtils)
+        assertThat(root.bolusProgressData).isSameInstanceAs(root.bolusProgressData)
+        assertThat(root.persistenceLayer).isSameInstanceAs(root.persistenceLayer)
+        assertThat(root.cloudStorageManager).isSameInstanceAs(root.cloudStorageManager)
+        assertThat(root.overviewDataCache).isSameInstanceAs(root.overviewDataCache)
+        assertThat(root.calculationSignals).isSameInstanceAs(root.calculationSignals)
+        assertThat(root.calculationSignalsEmitter).isSameInstanceAs(root.calculationSignalsEmitter)
+        assertThat(root.calculationSignals).isSameInstanceAs(root.calculationSignalsEmitter)
+        // A multibinding hands out a fresh Set each read; what has to be shared is the provider in it.
+        assertThat(root.cloudStorageProviders.single()).isSameInstanceAs(root.cloudStorageProviders.single())
+        assertThat(root.constraintsChecker).isSameInstanceAs(root.constraintsChecker)
+        assertThat(root.nsClientRepository).isSameInstanceAs(root.nsClientRepository)
     }
 
     @Test
@@ -106,5 +129,8 @@ class ContributedBindingsTest {
         assertThat(root.pumpSync).isNotSameInstanceAs(root.pumpSync)
         assertThat(root.pumpWithConcentration).isNotSameInstanceAs(root.pumpWithConcentration)
         assertThat(root.widgetUpdater).isNotSameInstanceAs(root.widgetUpdater)
+        // Result objects: a fresh one per call is the point.
+        assertThat(root.apsResult).isNotSameInstanceAs(root.apsResult)
+        assertThat(root.pumpEnactResult).isNotSameInstanceAs(root.pumpEnactResult)
     }
 }

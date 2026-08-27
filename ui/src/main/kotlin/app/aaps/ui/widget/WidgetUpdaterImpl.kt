@@ -12,16 +12,16 @@ import app.aaps.core.interfaces.widget.WidgetUpdater
 import app.aaps.ui.widget.glance.AapsGlanceWidget
 import app.aaps.ui.widget.glance.BgGraphGlanceWidget
 import app.aaps.ui.widget.glance.CompactBgGlanceWidget
+import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
-import javax.inject.Inject
 
 /**
  * Default [WidgetUpdater] implementation. Fires [AapsGlanceWidget.updateAll] on the
  * app-wide [CoroutineScope] so callers stay non-suspend. The widget instances are
- * stateless — they resolve their dependencies via Hilt EntryPoint inside
+ * stateless — they resolve their dependencies from the Metro graph inside
  * `provideGlance`, so this class doesn't need to hold any state-loader refs.
  */
 // Deliberately NOT @SingleIn: the @Binds this replaces had no scope.

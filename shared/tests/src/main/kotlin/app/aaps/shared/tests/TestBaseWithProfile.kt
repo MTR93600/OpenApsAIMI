@@ -163,7 +163,7 @@ open class TestBaseWithProfile : TestBase() {
         whenever(profileRepository.revision).thenReturn(MutableStateFlow(0L))
         whenever(profileRepository.profile).thenReturn(MutableStateFlow(getValidProfileStore()))
         deltaCalculator = DeltaCalculator(aapsLogger)
-        apsResultProvider = Provider { DetermineBasalResult(aapsLogger, fabricPrivacy, constraintsChecker, preferences, activePlugin, processedTbrEbData, profileFunction, rh, decimalFormatter, dateUtil, apsResultProvider, ch) }
+        apsResultProvider = Provider { DetermineBasalResult(aapsLogger, fabricPrivacy, constraintsChecker, preferences, activePlugin, processedTbrEbData, profileFunction, rh, decimalFormatter, dateUtil, { apsResultProvider.get() }, ch) }
         validProfile = ProfileSealed.Pure(pureProfileFromJson(validProfileJSON, dateUtil)!!, activePlugin)
         effectiveProfileSwitch = EPS(
             timestamp = dateUtil.now(),
@@ -225,6 +225,22 @@ open class TestBaseWithProfile : TestBase() {
             @Suppress("USELESS_ELVIS")
             String.format(rh.gs(ref) ?: "", *args)
         }.whenever(rh).gs(any<TextRef>(), anyVararg())
+
+        // The plain gs(TextRef) template. ResourceHelper has a real body for it, but a Mockito mock
+        // does not run it, so it is repeated here: unwrap the ref and go back through the gs(Int)
+        // stubs. Without this a test that stubs whenever(rh.gs(R.string.x)) gets null as soon as the
+        // code under test starts passing a TextRef.AndroidRes instead of the bare id.
+        doAnswer { invocation: InvocationOnMock ->
+            when (val ref = invocation.getArgument<TextRef>(0)) {
+                is TextRef.Literal    -> ref.text
+                is TextRef.AndroidRes ->
+                    if (ref.args.isEmpty()) rh.gs(ref.id)
+                    else rh.gs(ref.id, *ref.args.toTypedArray())
+                // Resolving a name needs the generated id maps, which are not on the test classpath.
+                // Same fallback the real code uses when nobody claims the owner: show the raw name.
+                is TextRef.Named      -> ref.name
+            }
+        }.whenever(rh).gs(any<TextRef>())
 
         doAnswer { invocation: InvocationOnMock ->
             val string = invocation.getArgument<Int>(0)

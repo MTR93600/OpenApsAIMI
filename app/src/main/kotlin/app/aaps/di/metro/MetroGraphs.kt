@@ -26,8 +26,26 @@ import app.aaps.plugins.sync.tidepool.auth.AuthFlowOut
 import app.aaps.implementation.scenes.SceneExecutor
 import app.aaps.core.interfaces.plugin.PluginPermissions
 import app.aaps.core.interfaces.aps.AutosensData
+import app.aaps.core.interfaces.configuration.RunningConfigurationKeys
+import app.aaps.core.nssdk.interfaces.RunningConfiguration
+import app.aaps.core.interfaces.aps.APSResult
+import app.aaps.core.interfaces.pump.PumpEnactResult
+import app.aaps.core.interfaces.configuration.Config
+import app.aaps.core.interfaces.constraints.ConstraintsChecker
+import app.aaps.core.interfaces.nsclient.NSClientRepository
+import app.aaps.core.interfaces.maintenance.CloudStorageProvider
+import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.pump.BolusProgressData
+import app.aaps.database.AppRepository
+import app.aaps.core.interfaces.workflow.CalculationSignals
+import app.aaps.core.interfaces.workflow.CalculationSignalsEmitter
+import app.aaps.core.interfaces.overview.graph.OverviewDataCache
+import app.aaps.core.interfaces.queue.CommandQueue
+import app.aaps.implementation.maintenance.cloud.CloudStorageManager
+import app.aaps.ui.search.BuiltInSearchables
 import app.aaps.core.utils.receivers.DataInbox
 import app.aaps.implementation.plugin.PluginStore
+import app.aaps.implementation.profile.ProfileSwitchSilentGate
 import app.aaps.core.interfaces.sync.XDripBroadcast
 import app.aaps.workflow.WorkflowChainData
 import app.aaps.core.interfaces.maintenance.Maintenance
@@ -258,10 +276,10 @@ class MetroGraphs @Inject constructor(
      * wrong otherwise.
      */
     val xDripSource: XDripSource get() = root.xdripSourcePlugin
-    val nsClientSource: NSClientSource get() = root.nsClientSourcePlugin
+    val nsClientSource: NSClientSource get() = root.nsClientSource
     val dexcomBoyda: DexcomBoyda get() = root.dexcomPlugin
     val bgQualityCheck: BgQualityCheck get() = root.bgQualityCheckPlugin
-    val dstHelper: DstHelper get() = root.dstHelperPlugin
+    val dstHelper: DstHelper get() = root.dstHelper
     val objectives: Objectives get() = root.objectivesPlugin
 
     /** Same plugin as [objectives], by class. The instrumented tests ask for the concrete type. */
@@ -314,6 +332,24 @@ class MetroGraphs @Inject constructor(
     val sceneExecutor: SceneExecutor get() = root.sceneExecutor
     val dataInbox: DataInbox get() = root.dataInbox
     val autosensData: AutosensData get() = root.autosensData
+    val commandQueue: CommandQueue get() = root.commandQueue
+    val localAlertUtils: LocalAlertUtils get() = root.localAlertUtils
+    val bolusProgressData: BolusProgressData get() = root.bolusProgressData
+    val persistenceLayer: PersistenceLayer get() = root.persistenceLayer
+    val cloudStorageManager: CloudStorageManager get() = root.cloudStorageManager
+    val overviewDataCache: OverviewDataCache get() = root.overviewDataCache
+    val calculationSignals: CalculationSignals get() = root.calculationSignals
+    val calculationSignalsEmitter: CalculationSignalsEmitter get() = root.calculationSignalsEmitter
+    val appRepository: AppRepository get() = root.appRepository
+    val cloudStorageProviders: Set<CloudStorageProvider> get() = root.cloudStorageProviders
+    val constraintsChecker: ConstraintsChecker get() = root.constraintsChecker
+    val nsClientRepository: NSClientRepository get() = root.nsClientRepository
+    val builtInSearchables: BuiltInSearchables get() = root.builtInSearchables
+    val apsResult: APSResult get() = root.apsResult
+    val pumpEnactResult: PumpEnactResult get() = root.pumpEnactResult
+    val profileSwitchSilentGate: ProfileSwitchSilentGate get() = root.profileSwitchSilentGate
+    val runningConfiguration: RunningConfiguration get() = root.runningConfiguration
+    val runningConfigurationKeys: RunningConfigurationKeys get() = root.runningConfigurationKeys
     val activePlugin: ActivePlugin get() = root.activePlugin
     val pluginPermissions: PluginPermissions get() = root.pluginPermissions
     val pluginStore: PluginStore get() = root.pluginStore

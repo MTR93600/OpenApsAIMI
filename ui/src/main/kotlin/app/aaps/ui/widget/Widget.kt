@@ -8,7 +8,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.di.injectMetroMembers
 import app.aaps.ui.widget.glance.AapsGlanceWidget
-import javax.inject.Inject
+import dev.zacsweers.metro.Inject
 
 /**
  * [GlanceAppWidgetReceiver] registered in the manifest. Still needed so the OS can
@@ -18,7 +18,7 @@ import javax.inject.Inject
  * The receiver itself holds no widget state — Glance can construct it reflectively
  * (e.g. for `addAllReceiversAndProvidersToPreferences`) without injection, so
  * [glanceAppWidget] must be a no-arg instance. [AapsGlanceWidget] resolves its
- * dependencies via Hilt EntryPoint inside `provideGlance`.
+ * dependencies from the Metro graph inside `provideGlance`.
  */
 class Widget : GlanceAppWidgetReceiver() {
 
