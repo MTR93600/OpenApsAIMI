@@ -15,7 +15,7 @@ The first KMP study left G0 open. Waiting for every product question blocked all
 |---|---|---|
 | D1 host | iOS host is **Trio / LoopKit**. AIMI is an XCFramework (`AimiKit`) behind a Swift `DosingEngine`. | A full AAPS iOS app is a different programme. Trio already owns BLE wake and restore. |
 | D2 CGM | **First CGM is Dexcom ONE+ / G7.** Android uses `:plugins:dexcom_oneplus`. iOS uses `G7SensorKit`. Both feed one `GlucosePort`. Libre 3 is wave 2 (Android native plugin, then `LibreTransmitter` + CoreNFC). | Direct BLE is the iOS loop heartbeat. Followers (xDrip, Notification Reader, Nightscout, Share) cannot keep iOS looping in the background. |
-| D2 pump | **VirtualPump** until week 8. After the W8 go/no-go, pick **Dana-i** or **Medtrum** (LoopKit BLE). No Bluetooth Classic pump. | Pump choice must not block CGM landing or empty KMP modules. |
+| D2 pump | **VirtualPump** until week 8. After W8: **Medtrum** (Android `:pump:medtrum`, iOS Trio `MedtrumKit`). Locked in [`adr-g0-d2-ios-pump-medtrum.md`](adr-g0-d2-ios-pump-medtrum.md). No Dana-i as first iOS pump. No Bluetooth Classic pump. | Pump choice must not block CGM landing or empty KMP modules. |
 | D4 model | Keep **`modelUAM.tflite`**. SHA-256 `741c5248fb81a2551ee4c612c9cbf2be97dbf6b434db7b7407a3ba2214235092`. LiteRT on Android, TFLite on iOS, same bytes. Do not rewrite it as `AimiNeuralNetwork`. | The Kotlin net is not the TFLite graph. |
 | D8 training | Training is opportunistic. A tick must dose from the last valid model even if training is late, cancelled, or missing. | iOS has no guaranteed 5 minute worker. |
 | D9 parity | Final command is exact after pump quantize. Inner floats have documented tolerances. | Matches blueprint P2. |
@@ -25,7 +25,7 @@ The first KMP study left G0 open. Waiting for every product question blocked all
 
 ## Still open (does not block W1–W8)
 
-- Exact iOS pump after week 8 (Dana-i vs Medtrum).
+- Week-8 go/no-go for dropping VirtualPump (iOS pump after W8 is already **Medtrum**).
 - User import of UAM vs factory-only.
 - Persist vs rebuild of each memory after process death.
 - v1 product extras: Advisor, TPO, Hormonitor viewer, HealthKit depth.

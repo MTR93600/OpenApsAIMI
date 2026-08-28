@@ -86,7 +86,7 @@ blueprint et ces annexes spécialisées font autorité sur `AIMI_KMP_MIGRATION_S
 Les défauts G0 (Trio, One+/G7, VirtualPump, TFLite conservé, défauts Android reproduits)
 sont dans [`adr-g0-defaults.md`](adr-g0-defaults.md). Restent ouverts :
 
-- pompe iOS après W8 (Dana-i vs Medtrum) ;
+- pompe iOS après W8 : **Medtrum** ([`adr-g0-d2-ios-pump-medtrum.md`](adr-g0-d2-ios-pump-medtrum.md)) ;
 - modèle UAM uniquement embarqué ou import utilisateur versionné ;
 - persistence/reconstruction des mémoires après restart ;
 - corpus privé et critères de shadow ;
