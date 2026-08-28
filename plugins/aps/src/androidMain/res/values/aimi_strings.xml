@@ -537,6 +537,8 @@
 
 <string name="OApsAIMI_PregnancyDueDate_summary">Enter estimated delivery date (YYYY-MM-DD) to enable gestational autopilot.</string>
 
+<string name="aimi_pkpd_state_internal_title" comment="Hidden preference title. Not shown in UI. Used by internal PKPD state string keys.">PKPD internal state</string>
+
 <string name="OApsAIMI_RemoteControlPin_title">Remote control PIN</string>
 
 <string name="OApsAIMI_RemoteControlPin_summary">PIN for AIMI remote control features.</string>
