@@ -47,12 +47,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.model.ICfg
-import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.DateTimeSection
 import app.aaps.core.ui.compose.EventTimeRow
@@ -64,9 +64,9 @@ import app.aaps.core.ui.compose.clearFocusOnTap
 import app.aaps.core.ui.compose.dialogs.DatePickerModal
 import app.aaps.core.ui.compose.dialogs.TimePickerModal
 import app.aaps.core.ui.compose.rememberBringIntoViewOnExpand
-import app.aaps.ui.R
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.ui.UiStrings
 import java.util.Calendar
-import app.aaps.core.ui.R as CoreUiR
 
 /**
  * Full screen for activating a profile with optional percentage, timeshift, and duration.
@@ -77,7 +77,7 @@ import app.aaps.core.ui.R as CoreUiR
  * @param hasReuseValues Whether reuse button should be shown
  * @param showNotesField Whether to show the notes input field (based on BooleanKey.OverviewShowNotesInDialogs)
  * @param initialTimestamp Initial timestamp (defaults to now)
- * @param rh ResourceHelper for string resources
+ * @param rh TextResolver for string resources
  * @param onNavigateBack Callback to navigate back
  * @param checkPumpCompatible Returns whether the profile's basal is deliverable by the current pump
  *        at the given percentage. Re-queried as the percentage changes so the screen can block
@@ -98,7 +98,7 @@ fun ProfileActivationScreen(
     hasReuseValues: Boolean = false,
     showNotesField: Boolean = true,
     initialTimestamp: Long,
-    rh: ResourceHelper,
+    rh: TextResolver,
     onNavigateBack: () -> Unit,
     checkPumpCompatible: (percentage: Int) -> Boolean = { true },
     insulinChoices: List<ICfg> = emptyList(),
@@ -162,12 +162,12 @@ fun ProfileActivationScreen(
     Scaffold(
         topBar = {
             AapsTopAppBar(
-                title = { Text(stringResource(R.string.activate_label)) },
+                title = { Text(stringResource(UiStrings.activate_label)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             imageVector = Icons.Filled.Close,
-                            contentDescription = stringResource(app.aaps.core.ui.R.string.close)
+                            contentDescription = stringResource(CoreUiStrings.close)
                         )
                     }
                 },
@@ -203,7 +203,7 @@ fun ProfileActivationScreen(
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(stringResource(R.string.activate_label))
+                Text(stringResource(UiStrings.activate_label))
             }
         }
     ) { paddingValues ->
@@ -230,7 +230,7 @@ fun ProfileActivationScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                 ) {
                     Text(
-                        text = stringResource(app.aaps.core.ui.R.string.profile_basal_not_compatible_with_pump),
+                        text = stringResource(CoreUiStrings.profile_basal_not_compatible_with_pump),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         modifier = Modifier.padding(16.dp)
@@ -248,7 +248,7 @@ fun ProfileActivationScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = stringResource(app.aaps.core.ui.R.string.profile_switch_select_insulin_hint),
+                            text = stringResource(CoreUiStrings.profile_switch_select_insulin_hint),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
@@ -269,23 +269,23 @@ fun ProfileActivationScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     // Percentage
                     NumberInputRow(
-                        labelResId = R.string.percentage_label,
+                        labelRef = UiStrings.percentage_label,
                         value = percentage,
                         onValueChange = { percentage = it },
                         valueRange = Constants.CPP_PERCENTAGE_RANGE,
                         step = 5.0,
-                        unitLabel = TextRef.AndroidRes(CoreUiR.string.units_percent),
+                        unitLabel = CoreUiStrings.units_percent,
                         modifier = itemModifier
                     )
 
                     // Duration
                     NumberInputRow(
-                        labelResId = app.aaps.core.ui.R.string.duration,
+                        labelRef = CoreUiStrings.duration,
                         value = duration,
                         onValueChange = { duration = it },
                         valueRange = Constants.ACTION_DURATION,
                         step = 10.0,
-                        unitLabel = TextRef.AndroidRes(CoreUiR.string.units_min),
+                        unitLabel = CoreUiStrings.units_min,
                         modifier = itemModifier
                     )
 
@@ -304,7 +304,7 @@ fun ProfileActivationScreen(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text(
-                                    text = stringResource(app.aaps.core.ui.R.string.timeshift_label) + ": ",
+                                    text = stringResource(CoreUiStrings.timeshift_label) + ": ",
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -317,7 +317,7 @@ fun ProfileActivationScreen(
                             }
                             if (!timeshiftExpanded) {
                                 FilledTonalButton(onClick = { timeshiftExpanded = true }) {
-                                    Text(stringResource(app.aaps.core.ui.R.string.change))
+                                    Text(stringResource(CoreUiStrings.change))
                                 }
                             }
                         }
@@ -327,12 +327,12 @@ fun ProfileActivationScreen(
                             exit = shrinkVertically()
                         ) {
                             NumberInputRow(
-                                labelResId = app.aaps.core.ui.R.string.timeshift_label,
+                                labelRef = CoreUiStrings.timeshift_label,
                                 value = timeshift,
                                 onValueChange = { timeshift = it },
                                 valueRange = Constants.CPP_TIMESHIFT_RANGE,
                                 step = 1.0,
-                                unitLabel = TextRef.AndroidRes(CoreUiR.string.units_hours)
+                                unitLabel = CoreUiStrings.units_hours
                             )
                         }
                     }
@@ -346,7 +346,7 @@ fun ProfileActivationScreen(
                             },
                             modifier = itemModifier
                         ) {
-                            Text(rh.gs(R.string.reuse_profile_pct_hours, currentPercentage, currentTimeshiftHours))
+                            Text(rh.gs(UiStrings.reuse_profile_pct_hours, currentPercentage, currentTimeshiftHours))
                         }
                     }
 
@@ -360,11 +360,11 @@ fun ProfileActivationScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = stringResource(app.aaps.core.ui.R.string.temporary_target),
+                                    text = stringResource(CoreUiStrings.temporary_target),
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                                 Text(
-                                    text = stringResource(app.aaps.core.ui.R.string.activity),
+                                    text = stringResource(CoreUiStrings.activity),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -397,7 +397,7 @@ fun ProfileActivationScreen(
                         TextField(
                             value = notes,
                             onValueChange = { notes = it },
-                            label = { Text(stringResource(app.aaps.core.ui.R.string.notes_label)) },
+                            label = { Text(stringResource(CoreUiStrings.notes_label)) },
                             modifier = itemModifier,
                             singleLine = false,
                             maxLines = 3

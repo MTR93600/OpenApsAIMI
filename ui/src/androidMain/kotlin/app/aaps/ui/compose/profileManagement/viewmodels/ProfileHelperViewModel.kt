@@ -6,21 +6,23 @@ import androidx.lifecycle.viewModelScope
 import app.aaps.core.data.model.EPS
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.time.T
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.observeChanges
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileRepository
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.profile.PureProfile
-import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventShowDialog
 import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.objects.profile.ProfileSealed
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.icons.IcProfile
-import app.aaps.ui.R
+import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.profileHelper.ProfileType
 import app.aaps.ui.compose.profileHelper.defaultProfile.DefaultProfile
 import app.aaps.ui.compose.profileHelper.defaultProfile.DefaultProfileDPV
@@ -30,7 +32,6 @@ import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -55,7 +56,7 @@ class ProfileHelperViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val profileFunction: ProfileFunction,
     val profileUtil: ProfileUtil,
-    val rh: ResourceHelper,
+    val rh: TextResolver,
     val dateUtil: DateUtil,
     private val tddCalculator: TddCalculator,
     private val defaultProfile: DefaultProfile,
@@ -99,7 +100,7 @@ class ProfileHelperViewModel @Inject constructor(
         viewModelScope.launch {
             val currentProfileName = profileFunction.getProfileName()
             val currentProfile = profileFunction.getProfile()?.convertToNonCustomizedProfile(dateUtil)
-            val profileSwitches = withContext(Dispatchers.IO) {
+            val profileSwitches = withContext(aapsIoDispatcher) {
                 persistenceLayer.getEffectiveProfileSwitchesFromTime(
                     dateUtil.now() - T.months(2).msecs(),
                     true
@@ -120,7 +121,7 @@ class ProfileHelperViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingStats = true) }
             try {
-                val data = withContext(Dispatchers.IO) {
+                val data = withContext(aapsIoDispatcher) {
                     val tdds = tddCalculator.calculate(7, allowMissingDays = true)
                     val averageTdd = tddCalculator.averageTDD(tdds)
                     val todayTdd = tddCalculator.calculateToday()
@@ -190,10 +191,10 @@ class ProfileHelperViewModel @Inject constructor(
         profileSwitchIndex: Int
     ): String {
         return when (profileType) {
-            ProfileType.MOTOL_DEFAULT     -> if (tdd > 0) rh.gs(R.string.format_with_tdd, age, tdd)
-            else rh.gs(R.string.format_with_weight, age, weight)
+            ProfileType.MOTOL_DEFAULT     -> if (tdd > 0) rh.gs(UiStrings.format_with_tdd, age, tdd)
+            else rh.gs(UiStrings.format_with_weight, age, weight)
 
-            ProfileType.DPV_DEFAULT       -> rh.gs(R.string.format_with_tdd_and_pct, age, tdd, (basalPct * 100).toInt())
+            ProfileType.DPV_DEFAULT       -> rh.gs(UiStrings.format_with_tdd_and_pct, age, tdd, (basalPct * 100).toInt())
             ProfileType.CURRENT           -> uiState.value.currentProfileName
 
             ProfileType.AVAILABLE_PROFILE -> {
@@ -226,8 +227,8 @@ class ProfileHelperViewModel @Inject constructor(
         profile?.let {
             rxBus.send(
                 EventShowDialog.OkCancel(
-                    title = rh.gs(app.aaps.core.ui.R.string.careportal_profileswitch),
-                    message = rh.gs(app.aaps.core.ui.R.string.copytolocalprofile),
+                    title = rh.gs(CoreUiStrings.careportal_profileswitch),
+                    message = rh.gs(CoreUiStrings.copytolocalprofile),
                     icon = IcProfile,
                     onOk = {
                         viewModelScope.launch {

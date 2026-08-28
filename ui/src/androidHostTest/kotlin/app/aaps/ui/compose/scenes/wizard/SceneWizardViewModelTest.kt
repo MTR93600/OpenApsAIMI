@@ -10,7 +10,8 @@ import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.Translator
 import app.aaps.core.keys.StringNonKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.ui.R
+import app.aaps.core.ui.CoreUiStrings
+import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.scenes.SceneTemplate
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
@@ -130,7 +131,7 @@ internal class SceneWizardViewModelTest {
 
     @Test
     fun `selectTemplate for a bundled template enables its actions and jumps to info step`() {
-        whenever(rh.gs(R.string.scene_template_exercise)).thenReturn("Exercise")
+        whenever(rh.gs(CoreUiStrings.scene_template_exercise)).thenReturn("Exercise")
 
         sut.selectTemplate(SceneTemplate.EXERCISE)
 
@@ -148,7 +149,7 @@ internal class SceneWizardViewModelTest {
 
     @Test
     fun `selectTemplate BLANK jumps to profile step with no actions and empty name`() {
-        whenever(rh.gs(R.string.scene_template_blank)).thenReturn("Blank")
+        whenever(rh.gs(CoreUiStrings.scene_template_blank)).thenReturn("Blank")
 
         sut.selectTemplate(SceneTemplate.BLANK)
 

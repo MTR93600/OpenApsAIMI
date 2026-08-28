@@ -7,7 +7,9 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import app.aaps.core.data.format.NumberFormat
+import app.aaps.core.interfaces.resources.TextRefIdRegistry
 import app.aaps.ui.R
+import app.aaps.ui.UiStringIds
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Rule
@@ -38,6 +40,9 @@ class FillDialogContentTest {
 
     @Before
     fun setUp() {
+        // MainApp does this in production; a Robolectric test has no MainApp, so a TextRef.Named
+        // would have no id to resolve to and the screen would render blank text.
+        TextRefIdRegistry.register("ui") { name -> UiStringIds.idOf(name) }
         val context: Context = RuntimeEnvironment.getApplication()
         siteChangeLabel = context.getString(R.string.record_pump_site_change)
         cartridgeLabel = context.getString(R.string.record_insulin_cartridge_change)

@@ -8,12 +8,14 @@ import app.aaps.core.interfaces.overview.LastBgData
 import app.aaps.core.interfaces.overview.graph.OverviewDataCache
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
-import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.TrendCalculator
 import app.aaps.core.keys.BooleanComposedKey
 import app.aaps.core.keys.IntComposedKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.ui.CoreUiStrings
+import app.aaps.ui.UiStrings
 import app.aaps.ui.widget.directionToDrawableRes
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.Provider
@@ -44,7 +46,7 @@ class BgGraphStateLoader @Inject constructor(
     private val trendCalculator: TrendCalculator,
     private val iobCobCalculator: IobCobCalculator,
     private val dateUtil: DateUtil,
-    private val rh: ResourceHelper,
+    private val rh: TextResolver,
     private val preferences: Preferences,
     private val config: Config
 ) {
@@ -83,7 +85,7 @@ class BgGraphStateLoader @Inject constructor(
         // Current BG + trend (same logic as WidgetStateLoader)
         val lastBg = lastBgData.lastBg()
         val bgText = lastBg?.let { profileUtil.fromMgdlToStringInUnits(it.recalculated) }
-            ?: rh.gs(app.aaps.core.ui.R.string.value_unavailable_short)
+            ?: rh.gs(CoreUiStrings.value_unavailable_short)
         val bgColor = when {
             lastBgData.isLow()  -> colors.low
             lastBgData.isHigh() -> colors.high

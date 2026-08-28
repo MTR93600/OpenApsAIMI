@@ -7,7 +7,8 @@ import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.Translator
-import app.aaps.core.ui.R
+import app.aaps.core.ui.CoreUiStrings
+import app.aaps.ui.UiStrings
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -98,7 +99,7 @@ internal class CareportalViewModelTest {
     fun `getDeleteConfirmationMessage empty when nothing selected, plural for many`() {
         assertThat(sut.getDeleteConfirmationMessage()).isEqualTo("")
 
-        whenever(rh.gs(R.string.confirm_remove_multiple_items, 2)).thenReturn("Remove 2 items")
+        whenever(rh.gs(CoreUiStrings.confirm_remove_multiple_items, 2)).thenReturn("Remove 2 items")
         sut.enterSelectionMode(mock<TE>())
         sut.toggleSelection(mock<TE>())
         assertThat(sut.getDeleteConfirmationMessage()).isEqualTo("Remove 2 items")

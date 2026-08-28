@@ -3,13 +3,16 @@ package app.aaps.ui.compose.quickWizard.viewmodels
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.resources.TextRefIdRegistry
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.objects.wizard.QuickWizard
 import app.aaps.core.objects.wizard.QuickWizardEntry
 import app.aaps.core.objects.wizard.QuickWizardMode
 import app.aaps.core.ui.compose.ScreenMode
+import app.aaps.ui.UiStringIds
 import app.aaps.ui.events.EventQuickWizardChange
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
@@ -245,6 +248,8 @@ internal class QuickWizardManagementViewModelTest {
     @Test
     fun `a replacement of the entry list aborts the commit`() = runTest {
         whenever(rh.gs(any<Int>())).thenReturn("message")
+        // The screens name their strings now, so the TextRef overload is the one they call.
+        whenever(rh.gs(any<TextRef>())).thenReturn("message")
         givenEntries("a", "b", "c")
         sut.enterReorderMode()
         sut.moveReorderItem(0, 2)

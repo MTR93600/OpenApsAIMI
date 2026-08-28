@@ -8,7 +8,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TE
+import app.aaps.core.interfaces.resources.TextRefIdRegistry
 import app.aaps.ui.R
+import app.aaps.ui.UiStringIds
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Rule
@@ -32,6 +34,9 @@ class InlineEditorContentTest {
 
     @Before
     fun setUp() {
+        // MainApp does this in production; a Robolectric test has no MainApp, so a TextRef.Named
+        // would have no id to resolve to and the screen would render blank text.
+        TextRefIdRegistry.register("ui") { name -> UiStringIds.idOf(name) }
         val ctx: Context = RuntimeEnvironment.getApplication()
         arrowLabel = ctx.getString(R.string.select_arrow)
     }

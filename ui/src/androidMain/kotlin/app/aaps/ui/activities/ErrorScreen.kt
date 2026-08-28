@@ -17,6 +17,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,9 +27,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import app.aaps.core.ui.CoreUiStrings
+import app.aaps.core.ui.compose.stringResource
 
 /**
  * Modal-style screen rendered over a scrim by [ErrorActivity] when an urgent alarm fires.
@@ -81,9 +85,10 @@ fun ErrorScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     // Main error icon
-                    Image(
-                        painter = painterResource(id = app.aaps.core.ui.R.drawable.ic_error_red_48dp),
+                    Icon(
+                        imageVector = Icons.Filled.Error,
                         contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(48.dp)
                     )
                     // App icon badge in bottom-right corner
@@ -132,7 +137,7 @@ fun ErrorScreen(
                     onClick = onMute5Min,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(stringResource(app.aaps.core.ui.R.string.mute5min))
+                    Text(stringResource(CoreUiStrings.mute5min))
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -142,7 +147,7 @@ fun ErrorScreen(
                     onClick = onMute,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(stringResource(app.aaps.core.ui.R.string.mute))
+                    Text(stringResource(CoreUiStrings.mute))
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -152,7 +157,7 @@ fun ErrorScreen(
                     onClick = onOk,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(stringResource(app.aaps.core.ui.R.string.ok))
+                    Text(stringResource(CoreUiStrings.ok))
                 }
             }
         }

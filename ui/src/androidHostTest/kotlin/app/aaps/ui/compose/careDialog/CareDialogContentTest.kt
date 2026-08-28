@@ -6,7 +6,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import app.aaps.core.interfaces.resources.TextRefIdRegistry
 import app.aaps.ui.R
+import app.aaps.ui.UiStringIds
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Rule
@@ -32,6 +34,9 @@ class CareDialogContentTest {
 
     @Before
     fun setUp() {
+        // MainApp does this in production; a Robolectric test has no MainApp, so a TextRef.Named
+        // would have no id to resolve to and the screen would render blank text.
+        TextRefIdRegistry.register("ui") { name -> UiStringIds.idOf(name) }
         val ctx: Context = RuntimeEnvironment.getApplication()
         meterLabel = ctx.getString(R.string.bg_meter)
         sensorLabel = ctx.getString(R.string.bg_sensor)

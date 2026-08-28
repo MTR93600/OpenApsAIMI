@@ -19,6 +19,7 @@ import app.aaps.core.interfaces.sync.NsClient
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.objects.extensions.singleBlock
 import app.aaps.core.objects.extensions.singleTargetBlock
 import app.aaps.core.ui.compose.ScreenMode
@@ -294,6 +295,8 @@ internal class ProfileManagementViewModelTest {
     fun `a failed commit reports it and leaves reorder mode`() = runTest {
         givenProfiles(3)
         whenever(rh.gs(any<Int>())).thenReturn("message")
+        // The screens name their strings now, so the TextRef overload is the one they call.
+        whenever(rh.gs(any<TextRef>())).thenReturn("message")
         whenever(profileRepository.reorder(any()))
             .thenReturn(Result.failure(IllegalArgumentException("list replaced mid-reorder")))
         sut.enterReorderMode()
@@ -307,6 +310,8 @@ internal class ProfileManagementViewModelTest {
     fun `a same-size replacement of the profile list aborts the commit`() = runTest {
         givenProfiles(3)
         whenever(rh.gs(any<Int>())).thenReturn("message")
+        // The screens name their strings now, so the TextRef overload is the one they call.
+        whenever(rh.gs(any<TextRef>())).thenReturn("message")
         sut.enterReorderMode()
         sut.moveReorderItem(0, 2)
 

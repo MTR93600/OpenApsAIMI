@@ -30,7 +30,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -48,6 +47,7 @@ import app.aaps.core.interfaces.maintenance.ImportExportPrefs
 import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.interfaces.userEntry.UserEntryPresentationHelper
 import app.aaps.core.interfaces.utils.Translator
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsCard
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalDateUtil
@@ -56,7 +56,8 @@ import app.aaps.core.ui.compose.SelectableListToolbar
 import app.aaps.core.ui.compose.ToolbarConfig
 import app.aaps.core.ui.compose.dialogs.OkCancelDialog
 import app.aaps.core.ui.compose.navigation.color
-import app.aaps.ui.R
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.treatments.viewmodels.UserEntryViewModel
 
 /**
@@ -101,7 +102,7 @@ fun UserEntryScreen(
                 onToggleLoop = { viewModel.toggleLoop() },
                 menuItems = listOf(
                     MenuItemData(
-                        label = viewModel.rh.gs(app.aaps.core.ui.R.string.ue_export_to_csv),
+                        label = viewModel.rh.gs(CoreUiStrings.ue_export_to_csv),
                         onClick = {
                             showExportDialog = true
                         }
@@ -114,8 +115,8 @@ fun UserEntryScreen(
     // Export confirmation dialog
     if (showExportDialog) {
         OkCancelDialog(
-            title = viewModel.rh.gs(app.aaps.core.ui.R.string.confirm),
-            message = viewModel.rh.gs(app.aaps.core.ui.R.string.ue_export_to_csv) + "?",
+            title = viewModel.rh.gs(CoreUiStrings.confirm),
+            message = viewModel.rh.gs(CoreUiStrings.ue_export_to_csv) + "?",
             onConfirm = {
                 uel.log(Action.EXPORT_CSV, Sources.Treatments)
                 importExportPrefs.exportUserEntriesCsv()
@@ -137,7 +138,7 @@ fun UserEntryScreen(
 
                 uiState.userEntries.isEmpty() -> {
                     Text(
-                        text = stringResource(R.string.no_records_available),
+                        text = stringResource(UiStrings.no_records_available),
                         modifier = Modifier
                             .align(Alignment.Center)
                             .padding(50.dp),
@@ -238,7 +239,7 @@ private fun UserEntryItem(
                 // Source Icon
                 Image(
                     painter = rememberVectorPainter(userEntryPresentationHelper.icon(userEntry.source)),
-                    contentDescription = "${stringResource(app.aaps.core.ui.R.string.ue_source)}: ${userEntry.source}",
+                    contentDescription = "${stringResource(CoreUiStrings.ue_source)}: ${userEntry.source}",
                     modifier = Modifier
                         .size(20.dp)
                         .padding(end = 4.dp),

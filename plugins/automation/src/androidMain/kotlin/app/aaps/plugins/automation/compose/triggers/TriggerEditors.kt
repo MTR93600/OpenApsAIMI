@@ -1,5 +1,9 @@
 package app.aaps.plugins.automation.compose.triggers
 
+import app.aaps.core.interfaces.InterfacesStrings
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.core.ui.CoreUiStrings
+import app.aaps.plugins.automation.AutomationStrings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -7,13 +11,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.compose.NumberInputRow
-import app.aaps.plugins.automation.R
 import app.aaps.plugins.automation.compose.elements.AutomationDropdown
 import app.aaps.plugins.automation.compose.elements.ComparatorConnectEditor
 import app.aaps.plugins.automation.compose.elements.ComparatorExistsEditor
@@ -55,7 +57,6 @@ import app.aaps.plugins.automation.triggers.TriggerTempTargetValue
 import app.aaps.plugins.automation.triggers.TriggerTime
 import app.aaps.plugins.automation.triggers.TriggerTimeRange
 import app.aaps.plugins.automation.triggers.TriggerWifiSsid
-import app.aaps.core.ui.R as CoreUiR
 
 @Composable
 fun TriggerEditor(
@@ -63,8 +64,8 @@ fun TriggerEditor(
     onChange: () -> Unit,
     tick: Int = 0,
     bondedDevices: List<String> = emptyList(),
-    showCurrentLocation: Boolean = false,
-    onUseCurrentLocation: () -> Unit = {},
+
+    onUseCurrentLocation: ((TriggerLocation) -> Unit)? = null,
     onPickLocationFromMap: (TriggerLocation) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -98,9 +99,9 @@ fun TriggerEditor(
             is TriggerTimeRange          -> TriggerTimeRangeEditor(trigger, onChange)
             is TriggerWifiSsid           -> TriggerWifiSsidEditor(trigger, onChange)
             is TriggerBTDevice           -> TriggerBTDeviceEditor(trigger, bondedDevices, onChange)
-            is TriggerLocation           -> TriggerLocationEditor(trigger, onChange, tick, showCurrentLocation, onUseCurrentLocation, onPickLocationFromMap)
+            is TriggerLocation           -> TriggerLocationEditor(trigger, onChange, tick, onUseCurrentLocation, onPickLocationFromMap)
             is TriggerConnector          -> Text("Connector")
-            else                         -> Text(trigger.javaClass.simpleName)
+            else                         -> Text(trigger::class.simpleName.orEmpty())
         }
     }
 }
@@ -117,13 +118,13 @@ fun TriggerBgEditor(t: TriggerBg, onChange: () -> Unit, tick: Int = 0) {
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.bg.value,
             onValueChange = { t.bg.value = it; onChange() },
             valueRange = if (isMmol) InputBg.MMOL_MIN..InputBg.MMOL_MAX else InputBg.MGDL_MIN..InputBg.MGDL_MAX,
             step = if (isMmol) 0.1 else 1.0,
             decimalPlaces = if (isMmol) 1 else 0,
-            unitLabel = TextRef.AndroidRes(if (isMmol) CoreUiR.string.units_mmol else CoreUiR.string.units_mgdl),
+            unitLabel = if (isMmol) CoreUiStrings.units_mmol else CoreUiStrings.units_mgdl,
             compact = true
         )
     }
@@ -151,13 +152,13 @@ fun TriggerDeltaEditor(t: TriggerDelta, onChange: () -> Unit, tick: Int = 0) {
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.delta.value,
             onValueChange = { t.delta.value = it; onChange() },
             valueRange = -72.0..72.0,
             step = 0.1,
             decimalPlaces = 1,
-            unitLabel = TextRef.AndroidRes(if (isMmol) CoreUiR.string.units_mmol else CoreUiR.string.units_mgdl),
+            unitLabel = if (isMmol) CoreUiStrings.units_mmol else CoreUiStrings.units_mgdl,
             compact = true
         )
     }
@@ -172,12 +173,12 @@ fun TriggerCOBEditor(t: TriggerCOB, onChange: () -> Unit, tick: Int = 0) {
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.cob.value,
             onValueChange = { t.cob.value = it; onChange() },
             valueRange = 0.0..150.0,
             step = 1.0,
-            unitLabel = TextRef.AndroidRes(CoreUiR.string.units_grams),
+            unitLabel = CoreUiStrings.units_grams,
             compact = true
         )
     }
@@ -192,13 +193,13 @@ fun TriggerIobEditor(t: TriggerIob, onChange: () -> Unit, tick: Int = 0) {
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.insulin.value,
             onValueChange = { t.insulin.value = it; onChange() },
             valueRange = -20.0..20.0,
             step = 0.1,
             decimalPlaces = 1,
-            unitLabel = TextRef.AndroidRes(CoreUiR.string.units_insulin),
+            unitLabel = CoreUiStrings.units_insulin,
             compact = true
         )
     }
@@ -213,12 +214,12 @@ fun TriggerHeartRateEditor(t: TriggerHeartRate, onChange: () -> Unit, tick: Int 
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.heartRate.value,
             onValueChange = { t.heartRate.value = it; onChange() },
             valueRange = 30.0..250.0,
             step = 5.0,
-            unitLabel = TextRef.AndroidRes(R.string.automation_unit_bpm),
+            unitLabel = AutomationStrings.automation_unit_bpm,
             compact = true
         )
     }
@@ -233,12 +234,12 @@ fun TriggerAutosensValueEditor(t: TriggerAutosensValue, onChange: () -> Unit, ti
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.autosens.value,
             onValueChange = { t.autosens.value = it; onChange() },
             valueRange = 0.0..300.0,
             step = 1.0,
-            unitLabel = TextRef.AndroidRes(CoreUiR.string.units_percent),
+            unitLabel = CoreUiStrings.units_percent,
             compact = true
         )
     }
@@ -253,12 +254,12 @@ fun TriggerBolusAgoEditor(t: TriggerBolusAgo, onChange: () -> Unit, tick: Int = 
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.minutesAgo.value.toDouble(),
             onValueChange = { t.minutesAgo.value = it.toInt(); onChange() },
             valueRange = 5.0..(24 * 60.0),
             step = 10.0,
-            unitLabel = TextRef.AndroidRes(CoreUiR.string.units_min),
+            unitLabel = CoreUiStrings.units_min,
             compact = true
         )
     }
@@ -273,13 +274,13 @@ fun TriggerCannulaAgeEditor(t: TriggerCannulaAge, onChange: () -> Unit, tick: In
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.cannulaAgeHours.value,
             onValueChange = { t.cannulaAgeHours.value = it; onChange() },
             valueRange = 0.0..336.0,
             step = 0.1,
             decimalPlaces = 1,
-            unitLabel = TextRef.AndroidRes(CoreUiR.string.units_hours),
+            unitLabel = CoreUiStrings.units_hours,
             compact = true
         )
     }
@@ -294,13 +295,13 @@ fun TriggerInsulinAgeEditor(t: TriggerInsulinAge, onChange: () -> Unit, tick: In
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.insulinAgeHours.value,
             onValueChange = { t.insulinAgeHours.value = it; onChange() },
             valueRange = 0.0..336.0,
             step = 0.1,
             decimalPlaces = 1,
-            unitLabel = TextRef.AndroidRes(CoreUiR.string.units_hours),
+            unitLabel = CoreUiStrings.units_hours,
             compact = true
         )
     }
@@ -315,12 +316,12 @@ fun TriggerReservoirLevelEditor(t: TriggerReservoirLevel, onChange: () -> Unit, 
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.reservoirLevel.value,
             onValueChange = { t.reservoirLevel.value = it; onChange() },
             valueRange = 0.0..800.0,
             step = 1.0,
-            unitLabel = TextRef.AndroidRes(CoreUiR.string.units_insulin),
+            unitLabel = CoreUiStrings.units_insulin,
             compact = true
         )
     }
@@ -335,13 +336,13 @@ fun TriggerPumpBatteryAgeEditor(t: TriggerPumpBatteryAge, onChange: () -> Unit, 
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.pumpBatteryAgeHours.value,
             onValueChange = { t.pumpBatteryAgeHours.value = it; onChange() },
             valueRange = 0.0..336.0,
             step = 0.1,
             decimalPlaces = 1,
-            unitLabel = TextRef.AndroidRes(CoreUiR.string.units_hours),
+            unitLabel = CoreUiStrings.units_hours,
             compact = true
         )
     }
@@ -356,12 +357,12 @@ fun TriggerPumpBatteryLevelEditor(t: TriggerPumpBatteryLevel, onChange: () -> Un
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.pumpBatteryLevel.value,
             onValueChange = { t.pumpBatteryLevel.value = it; onChange() },
             valueRange = 0.0..100.0,
             step = 1.0,
-            unitLabel = TextRef.AndroidRes(CoreUiR.string.units_percent),
+            unitLabel = CoreUiStrings.units_percent,
             compact = true
         )
     }
@@ -376,13 +377,13 @@ fun TriggerSensorAgeEditor(t: TriggerSensorAge, onChange: () -> Unit, tick: Int 
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.sensorAgeHours.value,
             onValueChange = { t.sensorAgeHours.value = it; onChange() },
             valueRange = 0.0..720.0,
             step = 0.1,
             decimalPlaces = 1,
-            unitLabel = TextRef.AndroidRes(CoreUiR.string.units_hours),
+            unitLabel = CoreUiStrings.units_hours,
             compact = true
         )
     }
@@ -390,7 +391,7 @@ fun TriggerSensorAgeEditor(t: TriggerSensorAge, onChange: () -> Unit, tick: Int 
 
 @Composable
 fun TriggerPodChangeEditor() {
-    Text(stringResource(R.string.triggerPodChangeDesc))
+    Text(stringResource(AutomationStrings.triggerPodChangeDesc))
 }
 
 @Composable
@@ -402,12 +403,12 @@ fun TriggerPumpLastConnectionEditor(t: TriggerPumpLastConnection, onChange: () -
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.minutesAgo.value.toDouble(),
             onValueChange = { t.minutesAgo.value = it.toInt(); onChange() },
             valueRange = 5.0..(24 * 60.0),
             step = 10.0,
-            unitLabel = TextRef.AndroidRes(CoreUiR.string.units_min),
+            unitLabel = CoreUiStrings.units_min,
             compact = true
         )
     }
@@ -422,12 +423,12 @@ fun TriggerProfilePercentEditor(t: TriggerProfilePercent, onChange: () -> Unit, 
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.pct.value,
             onValueChange = { t.pct.value = it; onChange() },
             valueRange = InputPercent.MIN..InputPercent.MAX,
             step = 5.0,
-            unitLabel = TextRef.AndroidRes(CoreUiR.string.units_percent),
+            unitLabel = CoreUiStrings.units_percent,
             compact = true
         )
     }
@@ -448,14 +449,14 @@ fun TriggerTempTargetValueEditor(t: TriggerTempTargetValue, onChange: () -> Unit
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.ttValue.value,
             onValueChange = { t.ttValue.value = it; onChange() },
             valueRange = if (isMmol) Constants.TT_RANGE_MMOL
             else Constants.TT_RANGE_MGDL,
             step = if (isMmol) 0.1 else 1.0,
             decimalPlaces = if (isMmol) 1 else 0,
-            unitLabel = TextRef.AndroidRes(if (isMmol) CoreUiR.string.units_mmol else CoreUiR.string.units_mgdl),
+            unitLabel = if (isMmol) CoreUiStrings.units_mmol else CoreUiStrings.units_mgdl,
             compact = true
         )
     }
@@ -466,8 +467,8 @@ fun TriggerStepsCountEditor(t: TriggerStepsCount, onChange: () -> Unit, tick: In
     @Suppress("UNUSED_EXPRESSION") tick
     val durations = listOf("5", "10", "15", "30", "60", "180")
     LabelWithElementRow(
-        textPre = stringResource(R.string.triggerStepsCountDropdownLabel) + ":",
-        textPost = stringResource(app.aaps.core.interfaces.R.string.unit_minutes)
+        textPre = stringResource(AutomationStrings.triggerStepsCountDropdownLabel) + ":",
+        textPost = stringResource(InterfacesStrings.unit_minutes)
     ) {
         AutomationDropdown(
             value = t.measurementDuration.value.ifEmpty { "5" },
@@ -481,7 +482,7 @@ fun TriggerStepsCountEditor(t: TriggerStepsCount, onChange: () -> Unit, tick: In
         label = ""
     ) {
         NumberInputRow(
-            labelResId = 0,
+            labelRef = null,
             value = t.stepsCount.value,
             onValueChange = { t.stepsCount.value = it; onChange() },
             valueRange = 0.0..20000.0,
@@ -543,30 +544,30 @@ fun TriggerLocationEditor(
     t: TriggerLocation,
     onChange: () -> Unit,
     tick: Int = 0,
-    showCurrentLocation: Boolean,
-    onUseCurrentLocation: () -> Unit,
+
+    onUseCurrentLocation: ((TriggerLocation) -> Unit)?,
     onPickLocationFromMap: (TriggerLocation) -> Unit
 ) {
     @Suppress("UNUSED_EXPRESSION") tick
     InputStringEditor(
         value = t.name.value, onValueChange = { t.name.value = it; onChange() },
-        label = stringResource(app.aaps.core.ui.R.string.name_short)
+        label = stringResource(CoreUiStrings.name_short)
     )
-    if (showCurrentLocation) {
-        OutlinedButton(onClick = onUseCurrentLocation, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.currentlocation))
+    if (onUseCurrentLocation != null) {
+        OutlinedButton(onClick = { onUseCurrentLocation(t) }, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(AutomationStrings.currentlocation))
         }
     }
     OutlinedButton(onClick = { onPickLocationFromMap(t) }, modifier = Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.pick_from_map))
+        Text(stringResource(AutomationStrings.pick_from_map))
     }
     NumberInputRow(
-        labelResId = 0,
+        labelRef = null,
         value = t.distance.value,
         onValueChange = { t.distance.value = it; onChange() },
         valueRange = 0.0..100000.0,
         step = 10.0,
-        unitLabel = TextRef.AndroidRes(R.string.automation_unit_meters)
+        unitLabel = AutomationStrings.automation_unit_meters
     )
     InputLocationModeEditor(
         value = t.modeSelected.value,

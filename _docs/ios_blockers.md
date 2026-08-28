@@ -46,6 +46,38 @@ Moving one test file across immediately found two faults the JVM run had hidden:
 implement every interface member (Mockito had been filling it in), and a backticked test name
 containing a comma, which Kotlin/Native rejects outright.
 
+## Hint: most common code still has no iOS test coverage
+
+Measured 2026-08-27, after `:implementation` got its `commonTest`. This is a survey, not a claim that
+anything is broken - but the one module that was converted immediately turned up three real faults,
+so it is worth working through.
+
+| module | commonMain files | commonTest | test files that never run on iOS |
+|---|---|---|---|
+| `plugins/aps` | 23 | none | 33 |
+| `core/objects` | 26 | none | 27 |
+| `database/persistence` | 32 | none | 16 |
+| `core/interfaces` | 255 | none | 13 |
+| `plugins/sensitivity`, `smoothing`, `calibration` | 22 | none | 9 |
+| `core/utils` | 6 | none | 5 |
+
+Only `core/data`, `shared/impl` and `implementation` have a `commonTest` at all. Everything else
+tests `commonMain` classes from `androidHostTest`, which runs on the JVM only - so code that ships to
+iOS is verified only on Android. `plugins/aps` is the dosing algorithm and `database/persistence` is
+what writes user data, so those two are worth the most.
+
+What converting one module found, none of which the JVM could have shown: a fake that did not
+implement every interface member because Mockito had been filling it in, a backticked test name
+containing a comma, which Kotlin/Native rejects, and a segfault in `NSLog` that only appeared when
+something called through the injected logger.
+
+This is left for the kmp session because it touches many modules at once. Friction to expect: AAPS
+tests lean on Mockito, which is JVM only, so a test that mocks has to be rewritten with hand written
+fakes before it can move. Expect each module to split into "moves today" and "needs a rewrite first"
+- converting the first group and recording the second is a good outcome, a clean sweep is not
+realistic. See `implementation/src/commonTest/.../CommonNotificationManagerTest.kt` for the shape,
+and the section above for the source set to add.
+
 ## Gotchas in iOS interop
 
 Collected so nobody pays for them twice. All were found by tests or a crash, not by review.
@@ -64,62 +96,7 @@ Collected so nobody pays for them twice. All were found by tests or a crash, not
 
 ## Open
 
-### 1. The notification cluster - to delete a duplicate, not to unblock anything
-
-`implementation/src/androidMain/kotlin/app/aaps/implementation/notifications/NotificationManagerImpl.kt`
-and, in `implementation/src/androidMain/kotlin/app/aaps/implementation/androidNotification/`,
-`AlarmNotificationManager`, `AlarmSoundPlayerImpl` and `NotificationHolderImpl`. All four are still
-`javax.inject`.
-
-Nothing is blocked by this - iOS has its own binding already - but there are two registries now, and
-they should become one. When these move to Metro:
-
-- delete `NotificationManagerImpl` and bind `CommonNotificationManager`
-  (`implementation/src/commonMain/kotlin/app/aaps/implementation/notifications/`) instead. It already
-  holds all the shared logic: the list and its ordering, `allowMultiple` replacement, expiry and
-  `validityCheck`, both `dismiss` overloads, `muteAllAlarms`, and the alarm sound owner handoff.
-  18 tests cover it in `implementation/src/commonTest/.../CommonNotificationManagerTest.kt`, and
-  they run on the JVM and on the iOS simulator.
-- keep the Android specific half - the channel, the dismiss `BroadcastReceiver`,
-  `NotificationCompat` and the `PendingIntent` - as an Android `SystemNotificationPlatform`
-  (`core/interfaces/src/commonMain/.../notifications/SystemNotificationPlatform.kt`). Drive
-  `AlarmSoundPlayer` from its `setAudibleAlarm`, which is called with the key of the alarm that owns
-  the sound, or null for silence.
-
-`CommonNotificationManager` deliberately has **no** `@ContributesBinding`, so that it cannot clash
-with the Android binding while both exist. Add the annotation when the Android one goes away.
-
-**Windows session, 2026-08-27: started this and stopped, because the interface cannot express what
-Android does today.** `CommonNotificationManager.post` called `platform.show(...)` unconditionally.
-`NotificationManagerImpl` does not - it picks one of three paths:
-
-1. `level == URGENT && sound != null` -> `alarmNotificationManager.postSilentAlarmNotification(...)`,
-   a **silent** heads-up notification, because the ramping audio is owned by `AlarmSoundPlayer`
-2. else if `preferences.get(BooleanKey.AlertUrgentAsAndroidNotification) && actions.isEmpty()` ->
-   the ordinary `NotificationCompat` notification
-3. else nothing at all
-
-**macOS session: agreed, and fixed - the seam now carries the whole notification.**
-
-```kotlin
-fun show(notification: AapsNotification, title: String)
-```
-
-Rather than adding `sound` and `hasActions` as separate parameters, which is what was suggested,
-`AapsNotification` is passed whole. It is `commonMain` already and is the registry's own currency, so
-Android can express all three paths, and the signature will not have to be widened a third time when
-something needs `date` or `id.category`. `title` stays separate because resolving it needs a
-`TextResolver`, which a platform implementation should not have to carry. An implementation may
-decide to show nothing at all, which is path 3.
-
-`CommonNotificationManagerTest` has a test - `the platform is given the sound and the actions` -
-whose only job is to keep those two fields reaching the platform, so this cannot regress quietly.
-iOS ignores them and says why in `IosSystemNotificationPlatform.show`.
-
-The remaining work is unchanged: take the four classes off `javax.inject`, then delete
-`NotificationManagerImpl` in favour of `CommonNotificationManager` plus an Android
-`SystemNotificationPlatform`. `AlarmSoundPlayerImpl` and `NotificationHolderImpl` are already off
-javax; `NotificationManagerImpl` and `AlarmNotificationManager` are not.
+Nothing open. The notification cluster was the last one - see Done.
 
 ## Known gaps on the iOS side
 
@@ -128,12 +105,37 @@ Not blockers, and not for the Windows session to fix. Listed so nobody is surpri
 - `IosSystemNotificationPlatform.setAudibleAlarm` only logs. An iOS notification carries its own
   sound, and reposting one every time the owner is recomputed would re-alert the user. A real
   ramping alarm needs a critical alert entitlement or an audio session.
-- `IosSystemNotificationPlatform.onDismissed` is not wired. It needs a
-  `UNUserNotificationCenterDelegate` set on the shared centre by the app during start up, which that
-  class cannot own without two of them fighting over the slot. A notification cleared on the lock
-  screen therefore stays in the in-app list.
+- `IosSystemNotificationPlatform.onDismissed` **is** wired now. Two things were needed and either
+  one missing makes it silently never fire: a delegate on the shared centre, held in a property
+  because that slot is weak, and a `UNNotificationCategory` carrying `customDismissAction`, without
+  which iOS reports taps but not dismissals. The one caveat left is that it calls
+  `setNotificationCategories` with only its own category, so it would clobber categories registered
+  elsewhere - nothing else registers any today.
 
 ## Done
+
+- **The notification cluster - done.** There is one registry now.
+  `AndroidSystemNotificationPlatform` (`implementation/src/androidMain/.../notifications/`) holds the
+  Android half - channel, dismiss `BroadcastReceiver`, `NotificationCompat`, `PendingIntent` - and
+  makes the three way decision the old class made inline: URGENT **with a sound** is posted silently,
+  because `AlarmSoundPlayer` owns the ramping audio; anything else is shown only when
+  `AlertUrgentAsAndroidNotification` is set **and** there are no actions; otherwise nothing.
+  `NotificationManagerImpl` is deleted and `CommonNotificationManager` is bound on both platforms.
+  Notes for whoever reads this next:
+  - the `show(notification, title)` shape is what made it possible. A signature naming a subset of
+    the fields could not express the three way decision, which is why this sat open.
+  - it is a `@Provides` in `ImplementationBindings`, not annotations on the class: building the
+    registry registers the receiver and creates the channel, and that must not happen while the
+    graph is being assembled.
+  - `AlarmNotificationManager`, `AlarmSoundPlayer` and `NotificationHolder` are injected as
+    `Provider`s for the same reason. `AlarmNotificationManager` calls `createChannels()` in its own
+    constructor, so injecting it directly makes the plain-JVM graph tests fail on `getSystemService`.
+  - the channel is created on the first `show()` rather than at start up, so its entry in the system
+    notification settings appears only after the first notification.
+  - `AlarmSoundPlayerImpl` and `NotificationHolderImpl` are on Metro now. `AlarmNotificationManager`
+    is the last one still on javax.
+  - 9 Robolectric tests pin the gating in `AndroidSystemNotificationPlatformTest`. The paths that
+    need a real alarm are not covered on device yet.
 
 - `AutotunePlugin` - off the `org.json` adapters. `ATProfile.basal()/ic()/isf()` return kotlinx
   `JsonArray` directly now; they were already built with `jsonArrayOf` and only wrapped in a

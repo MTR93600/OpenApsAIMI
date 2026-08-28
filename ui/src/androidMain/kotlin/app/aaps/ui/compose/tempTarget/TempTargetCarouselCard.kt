@@ -35,6 +35,9 @@ import androidx.compose.ui.unit.dp
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TT
 import app.aaps.core.data.model.TTPreset
+import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.ui.CoreUiStrings
+import app.aaps.core.ui.compose.LocalDateUtil
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalProfileUtil
 import app.aaps.core.ui.compose.formatMinutesAsDuration
@@ -42,6 +45,8 @@ import app.aaps.core.ui.compose.icons.IcTtActivity
 import app.aaps.core.ui.compose.icons.IcTtEatingSoon
 import app.aaps.core.ui.compose.icons.IcTtHypo
 import app.aaps.core.ui.compose.icons.IcTtManual
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.ui.UiStrings
 import kotlinx.coroutines.delay
 
 /**
@@ -66,6 +71,7 @@ fun TempTargetCarouselCard(
     onExpired: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val dateUtil = LocalDateUtil.current
     val profileUtil = LocalProfileUtil.current
     val isActiveCard = activeTT != null
     val reason = preset?.reason ?: activeTT?.reason ?: TT.Reason.CUSTOM
@@ -78,7 +84,7 @@ fun TempTargetCarouselCard(
     LaunchedEffect(isActiveCard, activeTT?.timestamp, activeTT?.duration) {
         if (isActiveCard) {
             while (true) {
-                val now = System.currentTimeMillis()
+                val now = dateUtil.now()
                 val elapsed = now - activeTT.timestamp
                 val remaining = activeTT.duration - elapsed
                 if (remaining > 0) {
@@ -144,7 +150,7 @@ fun TempTargetCarouselCard(
             ) {
                 // Preset/TT name - for standalone active card show TT reason as name
                 val nameText = when {
-                    preset != null -> preset.nameRes?.let { stringResource(it) } ?: preset.name ?: ""
+                    preset != null -> preset.displayName ?: preset.name ?: ""
                     isActiveCard   -> stringResource(getTTReasonStringRes(reason))
                     else           -> ""
                 }
@@ -203,7 +209,7 @@ fun TempTargetCarouselCard(
                 if (isActiveCard) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = stringResource(app.aaps.core.ui.R.string.active).uppercase(),
+                        text = stringResource(CoreUiStrings.active).uppercase(),
                         style = MaterialTheme.typography.labelMedium,
                         color = AapsTheme.generalColors.activeInsulinText,
                         fontWeight = FontWeight.Bold
@@ -246,14 +252,14 @@ private fun getTTReasonColor(reason: TT.Reason): Color {
 /**
  * Get string resource ID for TT reason
  */
-private fun getTTReasonStringRes(reason: TT.Reason): Int {
+private fun getTTReasonStringRes(reason: TT.Reason): TextRef {
     return when (reason) {
-        TT.Reason.EATING_SOON  -> app.aaps.core.ui.R.string.eatingsoon
-        TT.Reason.ACTIVITY     -> app.aaps.core.ui.R.string.activity
-        TT.Reason.HYPOGLYCEMIA -> app.aaps.core.ui.R.string.hypo
-        TT.Reason.CUSTOM       -> app.aaps.core.ui.R.string.custom
-        TT.Reason.AUTOMATION   -> app.aaps.core.ui.R.string.automation
-        TT.Reason.WEAR         -> app.aaps.core.ui.R.string.wear
+        TT.Reason.EATING_SOON  -> CoreUiStrings.eatingsoon
+        TT.Reason.ACTIVITY     -> CoreUiStrings.activity
+        TT.Reason.HYPOGLYCEMIA -> CoreUiStrings.hypo
+        TT.Reason.CUSTOM       -> CoreUiStrings.custom
+        TT.Reason.AUTOMATION   -> CoreUiStrings.automation
+        TT.Reason.WEAR         -> CoreUiStrings.wear
     }
 }
 

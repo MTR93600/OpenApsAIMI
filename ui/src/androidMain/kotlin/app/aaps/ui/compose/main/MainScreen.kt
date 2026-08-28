@@ -36,7 +36,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -45,13 +44,15 @@ import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.interfaces.notifications.AapsNotification
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.pump.BolusProgressState
-import app.aaps.core.ui.R
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.LocalDateUtil
 import app.aaps.core.ui.compose.LocalSnackbarHostState
 import app.aaps.core.ui.compose.dialogs.OkCancelDialog
 import app.aaps.core.ui.compose.dialogs.ThreeButtonDialog
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.aboutDialog.AboutAlertDialog
 import app.aaps.ui.compose.aboutDialog.AboutDialogData
 import app.aaps.ui.compose.maintenance.ImportSource
@@ -174,7 +175,6 @@ fun MainScreen(
         drawerContent = {
             MainDrawer(
                 versionName = mainViewModel.versionName,
-                appIcon = mainViewModel.appIcon,
                 onNavigate = { request ->
                     scope.launch { drawerState.close() }
                     onDrawerClosed()
@@ -307,9 +307,9 @@ fun MainScreen(
                     // Plugin enable/disable confirmations raised from search results (same dialogs as Config Builder)
                     searchUiState.pluginSwitchConfirmation?.let { confirmation ->
                         OkCancelDialog(
-                            title = stringResource(R.string.configbuilder_switch_confirmation_title),
+                            title = stringResource(CoreUiStrings.configbuilder_switch_confirmation_title),
                             message = stringResource(
-                                R.string.configbuilder_switch_confirmation,
+                                CoreUiStrings.configbuilder_switch_confirmation,
                                 confirmation.fromName,
                                 confirmation.toName
                             ),
@@ -319,7 +319,7 @@ fun MainScreen(
                     }
                     searchUiState.hardwarePumpConfirmation?.let { confirmation ->
                         OkCancelDialog(
-                            title = stringResource(R.string.confirmation),
+                            title = stringResource(CoreUiStrings.confirmation),
                             message = confirmation.message,
                             onConfirm = onConfirmSearchHardwarePump,
                             onDismiss = onDismissSearchHardwarePump
@@ -515,7 +515,7 @@ fun MainScreen(
                 title = confirmation.title,
                 message = confirmation.message,
                 icon = confirmation.icon,
-                primaryLabel = confirmation.confirmLabel ?: stringResource(R.string.ok),
+                primaryLabel = confirmation.confirmLabel ?: stringResource(CoreUiStrings.ok),
                 onPrimary = { mainViewModel.executeConfirmableAction(confirmation.onConfirmAction) },
                 secondaryLabel = secondaryLabel,
                 onSecondary = { mainViewModel.executeConfirmableAction(secondaryAction) },
