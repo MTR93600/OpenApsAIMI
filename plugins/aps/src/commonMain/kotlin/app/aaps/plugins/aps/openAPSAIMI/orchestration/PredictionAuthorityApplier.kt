@@ -9,8 +9,6 @@ import kotlin.math.abs
 /**
  * Phase C1 — applies [DecisionPredictionAuthority] to loop runtime state after resolve.
  * Shadow mode logs deltas without mutating dose-facing fields.
- *
- * `fromAuthority` stays dump until `PredictionAuthorityView` / `AimiIntelligenceSnapshot` is T1-clean.
  */
 data class PredictionAuthorityApplyResult(
     val applied: Boolean,
@@ -29,6 +27,19 @@ object PredictionAuthorityApplier {
     // Plausible BG bounds for the authoritative eventual (same NUMERIC_FLOOR / ceiling as the PKPD curves).
     private const val EVENTUAL_MIN_MGDL = 39.0
     private const val EVENTUAL_MAX_MGDL = 401.0
+
+    fun fromAuthority(authority: DecisionPredictionAuthority): PredictionAuthorityView =
+        PredictionAuthorityView(
+            predTerminalMgdl = authority.predTerminalMgdl,
+            eventualTerminalMgdl = authority.eventualTerminalMgdl,
+            pkpdEventualMgdl = authority.pkpdEventualMgdl,
+            scenarioFloorMgdl = authority.scenarioFloorTerminalMgdl,
+            scenarioBestMgdl = authority.scenarioBestTerminalMgdl,
+            source = authority.source.name,
+            scenarioUpliftApplied = authority.scenarioUpliftApplied,
+            falseMealSuppression = authority.falseMealSuppression,
+            reason = authority.reason,
+        )
 
     fun apply(
         rT: RT,
