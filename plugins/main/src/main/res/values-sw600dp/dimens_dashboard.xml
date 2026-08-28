@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Wider tablets: allow a slightly larger hero; less vertical overlap -->
-    <dimen name="dashboard_glucose_hero_width_max">192dp</dimen>
-</resources>

@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="authorizationfailed">Yetkilendirme başarısız oldu</string>
-    <string name="identification_not_set">Tanımlama geliştirme modunda ayarlanmadı</string>
-    <string name="select">Seçin</string>
-    <string name="set">Uygula</string>
-</resources>

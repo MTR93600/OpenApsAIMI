@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="authorizationfailed">Autorisierung fehlgeschlagen</string>
-    <string name="identification_not_set">Identifikation im Dev-Modus nicht gesetzt</string>
-</resources>
