@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Local profile toolbar icons (vectors in this module) -->
-    <color name="ic_local_activate">#4CAF50</color>
-    <color name="ic_local_reset">#78909C</color>
-</resources>

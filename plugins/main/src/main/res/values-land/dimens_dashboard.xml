@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <dimen name="dashboard_graph_height_min">160dp</dimen>
-    <dimen name="dashboard_graph_height_max">240dp</dimen>
-    <!-- Simple-mode Compose: allow the graph card to use most of the column/row height in landscape. -->
-    <dimen name="dashboard_graph_height_max_simple">2000dp</dimen>
-    <dimen name="dashboard_activity_strip_height">132dp</dimen>
-</resources>

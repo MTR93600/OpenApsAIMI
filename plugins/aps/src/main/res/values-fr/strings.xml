@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="aimi_iob_surveillance_guard_title">Surveillance IOB (anti-cumul)</string>
-    <string name="aimi_iob_surveillance_guard_summary">Lorsque la glycémie est au-dessus de la cible avec un IOB déjà significatif, que la pente n\'est plus une montée rapide (plateau) et que les prévisions pointent vers le bas, les SMB sont plafonnés et la basale temporaire est légèrement favorisée pour laisser l\'insuline déjà injectée agir — sans bloquer les fortes montées ni l\'absorption repas marquée (COB/UAM). Bypass montée-repas : Δ≥2,0 ou moyenne courte≥2,5 mg/dL/5 min si contexte repas prioritaire. Constantes : InsulinStackingStance.kt. Analyses : adjustments.iob_surveillance dans Documents/AAPS/AIMI_Decisions.jsonl à chaque cycle.</string>
-    <string name="aimi_iob_surveillance_applied">Surveillance IOB : insuline active élevée et prévision à la baisse — SMB réduits ; privilégier le TBR. Laisser l\'insuline déjà présente faire effet.</string>
-</resources>

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/log_text"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:paddingVertical="2dp"
-    android:textAppearance="?attr/textAppearanceBodySmall"
-    tools:text="12:00:00 &lt;b&gt;NS&lt;/b&gt; message" />
