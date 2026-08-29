@@ -1,8 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.learning
 
-import android.content.Context
 import app.aaps.core.data.format.NumberFormat
 import app.aaps.core.data.format.NumberFormatPlatform
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.keys.BooleanKey
@@ -13,8 +14,8 @@ import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
-import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -33,9 +34,8 @@ import dev.zacsweers.metro.SingleIn
  */
 @SingleIn(AppScope::class)
 class BasalNeuralLearner @Inject constructor(
-    private val context: Context,
     private val preferences: Preferences,
-    private val storageHelper: AimiStorageHelper,
+    private val storage: AimiStorage,
     private val log: AAPSLogger
 ) {
     enum class GovernanceAction {
@@ -120,6 +120,17 @@ class BasalNeuralLearner @Inject constructor(
     private var lastGovernanceLogAt = 0L
 
     /**
+     * Guards `lastGovernanceSnapshot` and the two model fields against a background training thread
+     * publishing new weights while the loop reads them.
+     *
+     * Replaces `@Synchronized`, which is JVM only. On Android [AapsLock] delegates straight to
+     * `kotlin.synchronized`, so the generated code and the runtime behaviour there are unchanged. It
+     * is a dedicated lock and is never reassigned, which is the rule the class KDoc of [AapsLock]
+     * states.
+     */
+    private val stateLock = AapsLock()
+
+    /**
      * Neutral physiological context (backfill / when no live state is available): 4 latent + 3 mode + 3 causal = 10,
      * reusing the SMB feature schema so the two models share one physio vocabulary.
      *
@@ -141,11 +152,11 @@ class BasalNeuralLearner @Inject constructor(
     }
 
     private fun loadModels() {
-        val t3cWeights = storageHelper.getAimiFile("t3c_brain_weights.json")
-        val basalWeights = storageHelper.getAimiFile("basal_adaptive_weights.json")
+        val t3cWeights = storage.file("t3c_brain_weights.json")
+        val basalWeights = storage.file("basal_adaptive_weights.json")
 
-        neuralT3cNet = BasalMlModelStore.loadValid(t3cWeights, BasalMlTrainingCoordinator.INPUT_SIZE)
-        neuralBasalNet = BasalMlModelStore.loadValid(basalWeights, BasalMlTrainingCoordinator.INPUT_SIZE)
+        neuralT3cNet = BasalMlModelStore.loadValid(storage, t3cWeights, BasalMlSchema.INPUT_SIZE)
+        neuralBasalNet = BasalMlModelStore.loadValid(storage, basalWeights, BasalMlSchema.INPUT_SIZE)
         rejectUnhealthyNets()
     }
 
@@ -222,8 +233,7 @@ class BasalNeuralLearner @Inject constructor(
     }
 
     /** Reload weight files from disk after background training publishes new models. */
-    @Synchronized
-    fun reloadModels() {
+    fun reloadModels() = stateLock.withLock {
         loadModels()
         log.debug(
             LTag.AIMI,
@@ -233,7 +243,7 @@ class BasalNeuralLearner @Inject constructor(
 
     /**
      * Model input = 6 glucose-dynamics base features + 10 physiological-context features (mirror of the SMB schema)
-     * → [BasalMlTrainingCoordinator.INPUT_SIZE]. Falls back to neutral physio if the caller's vector is the wrong
+     * → `BasalMlTrainingCoordinator.INPUT_SIZE`. Falls back to neutral physio if the caller's vector is the wrong
      * size, so a wiring mistake degrades to context-blind rather than crashing on an input-size mismatch.
      */
     private fun modelInput(
@@ -495,8 +505,7 @@ class BasalNeuralLearner @Inject constructor(
         }
     }
 
-    @Synchronized
-    fun getGovernanceSnapshot(): GovernanceSnapshot = lastGovernanceSnapshot
+    fun getGovernanceSnapshot(): GovernanceSnapshot = stateLock.withLock { lastGovernanceSnapshot }
 
     /**
      * CSV header: legacy columns, then the physio-context columns (mirror of the SMB schema), then the
@@ -515,19 +524,19 @@ class BasalNeuralLearner @Inject constructor(
      * header → replace the header line in place. Old data rows keep their own width; the parser reads
      * by column name, so a column they do not have is read as absent (schema versioning + backfill).
      */
-    private fun ensureCsvSchema(file: File) {
-        if (!file.exists()) {
-            file.writeText(basalCsvHeader + "\n")
+    private fun ensureCsvSchema(file: AimiPath) {
+        if (!storage.exists(file)) {
+            storage.writeText(file, basalCsvHeader + "\n")
             return
         }
-        val firstLine = file.bufferedReader().use { it.readLine() } ?: ""
+        val firstLine = storage.readFirstLine(file) ?: ""
         if (firstLine != basalCsvHeader) {
-            val lines = file.readLines().toMutableList()
+            val lines = storage.readLines(file).toMutableList()
             if (lines.isEmpty()) {
-                file.writeText(basalCsvHeader + "\n")
+                storage.writeText(file, basalCsvHeader + "\n")
             } else {
                 lines[0] = basalCsvHeader
-                file.writeText(lines.joinToString("\n") + "\n")
+                storage.writeText(file, lines.joinToString("\n") + "\n")
             }
         }
     }
@@ -545,14 +554,14 @@ class BasalNeuralLearner @Inject constructor(
         bolusInsulinU: Double,
         cobGrams: Double,
     ) {
-        val file = storageHelper.getAimiFile("basal_adaptive_records.csv")
+        val file = storage.file("basal_adaptive_records.csv")
         ensureCsvSchema(file)
 
         val physio = if (physioFeatures.size == neutralPhysioFeatures.size) physioFeatures else neutralPhysioFeatures
         val row = "${aimiWallClockMs()},$bg,$eventualBg,$basal,$target,$accel,$duraMin,$duraAvg,$iob," +
             "$internalAggressivenessFactor,$internalBasalScalingFactor,${physio.joinToString(",")}," +
             "$bolusInsulinU,$cobGrams\n"
-        file.appendText(row)
+        storage.appendText(file, row)
     }
 
     private fun updateGovernanceWindow(
