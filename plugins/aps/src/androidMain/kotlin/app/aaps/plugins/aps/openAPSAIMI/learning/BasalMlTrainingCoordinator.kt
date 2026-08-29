@@ -43,7 +43,9 @@ class BasalMlTrainingCoordinator @Inject constructor(
         // 6 glucose-dynamics base features + 10 physiological-context features (mirror of the SMB schema:
         // 4 latent + 3 patient-mode + 3 causal). Keep in sync with BasalNeuralLearner.modelInput / the parser.
         const val BASE_FEATURE_COUNT = 6
-        const val INPUT_SIZE = 16
+
+        /** Alias of [BasalMlSchema.INPUT_SIZE]. Same number, kept so the ~15 uses below are untouched. */
+        const val INPUT_SIZE = BasalMlSchema.INPUT_SIZE
 
         /**
          * Index of the bg column in the feature vector built by `BasalNeuralLearner.modelInput`.
@@ -426,13 +428,6 @@ internal data class BasalMlDataset(
 }
 
 /**
- * Column names shared by the CSV writer (`BasalNeuralLearner.logRecord`) and [BasalMlDatasetParser].
- *
- * These two columns were added so a label window that also received insulin or carbs can be dropped.
- * Rows written before they existed simply do not have them; the parser reads by name and treats a
- * missing column as "unknown", never as zero.
- */
-/**
  * The one place the basal / T3C label window is written down.
  *
  * The trainer clamps every label into this window, so a model can only have LEARNED a value inside it;
@@ -459,16 +454,6 @@ internal object BasalLabelWindow {
 
     /** T3C aggressiveness label ceiling. Same value as the runtime clamp ceiling. */
     const val T3C_MAX = 2.0
-}
-
-internal object BasalCsvSchema {
-    /** Insulin delivered outside basal at this tick (SMB + manual bolus), in units. */
-    const val COL_BOLUS_U = "bolusU"
-
-    /** Carbs on board at this tick, in grams. */
-    const val COL_COB_G = "cobG"
-
-    val causalColumns: List<String> = listOf(COL_BOLUS_U, COL_COB_G)
 }
 
 internal object BasalMlDatasetParser {

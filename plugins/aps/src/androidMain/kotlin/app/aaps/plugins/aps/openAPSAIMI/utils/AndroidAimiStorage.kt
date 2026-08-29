@@ -33,6 +33,8 @@ class AndroidAimiStorage @Inject constructor(
     override fun resolve(directory: AimiPath, name: String): AimiPath =
         AimiPath(File(fileOf(directory), name).absolutePath)
 
+    override fun sibling(path: AimiPath, suffix: String): AimiPath = AimiPath(path.value + suffix)
+
     override fun exists(path: AimiPath): Boolean = runCatching { fileOf(path).exists() }.getOrDefault(false)
 
     override fun canRead(path: AimiPath): Boolean = runCatching { fileOf(path).canRead() }.getOrDefault(false)
@@ -50,6 +52,9 @@ class AndroidAimiStorage @Inject constructor(
 
     override fun readLines(path: AimiPath): List<String> =
         runCatching { fileOf(path).readLines() }.getOrDefault(emptyList())
+
+    override fun readFirstLine(path: AimiPath): String? =
+        runCatching { fileOf(path).bufferedReader().use { it.readLine() } }.getOrNull()
 
     override fun writeText(path: AimiPath, text: String): Boolean =
         runCatching { fileOf(path).writeText(text); true }.getOrDefault(false)

@@ -1,7 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
 import app.aaps.core.data.json.OrgJsonCompat.optIntCompat
-import java.io.File
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.pow
@@ -486,7 +485,15 @@ class AimiNeuralNetwork(
         return totalLoss / valInputs.size
     }
 
-    fun saveToFile(file: File) {
+    /**
+     * The saved form of this network, as JSON.
+     *
+     * Was `saveToFile(File)`. The bytes are identical - only who writes them changed, because
+     * `java.io.File` does not exist outside the JVM. Android still writes them through
+     * `AimiNeuralNetwork.saveToFile`, an extension in androidMain that calls this and hands the
+     * result to `File.writeText`, so the on-disk format and every existing weight file are unchanged.
+     */
+    fun toJsonString(): String {
         fun DoubleArray.toJsonArray(): JsonArray = buildJsonArray {
             forEach { add(it) }
         }
@@ -508,7 +515,7 @@ class AimiNeuralNetwork(
             put("inputStd", inputStd.toJsonArray())
         }
 
-        file.writeText(root.toString())
+        return root.toString()
     }
 
     /** Copy of the output bias. For tests and diagnostics only. */
@@ -529,7 +536,7 @@ class AimiNeuralNetwork(
          * Version of the saved weight file.
          *
          * Version 2 adds the trained biases, the input normalization arrays and this field itself. A file without the
-         * field, or with another value, is refused by [loadFromFile] and the caller falls back to no model. Every
+         * field, or with another value, is refused by [fromJsonString] and the caller falls back to no model. Every
          * weight file written before this version is therefore dropped on the first load after the update, on every
          * device and for every head (basal, T3C, SMB), backup files included. That is on purpose: those files hold a
          * constant model that could not be trained by the old code, and they must not survive the fix.
@@ -553,10 +560,16 @@ class AimiNeuralNetwork(
         /** Weight of the MSE part of the hybrid loss. */
         private const val MSE_WEIGHT = 1.0 - MAE_WEIGHT
 
-        fun loadFromFile(file: File): AimiNeuralNetwork? {
-            if (!file.exists()) return null
+        /**
+         * Rebuilds a network from the JSON written by [toJsonString], or `null` when it cannot.
+         *
+         * Was `loadFromFile(File)`. The "file missing" case moved out to the caller: Android's
+         * `AimiNeuralNetwork.loadFromFile` extension still checks `file.exists()` first and answers
+         * `null` without calling this, so the behaviour a caller sees is unchanged.
+         */
+        fun fromJsonString(text: String): AimiNeuralNetwork? {
             try {
-                val root = Json.parseToJsonElement(file.readText()).jsonObject
+                val root = Json.parseToJsonElement(text).jsonObject
                 if (root.optIntCompat("schemaVersion", 0) != SCHEMA_VERSION) return null
                 val inputSize = root.getValue("inputSize").jsonPrimitive.int
                 val hiddenSize = root.getValue("hiddenSize").jsonPrimitive.int

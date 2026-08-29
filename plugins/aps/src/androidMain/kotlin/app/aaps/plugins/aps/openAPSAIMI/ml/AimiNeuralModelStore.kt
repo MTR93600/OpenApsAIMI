@@ -1,6 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.ml
 
 import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
+import app.aaps.plugins.aps.openAPSAIMI.loadFromFile
+import app.aaps.plugins.aps.openAPSAIMI.saveToFile
 import java.io.File
 
 /**

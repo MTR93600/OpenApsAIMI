@@ -43,6 +43,15 @@ interface AimiStorage {
     /** [name] inside [directory], for a directory that did not come from [directory]. */
     fun resolve(directory: AimiPath, name: String): AimiPath
 
+    /**
+     * [path] with [suffix] added to its name - `weights.json` + `".bak"` gives `weights.json.bak`,
+     * in the same directory.
+     *
+     * It exists so shared code can name a backup file without pulling an [AimiPath] apart, which the
+     * path's own contract forbids.
+     */
+    fun sibling(path: AimiPath, suffix: String): AimiPath
+
     fun exists(path: AimiPath): Boolean
 
     fun canRead(path: AimiPath): Boolean
@@ -61,6 +70,16 @@ interface AimiStorage {
 
     /** Lines, or an empty list when the file is missing or unreadable. */
     fun readLines(path: AimiPath): List<String>
+
+    /**
+     * The first line of [path], or `null` when the file is missing, empty or unreadable.
+     *
+     * Separate from [readLines] on purpose. The CSV schema check runs on every loop tick against a
+     * file that gains one row every five minutes and is never truncated, so reading the whole file to
+     * look at its header would grow without limit. This reads one line, which is what the code did
+     * before the port.
+     */
+    fun readFirstLine(path: AimiPath): String?
 
     /** Replaces the content. `false` on failure. */
     fun writeText(path: AimiPath, text: String): Boolean
