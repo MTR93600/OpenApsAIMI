@@ -1,7 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
-import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -103,11 +104,18 @@ object AuditorJsonlExport {
             put("advisory_only", true)
         }
 
-    fun appendLine(decisionsFile: File, jsonLine: String) {
-        if (!decisionsFile.exists()) {
-            decisionsFile.parentFile?.mkdirs()
-            decisionsFile.createNewFile()
+    /**
+     * Adds one JSONL record to [decisionsFile].
+     *
+     * Same three steps as before the port: create the parent directory and the file when it is not
+     * there, then append. [AimiStorage] answers `false` instead of throwing, so a full disk drops a
+     * journal line rather than a dosing tick.
+     */
+    fun appendLine(storage: AimiStorage, decisionsFile: AimiPath, jsonLine: String) {
+        if (!storage.exists(decisionsFile)) {
+            storage.createParentDirectories(decisionsFile)
+            storage.createFile(decisionsFile)
         }
-        decisionsFile.appendText("$jsonLine\n")
+        storage.appendText(decisionsFile, "$jsonLine\n")
     }
 }

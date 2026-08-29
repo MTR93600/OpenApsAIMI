@@ -1,13 +1,11 @@
 package app.aaps.plugins.aps.openAPSAIMI.wcycle
 
-import android.content.Context
-import android.os.Environment
 import app.aaps.core.data.json.OrgJsonCompat.optDoubleCompat
 import app.aaps.core.data.json.OrgJsonCompat.optJsonArrayCompat
 import app.aaps.core.data.json.OrgJsonCompat.optStringCompat
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
-import java.io.File
-import java.util.EnumMap
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import kotlin.concurrent.Volatile
 import kotlin.math.max
 import kotlin.math.min
 import kotlinx.serialization.json.Json
@@ -18,22 +16,16 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 
 class WCycleLearner(
-    private val ctx: Context, // <-- on injecte Context pour persister sur disque
-    private val storageHelper: AimiStorageHelper? = null,
+    private val storage: AimiStorage,
     private val alpha: Double = 0.10,
     private val clampMin: Double = 0.70,
     private val clampMax: Double = 1.30
 ) {
-    private val learnedBasal = EnumMap<CyclePhase, Double>(CyclePhase::class.java)
-    private val learnedSmb = EnumMap<CyclePhase, Double>(CyclePhase::class.java)
+    private val learnedBasal = mutableMapOf<CyclePhase, Double>()
+    private val learnedSmb = mutableMapOf<CyclePhase, Double>()
     @Volatile private var initialized = false
 
-    // Use AIMI storage helper when available so learning survives missing shared-storage access.
-    private val dir by lazy {
-        storageHelper?.getAimiDirectory()
-            ?: File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
-    }
-    private val learnedFile by lazy { File(dir, "oapsaimi_wcycle_learned.json") }
+    private val learnedFile: AimiPath by lazy { storage.file("oapsaimi_wcycle_learned.json") }
 
     init {
         CyclePhase.entries.forEach {
@@ -45,10 +37,10 @@ class WCycleLearner(
     fun initFromDiskIfNeeded() {
         if (initialized) return
         runCatching {
-            if (!learnedFile.exists()) { initialized = true; return }
-            val txt = learnedFile.readText()
+            if (!storage.exists(learnedFile)) { initialized = true; return }
+            val txt = storage.readText(learnedFile) ?: run { initialized = true; return }
             val json = Json.parseToJsonElement(txt).jsonObject
-            fun loadArr(key: String, target: EnumMap<CyclePhase, Double>) {
+            fun loadArr(key: String, target: MutableMap<CyclePhase, Double>) {
                 val arr = json.optJsonArrayCompat(key) ?: return
                 for (i in 0 until arr.size) {
                     val o = arr[i].jsonObject
@@ -62,13 +54,11 @@ class WCycleLearner(
         }.onFailure { /* ignore */ }
         initialized = true
     }
-    fun provideWCycleLearner(context: Context): WCycleLearner =
-        WCycleLearner(ctx = context, storageHelper = storageHelper)
 
     fun persistToDisk() {
         runCatching {
-            dir.mkdirs()
-            fun dump(map: EnumMap<CyclePhase, Double>) = buildJsonArray {
+            storage.createDirectories(storage.directory())
+            fun dump(map: Map<CyclePhase, Double>) = buildJsonArray {
                 CyclePhase.entries.forEach { ph ->
                     add(
                         buildJsonObject {
@@ -82,7 +72,7 @@ class WCycleLearner(
                 put("basal", dump(learnedBasal))
                 put("smb", dump(learnedSmb))
             }
-            learnedFile.writeText(obj.toString())
+            storage.writeText(learnedFile, obj.toString())
         }
     }
 
@@ -108,11 +98,11 @@ class WCycleLearner(
     }
 
     /** Offline: rejoue un apprentissage à partir du CSV wcycle */
-    fun retrainFromCsv(csv: File, maxRows: Int = Int.MAX_VALUE) {
+    fun retrainFromCsv(csv: AimiPath, maxRows: Int = Int.MAX_VALUE) {
         initFromDiskIfNeeded()
-        if (!csv.exists() || !csv.canRead()) return
+        if (!storage.exists(csv) || !storage.canRead(csv)) return
 
-        val lines = csv.readLines()
+        val lines = storage.readLines(csv)
         if (lines.isEmpty()) return
         val header = lines.first().split(',').map { it.trim().lowercase() }
 
