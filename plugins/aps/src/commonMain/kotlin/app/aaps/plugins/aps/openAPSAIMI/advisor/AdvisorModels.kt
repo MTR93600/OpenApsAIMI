@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor
 
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefAnalysisReport
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain
@@ -76,11 +77,11 @@ interface AdvisorActionStrategy {
 
 /**
  * A single recommendation from the advisor.
- * Uses Resource IDs for localization.
+ * Uses [TextRef] for localization.
  */
 data class AimiRecommendation(
-    val titleResId: Int,
-    val descriptionResId: Int,
+    val title: TextRef,
+    val description: TextRef,
     val priority: AimiPriority,
     val domain: AimiDomain,
     val action: AimiAction? = null,

@@ -1,12 +1,14 @@
 package app.aaps.plugins.aps.openAPSAIMI.basal
 
-import android.content.Context
 import app.aaps.core.interfaces.aps.CurrentTemp
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.RT
-import app.aaps.plugins.aps.R
+import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.AIMIAdaptiveBasal
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.model.*
 import app.aaps.plugins.aps.openAPSAIMI.safety.SafetyDecision
 import dev.zacsweers.metro.Inject
@@ -18,7 +20,7 @@ import kotlin.math.min
 
 @SingleIn(AppScope::class)
 class BasalDecisionEngine @Inject constructor(
-    private val context: Context,
+    private val rh: TextResolver,
     private val aimiAdaptiveBasal: AIMIAdaptiveBasal,
     private val basalPlanner: BasalPlanner
 ) {
@@ -128,7 +130,7 @@ class BasalDecisionEngine @Inject constructor(
                 r2 = gs?.corrSqu,
                 parabolaMinutes = gs?.parabolaMinutes,
                 combinedDelta = input.featuresCombinedDelta ?: input.combinedDelta,
-                epochMillis = System.currentTimeMillis()
+                epochMillis = aimiWallClockMs()
             )
 
             // Capacités pompe passées via Input (dynamique)
@@ -166,7 +168,7 @@ class BasalDecisionEngine @Inject constructor(
                 ),
                 tdd24hU = input.tdd7Days,   // ou tdd 24h réel si dispo
                 eventualBg = input.eventualBg,
-                nowEpochMillis = System.currentTimeMillis()
+                nowEpochMillis = aimiWallClockMs()
             )
 
             basalPlanner.plan(ctx)?.let { plan ->
@@ -269,7 +271,7 @@ class BasalDecisionEngine @Inject constructor(
 
             chosenRate = input.forcedBasal
             overrideSafety = true
-            rT.reason.append(context.getString(R.string.reason_early_meal, input.forcedBasal))
+            rT.reason.append(rh.gs(ApsStrings.reason_early_meal, input.forcedBasal))
             if (input.forcedBasal > 0) {
                  rT.reason.append(" [AD_EARLY_TBR_TRIGGER rate=${input.forcedBasal}]")
             }
@@ -278,9 +280,9 @@ class BasalDecisionEngine @Inject constructor(
                 // Detector fired but a safety guard suppressed the forced TBR — surface which one for field triage.
                 rT.reason.append(
                     " [AD_EARLY_TBR_BLOCKED" +
-                        (if (!forcedTbrIobHeadroomOk) " iob=${"%.1f".format(input.iob)}>=${"%.1f".format(FORCED_TBR_MAX_IOB_U)}" else "") +
+                        (if (!forcedTbrIobHeadroomOk) " iob=${aimiFmt1(input.iob)}>=${aimiFmt1(FORCED_TBR_MAX_IOB_U)}" else "") +
                         (if (!forcedTbrNotDroppingHypo) " evBG=${input.eventualBg.toInt()}<=lgs+${FORCED_TBR_HYPO_MARGIN_MGDL.toInt()}" else "") +
-                        (if (!forcedTbrNightOk) " nightDelta=${"%.1f".format(input.delta)}<${"%.1f".format(FORCED_TBR_NIGHT_MIN_DELTA)}" else "") +
+                        (if (!forcedTbrNightOk) " nightDelta=${aimiFmt1(input.delta)}<${aimiFmt1(FORCED_TBR_NIGHT_MIN_DELTA)}" else "") +
                         "]"
                 )
             }
@@ -305,7 +307,7 @@ class BasalDecisionEngine @Inject constructor(
                 if (input.predictedBg < 65) {
                     chosenRate = 0.0
                     overrideSafety = false
-                    rT.reason.append(context.getString(R.string.safety_cut_tbr, input.maxIob))
+                    rT.reason.append(rh.gs(ApsStrings.safety_cut_tbr, input.maxIob))
                 } else {
                     chosenRate = input.profileCurrentBasal * 0.25
                     overrideSafety = false
@@ -320,7 +322,7 @@ class BasalDecisionEngine @Inject constructor(
                 rT.reason.append("HighIOB: ${if(safeFloor>0) "50%" else "0% (dropping)"} basal")
             } else if (input.iob > input.maxIob && input.allowMealHighIob) {
                 chosenRate = max(input.profileCurrentBasal, input.currentTemp.rate)
-                rT.reason.append(context.getString(R.string.reason_meal_hold_profile_basal,
+                rT.reason.append(rh.gs(ApsStrings.reason_meal_hold_profile_basal,
                                                    helpers.round(input.iob, 2), helpers.round(input.maxIob, 2)))
             }
         }
@@ -353,7 +355,7 @@ class BasalDecisionEngine @Inject constructor(
                              rT.reason.append("BG 80-90 fall safe: 20%")
                         } else {
                              chosenRate = 0.0
-                             rT.reason.append(context.getString(R.string.bg_80_90_fall))
+                             rT.reason.append(rh.gs(ApsStrings.bg_80_90_fall))
                         }
                     } else {
                         chosenRate = input.profileCurrentBasal * 0.25
@@ -365,7 +367,7 @@ class BasalDecisionEngine @Inject constructor(
                     input.combinedDelta in -1.0..2.0 && !input.sportTime &&
                     input.bgAcceleration > 0.0 -> {
                     chosenRate = input.profileCurrentBasal * 0.2
-                    rT.reason.append(context.getString(R.string.bg_80_90_stable))
+                    rT.reason.append(rh.gs(ApsStrings.bg_80_90_stable))
                 }
                 input.bg in 90.0..100.0 &&
                     input.slopeFromMinDeviation <= 0.3 && input.iob > 0.1 && !input.sportTime &&
@@ -377,7 +379,7 @@ class BasalDecisionEngine @Inject constructor(
                     input.slopeFromMinDeviation >= 0.3 && input.combinedDelta in -1.0..2.0 && !input.sportTime &&
                     input.bgAcceleration > 0.0 -> {
                     chosenRate = input.profileCurrentBasal * 0.5
-                    rT.reason.append(context.getString(R.string.bg_90_100_slight_gain))
+                    rT.reason.append(rh.gs(ApsStrings.bg_90_100_slight_gain))
                 }
             }
         }
@@ -389,13 +391,13 @@ class BasalDecisionEngine @Inject constructor(
                 input.bgAcceleration > 1.0
             ) {
                 chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, input.combinedDelta)
-                rT.reason.append(context.getString(R.string.slow_rise_proportional_adjustment))
+                rT.reason.append(rh.gs(ApsStrings.slow_rise_proportional_adjustment))
             } else if (input.eventualBg > 110 && !input.sportTime && input.bg > 150 &&
                 input.combinedDelta in -2.0..15.0 &&
                 input.bgAcceleration > 0.0
             ) {
                 chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, basalAdjustmentFactor)
-                rT.reason.append(context.getString(R.string.eventual_bg_over_110_hyper_factor))
+                rT.reason.append(rh.gs(ApsStrings.eventual_bg_over_110_hyper_factor))
             }
         }
 
@@ -406,13 +408,13 @@ class BasalDecisionEngine @Inject constructor(
                 input.bgAcceleration > 0.0
             ) {
                 chosenRate = input.profileCurrentBasal * 1.5
-                rT.reason.append(context.getString(R.string.calm_meal_and_timing))
+                rT.reason.append(rh.gs(ApsStrings.calm_meal_and_timing))
             } else if (input.timenow > input.sixAmHour && input.recentSteps5Minutes > 100) {
                 chosenRate = input.profileCurrentBasal * 0.5
                 rT.reason.append("Morning activity: 50%")
             } else if (input.timenow <= input.sixAmHour && input.delta > 0 && input.bgAcceleration > 0.0) {
                 chosenRate = input.profileCurrentBasal
-                rT.reason.append(context.getString(R.string.morning_rise_profile_basal))
+                rT.reason.append(rh.gs(ApsStrings.morning_rise_profile_basal))
             }
         }
 
@@ -439,8 +441,8 @@ class BasalDecisionEngine @Inject constructor(
                 val capped = min(candidate, input.profileCurrentBasal * 2.0)
                 chosenRate = capped
                 rT.reason.append(
-                    context.getString(
-                        R.string.reason_strong_rise_basal,
+                    rh.gs(
+                        ApsStrings.reason_strong_rise_basal,
                         helpers.round(strongestRise, 1),
                         helpers.round(multiplier, 2)
                     )
@@ -461,7 +463,7 @@ class BasalDecisionEngine @Inject constructor(
                 if (!active) continue
                 if (runtimeMin in 0..30) {
                     chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, 10.0)
-                    rT.reason.append(context.getString(R.string.meal_snack_under_30m_basal_10))
+                    rT.reason.append(rh.gs(ApsStrings.meal_snack_under_30m_basal_10))
                     rT.reason.append(" [MODE_TBR_TRIGGER rate=${chosenRate} reason=ModeActiveFirst30min]")
                     break
                 } else if (runtimeMin > 30 && input.delta > 0) {
@@ -471,7 +473,7 @@ class BasalDecisionEngine @Inject constructor(
                     val boost = max(1.0, sensitivityRatio)
                     val multiplier = input.delta * boost
                     chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, multiplier)
-                    rT.reason.append(context.getString(R.string.meal_snack_30_60m_rising_basal_delta))
+                    rT.reason.append(rh.gs(ApsStrings.meal_snack_30_60m_rising_basal_delta))
                     if (boost > 1.05) {
                         rT.reason.append(" (boost x${helpers.round(boost, 2)} due to PKPD)")
                     }
@@ -483,7 +485,7 @@ class BasalDecisionEngine @Inject constructor(
                     if (input.bg > input.targetBg && input.predictedBg > 80) {
                         val floorFactor = if (input.delta < -2) 0.5 else 0.8
                         chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, floorFactor)
-                        rT.reason.append(context.getString(R.string.meal_dinner_maintain, floorFactor))
+                        rT.reason.append(rh.gs(ApsStrings.meal_dinner_maintain, floorFactor))
                         break
                     }
                 }
@@ -505,7 +507,7 @@ class BasalDecisionEngine @Inject constructor(
                 val candidate = input.profileCurrentBasal * (1.0 + boostFrac)
                 val boosted = max(candidate, input.basalEstimate)
                 chosenRate = boosted
-                rT.reason.append(context.getString(R.string.aimi_plateau_high_boost))
+                rT.reason.append(rh.gs(ApsStrings.aimi_plateau_high_boost))
             }
         }
 
@@ -513,11 +515,11 @@ class BasalDecisionEngine @Inject constructor(
             when {
                 input.eventualBg > 120 && input.delta > 3 -> {
                     chosenRate = helpers.calculateBasalRate(input.basalEstimate, input.profileCurrentBasal, basalAdjustmentFactor)
-                    rT.reason.append(context.getString(R.string.eventual_bg_over_180_hyper_basalaimi))
+                    rT.reason.append(rh.gs(ApsStrings.eventual_bg_over_180_hyper_basalaimi))
                 }
                 input.bg > 150 && input.delta in -5.0..1.0 -> {
                     chosenRate = input.profileCurrentBasal * basalAdjustmentFactor
-                    rT.reason.append(context.getString(R.string.bg_over_180_stable_basal_factor))
+                    rT.reason.append(rh.gs(ApsStrings.bg_over_180_stable_basal_factor))
                 }
             }
         }
@@ -526,33 +528,33 @@ class BasalDecisionEngine @Inject constructor(
             when {
                 input.bg in 140.0..169.0 && input.delta > 0 -> {
                     chosenRate = input.profileCurrentBasal
-                    rT.reason.append(context.getString(R.string.honeymoon_bg_140_169_profile))
+                    rT.reason.append(rh.gs(ApsStrings.honeymoon_bg_140_169_profile))
                 }
                 input.bg > 170 && input.delta > 0 -> {
                     chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, basalAdjustmentFactor)
-                    rT.reason.append(context.getString(R.string.honeymoon_bg_over_170_adjustment))
+                    rT.reason.append(rh.gs(ApsStrings.honeymoon_bg_over_170_adjustment))
                 }
                 input.combinedDelta > 2 && input.bg in 90.0..119.0 -> {
                     chosenRate = input.profileCurrentBasal
-                    rT.reason.append(context.getString(R.string.honeymoon_delta_over_2_bg_90_119_profile))
+                    rT.reason.append(rh.gs(ApsStrings.honeymoon_delta_over_2_bg_90_119_profile))
                 }
                 input.combinedDelta > 0 && input.bg > 110 && input.eventualBg > 120 && input.bg < 160 -> {
                     chosenRate = input.profileCurrentBasal * basalAdjustmentFactor
-                    rT.reason.append(context.getString(R.string.honeymoon_mixed_correction))
+                    rT.reason.append(rh.gs(ApsStrings.honeymoon_mixed_correction))
                 }
                 input.mealData.slopeFromMaxDeviation > 0 && input.mealData.slopeFromMinDeviation > 0 && input.bg > 110 && input.combinedDelta > 0 -> {
                     chosenRate = input.profileCurrentBasal * basalAdjustmentFactor
-                    rT.reason.append(context.getString(R.string.honeymoon_plus_meal_detection))
+                    rT.reason.append(rh.gs(ApsStrings.honeymoon_plus_meal_detection))
                 }
                 input.mealData.slopeFromMaxDeviation in 0.0..0.2 && input.mealData.slopeFromMinDeviation in 0.0..0.5 &&
                     input.bg in 120.0..150.0 && input.delta > 0 -> {
                     chosenRate = input.profileCurrentBasal * basalAdjustmentFactor
-                    rT.reason.append(context.getString(R.string.honeymoon_small_slope))
+                    rT.reason.append(rh.gs(ApsStrings.honeymoon_small_slope))
                 }
                 input.mealData.slopeFromMaxDeviation > 0 && input.mealData.slopeFromMinDeviation > 0 &&
                     input.bg in 100.0..120.0 && input.delta > 0 -> {
                     chosenRate = input.profileCurrentBasal * basalAdjustmentFactor
-                    rT.reason.append(context.getString(R.string.honeymoon_meal_slope))
+                    rT.reason.append(rh.gs(ApsStrings.honeymoon_meal_slope))
                 }
             }
         }
