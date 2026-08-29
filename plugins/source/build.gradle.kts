@@ -9,9 +9,19 @@ plugins {
     alias(libs.plugins.metro)
 }
 
-// No `metro { interop { includeDagger() } }` here, unlike :plugins:aps. Nothing in this module carries
-// a javax annotation any more - the Dagger processors and the last 18 `javax.inject.Inject` went in the
-// same change that made it multiplatform.
+metro {
+    interop {
+        // Upstream dropped this block, because upstream's :plugins:source carries no javax annotation
+        // any more. That is not true on this fork: the Dexcom ONE+ and Libre 3 sources added here are
+        // still on javax, 14 files of them, including DexcomOnePlusWarmupBasalGuard's @Inject
+        // constructor and CgmDriverLogActivity's @Inject fields. Without interop Metro does not process
+        // those declarations and :app fails to build them with UnprocessedUpstreamDeclaration and
+        // MissingBinding<MembersInjector<CgmDriverLogActivity>>.
+        //
+        // Remove this block when those 14 files move to dev.zacsweers.metro annotations, not before.
+        includeDagger()
+    }
+}
 
 kotlin {
     android {

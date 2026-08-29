@@ -11,6 +11,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.runBlocking
 
 /**
  * Implementation of Time In Range (TIR) statistics calculator.
