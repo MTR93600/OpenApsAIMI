@@ -1,14 +1,23 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.core.data.json.OrgJsonCompat.optDoubleCompat
+import app.aaps.core.data.json.OrgJsonCompat.optIntCompat
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlin.concurrent.Volatile
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
+import kotlin.time.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 
-/**
- * In-memory circadian meal prior. File persist (`AimiStorageHelper` / json) stays dump until a host lot.
- * With zero samples this matches dump `priorForHour` before the first load.
- */
 internal data class CircadianMealProfileSnapshot(
     val breakfastCenterHour: Double = 8.25,
     val breakfastSamples: Int = 0,
@@ -20,12 +29,78 @@ internal data class CircadianMealProfileSnapshot(
     val snackSamples: Int = 0,
     val dawnCenterHour: Double = 6.25,
     val dawnSamples: Int = 0,
-)
+) {
+    fun toJsonObject(): JsonObject = buildJsonObject {
+        put("breakfast_center_hour", breakfastCenterHour)
+        put("breakfast_samples", breakfastSamples)
+        put("lunch_center_hour", lunchCenterHour)
+        put("lunch_samples", lunchSamples)
+        put("dinner_center_hour", dinnerCenterHour)
+        put("dinner_samples", dinnerSamples)
+        put("snack_center_hour", snackCenterHour)
+        put("snack_samples", snackSamples)
+        put("dawn_center_hour", dawnCenterHour)
+        put("dawn_samples", dawnSamples)
+    }
+
+    companion object {
+        fun fromJsonObject(json: JsonObject): CircadianMealProfileSnapshot = CircadianMealProfileSnapshot(
+            breakfastCenterHour = json.optDoubleCompat("breakfast_center_hour", 8.25),
+            breakfastSamples = json.optIntCompat("breakfast_samples", 0),
+            lunchCenterHour = json.optDoubleCompat("lunch_center_hour", 12.50),
+            lunchSamples = json.optIntCompat("lunch_samples", 0),
+            dinnerCenterHour = json.optDoubleCompat("dinner_center_hour", 19.00),
+            dinnerSamples = json.optIntCompat("dinner_samples", 0),
+            snackCenterHour = json.optDoubleCompat("snack_center_hour", 16.00),
+            snackSamples = json.optIntCompat("snack_samples", 0),
+            dawnCenterHour = json.optDoubleCompat("dawn_center_hour", 6.25),
+            dawnSamples = json.optIntCompat("dawn_samples", 0),
+        )
+    }
+}
 
 internal object CircadianMealProfileStore {
+    private const val FILE_NAME = "circadian_meal_profile.json"
+    private const val MEAL_DEDUPE_WINDOW_MS = 90L * 60L * 1000L
+    private const val DAWN_DEDUPE_WINDOW_MS = 60L * 60L * 1000L
+
+    private enum class Slot {
+        BREAKFAST,
+        LUNCH,
+        DINNER,
+        SNACK,
+        DAWN,
+    }
+
+    /** Guards [loaded] and [profile] during the first load. Replaces `synchronized(this)`. */
+    private val lock = AapsLock()
+
+    @Volatile
+    private var loaded = false
 
     @Volatile
     private var profile = CircadianMealProfileSnapshot()
+
+    private val lastObservedBySlot = mutableMapOf<Slot, Long>()
+
+    fun ensureLoaded(storage: AimiStorage) {
+        if (loaded) return
+        lock.withLock {
+            if (loaded) return
+            val path = storage.file(FILE_NAME)
+            if (storage.exists(path) && storage.canRead(path)) {
+                val content = storage.readText(path)
+                if (content != null && content.isNotEmpty()) {
+                    runCatching {
+                        profile = CircadianMealProfileSnapshot.fromJsonObject(
+                            Json.parseToJsonElement(content).jsonObject
+                        )
+                    }
+                }
+            }
+            loaded = true
+        }
+    }
 
     fun priorForHour(hourOfDay: Int): Double {
         val base = defaultPriorForHour(hourOfDay)
@@ -57,6 +132,43 @@ internal object CircadianMealProfileStore {
             .coerceIn(0.10, 0.95)
     }
 
+    fun observeMealWindow(storage: AimiStorage, slotLabel: String, eventTimeMs: Long) {
+        ensureLoaded(storage)
+        val eventHour = hourOfDayFrom(eventTimeMs)
+        val slot = when (slotLabel.lowercase()) {
+            "bfast", "breakfast" -> Slot.BREAKFAST
+            "lunch" -> Slot.LUNCH
+            "dinner" -> Slot.DINNER
+            "snack" -> Slot.SNACK
+            "highcarb", "meal" -> inferMealSlot(eventHour)
+            else -> inferMealSlot(eventHour)
+        }
+        observeSlot(storage, slot, eventTimeMs, MEAL_DEDUPE_WINDOW_MS)
+    }
+
+    fun observeEstimatedMeal(storage: AimiStorage, eventTimeMs: Long) {
+        ensureLoaded(storage)
+        observeSlot(
+            storage = storage,
+            slot = inferMealSlot(hourOfDayFrom(eventTimeMs)),
+            eventTimeMs = eventTimeMs,
+            dedupeWindowMs = MEAL_DEDUPE_WINDOW_MS,
+        )
+    }
+
+    fun observeDawnPhase(
+        storage: AimiStorage,
+        eventTimeMs: Long,
+        phaseOutput: PhysiologicalPhaseClassifier.Output?,
+        mealSignalsActive: Boolean,
+    ) {
+        ensureLoaded(storage)
+        if (mealSignalsActive) return
+        val phase = phaseOutput?.phase ?: return
+        if (!(phase.isHormonalRisk || phase.isEndogenousRisk)) return
+        observeSlot(storage, Slot.DAWN, eventTimeMs, DAWN_DEDUPE_WINDOW_MS)
+    }
+
     internal fun defaultPriorForHour(hourOfDay: Int): Double = when (hourOfDay) {
         in 5..8 -> 0.22
         in 9..10 -> 0.42
@@ -70,11 +182,64 @@ internal object CircadianMealProfileStore {
 
     internal fun replaceProfileForTests(snapshot: CircadianMealProfileSnapshot) {
         profile = snapshot
+        loaded = true
+        lastObservedBySlot.clear()
     }
 
     internal fun resetForTests() {
         profile = CircadianMealProfileSnapshot()
+        loaded = false
+        lastObservedBySlot.clear()
     }
+
+    private fun observeSlot(
+        storage: AimiStorage,
+        slot: Slot,
+        eventTimeMs: Long,
+        dedupeWindowMs: Long,
+    ) {
+        val lastObserved = lastObservedBySlot[slot]
+        if (lastObserved != null && abs(eventTimeMs - lastObserved) < dedupeWindowMs) return
+        val hour = hourOfDayFrom(eventTimeMs)
+        profile = when (slot) {
+            Slot.BREAKFAST -> profile.copy(
+                breakfastCenterHour = blendHour(profile.breakfastCenterHour, profile.breakfastSamples, hour),
+                breakfastSamples = incrementSamples(profile.breakfastSamples),
+            )
+            Slot.LUNCH -> profile.copy(
+                lunchCenterHour = blendHour(profile.lunchCenterHour, profile.lunchSamples, hour),
+                lunchSamples = incrementSamples(profile.lunchSamples),
+            )
+            Slot.DINNER -> profile.copy(
+                dinnerCenterHour = blendHour(profile.dinnerCenterHour, profile.dinnerSamples, hour),
+                dinnerSamples = incrementSamples(profile.dinnerSamples),
+            )
+            Slot.SNACK -> profile.copy(
+                snackCenterHour = blendHour(profile.snackCenterHour, profile.snackSamples, hour),
+                snackSamples = incrementSamples(profile.snackSamples),
+            )
+            Slot.DAWN -> profile.copy(
+                dawnCenterHour = blendHour(profile.dawnCenterHour, profile.dawnSamples, hour),
+                dawnSamples = incrementSamples(profile.dawnSamples),
+            )
+        }
+        lastObservedBySlot[slot] = eventTimeMs
+        persist(storage)
+    }
+
+    private fun persist(storage: AimiStorage) {
+        val path = storage.file(FILE_NAME)
+        storage.writeText(path, profile.toJsonObject().toString())
+    }
+
+    private fun inferMealSlot(hour: Double): Slot = when {
+        hour in 4.0..10.5 -> Slot.BREAKFAST
+        hour in 10.5..15.5 -> Slot.LUNCH
+        hour in 17.0..22.5 -> Slot.DINNER
+        else -> Slot.SNACK
+    }
+
+    private fun incrementSamples(current: Int): Int = (current + 1).coerceAtMost(30)
 
     private fun slotPrior(
         hour: Double,
@@ -96,9 +261,32 @@ internal object CircadianMealProfileStore {
         return (peak * confidence * gaussian).coerceIn(0.0, 1.0)
     }
 
+    private fun blendHour(currentCenter: Double, samples: Int, observedHour: Double): Double {
+        if (samples <= 0) return normalizeHour(observedHour)
+        val alpha = 1.0 / (samples.coerceAtMost(12) + 1.0)
+        val delta = shortestHourDelta(currentCenter, observedHour)
+        return normalizeHour(currentCenter + delta * alpha)
+    }
+
+    private fun hourOfDayFrom(timeMs: Long): Double {
+        val localDateTime = Instant.fromEpochMilliseconds(timeMs)
+            .toLocalDateTime(TimeZone.currentSystemDefault())
+        val localHour = localDateTime.hour + (localDateTime.minute / 60.0)
+        return normalizeHour(localHour)
+    }
+
     private fun circularDistance(a: Double, b: Double): Double {
         val raw = abs(normalizeHour(a) - normalizeHour(b))
         return minOf(raw, 24.0 - raw)
+    }
+
+    private fun shortestHourDelta(from: Double, to: Double): Double {
+        val delta = normalizeHour(to) - normalizeHour(from)
+        return when {
+            delta > 12.0 -> delta - 24.0
+            delta < -12.0 -> delta + 24.0
+            else -> delta
+        }
     }
 
     private fun normalizeHour(value: Double): Double {

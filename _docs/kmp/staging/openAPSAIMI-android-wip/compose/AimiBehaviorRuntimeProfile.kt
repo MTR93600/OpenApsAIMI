@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisTuning
 
 internal data class AimiBehaviorRuntimeProfile(
     val protectionLevel: Int,
@@ -8,7 +9,7 @@ internal data class AimiBehaviorRuntimeProfile(
     val stabilityLevel: Int,
     val physioLevel: Int,
     val autonomyMode: AimiAutonomyMode,
-) {
+) : UamHypothesisTuning {
     val protectionBias: Double
         get() = protectionLevel.coerceIn(0, 4) / 4.0
 
@@ -33,35 +34,35 @@ internal data class AimiBehaviorRuntimeProfile(
     val assertiveMealAuthority: Boolean
         get() = mealCaptureLevel >= 3 && autonomyMode.authorityRank() >= AimiAutonomyMode.AssistedApplication.authorityRank()
 
-    fun mealSuppressionCap(): Double =
+    override fun mealSuppressionCap(): Double =
         when {
             cautiousFalseMealGuard -> 0.24
             assertiveMealAuthority -> 0.42
             else -> 0.32
         }
 
-    fun competingNonMealDominanceMargin(): Double =
+    override fun competingNonMealDominanceMargin(): Double =
         when {
             cautiousFalseMealGuard -> 0.06
             assertiveMealAuthority -> 0.14
             else -> 0.10
         }
 
-    fun competingNonMealConfidenceFloor(): Double =
+    override fun competingNonMealConfidenceFloor(): Double =
         when {
             cautiousFalseMealGuard -> 0.52
             assertiveMealAuthority -> 0.68
             else -> 0.60
         }
 
-    fun suppressMealDecisionMargin(): Double =
+    override fun suppressMealDecisionMargin(): Double =
         when {
             cautiousFalseMealGuard -> 0.04
             assertiveMealAuthority -> 0.12
             else -> 0.08
         }
 
-    fun suppressMealDecisionFloor(): Double =
+    override fun suppressMealDecisionFloor(): Double =
         when {
             cautiousFalseMealGuard -> 0.54
             assertiveMealAuthority -> 0.66
