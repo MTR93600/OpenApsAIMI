@@ -1,5 +1,10 @@
 # AIMI port - verification against the `kmp-module-flip` checklist
 
+> **Note, 2026-09-02.** These checklist results were true at `c174fa6f69`. The two findings that
+> matter - the plugin is not registered, and the port is not wired into the app - are still true.
+> Current state is in [AIMI_PORT_STATE.md](AIMI_PORT_STATE.md).
+
+
 Run 2026-08-29 on `kmp-aimi-migration-study` at `c174fa6f69` (just after the `kmp` merge).
 Checklist source: `.claude/skills/kmp-module-flip/SKILL.md`, which arrived with that merge.
 Scope: `:plugins:aps` (which hosts the ported AIMI code) and the five `:plugins:aimi-*` modules.

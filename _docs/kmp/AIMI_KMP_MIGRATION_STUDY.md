@@ -13,6 +13,33 @@ Branch: `kmp-aimi-migration-study`, cut from `kmp` at `4957c26eb8`.
 Written 2026-08-25. All numbers were measured on this machine, on the branches named.
 Reference document under review: `_docs/KMP_IOS_FEASIBILITY.md` (Milos, 2026-08-05, 2115 lines).
 
+> **Mise a jour 2026-09-02, en complement de la banniere ci-dessus.** L'etat courant du portage est
+> dans [AIMI_PORT_STATE.md](AIMI_PORT_STATE.md).
+>
+> Sur le fond, la banniere ci-dessus a raison et ce rapport avait tort sur un point qui compte :
+> l'annexe 5 a releve la signature du modele (`modelUAM.tflite`, 4 504 octets, entree `[1,18]`
+> Float32 vers `[1,1]`, une inference reelle active dans `DetermineBasalAIMI2`) et note que
+> `AimiNeuralNetwork` a une **architecture differente**. Reexprimer le modele en JSON, comme la
+> section 4.3 le proposait, n'aurait donc pas ete un echange a l'identique mais un changement de
+> comportement sur un chemin d'estimation SMB. Garder le modele et l'executer via un adaptateur par
+> plateforme est le bon choix. Cela augmente le cout, il ne le reduit pas.
+>
+> Trois faits ont par ailleurs change depuis la redaction, et invalident des affirmations du texte :
+>
+> 1. **Une app iOS existe.** La section 2.3 dit le contraire. Depuis le 2026-08-29 l'amont a livre un
+>    vrai client suiveur : `ios/app/AAPSClient.xcodeproj`, 8 cibles, un `@main` Swift, et
+>    `ios/shell` qui heberge le vrai `AapsAppRoot`. Mais `IosClientConfig` fixe `APS = false`,
+>    `PUMPCONTROL = false`, `PUMPDRIVERS = false` : c'est un suiveur par conception. Le scenario SC-A
+>    a donc ete livre par l'amont ; SC-C, le master sur iPhone, reste intact.
+> 2. **Dagger a ete remplace par Metro**, natif KMP. La loi de planification la plus citee ici,
+>    "le cout de conversion d'un module est a peu pres son nombre de Dagger", est retiree, et les
+>    lignes de cout DI de la section 7 sont surevaluees.
+> 3. **Room n'est plus intact** : `:database:impl` et `:database:persistence` sont tous deux dans
+>    `migratedModules`.
+>
+> Ce qui tient : le cadre strategique, l'analyse par paliers de portabilite, le constat sur la
+> distribution et le point de securite sur les Critical Alerts.
+
 Supporting detail, same folder:
 [annex 1 - audit of Milos's branch](annex-1-milos-kmp-audit.md) ·
 [annex 2 - AIMI portability inventory](annex-2-aimi-portability-inventory.md) ·

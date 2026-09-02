@@ -1,5 +1,10 @@
 # Review of the Cursor migration session
 
+> **Note, 2026-09-02.** The process findings here hold, but the tree has moved: upstream now has
+> real `expect`/`actual` pairs, and `plugins/aps/.../loop/LoopNotifier.kt` shows the shape to copy.
+> Current state is in [AIMI_PORT_STATE.md](AIMI_PORT_STATE.md).
+
+
 Written 2026-08-28, on branch `kmp-aimi-migration-study`.
 Companion to [AIMI_KMP_MIGRATION_STUDY.md](AIMI_KMP_MIGRATION_STUDY.md), which is the baseline this
 session was working from.
