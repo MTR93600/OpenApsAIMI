@@ -276,4 +276,13 @@ class AimiStorageHelper @Inject constructor(
                 "❌ Storage: ERROR - ${error ?: "unknown"}"
         }
     }
+
+    /**
+     * The app scoped external directory, tier 2 of [determineStorageDirectory], or `null`.
+     *
+     * Exposed so [AndroidAimiStorage] can build the CSV fallback path without a second copy of the
+     * platform call. It reads the same `getExternalFilesDir(null)` tier 2 uses, and it does not
+     * change which directory this helper hands out.
+     */
+    fun appScopedExternalDir(): File? = context.getExternalFilesDir(null)
 }

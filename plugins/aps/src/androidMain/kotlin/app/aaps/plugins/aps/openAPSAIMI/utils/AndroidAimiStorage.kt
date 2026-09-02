@@ -63,4 +63,9 @@ class AndroidAimiStorage @Inject constructor(
         runCatching { fileOf(path).appendText(text); true }.getOrDefault(false)
 
     override fun displayPath(path: AimiPath): String = path.value
+
+    override fun healthReport(): String = helper.getHealthReport()
+
+    override fun fallbackFile(name: String): AimiPath =
+        AimiPath(File(File(helper.appScopedExternalDir() ?: helper.getAimiDirectory(), "AAPS"), name).absolutePath)
 }

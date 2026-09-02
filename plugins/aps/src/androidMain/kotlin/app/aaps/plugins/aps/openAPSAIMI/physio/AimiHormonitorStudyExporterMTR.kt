@@ -15,8 +15,6 @@ import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
-import app.aaps.plugins.aps.openAPSAIMI.patient.PhysioLiveDigest
-import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefDigest
 import java.io.File
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
@@ -33,148 +31,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonObjectBuilder
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
-
-data class HormonitorDecisionEventMTR(
-    val eventId: String,
-    val eventTimestamp: Long,
-    val trigger: String,
-    val profileIsfMgdl: Double,
-    val profileBasalUph: Double,
-    val currentBgMgdl: Double,
-    val cobG: Double,
-    val iobU: Double,
-    val cyclePhase: String? = null,
-    val cycleDay: Int? = null,
-    val cycleTrackingMode: String? = null,
-    val contraceptiveType: String? = null,
-    val wcycleBasalMult: Double? = null,
-    val wcycleSmbMult: Double? = null,
-    val wcycleIsfMult: Double? = null,
-    val thyroidStatus: String? = null,
-    val inflammationStatus: String? = null,
-    val hrNowBpm: Int? = null,
-    val hrAvg15mBpm: Int? = null,
-    val rhrRestingBpm: Int? = null,
-    val hrvRmssdMs: Double? = null,
-    val steps5m: Int? = null,
-    val steps15m: Int? = null,
-    val steps60m: Int? = null,
-    val activityState: String? = null,
-    val sleepDebtMinutes: Int? = null,
-    val sleepEfficiency: Double? = null,
-    val physioSnapshotTimestamp: Long? = null,
-    val physioSnapshotValidFlag: Boolean? = null,
-    val physioTrace: PhysioDecisionTraceMTR,
-    val safetyPhase: String? = null,
-    val predictiveHypoSuppressed: Boolean? = null,
-    val safetyGate: String? = null,
-    val safetyCompositeMinMgdl: Double? = null,
-    val safetyUamTerminalMgdl: Double? = null,
-    val decisionCompositeMinMgdl: Double? = null,
-    val safetyReconcileDeltaMgdl: Double? = null,
-    val patientMode: String? = null,
-    val patientModeConfidence: Double? = null,
-    val patientStrategyHint: String? = null,
-    val patientNarrative: String? = null,
-    val patientReasonCodes: List<String>? = null,
-    val patientPhysioLive: PhysioLiveDigest? = null,
-    val patientThermalBelief: ThermalBeliefDigest? = null,
-) {
-    fun toJSON(datasetId: String, generatedAtIsoUtc: String, appVersion: String, schemaVersion: String): JsonObject =
-        buildJsonObject {
-            put("dataset_id", datasetId)
-            put("generated_at", generatedAtIsoUtc)
-            put("app_version", appVersion)
-            put("schema_version", schemaVersion)
-            put("event_id", eventId)
-            put("timestamp", eventTimestamp)
-            put("trigger", trigger)
-            put("profile_isf_mgdl", profileIsfMgdl)
-            put("profile_basal_uph", profileBasalUph)
-            put("current_bg_mgdl", currentBgMgdl)
-            put("cob_g", cobG)
-            put("iob_u", iobU)
-            putOrNull("cycle_phase", cyclePhase)
-            putOrNull("cycle_day", cycleDay)
-            putOrNull("cycle_tracking_mode", cycleTrackingMode)
-            putOrNull("contraceptive_type", contraceptiveType)
-            putOrNull("wcycle_basal_mult", wcycleBasalMult)
-            putOrNull("wcycle_smb_mult", wcycleSmbMult)
-            putOrNull("wcycle_isf_mult", wcycleIsfMult)
-            putOrNull("thyroid_status", thyroidStatus)
-            putOrNull("inflammation_status", inflammationStatus)
-            putOrNull("hr_now_bpm", hrNowBpm)
-            putOrNull("hr_avg_15m_bpm", hrAvg15mBpm)
-            putOrNull("rhr_resting_bpm", rhrRestingBpm)
-            putOrNull("hrv_rmssd_ms", hrvRmssdMs)
-            putOrNull("steps_5m", steps5m)
-            putOrNull("steps_15m", steps15m)
-            putOrNull("steps_60m", steps60m)
-            putOrNull("activity_state", activityState)
-            putOrNull("sleep_debt_minutes", sleepDebtMinutes)
-            putOrNull("sleep_efficiency", sleepEfficiency)
-            putOrNull("physio_snapshot_timestamp", physioSnapshotTimestamp)
-            putOrNull("physio_snapshot_valid_flag", physioSnapshotValidFlag)
-            put("physio_state", physioTrace.physioState)
-            put("physio_confidence", physioTrace.physioConfidence)
-            put("physio_data_quality", physioTrace.physioDataQuality)
-            putOrNull("sleep_quality_score", physioTrace.sleepQualityScore)
-            put("isf_factor", physioTrace.isfFactor)
-            put("basal_factor", physioTrace.basalFactor)
-            put("smb_factor", physioTrace.smbFactor)
-            put("reactivity_factor", physioTrace.reactivityFactor)
-            putOrNull("physio_veto_reason", physioTrace.vetoReason)
-            putOrNull("final_loop_decision_type", physioTrace.finalLoopDecisionType)
-            putOrNull("smb_action_type", physioTrace.smbActionType)
-            putOrNull("basal_action_type", physioTrace.basalActionType)
-            put("decision_conflict_flags", stringJsonArray(physioTrace.decisionConflictFlags))
-            put("source", physioTrace.source)
-            putOrNull("safety_phase", safetyPhase)
-            putOrNull("predictive_hypo_suppressed", predictiveHypoSuppressed)
-            putOrNull("safety_gate", safetyGate)
-            putOrNull("safety_composite_min_mgdl", safetyCompositeMinMgdl)
-            putOrNull("safety_uam_terminal_mgdl", safetyUamTerminalMgdl)
-            putOrNull("decision_composite_min_mgdl", decisionCompositeMinMgdl)
-            putOrNull("safety_reconcile_delta_mgdl", safetyReconcileDeltaMgdl)
-            put(
-                "patient_story",
-                buildJsonObject {
-                    putOrNull("patient_mode", patientMode)
-                    putOrNull("patient_mode_confidence", patientModeConfidence)
-                    putOrNull("patient_strategy_hint", patientStrategyHint)
-                    putOrNull("patient_narrative", patientNarrative)
-                    putOrNull(
-                        "patient_reason_codes",
-                        patientReasonCodes?.let { codes -> stringJsonArray(codes) },
-                    )
-                    putOrNull(
-                        "physio_live",
-                        patientPhysioLive?.toJsonObject(),
-                    )
-                    putOrNull(
-                        "thermal_belief",
-                        patientThermalBelief?.toJsonObject(),
-                    )
-                },
-            )
-        }
-}
 
 class AimiHormonitorStudyExporterMTR(
     private val context: Context,
     private val aapsLogger: AAPSLogger,
     private val preferences: Preferences
-) {
+) : HormonitorStudyExporter {
     companion object {
         private const val SCHEMA_VERSION = "1.4.0"
         private const val FILE_NAME = "AIMI_HORMONITOR_event_stream_v1.jsonl"
@@ -262,7 +128,7 @@ class AimiHormonitorStudyExporterMTR(
      * Called at the start of each AIMI determine_basal pass (wall clock).
      * Writes a JSONL pulse and feeds the stall watchdog (post-mortem blackbox).
      */
-    fun recordLoopPulse(wallClockMs: Long, tickId: Long = 0L) {
+    override fun recordLoopPulse(wallClockMs: Long, tickId: Long) {
         lastLoopPulseWallMs = wallClockMs
         if (tickId > 0L) {
             pendingTickEndId = tickId
@@ -278,12 +144,12 @@ class AimiHormonitorStudyExporterMTR(
     }
 
     /** Phase transition inside the current tick (observe-only). */
-    fun recordLoopPhase(
+    override fun recordLoopPhase(
         tickId: Long,
         phaseName: String,
         wallClockMs: Long,
-        msSinceTickStart: Long? = null,
-        msSincePrevPhase: Long? = null
+        msSinceTickStart: Long?,
+        msSincePrevPhase: Long?
     ) {
         lastReportedPhaseName = phaseName
         val line = buildJsonObject {
@@ -302,7 +168,7 @@ class AimiHormonitorStudyExporterMTR(
      * Uncaught exception escaped the tick body; clears pending tick watchdog state.
      * Study pipelines should ignore unknown `type` or filter on this type for QA.
      */
-    fun recordLoopTickAborted(
+    override fun recordLoopTickAborted(
         tickId: Long,
         startedWallMs: Long,
         endedWallMs: Long,
@@ -334,11 +200,11 @@ class AimiHormonitorStudyExporterMTR(
     }
 
     /** Emitted when a determine_basal pass completes; pairs with [recordLoopPulse]. */
-    fun recordLoopTickEnd(
+    override fun recordLoopTickEnd(
         tickId: Long,
         startedWallMs: Long,
         endedWallMs: Long,
-        lastPhaseName: String? = null
+        lastPhaseName: String?
     ) {
         if (tickId > 0L && tickId == pendingTickEndId) {
             pendingTickEndId = 0L
@@ -356,7 +222,7 @@ class AimiHormonitorStudyExporterMTR(
         appendLoopBlackboxLine(line)
     }
 
-    fun export(event: HormonitorDecisionEventMTR) {
+    override fun export(event: HormonitorDecisionEventMTR) {
         val generatedAt = isoUtcNow()
         val payload = event
             .toJSON(
@@ -372,7 +238,7 @@ class AimiHormonitorStudyExporterMTR(
         appendJsonlSafely(target, fallback, payload)
     }
 
-    fun exportShadowContributions(event: HormonitorDecisionEventMTR) {
+    override fun exportShadowContributions(event: HormonitorDecisionEventMTR) {
         val trace = event.physioTrace
         val generatedAt = isoUtcNow()
 
@@ -408,7 +274,7 @@ class AimiHormonitorStudyExporterMTR(
     }
 
     @Synchronized
-    fun exportDailyOutcomes(
+    override fun exportDailyOutcomes(
         event: HormonitorDecisionEventMTR,
         tirLowPct: Double?,
         tirInRangePct: Double?,
@@ -889,33 +755,6 @@ class AimiHormonitorStudyExporterMTR(
         var staleSnapshotCount: Int = 0
     )
 }
-
-private fun JsonObjectBuilder.putOrNull(key: String, value: String?) {
-    if (value != null) put(key, value) else put(key, JsonNull)
-}
-
-private fun JsonObjectBuilder.putOrNull(key: String, value: Int?) {
-    if (value != null) put(key, value) else put(key, JsonNull)
-}
-
-private fun JsonObjectBuilder.putOrNull(key: String, value: Long?) {
-    if (value != null) put(key, value) else put(key, JsonNull)
-}
-
-private fun JsonObjectBuilder.putOrNull(key: String, value: Double?) {
-    if (value != null) put(key, value) else put(key, JsonNull)
-}
-
-private fun JsonObjectBuilder.putOrNull(key: String, value: Boolean?) {
-    if (value != null) put(key, value) else put(key, JsonNull)
-}
-
-private fun JsonObjectBuilder.putOrNull(key: String, value: JsonElement?) {
-    if (value != null) put(key, value) else put(key, JsonNull)
-}
-
-private fun stringJsonArray(values: List<String>): JsonArray =
-    buildJsonArray { values.forEach { add(it) } }
 
 private fun mapToJsonObject(map: Map<String, Double>): JsonObject =
     buildJsonObject { map.forEach { (key, value) -> put(key, value) } }

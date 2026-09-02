@@ -89,4 +89,23 @@ interface AimiStorage {
 
     /** Human readable form of [path], for log lines only. Never parse it. */
     fun displayPath(path: AimiPath): String
+
+    /**
+     * One human readable line per storage location AIMI tried, for the loop's learners health block.
+     *
+     * A diagnostic string, not data: the caller prints it into the reasoning text and never parses
+     * it. The Android half already owns the three deep directory policy this describes, so the report
+     * is its to write.
+     */
+    fun healthReport(): String
+
+    /**
+     * The app scoped fallback file AIMI writes a CSV row to when the shared storage write is denied.
+     *
+     * A second location, not a second policy: this is the same app scoped external directory the
+     * Android storage helper already resolves at its second tier, named here so shared code can reach
+     * the fallback without holding a platform path. Falls back to [directory] when the platform has
+     * no app scoped external directory, exactly as the loop has always done.
+     */
+    fun fallbackFile(name: String): AimiPath
 }
