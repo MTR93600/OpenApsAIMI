@@ -20,8 +20,6 @@ import kotlin.concurrent.Volatile
 
 class QuickWizard(
     private val preferences: Preferences,
-    // A plain factory, not a javax.inject.Provider: that type is JVM only and would pin this class
-    // to one platform. Dagger still supplies it, as a method reference, from the Android side.
     private val quickWizardEntryProvider: () -> QuickWizardEntry
 ) {
 
@@ -57,8 +55,8 @@ class QuickWizard(
     /**
      * Reads the stored list, skipping anything unreadable rather than losing the whole list.
      *
-     * An element that is not an object used to be a `ClassCastException` at construction time, which
-     * meant a single damaged entry stopped the app from starting.
+     * An element that is not an object must not throw at construction time: a single damaged entry
+     * would otherwise stop the app from starting.
      */
     private fun parse(raw: String): List<QuickWizardEntryData> =
         runCatching {

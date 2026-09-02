@@ -9,7 +9,6 @@ plugins {
     alias(libs.plugins.metro)
 }
 
-// No `metro { interop { includeDagger() } }`: nothing here carries a javax annotation any more.
 
 // Generates ConfigurationStrings (commonMain) and ConfigurationStringIds (androidMain) from this
 // module's strings.xml, the same generator :ui, :plugins:automation and the :core modules use. The
@@ -54,6 +53,10 @@ kotlin {
     // android-only import from quietly reaching common code once files start moving across.
     iosArm64()
     iosSimulatorArm64()
+
+    // Desktop (Windows/macOS/Linux). Compose Multiplatform resolves its `desktop` variant from a
+    // plain jvm() target, so no special target name is needed.
+    jvm()
 
     sourceSets {
         // The setup wizard and its elements live here. androidMain inherits all of this.

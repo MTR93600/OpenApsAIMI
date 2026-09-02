@@ -26,14 +26,6 @@ val generateUiStrings = tasks.register<GenerateKeyStringsTask>("generateUiString
     androidOutputDir.set(layout.buildDirectory.dir("generated/uiStrings/android"))
 }
 
-metro {
-    interop {
-        // PermissionsViewModel still reads Hilt's @ApplicationContext qualifier. Everything else in this
-        // module is Metro now, but without interop that one qualifier would be ignored silently.
-        includeDagger()
-    }
-}
-
 kotlin {
     android {
         namespace = "app.aaps.ui"
@@ -57,7 +49,20 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
 
+    // Desktop (Windows/macOS/Linux). Compose Multiplatform resolves its `desktop` variant from a
+    // plain jvm() target, so no special target name is needed.
+    jvm()
+
+    // Android and desktop share the diacritics actual: it is plain `java.text.Normalizer` on both.
+    // Applied explicitly, because the manual dependsOn below would otherwise switch the automatic
+    // hierarchy off and silently unwire iosMain.
+    applyDefaultHierarchyTemplate()
+
     sourceSets {
+        val jvmSharedMain = create("jvmSharedMain") { dependsOn(commonMain.get()) }
+        androidMain.get().dependsOn(jvmSharedMain)
+        jvmMain.get().dependsOn(jvmSharedMain)
+
         // The modules and the Compose artifacts a shared screen needs. Compose Multiplatform
         // republishes the same `androidx.compose.*` package names, so a screen that only uses Compose
         // moves here unchanged - that is how :core:ui ended up with 435 of its files in commonMain.
@@ -81,12 +86,32 @@ kotlin {
                 api(libs.jetbrains.lifecycle.viewmodel.compose)
                 api(libs.jetbrains.lifecycle.runtime.compose)
                 api(libs.kotlinx.datetime)
+                implementation(libs.kotlinx.serialization.json)
+                // Ktor rather than OkHttp so the wiki search runs on every target. Same split as
+                // :core:nssdk: the engine is per platform, the code is not.
+                implementation(libs.io.ktor.client.core)
                 implementation(libs.cmp.ui.tooling.preview)
+                // A Compose Multiplatform library - it publishes iosArm64, jvm and wasm too, so the
+                // reorderable list works everywhere and does not pin a screen to Android.
+                // Same choice as :plugins:automation.
+                implementation(libs.sh.calvin.reorderable)
             }
         }
 
         // Still Android: the widgets are RemoteViews, and Glance, WorkManager, OkHttp and the
         // activity/lifecycle integrations have no iOS side. Screens move to commonMain from here.
+        getByName("commonTest") {
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
+
+        iosMain {
+            dependencies {
+                implementation(libs.io.ktor.client.darwin)
+            }
+        }
+
         androidMain {
             // Android only: the string name to R.string id map.
             kotlin.srcDir(generateUiStrings.flatMap { it.androidOutputDir })
@@ -98,12 +123,13 @@ kotlin {
                 api(libs.androidx.ui.tooling.preview)
                 // Was debugImplementation; the multiplatform library target has no build types.
                 implementation(libs.androidx.ui.tooling)
-                implementation(libs.sh.calvin.reorderable)
                 implementation(libs.androidx.glance.appwidget)
                 implementation(libs.androidx.work.runtime)
                 implementation(libs.androidx.core)
 
-                api(libs.com.squareup.okhttp3.okhttp)
+                // Ktor engine for this target. Replaces the direct OkHttp dependency the wiki search
+                // used before it was ported.
+                implementation(libs.io.ktor.client.okhttp)
             }
         }
 

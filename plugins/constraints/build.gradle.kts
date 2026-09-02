@@ -17,9 +17,8 @@ allOpen {
     annotation("app.aaps.annotations.OpenForTesting")
 }
 
-// No `metro { interop { includeDagger() } }`: nothing here carries a javax annotation any more. The
-// three qualified plugin buckets keep working because @AllConfigs, @APS and @NotNSClient each carry
-// Metro's own @Qualifier alongside the javax one - ConstraintsBucketsTest is the guard.
+// The three qualified plugin buckets are keyed by @AllConfigs, @APS and @NotNSClient, each carrying
+// Metro's @Qualifier - ConstraintsBucketsTest is the guard.
 
 // Generates ConstraintsStrings (commonMain) and ConstraintsStringIds (androidMain) from this module's
 // res/values, the same generator the other plugins use. The objectives and exam text is the bulk of
@@ -61,7 +60,20 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
 
+    // Desktop (Windows/macOS/Linux). Compose Multiplatform resolves its `desktop` variant from a
+    // plain jvm() target, so no special target name is needed.
+    jvm()
+
+    // Android and desktop share what is plain JVM - the SNTP client. Applied explicitly, because
+    // the manual dependsOn below would otherwise switch the automatic hierarchy off and silently
+    // unwire iosMain.
+    applyDefaultHierarchyTemplate()
+
     sourceSets {
+        val jvmSharedMain = create("jvmSharedMain") { dependsOn(commonMain.get()) }
+        androidMain.get().dependsOn(jvmSharedMain)
+        jvmMain.get().dependsOn(jvmSharedMain)
+
         // What ConstraintsCheckerImpl needs. androidMain inherits these, so the rest of the module
         // keeps compiling unchanged; only the modules no common file uses yet stay android only.
         commonMain {

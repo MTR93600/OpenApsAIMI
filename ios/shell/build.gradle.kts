@@ -1,3 +1,6 @@
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
 plugins {
     kotlin("multiplatform")
     // Metro, because this module does not only link the migrated code, it builds a graph from it.
@@ -17,6 +20,7 @@ plugins {
 // its own, while linking resolves the whole graph at once, so it is the step that finds a missing
 // `actual`, a dependency with no Apple artifact, or a symbol nothing provides.
 val migratedModules = listOf(
+    ":appshell",
     ":core:data",
     ":core:graph",
     ":core:interfaces",
@@ -28,7 +32,6 @@ val migratedModules = listOf(
     ":database:impl",
     ":database:persistence",
     ":implementation",
-    ":appshell",
     ":plugins:aimi-contracts",
     ":plugins:aimi-engine",
     ":plugins:aimi-io",
@@ -43,9 +46,12 @@ val migratedModules = listOf(
     ":plugins:sensitivity",
     ":plugins:smoothing",
     ":plugins:source",
+    ":plugins:sync",
     ":pump:virtual",
+    ":shared:clientbindings",
     ":shared:impl",
-    ":ui"
+    ":ui",
+    ":workflow"
 )
 
 // Whether the migrated API is written into the framework header for Swift to call.
@@ -79,9 +85,19 @@ val checkMigratedModules = tasks.register("checkMigratedModules") {
 
     doLast {
         val withIosTargets = buildFiles
-            .filter { it.readText().contains("iosArm64()") }
+            // Skip comment lines: a doc line that merely mentions the target used to count as
+            // declaring it, which is how a KDoc in :appshell once made this fail.
+            .filter { f ->
+                f.readLines().any { line ->
+                    val t = line.trimStart()
+                    !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*") && t.contains("iosArm64()")
+                }
+            }
             .map { ":" + it.parentFile.relativeTo(rootDir).invariantSeparatorsPath.replace('/', ':') }
-            .filterNot { it == ":ios:shell" }
+            // :ios:shell is this module. :shared:tests builds for iOS so that shared test fixtures
+            // are available to common tests, but it is fixtures, not product - linking it would put
+            // test helpers into the framework header Swift sees.
+            .filterNot { it == ":ios:shell" || it == ":shared:tests" }
             .toSet()
 
         val missing = withIosTargets - listed
@@ -98,6 +114,42 @@ val checkMigratedModules = tasks.register("checkMigratedModules") {
 }
 
 tasks.matching { it.name.startsWith("linkDebugFramework") }.configureEach { dependsOn(checkMigratedModules) }
+
+/**
+ * Which module owns which strings, generated rather than hand written.
+ *
+ * The list is `StringOwnerModules.ALL`, shared with `:app` and the desktop shell, so the three
+ * platforms cannot drift - which they had: the desktop copy carried five of sixteen modules.
+ */
+
+/** The same build stamp `:app` puts in BuildConfig.BUILDVERSION: short commit and date. */
+fun buildStamp(): String {
+    val commit = try {
+        val out = File.createTempFile("git-build", "")
+        ProcessBuilder("git", "describe", "--always", "--abbrev=7").redirectOutput(out).start().waitFor()
+        out.readText().trim()
+    } catch (_: Exception) {
+        "NoGitSystemAvailable"
+    }
+    return "$commit-" + SimpleDateFormat("yyyy.MM.dd").format(Date())
+}
+/** The version this build reports, from the same constant the Android app uses. */
+val generateIosBuildInfo = tasks.register<GenerateBuildInfoTask>("generateIosBuildInfo") {
+    version.set(Versions.appVersion)
+    buildStamp.set(buildStamp())
+    platform.set("iOS")
+    packageName.set("app.aaps.ios.shell.config")
+    outputDir.set(layout.buildDirectory.dir("generated/buildInfo"))
+}
+
+val generateIosStringOwners = tasks.register<GenerateStringOwnerRegistryTask>("generateIosStringOwners") {
+    owners.set(StringOwnerModules.ALL)
+    packageName.set("app.aaps.ios.shell.di")
+    objectName.set("GeneratedStringOwners")
+    // Text, not resource ids: there is no AAPT table on Apple.
+    useResourceIds.set(false)
+    outputDir.set(layout.buildDirectory.dir("generated/stringOwners"))
+}
 
 kotlin {
     listOf(
@@ -117,6 +169,8 @@ kotlin {
     }
 
     sourceSets {
+        iosMain { kotlin.srcDir(generateIosStringOwners); kotlin.srcDir(generateIosBuildInfo) }
+
         commonMain {
             dependencies {
                 // `api`, not `implementation`: a module can only be exported to the framework when

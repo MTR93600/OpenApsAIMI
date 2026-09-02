@@ -126,7 +126,7 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
                 notificationManager,
                 persistenceLayer,
                 decimalFormatter,
-                { pumpEnactResultProvider.get() },
+                { pumpEnactResultProvider() },
                 pumpSync,
                 preferences,
                 profileSwitchSilentGate,
@@ -174,26 +174,39 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
         lateinit var executor: CommandExecutor
         commandQueue = CommandQueueImplementation(
             aapsLogger, rxBus, rh, constraintChecker, profileFunction, activePlugin, config, dateUtil,
-            fabricPrivacy, notificationManager, persistenceLayer, decimalFormatter, { pumpEnactResultProvider.get() },
+            fabricPrivacy, notificationManager, persistenceLayer, decimalFormatter, { pumpEnactResultProvider() },
             pumpSync, preferences, profileSwitchSilentGate, localAlertUtilsProvider, smsCommunicatorProvider,
             { executor }, testScope, bolusProgressData
         )
         // Real executor sharing this queue: notifyAboutNewCommand() signals it and it drains on its own thread.
         executor = CommandExecutor(
-            aapsLogger, fabricPrivacy, commandQueue, rxBus, activePlugin, rh, preferences, config, bolusProgressData, context
+            aapsLogger, fabricPrivacy, commandQueue, rxBus, activePlugin, rh, preferences, config, bolusProgressData, TestCommandExecutionPlatform()
         )
 
         // start with empty queue
         assertThat(commandQueue.size()).isEqualTo(0)
 
-        // add bolus command
-        backgroundScope.launch { commandQueue.bolus(DetailedBolusInfo()) }
-        yield()
-        assertThat(commandQueue.size()).isEqualTo(1)
+        // Run bolus() on a real dispatcher, same as the carbs test below: its internal deferred.await()
+        // is completed by the executor off the test scheduler, so only real threads can resume it.
+        var result: PumpEnactResult? = null
+        CoroutineScope(Dispatchers.IO).launch { result = commandQueue.bolus(DetailedBolusInfo()) }
 
-        // the executor picks up and drains the command off the test scheduler
-        Thread.sleep(3000)
+        // Wait for the command to finish instead of sleeping a fixed time.
+        //
+        // The queue size is deliberately not asserted while the command is in flight. CommandExecutor
+        // takes the command with pickup(), which removes it from the queue before running it, so the
+        // size goes 0 -> 1 -> 0 on the executor's own thread and "1" can be gone before the next line
+        // reads it. Asserting it made this test fail in CI with `expected 1 but was 0`, and a fixed
+        // sleep afterwards could just as easily be too short on a loaded machine.
+        var waitedMs = 0
+        while (result == null && waitedMs < 8000) {
+            Thread.sleep(100); waitedMs += 100
+        }
 
+        // A successful result can only come back through the executor: every early return in bolus()
+        // reports failure, so this proves the command was queued, picked up and run.
+        assertThat(result?.success).isTrue()
+        // And the queue is empty again afterwards - checked once the work is known to be over.
         assertThat(commandQueue.size()).isEqualTo(0)
     }
 
@@ -205,12 +218,12 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
         lateinit var executor: CommandExecutor
         commandQueue = CommandQueueImplementation(
             aapsLogger, rxBus, rh, constraintChecker, profileFunction, activePlugin, config, dateUtil,
-            fabricPrivacy, notificationManager, persistenceLayer, decimalFormatter, { pumpEnactResultProvider.get() },
+            fabricPrivacy, notificationManager, persistenceLayer, decimalFormatter, { pumpEnactResultProvider() },
             pumpSync, preferences, profileSwitchSilentGate, localAlertUtilsProvider, smsCommunicatorProvider,
             { executor }, testScope, bolusProgressData
         )
         executor = CommandExecutor(
-            aapsLogger, fabricPrivacy, commandQueue, rxBus, activePlugin, rh, preferences, config, bolusProgressData, context
+            aapsLogger, fabricPrivacy, commandQueue, rxBus, activePlugin, rh, preferences, config, bolusProgressData, TestCommandExecutionPlatform()
         )
         whenever(rh.gs(app.aaps.core.ui.R.string.carbs_not_saved_after_bolus)).thenReturn("Carbs could not be saved")
         // The pump delivers successfully (TestPumpPlugin), but storing carbs blows up.
@@ -230,7 +243,7 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
 
         // The user is alerted (URGENT) that the carbs were lost — not silently dropped.
         verify(notificationManager).post(
-            eq(NotificationId.CARBS_STORE_FAILED), eq(TextRef.AndroidRes(app.aaps.core.ui.R.string.carbs_not_saved_after_bolus)),
+            eq(NotificationId.CARBS_STORE_FAILED), eq(CoreUiStrings.carbs_not_saved_after_bolus),
             any<NotificationLevel>(), any<Int>(), any<Long>(), any<Long>(), anyOrNull(), any<List<NotificationAction>>(), anyOrNull()
         )
     }
@@ -271,7 +284,7 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
     // TextRef overload (id, textRef, level, validMinutes, date, validTo, sound, actions, validityCheck).
     private fun verifyOkPosted() =
         verify(notificationManager).post(
-            eq(NotificationId.PROFILE_SET_OK), eq(TextRef.AndroidRes(app.aaps.core.ui.R.string.profile_set_ok)),
+            eq(NotificationId.PROFILE_SET_OK), eq(CoreUiStrings.profile_set_ok),
             any<NotificationLevel>(), any<Int>(), any<Long>(), any<Long>(),
             anyOrNull(), any<List<NotificationAction>>(), anyOrNull()
         )

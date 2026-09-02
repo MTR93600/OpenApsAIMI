@@ -6,8 +6,7 @@ plugins {
     // NOT com.android.library. AGP 9 refuses that plugin together with the multiplatform plugin.
     alias(libs.plugins.android.kmp.library)
     kotlin("plugin.allopen")
-    // Metro, a Kotlin compiler plugin - no KSP, no generated sources. The comment below was written
-    // when this module's DI had to live in :app because Dagger cannot run in a multiplatform module.
+    // Metro, a Kotlin compiler plugin - no KSP, no generated sources.
     alias(libs.plugins.metro)
 }
 
@@ -40,7 +39,21 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
 
+    // Desktop (Windows/macOS/Linux). Compose Multiplatform resolves its `desktop` variant from a
+    // plain jvm() target, so no special target name is needed.
+    jvm()
+
+    // CryptoUtil is plain javax.crypto with no Android in it, and its output is a STORED format, so
+    // Android and desktop share the one implementation rather than keeping two that could drift.
+    // Applied explicitly, because the manual dependsOn below would otherwise switch the automatic
+    // hierarchy off and silently unwire iosMain.
+    applyDefaultHierarchyTemplate()
+
     sourceSets {
+        val jvmSharedMain = create("jvmSharedMain") { dependsOn(commonMain.get()) }
+        androidMain.get().dependsOn(jvmSharedMain)
+        jvmMain.get().dependsOn(jvmSharedMain)
+
         commonMain {
             dependencies {
                 api(project(":core:data"))

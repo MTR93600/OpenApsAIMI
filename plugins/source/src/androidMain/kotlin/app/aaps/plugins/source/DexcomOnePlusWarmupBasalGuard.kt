@@ -11,8 +11,8 @@ import app.aaps.core.interfaces.source.BgSource
 import app.aaps.core.objects.extensions.convertedToAbsolute
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import javax.inject.Inject
-import javax.inject.Provider
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.Provider
 
 /**
  * ⚠️ SAFETY-CRITICAL — **DRAFT** pending project-maintainer + clinician review and on-device
@@ -73,7 +73,7 @@ class DexcomOnePlusWarmupBasalGuard @Inject constructor(
     internal suspend fun shouldCancelResidualTemp(owner: BgSource, nowMs: Long): Boolean {
         if (activePlugin.activeBgSource !== owner) return false
 
-        val loop = loopProvider.get()
+        val loop = loopProvider()
         if (!loop.isEnabled()) return false
 
         val mode = loop.runningMode()

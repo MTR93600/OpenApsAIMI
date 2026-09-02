@@ -49,6 +49,14 @@ kotlin {
             }
         }
 
+        // CryptoUtil is plain javax.crypto and is shared with desktop, so its Base64 has to be on
+        // the JVM classpath too. A Java jar, so the same artifact serves both.
+        jvmMain {
+            dependencies {
+                api(libs.com.madgag.spongycastle)
+            }
+        }
+
         androidMain {
             dependencies {
                 // Everything below was `api` on the old android library and several of the 24
@@ -73,13 +81,19 @@ kotlin {
                 // ProcessLifecycleOwner for DeferredForegroundStart
                 implementation(libs.androidx.lifecycle.process)
 
-                api(libs.com.google.dagger.android) // for javax.inject annotations
-                api(libs.com.google.dagger.android.support)
             }
         }
 
         // Hand written rather than taken from test-module-dependencies, which applies
         // com.android.library and so cannot be used here. Same approach as :core:keys.
+        // Tests of commonMain classes belong here: androidHostTest runs on the JVM only.
+        getByName("commonTest") {
+            dependencies {
+                implementation(kotlin("test"))
+
+            }
+        }
+
         getByName("androidHostTest") {
             dependencies {
                 implementation(libs.org.junit.jupiter)

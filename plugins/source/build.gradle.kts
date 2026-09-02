@@ -23,6 +23,22 @@ metro {
     }
 }
 
+// Generates SourceStrings (commonMain) and SourceStringIds (androidMain) from this module's
+// res/values, the same generator the other plugins use. The strings themselves do not move, and AAPT
+// keeps resolving them on Android exactly as before.
+val generateSourceStrings = tasks.register<GenerateKeyStringsTask>("generateSourceStrings") {
+    resDir.set(layout.projectDirectory.dir("src/androidMain/res"))
+    packageName.set("app.aaps.plugins.source")
+    owner.set("source")
+    objectName.set("SourceStrings")
+    idsObjectName.set("SourceStringIds")
+    reportFile.set(layout.buildDirectory.file("reports/sourceStrings/translations.txt"))
+    // Set explicitly: addGeneratedSourceDirectory only derives a convention from the task name, so
+    // both properties would land on one directory and the second file written would delete the first.
+    commonOutputDir.set(layout.buildDirectory.dir("generated/sourceStrings/common"))
+    androidOutputDir.set(layout.buildDirectory.dir("generated/sourceStrings/android"))
+}
+
 kotlin {
     android {
         namespace = "app.aaps.plugins.source"
@@ -47,13 +63,18 @@ kotlin {
         }
     }
 
-    // Declared even though nothing is in commonMain yet. Keeping the targets is what stops an
-    // android-only import from quietly reaching common code once files start moving across.
+    // These are what stop an android-only import from quietly reaching common code: the shared
+    // plugins and the BG source abstractions build for them now.
     iosArm64()
     iosSimulatorArm64()
 
+    // Desktop (Windows/macOS/Linux). Compose Multiplatform resolves its `desktop` variant from a
+    // plain jvm() target, so no special target name is needed.
+    jvm()
+
     sourceSets {
-        androidMain {
+        commonMain {
+            kotlin.srcDir(generateSourceStrings.flatMap { it.commonOutputDir })
             dependencies {
                 implementation(project(":core:data"))
                 implementation(project(":core:interfaces"))
@@ -61,11 +82,23 @@ kotlin {
                 implementation(project(":core:objects"))
                 implementation(project(":core:ui"))
                 implementation(project(":core:utils"))
-                // :ui is still a plain Android library, so it can only be reached from here.
+                // :ui is multiplatform now, so the shared screens it hosts (ContentContainer) reach here.
                 implementation(project(":ui"))
 
-                // Fork-only CGM source plugins. Both are plain Android libraries, so like :ui they
-                // can only be reached from androidMain.
+                api(libs.cmp.runtime)
+                api(libs.cmp.foundation)
+                api(libs.cmp.ui)
+                api(libs.cmp.material3)
+                api(libs.jetbrains.lifecycle.viewmodel.compose)
+                api(libs.jetbrains.lifecycle.runtime.compose)
+            }
+        }
+
+        androidMain {
+            kotlin.srcDir(generateSourceStrings.flatMap { it.androidOutputDir })
+            dependencies {
+                // Fork-only CGM source plugins. Both are plain Android libraries, so they can
+                // only be reached from androidMain.
                 implementation(project(":plugins:dexcom_oneplus"))
                 implementation(project(":plugins:libre3"))
 

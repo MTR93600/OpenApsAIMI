@@ -4,17 +4,17 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AapsNotification
 import app.aaps.core.interfaces.notifications.AlarmSound
+import app.aaps.core.interfaces.notifications.IosNotificationDelegate
+import app.aaps.core.interfaces.notifications.AlarmSoundPlayer
 import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.notifications.SystemNotificationPlatform
 import platform.UserNotifications.UNAuthorizationOptionAlert
 import platform.UserNotifications.UNAuthorizationOptionBadge
 import platform.UserNotifications.UNAuthorizationOptionSound
-import platform.darwin.NSObject
 import platform.UserNotifications.UNNotificationCategory
 import platform.UserNotifications.UNNotificationCategoryOptionCustomDismissAction
 import platform.UserNotifications.UNNotificationDismissActionIdentifier
 import platform.UserNotifications.UNNotificationResponse
-import platform.UserNotifications.UNUserNotificationCenterDelegateProtocol
 import platform.UserNotifications.UNMutableNotificationContent
 import platform.UserNotifications.UNNotificationInterruptionLevel.UNNotificationInterruptionLevelActive
 import platform.UserNotifications.UNNotificationInterruptionLevel.UNNotificationInterruptionLevelTimeSensitive
@@ -35,8 +35,12 @@ import platform.UserNotifications.UNUserNotificationCenter
  * app wants it.
  */
 class IosSystemNotificationPlatform(
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    private val alarmSoundPlayer: AlarmSoundPlayer
 ) : SystemNotificationPlatform {
+
+    /** The alarm currently owning the audio, so an unchanged owner does not restart the sound. */
+    private var soundingKey: Int? = null
 
     /**
      * Resolved on first use, not in the constructor.
@@ -48,9 +52,6 @@ class IosSystemNotificationPlatform(
      */
     private val center by lazy { UNUserNotificationCenter.currentNotificationCenter() }
     private var authorizationAsked = false
-
-    /** Strong reference: the centre holds its delegate weakly. */
-    private var delegate: DismissDelegate? = null
 
     /**
      * iOS shows every notification, unlike Android.
@@ -100,33 +101,43 @@ class IosSystemNotificationPlatform(
     }
 
     /**
-     * On iOS the delivered notification carries the sound, so there is no separate player to own.
+     * Hands the ramping alarm to [AlarmSoundPlayer], or silences it.
      *
-     * The ramping alarm Android builds by hand has no counterpart here yet. Posting a fresh sound
-     * on every change would re-alert the user each time the registry recomputes the owner, which is
-     * exactly what the owner handoff exists to avoid, so this stays a no-op beyond the log line
-     * until iOS grows a real alarm path (a critical alert entitlement, or an audio session).
+     * The registry calls this after every change with whichever alarm owns the sound, so calling it
+     * again with the same key must not restart the audio - that is what stops a second alarm
+     * cutting the first one off, and why the owner key is compared here rather than in the player.
      */
     override fun setAudibleAlarm(instanceKey: Int?, sound: AlarmSound?) {
-        aapsLogger.debug(LTag.NOTIFICATION, "Audible alarm owner is now $instanceKey ($sound)")
+        if (instanceKey == soundingKey) return
+        soundingKey = instanceKey
+        if (instanceKey == null || sound == null) {
+            alarmSoundPlayer.stop(AlarmSoundPlayer.OWNER_INTERNAL)
+            aapsLogger.debug(LTag.NOTIFICATION, "Alarm audio stopped")
+        } else {
+            alarmSoundPlayer.play(sound, AlarmSoundPlayer.OWNER_INTERNAL)
+            aapsLogger.debug(LTag.NOTIFICATION, "Alarm audio owner is now $instanceKey ($sound)")
+        }
     }
 
     /**
      * Learn about notifications the user swiped away outside the app.
      *
-     * Two things are needed, and missing either one makes this silently never fire:
+     * Two things are needed, and missing either one makes this silently never fire: a delegate on
+     * the shared centre, and a category carrying `customDismissAction` - without that iOS reports
+     * taps but not dismissals, which is the trap, because the code looks right and nothing arrives.
      *
-     * 1. A delegate on the shared centre. The slot is app wide and **weak**, so the delegate is held
-     *    in a property here - a local would be collected and the callbacks would simply stop.
-     * 2. A category carrying `customDismissAction`. Without it iOS reports taps but not dismissals,
-     *    which is the trap: the code looks right and nothing ever arrives.
+     * The delegate is not set here. There is one slot for the whole app and `setDelegate` replaces
+     * whatever was in it, so [IosNotificationDelegate] owns it and routes; a second owner would
+     * silently stop the first one's callbacks.
      */
     override fun onDismissed(callback: (instanceKey: Int) -> Unit) {
-        center.setNotificationCategories(setOf(dismissibleCategory()))
-        delegate = DismissDelegate { identifier ->
-            instanceKeyOf(identifier)?.let(callback)
+        IosNotificationDelegate.register(setOf(dismissibleCategory())) { actionId, notificationId ->
+            if (actionId != UNNotificationDismissActionIdentifier) return@register false
+            // A tap is deliberately not a dismissal: the notification goes away, but the user asked
+            // to *see* the thing, so it stays in the in-app list.
+            instanceKeyOf(notificationId)?.let(callback)
+            true
         }
-        center.setDelegate(delegate)
     }
 
     private fun dismissibleCategory(): UNNotificationCategory =
@@ -136,28 +147,6 @@ class IosSystemNotificationPlatform(
             intentIdentifiers = emptyList<Any>(),
             options = UNNotificationCategoryOptionCustomDismissAction
         )
-
-    /**
-     * Only reacts to a dismissal, and hands every other response straight back to iOS.
-     *
-     * A tap is deliberately not treated as a dismissal: the notification does go away, but the user
-     * asked to *see* the thing, so it must stay in the in-app list.
-     */
-    private class DismissDelegate(
-        private val onDismiss: (String) -> Unit
-    ) : NSObject(), UNUserNotificationCenterDelegateProtocol {
-
-        override fun userNotificationCenter(
-            center: UNUserNotificationCenter,
-            didReceiveNotificationResponse: UNNotificationResponse,
-            withCompletionHandler: () -> Unit
-        ) {
-            if (didReceiveNotificationResponse.actionIdentifier == UNNotificationDismissActionIdentifier) {
-                onDismiss(didReceiveNotificationResponse.notification.request.identifier)
-            }
-            withCompletionHandler()
-        }
-    }
 
     internal fun identifier(instanceKey: Int) = "$IDENTIFIER_PREFIX$instanceKey"
 

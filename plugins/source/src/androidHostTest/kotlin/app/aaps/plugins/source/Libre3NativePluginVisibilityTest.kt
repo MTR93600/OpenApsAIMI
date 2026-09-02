@@ -15,7 +15,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.source.Libre3AvailabilityProvider.Companion.LIBRE3_ACCESS_FILE_NAME
 import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
-import dagger.Lazy
+import dev.zacsweers.metro.Provider
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
@@ -53,7 +53,7 @@ class Libre3NativePluginVisibilityTest : TestBase() {
         whenever(fileListProvider.ensureExtraDirExists()).thenReturn(extraDir)
         whenever(extraDir.findFile(LIBRE3_ACCESS_FILE_NAME)).thenReturn(markerFile)
         val availabilityProvider =
-            Libre3AvailabilityProvider(aapsLogger, Lazy { fileListProvider }, preferences, notificationManager, dateUtil)
+            Libre3AvailabilityProvider(aapsLogger, Provider { fileListProvider }, preferences, notificationManager, dateUtil)
         plugin = Libre3NativePlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority)
     }
 

@@ -7,11 +7,11 @@ import app.aaps.core.interfaces.notifications.NotificationAction
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.utils.DateUtil
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.Provider
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
-import dagger.Lazy
-import javax.inject.Inject
 
 /**
  * Outcome of the Dexcom ONE+ availability check.
@@ -62,7 +62,7 @@ class DexcomOnePlusAvailabilityProvider @Inject constructor(
     private val aapsLogger: AAPSLogger,
     // Lazy, mirroring ConfigImpl: FileListProvider pulls in Config/Preferences/Storage, and this
     // provider is constructed as part of a BG source plugin that is itself in the plugin graph.
-    private val fileListProvider: Lazy<FileListProvider>,
+    private val fileListProvider: Provider<FileListProvider>,
     private val preferences: Preferences,
     private val notificationManager: NotificationManager,
     private val dateUtil: DateUtil
@@ -131,11 +131,11 @@ class DexcomOnePlusAvailabilityProvider @Inject constructor(
     private fun compute(uri: String?): DexcomOnePlusAvailability {
         if (uri.isNullOrEmpty()) return DexcomOnePlusAvailability.AapsFolderUnavailable
         return try {
-            if (!fileListProvider.get().isDirectoryAccessGranted()) return DexcomOnePlusAvailability.FolderPermissionMissing
+            if (!fileListProvider().isDirectoryAccessGranted()) return DexcomOnePlusAvailability.FolderPermissionMissing
             // Resolving `extra` also creates it when missing — the project's standard behaviour for
             // this directory (MainApp password-reset checks and ConfigImpl rely on it). A freshly
             // created `extra` simply has no marker file, which is MarkerFileMissing, not an error.
-            val extraDir = fileListProvider.get().ensureExtraDirExists()
+            val extraDir = fileListProvider().ensureExtraDirExists()
                 ?: return DexcomOnePlusAvailability.TechnicalError("extra directory not resolvable")
             // Existence only — the file is never opened, read or interpreted.
             if (extraDir.findFile(ONE_PLUS_ACCESS_FILE_NAME) != null) DexcomOnePlusAvailability.Available

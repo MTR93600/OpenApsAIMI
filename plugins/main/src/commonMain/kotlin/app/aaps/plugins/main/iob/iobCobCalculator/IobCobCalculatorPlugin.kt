@@ -90,11 +90,6 @@ class IobCobCalculatorPlugin(
     private val decimalFormatter: DecimalFormatter,
     private val processedTbrEbData: ProcessedTbrEbData,
     private val signals: CalculationSignalsEmitter,
-    // Lazy cache reference: IobCobCalculator and OverviewDataCache form a Dagger cycle (Loop
-    // transitively pulls IobCobCalculator). Deferring the lookup breaks it; runCalculation is only
-    // invoked post-construction, so calling this is always safe. A plain lambda rather than
-    // javax.inject.Provider, which is JVM only - the :app side adapts Dagger's Provider to it, the
-    // same shape OverviewDataCacheImpl already uses for the other direction of the cycle.
     private val cache: () -> OverviewDataCache
 ) : PluginBase(
     PluginDescription()
@@ -202,7 +197,7 @@ class IobCobCalculatorPlugin(
         super.onStop()
     }
 
-    private fun resetDataAndRunCalculation(reason: String) {
+    private suspend fun resetDataAndRunCalculation(reason: String) {
         calculationWorkflow.stopCalculation(CalculationWorkflow.MAIN_CALCULATION, reason)
         clearCache()
         ads.reset()
@@ -339,7 +334,7 @@ class IobCobCalculatorPlugin(
         return retVal
     }
 
-    override fun getLastAutosensDataWithWaitForCalculationFinish(reason: String): AutosensData? {
+    override suspend fun getLastAutosensDataWithWaitForCalculationFinish(reason: String): AutosensData? {
         calculationWorkflow.waitForCalculationFinish(CalculationWorkflow.MAIN_CALCULATION, reason)
         return ads.getLastAutosensData(reason, aapsLogger, dateUtil)
     }
@@ -449,9 +444,8 @@ class IobCobCalculatorPlugin(
      * Guards [scheduledData] and [scheduledHistoryPost]. Held by both the scheduling call and the
      * debounced body, so a new request cannot land while a run is in progress.
      *
-     * This pair used to be `@Synchronized` on the method plus `synchronized(this)` in the body -
-     * the same monitor, just written two ways. Naming it makes the pairing explicit, and replaces
-     * `synchronized`, which is JVM only.
+     * A named lock rather than `@Synchronized` plus `synchronized(this)`: the pairing is then
+     * explicit, and it works off the JVM.
      */
     private val historyLock = AapsLock()
 
@@ -467,10 +461,8 @@ class IobCobCalculatorPlugin(
             scheduledData = data
             scheduledHistoryPost = scope?.launch {
                 delay(HISTORY_DEBOUNCE_MS)
-                // Only the wait is cancellable. This used to be a ScheduledFuture cancelled with
-                // `cancel(false)`, which never interrupted a run that had already begun; without
-                // NonCancellable a late cancel could now stop this half done, between clearing the
-                // TDD cache and rebuilding from it.
+                // Only the wait is cancellable. Without NonCancellable a late cancel could stop this
+                // half done, between clearing the TDD cache and rebuilding from it.
                 withContext(NonCancellable) {
                     historyLock.withLock {
                         aapsLogger.debug(LTag.AUTOSENS, "Running newHistoryData")
@@ -493,7 +485,7 @@ class IobCobCalculatorPlugin(
     }
 
     // When historical data is changed (coming from NS etc.) finished calculations after this date must be invalidated
-    private fun newHistoryData(oldDataTimestamp: Long, bgDataReload: Boolean, triggeredByNewBG: Boolean) {
+    private suspend fun newHistoryData(oldDataTimestamp: Long, bgDataReload: Boolean, triggeredByNewBG: Boolean) {
         calculationWorkflow.stopCalculation(CalculationWorkflow.MAIN_CALCULATION, "onEventNewHistoryData")
         dataLock.withLock {
 

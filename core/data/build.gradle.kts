@@ -1,6 +1,9 @@
 plugins {
     id("kmp-test-defaults")
     kotlin("multiplatform")
+    // BCR and IDs are serialized into the Nightscout bolus wizard record. The json dependency was
+    // already here; only the compiler plugin that generates the serializers was missing.
+    id("kotlinx-serialization")
 }
 
 kotlin {
@@ -17,11 +20,7 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
 
-    // mingwX64 stays, and not out of habit: it is the only Kotlin/Native target whose tests can
-    // actually RUN on this machine. iosSimulatorArm64Test is disabled off macOS ("simulator tests
-    // require macOS"), so without mingw there would be no way to execute common code through
-    // Kotlin/Native at all before a Mac appears.
-    mingwX64()
+
 
     // No module-wide opt-in for ExperimentalNativeApi. `assert` is not in the common standard
     // library at all, so opting in could never have fixed it; the fix is the devAssert
