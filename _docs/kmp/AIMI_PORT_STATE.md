@@ -91,6 +91,21 @@ drops the interop capability. Converting those 7 files to Metro removes the depe
 `kmp-module-flip` skill states **cannot** be used by a multiplatform module. These three will have to
 flip eventually, and nobody has started.
 
+**After every merge that touches DI, purge the generated output before believing the build.** This
+has now bitten twice, identically. Upstream keeps deleting Dagger and Hilt code, but
+`build/generated/ksp/**` still holds Java that imports `dagger.hilt.InstallIn` and `dagger.android`,
+and it fails `compileFullDebugJavaWithJavac` in `:app` and in several `:pump:*` modules. The Kotlin
+compile and the tests pass, so it looks like an unrelated breakage. The fix is one line:
+
+```
+find . -type d -name ksp -path "*/build/generated/*" -exec rm -rf {} +
+```
+
+A related trap, also hit twice: `./gradlew … > log 2>&1; echo "EXIT=$?"` in a **backgrounded** command
+reports the exit code of the `echo`, not Gradle's, and the harness notification then says "exit code
+0" over a failed build. Append the real code into the log (`echo "GRADLE_EXIT=$?" >> log`) and read it
+from there.
+
 Two smaller ones: `plugins/aps/androidMain/AndroidManifest.xml` was **deleted** upstream, so
 `StepService.kt` needs `:app` now. And the iOS/desktop guards fail only the iOS/desktop build, so
 **drift is invisible from an Android-only local build** - run `:ios:shell:checkMigratedModules`
