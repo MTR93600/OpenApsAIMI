@@ -54,6 +54,7 @@ import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
 import app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
@@ -9415,11 +9416,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
-    private fun aimiDecisionsJsonlFile(): File = File(externalDir, "AIMI_Decisions.jsonl")
+    private fun aimiDecisionsJsonlFile(): AimiPath = storage.file("AIMI_Decisions.jsonl")
 
     private fun appendAimiDecisionsJsonlLine(jsonLine: String) {
         try {
-            AuditorJsonlExport.appendLine(aimiDecisionsJsonlFile(), jsonLine)
+            AuditorJsonlExport.appendLine(storage, aimiDecisionsJsonlFile(), jsonLine)
         } catch (e: Exception) {
             consoleError.add("Failed to save AIMI Decision JSON: ${e.message}")
         }
@@ -16026,7 +16027,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val msg = context.getString(
                 R.string.aimi_prebolus_not_delivered,
                 tag,
-                context.getString(app.aaps.core.ui.R.string.format_insulin_units, requestedU),
+                context.getString(app.aaps.core.interfaces.R.string.format_insulin_units, requestedU),
             )
             consoleLog.add(
                 "⚠️ PREBOLUS_NOT_DELIVERED tag=$tag requested=${"%.2f".format(Locale.US, requestedU)}U " +
