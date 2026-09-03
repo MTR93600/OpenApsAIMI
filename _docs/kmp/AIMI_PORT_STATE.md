@@ -695,23 +695,45 @@ still unported.
 Verified after deleting: `:plugins:aps:compileAndroidMain` EXIT=0 (expected - staging was never in any
 source set, so this could only ever be a no-op check).
 
+**Same day, addendum: the meal-photo vision pipeline moved.** Asked which of the 26 remaining files to
+tackle first, since the View-Activity-versus-Compose question didn't need answering to make progress
+on the rest: the answer was the 6 vision-provider files, independent of any Activity. Moving
+`AIVisionProvider.kt` wholesale hit the same "duplicate by type, not by filename" shape as 6i's cleanup
+but the other direction - the file's `AIVisionProvider` interface was genuinely new, but the same file
+also carried `EstimationResult`/`VisibleFoodItem`/`MacroRange`/`FoodAnalysisPrompt`, already extracted
+into two other already-ported commonMain files (`MealEstimateModels.kt`, `FoodAnalysisPrompt.kt`) under
+different names than the monolithic staging original - so the filename-match check in 6i's cleanup
+script never flagged it. Same underlying pattern as everything else this week: the real
+`FoodAnalysisPrompt.kt` parses with `kotlinx.serialization` instead of `org.json`, same public API
+(`cleanJsonResponse`/`parseJsonToResult`/`emptyErrorResult`/`SYSTEM_PROMPT`). Fixed by stripping the
+four duplicated declarations out of the moved file, leaving only the interface (same package, so the
+already-ported models resolve with no new import). `ClaudeVisionProvider`/`DeepSeekVisionProvider`/
+`GeminiVisionProvider`/`OpenAIVisionProvider`/`FoodRecognitionService` moved with no further changes -
+all their dependencies (`LlmHttpRetry`, `PatientStateRuntimeRepository`, `MealVisionUserPrompt`) were
+already ported. `FoodRecognitionService` takes a plain constructor, not `@Inject` - nothing in the live
+graph constructs it yet, since its only caller is the still-parked `MealAdvisorActivity`/
+`MealAdvisorCameraActivity`. Verified: `:plugins:aps:compileAndroidMain`, `:app:assembleFullDebug`,
+`:plugins:aps:compileKotlinIosArm64` all EXIT=0; `:plugins:aps:testAndroidHostTest` 330 tests, 0
+failures. Staging down to 20 files - the View-based Activities only.
+
 ---
 
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at
 `@MetroIntKey(250)` and its whole reachable dependency closure compiling. All eight collaborator ports
-now have exactly one implementation each. Staging is down to 26 files, all confirmed genuinely
-unported (no filename match anywhere in `commonMain`/`androidMain`) - not 247, see 6i.
+now have exactly one implementation each. Staging is down to 20 files, all View-based Android
+Activities with no Compose equivalent yet - not 247, see 6i and 6i's addendum.
 
-1. **The 26 remaining staged files are legacy View-based Activities and the meal-photo vision
-   pipeline**, not AIMI's dosing logic - `AimiProfileAdvisorActivity`, `AuditorReportActivity`,
-   `ContextActivity`, `MealAdvisorActivity`/`MealAdvisorCameraActivity`, two permission Activities, and
-   `ClaudeVisionProvider`/`GeminiVisionProvider`/`OpenAIVisionProvider`/`DeepSeekVisionProvider`/
-   `AIVisionProvider`/`FoodRecognitionService`. None of it blocks what already runs. Porting an Activity
+1. **The 20 remaining staged files are all legacy View-based Android Activities**, not AIMI's dosing
+   logic - `AimiModeSettingsActivity`, `AimiProfileAdvisorActivity`, `AuditorReportActivity`,
+   `ContextActivity`, `MealAdvisorActivity`/`MealAdvisorCameraActivity`, plus the smaller View-support
+   files that go with them (notification managers, view models, adapters, permission Activities). The
+   meal-photo vision pipeline moved this same day (see the addendum right above); its two Activities
+   are the only pieces of it still parked. None of the 20 blocks what already runs. Porting an Activity
    at all is itself a design decision this codebase has been moving away from (Compose over View) -
    don't assume "port it as-is" is even the right call before asking.
-2. **Before moving any of those 26, or anything from a future upstream merge, check for the recurring
+2. **Before moving any of those 20, or anything from a future upstream merge, check for the recurring
    failure shapes from 6g through 6i, in order:** (a) a class implementing a port interface but missing
    `@ContributesBinding(AppScope::class)` - compiles fine alone, fails only at `:app:compileFullDebugKotlin`,
    so that has to be the gate, not `:plugins:aps:compileAndroidMain`; (b) `.titleResId`/`.descriptionResId`/
@@ -722,8 +744,13 @@ unported (no filename match anywhere in `commonMain`/`androidMain`) - not 247, s
    `java.time.*` → `kotlinx.datetime.*`, `javaClass.simpleName` → `.name`/`::class.simpleName`; (d) a
    duplicate top-level declaration between a staging leftover and an already-extracted `commonMain`
    file - diff before deleting, they have all matched (byte-for-byte, or differing only by (c)) every
-   time so far; (e) a capability or resource genuinely dropped (not renamed) during the KMP rewrite -
-   confirm on `dev_OAPSAIMI` before restoring, and prefer the smallest correct fix over guessing.
+   time so far. **This duplication can be by type, not by filename** - a monolithic staging file can
+   carry several top-level declarations that were later split into differently-named files during the
+   real port (`AIVisionProvider.kt`'s models ended up in `MealEstimateModels.kt`/`FoodAnalysisPrompt.kt`);
+   a filename-only duplicate check misses this, only the compiler's "Redeclaration" error catches it,
+   so move-and-compile still beats predicting the closure by filename; (e) a capability or resource
+   genuinely dropped (not renamed) during the KMP rewrite - confirm on `dev_OAPSAIMI` before restoring,
+   and prefer the smallest correct fix over guessing.
 3. **`:app:assembleFullDebug` is now a required gate, not `:plugins:aps:compileAndroidMain` alone.**
    The module compile cannot see a missing Metro binding; only the app graph resolution catches it.
    Keep both in the loop, but if only one can run, run the app assemble.
