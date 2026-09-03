@@ -365,6 +365,62 @@ So the eleventh issue is a one-file move like the rest. `AiCoachingService` was 
 
 ---
 
+## 6e. Do the remaining four collaborators cut the same way? Measured
+
+After the `AimiAuditor` port worked, the obvious question was whether the same cut applies to the four
+files that still block the move. It does, structurally. But the second half of the answer is the one
+that matters, and it is not the encouraging one.
+
+### The cut works, and it is dramatic
+
+Members actually used, counted by resolving each consumer's property of that type and every call on it:
+
+| consumer | target | target size | members used |
+|---|---|---:|---:|
+| `ContextManager` | `ContextLLMClient` | 605 LOC | **1** (`parseWithLLM`) |
+| `ContextManager` | `PatientStateRuntimeRefresher` | 199 LOC | **1** (`refreshFromContextIntents`) |
+| `AutoDriveGater` | `HealthContextRepository` | 282 LOC | **1** (`fetchSnapshotForAutodriveGater`) |
+| `AIMIInsulinDecisionAdapterMTR` | `AIMIPhysioDataRepositoryMTR` | **985 LOC** | **2** (`fetchLastHeartRate`, `fetchStepsData`) |
+| `AIMIInsulinDecisionAdapterMTR` | `HealthContextRepository` | 282 LOC | 2 (`fetchSnapshot`, `getLastSnapshot`) |
+
+**Six methods stand between the decision path and 2,071 lines of collaborators.** Four narrow ports,
+in the shape lot 5A established, would cut all of it out of the compile graph. That is worth doing and
+it is the next lot.
+
+### But it does not lower the iOS cost, and it would have been easy to claim it did
+
+The tempting reading of that table is: the decision path only needs heart rate and steps from the
+985-line Health Connect repository, and those are the two easiest HealthKit mappings - the ones §11.4
+lists as direct with no caveat. So Health Connect stops being a T3 item.
+
+**That reading is wrong, and the transitive path is why.** `HealthContextRepository` is itself on the
+decision path, and it calls four more methods on the repository: `fetchHRVData`, `fetchMorningRHR`,
+`fetchSleepData`, `fetchThermalWindow`. What it returns is `HealthContextSnapshot`, which carries
+`hrvRmssd`, `sleepDebtMinutes`, `sleepEfficiency`, `hcSleepSessionActive`, `asleepLiveConfidence` and
+`thermalBelief`.
+
+And that snapshot reaches the dose. `AIMIInsulinDecisionAdapterMTR:227` reads
+`hrvCurrent = snapshot.hrvRmssd`, which is the input §11.4 traced into the stress and brake
+computation and from there into `smbMult`.
+
+**So §11.4's finding stands, confirmed rather than overturned.** The HRV RMSSD-versus-SDNN mismatch is
+on the dosing path, and sleep and skin temperature - the other two caveated mappings - are on it too.
+Health Connect to HealthKit remains a real T3 item for the engine, not only for the physio feature.
+
+One incidental correction to §11.4's table: `HealthContextSnapshot` also carries `bpSys` and `bpDia`.
+They are **not** sourced from Health Connect - there is no `BloodPressureRecord` anywhere in the
+repository - so they are not an iOS concern, but the table should not be read as the complete field
+list of what the decision path consumes.
+
+### What this means for sequencing
+
+The four ports are a good next lot: they are small, they follow a pattern that has now worked once,
+and they remove 2,071 lines from the move. They do **not** remove the HealthKit work. Those are
+separate facts and it is worth not conflating them - the port makes the Android-side port tractable;
+the HealthKit adapter is still the price of running the engine on iOS.
+
+---
+
 ## 7. Start here tomorrow
 
 1. **Convert `OpenAPSAIMIPlugin.kt` (parked) off javax to Metro.** H1. Do this before any port
