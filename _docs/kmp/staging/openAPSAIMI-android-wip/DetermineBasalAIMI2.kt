@@ -90,6 +90,7 @@ import app.aaps.plugins.aps.openAPSAIMI.orchestration.DoseTerminalSnapshotBuilde
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.PredictionAuthorityApplier
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.PredictionAuthorityApplyResult
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiTpo
 import app.aaps.plugins.aps.openAPSAIMI.ports.PkpdPort
 import app.aaps.plugins.aps.openAPSAIMI.prediction.ClampPkpdScenarioReconcile
 import app.aaps.plugins.aps.openAPSAIMI.prediction.NaiveEventualBgSignGuard
@@ -206,7 +207,6 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientEventMemory
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientEventMemoryCalculator
-import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientRefreshSource
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateEngine
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateLoopCache
@@ -1308,7 +1308,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var straightLineTubeAdvisor: StraightLineTubeAdvisor  // 📐 MPC-lite hypo tube + SMB-cap smoothing
     @Inject lateinit var sensitivityRatioEstimator: SensitivityRatioEstimator
     @Inject lateinit var continuousStateEstimator: app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstimator
-    @Inject lateinit var tpoOrchestrator: TpoOrchestrator
+    @Inject lateinit var tpoOrchestrator: AimiTpo
     
     // 🌸 Endometriosis Adjuster (Lazy init manually since not in graph yet or use manual passing)
     private val endoAdjuster by lazy { app.aaps.plugins.aps.openAPSAIMI.wcycle.EndometriosisAdjuster(preferences, aapsLogger) }

@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.tpo
 
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiTpo
 import android.content.Context
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -31,7 +32,7 @@ class TpoOrchestrator @Inject constructor(
     private val aapsLogger: AAPSLogger,
     private val tpoNotificationManager: TpoNotificationManager,
     private val context: Context,
-) {
+) : AimiTpo {
     private val persistence = TpoPersistence(storageHelper)
     private val sessionManager = TpoSessionManager(persistence)
     private val llmValidator = TpoLlmValidator(context, sp, aiCoachingService, aapsLogger)
@@ -44,7 +45,7 @@ class TpoOrchestrator @Inject constructor(
     @Volatile
     private var llmValidationInFlight: Boolean = false
 
-    fun consumePrefsChangedThisTick(): Boolean {
+    override fun consumePrefsChangedThisTick(): Boolean {
         val changed = prefsChangedThisTick
         prefsChangedThisTick = false
         return changed
@@ -61,7 +62,7 @@ class TpoOrchestrator @Inject constructor(
         return changed
     }
 
-    fun onTickStart(nowMs: Long): Boolean {
+    override fun onTickStart(nowMs: Long): Boolean {
         // Always expire/revert active sessions even when TPO master switch is off.
         val changed = sessionManager.expireIfNeeded(nowMs, preferences, historyRepo)
         if (changed) {
@@ -71,7 +72,7 @@ class TpoOrchestrator @Inject constructor(
         return changed
     }
 
-    fun onPatientStateReady(
+    override fun onPatientStateReady(
         patientState: PatientStateSnapshot,
         patientModeName: String,
         patientModeConfidence: Double,
