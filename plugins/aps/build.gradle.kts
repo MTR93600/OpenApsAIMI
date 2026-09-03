@@ -88,6 +88,13 @@ kotlin {
                 implementation("org.tensorflow:tensorflow-lite:2.4.0")
                 implementation("org.tensorflow:tensorflow-lite-support:0.1.0")
                 implementation("org.tensorflow:tensorflow-lite-metadata:0.1.0")
+                // ONNX Runtime for OrefOnnxScorer's hypo/hyper/bg-change classifiers (assets/oref/*.onnx).
+                // Same story as TensorFlow Lite above: dropped when upstream rewrote this module for KMP,
+                // restored here because the exported models stay. Android only.
+                implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
+                // Health Connect for AIMIPhysioDataRepositoryMTR's HRV/sleep/temperature/steps read path.
+                // Same story again: dropped in the KMP rewrite, restored for the same reason.
+                implementation("androidx.health.connect:connect-client:1.1.0")
                 implementation(libs.androidx.compose.ui.tooling.preview)
                 implementation(libs.androidx.work.runtime)
                 implementation(libs.org.slf4j.api)

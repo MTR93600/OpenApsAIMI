@@ -23,6 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -47,6 +48,7 @@ import dev.zacsweers.metro.AppScope
  * - Respects prebolus windows (P1/P2)
  * - Intelligent triggering (not every 5 min)
  */
+@ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class AuditorOrchestrator @Inject constructor(
     private val preferences: Preferences,

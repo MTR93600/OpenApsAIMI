@@ -106,6 +106,9 @@ interface ImportExportPrefs {
 
     /** Send events needed before app restart after import. */
     fun prepareImportRestart()
+
+    /** Upload an arbitrary file to the active cloud provider, at [remotePath]. Not the settings-export flow. */
+    suspend fun uploadFileToCloud(fileName: String, fileContent: ByteArray, mimeType: String, remotePath: String): Boolean
 }
 
 /** Result of attempting to decrypt a preference file for import. */

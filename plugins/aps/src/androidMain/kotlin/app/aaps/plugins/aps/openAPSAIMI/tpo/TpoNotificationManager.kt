@@ -136,7 +136,7 @@ class TpoNotificationManager @Inject constructor(
     }
 
     private fun createOpenAimiPrefsIntent(): PendingIntent {
-        val intent = Intent(context, uiInteraction.mainActivity).apply {
+        val intent = Intent(context, uiInteraction.mainActivity.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(EXTRA_NAVIGATE_ROUTE, OPENAPS_AIMI_PLUGIN_ROUTE)
         }

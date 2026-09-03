@@ -13,6 +13,12 @@
     <color name="inRange">#00FF00</color>
     <color name="tempTargetConfirmation">#6BD16B</color>
 
+    <!-- AIMI auditor status badge (classic View UI, not Compose) -->
+    <color name="examinedProfile">#FFFF5555</color>
+    <color name="high">#FFFB8C00</color>
+    <color name="warning">#ff1a1a</color>
+    <color name="deviationGrey">#c8666666</color>
+
     <!-- Material 3 base palette (light) -->
     <color name="aaps_theme_light_primary">#006493</color>
     <color name="aaps_theme_light_onPrimary">#FFFFFF</color>

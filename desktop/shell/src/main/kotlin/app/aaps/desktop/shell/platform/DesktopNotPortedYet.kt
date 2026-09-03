@@ -122,6 +122,9 @@ class DesktopImportExportPrefs @Inject constructor(
     override fun executeImport(prefs: Prefs) = aapsLogger.failNotOnDesktopYet("ImportExportPrefs.executeImport")
 
     override fun prepareImportRestart() = aapsLogger.notOnDesktopYet("ImportExportPrefs.prepareImportRestart")
+
+    override suspend fun uploadFileToCloud(fileName: String, fileContent: ByteArray, mimeType: String, remotePath: String): Boolean =
+        aapsLogger.failNotOnDesktopYet("ImportExportPrefs.uploadFileToCloud")
 }
 
 /**

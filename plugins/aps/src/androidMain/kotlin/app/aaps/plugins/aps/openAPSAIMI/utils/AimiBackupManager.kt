@@ -13,10 +13,11 @@ import app.aaps.core.interfaces.rx.events.EventAimiCloudBackupTrigger
 import app.aaps.core.interfaces.storage.Storage
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
-import io.reactivex.rxjava3.disposables.CompositeDisposable
-import io.reactivex.rxjava3.kotlin.plusAssign
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -44,7 +45,6 @@ class AimiBackupManager @Inject constructor(
     private val preferences: Preferences
 ) {
     private val scope = CoroutineScope(Dispatchers.IO)
-    private val disposables = CompositeDisposable()
 
     companion object {
         /** Hard cap per file before full in-memory read/upload (models/CSV stay under this). */
@@ -53,8 +53,10 @@ class AimiBackupManager @Inject constructor(
 
     init {
         log.info(LTag.APS, "AimiBackupManager initialized and listening for triggers")
-        disposables += rxBus.toObservable(EventAimiCloudBackupTrigger::class.java)
-            .subscribe { backupToCloud() }
+        rxBus.toFlow(EventAimiCloudBackupTrigger::class)
+            .onEach { backupToCloud() }
+            .catch { t -> log.error(LTag.APS, "AimiBackupManager trigger subscription error", t) }
+            .launchIn(scope)
     }
 
     /**

@@ -1,8 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.di
 
-import android.content.Context
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleAdjuster
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleEstimator
@@ -31,8 +30,8 @@ object WCycleModule {
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideWCycleLearner(context: Context, storageHelper: AimiStorageHelper): WCycleLearner =
-        WCycleLearner(ctx = context, storageHelper = storageHelper)
+    fun provideWCycleLearner(storage: AimiStorage): WCycleLearner =
+        WCycleLearner(storage)
 
     @Provides
     @SingleIn(AppScope::class)
@@ -45,8 +44,8 @@ object WCycleModule {
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideWCycleCsvLogger(context: Context, storageHelper: AimiStorageHelper): WCycleCsvLogger =
-        WCycleCsvLogger(context, storageHelper)
+    fun provideWCycleCsvLogger(storage: AimiStorage): WCycleCsvLogger =
+        WCycleCsvLogger(storage)
 
     @Provides
     @SingleIn(AppScope::class)

@@ -9,4 +9,10 @@
     <color name="inRange">#00FF00</color>
     <color name="tempTargetConfirmation">#77dd77</color>
 
+    <!-- AIMI auditor status badge (classic View UI, not Compose) -->
+    <color name="examinedProfile">#FFFF5555</color>
+    <color name="high">#FFFF00</color>
+    <color name="warning">#ff1a1a</color>
+    <color name="deviationGrey">#c8666666</color>
+
 </resources>

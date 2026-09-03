@@ -92,6 +92,9 @@ class IosImportExportPrefs @Inject constructor(
 
     override fun prepareImportRestart() = aapsLogger.notOnIosYet("ImportExportPrefs.prepareImportRestart")
 
+    override suspend fun uploadFileToCloud(fileName: String, fileContent: ByteArray, mimeType: String, remotePath: String): Boolean =
+        aapsLogger.failNotOnIosYet("ImportExportPrefs.uploadFileToCloud")
+
     override fun exportCustomWatchface(customWatchface: CwfData, withDate: Boolean) =
         aapsLogger.notOnIosYet("ImportExportPrefs.exportCustomWatchface")
 

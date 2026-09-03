@@ -16,6 +16,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
+import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
 import java.util.Locale
 
@@ -29,7 +31,9 @@ import java.util.Locale
  * =============================================================================
  */
 @SingleIn(AppScope::class)
-class AiCoachingService @Inject constructor() {
+class AiCoachingService @Inject constructor(
+    private val rh: ResourceHelper,
+) {
 
     enum class Provider { OPENAI, GEMINI, DEEPSEEK, CLAUDE }
 
@@ -331,8 +335,8 @@ class AiCoachingService @Inject constructor() {
         sb.append("--- SYSTEM OBSERVATIONS ---\n")
         if (report.recommendations.isNotEmpty()) {
             report.recommendations.forEach {
-                val title = try { androidContext.getString(it.titleResId) } catch (e: Exception) { "Issue" }
-                val desc = formatRecommendationDescription(androidContext, it)
+                val title = try { rh.gs(it.title) } catch (e: Exception) { "Issue" }
+                val desc = formatRecommendationDescription(it)
                 sb.append("- [Priority ${it.priority}] $title: $desc\n")
             }
         } else {
@@ -353,8 +357,8 @@ class AiCoachingService @Inject constructor() {
         return sb.toString()
     }
 
-    private fun formatRecommendationDescription(ctx: Context, rec: AimiRecommendation): String {
-        if (rec.descriptionResId == 0) {
+    private fun formatRecommendationDescription(rec: AimiRecommendation): String {
+        if (rec.description == TextRef.Literal("")) {
             val act = rec.action
             return when (act) {
                 is AimiAction.PreferenceUpdate -> act.reason
@@ -363,9 +367,9 @@ class AiCoachingService @Inject constructor() {
         }
         return try {
             if (rec.descriptionArgs.isNotEmpty()) {
-                ctx.getString(rec.descriptionResId, *rec.descriptionArgs.toTypedArray())
+                rh.gs(rec.description, *rec.descriptionArgs.toTypedArray())
             } else {
-                ctx.getString(rec.descriptionResId)
+                rh.gs(rec.description)
             }
         } catch (e: Exception) {
             ""

@@ -2,9 +2,11 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor
 
 import android.content.Context
 import app.aaps.core.interfaces.profile.EffectiveProfile
+import app.aaps.core.keys.interfaces.TextRef
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlin.math.roundToInt
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefAnalysisReport
@@ -492,8 +494,8 @@ class AimiAdvisorService {
         // Map actions to recommendations for the UI
         val recs = actions.map { action ->
             AimiRecommendation(
-                titleResId = app.aaps.plugins.aps.R.string.aimi_advisor_recommendations_title,
-                descriptionResId = 0, // Should be dynamic
+                title = ApsStrings.aimi_advisor_recommendations_title,
+                description = TextRef.Literal(""), // Should be dynamic
                 priority = action.priority,
                 domain = action.domain,
                 action = action
@@ -515,8 +517,8 @@ class AimiAdvisorService {
             if (autodriveV3Active && !rbtShadowEnabled) {
                 recs.add(
                     AimiRecommendation(
-                        titleResId = R.string.aimi_adv_rec_rbt_shadow_title,
-                        descriptionResId = R.string.aimi_adv_rec_rbt_shadow_desc,
+                        title = ApsStrings.aimi_adv_rec_rbt_shadow_title,
+                        description = ApsStrings.aimi_adv_rec_rbt_shadow_desc,
                         priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
                         domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                         action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
@@ -530,8 +532,8 @@ class AimiAdvisorService {
             if (autodriveV3Active && rbtShadowEnabled && !rbtAuthorityEnabled) {
                 recs.add(
                     AimiRecommendation(
-                        titleResId = R.string.aimi_adv_rec_rbt_authority_title,
-                        descriptionResId = R.string.aimi_adv_rec_rbt_authority_desc,
+                        title = ApsStrings.aimi_adv_rec_rbt_authority_title,
+                        description = ApsStrings.aimi_adv_rec_rbt_authority_desc,
                         priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.High,
                         domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                         action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
@@ -545,8 +547,8 @@ class AimiAdvisorService {
             if (autodriveV3Active && !htrEnabled && !rbtAuthorityEnabled && ctx.metrics.timeAbove180 > 0.22 && ctx.metrics.timeBelow70 < 0.05) {
                 recs.add(
                     AimiRecommendation(
-                        titleResId = R.string.aimi_adv_rec_htr_enable_title,
-                        descriptionResId = R.string.aimi_adv_rec_htr_enable_desc,
+                        title = ApsStrings.aimi_adv_rec_htr_enable_title,
+                        description = ApsStrings.aimi_adv_rec_htr_enable_desc,
                         priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.High,
                         domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                         action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
@@ -561,8 +563,8 @@ class AimiAdvisorService {
             if (!reliefEnabled && ctx.metrics.timeAbove180 > 0.25 && ctx.metrics.timeBelow70 < 0.04) {
                 recs.add(
                     AimiRecommendation(
-                        titleResId = R.string.aimi_adv_rec_pkpd_relief_enable_title,
-                        descriptionResId = R.string.aimi_adv_rec_pkpd_relief_enable_desc,
+                        title = ApsStrings.aimi_adv_rec_pkpd_relief_enable_title,
+                        description = ApsStrings.aimi_adv_rec_pkpd_relief_enable_desc,
                         priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
                         domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Pkpd,
                         action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
@@ -577,8 +579,8 @@ class AimiAdvisorService {
             if (reliefEnabled && reliefMinFactor < 0.70 && ctx.metrics.timeAbove180 > 0.25 && ctx.metrics.timeBelow70 <= 0.045) {
                 recs.add(
                     AimiRecommendation(
-                        titleResId = R.string.aimi_adv_rec_pkpd_relief_factor_title,
-                        descriptionResId = R.string.aimi_adv_rec_pkpd_relief_factor_desc,
+                        title = ApsStrings.aimi_adv_rec_pkpd_relief_factor_title,
+                        description = ApsStrings.aimi_adv_rec_pkpd_relief_factor_desc,
                         priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
                         domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Pkpd,
                         action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
@@ -594,8 +596,8 @@ class AimiAdvisorService {
             if (reliefEnabled && redCarpetRestore < 0.65 && ctx.metrics.timeAbove180 > 0.25 && ctx.metrics.timeBelow70 <= 0.045) {
                 recs.add(
                     AimiRecommendation(
-                        titleResId = R.string.aimi_adv_rec_redcarpet_restore_title,
-                        descriptionResId = R.string.aimi_adv_rec_redcarpet_restore_desc,
+                        title = ApsStrings.aimi_adv_rec_redcarpet_restore_title,
+                        description = ApsStrings.aimi_adv_rec_redcarpet_restore_desc,
                         priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
                         domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                         action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
@@ -611,8 +613,8 @@ class AimiAdvisorService {
             if (reliefEnabled && (maxIobFactor < 1.10 || maxIobExtra < 1.0) && ctx.metrics.timeAbove180 > 0.30 && ctx.metrics.timeBelow70 < 0.04) {
                 recs.add(
                     AimiRecommendation(
-                        titleResId = R.string.aimi_adv_rec_priority_maxiob_title,
-                        descriptionResId = R.string.aimi_adv_rec_priority_maxiob_desc,
+                        title = ApsStrings.aimi_adv_rec_priority_maxiob_title,
+                        description = ApsStrings.aimi_adv_rec_priority_maxiob_desc,
                         priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
                         domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                         action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
@@ -634,8 +636,8 @@ class AimiAdvisorService {
                 if (proposed <= reliefMinFactor - 0.02) {
                     recs.add(
                         AimiRecommendation(
-                            titleResId = R.string.aimi_adv_rec_pkpd_relief_reduce_title,
-                            descriptionResId = R.string.aimi_adv_rec_pkpd_relief_reduce_desc,
+                            title = ApsStrings.aimi_adv_rec_pkpd_relief_reduce_title,
+                            description = ApsStrings.aimi_adv_rec_pkpd_relief_reduce_desc,
                             priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.High,
                             domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Pkpd,
                             action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
@@ -657,8 +659,8 @@ class AimiAdvisorService {
                 if (proposed <= redCarpetRestore - 0.02) {
                     recs.add(
                         AimiRecommendation(
-                            titleResId = R.string.aimi_adv_rec_redcarpet_reduce_title,
-                            descriptionResId = R.string.aimi_adv_rec_redcarpet_reduce_desc,
+                            title = ApsStrings.aimi_adv_rec_redcarpet_reduce_title,
+                            description = ApsStrings.aimi_adv_rec_redcarpet_reduce_desc,
                             priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
                             domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                             action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
@@ -680,8 +682,8 @@ class AimiAdvisorService {
                 if (proposed <= maxIobFactor - 0.03) {
                     recs.add(
                         AimiRecommendation(
-                            titleResId = R.string.aimi_adv_rec_priority_maxiob_reduce_title,
-                            descriptionResId = R.string.aimi_adv_rec_priority_maxiob_reduce_desc,
+                            title = ApsStrings.aimi_adv_rec_priority_maxiob_reduce_title,
+                            description = ApsStrings.aimi_adv_rec_priority_maxiob_reduce_desc,
                             priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.High,
                             domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                             action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
@@ -703,8 +705,8 @@ class AimiAdvisorService {
                 if (proposed <= maxIobExtra - 0.25) {
                     recs.add(
                         AimiRecommendation(
-                            titleResId = R.string.aimi_adv_rec_priority_maxiob_extra_reduce_title,
-                            descriptionResId = R.string.aimi_adv_rec_priority_maxiob_extra_reduce_desc,
+                            title = ApsStrings.aimi_adv_rec_priority_maxiob_extra_reduce_title,
+                            description = ApsStrings.aimi_adv_rec_priority_maxiob_extra_reduce_desc,
                             priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
                             domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                             action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
@@ -727,8 +729,8 @@ class AimiAdvisorService {
         // 5) If nothing alarming -> positive message
         if (recs.isEmpty()) {
             recs.add(AimiRecommendation(
-                titleResId = app.aaps.plugins.aps.R.string.aimi_adv_rec_profile_ok_title,
-                descriptionResId = app.aaps.plugins.aps.R.string.aimi_adv_rec_profile_ok_desc,
+                title = ApsStrings.aimi_adv_rec_profile_ok_title,
+                description = ApsStrings.aimi_adv_rec_profile_ok_desc,
                 priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Low,
                 domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                 action = null
@@ -759,8 +761,8 @@ class AimiAdvisorService {
         if (mixedOref && hypoLoad >= 0.04 && hyperLoad >= 0.12) {
             recs.add(
                 AimiRecommendation(
-                    titleResId = R.string.aimi_adv_rec_oref_isf_mixed_title,
-                    descriptionResId = R.string.aimi_adv_rec_oref_isf_mixed_desc,
+                    title = ApsStrings.aimi_adv_rec_oref_isf_mixed_title,
+                    description = ApsStrings.aimi_adv_rec_oref_isf_mixed_desc,
                     priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.High,
                     domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                     action = null,
@@ -775,8 +777,8 @@ class AimiAdvisorService {
             if (hypoFocus && hypoLoad >= 0.04 && !hyperDominatesLoad) {
                 recs.add(
                     AimiRecommendation(
-                        titleResId = R.string.aimi_adv_rec_oref_isf_hypo_title,
-                        descriptionResId = R.string.aimi_adv_rec_oref_isf_hypo_desc,
+                        title = ApsStrings.aimi_adv_rec_oref_isf_hypo_title,
+                        description = ApsStrings.aimi_adv_rec_oref_isf_hypo_desc,
                         priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.High,
                         domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                         action = null,
@@ -787,8 +789,8 @@ class AimiAdvisorService {
             if (hyperFocus && hyperLoad >= 0.10 && hypoLoad < 0.05) {
                 recs.add(
                     AimiRecommendation(
-                        titleResId = R.string.aimi_adv_rec_oref_isf_hyper_title,
-                        descriptionResId = R.string.aimi_adv_rec_oref_isf_hyper_desc,
+                        title = ApsStrings.aimi_adv_rec_oref_isf_hyper_title,
+                        description = ApsStrings.aimi_adv_rec_oref_isf_hyper_desc,
                         priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
                         domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                         action = null,
@@ -803,8 +805,8 @@ class AimiAdvisorService {
         ) {
             recs.add(
                 AimiRecommendation(
-                    titleResId = R.string.aimi_adv_rec_oref_basal_hypo_title,
-                    descriptionResId = R.string.aimi_adv_rec_oref_basal_hypo_desc,
+                    title = ApsStrings.aimi_adv_rec_oref_basal_hypo_title,
+                    description = ApsStrings.aimi_adv_rec_oref_basal_hypo_desc,
                     priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
                     domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                     action = null,
@@ -816,8 +818,8 @@ class AimiAdvisorService {
         if (hyperFocus && hyperLoad >= 0.10) {
             recs.add(
                 AimiRecommendation(
-                    titleResId = R.string.aimi_adv_rec_oref_ic_hyper_title,
-                    descriptionResId = R.string.aimi_adv_rec_oref_ic_hyper_desc,
+                    title = ApsStrings.aimi_adv_rec_oref_ic_hyper_title,
+                    description = ApsStrings.aimi_adv_rec_oref_ic_hyper_desc,
                     priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
                     domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                     action = null,
@@ -831,8 +833,8 @@ class AimiAdvisorService {
         ) {
             recs.add(
                 AimiRecommendation(
-                    titleResId = R.string.aimi_adv_rec_oref_pkpd_review_title,
-                    descriptionResId = R.string.aimi_adv_rec_oref_pkpd_review_desc,
+                    title = ApsStrings.aimi_adv_rec_oref_pkpd_review_title,
+                    description = ApsStrings.aimi_adv_rec_oref_pkpd_review_desc,
                     priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
                     domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Pkpd,
                     action = null,
@@ -844,8 +846,8 @@ class AimiAdvisorService {
             if (hypoFocus && ctx.metrics.timeBelow70 >= 0.055) {
                 recs.add(
                     AimiRecommendation(
-                        titleResId = R.string.aimi_adv_rec_oref_autodrive_mpc_hypo_title,
-                        descriptionResId = R.string.aimi_adv_rec_oref_autodrive_mpc_hypo_desc,
+                        title = ApsStrings.aimi_adv_rec_oref_autodrive_mpc_hypo_title,
+                        description = ApsStrings.aimi_adv_rec_oref_autodrive_mpc_hypo_desc,
                         priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
                         domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                         action = null,
@@ -857,8 +859,8 @@ class AimiAdvisorService {
             } else if (hyperFocus && ctx.metrics.timeAbove180 >= 0.08 && ctx.metrics.timeBelow70 < 0.052) {
                 recs.add(
                     AimiRecommendation(
-                        titleResId = R.string.aimi_adv_rec_oref_autodrive_mpc_title,
-                        descriptionResId = R.string.aimi_adv_rec_oref_autodrive_mpc_desc,
+                        title = ApsStrings.aimi_adv_rec_oref_autodrive_mpc_title,
+                        description = ApsStrings.aimi_adv_rec_oref_autodrive_mpc_desc,
                         priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Low,
                         domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                         action = null,
@@ -916,7 +918,7 @@ class AimiAdvisorService {
                 sb.append(rh.gs(R.string.aimi_adv_analysis_issues_header) + "\n")
                 report.recommendations.forEach { rec ->
                     // Just print the title of the recommendation
-                    val title = try { rh.gs(rec.titleResId) } catch (e: Exception) { "-" }
+                    val title = try { rh.gs(rec.title) } catch (e: Exception) { "-" }
                     sb.append("- $title\n")
                 }
             } else {
@@ -926,11 +928,11 @@ class AimiAdvisorService {
             report.orefAnalysis?.let { oref ->
                 sb.append("\n\n--- OREF local ---\n")
                 sb.append(oref.toPromptSection())
-                insightContext?.let { ctx ->
+                insightContext?.let {
                     sb.append("\n\n")
                     sb.append(
                         app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefUserInsightFormatter.buildParagraph(
-                            ctx,
+                            rh,
                             oref,
                         ),
                     )
@@ -972,7 +974,7 @@ class AimiAdvisorService {
                 "smbTailDamping": ${context.pkpdPrefs.smbTailDamping}
               },
               "suggestions": [
-                ${report.recommendations.filter { it.domain is app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Pkpd }.joinToString(",") { "\"${try{rh?.gs(it.titleResId)}catch(e:Exception){it.descriptionResId}}\"" }}
+                ${report.recommendations.filter { it.domain is app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Pkpd }.joinToString(",") { "\"${try{rh?.gs(it.title)}catch(e:Exception){rh?.gs(it.description)}}\"" }}
               ]
             }
         """.trimIndent()

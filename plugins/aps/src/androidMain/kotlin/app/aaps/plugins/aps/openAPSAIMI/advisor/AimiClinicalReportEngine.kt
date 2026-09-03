@@ -116,9 +116,8 @@ class AimiClinicalReportEngine @Inject constructor(
         return buildJsonObject {
             put("cyclePhase", "UNKNOWN") // Placeholder until we link WCycle
             when (val enabled = status["isEnabled"]) {
-                is Boolean -> put("physioEngineActive", enabled)
                 null -> put("physioEngineActive", JsonNull)
-                else -> put("physioEngineActive", enabled.toString())
+                else -> put("physioEngineActive", enabled.toBoolean())
             }
         }
     }

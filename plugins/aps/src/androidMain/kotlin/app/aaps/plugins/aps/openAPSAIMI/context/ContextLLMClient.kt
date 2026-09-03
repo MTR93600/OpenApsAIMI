@@ -9,6 +9,7 @@ import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.*
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import org.json.JSONArray
 import org.json.JSONObject
+import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -37,6 +38,7 @@ import kotlin.time.Duration.Companion.minutes
  * // Returns: [Activity(intensity=HIGH, duration=60min, type=CARDIO)]
  * ```
  */
+@ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class ContextLLMClient @Inject constructor(
     private val aiCoachingService: AiCoachingService,

@@ -8,6 +8,8 @@ import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -409,7 +411,7 @@ class AuditorAIService @Inject constructor(
         }
         
         // Parse verdict JSON
-        val verdictJson = JSONObject(jsonStr)
+        val verdictJson = Json.parseToJsonElement(jsonStr).jsonObject
         val verdict = AuditorVerdict.fromJSON(verdictJson)
         AuditorStatusTracker.updateStatus(verdict.toTrackerStatus())
         return verdict

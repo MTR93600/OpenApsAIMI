@@ -11,6 +11,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalDataWindowMTR
 import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -31,6 +32,7 @@ import java.time.ZoneId
  * 
  * Provides the `HealthContextSnapshot` to the rest of the app.
  */
+@ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class HealthContextRepository @Inject constructor(
     private val context: Context,

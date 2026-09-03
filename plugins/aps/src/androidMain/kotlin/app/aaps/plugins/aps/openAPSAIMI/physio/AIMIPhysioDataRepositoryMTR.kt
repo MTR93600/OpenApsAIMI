@@ -33,6 +33,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
+import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -55,6 +56,7 @@ import kotlin.math.sqrt
  * 
  * @author MTR & Lyra AI - AIMI Physiological Intelligence
  */
+@ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class AIMIPhysioDataRepositoryMTR @Inject constructor(
     private val context: Context,

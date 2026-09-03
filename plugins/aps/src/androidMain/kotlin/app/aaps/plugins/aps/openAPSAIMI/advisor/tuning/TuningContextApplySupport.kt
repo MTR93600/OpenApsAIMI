@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.tuning
 
-import android.content.Context
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.StringKey
@@ -11,34 +10,6 @@ import app.aaps.core.interfaces.maintenance.ImportExportPrefs
 import app.aaps.core.interfaces.protection.ExportPasswordDataStore
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import java.util.Locale
-
-object TuningPreferenceLabels {
-
-    fun shortLabel(key: app.aaps.core.keys.interfaces.PreferenceKey): String =
-        when (key) {
-            DoubleKey.OApsAIMIMaxSMB -> "Max SMB"
-            DoubleKey.OApsAIMIHighBGMaxSMB -> "High BG Max SMB"
-            DoubleKey.OApsAIMILunchFactor -> "Lunch factor"
-            DoubleKey.OApsAIMIDinnerFactor -> "Dinner factor"
-            DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor -> "PKPD relief min factor"
-            DoubleKey.OApsAIMIRedCarpetRestoreThreshold -> "Red Carpet restore"
-            DoubleKey.OApsAIMIPriorityMaxIobFactor -> "Priority MaxIOB factor"
-            DoubleKey.OApsAIMIPriorityMaxIobExtraU -> "Priority MaxIOB extra U"
-            DoubleKey.OApsAIMISmbTailDamping -> "SMB tail damping"
-            DoubleKey.AimiTubeAggressiveness -> "Tube aggressiveness"
-            DoubleKey.AimiTubeHypoFloorMgdl -> "Tube hypo floor"
-            BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled -> "PKPD pragmatic relief"
-            BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled -> "Straight-line tube"
-            else -> key.key
-        }
-
-    fun formatValue(value: Any): String = when (value) {
-        is Double -> String.format(Locale.US, "%.3f", value)
-        is Boolean -> if (value) "on" else "off"
-        else -> value.toString()
-    }
-}
-
 object TuningContextApplySupport {
 
     fun applyTuningPlan(
@@ -118,19 +89,18 @@ object TuningContextApplySupport {
     }
 
     fun tryExportSettings(
-        context: Context,
         importExportPrefs: ImportExportPrefs,
         exportPasswordDataStore: ExportPasswordDataStore,
     ): TuningExportStatus {
         if (!exportPasswordDataStore.exportPasswordStoreEnabled()) {
             return TuningExportStatus.SKIPPED_DISABLED
         }
-        val (password, isExpired, _) = exportPasswordDataStore.getPasswordFromDataStore(context)
+        val (password, isExpired, _) = exportPasswordDataStore.getPasswordFromDataStore()
         if (password.isEmpty() || isExpired) {
             return if (isExpired) TuningExportStatus.SKIPPED_PASSWORD_EXPIRED
             else TuningExportStatus.SKIPPED_NO_PASSWORD
         }
-        return if (importExportPrefs.exportSharedPreferencesNonInteractive(context, password)) {
+        return if (importExportPrefs.exportSharedPreferencesNonInteractive(password)) {
             TuningExportStatus.SUCCESS
         } else {
             TuningExportStatus.FAILED

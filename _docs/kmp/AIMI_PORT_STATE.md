@@ -521,43 +521,157 @@ worth checking by declaration, not by filename, before assuming either.
 
 ---
 
+## 6h. Milestone, 2026-09-03: `OpenAPSAIMIPlugin` registers and the app builds
+
+Section 6g's next milestone is done: `OpenAPSAIMIPlugin.kt` (2,272 lines) moved into `androidMain`,
+converted off `javax.inject.Provider` to a plain `() -> APSResult`, self-registered with
+`@ContributesIntoMap(AppScope::class, binding = binding<PluginBase>()) @MetroIntKey(250)` (the next
+free slot after Autotune's 240 - grepped every `@IntKey`/`@MetroIntKey` in the tree first), and its
+whole transitive dependency closure moved out of staging behind it. `:app:assembleFullDebug` now
+succeeds - **this is the first time in the whole migration that AIMI is reachable from a running
+build**, not just compiling in isolation.
+
+**Scale.** ~45 files moved from `_docs/kmp/staging/openAPSAIMI-android-wip/` into `androidMain` this
+lot: the oref pipeline (`OrefLocalPipeline`, `OrefOnnxScorer`, `OrefPersonalMlTrainer` - ONNX inference
+was never wired at all), the whole auditor UI/model cluster, the TPO cluster
+(`AiCoachingService`/`TpoSessionManager`/`TpoLlmValidator`/`TpoNotificationManager`), the physio/Health
+Connect cluster (`AIMIPhysioDataRepositoryMTR`, `HealthContextRepository`, permission handlers, sync
+service + worker), the wcycle DI module, and the Compose screens (`AimiControlCenterScreen`,
+`AimiPkpdSettingsScreen`/`PkpdSettingsUi`, `HormonitorViewerScreen`, `AimiPreferenceInfoScreen`). Every
+move followed the same fixpoint loop: `git mv`, compile, fix the exact reported error, repeat - never
+predicting the closure in advance. Five duplicate top-level declarations were found and deleted along
+the way (`TuningPreferenceLabels` was the fifth, byte-identical between a staging leftover and the
+already-extracted commonMain copy).
+
+**Recurring drift patterns, same shapes as 6g but in new files:**
+
+- **`rh: ResourceHelper` narrowed to `TextResolver`.** `PluginBase.rh` is `open val rh: TextResolver`
+  (KMP-common), so a plain (non-`override`) `rh: ResourceHelper` constructor parameter is invisible
+  outside the primary constructor - every `rh.gs(R.string.x)` call in a member function actually
+  resolved against the narrower inherited property and failed with "Int, but TextRef expected". Fixed
+  by declaring `override val rh: ResourceHelper` on the plugin's own constructor param, matching the
+  established pattern (`AutotunePlugin`, `VersionCheckerPlugin`, `BgQualityCheckPlugin` all do this).
+  This one line fixed a dozen call sites at once; converting each call site to a named `TextRef`
+  first (which I did before finding the root cause) was not wasted work, just not the minimal fix.
+- **`AimiRecommendation.titleResId`/`descriptionResId` (Int) → `.title`/`.description` (TextRef).**
+  Same shape as `AimiAutonomyMode`'s old `labelResId` - hit in `AimiAdvisorService`,
+  `AiCoachingService`, `PkpdSettingsUi` independently. One `descriptionResId = 0` sentinel became
+  `TextRef.Literal("")`, per the type's own doc comment: `Literal` is the direct replacement for the
+  `0`/`-1` "no resource" sentinels.
+- **`UnitType.valueResId()`/`.unitLabelResId()` → `.valueFormat()`/`.unitLabel()` in `:core:ui`,
+  returning `TextRef?` not `Int?`.** `UnitType.kt`'s own comment says the mapping "lives in `:core:ui`
+  (`UnitTypeText.kt`), not here" - the old names never existed there either, they'd just moved.
+- **Two Android APIs that changed shape under the plain-Kotlin refactor:**
+  `ExportPasswordDataStore.getPasswordFromDataStore()` and
+  `ImportExportPrefs.exportSharedPreferencesNonInteractive(password)` both dropped a `Context`
+  parameter they no longer need internally.
+
+**Two capabilities were dropped, not renamed, and had to be restored rather than chased:**
+
+- **`ResourceHelper.gsa()` (string-array reading) does not exist in the KMP interface at all** - only
+  `gs`/`gq`/`gsNotLocalised`. Every other array-based preference in the tree had already been migrated
+  away from Android `<string-array>` resources (`SafetyPlugin`'s `hardLimits.ageEntries()` is the
+  precedent). Asked the user rather than guessing: **converted to Kotlin-native entries** - a small
+  `aimiComposeEntries(vararg Pair<String,String>): Map<String, TextRef>` helper wrapping each label in
+  `TextRef.Literal`, at the 8 call sites (Women's Cycle tracking/contraceptive, inflammatory disease,
+  thyroid module). The backing `wcycle_strings.xml` string-arrays were never carried into the KMP
+  tree; their content (recovered from `dev_OAPSAIMI`) is now inline at the call site instead.
+- **The AIMI cloud-backup bridge (`CloudBackupConstants`, `EventAimiCloudBackupResult`,
+  `EventAimiCloudBackupTrigger`, `ImportExportPrefs.uploadFileToCloud`) did not exist anywhere in the
+  KMP tree**, though the `CloudStorageManager`/`CloudStorageProvider` abstraction it bridges to was
+  already fully ported and working. Restored the 3 small `core:interfaces` files verbatim from
+  `dev_OAPSAIMI`, and added `uploadFileToCloud` to `ImportExportPrefs` plus its three implementations
+  (`ImportExportPrefsImpl` gets the real bridge to `CloudStorageManager`; `IosImportExportPrefs` and
+  `DesktopImportExportPrefs` get a `failNotOnIosYet`/`failNotOnDesktopYet` stub, matching those files'
+  own stated convention of throwing rather than faking a result).
+- Also restored as plain missing resources (dropped, not renamed, confirmed by diffing against
+  `dev_OAPSAIMI`): the `aimi_tube_advanced_title` string in `:core:keys`, and four color resources
+  (`deviationGrey`, `examinedProfile`, `high`, `warning` - light + night) in `:core:ui`, both consumed
+  by classic View-based UI (`AuditorUIState`'s status badge), not Compose, so restoring them doesn't
+  fight the "no Android colors in Compose" rule.
+- Two Gradle dependencies restored the same way as `tensorflow-lite`/`onnxruntime` in 6g:
+  `androidx.health.connect:connect-client:1.1.0` (Health Connect - `AIMIPhysioDataRepositoryMTR`'s
+  HRV/sleep/temperature/steps reads) and (already had) ONNX runtime.
+
+**Four Metro bindings were missing entirely** - classes moved into `androidMain` implementing a port
+interface (`AimiAuditor`, `AimiHealthContext`, `AimiPhysioSource`, `AimiContextLlm`) but never
+annotated `@ContributesBinding(AppScope::class)`, so `:plugins:aps:compileAndroidMain` passed (nothing
+there checks the graph) while `:app:compileFullDebugKotlin` failed with `Metro/MissingBinding` -
+`AuditorOrchestrator`, `TpoOrchestrator`, `HealthContextRepository`, `AIMIPhysioDataRepositoryMTR`,
+`ContextLLMClient`. This is the reason `:app:assembleFullDebug`, not just
+`:plugins:aps:compileAndroidMain`, has to be the gate for "this plugin is actually live" - the module
+compile alone cannot see a missing binding.
+
+**One dead-code deletion, checked both ways before removing.** `OpenAPSAIMIPlugin.invoke()` had an
+"FCL 11.0: Force Copy Predictions via JSON" block that built an `org.json.JSONObject` and mutated the
+`JsonObject?` returned by `determineBasalResult.json()`. Checked `DetermineBasalResult.json()`'s
+implementation on **both** sides: in the current KMP tree it is `Json.encodeToJsonElement(...)`, a
+fresh value every call; in `dev_OAPSAIMI` it was `JSONObject(result.serialize())`, also fresh every
+call. The mutation was already a no-op before this migration touched it, not something the migration
+broke - confirmed dead on both timelines before deleting it, per the "check whether dead code is
+hiding a bug" rule.
+
+**Verified:** `:app:assembleFullDebug` EXIT=0, `:plugins:aps:compileKotlinIosArm64` EXIT=0,
+`:plugins:aps:testAndroidHostTest` EXIT=0 (330 tests, 0 failures). Numeric-fidelity check was scoped
+to files with actual logic edits (not pure `git mv`s, which cannot alter content) - none of those
+edits touched a dosing-relevant constant; they were TextRef/API-signature/DI-annotation fixes.
+
+**State after this lot:**
+
+| | files |
+|---|---:|
+| AIMI in `commonMain` | 356 |
+| AIMI in `androidMain` | 100 |
+| AIMI still in staging | 247 |
+
+**What this does NOT do.** The other 247 staged files (Compose screens beyond the ones just moved,
+`AimiHormonitorStudyExporterMTR`, SOS SMS, and whatever else the app doesn't currently reach) are still
+parked - none of them block the plugin from running with the feature set that compiled. `AimiSmbComparison`
+and `AimiEmergencySos` (two of the eight collaborator ports) still have no implementation anywhere in
+the tree; nothing currently constructs them, so they haven't surfaced as a `MissingBinding` yet, but
+they will the moment something does.
+
+---
+
 ## 7. Start here next session
 
-Everything in the list this section used to carry is done: the storage seam, the JSON conversion, six
-collaborator ports, and `DetermineBasalAIMI2` itself compiling in `androidMain`. The front has moved.
-What is left is getting AIMI to actually run, not getting it to compile.
+The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at
+`@MetroIntKey(250)` and its whole reachable dependency closure compiling. What is left is the 247
+still-staged files (nothing the app currently reaches depends on them) and the two ports with no
+implementation yet.
 
-1. **Convert `OpenAPSAIMIPlugin.kt` off `javax` to Metro before it lands - H1, still open.** It is
-   2,272 lines, still on `javax.inject.Provider` (line 104) and an `@Inject constructor` (line 151).
-   The moment it is annotated for Metro and registered, also apply the `@IntKey` alias the
-   `kmp-module-flip` skill's audit recorded: `import dev.zacsweers.metro.IntKey as MetroIntKey`,
-   because this file both registers a plugin (`@IntKey`) and reads preferences
-   (`app.aaps.core.keys.IntKey`) - the plain import collides.
-2. **Resolve its 14 remaining unresolved imports, measured in 6g, by declaration not by filename.**
-   Check each one the way `AimiBehaviorCausalInsight` and `AimiAutonomyMode` were checked - `grep`
-   for `class X` / `object X` / `fun X`, never for the bare name. Some of the 14 are real UI screens
-   that rightly stay Android-only (`AimiControlCenterScreen`, `AimiPkpdSettingsScreen`,
-   `HormonitorViewerScreen`, `AimiPreferenceInfoScreen`); others may turn out to be a type sitting in
-   the wrong file, the way `AimiAutonomyMode` did twice already in this document.
-3. **Register `OpenAPSAIMIPlugin` in `ApsPluginRegistrations.kt`** once it compiles, with its own
-   `@IntKey` (the study's earlier documents suggest it historically bound after `AUTO_ISF` (230); pick
-   the next free slot and record why). This is the moment AIMI becomes reachable from the running app
-   for the first time in this whole migration.
-4. **Only after that, decide what to do with the other 295 staged files** - `AimiHormonitorStudyExporterMTR`
-   (recommend: stub, still), the Compose screens, the TPO/auditor clusters five ports now hold
-   parked, Health Connect workers, SOS SMS. None of it blocks the plugin from registering and running
-   with a reduced feature set; all of it can be its own lot once the plugin is live.
-5. **Keep the two-baseline numeric check on every lot, and keep measuring before moving.** Three
-   things this session got wrong were all name-matching instead of declaration-checking (the blocker
-   count, a `StatusSnapshot` collision, `AimiBehaviorCausalInsight`'s real home), and every one of the
-   four attempts to move `DetermineBasalAIMI2` that eventually worked was won by moving-and-compiling,
-   never by predicting the closure in advance.
+1. **`AimiSmbComparison` and `AimiEmergencySos` have no implementing class anywhere in the tree.**
+   Nothing constructs them yet, so they have not surfaced as a `Metro/MissingBinding` failure - but
+   the moment some staged file needing either one gets moved in, `:app:compileFullDebugKotlin` will
+   fail the same way `AimiAuditor`/`AimiContextLlm`/etc. did this lot. Find their intended
+   implementations in `_docs/kmp/staging/` (by declaration - grep for `: AimiSmbComparison` /
+   `: AimiEmergencySos`, not by filename) before assuming they don't exist.
+2. **Before moving any more staged files, check for the recurring failure shapes from this lot and
+   6g, in order:** (a) a class implementing a port interface but missing
+   `@ContributesBinding(AppScope::class)` - compiles fine alone, fails only at `:app:compileFullDebugKotlin`,
+   so that has to be the gate, not `:plugins:aps:compileAndroidMain`; (b) `.titleResId`/`.descriptionResId`/
+   `.summaryResId`/`.valueResId`/`.unitLabelResId`-shaped names on anything that used to carry a bare
+   `Int` - almost always renamed to a `TextRef`-typed property, not gone; (c) a duplicate top-level
+   declaration between a staging leftover and an already-extracted `commonMain` file (five found across
+   6g and this lot) - diff before deleting, but they have all matched byte-for-byte so far; (d) a
+   capability or resource genuinely dropped (not renamed) during the KMP rewrite - confirm on
+   `dev_OAPSAIMI` before restoring, and prefer the smallest correct fix over guessing (an array-based
+   preference became Kotlin-native entries because the reading API itself is gone tree-wide, not just
+   renamed).
+3. **`:app:assembleFullDebug` is now a required gate, not `:plugins:aps:compileAndroidMain` alone.**
+   The module compile cannot see a missing Metro binding; only the app graph resolution catches it.
+   Keep both in the loop, but if only one can run, run the app assemble.
+4. **Decide what to do with the other 247 staged files** - `AimiHormonitorStudyExporterMTR`
+   (recommend: stub, still), SOS SMS, and whatever Compose screens weren't already pulled in behind
+   `OpenAPSAIMIPlugin`. None of it blocks what already runs; each is its own lot.
+5. **Keep the two-baseline numeric check on every lot that touches logic, not just moves files.** This
+   lot's edits were all TextRef/API-signature/DI-annotation fixes with no numeric-literal risk, so the
+   fidelity check was scoped to touched-with-logic files rather than every moved file - a pure `git mv`
+   cannot alter content, so it doesn't need re-diffing. Keep making that distinction explicit rather
+   than checking everything or nothing.
 
-One process note for whoever runs the next session on the pipeline of five agents (definer, designer,
-coder, controller, committer): it earned its cost early on, catching real errors a single pass would
-have shipped. But the two largest pieces of actual progress in this document - the JSON-surface
-measurement in 6c/6d and getting `DetermineBasalAIMI2` to compile in 6g - were both done directly,
-file by file, compile by compile, without spawning an agent. For a task this entangled, a tight
-measure-edit-compile loop held by one continuous train of thought outperformed delegating it. Use the
-pipeline for lots with a real architectural decision to make; do the mechanical, iterative ones
-directly.
+One process note, still holding from 6g: the pipeline of five agents (definer, designer, coder,
+controller, committer) is for lots with a real architectural decision to make. This lot had exactly one
+such decision - the array-based preferences with no backing API left in the tree - and it was put to
+the user rather than guessed. Everything else (closing ~45 files' worth of dependency graph, five
+Metro bindings, three dropped-capability restores) was mechanical move-compile-fix, done directly.

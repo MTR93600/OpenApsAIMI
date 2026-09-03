@@ -42,14 +42,17 @@ import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.decimalPlaces
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.step
-import app.aaps.core.keys.unitLabelResId
-import app.aaps.core.keys.valueResId
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.core.ui.compose.stringResourceOrNull
+import app.aaps.core.ui.compose.unitLabel
+import app.aaps.core.ui.compose.valueFormat
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.SliderWithButtons
 import app.aaps.core.data.format.NumberFormat
 import app.aaps.core.ui.compose.preference.AdaptiveDoublePreferenceItem
 import app.aaps.core.ui.compose.preference.AdaptiveSwitchPreferenceItem
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiRecommendation
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
@@ -186,8 +189,8 @@ fun PkpdSimpleSettingsContent(
 
     AdaptiveSwitchPreferenceItem(
         booleanKey = BooleanKey.OApsAIMIPkpdEnabled,
-        titleResId = R.string.oaps_aimi_pkpd_enabled_title,
-        summaryResId = R.string.aimi_pkpd_enabled_simple_summary,
+        title = ApsStrings.oaps_aimi_pkpd_enabled_title,
+        summary = ApsStrings.aimi_pkpd_enabled_simple_summary,
     )
 
     Text(
@@ -362,8 +365,8 @@ fun PkpdAdvancedSettingsContent(
 
     AdaptiveSwitchPreferenceItem(
         booleanKey = BooleanKey.OApsAIMIPkpdStackAwareGuardB,
-        titleResId = R.string.oaps_aimi_pkpd_stack_aware_guardb_title,
-        summaryResId = R.string.oaps_aimi_pkpd_stack_aware_guardb_summary,
+        title = ApsStrings.oaps_aimi_pkpd_stack_aware_guardb_title,
+        summary = ApsStrings.oaps_aimi_pkpd_stack_aware_guardb_summary,
     )
 
     OutlinedButton(onClick = { showResetConfirm = true }) {
@@ -404,15 +407,15 @@ fun PkpdExpertSettingsContent(preferenceRevision: Int) {
     ExpandableSection(title = stringResource(R.string.aimi_pkpd_expert_isf_fusion), initiallyExpanded = false) {
         AdaptiveDoublePreferenceItem(
             doubleKey = DoubleKey.OApsAIMIIsfFusionMinFactor,
-            titleResId = R.string.oaps_aimi_isf_fusion_min_title,
+            title = ApsStrings.oaps_aimi_isf_fusion_min_title,
         )
         AdaptiveDoublePreferenceItem(
             doubleKey = DoubleKey.OApsAIMIIsfFusionMaxFactor,
-            titleResId = R.string.oaps_aimi_isf_fusion_max_title,
+            title = ApsStrings.oaps_aimi_isf_fusion_max_title,
         )
         AdaptiveDoublePreferenceItem(
             doubleKey = DoubleKey.OApsAIMIIsfFusionMaxChangePerTick,
-            titleResId = R.string.oaps_aimi_isf_fusion_slope_title,
+            title = ApsStrings.oaps_aimi_isf_fusion_slope_title,
         )
     }
 
@@ -425,48 +428,48 @@ fun PkpdExpertSettingsContent(preferenceRevision: Int) {
     ExpandableSection(title = stringResource(R.string.aimi_pkpd_expert_smb_tail), initiallyExpanded = false) {
         AdaptiveDoublePreferenceItem(
             doubleKey = DoubleKey.OApsAIMISmbTailThreshold,
-            titleResId = R.string.oaps_aimi_smb_tail_threshold_title,
+            title = ApsStrings.oaps_aimi_smb_tail_threshold_title,
         )
         AdaptiveDoublePreferenceItem(
             doubleKey = DoubleKey.OApsAIMISmbTailDamping,
-            titleResId = R.string.oaps_aimi_smb_tail_damping_title,
+            title = ApsStrings.oaps_aimi_smb_tail_damping_title,
         )
         AdaptiveDoublePreferenceItem(
             doubleKey = DoubleKey.OApsAIMISmbExerciseDamping,
-            titleResId = R.string.oaps_aimi_smb_exercise_damping_title,
+            title = ApsStrings.oaps_aimi_smb_exercise_damping_title,
         )
         AdaptiveDoublePreferenceItem(
             doubleKey = DoubleKey.OApsAIMISmbLateFatDamping,
-            titleResId = R.string.oaps_aimi_smb_late_fat_damping_title,
+            title = ApsStrings.oaps_aimi_smb_late_fat_damping_title,
         )
     }
 
     ExpandableSection(title = stringResource(R.string.aimi_pkpd_section_expert), initiallyExpanded = false) {
         AdaptiveSwitchPreferenceItem(
             booleanKey = BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled,
-            titleResId = R.string.oaps_aimi_pkpd_relief_enabled_title,
-            summaryResId = R.string.oaps_aimi_pkpd_relief_enabled_summary,
+            title = ApsStrings.oaps_aimi_pkpd_relief_enabled_title,
+            summary = ApsStrings.oaps_aimi_pkpd_relief_enabled_summary,
         )
         AdaptiveDoublePreferenceItem(
             doubleKey = DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor,
-            titleResId = R.string.oaps_aimi_pkpd_relief_factor_title,
+            title = ApsStrings.oaps_aimi_pkpd_relief_factor_title,
         )
         AdaptiveDoublePreferenceItem(
             doubleKey = DoubleKey.OApsAIMIRedCarpetRestoreThreshold,
-            titleResId = R.string.oaps_aimi_redcarpet_restore_title,
+            title = ApsStrings.oaps_aimi_redcarpet_restore_title,
         )
         AdaptiveSwitchPreferenceItem(
             booleanKey = BooleanKey.OApsAIMIIobSurveillanceGuard,
-            titleResId = R.string.aimi_iob_surveillance_guard_title,
-            summaryResId = R.string.aimi_iob_surveillance_guard_summary,
+            title = ApsStrings.aimi_iob_surveillance_guard_title,
+            summary = ApsStrings.aimi_iob_surveillance_guard_summary,
         )
         AdaptiveDoublePreferenceItem(
             doubleKey = DoubleKey.OApsAIMIPriorityMaxIobFactor,
-            titleResId = R.string.oaps_aimi_priority_max_iob_factor_title,
+            title = ApsStrings.oaps_aimi_priority_max_iob_factor_title,
         )
         AdaptiveDoublePreferenceItem(
             doubleKey = DoubleKey.OApsAIMIPriorityMaxIobExtraU,
-            titleResId = R.string.oaps_aimi_priority_max_iob_extra_title,
+            title = ApsStrings.oaps_aimi_priority_max_iob_extra_title,
         )
     }
 }
@@ -568,10 +571,10 @@ private fun PkpdTechnicalPeakDetails(preferences: Preferences) {
 private fun formatPkpdRecommendationDescription(recommendation: AimiRecommendation): String {
     val args = recommendation.descriptionArgs
     return when (args.size) {
-        0 -> stringResource(recommendation.descriptionResId)
-        1 -> stringResource(recommendation.descriptionResId, args[0])
-        2 -> stringResource(recommendation.descriptionResId, args[0], args[1])
-        else -> stringResource(recommendation.descriptionResId)
+        0 -> stringResource(recommendation.description)
+        1 -> stringResource(recommendation.description, args[0])
+        2 -> stringResource(recommendation.description, args[0], args[1])
+        else -> stringResource(recommendation.description)
     }
 }
 
@@ -587,7 +590,7 @@ fun PkpdAdvisorSuggestionCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
     ) {
         Column(Modifier.padding(AapsSpacing.medium)) {
-            Text(stringResource(recommendation.titleResId), style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(recommendation.title), style = MaterialTheme.typography.titleSmall)
             Text(description, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = AapsSpacing.extraSmall))
             Button(
                 onClick = { onApply(action) },
@@ -736,14 +739,13 @@ fun PkpdReactiveDoubleSlider(
     preferenceRevision: Int,
 ) {
     val preferences = LocalPreferences.current
-    val summaryRes = key.summaryResId?.takeIf { it != 0 }?.let { stringResource(it) }
+    val summaryRes = stringResourceOrNull(key.summary)
     val unitType = key.unitType
     val decimalPlaces = unitType.decimalPlaces()
     val step = unitType.step()
-    val valueFormatResId = unitType.valueResId()
+    val valueFormatRef = unitType.valueFormat()
     val valueFormat = NumberFormat.withDecimals(decimalPlaces)
-    val unitLabelResId = unitType.unitLabelResId()
-    val unitLabel = unitLabelResId?.takeIf { it != 0 }?.let { stringResource(it) } ?: ""
+    val unitLabelRef = unitType.unitLabel()
 
     var local by remember(key) { mutableDoubleStateOf(preferences.get(key)) }
     LaunchedEffect(key, preferenceRevision) {
@@ -769,9 +771,9 @@ fun PkpdReactiveDoubleSlider(
             valueRange = key.min..key.max,
             step = step,
             showValue = true,
-            valueFormatResId = valueFormatResId,
+            valueFormatRef = valueFormatRef,
             valueFormat = valueFormat,
-            unitLabel = unitLabel,
+            unitLabel = unitLabelRef,
             dialogLabel = stringResource(titleResId),
             dialogSummary = summaryRes,
         )

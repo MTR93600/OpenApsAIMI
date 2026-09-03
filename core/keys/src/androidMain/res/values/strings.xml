@@ -500,6 +500,7 @@
     <string name="pref_summary_aimi_hyper_established_dev">0 = TDD-scaled default (~80). Deviation above target for ESTABLISHED tier.</string>
     <string name="pref_title_aimi_hyper_deep_dev">HTR deep deviation (mg/dL above target)</string>
     <string name="pref_summary_aimi_hyper_deep_dev">0 = TDD-scaled default (~120). Deviation above target for DEEP plateau tier.</string>
+    <string name="aimi_tube_advanced_title">Straight-line tube (tuning)</string>
     <string name="aimi_tube_hypo_floor_title">Tube: minimum predicted BG floor (mg/dL)</string>
     <string name="aimi_tube_hypo_floor_summary">Robust hypo constraint: SMB cap scale is only allowed if min predicted BG minus estimated SMB effect stays at or above this value.</string>
     <string name="aimi_tube_hyper_band_title">Tube: hyper band above target (mg/dL)</string>

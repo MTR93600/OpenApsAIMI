@@ -626,6 +626,36 @@ class ImportExportPrefsImpl @Inject constructor(
         preferences.put(BooleanNonKey.GeneralSetupWizardProcessed, true)
     }
 
+    override suspend fun uploadFileToCloud(fileName: String, fileContent: ByteArray, mimeType: String, remotePath: String): Boolean {
+        // This is a bridge to CloudStorageManager which is in the same module
+        val provider = cloudStorageManager.getActiveProvider() ?: return false
+
+        return try {
+            if (provider.testConnection()) {
+                // Align with doExportToCloud: force selection of the target folder
+                provider.getOrCreateFolderPath(remotePath)?.let {
+                    provider.setSelectedFolderId(it)
+                }
+
+                // Primary attempt: upload to specific path
+                var resultId = provider.uploadFileToPath(fileName, fileContent, mimeType, remotePath)
+
+                // Fallback attempt: upload using selection/inference if path-based failed
+                if (resultId == null) {
+                    aapsLogger.warn(LTag.CORE, "uploadFileToPath failed for $fileName, attempting fallback uploadFile")
+                    resultId = provider.uploadFile(fileName, fileContent, mimeType)
+                }
+
+                resultId != null
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.CORE, "Failed to upload file to cloud from bridge: $fileName", e)
+            false
+        }
+    }
+
     override fun exportUserEntriesCsv() {
         aapsLogger.info(LTag.CORE, "${CloudConstants.LOG_PREFIX} CSV_EXPORT exportUserEntriesCsv called, enqueuing WorkManager")
         WorkManager.getInstance(context).enqueueUniqueWork(
