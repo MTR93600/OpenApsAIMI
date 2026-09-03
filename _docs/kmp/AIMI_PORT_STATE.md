@@ -651,36 +651,87 @@ changes are type-narrowing plus one call-site rename.
 
 ---
 
+## 6i. Discovery, same day: 221 of the 247 "still staged" files were already ported
+
+The 247 count in 6h's table was never wrong about the staging directory's contents, but it implied 247
+files' worth of work still to do. It was not: 221 of them had already been ported to `commonMain` or
+`androidMain` under the same filename, and the staging copy was a forgotten pre-refactor snapshot -
+never deleted after whatever session or upstream merge actually did the port. Nothing in any
+`build.gradle.kts` or `settings.gradle.kts` references `_docs/kmp/staging/` at all, so none of this was
+ever compiled, tested, or reachable - ordinary `find`-by-basename against the two real source sets is
+what surfaced it, not a build failure.
+
+**Checked before deleting anything, not assumed:** 55 of the 221 were byte-identical to their real
+counterpart - zero risk. The other 166 differed, so before deleting those the numeric-literal multiset
+of each pair was compared (same technique as every fidelity check in this document) - 141 matched
+exactly, and the 25 that didn't were individually diffed by hand, including the highest-stakes ones on
+purpose: `pkpd/AdvancedPredictionEngine.kt`, `pkpd/AdaptivePkPdEstimator.kt`,
+`autodrive/controller/MpcController.kt`, `advisor/gestation/GestationalAutopilot.kt`. Every single one,
+with no exception found, turned out to be the same story: a systematic JVM-to-multiplatform primitive
+substitution, already completed on the real file, that the number-diff or line-diff surfaces as noise
+but changes no threshold, no control flow, no dosing constant:
+
+- `AtomicReference`/`AtomicLong` + manual `synchronized` → `AapsLock`/`withLock` (or a plain `var`
+  behind one lock)
+- `System.currentTimeMillis()` → `aimiWallClockMs()`
+- `String.format("%.Nf", x)` / a local `.format(digits)` extension → `aimiFmt1`/`aimiFmt2`
+- `java.time.LocalDate`/`ChronoUnit`/`Math.round` → `kotlinx.datetime.LocalDate`/`daysUntil`/
+  `kotlin.math.round`
+- `javaClass.simpleName` → `.name` (enums) or `::class.simpleName` (sealed types)
+- `@JvmStatic`/`@JvmOverloads` dropped (meaningless outside a JVM-only target)
+- one frozen shared constant (`Constants.PREDICTION_GRAPH_MIN_MINUTES` = 120) inlined with a comment,
+  because the KMP rewrite of `:core:data`'s `Constants` object dropped the AIMI-specific keys - same
+  "capability genuinely removed, not renamed" shape as 6g/6h's dropped resources, just already handled
+  by whoever ported the real file, before this session ever looked at it
+
+Deleted all 221 (`git rm`, no content edit to any live file). Staging is down to 26 files, and every one
+of them was independently confirmed to have **no** filename match anywhere in `commonMain` or
+`androidMain` - legacy View-based Android Activities (`AimiProfileAdvisorActivity`,
+`AuditorReportActivity`, `ContextActivity`, `MealAdvisorActivity`, permission Activities) and the
+meal-photo vision providers (`ClaudeVisionProvider`, `GeminiVisionProvider`, `OpenAIVisionProvider`,
+`FoodRecognitionService`). These are the only files in the whole original inventory that are actually
+still unported.
+
+Verified after deleting: `:plugins:aps:compileAndroidMain` EXIT=0 (expected - staging was never in any
+source set, so this could only ever be a no-op check).
+
+---
+
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at
 `@MetroIntKey(250)` and its whole reachable dependency closure compiling. All eight collaborator ports
-now have exactly one implementation each. What is left is the 247 still-staged files - nothing the app
-currently reaches depends on them.
+now have exactly one implementation each. Staging is down to 26 files, all confirmed genuinely
+unported (no filename match anywhere in `commonMain`/`androidMain`) - not 247, see 6i.
 
-1. **Before moving any more staged files, check for the recurring failure shapes from this lot and
-   6g, in order:** (a) a class implementing a port interface but missing
+1. **The 26 remaining staged files are legacy View-based Activities and the meal-photo vision
+   pipeline**, not AIMI's dosing logic - `AimiProfileAdvisorActivity`, `AuditorReportActivity`,
+   `ContextActivity`, `MealAdvisorActivity`/`MealAdvisorCameraActivity`, two permission Activities, and
+   `ClaudeVisionProvider`/`GeminiVisionProvider`/`OpenAIVisionProvider`/`DeepSeekVisionProvider`/
+   `AIVisionProvider`/`FoodRecognitionService`. None of it blocks what already runs. Porting an Activity
+   at all is itself a design decision this codebase has been moving away from (Compose over View) -
+   don't assume "port it as-is" is even the right call before asking.
+2. **Before moving any of those 26, or anything from a future upstream merge, check for the recurring
+   failure shapes from 6g through 6i, in order:** (a) a class implementing a port interface but missing
    `@ContributesBinding(AppScope::class)` - compiles fine alone, fails only at `:app:compileFullDebugKotlin`,
    so that has to be the gate, not `:plugins:aps:compileAndroidMain`; (b) `.titleResId`/`.descriptionResId`/
    `.summaryResId`/`.valueResId`/`.unitLabelResId`-shaped names on anything that used to carry a bare
-   `Int` - almost always renamed to a `TextRef`-typed property, not gone; (c) a duplicate top-level
-   declaration between a staging leftover and an already-extracted `commonMain` file (five found across
-   6g and this lot) - diff before deleting, but they have all matched byte-for-byte so far; (d) a
-   capability or resource genuinely dropped (not renamed) during the KMP rewrite - confirm on
-   `dev_OAPSAIMI` before restoring, and prefer the smallest correct fix over guessing (an array-based
-   preference became Kotlin-native entries because the reading API itself is gone tree-wide, not just
-   renamed).
-2. **`:app:assembleFullDebug` is now a required gate, not `:plugins:aps:compileAndroidMain` alone.**
+   `Int` - almost always renamed to a `TextRef`-typed property, not gone; (c) a JVM-only primitive with a
+   multiplatform replacement already in use everywhere else - `AtomicReference`/`synchronized` →
+   `AapsLock`, `System.currentTimeMillis()` → `aimiWallClockMs()`, `String.format` → `aimiFmtN`,
+   `java.time.*` → `kotlinx.datetime.*`, `javaClass.simpleName` → `.name`/`::class.simpleName`; (d) a
+   duplicate top-level declaration between a staging leftover and an already-extracted `commonMain`
+   file - diff before deleting, they have all matched (byte-for-byte, or differing only by (c)) every
+   time so far; (e) a capability or resource genuinely dropped (not renamed) during the KMP rewrite -
+   confirm on `dev_OAPSAIMI` before restoring, and prefer the smallest correct fix over guessing.
+3. **`:app:assembleFullDebug` is now a required gate, not `:plugins:aps:compileAndroidMain` alone.**
    The module compile cannot see a missing Metro binding; only the app graph resolution catches it.
    Keep both in the loop, but if only one can run, run the app assemble.
-3. **Decide what to do with the other 247 staged files** - `AimiHormonitorStudyExporterMTR`
-   (recommend: stub, still), SOS SMS, and whatever Compose screens weren't already pulled in behind
-   `OpenAPSAIMIPlugin`. None of it blocks what already runs; each is its own lot.
-4. **Keep the two-baseline numeric check on every lot that touches logic, not just moves files.** This
-   lot's edits were all TextRef/API-signature/DI-annotation fixes with no numeric-literal risk, so the
-   fidelity check was scoped to touched-with-logic files rather than every moved file - a pure `git mv`
-   cannot alter content, so it doesn't need re-diffing. Keep making that distinction explicit rather
-   than checking everything or nothing.
+4. **Keep the two-baseline numeric check on every lot that touches logic, not just moves files - and
+   remember it also answers "is this staging file safe to delete", not only "is this edit safe".** A
+   matching numeric-literal multiset was the signal that let 6i clear 221 files in one pass instead of
+   hand-diffing each one; a pure `git mv` or `git rm` of an already-superseded file needs no re-diffing
+   at all, since it cannot alter content anyone still depends on.
 
 One process note, still holding from 6g: the pipeline of five agents (definer, designer, coder,
 controller, committer) is for lots with a real architectural decision to make. This lot had exactly one
