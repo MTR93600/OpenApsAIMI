@@ -345,12 +345,23 @@ broken reference for as long as the file has been parked - it cannot compile, an
 because nothing compiles it. **This is the clearest single argument for getting the file into a source
 set:** a resource reference rotted and no one knew.
 
-### And one collaborator genuinely cannot move yet
+### The eleventh is mechanical after all - the earlier note here was wrong
 
-`AiCoachingService` needs `AimiBehaviorCausalInsight`, which is declared inside
-`advisor/AimiProfileAdvisorActivity.kt` - a 2,316-line Activity that builds its UI programmatically.
-Moving the service drags the Activity, or the type has to be lifted out of it first. That is a real
-decision, not a mechanical step, and it is the only one of the eleven that is.
+This section previously said `AiCoachingService` was blocked because
+`AimiBehaviorCausalInsight` is declared inside `advisor/AimiProfileAdvisorActivity.kt`, a 2,316-line
+Activity, and that lifting it was a real decision. **That is not true.** The type is declared in
+`advisor/AimiBehaviorCausalAnalyzer.kt` - **163 lines, zero `android` / `java` / `javax` / `org.json`
+imports**. The Activity merely *uses* it.
+
+The mistake was grepping for files that **contain** the name rather than for the **declaration**, so a
+consumer was read as the owner. That is the third time in this port that reasoning from filenames or
+name-matches has produced a wrong answer - the others were the blocker count (2 vs 22, because inline
+fully-qualified names are invisible to an import scan) and a "type already in commonMain" clear that
+had matched a different class of the same name. **Grep for `class X` / `object X` / `fun X`, never for
+`X`.**
+
+So the eleventh issue is a one-file move like the rest. `AiCoachingService` was pulled in only because
+`TpoOrchestrator` takes it as a constructor parameter.
 
 ---
 
