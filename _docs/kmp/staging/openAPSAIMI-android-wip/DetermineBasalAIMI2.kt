@@ -94,6 +94,7 @@ import app.aaps.plugins.aps.openAPSAIMI.prediction.ClampPkpdScenarioReconcile
 import app.aaps.plugins.aps.openAPSAIMI.prediction.NaiveEventualBgSignGuard
 import app.aaps.plugins.aps.openAPSAIMI.prediction.PredictionSanityResult
 import app.aaps.plugins.aps.openAPSAIMI.prediction.minPredictedAcrossCurves
+import app.aaps.plugins.aps.openAPSAIMI.quality.IobSurveillanceExport
 import app.aaps.plugins.aps.openAPSAIMI.quality.ReplayQualityExportBuilder
 import app.aaps.plugins.aps.openAPSAIMI.quality.SmbBindingTrace
 import app.aaps.plugins.aps.openAPSAIMI.recursive.BasalFirstChannel
@@ -279,6 +280,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlin.time.Instant as KotlinInstant
+import kotlinx.datetime.LocalDate as KxLocalDate
+import kotlinx.datetime.LocalTime as KxLocalTime
 import kotlinx.serialization.json.JsonObject
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiJson
 import app.aaps.plugins.aps.openAPSAIMI.utils.JsonArr
@@ -637,42 +640,6 @@ internal data class AimiDecisionContext(
     /**
      * One row-friendly snapshot for external analytics (plateau + high IOB + predicted drop).
      */
-    data class IobSurveillanceExport(
-        val pref_enabled: Boolean,
-        val preference_key: String,
-        val kind: String,
-        val active_reason: String?,
-        val meal_priority_context: Boolean,
-        val bg_mgdl: Double,
-        val target_bg_mgdl: Double,
-        val delta_mgdl_5m: Double,
-        val short_avg_delta_mgdl_5m: Double,
-        val iob_u: Double,
-        val max_iob_u: Double,
-        val iob_floor_u: Double,
-        val eventual_bg: Double?,
-        val min_predicted_bg: Double?,
-        val trajectory_energy: Double?,
-        val signal_eventual_drop: Boolean,
-        val signal_min_pred_drop: Boolean,
-        val signal_trajectory_stack: Boolean,
-        val smb_multiplier: Double,
-        val smb_cap_u: Double,
-        val suppress_red_carpet_restore: Boolean,
-        val tbr_boost_floor: Double,
-        val smb_u_after_pkpd_before_stacking: Double,
-        val smb_u_after_stacking_step: Double,
-        val stacking_reduced_smb: Boolean,
-        val pkpd_tbr_boost_after_finalize: Double,
-        /** SMB after [capSmbDose] (maxSMB / IOB space), before Red Carpet restore. */
-        val smb_u_after_cap_smb_dose: Double,
-        /** Dose written to [RT.units] — aligns with pump / enacted SMB for this path. */
-        val smb_u_final_for_delivery: Double,
-        /** How [smb_u_final_for_delivery] was chosen: standard_safe_cap vs red_carpet. */
-        val smb_final_source: String,
-        val summary_line: String,
-        val tuning_reference: String
-    )
     data class DynamicIsf(
         var final_value_mgdl: Double = 0.0,
         val modifiers: MutableList<Modifier> = mutableListOf()
@@ -9186,7 +9153,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         put("insulin_intent", smb.insulinIntent ?: AimiJson.NULL)
                         put("reason_codes", JsonArr(smb.reasonCodes))
                         put("source", "harmonia_smb_authority_v1")
-                    }
+                    }.build()
                 decisionCtx.adjustments.harmonia_smb_authority = harmoniaSmbAuthorityJson
             }
         }
@@ -9238,19 +9205,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
         }
 
-        decisionCtx.adjustments.physiological_tree = lastPhysiologicalTreeSnapshot?.toJsonObject()?.apply {
-            // Keep tree authority label honest: Harmonia arbitrates basal + SMB (not "none"/context-only).
-            put("insulin_authority", "harmonia_basal_and_smb_arbitration")
-            lastIntelligenceSnapshot?.let { snap ->
-                put("insulin_kinetics_context", JsonObj().apply {
-                    put("effective_dia_h", snap.kinetics.effective.diaHours)
-                    put("effective_peak_min", snap.kinetics.effective.peakMinutes)
-                    put("structural_dia_h", snap.kinetics.structural.diaHrs)
-                    put("structural_peak_min", snap.kinetics.structural.peakMin)
-                    put("learning_gate_pass", snap.kinetics.learning.learningGatePass)
-                    put("causal_modulation", snap.causal.causalModulationReason)
-                })
-            }
+        // Rebuilt rather than mutated: a kotlinx JsonObject is immutable where the org.json one was
+        // not. Same result - the snapshot's own members first, then the two additions.
+        decisionCtx.adjustments.physiological_tree = lastPhysiologicalTreeSnapshot?.toJsonObject()?.let { tree ->
+            JsonObj().apply {
+                tree.forEach { (key, value) -> put(key, value) }
+                // Keep tree authority label honest: Harmonia arbitrates basal + SMB (not "none"/context-only).
+                put("insulin_authority", "harmonia_basal_and_smb_arbitration")
+                lastIntelligenceSnapshot?.let { snap ->
+                    put("insulin_kinetics_context", JsonObj().apply {
+                        put("effective_dia_h", snap.kinetics.effective.diaHours)
+                        put("effective_peak_min", snap.kinetics.effective.peakMinutes)
+                        put("structural_dia_h", snap.kinetics.structural.diaHrs)
+                        put("structural_peak_min", snap.kinetics.structural.peakMin)
+                        put("learning_gate_pass", snap.kinetics.learning.learningGatePass)
+                        put("causal_modulation", snap.causal.causalModulationReason)
+                    })
+                }
+            }.build()
         }
         decisionCtx.adjustments.meal_certainty = lastMealCertainty?.toJsonObject()
         decisionCtx.adjustments.dose_terminal_snapshot = lastDoseTerminalSnapshot?.toJsonObject()
@@ -10623,7 +10595,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             put("max_smb_baseline_u", baseline.maxSmb)
             put("max_smb_after_u", this@DetermineBasalaimiSMB2.maxSMB)
             put("max_smb_hb_after_u", this@DetermineBasalaimiSMB2.maxSMBHB)
-        }
+        }.build()
     }
 
     /**
@@ -11099,7 +11071,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastHarmoniaProductionDecision: HarmoniaProductionDecision? = null
     private var lastPatientSourceSensor: SourceSensor? = null
     /** Latest IOB surveillance snapshot for JSONL (updated each [finalizeAndCapSMB]). */
-    private var lastIobSurveillanceExport: AimiDecisionContext.IobSurveillanceExport? = null
+    private var lastIobSurveillanceExport: IobSurveillanceExport? = null
 
     /** Current IOB (U) on effective (learned) kinetics for this tick; null when unavailable. See [resolveIobForGate]. */
     private var tickIobEffectiveU: Double? = null
@@ -11335,8 +11307,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private fun Double.toFixed2(): String = "%.2f".format(Locale.US, this)
-    private fun parseNgrTime(value: String, fallback: LocalTime): LocalTime =
-        runCatching { LocalTime.parse(value, ngrTimeFormatter) }.getOrElse { fallback }
+    // kotlinx, because NGRConfig in commonMain is typed with kotlinx.datetime.LocalTime. Its
+    // `parse` reads "HH:mm" without a formatter, so `ngrTimeFormatter` is no longer needed here.
+    // The failure path is unchanged: anything unparseable falls back, exactly as before.
+    private fun parseNgrTime(value: String, fallback: KxLocalTime): KxLocalTime =
+        runCatching { KxLocalTime.parse(value) }.getOrElse { fallback }
 
     private class PkpdPortAdapter(
         private val pkpdIntegration: PkPdIntegration,
@@ -11483,8 +11458,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): NGRConfig {
         val age = preferences.get(IntKey.OApsAIMINightGrowthAgeYears).coerceAtLeast(0)
         val enabledPref = preferences.getIfExists(BooleanKey.OApsAIMINightGrowthEnabled)
-        val nightStart = parseNgrTime(preferences.get(StringKey.OApsAIMINightGrowthStart), LocalTime.of(22, 0))
-        val nightEnd = parseNgrTime(preferences.get(StringKey.OApsAIMINightGrowthEnd), LocalTime.of(6, 0))
+        val nightStart = parseNgrTime(preferences.get(StringKey.OApsAIMINightGrowthStart), KxLocalTime(22, 0))
+        val nightEnd = parseNgrTime(preferences.get(StringKey.OApsAIMINightGrowthEnd), KxLocalTime(6, 0))
         val extraIobPerSlot = max(0.0, preferences.get(DoubleKey.OApsAIMINightGrowthMaxIobExtra))
         val diaMinutes = max(60, (profile.dia * 60.0).roundToInt())
         val features = glucoseStatusCalculatorAimi.getAimiFeatures(true)
@@ -12799,7 +12774,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             put("iob_u", iobNet)
             put("meal_mode_active", isMealMode)
             put("post_hypo_active", lastPostHypoDeliveryAuthority.active)
-        }
+        }.build()
         if (terminal.boundBy != null) {
             consoleLog.add("🔒 BASAL_TERMINAL[${terminal.boundBy}] ${terminal.trace}")
             rT.reason.append(" [BASAL_TERMINAL:${terminal.boundBy} ${"%.2f".format(rate)}→${"%.2f".format(terminal.rateUph)}U/h]")
@@ -13696,7 +13671,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val mnExp = minPredForExport?.takeIf { it.isFinite() }
         val teExp = rT.trajectoryEnergy
         val iobFloorExp = InsulinStackingStance.iobFloorU(this.maxIob)
-        lastIobSurveillanceExport = AimiDecisionContext.IobSurveillanceExport(
+        lastIobSurveillanceExport = IobSurveillanceExport(
             pref_enabled = preferences.get(BooleanKey.OApsAIMIIobSurveillanceGuard),
             preference_key = BooleanKey.OApsAIMIIobSurveillanceGuard.key,
             kind = stackingEval.kind.name,
@@ -15742,7 +15717,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val dueDateString = preferences.get(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey.PregnancyDueDateString)
                 if (dueDateString.isNotEmpty()) {
                     try {
-                        val dueDate = java.time.LocalDate.parse(dueDateString)
+                        val dueDate = KxLocalDate.parse(dueDateString)
                         val gState = gestationalAutopilot.calculateState(dueDate)
                         val mult = gestationalAutopilot.getProfileMultipliers(gState)
                         
