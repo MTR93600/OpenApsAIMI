@@ -11,7 +11,6 @@ import app.aaps.plugins.source.Libre3AvailabilityProvider.Companion.CACHE_TTL_MS
 import app.aaps.plugins.source.Libre3AvailabilityProvider.Companion.LIBRE3_ACCESS_FILE_NAME
 import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
-import dev.zacsweers.metro.Provider
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
@@ -51,7 +50,7 @@ class Libre3AvailabilityProviderTest : TestBase() {
         whenever(fileListProvider.isDirectoryAccessGranted()).thenReturn(true)
         whenever(fileListProvider.ensureExtraDirExists()).thenReturn(extraDir)
         whenever(extraDir.findFile(LIBRE3_ACCESS_FILE_NAME)).thenReturn(markerFile)
-        provider = Libre3AvailabilityProvider(aapsLogger, Provider { fileListProvider }, preferences, notificationManager, dateUtil)
+        provider = Libre3AvailabilityProvider(aapsLogger, { fileListProvider }, preferences, notificationManager, dateUtil)
     }
 
     /**

@@ -11,7 +11,6 @@ import app.aaps.plugins.source.DexcomOnePlusAvailabilityProvider.Companion.CACHE
 import app.aaps.plugins.source.DexcomOnePlusAvailabilityProvider.Companion.ONE_PLUS_ACCESS_FILE_NAME
 import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
-import dev.zacsweers.metro.Provider
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
@@ -51,7 +50,7 @@ class DexcomOnePlusAvailabilityProviderTest : TestBase() {
         whenever(fileListProvider.isDirectoryAccessGranted()).thenReturn(true)
         whenever(fileListProvider.ensureExtraDirExists()).thenReturn(extraDir)
         whenever(extraDir.findFile(ONE_PLUS_ACCESS_FILE_NAME)).thenReturn(markerFile)
-        provider = DexcomOnePlusAvailabilityProvider(aapsLogger, Provider { fileListProvider }, preferences, notificationManager, dateUtil)
+        provider = DexcomOnePlusAvailabilityProvider(aapsLogger, { fileListProvider }, preferences, notificationManager, dateUtil)
     }
 
     /**

@@ -8,7 +8,6 @@ import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.utils.DateUtil
 import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.Provider
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
@@ -62,7 +61,7 @@ class DexcomOnePlusAvailabilityProvider @Inject constructor(
     private val aapsLogger: AAPSLogger,
     // Lazy, mirroring ConfigImpl: FileListProvider pulls in Config/Preferences/Storage, and this
     // provider is constructed as part of a BG source plugin that is itself in the plugin graph.
-    private val fileListProvider: Provider<FileListProvider>,
+    private val fileListProvider: () -> FileListProvider,
     private val preferences: Preferences,
     private val notificationManager: NotificationManager,
     private val dateUtil: DateUtil

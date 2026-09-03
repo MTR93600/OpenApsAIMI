@@ -12,7 +12,6 @@ import app.aaps.core.objects.extensions.convertedToAbsolute
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.Provider
 
 /**
  * ⚠️ SAFETY-CRITICAL — **DRAFT** pending project-maintainer + clinician review and on-device
@@ -45,7 +44,7 @@ import dev.zacsweers.metro.Provider
 class DexcomOnePlusWarmupBasalGuard @Inject constructor(
     private val aapsLogger: AAPSLogger,
     private val commandQueue: CommandQueue,
-    private val loopProvider: Provider<Loop>,
+    private val loopProvider: () -> Loop,
     private val activePlugin: ActivePlugin,
     private val profileFunction: ProfileFunction,
     private val persistenceLayer: PersistenceLayer,

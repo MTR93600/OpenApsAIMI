@@ -17,7 +17,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
-import dev.zacsweers.metro.Provider
 
 /**
  * Decision-matrix tests for the SAFETY basal guard (see [DexcomOnePlusWarmupBasalGuard]).
@@ -40,7 +39,7 @@ class DexcomOnePlusWarmupBasalGuardTest : TestBaseWithProfile() {
 
     @BeforeEach
     fun prepareGuard() {
-        guard = DexcomOnePlusWarmupBasalGuard(aapsLogger, commandQueue, Provider { loop }, activePlugin, profileFunction, persistenceLayer)
+        guard = DexcomOnePlusWarmupBasalGuard(aapsLogger, commandQueue, { loop }, activePlugin, profileFunction, persistenceLayer)
         runTest {
             // Happy path: active source, closed loop, no fresh glucose, HIGH residual temp, profile 1.0 U/h.
             whenever(activePlugin.activeBgSource).thenReturn(owner)

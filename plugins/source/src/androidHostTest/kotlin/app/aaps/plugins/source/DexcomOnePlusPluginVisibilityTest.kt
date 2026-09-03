@@ -15,7 +15,6 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.source.DexcomOnePlusAvailabilityProvider.Companion.ONE_PLUS_ACCESS_FILE_NAME
 import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
-import dev.zacsweers.metro.Provider
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
@@ -54,7 +53,7 @@ class DexcomOnePlusPluginVisibilityTest : TestBase() {
         whenever(fileListProvider.ensureExtraDirExists()).thenReturn(extraDir)
         whenever(extraDir.findFile(ONE_PLUS_ACCESS_FILE_NAME)).thenReturn(markerFile)
         val availabilityProvider =
-            DexcomOnePlusAvailabilityProvider(aapsLogger, Provider { fileListProvider }, preferences, notificationManager, dateUtil)
+            DexcomOnePlusAvailabilityProvider(aapsLogger, { fileListProvider }, preferences, notificationManager, dateUtil)
         plugin = DexcomOnePlusPlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority)
     }
 
