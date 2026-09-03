@@ -1,9 +1,30 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
-import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisTuning
 
-internal data class AimiBehaviorRuntimeProfile(
+/**
+ * How much production authority AIMI has been given, from Observation (nothing applied) up to
+ * ControlledAuthority. Plain enum in commonMain - the display label used to live on it as a
+ * `@StringRes Int`, which is why this type used to be Android-only. The label is now a UI-only
+ * extension function in the androidMain Compose screen that reads it - see
+ * `AimiAutonomyMode.labelResId()` in AimiControlCenterSupport.kt.
+ */
+enum class AimiAutonomyMode {
+    Observation,
+    Recommendations,
+    AssistedApplication,
+    ControlledAuthority,
+}
+
+internal fun AimiAutonomyMode.authorityRank(): Int =
+    when (this) {
+        AimiAutonomyMode.Observation -> 0
+        AimiAutonomyMode.Recommendations -> 1
+        AimiAutonomyMode.AssistedApplication -> 2
+        AimiAutonomyMode.ControlledAuthority -> 3
+    }
+
+data class AimiBehaviorRuntimeProfile(
     val protectionLevel: Int,
     val mealCaptureLevel: Int,
     val stabilityLevel: Int,
@@ -101,21 +122,3 @@ internal data class AimiBehaviorRuntimeProfile(
     }
 }
 
-internal fun readAimiBehaviorRuntimeProfile(preferences: Preferences): AimiBehaviorRuntimeProfile {
-    val draft = readAimiControlCenterDraft(preferences)
-    return AimiBehaviorRuntimeProfile(
-        protectionLevel = draft.protectionLevel,
-        mealCaptureLevel = draft.mealCaptureLevel,
-        stabilityLevel = draft.stabilityLevel,
-        physioLevel = draft.physioLevel,
-        autonomyMode = draft.autonomyMode,
-    )
-}
-
-internal fun AimiAutonomyMode.authorityRank(): Int =
-    when (this) {
-        AimiAutonomyMode.Observation -> 0
-        AimiAutonomyMode.Recommendations -> 1
-        AimiAutonomyMode.AssistedApplication -> 2
-        AimiAutonomyMode.ControlledAuthority -> 3
-    }

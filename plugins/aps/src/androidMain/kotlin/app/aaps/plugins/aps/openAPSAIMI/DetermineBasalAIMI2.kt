@@ -90,6 +90,7 @@ import app.aaps.plugins.aps.openAPSAIMI.orchestration.DoseTerminalSnapshotBuilde
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.PredictionAuthorityApplier
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.PredictionAuthorityApplyResult
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiTpo
 import app.aaps.plugins.aps.openAPSAIMI.ports.PkpdPort
 import app.aaps.plugins.aps.openAPSAIMI.prediction.ClampPkpdScenarioReconcile
@@ -175,7 +176,6 @@ import app.aaps.plugins.aps.openAPSAIMI.safety.signalMinPredDrop
 import app.aaps.plugins.aps.openAPSAIMI.safety.capSmbDose
 import app.aaps.plugins.aps.openAPSAIMI.safety.clampSmbToMaxSmbAndMaxIob
 import app.aaps.plugins.aps.openAPSAIMI.control.StraightLineTubeAdvisor
-import app.aaps.plugins.aps.openAPSAIMI.compose.readAimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.safety.signalTrajectoryStack
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoThresholdMath
 import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinLoadGovernor
@@ -1254,6 +1254,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val preferences: Preferences,
     private val gestationalAutopilot: app.aaps.plugins.aps.openAPSAIMI.advisor.gestation.GestationalAutopilot,
     private val auditorOrchestrator: AimiAuditor,
+    private val behaviorProfileSource: AimiBehaviorProfileSource,
     private val uiInteraction: UiInteraction,
     private val notificationManager: app.aaps.core.interfaces.notifications.NotificationManager,
     private val wCycleFacade: WCycleFacade,
@@ -3389,7 +3390,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             patternSnapshot = patternSnapshot,
             correctionAggressionDecision = correctionAggressionDecision,
             uamConfidence = AimiUamHandler.confidenceOrZero(),
-            behaviorProfile = readAimiBehaviorRuntimeProfile(preferences),
+            behaviorProfile = behaviorProfileSource.read(preferences),
         )
         val stressMask = PhysiologicalStressMaskBuilder.build(
             snapshot = snapshot,
@@ -10332,7 +10333,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             .getOrNull()
     }
     private var csvPrimaryStorageDeniedLogged = false
-    private val pkpdIntegration = PkPdIntegration(preferences)
+    private val pkpdIntegration = PkPdIntegration(preferences, behaviorProfileSource)
     //private val tempFile = File(externalDir, "temp.csv")
     private var bgacc = 0.0
     private var predictedSMB = 0.0f
@@ -12826,7 +12827,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val latentFeatures = SmbRefinementFeatureSchema.latentFeatureValues(lastPhysioLatentState)
         val modeFeatures = SmbRefinementFeatureSchema.modeFeatureValues(lastPatientModeDecision)
         val causalFeatures = SmbRefinementFeatureSchema.causalFeatureValues(lastPatientState?.causalPosterior)
-        val behaviorProfile = readAimiBehaviorRuntimeProfile(preferences)
+        val behaviorProfile = behaviorProfileSource.read(preferences)
         val eventMemory = lastPatientState?.eventMemory ?: PatientEventMemory.EMPTY
         val decisionConflictFlags = physioAdapter.getLastDecisionTrace()?.decisionConflictFlags?.joinToString("|").orEmpty()
 
@@ -15055,7 +15056,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             patientModeDecision = lastPatientModeDecision,
             causalStatePosterior = lastPatientState?.causalPosterior,
         )
-        val behaviorProfile = readAimiBehaviorRuntimeProfile(preferences)
+        val behaviorProfile = behaviorProfileSource.read(preferences)
 
         // 🔥 Trigger async training (fire-and-forget, rate-limited to 1/6h, never blocks)
         AimiSmbTrainer.maybeTrainAsync(

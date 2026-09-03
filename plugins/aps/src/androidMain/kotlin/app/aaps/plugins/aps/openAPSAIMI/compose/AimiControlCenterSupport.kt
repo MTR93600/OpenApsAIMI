@@ -11,11 +11,15 @@ import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import kotlin.math.abs
 
-internal enum class AimiAutonomyMode(@StringRes val labelResId: Int) {
-    Observation(R.string.aimi_control_center_autonomy_observation),
-    Recommendations(R.string.aimi_control_center_autonomy_recommendations),
-    AssistedApplication(R.string.aimi_control_center_autonomy_assisted),
-    ControlledAuthority(R.string.aimi_control_center_autonomy_controlled),
+// AimiAutonomyMode itself moved to commonMain - the decision path needs the type, not the label.
+// Its display string is UI-only, so it is a plain extension function here instead of a constructor
+// property, and the four resource ids are unchanged.
+@StringRes
+internal fun AimiAutonomyMode.labelResId(): Int = when (this) {
+    AimiAutonomyMode.Observation -> R.string.aimi_control_center_autonomy_observation
+    AimiAutonomyMode.Recommendations -> R.string.aimi_control_center_autonomy_recommendations
+    AimiAutonomyMode.AssistedApplication -> R.string.aimi_control_center_autonomy_assisted
+    AimiAutonomyMode.ControlledAuthority -> R.string.aimi_control_center_autonomy_controlled
 }
 
 internal data class AimiControlCenterDraft(
@@ -378,8 +382,8 @@ private fun buildAutonomyPlan(
     }
     return AimiFamilyWritebackPlan(
         familyId = AimiBehaviorFamilyId.Autonomy,
-        currentLabelResId = currentLevel.labelResId,
-        targetLabelResId = targetLevel.labelResId,
+        currentLabelResId = currentLevel.labelResId(),
+        targetLabelResId = targetLevel.labelResId(),
         noteResId = R.string.aimi_control_center_autonomy_apply_note,
         changes = changes,
     )

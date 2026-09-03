@@ -75,6 +75,19 @@ kotlin {
             kotlin.srcDir(generateApsStrings.flatMap { it.androidOutputDir })
             dependencies {
                 implementation(project(":core:graph"))
+                // TensorFlow Lite for AimiModelHandler's UAM inference. Dropped when upstream rewrote
+                // this module for KMP. The model stays: modelUAM.tflite has its own architecture, so
+                // re-expressing it would change behaviour on an SMB path. Android only.
+                //
+                // No tensorflow-lite-gpu: nothing in AimiModelHandler ever constructs a GpuDelegate -
+                // grepped, zero hits - and this 2.4.0 (2020) release of it shares AGP's newly enforced
+                // unique-namespace check with tensorflow-lite itself (both declare
+                // org.tensorflow.lite), which fails :app's manifest merge. The fork's build predates
+                // that AGP check. Dropping the unused artifact is the narrow fix; a real GPU delegate,
+                // if ever added, would need a newer TFLite release with distinct namespaces.
+                implementation("org.tensorflow:tensorflow-lite:2.4.0")
+                implementation("org.tensorflow:tensorflow-lite-support:0.1.0")
+                implementation("org.tensorflow:tensorflow-lite-metadata:0.1.0")
                 implementation(libs.androidx.compose.ui.tooling.preview)
                 implementation(libs.androidx.work.runtime)
                 implementation(libs.org.slf4j.api)

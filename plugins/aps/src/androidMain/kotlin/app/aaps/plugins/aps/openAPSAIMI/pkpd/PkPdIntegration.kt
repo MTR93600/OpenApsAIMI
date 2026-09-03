@@ -1,9 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.pkpd
 
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.plugins.aps.openAPSAIMI.compose.readAimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientEventMemory
@@ -12,18 +12,10 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.max
 
-data class MealAggressionContext(
-    val mealModeActive: Boolean,
-    val predictedBgMgdl: Double? = null,
-    val targetBgMgdl: Double? = null
-)
-
-data class PkpdBolusSample(
-    val ageMin: Double,
-    val units: Double
-)
-
-class PkPdIntegration(private val preferences: Preferences) {
+class PkPdIntegration(
+    private val preferences: Preferences,
+    private val behaviorProfileSource: AimiBehaviorProfileSource,
+) {
 
     companion object {
         /** Minimum learned DIA change (hours) before writing prefs again. */
@@ -201,7 +193,7 @@ class PkPdIntegration(private val preferences: Preferences) {
             } else 0.0
             0.05 + 0.15 * normalizedRise
         } ?: 0.0
-        val behaviorProfile = readAimiBehaviorRuntimeProfile(preferences)
+        val behaviorProfile = behaviorProfileSource.read(preferences)
         val weightKineticFactor = buildWeightKineticFactor(patientWeightKg)
         val rawPhysioAbsorptionFactor = buildPhysioAbsorptionFactor(
             physioLatentState = physioLatentState,
@@ -637,45 +629,3 @@ class PkPdIntegration(private val preferences: Preferences) {
  * @property diaLearnBlockedBy why learning did not run on this tick, or null when it did run. Taken
  *   in [PkPdIntegration.computeRuntime] at the line where the gate is really applied.
  */
-data class PkpdLearningTrace(
-    val diaAtFloor: Boolean,
-    val diaRegPullH: Double,
-    val diaLearnStepH: Double,
-    val iobResidual120Min: Double,
-    val diaAcceptedUpdates: Long = 0L,
-    val diaLearnBlockedBy: String? = null,
-)
-
-class PkPdRuntime(
-    val params: PkPdParams,
-    val tailFraction: Double,
-    val fusedIsf: Double,
-    val profileIsf: Double,
-    val tddIsf: Double,
-    val pkpdScale: Double,
-    val weightKineticFactor: Double,
-    val physioAbsorptionFactor: Double,
-    val physioSiFactor: Double,
-    private val damping: SmbDamping,
-    val activity: InsulinActivityState,
-    val learningTrace: PkpdLearningTrace? = null,
-) {
-
-    fun dampSmbWithAudit(
-        smb: Double,
-        exercise: Boolean,
-        suspectedLateFatMeal: Boolean,
-        bypassDamping: Boolean = false,
-        elapsedSinceMealMin: Double = 0.0
-    ): SmbDampingAudit =
-        damping.dampWithAudit(smb, tailFraction, exercise, suspectedLateFatMeal, bypassDamping, activity, elapsedSinceMealMin)
-
-    fun dampSmb(
-        smb: Double,
-        exercise: Boolean,
-        suspectedLateFatMeal: Boolean,
-        bypassDamping: Boolean = false,
-        elapsedSinceMealMin: Double = 0.0
-    ): Double =
-        damping.damp(smb, tailFraction, exercise, suspectedLateFatMeal, bypassDamping, activity, elapsedSinceMealMin)
-}

@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
+import app.aaps.core.keys.interfaces.TextRef
 import androidx.annotation.StringRes
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
@@ -367,20 +368,27 @@ private fun buildContextSection(preferences: Preferences): AimiControlSectionSna
 
 private fun buildSourceSection(preferences: Preferences): AimiControlSectionSnapshot {
     val sourceMode = preferences.get(AimiStringKey.ActivitySourceMode)
-    val sourceResId = AimiStringKey.ActivitySourceMode.entries[sourceMode]
-        ?: R.string.pref_aimi_steps_source_disabled
+    // AimiStringKey.ActivitySourceMode.entries became Map<String, TextRef> with the wave 10
+    // migration - TextRef.Named values, not resource ids, so they cannot answer this Int-typed
+    // field. Same four options, same four resources, read directly instead of through the key.
+    val sourceResId = when (sourceMode) {
+        "prefer_wear" -> R.string.pref_aimi_steps_source_wear
+        "auto" -> R.string.pref_aimi_steps_source_auto
+        "hc_only" -> R.string.pref_aimi_steps_source_hc
+        else -> R.string.pref_aimi_steps_source_disabled
+    }
     val ouraConfigured = preferences.get(AimiStringKey.OuraPersonalAccessToken).isNotBlank()
     return AimiControlSectionSnapshot(
         titleResId = R.string.aimi_control_center_sources_title,
         summaryResId = R.string.aimi_control_center_sources_summary,
         details = listOf(
             AimiControlDetail(
-                titleResId = AimiStringKey.ActivitySourceMode.titleResId,
+                titleResId = R.string.pref_aimi_steps_source_title,
                 valueText = sourceMode,
                 valueResId = sourceResId,
             ),
             AimiControlDetail(
-                titleResId = AimiStringKey.OuraPersonalAccessToken.titleResId,
+                titleResId = R.string.aimi_oura_pat_title,
                 valueResId = if (ouraConfigured) R.string.aimi_control_center_configured else R.string.aimi_control_center_not_configured,
             ),
         ),
@@ -682,18 +690,22 @@ private fun boolDetail(
         valueResId = if (enabled) CoreUiR.string.yes else CoreUiR.string.no,
     )
 
-/** Legacy AIMI keys often omit [PreferenceKey.titleResId]; map them for Control Center UI. */
-internal fun DoublePreferenceKey.controlCenterTitleResId(): Int {
-    if (titleResId != 0) return titleResId
-    return when (this) {
-        DoubleKey.autodriveMaxBasal -> R.string.autodrive_max_basal_title
-        DoubleKey.meal_modes_MaxBasal -> R.string.meal_modes_max_basal_title
-        else -> R.string.aimi_control_center_unlabeled_preference
-    }
-}
+// PreferenceKey.title moved from a bare @StringRes Int (titleResId, 0/-1 meaning "unset") to
+// TextRef with Milos's wave 10 migration. This Control Center screen still shows a plain resource
+// id with `stringResource(Int)`, so this pulls one back out where the key still has one.
+//
+// The two DoubleKey special cases this used to carry - autodriveMaxBasal and meal_modes_MaxBasal -
+// pointed at R.string.autodrive_max_basal_title / meal_modes_max_basal_title. Neither resource
+// exists anywhere in the tree any more; that branch had already rotted while this file sat parked,
+// the same way format_insulin_units had in DetermineBasalAIMI2. Both keys now carry a real title as
+// TextRef.Named (KeysStrings.pref_title_autodrive_max_basal / pref_title_meal_modes_max_basal), which
+// this function cannot turn into an Int - a Named string resolves through TextRef, not through a
+// resource id. They fall through to the same "unlabeled" placeholder as the general Named case below.
+internal fun DoublePreferenceKey.controlCenterTitleResId(): Int =
+    (title as? TextRef.AndroidRes)?.id ?: R.string.aimi_control_center_unlabeled_preference
 
 internal fun BooleanPreferenceKey.controlCenterTitleResId(): Int =
-    titleResId.takeIf { it != 0 } ?: R.string.aimi_control_center_unlabeled_preference
+    (title as? TextRef.AndroidRes)?.id ?: R.string.aimi_control_center_unlabeled_preference
 
 internal fun formatControlCenterDoubleValue(value: Double, unit: String?): String {
     val formatted = when {

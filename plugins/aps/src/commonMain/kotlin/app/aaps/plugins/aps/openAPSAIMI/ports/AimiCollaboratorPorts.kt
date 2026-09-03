@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.ports
 
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent
 import app.aaps.core.interfaces.aps.AutosensResult
@@ -216,4 +217,17 @@ interface AimiPhysioSource {
     suspend fun fetchLastHeartRate(): Int
 
     suspend fun fetchStepsData(daysBack: Int = 7, ignoreUnifiedSourceMode: Boolean = false): Int
+}
+
+
+/**
+ * Reads the AIMI Control Center's resolved authority profile for one tick.
+ *
+ * The read path - preferences to draft to snapshot, with two runtime history readers along the way -
+ * stays in androidMain, so this is a port rather than a moved function. `AimiBehaviorRuntimeProfile`
+ * and `AimiAutonomyMode` are plain data in commonMain; only how they get built from disk is Android.
+ */
+interface AimiBehaviorProfileSource {
+
+    fun read(preferences: Preferences): AimiBehaviorRuntimeProfile
 }

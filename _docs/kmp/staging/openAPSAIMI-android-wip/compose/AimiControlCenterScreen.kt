@@ -325,7 +325,7 @@ fun AimiControlCenterScreen(
                             )
                             AimiBehaviorFamilyId.Autonomy -> AimiFamilyCard(
                                 snapshot = family,
-                                targetLabelResId = autonomyMode.labelResId,
+                                targetLabelResId = autonomyMode.labelResId(),
                                 pendingPlan = familyPlan,
                                 onResetFamily = { autonomyMode = currentDraft.autonomyMode },
                                 control = {
@@ -789,7 +789,7 @@ private fun AutonomyModeSelector(
             FilterChip(
                 selected = selectedMode == mode,
                 onClick = { onModeSelected(mode) },
-                label = { Text(stringResource(mode.labelResId)) },
+                label = { Text(stringResource(mode.labelResId())) },
             )
         }
     }
