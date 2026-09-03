@@ -458,24 +458,106 @@ false alarm. `AimiAutonomyMode` and `AimiBehaviorFamilyId` are real cases.
 
 ---
 
-## 7. Start here tomorrow
+## 6g. Milestone, 2026-09-03: DetermineBasalAIMI2 compiles in a real source set
 
-1. **Convert `OpenAPSAIMIPlugin.kt` (parked) off javax to Metro.** H1. Do this before any port
-   touches it.
-2. **Lot 5: rewire `AimiStorageHelper`'s consumers to `AimiStorage`.** The seam exists; this removes
-   blocker one without moving the file.
-3. **Decide on `AimiHormonitorStudyExporterMTR`**: six seams, or stub the import and press on to
-   `DetermineBasalAIMI2`. Recommend the stub - it is a study exporter, not a dosing path.
-4. **Then `DetermineBasalAIMI2` itself.** 18,886 lines, of which only **244 touch Android**: 133
-   `context.getString`, 116 `JSONObject`, 107 `Locale.US` with 33 `String.format`, 26 atomics. The
-   `aimiFmt1` seam (lot 1), the `AimiStorage` seam (lot 2) and `AapsLock` already cover part of that
-   list. Note upstream **dropped its own `org.json` port** in `eb6f17f494` - check what it did
-   instead before writing 116 conversions by hand.
-5. **Keep the two-baseline numeric check on every lot.** It is cheap and it is the only gate that has
-   caught anything.
+Commit `3ee2d6ec91`. This is the point the whole 5A/5G effort was aimed at. The circle from 6f -
+`AimiAutonomyMode` and `AimiBehaviorFamilyId` declared inside Compose files - is broken, and with it
+the 20-file cluster around `DetermineBasalAIMI2` (18,886 lines) moved out of the staging dump into
+`plugins/aps/src/androidMain/`, where a compiler checks every line of it.
 
-One process note for whoever runs the next session: the pipeline of five agents (definer, designer,
-coder, controller, committer) earned its cost. In every lot, a later stage caught a real error an
-earlier stage had missed - a spec that claimed no `String.format` where there were four, a dependency
-closure naming the wrong companions, a "mechanical" swap that would have loaded a forever-growing CSV
-into memory on every loop tick. A single pass would have shipped each of those.
+**How the circle broke.** `AimiAutonomyMode` carried `@StringRes val labelResId: Int` as a constructor
+parameter, which was the only thing making the type Android-only - the four cases themselves are
+plain data. Split: the enum (four cases, no label) moved to commonMain; the label became a UI-only
+extension function, `AimiAutonomyMode.labelResId()`, in the androidMain screen that displays it - same
+four resource ids, unchanged. `AimiBehaviorRuntimeProfile`, the data class DB2 actually reads, is pure
+arithmetic and moved whole. Only `readAimiBehaviorRuntimeProfile` - which walks a
+preferences-to-draft-to-snapshot chain through two file-based history readers - stays on Android,
+behind a sixth port: `AimiBehaviorProfileSource.read(preferences)`, same shape as the five from 6f.
+
+**A fourth and fifth duplicate turned up**, extending the pattern from 6b/6e: `PkPdIntegration.kt`
+had its own copies of `MealAggressionContext`, `PkpdBolusSample`, `PkpdLearningTrace` and
+`PkPdRuntime`, all already extracted to commonMain by an earlier lot. Diffed identical before
+deleting.
+
+**Moving the file exposed drift that had been accumulating invisibly.** Three separate places in the
+Compose support files still read a bare `titleResId: Int` from types whose `title` had already become
+`TextRef` under Milos's wave 10 migration - `AimiStringKey.ActivitySourceMode`/`OuraPersonalAccessToken`,
+the `DoublePreferenceKey`/`BooleanPreferenceKey.controlCenterTitleResId()` helpers, and
+`ActivitySourceMode.entries` itself (`Map<String, TextRef>`, not `Map<String, Int>`). One of these
+pointed at `R.string.autodrive_max_basal_title` / `meal_modes_max_basal_title` - **a second rotted
+reference**, same shape as `format_insulin_units` in 6f: neither resource exists anywhere in the tree.
+None of this was visible before, because nothing compiled this file.
+
+**And an AGP-version problem, not an AIMI one.** Restoring the four `org.tensorflow:*` dependencies
+(needed since 6d) hit AGP's namespace-uniqueness check: `tensorflow-lite` and `tensorflow-lite-gpu`
+2.4.0 both declare the manifest namespace `org.tensorflow.lite`. Grepped - nothing in
+`AimiModelHandler` ever constructs a `GpuDelegate` - so the GPU artifact was dropped rather than
+worked around. `dev_OAPSAIMI`'s older AGP never enforced this check.
+
+**Verified**, not assumed: numeric-literal multiset checked file by file against the pre-lot state,
+and the split profile file's 56 literals checked as a set against the original with none lost or
+added. `:app:assembleFullDebug`, `:plugins:aps:compileKotlinIosArm64`,
+`:ios:shell:checkMigratedModules` all EXIT=0. `:plugins:aps:testAndroidHostTest` EXIT=0, 330 tests,
+0 failures.
+
+**State after this commit:**
+
+| | files |
+|---|---:|
+| AIMI in `commonMain` | 339 |
+| AIMI in `androidMain` | 52 |
+| AIMI still in staging | 295 |
+
+**What this does NOT do.** AIMI is still not in `ApsPluginRegistrations` - nothing in the running app
+calls any of this yet. That is the next real milestone, and it is `OpenAPSAIMIPlugin.kt` itself: 2,272
+lines, still on `javax.inject` (the H1 hazard from section 4 - convert it before it lands, not after),
+and with 14 of its 38 `openAPSAIMI` imports still unresolved (measured 2026-09-03):
+`AimiAdvisorService`, `AimiControlCenterScreen`, `AimiPkpdSettingsScreen`, `PkpdTailPrudence`,
+`AimiPreferenceInfoScreen`, `HormonitorViewerScreen`, `AimiMlTrainingScheduler`,
+`PhysioMultipliersMTR`, `ActivityStage`, `InsulinActivityStage`, `IsfFusionBounds`, `TpoOrchestrator`,
+`StableOrbit`, `AimiBackupManager`. Some of these are genuine UI screens (rightly Android-only);
+others may be the same "type stuck in the wrong file" pattern seen twice already in this section -
+worth checking by declaration, not by filename, before assuming either.
+
+---
+
+## 7. Start here next session
+
+Everything in the list this section used to carry is done: the storage seam, the JSON conversion, six
+collaborator ports, and `DetermineBasalAIMI2` itself compiling in `androidMain`. The front has moved.
+What is left is getting AIMI to actually run, not getting it to compile.
+
+1. **Convert `OpenAPSAIMIPlugin.kt` off `javax` to Metro before it lands - H1, still open.** It is
+   2,272 lines, still on `javax.inject.Provider` (line 104) and an `@Inject constructor` (line 151).
+   The moment it is annotated for Metro and registered, also apply the `@IntKey` alias the
+   `kmp-module-flip` skill's audit recorded: `import dev.zacsweers.metro.IntKey as MetroIntKey`,
+   because this file both registers a plugin (`@IntKey`) and reads preferences
+   (`app.aaps.core.keys.IntKey`) - the plain import collides.
+2. **Resolve its 14 remaining unresolved imports, measured in 6g, by declaration not by filename.**
+   Check each one the way `AimiBehaviorCausalInsight` and `AimiAutonomyMode` were checked - `grep`
+   for `class X` / `object X` / `fun X`, never for the bare name. Some of the 14 are real UI screens
+   that rightly stay Android-only (`AimiControlCenterScreen`, `AimiPkpdSettingsScreen`,
+   `HormonitorViewerScreen`, `AimiPreferenceInfoScreen`); others may turn out to be a type sitting in
+   the wrong file, the way `AimiAutonomyMode` did twice already in this document.
+3. **Register `OpenAPSAIMIPlugin` in `ApsPluginRegistrations.kt`** once it compiles, with its own
+   `@IntKey` (the study's earlier documents suggest it historically bound after `AUTO_ISF` (230); pick
+   the next free slot and record why). This is the moment AIMI becomes reachable from the running app
+   for the first time in this whole migration.
+4. **Only after that, decide what to do with the other 295 staged files** - `AimiHormonitorStudyExporterMTR`
+   (recommend: stub, still), the Compose screens, the TPO/auditor clusters five ports now hold
+   parked, Health Connect workers, SOS SMS. None of it blocks the plugin from registering and running
+   with a reduced feature set; all of it can be its own lot once the plugin is live.
+5. **Keep the two-baseline numeric check on every lot, and keep measuring before moving.** Three
+   things this session got wrong were all name-matching instead of declaration-checking (the blocker
+   count, a `StatusSnapshot` collision, `AimiBehaviorCausalInsight`'s real home), and every one of the
+   four attempts to move `DetermineBasalAIMI2` that eventually worked was won by moving-and-compiling,
+   never by predicting the closure in advance.
+
+One process note for whoever runs the next session on the pipeline of five agents (definer, designer,
+coder, controller, committer): it earned its cost early on, catching real errors a single pass would
+have shipped. But the two largest pieces of actual progress in this document - the JSON-surface
+measurement in 6c/6d and getting `DetermineBasalAIMI2` to compile in 6g - were both done directly,
+file by file, compile by compile, without spawning an agent. For a task this entangled, a tight
+measure-edit-compile loop held by one continuous train of thought outperformed delegating it. Use the
+pipeline for lots with a real architectural decision to make; do the mechanical, iterative ones
+directly.
