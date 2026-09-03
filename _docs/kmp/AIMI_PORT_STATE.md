@@ -228,6 +228,53 @@ first anyway.
 
 ---
 
+## 6c. The JSON surface of DB2, measured - and it is one function
+
+After the second failed attempt at moving DB2, I stopped patching and measured what the conversion
+actually is. The answer changes the size of the job.
+
+| | |
+|---|---|
+| real JSON `.put(` calls | **200** (210 minus 10 on `preferences`, which are not JSON) |
+| `JSONObject()` constructions | 22 |
+| `JSONArray` | 3 |
+| `JSONObject.NULL` | **61** |
+| **reads** - `optString`, `optDouble`, `getJSONObject`, `has`, `keys`, `length` | **0** |
+| `.toString()` on a built object | 1 |
+
+**All 200 of those `.put(` calls live inside one function: `toMedicalJson(): String`, lines 680-1405.
+Zero are outside it.** The whole `org.json` surface of an 18,886-line file is a self-contained,
+write-only, 726-line subsystem that builds one string.
+
+That is a different job from "convert 116 scattered sites":
+
+- **It is write-only.** No read-side semantics to preserve, which is the direction that usually costs.
+- **It has a testable output.** Build the JSON both ways from the same input and compare the strings.
+  That is the gate the parked file otherwise lacks, and it is worth more than any review.
+- **It is one reviewable unit.** 726 lines, one idiom repeated: `receiver.put("key", value)`, with
+  `?: org.json.JSONObject.NULL` for absent values 61 times.
+
+### The one behavioural difference to design for
+
+`org.json.put(String, Double)` **throws** on NaN and infinity; `kotlinx` does not. So a value that
+today raises - and is caught somewhere up the stack - would silently serialise as a number after the
+conversion. `putFiniteOrNull` already exists in commonMain for exactly this and is the right
+replacement, but **every one of the 200 sites has to be classified**: which carry a `Double` that can
+be non-finite, and which cannot. That classification is the real work of the lot; the substitution
+itself is mechanical.
+
+`JSONObject.NULL` maps to `JsonNull`, or to omitting the key. **These are not the same thing** for a
+consumer that distinguishes "absent" from "null", so pick one deliberately and apply it to all 61.
+
+### Why this was not obvious
+
+Both failed attempts assumed the boundary could be adapted - retype the fields, or convert at the
+call sites. Neither works, because the mismatch runs in both directions through the same data paths.
+Measuring first would have shown that the mismatch is not spread through the file at all: it is
+concentrated in one function, and the rest of DB2 never touches JSON.
+
+---
+
 ## 7. Start here tomorrow
 
 1. **Convert `OpenAPSAIMIPlugin.kt` (parked) off javax to Metro.** H1. Do this before any port
