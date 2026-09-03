@@ -421,6 +421,43 @@ the HealthKit adapter is still the price of running the engine on iOS.
 
 ---
 
+## 6f. Five ports later: what actually blocks the move now
+
+All five lot 5A ports are wired. Each one behaved as designed - the consumer names the port, the
+implementation declares it, and the concrete class and everything behind it stays parked:
+
+| port | members | keeps parked |
+|---|---:|---|
+| `AimiAuditor` | 2 | `AuditorOrchestrator` + `AuditorAIService` + `AuditorStatusLiveData` + the advisor UI |
+| `AimiTpo` | 3 | `TpoOrchestrator` + `AiCoachingService`, `TpoLlmValidator`, `TpoNotificationManager`, `TpoSessionManager`, `TpoEndReason` |
+| `AimiContextLlm` | 1 | `ContextLLMClient`, 605 LOC |
+| `AimiHealthContext` | 3 | `HealthContextRepository`, 282 LOC |
+| `AimiPhysioSource` | 2 | `AIMIPhysioDataRepositoryMTR`, 985 LOC |
+
+**Eleven methods now stand between the decision path and roughly 3,000 lines of collaborators.** The
+pattern works and it is worth continuing.
+
+### What blocks the move is no longer a collaborator - it is where two types are declared
+
+`DetermineBasalAIMI2` calls `readAimiBehaviorRuntimeProfile`. That needs `AimiAutonomyMode`, declared
+inside `compose/AimiControlCenterSupport.kt`, and `AimiBehaviorFamilyId`, declared inside
+`compose/AimiControlCenterScreen.kt` - a **1,016-line Compose screen**.
+
+So the engine cannot compile without dragging a screen in, and the screen drags `TpoOrchestrator`
+back, which is what the `AimiTpo` port had just cut out. That circle is the current blocker.
+
+**A port does not fix this one.** These are not behaviours to abstract, they are two plain
+declarations - an enum and an id - sitting in the wrong file. The fix is to lift them into their own
+files under `compose/` or `model/`, which is mechanical and small, and then nothing in the engine
+names a UI file at all.
+
+This is worth stating as a rule the port has now demonstrated twice: **a type that non-UI code needs
+must not be declared inside a UI file.** `AimiBehaviorCausalInsight` was the first case - it turned
+out to live in `AimiBehaviorCausalAnalyzer.kt` rather than the Activity, which is why that one was a
+false alarm. `AimiAutonomyMode` and `AimiBehaviorFamilyId` are real cases.
+
+---
+
 ## 7. Start here tomorrow
 
 1. **Convert `OpenAPSAIMIPlugin.kt` (parked) off javax to Metro.** H1. Do this before any port
