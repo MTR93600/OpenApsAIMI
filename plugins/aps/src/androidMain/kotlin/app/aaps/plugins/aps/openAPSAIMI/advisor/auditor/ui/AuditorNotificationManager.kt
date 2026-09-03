@@ -14,8 +14,11 @@ import app.aaps.core.interfaces.notifications.NotificationAction
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.notifications.NotificationManager as AapsNotificationManager
+import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.rx.events.EventShowDialog
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.ui.R as CoreUiR
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model.AuditorUIState
@@ -32,6 +35,7 @@ class AuditorNotificationManager @Inject constructor(
   private val uiInteraction: UiInteraction,
   private val notificationManager: AapsNotificationManager,
   private val auditorStatusLiveData: AuditorStatusLiveData,
+  private val rxBus: RxBus,
   private val aapsLogger: AAPSLogger,
 ) {
 
@@ -67,15 +71,16 @@ class AuditorNotificationManager @Inject constructor(
   /**
    * Presents the full auditor report dialog and clears notification state.
    */
-  fun openReport(hostContext: Context, onFinish: (() -> Unit)? = null) {
+  fun openReport(onFinish: (() -> Unit)? = null) {
     auditorStatusLiveData.markAsRead()
     cancelNotification()
     val (message, _) = AuditorReportFormatter.buildFullReportMessageWithFallback(context)
-    uiInteraction.showOkDialog(
-      hostContext,
-      context.getString(R.string.aimi_auditor_report_dialog_title),
-      message,
-      onFinish,
+    rxBus.send(
+      EventShowDialog.Ok(
+        title = context.getString(R.string.aimi_auditor_report_dialog_title),
+        message = message,
+        onOk = onFinish,
+      )
     )
   }
 
@@ -87,7 +92,7 @@ class AuditorNotificationManager @Inject constructor(
       level = NotificationLevel.INFO,
       validMinutes = 60,
       actions = listOf(
-        NotificationAction(R.string.aimi_auditor_notification_action_view) {
+        NotificationAction(ApsStrings.aimi_auditor_notification_action_view) {
           launchReportActivity()
         },
       ),
@@ -154,14 +159,14 @@ class AuditorNotificationManager @Inject constructor(
   }
 
   private fun launchReportActivity() {
-    val intent = Intent(context, AuditorReportActivity::class.java).apply {
+    val intent = Intent(context, uiInteraction.mainActivity.java).apply {
       flags = Intent.FLAG_ACTIVITY_NEW_TASK
     }
     context.startActivity(intent)
   }
 
   private fun createOpenReportIntent(): PendingIntent {
-    val intent = Intent(context, AuditorReportActivity::class.java).apply {
+    val intent = Intent(context, uiInteraction.mainActivity.java).apply {
       flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
     }
     return PendingIntent.getActivity(

@@ -7,6 +7,9 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
+import app.aaps.core.interfaces.overview.PluginStatusBadge
+import app.aaps.core.interfaces.overview.PluginStatusBadgeSource
+import app.aaps.core.interfaces.overview.PluginStatusLevel
 import app.aaps.core.interfaces.overview.graph.CobGraphData
 import app.aaps.core.interfaces.overview.graph.IobGraphData
 import app.aaps.core.interfaces.overview.graph.OverviewDataCache
@@ -51,6 +54,7 @@ internal class ChipsViewModelTest {
     @Mock private lateinit var aapsLogger: AAPSLogger
     @Mock private lateinit var preferences: Preferences
     @Mock private lateinit var rxBus: RxBus
+    @Mock private lateinit var pluginStatusBadgeSource: PluginStatusBadgeSource
 
     private lateinit var sut: ChipsViewModel
 
@@ -62,10 +66,11 @@ internal class ChipsViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher())
         whenever(cache.iobGraphFlow).thenReturn(MutableStateFlow(IobGraphData(emptyList(), emptyList())))
         whenever(cache.cobGraphFlow).thenReturn(MutableStateFlow(CobGraphData(emptyList(), emptyList())))
+        whenever(pluginStatusBadgeSource.badge).thenReturn(MutableStateFlow(PluginStatusBadge(PluginStatusLevel.IDLE)))
         sut = ChipsViewModel(
             cache, iobCobCalculator, loop, config, persistenceLayer, constraintChecker, profileFunction,
             processedDeviceStatusData, profileUtil, activePlugin, rh, decimalFormatter, dateUtil, aapsLogger,
-            preferences, rxBus
+            preferences, rxBus, pluginStatusBadgeSource
         )
     }
 

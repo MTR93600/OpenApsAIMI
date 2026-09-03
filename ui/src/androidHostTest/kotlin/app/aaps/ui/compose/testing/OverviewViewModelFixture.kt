@@ -19,6 +19,9 @@ import app.aaps.core.interfaces.aps.AutosensDataStore
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
+import app.aaps.core.interfaces.overview.PluginStatusBadge
+import app.aaps.core.interfaces.overview.PluginStatusBadgeSource
+import app.aaps.core.interfaces.overview.PluginStatusLevel
 import app.aaps.core.interfaces.overview.graph.BgInfoData
 import app.aaps.core.interfaces.overview.graph.BgRange
 import app.aaps.core.interfaces.overview.graph.GraphConfig
@@ -83,6 +86,7 @@ internal class OverviewViewModelFixture(private val screen: AapsScreenFixture) {
     val activePlugin: ActivePlugin = mock()
     val profileFunction: ProfileFunction = mock()
     val loop: Loop = mock()
+    val pluginStatusBadgeSource: PluginStatusBadgeSource = mock()
 
     /** Shared with the composables through `LocalDecimalFormatter`, so the two cannot format differently. */
     val decimalFormatter: DecimalFormatter = screen.decimalFormatter
@@ -163,6 +167,7 @@ internal class OverviewViewModelFixture(private val screen: AapsScreenFixture) {
         whenever(persistenceLayer.observeChanges(TB::class)).thenReturn(emptyFlow())
         whenever(persistenceLayer.databaseClearedFlow).thenReturn(emptyFlow())
         whenever(nsClient.masterOrPairedClientFlow).thenReturn(MutableStateFlow(false))
+        whenever(pluginStatusBadgeSource.badge).thenReturn(MutableStateFlow(PluginStatusBadge(PluginStatusLevel.IDLE)))
     }
 
     val graphViewModel: GraphViewModel by lazy {
@@ -173,7 +178,7 @@ internal class OverviewViewModelFixture(private val screen: AapsScreenFixture) {
         ChipsViewModel(
             cache, iobCobCalculator, loop, screen.config, persistenceLayer, constraintChecker, profileFunction,
             processedDeviceStatusData, screen.profileUtil, activePlugin, rh, decimalFormatter, screen.dateUtil,
-            aapsLogger, screen.preferences, rxBus
+            aapsLogger, screen.preferences, rxBus, pluginStatusBadgeSource
         )
     }
 

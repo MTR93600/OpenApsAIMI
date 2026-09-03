@@ -12,6 +12,8 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
+import app.aaps.core.interfaces.overview.PluginStatusBadge
+import app.aaps.core.interfaces.overview.PluginStatusBadgeSource
 import app.aaps.core.interfaces.overview.graph.OverviewDataCache
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
@@ -56,7 +58,8 @@ class ChipsViewModel @AssistedInject constructor(
     private val dateUtil: DateUtil,
     private val aapsLogger: AAPSLogger,
     private val preferences: Preferences,
-    private val rxBus: RxBus
+    private val rxBus: RxBus,
+    private val pluginStatusBadgeSource: PluginStatusBadgeSource
 ) : ViewModel() {
 
     @AssistedFactory
@@ -191,6 +194,12 @@ class ChipsViewModel @AssistedInject constructor(
             isEnabled = isEnabled,
             hasData = lastAutosensData != null
         )
+    }
+
+    val pluginBadge: StateFlow<PluginStatusBadge> = pluginStatusBadgeSource.badge
+
+    fun onPluginBadgeClick() {
+        pluginStatusBadgeSource.onBadgeClick()
     }
 
     fun showIobInfo() {

@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import app.aaps.core.data.model.RM
 import app.aaps.core.data.model.TT
 import app.aaps.core.interfaces.navigation.ElementType
+import app.aaps.core.interfaces.overview.PluginStatusBadge
 import app.aaps.core.interfaces.overview.graph.TbrState
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsSpacing
@@ -24,6 +25,7 @@ import app.aaps.ui.compose.main.TempTargetChipState
 import app.aaps.ui.compose.overview.chips.CobUiState
 import app.aaps.ui.compose.overview.chips.IobCobChipsRow
 import app.aaps.ui.compose.overview.chips.IobUiState
+import app.aaps.ui.compose.overview.chips.PluginStatusChip
 import app.aaps.ui.compose.overview.chips.ProfileChip
 import app.aaps.ui.compose.overview.chips.RunningModeChip
 import app.aaps.ui.compose.overview.chips.SensitivityUiState
@@ -51,9 +53,11 @@ fun OverviewChipsColumn(
     iobUiState: IobUiState,
     cobUiState: CobUiState,
     sensitivityUiState: SensitivityUiState,
+    pluginBadge: PluginStatusBadge,
     onNavigate: (NavigationRequest) -> Unit,
     onTbrChipClick: () -> Unit,
     onIobChipClick: () -> Unit,
+    onPluginBadgeClick: () -> Unit,
     // The command chips (running mode / profile / temp target) open mutating screens — their click is disabled on an
     // unpaired client (same MASTER_OR_PAIRED_CLIENT gate as nav/Manage), while the chip stays visible as status.
     commandsAllowed: Boolean = true,
@@ -134,6 +138,10 @@ fun OverviewChipsColumn(
         SensitivityChipBlock(
             state = sensitivityUiState,
             modifier = Modifier.fillMaxWidth()
+        )
+        PluginStatusChip(
+            badge = pluginBadge,
+            onClick = onPluginBadgeClick
         )
     }
 }

@@ -84,6 +84,7 @@ fun OverviewScreenTablet(
     val config = LocalConfig.current
     val bgInfoState by graphViewModel.bgInfoState.collectAsStateWithLifecycle()
     val sensitivityUiState by chipsViewModel.sensitivityUiState.collectAsStateWithLifecycle()
+    val pluginBadge by chipsViewModel.pluginBadge.collectAsStateWithLifecycle()
     val iobUiState by chipsViewModel.iobUiState.collectAsStateWithLifecycle()
     val cobUiState by chipsViewModel.cobUiState.collectAsStateWithLifecycle()
     val statusState by statusViewModel.uiState.collectAsStateWithLifecycle()
@@ -162,9 +163,11 @@ fun OverviewScreenTablet(
                             iobUiState = iobUiState,
                             cobUiState = cobUiState,
                             sensitivityUiState = sensitivityUiState,
+                            pluginBadge = pluginBadge,
                             onNavigate = onNavigate,
                             onTbrChipClick = onTbrChipClick,
                             onIobChipClick = onIobChipClick,
+                            onPluginBadgeClick = chipsViewModel::onPluginBadgeClick,
                             commandsAllowed = commandsAllowed
                         )
                     }

@@ -716,24 +716,90 @@ graph constructs it yet, since its only caller is the still-parked `MealAdvisorA
 `:plugins:aps:compileKotlinIosArm64` all EXIT=0; `:plugins:aps:testAndroidHostTest` 330 tests, 0
 failures. Staging down to 20 files - the View-based Activities only.
 
+**Same day, addendum 2: `AuditorReportActivity` and the first cross-module plugin-status port.**
+Asked which of the 20 to start with; picked as the smallest (24 lines) - a transparent trampoline
+that showed a system-notification tap as a dialog, then finished itself. It turned out to need no
+Compose rewrite of its own, but unwound three layers deep before landing:
+
+1. **The trampoline's only real work, `uiInteraction.showOkDialog(...)`, doesn't exist anywhere in
+   the current tree.** Not renamed - the whole "dedicated Activity shows one dialog" idiom was
+   retired in favour of a global `rxBus.send(EventShowDialog.Ok(title, message, onOk))` consumed by
+   a `GlobalDialogHost` composable mounted once at the app root
+   (`appshell/.../AapsAppRoot.kt`). Fix: delete `AuditorReportActivity` outright (confirmed dead
+   architecture, not aporting gap), rewrite `AuditorNotificationManager.openReport()` to send that
+   event instead, and repoint its two `PendingIntent`s at `uiInteraction.mainActivity.java` - the
+   same pattern `TpoNotificationManager` already uses for its own notifications.
+2. **With the Activity gone, nothing calls `openReport()` on notification tap any more - by design**,
+   per the user's choice: open the app, let the status badge carry the detail, don't force a popup.
+   That pushed the real work onto the second piece: `AuditorStatusIndicator`, the old toolbar badge
+   (a hand-built `FrameLayout` View, animations included, meant for a `DashboardShellController` that
+   doesn't exist anywhere in the KMP tree - confirmed by search, not assumed). Its actual home in the
+   current app is the Overview screen's chips row, next to the BG circle
+   (`OverviewScreenStacked.kt`'s `BgInfoSection` + `OverviewChipsColumn`, confirmed by reading the
+   layout rather than guessing).
+3. **`OverviewChipsColumn` lives in `:ui` (plugin-neutral); the Auditor's live state
+   (`AuditorStatusLiveData`) lives in `:plugins:aps`.** No existing extension point let one plugin
+   contribute a status chip without `:ui` depending on that plugin - checked `StatusSectionContent`
+   (hardcoded to exactly 4 device-status items) and the top app bar (`MainTopBar`, one hardcoded
+   Settings icon, explicitly capped by its own doc comment at "2-3 icons") before concluding neither
+   was reusable. The mechanism that *does* already cross this exact boundary is `Loop` - a neutral
+   `core:interfaces` type, bound to whichever plugin implements it, injected straight into `:ui`'s
+   `ChipsViewModel`. Built the same shape for this, scoped to exactly what AIMI needs:
+   - `PluginStatusBadge`/`PluginStatusLevel`/`PluginStatusBadgeSource` -
+     `core/interfaces/.../overview/PluginStatusBadge.kt` (new, commonMain, no Android in it - deliberately
+     not named after "Auditor", the same way `Loop` isn't named after any specific APS algorithm).
+   - `AuditorStatusBadgeSource` - `plugins/aps/.../advisor/auditor/ui/` (new, androidMain,
+     `@ContributesBinding`), bridging `AuditorStatusLiveData`'s `LiveData` to a plain `StateFlow` via
+     `observeForever` (safe: this is a process-scoped singleton, not a `View`/`Activity`), and
+     `onBadgeClick()` calling the just-rewritten `AuditorNotificationManager.openReport()`.
+   - `PluginStatusChip` - `ui/.../overview/chips/` (new, commonMain), styled from
+     `AapsTheme.snackbarColors` (error/warning/info/success - already existing, semantic, no
+     `ElementType`/`ElementColors` touched) rather than the old View's raw `@ColorRes` ints. Hides
+     itself entirely at `IDLE` with nothing to count, so a quiet plugin adds no chrome.
+   - Wired through `ChipsViewModel` (new `pluginStatusBadgeSource` constructor param + `pluginBadge`
+     `StateFlow` + `onPluginBadgeClick()`) → `OverviewChipsColumn` (new `pluginBadge`/
+     `onPluginBadgeClick` params) → all three `OverviewScreenStacked`/`Split`/`Tablet` variants,
+     mirroring `sensitivityUiState`'s existing wiring line for line.
+   - Two pre-existing tests (`ChipsViewModelTest`, `OverviewViewModelFixture`) constructed
+     `ChipsViewModel` positionally and broke on the new parameter - added a mocked
+     `PluginStatusBadgeSource` stubbed to `PluginStatusBadge(PluginStatusLevel.IDLE)` to both.
+
+Verified: `:core:interfaces:compileAndroidMain`, `:plugins:aps:compileAndroidMain`,
+`:ui:compileAndroidMain`, `:app:assembleFullDebug`, `:plugins:aps:compileKotlinIosArm64` all EXIT=0;
+`:plugins:aps:testAndroidHostTest` 330 tests and `:ui:testAndroidHostTest` 499 tests, 0 failures on
+both. `AuditorStatusIndicator.kt` (the old View) deleted from staging rather than ported - fully
+superseded by `PluginStatusChip`. Staging down to 17 files, all still View-based Activities or their
+direct support classes.
+
+**Why this took three rounds of research before any code:** each "obvious" next layer turned out to
+be either gone (`showOkDialog`), never built in this tree at all (`DashboardShellController`), or
+present but not extensible the way it looked (`StatusSectionContent`, `MainTopBar`). Every one of
+those was confirmed by reading the actual current code, not inferred from the old (`dev_OAPSAIMI`)
+design or from what a class's name implied - the same discipline as every other lot in this document,
+just applied one layer further out than usual (into `:ui`/`:core:interfaces`, not just `:plugins:aps`).
+
 ---
 
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at
 `@MetroIntKey(250)` and its whole reachable dependency closure compiling. All eight collaborator ports
-now have exactly one implementation each. Staging is down to 20 files, all View-based Android
-Activities with no Compose equivalent yet - not 247, see 6i and 6i's addendum.
+now have exactly one implementation each. The AIMI Auditor now has a real Compose status chip on the
+Overview screen, wired through a new `:core:interfaces` port (`PluginStatusBadgeSource`) rather than
+its old View-based toolbar indicator. Staging is down to 17 files, all View-based Android Activities
+(or their direct support classes) with no Compose equivalent yet - not 247, see 6i and its addenda.
 
-1. **The 20 remaining staged files are all legacy View-based Android Activities**, not AIMI's dosing
-   logic - `AimiModeSettingsActivity`, `AimiProfileAdvisorActivity`, `AuditorReportActivity`,
-   `ContextActivity`, `MealAdvisorActivity`/`MealAdvisorCameraActivity`, plus the smaller View-support
-   files that go with them (notification managers, view models, adapters, permission Activities). The
-   meal-photo vision pipeline moved this same day (see the addendum right above); its two Activities
-   are the only pieces of it still parked. None of the 20 blocks what already runs. Porting an Activity
-   at all is itself a design decision this codebase has been moving away from (Compose over View) -
-   don't assume "port it as-is" is even the right call before asking.
-2. **Before moving any of those 20, or anything from a future upstream merge, check for the recurring
+1. **The 17 remaining staged files are all legacy View-based Android Activities or their support
+   classes**, not AIMI's dosing logic - `AimiModeSettingsActivity`, `AimiProfileAdvisorActivity`,
+   `ContextActivity`, `MealAdvisorActivity`/`MealAdvisorCameraActivity`, plus a handful of the smaller
+   view models/adapters/permission Activities that go with them. The meal-photo vision pipeline and
+   the Auditor's notification/status-badge cluster both moved this same day (see the two addenda right
+   above); their Activities are the only pieces still parked. None of the 17 blocks what already runs.
+   Porting an Activity at all is itself a design decision this codebase has been moving away from
+   (Compose over View) - don't assume "port it as-is" is even the right call before asking, the same
+   way `AuditorReportActivity` turned out not to need porting at all once its real dependency
+   (`showOkDialog`) turned out to be gone rather than just unfound.
+2. **Before moving any of those 17, or anything from a future upstream merge, check for the recurring
    failure shapes from 6g through 6i, in order:** (a) a class implementing a port interface but missing
    `@ContributesBinding(AppScope::class)` - compiles fine alone, fails only at `:app:compileFullDebugKotlin`,
    so that has to be the gate, not `:plugins:aps:compileAndroidMain`; (b) `.titleResId`/`.descriptionResId`/
