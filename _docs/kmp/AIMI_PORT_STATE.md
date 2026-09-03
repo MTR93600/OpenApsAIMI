@@ -180,6 +180,54 @@ is not wired into the app) are **still true**.
 
 ---
 
+## 6b. What a fixpoint attempt on DB2 proved, 2026-09-03
+
+I tried the spec's 5G - move `DetermineBasalAIMI2` from staging into `androidMain` so that every
+later edit faces a compiler instead of accumulating unverified in a parked file. The attempt was
+reverted, and the tree is back at `cbd77176e3`, green. It was worth doing: it corrects the plan.
+
+**The fixpoint converges, and it is the right technique.** Eight rounds, each one the compiler naming
+exactly what was missing, took DB2 and 23 supporting files out of the dump. No guessing, no regex
+closure. Milos's method works in this direction too.
+
+**But the closure is entangled, not layered.** Reverting one file broke the next, and the next. The 24
+files are mutually dependent, so this is one indivisible move, not a sequence of small ones.
+
+**The real blocker is not the file moves. It is JSON drift.** Once DB2 compiled, 30 errors remained
+and all but two were the same thing: DB2 holds **116 `org.json` usages**, while the files that lots
+2-4 ported now return kotlinx `JsonObject`. Changing DB2's four trace fields to `JsonObject?` did not
+help - it moved the mismatch to the sites where DB2 builds those traces itself with `org.json`. The
+two families are:
+
+| family | sites | note |
+|---|---|---|
+| `org.json.JSONObject` vs kotlinx `JsonObject` | ~28 of the 30 | both directions, boundary is not clean |
+| `java.time.Instant` vs `kotlin.time.Instant` | 2 | fixed with an aliased import, worked |
+
+**So the order in the spec is inverted.** 5G assumed "land in androidMain, reduce the surface after".
+That cannot work: the surface drift already exists, because DB2's collaborators moved to kotlinx while
+DB2 sat parked. **The JSON conversion has to come first, in staging, and only then does the move
+compile.** Upstream's `eb6f17f494` is the model - it deleted its own `org.json` port and rewrote the
+call sites in `buildJsonObject` / `put`. Mind `putFiniteOrNull`: `org.json` throws on NaN and kotlinx
+does not.
+
+**Two things that did work and should be kept:**
+
+1. **The `AimiStorage` rewire dissolves that blocker, as predicted.** Four call sites
+   (`ensureLoaded`, `observeMealWindow`, `observeEstimatedMeal`, `observeDawnPhase`) plus one injected
+   field, and it compiled. `AimiStorageHelper` stays in `androidMain` for the `File`-typed members;
+   both can coexist during the transition.
+2. **The TensorFlow Lite dependencies have to be restored.** Upstream's KMP rewrite of
+   `plugins/aps/build.gradle.kts` dropped the fork's four `org.tensorflow:*` lines, so
+   `AimiModelHandler` cannot compile. They belong in the `androidMain` dependency block, and they are
+   Android-only by nature - iOS needs its own adapter, per annex 5.
+
+The work-in-progress DB2, with the storage rewire and the `Instant` fix already applied, is worth
+redoing rather than recovering: it is a handful of edits on top of a file that must be JSON-converted
+first anyway.
+
+---
+
 ## 7. Start here tomorrow
 
 1. **Convert `OpenAPSAIMIPlugin.kt` (parked) off javax to Metro.** H1. Do this before any port
