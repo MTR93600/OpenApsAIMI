@@ -308,6 +308,52 @@ concentrated in one function, and the rest of DB2 never touches JSON.
 
 ---
 
+## 6d. What is actually left on DB2, measured by the compiler
+
+The JSON half is done and committed (`110f0cc666`). A move was attempted after it and reverted, but
+the compiler produced the remaining list before it did. **This is the list to work from - it is short,
+and it is not what the earlier notes feared.**
+
+I wrote earlier that "the families keep changing" each round. **That was wrong.** What shifted was the
+*messages*, as each fix exposed the next one; the set is bounded. The "30 errors" was also a double
+count - the log prints each error twice.
+
+**Eleven distinct issues**, all in `DetermineBasalAIMI2` except one:
+
+| # | issue | kind |
+|---|---|---|
+| 1-2 | `JsonObj` assigned to a `JsonObject?` field, 2 sites | add `.build()` |
+| 3 | `Any` assigned to `JsonObject?` | residue of the rewritten mutation site |
+| 4-5 | `put` unresolved, 2 sites | same |
+| 6 | `IobSurveillanceExport?` vs `AimiDecisionContext.IobSurveillanceExport?` | type resolution |
+| 7 | `AuditorJsonlExport.appendLine` | signature changed - see below |
+| 8-9 | `java.time.LocalTime` where a collaborator wants `kotlinx.datetime.LocalTime` | 2 sites |
+| 10 | `java.time.LocalDate` likewise | 1 site |
+| 11 | `R.string.format_insulin_units` unresolved | **a pre-existing bug** - see below |
+
+### Two of these are worth knowing about on their own
+
+**`AuditorJsonlExport.appendLine` now takes three parameters**, not two:
+`appendLine(storage: AimiStorage, decisionsFile: AimiPath, jsonLine: String)`. Lot 2 moved it onto the
+storage seam. DB2 still calls `appendLine(aimiDecisionsJsonlFile(), jsonLine)` and builds its path
+with `File(externalDir, "AIMI_Decisions.jsonl")`. Both sides of that call have to change together.
+
+**`R.string.format_insulin_units` does not exist.** `core/ui` has `format_insulin_units1` and
+`format_insulin_units_signed`, and nothing named `format_insulin_units`. So
+`context.getString(app.aaps.core.ui.R.string.format_insulin_units, requestedU)` in DB2 has been a
+broken reference for as long as the file has been parked - it cannot compile, and nobody could see it
+because nothing compiles it. **This is the clearest single argument for getting the file into a source
+set:** a resource reference rotted and no one knew.
+
+### And one collaborator genuinely cannot move yet
+
+`AiCoachingService` needs `AimiBehaviorCausalInsight`, which is declared inside
+`advisor/AimiProfileAdvisorActivity.kt` - a 2,316-line Activity that builds its UI programmatically.
+Moving the service drags the Activity, or the type has to be lifted out of it first. That is a real
+decision, not a mechanical step, and it is the only one of the eleven that is.
+
+---
+
 ## 7. Start here tomorrow
 
 1. **Convert `OpenAPSAIMIPlugin.kt` (parked) off javax to Metro.** H1. Do this before any port
