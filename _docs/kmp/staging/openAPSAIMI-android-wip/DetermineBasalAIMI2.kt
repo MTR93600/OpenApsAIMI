@@ -54,6 +54,7 @@ import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
 import app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
 import app.aaps.core.data.model.HR
@@ -276,8 +277,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import org.json.JSONArray
-import org.json.JSONObject
+import kotlin.time.Instant as KotlinInstant
+import kotlinx.serialization.json.JsonObject
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiJson
+import app.aaps.plugins.aps.openAPSAIMI.utils.JsonArr
+import app.aaps.plugins.aps.openAPSAIMI.utils.JsonObj
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
@@ -461,35 +465,35 @@ internal data class AimiDecisionContext(
         /** Physiological phase + behavioral risk policy (HTR / MPC / scenario) */
         var physiological_phase: PhysiologicalPhaseExport? = null,
         /** Multi-label body-state pattern catalog (RBT meta + HTR caps) */
-        var physiological_patterns: org.json.JSONObject? = null,
+        var physiological_patterns: JsonObject? = null,
         /** Unified meal absorption belief + phase (IOB / HTR / SMB priority) */
         var meal_absorption_phase: MealAbsorptionPhaseExport? = null,
         /** PKPD vs scenario eventual-BG divergence audit (PredictionDivergenceAuditor) */
-        var pred_divergence: org.json.JSONObject? = null,
+        var pred_divergence: JsonObject? = null,
         /** Recursive Belief Tree — full JSON object for AIMI_Decisions.jsonl */
-        var recursive_belief: org.json.JSONObject? = null,
+        var recursive_belief: JsonObject? = null,
         /** Progressive RBT authority gate decision for shadow -> soft -> hard transitions. */
-        var recursive_authority_gate: org.json.JSONObject? = null,
+        var recursive_authority_gate: JsonObject? = null,
         /** Replay-oriented quality bridge built from existing guards and shadow channels. */
-        var replay_quality: org.json.JSONObject? = null,
+        var replay_quality: JsonObject? = null,
         /** Diagnostic-only ordered SMB cap chain; never consumed by dose calculation. */
-        var smb_binding_trace: JSONObject? = null,
+        var smb_binding_trace: JsonObject? = null,
         /** Shared latent physiological state reused across engines for the tick. */
-        var physio_latent_state: org.json.JSONObject? = null,
+        var physio_latent_state: JsonObject? = null,
         /** Multi-hypothesis UAM interpretation for meal vs endogenous vs stress vs rebound. */
-        var uam_hypotheses: org.json.JSONObject? = null,
+        var uam_hypotheses: JsonObject? = null,
         /** Unified patient-state snapshot bridging physiology, meal state and user intent. */
-        var patient_state: org.json.JSONObject? = null,
+        var patient_state: JsonObject? = null,
         /** High-level patient mode and strategy derived from the shared state. */
-        var patient_mode: org.json.JSONObject? = null,
+        var patient_mode: JsonObject? = null,
         /** AIMI Harmonia physiological tree — deploys insulin intent; Harmonia arbitrates dose. */
-        var physiological_tree: org.json.JSONObject? = null,
+        var physiological_tree: JsonObject? = null,
         /** Lot A endocrine belief (WCycle + hypo dampen) — context for tree/Harmonia/forensics. */
-        var endocrine_belief: org.json.JSONObject? = null,
+        var endocrine_belief: JsonObject? = null,
         /** Cascade meal language (Tree→Harmonia→Auditor) — meal_certainty_v1. */
-        var meal_certainty: org.json.JSONObject? = null,
+        var meal_certainty: JsonObject? = null,
         /** Cascade D4 / C1 — single dose-facing eventual + minPred for the tick. */
-        var dose_terminal_snapshot: org.json.JSONObject? = null,
+        var dose_terminal_snapshot: JsonObject? = null,
         /**
          * Straight-line tube decision that set this tick's SMB ceiling.
          *
@@ -497,18 +501,18 @@ internal data class AimiDecisionContext(
          * the caps, so the exported snapshot is **not** the input the tube used. This block carries
          * the inputs of the stage that actually decided, so the two can be compared.
          */
-        var tube_advisor: JSONObject? = null,
+        var tube_advisor: JsonObject? = null,
         /** Wave4 H3 — soft-floor/EGP path-min (production curves + study JSON raw/soft). */
-        var pkpd_soft_floor: org.json.JSONObject? = null,
+        var pkpd_soft_floor: JsonObject? = null,
         /**
          * What the MPC asked for before the control barrier, and the barrier's own terms.
          *
          * Separates "the solver wanted nothing" from "the barrier suspended everything", which
          * `model_output_u` alone cannot do because it is read after the barrier.
          */
-        var control_barrier: JSONObject? = null,
+        var control_barrier: JsonObject? = null,
         /** Lot 2 — invariants terminaux du canal basal: taux avant/apres et invariant liant. */
-        var basal_terminal: org.json.JSONObject? = null,
+        var basal_terminal: JsonObject? = null,
         /**
          * Universal Adaptive Basal scaling for this tick: heuristic, learned head, and the blend.
          *
@@ -516,24 +520,24 @@ internal data class AimiDecisionContext(
          * be exported (as free text in the narrative), so a model stuck on one constant and a model
          * that had really learned the same number were impossible to tell apart in a log.
          */
-        var adaptive_basal: JSONObject? = null,
+        var adaptive_basal: JsonObject? = null,
         /** AIMI Harmonia simulated production branch; virtual only, never applied to the real pump. */
-        var harmonia_simulation: org.json.JSONObject? = null,
+        var harmonia_simulation: JsonObject? = null,
         /** AIMI Harmonia production owner state; basal-first only and safety-gated. */
-        var harmonia_production: org.json.JSONObject? = null,
+        var harmonia_production: JsonObject? = null,
         /** Harmonia SMB authority arbitration (ACCEPT / LIFT_WITHIN_ENVELOPE / REDUCE). */
-        var harmonia_smb_authority: org.json.JSONObject? = null,
+        var harmonia_smb_authority: JsonObject? = null,
         /** Unified intelligence snapshot (kinetics, causal, ISF, predictions) — intelligence_snapshot_v1. */
-        var intelligence_snapshot: org.json.JSONObject? = null,
+        var intelligence_snapshot: JsonObject? = null,
         /** Runtime ownership of T3C for this tick: native RBT, legacy fallback, or safety terminal. */
         var t3c_runtime_ownership: T3cRuntimeOwnershipExport? = null,
         /** Loop vs auditor binding for this tick (sync disposition; follow-up may arrive async). */
-        var auditor_tick: org.json.JSONObject? = null,
+        var auditor_tick: JsonObject? = null,
         /**
          * Post-hypo delivery authority for this tick: whether it applied, which condition declined
          * it, and the SMB before / after its cap. See `docs/adr/0006-autodrive-consumes-authority.md`.
          */
-        var post_hypo_delivery: org.json.JSONObject? = null,
+        var post_hypo_delivery: JsonObject? = null,
     )
 
     data class T3cRuntimeOwnershipExport(
@@ -679,69 +683,69 @@ internal data class AimiDecisionContext(
 
     fun toMedicalJson(): String {
         return try {
-            val json = org.json.JSONObject()
+            val json = JsonObj()
             json.put("event_id", event_id)
             json.put("timestamp", timestamp)
             json.put("trigger", trigger)
 
-            val base = org.json.JSONObject()
+            val base = JsonObj()
             base.put("profile_isf_mgdl", baseline_state.profile_isf_mgdl)
             base.put("profile_basal_uph", baseline_state.profile_basal_uph)
             base.put("current_bg_mgdl", baseline_state.current_bg_mgdl)
             base.put("cob_g", baseline_state.cob_g)
             base.put("iob_u", baseline_state.iob_u)
-            base.put("profile_isf_static_mgdl", baseline_state.profile_isf_static_mgdl ?: org.json.JSONObject.NULL)
-            base.put("command_isf_mgdl", baseline_state.command_isf_mgdl ?: org.json.JSONObject.NULL)
-            base.put("isf_source", baseline_state.isf_source ?: org.json.JSONObject.NULL)
-            base.put("isf_age_ms", baseline_state.isf_age_ms ?: org.json.JSONObject.NULL)
-            base.put("isf_cache_key", baseline_state.isf_cache_key ?: org.json.JSONObject.NULL)
-            base.put("isf_cache_glucose_mgdl", baseline_state.isf_cache_glucose_mgdl ?: org.json.JSONObject.NULL)
-            base.put("isf_kalman_fast_mgdl", baseline_state.isf_kalman_fast_mgdl ?: org.json.JSONObject.NULL)
-            base.put("isf_adj_engine_mgdl", baseline_state.isf_adj_engine_mgdl ?: org.json.JSONObject.NULL)
-            base.put("isf_fused_slow_mgdl", baseline_state.isf_fused_slow_mgdl ?: org.json.JSONObject.NULL)
-            base.put("isf_trust_fast", baseline_state.isf_trust_fast ?: org.json.JSONObject.NULL)
-            base.put("isf_dynamic_factor", baseline_state.isf_dynamic_factor ?: org.json.JSONObject.NULL)
-            base.put("isf_trajectory_multiplier", baseline_state.isf_trajectory_multiplier ?: org.json.JSONObject.NULL)
-            base.put("estimated_ra_mgdl_per_min", baseline_state.estimated_ra_mgdl_per_min ?: org.json.JSONObject.NULL)
-            base.put("physio_isf_factor", baseline_state.physio_isf_factor ?: org.json.JSONObject.NULL)
-            base.put("isf_profile_relative_shadow_mgdl", baseline_state.isf_profile_relative_shadow_mgdl ?: org.json.JSONObject.NULL)
-            base.put("isf_profile_relative_bound_hit", baseline_state.isf_profile_relative_bound_hit ?: org.json.JSONObject.NULL)
-            base.put("sensitivity_ratio_r", baseline_state.sensitivity_ratio_r ?: org.json.JSONObject.NULL)
-            base.put("isf_shadow_s_mgdl", baseline_state.isf_shadow_s_mgdl ?: org.json.JSONObject.NULL)
-            base.put("sensitivity_observations", baseline_state.sensitivity_observations ?: org.json.JSONObject.NULL)
-            base.put("htr_ra_floor_mgdl_per_min", baseline_state.htr_ra_floor_mgdl_per_min ?: org.json.JSONObject.NULL)
-            base.put("estimated_ra_used_mgdl_per_min", baseline_state.estimated_ra_used_mgdl_per_min ?: org.json.JSONObject.NULL)
-            base.put("ra_estimator_advances", baseline_state.ra_estimator_advances ?: org.json.JSONObject.NULL)
-            base.put("ra_estimator_replayed_calls", baseline_state.ra_estimator_replayed_calls ?: org.json.JSONObject.NULL)
-            base.put("ra_aligned_tau_shadow_mgdl_per_min", baseline_state.ra_aligned_tau_shadow_mgdl_per_min ?: org.json.JSONObject.NULL)
-            base.put("smb_seal_refused_count", baseline_state.smb_seal_refused_count ?: org.json.JSONObject.NULL)
-            base.put("smb_seal_refused_total_u", baseline_state.smb_seal_refused_total_u ?: org.json.JSONObject.NULL)
-            base.put("smb_seal_allowed_raise_count", baseline_state.smb_seal_allowed_raise_count ?: org.json.JSONObject.NULL)
-            base.put("cbf_coefficient_used", baseline_state.cbf_coefficient_used ?: org.json.JSONObject.NULL)
-            base.put("cbf_coefficient_unfloored", baseline_state.cbf_coefficient_unfloored ?: org.json.JSONObject.NULL)
-            base.put("cbf_permitted_u", baseline_state.cbf_permitted_u ?: org.json.JSONObject.NULL)
-            base.put("cbf_permitted_unfloored_u", baseline_state.cbf_permitted_unfloored_u ?: org.json.JSONObject.NULL)
-            base.put("cbf_profile_isf_mgdl", baseline_state.cbf_profile_isf_mgdl ?: org.json.JSONObject.NULL)
-            base.put("effort_smb_factor_requested", baseline_state.effort_smb_factor_requested ?: org.json.JSONObject.NULL)
-            base.put("effort_smb_factor_applied", baseline_state.effort_smb_factor_applied ?: org.json.JSONObject.NULL)
-            base.put("effort_smb_before_u", baseline_state.effort_smb_before_u ?: org.json.JSONObject.NULL)
-            base.put("effort_smb_after_u", baseline_state.effort_smb_after_u ?: org.json.JSONObject.NULL)
-            base.put("effort_smb_floored_by_meal", baseline_state.effort_smb_floored_by_meal ?: org.json.JSONObject.NULL)
-            base.put("rise_floor_spent_u", baseline_state.rise_floor_spent_u ?: org.json.JSONObject.NULL)
-            base.put("variable_sens_mgdl", baseline_state.variable_sens_mgdl ?: org.json.JSONObject.NULL)
+            base.put("profile_isf_static_mgdl", baseline_state.profile_isf_static_mgdl ?: AimiJson.NULL)
+            base.put("command_isf_mgdl", baseline_state.command_isf_mgdl ?: AimiJson.NULL)
+            base.put("isf_source", baseline_state.isf_source ?: AimiJson.NULL)
+            base.put("isf_age_ms", baseline_state.isf_age_ms ?: AimiJson.NULL)
+            base.put("isf_cache_key", baseline_state.isf_cache_key ?: AimiJson.NULL)
+            base.put("isf_cache_glucose_mgdl", baseline_state.isf_cache_glucose_mgdl ?: AimiJson.NULL)
+            base.put("isf_kalman_fast_mgdl", baseline_state.isf_kalman_fast_mgdl ?: AimiJson.NULL)
+            base.put("isf_adj_engine_mgdl", baseline_state.isf_adj_engine_mgdl ?: AimiJson.NULL)
+            base.put("isf_fused_slow_mgdl", baseline_state.isf_fused_slow_mgdl ?: AimiJson.NULL)
+            base.put("isf_trust_fast", baseline_state.isf_trust_fast ?: AimiJson.NULL)
+            base.put("isf_dynamic_factor", baseline_state.isf_dynamic_factor ?: AimiJson.NULL)
+            base.put("isf_trajectory_multiplier", baseline_state.isf_trajectory_multiplier ?: AimiJson.NULL)
+            base.put("estimated_ra_mgdl_per_min", baseline_state.estimated_ra_mgdl_per_min ?: AimiJson.NULL)
+            base.put("physio_isf_factor", baseline_state.physio_isf_factor ?: AimiJson.NULL)
+            base.put("isf_profile_relative_shadow_mgdl", baseline_state.isf_profile_relative_shadow_mgdl ?: AimiJson.NULL)
+            base.put("isf_profile_relative_bound_hit", baseline_state.isf_profile_relative_bound_hit ?: AimiJson.NULL)
+            base.put("sensitivity_ratio_r", baseline_state.sensitivity_ratio_r ?: AimiJson.NULL)
+            base.put("isf_shadow_s_mgdl", baseline_state.isf_shadow_s_mgdl ?: AimiJson.NULL)
+            base.put("sensitivity_observations", baseline_state.sensitivity_observations ?: AimiJson.NULL)
+            base.put("htr_ra_floor_mgdl_per_min", baseline_state.htr_ra_floor_mgdl_per_min ?: AimiJson.NULL)
+            base.put("estimated_ra_used_mgdl_per_min", baseline_state.estimated_ra_used_mgdl_per_min ?: AimiJson.NULL)
+            base.put("ra_estimator_advances", baseline_state.ra_estimator_advances ?: AimiJson.NULL)
+            base.put("ra_estimator_replayed_calls", baseline_state.ra_estimator_replayed_calls ?: AimiJson.NULL)
+            base.put("ra_aligned_tau_shadow_mgdl_per_min", baseline_state.ra_aligned_tau_shadow_mgdl_per_min ?: AimiJson.NULL)
+            base.put("smb_seal_refused_count", baseline_state.smb_seal_refused_count ?: AimiJson.NULL)
+            base.put("smb_seal_refused_total_u", baseline_state.smb_seal_refused_total_u ?: AimiJson.NULL)
+            base.put("smb_seal_allowed_raise_count", baseline_state.smb_seal_allowed_raise_count ?: AimiJson.NULL)
+            base.put("cbf_coefficient_used", baseline_state.cbf_coefficient_used ?: AimiJson.NULL)
+            base.put("cbf_coefficient_unfloored", baseline_state.cbf_coefficient_unfloored ?: AimiJson.NULL)
+            base.put("cbf_permitted_u", baseline_state.cbf_permitted_u ?: AimiJson.NULL)
+            base.put("cbf_permitted_unfloored_u", baseline_state.cbf_permitted_unfloored_u ?: AimiJson.NULL)
+            base.put("cbf_profile_isf_mgdl", baseline_state.cbf_profile_isf_mgdl ?: AimiJson.NULL)
+            base.put("effort_smb_factor_requested", baseline_state.effort_smb_factor_requested ?: AimiJson.NULL)
+            base.put("effort_smb_factor_applied", baseline_state.effort_smb_factor_applied ?: AimiJson.NULL)
+            base.put("effort_smb_before_u", baseline_state.effort_smb_before_u ?: AimiJson.NULL)
+            base.put("effort_smb_after_u", baseline_state.effort_smb_after_u ?: AimiJson.NULL)
+            base.put("effort_smb_floored_by_meal", baseline_state.effort_smb_floored_by_meal ?: AimiJson.NULL)
+            base.put("rise_floor_spent_u", baseline_state.rise_floor_spent_u ?: AimiJson.NULL)
+            base.put("variable_sens_mgdl", baseline_state.variable_sens_mgdl ?: AimiJson.NULL)
             base.put(
                 "rise_floor_minutes_since_contribution",
-                baseline_state.rise_floor_minutes_since_contribution ?: org.json.JSONObject.NULL,
+                baseline_state.rise_floor_minutes_since_contribution ?: AimiJson.NULL,
             )
             json.put("baseline_state", base)
 
-            val adj = org.json.JSONObject()
+            val adj = JsonObj()
             adjustments.dynamic_isf?.let { d ->
-                val dJson = org.json.JSONObject()
+                val dJson = JsonObj()
                 dJson.put("final_value_mgdl", d.final_value_mgdl)
-                val modsIdx = org.json.JSONArray()
+                val modsIdx = JsonArr()
                 d.modifiers.forEach { m ->
-                    val mJson = org.json.JSONObject()
+                    val mJson = JsonObj()
                     mJson.put("source", m.source)
                     mJson.put("factor", m.factor)
                     mJson.put("reason", m.clinical_reason)
@@ -751,25 +755,25 @@ internal data class AimiDecisionContext(
                 adj.put("dynamic_isf", dJson)
             }
             adjustments.physiological_context?.let { p ->
-                val pJson = org.json.JSONObject()
+                val pJson = JsonObj()
                 pJson.put("cycle_phase", p.hormonal_cycle_phase)
                 pJson.put("activity_mode", p.physical_activity_mode)
                 adj.put("physio_context", pJson)
             }
             // Add Basal Cap if present
             adjustments.basal_safety_cap?.let { c ->
-                val cJson = org.json.JSONObject()
+                val cJson = JsonObj()
                 cJson.put("status", c.status)
                 cJson.put("limit_uph", c.limit_uph)
                 cJson.put("reason", c.safety_reason)
                 adj.put("basal_cap", cJson)
             }
             adjustments.iob_surveillance?.let { s ->
-                val sJson = org.json.JSONObject()
+                val sJson = JsonObj()
                 sJson.put("pref_enabled", s.pref_enabled)
                 sJson.put("preference_key", s.preference_key)
                 sJson.put("kind", s.kind)
-                sJson.put("active_reason", s.active_reason ?: org.json.JSONObject.NULL)
+                sJson.put("active_reason", s.active_reason ?: AimiJson.NULL)
                 sJson.put("meal_priority_context", s.meal_priority_context)
                 sJson.put("bg_mgdl", s.bg_mgdl)
                 sJson.put("target_bg_mgdl", s.target_bg_mgdl)
@@ -778,9 +782,9 @@ internal data class AimiDecisionContext(
                 sJson.put("iob_u", s.iob_u)
                 sJson.put("max_iob_u", s.max_iob_u)
                 sJson.put("iob_floor_u", s.iob_floor_u)
-                sJson.put("eventual_bg", s.eventual_bg ?: org.json.JSONObject.NULL)
-                sJson.put("min_predicted_bg", s.min_predicted_bg ?: org.json.JSONObject.NULL)
-                sJson.put("trajectory_energy", s.trajectory_energy ?: org.json.JSONObject.NULL)
+                sJson.put("eventual_bg", s.eventual_bg ?: AimiJson.NULL)
+                sJson.put("min_predicted_bg", s.min_predicted_bg ?: AimiJson.NULL)
+                sJson.put("trajectory_energy", s.trajectory_energy ?: AimiJson.NULL)
                 sJson.put("signal_eventual_drop", s.signal_eventual_drop)
                 sJson.put("signal_min_pred_drop", s.signal_min_pred_drop)
                 sJson.put("signal_trajectory_stack", s.signal_trajectory_stack)
@@ -800,11 +804,11 @@ internal data class AimiDecisionContext(
                 adj.put("iob_surveillance", sJson)
             }
             adjustments.iob_release?.let { r ->
-                val rJson = org.json.JSONObject()
+                val rJson = JsonObj()
                 rJson.put("enabled", r.enabled)
                 rJson.put("theta", r.theta)
                 rJson.put("iob_ledger_u", r.iob_ledger_u)
-                rJson.put("iob_effective_u", r.iob_effective_u ?: org.json.JSONObject.NULL)
+                rJson.put("iob_effective_u", r.iob_effective_u ?: AimiJson.NULL)
                 rJson.put("iob_for_gate_u", r.iob_for_gate_u)
                 rJson.put("released_u", r.released_u)
                 rJson.put("gate_flips_block_to_allow", r.gate_flips_block_to_allow)
@@ -812,7 +816,7 @@ internal data class AimiDecisionContext(
                 adj.put("iob_release", rJson)
             }
             adjustments.safety_risk?.let { r ->
-                val rJson = org.json.JSONObject()
+                val rJson = JsonObj()
                 rJson.put("phase", r.phase)
                 rJson.put("predictive_hypo_suppressed", r.predictive_hypo_suppressed)
                 rJson.put("safety_gate", r.safety_gate)
@@ -822,15 +826,15 @@ internal data class AimiDecisionContext(
                 rJson.put("composite_min_mgdl", r.composite_min_mgdl)
                 rJson.put("pred_bg_mgdl", r.pred_bg_mgdl)
                 rJson.put("eventual_bg_mgdl", r.eventual_bg_mgdl)
-                rJson.put("uam_terminal_mgdl", r.uam_terminal_mgdl ?: org.json.JSONObject.NULL)
+                rJson.put("uam_terminal_mgdl", r.uam_terminal_mgdl ?: AimiJson.NULL)
                 rJson.put("hypo_threshold_mgdl", r.hypo_threshold_mgdl)
-                rJson.put("decision_composite_min_mgdl", r.decision_composite_min_mgdl ?: org.json.JSONObject.NULL)
-                rJson.put("decision_hypo_threshold_mgdl", r.decision_hypo_threshold_mgdl ?: org.json.JSONObject.NULL)
-                rJson.put("reconcile_delta_mgdl", r.reconcile_delta_mgdl ?: org.json.JSONObject.NULL)
+                rJson.put("decision_composite_min_mgdl", r.decision_composite_min_mgdl ?: AimiJson.NULL)
+                rJson.put("decision_hypo_threshold_mgdl", r.decision_hypo_threshold_mgdl ?: AimiJson.NULL)
+                rJson.put("reconcile_delta_mgdl", r.reconcile_delta_mgdl ?: AimiJson.NULL)
                 adj.put("safety_risk", rJson)
             }
             adjustments.scenario_projection?.let { s ->
-                val sJson = org.json.JSONObject()
+                val sJson = JsonObj()
                 sJson.put("floor_terminal_mgdl", s.floor_terminal_mgdl)
                 sJson.put("floor_path_min_mgdl", s.floor_path_min_mgdl)
                 sJson.put("best_terminal_mgdl", s.best_terminal_mgdl)
@@ -838,12 +842,12 @@ internal data class AimiDecisionContext(
                 sJson.put("best_gate_path_min_mgdl", s.best_gate_path_min_mgdl)
                 sJson.put("best_gate_path_min_hit_floor", s.best_gate_path_min_hit_floor)
                 sJson.put("terminal_gap_mgdl", s.terminal_gap_mgdl)
-                sJson.put("trajectory_type", s.trajectory_type ?: org.json.JSONObject.NULL)
-                sJson.put("contributors", org.json.JSONArray(s.contributors))
+                sJson.put("trajectory_type", s.trajectory_type ?: AimiJson.NULL)
+                sJson.put("contributors", JsonArr(s.contributors))
                 adj.put("scenario_projection", sJson)
             }
             adjustments.hyper_trajectory_release?.let { h ->
-                val hJson = org.json.JSONObject()
+                val hJson = JsonObj()
                 hJson.put("active", h.active)
                 hJson.put("tier", h.tier)
                 hJson.put("dev_above_target_mgdl", h.dev_above_target_mgdl)
@@ -859,7 +863,7 @@ internal data class AimiDecisionContext(
                 adj.put("hyper_trajectory_release", hJson)
             }
             adjustments.physiological_phase?.let { p ->
-                val pJson = org.json.JSONObject()
+                val pJson = JsonObj()
                 pJson.put("phase", p.phase)
                 pJson.put("confidence", p.confidence)
                 pJson.put("behavioral_risk", p.behavioral_risk)
@@ -867,16 +871,16 @@ internal data class AimiDecisionContext(
                 pJson.put("extended_dawn_guard", p.extended_dawn_guard)
                 pJson.put("scenario_best_capped", p.scenario_best_capped)
                 pJson.put("max_htr_tier", p.max_htr_tier)
-                pJson.put("smb_floor_cap_u", p.smb_floor_cap_u ?: org.json.JSONObject.NULL)
-                pJson.put("physio_smb_factor_fused", p.physio_smb_factor_fused ?: org.json.JSONObject.NULL)
-                pJson.put("physio_phase_source", p.physio_phase_source ?: org.json.JSONObject.NULL)
+                pJson.put("smb_floor_cap_u", p.smb_floor_cap_u ?: AimiJson.NULL)
+                pJson.put("physio_smb_factor_fused", p.physio_smb_factor_fused ?: AimiJson.NULL)
+                pJson.put("physio_phase_source", p.physio_phase_source ?: AimiJson.NULL)
                 adj.put("physiological_phase", pJson)
             }
             adjustments.physiological_patterns?.let { pp ->
                 adj.put("physiological_patterns", pp)
             }
             adjustments.meal_absorption_phase?.let { m ->
-                val mJson = org.json.JSONObject()
+                val mJson = JsonObj()
                 mJson.put("phase", m.phase)
                 mJson.put("belief", m.belief)
                 mJson.put("reason", m.reason)
@@ -956,7 +960,7 @@ internal data class AimiDecisionContext(
                 adj.put("intelligence_snapshot_v1", snapshot)
             }
             adjustments.t3c_runtime_ownership?.let { ownership ->
-                val ownershipJson = org.json.JSONObject()
+                val ownershipJson = JsonObj()
                 ownershipJson.put("mode", ownership.mode)
                 ownershipJson.put("native_owner_active", ownership.native_owner_active)
                 ownershipJson.put("legacy_fallback_allowed", ownership.legacy_fallback_allowed)
@@ -972,7 +976,7 @@ internal data class AimiDecisionContext(
             json.put("adjustments", adj)
 
             outcome?.let { o ->
-                val oJson = org.json.JSONObject()
+                val oJson = JsonObj()
                 oJson.put("decision", o.clinical_decision)
                 oJson.put("amount", o.dosage_u)
                 o.target_basal_uph?.let { oJson.put("target_basal_rate_uph", it) }
@@ -1310,6 +1314,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var basalNeuralLearner: app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
     @Inject lateinit var basalMlTrainingCoordinator: app.aaps.plugins.aps.openAPSAIMI.learning.BasalMlTrainingCoordinator
     @Inject lateinit var storageHelper: AimiStorageHelper  // 🛡️ Restored StorageHelper
+
+    // The shared storage seam, next to the Android helper above. Transitional: the four
+    // CircadianMealProfileStore entry points took `AimiStorage` when they were restored, while the
+    // File-typed members below still need the helper.
+    @Inject lateinit var storage: AimiStorage
     
     // Helper to safely access learner (handles potential early access before injection)
     private val safeReactivityFactor: Double
@@ -1962,20 +1971,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         hMult: Double,
         nDecision: BasalNeuralLearner.UniversalBasalDecision?,
         combined: Double,
-    ): JSONObject = JSONObject().apply {
+    ): JsonObject = JsonObj().apply {
         put("h_mult_raw", hMultRaw)
         put("h_mult", hMult)
         put("n_mult", nDecision?.multiplier ?: 1.0)
-        put("n_raw", nDecision?.rawValue ?: JSONObject.NULL)
+        put("n_raw", nDecision?.rawValue ?: AimiJson.NULL)
         put("n_source", (nDecision?.source ?: BasalNeuralLearner.BasalMultiplierSource.DISABLED).name.lowercase(Locale.US))
         put("n_clamped", nDecision?.clamped ?: false)
-        put("n_floor", nDecision?.floor ?: JSONObject.NULL)
-        put("n_ceiling", nDecision?.ceiling ?: JSONObject.NULL)
+        put("n_floor", nDecision?.floor ?: AimiJson.NULL)
+        put("n_ceiling", nDecision?.ceiling ?: AimiJson.NULL)
         put("combined", combined)
         val gov = basalNeuralLearner.getGovernanceSnapshot()
         put("governance_action", gov.action.name)
-        put("governance_basal_floor", gov.activeBasalFloor ?: JSONObject.NULL)
-    }
+        put("governance_basal_floor", gov.activeBasalFloor ?: AimiJson.NULL)
+    }.build()
 
     /**
      * Phase 2 (P2): [AimiDecisionContext], initial [RT], CONTEXT telemetry phase, SOS evaluation,
@@ -3275,7 +3284,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastPhysiologicalPhaseOutput = fused.phaseOutput
         lastFusedPhysioMultipliers = fused.multipliers
         CircadianMealProfileStore.observeDawnPhase(
-            storageHelper = storageHelper,
+            storage = storage,
             eventTimeMs = dateUtil.now(),
             phaseOutput = fused.phaseOutput,
             mealSignalsActive = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime || cob > 1.0,
@@ -3768,13 +3777,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private fun observeCircadianMealProfile(nowMs: Long) {
-        CircadianMealProfileStore.ensureLoaded(storageHelper)
+        CircadianMealProfileStore.ensureLoaded(storage)
 
         fun observeIfFresh(active: Boolean, runtimeMinutes: Long, slotLabel: String) {
             if (!active) return
             if (runtimeMinutes !in 0L..10L) return
             val eventTimeMs = nowMs - (runtimeMinutes * 60_000L)
-            CircadianMealProfileStore.observeMealWindow(storageHelper, slotLabel, eventTimeMs)
+            CircadianMealProfileStore.observeMealWindow(storage, slotLabel, eventTimeMs)
         }
 
         observeIfFresh(bfastTime, bfastruntime, "bfast")
@@ -3789,7 +3798,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (estimatedCarbs > 10.0 && estimatedCarbsTime > 0L) {
             val estimatedAgeMinutes = ((nowMs - estimatedCarbsTime) / 60_000L).coerceAtLeast(0L)
             if (estimatedAgeMinutes in 0L..10L) {
-                CircadianMealProfileStore.observeEstimatedMeal(storageHelper, estimatedCarbsTime)
+                CircadianMealProfileStore.observeEstimatedMeal(storage, estimatedCarbsTime)
             }
         }
     }
@@ -3862,7 +3871,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastPostHypoOrdinal = postHypoOrdinal
         val ngrConfig = buildNightGrowthResistanceConfig(profile, autosens, glucoseStatus, targetBg.toDouble())
         val ngrResult = nightGrowthResistanceMode.evaluate(
-            now = java.time.Instant.ofEpochMilli(dateUtil.now()),
+            now = KotlinInstant.fromEpochMilliseconds(dateUtil.now()),
             bg = bg,
             delta = delta.toDouble(),
             shortAvgDelta = shortAvgDelta.toDouble(),
@@ -5133,9 +5142,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * of the meal) because its own `lfh` reached -11.2 mg/dL/min — a predicted fall of 56 mg/dL per
      * 5 minutes against a measured 9. The two cases need opposite fixes, so they are now separated.
      */
-    private fun buildControlBarrierExport(): JSONObject? {
+    private fun buildControlBarrierExport(): JsonObject? {
         val d = autodriveEngine.lastBarrierDiagnostics ?: return null
-        return JSONObject().apply {
+        return JsonObj().apply {
             put("mpc_raw_smb_u", autodriveEngine.lastMpcRawSmbU)
             put("mpc_raw_tbr_uph", autodriveEngine.lastMpcRawTbrUph)
             put("h_mgdl", d.hMgdl)
@@ -5148,7 +5157,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             put("si_metabolic", d.siMetabolic)
             put("fully_suspended", d.fullySuspended)
             d.safeU?.let { put("safe_u", it) }
-        }
+        }.build()
     }
 
     private fun raObservationId(ctx: AimiTickContext): Long =
@@ -7562,7 +7571,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val systemTime = ctx.currentTime
         val iobTotal = ctx.iobDataArray[0]
         val ngrResult = nightGrowthResistanceMode.evaluate(
-            now = Instant.ofEpochMilli(systemTime),
+            now = KotlinInstant.fromEpochMilliseconds(systemTime),
             bg = bg,
             delta = delta.toDouble(),
             shortAvgDelta = shortAvgDelta.toDouble(),
@@ -9144,7 +9153,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.meal_absorption_phase = mealAbsorptionPhaseExport()
         decisionCtx.adjustments.pred_divergence = lastPredDivergenceExport
         val rbtPrefs = RecursiveBeliefPreferences.from(preferences)
-        var harmoniaSmbAuthorityJson: org.json.JSONObject? = null
+        var harmoniaSmbAuthorityJson: JsonObject? = null
         lastRecursiveBeliefSnapshot?.let { snap ->
             val t3cApplied = snap.resolutions.t3cBasalFirst?.selectedForProduction == true
             val harmoniaApplied = snap.resolutions.harmoniaBasalFirst?.selectedForProduction == true
@@ -9167,14 +9176,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // `demand_before_u` AFTER the lift was already applied, so a lift always measured as
                 // zero. Fall back to it only on a tick where no arbiter ran.
                 harmoniaSmbAuthorityJson = smb.authorityDecision?.toJsonObject()
-                    ?: JSONObject().apply {
-                        put("mode", smb.authorityMode ?: JSONObject.NULL)
+                    ?: JsonObj().apply {
+                        put("mode", smb.authorityMode ?: AimiJson.NULL)
                         putFiniteOrNull("smb_u", smb.demandAfterU)
                         putFiniteOrNull("demand_before_u", smb.demandBeforeU)
                         putFiniteOrNull("max_smb_cap_u", smb.maxSmbCapU)
                         put("adds_smb_authority", smb.addsSmbAuthority)
-                        put("insulin_intent", smb.insulinIntent ?: JSONObject.NULL)
-                        put("reason_codes", JSONArray(smb.reasonCodes))
+                        put("insulin_intent", smb.insulinIntent ?: AimiJson.NULL)
+                        put("reason_codes", JsonArr(smb.reasonCodes))
                         put("source", "harmonia_smb_authority_v1")
                     }
                 decisionCtx.adjustments.harmonia_smb_authority = harmoniaSmbAuthorityJson
@@ -9203,15 +9212,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             lastIntelligenceSnapshot = buildIntelligenceSnapshot(ctx, profile, pkpdRuntime)
             decisionCtx.adjustments.intelligence_snapshot =
                 lastIntelligenceSnapshot?.let { snap ->
-                    IntelligenceSnapshotJson.toJsonObject(snap).apply {
-                        lastPredictionAuthorityApplyResult?.let { ar ->
-                            optJSONObject("predictions")?.apply {
-                                put("authority_applied", ar.applied)
-                                put("shadow_only", ar.shadowOnly)
-                                ar.shadowDeltaEventualMgdl?.let { put("shadow_delta_eventual", it) }
-                                ar.shadowDeltaPredTerminalMgdl?.let { put("shadow_delta_pred_terminal", it) }
+                    // Rebuilt rather than mutated: a kotlinx JsonObject is immutable, where the
+                    // org.json one this replaced was not. The behaviour is the same - when there is no
+                    // apply result, or no "predictions" member, the snapshot is returned untouched,
+                    // exactly as the old `?.apply` was a no-op in those cases.
+                    val base = IntelligenceSnapshotJson.toJsonObject(snap)
+                    val ar = lastPredictionAuthorityApplyResult
+                    val predictions = base["predictions"] as? JsonObject
+                    if (ar == null || predictions == null) base
+                    else {
+                        val enriched = JsonObj().apply {
+                            predictions.forEach { (key, value) -> put(key, value) }
+                            put("authority_applied", ar.applied)
+                            put("shadow_only", ar.shadowOnly)
+                            ar.shadowDeltaEventualMgdl?.let { put("shadow_delta_eventual", it) }
+                            ar.shadowDeltaPredTerminalMgdl?.let { put("shadow_delta_pred_terminal", it) }
+                        }.build()
+                        JsonObj().apply {
+                            base.forEach { (key, value) ->
+                                put(key, if (key == "predictions") enriched else value)
                             }
-                        }
+                        }.build()
                     }
                 }
         }
@@ -9220,7 +9241,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Keep tree authority label honest: Harmonia arbitrates basal + SMB (not "none"/context-only).
             put("insulin_authority", "harmonia_basal_and_smb_arbitration")
             lastIntelligenceSnapshot?.let { snap ->
-                put("insulin_kinetics_context", org.json.JSONObject().apply {
+                put("insulin_kinetics_context", JsonObj().apply {
                     put("effective_dia_h", snap.kinetics.effective.diaHours)
                     put("effective_peak_min", snap.kinetics.effective.peakMinutes)
                     put("structural_dia_h", snap.kinetics.structural.diaHrs)
@@ -10364,7 +10385,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastScenarioProjection: ScenarioProjectionPair? = null
 
     /** PKPD vs scenario divergence audit of the current tick (PredictionDivergenceAuditor). */
-    private var lastPredDivergenceExport: org.json.JSONObject? = null
+    private var lastPredDivergenceExport: JsonObject? = null
     private var lastDecisionPredictionAuthority: DecisionPredictionAuthority? = null
     private var lastIntelligenceSnapshot: AimiIntelligenceSnapshot? = null
     private var lastPredictionAuthorityApplyResult: PredictionAuthorityApplyResult? = null
@@ -10579,7 +10600,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         stageTag: String,
         baseline: TubeDoseBaseline,
     ) {
-        lastTubeAdvisorTrace = JSONObject().apply {
+        lastTubeAdvisorTrace = JsonObj().apply {
             put("deciding_stage", stageTag)
             put("branch", outcome.branch.name)
             put("feasible", outcome.feasible)
@@ -10868,10 +10889,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var criticalSafetyZeroedThisTick: Boolean = false
 
     /** 🔒 Lot 2 — dernier verdict des invariants terminaux du tick, exporté en JSON structuré. */
-    private var lastBasalTerminalTelemetry: org.json.JSONObject? = null
+    private var lastBasalTerminalTelemetry: JsonObject? = null
 
     /** Universal Adaptive Basal scaling trace for this tick; exported as `adjustments.adaptive_basal`. */
-    private var lastAdaptiveBasalTrace: JSONObject? = null
+    private var lastAdaptiveBasalTrace: JsonObject? = null
 
     /**
      * Carbs on board (g) read at the start of the current tick, for the basal-learning CSV.
@@ -11027,7 +11048,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * Inputs and branch of the tube call that set this tick's SMB ceiling. See
      * `AimiDecisionContext.Adjustments.tube_advisor`. Written by `noteTubeAdvisorTrace`, per tick.
      */
-    private var lastTubeAdvisorTrace: JSONObject? = null
+    private var lastTubeAdvisorTrace: JsonObject? = null
     private var lastInflammationResult: app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster.InflammationResult? = null
     private var tickInsulinActionState: InsulinActionState? = null
     private var tickEffectiveDiaHours: Double? = null
@@ -12763,16 +12784,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 postHypoActive = lastPostHypoDeliveryAuthority.active,
             )
         )
-        lastBasalTerminalTelemetry = org.json.JSONObject().apply {
+        lastBasalTerminalTelemetry = JsonObj().apply {
             put("enabled", preferences.get(BooleanKey.OApsAIMIBasalTerminalInvariants))
             put("rate_in_uph", rate)
             put("rate_out_uph", terminal.rateUph)
-            put("bound_by", terminal.boundBy ?: org.json.JSONObject.NULL)
+            put("bound_by", terminal.boundBy ?: AimiJson.NULL)
             put("trace", terminal.trace)
             put("profile_basal_uph", profile.current_basal)
             put("bg_mgdl", bgNow)
             put("target_bg_mgdl", targetBg.toDouble())
-            put("eventual_bg_mgdl", eventualBG.takeIf { it.isFinite() && it > 1.0 } ?: org.json.JSONObject.NULL)
+            put("eventual_bg_mgdl", eventualBG.takeIf { it.isFinite() && it > 1.0 } ?: AimiJson.NULL)
             put("delta_mgdl_5m", delta.toDouble())
             put("iob_u", iobNet)
             put("meal_mode_active", isMealMode)
