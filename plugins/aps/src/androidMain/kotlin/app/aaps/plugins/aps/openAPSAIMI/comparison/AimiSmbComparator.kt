@@ -27,10 +27,13 @@ import java.util.Locale
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiSmbComparison
+import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
 
+@ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class AimiSmbComparator @Inject constructor(
     private val determineBasalSMB: DetermineBasalSMB,
@@ -43,7 +46,7 @@ class AimiSmbComparator @Inject constructor(
     private val dateUtil: DateUtil,          // Dependency for time
     private val storageHelper: AimiStorageHelper,
     private val preferences: Preferences
-) {
+) : AimiSmbComparison {
     private companion object {
         const val CSV_SCHEMA_VERSION = "3"
     }
@@ -83,7 +86,7 @@ class AimiSmbComparator @Inject constructor(
         }
     }
 
-    fun compare(
+    override fun compare(
         aimiResult: RT,
         glucoseStatus: GlucoseStatusAIMI,
         currentTemp: CurrentTemp,

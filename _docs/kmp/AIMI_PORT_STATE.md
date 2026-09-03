@@ -626,27 +626,39 @@ edits touched a dosing-relevant constant; they were TextRef/API-signature/DI-ann
 
 **What this does NOT do.** The other 247 staged files (Compose screens beyond the ones just moved,
 `AimiHormonitorStudyExporterMTR`, SOS SMS, and whatever else the app doesn't currently reach) are still
-parked - none of them block the plugin from running with the feature set that compiled. `AimiSmbComparison`
-and `AimiEmergencySos` (two of the eight collaborator ports) still have no implementation anywhere in
-the tree; nothing currently constructs them, so they haven't surfaced as a `MissingBinding` yet, but
-they will the moment something does.
+parked - none of them block the plugin from running with the feature set that compiled.
+
+**Addendum, same day: the last two collaborator ports closed.** `AimiSmbComparison` and
+`AimiEmergencySos` turned out not to be missing implementations at all - both had a fully-working,
+already-injected concrete class sitting right next to them (`AimiSmbComparator`, field-injected by its
+own concrete type; `EmergencySosManager`, called directly as a plain object) that the port was
+designed to narrow down to, and neither had ever been wired up:
+
+- `AimiSmbComparator.compare(...)`'s eleven parameters matched the port's signature exactly, field for
+  field - added `: AimiSmbComparison` + `@ContributesBinding(AppScope::class)`, then narrowed
+  `DetermineBasalAIMI2`'s `@Inject lateinit var comparator` from the concrete type to the port (its
+  only two call sites use nothing but `.compare(...)`, so nothing else could break).
+- `EmergencySosManager.evaluateSosCondition(...)` takes one parameter the port's own doc comment says
+  on purpose does not belong in the signature - `context: Context`, "it belongs to the Android half."
+  Added a two-line wrapper, `AndroidAimiEmergencySos`, holding the `Context` and delegating straight
+  through with no behaviour change; `DetermineBasalAIMI2` now field-injects the port and calls
+  `.evaluate(...)` instead of the object directly.
+
+All eight collaborator ports designed for this migration now have exactly one implementation each.
+Verified: `:plugins:aps:compileAndroidMain`, `:app:assembleFullDebug`, `:plugins:aps:compileKotlinIosArm64`
+all EXIT=0; `:plugins:aps:testAndroidHostTest` 330 tests, 0 failures. No numeric literal touched - both
+changes are type-narrowing plus one call-site rename.
 
 ---
 
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at
-`@MetroIntKey(250)` and its whole reachable dependency closure compiling. What is left is the 247
-still-staged files (nothing the app currently reaches depends on them) and the two ports with no
-implementation yet.
+`@MetroIntKey(250)` and its whole reachable dependency closure compiling. All eight collaborator ports
+now have exactly one implementation each. What is left is the 247 still-staged files - nothing the app
+currently reaches depends on them.
 
-1. **`AimiSmbComparison` and `AimiEmergencySos` have no implementing class anywhere in the tree.**
-   Nothing constructs them yet, so they have not surfaced as a `Metro/MissingBinding` failure - but
-   the moment some staged file needing either one gets moved in, `:app:compileFullDebugKotlin` will
-   fail the same way `AimiAuditor`/`AimiContextLlm`/etc. did this lot. Find their intended
-   implementations in `_docs/kmp/staging/` (by declaration - grep for `: AimiSmbComparison` /
-   `: AimiEmergencySos`, not by filename) before assuming they don't exist.
-2. **Before moving any more staged files, check for the recurring failure shapes from this lot and
+1. **Before moving any more staged files, check for the recurring failure shapes from this lot and
    6g, in order:** (a) a class implementing a port interface but missing
    `@ContributesBinding(AppScope::class)` - compiles fine alone, fails only at `:app:compileFullDebugKotlin`,
    so that has to be the gate, not `:plugins:aps:compileAndroidMain`; (b) `.titleResId`/`.descriptionResId`/
@@ -658,13 +670,13 @@ implementation yet.
    `dev_OAPSAIMI` before restoring, and prefer the smallest correct fix over guessing (an array-based
    preference became Kotlin-native entries because the reading API itself is gone tree-wide, not just
    renamed).
-3. **`:app:assembleFullDebug` is now a required gate, not `:plugins:aps:compileAndroidMain` alone.**
+2. **`:app:assembleFullDebug` is now a required gate, not `:plugins:aps:compileAndroidMain` alone.**
    The module compile cannot see a missing Metro binding; only the app graph resolution catches it.
    Keep both in the loop, but if only one can run, run the app assemble.
-4. **Decide what to do with the other 247 staged files** - `AimiHormonitorStudyExporterMTR`
+3. **Decide what to do with the other 247 staged files** - `AimiHormonitorStudyExporterMTR`
    (recommend: stub, still), SOS SMS, and whatever Compose screens weren't already pulled in behind
    `OpenAPSAIMIPlugin`. None of it blocks what already runs; each is its own lot.
-5. **Keep the two-baseline numeric check on every lot that touches logic, not just moves files.** This
+4. **Keep the two-baseline numeric check on every lot that touches logic, not just moves files.** This
    lot's edits were all TextRef/API-signature/DI-annotation fixes with no numeric-literal risk, so the
    fidelity check was scoped to touched-with-logic files rather than every moved file - a pure `git mv`
    cannot alter content, so it doesn't need re-diffing. Keep making that distinction explicit rather

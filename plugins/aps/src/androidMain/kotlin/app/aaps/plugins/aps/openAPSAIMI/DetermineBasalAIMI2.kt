@@ -91,6 +91,8 @@ import app.aaps.plugins.aps.openAPSAIMI.orchestration.PredictionAuthorityApplier
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.PredictionAuthorityApplyResult
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiEmergencySos
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiSmbComparison
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiTpo
 import app.aaps.plugins.aps.openAPSAIMI.ports.PkpdPort
 import app.aaps.plugins.aps.openAPSAIMI.prediction.ClampPkpdScenarioReconcile
@@ -199,7 +201,6 @@ import app.aaps.plugins.aps.openAPSAIMI.smb.SmbDampingUsecase
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbInstructionExecutor
 import app.aaps.plugins.aps.openAPSAIMI.smb.computeMealHighIobDecision
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleFacade
-import app.aaps.plugins.aps.openAPSAIMI.comparison.AimiSmbComparator
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiDetermineBasalTickOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopTickRecovery
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
@@ -1278,7 +1279,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     lateinit var autodriveGater: app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.AutoDriveGater
     @Inject lateinit var activityManager: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityManager // Agnostic injection
     @Inject lateinit var glucoseStatusCalculatorAimi: GlucoseStatusCalculatorAimi
-    @Inject lateinit var comparator: AimiSmbComparator
+    @Inject lateinit var comparator: AimiSmbComparison
+    @Inject lateinit var emergencySos: AimiEmergencySos
     @Inject lateinit var basalLearner: app.aaps.plugins.aps.openAPSAIMI.learning.BasalLearner
     @Inject lateinit var unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner
     @Inject lateinit var basalNeuralLearner: app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
@@ -2092,12 +2094,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append("${ctx.extraDebug}\n")
         }
         // ⚠️ ASYNC IMPACT: SOS may launch IO work (location + SMS) on a process-scoped scope.
-        app.aaps.plugins.aps.openAPSAIMI.sos.EmergencySosManager.evaluateSosCondition(
+        emergencySos.evaluate(
             aapsLogger = aapsLogger,
             bg = ctx.glucoseStatus.glucose,
             delta = ctx.glucoseStatus.delta,
             iob = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
-            context = context,
             preferences = this.preferences,
             nowMs = dateUtil.now()
         )
