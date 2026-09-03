@@ -242,9 +242,32 @@ actually is. The answer changes the size of the job.
 | **reads** - `optString`, `optDouble`, `getJSONObject`, `has`, `keys`, `length` | **0** |
 | `.toString()` on a built object | 1 |
 
-**All 200 of those `.put(` calls live inside one function: `toMedicalJson(): String`, lines 680-1405.
-Zero are outside it.** The whole `org.json` surface of an 18,886-line file is a self-contained,
-write-only, 726-line subsystem that builds one string.
+**All 200 of those `.put(` calls live inside one function: `toMedicalJson(): String`, lines 680-984 -
+305 lines.** (An earlier version of this note said 680-1405 and 726 lines. That was wrong: the range
+was measured on a comment-stripped copy and the line numbers were mapped back incorrectly.) The whole
+`org.json` *construction* in an 18,886-line file is one self-contained, write-only function.
+
+**But the conversion has a second half, and it is the one that defeated both attempts.** Outside that
+function there are **47 `JSONObject` type references** - the field declarations on
+`AimiDecisionContext`, `var x: org.json.JSONObject? = null`. They construct nothing; they *receive*.
+Some receive from inside `toMedicalJson()`, some from collaborators that lots 2-4 already moved to
+kotlinx. That is why patching at either end failed: the two halves have to change together.
+
+**And the catch block decides the NaN question.** The function ends:
+
+```kotlin
+    json.toString()
+} catch (_: Exception) { "{ \"error\": \"JSON Generation Failed\" }" }
+```
+
+`org.json` throws on a non-finite `Double`, so **today a single NaN anywhere in the export destroys
+the whole medical JSON** and emits that error string instead. That is worth knowing on its own - it
+is a latent all-or-nothing defect in the fork, and nobody appears to have noticed.
+
+For the conversion it settles the choice: **replicate it exactly.** A shim whose `put(String, Double)`
+throws on non-finite reproduces the current behaviour with no change at all, which is what "move the
+logic, never improve it" requires here. Whether an export should really be all-or-nothing is a
+separate decision, and a real one, but it is not this lot's to take.
 
 That is a different job from "convert 116 scattered sites":
 
@@ -264,7 +287,17 @@ be non-finite, and which cannot. That classification is the real work of the lot
 itself is mechanical.
 
 `JSONObject.NULL` maps to `JsonNull`, or to omitting the key. **These are not the same thing** for a
-consumer that distinguishes "absent" from "null", so pick one deliberately and apply it to all 61.
+consumer that distinguishes "absent" from "null", so pick one deliberately and apply it to all 53
+inside the function (61 across the file).
+
+### The method that makes this small
+
+Do **not** hand-convert 200 `put` lines into a `buildJsonObject { }` DSL. That is a restructuring, on
+a file no compiler is checking. Write a ~40-line internal shim with `org.json`'s shape over kotlinx -
+`put(key, value)` returning itself, a `JsonArr` for the two array uses, and a `NULL` sentinel - and
+the 200 call lines do not change at all. The diff becomes the shim plus 16 constructor lines, the NaN
+rule lives in one `toElement()` instead of 200 site decisions, and the shim can be deleted later once
+the fields are kotlinx-native.
 
 ### Why this was not obvious
 
