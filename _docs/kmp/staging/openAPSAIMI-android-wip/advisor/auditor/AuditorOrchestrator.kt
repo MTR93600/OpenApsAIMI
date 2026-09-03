@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.OapsProfileAimi
@@ -54,7 +55,7 @@ class AuditorOrchestrator @Inject constructor(
     private val auditorStatusLiveData: AuditorStatusLiveData,
     private val aapsLogger: AAPSLogger,
     private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR
-) {
+) : AimiAuditor {
     // 🔄 New State Transition Manager
     private val stateManager = AimiStateTransitionManager(aapsLogger)
     
@@ -120,10 +121,10 @@ class AuditorOrchestrator @Inject constructor(
      */
     /** Last Tier-1 Sentinel advice — coherence-agreement "gendarme" score, exposed for JSONL telemetry. */
     @Volatile
-    var lastSentinelAdvice: LocalSentinel.SentinelAdvice? = null
+    override var lastSentinelAdvice: LocalSentinel.SentinelAdvice? = null
         private set
 
-    fun auditDecision(
+    override fun auditDecision(
         bg: Double,
         delta: Double,
         shortAvgDelta: Double,
@@ -155,12 +156,12 @@ class AuditorOrchestrator @Inject constructor(
         predictedBg: Double?,
         eventualBg: Double?,
         inPrebolusWindow: Boolean,
-        effectiveProfile: EffectiveProfile? = null,
-        mealCertainty: MealCertainty? = null,
-        harmoniaProduction: HarmoniaProductionDecision? = null,
-        harmonizerOutcome: HarmoniaHarmonizer.Outcome? = null,
-        onSyncDisposition: (AuditorJsonlExport.TickDisposition) -> Unit = {},
-        callback: ((AuditorVerdict?, DecisionResult) -> Unit)? = null
+        effectiveProfile: EffectiveProfile?,
+        mealCertainty: MealCertainty?,
+        harmoniaProduction: HarmoniaProductionDecision?,
+        harmonizerOutcome: HarmoniaHarmonizer.Outcome?,
+        onSyncDisposition: (AuditorJsonlExport.TickDisposition) -> Unit,
+        callback: ((AuditorVerdict?, DecisionResult) -> Unit)?
     ) {
         val now = System.currentTimeMillis()
         // Reset each tick; set again below only if the Sentinel actually runs, so early-exit dispositions

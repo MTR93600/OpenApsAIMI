@@ -89,6 +89,7 @@ import app.aaps.plugins.aps.openAPSAIMI.orchestration.DoseTerminalSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.DoseTerminalSnapshotBuilder
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.PredictionAuthorityApplier
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.PredictionAuthorityApplyResult
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
 import app.aaps.plugins.aps.openAPSAIMI.ports.PkpdPort
 import app.aaps.plugins.aps.openAPSAIMI.prediction.ClampPkpdScenarioReconcile
 import app.aaps.plugins.aps.openAPSAIMI.prediction.NaiveEventualBgSignGuard
@@ -1252,7 +1253,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val fabricPrivacy: FabricPrivacy,
     private val preferences: Preferences,
     private val gestationalAutopilot: app.aaps.plugins.aps.openAPSAIMI.advisor.gestation.GestationalAutopilot,
-    private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator,
+    private val auditorOrchestrator: AimiAuditor,
     private val uiInteraction: UiInteraction,
     private val notificationManager: app.aaps.core.interfaces.notifications.NotificationManager,
     private val wCycleFacade: WCycleFacade,
