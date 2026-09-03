@@ -176,12 +176,6 @@ internal object PatientStateRuntimeRefresher {
     }
 }
 
-internal enum class PatientRefreshSource {
-    LOOP_TICK,
-    PHYSIO_SIGNAL,
-    CONTEXT_INTENT,
-}
-
 private fun PhysioLiveDigest.toHealthSnapshot(nowMs: Long): HealthContextSnapshot =
     HealthContextSnapshot(
         stepsLast15m = stepsLast15m,

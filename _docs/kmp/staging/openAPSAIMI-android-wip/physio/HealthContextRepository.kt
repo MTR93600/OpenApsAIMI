@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
 import android.content.Context
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -38,7 +39,7 @@ class HealthContextRepository @Inject constructor(
     private val aggregator: PhysioAggregator,
     private val unifiedProvider: app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR, // 🚀 NEW INJECTION
     private val aapsLogger: AAPSLogger
-) {
+) : AimiHealthContext {
     
     companion object {
         private const val TAG = "HealthContextRepo"
@@ -59,12 +60,12 @@ class HealthContextRepository @Inject constructor(
      * Fetches and builds the current Health Snapshot.
      * Merges HC data with Watch data and calculates derived metrics.
      */
-    fun fetchSnapshot(): HealthContextSnapshot = fetchSnapshotInternal()
+    override fun fetchSnapshot(): HealthContextSnapshot = fetchSnapshotInternal()
 
     /**
      * Throttled snapshot for Autodrive V3 gater — avoids four DB reads every 5 min when unchanged.
      */
-    fun fetchSnapshotForAutodriveGater(): HealthContextSnapshot {
+    override fun fetchSnapshotForAutodriveGater(): HealthContextSnapshot {
         val ageMs = System.currentTimeMillis() - lastSnapshot.timestamp
         if (lastSnapshot.isValid && ageMs in 0..AUTODRIVE_GATER_SNAPSHOT_MAX_AGE_MS) {
             return lastSnapshot
@@ -243,7 +244,7 @@ class HealthContextRepository @Inject constructor(
     }
 
     // Pass-through for legacy or specific access if needed
-    fun getLastSnapshot(): HealthContextSnapshot = lastSnapshot
+    override fun getLastSnapshot(): HealthContextSnapshot = lastSnapshot
     
     // For Workers: Access underlying HC Repo
     fun getHcRepo(): AIMIPhysioDataRepositoryMTR = hcRepo

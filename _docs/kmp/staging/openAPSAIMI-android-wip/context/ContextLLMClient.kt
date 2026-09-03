@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.context
 
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiContextLlm
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.SP
@@ -42,7 +43,7 @@ class ContextLLMClient @Inject constructor(
     private val sp: SP,
     private val aapsLogger: AAPSLogger,
     private val context: android.content.Context
-) {
+) : AimiContextLlm {
     companion object {
         private const val TIMEOUT_MS = 3000L // 3 secondes max
         
@@ -227,6 +228,13 @@ Output:
      * @param medicalContext Current diabetes state (optional but recommended)
      * @return List of parsed intents (empty if parsing fails)
      */
+    /**
+     * The port's one-argument form. Delegates to the fuller method below, which keeps its
+     * `MedicalContext` parameter - that type is declared in this file and stays on Android.
+     */
+    override suspend fun parseWithLLM(userText: String): List<ContextIntent> =
+        parseWithLLM(userText, medicalContext = null)
+
     suspend fun parseWithLLM(userText: String, medicalContext: MedicalContext? = null): List<ContextIntent> {
         if (userText.isBlank()) return emptyList()
         

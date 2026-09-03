@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPhysioSource
 import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
@@ -59,7 +60,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
     private val context: Context,
     private val aapsLogger: AAPSLogger,
     private val ouraApiThermalClient: OuraApiThermalClient,
-) {
+) : AimiPhysioSource {
     
     companion object {
         private const val TAG = "PhysioRepository"
@@ -379,7 +380,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
      * Fetches the most recent Heart Rate sample (Real-Time check)
      * Lookback window: 1 hour
      */
-    suspend fun fetchLastHeartRate(): Int {
+    override suspend fun fetchLastHeartRate(): Int {
         val client = healthConnectClient ?: return 0
         return try {
             withTimeout(API_TIMEOUT_MS) {
@@ -530,7 +531,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
      * @param ignoreUnifiedSourceMode si true, lit quand même Health Connect (ex. pipeline Physio quand
      *        les pas Garmin sont dans HC mais le mode UI est « préférer la montre »).
      */
-    suspend fun fetchStepsData(daysBack: Int = 7, ignoreUnifiedSourceMode: Boolean = false): Int {
+    override suspend fun fetchStepsData(daysBack: Int, ignoreUnifiedSourceMode: Boolean): Int {
         if (!ignoreUnifiedSourceMode) {
             val mode = app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR.getMode(context)
             if (mode == app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR.MODE_PREFER_WEAR ||

@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPhysioSource
 import android.os.Looper
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -42,9 +44,9 @@ import kotlinx.coroutines.runBlocking
  */
 @SingleIn(AppScope::class)
 class AIMIInsulinDecisionAdapterMTR @Inject constructor(
-    private val repo: HealthContextRepository,
+    private val repo: AimiHealthContext,
     private val persistenceLayer: PersistenceLayer,
-    private val dataRepository: AIMIPhysioDataRepositoryMTR,
+    private val dataRepository: AimiPhysioSource,
     private val contextStore: AIMIPhysioContextStoreMTR,
     private val relevanceGate: CosineTrajectoryGate, // 🌀 Relevance Gate (Trajectory Filter)
     private val aapsLogger: AAPSLogger

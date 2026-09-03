@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.ports
 
+import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
@@ -168,4 +170,50 @@ interface AimiEmergencySos {
         preferences: Preferences,
         nowMs: Long,
     )
+}
+
+
+/**
+ * The one method `ContextManager` needs of `ContextLLMClient` (605 lines, androidMain).
+ *
+ * The implementation's `parseWithLLM` also takes a `MedicalContext?`, defaulted to null and declared
+ * inside `ContextLLMClient` itself. Every call site passes one argument, so the port does not carry
+ * that parameter and the type stays where it is.
+ */
+interface AimiContextLlm {
+
+    suspend fun parseWithLLM(userText: String): List<ContextIntent>
+}
+
+/**
+ * What the decision path needs of `HealthContextRepository` (282 lines, androidMain).
+ *
+ * Three reads, no writes. `fetchSnapshotForAutodriveGater` is the cached variant the gater uses;
+ * `fetchSnapshot` refreshes; `getLastSnapshot` returns whatever was read last without touching the
+ * platform.
+ */
+interface AimiHealthContext {
+
+    fun fetchSnapshot(): HealthContextSnapshot
+
+    fun fetchSnapshotForAutodriveGater(): HealthContextSnapshot
+
+    fun getLastSnapshot(): HealthContextSnapshot
+}
+
+/**
+ * The two values the decision path reads from `AIMIPhysioDataRepositoryMTR` (985 lines, androidMain,
+ * twelve Health Connect imports).
+ *
+ * **This port does not make Health Connect an Android-only concern.** The decision path also consumes
+ * HRV, sleep and skin temperature, but it does so through [AimiHealthContext] and its
+ * `HealthContextSnapshot` rather than from here - and `hrvRmssd` in that snapshot reaches the dose.
+ * An iOS implementation still needs HealthKit for those. See section 11.4 of the migration study for
+ * the mapping, including the RMSSD-versus-SDNN mismatch, which is the one that matters.
+ */
+interface AimiPhysioSource {
+
+    suspend fun fetchLastHeartRate(): Int
+
+    suspend fun fetchStepsData(daysBack: Int = 7, ignoreUnifiedSourceMode: Boolean = false): Int
 }

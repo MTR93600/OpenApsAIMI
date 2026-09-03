@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.context
 
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiContextLlm
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TE
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -50,7 +51,7 @@ import kotlin.time.Duration.Companion.minutes
  */
 @SingleIn(AppScope::class)
 class ContextManager @Inject constructor(
-    private val contextLLMClient: ContextLLMClient,
+    private val contextLLMClient: AimiContextLlm,
     private val contextParser: ContextParser,
     private val sp: SP,
     internal val aapsLogger: AAPSLogger,  // Internal for inline functions

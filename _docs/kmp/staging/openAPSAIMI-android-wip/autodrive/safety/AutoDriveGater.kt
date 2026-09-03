@@ -2,7 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.autodrive.safety
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextRepository
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
 import app.aaps.plugins.aps.openAPSAIMI.recursive.MealChannelHint
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 import dev.zacsweers.metro.Inject
@@ -21,7 +21,7 @@ import dev.zacsweers.metro.AppScope
  */
 @SingleIn(AppScope::class)
 class AutoDriveGater @Inject constructor(
-    private val healthRepo: HealthContextRepository,
+    private val healthRepo: AimiHealthContext,
     private val aapsLogger: AAPSLogger
 ) {
 
