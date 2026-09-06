@@ -675,8 +675,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     /** Time of the last background refresh that was started, used by [dynIsfRefreshDue]. */
     private val dynIsfRefreshGate = AtomicLong(0L)
 
+    /** Shortest gap between two background dynamic ISF refreshes. Field, not a companion: this class is Metro-injected. */
+    private val dynIsfRefreshMinIntervalMs = 60_000L
+
     /**
-     * True at most once per [DYN_ISF_REFRESH_MIN_INTERVAL_MS], for the caller that wins the race.
+     * True at most once per [dynIsfRefreshMinIntervalMs], for the caller that wins the race.
      *
      * `getIsfMgdl` is called many times per tick, and every call used to start a full recomputation
      * on the background scope. Now that the refresh no longer takes the database short cut it is a
@@ -684,7 +687,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
      */
     private fun dynIsfRefreshDue(nowMs: Long): Boolean {
         val last = dynIsfRefreshGate.get()
-        if (nowMs - last < DYN_ISF_REFRESH_MIN_INTERVAL_MS) return false
+        if (nowMs - last < dynIsfRefreshMinIntervalMs) return false
         return dynIsfRefreshGate.compareAndSet(last, nowMs)
     }
 
@@ -2353,11 +2356,5 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             // Wave1 G1: product surface is the guided Compose screen only — raw key dump removed.
             items = listOf(aimiComposePkpdSetupItem()),
         )
-
-    companion object {
-
-        /** Shortest gap between two background dynamic ISF refreshes. */
-        private const val DYN_ISF_REFRESH_MIN_INTERVAL_MS = 60_000L
-    }
 
 }

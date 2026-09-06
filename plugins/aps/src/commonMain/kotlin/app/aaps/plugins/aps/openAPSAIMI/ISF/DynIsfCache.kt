@@ -26,11 +26,12 @@ import app.aaps.core.interfaces.concurrent.withLock
  * emptied in one go: a wholesale `clear()` made the very next read fall back to the static profile
  * ISF, which is a different quantity.
  *
- * Source: `origin/dev_OAPSAIMI` @ `dd9979ca4d`. KMP adaptations only: [AapsLock] instead of
- * `@Synchronized` (`@Synchronized` is JVM-only; this type is commonMain), and a [MutableMap] keyed
- * the same way as the reference `TreeMap` (`TreeMap` is JVM-only). "Newest" is still the highest
- * key, never insertion order and never glucose. `floorMod` is the same rule as `Math.floorMod`
- * for a positive modulus.
+ * Source: `origin/dev_OAPSAIMI` @ `dd9979ca4d`. Study wiring matches [IsfBlender] /
+ * [IsfAdjustmentEngine]: commonMain, no Metro `@Inject` (one plugin-owned instance, constructed
+ * as a field on `OpenAPSAIMIPlugin`). KMP adaptations only: [AapsLock] instead of `@Synchronized`
+ * (`@Synchronized` is JVM-only), and a [MutableMap] keyed the same way as the reference `TreeMap`
+ * (`TreeMap` is JVM-only). "Newest" is still the highest key, never insertion order and never
+ * glucose. `floorMod` is the same rule as `Math.floorMod` for a positive modulus.
  *
  * See `docs/adr/0003-dynisf-cache-read-path.md`.
  *

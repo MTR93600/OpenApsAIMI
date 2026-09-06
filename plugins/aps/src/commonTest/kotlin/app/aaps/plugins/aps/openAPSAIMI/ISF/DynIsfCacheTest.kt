@@ -1,10 +1,10 @@
 package app.aaps.plugins.aps.openAPSAIMI.ISF
 
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Locks the read rule of [DynIsfCache].
@@ -14,6 +14,9 @@ import org.junit.jupiter.api.Test
  * `android.util.LongSparseArray`, which returns default values under `unitTests.isReturnDefaultValues`,
  * so the old behaviour could not be tested at all. Each test below says what the old rule would have
  * answered.
+ *
+ * Study source set: [DynIsfCache] is commonMain and has no mocks, so the tests live in `commonTest`
+ * (`kotlin.test`) — same layout as `TddStatusTest`, not `androidHostTest` (mockito/Robolectric).
  *
  * See `docs/adr/0003-dynisf-cache-read-path.md`.
  */
@@ -54,7 +57,7 @@ class DynIsfCacheTest {
 
         val sample = cache.newest()
         assertNotNull(sample)
-        assertEquals(2 * minute, readAt - sample!!.atMs)
+        assertEquals(2 * minute, readAt - sample.atMs)
     }
 
     /** T3 — a fresh write after a long silence must win over the warm-up history. */
