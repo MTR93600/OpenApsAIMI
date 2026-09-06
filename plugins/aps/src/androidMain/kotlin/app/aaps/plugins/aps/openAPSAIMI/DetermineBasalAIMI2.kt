@@ -51,6 +51,7 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAutodriveBasalBridge
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cTrajectoryContext
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
+import app.aaps.plugins.aps.openAPSAIMI.ISF.CommandedIsf
 import app.aaps.plugins.aps.openAPSAIMI.ISF.ObservedSensitivityMeter
 import app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
 import app.aaps.core.interfaces.ui.UiInteraction
@@ -396,6 +397,13 @@ internal data class AimiDecisionContext(
         val estimated_ra_mgdl_per_min: Double? = null,
         /** Physiological ISF factor of the tick, bounds [0.85, 1.15]. Applied once since ADR 0007. */
         val physio_isf_factor: Double? = null,
+        /**
+         * Commanded sensitivity before the profile-relative floor, mg/dL per U.
+         *
+         * Next to `command_isf_mgdl` it says how much the floor moved this tick, which no exported
+         * field could say while the shadow witness was reading the already-floored value.
+         */
+        val isf_pre_floor_mgdl: Double? = null,
         /** Shadow: sensitivity an unconditional exit clamp relative to the profile would command. */
         val isf_profile_relative_shadow_mgdl: Double? = null,
         /** Shadow: true when that clamp would have changed the value. */
@@ -728,6 +736,7 @@ internal data class AimiDecisionContext(
             base.put("isf_trajectory_multiplier", baseline_state.isf_trajectory_multiplier ?: AimiJson.NULL)
             base.put("estimated_ra_mgdl_per_min", baseline_state.estimated_ra_mgdl_per_min ?: AimiJson.NULL)
             base.put("physio_isf_factor", baseline_state.physio_isf_factor ?: AimiJson.NULL)
+            base.put("isf_pre_floor_mgdl", baseline_state.isf_pre_floor_mgdl ?: AimiJson.NULL)
             base.put("isf_profile_relative_shadow_mgdl", baseline_state.isf_profile_relative_shadow_mgdl ?: AimiJson.NULL)
             base.put("isf_profile_relative_bound_hit", baseline_state.isf_profile_relative_bound_hit ?: AimiJson.NULL)
             base.put("sensitivity_ratio_r", baseline_state.sensitivity_ratio_r ?: AimiJson.NULL)
@@ -2128,6 +2137,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 isf_trajectory_multiplier = IsfSourceTelemetry.lastTrajectoryMultiplier,
                 estimated_ra_mgdl_per_min = runCatching { continuousStateEstimator.getLastRa() }.getOrNull(),
                 physio_isf_factor = IsfSourceTelemetry.lastPhysioIsfFactor,
+                isf_pre_floor_mgdl = CommandedIsf.lastPreFloorMgdlPerU,
                 isf_profile_relative_shadow_mgdl = IsfSourceTelemetry.lastProfileRelativeShadowMgdl,
                 isf_profile_relative_bound_hit = IsfSourceTelemetry.lastProfileRelativeBoundHit,
                 sensitivity_ratio_r = runCatching { sensitivityRatioEstimator.ratio }.getOrNull(),
