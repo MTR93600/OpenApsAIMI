@@ -4,6 +4,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.key
+import app.aaps.core.keys.StringKey
+import kotlinx.coroutines.flow.drop
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,12 +44,15 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.IosNotificationDelegate
 import app.aaps.core.interfaces.protection.ProtectionCheck
 import app.aaps.core.interfaces.protection.ProtectionResult
+import app.aaps.core.interfaces.resources.TextRefValueRegistry
 import app.aaps.core.objects.di.CoreObjectsGraph
+import app.aaps.ios.shell.platform.IosLanguage
 import app.aaps.plugins.sync.nsclientV3.ws.NsSocketFactory
 import app.aaps.shared.clientbindings.ClientGraphBindings
 import app.aaps.core.ui.compose.LocalMetroViewModelFactory
 import app.aaps.core.ui.compose.icons.IcAaps
 import app.aaps.core.ui.compose.metroViewModel
+import app.aaps.implementation.lifecycle.IosProtectionLifecycle
 import app.aaps.ios.shell.IosAppStartup
 import app.aaps.ios.shell.PluginStoreRegistry
 import app.aaps.ios.shell.di.IosAppGraph
@@ -98,17 +106,26 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
 
     // Before the composition, not beside it: the first view model built reads the active pump, and
     // an empty plugin list there throws from a coroutine and takes the process with it.
-    IosAppStartup(logger, PluginStoreRegistry(graph.pluginStore, graph.configBuilder), graph.contributedPlugins).run()
+    IosAppStartup(logger, PluginStoreRegistry(graph.pluginStore, graph.configBuilder), graph.contributedPlugins) { graph.periodicMaintenance.start(graph.appScope) }.run()
 
     // Attach to the notification centre. Registering a category only records it now, so that building
     // the graph does not need an app bundle - see `IosNotificationDelegate.install`. It is done here
     // rather than in `IosAppStartup` because only the real app reaches this function: startup is unit
     // tested, and `currentNotificationCenter()` cannot be called from a test binary.
+    // Before the first screen composes, or it renders English and only corrects itself on the next
+    // recomposition. Android gets this from `Resources`; here the registry has to be told.
+    IosLanguage.apply(graph.preferences)
+    logger.debug(LTag.CORE, "Language: ${TextRefValueRegistry.locale ?: "English"}")
+
     IosNotificationDelegate.install()
 
     // Same placement and the same reason: this touches UIKit, so it cannot live in the graph or in
     // `IosAppStartup`. Until this ran, Nightscout sync was blocked forever - see `startBatteryWatch`.
     graph.receiverStatusStore.startBatteryWatch()
+
+    // Clears a granted PIN or biometric session when the app is backgrounded, which is what Android
+    // gets from `ProcessLifecycleListener.onPause`. Same placement and the same UIKit reason.
+    IosProtectionLifecycle(logger, graph.protectionCheck).start()
 
     // Read once, outside the composition, for the same reason as the graph: decoding the icon on
     // every recomposition would be work for nothing.
@@ -120,7 +137,27 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
     if (appIcon == null) logger.error(LTag.CORE, "The app bundle gave no icon; showing the plain AAPS mark")
     logger.debug(LTag.CORE, "Starting the AAPS Compose root on iOS")
 
+    // The language setting, applied while the app runs. Android answers this by recreating the
+    // activity, which reloads the `Context` its `Resources` resolve against; here the registry is
+    // repointed and the composition is rebuilt, which is the same outcome without a restart iOS
+    // could not perform anyway.
     return ComposeUIViewController {
+        // Rebuilds everything below when a rebuild is asked for - after an import, or a language
+        // change. `key` discards the subtree's state, which is why it is keyed on this and nothing
+        // else: a scroll position lost on a language change is fine, on every recomposition is not.
+        // The language setting, applied while the app runs. Android answers this by recreating the
+        // activity, which reloads the `Context` its `Resources` resolve against; here the registry is
+        // repointed and the composition rebuilt - the same outcome without a restart iOS could not
+        // perform anyway.
+        LaunchedEffect(Unit) {
+            graph.preferences.observe(StringKey.GeneralLanguage).drop(1).collect {
+                IosLanguage.apply(graph.preferences)
+                logger.debug(LTag.CORE, "Language changed to ${TextRefValueRegistry.locale ?: "English"}")
+                graph.uiRestart.request()
+            }
+        }
+        val restart by graph.uiRestart.signal.collectAsState()
+        key(restart) {
         // iOS has no ambient application object, so the factory is provided here rather than found.
         CompositionLocalProvider(LocalMetroViewModelFactory provides viewModelFactory) {
             AapsAppRoot(
@@ -280,9 +317,16 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                             logger.error(LTag.CORE, "Delivery error: ${graph.textResolver.gs(title)} - $comment")
                         },
                         withProtection = guardedBy(graph.protectionCheck),
+                        // The same check `ComposeMainActivity` makes. It used to grant unconditionally
+                        // with a "not wired yet" line, which is a stub that fails open on a protection
+                        // check: with settings protection configured, the edit pencil on the
+                        // QuickWizard, profile, insulin and temp-target screens opened with no prompt.
+                        // Those values feed dosing, and a client's edits are pushed to the master.
+                        // `protectionCheck` was already on the graph - `withProtection` above uses it.
                         requestEditModeAuthorization = { onGranted ->
-                            logger.notWiredYet("edit mode authorization - granting")
-                            onGranted()
+                            graph.protectionCheck.requestAuthorization(ProtectionCheck.Protection.PREFERENCES) { result ->
+                                if (result.grantedLevel != null) onGranted()
+                            }
                         },
                         onRefreshPermissions = { logger.notWiredYet("permission refresh") },
                         onExecuteQuickWizard = { guid -> logger.notWiredYet("quick wizard $guid") },
@@ -319,12 +363,31 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                                 onSearchResultClick = { entry -> navigator.handleSearchResultClick(entry) },
                                 onNotificationActionClick = { n -> navigator.handleNotificationAction(n.id) },
                                 onQuickLaunchActionClick = { action -> navigator.handleQuickLaunchAction(action) },
-                                onImportSettingsNavigate = { source -> logger.notWiredYet("import from $source") },
+                                // The destination is already in the shared graph and the view model is
+                                // already handed to it above, so this is the same call the other two
+                                // shells make. It was a placeholder only while iOS had no importer.
+                                onImportSettingsNavigate = { source -> navController.navigate(AppRoute.ImportSettings.createRoute(source.name)) },
                                 // Needs a UIDocumentPicker, which nothing on iOS has yet.
                                 onDirectoryClick = { logger.notWiredYet("directory picker") },
-                                onLaunchBrowser = { url -> graph.urlOpener.open(url) },
-                                // An iOS app cannot bring itself to the front; the system decides.
-                                onBringToForeground = { logger.notWiredYet("bring to foreground") },
+                                // The Google sign in, and the only thing that reaches this callback.
+                                // Shown *over* AAPS rather than handed to Safari: switching to Safari
+                                // lets iOS suspend this app within seconds, and the loopback listener
+                                // waiting for Google's redirect goes with it - so the sign in would
+                                // never complete. `urlOpener` is right for ordinary links and wrong
+                                // for this one. See AuthBrowser.
+                                onLaunchBrowser = { url -> graph.authBrowser.show(url) },
+                                // Android says "bring the app back" because the browser took over the
+                                // screen; on iOS the browser is a sheet this app presented, so the
+                                // same intent is to close it.
+                                //
+                                // Only ever after the wait has ended, never while it is running. This
+                                // event is also emitted when a sign in fails, and the first version
+                                // dismissed on that too - which closed the Google page while the user
+                                // was still typing into it, because the wait had timed out at a
+                                // minute. The timeout is now five minutes; this stays defensive
+                                // because "bring the app forward" is harmless on Android and
+                                // destructive here.
+                                onBringToForeground = { graph.authBrowser.dismiss() },
                                 // No activity to recreate. A Compose scene is not restarted this way.
                                 onRecreateActivity = { logger.notWiredYet("recreate") },
                                 onAuthorizationFailed = { logger.error(LTag.CORE, "Authorization failed") },
@@ -335,6 +398,7 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                     )
                 }
             }
+        }
         }
     }
 }

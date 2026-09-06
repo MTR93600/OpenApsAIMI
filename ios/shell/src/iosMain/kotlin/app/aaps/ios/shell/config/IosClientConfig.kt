@@ -1,5 +1,6 @@
 package app.aaps.ios.shell.config
 
+import app.aaps.core.keys.interfaces.AppPlatform
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.configuration.ExternalOptions
@@ -10,7 +11,12 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSBundle
+import platform.Foundation.NSUserDomainMask
+import platform.Foundation.NSDocumentDirectory
+import platform.Foundation.NSSearchPathForDirectoriesInDomains
+import platform.Foundation.NSFileManager
 import platform.UIKit.UIDevice
 
 /**
@@ -25,7 +31,16 @@ import platform.UIKit.UIDevice
  */
 class IosClientConfig(
     override val VERSION_NAME: String = GeneratedBuildInfo.VERSION,
-    override val APPLICATION_ID: String = NSBundle.mainBundle.bundleIdentifier ?: DEFAULT_BUNDLE_ID
+    override val APPLICATION_ID: String = NSBundle.mainBundle.bundleIdentifier ?: DEFAULT_BUNDLE_ID,
+    /**
+     * Where the option marker files are looked for. A test points it elsewhere.
+     *
+     * `extra` inside the app's Documents directory, which the Files app shows as
+     * **On My iPhone → AAPSClient**. That is the whole reason this can work at all: the folder is
+     * reachable by the person using the phone, so `extra/engineering_mode` can be created by hand
+     * there exactly as it is created in `AAPS/extra` on Android.
+     */
+    private val extraDir: String? = defaultExtraDir()
 ) : Config {
 
     override val SUPPORTED_NS_VERSION: Int = 150000
@@ -63,6 +78,7 @@ class IosClientConfig(
     override val BUILD_TYPE: String =
         (NSBundle.mainBundle.objectForInfoDictionaryKey("AAPSBuildType") as? String)?.lowercase() ?: "debug"
     override val PLATFORM: String = GeneratedBuildInfo.PLATFORM
+    override val platform: AppPlatform = AppPlatform.Ios
     override val VERSION: String = VERSION_NAME
     override val BUILD_VERSION: String = GeneratedBuildInfo.BUILD
     /** Anything that is not a release build is treated as a debug one, which is the safe way round. */
@@ -125,14 +141,36 @@ class IosClientConfig(
     }
 
     override fun isDev(): Boolean = DEBUG
-    override fun isEngineeringMode(): Boolean = false
+
+    /** Read from the file, the same as Android and the desktop do. */
+    override fun isEngineeringMode(): Boolean = isEnabled(ExternalOptions.ENGINEERING_MODE)
+
+    /**
+     * Always true, and correct rather than a shortcut.
+     *
+     * Android computes `if (!APS) true else isEngineeringMode() || !isDev()`. [APS] is false here
+     * because this is a follower, so that expression is true whatever the rest says. Written out
+     * rather than copied so it does not read as a stub.
+     */
     override fun isEngineeringModeOrRelease(): Boolean = true
 
     /**
-     * Always false: the options are toggled by dropping a file next to the Android app's data.
-     * iOS has no such directory, so nothing can turn one on.
+     * Read the same way Android does - by the presence of a file in the `extra` folder.
+     *
+     * This answered a flat `false` before, on the grounds that iOS had nowhere for a user to put such
+     * a file. That was true when it was written and stopped being true when the app's Documents
+     * directory was exposed to the Files app: a person can now create
+     * **On My iPhone → AAPSClient → extra → engineering_mode** with no computer and no cable, which
+     * is the same gesture as `touch AAPS/extra/engineering_mode` on the other two platforms.
+     *
+     * Checked on each call rather than cached, because the file appears while the app is running -
+     * the user has no way to restart it first, and a value read once at start up would ignore them
+     * until the next launch.
      */
-    override fun isEnabled(option: ExternalOptions): Boolean = false
+    override fun isEnabled(option: ExternalOptions): Boolean {
+        val directory = extraDir ?: return false
+        return NSFileManager.defaultManager.fileExistsAtPath("$directory/${option.filename}")
+    }
 
     companion object {
 
@@ -156,4 +194,20 @@ internal fun clientFlavorFor(bundleId: String): String = when {
     bundleId.endsWith("client2") -> "aapsclient2"
     bundleId.endsWith("client3") -> "aapsclient3"
     else                         -> "aapsclient"
+}
+
+/**
+ * `extra` inside the app's own Documents directory, created if it is not there yet.
+ *
+ * Made rather than merely looked for, so the folder is visible in the Files app before anyone needs
+ * it - a user told to create `extra/engineering_mode` should find `extra` already waiting rather
+ * than have to guess the name and spelling.
+ */
+@OptIn(ExperimentalForeignApi::class)
+private fun defaultExtraDir(): String? {
+    val documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).firstOrNull() as? String
+        ?: return null
+    val extra = "$documents/extra"
+    NSFileManager.defaultManager.createDirectoryAtPath(extra, withIntermediateDirectories = true, attributes = null, error = null)
+    return extra
 }
