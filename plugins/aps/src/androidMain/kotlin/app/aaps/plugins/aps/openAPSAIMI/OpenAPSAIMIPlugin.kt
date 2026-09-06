@@ -124,6 +124,7 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinKineticsAuthority
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningDiagnostics
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLearnedState
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
@@ -174,6 +175,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val iobCobCalculator: IobCobCalculator,
     private val hardLimits: HardLimits,
     private val preferences: Preferences,
+    private val pkPdLearnedState: PkPdLearnedState,
     private val sp: SP,
     protected val dateUtil: DateUtil,
     private val processedTbrEbData: ProcessedTbrEbData,
@@ -400,7 +402,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     override var lastAPSResult: APSResult? = null
     override fun usingDynamicIsf(): Boolean = preferences.get(BooleanKey.ApsUseDynamicSensitivity)
     override fun offersDynamicSensitivity(): Boolean = true
-    private val pkpdIntegration = PkPdIntegration(preferences, behaviorProfileSource)
+    private val pkpdIntegration = PkPdIntegration(preferences, pkPdLearnedState, behaviorProfileSource)
     private var lastPkpdScale: Double = 1.0
     // Dans votre classe principale (ou plugin), vous pouvez d?clarer :
     private val kalmanISFCalculator = KalmanISFCalculator(tddCalculator, preferences, aapsLogger)

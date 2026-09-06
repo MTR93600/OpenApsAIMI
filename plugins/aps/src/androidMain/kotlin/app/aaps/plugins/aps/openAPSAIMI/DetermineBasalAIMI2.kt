@@ -71,6 +71,7 @@ import app.aaps.plugins.aps.openAPSAIMI.model.PumpCaps
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.MealAggressionContext
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLearnedState
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdBolusSample
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfTddProvider
@@ -1253,6 +1254,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val profileUtil: ProfileUtil,
     private val fabricPrivacy: FabricPrivacy,
     private val preferences: Preferences,
+    private val pkPdLearnedState: PkPdLearnedState,
     private val gestationalAutopilot: app.aaps.plugins.aps.openAPSAIMI.advisor.gestation.GestationalAutopilot,
     private val auditorOrchestrator: AimiAuditor,
     private val behaviorProfileSource: AimiBehaviorProfileSource,
@@ -10334,7 +10336,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             .getOrNull()
     }
     private var csvPrimaryStorageDeniedLogged = false
-    private val pkpdIntegration = PkPdIntegration(preferences, behaviorProfileSource)
+    private val pkpdIntegration = PkPdIntegration(preferences, pkPdLearnedState, behaviorProfileSource)
     //private val tempFile = File(externalDir, "temp.csv")
     private var bgacc = 0.0
     private var predictedSMB = 0.0f

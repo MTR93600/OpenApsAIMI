@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.pkpd
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.LongNonKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
@@ -14,6 +15,7 @@ import kotlin.math.max
 
 class PkPdIntegration(
     private val preferences: Preferences,
+    private val learnedState: PkPdLearnedState,
     private val behaviorProfileSource: AimiBehaviorProfileSource,
 ) {
 
@@ -53,15 +55,46 @@ class PkPdIntegration(
     )
 
     private var cachedStructuralConfig: StructuralConfig? = null
-    private var estimator: AdaptivePkPdEstimator? = null
-    private var lastBounds: PkPdBounds? = null
-    private var lastLearningCfg: PkPdLearningConfig? = null
     private var fusion: IsfFusion? = null
     private var lastFusionBounds: IsfFusionBounds? = null
     private var damping: SmbDamping? = null
     private var lastTailPolicy: TailAwareSmbPolicy? = null
-    private var lastPersisted: PkPdParams? = null
     private var recentBolusSamples: List<PkpdBolusSample> = emptyList()
+
+    // The learned state lives in [PkPdLearnedState], so both consumers read one single value.
+    // These are views on the holder, not fields: the rest of the class does not change.
+    private var estimator: AdaptivePkPdEstimator?
+        get() = learnedState.estimator
+        set(value) {
+            learnedState.estimator = value
+        }
+    private var lastBounds: PkPdBounds?
+        get() = learnedState.lastBounds
+        set(value) {
+            learnedState.lastBounds = value
+        }
+    private var lastLearningCfg: PkPdLearningConfig?
+        get() = learnedState.lastLearningCfg
+        set(value) {
+            learnedState.lastLearningCfg = value
+        }
+    private var lastPersisted: PkPdParams?
+        get() = learnedState.lastPersisted
+        set(value) {
+            learnedState.lastPersisted = value
+        }
+
+    /**
+     * Last generation counter this instance acted on.
+     * `null` means it was never read yet (fresh process): adopt the value without resetting,
+     * because prefs are already the seed source on the first tick. Only a *change* between two
+     * ticks means someone wrote the learned state from outside the loop.
+     */
+    private var seenLearnedStateGeneration: Long?
+        get() = learnedState.seenLearnedStateGeneration
+        set(value) {
+            learnedState.seenLearnedStateGeneration = value
+        }
 
     @Synchronized
     fun setRecentBolusSamples(samples: List<PkpdBolusSample>) {
@@ -105,6 +138,7 @@ class PkPdIntegration(
     ): PkPdRuntime? {
         val structural = readStructuralConfig()
         val previousStructural = cachedStructuralConfig
+        adoptExternalLearnedStateReset()
         if (previousStructural != null && previousStructural != structural) {
             applyStructuralConfigChange(previousStructural, structural)
         }
@@ -303,7 +337,31 @@ class PkPdIntegration(
         )
     }
 
+    /**
+     * Detects a learned-state write done outside the loop (reset button, insulin preset).
+     * Drops the in-memory learner so this tick re-seeds from prefs via [readLearnedSeed].
+     * It does not touch the fusion/damping caches on purpose: they hold no learned PK/PD state.
+     *
+     * It must run first in the tick, before the structural config is compared. An insulin preset
+     * changes the bounds and writes the learned state in one gesture, and
+     * [applyStructuralConfigChange] persists the old in-memory value when the bounds change. With
+     * the learner already dropped here, that persist is a no-op and cannot overwrite the new
+     * value. Running it while PK/PD is off is safe too: [clearAllCaches] wipes everything anyway.
+     */
+    private fun adoptExternalLearnedStateReset() {
+        val generation = preferences.get(LongNonKey.OApsAIMIPkpdLearnedStateGeneration)
+        val seen = seenLearnedStateGeneration
+        seenLearnedStateGeneration = generation
+        if (seen == null || seen == generation) return
+        estimator = null
+        lastBounds = null
+        lastLearningCfg = null
+        lastPersisted = null
+    }
+
     private fun applyStructuralConfigChange(old: StructuralConfig, new: StructuralConfig) {
+        // Same persist as 0761e9c00a. The stale write is gone because [estimator] is now the
+        // shared learned holder, not a private seed frozen on the read-only consumer.
         estimator?.let { persistStateIfNeeded(it.params(), new.bounds) }
 
         val learningInputsChanged = old.bounds != new.bounds ||
@@ -325,15 +383,14 @@ class PkPdIntegration(
     }
 
     private fun clearAllCaches() {
-        estimator = null
+        learnedState.clearLearned()
         fusion = null
         damping = null
-        lastBounds = null
         lastFusionBounds = null
         lastTailPolicy = null
-        lastLearningCfg = null
         cachedStructuralConfig = null
-        lastPersisted = null
+        // seenLearnedStateGeneration is kept on purpose: turning OApsAIMIPkpdEnabled off and on
+        // again must not look like an external reset on the next tick.
     }
 
     private fun aggregateActivityState(

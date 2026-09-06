@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
 import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.LongNonKey
 import app.aaps.core.keys.interfaces.Preferences
 
 /**
@@ -82,6 +83,7 @@ fun reclampPkpdLearnedStateToBounds(preferences: Preferences) {
     val peak = preferences.get(DoubleKey.OApsAIMIPkpdStatePeakMin).coerceIn(bPeakLo, bPeakHi)
     preferences.putClamped(DoubleKey.OApsAIMIPkpdStateDiaH, dia)
     preferences.putClamped(DoubleKey.OApsAIMIPkpdStatePeakMin, peak)
+    bumpPkpdLearnedStateGeneration(preferences)
 }
 
 /**
@@ -97,6 +99,16 @@ fun resetPkpdLearnedStateToInitial(preferences: Preferences) {
     val bPeakHi = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax)
     preferences.putClamped(DoubleKey.OApsAIMIPkpdStateDiaH, diaInit.coerceIn(bDiaLo, bDiaHi))
     preferences.putClamped(DoubleKey.OApsAIMIPkpdStatePeakMin, peakInit.coerceIn(bPeakLo, bPeakHi))
+    bumpPkpdLearnedStateGeneration(preferences)
+}
+
+/**
+ * Marks the learned state in prefs as replaced from outside the loop, so every live PK/PD engine
+ * instance re-seeds from prefs. Used only by the two writers in this file, and always AFTER the
+ * OApsAIMIPkpdState* writes, never before.
+ */
+private fun bumpPkpdLearnedStateGeneration(preferences: Preferences) {
+    preferences.inc(LongNonKey.OApsAIMIPkpdLearnedStateGeneration)
 }
 
 /**
