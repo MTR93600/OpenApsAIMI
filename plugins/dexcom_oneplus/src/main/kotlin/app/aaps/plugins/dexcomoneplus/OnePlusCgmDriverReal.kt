@@ -25,6 +25,7 @@ import app.aaps.plugins.dexcomoneplus.session.OnePlusSessionStart
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 internal object OnePlusCgmDriverResumePolicy {
     fun canResume(storedSession: OnePlusStoredSession?): Boolean =
@@ -49,10 +50,34 @@ internal object OnePlusCgmDriverResumePolicy {
  *   original single-sensor file; "staging" = the pre-soak second sensor). Lets two driver instances
  *   run concurrently without sharing identity / MAC / KEKS key / ingest markers.
  */
-class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlusCgmDriver {
+class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
 
-    /** `prod` / `staging` — logged on every marker so a dual-sensor trace is attributable. */
+    /**
+     * Which preferences file this instance's sessions read and write.
+     *
+     * A `var` and not a constructor `val`: a promotion hands a **live link** from the staging slot
+     * over to production, and the link must not be dropped — but from that moment every new session
+     * this instance opens has to read and write the production file. See [rebindStore].
+     */
+    @Volatile
+    private var storeNamespace: String? = storeNamespace
+
+    /**
+     * `prod` / `staging` — logged on every marker so a dual-sensor trace is attributable.
+     *
+     * Fixed for the whole life of the instance, even after a promotion, so a bug report stays
+     * readable across the swap: a promoted instance is production but still calls itself "staging"
+     * in the log.
+     */
     private val slot: String = OnePlusLogMarkers.slotOf(storeNamespace)
+
+    /**
+     * [OnePlusMacArbiter] owner token for this instance: unique for its whole life, unlike [slot]
+     * which the next staging instance reuses. Keying the arbiter on [slot] would let that next
+     * pre-soak's claim silently release the promoted instance's claim on the sensor still feeding
+     * the loop — see [OnePlusMacArbiter]'s warning.
+     */
+    private val arbiterOwner: String = "$slot#${nextInstance.incrementAndGet()}"
 
     private val watchers = CopyOnWriteArrayList<OnePlusGlucoseWatcher>()
     private val lifecycleLock = Any()
@@ -108,6 +133,18 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
 
     fun sensorStore(): OnePlusSensorStore? = sensorStore
 
+    /**
+     * Points this instance at another slot's preferences file, without dropping a running link.
+     *
+     * Used once, by a promotion. The running Control/EGV loop kept its store in a local, so it goes
+     * on writing into the old (staging) file until the link ends, which is harmless. The next
+     * session this instance opens reads and writes the new file.
+     */
+    fun rebindStore(namespace: String?) {
+        storeNamespace = namespace
+        context?.let { sensorStore = OnePlusSensorStore(it, namespace) }
+    }
+
     fun saveIdentity(identity: OnePlusSensorIdentity) {
         sensorStore?.saveIdentity(identity)
         (scanner as? OnePlusBleScannerAndroid)?.sessionHint = sensorStore?.load()
@@ -138,7 +175,7 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
         // The transmitter has one owner — see OnePlusMacArbiter. Refused means the other slot is on
         // this sensor, and opening a second session would corrupt both KEKS handshakes. Nothing is
         // written to the store on a refusal: the slot must stay exactly as it was.
-        if (!OnePlusMacArbiter.claim(deviceAddress, slot)) {
+        if (!OnePlusMacArbiter.claim(deviceAddress, arbiterOwner)) {
             watchers.forEach {
                 it.onError("ONEPLUS_SESSION: sensor already in use by the other slot", false)
             }
@@ -226,7 +263,7 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
         val deviceAddress = stored?.lastMac ?: return false
         // The path that reproduced the collision on every plugin start for an install whose two
         // stores already held the same MAC. Claim before queueing anything.
-        if (!OnePlusMacArbiter.claim(deviceAddress, slot)) {
+        if (!OnePlusMacArbiter.claim(deviceAddress, arbiterOwner)) {
             OnePlusLog.w(
                 "${OnePlusLogMarkers.SESSION}: [$slot] auto-resume skipped — the other slot owns this sensor",
             )
@@ -326,7 +363,7 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
             session.also { session = null }
         }
         previousSession?.stop("disconnect")
-        OnePlusMacArbiter.release(slot)
+        OnePlusMacArbiter.release(arbiterOwner)
     }
 
     override fun shutdown() {
@@ -350,7 +387,7 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
         }
         watchers.clear()
         previousExecutor.shutdownNow()
-        OnePlusMacArbiter.release(slot)
+        OnePlusMacArbiter.release(arbiterOwner)
         OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] shutdown")
     }
 
@@ -555,5 +592,8 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
          * be quiet and a direct connect would miss the window.
          */
         const val ADV_HANDOFF_FRESH_MS = 6_000L
+
+        /** Process-wide counter so every instance's [arbiterOwner] is unique — see its doc comment. */
+        val nextInstance = AtomicInteger(0)
     }
 }

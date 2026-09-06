@@ -119,6 +119,19 @@ Reference: [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS-E
   `KeepAliveWorker runVacuum=false`, notification-reader v3).
 - Log: [MERGE_DEV_2026-08-08.md](MERGE_DEV_2026-08-08.md).
 
+### Merge `dev` → `dev_OAPSAIMI` (2026-09-06)
+
+- Upstream `dev` at `283a184f60` (22 commits since `7fc8205e9a`): dependency bumps only (Gradle wrapper
+  9.7.1, AGP 9.3.2, compose-bom 2026.08.00, **Vico 3.3.0**, okhttp 5.5.0, appcompat 1.8.0, firebase-bom
+  34.18.0, java-otp 1.0.0, junit 6.1.3) plus the Wear OS 3 `wear-sdk` optional-library install fix.
+- **Zero conflicts.** Upstream diff is 6 files, none of them Eversense, AIMI, SMB, AutoISF, smoothing,
+  dashboard, `SourceSensor`, DI, DB or storage — constraint satisfied without re-application. Nothing to
+  port into AIMI.
+- Both auto-merged files reviewed by hand (`libs.versions.toml` = bumps only; `wear/AndroidManifest.xml`
+  delta empty, fork already had the fix, `BgGraphComplication` still declared once).
+- **Fork preserved:** verified by identical invariant baseline before/after + clean duplicate scan.
+- Log: [MERGE_DEV_2026-09-06.md](MERGE_DEV_2026-09-06.md).
+
 ### Merge `dev` → `feature/dexcom-oneplus-native` (2026-08-03)
 
 - Upstream `dev` at `fa2d2c78a5` (45 commits since `88d31b816d`: alarms refactor — `USE_FULL_SCREEN_INTENT`
@@ -577,3 +590,43 @@ is blocked by pre-existing breakage (`GraphViewModelTest`, `RunningModeManagemen
 All runtime behaviour needs hardware: a real calibration reaching an E3 or 365, the toast suppression,
 and the quick-launch grey-out. The 40–400 range itself is CAPTCG's assertion, not a Senseonics
 document — inference, in the conservative direction.
+
+### CAPTCG sync 2026-09-06 (swapping to a replacement transmitter)
+
+Reference: [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS-Eversense-) branch
+`european-region-support` @ **bfffcc6e8b** (3 commits past `88e60751da`). `master` has not moved since
+2026-08-27 and is still `fc1ae8c8f2` — **watch the feature branch, not master**.
+
+All three commits address one scenario, replacing a transmitter, and all three are backed by field
+logs in their commit bodies.
+
+| Change | File | Notes |
+|--------|------|--------|
+| `autoConnect = false` on the fresh-scan branch | `EversenseCGMPlugin.connect()` | Upstream `5572cdbfdd`. **We had this bug.** Both branches passed `true`. On a device just found by an active scan and never bonded, `autoConnect = true` yields no GATT callback and no pairing prompt, silently and forever — so a **new transmitter never connected**. The stored-device branch keeps `true`: our persistent 60 s retry loop and `reconnectRunnable` both go through `connect(null)` and depend on it |
+| `disallowUseShortcut()` on an explicit device | `EversenseCGMPlugin.connect()` | Upstream `bfffcc6e8b`. `canUseShortcut()` is a plain saved flag, not tied to any transmitter identity, so a cached shortcut is always wrong for newly picked hardware. Without this the 365 tries it, is rejected, and only recovers after `SHORTCUT_FAIL_THRESHOLD` (3) failures — about **two wasted connect/auth/disconnect cycles with no glucose**. E3 is unaffected, its auth flow has no shortcut |
+| "Change transmitter" button | `EversenseStatusActivity`, `activity_eversense_status.xml`, `plugins/source` strings | Upstream `b28ece701d`, hand ported — our activity is an `EversenseWatcher` rewrite and our layout has diverged. **Order deliberately inverted vs CAPTCG:** we clear the stored address *before* disconnecting, so `scheduleReconnect()` cannot queue a reconnect to the old MAC that would race the new transmitter |
+| Honest disconnect wording | `plugins/source` strings | Fork addition. The confirm text now says the app also forgets the transmitter — see the design note below |
+
+**Design decision — `clearStoredDevice()` stays on the Disconnect path.** We considered removing it so
+that a deliberate disconnect would only disconnect, matching CAPTCG. **That would have been wrong:**
+that call is the only thing that makes Disconnect stick. `scheduleReconnect()`, both runnables,
+`onStart()` and `forceReconnect()` are all keyed on the stored address and there is no
+"stay disconnected" flag, so removing it would have turned Disconnect into a five-second pause.
+Kept as is, and the confirmation text now states the consequence instead of hiding it.
+
+**Known cost of that choice, combined with the shortcut change:** because Disconnect forgets the
+device, the next connect goes through the scan-and-pick path, which now forces a full
+internet-dependent handshake even when reconnecting to the *same* transmitter. Self-healing through
+`FULL_AUTH_FAIL_THRESHOLD`, but it is a real behaviour change and users will notice it.
+
+**Verified:** `:plugins:eversense` and `:plugins:source` compile clean; `:plugins:eversense`
+unit tests 76 passed / 0 failed, including a new `SECURE_STATE` round-trip lock proving
+`disallowUseShortcut()` does not wipe the key pair, the credentials or `isEuropeanRegion`.
+**Not verified — needs hardware.** `connectGatt` cannot be unit tested here. Still open: that an
+already-paired reconnect still logs `Reconnecting to stored device`; Bluetooth radio-toggle recovery;
+that the 365 shortcut is still used on a normal status-19 reconnect; the offline
+`FULL_AUTH_FAIL_THRESHOLD` self-heal; and that no `Scheduling auto-reconnect` appears after
+"Change transmitter".
+
+**Left alone, pre-existing:** the disconnect dialog's button labels are still hardcoded English
+literals (`"Disconnect"`, `"Cancel"`) in this activity. Out of scope here; worth a dedicated pass.

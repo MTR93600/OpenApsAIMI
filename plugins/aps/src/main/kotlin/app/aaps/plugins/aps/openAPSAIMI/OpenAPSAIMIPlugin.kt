@@ -84,6 +84,7 @@ import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.events.EventOpenAPSUpdateGui
 import app.aaps.plugins.aps.events.EventResetOpenAPSGui
 import app.aaps.plugins.aps.openAPS.TddStatus
+import app.aaps.plugins.aps.openAPSAIMI.ISF.CommandedIsf
 import app.aaps.plugins.aps.openAPSAIMI.ISF.DynIsfCache
 import app.aaps.plugins.aps.openAPSAIMI.ISF.DynIsfTrajectoryTuning
 import app.aaps.plugins.aps.openAPSAIMI.ISF.DynamicSensitivityPolicy
@@ -1460,25 +1461,19 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 // before the multipliers that undo it, which is the defect ADR 0008 keeps recording: the
                 // physiological factor is applied after the `coerceIn(5.0, 300.0)` on this path, which is
                 // how a commanded sensitivity of 4.54 mg/dL/U was reached on 2026-08-14 (5.00 x 0.908).
-                sens = DynamicSensitivityPolicy.floorAgainstProfile(
-                    commandedMgdlPerU = profile.getIsfMgdl("OpenAPSAIMIPlugin") * physioMults.isfFactor,
+                // The shadow witness of that same bound used to be recorded here, on the value the
+                // floor had **already** raised. Its own lower bound is the same 0.5 x profile, so it
+                // could never fire again: `isf_profile_relative_bound_hit` was false on 709 night
+                // ticks out of 709 while the floor was really setting the value on 244 of them. The
+                // order now lives in [CommandedIsf], which measures first and floors after.
+                // See `docs/adr/0008-isf-decision-architecture.md`.
+                sens = CommandedIsf.floorAgainstProfileAndRecordShadow(
+                    // The commanded sensitivity after every multiplier and before the floor. Read
+                    // here, at the same place the old code read it, so the number the loop commands
+                    // is unchanged.
+                    preFloorMgdlPerU = profile.getIsfMgdl("OpenAPSAIMIPlugin") * physioMults.isfFactor,
                     profileIsfMgdlPerU = runCatching { profile.getProfileIsfMgdl() }.getOrNull(),
-                ).also { commanded ->
-                    // Shadow only — nothing reads this. Records what an **unconditional exit clamp**
-                    // relative to the profile would command.
-                    //
-                    // It was first placed inside `calculateVariableIsf`, before the effective-profile
-                    // percentage and the physiological factor. Production then showed the commanded
-                    // sensitivity reaching x0.46 and x2.11 of profile while the shadow reported a
-                    // single hit in 282 ticks — the guard had been put before the multipliers that
-                    // undo it, which is precisely the defect this ADR set keeps documenting. It now
-                    // sits where the value is final.
-                    // See `docs/adr/0008-isf-decision-architecture.md`.
-                    IsfSourceTelemetry.recordProfileRelativeShadow(
-                        blendedMgdl = commanded,
-                        profileIsfMgdl = runCatching { profile.getProfileIsfMgdl() }.getOrNull() ?: 0.0,
-                    )
-                },
+                ),
                 autosens_adjust_targets = false, // not used
                 max_daily_safety_multiplier = preferences.get(DoubleKey.ApsMaxDailyMultiplier) * physioMults.smbFactor, // ?? SMB Cap modulation
                 current_basal_safety_multiplier = preferences.get(DoubleKey.ApsMaxCurrentBasalMultiplier) * physioMults.basalFactor, // ?? Basal Cap modulation

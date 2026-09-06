@@ -24,6 +24,7 @@ import app.aaps.plugins.eversense.packets.e365.GetSignalStrengthPacket
 import app.aaps.plugins.eversense.packets.e365.SetBloodGlucosePointPacket365
 import app.aaps.plugins.eversense.packets.e3.GetCalibrationReadinessPacket
 import app.aaps.plugins.eversense.packets.e3.GetSignalStrengthRawPacket
+import app.aaps.plugins.eversense.util.EversenseCrypto365Util
 import app.aaps.plugins.eversense.util.EversenseLogger
 import app.aaps.plugins.eversense.util.EversenseScanner
 import app.aaps.plugins.eversense.util.StorageKeys
@@ -160,7 +161,25 @@ class EversenseCGMPlugin {
                 // Save address so we can auto-reconnect after app restart or phone reboot
                 preferences?.edit()?.putString(StorageKeys.REMOTE_DEVICE_KEY, device.address)?.apply()
                 EversenseLogger.info(TAG, "Saved device address for auto-reconnect: ${device.address}")
-                device.connectGatt(context, true, gattCallback, android.bluetooth.BluetoothDevice.TRANSPORT_LE)
+                // A transmitter picked from the scan list is not necessarily the one the cached
+                // "shortcut auth" session was agreed with. canUseShortcut() is a plain saved flag,
+                // it is not tied to any transmitter identity, so for newly picked hardware the
+                // cached shortcut is wrong. Without this, the 365 auth flow tries it anyway, the
+                // new transmitter rejects it and drops the link, and we only recover after
+                // SHORTCUT_FAIL_THRESHOLD (3) failed connect/auth/disconnect cycles. Ask for the
+                // full WhoAmI + DMS login + fleet certificate handshake on the first attempt
+                // instead. E3 is unaffected: its auth flow has no shortcut.
+                preferences?.let { EversenseCrypto365Util(it).disallowUseShortcut() }
+                // autoConnect = false here, unlike the stored-device branch below. This device was
+                // just found by an active scan and has never been bonded or connected before.
+                // autoConnect = true asks Android to connect "whenever the device shows up", which
+                // is meant for a device it already knows. For a brand new device it is a known way
+                // to get no GATT callback and no pairing prompt at all, silently and forever.
+                // false asks for one direct connection attempt right now, which is what we want
+                // for a first pairing. If that attempt fails, onConnectionStateChange fires with a
+                // real status and scheduleReconnect() retries through the stored-device branch,
+                // which still uses autoConnect = true.
+                device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
                 true
             } else {
                 val address = preferences?.getString(StorageKeys.REMOTE_DEVICE_KEY, null) ?: run {
@@ -172,7 +191,7 @@ class EversenseCGMPlugin {
                     return false
                 }
                 EversenseLogger.info(TAG, "Reconnecting to stored device: $address")
-                remoteDevice.connectGatt(context, true, gattCallback, android.bluetooth.BluetoothDevice.TRANSPORT_LE)
+                remoteDevice.connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
                 true
             }
         }

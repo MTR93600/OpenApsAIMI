@@ -329,7 +329,16 @@ class AutodriveEngine @Inject constructor(
          * as engaged.
          */
         engaged: Boolean = true,
+        /**
+         * Whether [profileIsf] is the **dynamic** ISF rather than an independent profile block.
+         *
+         * Diagnostic only: it is copied into `ControlBarrierShield.Diagnostics` and never enters the
+         * arithmetic. The default is `true` because that is what the only production caller does
+         * today — it passes `profile.sens`. See `profileAnchoredSafetySi` for why that matters.
+         */
+        profileIsfIsDynamic: Boolean = true,
     ): AutoDriveCommand? {
+        clearTickObservations()
         val state = systemState.get() as? AimiState.AutoDrive ?: return null
         if (!state.isActive && !state.isShadowMode) return null
 
@@ -406,16 +415,24 @@ class AutodriveEngine @Inject constructor(
         // This is the same failure the attention gate was clamped for — except that arm had never run,
         // and this one runs on every tick.
         //
-        // The barrier therefore anchors on the profile ISF, and takes whichever of the two is *more*
-        // restrictive, so this can only ever tighten the barrier relative to today: a defensive
-        // learner raising `estimatedSI` is kept, a policy lowering it is ignored.
+        // The barrier therefore takes whichever of the two is *more* restrictive, so this can only
+        // ever tighten the barrier relative to before.
+        //
+        // ⚠️ But the "profile" side of that maximum is not a profile block today: the only production
+        // caller passes `profile.sens`, the dynamic ISF. The intended protection — a learner able to
+        // lower sensitivity cannot loosen the barrier — is therefore NOT in place. See
+        // `profileAnchoredSafetySi` for the measurement, and [profileIsfIsDynamic] for the flag that
+        // exposes it. Changing the anchor changes the dose, so it is deliberately not done here.
         //
         // Passed as an argument, not carried on the state: a `copy()` here would re-run
         // `AutoDriveState.init` on the dosing path, turning a non-finite estimate into a throw where
         // it used to be tolerated.
         val safetySi = profileAnchoredSafetySi(profileIsf, estimatedState.estimatedSI)
         lastSafetySiUsed = safetySi
-        val safeCommand = safetyShield.enforce(rawCommand, estimatedState, profileBasal, safetySi, observationId)
+        val safeCommand = safetyShield.enforce(
+            rawCommand, estimatedState, profileBasal, safetySi, observationId,
+            anchorIsDynamicIsf = profileIsfIsDynamic,
+        )
         // Captured here on purpose: recordCoefficientShadow below runs `enforce` a second time for the
         // unfloored shadow, which would overwrite the shield's own record of the production call.
         lastBarrierDiagnostics = safetyShield.lastDiagnostics
@@ -485,21 +502,6 @@ class AutodriveEngine @Inject constructor(
     }
 
     /**
-     * Sensitivity the safety barrier reads, anchored on the profile and never looser than today.
-     *
-     * [profileIsf] is the profile ISF in mg/dL/U; the state carries sensitivity as ISF/10000, so it is
-     * rescaled. The result is `max(profile-anchored, commanded)` because a **higher** sensitivity
-     * makes `lgh = -siMetabolic * bg` larger in magnitude and the permitted dose smaller. Taking the
-     * maximum means:
-     *
-     * - a policy multiplier that lowers the commanded sensitivity no longer loosens the barrier;
-     * - a defensive learner that raises it is still honoured;
-     * - the barrier can never end up looser than it is today, whatever the inputs.
-     *
-     * On a non-finite or non-positive profile ISF there is no anchor to trust, so the commanded value
-     * is used unchanged and the event is logged rather than silently substituted.
-     */
-    /**
      * Measures what removing the coefficient floor would cost, without letting it reach the pump.
      *
      * `InsulinActionModel.controlCoefficient` floors at the pre-unification value so this refactor can
@@ -508,9 +510,29 @@ class AutodriveEngine @Inject constructor(
      * unfloored coefficient is 0.67x and the barrier would be about a third more permissive.
      *
      * A third more permissive **on the median tick** is not something to ship on arithmetic. So the
-     * unfloored barrier is run here on the same state, and only its result is exported. `enforce` is
-     * pure apart from its acceleration memory, and that memory is now keyed on [observationId], so the
-     * second call reads the same acceleration as the first instead of resetting it.
+     * unfloored barrier is run here on the same state, and only its result is exported.
+     *
+     * ## Why the shadow needs `siMetabolicOverride`
+     *
+     * The first version of this shadow tried to express "no floor" as a sensitivity, and that is
+     * algebraically impossible. It computed
+     * `unflooredEquivalentSi = coefUnfloored * REFERENCE_BG_MGDL * MPC_TAU_MIN / 10000`, which
+     * reduces to `isf / 10000` — exactly the `safetySi` the production call already passes. `enforce`
+     * then fed it back through `InsulinActionModel.controlCoefficient` and re-applied the very floor
+     * being measured, so the shadow reproduced the production number. That is the mechanical reason
+     * `cbf_permitted_unfloored_u` equalled `cbf_permitted_u` on 281 of 281 ticks on the 2026-09-05
+     * night, which was read as "the floor cost nothing". It cost: with the floor really removed the
+     * permitted total over that night goes from 19.7 U to 27.0 U and the full blocks from 32 to 28,
+     * including 3.779 U of the 7.350 U asked for between 21:55 and 22:15.
+     *
+     * The coefficient is therefore handed to `enforce` directly.
+     *
+     * ## Why this cannot touch the dose
+     *
+     * `enforce` is pure apart from its acceleration memory, and that memory is keyed on
+     * [observationId], so the second call reads the same acceleration as the first instead of
+     * resetting it. Its other trace, `ControlBarrierShield.lastDiagnostics`, is captured by the
+     * caller **before** this function runs. The command built here is only measured, never returned.
      */
     private fun recordCoefficientShadow(
         profileIsf: Double,
@@ -529,17 +551,77 @@ class AutodriveEngine @Inject constructor(
                 InsulinActionModel.metabolicCoefficient(isf, InsulinActionModel.MPC_TAU_MIN)
             lastCbfPermittedU = safeCommand.scheduledMicroBolus + safeCommand.temporaryBasalRate / 12.0
 
-            // Same barrier, same state, only the floor removed. Expressed as the sensitivity that
-            // yields the unfloored coefficient, so `enforce` needs no new parameter.
-            val unflooredEquivalentSi = lastControlCoefficientUnfloored * InsulinActionModel.REFERENCE_BG_MGDL *
-                InsulinActionModel.MPC_TAU_MIN / 10000.0
+            // Same barrier, same state, same sensitivity — only the floor removed. The coefficient is
+            // passed straight in, because expressing it as a sensitivity sends it back through
+            // `controlCoefficient` and the floor comes straight back. See the doc above.
             val unflooredCommand = safetyShield.enforce(
-                rawCommand, estimatedState, profileBasal, unflooredEquivalentSi, observationId,
+                rawCommand, estimatedState, profileBasal, safetySi, observationId,
+                siMetabolicOverride = lastControlCoefficientUnfloored,
             )
             lastCbfPermittedUnflooredU =
                 unflooredCommand.scheduledMicroBolus + unflooredCommand.temporaryBasalRate / 12.0
             lastProfileIsfSeen = profileIsf
         }
+    }
+
+    /**
+     * Sensitivity the safety barrier reads. Named for an anchor it does not have yet.
+     *
+     * [profileIsf] is a profile ISF in mg/dL/U; the state carries sensitivity as ISF/10000, so it is
+     * rescaled. The result is `max(anchored, commanded)` because a **higher** sensitivity makes
+     * `lgh = -siMetabolic * bg` larger in magnitude and the permitted dose smaller. Taking the
+     * maximum was meant to give three properties:
+     *
+     * - a policy multiplier that lowers the commanded sensitivity no longer loosens the barrier;
+     * - a defensive learner that raises it is still honoured;
+     * - the barrier can never end up looser than it is today, whatever the inputs.
+     *
+     * ## Only the third property holds today
+     *
+     * The maximum is real, but the first two need [profileIsf] to be **independent** of the value it
+     * is protecting against, and it is not. The only production caller passes `profile.sens`, which
+     * is the dynamic ISF — the same number the learners move. So the "anchor" moves with the
+     * controller, and a learner that lowers sensitivity still loosens the barrier.
+     *
+     * Measured on the 2026-09-05 night: `cbf_profile_isf_mgdl`, `profile_isf_mgdl` and
+     * `command_isf_mgdl` were the same value on 281 ticks out of 281, and that value went from 28.2
+     * to 62.4 between 22:20 and 22:30 — tightening the barrier by a factor 1.39 at the moment the
+     * insulin term was at its worst (-19.75 mg/dL/min predicted against -1.22 measured). The static
+     * profile block, exported as `profile_isf_static_mgdl`, is 50 in the evening and 120 at night and
+     * never reaches the barrier at all.
+     *
+     * Passing the static block instead is the fix, and it is **not** done here: it changes the
+     * permitted dose on every tick and needs a replay first. Until then
+     * [ControlBarrierShield.Diagnostics.anchorIsDynamicIsf] makes the situation readable from the
+     * export instead of leaving the doc claiming a protection that is not in place.
+     *
+     * On a non-finite or non-positive profile ISF there is no anchor to trust, so the commanded value
+     * is used unchanged and the event is logged rather than silently substituted.
+     */
+    /**
+     * Clears everything the export reads about **this** tick, before any early exit can skip it.
+     *
+     * These fields are written late in [tick]: the raw command around the middle, the barrier
+     * diagnostics after `enforce`. `tick` can also return before either, when the state is not an
+     * autodrive state or the engine is neither active nor in shadow mode. Without this reset those
+     * fields keep the values of the last tick that did run, and the export then presents an older
+     * tick's barrier as the current one. That is the same "read a value after the step that set it"
+     * mistake the barrier and ISF witnesses were making, so it is cleared here rather than guarded
+     * at each of the six read sites.
+     *
+     * The cleared values are all ones the readers already treat as unknown: `null` diagnostics makes
+     * the whole `control_barrier` block absent, and the numeric fields fall outside the
+     * `takeIf { it > 0.0 }` and `takeIf { it.isFinite() }` guards the export applies.
+     */
+    private fun clearTickObservations() {
+        lastBarrierDiagnostics = null
+        lastMpcRawSmbU = Double.NaN
+        lastMpcRawTbrUph = Double.NaN
+        lastControlCoefficientUsed = 0.0
+        lastControlCoefficientUnfloored = 0.0
+        lastCbfPermittedU = Double.NaN
+        lastCbfPermittedUnflooredU = Double.NaN
+        lastProfileIsfSeen = 0.0
     }
 
     private fun profileAnchoredSafetySi(profileIsf: Double, commandedSi: Double): Double {

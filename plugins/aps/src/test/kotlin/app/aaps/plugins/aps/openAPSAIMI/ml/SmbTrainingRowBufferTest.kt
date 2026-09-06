@@ -25,7 +25,7 @@ class SmbTrainingRowBufferTest {
         add("adjustedDia")
     }
 
-    /** The header written today: the same columns, then the five new ones. */
+    /** The header written today: the same columns, then the six new ones. */
     private val enrichedHeaders: List<String> = legacyHeaders + SmbTrainingRowBuffer.ADDED_COLUMN_NAMES
 
     /** One plausible row for [legacyHeaders]: numbers everywhere, empty conflict flags. */
@@ -44,7 +44,7 @@ class SmbTrainingRowBufferTest {
 
     @Test
     fun `the enriched CSV stays readable by the existing parser`() {
-        val enrichedCols = legacyCols + listOf("0.0000", "0.3000", "AUTODRIVE_FLOOR", "GlobalAIMI", "142.0")
+        val enrichedCols = legacyCols + listOf("0.0000", "0.3000", "AUTODRIVE_FLOOR", "GlobalAIMI", "142.0", "1.5000")
 
         val legacyFeatures = SmbRefinementFeatureSchema.parseTrainingFeatures(legacyHeaders, legacyCols)
         val enrichedFeatures = SmbRefinementFeatureSchema.parseTrainingFeatures(enrichedHeaders, enrichedCols)
@@ -92,6 +92,7 @@ class SmbTrainingRowBufferTest {
             smbFloorU = 0.35,
             bindingStage = "AUTODRIVE_FLOOR",
             originOwner = "GlobalAIMI",
+            smbMpcRequestedU = null,
         )
 
         val cols = buffer.drainWritableRows(t0 + SmbTrainingRowBuffer.OUTCOME_HORIZON_MAX_MS + 1)
@@ -102,6 +103,63 @@ class SmbTrainingRowBufferTest {
         assertThat(cols[enrichedHeaders.indexOf("smbFloorU")].toDouble()).isWithin(1e-9).of(0.35)
         assertThat(cols[enrichedHeaders.indexOf("smbBindingStage")]).isEqualTo("AUTODRIVE_FLOOR")
         assertThat(cols[enrichedHeaders.indexOf("smbOriginOwner")]).isEqualTo("GlobalAIMI")
+    }
+
+    @Test
+    fun `the pre-barrier request is kept apart from the post-barrier model output`() {
+        val buffer = SmbTrainingRowBuffer()
+        val t0 = 8_000_000L
+        buffer.enqueue(timestampMs = t0, valuesPrefix = legacyCols.joinToString(","))
+        // The solver asked for 1.5 U and the barrier allowed nothing.
+        buffer.stampOrigin(
+            tickKey = t0,
+            smbModelU = 0.0,
+            smbFloorU = null,
+            bindingStage = null,
+            originOwner = "AutodriveV3",
+            smbMpcRequestedU = 1.5,
+        )
+
+        val cols = buffer.drainWritableRows(t0 + SmbTrainingRowBuffer.OUTCOME_HORIZON_MAX_MS + 1)
+            .single()
+            .split(",")
+
+        assertThat(cols[enrichedHeaders.indexOf("smbMpcRequestedU")].toDouble()).isWithin(1e-9).of(1.5)
+        assertThat(cols[enrichedHeaders.indexOf("smbModelU")].toDouble()).isWithin(1e-9).of(0.0)
+    }
+
+    @Test
+    fun `an unknown pre-barrier request stays empty and is never read as zero`() {
+        val buffer = SmbTrainingRowBuffer()
+        val t0 = 9_000_000L
+        buffer.enqueue(timestampMs = t0, valuesPrefix = legacyCols.joinToString(","))
+        // A tick that did not engage Autodrive: the model output is known, the request is not.
+        buffer.stampOrigin(
+            tickKey = t0,
+            smbModelU = 0.0,
+            smbFloorU = null,
+            bindingStage = null,
+            originOwner = "GlobalAIMI",
+            smbMpcRequestedU = null,
+        )
+
+        val cols = buffer.drainWritableRows(t0 + SmbTrainingRowBuffer.OUTCOME_HORIZON_MAX_MS + 1)
+            .single()
+            .split(",")
+
+        val cell = cols[enrichedHeaders.indexOf("smbMpcRequestedU")]
+        assertThat(cell).isEmpty()
+        assertThat(cell).isNotEqualTo("0")
+        assertThat(cell.toDoubleOrNull()).isNull()
+        // The model output of the same row is a real zero, so the two cannot be confused.
+        assertThat(cols[enrichedHeaders.indexOf("smbModelU")].toDouble()).isWithin(1e-9).of(0.0)
+    }
+
+    @Test
+    fun `the new column is added last so existing column indexes do not move`() {
+        assertThat(SmbTrainingRowBuffer.ADDED_COLUMN_NAMES.last()).isEqualTo("smbMpcRequestedU")
+        assertThat(enrichedHeaders.indexOf("smbModelU")).isEqualTo(legacyHeaders.size)
+        assertThat(enrichedHeaders.indexOf("bgRealisedAfter")).isEqualTo(legacyHeaders.size + 4)
     }
 
     @Test
@@ -151,9 +209,23 @@ class SmbTrainingRowBufferTest {
         val buffer = SmbTrainingRowBuffer()
         val t0 = 6_000_000L
         buffer.enqueue(timestampMs = t0, valuesPrefix = legacyCols.joinToString(","))
-        buffer.stampOrigin(tickKey = t0, smbModelU = 0.10, smbFloorU = null, bindingStage = "SMB_EXECUTOR", originOwner = "A")
+        buffer.stampOrigin(
+            tickKey = t0,
+            smbModelU = 0.10,
+            smbFloorU = null,
+            bindingStage = "SMB_EXECUTOR",
+            originOwner = "A",
+            smbMpcRequestedU = null,
+        )
         buffer.enqueue(timestampMs = t0 + 300_000, valuesPrefix = legacyCols.joinToString(","))
-        buffer.stampOrigin(tickKey = t0 + 300_000, smbModelU = 0.20, smbFloorU = null, bindingStage = "PKPD_GUARD", originOwner = "B")
+        buffer.stampOrigin(
+            tickKey = t0 + 300_000,
+            smbModelU = 0.20,
+            smbFloorU = null,
+            bindingStage = "PKPD_GUARD",
+            originOwner = "B",
+            smbMpcRequestedU = null,
+        )
 
         val rows = buffer.drainWritableRows(t0 + 300_000 + SmbTrainingRowBuffer.OUTCOME_HORIZON_MAX_MS + 1)
         assertThat(rows).hasSize(2)
@@ -168,7 +240,14 @@ class SmbTrainingRowBufferTest {
         // The tick at t0 queues a row but leaves before the export point, so it stays unstamped.
         buffer.enqueue(timestampMs = t0, valuesPrefix = legacyCols.joinToString(","))
         // The next tick queues nothing yet reaches the export point.
-        buffer.stampOrigin(tickKey = t0 + 300_000, smbModelU = 9.99, smbFloorU = 9.99, bindingStage = "OTHER", originOwner = "OTHER_TICK")
+        buffer.stampOrigin(
+            tickKey = t0 + 300_000,
+            smbModelU = 9.99,
+            smbFloorU = 9.99,
+            bindingStage = "OTHER",
+            originOwner = "OTHER_TICK",
+            smbMpcRequestedU = 9.99,
+        )
 
         val cols = buffer.drainWritableRows(t0 + SmbTrainingRowBuffer.OUTCOME_HORIZON_MAX_MS + 1)
             .single()

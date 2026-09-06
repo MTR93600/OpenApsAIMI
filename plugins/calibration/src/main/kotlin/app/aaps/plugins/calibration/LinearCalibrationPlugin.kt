@@ -27,8 +27,10 @@ import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventCalibrationChanged
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.icons.IcCalibration
 import app.aaps.plugins.calibration.compose.CalibrationComposeContent
+import app.aaps.plugins.calibration.keys.CalibrationLongKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -47,7 +49,8 @@ class LinearCalibrationPlugin @Inject constructor(
     private val persistenceLayer: PersistenceLayer,
     private val notificationManager: NotificationManager,
     private val glucoseStatusProvider: GlucoseStatusProvider,
-    private val rxBus: RxBus
+    private val rxBus: RxBus,
+    private val preferences: Preferences
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.CALIBRATION)
@@ -65,9 +68,13 @@ class LinearCalibrationPlugin @Inject constructor(
     @Volatile
     private var lastGapScanAt: Long = 0L
 
-    /** Break the user was already told about, so the same one is not reported again. */
+    /** Break the user was already told about, so the same one is not reported again this session. */
     @Volatile
     private var lastNotifiedGapAt: Long = 0L
+
+    init {
+        preferences.registerPreferences(CalibrationLongKey::class.java)
+    }
 
     override suspend fun onStart() {
         super.onStart()
@@ -233,9 +240,10 @@ class LinearCalibrationPlugin @Inject constructor(
             gapThresholdMs = T.mins(GAP_THRESHOLD_MIN).msecs(),
             notBefore = sessionStart
         ) ?: return
-        // The same break is found again on every scan until the user acts on it. Asking once is
-        // enough; a restart of AAPS asks again, which is the honest cost of keeping this in memory.
+        // The same break is found again on every scan. Asking once per session is enough.
+        // If the user said this is not a new sensor, that answer is kept across restarts.
         if (detectedAt == lastNotifiedGapAt) return
+        if (detectedAt == preferences.get(CalibrationLongKey.IgnoredSensorGapAt)) return
 
         val nearby = persistenceLayer.getTherapyEventDataFromToTime(
             from = detectedAt - SENSOR_CHANGE_PROXIMITY_MS,
@@ -251,6 +259,9 @@ class LinearCalibrationPlugin @Inject constructor(
             actions = listOf(
                 NotificationAction(R.string.sensor_change_detected_action) {
                     runBlocking { insertSensorChange(detectedAt) }
+                },
+                NotificationAction(R.string.sensor_change_detected_ignore) {
+                    preferences.put(CalibrationLongKey.IgnoredSensorGapAt, detectedAt)
                 }
             )
         )

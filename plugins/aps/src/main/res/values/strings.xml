@@ -491,7 +491,7 @@
     <string name="oaps_aimi_HIGHBG_interval_title">High BG SMB Interval</string>
     <string name="openapsaimi_highBG_maxsmb_summary">Max SMB value when BG is above 120</string>
     <string name="openapsaimi_highBG_maxsmb_title">Max SMB High BG</string>
-    <string name="OApsAIMI_Enable_night_title">Night Mode (SMB/2)</string>
+    <string name="OApsAIMI_Enable_night_title">Night mode: shorter SMB interval at 23:00</string>
 
     <!-- Learners Section -->
     <string name="oaps_aimi_learners_title">🎓 Learners</string>

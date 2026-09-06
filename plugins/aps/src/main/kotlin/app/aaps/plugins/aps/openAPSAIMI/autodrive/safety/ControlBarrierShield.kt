@@ -59,6 +59,21 @@ class ControlBarrierShield @Inject constructor(
         val safeU: Double?,
         val siMetabolic: Double,
         val fullySuspended: Boolean,
+        /**
+         * Whether the sensitivity handed to the barrier was the **dynamic** ISF.
+         *
+         * Read this before reading anything else about the anchor. The comment on [enforce] used to
+         * promise that `safetySi` was anchored on the profile ISF, so that a learner able to lower
+         * sensitivity could not loosen the barrier. That promise is not kept today: the only
+         * production caller passes `profile.sens`, which is the dynamic ISF, so the "anchor" and the
+         * value it is supposed to protect against are the same number. On the 2026-09-05 night
+         * `cbf_profile_isf_mgdl`, `profile_isf_mgdl` and `command_isf_mgdl` were equal on 281 of 281
+         * ticks, and that shared value moved from 28.2 to 62.4 in ten minutes.
+         *
+         * `true` here means "the number below carries no independent information". It changes
+         * nothing in the arithmetic; it only makes the hole visible from the export.
+         */
+        val anchorIsDynamicIsf: Boolean,
     )
 
     /** Set on every [enforce] call. */
@@ -82,6 +97,16 @@ class ControlBarrierShield @Inject constructor(
      *   barrier a different number from the one the controller optimised against, without a second
      *   sensitivity field in the domain model — and without a `copy()` re-running the state's `init`
      *   checks on the dosing path. `null` falls back to `state.estimatedSI`.
+     * @param siMetabolicOverride Coefficient to use instead of deriving one from [safetySi], or
+     *   `null` for the normal path. It exists for the unfloored counterfactual described in
+     *   `AutodriveEngine.recordCoefficientShadow`: expressing that counterfactual as a sensitivity
+     *   was algebraically impossible, because whatever sensitivity is passed in goes back through
+     *   `InsulinActionModel.controlCoefficient`, which re-applies the very floor being measured.
+     *   Non-finite or non-positive values are ignored, so a bad shadow can never widen the barrier.
+     * @param anchorIsDynamicIsf What the caller knows about the sensitivity it just handed over:
+     *   `true` when it is the dynamic ISF, `false` when it is an independent profile block. Recorded
+     *   in [Diagnostics] only, never used in the arithmetic. Defaults to `true` because that is what
+     *   production passes today.
      */
     fun enforce(
         rawCommand: AutoDriveCommand,
@@ -94,6 +119,8 @@ class ControlBarrierShield @Inject constructor(
          * Used only to keep the acceleration memory one-per-observation — see [lastBgVelocity].
          */
         observationId: Long = 0L,
+        siMetabolicOverride: Double? = null,
+        anchorIsDynamicIsf: Boolean = true,
     ): AutoDriveCommand {
         
         // --- 1. Définition de la distance à la zone de danger, h(x) ---
@@ -123,13 +150,27 @@ class ControlBarrierShield @Inject constructor(
         // sait baisser la sensibilité sait donc desserrer cette barrière — c'est vrai du
         // multiplicateur d'agressivité de `PkPdIntegration` comme d'un futur learner.
         //
-        // `safetySi` est ancré sur l'ISF du profil et pris comme le plus restrictif des deux (voir
-        // `AutodriveEngine.profileAnchoredSafetySi`). Le repli sur `estimatedSI` conserve le
-        // comportement d'avant pour les états construits hors du moteur.
-        val siMetabolic = InsulinActionModel.controlCoefficient(
-            isfMgdlPerU = InsulinActionModel.isfFromStateSi(safetySi ?: state.estimatedSI),
-            tauMin = InsulinActionModel.MPC_TAU_MIN,
-        )
+        // ⚠️ `safetySi` n'est PAS une ancre indépendante aujourd'hui.
+        //
+        // `AutodriveEngine.profileAnchoredSafetySi` prend bien le plus restrictif des deux valeurs,
+        // mais la seule valeur "profil" qu'on lui passe en production est `profile.sens`, c'est-à-dire
+        // l'ISF **dynamique** — le même nombre que les learners font bouger. La protection annoncée
+        // ("tout ce qui sait baisser la sensibilité sait desserrer cette barrière, donc on l'ancre au
+        // profil") n'est donc pas en place: mesuré sur la nuit du 2026-09-05, l'ancre était égale à
+        // l'ISF commandé sur 281 ticks sur 281, et passait de 28,2 à 62,4 en dix minutes.
+        // Le drapeau [Diagnostics.anchorIsDynamicIsf] rend ce fait lisible dans l'export. Changer
+        // l'ancre changerait les doses et demande un rejeu, donc ce n'est pas fait ici.
+        //
+        // Le repli sur `estimatedSI` conserve le comportement d'avant pour les états construits hors
+        // du moteur.
+        //
+        // `siMetabolicOverride` court-circuite ce calcul pour le contrefactuel sans plancher: repasser
+        // par `controlCoefficient` y réappliquerait le plancher qu'on cherche justement à mesurer.
+        val siMetabolic = siMetabolicOverride?.takeIf { it.isFinite() && it > 0.0 }
+            ?: InsulinActionModel.controlCoefficient(
+                isfMgdlPerU = InsulinActionModel.isfFromStateSi(safetySi ?: state.estimatedSI),
+                tauMin = InsulinActionModel.MPC_TAU_MIN,
+            )
         val lfh = - p1 * (state.bg - 100.0) - (siMetabolic * state.iob * state.bg) + state.estimatedRa
 
         // Lie Derivative L_g(h) : Impact de l'action de contrôle (Dose_u)
@@ -225,6 +266,7 @@ class ControlBarrierShield @Inject constructor(
             safeU = diagnosticSafeU,
             siMetabolic = siMetabolic,
             fullySuspended = diagnosticSafeU != null && diagnosticSafeU <= 0.0,
+            anchorIsDynamicIsf = anchorIsDynamicIsf,
         )
 
         var (finalTbr, finalSmb) = if (systemEvolution >= safetyBoundary) {

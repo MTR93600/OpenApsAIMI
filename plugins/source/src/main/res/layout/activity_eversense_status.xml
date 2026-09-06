@@ -74,6 +74,12 @@
             android:layout_marginTop="16dp"
             android:text="@string/eversense_information_connected" />
 
+        <Button android:id="@+id/eversense_btn_change_transmitter"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/eversense_change_transmitter" />
+
         <Button android:id="@+id/eversense_btn_sync"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

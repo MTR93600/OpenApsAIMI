@@ -8,6 +8,7 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.nsclient.NSSettingsStatus
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.interfaces.overview.OverviewData
+import app.aaps.core.interfaces.profile.Profile
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -50,7 +51,20 @@ class AimiDiagnosticsManager(
         }
     }
 
-    fun generateReport(userMessage: String): String {
+    /**
+     * Builds the support report.
+     *
+     * @param activeProfile the profile the loop is really running, from `ProfileFunction.getProfile()`.
+     *   Pass it whenever it can be read. Without it the report only shows the `LocalProfile_*`
+     *   preferences, which are the profile **editor's** content and can differ from what runs: on the
+     *   2026-09-06 package they read 70 / 30 mg/dL per U while the loop was running 120 / 50.
+     * @param activeProfileName name of that profile, when known.
+     */
+    fun generateReport(
+        userMessage: String,
+        activeProfile: Profile? = null,
+        activeProfileName: String? = null,
+    ): String {
         val sb = StringBuilder()
         val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
 
@@ -99,8 +113,15 @@ class AimiDiagnosticsManager(
         val nsEnabled = preferences.get(app.aaps.core.keys.BooleanKey.NsClientUploadData)
         sb.append("Upload Enabled: $nsEnabled\n\n")
 
-        // 4. AIMI Core Preferences
+        // 4. The profile the loop is really running
+        sb.append("[ACTIVE PROFILE]\n")
+        appendActiveProfile(sb, activeProfile, activeProfileName)
+        sb.append("\n")
+
+        // 5. AIMI Core Preferences
         sb.append("[AIMI PREFERENCES]\n")
+        sb.append("Note: the LocalProfile_* keys below are the profile editor's content.\n")
+        sb.append("They are not always what the loop runs. See [ACTIVE PROFILE] above.\n")
         val prefs = context.getSharedPreferences(context.packageName + "_preferences", Context.MODE_PRIVATE)
         val allPrefs = prefs.all
         
@@ -131,7 +152,7 @@ class AimiDiagnosticsManager(
         }
         sb.append("\n")
 
-        // 5. Statistics (Simulé ou récupéré si dispo)
+        // 6. Statistics (Simulé ou récupéré si dispo)
         // Note: Accéder aux vraies stats TDD/TIR nécessite des injections complexes (OverviewData/StatsProvider).
         // Pour cette version V1, on met un placeholder ou on essaie de lire des prefs cachées si elles existent.
         sb.append("[VITAL STATS]\n")
@@ -140,5 +161,43 @@ class AimiDiagnosticsManager(
         sb.append("(Stats deep analysis requires DB access - available in V2)\n")
 
         return sb.toString()
+    }
+
+    /**
+     * Writes the running profile, block by block, in mg/dL per U so no unit conversion can hide.
+     *
+     * Reads the same accessors the loop reads, so what is printed here is what the engine was
+     * handed. A null profile is stated as such instead of being left out: an absent section would
+     * read as "no profile problem", which is the mistake this whole section exists to stop.
+     */
+    private fun appendActiveProfile(sb: StringBuilder, profile: Profile?, name: String?) {
+        if (profile == null) {
+            sb.append("Not available when the report was built.\n")
+            return
+        }
+        sb.append("Name: ").append(name ?: "unknown").append('\n')
+        sb.append("Display units: ").append(profile.units).append('\n')
+        sb.append("Percentage: ").append(profile.percentage).append("%\n")
+        sb.append("Timeshift: ").append(profile.timeshift).append(" h\n")
+        appendBlocks(sb, "ISF (mg/dL per U)", profile.getIsfsMgdlValues())
+        appendBlocks(sb, "IC (g per U)", profile.getIcsValues())
+        appendBlocks(sb, "Basal (U/h)", profile.getBasalValues())
+        appendBlocks(sb, "Target (mg/dL)", profile.getSingleTargetsMgdl())
+    }
+
+    /** One line per quantity: every block as `hh:mm value`, in the profile's own order. */
+    private fun appendBlocks(sb: StringBuilder, label: String, values: Array<Profile.ProfileValue>) {
+        sb.append(label).append(": ")
+        if (values.isEmpty()) {
+            sb.append("none\n")
+            return
+        }
+        values.forEachIndexed { index, block ->
+            if (index > 0) sb.append(", ")
+            val hours = block.timeAsSeconds / 3600
+            val minutes = (block.timeAsSeconds % 3600) / 60
+            sb.append(String.format(Locale.US, "%02d:%02d %.2f", hours, minutes, block.value))
+        }
+        sb.append('\n')
     }
 }

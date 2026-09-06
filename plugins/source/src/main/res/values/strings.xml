@@ -416,6 +416,9 @@
     <string name="eversense_scan_title">Select Eversense transmitter</string>
     <string name="eversense_scan_cancel">Cancel</string>
     <string name="eversense_scan_unknown_device">Unknown device</string>
+    <string name="eversense_change_transmitter">Change transmitter</string>
+    <string name="eversense_change_transmitter_confirm">Forget this transmitter and look for a new one? You will then pick the new transmitter from the scan results.</string>
+    <string name="eversense_disconnect_confirm">Disconnect from the transmitter? The app will also forget it, so you will pick it again from the scan results next time you connect.</string>
     <!-- Calibration activity -->
     <string name="eversense_calibration_ready">Ready to calibrate</string>
     <string name="eversense_calibration_status">Calibration status</string>

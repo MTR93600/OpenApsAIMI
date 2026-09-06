@@ -289,7 +289,12 @@ enum class BooleanKey(
     OApsAIMIEnableStepsFromWatch("count_steps_watch", false),
     OApsAIMIpregnancy("key_use_AimiPregnancy",false),
     OApsAIMIforcelimits("key_use_AimiForceLimits",false),
-    OApsAIMInight("OApsAIMI_Enable_night",false),
+    OApsAIMInight(
+        "OApsAIMI_Enable_night",
+        false,
+        titleResId = R.string.pref_title_oaps_aimi_night_mode,
+        summaryResId = R.string.pref_summary_oaps_aimi_night_mode,
+    ),
     OApsAIMIhoneymoon("key_use_Aimi_honeymoon",false),
     OApsxdriponeminute(key = "key_use_Aimi_xdripOM",defaultValue = false),
     OApsAIMIT3cAdaptiveBasalEnabled("key_use_aimi_t3c_adaptive_basal", true),

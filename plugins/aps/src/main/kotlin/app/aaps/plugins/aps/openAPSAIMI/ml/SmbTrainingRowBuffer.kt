@@ -11,7 +11,7 @@ import java.util.Locale
  * zero, so the model learns to copy the safety net roughly one time in two.
  *
  * This class does not change the label, the training filter or the model input vector. It only
- * carries four origin fields plus one delayed outcome field to the end of each CSV row, so the
+ * carries five origin fields plus one delayed outcome field to the end of each CSV row, so the
  * question can be answered offline.
  *
  * Two things happen with a delay, so a row cannot be written at the moment it is built:
@@ -41,6 +41,8 @@ internal class SmbTrainingRowBuffer(
         var smbFloorU: Double? = null,
         var bindingStage: String? = null,
         var originOwner: String? = null,
+        /** Solver request before the control barrier, in U. `null` means unknown, never zero. */
+        var smbMpcRequestedU: Double? = null,
         var originStamped: Boolean = false,
         var bgRealisedAfter: Double? = null,
     )
@@ -55,7 +57,7 @@ internal class SmbTrainingRowBuffer(
     }
 
     /**
-     * Stamps the four origin fields on the row queued by the tick [tickKey].
+     * Stamps the five origin fields on the row queued by the tick [tickKey].
      *
      * Called at the end of the tick, from the single point every export path goes through. The match
      * is on the tick key and not on "the newest unstamped row": some ticks reach the export without
@@ -70,12 +72,14 @@ internal class SmbTrainingRowBuffer(
         smbFloorU: Double?,
         bindingStage: String?,
         originOwner: String?,
+        smbMpcRequestedU: Double?,
     ) {
         val row = pending.lastOrNull { it.timestampMs == tickKey && !it.originStamped } ?: return
         row.smbModelU = smbModelU
         row.smbFloorU = smbFloorU
         row.bindingStage = bindingStage
         row.originOwner = originOwner
+        row.smbMpcRequestedU = smbMpcRequestedU
         row.originStamped = true
     }
 
@@ -119,14 +123,15 @@ internal class SmbTrainingRowBuffer(
     @Synchronized
     fun pendingCount(): Int = pending.size
 
-    /** Renders one row: the original prefix, then the five new fields, empty when unknown. */
+    /** Renders one row: the original prefix, then the six new fields, empty when unknown. */
     internal fun render(row: PendingRow): String =
         row.valuesPrefix +
             "," + formatUnits(row.smbModelU) +
             "," + formatUnits(row.smbFloorU) +
             "," + formatText(row.bindingStage) +
             "," + formatText(row.originOwner) +
-            "," + formatGlucose(row.bgRealisedAfter)
+            "," + formatGlucose(row.bgRealisedAfter) +
+            "," + formatUnits(row.smbMpcRequestedU)
 
     private fun formatUnits(value: Double?): String =
         value?.takeIf { it.isFinite() }?.let { String.format(Locale.US, "%.4f", it) } ?: ""
@@ -147,6 +152,9 @@ internal class SmbTrainingRowBuffer(
             "smbBindingStage",
             "smbOriginOwner",
             "bgRealisedAfter",
+            // Added last on purpose: a new column at the end leaves every existing column index
+            // untouched, so an older parser reads the same cells it always did.
+            "smbMpcRequestedU",
         )
 
         /** Delay after which a tick's outcome is considered observable. Same value as the basal head. */

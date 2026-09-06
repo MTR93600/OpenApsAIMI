@@ -11,10 +11,12 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
+import app.aaps.plugins.dexcomoneplus.session.OnePlusMacArbiter
 import app.aaps.shared.tests.SharedPreferencesMock
 import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
@@ -56,6 +58,13 @@ class DexcomOnePlusPromotionWarmupSyncTest : TestBase() {
         )
     }
 
+    /** The driver instances and their MAC claims are process-wide — none of it may travel to the next test. */
+    @AfterEach
+    fun tearDownDrivers() {
+        runCatching { OnePlusCgmDrivers.select(useReal = false) }
+        OnePlusMacArbiter.reset()
+    }
+
     /** Pokes state a real staging session reaches only through BLE, which this test does not run. */
     private fun setPrivate(name: String, value: Any?) {
         DexcomOnePlusPlugin::class.java.getDeclaredField(name).apply { isAccessible = true }.set(plugin, value)
@@ -83,6 +92,33 @@ class DexcomOnePlusPromotionWarmupSyncTest : TestBase() {
         // Production must show that — not the stale READY left over from the sensor that was just
         // retired (in the field this stale phase is what leaves the Status screen frozen).
         assertThat(plugin.warmup.value.phase).isEqualTo(OnePlusWarmupState.Phase.IDLE)
+    }
+
+    /**
+     * Before this fix, `OnePlusCgmDrivers.default()` kept handing out the OLD (retired) production
+     * instance for the rest of the session — a bare flag flip (`stagingPublishesToLoop`) inside the
+     * plugin routed glucose to the loop, but the registry itself never learned about the swap. Every
+     * reader that asks the registry directly instead of the plugin's own StateFlow — the Status and
+     * Warmup screens, and the reconnect watchdog's `armReconnectWatchdog` — kept watching the retired
+     * instance until an app restart. See docs/DEXCOM_ONEPLUS_DUAL_SENSOR_STAGING_PLAN.md.
+     */
+    @Test
+    fun `promotion swaps the registry so default() and the reconnect watchdog see the promoted driver`() = runTest {
+        OnePlusSensorStore(context, OnePlusCgmDrivers.STAGING_NAMESPACE)
+            .startSessionForSensor("AA:BB:CC:DD:EE:02", System.currentTimeMillis() - 60_000L, null)
+        setPrivate("stagingPresent", true)
+        setPrivate("stagingValidEgvCount", 6)
+        setPrivate("stagingLastValueMgdl", 120.0)
+        setPrivate("stagingLastValueAtMs", System.currentTimeMillis())
+        // Captured before the swap: after it, `OnePlusCgmDrivers.staging()` builds a fresh instance.
+        val stagingInstance = OnePlusCgmDrivers.staging()
+
+        val result = plugin.promoteStagingToProduction(allowEarly = true)
+
+        assertThat(result).isEqualTo(PromotionResult.Ok)
+        assertThat(OnePlusCgmDrivers.default()).isSameInstanceAs(stagingInstance)
+        // A later pre-soak must get its own instance, never the one that is now production.
+        assertThat(OnePlusCgmDrivers.staging()).isNotSameInstanceAs(stagingInstance)
     }
 
     companion object {

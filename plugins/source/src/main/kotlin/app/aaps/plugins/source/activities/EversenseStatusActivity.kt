@@ -50,6 +50,10 @@ class EversenseStatusActivity : AppCompatActivity(), EversenseWatcher {
             handleConnectTap()
         }
 
+        findViewById<Button>(R.id.eversense_btn_change_transmitter).setOnClickListener {
+            handleChangeTransmitterTap()
+        }
+
         findViewById<Button>(R.id.eversense_btn_sync).setOnClickListener {
             if (eversense.isConnected()) {
                 ioScope.launch { eversense.triggerFullSync(force = true) }
@@ -124,7 +128,7 @@ class EversenseStatusActivity : AppCompatActivity(), EversenseWatcher {
         if (eversense.isConnected()) {
             AlertDialog.Builder(this)
                 .setTitle(getString(R.string.eversense_scan_title))
-                .setMessage("Disconnect from transmitter?")
+                .setMessage(getString(R.string.eversense_disconnect_confirm))
                 .setPositiveButton("Disconnect") { _, _ ->
                     eversense.clearStoredDevice()
                     eversense.disconnect()
@@ -142,6 +146,26 @@ class EversenseStatusActivity : AppCompatActivity(), EversenseWatcher {
                 showDeviceSelectionDialog()
             }
         }
+    }
+
+    // Forgets the stored address of the paired transmitter and scans again. This is the way to
+    // move to a replacement transmitter: handleConnectTap() only opens the scan dialog when no
+    // address is stored, so with a stored address the app would keep trying the old transmitter
+    // forever. The address is cleared BEFORE the disconnect on purpose: scheduleReconnect() in
+    // EversenseGattCallback reads that address, and with it already gone it stops instead of
+    // scheduling a reconnect to the old transmitter that would race the new one.
+    private fun handleChangeTransmitterTap() {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.eversense_change_transmitter))
+            .setMessage(getString(R.string.eversense_change_transmitter_confirm))
+            .setPositiveButton(getString(R.string.eversense_change_transmitter)) { _, _ ->
+                eversense.clearStoredDevice()
+                if (eversense.isConnected()) eversense.disconnect()
+                updateStatus()
+                showDeviceSelectionDialog()
+            }
+            .setNegativeButton(getString(R.string.eversense_scan_cancel), null)
+            .show()
     }
 
     private fun showDeviceSelectionDialog() {

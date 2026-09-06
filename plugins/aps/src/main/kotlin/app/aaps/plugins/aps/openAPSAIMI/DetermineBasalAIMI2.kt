@@ -51,6 +51,7 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAutodriveBasalBridge
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cTrajectoryContext
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
+import app.aaps.plugins.aps.openAPSAIMI.ISF.CommandedIsf
 import app.aaps.plugins.aps.openAPSAIMI.ISF.ObservedSensitivityMeter
 import app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaCounterfactual
@@ -456,6 +457,13 @@ internal data class AimiDecisionContext(
         val estimated_ra_mgdl_per_min: Double? = null,
         /** Physiological ISF factor of the tick, bounds [0.85, 1.15]. Applied once since ADR 0007. */
         val physio_isf_factor: Double? = null,
+        /**
+         * Commanded sensitivity before the profile-relative floor, mg/dL per U.
+         *
+         * Next to `command_isf_mgdl` it says how much the floor moved this tick, which no exported
+         * field could say while the shadow witness was reading the already-floored value.
+         */
+        val isf_pre_floor_mgdl: Double? = null,
         /** Shadow: sensitivity an unconditional exit clamp relative to the profile would command. */
         val isf_profile_relative_shadow_mgdl: Double? = null,
         /** Shadow: true when that clamp would have changed the value. */
@@ -849,6 +857,7 @@ internal data class AimiDecisionContext(
             base.put("isf_trajectory_multiplier", baseline_state.isf_trajectory_multiplier ?: org.json.JSONObject.NULL)
             base.put("estimated_ra_mgdl_per_min", baseline_state.estimated_ra_mgdl_per_min ?: org.json.JSONObject.NULL)
             base.put("physio_isf_factor", baseline_state.physio_isf_factor ?: org.json.JSONObject.NULL)
+            base.put("isf_pre_floor_mgdl", baseline_state.isf_pre_floor_mgdl ?: org.json.JSONObject.NULL)
             base.put("isf_profile_relative_shadow_mgdl", baseline_state.isf_profile_relative_shadow_mgdl ?: org.json.JSONObject.NULL)
             base.put("isf_profile_relative_bound_hit", baseline_state.isf_profile_relative_bound_hit ?: org.json.JSONObject.NULL)
             base.put("sensitivity_ratio_r", baseline_state.sensitivity_ratio_r ?: org.json.JSONObject.NULL)
@@ -2241,6 +2250,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 isf_trajectory_multiplier = IsfSourceTelemetry.lastTrajectoryMultiplier,
                 estimated_ra_mgdl_per_min = runCatching { continuousStateEstimator.getLastRa() }.getOrNull(),
                 physio_isf_factor = IsfSourceTelemetry.lastPhysioIsfFactor,
+                isf_pre_floor_mgdl = CommandedIsf.lastPreFloorMgdlPerU,
                 isf_profile_relative_shadow_mgdl = IsfSourceTelemetry.lastProfileRelativeShadowMgdl,
                 isf_profile_relative_bound_hit = IsfSourceTelemetry.lastProfileRelativeBoundHit,
                 sensitivity_ratio_r = runCatching { sensitivityRatioEstimator.ratio }.getOrNull(),
@@ -5296,6 +5306,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             put("system_evolution", d.systemEvolution)
             put("si_metabolic", d.siMetabolic)
             put("fully_suspended", d.fullySuspended)
+            put("anchor_is_dynamic_isf", d.anchorIsDynamicIsf)
             d.safeU?.let { put("safe_u", it) }
         }
     }
@@ -5603,6 +5614,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 originOwner = "AutodriveV3",
                 modelOutputU = v3SmbModel,
                 mpcOutputU = v3SmbModel,
+                // Read here and not earlier: `lastMpcRawSmbU` is written inside `tick()`, exactly
+                // like the barrier fields read by `markHtrRaFloorForExport` a few lines above. Read
+                // before the call it would still hold the previous tick's request. Ticks that do
+                // not engage Autodrive never reach this line, so the field stays null there —
+                // "not known", which is what the barrier-zero case needs to be told apart from.
+                mpcRequestedU = autodriveEngine.lastMpcRawSmbU.takeIf { it.isFinite() },
                 tier = v3FloorTier,
                 smallPrebolusPrefU = smallPrebolusPref,
                 largePrebolusPrefU = largePrebolusPref,
@@ -9541,6 +9558,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 smbFloorU = bindingTrace.autodriveFloorU,
                 bindingStage = bindingTrace.bindingStage,
                 originOwner = bindingTrace.originOwner,
+                smbMpcRequestedU = bindingTrace.mpcRequestedU,
             )
         }
 

@@ -29,6 +29,18 @@ internal data class SmbBindingTrace(
     val finalOwner: String,
     val modelOutputU: Double?,
     val mpcOutputU: Double?,
+    /**
+     * What the solver asked for **before** the control barrier saw it, in U, or `null` when unknown.
+     *
+     * [modelOutputU] is read after the barrier, so a `0.000` there means either "the solver wanted
+     * nothing" or "the solver wanted a dose and the barrier removed it". Those two readings need
+     * opposite fixes. From 21:55 to 22:15 on 2026-09-05 the solver asked for 1.725, 1.350, 1.125,
+     * 1.575 and 1.575 U, the barrier permitted 0.000, and the trace exported a bare zero.
+     *
+     * `null` means "not known on this tick" and must never be read as zero. It stays `null` when the
+     * tick did not engage Autodrive, because then no solver ran.
+     */
+    val mpcRequestedU: Double?,
     val tier: String,
     val smallPrebolusPrefU: Double?,
     val largePrebolusPrefU: Double?,
@@ -78,6 +90,7 @@ internal data class SmbBindingTrace(
             put("stage_structure", "ORDERED_EVENTS_NOT_STRICTLY_CONTIGUOUS")
             putNullable("model_output_u", modelOutputU)
             putNullable("mpc_output_u", mpcOutputU)
+            putNullable("mpc_requested_u", mpcRequestedU)
             put("tier", tier)
             putNullable("small_prebolus_pref_u", smallPrebolusPrefU)
             putNullable("large_prebolus_pref_u", largePrebolusPrefU)
@@ -130,6 +143,8 @@ internal data class SmbBindingTrace(
         val finalOwner: String = "NONE",
         val modelOutputU: Double? = null,
         val mpcOutputU: Double? = null,
+        /** See [SmbBindingTrace.mpcRequestedU]. `null` until an engaged Autodrive tick fills it. */
+        val mpcRequestedU: Double? = null,
         val tier: String = "OFF",
         val smallPrebolusPrefU: Double? = null,
         val largePrebolusPrefU: Double? = null,
@@ -174,6 +189,7 @@ internal data class SmbBindingTrace(
                 finalOwner = finalOwner,
                 modelOutputU = modelOutputU.finiteOrNull(),
                 mpcOutputU = mpcOutputU.finiteOrNull(),
+                mpcRequestedU = mpcRequestedU.finiteOrNull(),
                 tier = tier,
                 smallPrebolusPrefU = smallPrebolusPrefU.finiteOrNull(),
                 largePrebolusPrefU = largePrebolusPrefU.finiteOrNull(),

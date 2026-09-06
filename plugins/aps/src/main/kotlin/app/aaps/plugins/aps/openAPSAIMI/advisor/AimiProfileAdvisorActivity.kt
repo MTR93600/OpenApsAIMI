@@ -36,6 +36,10 @@ import android.content.Intent
 import app.aaps.core.keys.StringKey
 import app.aaps.core.interfaces.maintenance.ImportExportPrefs
 import app.aaps.core.interfaces.protection.ExportPasswordDataStore
+import app.aaps.core.interfaces.logging.LTag
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.AimiTuningContext
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningContextApplySupport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningContextEngine
@@ -84,6 +88,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     @Inject lateinit var aapsLogger: app.aaps.core.interfaces.logging.AAPSLogger
     @Inject lateinit var importExportPrefs: ImportExportPrefs
     @Inject lateinit var exportPasswordDataStore: ExportPasswordDataStore
+    @Inject lateinit var aimiStorageHelper: AimiStorageHelper
     
     // NOT injected - created manually to avoid Dagger issues
     private lateinit var advisorService: AimiAdvisorService
@@ -490,13 +495,70 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             .show()
     }
 
+    companion object {
+
+        /**
+         * How many CSV rows the support package carries, newest last.
+         *
+         * About two days at the one minute loop rate, which matches the 24 hour window the decision
+         * log uses, with room for the delay `SmbTrainingRowBuffer` adds before a row is written.
+         */
+        private const val MAX_CSV_ROWS_IN_PACKAGE = 3000
+    }
+
+    /**
+     * Adds the tail of an AIMI CSV to the support package, header first.
+     *
+     * The tail, not the whole file: the corpus grows for ever and a support package must stay small
+     * enough to send. [MAX_CSV_ROWS_IN_PACKAGE] rows are about two days at the one minute loop rate
+     * the Libre 3 imposes, which covers the window the decision log itself covers.
+     *
+     * Rows are counted, not dated. The date column is written with the user's locale format, so
+     * parsing it back to filter on time would break on some devices; counting lines cannot.
+     *
+     * A missing or unreadable file is skipped in silence. The package is a best effort report, and
+     * failing to build it would leave the user with nothing to send.
+     */
+    private fun addCsvTail(out: ZipOutputStream, fileName: String) {
+        try {
+            val source = aimiStorageHelper.getAimiFile(fileName)
+            if (!source.exists() || !source.canRead()) {
+                aapsLogger.info(LTag.APS, "AIMI_DIAG: $fileName not found, not added to the package")
+                return
+            }
+            val lines = source.readLines(Charsets.UTF_8)
+            if (lines.isEmpty()) return
+            val header = lines.first()
+            val body = lines.drop(1).takeLast(MAX_CSV_ROWS_IN_PACKAGE)
+            out.putNextEntry(ZipEntry(fileName))
+            out.write((header + "\n").toByteArray(Charsets.UTF_8))
+            body.forEach { row -> out.write((row + "\n").toByteArray(Charsets.UTF_8)) }
+            out.closeEntry()
+            aapsLogger.info(
+                LTag.APS,
+                "AIMI_DIAG: added $fileName to the package (${body.size} rows of ${lines.size - 1})"
+            )
+        } catch (e: Exception) {
+            aapsLogger.warn(LTag.APS, "AIMI_DIAG: could not add $fileName: ${e.message}")
+        }
+    }
+
     private fun generateAndShareReport(issue: String) {
         android.widget.Toast.makeText(this, "Generating diagnostic report...", android.widget.Toast.LENGTH_SHORT).show()
         
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val diagManager = app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager(this@AimiProfileAdvisorActivity, preferences, aapsLogger)
-                val reportContent = diagManager.generateReport(issue)
+                // The running profile, read here because `getProfile()` suspends and this block is
+                // already a coroutine. Without it the report shows only the profile editor's
+                // preferences, which had drifted away from what the loop was running.
+                val runningProfile = runCatching { profileFunction.getProfile() }.getOrNull()
+                val runningProfileName = runCatching { profileFunction.getProfileName() }.getOrNull()
+                val reportContent = diagManager.generateReport(
+                    userMessage = issue,
+                    activeProfile = runningProfile,
+                    activeProfileName = runningProfileName,
+                )
                 val authority = "${packageName}.fileprovider"
                 
                 // Create a temporary ZIP file in cache
@@ -564,6 +626,14 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                         }
                         out.closeEntry()
                     }
+
+                    // 3. Add the SMB training corpus (CSV) - tail only
+                    //
+                    // Without it the origin columns written by `SmbTrainingRowBuffer` cannot be read
+                    // back at all: the package carried only the report and the decision log, so the
+                    // question "did the model decide this dose, or did a floor?" had no answer
+                    // outside the device.
+                    addCsvTail(out, "oapsaimiML2_records.csv")
                 }
 
                 if (zipFile.exists() && zipFile.length() > 0) {

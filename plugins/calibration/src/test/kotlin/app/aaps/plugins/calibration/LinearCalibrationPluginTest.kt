@@ -19,6 +19,8 @@ import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.calibration.keys.CalibrationLongKey
 import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
@@ -41,6 +43,7 @@ class LinearCalibrationPluginTest : TestBase() {
     @Mock lateinit var persistenceLayer: PersistenceLayer
     @Mock lateinit var notificationManager: NotificationManager
     @Mock lateinit var glucoseStatusProvider: GlucoseStatusProvider
+    @Mock lateinit var preferences: Preferences
 
     private lateinit var plugin: LinearCalibrationPlugin
 
@@ -58,8 +61,9 @@ class LinearCalibrationPluginTest : TestBase() {
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(emptyList())
         // Gap detection reads the stored readings, so every calibrate() touches this.
         whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(emptyList())
+        whenever(preferences.get(CalibrationLongKey.IgnoredSensorGapAt)).thenReturn(0L)
         plugin = LinearCalibrationPlugin(
-            aapsLogger, rh, dateUtil, persistenceLayer, notificationManager, glucoseStatusProvider, rxBus
+            aapsLogger, rh, dateUtil, persistenceLayer, notificationManager, glucoseStatusProvider, rxBus, preferences
         )
     }
 
@@ -295,10 +299,58 @@ class LinearCalibrationPluginTest : TestBase() {
             actionsCaptor.capture(),
             anyOrNull()
         )
-        actionsCaptor.firstValue.single().action.invoke()
+        actionsCaptor.firstValue.first().action.invoke()
 
         verify(persistenceLayer).insertPumpTherapyEventIfNewByTimestamp(
             any(), any(), any(), any(), anyOrNull(), any()
+        )
+    }
+
+    @Test
+    fun calibrate_gapDetected_offersIgnoreWithoutLogging() = runTest {
+        whenever(rh.gs(any<Int>(), any())).thenReturn("Possible sensor change")
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+
+        val actionsCaptor = argumentCaptor<List<NotificationAction>>()
+        verify(notificationManager).post(
+            any<NotificationId>(),
+            any<String>(),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            actionsCaptor.capture(),
+            anyOrNull()
+        )
+        assertThat(actionsCaptor.firstValue).hasSize(2)
+
+        actionsCaptor.firstValue[1].action.invoke()
+        verify(persistenceLayer, never()).insertPumpTherapyEventIfNewByTimestamp(
+            any(), any(), any(), any(), anyOrNull(), any()
+        )
+        verify(preferences).put(CalibrationLongKey.IgnoredSensorGapAt, now - T.mins(30).msecs())
+    }
+
+    @Test
+    fun calibrate_ignoredGap_doesNotRenotifyAfterRestart() = runTest {
+        whenever(rh.gs(any<Int>(), any())).thenReturn("Possible sensor change")
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
+        val ignoredAt = now - T.mins(30).msecs()
+        whenever(preferences.get(CalibrationLongKey.IgnoredSensorGapAt)).thenReturn(ignoredAt)
+
+        val restarted = LinearCalibrationPlugin(
+            aapsLogger, rh, dateUtil, persistenceLayer, notificationManager, glucoseStatusProvider, rxBus, preferences
+        )
+        restarted.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+
+        verify(notificationManager, never()).post(
+            any<NotificationId>(),
+            any<String>(),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            any<List<NotificationAction>>(),
+            anyOrNull()
         )
     }
 

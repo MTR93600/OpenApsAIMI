@@ -140,9 +140,12 @@ private fun DexcomOnePlusStatusScreen(
     onCancelStaging: () -> Unit,
     onPromote: suspend (Boolean) -> PromotionResult,
 ) {
-    val driver = remember { OnePlusCgmDrivers.default() }
-    var state by remember { mutableStateOf(driver.warmupState()) }
-    var sessionUp by remember { mutableStateOf(driver.isSessionUp()) }
+    // Not `remember`-ed: a promotion swaps which driver instance `default()` hands out (see
+    // OnePlusCgmDrivers.promoteStagingInstance), and a `remember`-ed reference kept polling the
+    // retired instance for the rest of this screen's life, showing a status stuck at whatever
+    // phase it had before the promotion.
+    var state by remember { mutableStateOf(OnePlusCgmDrivers.default().warmupState()) }
+    var sessionUp by remember { mutableStateOf(OnePlusCgmDrivers.default().isSessionUp()) }
     var newestGlucose by remember { mutableStateOf<GV?>(null) }
     val stagingState by stagingStateFlow.collectAsState()
     val stagingEvidence by stagingEvidenceFlow.collectAsState()
@@ -169,6 +172,7 @@ private fun DexcomOnePlusStatusScreen(
 
     LaunchedEffect(Unit) {
         while (true) {
+            val driver = OnePlusCgmDrivers.default()
             state = driver.warmupState()
             sessionUp = driver.isSessionUp()
             now = System.currentTimeMillis()
