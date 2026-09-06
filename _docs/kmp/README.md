@@ -7,8 +7,8 @@
 
 ## Document à exécuter
 
-**Lots concrets aujourd'hui :** [`docs/kmp-migration/DELTA-remaining.md`](../kmp-migration/DELTA-remaining.md)  
-**Snapshot vérifié :** [`docs/kmp-migration/STATUS.md`](../kmp-migration/STATUS.md)
+**Lots concrets aujourd'hui :** [`docs/kmp-migration/DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md)  
+**Snapshot vérifié :** [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md)
 (tip `6f66e63565`, **P0.1 DONE** via PR #71 ; l'ancien tip `f237f2d3d0` / PR #69 n'est plus HEAD).
 
 [`AIMI_KMP_EXECUTION_PLAN.md`](AIMI_KMP_EXECUTION_PLAN.md) reste la carte W1–W8 / One+ / Libre 3,
