@@ -47,4 +47,14 @@ interface Calibration {
      * re-evaluates everything. This is a UX hint, not a contract.
      */
     suspend fun checkPreconditions(): AddEntryResult
+
+    /**
+     * Current [CalibrationStatus] for the running sensor session, evaluated now.
+     *
+     * Meant for feedback right after [addEntry] returns [AddEntryResult.Accepted]: an accepted
+     * entry can still leave the sensor value unchanged (e.g. the session's first entry, with
+     * [CalibrationStatus.NeedMoreEntries]), and the caller needs to say so instead of going quiet.
+     * The default plugin has nothing to fit and always returns [CalibrationStatus.Applied].
+     */
+    suspend fun status(): CalibrationStatus
 }

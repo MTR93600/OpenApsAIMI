@@ -11,6 +11,7 @@ import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.GlucoseStatusSMB
 import app.aaps.core.interfaces.calibration.AddEntryResult
 import app.aaps.core.interfaces.calibration.CalibrationContext
+import app.aaps.core.interfaces.calibration.CalibrationStatus
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.notifications.NotificationAction
@@ -502,6 +503,58 @@ class LinearCalibrationPluginTest : TestBase() {
         whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), eq(false)))
             .thenReturn(listOf(bgReading(now, 145.0)))
         assertThat(plugin.checkPreconditions()).isEqualTo(AddEntryResult.Accepted)
+    }
+
+    // ------------ status() ------------
+
+    @Test
+    fun status_noSession_returnsNoSession() = runTest {
+        whenever(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)).thenReturn(null)
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.NoSession)
+    }
+
+    @Test
+    fun status_inWarmUp_returnsWarmUpWithEndsAt() = runTest {
+        val sessionStart = now - T.hours(1).msecs()
+        whenever(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)).thenReturn(sensorChange(sessionStart))
+        val result = plugin.status()
+        assertThat(result).isEqualTo(CalibrationStatus.WarmUp(sessionStart + T.hours(2).msecs()))
+    }
+
+    @Test
+    fun status_oneEntry_returnsNeedMoreEntriesWithCount() = runTest {
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any()))
+            .thenReturn(listOf(entry(sensor = 100.0, fs = 110.0, ageDays = 1L)))
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.NeedMoreEntries(1))
+    }
+
+    @Test
+    fun status_slopeOutOfRange_returnsUnsafeFit() = runTest {
+        // Same fit as calibrate_slopeOutOfRange_returnsIdentity: slope 2.0 is outside [0.55, 1.6]
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(
+                entry(sensor = 100.0, fs = 200.0, ageDays = 1L),
+                entry(sensor = 200.0, fs = 400.0, ageDays = 1L)
+            )
+        )
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.UnsafeFit)
+    }
+
+    @Test
+    fun status_clusteredEntries_returnsAppliedOffsetOnly() = runTest {
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(
+                entry(sensor = 140.0, fs = 143.0, ageDays = 0L),
+                entry(sensor = 141.0, fs = 146.0, ageDays = 0L)
+            )
+        )
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.AppliedOffsetOnly)
+    }
+
+    @Test
+    fun status_validFit_returnsApplied() = runTest {
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.Applied)
     }
 
     // ------------ helpers ------------

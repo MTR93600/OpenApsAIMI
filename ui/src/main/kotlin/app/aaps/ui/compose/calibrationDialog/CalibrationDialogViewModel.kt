@@ -12,6 +12,7 @@ import app.aaps.core.data.ui.ConfirmationLine
 import app.aaps.core.data.ui.ConfirmationRole
 import app.aaps.core.data.ui.confirmationLines
 import app.aaps.core.interfaces.calibration.AddEntryResult
+import app.aaps.core.interfaces.calibration.CalibrationStatus
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.logging.UserEntryLogger
@@ -55,7 +56,13 @@ class CalibrationDialogViewModel @Inject constructor(
     val uiState: StateFlow<CalibrationDialogUiState> = _uiState.asStateFlow()
 
     sealed class SideEffect {
-        data object EntryAccepted : SideEffect()
+
+        /**
+         * @param message set when the entry was saved but did not yet change the sensor value
+         *   (e.g. the session's first entry, or a fit outside the safe range) — the dialog shows
+         *   it before navigating back, so the user is not left thinking nothing happened.
+         */
+        data class EntryAccepted(val message: String?) : SideEffect()
         data class EntryRejected(val message: String) : SideEffect()
     }
 
@@ -154,7 +161,8 @@ class CalibrationDialogViewModel @Inject constructor(
                     AddEntryResult.Accepted    -> {
                         uel.log(action = Action.CALIBRATION, source = Sources.CalibrationDialog, value = unitValue)
                         if (xDripSource.isEnabled()) xDripBroadcast.sendCalibration(state.bg)
-                        _sideEffect.emit(SideEffect.EntryAccepted)
+                        val message = notYetEffectiveMessage(activePlugin.activeCalibration.status())
+                        _sideEffect.emit(SideEffect.EntryAccepted(message))
                     }
 
                     is AddEntryResult.Rejected -> {
@@ -172,6 +180,14 @@ class CalibrationDialogViewModel @Inject constructor(
                 _uiState.update { it.copy(submitting = false) }
             }
         }
+    }
+
+    // NoSession/WarmUp are unreachable here: addEntry() already required a running, past-warm-up
+    // session for the entry to be Accepted in the first place.
+    private fun notYetEffectiveMessage(status: CalibrationStatus): String? = when (status) {
+        is CalibrationStatus.NeedMoreEntries -> rh.gs(R.string.cal_saved_need_more_entries, status.entryCount)
+        CalibrationStatus.UnsafeFit          -> rh.gs(R.string.cal_saved_unsafe_fit)
+        else                                  -> null
     }
 
     fun preconditionMessage(rejected: AddEntryResult.Rejected): String = when (rejected) {

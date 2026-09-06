@@ -70,7 +70,11 @@ fun CalibrationDialogScreen(
     LaunchedEffect(Unit) {
         viewModel.sideEffect.collect { effect ->
             when (effect) {
-                CalibrationDialogViewModel.SideEffect.EntryAccepted -> onNavigateBack()
+                is CalibrationDialogViewModel.SideEffect.EntryAccepted -> {
+                    effect.message?.let { snackbarHostState.showSnackbar(it) }
+                    onNavigateBack()
+                }
+
                 is CalibrationDialogViewModel.SideEffect.EntryRejected -> snackbarHostState.showSnackbar(effect.message)
             }
         }

@@ -5,6 +5,7 @@ import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.calibration.AddEntryResult
 import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.calibration.CalibrationContext
+import app.aaps.core.interfaces.calibration.CalibrationStatus
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
@@ -36,4 +37,6 @@ class NoCalibrationPlugin @Inject constructor(
     override suspend fun addEntry(bgMgdl: Double, timestamp: Long): AddEntryResult = AddEntryResult.Accepted
 
     override suspend fun checkPreconditions(): AddEntryResult = AddEntryResult.Accepted
+
+    override suspend fun status(): CalibrationStatus = CalibrationStatus.Applied
 }

@@ -334,6 +334,10 @@
     <string name="cal_precheck_delta_too_high">Glucose is changing too fast (Δ %1$s %3$s per 5 min, limit %2$s). Wait for stability.</string>
     <string name="cal_precheck_mark_sensor_change">Mark sensor change</string>
 
+    <!-- Calibration entry accepted, but the sensor value is not corrected yet -->
+    <string name="cal_saved_need_more_entries" comment="%1$d=number of valid fingerstick entries recorded so far for the current sensor session (always less than 2 when this shows)">Calibration saved. It will take effect once you add one more fingerstick entry for this sensor (currently %1$d).</string>
+    <string name="cal_saved_unsafe_fit">Calibration saved, but the calculated correction is outside the safe range, so it was not applied. Add another entry, or check your fingerstick value.</string>
+
     <!-- Afrezza Inhaled Insulin -->
     <string name="log_afrezza_dose">Log Afrezza Dose</string>
     <string name="afrezza_confirm_log">Log %1$dU Afrezza?</string>

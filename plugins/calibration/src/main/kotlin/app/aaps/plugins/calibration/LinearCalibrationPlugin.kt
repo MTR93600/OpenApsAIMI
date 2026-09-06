@@ -13,6 +13,7 @@ import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.interfaces.calibration.AddEntryResult
 import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.calibration.CalibrationContext
+import app.aaps.core.interfaces.calibration.CalibrationStatus
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.observeChanges
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
@@ -157,6 +158,23 @@ class LinearCalibrationPlugin @Inject constructor(
     }
 
     override suspend fun checkPreconditions(): AddEntryResult = checkPreconditionsAt(dateUtil.now())
+
+    override suspend fun status(): CalibrationStatus {
+        val now = dateUtil.now()
+        val sessionStart = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp
+            ?: return CalibrationStatus.NoSession
+        val warmUpEndsAt = sessionStart + T.hours(WARM_UP_HOURS).msecs()
+        if (now < warmUpEndsAt) return CalibrationStatus.WarmUp(warmUpEndsAt)
+
+        val entries = persistenceLayer.getValidCalibrationEntriesSince(sessionStart)
+        val fit = fitLinearCalibration(entries, now) ?: return CalibrationStatus.NeedMoreEntries(entries.size)
+        return when {
+            !fit.isApplicable                -> CalibrationStatus.UnsafeFit
+            fit.mode == FitMode.OffsetOnly    -> CalibrationStatus.AppliedOffsetOnly
+            fit.mode == FitMode.SlopeClamped  -> CalibrationStatus.AppliedSlopeClamped
+            else                              -> CalibrationStatus.Applied
+        }
+    }
 
     private suspend fun checkPreconditionsAt(timestamp: Long): AddEntryResult {
         val sessionStart = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp

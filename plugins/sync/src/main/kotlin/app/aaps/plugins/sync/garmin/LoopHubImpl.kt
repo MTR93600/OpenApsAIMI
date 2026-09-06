@@ -164,13 +164,35 @@ class LoopHubImpl @Inject constructor(
      * coincidentally match a raw row's own timestamp, so we match to the nearest overlay entry
      * within tolerance instead of requiring an exact key match. Rows with no overlay entry within
      * tolerance (older backfill history, or no overlay available at all) keep their raw value.
+     *
+     * For a re-gridded source (readings more frequent than the overlay's 5-minute slots, e.g. a
+     * 1-minute CGM like Libre 3), several consecutive raw rows land in the same overlay slot and
+     * would otherwise all get that slot's identical value. That flattens the glucose delta Garmin
+     * computes from consecutive rows to ~0 between them, with the whole 5-minute change instead
+     * dumped as a spike at the slot boundary. So consecutive rows sharing the same overlay slot are
+     * collapsed to a single row (the one closest to the slot's own timestamp), keeping one row per
+     * distinct value the watch would actually need to see.
      */
     override fun getGlucoseValues(from: Instant, ascending: Boolean): List<GV> = runBlocking {
         val raw = persistenceLayer.getBgReadingsDataFromTime(from.toEpochMilli(), ascending)
         val overlay = iobCobCalculator.ads.bucketedData.orEmpty()
             .filterNot { it.filledGap }
             .sortedBy { it.timestamp }
-        raw.map { gv -> nearestOverlay(overlay, gv.timestamp)?.let { gv.copy(value = it.recalculated) } ?: gv }
+        val result = mutableListOf<GV>()
+        var lastSlot: InMemoryGlucoseValue? = null
+        for (gv in raw) {
+            val slot = nearestOverlay(overlay, gv.timestamp)
+            if (slot != null && slot === lastSlot) {
+                val prev = result[result.lastIndex]
+                if (abs(gv.timestamp - slot.timestamp) < abs(prev.timestamp - slot.timestamp)) {
+                    result[result.lastIndex] = gv.copy(value = slot.recalculated)
+                }
+                continue
+            }
+            result.add(slot?.let { gv.copy(value = it.recalculated) } ?: gv)
+            lastSlot = slot
+        }
+        result
     }
 
     private fun nearestOverlay(overlay: List<InMemoryGlucoseValue>, timestamp: Long): InMemoryGlucoseValue? {
