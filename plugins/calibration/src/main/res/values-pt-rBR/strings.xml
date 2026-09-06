@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="calibration_shortname">CAL</string>
+    <string name="no_calibration_name">Sem calibração</string>
+    <string name="description_no_calibration">"Nenhum ajuste de calibração aplicado. Os valores do sensor são usados como estão. Use isto quando o sensor já estiver calibrado de fábrica e for preciso."</string>
+    <string name="linear_calibration_name">Calibração linear</string>
+    <string name="description_linear_calibration">"Ajuste de calibração linear por sensor (inclinação e desvio) calculado a partir das suas leituras capilares. As leituras recentes têm maior peso. O ajuste é aplicado após o início da sessão atual do sensor; as primeiras 2 horas são ignoradas para aquecimento."</string>
+    <string name="sensor_change_detected_text">Possível alteração do sensor detetada às %1$s. Marcar como novo sensor?</string>
+    <string name="sensor_change_detected_action">Marcar alteração do sensor</string>
+
+    <!-- Calibration management screen -->
+    <string name="cal_status_no_session">Registe uma alteração do sensor para ativar a calibração.</string>
+    <string name="cal_status_warmup">Aquecimento do sensor — calibração ativa após %1$s.</string>
+    <string name="cal_status_need_more_entries">São necessárias pelo menos 2 leituras capilares (atualmente %1$d).</string>
+    <string name="cal_status_unsafe_fit">Ajuste fora do intervalo seguro — calibração não aplicada.</string>
+    <string name="cal_status_applied">Calibração aplicada.</string>
+    <string name="cal_status_applied_offset_only">Calibração aplicada apenas por desvio (offset) — intervalo do sensor demasiado estreito para a inclinação.</string>
+    <string name="cal_status_applied_slope_clamped">Calibração aplicada — inclinação limitada ao intervalo seguro. Adicione mais leituras para flexibilizar.</string>
+    <string name="cal_slope_offset">Inclinação %1$.2f, correção de intervalo médio %2$s</string>
+    <string name="cal_session_started">Sessão iniciada: %1$s</string>
+    <string name="cal_mark_sensor_change_now">Registar alteração do sensor</string>
+    <string name="cal_add_calibration">Adicionar calibração</string>
+    <string name="cal_entries_header">Leituras capilares (%1$d)</string>
+    <string name="cal_no_entries">Ainda sem leituras capilares.</string>
+    <string name="cal_entry_pair">Capilar %1$s → sensor %2$s (Δ %3$s)</string>
+    <string name="cal_remove_entry_title">Remover leitura?</string>
+    <string name="cal_remove_entry_message">Isto irá invalidar a leitura. O ajuste será recalculado.</string>
+    <string name="cal_chart_entry_readout">Leitura %1$d/%2$d · %3$s · sensor %4$s → Glicemia %5$s</string>
+</resources>
