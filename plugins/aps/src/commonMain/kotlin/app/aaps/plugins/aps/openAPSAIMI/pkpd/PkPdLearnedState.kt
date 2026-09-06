@@ -10,9 +10,9 @@ import kotlin.concurrent.Volatile
 /**
  * Single owner of the learned PK/PD state for the whole process.
  *
- * Two `@SingleIn` consumers build their own [PkPdIntegration]: the loop plugin, which only reads
- * the learned kinetics, and the AIMI determine-basal engine, which is the only one allowed to
- * learn. Without a shared owner the reader keeps the values it read at start up for ever, so the
+ * Study has **one** [PkPdIntegration] class and **two** instances: [app.aaps.plugins.aps.openAPSAIMI.OpenAPSAIMIPlugin]
+ * (read-only) and `DetermineBasalaimiSMB2` in `DetermineBasalAIMI2.kt` (the only learner).
+ * Without a shared owner the reader keeps the values it read at start up for ever, so the
  * prediction kinetics never follow what the learner found.
  *
  * Only the learned state is shared. Everything else stays per consumer on purpose:
@@ -20,8 +20,9 @@ import kotlin.concurrent.Volatile
  *   about three times faster per loop tick;
  * - the recent bolus samples change `pkpdScale`, so sharing them would change the ISF that doses.
  *
- * Copied from `origin/dev_OAPSAIMI` @ `c5db5a0333`. KMP adaptations only: Metro instead of
- * Hilt/javax, `kotlin.concurrent.Volatile`, and [AapsLock] instead of `@Synchronized`.
+ * Source: `origin/dev_OAPSAIMI` @ `0761e9c00a`. KMP adaptations only: Metro `@SingleIn(AppScope)`
+ * instead of javax `@Singleton`, `kotlin.concurrent.Volatile`, and [AapsLock] instead of
+ * `@Synchronized` (`@Synchronized` is JVM-only; this type is commonMain).
  */
 @SingleIn(AppScope::class)
 class PkPdLearnedState @Inject constructor() {

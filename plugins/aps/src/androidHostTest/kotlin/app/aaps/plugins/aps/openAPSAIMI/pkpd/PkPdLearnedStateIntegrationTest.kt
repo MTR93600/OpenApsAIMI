@@ -19,8 +19,15 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.whenever
 
 /**
- * Matching tests for [PkPdLearnedState] from `origin/dev_OAPSAIMI` @ `c5db5a0333`
- * (`PkPdIntegrationTest` shared-state / generation cases).
+ * Matching tests for [PkPdLearnedState] from `origin/dev_OAPSAIMI` @ `0761e9c00a`
+ * (`PkPdIntegrationTest`).
+ *
+ * The two regressions that fail without the shared holder:
+ * - [read_only_consumer_sees_the_state_learned_by_the_other_consumer]
+ * - [bounds_change_does_not_persist_a_stale_value_from_the_read_only_consumer]
+ *
+ * Plus the four 0761e9c guard tests (read-only does not learn; ISF slew per consumer;
+ * external reset reaches both; bolus samples stay private).
  *
  * Adapted to study: mockito instead of mockk, and the study constructor also takes
  * [AimiBehaviorProfileSource]. Clinical tick inputs are copied from the reference tests.

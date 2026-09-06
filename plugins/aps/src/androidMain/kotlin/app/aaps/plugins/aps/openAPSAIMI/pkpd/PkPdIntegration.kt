@@ -360,6 +360,8 @@ class PkPdIntegration(
     }
 
     private fun applyStructuralConfigChange(old: StructuralConfig, new: StructuralConfig) {
+        // Same persist as 0761e9c00a. The stale write is gone because [estimator] is now the
+        // shared learned holder, not a private seed frozen on the read-only consumer.
         estimator?.let { persistStateIfNeeded(it.params(), new.bounds) }
 
         val learningInputsChanged = old.bounds != new.bounds ||
