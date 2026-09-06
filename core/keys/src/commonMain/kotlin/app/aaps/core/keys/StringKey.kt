@@ -224,7 +224,7 @@ enum class StringKey(
     ContextLLMClaudeKey("aimi_context_llm_claude_key", "", isPassword = true, title = KeysStrings.pref_title_context_llm_claude_key),
     ContextMode("aimi_context_mode", "BALANCED", title = KeysStrings.pref_title_context_mode), // CONSERVATIVE, BALANCED, AGGRESSIVE
     OApsAIMIUnstableModeState("key_oaps_aimi_mode_state", "", title = KeysStrings.pref_title_oaps_aimi_unstable_mode_state),
-    OApsAIMIContextStorage("aimi_context_storage", "", exportable = false, title = KeysStrings.pref_title_oaps_aimi_context_storage),
+    OApsAIMIContextStorage("aimi_context_storage", "", title = KeysStrings.pref_title_oaps_aimi_context_storage),
     // 🏥 AIMI Physiological Assistant (MTR)
     AimiPhysioLLMProvider("aimi_physio_llm_provider", "gpt4", title = KeysStrings.pref_title_aimi_physio_llm_provider),
     // 🦋 Thyroid / Basedow Module (MTR)

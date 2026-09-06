@@ -196,6 +196,32 @@ class LocalImportExportPrefs(
         }.also { ok -> aapsLogger.info(LTag.CORE, if (ok) "Settings exported to the cloud as $name" else "Settings were not exported to the cloud") }
     }
 
+    /**
+     * Uploads an arbitrary file to the active cloud provider, for a caller outside the settings-export
+     * flow (an AIMI plugin backing up its own decision log, say). Same provider, same "no provider
+     * signed in" refusal, as [uploadToCloud] - the only difference is the caller picks the name, the
+     * bytes and the folder instead of this class building an export.
+     */
+    override suspend fun uploadFileToCloud(fileName: String, fileContent: ByteArray, mimeType: String, remotePath: String): Boolean {
+        val provider = cloudStorageManager.getActiveProvider()
+        if (provider == null) {
+            aapsLogger.error(LTag.CORE, "Upload to the cloud was asked for with no provider signed in")
+            return false
+        }
+        return runCatching {
+            provider.getOrCreateFolderPath(remotePath)?.let { provider.setSelectedFolderId(it) }
+            var resultId = provider.uploadFileToPath(fileName, fileContent, mimeType, remotePath)
+            if (resultId == null) {
+                aapsLogger.warn(LTag.CORE, "uploadFileToPath failed for $fileName, attempting fallback uploadFile")
+                resultId = provider.uploadFile(fileName, fileContent, mimeType)
+            }
+            resultId != null
+        }.getOrElse {
+            aapsLogger.error(LTag.CORE, "Failed to upload file to cloud: $fileName", it)
+            false
+        }
+    }
+
     override fun exportSharedPreferencesNonInteractive(password: String): Boolean =
         writeExport(files.newExportName(config.FLAVOR), password)
 
