@@ -51,6 +51,7 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAutodriveBasalBridge
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cTrajectoryContext
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
+import app.aaps.plugins.aps.openAPSAIMI.ISF.ObservedSensitivityMeter
 import app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
@@ -341,6 +342,44 @@ internal data class AimiDecisionContext(
         val isf_cache_key: Long? = null,
         /** Glucose the cached value was computed for (the key's within-bucket remainder). */
         val isf_cache_glucose_mgdl: Long? = null,
+        /**
+         * Sensitivity the **outcomes** imply, in mg/dL per U, measured as `-dBG / insulin absorbed`
+         * over clean falls. See `ObservedSensitivityMeter`.
+         *
+         * A fall is counted only when it lasts 30 to 120 minutes, drops at least 25 mg/dL, has no
+         * carbs on board and no meal in the 30 minutes before it, shows a mean rate of glucose
+         * appearance below 0.30 mg/dL/min, and cost at least 0.8 U. The insulin credited is the fall
+         * in IOB, plus the basal above the profile rate, plus the SMBs decided inside the window.
+         *
+         * The median is `null` below three windows, never `0.0`: zero would read as a real
+         * sensitivity of zero. [isf_obs_window_count] says how far the instrument is from being able
+         * to answer.
+         *
+         * These fields are **strictly passive**. Nothing in the dosing chain reads them. They exist
+         * for one purpose: to be compared with [command_isf_mgdl], so that the question "does the ISF
+         * chain estimate the right quantity" can finally be answered from exported data.
+         *
+         * `var`, and written after this object is built, like the fields below.
+         */
+        var isf_obs_median_mgdl: Double? = null,
+        /** Same measure, night windows only (local hour 0 to 8). */
+        var isf_obs_night_median_mgdl: Double? = null,
+        /** Same measure, day windows only. */
+        var isf_obs_day_median_mgdl: Double? = null,
+        /** How many windows the look-back holds. Reported even when the median is `null`. */
+        var isf_obs_window_count: Int? = null,
+        /** How many of them are night windows. */
+        var isf_obs_night_count: Int? = null,
+        /** How many of them are day windows. */
+        var isf_obs_day_count: Int? = null,
+        /** End time of the most recent window, so a reading can be aged. */
+        var isf_obs_last_window_end_ms: Long? = null,
+        /** Sensitivity of that most recent window alone. */
+        var isf_obs_last_window_mgdl: Double? = null,
+        /** Fall of that window, mg/dL. */
+        var isf_obs_last_window_drop_mgdl: Double? = null,
+        /** Insulin credited to that window, U. */
+        var isf_obs_last_window_absorbed_u: Double? = null,
         /** Fast estimator 1: Kalman-filtered raw ISF. */
         val isf_kalman_fast_mgdl: Double? = null,
         /** Fast estimator 2: IsfAdjustmentEngine output. */
@@ -671,6 +710,16 @@ internal data class AimiDecisionContext(
             base.put("isf_age_ms", baseline_state.isf_age_ms ?: AimiJson.NULL)
             base.put("isf_cache_key", baseline_state.isf_cache_key ?: AimiJson.NULL)
             base.put("isf_cache_glucose_mgdl", baseline_state.isf_cache_glucose_mgdl ?: AimiJson.NULL)
+            base.put("isf_obs_median_mgdl", baseline_state.isf_obs_median_mgdl ?: AimiJson.NULL)
+            base.put("isf_obs_night_median_mgdl", baseline_state.isf_obs_night_median_mgdl ?: AimiJson.NULL)
+            base.put("isf_obs_day_median_mgdl", baseline_state.isf_obs_day_median_mgdl ?: AimiJson.NULL)
+            base.put("isf_obs_window_count", baseline_state.isf_obs_window_count ?: AimiJson.NULL)
+            base.put("isf_obs_night_count", baseline_state.isf_obs_night_count ?: AimiJson.NULL)
+            base.put("isf_obs_day_count", baseline_state.isf_obs_day_count ?: AimiJson.NULL)
+            base.put("isf_obs_last_window_end_ms", baseline_state.isf_obs_last_window_end_ms ?: AimiJson.NULL)
+            base.put("isf_obs_last_window_mgdl", baseline_state.isf_obs_last_window_mgdl ?: AimiJson.NULL)
+            base.put("isf_obs_last_window_drop_mgdl", baseline_state.isf_obs_last_window_drop_mgdl ?: AimiJson.NULL)
+            base.put("isf_obs_last_window_absorbed_u", baseline_state.isf_obs_last_window_absorbed_u ?: AimiJson.NULL)
             base.put("isf_kalman_fast_mgdl", baseline_state.isf_kalman_fast_mgdl ?: AimiJson.NULL)
             base.put("isf_adj_engine_mgdl", baseline_state.isf_adj_engine_mgdl ?: AimiJson.NULL)
             base.put("isf_fused_slow_mgdl", baseline_state.isf_fused_slow_mgdl ?: AimiJson.NULL)
@@ -1311,6 +1360,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var contextInfluenceEngine: app.aaps.plugins.aps.openAPSAIMI.context.ContextInfluenceEngine  // 🎯 Context Influence
     @Inject lateinit var physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR  // 🏥 Physiological Modulation
     @Inject lateinit var straightLineTubeAdvisor: StraightLineTubeAdvisor  // 📐 MPC-lite hypo tube + SMB-cap smoothing
+    /**
+     * Passive reference instrument. It measures the sensitivity the outcomes imply and writes it to
+     * `baseline_state` only. It is a plain private field on purpose: not @Inject, not @Singleton, so
+     * nothing else can reach it. Any new call site is a bug. See `ObservedSensitivityMeter`.
+     */
+    private val observedSensitivityMeter = ObservedSensitivityMeter()
+
     @Inject lateinit var sensitivityRatioEstimator: SensitivityRatioEstimator
     @Inject lateinit var continuousStateEstimator: app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstimator
     @Inject lateinit var tpoOrchestrator: AimiTpo
@@ -9081,6 +9137,48 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     lastBolusMs = ctx.iobDataArray.firstOrNull()?.lastBolusTime ?: 0L,
                 ),
             )
+        }
+
+        // Reference measurement, strictly passive. It rebuilds the sensitivity the outcomes imply,
+        // -dBG / absorbed insulin over clean falls, outside the ISF chain. No dosing decision reads
+        // it: it only reaches baseline_state, next to command_isf_mgdl, so the two can be compared.
+        runCatching {
+            val tickCalendar = Calendar.getInstance()
+            tickCalendar.timeInMillis = decisionCtx.timestamp
+            val runningTempForMeter = ctx.currentTemp
+            observedSensitivityMeter.observe(
+                ObservedSensitivityMeter.Sample(
+                    timestampMs = decisionCtx.timestamp,
+                    localHourOfDay = tickCalendar.get(Calendar.HOUR_OF_DAY),
+                    bgMgdl = decisionCtx.baseline_state.current_bg_mgdl,
+                    // Net of the profile basal: it goes negative when the loop cuts the basal for a
+                    // long time, which is why the basal integral below is needed.
+                    iobU = decisionCtx.baseline_state.iob_u,
+                    cobG = decisionCtx.baseline_state.cob_g,
+                    smbU = finalResult.units ?: 0.0,
+                    // The basal that ran is the temp in progress, not the rate this tick asks for.
+                    deliveredBasalUph =
+                        if (runningTempForMeter.duration > 0) runningTempForMeter.rate else profile.current_basal,
+                    profileBasalUph = profile.current_basal,
+                    // Previous tick's value. A one-tick lag does not matter for a threshold filter
+                    // over a 30 to 120 minute window. Do not swap this for the "used" field: it is
+                    // only set on the engaged Autodrive branch, so it would be null most of the time
+                    // and the fail-closed rule would reject every window.
+                    raMgdlPerMin = decisionCtx.baseline_state.estimated_ra_mgdl_per_min,
+                    lastBolusMs = ctx.iobDataArray.firstOrNull()?.lastBolusTime ?: 0L,
+                ),
+            )
+            val observed = observedSensitivityMeter.read(decisionCtx.timestamp)
+            decisionCtx.baseline_state.isf_obs_median_mgdl = observed.medianMgdlPerU
+            decisionCtx.baseline_state.isf_obs_night_median_mgdl = observed.nightMedianMgdlPerU
+            decisionCtx.baseline_state.isf_obs_day_median_mgdl = observed.dayMedianMgdlPerU
+            decisionCtx.baseline_state.isf_obs_window_count = observed.windowCount
+            decisionCtx.baseline_state.isf_obs_night_count = observed.nightCount
+            decisionCtx.baseline_state.isf_obs_day_count = observed.dayCount
+            decisionCtx.baseline_state.isf_obs_last_window_end_ms = observed.lastWindow?.endMs
+            decisionCtx.baseline_state.isf_obs_last_window_mgdl = observed.lastWindow?.isfMgdlPerU
+            decisionCtx.baseline_state.isf_obs_last_window_drop_mgdl = observed.lastWindow?.dropMgdl
+            decisionCtx.baseline_state.isf_obs_last_window_absorbed_u = observed.lastWindow?.absorbedU
         }
 
         decisionCtx.adjustments.dynamic_isf = AimiDecisionContext.DynamicIsf(
