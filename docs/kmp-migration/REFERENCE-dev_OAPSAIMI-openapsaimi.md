@@ -24,7 +24,7 @@ AIMI is **not** a separate Gradle module. It lives inside **`:plugins:aps`**, pa
 - Visible only when `config.APS` is true (`BuildConfig.FLAVOR == "full"`).
 - Closed-loop entry: `LoopPlugin.invoke` → `activePlugin.activeAPS.invoke` → `OpenAPSAIMIPlugin.invoke` → `DetermineBasalaimiSMB2.determine_basal` → `RT` → `APSResult`.
 - The live determinator is **native Kotlin**, not oref JavaScript. File `DetermineBasalAIMI2.kt` (19 312 lines) holds class `DetermineBasalaimiSMB2`.
-- On-device ML is mostly a custom `AimiNeuralNetwork` (JSON weights). TFLite UAM and optional ONNX advisor models are separate, Android-bound paths.
+- On-device ML is a **two-step** pipeline on the SMB path: **TFLite first value**, then **`AimiNeuralNetwork` refine + CSV train**. Basal is **not** the same: first value is a **heuristic**, then the same house JSON/CSV net. Optional ONNX is Advisor-only.
 - **No AIMI-specific KMP migration plan exists today.** ComboCtl already uses KMP; that is unrelated to AIMI.
 
 ---
@@ -342,55 +342,147 @@ High-level stages that exist as named helpers today:
 
 ## 6. Machine learning
 
-### 6.1 Shared net
+Re-checked on `dev_OAPSAIMI` @ `c5db5a0333` against the live tick (not older markdown).  
+User claim to validate: *TFLite gives a first value, then `AimiNeuralNetwork` trains on CSV; same for basal.*
 
-`AimiNeuralNetwork` (`aimiNeuralNetwork.kt`): one hidden layer, z-score → linear → LeakyReLU → optional layer-norm / dropout → linear. Weights saved as **JSON**, trained on device. Used by SMB, basal/T3C, and OREF personal heads.
+**Verdict**
 
-`ml/NeuralModelTrainer`: 80/20 split, normalization, publish probes, atomic save.
+| Claim | SMB / bolus | Basal |
+|---|---|---|
+| TFLite computes a **first value** | **Yes.** `AimiUamHandler.predictSmbUam` (`Interpreter` on `Documents/AAPS/ml/modelUAM.tflite`). | **No.** There is **no live basal TFLite**. `model.tflite` is only a **commented** leftover (`DetermineBasalAIMI2.kt` ~L10643). |
+| House net **trains on CSV** | **Yes.** `AimiSmbTrainer.maybeTrainAsync` reads `oapsaimiML2_records.csv`. | **Yes.** `BasalMlTrainingCoordinator` reads `basal_adaptive_records.csv`. |
+| House net also **refines the first value** on the hot path | **Yes**, when `BooleanKey.OApsAIMIMLtraining` is on (default **false**). | **Partial.** N-channel uses `AimiNeuralNetwork.predict` if weights exist; else heuristic. Not TFLite → NN. |
 
-### 6.2 Distinct ML / learning subsystems (today)
+`PhysiologicalTree.kt` ~L412 names the split in code comments: *“ML (SMB TFLite, basal NN)”*.
+
+### 6.1 Two-step SMB path (verified)
+
+Order on a tick that reaches SMB execution:
+
+```
+1) runUamModelCalHypoGuardPostHypoAndSetPredictedSmb
+     modelcal = calculateSMBFromModel(rT.reason)
+              = AimiUamHandler.predictSmbUam(18 UAM features, …)
+     → this.predictedSMB = TFLite first value (after hypo / post-hypo guards)
+
+2) SmbInstructionExecutor.execute  (csvFile = csvfile)
+     if OApsAIMIMLtraining:
+       refineSmb hook → neuralnetwork5(...)
+         finalRefinedSMB = calculateSMBFromModel()     // TFLite again (same first-value source)
+         AimiSmbTrainer.maybeTrainAsync(externalDir, csvfile)   // fire-and-forget, not on the dose wait
+         mlRefined = AimiSmbTrainer.refine(finalRefinedSMB, 21 features)
+         return 0.7 * mlRefined + 0.3 * predictedSMB   // predictedSMB here is the incoming first value
+     else:
+       keep predictedSMB (TFLite / guards only)
+
+3) Later in the same executor: logDataMl / logData write CSV rows
+     (rows are buffered; realised BG is filled ~30 min later — see SmbTrainingRowBuffer)
+```
+
+| Symbol | File | Role |
+|---|---|---|
+| `AimiUamHandler` | `AimiModelHandler.kt` | **Android-only** TFLite inference. Missing file → SMB `0f`. |
+| `calculateSMBFromModel` | `DetermineBasalAIMI2.kt` ~L15384 | Thin wrapper: 18 floats → `predictSmbUam`. |
+| `runUamModelCalHypoGuardPostHypoAndSetPredictedSmb` | same, ~L6512 | Sets `predictedSMB` from TFLite. |
+| `neuralnetwork5` | same, ~L15454 | Step 2: TFLite seed + async CSV train + `refine`. |
+| `SmbInstructionExecutor` | `smb/SmbInstructionExecutor.kt` | Gate `OApsAIMIMLtraining`; hook `refineSmb`. |
+| `AimiSmbTrainer` | `ml/AimiSmbTrainer.kt` | JSON `AimiNeuralNetwork` (21 inputs). `refine` is O(1); clamp ±min(0.05 U, 25%). |
+| `csvfile` | `DetermineBasalAIMI2.kt` ~L10645 | `storageHelper.getAimiFile("oapsaimiML2_records.csv")` — **trainer input**. |
+| `csvfile2` | same ~L10646 | `oapsaimi2_records.csv` — extra log (`logDataToCsv`). **Not** the SMB trainer file. |
+
+`AimiSmbTrainer.maybeTrainAsync`: skip if CSV missing; need **200** new rows and **6 h** since last train; circuit breaker 6 h after 3 failures. Training does **not** block the tick. The net used by `refine` is the last **published** JSON model (`AimiSmbTrainer.loadModel` from plugin `onStart`).
+
+TFLite input (18): hour, weekend, BG, target, IOB, three deltas, four TDD rates, six step windows.  
+NN refine input (21): 10 base (BG, IOB, COB, deltas, TDD rates) + 4 latent physio + 3 patient-mode + 3 causal + 1 trend — `SmbRefinementFeatureSchema`.
+
+`AimiUamHandler.confidenceOrZero()` is a **separate** UAM-confidence signal used in many tick sites. It is not the SMB first-value path.
+
+### 6.2 Basal path (verified — not TFLite-first)
+
+Live basal ML is **heuristic first value + house net + CSV**. No `Interpreter` call.
+
+```
+bootstrapPhysiologyAfterEarlyTick  (early tick, if OApsAIMIT3cAdaptiveBasalEnabled)
+  H = BasalLearner.getMultiplier()          // heuristic, floor 0.70
+  N = BasalNeuralLearner.getUniversalBasalDecision(...)
+        neuralBasalNet.predict(...)         // AimiNeuralNetwork if JSON loaded
+        else internalBasalScalingFactor     // heuristic fallback
+  adaptiveMult = BasalAdaptiveMultiplier.combine(H, N)
+
+end of tick / early exits
+  applyBasalNeuralLearningAndTraining
+    BasalNeuralLearner.updateLearning(...)  // writes basal_adaptive_records.csv
+    BasalMlTrainingCoordinator.maybeTrainAsync()
+      parse CSV → train basal + T3C heads → basal_adaptive_weights.json / t3c_brain_weights.json
+      reloadModels()
+```
+
+| Symbol | File | Role |
+|---|---|---|
+| `BasalLearner` | `learning/BasalLearner.kt` | H-channel heuristic. State file `aimi_basal_learner.json`. |
+| `BasalNeuralLearner` | `learning/BasalNeuralLearner.kt` | N-channel: two `AimiNeuralNetwork` (basal + T3C), input **16**. |
+| `getUniversalBasalDecision` | same ~L391 | `NEURAL` if net present, else `HEURISTIC`. No TFLite. |
+| `getT3cAdaptiveDecision` | same ~L301 | Same pattern for T3C aggressiveness. |
+| `BasalAdaptiveMultiplier` | `learning/BasalAdaptiveMultiplier.kt` | Combines H and N. |
+| `logRecord` | `BasalNeuralLearner` ~L548 | Appends `basal_adaptive_records.csv`. |
+| `BasalMlTrainingCoordinator` | `learning/BasalMlTrainingCoordinator.kt` | CSV → JSON train. `CSV_FILE = "basal_adaptive_records.csv"`. |
+| `applyBasalNeuralLearningAndTraining` | `DetermineBasalAIMI2.kt` ~L18429 | Record row + trigger async train. |
+
+Pref `OApsAIMIT3cAdaptiveBasalEnabled` default **true** gates **apply**. Training still records CSV even when apply is off (coordinator KDoc).
+
+Commented leftover only (not executed):
+
+```kotlin
+//private val modelFile = File(externalDir, "ml/model.tflite")
+//private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
+```
+
+Do **not** treat `model.tflite` as a live basal TFLite head.
+
+### 6.3 Shared house net (portable core)
+
+`AimiNeuralNetwork` (`aimiNeuralNetwork.kt`): one hidden layer, z-score → linear → LeakyReLU → optional layer-norm / dropout → linear. Weights = **JSON**. Train/infer are pure Kotlin + `java.io.File` / `org.json`.
+
+`ml/NeuralModelTrainer`: 80/20 split, normalization, publish probes, atomic save. Shared by SMB and basal/T3C trainers.
+
+### 6.4 Other ML / learning (not the two-step dose seed)
 
 | # | Name | Type | On the dose path? | Storage |
 |---|---|---|---|---|
-| 1 | `AimiSmbTrainer` | `AimiNeuralNetwork`, input **21** (`SmbRefinementFeatureSchema`) | **Yes** — `refine()` after predicted SMB; clamp ±min(0.05 U, 25%) | App files via `AimiSmbModelStore` |
-| 2 | `BasalNeuralLearner` | Two nets (T3C + universal basal), input **16** | **Yes** — basal / T3C factors | `t3c_brain_weights.json`, `basal_adaptive_weights.json` |
 | 3 | `AutodriveNeuralTrainer` | Logistic / attention-gate weights | **Gating** for Autodrive stress mask | `autodrive_attention_weights.json` |
 | 4 | Autodrive `OnlineLearner` + `AutodriveDataLake` | Online rows / CSV | Shadow + engaged Autodrive | Data lake files |
 | 5 | `OrefOnnxScorer` | ONNX Runtime Android | **No** — Advisor risk scores | Optional `assets/oref/*.onnx` — **not committed** |
 | 6 | `OrefPersonalMlTrainer` | `AimiNeuralNetwork`, 35 OREF features | **No** — Advisor; KDoc says weights are saved but **not loaded back yet** | `filesDir/oref_personal/` |
-| 7 | `AimiUamHandler` | TensorFlow Lite `Interpreter` | **Yes for UAM** — `predictSmbUam` + `confidenceOrZero` used in many tick sites | External `/Documents/AAPS/ml/modelUAM.tflite` |
 
-Gradle deps in `:plugins:aps`:
+Heuristic (not this pipeline): `UnifiedReactivityLearner`, `AdaptivePkPdEstimator` (DIA/peak).
 
-- TensorFlow Lite **2.4.0** (+ GPU, support, metadata)
-- ONNX Runtime Android **1.20.0**
-- Health Connect **1.1.0** (not ML, but listed with the same module)
+Gradle deps in `:plugins:aps`: TensorFlow Lite **2.4.0** (+ GPU, support, metadata), ONNX Runtime Android **1.20.0**.  
+**No PyTorch.** No `.onnx` / `.tflite` committed in-repo (ONNX placeholder: `assets/oref/PLACE_ONNX_MODELS_HERE.txt`).
 
-**No PyTorch** in AIMI loop code. **No `.onnx` or `.tflite` model files committed** under `plugins/aps/src/main/assets/oref/` — only `PLACE_ONNX_MODELS_HERE.txt`. Stub generator: `scripts/generate_oref_stub_onnx.py`.
+### 6.5 What is portable vs Android-only
 
-### 6.3 Training pipelines in-repo
-
-| Pipeline | Trigger | Notes |
+| Piece | Portable (`commonMain` candidate) | Android-only (`actual`) |
 |---|---|---|
-| SMB refinement | `AimiSmbTrainer.maybeTrainAsync` | Min 200 new rows / 6 h; circuit breaker 6 h after 3 failures |
-| Basal / T3C | `BasalMlTrainingCoordinator` + `BasalMlTrainerWorker` (`@HiltWorker`) | Governance can hold conservative on high hypo rate |
-| Autodrive | `AutodriveNeuralTrainerWorker`, `AutodriveBackfillWorker` | Chronological holdout; hypo-in-1h labels |
-| OREF personal | Advisor `trainAndSummarize` | Persistence incomplete (see open questions) |
-| Scheduler | `AimiMlTrainingScheduler` | Started/cancelled from plugin lifecycle |
+| `AimiNeuralNetwork` train + `predict` | **Yes** (Kotlin math + JSON) | File path via `AimiStorageHelper` |
+| CSV parse / `NeuralModelTrainer` | **Yes** | Same file port |
+| `AimiSmbTrainer.refine` / basal `predict` | **Yes** | Prefs / storage |
+| `AimiUamHandler` / TFLite `Interpreter` | **No** | JNI, `Context`, `/Documents/AAPS/ml/modelUAM.tflite` |
+| `OrefOnnxScorer` | **No** | ONNX Runtime Android + assets |
+| WorkManager trainers (`BasalMlTrainerWorker`, …) | Job API | Android `Worker` |
 
-Heuristic (not neural) learners that still change factors: `BasalLearner`, `UnifiedReactivityLearner`, `AdaptivePkPdEstimator` (DIA/peak).
+KMP note: the **CSV + JSON net** is the shared second step. The **TFLite first value** exists only on SMB and is the hard Android seam. Basal already uses heuristic + JSON net (no TFLite to port).
 
-### 6.4 SMB feature vector (21)
+### 6.6 Training triggers (CSV)
 
-From `AimiSmbTrainer` / `SmbRefinementFeatureSchema` comments:
+| Pipeline | CSV | Trigger | Gates |
+|---|---|---|---|
+| SMB refine | `oapsaimiML2_records.csv` | `neuralnetwork5` → `maybeTrainAsync` | Pref `OApsAIMIMLtraining` (default **false**) gates **refine + train**. CSV **write** still happens later via `logDataMl` even when the pref is off. |
+| SMB extra log | `oapsaimi2_records.csv` | `logDataToCsv` | Not the trainer dataset |
+| Basal / T3C | `basal_adaptive_records.csv` | `updateLearning` + `maybeTrainAsync` | Apply gated by `OApsAIMIT3cAdaptiveBasalEnabled` (default **true**) |
+| Autodrive | Autodrive data-lake CSV | workers | Separate |
+| OREF personal | advisor slices | `trainAndSummarize` | Advisor only |
 
-- 10 base: BG, IOB, COB, deltas, TDD rates
-- 4 latent physio: meal probability, endogenous drive, circadian SI, transient resistance
-- 3 patient-mode
-- 3 causal context
-- 1 trend indicator
-
-Blending in the engine (site ~L15487): `alpha * mlRefined + (1 - alpha) * predictedSMB`.
+`AimiMlTrainingScheduler` starts/cancels from plugin lifecycle (basal/T3C worker glue).
 
 ---
 
@@ -620,7 +712,7 @@ Repo-wide search for “KMP / Kotlin Multiplatform / expect/actual” hits **Com
 
 | Path | Staleness |
 |---|---|
-| `docs/AUDIT_CHEMINS_FICHIERS_AIMI.md` (2025-12-23) | Paths under `/Documents/AAPS`, TFLite-centric. Predates JSON neural refactor. TFLite is now one of several heads. |
+| `docs/AUDIT_CHEMINS_FICHIERS_AIMI.md` (2025-12-23) | Paths under `/Documents/AAPS`. TFLite UAM path is still live as the **SMB first value**; the house JSON net is the second step. Do not read this audit as “TFLite-only”. |
 | `docs/AIMI_NEXT_SESSION.md` | Long handover. Useful history; not canonical. Mentions HC step-window bugs — not re-verified here. |
 | `docs/TRAJECTORY_GUARD_INTEGRATION_COMPLETE.md` | Wishlist includes Google Fit — **not in code**. |
 | `docs/AIMI_ADVISOR_MULTI_MODEL_COMPLETE.md` and many `MEAL_ADVISOR_*` | Status reports. Verify against `advisor/meal/` before trusting “complete”. |
@@ -646,7 +738,7 @@ Do not guess these. They matter for a KMP split.
 11. **Auditor async vs export** — can `RT` change after hormonitor / JSONL snapshot?
 12. **`AimiDecisionPlugin` impls** — dead code, or registered only from a path grep missed (reflection / late init)?
 13. **`tools/aimi_viewer`** — keep as a separate tool, or part of the KMP product surface?
-14. **TFLite UAM** — required for current UAM SMB, or can confidence-only / neural SMB replace it?
+14. **TFLite UAM first value** — live SMB seed (`calculateSMBFromModel`). If the `.tflite` file is missing, first value is `0f`. Can a portable net replace that seed, or must KMP keep an Android TFLite `actual`? Basal has **no** equivalent TFLite seed.
 15. **Wear / Garmin ownership** — keep DB contract only, or wrap vitals behind one AIMI port (`UnifiedActivityProviderMTR`)?
 16. **Filename vs class name** — `DetermineBasalAIMI2.kt` / `DetermineBasalaimiSMB2` will confuse a port. Rename is out of scope here.
 17. **`:plugins:main` compile dependency on AIMI** — extract interfaces to `:core:interfaces` before any KMP module, or keep dashboard Android-only?
@@ -665,10 +757,12 @@ Do not guess these. They matter for a KMP split.
 - No dedicated AIMI Gradle module and no AIMI KMP doc existed before this file.
 - Hard platform shell = sensors, Health Connect, WorkManager, Activities/Compose, TFLite, ONNX, file paths.
 - Decision math (effort belief, sleep detector, T3C anticipation, Harmonia, RBT, most PKPD/safety) is already largely Kotlin-without-Android.
+- SMB ML = TFLite first value (`AimiUamHandler`) then `AimiNeuralNetwork` refine/train on `oapsaimiML2_records.csv` (refine+train gated by `OApsAIMIMLtraining`, default false).
+- Basal ML = heuristic first value (`BasalLearner` / `internalBasalScalingFactor`) then `AimiNeuralNetwork` on `basal_adaptive_records.csv`. **No live basal TFLite.**
 
 **Not safe to copy from older markdown without re-checking**
 
-- File counts (“~429”), default-off effort protection, “no parallel activity logic”, “Harmonia is simulation only”, “AIMI is a separate module”, Google Fit, committed ONNX/TFLite assets, `DetermineBasalCoordinator` as the live engine.
+- File counts (“~429”), default-off effort protection, “no parallel activity logic”, “Harmonia is simulation only”, “AIMI is a separate module”, Google Fit, committed ONNX/TFLite assets, `DetermineBasalCoordinator` as the live engine, “basal also starts from TFLite”.
 
 **Out of scope for this document**
 
@@ -693,6 +787,15 @@ find plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI -name '*.kt' |
 
 # no separate module
 # grep settings.gradle for aimi  →  should be empty
+
+# SMB two-step
+# calculateSMBFromModel → AimiUamHandler.predictSmbUam
+# neuralnetwork5 → AimiSmbTrainer.maybeTrainAsync(csvfile) + refine
+# csvfile = oapsaimiML2_records.csv
+
+# basal (no TFLite)
+# BasalNeuralLearner.getUniversalBasalDecision → neuralBasalNet or heuristic
+# BasalMlTrainingCoordinator CSV_FILE = basal_adaptive_records.csv
 ```
 
 If this file and the tree disagree, **trust the tree** and update this file.
