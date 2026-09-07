@@ -15,6 +15,17 @@ object MealAbsorptionMemory {
     @Volatile
     var lastActiveAtMs: Long = 0L
 
+    /**
+     * Time the current absorption episode started, not the time it was last seen.
+     *
+     * [lastActiveAtMs] is refreshed on every active tick, so it always says "a few minutes ago" and
+     * can never tell how old the episode is. This field is written once, when the phase turns
+     * active while it was not, and then stays put until [reset]. Use [onsetAgeMin] to ask how far
+     * into the episode the loop is.
+     */
+    @Volatile
+    var onsetAtMs: Long = 0L
+
     @Volatile
     var waveCount: Int = 0
 
@@ -29,6 +40,9 @@ object MealAbsorptionMemory {
 
     fun isActive(nowMs: Long): Boolean =
         lastPhase.isActive && lastActiveAtMs > 0L && (nowMs - lastActiveAtMs) < MEMORY_WINDOW_MS
+
+    /** Minutes since the episode started, or `null` when there is no episode. */
+    fun onsetAgeMin(nowMs: Long): Double? = onsetAtMs.takeIf { it > 0L }?.let { (nowMs - it) / 60_000.0 }
 
     fun update(output: MealAbsorptionPhaseEngine.Output, nowMs: Long) {
         val prev = lastPhase
@@ -45,6 +59,9 @@ object MealAbsorptionMemory {
             } else if (!prev.isActive && output.phase == MealAbsorptionPhase.FIRST_WAVE) {
                 waveCount = 1
             }
+            // Onset is stamped once per episode: when the phase turns active while it was not, or
+            // when the stamp is missing. Later active ticks must not move it.
+            if (!prev.isActive || onsetAtMs == 0L) onsetAtMs = nowMs
             lastPhase = output.phase
             lastActiveAtMs = nowMs
         } else if (!isActive(nowMs)) {
@@ -58,6 +75,7 @@ object MealAbsorptionMemory {
     fun reset() {
         lastPhase = MealAbsorptionPhase.NONE
         lastActiveAtMs = 0L
+        onsetAtMs = 0L
         waveCount = 0
         lastDeltaMgdlPer5 = null
         lastGapMgdl = null
