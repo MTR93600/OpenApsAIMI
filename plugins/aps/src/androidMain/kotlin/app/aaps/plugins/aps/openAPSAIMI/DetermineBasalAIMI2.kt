@@ -66,6 +66,7 @@ import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorJsonlExport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdict
+import app.aaps.plugins.aps.openAPSAIMI.smb.MaxSmbLadder
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbIntervalPolicy
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefPredictionReasonSuffix
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
@@ -1075,30 +1076,6 @@ private const val MEAL_ADVISOR_MIN_CARB_COVERAGE = 0.25
  */
 private const val RISE_FLOOR_REARM_MS = 90L * 60L * 1000L
 
-/**
- * Stable tags naming which branch of the maxSMB ladder picked the ceiling for a tick.
- *
- * Exported as `smb_binding_trace.max_smb_ladder_branch`. The rise floor obeys the ceiling this ladder
- * picks, so the tag is what tells us afterwards whether the ladder saw a rise (a promoted or partial
- * branch) or saw nothing at all (`STANDARD`). The two readings mean very different things.
- *
- * The `_CLAMPED` twins mean the branch fired and the BG below 120 safety clamp then pulled the
- * ceiling back down to the standard preference. Without them the tag would report a promotion that
- * never reached the dose. `STANDARD` has no twin: it already sets the standard preference, so the
- * clamp cannot lower it further.
- */
-private const val LADDER_PLATEAU_CRITICAL = "PLATEAU_CRITICAL_BG250"
-private const val LADDER_PLATEAU_CRITICAL_CLAMPED = "PLATEAU_CRITICAL_BG250_CLAMPED"
-private const val LADDER_CONFIRMED_RISE_HIGH = "CONFIRMED_RISE_HIGH"
-private const val LADDER_CONFIRMED_RISE_HIGH_CLAMPED = "CONFIRMED_RISE_HIGH_CLAMPED"
-private const val LADDER_SENSITIVE_85 = "SENSITIVE_85"
-private const val LADDER_SENSITIVE_85_CLAMPED = "SENSITIVE_85_CLAMPED"
-private const val LADDER_PLATEAU_MODERATE_75 = "PLATEAU_MODERATE_75"
-private const val LADDER_PLATEAU_MODERATE_75_CLAMPED = "PLATEAU_MODERATE_75_CLAMPED"
-private const val LADDER_FALLING_60 = "FALLING_60"
-private const val LADDER_FALLING_60_CLAMPED = "FALLING_60_CLAMPED"
-private const val LADDER_STANDARD = "STANDARD"
-
 private const val TIGHT_SPIRAL_CAP_TDD_REFERENCE_U = 55.0
 
 /** Seuil énergie spiral (U) à TDD = [TIGHT_SPIRAL_CAP_TDD_REFERENCE_U] (échelle adulte repas). */
@@ -2045,6 +2022,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // empty trace, and a reader could not tell. Null means "the ladder did not run this tick".
         lastMaxSmbLadderBranch = null
         lastSlopeFromMinDeviation = null
+        lastShortAvgDeltaAtLadder = null
         // Effort reduction telemetry is per tick — a basal-only tick must export null, not the last
         // SMB tick's multiplier.
         lastEffortSmbFactorRaw = null
@@ -2654,65 +2632,49 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Solution: Use maxSMBHB if EITHER:
         //   1. Active rise detected (slope >= 1.0) - Original logic
         //   2. High plateau (BG >= 250) - NEW, regardless of slope
-        // The rise floor obeys whichever ceiling this ladder picks, so remember the branch and the
-        // slope it read. Both go out in `smb_binding_trace` so the next package can say whether the
-        // ladder we now trust is reading the rise correctly.
+        // The rise floor obeys whichever ceiling this ladder picks, so remember the branch and both
+        // rise signals it read. All three go out in `smb_binding_trace` so the next package can say
+        // whether the ladder we now trust is reading the rise correctly.
         this.lastSlopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation.takeIf { it.isFinite() }
-        this.maxSMB = when {
-            // 🚨 CRITICAL PLATEAU: BG >= 250, regardless of slope
-            // Absolute emergency if BG catastrophic, even with low delta
-            // Protection: Don't apply if rapid fall (delta <= -5)
-            bg >= 250 && combinedDelta > -5.0 -> {
-                this.lastMaxSmbLadderBranch = LADDER_PLATEAU_CRITICAL
-                consoleLog.add("MAXSMB_PLATEAU_CRITICAL BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} slope=${String.format("%.2f", ctx.mealData.slopeFromMinDeviation)} -> maxSMBHB=${String.format("%.2f", maxSMBHB)}U (plateau)")
-                maxSMBHB
-            }
+        this.lastShortAvgDeltaAtLadder = glucoseStatus.shortAvgDelta.takeIf { it.isFinite() }
+        // Trap: `this.shortAvgDelta` is only copied from `glucoseStatus` further down this method,
+        // so reading the bare member here would read the PREVIOUS tick. Always pass
+        // `glucoseStatus.shortAvgDelta`.
+        val ladder = MaxSmbLadder.decide(
+            bgMgdl = bg,
+            combinedDelta = combinedDelta.toDouble(),
+            slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
+            shortAvgDeltaMgdl5m = glucoseStatus.shortAvgDelta,
+            honeymoon = honeymoon,
+            maxSmb = this.maxSMB,
+            maxSmbHighBg = this.maxSMBHB,
+        )
+        this.lastMaxSmbLadderBranch = ladder.branch
+        consoleLog.add(
+            when (ladder.branch) {
+                MaxSmbLadder.LADDER_PLATEAU_CRITICAL     ->
+                    "MAXSMB_PLATEAU_CRITICAL BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} slope=${String.format("%.2f", ctx.mealData.slopeFromMinDeviation)} -> maxSMBHB=${String.format("%.2f", maxSMBHB)}U (plateau)"
 
-            // 🔴 ACTIVE RISE HIGH: BG >= 140 (meal interception zone)
-            // Full maxSMBHB for confirmed meal/resistance in elevated range
-            // Added combinedDelta check to confirm rise is real
-            (bg >= 140 && !honeymoon && ctx.mealData.slopeFromMinDeviation >= 1.0 && combinedDelta > 0.5) ||
-            (bg >= 180 && honeymoon && ctx.mealData.slopeFromMinDeviation >= 1.4 && combinedDelta > 0.5) -> {
-                this.lastMaxSmbLadderBranch = LADDER_CONFIRMED_RISE_HIGH
-                consoleLog.add("MAXSMB_SLOPE_HIGH BG=${bg.roundToInt()} slope=${String.format("%.2f", ctx.mealData.slopeFromMinDeviation)} \u0394=${String.format("%.1f", combinedDelta)} -> maxSMBHB=${String.format("%.2f", maxSMBHB)}U (confirmed rise)")
-                maxSMBHB
-            }
+                MaxSmbLadder.LADDER_CONFIRMED_RISE_HIGH  ->
+                    "MAXSMB_SLOPE_HIGH BG=${bg.roundToInt()} slope=${String.format("%.2f", ctx.mealData.slopeFromMinDeviation)} Δ=${String.format("%.1f", combinedDelta)} -> maxSMBHB=${String.format("%.2f", maxSMBHB)}U (confirmed rise)"
 
-            // 🟡 ACTIVE RISE SENSITIVE: BG 120-140 (near target zone)
-            // 85% maxSMBHB for extra caution close to target
-            // Added combinedDelta check to confirm rise is real
-            bg >= 120 && bg < 140 && !honeymoon && ctx.mealData.slopeFromMinDeviation >= 1.0 && combinedDelta > 0.5 -> {
-                this.lastMaxSmbLadderBranch = LADDER_SENSITIVE_85
-                val partial = max(maxSMB, maxSMBHB * 0.85)
-                consoleLog.add("MAXSMB_SLOPE_SENSITIVE BG=${bg.roundToInt()} slope=${String.format("%.2f", ctx.mealData.slopeFromMinDeviation)} \u0394=${String.format("%.1f", combinedDelta)} -> ${String.format("%.2f", partial)}U (85% maxSMBHB - confirmed rise)")
-                partial
-            }
+                MaxSmbLadder.LADDER_CONFIRMED_RISE_HIGH_BY_DELTA ->
+                    "MAXSMB_DELTA_HIGH BG=${bg.roundToInt()} shortAvgDelta=${String.format("%.2f", glucoseStatus.shortAvgDelta)} slope=${String.format("%.2f", ctx.mealData.slopeFromMinDeviation)} Δ=${String.format("%.1f", combinedDelta)} -> maxSMBHB=${String.format("%.2f", maxSMBHB)}U (confirmed rise by delta)"
 
-            // 🟠 MODERATE PLATEAU: BG 200-250, stable delta
-            // Compromise: 75% of maxSMBHB for elevated but not critical BG
-            bg >= 200 && bg < 250 && combinedDelta > -3.0 && combinedDelta < 3.0 -> {
-                this.lastMaxSmbLadderBranch = LADDER_PLATEAU_MODERATE_75
-                val partial = max(maxSMB, maxSMBHB * 0.75)
-                consoleLog.add("MAXSMB_PLATEAU_MODERATE BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} -> ${String.format("%.2f", partial)}U (75% maxSMBHB)")
-                partial
-            }
+                MaxSmbLadder.LADDER_SENSITIVE_85         ->
+                    "MAXSMB_SLOPE_SENSITIVE BG=${bg.roundToInt()} slope=${String.format("%.2f", ctx.mealData.slopeFromMinDeviation)} Δ=${String.format("%.1f", combinedDelta)} -> ${String.format("%.2f", ladder.ceilingU)}U (85% maxSMBHB - confirmed rise)"
 
-            // 🔵 FALLING PROTECTION: BG elevated but falling moderately
-            // Partial limit to avoid over-correction while still allowing some action
-            bg > 180 && combinedDelta <= -3.0 && combinedDelta > -8.0 -> {
-                this.lastMaxSmbLadderBranch = LADDER_FALLING_60
-                val partial = max(maxSMB, maxSMBHB * 0.6)
-                consoleLog.add("MAXSMB_FALLING BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} -> ${String.format("%.2f", partial)}U (60% maxSMBHB)")
-                partial
-            }
+                MaxSmbLadder.LADDER_PLATEAU_MODERATE_75  ->
+                    "MAXSMB_PLATEAU_MODERATE BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} -> ${String.format("%.2f", ladder.ceilingU)}U (75% maxSMBHB)"
 
-            // ⚪ STANDARD: Normal/low BG conditions
-            else -> {
-                this.lastMaxSmbLadderBranch = LADDER_STANDARD
-                consoleLog.add("MAXSMB_STANDARD BG=${bg.roundToInt()} -> ${String.format("%.2f", maxSMB)}U")
-                maxSMB
+                MaxSmbLadder.LADDER_FALLING_60           ->
+                    "MAXSMB_FALLING BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} -> ${String.format("%.2f", ladder.ceilingU)}U (60% maxSMBHB)"
+
+                else                                     ->
+                    "MAXSMB_STANDARD BG=${bg.roundToInt()} -> ${String.format("%.2f", ladder.ceilingU)}U"
             }
-        }
+        )
+        this.maxSMB = ladder.ceilingU
 
         // 🔒 SAFETY CLAMP: Force Standard MaxSMB if < 120
         // User Rule: "lowbg when < 120". No bypass allowed.
@@ -2722,12 +2684,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              // The exported branch tag must show that the clamp won, otherwise the tag reports a
              // promotion that never reached the dose.
              this.lastMaxSmbLadderBranch = when (this.lastMaxSmbLadderBranch) {
-                 LADDER_PLATEAU_CRITICAL    -> LADDER_PLATEAU_CRITICAL_CLAMPED
-                 LADDER_CONFIRMED_RISE_HIGH -> LADDER_CONFIRMED_RISE_HIGH_CLAMPED
-                 LADDER_SENSITIVE_85        -> LADDER_SENSITIVE_85_CLAMPED
-                 LADDER_PLATEAU_MODERATE_75 -> LADDER_PLATEAU_MODERATE_75_CLAMPED
-                 LADDER_FALLING_60          -> LADDER_FALLING_60_CLAMPED
-                 else                       -> LADDER_STANDARD
+                 MaxSmbLadder.LADDER_PLATEAU_CRITICAL    -> MaxSmbLadder.LADDER_PLATEAU_CRITICAL_CLAMPED
+                 MaxSmbLadder.LADDER_CONFIRMED_RISE_HIGH -> MaxSmbLadder.LADDER_CONFIRMED_RISE_HIGH_CLAMPED
+
+                 MaxSmbLadder.LADDER_CONFIRMED_RISE_HIGH_BY_DELTA ->
+                     MaxSmbLadder.LADDER_CONFIRMED_RISE_HIGH_BY_DELTA_CLAMPED
+
+                 MaxSmbLadder.LADDER_SENSITIVE_85        -> MaxSmbLadder.LADDER_SENSITIVE_85_CLAMPED
+                 MaxSmbLadder.LADDER_PLATEAU_MODERATE_75 -> MaxSmbLadder.LADDER_PLATEAU_MODERATE_75_CLAMPED
+                 MaxSmbLadder.LADDER_FALLING_60          -> MaxSmbLadder.LADDER_FALLING_60_CLAMPED
+                 else                                    -> MaxSmbLadder.LADDER_STANDARD
              }
              consoleLog.add("🔒 STRICT CLAMP: BG<120 -> Forced Standard MaxSMB (${String.format("%.2f", stdMaxSMB)}U)")
         }
@@ -9376,6 +9342,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val bindingExportDraft = lastSmbBindingTraceDraft.copy(
             maxSmbLadderBranch = lastMaxSmbLadderBranch,
             slopeFromMinDeviation = lastSlopeFromMinDeviation,
+            shortAvgDeltaMgdl5m = lastShortAvgDeltaAtLadder,
         ).appendStage(
             "FINAL",
             bindingFinalU,
@@ -11087,18 +11054,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastRiseFloorContributionMs: Long = 0L
 
     /**
-     * Which branch of the maxSMB ladder fired this tick, and the slope it read.
+     * Which branch of the maxSMB ladder fired this tick, and the two rise signals it read.
      *
      * The rise floor now obeys the ceiling this ladder picks, so we must be able to see whether the
      * ladder is sane. Measured on 2026-08-15: on the two rises that ended below 70 mg/dL the ladder
      * stayed on `STANDARD` while BG climbed 7 to 12 mg/dL per 5 minutes, and the only condition that
      * can have failed there is `slopeFromMinDeviation >= 1.0`. We cannot tell from the exports alone
-     * whether the slope was right or simply blind, so both values are written out.
+     * whether the slope was right or simply blind, so both rise signals are written out.
      *
-     * See [SmbBindingTrace] fields `max_smb_ladder_branch` and `slope_from_min_deviation`.
+     * See [SmbBindingTrace] fields `max_smb_ladder_branch`, `slope_from_min_deviation` and
+     * `short_avg_delta_mgdl_5m`.
      */
     private var lastMaxSmbLadderBranch: String? = null
     private var lastSlopeFromMinDeviation: Double? = null
+    private var lastShortAvgDeltaAtLadder: Double? = null
 
     /**
      * Deltas the end-of-tick safety net feeds the estimator with.

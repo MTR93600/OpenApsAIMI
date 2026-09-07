@@ -49,6 +49,13 @@ internal data class SmbBindingTrace(
      */
     val maxSmbLadderBranch: String?,
     val slopeFromMinDeviation: Double?,
+    /**
+     * The `shortAvgDelta` the ladder read, mg/dL per 5 min.
+     *
+     * The rise branch opens on this value as well as on [slopeFromMinDeviation], so both are written
+     * out. Together they let a support package replay any candidate threshold on recorded ticks.
+     */
+    val shortAvgDeltaMgdl5m: Double?,
     val iobHeadroomU: Double?,
     val rbtBeforeU: Double?,
     val rbtAfterU: Double?,
@@ -85,6 +92,7 @@ internal data class SmbBindingTrace(
             putNullable("max_smb_high_bg_u", maxSmbHighBgU)
             putNullable("max_smb_ladder_branch", maxSmbLadderBranch)
             putNullable("slope_from_min_deviation", slopeFromMinDeviation)
+            putNullable("short_avg_delta_mgdl_5m", shortAvgDeltaMgdl5m)
             putNullable("iob_headroom_u", iobHeadroomU)
             putNullable("rbt_before_u", rbtBeforeU)
             putNullable("rbt_after_u", rbtAfterU)
@@ -136,6 +144,7 @@ internal data class SmbBindingTrace(
         val maxSmbHighBgU: Double? = null,
         val maxSmbLadderBranch: String? = null,
         val slopeFromMinDeviation: Double? = null,
+        val shortAvgDeltaMgdl5m: Double? = null,
         val iobHeadroomU: Double? = null,
         val rbtBeforeU: Double? = null,
         val rbtAfterU: Double? = null,
@@ -180,6 +189,7 @@ internal data class SmbBindingTrace(
                 maxSmbLadderBranch = maxSmbLadderBranch,
                 // NaN or Inf must never reach org.json — export null instead.
                 slopeFromMinDeviation = slopeFromMinDeviation.finiteOrNull(),
+                shortAvgDeltaMgdl5m = shortAvgDeltaMgdl5m.finiteOrNull(),
                 iobHeadroomU = iobHeadroomU.finiteOrNull(),
                 rbtBeforeU = rbtBeforeU.finiteOrNull(),
                 rbtAfterU = rbtAfterU.finiteOrNull(),
