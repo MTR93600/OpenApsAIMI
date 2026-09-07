@@ -67,6 +67,7 @@ import app.aaps.core.data.model.HR
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
+import app.aaps.plugins.aps.openAPSAIMI.ml.SmbTrainingRowBuffer
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorJsonlExport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdict
 import app.aaps.plugins.aps.openAPSAIMI.smb.MaxSmbLadder
@@ -9489,7 +9490,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             phase = "EXPORT",
             kind = "OBSERVATION",
         )
-        decisionCtx.adjustments.smb_binding_trace = bindingExportDraft.build(bindingFinalU).toJsonObject()
+        val bindingTrace = bindingExportDraft.build(bindingFinalU)
+        decisionCtx.adjustments.smb_binding_trace = bindingTrace.toJsonObject()
+
+        // Observation only — stamps the origin of this tick's dose on the training row queued
+        // earlier in the same tick. Read here, not at CSV time: the row is built inside the SMB
+        // executor, before the owner fallback and the late caps have run, so reading it there would
+        // report "NONE" on ticks that do have an owner.
+        runCatching {
+            smbTrainingRowBuffer.stampOrigin(
+                tickKey = smbTrainingRowTickKey,
+                smbModelU = bindingTrace.modelOutputU,
+                smbFloorU = bindingTrace.autodriveFloorU,
+                bindingStage = bindingTrace.bindingStage,
+                originOwner = bindingTrace.originOwner,
+                // Study SmbBindingTrace has no mpcRequestedU yet (db21308e6c Autodrive fill).
+                // Empty cell = unknown, never a synthetic 0. lastMpcRawSmbU defaults to 0.0
+                // on ticks that never engaged Autodrive and would poison the corpus if read here.
+                smbMpcRequestedU = null,
+            )
+        }
 
         // Observation only — running share of the delivered insulin the model really asked for.
         // Placed here on purpose, **after** `bindingExportDraft` is complete: read any earlier and
@@ -10582,6 +10602,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             .getOrNull()
     }
     private var csvPrimaryStorageDeniedLogged = false
+    /** Files whose header was already compared with the wanted one since the app started. */
+    private val csvHeaderCheckedPaths = mutableSetOf<String>()
     private val pkpdIntegration = PkPdIntegration(preferences, pkPdLearnedState, behaviorProfileSource)
     //private val tempFile = File(externalDir, "temp.csv")
     private var bgacc = 0.0
@@ -11287,6 +11309,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastSmbProposed: Double = 0.0
     /** Diagnostic-only immutable SMB cap chain, replaced at every tick bootstrap. */
     private var lastSmbBindingTraceDraft = SmbBindingTrace.Draft()
+
+    /**
+     * Holds the SMB training rows until their origin stamp and their realised glucose are known.
+     *
+     * Instrumentation only: it changes when a row reaches `oapsaimiML2_records.csv`, never what the
+     * pump is asked to do. See [app.aaps.plugins.aps.openAPSAIMI.ml.SmbTrainingRowBuffer].
+     *
+     * Plain private field on purpose: not @Inject, not @Singleton. One consumer (this tick), same
+     * sibling as [observedSensitivityMeter] / [insulinOriginMeter].
+     */
+    private val smbTrainingRowBuffer = SmbTrainingRowBuffer()
+
+    /**
+     * Tick clock shared by the queued training row and by its origin stamp.
+     *
+     * The row is queued in the middle of the tick and stamped at its end, so both need the same key
+     * to be sure they speak about the same tick. `dateUtil.now()` moves between the two points and
+     * would not match.
+     */
+    private var smbTrainingRowTickKey: Long = 0L
     /** Cross-tick effort-load memory for [EffortActivityBelief]; intentionally NOT reset per tick. */
     private var lastEffortMemory = EffortActivityBelief.Memory()
     private var lastEffortAssessment: EffortActivityBelief.Assessment? = null
@@ -13100,7 +13142,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             "dateStr, ${SmbRefinementFeatureSchema.csvFeatureNames.joinToString(", ")}, " +
                 "${SmbRefinementFeatureSchema.familyAuditFeatureNames.joinToString(", ")}, " +
                 "${SmbRefinementFeatureSchema.optionalTrainingAuditFeatureNames.joinToString(", ")}, " +
-                "predictedSMB, smbGiven, dynamicPeak, adjustedDia\n"
+                "predictedSMB, smbGiven, dynamicPeak, adjustedDia, " +
+                "${SmbTrainingRowBuffer.ADDED_COLUMN_NAMES.joinToString(", ")}\n"
         val valuesToRecord = "$dateStr," +
             "$bg,$iob,$cob,$delta,$shortAvgDelta,$longAvgDelta," +
             "$tdd7DaysPerHour,$tdd2DaysPerHour,$tddPerHour,$tdd24HrsPerHour," +
@@ -13112,12 +13155,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             "${eventMemory.postHyperExhaustionScore},${eventMemory.correctionFragilityScore},$decisionConflictFlags," +
             "$predictedSMB,$smbToGive," +
             "$peakintermediaire,$latestAdjustedDia"
-        appendCsvSafely(
-            primaryFile = csvfile,
-            fallbackFileName = "oapsaimiML2_records.csv",
-            headerRow = headerRow,
-            valuesRow = valuesToRecord,
-        )
+        // The row is queued, not written. Its origin fields are only complete at the end of the
+        // tick, and its realised glucose only about half an hour later, so it leaves the queue once
+        // its outcome window has closed. This delays when a row appears in the CSV; it does not
+        // change the row itself, the label, or anything the pump is asked to do.
+        val nowMs = smbTrainingRowTickKey.takeIf { it > 0L } ?: dateUtil.now()
+        smbTrainingRowBuffer.fillRealisedOutcomes(nowMs = nowMs, observedBg = bg)
+        smbTrainingRowBuffer.enqueue(timestampMs = nowMs, valuesPrefix = valuesToRecord)
+        smbTrainingRowBuffer.drainWritableRows(nowMs).forEach { readyRow ->
+            appendCsvSafely(
+                primaryFile = csvfile,
+                fallbackFileName = "oapsaimiML2_records.csv",
+                headerRow = headerRow,
+                valuesRow = readyRow,
+            )
+        }
     }
 
     private fun logDataToCsv(predictedSMB: Float, smbToGive: Float) {
@@ -13181,8 +13233,38 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             file.parentFile?.mkdirs()
             file.createNewFile()
             file.appendText(headerRow)
+        } else {
+            upgradeCsvHeaderIfColumnsWereAppended(file, headerRow)
         }
         file.appendText(valuesRow + "\n")
+    }
+
+    /**
+     * Rewrites the first line of an existing CSV when new columns were appended to the header.
+     *
+     * The header is only written when the file is created, so a file that already exists keeps its
+     * old header for ever. New rows would then carry cells that no reader can name, and both
+     * [app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer] and the offline analysis look columns up
+     * by name. The rewrite happens only when the stored header is the start of the wanted one, so a
+     * file with another shape is never touched. Old rows keep their shorter row on purpose: a cell
+     * that is not there reads as absent, never as zero.
+     *
+     * The file is read once per path per app start; after that the path is remembered and skipped.
+     * File I/O stays in androidMain on the existing writer — not a second store, not commonMain.
+     */
+    private fun upgradeCsvHeaderIfColumnsWereAppended(file: File, headerRow: String) {
+        if (!csvHeaderCheckedPaths.add(file.absolutePath)) return
+        runCatching {
+            val wanted = headerRow.trimEnd('\n')
+            val lines = file.readLines(Charsets.UTF_8)
+            val stored = lines.firstOrNull()?.trimEnd('\r') ?: return@runCatching
+            if (stored == wanted) return@runCatching
+            if (!wanted.startsWith("$stored,")) return@runCatching
+            file.writeText((listOf(wanted) + lines.drop(1)).joinToString("\n") + "\n", Charsets.UTF_8)
+            aapsLogger.info(LTag.APS, "CSV header extended in place for ${file.name}")
+        }.onFailure { error ->
+            aapsLogger.warn(LTag.APS, "CSV header upgrade skipped for ${file.name}: ${error.message}")
+        }
     }
 
     fun removeLast200Lines(csvFile: File) {
@@ -17119,6 +17201,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         smbSealAllowedRaiseCount = 0
         raNetCombinedDelta = shortAvgDelta
         raNetShortAvgDeltaAdj = shortAvgDelta
+        smbTrainingRowTickKey = ctx.currentTime
         val result = try {
             val inner = runDetermineBasalTickInner(ctx)
             observeRaIfNotAlreadyRun(
