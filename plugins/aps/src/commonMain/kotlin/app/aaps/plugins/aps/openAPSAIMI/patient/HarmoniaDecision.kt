@@ -41,6 +41,18 @@ data class HarmoniaDecisionEnvironment(
      * - `>1.0` = use governor amp (capped).
      */
     val endocrineBasalAmp: Double? = null,
+    /**
+     * Runtime blocker that refused Harmonia on the **previous** tick, `null` when there was none.
+     *
+     * Doors for the export and for `HarmoniaCounterfactual` **only**. The decision never reads them:
+     * `evaluate`, `buildBlockers` and `chooseActionWithReason` all ignore them, and
+     * `HarmoniaDecisionEngineFeedbackIsInertTest` fails the build if that ever stops being true.
+     * They exist so the question "does Harmonia even know it was refused" has a place to be
+     * answered, before anything is wired.
+     */
+    val priorRuntimeBlocker: String? = null,
+    /** How many ticks in a row the same blocker refused Harmonia. Same rule: never read by the decision. */
+    val priorBlockedStreak: Int = 0,
     val seed: Long? = null,
 ) {
     fun toJsonObject(): JsonObject =
@@ -66,6 +78,8 @@ data class HarmoniaDecisionEnvironment(
             effectiveDiaHours?.let { put("effective_dia_h", it) }
             effectivePeakMinutes?.let { put("effective_peak_min", it) }
             put("body_kinetics", bodyKinetics.toJsonObject())
+            put("prior_runtime_blocker", priorRuntimeBlocker)
+            put("prior_blocked_streak", priorBlockedStreak)
             put("seed", seed)
         }
 }

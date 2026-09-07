@@ -54,6 +54,9 @@ import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
 import app.aaps.plugins.aps.openAPSAIMI.ISF.CommandedIsf
 import app.aaps.plugins.aps.openAPSAIMI.ISF.ObservedSensitivityMeter
 import app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaCounterfactual
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSafetyVerdict
+import app.aaps.plugins.aps.openAPSAIMI.quality.InsulinOriginMeter
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
@@ -382,6 +385,58 @@ internal data class AimiDecisionContext(
         var isf_obs_last_window_drop_mgdl: Double? = null,
         /** Insulin credited to that window, U. */
         var isf_obs_last_window_absorbed_u: Double? = null,
+        /**
+         * Harmonia counterfactual, strictly passive. Nothing in the dosing chain reads these fifteen
+         * fields, and nothing may ever read them: they exist only so that what Harmonia proposed can
+         * be compared, after the fact, with what was really done.
+         *
+         * Harmonia is asked for a plan before the tick knows whether the SMB channel was zeroed for
+         * safety. It is then judged on exactly that verdict, and never told it, nor told that it was
+         * refused. These fields write down the missing message and its price:
+         *
+         *  - `harmonia_cf_*` — what Harmonia would propose if it were told, and whether that differs
+         *    from what it really proposed. [harmonia_cf_changes_proposal] is the whole question.
+         *  - `harmonia_block_*` — the size of the refusal. [harmonia_block_stake_u] is signed:
+         *    negative means the refusal **added** insulin, because it refused an under-dose.
+         *  - `harmonia_verdict_*` — the mirrored safety verdict.
+         *    [harmonia_verdict_known_to_engine] is the witness of inertia: it is written `false`, and
+         *    stays `false` for as long as nothing feeds the verdict back into the decision.
+         *  - `harmonia_prev_*` — what refused the previous tick, and for how many ticks in a row.
+         *  - [harmonia_tree_risk_divergence] — set only when the tree trunk and Harmonia disagree on
+         *    the risk level.
+         *
+         * `var`, and written after this object is built, like the fields above. See
+         * `HarmoniaCounterfactual`.
+         */
+        var harmonia_cf_rule: String? = null,
+        /** Action Harmonia would propose knowing the verdict. */
+        var harmonia_cf_action: String? = null,
+        /** Basal that goes with that action, U/h. */
+        var harmonia_cf_basal_uph: Double? = null,
+        /** `true` only when knowing the verdict would change the proposal. */
+        var harmonia_cf_changes_proposal: Boolean? = null,
+        /** The refused request was above the profile basal by more than one pump step. */
+        var harmonia_block_was_escalation: Boolean? = null,
+        /** Request minus profile basal, U/h, signed. */
+        var harmonia_block_delta_uph: Double? = null,
+        /** Insulin the refusal moved over the applied duration, U, signed. */
+        var harmonia_block_stake_u: Double? = null,
+        /** Applied rate minus requested rate, U/h. */
+        var harmonia_applied_gap_uph: Double? = null,
+        /** Mirrored verdict: a safety rule zeroed the SMB of this tick. */
+        var harmonia_verdict_critical_safety: Boolean? = null,
+        /** Mirrored verdict: the active context suppresses the SMB of this tick. */
+        var harmonia_verdict_context_suppress: Boolean? = null,
+        /** Mirrored verdict: a manual meal mode is declared, which exempts the channel. */
+        var harmonia_verdict_meal_mode: Boolean? = null,
+        /** Witness of inertia. Written `false`: the engine is never told the verdict. */
+        var harmonia_verdict_known_to_engine: Boolean? = null,
+        /** Runtime blocker of the previous tick, `null` when there was none. */
+        var harmonia_prev_blocker: String? = null,
+        /** How many ticks in a row the same blocker has refused Harmonia. */
+        var harmonia_prev_blocked_streak: Int? = null,
+        /** `"tronc=X|harmonia=Y"` when the two risk views differ, `null` when they agree. */
+        var harmonia_tree_risk_divergence: String? = null,
         /** Fast estimator 1: Kalman-filtered raw ISF. */
         val isf_kalman_fast_mgdl: Double? = null,
         /** Fast estimator 2: IsfAdjustmentEngine output. */
@@ -593,6 +648,11 @@ internal data class AimiDecisionContext(
          * it, and the SMB before / after its cap. See `docs/adr/0006-autodrive-consumes-authority.md`.
          */
         var post_hypo_delivery: JsonObject? = null,
+        /**
+         * Running share of the delivered insulin the model actually asked for, against the share the
+         * floors added. Observation only; no dose reads it. See `InsulinOriginMeter`.
+         */
+        var insulin_origin: JsonObject? = null,
     )
 
     data class T3cRuntimeOwnershipExport(
@@ -729,6 +789,21 @@ internal data class AimiDecisionContext(
             base.put("isf_obs_last_window_mgdl", baseline_state.isf_obs_last_window_mgdl ?: AimiJson.NULL)
             base.put("isf_obs_last_window_drop_mgdl", baseline_state.isf_obs_last_window_drop_mgdl ?: AimiJson.NULL)
             base.put("isf_obs_last_window_absorbed_u", baseline_state.isf_obs_last_window_absorbed_u ?: AimiJson.NULL)
+            base.put("harmonia_cf_rule", baseline_state.harmonia_cf_rule ?: AimiJson.NULL)
+            base.put("harmonia_cf_action", baseline_state.harmonia_cf_action ?: AimiJson.NULL)
+            base.put("harmonia_cf_basal_uph", baseline_state.harmonia_cf_basal_uph ?: AimiJson.NULL)
+            base.put("harmonia_cf_changes_proposal", baseline_state.harmonia_cf_changes_proposal ?: AimiJson.NULL)
+            base.put("harmonia_block_was_escalation", baseline_state.harmonia_block_was_escalation ?: AimiJson.NULL)
+            base.put("harmonia_block_delta_uph", baseline_state.harmonia_block_delta_uph ?: AimiJson.NULL)
+            base.put("harmonia_block_stake_u", baseline_state.harmonia_block_stake_u ?: AimiJson.NULL)
+            base.put("harmonia_applied_gap_uph", baseline_state.harmonia_applied_gap_uph ?: AimiJson.NULL)
+            base.put("harmonia_verdict_critical_safety", baseline_state.harmonia_verdict_critical_safety ?: AimiJson.NULL)
+            base.put("harmonia_verdict_context_suppress", baseline_state.harmonia_verdict_context_suppress ?: AimiJson.NULL)
+            base.put("harmonia_verdict_meal_mode", baseline_state.harmonia_verdict_meal_mode ?: AimiJson.NULL)
+            base.put("harmonia_verdict_known_to_engine", baseline_state.harmonia_verdict_known_to_engine ?: AimiJson.NULL)
+            base.put("harmonia_prev_blocker", baseline_state.harmonia_prev_blocker ?: AimiJson.NULL)
+            base.put("harmonia_prev_blocked_streak", baseline_state.harmonia_prev_blocked_streak ?: AimiJson.NULL)
+            base.put("harmonia_tree_risk_divergence", baseline_state.harmonia_tree_risk_divergence ?: AimiJson.NULL)
             base.put("isf_kalman_fast_mgdl", baseline_state.isf_kalman_fast_mgdl ?: AimiJson.NULL)
             base.put("isf_adj_engine_mgdl", baseline_state.isf_adj_engine_mgdl ?: AimiJson.NULL)
             base.put("isf_fused_slow_mgdl", baseline_state.isf_fused_slow_mgdl ?: AimiJson.NULL)
@@ -1002,6 +1077,9 @@ internal data class AimiDecisionContext(
             }
             adjustments.post_hypo_delivery?.let { postHypoDelivery ->
                 adj.put("post_hypo_delivery", postHypoDelivery)
+            }
+            adjustments.insulin_origin?.let { insulinOrigin ->
+                adj.put("insulin_origin", insulinOrigin)
             }
             json.put("adjustments", adj)
 
@@ -1352,6 +1430,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * nothing else can reach it. Any new call site is a bug. See `ObservedSensitivityMeter`.
      */
     private val observedSensitivityMeter = ObservedSensitivityMeter()
+
+    /**
+     * Passive reference instrument. It measures which share of the delivered insulin the model
+     * really asked for, and which share the floors added under it, and writes the answer to
+     * `adjustments.insulin_origin` only.
+     *
+     * **Only the export stage may reach it.** It is a plain private field on purpose: not @Inject,
+     * not @Singleton, so nothing else can. Any other call site is a bug — it would mean a dose
+     * depends on a passive instrument. See `InsulinOriginMeter`.
+     */
+    private val insulinOriginMeter = InsulinOriginMeter()
 
     @Inject lateinit var sensitivityRatioEstimator: SensitivityRatioEstimator
     @Inject lateinit var continuousStateEstimator: app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstimator
@@ -3697,6 +3786,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         it.enabled && it.applicationMode == EndocrineApplicationMode.APPLIED
                     }
                     ?.effectiveBasalAmp,
+                // Carried for the export and the counterfactual only. The decision engine does not
+                // read these two, and a test locks that down.
+                priorRuntimeBlocker = harmoniaPrevRuntimeBlocker,
+                priorBlockedStreak = harmoniaBlockedStreak,
             )
         }
         val harmoniaDecision = HarmoniaDecisionEngine.evaluate(
@@ -9157,6 +9250,52 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             decisionCtx.baseline_state.isf_obs_last_window_absorbed_u = observed.lastWindow?.absorbedU
         }
 
+        // Observation only — the Harmonia counterfactual. It answers two questions and changes
+        // nothing: "would Harmonia propose something else if it were told the safety verdict", and
+        // "how much insulin does the refusal move". The verdict below is a mirror of the real guard;
+        // it is never handed back to the engine, which is what `harmonia_verdict_known_to_engine`
+        // records. See `HarmoniaCounterfactual`.
+        runCatching {
+            val verdict = HarmoniaSafetyVerdict(
+                criticalSafetyZeroed = criticalSafetyZeroedThisTick,
+                contextSuppressSmb = lastContextSuppressSmb,
+                mealModeActive = manualMealModeActive(),
+                guardsEnabled = basalChannelSafetyGuardsActive(),
+            )
+            val counterfactual = HarmoniaCounterfactual.evaluate(
+                simulation = lastHarmoniaDecision,
+                production = lastHarmoniaProductionDecision,
+                verdict = verdict,
+                profileBasalUph = profile.current_basal,
+                appliedRateUph = finalResult.rate,
+                appliedDurationMin = finalResult.duration ?: 30,
+            )
+            decisionCtx.baseline_state.harmonia_cf_rule = counterfactual.rule.name
+            decisionCtx.baseline_state.harmonia_cf_action = counterfactual.counterfactualAction?.name
+            decisionCtx.baseline_state.harmonia_cf_basal_uph = counterfactual.counterfactualBasalUph
+            decisionCtx.baseline_state.harmonia_cf_changes_proposal = counterfactual.changesProposal
+            decisionCtx.baseline_state.harmonia_block_was_escalation = counterfactual.requestWasEscalation
+            decisionCtx.baseline_state.harmonia_block_delta_uph = counterfactual.requestDeltaVsProfileUph
+            decisionCtx.baseline_state.harmonia_block_stake_u = counterfactual.blockStakeU
+            decisionCtx.baseline_state.harmonia_applied_gap_uph = counterfactual.appliedGapUph
+            decisionCtx.baseline_state.harmonia_verdict_critical_safety = verdict.criticalSafetyZeroed
+            decisionCtx.baseline_state.harmonia_verdict_context_suppress = verdict.contextSuppressSmb
+            decisionCtx.baseline_state.harmonia_verdict_meal_mode = verdict.mealModeActive
+            // Hard-coded false: witness of inertia. It stays false for as long as no decision path
+            // reads the verdict. The day one does, this line has to change with it.
+            decisionCtx.baseline_state.harmonia_verdict_known_to_engine = false
+            decisionCtx.baseline_state.harmonia_prev_blocker = harmoniaPrevRuntimeBlocker
+            decisionCtx.baseline_state.harmonia_prev_blocked_streak = harmoniaBlockedStreak
+            val trunkRisk = lastPhysiologicalTreeSnapshot?.trunk?.riskLevel
+            val harmoniaRisk = lastHarmoniaDecision?.decisionBasis?.trunkRisk
+            decisionCtx.baseline_state.harmonia_tree_risk_divergence =
+                if (trunkRisk != null && harmoniaRisk != null && trunkRisk != harmoniaRisk) {
+                    "tronc=${trunkRisk.name}|harmonia=${harmoniaRisk.name}"
+                } else {
+                    null
+                }
+        }
+
         decisionCtx.adjustments.dynamic_isf = AimiDecisionContext.DynamicIsf(
             final_value_mgdl = snapshotFusedIsf,
             modifiers = mutableListOf<AimiDecisionContext.Modifier>().apply {
@@ -9352,6 +9491,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         decisionCtx.adjustments.smb_binding_trace = bindingExportDraft.build(bindingFinalU).toJsonObject()
 
+        // Observation only — running share of the delivered insulin the model really asked for.
+        // Placed here on purpose, **after** `bindingExportDraft` is complete: read any earlier and
+        // the model output and the floor of this tick are not both known yet, so the split would be
+        // wrong on exactly the ticks it is meant to describe. See `InsulinOriginMeter`.
+        runCatching {
+            insulinOriginMeter.observe(
+                InsulinOriginMeter.Sample(
+                    timestampMs = decisionCtx.timestamp,
+                    finalU = bindingFinalU,
+                    modelOutputU = bindingExportDraft.modelOutputU,
+                    mpcOutputU = bindingExportDraft.mpcOutputU,
+                    autodriveFloorU = bindingExportDraft.autodriveFloorU,
+                    bindingStage = bindingExportDraft.stages.lastOrNull()?.name,
+                    originOwner = bindingExportDraft.originOwner,
+                ),
+            )
+            decisionCtx.adjustments.insulin_origin =
+                insulinOriginMeter.read(decisionCtx.timestamp).toJsonObject()
+        }
+
         lastAuditorLoopSnapshot?.let { snapshot ->
             decisionCtx.adjustments.auditor_tick = snapshot.toJsonObject()
         }
@@ -9466,6 +9625,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } catch (e: Exception) {
             consoleError.add("Failed to save HORMONITOR event JSON: ${e.message}")
         }
+
+        // Very last thing the stage does, and it must stay last: the export above has already read
+        // `harmoniaPrevRuntimeBlocker`, so updating here is what makes "previous" mean the previous
+        // tick. Move this up and every line would export its own blocker while claiming it is the
+        // one before. Observation only.
+        val nowBlocker = lastHarmoniaProductionDecision?.runtimeBlocker
+        harmoniaBlockedStreak = when {
+            nowBlocker != null && nowBlocker == harmoniaPrevRuntimeBlocker -> harmoniaBlockedStreak + 1
+            nowBlocker != null                                            -> 1
+            else                                                          -> 0
+        }
+        harmoniaPrevRuntimeBlocker = nowBlocker
     }
 
     private fun aimiDecisionsJsonlFile(): AimiPath = storage.file("AIMI_Decisions.jsonl")
@@ -11151,6 +11322,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastMealCertainty: MealCertainty? = null
     private var lastHarmonizerOutcome: HarmoniaHarmonizer.Outcome? = null
     private var lastHarmoniaProductionDecision: HarmoniaProductionDecision? = null
+
+    /**
+     * Runtime blocker that refused Harmonia on the **previous** tick, and how many ticks in a row the
+     * same blocker has refused it.
+     *
+     * Deliberately **not** reset with the other `last*` fields at the start of a tick: a memory that
+     * is cleared every tick is not a memory. Same reason as `lastEffortMemory`, which the reset block
+     * also leaves alone. Both are written at the very end of the export stage, after the export has
+     * already read the previous value, so a tick exports the previous tick and never itself.
+     *
+     * Observation only. Nothing in the dosing chain reads either field.
+     */
+    private var harmoniaPrevRuntimeBlocker: String? = null
+    private var harmoniaBlockedStreak: Int = 0
     private var lastPatientSourceSensor: SourceSensor? = null
     /** Latest IOB surveillance snapshot for JSONL (updated each [finalizeAndCapSMB]). */
     private var lastIobSurveillanceExport: IobSurveillanceExport? = null
