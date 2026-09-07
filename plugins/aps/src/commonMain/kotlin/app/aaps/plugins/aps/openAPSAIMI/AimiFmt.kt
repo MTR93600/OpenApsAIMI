@@ -14,6 +14,9 @@ internal fun aimiFmt1(value: Double): String =
 internal fun aimiFmt2(value: Double): String =
     NumberFormat.DECIMAL_2.format(value, NumberFormatPlatform.SEPARATOR_DOT)
 
+internal fun aimiFmt4(value: Double): String =
+    NumberFormat.withDecimals(4).format(value, NumberFormatPlatform.SEPARATOR_DOT)
+
 internal fun aimiFmtSigned1(value: Double): String {
     val body = aimiFmt1(abs(value))
     return if (value >= 0.0) "+$body" else "-$body"
