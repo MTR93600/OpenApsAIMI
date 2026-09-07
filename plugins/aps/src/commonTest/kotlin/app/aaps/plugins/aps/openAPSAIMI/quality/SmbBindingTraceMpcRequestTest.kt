@@ -6,7 +6,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /**
  * Locks the one reading the binding trace could not make before: "the solver asked for nothing"
@@ -48,7 +47,6 @@ class SmbBindingTraceMpcRequestTest {
             .toJsonObject()
 
         assertEquals(JsonNull, json["mpc_requested_u"])
-        assertTrue(json["mpc_requested_u"] !is kotlinx.serialization.json.JsonPrimitive)
     }
 
     @Test

@@ -2,7 +2,6 @@ package app.aaps.plugins.aps.openAPSAIMI.patient
 
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.boolean
-import kotlinx.serialization.json.content
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
