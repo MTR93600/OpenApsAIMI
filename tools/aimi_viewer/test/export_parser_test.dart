@@ -169,21 +169,49 @@ void main() {
     expect(source['coverageComplete'], isFalse);
   });
 
-  test('borne les buffers glucose à 320 et journal à 80', () async {
+  test(
+    'borne les buffers glucose à 320 et journal à timelineCapacity',
+    () async {
+      final start = DateTime(2026, 8, 26).millisecondsSinceEpoch;
+      final end = DateTime(2026, 8, 27).millisecondsSinceEpoch;
+      final lines = List<String>.generate(1000, (index) {
+        final timestamp = start + index * 60 * 1000;
+        return _decision(timestamp, bg: 80 + (index % 100).toDouble(), smb: 0);
+      });
+      final decisions = await _writeFile(directory, decisionsFile, lines);
+
+      final result = await _parse(start, end, <Map<String, Object>>[
+        _metadata(decisionsFile, decisions),
+      ]);
+
+      expect((result['glucose'] as List).length, lessThanOrEqualTo(320));
+      expect((result['timeline'] as List), hasLength(timelineCapacity));
+    },
+  );
+
+  test('expose la narrative de décision et les séries IOB/COB/SMB', () async {
     final start = DateTime(2026, 8, 26).millisecondsSinceEpoch;
     final end = DateTime(2026, 8, 27).millisecondsSinceEpoch;
-    final lines = List<String>.generate(1000, (index) {
-      final timestamp = start + index * 60 * 1000;
-      return _decision(timestamp, bg: 80 + (index % 100).toDouble(), smb: 0);
-    });
-    final decisions = await _writeFile(directory, decisionsFile, lines);
+    final decisions = await _writeFile(directory, decisionsFile, <String>[
+      _decision(
+        start + 1000,
+        bg: 130,
+        smb: 0.4,
+        narrative: 'IOB haut, SMB réduit par prudence.',
+      ),
+    ]);
 
     final result = await _parse(start, end, <Map<String, Object>>[
       _metadata(decisionsFile, decisions),
     ]);
 
-    expect((result['glucose'] as List).length, lessThanOrEqualTo(320));
-    expect((result['timeline'] as List), hasLength(80));
+    final timeline = (result['timeline'] as List).cast<Map>();
+    expect(timeline.single['narrative'], 'IOB haut, SMB réduit par prudence.');
+    expect((result['iobSeries'] as List), isNotEmpty);
+    expect((result['cobSeries'] as List), isNotEmpty);
+    expect((result['smbSeries'] as List), isNotEmpty);
+    final smbPoint = (result['smbSeries'] as List).cast<Map>().single;
+    expect(smbPoint['value'], closeTo(0.4, 0.0001));
   });
 }
 
@@ -224,6 +252,7 @@ String _decision(
   required double bg,
   required double smb,
   String safety = 'SafetyPass',
+  String? narrative,
 }) => jsonEncode(<String, Object>{
   'event_id': 'event-$timestamp',
   'timestamp': timestamp,
@@ -239,6 +268,7 @@ String _decision(
   'outcome': <String, Object>{
     'decision': smb > 0 ? 'SMB_Delivery' : 'No_Action',
     'amount': smb,
+    if (narrative != null) 'narrative': narrative,
   },
 });
 

@@ -7,6 +7,8 @@ import 'src/dashboard_controller.dart';
 import 'src/export_parser.dart';
 import 'src/label_catalog.dart';
 import 'src/models.dart';
+import 'src/widgets/series_chart.dart';
+import 'src/widgets/timeline_detail_sheet.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -522,6 +524,43 @@ class _OverviewTab extends StatelessWidget {
             high: data.highPct,
           ),
         ),
+        if (data.iobSeries.isNotEmpty || data.cobSeries.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _SectionCard(
+            title: 'Insuline et glucides actifs',
+            subtitle: 'IOB et COB estimés sur la période',
+            child: MultiSeriesChart(
+              series: [
+                ChartSeries(
+                  label: 'IOB',
+                  unit: 'U',
+                  color: const Color(0xFF67A8FF),
+                  points: data.iobSeries,
+                ),
+                ChartSeries(
+                  label: 'COB',
+                  unit: 'g',
+                  color: const Color(0xFF48D7C2),
+                  points: data.cobSeries,
+                ),
+              ],
+              startMs: data.windowStartMs,
+              endMs: data.windowEndMs,
+            ),
+          ),
+        ],
+        if (data.smbSeries.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _SectionCard(
+            title: 'Micro-bolus SMB',
+            subtitle: 'Chaque barre est une dose délivrée',
+            child: SmbBarChart(
+              points: data.smbSeries,
+              startMs: data.windowStartMs,
+              endMs: data.windowEndMs,
+            ),
+          ),
+        ],
         const SizedBox(height: 14),
         _DistributionCard(
           title: 'Actions décidées par AIMI',
@@ -632,47 +671,227 @@ class _HormonitorTab extends StatelessWidget {
   }
 }
 
-class _TimelineTab extends StatelessWidget {
+class _TimelineTab extends StatefulWidget {
   const _TimelineTab({required this.data, required this.period});
   final DashboardData data;
   final AnalysisPeriod period;
 
   @override
+  State<_TimelineTab> createState() => _TimelineTabState();
+}
+
+class _TimelineTabState extends State<_TimelineTab> {
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+  final Set<String> _decisionFilter = <String>{};
+  final Set<String> _modeFilter = <String>{};
+  final Set<String> _safetyFilter = <String>{};
+
+  @override
+  void didUpdateWidget(covariant _TimelineTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data != widget.data) {
+      _searchController.clear();
+      _query = '';
+      _decisionFilter.clear();
+      _modeFilter.clear();
+      _safetyFilter.clear();
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<TimelineEntry> get _filteredEntries {
+    return widget.data.timeline.where((entry) {
+      if (_decisionFilter.isNotEmpty &&
+          !_decisionFilter.contains(entry.decision)) {
+        return false;
+      }
+      if (_modeFilter.isNotEmpty &&
+          (entry.patientMode == null ||
+              !_modeFilter.contains(entry.patientMode))) {
+        return false;
+      }
+      if (_safetyFilter.isNotEmpty &&
+          (entry.safetyGate == null ||
+              !_safetyFilter.contains(entry.safetyGate))) {
+        return false;
+      }
+      if (_query.isEmpty) return true;
+      final haystack =
+          '${labelFor(LabelDomain.decision, entry.decision)} ${entry.narrative ?? ''}'
+              .toLowerCase();
+      return haystack.contains(_query);
+    }).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
-      itemCount: data.timeline.isEmpty ? 2 : data.timeline.length + 1,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Journal des décisions',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+    final entries = _filteredEntries;
+    final decisionOptions =
+        widget.data.timeline.map((entry) => entry.decision).toSet().toList()
+          ..sort();
+    final modeOptions =
+        widget.data.timeline
+            .map((entry) => entry.patientMode)
+            .whereType<String>()
+            .toSet()
+            .toList()
+          ..sort();
+    final safetyOptions =
+        widget.data.timeline
+            .map((entry) => entry.safetyGate)
+            .whereType<String>()
+            .toSet()
+            .toList()
+          ..sort();
+    final hasActiveFilters =
+        _query.isNotEmpty ||
+        _decisionFilter.isNotEmpty ||
+        _modeFilter.isNotEmpty ||
+        _safetyFilter.isNotEmpty;
+    final hasFilterOptions =
+        decisionOptions.isNotEmpty ||
+        modeOptions.isNotEmpty ||
+        safetyOptions.isNotEmpty;
+
+    return Column(
+      children: [
+        if (widget.data.timeline.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: TextField(
+              controller: _searchController,
+              onChanged:
+                  (value) =>
+                      setState(() => _query = value.trim().toLowerCase()),
+              decoration: InputDecoration(
+                hintText: 'Rechercher une décision ou une explication…',
+                isDense: true,
+                filled: true,
+                fillColor: const Color(0xFF13212B),
+                prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                suffixIcon:
+                    _query.isEmpty
+                        ? null
+                        : IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _query = '');
+                          },
+                        ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFF263943)),
                 ),
-                const SizedBox(height: 5),
-                Text(
-                  '${period.label} · ${data.timeline.length >= 80 ? '80 événements les plus récents' : 'événements les plus récents'} en premier',
-                  style: const TextStyle(color: Color(0xFF9EB1BE)),
-                ),
-              ],
+              ),
             ),
-          );
-        }
-        if (data.timeline.isEmpty) {
-          return const _InlineEmpty(
-            'Aucune décision dans la période sélectionnée.',
-          );
-        }
-        return _TimelineTile(entry: data.timeline[index - 1]);
-      },
+          ),
+        if (hasFilterOptions)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  ..._filterChips(
+                    decisionOptions,
+                    _decisionFilter,
+                    LabelDomain.decision,
+                  ),
+                  ..._filterChips(
+                    modeOptions,
+                    _modeFilter,
+                    LabelDomain.patientMode,
+                  ),
+                  ..._filterChips(
+                    safetyOptions,
+                    _safetyFilter,
+                    LabelDomain.safetyGate,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
+            itemCount: entries.isEmpty ? 2 : entries.length + 1,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Journal des décisions',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        hasActiveFilters
+                            ? '${entries.length} résultat(s) sur ${widget.data.timeline.length}'
+                            : '${widget.period.label} · ${widget.data.timeline.length >= timelineCapacity ? '$timelineCapacity événements les plus récents' : 'événements les plus récents'} en premier',
+                        style: const TextStyle(color: Color(0xFF9EB1BE)),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              if (entries.isEmpty) {
+                return _InlineEmpty(
+                  widget.data.timeline.isEmpty
+                      ? 'Aucune décision dans la période sélectionnée.'
+                      : 'Aucune décision ne correspond à la recherche ou aux filtres.',
+                );
+              }
+              return _TimelineTile(entry: entries[index - 1]);
+            },
+          ),
+        ),
+      ],
     );
+  }
+
+  List<Widget> _filterChips(
+    List<String> options,
+    Set<String> selected,
+    LabelDomain domain,
+  ) {
+    return options
+        .map(
+          (option) => Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: Text(
+                labelFor(domain, option),
+                style: const TextStyle(fontSize: 12),
+              ),
+              selected: selected.contains(option),
+              visualDensity: VisualDensity.compact,
+              onSelected:
+                  (value) => setState(() {
+                    if (value) {
+                      selected.add(option);
+                    } else {
+                      selected.remove(option);
+                    }
+                  }),
+            ),
+          ),
+        )
+        .toList();
   }
 }
 
@@ -1270,16 +1489,21 @@ class _TimelineTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasSmb = entry.smbU > 0.0001;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF13212B),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF263943)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        onTap: () => showTimelineDetailSheet(context, entry),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF13212B),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF263943)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
           Container(
             width: 44,
             padding: const EdgeInsets.symmetric(vertical: 7),
@@ -1362,6 +1586,8 @@ class _TimelineTile extends StatelessWidget {
             ),
           ),
         ],
+          ),
+        ),
       ),
     );
   }

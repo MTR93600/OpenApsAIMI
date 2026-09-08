@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
@@ -83,6 +84,9 @@ object AimiSmbTrainer {
     // Training rate limit
     private val lastTrainMs   = AtomicLong(0L)
     private val rowsAtLastTrain = AtomicLong(0L)
+
+    /** Set once the weights trained on an unreadable corpus have been thrown away. */
+    private val staleModelDiscarded = AtomicBoolean(false)
 
     // ---- Public API ----------------------------------------------------------
 
@@ -182,31 +186,15 @@ object AimiSmbTrainer {
         }
 
         val headers = allLines.firstOrNull()?.split(",")?.map { it.trim() } ?: return
-        val targetName = "smbGiven"
-        val targetIndex    = headers.indexOf(targetName)
-
-        if (targetIndex == -1) {
-            Log.w(TAG, "CSV missing required columns — skip training")
+        val headerCheck = checkCorpusHeader(headers)
+        if (!headerCheck.valid) {
+            Log.e(TAG, "SMB corpus refused — no training. ${headerCheck.reason}")
+            discardModelTrainedOnUnreadableCorpus(dir)
             return
         }
-
-        val inputs  = mutableListOf<FloatArray>()
-        val targets = mutableListOf<DoubleArray>()
-
-        for (line in dataLines) {
-            val cols = line.split(",").map { it.trim() }
-            if (cols.size <= targetIndex) continue
-
-            val raw = SmbRefinementFeatureSchema.parseTrainingFeatures(headers, cols) ?: continue
-            if (!SmbRefinementFeatureSchema.shouldUseCsvRowForTraining(headers, cols, raw)) continue
-
-            // Approximate trendIndicator for offline training
-            val trendIndicator = computeTrendIndicator(raw)
-            val enhanced = raw.copyOf(raw.size + 1).also { it[raw.size] = trendIndicator }
-
-            targets.add(doubleArrayOf(cols[targetIndex].toDoubleOrNull() ?: continue))
-            inputs.add(enhanced)
-        }
+        val corpus = buildTrainingCorpus(headers, dataLines) ?: return
+        val inputs = corpus.inputs
+        val targets = corpus.targets
 
         if (inputs.size < 10) {
             Log.w(TAG, "Insufficient training samples (${inputs.size}) — skip")
@@ -249,7 +237,119 @@ object AimiSmbTrainer {
         }
     }
 
+    // ---- Corpus reading ------------------------------------------------------
+
+    /** The rows the trainer accepted, in the shape the training pipeline expects. */
+    internal data class TrainingCorpus(
+        val inputs: List<FloatArray>,
+        val targets: List<DoubleArray>,
+    )
+
+    /** Verdict on a stored header: whether the trainer may read the file, and why not when it may not. */
+    internal data class HeaderCheck(val valid: Boolean, val reason: String)
+
+    /**
+     * Checks a stored CSV header against [SmbRefinementFeatureSchema.trainingCsvColumnNames].
+     *
+     * The trainer looks its label up by name, so a header that lists fewer columns than the rows carry
+     * silently returns the index of another column. That is what happened in production: a 13 name
+     * header put `smbGiven` at index 12, where a real row holds `endogenousGlucoseDrive`, a score
+     * bounded by 1. The model then learned a hormonal score while believing it learned insulin units.
+     *
+     * The header is accepted only when `smbGiven` sits exactly where the schema puts it, and when every
+     * name up to and including it matches the schema. Columns after the label are not checked here:
+     * they are read by name with a bounds-safe lookup, so an older, shorter header stays usable.
+     */
+    internal fun checkCorpusHeader(headers: List<String>): HeaderCheck {
+        val expected = SmbRefinementFeatureSchema.trainingCsvColumnNames
+        val expectedTargetIndex = SmbRefinementFeatureSchema.targetColumnIndex
+        val foundTargetIndex = headers.indexOf(SmbRefinementFeatureSchema.TARGET_COLUMN_NAME)
+
+        if (foundTargetIndex != expectedTargetIndex) {
+            return HeaderCheck(
+                valid = false,
+                reason = "'${SmbRefinementFeatureSchema.TARGET_COLUMN_NAME}' expected at index " +
+                    "$expectedTargetIndex, found at index $foundTargetIndex " +
+                    "(stored header has ${headers.size} columns, schema has ${expected.size})",
+            )
+        }
+
+        for (index in 0..expectedTargetIndex) {
+            val stored = headers.getOrNull(index)
+            if (stored != expected[index]) {
+                return HeaderCheck(
+                    valid = false,
+                    reason = "column $index is '$stored', schema expects '${expected[index]}'",
+                )
+            }
+        }
+
+        return HeaderCheck(valid = true, reason = "")
+    }
+
+    /**
+     * Turns the stored header and data lines into a training corpus, or returns `null` when the
+     * corpus cannot be read safely.
+     *
+     * A row shorter than the header is kept: the schemas are nested, so an older row holds its cells
+     * under the right names and the columns it lacks read as absent. A row longer than the header is
+     * dropped, because it cannot be lined up with any column: the production file holds one such row,
+     * 65 fields wide, made of two writes that got interleaved.
+     */
+    internal fun buildTrainingCorpus(headers: List<String>, dataLines: List<String>): TrainingCorpus? {
+        val headerCheck = checkCorpusHeader(headers)
+        if (!headerCheck.valid) {
+            Log.e(TAG, "SMB corpus refused — no training. ${headerCheck.reason}")
+            return null
+        }
+        val targetIndex = SmbRefinementFeatureSchema.targetColumnIndex
+
+        val inputs = mutableListOf<FloatArray>()
+        val targets = mutableListOf<DoubleArray>()
+
+        for (line in dataLines) {
+            val cols = line.split(",").map { it.trim() }
+            if (cols.size <= targetIndex) continue
+            if (cols.size > headers.size) continue
+
+            val raw = SmbRefinementFeatureSchema.parseTrainingFeatures(headers, cols) ?: continue
+            if (!SmbRefinementFeatureSchema.shouldUseCsvRowForTraining(headers, cols, raw)) continue
+
+            // Approximate trendIndicator for offline training
+            val trendIndicator = computeTrendIndicator(raw)
+            val enhanced = raw.copyOf(raw.size + 1).also { it[raw.size] = trendIndicator }
+
+            targets.add(doubleArrayOf(cols[targetIndex].toDoubleOrNull() ?: continue))
+            inputs.add(enhanced)
+        }
+
+        return TrainingCorpus(inputs = inputs, targets = targets)
+    }
+
     // ---- Helpers -------------------------------------------------------------
+
+    /**
+     * Throws away the stored SMB weights, once, after the corpus guard refused the file.
+     *
+     * The weights on disk were fitted against whatever column the stale header pointed at, so they
+     * answer in the wrong unit and `refine` keeps using them until a training run succeeds. Clearing
+     * [modelRef] and deleting the weight file sends `refine` back to returning `predictedSmb`
+     * unchanged, which is already what it does when no model is loaded.
+     *
+     * It runs at most once per app start: a corpus that stays unreadable must not turn into a delete
+     * on every tick.
+     */
+    private fun discardModelTrainedOnUnreadableCorpus(dir: File) {
+        if (!staleModelDiscarded.compareAndSet(false, true)) return
+        modelRef.set(null)
+        val removed = AimiSmbModelStore.delete(dir)
+        Log.w(
+            TAG,
+            "SMB weights discarded: they were trained on an unreadable corpus. " +
+                "Weight file removed=$removed. refine() now returns the rule-based dose until a " +
+                "training run on a readable corpus publishes new weights.",
+        )
+    }
 
     private fun computeTrendIndicator(raw: FloatArray): Float {
         // raw: [bg, iob, cob, delta, shortAvgDelta, longAvgDelta, ...]

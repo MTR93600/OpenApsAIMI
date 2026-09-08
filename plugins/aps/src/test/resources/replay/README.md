@@ -15,6 +15,30 @@ See `docs/adr/0001-replay-harness.md` for why these exist.
 
 All three are the maintainer's own data, contributed deliberately as test fixtures.
 
+### Barrier ticks
+
+| File | Why it is kept |
+|---|---|
+| `barrier_ticks.jsonl` | 60 real ticks where `ControlBarrierShield` actually ran, used by `BarrierReplay`. **The input of the replay the coefficient floor needs** — see the note on `InsulinActionModel.controlCoefficient`. |
+
+This one is **not a day** and is not listed in `ReplayCorpus.bundled`. The barrier only runs on about
+a third of ticks, so a day of it would be two thirds empty, and a day summary of it would be
+meaningless.
+
+It is also cut differently from the day fixtures, because it is meant to be safe to keep in a public
+repository whatever it is regenerated from:
+
+- **no clock.** `t` is an offset in milliseconds from the first tick of the file and `tmin` the same
+  offset in minutes. There is no date and no time of day.
+- **no identifiers.** No event id, no trigger name, no decision text, no owner. Every value in the
+  file is a number or a boolean.
+- **only what the barrier reads.** Glucose, IOB, carb appearance, the barrier's own terms, the
+  controller's raw request, the profile basal, the IOB ceiling and the two sensitivities.
+
+The 60 ticks are picked round-robin over the strata that matter for the barrier — the gamma branch,
+whether the dose was fully suspended, and whether the barrier had to intervene at all — so the small
+file still holds suspended ticks, passing ticks, accelerated ticks and relaxed ticks.
+
 ## Format
 
 One flat JSON object per line, sorted by timestamp, short keys, only the fields the harness reads.
@@ -30,6 +54,14 @@ properties throughout.
 python3 scripts/aimi_replay_fixture.py \
     ~/Downloads/AIMI_Support_Package_<id>/AIMI_Decisions_Last24h.jsonl \
     plugins/aps/src/test/resources/replay/<name>.jsonl
+```
+
+And for the barrier fixture:
+
+```
+python3 scripts/aimi_replay_fixture.py --barrier --max 60 \
+    ~/Downloads/AIMI_Support_Package_<id>/AIMI_Decisions_Last24h.jsonl \
+    plugins/aps/src/test/resources/replay/barrier_ticks.jsonl
 ```
 
 If a regenerated fixture changes the figures asserted in `ReplayCorpusTest`, that is a signal to

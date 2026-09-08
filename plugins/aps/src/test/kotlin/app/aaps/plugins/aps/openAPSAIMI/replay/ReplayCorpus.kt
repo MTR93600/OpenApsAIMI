@@ -36,7 +36,16 @@ object ReplayCorpus {
     /** A day spending 21 % above 180 mg/dL. */
     const val DAY_HYPER = "day_hyper.jsonl"
 
-    /** All bundled fixtures, in the order a report should present them. */
+    /**
+     * Barrier ticks only, de-identified — see the README.
+     *
+     * Deliberately **not** in [bundled]: it is not a day. It carries no clock, no decision, no
+     * owner, and only the ticks where `ControlBarrierShield` actually ran, so a day summary of it
+     * would be meaningless. Read it with [BarrierReplay].
+     */
+    const val BARRIER_TICKS = "barrier_ticks.jsonl"
+
+    /** All bundled *day* fixtures, in the order a report should present them. */
     val bundled: List<String> = listOf(DAY_IN_RANGE, DAY_REBOUND_CYCLES, DAY_HYPER)
 
     fun load(name: String): List<ReplayTick> {

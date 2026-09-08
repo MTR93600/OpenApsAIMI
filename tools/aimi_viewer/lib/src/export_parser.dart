@@ -16,6 +16,9 @@ const String hormonitorShadowFile =
     'AIMI_HORMONITOR_shadow_contributions_v1.jsonl';
 const String hormonitorBlackboxFile = 'AIMI_HORMONITOR_loop_blackbox_v1.jsonl';
 
+/// Most recent decision-journal entries kept in memory for the Journal tab.
+const int timelineCapacity = 300;
+
 const List<String> expectedExportNames = <String>[
   decisionsFile,
   pkpdFile,
@@ -90,8 +93,15 @@ class _ExportParser {
   final _PointBuffer decisionGlucose = _PointBuffer(320);
   final _PointBuffer pkpdGlucose = _PointBuffer(320);
   final _PointBuffer hormonitorGlucose = _PointBuffer(320);
-  final _RecentTimeline decisionTimeline = _RecentTimeline(80);
-  final _RecentTimeline hormonitorTimeline = _RecentTimeline(80);
+  final _PointBuffer decisionIob = _PointBuffer(200, valueKey: 'value');
+  final _PointBuffer decisionCob = _PointBuffer(200, valueKey: 'value');
+  final _PointBuffer decisionSmb = _PointBuffer(200, valueKey: 'value');
+  final _PointBuffer pkpdIob = _PointBuffer(200, valueKey: 'value');
+  final _PointBuffer pkpdSmb = _PointBuffer(200, valueKey: 'value');
+  final _PointBuffer hormonitorIob = _PointBuffer(200, valueKey: 'value');
+  final _PointBuffer hormonitorCob = _PointBuffer(200, valueKey: 'value');
+  final _RecentTimeline decisionTimeline = _RecentTimeline(timelineCapacity);
+  final _RecentTimeline hormonitorTimeline = _RecentTimeline(timelineCapacity);
   final _GlucoseStats decisionGlucoseStats = _GlucoseStats();
   final _GlucoseStats pkpdGlucoseStats = _GlucoseStats();
   final _GlucoseStats hormonitorGlucoseStats = _GlucoseStats();
@@ -148,6 +158,14 @@ class _ExportParser {
             : hormonitorGlucoseStats;
     final selectedTimeline =
         decisionTimeline.isNotEmpty ? decisionTimeline : hormonitorTimeline;
+    final selectedIob =
+        decisionIob.isNotEmpty
+            ? decisionIob
+            : pkpdIob.isNotEmpty
+            ? pkpdIob
+            : hormonitorIob;
+    final selectedCob = decisionCob.isNotEmpty ? decisionCob : hormonitorCob;
+    final selectedSmb = decisionSmb.isNotEmpty ? decisionSmb : pkpdSmb;
     final selectedSafety =
         hormonitorSafetyGates.isNotEmpty
             ? hormonitorSafetyGates
@@ -175,6 +193,9 @@ class _ExportParser {
       'dailyTddDays': tddValues.length,
       'patientStoryCoverage': _pct(patientStoryCount, hormonitorEventCount),
       'glucose': selectedPoints.sorted,
+      'iobSeries': selectedIob.sorted,
+      'cobSeries': selectedCob.sorted,
+      'smbSeries': selectedSmb.sorted,
       'timeline': selectedTimeline.sortedNewestFirst,
       'decisionTypes': _sortedCounts(decisionTypes),
       'patientModes': _sortedCounts(
@@ -224,8 +245,12 @@ class _ExportParser {
       final safetyGate = _text(
         _map(adjustments?['safety_risk'])?['safety_gate'],
       );
+      final narrative = _text(outcome?['narrative']);
 
       _observeGlucose(timestamp!, bg, decisionGlucose, decisionGlucoseStats);
+      if (iob != null) decisionIob.add(timestamp, iob, windowStartMs, windowEndMs);
+      if (cob != null) decisionCob.add(timestamp, cob, windowStartMs, windowEndMs);
+      if (smb > 0) decisionSmb.add(timestamp, smb, windowStartMs, windowEndMs);
       decisionSmbTotal += smb > 0 ? smb : 0;
       if (decision != null) _bump(decisionTypes, decision);
       if (patientMode != null) _bump(decisionModes, patientMode);
@@ -241,6 +266,7 @@ class _ExportParser {
         'decision': decision ?? 'Décision non renseignée',
         'patientMode': patientMode,
         'safetyGate': safetyGate,
+        'narrative': narrative,
       });
     }
   }
@@ -265,7 +291,11 @@ class _ExportParser {
       profileIsf.add(double.tryParse(columns[11].trim()));
       final smbFinal = double.tryParse(columns[14].trim()) ?? 0;
       _observeGlucose(timestamp!, bg, pkpdGlucose, pkpdGlucoseStats);
-      if (smbFinal > 0) pkpdSmbTotal += smbFinal;
+      if (iob != null) pkpdIob.add(timestamp, iob, windowStartMs, windowEndMs);
+      if (smbFinal > 0) {
+        pkpdSmbTotal += smbFinal;
+        pkpdSmb.add(timestamp, smbFinal, windowStartMs, windowEndMs);
+      }
       _observeLatest(timestamp, iob, isIob: true, sourcePriority: 2);
     }
   }
@@ -311,6 +341,12 @@ class _ExportParser {
         hormonitorGlucose,
         hormonitorGlucoseStats,
       );
+      if (iob != null) {
+        hormonitorIob.add(timestamp, iob, windowStartMs, windowEndMs);
+      }
+      if (cob != null) {
+        hormonitorCob.add(timestamp, cob, windowStartMs, windowEndMs);
+      }
       _observeLatest(timestamp, iob, isIob: true, sourcePriority: 1);
       _observeLatest(timestamp, cob, isIob: false, sourcePriority: 1);
       hormonitorTimeline.add(<String, Object?>{
@@ -450,8 +486,9 @@ class _SourceAccumulator {
 }
 
 class _PointBuffer {
-  _PointBuffer(this.capacity);
+  _PointBuffer(this.capacity, {this.valueKey = 'valueMgdl'});
   final int capacity;
+  final String valueKey;
   final Map<int, Map<String, Object?>> _buckets = <int, Map<String, Object?>>{};
 
   bool get isNotEmpty => _buckets.isNotEmpty;
@@ -465,7 +502,7 @@ class _PointBuffer {
     );
     _buckets[bucket] = <String, Object?>{
       'timestampMs': timestamp,
-      'valueMgdl': value,
+      valueKey: value,
     };
   }
 

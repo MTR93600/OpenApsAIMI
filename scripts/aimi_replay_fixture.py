@@ -11,6 +11,20 @@ block outside the allow-list below. The ``Diagnostic_Report.txt`` of a package i
 
 Usage:
     python3 scripts/aimi_replay_fixture.py <package>/AIMI_Decisions_Last24h.jsonl <out.jsonl>
+    python3 scripts/aimi_replay_fixture.py --barrier [--max N] <package>/...jsonl <out.jsonl>
+
+The default (day) mode keeps a whole day and keeps the absolute timestamp, because a day fixture is
+already the maintainer's own contributed data and the harness sorts on it.
+
+``--barrier`` writes the *barrier* fixture instead. It keeps only the ticks that carry an
+``adjustments.control_barrier`` block (about a third of a day), keeps **only numeric and boolean
+fields**, and replaces the absolute timestamp by an offset from the first kept tick. No date, no
+time of day, no event id, no free text. That fixture is meant to be read by the barrier replay,
+which never needs to know when a tick happened.
+
+``--max N`` subsamples to about N ticks, round-robin over the strata that matter for the barrier
+(gamma branch, full suspension, whether the barrier intervened at all), so a small fixture still
+contains suspended ticks, passing ticks, accelerated ticks and relaxed ticks.
 
 Bundled fixtures live in ``plugins/aps/src/test/resources/replay/``. A larger private corpus can be
 kept outside the repository and pointed at with the ``AIMI_REPLAY_CORPUS`` environment variable;
@@ -70,11 +84,112 @@ def flat(r):
       "phd_active":phd.get("active"),"phd_reason":phd.get("reason_tag"),
       "phd_before":phd.get("smb_before_cap_u"),"phd_after":phd.get("smb_after_cap_u"),
     }
+    d.update(barrier(r))
     return {k:v for k,v in d.items() if v is not None}
-src,dst=sys.argv[1],sys.argv[2]
+
+def barrier(r):
+    """The fields ``ControlBarrierShield.enforce`` needs to be replayed on this tick.
+
+    Absent on the two thirds of ticks where the barrier did not run: the whole ``control_barrier``
+    block is missing then, and every key below is dropped by the caller. A missing key must read as
+    "unknown" on the Kotlin side, never as zero.
+    """
+    b=r["baseline_state"]; a=r.get("adjustments") or {}
+    cb=a.get("control_barrier")
+    bt=a.get("basal_terminal") or {}; sr=a.get("safety_risk") or {}
+    env=g(a,"harmonia_simulation","environment") or {}
+    ios=a.get("iob_surveillance") or {}
+    delta5=bt.get("delta_mgdl_5m")
+    if delta5 is None: delta5=ios.get("delta_mgdl_5m")
+    d={
+      # Baseline witnesses of the barrier. Present whenever the engine ran, block or not.
+      "cbfc":b.get("cbf_coefficient_used"),"cbfcunf":b.get("cbf_coefficient_unfloored"),
+      "cbfu":b.get("cbf_permitted_u"),"cbfuunf":b.get("cbf_permitted_unfloored_u"),
+      "cbfisf":b.get("cbf_profile_isf_mgdl"),
+      # Inputs the barrier itself does not export but the replay needs.
+      "maxiob":env.get("max_iob_u") if env.get("max_iob_u") is not None else ios.get("max_iob_u"),
+      "vel":(delta5/5.0) if isinstance(delta5,(int,float)) else None,
+      "lgs":sr.get("hypo_threshold_mgdl"),
+    }
+    if isinstance(cb,dict):
+        d.update({
+          "cb_h":cb.get("h_mgdl"),"cb_lfh":cb.get("lfh_mgdl_per_min"),
+          "cb_lgh":cb.get("lgh_mgdl_per_u_per_min"),"cb_ins":cb.get("insulin_term_mgdl_per_min"),
+          "cb_gam":cb.get("active_gamma"),"cb_bnd":cb.get("safety_boundary"),
+          "cb_evo":cb.get("system_evolution"),"cb_si":cb.get("si_metabolic"),
+          "cb_safeu":cb.get("safe_u"),"cb_susp":cb.get("fully_suspended"),
+          "cb_anch":cb.get("anchor_is_dynamic_isf"),
+          "cb_rsmb":cb.get("mpc_raw_smb_u"),"cb_rtbr":cb.get("mpc_raw_tbr_uph"),
+        })
+    return d
+
+# Keys the barrier fixture is allowed to carry. Numbers and booleans only: no timestamp, no event
+# id, no trigger name, no decision text. Everything here is either a physiological quantity or a
+# term the barrier computed from one.
+BARRIER_KEYS=(
+  "cb_h","cb_lfh","cb_lgh","cb_ins","cb_gam","cb_bnd","cb_evo","cb_si","cb_safeu","cb_susp",
+  "cb_anch","cb_rsmb","cb_rtbr",
+  "cbfc","cbfcunf","cbfu","cbfuunf","cbfisf","maxiob","vel","lgs",
+  "bg","iob","cob","pbasal","pisf","sisf","cisf",
+)
+
+def barrier_row(r,first_ts):
+    d={k:v for k,v in barrier(r).items() if v is not None}
+    b=r["baseline_state"]
+    for key,src_key in (("bg","current_bg_mgdl"),("iob","iob_u"),("cob","cob_g"),
+                        ("pbasal","profile_basal_uph"),("pisf","profile_isf_mgdl"),
+                        ("sisf","profile_isf_static_mgdl"),("cisf","command_isf_mgdl")):
+        v=b.get(src_key)
+        if v is not None: d[key]=v
+    offset_ms=r["timestamp"]-first_ts
+    out={"t":offset_ms,"tmin":round(offset_ms/60000.0,3)}
+    for k in BARRIER_KEYS:
+        if k in d: out[k]=d[k]
+    return out
+
+def strata(r):
+    """The axes a barrier fixture must cover to be worth replaying.
+
+    ``requested`` matters as much as the rest: a tick where the controller asked for nothing is
+    suspended by arithmetic, not by the barrier, and a fixture made only of those cannot show what
+    a wider barrier would have let through.
+    """
+    cb=(r.get("adjustments") or {}).get("control_barrier") or {}
+    requested=(cb.get("mpc_raw_smb_u") or 0.0)+(cb.get("mpc_raw_tbr_uph") or 0.0)/12.0
+    return (round(cb.get("active_gamma") or 0.0,4),bool(cb.get("fully_suspended")),
+            cb.get("safe_u") is None,requested>0.0)
+
+def subsample(recs,limit):
+    """Round-robin over strata, keeping order inside each one."""
+    if limit is None or len(recs)<=limit: return recs
+    groups={}
+    for r in recs: groups.setdefault(strata(r),[]).append(r)
+    order=sorted(groups)
+    picked=[]; i=0
+    while len(picked)<limit and any(groups[k] for k in order):
+        k=order[i%len(order)]
+        if groups[k]: picked.append(groups[k].pop(0))
+        i+=1
+    picked.sort(key=lambda x:x["timestamp"])
+    return picked
+
+args=[a for a in sys.argv[1:]]
+barrier_mode="--barrier" in args
+if barrier_mode: args.remove("--barrier")
+limit=None
+if "--max" in args:
+    i=args.index("--max"); limit=int(args[i+1]); del args[i:i+2]
+src,dst=args[0],args[1]
 recs=[json.loads(l) for l in open(src,encoding="utf-8",errors="replace") if l.strip()]
 recs=[x for x in recs if "baseline_state" in x]
 recs.sort(key=lambda x:x["timestamp"])
+if barrier_mode:
+    recs=[x for x in recs if isinstance((x.get("adjustments") or {}).get("control_barrier"),dict)]
+    recs=subsample(recs,limit)
+    first_ts=recs[0]["timestamp"] if recs else 0
+    rows=[barrier_row(r,first_ts) for r in recs]
+else:
+    rows=[flat(r) for r in recs]
 with open(dst,"w",encoding="utf-8") as fh:
-    for r in recs: fh.write(json.dumps(flat(r),separators=(",",":"),sort_keys=True)+"\n")
-print(f"{os.path.basename(dst)}: {len(recs)} ticks, {os.path.getsize(dst)/1024:.0f} Ko")
+    for row in rows: fh.write(json.dumps(row,separators=(",",":"),sort_keys=True)+"\n")
+print(f"{os.path.basename(dst)}: {len(rows)} ticks, {os.path.getsize(dst)/1024:.0f} Ko")

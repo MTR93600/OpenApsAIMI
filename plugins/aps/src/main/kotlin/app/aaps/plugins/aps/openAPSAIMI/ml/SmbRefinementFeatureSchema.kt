@@ -71,6 +71,43 @@ internal object SmbRefinementFeatureSchema {
 
     val csvFeatureNames: List<String> = requiredTrainingFeatureNames + latentFeatureNames + modeFeatureNames + causalFeatureNames
 
+    /** Name of the column the SMB model is trained on: the dose that was really delivered. */
+    const val TARGET_COLUMN_NAME = "smbGiven"
+
+    /** Separator used between column names in the `oapsaimiML2_records.csv` header line. */
+    private const val HEADER_SEPARATOR = ", "
+
+    /**
+     * The ordered column names of `oapsaimiML2_records.csv`, as the writer lays them out.
+     *
+     * This is the single source of truth for the corpus shape. The writer builds its header line from
+     * [trainingCsvHeaderLine], and `AimiSmbTrainer` checks a stored header against this same list
+     * before it reads a single row. They used to be two separate lists, and they drifted: the file on
+     * disk kept a 13 name header while rows were written with 33, 38 and then 39 fields, so a lookup
+     * by name returned the index of another column.
+     *
+     * The trailing block comes from [SmbTrainingRowBuffer.ADDED_COLUMN_NAMES]. The buffer owns those
+     * names because it is the code that renders them, and the reference points this way to keep one
+     * direction only: the buffer never reads the schema back.
+     */
+    val trainingCsvColumnNames: List<String> = buildList {
+        add("dateStr")
+        addAll(csvFeatureNames)
+        addAll(familyAuditFeatureNames)
+        addAll(optionalTrainingAuditFeatureNames)
+        add("predictedSMB")
+        add(TARGET_COLUMN_NAME)
+        add("dynamicPeak")
+        add("adjustedDia")
+        addAll(SmbTrainingRowBuffer.ADDED_COLUMN_NAMES)
+    }
+
+    /** Index at which [TARGET_COLUMN_NAME] must sit in a header the trainer is willing to read. */
+    val targetColumnIndex: Int = trainingCsvColumnNames.indexOf(TARGET_COLUMN_NAME)
+
+    /** The header line of `oapsaimiML2_records.csv`, without the trailing line break. */
+    fun trainingCsvHeaderLine(): String = trainingCsvColumnNames.joinToString(HEADER_SEPARATOR)
+
     fun buildRuntimeFeatures(
         baseFeatures: FloatArray,
         trendIndicator: Float,

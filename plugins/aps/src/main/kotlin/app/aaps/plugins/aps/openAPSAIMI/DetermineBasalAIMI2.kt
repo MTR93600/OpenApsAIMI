@@ -66,6 +66,7 @@ import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbTrainingRowBuffer
+import app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCsvHeader
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorJsonlExport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdict
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbIntervalPolicy
@@ -520,6 +521,17 @@ internal data class AimiDecisionContext(
         /** Profile ISF the barrier was handed, so the two above are interpretable. */
         var cbf_profile_isf_mgdl: Double? = null,
         /**
+         * Whether the Autodrive gate let the MPC run this tick.
+         *
+         * Everything the barrier exports only exists on engaged ticks. Without this the disengaged
+         * ticks are a blank, and a blank reads as "nothing happened" rather than "the gate was shut".
+         */
+        var autodrive_gate_engaged: Boolean? = null,
+        /** Stable token for why the gate opened or stayed shut, for counting. */
+        var autodrive_gate_kind: String? = null,
+        /** The same reason with its live numbers, for reading. */
+        var autodrive_gate_reason: String? = null,
+        /**
          * Effort SMB reduction, as actually applied at the universal SMB exit.
          *
          * `_requested` is what the effort belief asked for, `_applied` is what was used after the
@@ -876,6 +888,9 @@ internal data class AimiDecisionContext(
             base.put("cbf_permitted_u", baseline_state.cbf_permitted_u ?: org.json.JSONObject.NULL)
             base.put("cbf_permitted_unfloored_u", baseline_state.cbf_permitted_unfloored_u ?: org.json.JSONObject.NULL)
             base.put("cbf_profile_isf_mgdl", baseline_state.cbf_profile_isf_mgdl ?: org.json.JSONObject.NULL)
+            base.put("autodrive_gate_engaged", baseline_state.autodrive_gate_engaged ?: org.json.JSONObject.NULL)
+            base.put("autodrive_gate_kind", baseline_state.autodrive_gate_kind ?: org.json.JSONObject.NULL)
+            base.put("autodrive_gate_reason", baseline_state.autodrive_gate_reason ?: org.json.JSONObject.NULL)
             base.put("effort_smb_factor_requested", baseline_state.effort_smb_factor_requested ?: org.json.JSONObject.NULL)
             base.put("effort_smb_factor_applied", baseline_state.effort_smb_factor_applied ?: org.json.JSONObject.NULL)
             base.put("effort_smb_before_u", baseline_state.effort_smb_before_u ?: org.json.JSONObject.NULL)
@@ -5387,6 +5402,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             estimatedRa = continuousStateEstimator.getLastRa(),
             mealChannelHint = lastRbtAppliedHints?.mealChannel,
         )
+
+        // Observation only — recorded for both outcomes, before the branch. The engaged path already
+        // logged its reason to the console; the disengaged path threw it away, so two thirds of a day
+        // had no explanation at all.
+        pendingDecisionCtxForExport?.baseline_state?.let { baseline ->
+            baseline.autodrive_gate_engaged = gate.engage
+            baseline.autodrive_gate_kind = gate.kind.name
+            baseline.autodrive_gate_reason = gate.reason
+        }
 
         if (!gate.engage) {
             // Estimation is unconditional; actuation is gated. Nothing inside the engaged branch
@@ -13191,12 +13215,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val eventMemory = lastPatientState?.eventMemory ?: PatientEventMemory.EMPTY
         val decisionConflictFlags = physioAdapter.getLastDecisionTrace()?.decisionConflictFlags?.joinToString("|").orEmpty()
 
-        val headerRow =
-            "dateStr, ${SmbRefinementFeatureSchema.csvFeatureNames.joinToString(", ")}, " +
-                "${SmbRefinementFeatureSchema.familyAuditFeatureNames.joinToString(", ")}, " +
-                "${SmbRefinementFeatureSchema.optionalTrainingAuditFeatureNames.joinToString(", ")}, " +
-                "predictedSMB, smbGiven, dynamicPeak, adjustedDia, " +
-                "${SmbTrainingRowBuffer.ADDED_COLUMN_NAMES.joinToString(", ")}\n"
+        // One source of truth for the column order: the writer and `AimiSmbTrainer` read the same list.
+        // Building the header here by hand is what let the file on disk drift away from the rows.
+        val headerRow = SmbRefinementFeatureSchema.trainingCsvHeaderLine() + "\n"
         val valuesToRecord = "$dateStr," +
             "$bg,$iob,$cob,$delta,$shortAvgDelta,$longAvgDelta," +
             "$tdd7DaysPerHour,$tdd2DaysPerHour,$tddPerHour,$tdd24HrsPerHour," +
@@ -13287,7 +13308,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             file.createNewFile()
             file.appendText(headerRow)
         } else {
-            upgradeCsvHeaderIfColumnsWereAppended(file, headerRow)
+            ensureCsvHeaderIsCurrent(file, headerRow)
         }
         file.appendText(valuesRow + "\n")
     }
@@ -13296,29 +13317,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val csvHeaderCheckedPaths = mutableSetOf<String>()
 
     /**
-     * Rewrites the first line of an existing CSV when new columns were appended to the header.
+     * Makes sure an existing CSV carries the header the writer builds today.
      *
-     * The header is only written when the file is created, so a file that already exists keeps its
-     * old header for ever. New rows would then carry cells that no reader can name, and both
-     * [app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer] and the offline analysis look columns up
-     * by name. The rewrite happens only when the stored header is the start of the wanted one, so a
-     * file with another shape is never touched. Old rows keep their shorter row on purpose: a cell
-     * that is not there reads as absent, never as zero.
-     *
-     * The file is read once per path per app start; after that the path is remembered and skipped.
+     * The rewrite itself, and why it is safe to replace the first line whatever its old shape, live in
+     * [app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCsvHeader]. Here we only add the two things that
+     * belong to the running app: the file is checked once per path per app start, and any failure is
+     * logged and swallowed, because a header that could not be fixed must never stop a row from being
+     * written.
      */
-    private fun upgradeCsvHeaderIfColumnsWereAppended(file: File, headerRow: String) {
+    private fun ensureCsvHeaderIsCurrent(file: File, headerRow: String) {
         if (!csvHeaderCheckedPaths.add(file.absolutePath)) return
         runCatching {
-            val wanted = headerRow.trimEnd('\n')
-            val lines = file.readLines(Charsets.UTF_8)
-            val stored = lines.firstOrNull()?.trimEnd('\r') ?: return@runCatching
-            if (stored == wanted) return@runCatching
-            if (!wanted.startsWith("$stored,")) return@runCatching
-            file.writeText((listOf(wanted) + lines.drop(1)).joinToString("\n") + "\n", Charsets.UTF_8)
-            aapsLogger.info(LTag.APS, "CSV header extended in place for ${file.name}")
+            val outcome = TrainingCsvHeader.ensureCurrent(file, headerRow)
+            if (outcome == TrainingCsvHeader.Outcome.REPLACED) {
+                aapsLogger.info(LTag.APS, "CSV header replaced in place for ${file.name}")
+            }
         }.onFailure { error ->
-            aapsLogger.warn(LTag.APS, "CSV header upgrade skipped for ${file.name}: ${error.message}")
+            aapsLogger.warn(LTag.APS, "CSV header refresh skipped for ${file.name}: ${error.message}")
         }
     }
 

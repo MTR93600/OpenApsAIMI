@@ -91,6 +91,19 @@ class GlucosePoint {
   );
 }
 
+/// A single downsampled point for a non-glucose time series (IOB, COB, SMB).
+class SeriesPoint {
+  const SeriesPoint({required this.timestampMs, required this.value});
+
+  final int timestampMs;
+  final double value;
+
+  factory SeriesPoint.fromMap(Map<Object?, Object?> map) => SeriesPoint(
+    timestampMs: _asInt(map['timestampMs']) ?? 0,
+    value: _asDouble(map['value']) ?? 0,
+  );
+}
+
 class TimelineEntry {
   const TimelineEntry({
     required this.timestampMs,
@@ -101,6 +114,7 @@ class TimelineEntry {
     required this.decision,
     required this.patientMode,
     required this.safetyGate,
+    required this.narrative,
   });
 
   final int timestampMs;
@@ -111,6 +125,7 @@ class TimelineEntry {
   final String decision;
   final String? patientMode;
   final String? safetyGate;
+  final String? narrative;
 
   factory TimelineEntry.fromMap(Map<Object?, Object?> map) => TimelineEntry(
     timestampMs: _asInt(map['timestampMs']) ?? 0,
@@ -121,6 +136,7 @@ class TimelineEntry {
     decision: map['decision']?.toString() ?? 'Décision AIMI',
     patientMode: _asNullableString(map['patientMode']),
     safetyGate: _asNullableString(map['safetyGate']),
+    narrative: _asNullableString(map['narrative']),
   );
 }
 
@@ -191,6 +207,9 @@ class DashboardData {
     required this.dailyTddDays,
     required this.patientStoryCoverage,
     required this.glucose,
+    required this.iobSeries,
+    required this.cobSeries,
+    required this.smbSeries,
     required this.timeline,
     required this.decisionTypes,
     required this.patientModes,
@@ -220,6 +239,9 @@ class DashboardData {
   final int dailyTddDays;
   final double? patientStoryCoverage;
   final List<GlucosePoint> glucose;
+  final List<SeriesPoint> iobSeries;
+  final List<SeriesPoint> cobSeries;
+  final List<SeriesPoint> smbSeries;
   final List<TimelineEntry> timeline;
   final Map<String, int> decisionTypes;
   final Map<String, int> patientModes;
@@ -252,6 +274,9 @@ class DashboardData {
     dailyTddDays: _asInt(map['dailyTddDays']) ?? 0,
     patientStoryCoverage: _asDouble(map['patientStoryCoverage']),
     glucose: _mapList(map['glucose'], GlucosePoint.fromMap),
+    iobSeries: _mapList(map['iobSeries'], SeriesPoint.fromMap),
+    cobSeries: _mapList(map['cobSeries'], SeriesPoint.fromMap),
+    smbSeries: _mapList(map['smbSeries'], SeriesPoint.fromMap),
     timeline: _mapList(map['timeline'], TimelineEntry.fromMap),
     decisionTypes: _asIntMap(map['decisionTypes']),
     patientModes: _asIntMap(map['patientModes']),
