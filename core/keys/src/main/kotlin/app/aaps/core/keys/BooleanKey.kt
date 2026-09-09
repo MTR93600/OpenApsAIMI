@@ -318,6 +318,24 @@ enum class BooleanKey(
         dependency = OApsAIMIautoDriveActive,
     ),
     /**
+     * Opt-in: refuse a **bolus** that re-doses a descent which is already covered by active insulin.
+     *
+     * Blocks only when all five conditions of `DescentRedoseGuard` hold at once: a peak of at least
+     * 180 mg/dL inside the last 120 min, that peak at least 30 min behind, BG now at least 25 mg/dL
+     * under it, more than 6 U still active, and BG not more than 25 mg/dL above the lowest point
+     * reached since the peak. That last condition is what keeps a new rise out.
+     *
+     * Bolus channel only: the temporary basal command is untouched. The verdict is computed and
+     * exported on every tick even when this key is false, so the effect can be measured before the
+     * gesture is armed.
+     */
+    OApsAIMIDescentRedoseGuard(
+        key = "key_aimi_descent_redose_guard",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_descent_redose_guard,
+        summaryResId = R.string.pref_summary_aimi_descent_redose_guard,
+    ),
+    /**
      * Opt-in: sensor-driven effort protection. Caps SMB when steps/HR indicate current or recent
      * physical effort, independent of any declared AIMI Context activity intent. Reduction-only
      * (fail-safe); never reduces under a stress posture. See docs/AIMI_ARCHITECTURE_MAP.md §11.

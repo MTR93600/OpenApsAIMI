@@ -89,9 +89,14 @@ class AutoDriveGater @Inject constructor(
             return GatingResult(engage = false, reason = "🧘 $reason", kind = GateKind.RISE_TOO_WEAK)
         }
 
+        // The meal reason is read first on purpose. `shouldEngage` above is a plain OR, so this
+        // order cannot change whether the gate opens; it only changes the name written on the tick.
+        // With the plateau read first, every tick above BG 150 was called HIGH_PLATEAU even when a
+        // meal was what opened the gate, and MEAL_AWARE_RISE could only ever be seen below 150. A
+        // meal is the more specific fact, so it wins the label.
         val engageKind = when {
-            isHighPlateau -> GateKind.HIGH_PLATEAU
             isMealRising  -> GateKind.MEAL_AWARE_RISE
+            isHighPlateau -> GateKind.HIGH_PLATEAU
             else          -> GateKind.STRONG_RISE
         }
         val engageReason = when (engageKind) {
@@ -136,10 +141,22 @@ class AutoDriveGater @Inject constructor(
         /** Glucose under 150 and the rise below the entry thresholds. The common case. */
         RISE_TOO_WEAK,
 
-        /** Glucose above 150. */
+        /**
+         * Glucose above 150 and no meal context on the tick.
+         *
+         * This is the weaker of the two open labels: when a meal context is also present,
+         * [MEAL_AWARE_RISE] is written instead, because a meal says more about why the gate opened
+         * than the glucose level alone.
+         */
         HIGH_PLATEAU,
 
-        /** A meal context plus any rise worth the name. */
+        /**
+         * A meal context plus any rise worth the name.
+         *
+         * This label wins over [HIGH_PLATEAU] when both are true. Before that, the plateau was read
+         * first, so above BG 150 a meal was never named and this label could only appear below 150.
+         * It never appeared at all on the measured day.
+         */
         MEAL_AWARE_RISE,
 
         /** A rise strong enough on its own. */
