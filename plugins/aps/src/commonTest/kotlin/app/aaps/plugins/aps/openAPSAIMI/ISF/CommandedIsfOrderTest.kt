@@ -34,7 +34,7 @@ class CommandedIsfOrderTest {
     private val preFloorInsideBounds = 120.0
 
     @Test
-    fun `the witness sees the value before the floor, so it can report a hit`() {
+    fun `the witness sees the value before the floor so it can report a hit`() {
         CommandedIsf.floorAgainstProfileAndRecordShadow(
             preFloorMgdlPerU = preFloorBelowBound,
             profileIsfMgdlPerU = profileIsf,
@@ -75,7 +75,7 @@ class CommandedIsfOrderTest {
     }
 
     @Test
-    fun `a non-finite pre-floor value is exported as unknown, never as a number`() {
+    fun `a non-finite pre-floor value is exported as unknown never as a number`() {
         CommandedIsf.floorAgainstProfileAndRecordShadow(
             preFloorMgdlPerU = Double.NaN,
             profileIsfMgdlPerU = profileIsf,

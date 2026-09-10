@@ -780,6 +780,91 @@ just applied one layer further out than usual (into `:ui`/`:core:interfaces`, no
 
 ---
 
+## 6j. 2026-09-06 to 2026-09-08: two `kmp` merges, and a parallel AIMI porting effort (P0.1-P0.7)
+
+Two upstream merges landed since 6i, and between them - **not from this session** - seven more AIMI
+pieces were ported directly onto `kmp-aimi-migration-study` via GitHub PRs (#71-#79), done with a
+Cursor agent and reviewed/merged by the user. This section is the analysis the user asked for after
+the second merge: what that parallel work is, and that it does not conflict with anything in 6a-6i.
+
+**The two merges themselves:**
+
+- **2026-09-06, ~106 commits from `milos/kmp`.** The big one: `ImportExportPrefs` gained a real
+  cross-platform implementation (`LocalImportExportPrefs` in `:implementation` commonMain, replacing
+  the old iOS/desktop "not ported yet" stubs), and `CloudStorageManager`/`CloudConstants` moved from
+  androidMain to commonMain in the same module. Three conflicts, all in the settings-export area this
+  session had also touched (6h's `uploadFileToCloud` addition): resolved by keeping both sides'
+  additions (upstream's `prepareImportRestart` → `prepareImportedSettings` rename, and this branch's
+  `uploadFileToCloud`), and by adding `uploadFileToCloud` to the new `LocalImportExportPrefs` so
+  iOS/desktop get the same AIMI cloud-backup path Android already had. One more break found only by
+  compiling: `StringKey.OApsAIMIContextStorage` used `exportable = false`, a parameter that used to
+  exist on `StringKey`'s own constructor and no longer does - `exportable` now lives only on
+  `NonPreferenceKey`. Dropped the argument; nothing depended on that key being excluded from export
+  (the only code that ever executed `isExportableKey` against `StringKey` entries reads a `prefsList`
+  typed `Set<NonPreferenceKey>`, so `StringKey.exportable` had never actually been wired in - the
+  argument compiled but did nothing, on both sides of the merge).
+- **2026-09-08, 9 commits, no conflicts.** CI/TestFlight signing checks, iOS/desktop preference-screen
+  navigation, a slow-basal-rebuild race fix, and a Metro version bump (snapshot → 1.4.3 release). None
+  of it touches `plugins:aps`.
+
+**Discovered while verifying the second merge, not caused by it:** now that `plugins:aps` (this
+week's P0.x work) and `:ui` (today's merge) both have real `commonTest` content for the first time,
+running `:iosSimulatorArm64Test` - the CLAUDE.md note that only `:core:data` has `commonTest` is
+stale - surfaced a Kotlin/Native-only restriction neither Windows nor the Android host test catches:
+**a backtick-quoted test name may not contain a comma** ("Name contains illegal characters"). The JVM
+accepts anything in a backtick identifier; Kotlin/Native has to turn the name into a valid symbol and
+refuses. Two occurrences, both from this week, both harmless prose renamed with no assertion changes:
+`CommandedIsfOrderTest` (P0.4) and `ProfileBoundariesTest` (today's merge, from upstream). Grepped the
+whole repo's `commonTest` trees precisely (`fun` \`...,...\`() a comma inside a backtick pair) for
+more - none. Worth remembering as its own item in the recurring-shapes list (7.2) now that AIMI code
+lives in `commonTest`: a comma in a backtick test name is a new failure shape, not one of the five
+already listed.
+
+**Also discovered, environmental and unresolved:** `:iosSimulatorArm64Test` cannot finish on this Mac
+right now - `xcode-select -p` points at `/Library/Developer/CommandLineTools`, not
+`/Applications/Xcode.app/Contents/Developer`, so `xcrun xcodebuild -version` fails and the simulator
+test link step never runs. This is a machine setting (`sudo xcode-select -s ...`), not a code issue,
+and out of scope for this session to change unasked. It only blocks the simulator *run* - both fixed
+test files were confirmed to *compile* clean for `iosSimulatorArm64` (`compileTestKotlinIosSimulatorArm64`
+succeeded before the link step hit the Xcode path problem), and `:plugins:aps:compileKotlinIosArm64`
+(main sources, unaffected by this) passed EXIT=0 on both merges.
+
+**The parallel P0.1-P0.7 AIMI work itself**, all seven PRs following one documented pattern - port
+the reference implementation from `origin/dev_OAPSAIMI` at a cited commit, land it in commonMain,
+adapt only the KMP-mechanical parts (`AapsLock` for `@Synchronized`, `aimiFmtN` for `String.format`,
+`ArrayDeque`/`MutableMap` for JVM collection types), keep the clinical formula and call-site order
+identical to the reference, put tests in `commonTest` when the type carries no Android dependency:
+
+| PR | What | Where |
+|---|---|---|
+| P0.1 (#71) | `PkPdLearnedState` - one shared learned DIA/peak holder for both `PkPdIntegration` instances (plugin + `DetermineBasalaimiSMB2`), replacing two separate copies | `pkpd/PkPdLearnedState.kt` |
+| P0.2 (#72) | `DynIsfCache` - time-keyed ISF store; fixes a real bug in the store it replaces (keyed on `bucketStart + glucose`, so "newest key" during a falling BG returned the value from the bucket's peak, not the latest sample) | `ISF/DynIsfCache.kt` |
+| P0.3 (#75) | `ObservedSensitivityMeter` - passive outcome ISF instrument, observation only | `ISF/ObservedSensitivityMeter.kt` |
+| P0.4 (#76) | `CommandedIsf` - shadow witness reading the ISF instrument before `floorAgainstProfile` runs, so the pre-floor value is on record | `ISF/CommandedIsf.kt` |
+| P0.5 (#77) | `MaxSmbLadder` - extracted the maxSMB ceiling out of `DetermineBasalAIMI2` (it was inline) and added the `shortAvgDelta >= 8.0` confirmed-rise branch alongside the existing slope-only rule | `smb/MaxSmbLadder.kt` |
+| P0.6 (#78) | `HarmoniaCounterfactual` + `InsulinOriginMeter` - an observation pair, distinct from the existing one-tick `IobSurveillanceExport` snapshot, which stays alongside it | `patient/HarmoniaCounterfactual.kt`, `quality/InsulinOriginMeter.kt` |
+| P0.7 (#79) | `SmbTrainingRowBuffer` - in-memory delayed origin/outcome CSV row queue for the ML training corpus; drain still goes through the existing androidMain `oapsaimiML2_records.csv` writer | `ml/SmbTrainingRowBuffer.kt` |
+
+All observation/instrumentation, explicitly "no dose change" per every commit message; confirmed live
+(44 references to these eight types inside the current `DetermineBasalAIMI2.kt`, not parked). None of
+it touches `_docs/kmp/staging/` - it is ported straight from `dev_OAPSAIMI`, a completely separate
+source from the staging snapshot 6i cleaned up, so the "17 files, all View-based Activities" count
+from 6i is unaffected and still current.
+
+**State after both merges and the P0.x series:**
+
+| | files |
+|---|---:|
+| AIMI in `commonMain` | 364 (+8 from P0.1-P0.7) |
+| AIMI in `androidMain` | 109 |
+| AIMI still in staging | 17 (unchanged - separate source) |
+
+Verified after the second merge: `:app:assembleFullDebug` EXIT=0; `:plugins:aps:compileKotlinIosArm64`
+EXIT=0; `:plugins:aps:testAndroidHostTest` 419 tests (was 330 - the ~89 new P0.x tests) and
+`:ui:testAndroidHostTest` 524 tests, 0 failures on both.
+
+---
+
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at
@@ -788,6 +873,8 @@ now have exactly one implementation each. The AIMI Auditor now has a real Compos
 Overview screen, wired through a new `:core:interfaces` port (`PluginStatusBadgeSource`) rather than
 its old View-based toolbar indicator. Staging is down to 17 files, all View-based Android Activities
 (or their direct support classes) with no Compose equivalent yet - not 247, see 6i and its addenda.
+Two `kmp` merges and a parallel P0.1-P0.7 porting series (done outside this session, with a Cursor
+agent) have landed since 6i; see 6j for what they were and why neither touches the 17 staged files.
 
 1. **The 17 remaining staged files are all legacy View-based Android Activities or their support
    classes**, not AIMI's dosing logic - `AimiModeSettingsActivity`, `AimiProfileAdvisorActivity`,
@@ -816,7 +903,10 @@ its old View-based toolbar indicator. Staging is down to 17 files, all View-base
    a filename-only duplicate check misses this, only the compiler's "Redeclaration" error catches it,
    so move-and-compile still beats predicting the closure by filename; (e) a capability or resource
    genuinely dropped (not renamed) during the KMP rewrite - confirm on `dev_OAPSAIMI` before restoring,
-   and prefer the smallest correct fix over guessing.
+   and prefer the smallest correct fix over guessing; (f) a backtick-quoted `commonTest` function name
+   containing a comma - compiles fine on the JVM/Android host, fails only Kotlin/Native's symbol
+   mangling, so `iosSimulatorArm64Test` (not `testAndroidHostTest`) is the gate that catches it. Found
+   in 6j, in AIMI content on both sides (P0.4's own test and one from this branch's own `kmp` merge).
 3. **`:app:assembleFullDebug` is now a required gate, not `:plugins:aps:compileAndroidMain` alone.**
    The module compile cannot see a missing Metro binding; only the app graph resolution catches it.
    Keep both in the loop, but if only one can run, run the app assemble.
