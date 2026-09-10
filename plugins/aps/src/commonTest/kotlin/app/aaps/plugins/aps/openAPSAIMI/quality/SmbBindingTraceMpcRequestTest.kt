@@ -40,7 +40,7 @@ class SmbBindingTraceMpcRequestTest {
     }
 
     @Test
-    fun `a tick without autodrive leaves the request unknown, not zero`() {
+    fun `a tick without autodrive leaves the request unknown not zero`() {
         val json = draft()
             .copy(originOwner = "GlobalAIMI", modelOutputU = 0.0)
             .build(finalU = 0.0)
