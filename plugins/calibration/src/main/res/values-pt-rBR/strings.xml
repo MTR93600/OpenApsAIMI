@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="calibration_shortname">CAL</string>
+    <string name="no_calibration_name">Sem calibração</string>
+    <string name="description_no_calibration">"Nenhum ajuste de calibração aplicado. Os valores do sensor são usados como vêm. Use isso quando o sensor já vier calibrado de fábrica e certinho."</string>
+    <string name="linear_calibration_name">Calibração linear</string>
+    <string name="description_linear_calibration">"Ajuste de calibração linear por sensor (inclinação e offset) calculado com base nos seus testes de ponta de dedo. As entradas mais recentes têm mais peso. O ajuste é aplicado após o início da sessão atual do sensor; as primeiras 2 horas são puladas como aquecimento."</string>
+    <string name="sensor_change_detected_text">Possível troca de sensor detectada às %1$s. Marcar como novo sensor?</string>
+    <string name="sensor_change_detected_action">Marcar troca de sensor</string>
+    <string name="sensor_change_detected_ignore">Não é um sensor novo</string>
+
+    <!-- Calibration management screen -->
+    <string name="cal_status_no_session">Registre uma troca de sensor para ativar a calibração.</string>
+    <string name="cal_status_warmup">Aquecimento do sensor — calibração ativa após as %1$s.</string>
+    <string name="cal_status_need_more_entries">Precisa de pelo menos 2 testes de ponta de dedo (atualmente %1$d).</string>
+    <string name="cal_status_unsafe_fit">Ajuste fora da faixa segura — calibração não aplicada.</string>
+    <string name="cal_status_applied">Calibração aplicada.</string>
+    <string name="cal_status_applied_offset_only">Calibração aplicada apenas com offset — faixa do sensor muito estreita para inclinação.</string>
+    <string name="cal_status_applied_slope_clamped">Calibração aplicada — inclinação limitada à faixa segura. Adicione mais entradas para ajustar.</string>
+    <string name="cal_slope_offset">Inclinação %1$.2f, correção no meio da faixa %2$s</string>
+    <string name="cal_session_started">Sessão iniciada: %1$s</string>
+    <string name="cal_mark_sensor_change_now">Registrar troca de sensor</string>
+    <string name="cal_add_calibration">Adicionar calibração</string>
+    <string name="cal_entries_header">Testes de ponta de dedo (%1$d)</string>
+    <string name="cal_no_entries">Nenhum teste de ponta de dedo ainda.</string>
+    <string name="cal_entry_pair">Ponta de dedo %1$s → sensor %2$s (Δ %3$s)</string>
+    <string name="cal_remove_entry_title">Remover entrada?</string>
+    <string name="cal_remove_entry_message">Isso vai invalidar a entrada. O cálculo será refeito.</string>
+    <string name="cal_chart_entry_readout">Entrada %1$d/%2$d · %3$s · sensor %4$s → glicemia %5$s</string>
+</resources>
