@@ -52,7 +52,8 @@ class AutoDriveGater @Inject constructor(
             val reason = if (hardHRBlock) "❤️ HR High (${health.hrNow})" else "🏃 Activity (BG=$bg, Steps15m=${health.stepsLast15m}, Steps5m=${health.stepsLast5m})"
             return GatingResult(
                 engage = false,
-                reason = "🏃 Activity Prohibited: $reason"
+                reason = "🏃 Activity Prohibited: $reason",
+                kind = if (hardHRBlock) GateKind.HR_HIGH else GateKind.ACTIVITY,
             )
         }
 
@@ -86,12 +87,22 @@ class AutoDriveGater @Inject constructor(
                 "BG stable (<150) and rise too weak " +
                     "(BG=$bg, Trend=$combinedDelta, COB=$cob, UAM=$uamConfidence, mealCtx=$implicitMealContext, minBg75=$minBgLookback75m)"
             aapsLogger.debug(LTag.APS, "${CorrectionAggressionGate.LOG_PREFIX}_V3_GATER: disengage $reason")
-            return GatingResult(engage = false, reason = "🧘 $reason")
+            return GatingResult(engage = false, reason = "🧘 $reason", kind = GateKind.RISE_TOO_WEAK)
         }
 
-        val engageReason = when {
-            isHighPlateau -> "High plateau"
-            isMealRising -> "Meal-aware rise"
+        // The meal reason is read first on purpose. `shouldEngage` above is a plain OR, so this
+        // order cannot change whether the gate opens; it only changes the name written on the tick.
+        // With the plateau read first, every tick above BG 150 was called HIGH_PLATEAU even when a
+        // meal was what opened the gate, and MEAL_AWARE_RISE could only ever be seen below 150. A
+        // meal is the more specific fact, so it wins the label.
+        val engageKind = when {
+            isMealRising -> GateKind.MEAL_AWARE_RISE
+            isHighPlateau -> GateKind.HIGH_PLATEAU
+            else -> GateKind.STRONG_RISE
+        }
+        val engageReason = when (engageKind) {
+            GateKind.HIGH_PLATEAU -> "High plateau"
+            GateKind.MEAL_AWARE_RISE -> "Meal-aware rise"
             else -> "Strong rise"
         }
         aapsLogger.debug(
@@ -100,9 +111,56 @@ class AutoDriveGater @Inject constructor(
         )
         return GatingResult(
             engage = true,
-            reason = "🚀 V3 ENGAGED [$engageReason] (BG=$bg, Trend=$combinedDelta, COB=$cob, UAM=$uamConfidence)"
+            reason = "🚀 V3 ENGAGED [$engageReason] (BG=$bg, Trend=$combinedDelta, COB=$cob, UAM=$uamConfidence)",
+            kind = engageKind,
         )
     }
 
-    data class GatingResult(val engage: Boolean, val reason: String)
+    /**
+     * Why the gate opened or stayed shut.
+     *
+     * [reason] carries the live numbers and is meant to be read by a person; every string is unique,
+     * so it cannot be grouped. [kind] is the stable token to count on: measured on 2026-09-07, the
+     * gate stayed shut on 884 ticks out of 1351 and nothing exported said why, so two thirds of the
+     * day could not be explained at all.
+     */
+    data class GatingResult(
+        val engage: Boolean,
+        val reason: String,
+        val kind: GateKind = GateKind.RISE_TOO_WEAK,
+    )
+
+    /** The stable reasons `shouldEngageV3` can return, for counting rather than reading. */
+    enum class GateKind {
+
+        /** Heart rate at or above 140: a hard block whatever the glucose does. */
+        HR_HIGH,
+
+        /** Moving fast while glucose is still fragile (under 160). */
+        ACTIVITY,
+
+        /** Glucose under 150 and the rise below the entry thresholds. The common case. */
+        RISE_TOO_WEAK,
+
+        /**
+         * Glucose above 150 and no meal context on the tick.
+         *
+         * This is the weaker of the two open labels: when a meal context is also present,
+         * [MEAL_AWARE_RISE] is written instead, because a meal says more about why the gate opened
+         * than the glucose level alone.
+         */
+        HIGH_PLATEAU,
+
+        /**
+         * A meal context plus any rise worth the name.
+         *
+         * This label wins over [HIGH_PLATEAU] when both are true. Before that, the plateau was read
+         * first, so above BG 150 a meal was never named and this label could only appear below 150.
+         * It never appeared at all on the measured day.
+         */
+        MEAL_AWARE_RISE,
+
+        /** A rise strong enough on its own. */
+        STRONG_RISE,
+    }
 }
