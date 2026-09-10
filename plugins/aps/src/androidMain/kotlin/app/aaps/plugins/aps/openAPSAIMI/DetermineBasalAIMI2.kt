@@ -5274,6 +5274,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             put("system_evolution", d.systemEvolution)
             put("si_metabolic", d.siMetabolic)
             put("fully_suspended", d.fullySuspended)
+            put("anchor_is_dynamic_isf", d.anchorIsDynamicIsf)
             d.safeU?.let { put("safe_u", it) }
         }.build()
     }
@@ -5503,6 +5504,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 tickId = ctx.currentTime,
                 observationId = raObservationId(ctx),
                 engaged = true,
+                // Diagnostic only: the caller passes `profile.sens` (dynamic ISF). The flag is
+                // copied into `control_barrier.anchor_is_dynamic_isf`. The anchor itself stays
+                // `profile.sens` — moving it would change the dose.
+                profileIsfIsDynamic = true,
             )
 
             // Called here, after `tick`, and not before it. The barrier fields this reads
@@ -18811,6 +18816,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 observationId = raObservationId(ctx),
                 // Shadow tick: it enacts nothing, so it must not be labelled as owning the dose.
                 engaged = false,
+                // Same honesty as the engaged path: `profile.sens` is the dynamic ISF.
+                profileIsfIsDynamic = true,
             )
             consoleLog.add("👻 [T3c_SHADOW] DataLake tick fired for V3 ML continuity.")
         } catch (e: Exception) {
