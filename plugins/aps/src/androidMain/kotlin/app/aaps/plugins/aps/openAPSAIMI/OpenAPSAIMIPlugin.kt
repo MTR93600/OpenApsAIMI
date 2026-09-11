@@ -2328,6 +2328,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 add(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep)
                 add(BooleanKey.OApsAIMIautodriveAggressiveSmbFloor)
                 add(BooleanKey.OApsAIMIEffortActivityProtection)
+                add(BooleanKey.OApsAIMIDescentRedoseGuard)
                 add(DoubleKey.OApsAIMIautodrivesmallPrebolus)
                 add(DoubleKey.OApsAIMIautodrivePrebolus)
                 add(
