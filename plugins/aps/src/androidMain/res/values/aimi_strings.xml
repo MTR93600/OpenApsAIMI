@@ -471,6 +471,8 @@
 
 <string name="aimi_adv_support_invalid">⚠️ Invalid Code</string>
 
+<string name="aimi_adv_support_code_hint">Enter Expert Code</string>
+
 <string name="aimi_adv_issue_title">Describe Issue</string>
 
 <string name="aimi_adv_issue_msg">Briefly describe the problem so MTR can analyze the context.</string>
@@ -484,6 +486,10 @@
 <string name="aimi_diag_subject">AIMI Diagnostic Report - %1$s</string>
 
 <string name="aimi_diag_chooser">Send Diagnostic to MTR</string>
+
+<string name="aimi_diag_generating">Generating diagnostic report...</string>
+
+<string name="aimi_diag_empty">Failed to create support package (Empty)</string>
 
 <string name="oaps_aimi_enableMlTraining_title">Enable A.I. Training</string>
 

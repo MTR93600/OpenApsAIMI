@@ -144,6 +144,9 @@ import androidx.core.net.toUri
 import kotlin.math.abs
 import kotlin.math.exp
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
+import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiSupportPackageScreen
+import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager
+import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiSupportPackageExporter
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiControlCenterScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPkpdSettingsScreen
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
@@ -1831,6 +1834,26 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         preferences = preferences,
                         tpoOrchestrator = tpoOrchestrator,
                         onBack = onBack,
+                    )
+                },
+            ),
+        )
+        add(
+            ApsIntentKey.AimiSupportPackage.withCompose(
+                ComposeScreenContent { onBack ->
+                    val exporter = AimiSupportPackageExporter(
+                        context = context,
+                        preferences = preferences,
+                        logger = aapsLogger,
+                        storageHelper = storageHelper,
+                        profileFunction = profileFunction,
+                        rh = rh,
+                    )
+                    AimiSupportPackageScreen(
+                        onBack = onBack,
+                        verifyCode = { code -> AimiDiagnosticsManager.verifyCode(code) },
+                        buildPackage = { issue -> exporter.build(issue) },
+                        sharePackage = { zip, issue -> exporter.share(zip, issue) },
                     )
                 },
             ),
