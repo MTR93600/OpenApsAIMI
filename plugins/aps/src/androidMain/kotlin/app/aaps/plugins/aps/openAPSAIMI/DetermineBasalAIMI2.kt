@@ -68,6 +68,8 @@ import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbTrainingRowBuffer
+import app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCsvHeader
+import app.aaps.plugins.aps.openAPSAIMI.ml.ensureCurrent
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorJsonlExport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdict
 import app.aaps.plugins.aps.openAPSAIMI.smb.MaxSmbLadder
@@ -13201,12 +13203,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val eventMemory = lastPatientState?.eventMemory ?: PatientEventMemory.EMPTY
         val decisionConflictFlags = physioAdapter.getLastDecisionTrace()?.decisionConflictFlags?.joinToString("|").orEmpty()
 
-        val headerRow =
-            "dateStr, ${SmbRefinementFeatureSchema.csvFeatureNames.joinToString(", ")}, " +
-                "${SmbRefinementFeatureSchema.familyAuditFeatureNames.joinToString(", ")}, " +
-                "${SmbRefinementFeatureSchema.optionalTrainingAuditFeatureNames.joinToString(", ")}, " +
-                "predictedSMB, smbGiven, dynamicPeak, adjustedDia, " +
-                "${SmbTrainingRowBuffer.ADDED_COLUMN_NAMES.joinToString(", ")}\n"
+        // One source of truth for the column order: the writer and the trainer read the same list.
+        // Building the header here by hand is what let the file on disk drift away from the rows.
+        val headerRow = SmbRefinementFeatureSchema.trainingCsvHeaderLine() + "\n"
         val valuesToRecord = "$dateStr," +
             "$bg,$iob,$cob,$delta,$shortAvgDelta,$longAvgDelta," +
             "$tdd7DaysPerHour,$tdd2DaysPerHour,$tddPerHour,$tdd24HrsPerHour," +
@@ -13297,36 +13296,32 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             file.createNewFile()
             file.appendText(headerRow)
         } else {
-            upgradeCsvHeaderIfColumnsWereAppended(file, headerRow)
+            ensureCsvHeaderIsCurrent(file, headerRow)
         }
         file.appendText(valuesRow + "\n")
     }
 
     /**
-     * Rewrites the first line of an existing CSV when new columns were appended to the header.
+     * Makes sure an existing CSV carries the header the writer builds today.
      *
-     * The header is only written when the file is created, so a file that already exists keeps its
-     * old header for ever. New rows would then carry cells that no reader can name, and both
-     * [app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer] and the offline analysis look columns up
-     * by name. The rewrite happens only when the stored header is the start of the wanted one, so a
-     * file with another shape is never touched. Old rows keep their shorter row on purpose: a cell
-     * that is not there reads as absent, never as zero.
+     * The rewrite itself, and why it is safe to replace the first line whatever its old shape, live in
+     * [app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCsvHeader]. Here we only add the two things that
+     * belong to the running app: the file is checked once per path per app start, and any failure is
+     * logged and swallowed, because a header that could not be fixed must never stop a row from being
+     * written.
      *
-     * The file is read once per path per app start; after that the path is remembered and skipped.
-     * File I/O stays in androidMain on the existing writer — not a second store, not commonMain.
+     * ⚠️ ASYNC IMPACT: File I/O on the tick writer thread (same as the previous prefix-only upgrade).
+     * The path is remembered after the first check so later ticks do not re-read the whole CSV.
      */
-    private fun upgradeCsvHeaderIfColumnsWereAppended(file: File, headerRow: String) {
+    private fun ensureCsvHeaderIsCurrent(file: File, headerRow: String) {
         if (!csvHeaderCheckedPaths.add(file.absolutePath)) return
         runCatching {
-            val wanted = headerRow.trimEnd('\n')
-            val lines = file.readLines(Charsets.UTF_8)
-            val stored = lines.firstOrNull()?.trimEnd('\r') ?: return@runCatching
-            if (stored == wanted) return@runCatching
-            if (!wanted.startsWith("$stored,")) return@runCatching
-            file.writeText((listOf(wanted) + lines.drop(1)).joinToString("\n") + "\n", Charsets.UTF_8)
-            aapsLogger.info(LTag.APS, "CSV header extended in place for ${file.name}")
+            val outcome = TrainingCsvHeader.ensureCurrent(file, headerRow)
+            if (outcome == TrainingCsvHeader.Outcome.REPLACED) {
+                aapsLogger.info(LTag.APS, "CSV header replaced in place for ${file.name}")
+            }
         }.onFailure { error ->
-            aapsLogger.warn(LTag.APS, "CSV header upgrade skipped for ${file.name}: ${error.message}")
+            aapsLogger.warn(LTag.APS, "CSV header refresh skipped for ${file.name}: ${error.message}")
         }
     }
 
