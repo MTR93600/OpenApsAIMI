@@ -12,12 +12,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.math.abs
-import kotlin.math.exp
 import kotlin.math.min
-import kotlin.math.sqrt
 
 /**
  * AimiSmbTrainer — Singleton managing the ML model lifecycle for SMB refinement.
@@ -83,6 +81,9 @@ object AimiSmbTrainer {
     // Training rate limit
     private val lastTrainMs   = AtomicLong(0L)
     private val rowsAtLastTrain = AtomicLong(0L)
+
+    /** Set once the weights trained on an unreadable corpus have been thrown away. */
+    private val staleModelDiscarded = AtomicBoolean(false)
 
     // ---- Public API ----------------------------------------------------------
 
@@ -182,31 +183,15 @@ object AimiSmbTrainer {
         }
 
         val headers = allLines.firstOrNull()?.split(",")?.map { it.trim() } ?: return
-        val targetName = "smbGiven"
-        val targetIndex    = headers.indexOf(targetName)
-
-        if (targetIndex == -1) {
-            Log.w(TAG, "CSV missing required columns — skip training")
+        val headerCheck = AimiSmbCorpus.checkCorpusHeader(headers)
+        if (!headerCheck.valid) {
+            Log.e(TAG, "SMB corpus refused — no training. ${headerCheck.reason}")
+            discardModelTrainedOnUnreadableCorpus(dir)
             return
         }
-
-        val inputs  = mutableListOf<FloatArray>()
-        val targets = mutableListOf<DoubleArray>()
-
-        for (line in dataLines) {
-            val cols = line.split(",").map { it.trim() }
-            if (cols.size <= targetIndex) continue
-
-            val raw = SmbRefinementFeatureSchema.parseTrainingFeatures(headers, cols) ?: continue
-            if (!SmbRefinementFeatureSchema.shouldUseCsvRowForTraining(headers, cols, raw)) continue
-
-            // Approximate trendIndicator for offline training
-            val trendIndicator = computeTrendIndicator(raw)
-            val enhanced = raw.copyOf(raw.size + 1).also { it[raw.size] = trendIndicator }
-
-            targets.add(doubleArrayOf(cols[targetIndex].toDoubleOrNull() ?: continue))
-            inputs.add(enhanced)
-        }
+        val corpus = AimiSmbCorpus.buildTrainingCorpus(headers, dataLines) ?: return
+        val inputs = corpus.inputs
+        val targets = corpus.targets
 
         if (inputs.size < 10) {
             Log.w(TAG, "Insufficient training samples (${inputs.size}) — skip")
@@ -251,19 +236,32 @@ object AimiSmbTrainer {
 
     // ---- Helpers -------------------------------------------------------------
 
-    private fun computeTrendIndicator(raw: FloatArray): Float {
-        // raw: [bg, iob, cob, delta, shortAvgDelta, longAvgDelta, ...]
-        val bg           = raw.getOrElse(0) { 120f }.toDouble()
-        val iob          = raw.getOrElse(1) { 0f }.toDouble()
-        val delta        = raw.getOrElse(3) { 0f }
-        val shortAvgDelta = raw.getOrElse(4) { 0f }
-        val longAvgDelta  = raw.getOrElse(5) { 0f }
-        val combinedDelta = (delta + shortAvgDelta + longAvgDelta) / 3f
-        val stressScore   = if (bg > 150) 40.0 else 0.0
-        val metabolicLoad = iob * 5.0
-        val baseTrend = (combinedDelta * 5.0f) + (stressScore * 0.1).toFloat() - (metabolicLoad * 0.5).toFloat()
-        val sig = (1f / (1f + exp(-baseTrend.toDouble()))).toFloat()
-        return 0.5f + sig * 0.7f
+    /**
+     * Throws away the stored SMB weights, once, after the corpus guard refused the file.
+     *
+     * The weights on disk were fitted against whatever column the stale header pointed at, so they
+     * answer in the wrong unit and `refine` keeps using them until a training run succeeds. Clearing
+     * [modelRef] and deleting the weight file sends `refine` back to returning `predictedSmb`
+     * unchanged, which is already what it does when no model is loaded.
+     *
+     * It runs at most once per app start: a corpus that stays unreadable must not turn into a delete
+     * on every tick.
+     *
+     * ⚠️ ASYNC IMPACT: runs on the existing `Dispatchers.IO` training coroutine (same as `trainNow`).
+     * `modelRef.set(null)` is visible to the hot-path `refine()`; the File delete is IO-only.
+     * `loadModel` is also fire-and-forget on that dispatcher — same pre-existing race as a training
+     * publish vs a plugin-start load.
+     */
+    private fun discardModelTrainedOnUnreadableCorpus(dir: File) {
+        if (!staleModelDiscarded.compareAndSet(false, true)) return
+        modelRef.set(null)
+        val removed = AimiSmbModelStore.delete(dir)
+        Log.w(
+            TAG,
+            "SMB weights discarded: they were trained on an unreadable corpus. " +
+                "Weight file removed=$removed. refine() now returns the rule-based dose until a " +
+                "training run on a readable corpus publishes new weights.",
+        )
     }
 
     internal fun correctionClamp(

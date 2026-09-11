@@ -19,4 +19,23 @@ internal object AimiSmbModelStore {
 
     fun load(dir: File, expectedInputSize: Int): AimiNeuralNetwork? =
         AimiNeuralModelStore.load(modelFile(dir), expectedInputSize)
+
+    /**
+     * Removes the stored SMB weights from [dir].
+     *
+     * Used when the weights are known to have been trained on the wrong column, so the engine falls
+     * back to the rule-based dose until a training run on a readable corpus publishes new weights.
+     * Deleting from here keeps the filename in one place; callers never build the path themselves.
+     *
+     * Study adaptation vs `6c0c0285ff`: the reference deleted only the target file. This store's
+     * [load] goes through [AimiNeuralModelStore.load], which would otherwise resurrect the same
+     * weights from the `.bak`. Delegating to [AimiNeuralModelStore.delete] removes target + siblings
+     * so the discard actually clears the model the next [load] would see.
+     *
+     * Returns `true` when no weight file is left behind, whether it was deleted now or already gone.
+     *
+     * ⚠️ ASYNC IMPACT: File I/O. Called from the trainer's IO coroutine after the corpus guard
+     * refuses the CSV; not on the `refine()` hot path.
+     */
+    fun delete(dir: File): Boolean = AimiNeuralModelStore.delete(modelFile(dir))
 }
