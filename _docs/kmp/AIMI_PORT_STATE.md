@@ -865,27 +865,70 @@ EXIT=0; `:plugins:aps:testAndroidHostTest` 419 tests (was 330 - the ~89 new P0.x
 
 ---
 
+## 6k. 2026-09-12: staging cleanup lot - 6 of the 17 files were dead, not pending
+
+Before starting the Compose port of the last 17 staged files, a survey pass checked each one for live
+callers and live successors, instead of assuming all 17 still needed porting (the same question that
+made `AuditorReportActivity` turn out to need no port at all, back in 6i). Six did not:
+
+- `AimiDiagnosticsManager.kt` - a live file of the same name already exists in `androidMain`, and is a
+  strict superset (English text, plus the 2026-09-06 active-profile fix from 6-something's support
+  report work). Diffed line by line to confirm before deleting.
+- `StateTransitionManager.kt` (`advisor/auditor/model/`) - superseded by the live
+  `AimiStateTransitionManager` (`advisor/auditor/`), which `AuditorOrchestrator` actually constructs.
+  Same job (Auditor state machine), different name, so a grep for the old name found nothing live.
+- `AimiSmbSimulator.kt` (class `DualEngineSimulator`) - its whole supporting cast
+  (`VirtualGlucoseEngine`, `VirtualInsulinReservoir`, `VirtualIobCalculator`, `PerformanceScorer`) is
+  already live and already consumed by `AimiSmbComparator`, a different top-level class doing the same
+  comparison job. Zero references to `DualEngineSimulator` anywhere.
+- `AIMIHealthConnectStepsProviderMTR.kt` and `AIMICompositeStepsProviderMTR.kt` - the steps
+  architecture moved to a sync-to-database model (`AIMIHealthConnectSyncServiceMTR` /
+  `AIMIDatabaseStepsProviderMTR` / `AIMIStepsManagerMTR`) after these two were written; neither has a
+  caller left.
+- `AimiMemberInjectors.kt` - a DI wiring template for a `MembersInjector`-per-Activity pattern the
+  project has moved away from (see `PluginStatusBadgeSource`, a plain interface + `@ContributesBinding`
+  instead). It was already stale against its own staging tree - it imports `AuditorReportActivity`,
+  removed back in 6i.
+
+Verified each with a grep across the whole repo excluding `_docs/kmp/staging/` before deleting, same
+discipline as 6i. `_docs/kmp/staging/` is not part of any Gradle source set (confirmed: no
+`build.gradle*` references it), so this cleanup needed no build re-verification.
+
+**11 files are left** (was 17), all confirmed genuine UI still to port, backend already live in every
+case - see 7.1 for the lot split. One of the 11, `AimiLoopRuntimeGuard.kt`, wraps a live telemetry
+method that nothing calls yet (no Overview wiring exists for it) - held rather than ported, per the
+"don't ship a registration nothing consumes yet" rule; port it together with whatever feature ends up
+needing it, not before.
+
+---
+
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at
 `@MetroIntKey(250)` and its whole reachable dependency closure compiling. All eight collaborator ports
 now have exactly one implementation each. The AIMI Auditor now has a real Compose status chip on the
 Overview screen, wired through a new `:core:interfaces` port (`PluginStatusBadgeSource`) rather than
-its old View-based toolbar indicator. Staging is down to 17 files, all View-based Android Activities
-(or their direct support classes) with no Compose equivalent yet - not 247, see 6i and its addenda.
-Two `kmp` merges and a parallel P0.1-P0.7 porting series (done outside this session, with a Cursor
-agent) have landed since 6i; see 6j for what they were and why neither touches the 17 staged files.
+its old View-based toolbar indicator. Staging is down to 11 files (was 17, six deleted in 6k as dead
+or superseded - see 6k), all View-based Android Activities or their direct support classes, real UI
+still to port, with no Compose equivalent yet. Two `kmp` merges and a parallel P0.1-P0.7 porting
+series (done outside this session, with a Cursor agent) have landed since 6i; see 6j for what they
+were and why neither touches these staged files.
 
-1. **The 17 remaining staged files are all legacy View-based Android Activities or their support
+1. **The 11 remaining staged files are all legacy View-based Android Activities or their support
    classes**, not AIMI's dosing logic - `AimiModeSettingsActivity`, `AimiProfileAdvisorActivity`,
-   `ContextActivity`, `MealAdvisorActivity`/`MealAdvisorCameraActivity`, plus a handful of the smaller
-   view models/adapters/permission Activities that go with them. The meal-photo vision pipeline and
-   the Auditor's notification/status-badge cluster both moved this same day (see the two addenda right
-   above); their Activities are the only pieces still parked. None of the 17 blocks what already runs.
-   Porting an Activity at all is itself a design decision this codebase has been moving away from
-   (Compose over View) - don't assume "port it as-is" is even the right call before asking, the same
-   way `AuditorReportActivity` turned out not to need porting at all once its real dependency
-   (`showOkDialog`) turned out to be gone rather than just unfound.
+   `ContextActivity` (+ `ContextViewModel`/`ContextIntentAdapter`/`PatientSignalGaugeBinder`),
+   `MealAdvisorActivity`/`MealAdvisorCameraActivity`, the HealthConnect/SOS permission Activities, and
+   `AimiLoopRuntimeGuard` (held, not ported yet - see 6k). None of the 11 blocks what already runs.
+   The survey in 6k confirmed each one's backend is already live in commonMain/androidMain, so the
+   remaining work is UI only. Suggested split, smallest first: (i) the two permission Activities,
+   (ii) the Context cluster (Activity + ViewModel + adapters + 3 layouts), (iii) Meal Advisor + its
+   camera Activity (its own risk profile - hand-rolled Camera2, not a layout port), (iv)
+   `AimiModeSettingsActivity`, (v) `AimiProfileAdvisorActivity` alone (2321 lines - likely needs
+   splitting further once scoped). Porting an Activity at all is itself a design decision this
+   codebase has been moving away from (Compose over View) - don't assume "port it as-is" is even the
+   right call before asking, the same way `AuditorReportActivity` turned out not to need porting at
+   all once its real dependency (`showOkDialog`) turned out to be gone rather than just unfound, and
+   six more of the original 17 turned out the same way in 6k.
 2. **Before moving any of those 17, or anything from a future upstream merge, check for the recurring
    failure shapes from 6g through 6i, in order:** (a) a class implementing a port interface but missing
    `@ContributesBinding(AppScope::class)` - compiles fine alone, fails only at `:app:compileFullDebugKotlin`,
