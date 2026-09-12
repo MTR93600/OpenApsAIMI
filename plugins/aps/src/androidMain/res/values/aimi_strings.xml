@@ -2000,6 +2000,62 @@
 <string name="console_temp_target_set">Temp Target set, not adjusting with autosens</string>
 <string name="context_patient_state_empty">No AIMI understanding yet. It updates on each loop tick and when body signals or user context change.</string>
 <string name="context_title">AIMI Context</string>
+
+<string name="pref_title_aimi_context">AIMI Context</string>
+<string name="pref_summary_aimi_context">Tell AIMI about exercise, illness, stress, or travel, and see how it currently reads your body.</string>
+
+<string name="aimi_context_intro">Tell AIMI what is going on (exercise, illness, stress, travel...) and it will adjust for the next few hours. Type a sentence or tap a preset below.</string>
+<string name="aimi_context_chat_hint">Describe what is happening</string>
+<string name="aimi_context_send_button">Analyze</string>
+<string name="aimi_context_clear_button">Clear</string>
+<string name="aimi_context_llm_failure_message">Could not detect a context from that text. Try a simpler sentence, or tap a preset instead.</string>
+<string name="aimi_context_offline_failure_message">No context matched those words. Try a simple keyword (Sport, Illness, Stress), or tap a preset instead.</string>
+<string name="aimi_context_error_prefix" comment="%1$s = the error message that follows the colon">Error</string>
+<string name="aimi_context_intent_added" comment="%1$d = how many contexts were added from the typed text. Example: 2 context(s) added">%1$d context(s) added</string>
+<string name="aimi_context_parse_failed_title">Could not understand this</string>
+
+<string name="aimi_context_presets_title">Quick presets</string>
+<string name="aimi_context_active_intents_title">Active contexts</string>
+<string name="aimi_context_clear_all_button">Clear all</string>
+<string name="aimi_context_empty_state">No active context. AIMI is using its normal, unmodified settings.</string>
+<string name="aimi_context_remove_action">Remove</string>
+<string name="aimi_context_extend_action">Extend</string>
+<string name="aimi_context_extend_dialog_title">Extend by</string>
+<string name="aimi_context_duration_minutes" comment="%1$d = number of minutes">%1$d min</string>
+<string name="aimi_context_duration_hours" comment="%1$d = number of hours">%1$d h</string>
+<string name="aimi_context_clear_all_confirm_title">Remove all active contexts?</string>
+<string name="aimi_context_clear_all_confirm_message">AIMI will go back to reading only your normal loop data.</string>
+<string name="aimi_context_clear_all_confirm_button">Remove all</string>
+
+<string name="aimi_context_settings_title">Settings</string>
+<string name="aimi_context_module_enabled_label">Context module enabled</string>
+<string name="aimi_context_llm_enabled_label">Use AI to read free text</string>
+
+<string name="aimi_context_time_expired">Expired</string>
+<string name="aimi_context_time_minutes" comment="%1$d = minutes left">%1$d min left</string>
+<string name="aimi_context_time_hours_minutes" comment="%1$d = hours left, %2$d = extra minutes left">%1$dh %2$dmin left</string>
+<string name="aimi_context_confidence_high">High confidence</string>
+<string name="aimi_context_confidence_medium">Medium confidence</string>
+<string name="aimi_context_confidence_low">Low confidence</string>
+
+<string name="aimi_context_intent_activity" comment="%1$s = activity type (e.g. Cardio), %2$s = intensity (e.g. High)">Activity: %1$s (%2$s)</string>
+<string name="aimi_context_intent_illness" comment="%1$s = symptom type, %2$s = intensity">Illness: %1$s (%2$s)</string>
+<string name="aimi_context_intent_stress" comment="%1$s = stress type, %2$s = intensity">Stress: %1$s (%2$s)</string>
+<string name="aimi_context_intent_meal_risk" comment="%1$s = intensity">Unannounced meal risk (%1$s)</string>
+<string name="aimi_context_intent_alcohol" comment="%1$.1f = units of alcohol, %2$s = intensity">Alcohol: %1$.1f U (%2$s)</string>
+<string name="aimi_context_intent_travel" comment="%1$d = timezone shift in hours, %2$s = intensity">Travel: %1$dh shift (%2$s)</string>
+<string name="aimi_context_intent_cycle" comment="%1$s = menstrual cycle phase">Menstrual cycle: %1$s</string>
+<string name="aimi_context_intent_slow_carb" comment="%1$s = intensity">Slow-carb meal (%1$s)</string>
+<string name="aimi_context_intent_hypo_recovery" comment="%1$s = intensity">Hypo recovery (%1$s)</string>
+
+<string name="aimi_context_patient_state_title">Patient state</string>
+<string name="aimi_context_patient_state_live_body_label">Live body signals</string>
+<string name="aimi_context_patient_state_thermal_label">Temperature</string>
+<string name="aimi_context_patient_state_phase_label">Physiological phase</string>
+<string name="aimi_context_patient_state_intent_label">Dominant context</string>
+<string name="aimi_context_patient_state_signals_label">Signal breakdown</string>
+<string name="aimi_context_patient_state_bias_label">Delivery strategy</string>
+<string name="aimi_context_patient_state_reasons_label">Reasons</string>
 <string name="dia_base_info">Base DIA: %1$f h = %2$f min\n</string>
 <string name="dia_calculation_details">DIA Calculation Details:</string>
 <string name="endo_enable_title">Enable Endometriosis Logic</string>

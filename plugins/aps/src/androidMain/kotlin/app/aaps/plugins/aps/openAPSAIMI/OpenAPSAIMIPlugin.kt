@@ -149,7 +149,9 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager
 import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiSupportPackageExporter
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiControlCenterScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPkpdSettingsScreen
+import app.aaps.plugins.aps.openAPSAIMI.context.ui.AimiContextScreen
 import app.aaps.plugins.aps.openAPSAIMI.physio.AimiHealthConnectPermissionScreen
+import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextRepository
 import app.aaps.plugins.aps.openAPSAIMI.sos.AimiSosPermissionScreen
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
@@ -202,6 +204,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR,
     private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator, // ?? AI Auditor MTR
     private val contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager, // ?? Context Manager
+    private val healthContextRepository: HealthContextRepository,
     private val aimiBackupManager: AimiBackupManager, // ?? Cloud Backup Manager (Force Init)
     private val aimiMlTrainingScheduler: AimiMlTrainingScheduler,
     private val storageHelper: AimiStorageHelper,
@@ -1856,6 +1859,20 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         verifyCode = { code -> AimiDiagnosticsManager.verifyCode(code) },
                         buildPackage = { issue -> exporter.build(issue) },
                         sharePackage = { zip, issue -> exporter.share(zip, issue) },
+                    )
+                },
+            ),
+        )
+        add(
+            ApsIntentKey.AimiContext.withCompose(
+                ComposeScreenContent { onBack ->
+                    AimiContextScreen(
+                        contextManager = contextManager,
+                        preferences = preferences,
+                        healthContextRepository = healthContextRepository,
+                        aapsLogger = aapsLogger,
+                        dateUtil = dateUtil,
+                        onBack = onBack,
                     )
                 },
             ),

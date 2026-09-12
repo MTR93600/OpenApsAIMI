@@ -949,37 +949,84 @@ happening after any DI-graph-touching change), `:plugins:aps:compileKotlinIosArm
 
 ---
 
+## 6m. 2026-09-12: lot 3 - the Context cluster, ported to Compose
+
+`ContextActivity.kt`, `ContextIntentAdapter.kt`, `PatientSignalGaugeBinder.kt` and their 3 layout XMLs
+are gone from staging, replaced by one file: `AimiContextScreen.kt` (`openAPSAIMI/context/ui/`). **5
+files left** (was 9): Meal Advisor + camera, Mode Settings, Profile Advisor, and the held
+`AimiLoopRuntimeGuard`.
+
+`ContextViewModel.kt` was **not** ported - it was dead weight even in staging. Its own package
+(`context.ui`) had two competing implementations sitting side by side: the Activity called
+`ContextManager` directly and said so in its own doc comment ("Simplified version without ViewModel
+for quick implementation"), while `ContextViewModel` wrapped the same calls in `LiveData` and was
+never once referenced by the Activity or anything else. Grepped to confirm zero live callers before
+dropping it - same check as every other deletion in this port, see 6k.
+
+This lot needed a real backend survey before writing any UI, not just a port: `ContextManager` -
+already a plugin constructor field, used elsewhere - had four call shapes the staged Activity had
+subtly wrong (`addPreset` returns one `String` id, not a list; `getAllIntents()` returns a `Map`, not
+a `List<Pair<...>>`, though `.toList()` on either produces the right shape so this one didn't matter;
+`removeIntent`/`extendDuration` return `Boolean`, ignored same as before). `ContextPreset.ALL_PRESETS`
+has grown to 12 entries since the Activity was parked (it assumed 10, hardcoded by index) - the new
+screen iterates the list and reads each preset's own `displayName`/`icon` instead of hardcoding a
+chip per index, so it will not go stale again the next time a preset is added. Two `ContextIntent`
+subtypes (`SlowCarbMeal`, `HypoRecovery`) existed in the model but were never handled by the staged
+Activity's display code at all - both are handled now.
+
+This feature had **no live entry point anywhere** before this lot - not a leftover Activity reference,
+an actually-missing one: no `ApsIntentKey` entry, no preference-tree `add(...)`, most of its
+`context_*` string resources were never created. Added `ApsIntentKey.AimiContext` (top-level, same
+shape as `AimiControlCenter`/`AimiSupportPackage`) and wired it with `.withCompose` right next to
+those two. `HealthContextRepository` (needed for the same on-resume snapshot refresh the old Activity
+did) was Metro-injectable but not yet a plugin constructor field either - added as one, the same way
+`preferences`/`tpoOrchestrator` already were, since Metro resolves it automatically at construction;
+this is a same-module Metro dependency addition, not the kind of new inter-module Gradle edge the
+project's dependency rule is about.
+
+Verified: `:app:assembleFullDebug` EXIT=0 on the first attempt (no stale-KSP issue this time),
+`:plugins:aps:compileKotlinIosArm64` EXIT=0, `:plugins:aps:testAndroidHostTest` 514 tests, 0 failures
+(unchanged - a UI-only lot, same as 6l, adds no new tests).
+
+---
+
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at
 `@MetroIntKey(250)` and its whole reachable dependency closure compiling. All eight collaborator ports
 now have exactly one implementation each. The AIMI Auditor now has a real Compose status chip on the
 Overview screen, wired through a new `:core:interfaces` port (`PluginStatusBadgeSource`) rather than
-its old View-based toolbar indicator. Staging is down to 9 files (was 17: six deleted in 6k as dead or
-superseded, two ported to Compose in 6l), all View-based Android Activities or their direct support
-classes, real UI still to port, with no Compose equivalent yet. Two `kmp` merges and a parallel
-P0.1-P0.7 porting series (done outside this session, with a Cursor agent) have landed since 6i; see 6j
-for what they were and why neither touches these staged files.
+its old View-based toolbar indicator. Staging is down to 5 files (was 17: six deleted in 6k as dead or
+superseded, two permission screens ported in 6l, the Context cluster ported in 6m), all View-based
+Android Activities or their direct support classes, real UI still to port, with no Compose equivalent
+yet. Two `kmp` merges and a parallel P0.1-P0.7 porting series (done outside this session, with a
+Cursor agent) have landed since 6i; see 6j for what they were and why neither touches these staged
+files.
 
-1. **The 9 remaining staged files are all legacy View-based Android Activities or their support
+1. **The 5 remaining staged files are all legacy View-based Android Activities or their support
    classes**, not AIMI's dosing logic - `AimiModeSettingsActivity`, `AimiProfileAdvisorActivity`,
-   `ContextActivity` (+ `ContextViewModel`/`ContextIntentAdapter`/`PatientSignalGaugeBinder`),
    `MealAdvisorActivity`/`MealAdvisorCameraActivity`, and `AimiLoopRuntimeGuard` (held, not ported yet
-   - see 6k). The two permission Activities are done (6l). None of the 9 blocks what already runs.
-   The survey in 6k confirmed each one's backend is already live in commonMain/androidMain, so the
-   remaining work is UI only. Suggested split, smallest first: (i) the Context cluster (Activity +
-   ViewModel + adapters + 3 layouts), (ii) Meal Advisor + its camera Activity (its own risk profile -
-   hand-rolled Camera2, not a layout port), (iii) `AimiModeSettingsActivity`, (iv)
-   `AimiProfileAdvisorActivity` alone (2321 lines - likely needs splitting further once scoped).
-   Porting an Activity at all is itself a design decision this codebase has been moving away from
-   (Compose over View) - don't assume "port it as-is" is even the right call before asking, the same
-   way `AuditorReportActivity` turned out not to need porting at all once its real dependency
+   - see 6k). The permission screens (6l) and the Context cluster (6m) are done. None of the 5 blocks
+   what already runs. The survey in 6k confirmed each one's backend is already live in
+   commonMain/androidMain, so the remaining work is UI only. Suggested split, smallest first: (i)
+   Meal Advisor + its camera Activity (its own risk profile - hand-rolled Camera2, not a layout port),
+   (ii) `AimiModeSettingsActivity`, (iii) `AimiProfileAdvisorActivity` alone (2321 lines - likely needs
+   splitting further once scoped). Before writing UI for any of these, repeat the same backend survey
+   6m did - check the real current shape of what it calls (return types, field names, how many
+   variants an enum/sealed class actually has now), don't trust what the staged code assumed; a
+   feature can also turn out to have zero live entry point yet, as Context did, which changes the
+   scope from "port a screen" to "port a screen and wire it into the preference tree for the first
+   time". Porting an Activity at all is itself a design decision this codebase has been moving away
+   from (Compose over View) - don't assume "port it as-is" is even the right call before asking, the
+   same way `AuditorReportActivity` turned out not to need porting at all once its real dependency
    (`showOkDialog`) turned out to be gone rather than just unfound, and six more of the original 17
-   turned out the same way in 6k. When a screen wraps a system permission model that does not fit the
-   app-wide `PermissionsSheet`/`PluginPermissionsImpl` mechanism (Health Connect's async grant check
+   turned out the same way in 6k, and `ContextViewModel` a seventh way in 6m (dead weight sitting
+   right next to the file that superseded it, in the same staging folder). When a screen wraps a
+   system permission model that does not fit the app-wide `PermissionsSheet`/`PluginPermissionsImpl`
+   mechanism (Health Connect's async grant check
    was the case in 6l), check permissions locally in the screen rather than forcing a new shared-infra
    change into a small lot - see 6l for the reasoning.
-2. **Before moving any of those 17, or anything from a future upstream merge, check for the recurring
+2. **Before moving any of those 5, or anything from a future upstream merge, check for the recurring
    failure shapes from 6g through 6i, in order:** (a) a class implementing a port interface but missing
    `@ContributesBinding(AppScope::class)` - compiles fine alone, fails only at `:app:compileFullDebugKotlin`,
    so that has to be the gate, not `:plugins:aps:compileAndroidMain`; (b) `.titleResId`/`.descriptionResId`/
