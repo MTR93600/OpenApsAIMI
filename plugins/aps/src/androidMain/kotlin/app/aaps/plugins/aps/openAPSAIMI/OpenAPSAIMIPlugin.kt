@@ -147,6 +147,7 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiSupportPackageScreen
 import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager
 import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiSupportPackageExporter
+import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.ui.AimiMealAdvisorScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiControlCenterScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPkpdSettingsScreen
 import app.aaps.plugins.aps.openAPSAIMI.context.ui.AimiContextScreen
@@ -1872,6 +1873,19 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         healthContextRepository = healthContextRepository,
                         aapsLogger = aapsLogger,
                         dateUtil = dateUtil,
+                        onBack = onBack,
+                    )
+                },
+            ),
+        )
+        add(
+            ApsIntentKey.AimiMealAdvisor.withCompose(
+                ComposeScreenContent { onBack ->
+                    AimiMealAdvisorScreen(
+                        preferences = preferences,
+                        persistenceLayer = persistenceLayer,
+                        profileFunction = profileFunction,
+                        aapsLogger = aapsLogger,
                         onBack = onBack,
                     )
                 },

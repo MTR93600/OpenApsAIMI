@@ -1284,6 +1284,62 @@
 
 <string name="aimi_meal_advisor_title">AIMI Meal Advisor</string>
 
+<string name="aimi_meal_advisor_intro">Take a photo of your meal. AIMI will estimate the carbs and protein, so you can review them before logging.</string>
+
+<string name="aimi_meal_advisor_provider_label">AI model</string>
+
+<string name="aimi_meal_advisor_description_hint">Optional notes about the meal, for example the type of pasta or bread</string>
+
+<string name="aimi_meal_advisor_photo_placeholder">No photo yet. Tap Analyze meal to take one.</string>
+
+<string name="aimi_meal_advisor_photo_content_description">Photo of the meal</string>
+
+<string name="aimi_meal_advisor_analyze_button">Analyze meal</string>
+
+<string name="aimi_meal_advisor_analyzing_button">Analyzing…</string>
+
+<string name="aimi_meal_advisor_analyze_error_prefix" comment="%1$s = the underlying error message. Example: Could not analyze the photo: timeout">Could not analyze the photo: %1$s</string>
+
+<string name="aimi_meal_advisor_confirm_error_prefix" comment="%1$s = the underlying error message. Example: Could not log carbs: database error">Could not log carbs: %1$s</string>
+
+<string name="aimi_meal_advisor_camera_error_message" comment="%1$d = the Camera2 error code reported by the system. Example: Camera error (code 2). Please try again.">Camera error (code %1$d). Please try again.</string>
+
+<string name="aimi_meal_advisor_camera_not_ready_message">Camera is not available right now. Please try again.</string>
+
+<string name="aimi_meal_advisor_camera_permission_denied_message">Camera access was not granted. Allow camera access in system settings to use Meal Advisor.</string>
+
+<string name="aimi_meal_advisor_capture_button">Capture</string>
+
+<string name="aimi_meal_advisor_carbs_field_label">Carbs (g)</string>
+
+<string name="aimi_meal_advisor_confidence_high">High confidence</string>
+
+<string name="aimi_meal_advisor_confidence_medium">Medium confidence</string>
+
+<string name="aimi_meal_advisor_confidence_low">Low confidence</string>
+
+<string name="aimi_meal_advisor_confirm_button" comment="%1$d = grams of carbs to log, %2$.1f = the insulin dose in units this implies at the current carb ratio. Example: Log 45 g carbs and 4.5 U dose">Log %1$d g carbs and %2$.1f U dose</string>
+
+<string name="aimi_meal_advisor_confirmed_message">Carbs logged.</string>
+
+<string name="aimi_meal_advisor_identified_items_title">Identified items</string>
+
+<string name="aimi_meal_advisor_item_row" comment="%1$s = food item name, %2$s = amount description. Example: Rice (about 1 cup)">%1$s (%2$s)</string>
+
+<string name="aimi_meal_advisor_macro_summary" comment="%1$.0f = protein grams, %2$.0f = fat grams, %3$s = fat-protein-unit equivalent used for extended dosing. Example: Protein: 20 g | Fat: 15 g | FPU: 1.2">Protein: %1$.0f g | Fat: %2$.0f g | FPU: %3$s</string>
+
+<string name="aimi_meal_advisor_reasoning_prefix" comment="%1$s = the AI's reasoning text for its estimate. Example: Why: Portion sizes were estimated from the plate diameter">Why: %1$s</string>
+
+<string name="aimi_meal_advisor_risk_banner" comment="%1$s = risk severity label (e.g. High hidden-carb risk), %2$s = specific notes from the AI. Example: High hidden-carb risk: Bread and rice portions were hard to size from the photo.">%1$s: %2$s</string>
+
+<string name="aimi_meal_advisor_risk_high">High hidden-carb risk</string>
+
+<string name="aimi_meal_advisor_risk_high_and_manual">High risk and manual check needed</string>
+
+<string name="aimi_meal_advisor_risk_manual">Manual check advised</string>
+
+<string name="aimi_meal_advisor_risk_notes_default">Review the estimate before confirming.</string>
+
 <string name="aimi_auditor_enabled_title">Enable AI Decision Auditor</string>
 
 <string name="aimi_auditor_enabled_summary">Activate the Second Brain to challenge and modulate AIMI decisions</string>
@@ -2003,6 +2059,9 @@
 
 <string name="pref_title_aimi_context">AIMI Context</string>
 <string name="pref_summary_aimi_context">Tell AIMI about exercise, illness, stress, or travel, and see how it currently reads your body.</string>
+
+<string name="pref_title_aimi_meal_advisor">AIMI Meal Advisor</string>
+<string name="pref_summary_aimi_meal_advisor">Take a photo of your meal and let AIMI estimate the carbs before you log them.</string>
 
 <string name="aimi_context_intro">Tell AIMI what is going on (exercise, illness, stress, travel...) and it will adjust for the next few hours. Type a sentence or tap a preset below.</string>
 <string name="aimi_context_chat_hint">Describe what is happening</string>

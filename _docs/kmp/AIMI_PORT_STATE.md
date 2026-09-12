@@ -990,43 +990,97 @@ Verified: `:app:assembleFullDebug` EXIT=0 on the first attempt (no stale-KSP iss
 
 ---
 
+## 6n. 2026-09-12: lot 4 - Meal Advisor + its camera screen, ported to Compose (multi-agent lot)
+
+`MealAdvisorActivity.kt` and `MealAdvisorCameraActivity.kt` are gone from staging, replaced by one
+file: `AimiMealAdvisorScreen.kt` (`openAPSAIMI/advisor/meal/ui/`). **4 files left** (was 5):
+`AimiModeSettingsActivity`, `AimiProfileAdvisorActivity`, and the held `AimiLoopRuntimeGuard`.
+
+This lot ran as definer -> coder -> reviewer, each a separate agent, rather than one pass done
+directly - the first lot in this port done that way on request. Worth recording what that bought and
+what it cost, since more lots may use it:
+
+- **The definer (a research-only agent) surfaced one real architectural fork before any code was
+  written**: `MealAdvisorCameraActivity` uses raw Camera2 (not CameraX - this repo had zero CameraX
+  usage anywhere), so porting it is a materially different decision from a layout port - Camera2
+  wrapped in a Compose `AndroidView`, or adopt CameraX as this repo's first precedent. Put to the user
+  rather than guessed (per the standing rule in section 7.1): **Camera2-in-`AndroidView`, no new
+  dependency**. The same survey also found two real bugs in the original - rotation hardcoded to a
+  fixed 90° regardless of device orientation, and a silent no-op on camera-permission denial (the
+  Activity called `requestPermissions` but never implemented `onRequestPermissionsResult` at all) -
+  also put to the user: **fix both**, rather than port them as-is.
+- **The two staged Activities became one Compose screen**, not two, same choice as 6m's Context
+  screen and for the same reason: there is no cross-screen "launch and get a result back" contract in
+  this app's preference-Compose-screen mechanism (`ComposeScreenContent { onBack -> ... }`, one screen
+  per entry). A local `showCamera` boolean toggles between the input/result view and a full-screen
+  Camera2 capture view inside one composable, instead of inventing a new navigation contract for two.
+- **The coder agent's first run was cut off mid-task by a platform rate limit**, after writing the
+  main screen file and the manifest permission but before the string resources, the `ApsIntentKey`
+  wiring, or a build check. Resumed via the same agent (not restarted, so the ~200K tokens of context
+  it had already built were not thrown away) with a message pointing at exactly what survived and
+  what was still missing - it finished the rest in one more pass and reported `BUILD SUCCESSFUL`.
+- **The reviewer agent hit its own turn limit before reporting**, mid-check of one detail
+  (`ExposedDropdownMenu` used with no matching top-level import - not a bug, it resolves as a
+  `ExposedDropdownMenuBoxScope` member, same as every other dropdown in this codebase). Resumed with
+  an explicit instruction to converge and call `ReportFindings` rather than open new lines of
+  investigation. Found one real, verified issue the coder's own build-passing self-check could not
+  have caught: **the camera was never reopened after `ON_PAUSE`** - only `stop()` was wired to
+  `ON_PAUSE`, with no `ON_RESUME` counterpart, so backgrounding the app while the capture screen was
+  open and returning left a frozen preview and a capture button that always failed. The reviewer
+  cross-checked the dosing-relevant confirm-flow contract (`persistenceLayer.insertOrUpdateCarbs`,
+  then `BooleanKey.OApsAIMIMealAdvisorTrigger`/`DoubleKey.OApsAIMILastEstimatedCarbs`/
+  `DoubleKey.OApsAIMILastEstimatedCarbTime`) against every live reader in `DetermineBasalAIMI2.kt` and
+  confirmed it unchanged - the one thing in this lot that would have been a real dosing-safety defect,
+  not a UX one, had it drifted.
+- **Fixed directly rather than sent back to an agent**: the ON_RESUME gap was a small, precisely
+  understood fix once named - added a `wasStoppedForPause` flag so the restart only fires after a
+  genuine pause, not on Lifecycle's synchronous ON_RESUME replay to an observer added while already
+  resumed (which would otherwise restart the camera a second time right at screen entry, on top of
+  the `AndroidView` factory's own first `start()`).
+
+Verified after the fix: `:app:assembleFullDebug` EXIT=0, `:plugins:aps:compileKotlinIosArm64` EXIT=0,
+`:plugins:aps:testAndroidHostTest` 514 tests, 0 failures (unchanged - UI-only, no new tests, same as
+6l/6m).
+
+---
+
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at
 `@MetroIntKey(250)` and its whole reachable dependency closure compiling. All eight collaborator ports
 now have exactly one implementation each. The AIMI Auditor now has a real Compose status chip on the
 Overview screen, wired through a new `:core:interfaces` port (`PluginStatusBadgeSource`) rather than
-its old View-based toolbar indicator. Staging is down to 5 files (was 17: six deleted in 6k as dead or
-superseded, two permission screens ported in 6l, the Context cluster ported in 6m), all View-based
-Android Activities or their direct support classes, real UI still to port, with no Compose equivalent
-yet. Two `kmp` merges and a parallel P0.1-P0.7 porting series (done outside this session, with a
-Cursor agent) have landed since 6i; see 6j for what they were and why neither touches these staged
-files.
+its old View-based toolbar indicator. Staging is down to 4 files (was 17: six deleted in 6k as dead or
+superseded, two permission screens ported in 6l, the Context cluster ported in 6m, Meal Advisor + its
+camera screen ported in 6n), all View-based Android Activities or their direct support classes, real
+UI still to port, with no Compose equivalent yet. Two `kmp` merges and a parallel P0.1-P0.7 porting
+series (done outside this session, with a Cursor agent) have landed since 6i; see 6j for what they
+were and why neither touches these staged files.
 
-1. **The 5 remaining staged files are all legacy View-based Android Activities or their support
-   classes**, not AIMI's dosing logic - `AimiModeSettingsActivity`, `AimiProfileAdvisorActivity`,
-   `MealAdvisorActivity`/`MealAdvisorCameraActivity`, and `AimiLoopRuntimeGuard` (held, not ported yet
-   - see 6k). The permission screens (6l) and the Context cluster (6m) are done. None of the 5 blocks
-   what already runs. The survey in 6k confirmed each one's backend is already live in
-   commonMain/androidMain, so the remaining work is UI only. Suggested split, smallest first: (i)
-   Meal Advisor + its camera Activity (its own risk profile - hand-rolled Camera2, not a layout port),
-   (ii) `AimiModeSettingsActivity`, (iii) `AimiProfileAdvisorActivity` alone (2321 lines - likely needs
-   splitting further once scoped). Before writing UI for any of these, repeat the same backend survey
-   6m did - check the real current shape of what it calls (return types, field names, how many
-   variants an enum/sealed class actually has now), don't trust what the staged code assumed; a
-   feature can also turn out to have zero live entry point yet, as Context did, which changes the
-   scope from "port a screen" to "port a screen and wire it into the preference tree for the first
-   time". Porting an Activity at all is itself a design decision this codebase has been moving away
-   from (Compose over View) - don't assume "port it as-is" is even the right call before asking, the
-   same way `AuditorReportActivity` turned out not to need porting at all once its real dependency
-   (`showOkDialog`) turned out to be gone rather than just unfound, and six more of the original 17
-   turned out the same way in 6k, and `ContextViewModel` a seventh way in 6m (dead weight sitting
-   right next to the file that superseded it, in the same staging folder). When a screen wraps a
+1. **The 4 remaining staged files are all legacy View-based Android Activities or their support
+   classes**, not AIMI's dosing logic - `AimiModeSettingsActivity`, `AimiProfileAdvisorActivity`, and
+   `AimiLoopRuntimeGuard` (held, not ported yet - see 6k). The permission screens (6l), the Context
+   cluster (6m), and Meal Advisor (6n) are done. None of the 4 blocks what already runs. The survey in
+   6k confirmed each one's backend is already live in commonMain/androidMain, so the remaining work is
+   UI only. Suggested split, smallest first: (i) `AimiModeSettingsActivity`, (ii)
+   `AimiProfileAdvisorActivity` alone (2321 lines - likely needs splitting further once scoped). Before
+   writing UI for either, repeat the same backend survey 6m/6n did - check the real current shape of
+   what it calls (return types, field names, how many variants an enum/sealed class actually has now),
+   don't trust what the staged code assumed; a feature can also turn out to have zero live entry point
+   yet, as Context and Meal Advisor both did, which changes the scope from "port a screen" to "port a
+   screen and wire it into the preference tree for the first time" - and can turn out to hide a real
+   architectural fork needing a human decision before any code gets written, as Meal Advisor's Camera2
+   question did (6n). Porting an Activity at all is itself a design decision this codebase has been
+   moving away from (Compose over View) - don't assume "port it as-is" is even the right call before
+   asking, the same way `AuditorReportActivity` turned out not to need porting at all once its real
+   dependency (`showOkDialog`) turned out to be gone rather than just unfound, and six more of the
+   original 17 turned out the same way in 6k, and `ContextViewModel` a seventh way in 6m (dead weight
+   sitting right next to the file that superseded it, in the same staging folder). When a screen wraps a
    system permission model that does not fit the app-wide `PermissionsSheet`/`PluginPermissionsImpl`
    mechanism (Health Connect's async grant check
    was the case in 6l), check permissions locally in the screen rather than forcing a new shared-infra
    change into a small lot - see 6l for the reasoning.
-2. **Before moving any of those 5, or anything from a future upstream merge, check for the recurring
+2. **Before moving any of those 4, or anything from a future upstream merge, check for the recurring
    failure shapes from 6g through 6i, in order:** (a) a class implementing a port interface but missing
    `@ContributesBinding(AppScope::class)` - compiles fine alone, fails only at `:app:compileFullDebugKotlin`,
    so that has to be the gate, not `:plugins:aps:compileAndroidMain`; (b) `.titleResId`/`.descriptionResId`/
