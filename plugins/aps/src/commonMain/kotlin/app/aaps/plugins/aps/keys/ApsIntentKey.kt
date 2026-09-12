@@ -41,7 +41,7 @@ enum class ApsIntentKey(
         key = "aimi_sos_permissions_compose",
         title = ApsStrings.pref_title_aimi_sos_permissions,
         summary = ApsStrings.pref_summary_aimi_sos_permissions,
-        preferenceType = PreferenceType.ACTIVITY,
+        preferenceType = PreferenceType.CLICK,
     ),
 
     AimiHypoRiskAlarmInfo(
@@ -62,7 +62,7 @@ enum class ApsIntentKey(
         key = "aimi_physio_hc_permissions_compose",
         title = ApsStrings.pref_title_aimi_health_connect_permissions,
         summary = ApsStrings.pref_summary_aimi_health_connect_permissions,
-        preferenceType = PreferenceType.ACTIVITY,
+        preferenceType = PreferenceType.CLICK,
     ),
 
     HormonitorViewer(

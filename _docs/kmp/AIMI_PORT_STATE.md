@@ -902,33 +902,83 @@ needing it, not before.
 
 ---
 
+## 6l. 2026-09-12: lot 2 - the two permission screens, ported to Compose
+
+`AIMIHealthConnectPermissionActivityMTR` and `AIMIEmergencySosPermissionActivityMTR` are gone from
+staging, replaced by `AimiHealthConnectPermissionScreen.kt` (`openAPSAIMI/physio/`) and
+`AimiSosPermissionScreen.kt` (`openAPSAIMI/sos/`) - self-contained `@Composable` functions in the same
+androidMain packages as the backend they wrap, not new Activities. **9 files left** (was 11).
+
+Neither screen is an Activity any more. Both are wired the same way `AimiSupportPackageScreen` and
+`AimiControlCenterScreen` already are: `ApsIntentKey.AimiHealthConnectPermissions` /
+`.AimiSosPermissions` now carry `.withCompose { onBack -> ... }` at their `add(...)` call site in
+`OpenAPSAIMIPlugin.kt`, and their `preferenceType` moved from the leftover `PreferenceType.ACTIVITY`
+to `PreferenceType.CLICK`, matching every other Compose-backed entry in that same enum (the type had
+no actual effect on rendering - `IntentPreferenceKey` picks compose-vs-click-vs-url by which field is
+set, not by this enum - but every sibling entry uses `CLICK`, so the two leftover `ACTIVITY` values
+were corrected for consistency, not because anything depended on them).
+
+One reusable decision made here, worth remembering for the rest of this lot split: **there is already
+an app-wide permission sheet** (`app.aaps.ui.compose.permissionsSheet.PermissionsSheet`, backed by
+`PermissionGroup`/`PluginPermissionsImpl`), and it was deliberately **not** used for either screen.
+Two independent reasons: (a) `:plugins:aps` does not depend on `:ui` today, and adding that edge
+without discussion is against this project's own inter-module rule; (b) that sheet's "is it granted"
+check is synchronous (`ContextCompat.checkSelfPermission`-shaped), while Health Connect's is a suspend
+call through its own `PermissionController` - a different model the sheet's existing wiring does not
+handle. Both screens instead check permissions themselves, the same way the Activities they replace
+did, and only borrow that sheet's *visual* language (a `ListItem` row with a
+`CheckCircle`/`Warning` leading icon) by hand, once per screen - a small, accepted duplication rather
+than a new cross-module dependency for two screens.
+
+The SOS screen keeps the two-stage request Android itself requires: foreground (SMS + fine/coarse
+location) first, then, only after those are granted, a *second*, separate request for background
+location - Android will not grant background location in the same dialog as foreground permissions
+(confirmed against the one other place in this repo that already does the same split,
+`AndroidLocationPermissions.kt` in `:plugins:automation`).
+
+Dropped from the original Activities, deliberately: the old HC Activity's `onNewIntent` handler for
+Health Connect's system `ACTION_SHOW_PERMISSIONS_RATIONALE` intent (this module has no
+`AndroidManifest.xml` entry that could ever receive it - confirmed before dropping, not assumed), and
+its post-grant "test read 5 minutes of steps" diagnostic probe (developer-facing debugging output, not
+something a real user needs to see on a settings screen).
+
+Verified: `:app:assembleFullDebug` EXIT=0 (after the usual stale-KSP purge - a Dagger/Hilt-referencing
+generated file broke the first attempt, unrelated to this change, see 6h/6i for why that keeps
+happening after any DI-graph-touching change), `:plugins:aps:compileKotlinIosArm64` EXIT=0,
+`:plugins:aps:testAndroidHostTest` 514 tests, 0 failures.
+
+---
+
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at
 `@MetroIntKey(250)` and its whole reachable dependency closure compiling. All eight collaborator ports
 now have exactly one implementation each. The AIMI Auditor now has a real Compose status chip on the
 Overview screen, wired through a new `:core:interfaces` port (`PluginStatusBadgeSource`) rather than
-its old View-based toolbar indicator. Staging is down to 11 files (was 17, six deleted in 6k as dead
-or superseded - see 6k), all View-based Android Activities or their direct support classes, real UI
-still to port, with no Compose equivalent yet. Two `kmp` merges and a parallel P0.1-P0.7 porting
-series (done outside this session, with a Cursor agent) have landed since 6i; see 6j for what they
-were and why neither touches these staged files.
+its old View-based toolbar indicator. Staging is down to 9 files (was 17: six deleted in 6k as dead or
+superseded, two ported to Compose in 6l), all View-based Android Activities or their direct support
+classes, real UI still to port, with no Compose equivalent yet. Two `kmp` merges and a parallel
+P0.1-P0.7 porting series (done outside this session, with a Cursor agent) have landed since 6i; see 6j
+for what they were and why neither touches these staged files.
 
-1. **The 11 remaining staged files are all legacy View-based Android Activities or their support
+1. **The 9 remaining staged files are all legacy View-based Android Activities or their support
    classes**, not AIMI's dosing logic - `AimiModeSettingsActivity`, `AimiProfileAdvisorActivity`,
    `ContextActivity` (+ `ContextViewModel`/`ContextIntentAdapter`/`PatientSignalGaugeBinder`),
-   `MealAdvisorActivity`/`MealAdvisorCameraActivity`, the HealthConnect/SOS permission Activities, and
-   `AimiLoopRuntimeGuard` (held, not ported yet - see 6k). None of the 11 blocks what already runs.
+   `MealAdvisorActivity`/`MealAdvisorCameraActivity`, and `AimiLoopRuntimeGuard` (held, not ported yet
+   - see 6k). The two permission Activities are done (6l). None of the 9 blocks what already runs.
    The survey in 6k confirmed each one's backend is already live in commonMain/androidMain, so the
-   remaining work is UI only. Suggested split, smallest first: (i) the two permission Activities,
-   (ii) the Context cluster (Activity + ViewModel + adapters + 3 layouts), (iii) Meal Advisor + its
-   camera Activity (its own risk profile - hand-rolled Camera2, not a layout port), (iv)
-   `AimiModeSettingsActivity`, (v) `AimiProfileAdvisorActivity` alone (2321 lines - likely needs
-   splitting further once scoped). Porting an Activity at all is itself a design decision this
-   codebase has been moving away from (Compose over View) - don't assume "port it as-is" is even the
-   right call before asking, the same way `AuditorReportActivity` turned out not to need porting at
-   all once its real dependency (`showOkDialog`) turned out to be gone rather than just unfound, and
-   six more of the original 17 turned out the same way in 6k.
+   remaining work is UI only. Suggested split, smallest first: (i) the Context cluster (Activity +
+   ViewModel + adapters + 3 layouts), (ii) Meal Advisor + its camera Activity (its own risk profile -
+   hand-rolled Camera2, not a layout port), (iii) `AimiModeSettingsActivity`, (iv)
+   `AimiProfileAdvisorActivity` alone (2321 lines - likely needs splitting further once scoped).
+   Porting an Activity at all is itself a design decision this codebase has been moving away from
+   (Compose over View) - don't assume "port it as-is" is even the right call before asking, the same
+   way `AuditorReportActivity` turned out not to need porting at all once its real dependency
+   (`showOkDialog`) turned out to be gone rather than just unfound, and six more of the original 17
+   turned out the same way in 6k. When a screen wraps a system permission model that does not fit the
+   app-wide `PermissionsSheet`/`PluginPermissionsImpl` mechanism (Health Connect's async grant check
+   was the case in 6l), check permissions locally in the screen rather than forcing a new shared-infra
+   change into a small lot - see 6l for the reasoning.
 2. **Before moving any of those 17, or anything from a future upstream merge, check for the recurring
    failure shapes from 6g through 6i, in order:** (a) a class implementing a port interface but missing
    `@ContributesBinding(AppScope::class)` - compiles fine alone, fails only at `:app:compileFullDebugKotlin`,

@@ -149,6 +149,8 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager
 import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiSupportPackageExporter
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiControlCenterScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPkpdSettingsScreen
+import app.aaps.plugins.aps.openAPSAIMI.physio.AimiHealthConnectPermissionScreen
+import app.aaps.plugins.aps.openAPSAIMI.sos.AimiSosPermissionScreen
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import kotlinx.coroutines.withContext
@@ -1871,7 +1873,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     add(IntKey.AimiEmergencySosThreshold)
                     add(IntKey.AimiEmergencySosImmediateThreshold)
                     add(IntKey.AimiEmergencySosStaleThreshold)
-                    add(ApsIntentKey.AimiSosPermissions)
+                    add(
+                        ApsIntentKey.AimiSosPermissions.withCompose(
+                            ComposeScreenContent { onBack -> AimiSosPermissionScreen(onBack = onBack) },
+                        ),
+                    )
                     add(
                         ApsIntentKey.AimiHypoRiskAlarmInfo.withCompose(
                             ComposeScreenContent { onBack ->
@@ -1903,7 +1909,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             },
                         ),
                     )
-                    add(ApsIntentKey.AimiHealthConnectPermissions)
+                    add(
+                        ApsIntentKey.AimiHealthConnectPermissions.withCompose(
+                            ComposeScreenContent { onBack -> AimiHealthConnectPermissionScreen(onBack = onBack) },
+                        ),
+                    )
                     add(AimiStringKey.ActivitySourceMode)
                     add(AimiStringKey.OuraPersonalAccessToken)
                     add(BooleanKey.AimiPhysioSleepDataEnable)

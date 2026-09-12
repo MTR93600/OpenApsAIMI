@@ -583,9 +583,36 @@
 
 <string name="aimi_sos_permissions_summary">Tap to authorize AAPS to send SOS SMS and access location for emergencies. Automatic phone calls are not used.</string>
 
+<string name="aimi_sos_permission_screen_title">Emergency SOS permissions</string>
+<string name="aimi_sos_permission_intro">Emergency SOS sends an SMS with your blood glucose and location to your emergency contact during a severe low. Grant the permissions below so it can work.</string>
+<string name="aimi_sos_permission_name_sms">Send SMS</string>
+<string name="aimi_sos_permission_name_fine_location">Precise location</string>
+<string name="aimi_sos_permission_name_coarse_location">Approximate location</string>
+<string name="aimi_sos_permission_name_background_location">Location in the background</string>
+<string name="aimi_sos_permission_grant_button">Grant access</string>
+<string name="aimi_sos_permission_all_granted_button">All permissions granted</string>
+<string name="aimi_sos_permission_open_settings_button">Open app settings</string>
+<string name="aimi_sos_permission_foreground_denied_message">Some permissions were denied</string>
+<string name="aimi_sos_permission_all_granted_message">All Emergency SOS permissions granted</string>
+<string name="aimi_sos_permission_background_denied_message">Background location denied. Emergency SOS may not work while the app is closed.</string>
+
 <string name="aimi_physio_hc_permissions_title">Health Connect permissions</string>
 
 <string name="aimi_physio_hc_permissions_summary">Open the screen to grant sleep, HRV, and heart rate access via Health Connect.</string>
+
+<string name="aimi_hc_permission_screen_title">Health Connect permissions</string>
+<string name="aimi_hc_permission_intro">AIMI uses Health Connect to read your sleep, heart rate, and step data for the physiological assistant. Grant the permissions below.</string>
+<string name="aimi_hc_permission_required_header">Required</string>
+<string name="aimi_hc_permission_optional_header">Optional: skin temperature (Garmin / Oura)</string>
+<string name="aimi_hc_permission_thermal_note">If temperature is not listed here, your device or Health Connect version may not support it. AIMI still works without it.</string>
+<string name="aimi_hc_permission_grant_button_with_count" comment="%1$d = number of required permissions still missing. Example: Grant access (2 required)">Grant access (%1$d required)</string>
+<string name="aimi_hc_permission_optional_only_button">Core granted — grant optional access</string>
+<string name="aimi_hc_permission_all_granted_button">All permissions granted</string>
+<string name="aimi_hc_permission_open_settings_button">Open Health Connect settings</string>
+<string name="aimi_hc_permission_sdk_unavailable">Health Connect is not available on this device.</string>
+<string name="aimi_hc_permission_update_required">Health Connect needs to be installed or updated.</string>
+<string name="aimi_hc_permission_client_error">Could not reach Health Connect. Open settings to check the app.</string>
+<string name="aimi_hc_permission_granted_message">Health Connect access granted</string>
 
 <string name="aimi_inflammatory_diseases_title">Inflammatory / autoimmune diseases</string>
 
