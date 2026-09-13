@@ -2063,6 +2063,31 @@
 <string name="pref_title_aimi_meal_advisor">AIMI Meal Advisor</string>
 <string name="pref_summary_aimi_meal_advisor">Take a photo of your meal and let AIMI estimate the carbs before you log them.</string>
 
+<string name="pref_title_aimi_mode_settings">AIMI Mode Settings</string>
+<string name="pref_summary_aimi_mode_settings">Set the prebolus doses, reactivity and timing for lunch, dinner, breakfast and high-carb meals, and turn a mode on right now.</string>
+
+<string name="aimi_mode_settings_title">Mode Settings</string>
+<string name="aimi_mode_settings_tab_lunch">Lunch</string>
+<string name="aimi_mode_settings_tab_dinner">Dinner</string>
+<string name="aimi_mode_settings_tab_bfast">Breakfast</string>
+<string name="aimi_mode_settings_tab_highcarb">High Carb</string>
+<string name="aimi_mode_settings_prebolus1_label">Prebolus 1 (U)</string>
+<string name="aimi_mode_settings_prebolus2_label">Prebolus 2 (U)</string>
+<string name="aimi_mode_settings_reactivity_label">Reactivity (%)</string>
+<string name="aimi_mode_settings_duration_label">Duration (min)</string>
+<string name="aimi_mode_settings_interval_label">Interval (min)</string>
+<string name="aimi_mode_settings_prebolus1_hint">2.5</string>
+<string name="aimi_mode_settings_prebolus2_hint">2.0</string>
+<string name="aimi_mode_settings_reactivity_hint">100</string>
+<string name="aimi_mode_settings_duration_hint">60</string>
+<string name="aimi_mode_settings_interval_hint">5</string>
+<string name="aimi_mode_settings_save_button">Save settings</string>
+<string name="aimi_mode_settings_activate_button" comment="%1$s = mode name (Lunch, Dinner, Breakfast, High Carb). Example: Activate Lunch">Activate %1$s</string>
+<string name="aimi_mode_settings_activate_confirm_title" comment="%1$s = mode name. Example: Activate Lunch mode?">Activate %1$s mode?</string>
+<string name="aimi_mode_settings_activate_confirm_message" comment="%1$s = mode name, %2$d = duration in minutes. Example: This creates a note named &quot;Lunch&quot; that lasts 60 minutes. AIMI uses this note to switch into Lunch mode.">This creates a note named \"%1$s\" that lasts %2$d minutes. AIMI uses this note to switch into %1$s mode.</string>
+<string name="aimi_mode_settings_activated_message" comment="%1$s = mode name, %2$d = duration in minutes. Example: Lunch mode is now active for 60 minutes.">%1$s mode is now active for %2$d minutes.</string>
+<string name="aimi_mode_settings_activate_error" comment="%1$s = the error message. Example: Could not activate mode: network error">Could not activate mode: %1$s</string>
+
 <string name="aimi_context_intro">Tell AIMI what is going on (exercise, illness, stress, travel...) and it will adjust for the next few hours. Type a sentence or tap a preset below.</string>
 <string name="aimi_context_chat_hint">Describe what is happening</string>
 <string name="aimi_context_send_button">Analyze</string>

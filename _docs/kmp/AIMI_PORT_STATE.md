@@ -1044,43 +1044,93 @@ Verified after the fix: `:app:assembleFullDebug` EXIT=0, `:plugins:aps:compileKo
 
 ---
 
+## 6o. 2026-09-13: lot 5 - Mode Settings, ported to Compose (multi-agent lot, clean this time)
+
+`AimiModeSettingsActivity.kt` is gone from staging, replaced by `AimiModeSettingsScreen.kt`
+(`openAPSAIMI/advisor/modesettings/ui/`). **3 files left** (was 4): `AimiProfileAdvisorActivity`
+(2321 lines, next), and the held `AimiLoopRuntimeGuard`.
+
+Same definer -> coder -> reviewer split as 6n, but no agent needed resuming this time - both finished
+their turn budget cleanly in one pass each.
+
+**Unlike every advisor screen ported before it (Context, Meal Advisor), this one is not advisory - it
+is a live control surface for the dosing engine.** The "Activate <mode>" button writes a therapy-event
+NOTE whose exact text ("Lunch" / "Dinner" / "Breakfast" / "High Carb") is matched by substring in
+`therapy.kt` (`findActiveLunchEvents` and its three siblings) to drive real prebolus/`smbMult`/meal-mode
+decisions in `DetermineBasalAIMI2.kt`. That raised the review bar: the definer's survey confirmed no
+backend drift at all (a first for this port series - every prior lot found at least one stale
+assumption), but flagged the one thing that mattered most - the note text has to survive translation
+untouched. The coder kept it as a separate, deliberately non-localized `noteText` field on the mode
+enum, apart from the translatable tab-label string shown in the UI, so a future translator can never
+touch the substring the dosing matcher depends on. The reviewer verified this by checking which of the
+two strings actually gets written to `TE.note` (the plain `noteText`, never the localized display
+label) - the trap a careless port could fall into without ever failing a build or a test, since nothing
+in this repo tests `therapy.kt`'s note-matching against a live Compose screen's output.
+
+One design call, made explicit rather than defaulted: the screen's 4 "Duration (min)" values live in a
+private `SharedPreferences` file (`"aimi_mode_activity"`) entirely outside the `Preferences`/`IntKey`
+system, and nothing else in the app reads them. Asked whether to keep that as-is or promote them to
+real `IntKey` entries for consistency with the other 10 mode settings (which are already
+`DoubleKey`/`IntKey`) - kept as-is, since nothing depends on the inconsistency and promoting it would
+be scope beyond what this lot needed.
+
+Also dropped, confirmed dead by the definer before any code was written: unused `automation`/`rh`
+injected fields, a never-wired "AI Settings" input trio (`inputOpenAiKey`/`inputGeminiKey`/
+`switchProvider` - declared, never initialized, never added to any layout, never read), and an unused
+`getInputBackground()` helper.
+
+Not fixed, flagged for later as a shared follow-up across all three advisor screens rather than
+patched here alone: none of `AimiContextScreen`/`AimiMealAdvisorScreen`/`AimiModeSettingsScreen` set
+`CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)` on their `Card`s
+or have a `@Preview`, and all three expose their top-level composable as `public` rather than
+`internal` - cosmetic/consistency items, not correctness bugs, worth doing as one pass over all three
+rather than three separate touch-ups.
+
+Verified: `:app:assembleFullDebug` EXIT=0, `:plugins:aps:compileKotlinIosArm64` EXIT=0,
+`:plugins:aps:testAndroidHostTest` 514 tests, 0 failures (unchanged - UI-only, no new tests).
+
+---
+
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at
 `@MetroIntKey(250)` and its whole reachable dependency closure compiling. All eight collaborator ports
 now have exactly one implementation each. The AIMI Auditor now has a real Compose status chip on the
 Overview screen, wired through a new `:core:interfaces` port (`PluginStatusBadgeSource`) rather than
-its old View-based toolbar indicator. Staging is down to 4 files (was 17: six deleted in 6k as dead or
+its old View-based toolbar indicator. Staging is down to 3 files (was 17: six deleted in 6k as dead or
 superseded, two permission screens ported in 6l, the Context cluster ported in 6m, Meal Advisor + its
-camera screen ported in 6n), all View-based Android Activities or their direct support classes, real
-UI still to port, with no Compose equivalent yet. Two `kmp` merges and a parallel P0.1-P0.7 porting
-series (done outside this session, with a Cursor agent) have landed since 6i; see 6j for what they
-were and why neither touches these staged files.
+camera screen ported in 6n, Mode Settings ported in 6o), all View-based Android Activities or their
+direct support classes, real UI still to port, with no Compose equivalent yet. Two `kmp` merges and a
+parallel P0.1-P0.7 porting series (done outside this session, with a Cursor agent) have landed since
+6i; see 6j for what they were and why neither touches these staged files.
 
-1. **The 4 remaining staged files are all legacy View-based Android Activities or their support
-   classes**, not AIMI's dosing logic - `AimiModeSettingsActivity`, `AimiProfileAdvisorActivity`, and
-   `AimiLoopRuntimeGuard` (held, not ported yet - see 6k). The permission screens (6l), the Context
-   cluster (6m), and Meal Advisor (6n) are done. None of the 4 blocks what already runs. The survey in
-   6k confirmed each one's backend is already live in commonMain/androidMain, so the remaining work is
-   UI only. Suggested split, smallest first: (i) `AimiModeSettingsActivity`, (ii)
-   `AimiProfileAdvisorActivity` alone (2321 lines - likely needs splitting further once scoped). Before
-   writing UI for either, repeat the same backend survey 6m/6n did - check the real current shape of
-   what it calls (return types, field names, how many variants an enum/sealed class actually has now),
-   don't trust what the staged code assumed; a feature can also turn out to have zero live entry point
-   yet, as Context and Meal Advisor both did, which changes the scope from "port a screen" to "port a
-   screen and wire it into the preference tree for the first time" - and can turn out to hide a real
+1. **The 3 remaining staged files are all legacy View-based Android Activities or their support
+   classes**, not AIMI's dosing logic - `AimiProfileAdvisorActivity` (2321 lines, the only screen left)
+   and `AimiLoopRuntimeGuard` (held, not ported yet - see 6k). The permission screens (6l), the Context
+   cluster (6m), Meal Advisor (6n), and Mode Settings (6o) are done. None of the 3 blocks what already
+   runs. The survey in 6k confirmed each one's backend is already live in commonMain/androidMain, so
+   the remaining work is UI only. `AimiProfileAdvisorActivity` will likely need splitting into more
+   than one lot once scoped - it is roughly 5x the size of any screen ported so far. Before writing UI
+   for it, repeat the same backend survey 6m/6n/6o did - check the real current shape of what it calls
+   (return types, field names, how many variants an enum/sealed class actually has now), don't trust
+   what the staged code assumed; a feature can also turn out to have zero live entry point yet, as
+   Context and Meal Advisor both did, which changes the scope from "port a screen" to "port a screen
+   and wire it into the preference tree for the first time" - and can turn out to hide a real
    architectural fork needing a human decision before any code gets written, as Meal Advisor's Camera2
-   question did (6n). Porting an Activity at all is itself a design decision this codebase has been
-   moving away from (Compose over View) - don't assume "port it as-is" is even the right call before
-   asking, the same way `AuditorReportActivity` turned out not to need porting at all once its real
-   dependency (`showOkDialog`) turned out to be gone rather than just unfound, and six more of the
-   original 17 turned out the same way in 6k, and `ContextViewModel` a seventh way in 6m (dead weight
+   question did (6n), or turn out to be a live dosing control surface rather than an advisory one, as
+   Mode Settings did (6o) - check whether any of its writes feed `therapy.kt`'s substring-matched
+   therapy-event notes or any other text the dosing engine parses, same as 6o's note-text check, before
+   assuming a label can be freely reworded. Porting an Activity at all is itself a design decision this
+   codebase has been moving away from (Compose over View) - don't assume "port it as-is" is even the
+   right call before asking, the same way `AuditorReportActivity` turned out not to need porting at all
+   once its real dependency (`showOkDialog`) turned out to be gone rather than just unfound, and six
+   more of the original 17 turned out the same way in 6k, and `ContextViewModel` a seventh way in 6m (dead weight
    sitting right next to the file that superseded it, in the same staging folder). When a screen wraps a
    system permission model that does not fit the app-wide `PermissionsSheet`/`PluginPermissionsImpl`
    mechanism (Health Connect's async grant check
    was the case in 6l), check permissions locally in the screen rather than forcing a new shared-infra
    change into a small lot - see 6l for the reasoning.
-2. **Before moving any of those 4, or anything from a future upstream merge, check for the recurring
+2. **Before moving any of those 3, or anything from a future upstream merge, check for the recurring
    failure shapes from 6g through 6i, in order:** (a) a class implementing a port interface but missing
    `@ContributesBinding(AppScope::class)` - compiles fine alone, fails only at `:app:compileFullDebugKotlin`,
    so that has to be the gate, not `:plugins:aps:compileAndroidMain`; (b) `.titleResId`/`.descriptionResId`/

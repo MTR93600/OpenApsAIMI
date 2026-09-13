@@ -51,6 +51,13 @@ enum class ApsIntentKey(
         preferenceType = PreferenceType.CLICK,
     ),
 
+    AimiModeSettings(
+        key = "aimi_mode_settings_compose",
+        title = ApsStrings.pref_title_aimi_mode_settings,
+        summary = ApsStrings.pref_summary_aimi_mode_settings,
+        preferenceType = PreferenceType.CLICK,
+    ),
+
     AimiSosPermissions(
         key = "aimi_sos_permissions_compose",
         title = ApsStrings.pref_title_aimi_sos_permissions,
