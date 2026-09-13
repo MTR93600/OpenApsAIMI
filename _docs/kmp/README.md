@@ -1,5 +1,11 @@
 # Dossier de décision — migration AIMI vers KMP/iOS
 
+> **2026-09-06 — notes live (méthode de portage, SHAs courants, lots) :**
+> [`docs/kmp-migration/PORTING-against-milos-kmp.md`](../../docs/kmp-migration/PORTING-against-milos-kmp.md),
+> [`STATUS.md`](../../docs/kmp-migration/STATUS.md),
+> [`DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md).
+> Ce dossier reste l’historique d’architecture. Le tag freeze et les SHA ci-dessous ne sont plus la pointe.
+
 > **Référence AIMI gelée :** tag `aimi-baseline-2026-08-26` = `dev_OAPSAIMI` @ `1ae418e106`  
 > **Audit initial AIMI :** `06e7bc5021ca8fdd976505d1fefb03cc88681c19` (25 août 2026)  
 > **Référence KMP (audit) :** `kmp` @ `4957c26eb85a71103e649498e7e991cb473e3098`  
