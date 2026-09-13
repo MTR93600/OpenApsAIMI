@@ -1088,7 +1088,7 @@
 
 <string name="aimi_adv_loading_details" comment="Shown under the main Advisor report while RBT/T3c history sections load">Loading detailed history…</string>
 
-<string name="aimi_adv_error_prefix">Erreur: </string>
+<string name="aimi_adv_error_prefix">Error: </string>
 
 <string name="aimi_adv_error_oom">Not enough memory to finish. Close other apps and try again.</string>
 
@@ -2065,6 +2065,9 @@
 
 <string name="pref_title_aimi_mode_settings">AIMI Mode Settings</string>
 <string name="pref_summary_aimi_mode_settings">Set the prebolus doses, reactivity and timing for lunch, dinner, breakfast and high-carb meals, and turn a mode on right now.</string>
+
+<string name="pref_title_aimi_profile_advisor">AIMI Profile Advisor</string>
+<string name="pref_summary_aimi_profile_advisor">Review your 7-day metrics and apply a graduated tuning adjustment for the pattern you are seeing now.</string>
 
 <string name="aimi_mode_settings_title">Mode Settings</string>
 <string name="aimi_mode_settings_tab_lunch">Lunch</string>

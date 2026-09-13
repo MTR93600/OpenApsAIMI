@@ -1091,46 +1091,122 @@ Verified: `:app:assembleFullDebug` EXIT=0, `:plugins:aps:compileKotlinIosArm64` 
 
 ---
 
+## 6p. 2026-09-13: `AimiProfileAdvisorActivity` split into 5 sub-lots; sub-lot 1/5 (Tuning Context) done
+
+The last screen-shaped staged file, `AimiProfileAdvisorActivity.kt` (2321 lines, ~5x any screen
+ported so far), was surveyed and split before any code was written, same discipline as every prior
+lot but at a larger scale. Ten distinct sections were found (bootstrap, dashboard header, a
+support-ZIP flow, model selector, metrics/recommendations, brain/Oref/CGM-range chart, AI Coach,
+Tuning Context, Behavior Causal Map/Family Bridge, T3c/Harmonia runtime history, footer). Two were
+resolved before any porting: the support-ZIP flow (lines ~450-601) is fully superseded by the
+already-live `AimiSupportPackageScreen` from an earlier lot - confirmed the live version does
+strictly more (adds `[ACTIVE PROFILE]` and an ML-training-CSV tail the staged code never had) - so
+that section is simply dropped, not ported. The Behavior Causal Map / Family Bridge section (~390
+lines) was put to the user: it has zero live callers anywhere and zero tests, was built only for this
+Activity and never wired anywhere else - decided **not to port it**, same treatment as the six files
+already dropped in 6k, rather than resurrecting ~390 lines of code nothing exercises.
+
+The remaining 5 sections became the sub-lot plan, smallest/safest first: (1) Tuning Context - done
+this entry; (2) Metrics + Recommendations + Apply flow; (3) T3c/Harmonia/RBT runtime history cards;
+(4) Brain + Oref + AI Coach cards; (5) Header + quick actions (dashboard, basal-profile proposal,
+model selector). Confirmed via grep that this file shares no classes or preference keys with
+`AimiModeSettingsActivity` (6o) - the two needed no coordination.
+
+**Sub-lot 1 (Tuning Context, ~230 lines) is done.** New screen:
+`AimiProfileAdvisorScreen.kt` (`openAPSAIMI/advisor/compose/`), wired via a new top-level
+`ApsIntentKey.AimiProfileAdvisor` entry - added now, not deferred, because every future sub-lot's
+cards read from the same `AdvisorReport` this sub-lot's screen already loads; building the
+loading/error state once now means sub-lots 2-5 just add cards to the existing `Column`, not
+redesign the state model. The screen will look sparse (one card) until more sub-lots land - an
+accepted, explicit trade for having something real and testable now instead of an unwired composable
+sitting in the tree for 4 more lots.
+
+A design/wiring decision surfaced and made without needing to go back to the user: constructing
+`AimiAdvisorService` for the new screen exposed that its `calculateMetrics` silently falls back to
+hardcoded fake TIR numbers (`tir70_180=0.65`, `timeBelow70=0.05`, `timeAbove180=0.30` - not derived
+from the patient's real data at all) whenever no `TirCalculator` is supplied, and `TuningContextEngine`
+gates its whole tiering decision on those numbers. `TirCalculator` is already Metro-bound and already
+injected elsewhere in this same plugin (`DetermineBasalAIMI2.kt`) - added as a new `OpenAPSAIMIPlugin`
+constructor field (same-module Metro addition, not a new Gradle dependency, same pattern as
+`HealthContextRepository` in 6m) and threaded through. Review confirmed the fix genuinely takes effect
+for the new screen, and caught the same bug still live at a **second**, pre-existing
+`AimiAdvisorService` construction site (`aimiComposePkpdSetupItem`'s PKPD-recommendations loader,
+`OpenAPSAIMIPlugin.kt`) that this lot's change didn't originally touch - fixed too, same one-line
+addition, since the plugin now has `tirCalculator` as a field either way. **Any card in a future
+sub-lot, or any other code path, that constructs `AimiAdvisorService` without `tirCalculator` will
+silently compute against fake TIR data - always pass it now that it exists as a plugin field.**
+
+Review also found the async report-load had no error handling at all (unlike the original, which
+caught `Throwable`, special-cased `OutOfMemoryError`, and showed a worded message) - an uncaught
+exception would have meant either a crash or an infinite spinner with no way for the user to tell
+what happened. Fixed: same try/catch shape as the original, an `aimi_adv_error_prefix`/`_error_oom`
+message shown in place of the spinner. Also found and fixed while touching that code path: the new
+screen called `generateReport()` with no arguments, silently dropping the `history` argument
+(defaults to `emptyList()`) that a *later* sub-lot's recommendation cards need for their 48h-cooldown
+filter (`isRecommendationVisible`/`wasPreferenceKeyAppliedInLast48h` - without real history, a
+recommendation could resurface immediately after being applied, instead of staying hidden for 48h)
+and the `assetContext` the OREF pipeline uses to load its bundled ML asset. Both are invisible today
+(sub-lot 1 renders nothing that depends on either) but would have silently degraded sub-lot 2 and
+sub-lot 4 once built on top of the same `report` this sub-lot loads - fixed now while the call site was
+already open, rather than left for a future sub-lot to rediscover. One unrelated, pre-existing base
+resource bug fixed in passing: `aimi_adv_error_prefix` (the string this fix now actually renders) was
+`"Erreur: "` in the base (non-French) `values/aimi_strings.xml` - corrected to `"Error: "`.
+
+Verified: `:app:assembleFullDebug` EXIT=0, `:plugins:aps:compileKotlinIosArm64` EXIT=0,
+`:plugins:aps:testAndroidHostTest` 514 tests, 0 failures (unchanged - UI-only, no new tests). The
+staged `AimiProfileAdvisorActivity.kt` is NOT deleted yet - 4 sub-lots still read from it.
+
+---
+
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at
 `@MetroIntKey(250)` and its whole reachable dependency closure compiling. All eight collaborator ports
 now have exactly one implementation each. The AIMI Auditor now has a real Compose status chip on the
 Overview screen, wired through a new `:core:interfaces` port (`PluginStatusBadgeSource`) rather than
-its old View-based toolbar indicator. Staging is down to 3 files (was 17: six deleted in 6k as dead or
+its old View-based toolbar indicator. Staging is down to 2 files (was 17: six deleted in 6k as dead or
 superseded, two permission screens ported in 6l, the Context cluster ported in 6m, Meal Advisor + its
-camera screen ported in 6n, Mode Settings ported in 6o), all View-based Android Activities or their
-direct support classes, real UI still to port, with no Compose equivalent yet. Two `kmp` merges and a
-parallel P0.1-P0.7 porting series (done outside this session, with a Cursor agent) have landed since
-6i; see 6j for what they were and why neither touches these staged files.
+camera screen ported in 6n, Mode Settings ported in 6o), plus `AimiProfileAdvisorActivity` itself
+still on disk mid-port (6p) - one of its 5 sub-lots (Tuning Context) done, 4 to go, not yet deletable.
+Two `kmp` merges and a parallel P0.1-P0.7 porting series (done outside this session, with a Cursor
+agent) have landed since 6i; see 6j for what they were and why neither touches these staged files.
 
-1. **The 3 remaining staged files are all legacy View-based Android Activities or their support
-   classes**, not AIMI's dosing logic - `AimiProfileAdvisorActivity` (2321 lines, the only screen left)
-   and `AimiLoopRuntimeGuard` (held, not ported yet - see 6k). The permission screens (6l), the Context
-   cluster (6m), Meal Advisor (6n), and Mode Settings (6o) are done. None of the 3 blocks what already
-   runs. The survey in 6k confirmed each one's backend is already live in commonMain/androidMain, so
-   the remaining work is UI only. `AimiProfileAdvisorActivity` will likely need splitting into more
-   than one lot once scoped - it is roughly 5x the size of any screen ported so far. Before writing UI
-   for it, repeat the same backend survey 6m/6n/6o did - check the real current shape of what it calls
-   (return types, field names, how many variants an enum/sealed class actually has now), don't trust
-   what the staged code assumed; a feature can also turn out to have zero live entry point yet, as
-   Context and Meal Advisor both did, which changes the scope from "port a screen" to "port a screen
-   and wire it into the preference tree for the first time" - and can turn out to hide a real
-   architectural fork needing a human decision before any code gets written, as Meal Advisor's Camera2
-   question did (6n), or turn out to be a live dosing control surface rather than an advisory one, as
-   Mode Settings did (6o) - check whether any of its writes feed `therapy.kt`'s substring-matched
-   therapy-event notes or any other text the dosing engine parses, same as 6o's note-text check, before
-   assuming a label can be freely reworded. Porting an Activity at all is itself a design decision this
-   codebase has been moving away from (Compose over View) - don't assume "port it as-is" is even the
-   right call before asking, the same way `AuditorReportActivity` turned out not to need porting at all
-   once its real dependency (`showOkDialog`) turned out to be gone rather than just unfound, and six
-   more of the original 17 turned out the same way in 6k, and `ContextViewModel` a seventh way in 6m (dead weight
-   sitting right next to the file that superseded it, in the same staging folder). When a screen wraps a
+1. **Continue the `AimiProfileAdvisorActivity` sub-lot split from 6p.** 4 sub-lots remain, in this
+   order (smallest/safest first): (i) Metrics + Recommendations + Apply flow, (ii) T3c/Harmonia/RBT
+   runtime-history cards, (iii) Brain + Oref + AI Coach cards, (iv) Header + quick actions (dashboard,
+   basal-profile proposal, model selector). The Behavior Causal Map/Family Bridge section was decided
+   NOT to be ported (6p - dead backend, zero callers, zero tests, same treatment as the six files
+   dropped in 6k) and the support-ZIP section is already superseded by the live
+   `AimiSupportPackageScreen` - neither needs a sub-lot. Each new sub-lot adds cards to the same
+   `AimiProfileAdvisorScreen.kt` / `ApsIntentKey.AimiProfileAdvisor` entry 6p already created and
+   wired, reading from the same `AdvisorReport` 6p's screen already loads - don't create a second
+   entry point. Before writing any of these, repeat the same backend survey 6m/6n/6o/6p did - check
+   the real current shape of what each section calls, don't trust what the staged code assumed; a
+   section can turn out to be a live dosing control surface rather than an advisory one, as Mode
+   Settings turned out to be (6o) and as this whole file turned out to be for the AI Coach card
+   (`AiCoachingService` now requires DI-construction, not `AiCoachingService()` bare, per 6p's initial
+   survey) - check whether any write feeds `therapy.kt`'s substring-matched therapy-event notes or any
+   other text the dosing engine parses before assuming a label can be freely reworded. **Always pass
+   `tirCalculator` to any new `AimiAdvisorService(...)` construction** (6p found and fixed two
+   pre-existing sites that silently omitted it, both computing against hardcoded fake TIR numbers
+   instead of the patient's real data) and **always pass `history`/`assetContext` to
+   `generateReport(...)`** if a sub-lot constructs its own report rather than reading the shared one -
+   both default to values that silently degrade the report (48h-cooldown filtering, OREF asset
+   loading) rather than erroring, so a missing argument won't be caught by a passing build. `Once all
+   5 sub-lots are done, delete the staged AimiProfileAdvisorActivity.kt` - not before, since later
+   sub-lots still read from it as reference. Porting an Activity's remaining sections is itself a
+   design decision this codebase has been moving away from (Compose over View) - don't assume "port it
+   as-is" is even the right call before asking, the same way `AuditorReportActivity` turned out not to
+   need porting at all once its real dependency (`showOkDialog`) turned out to be gone rather than
+   just unfound, six more of the original 17 turned out the same way in 6k, `ContextViewModel` a
+   seventh way in 6m (dead weight sitting right next to the file that superseded it, in the same
+   staging folder), and Behavior Causal Map/Family Bridge an eighth way in 6p (real code, just never
+   reachable from anywhere). When a screen wraps a
    system permission model that does not fit the app-wide `PermissionsSheet`/`PluginPermissionsImpl`
    mechanism (Health Connect's async grant check
    was the case in 6l), check permissions locally in the screen rather than forcing a new shared-infra
    change into a small lot - see 6l for the reasoning.
-2. **Before moving any of those 3, or anything from a future upstream merge, check for the recurring
+2. **Before moving `AimiLoopRuntimeGuard`, or anything from a future upstream merge, check for the recurring
    failure shapes from 6g through 6i, in order:** (a) a class implementing a port interface but missing
    `@ContributesBinding(AppScope::class)` - compiles fine alone, fails only at `:app:compileFullDebugKotlin`,
    so that has to be the gate, not `:plugins:aps:compileAndroidMain`; (b) `.titleResId`/`.descriptionResId`/

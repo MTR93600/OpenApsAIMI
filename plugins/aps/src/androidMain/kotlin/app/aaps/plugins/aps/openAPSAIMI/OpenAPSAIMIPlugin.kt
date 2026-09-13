@@ -49,8 +49,11 @@ import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventAPSCalculationFinished
 import app.aaps.core.interfaces.rx.events.EventPreferenceChange
+import app.aaps.core.interfaces.maintenance.ImportExportPrefs
+import app.aaps.core.interfaces.protection.ExportPasswordDataStore
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.interfaces.stats.TddCalculator
+import app.aaps.core.interfaces.stats.TirCalculator
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.InterfacesStrings
@@ -144,7 +147,9 @@ import androidx.core.net.toUri
 import kotlin.math.abs
 import kotlin.math.exp
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
+import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiProfileAdvisorScreen
 import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiSupportPackageScreen
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager
 import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiSupportPackageExporter
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.ui.AimiMealAdvisorScreen
@@ -218,6 +223,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val dynIsfTrajectoryTuning: DynIsfTrajectoryTuning,
     private val tpoOrchestrator: TpoOrchestrator,
     private val fabricPrivacy: FabricPrivacy,
+    private val tirCalculator: TirCalculator,
+    private val importExportPrefs: ImportExportPrefs,
+    private val exportPasswordDataStore: ExportPasswordDataStore,
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -1904,6 +1912,30 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 },
             ),
         )
+        add(
+            ApsIntentKey.AimiProfileAdvisor.withCompose(
+                ComposeScreenContent { onBack ->
+                    val advisorService = AimiAdvisorService(
+                        profileFunction = profileFunction,
+                        persistenceLayer = persistenceLayer,
+                        preferences = preferences,
+                        rh = rh,
+                        unifiedReactivityLearner = unifiedReactivityLearner,
+                        tddCalculator = tddCalculator,
+                        tirCalculator = tirCalculator,
+                        aapsLogger = aapsLogger,
+                    )
+                    AimiProfileAdvisorScreen(
+                        preferences = preferences,
+                        advisorService = advisorService,
+                        historyRepo = AdvisorHistoryRepository(context),
+                        importExportPrefs = importExportPrefs,
+                        exportPasswordDataStore = exportPasswordDataStore,
+                        onBack = onBack,
+                    )
+                },
+            ),
+        )
         add(aimiComposePkpdGuidedSubScreen())
         add(aimiComposePatientContextSubScreen())
         add(
@@ -1996,6 +2028,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                                 rh = rh,
                                 unifiedReactivityLearner = unifiedReactivityLearner,
                                 tddCalculator = tddCalculator,
+                                tirCalculator = tirCalculator,
+                                aapsLogger = aapsLogger,
                             ).pkpdRecommendationsForSettings(7)
                         }
                     },
