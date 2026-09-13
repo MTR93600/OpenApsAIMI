@@ -41,6 +41,7 @@ class PkpdAdvisorTailDampingTest {
         hyperEvents = 5,
         todayTir = null,
         todayTdd = null,
+        dataSufficiency = AdvisorDataSufficiency.GOOD,
     )
 
     private fun pkpd(smbTailDamping: Double) = PkpdPrefsSnapshot(

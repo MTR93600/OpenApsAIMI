@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.tuning
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorDataSufficiency
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorMetrics
 import io.mockk.every
 import io.mockk.mockk
@@ -36,6 +37,7 @@ class TuningContextEngineTest {
         hyperEvents = 5,
         todayTir = null,
         todayTdd = null,
+        dataSufficiency = AdvisorDataSufficiency.GOOD,
     )
 
     private fun mockPreferences(

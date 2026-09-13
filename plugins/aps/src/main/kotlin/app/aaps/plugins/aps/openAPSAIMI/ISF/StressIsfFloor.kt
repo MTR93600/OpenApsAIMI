@@ -44,10 +44,20 @@ object StressIsfFloor {
      * Steps in the last 15 minutes that still count as "not walking".
      *
      * This is what separates a cortisol rise from exercise. Above it the heart rate is explained by
-     * movement, and movement is already handled by the effort and activity path. The 15 episodes all
-     * sat well under it; the 2026-09-12 case had 48 steps.
+     * movement, and movement is already handled by the effort and activity path.
+     *
+     * The first value was 100, taken from the 15 selected episodes. Measured afterwards on 6950 ticks
+     * over 8 days, 100 was too low for an ordinary morning: on morning ticks with the heart rate at
+     * least 20 bpm over resting, the median step count is 58 but the 90th centile is 303, so 100
+     * covered only **62 %** of them. On 2026-09-13 the signature broke and reformed four times
+     * between 08:38 and 09:14 as the count crossed 100 (91, 119, 171, 248) while blood glucose fell
+     * to 56, and the floor was active on only 8 of the 420 ticks of that morning.
+     *
+     * 250 covers **87 %** of those ticks and stays under the 375 that
+     * `PhysiologicalTree` already treats as sustained walking, so a real walk is still excluded.
+     * Replayed on the same corpus the separation on morning episodes rises from 55.1 to 63.0.
      */
-    const val MAX_STEPS_LAST_15M: Int = 100
+    const val MAX_STEPS_LAST_15M: Int = 250
 
     /**
      * How long the signature must hold, in minutes, before the floor is allowed to act.
@@ -65,6 +75,20 @@ object StressIsfFloor {
      * [MIN_HELD_MINUTES], so one missed tick is tolerated and two are not.
      */
     const val MAX_GAP_BETWEEN_EVALUATIONS_MS: Long = 10 * 60 * 1000L
+
+    /**
+     * How long, in minutes, the signature may stop holding before an active floor is dropped.
+     *
+     * Entering and leaving are deliberately not the same test. Entering needs [MIN_HELD_MINUTES] of
+     * unbroken signature, because a single elevated sample is noise. Leaving needs this much time
+     * out of signature, because a single step burst is noise too: on 2026-09-13 the count crossed
+     * 100 for one tick at a time while the heart rate stayed 24 to 44 bpm over resting throughout.
+     *
+     * Five minutes is one CGM tick. Replayed on the corpus it lifts the floor from 8 to 112 active
+     * ticks on the morning of 2026-09-13 and leaves the separation on morning episodes at 63.0. Ten
+     * minutes was also measured and gives no further separation, only more exposure.
+     */
+    const val EXIT_GRACE_MINUTES: Double = 5.0
 
     /**
      * Floor multiplier the caller passes to [DynamicSensitivityPolicy.floorAgainstProfile] while the
@@ -89,6 +113,14 @@ object StressIsfFloor {
     const val REASON_ACTIVE: String = "active"
 
     /**
+     * The signature has stopped holding, but the floor stays on for up to [EXIT_GRACE_MINUTES].
+     *
+     * [Verdict.active] is still true here. Only the code differs, so a support package can tell a
+     * floor held through a short break from a floor held by a live signature.
+     */
+    const val REASON_EXIT_GRACE: String = "exit_grace"
+
+    /**
      * What the signature looks like at one instant.
      *
      * @param active true only when the signature holds **and** has held for at least
@@ -98,8 +130,12 @@ object StressIsfFloor {
      *   is none. The caller stores it and feeds it back on the next tick.
      * @param lastEvaluatedMs the instant of this evaluation. The caller stores it and feeds it back on
      *   the next tick so a gap can be detected.
+     * @param breakStartedMs the instant the signature stopped holding while the floor was still on,
+     *   or null when it holds. The caller stores it and feeds it back so the grace time can be
+     *   measured across ticks.
      * @param reason a code taken from [REASON_NO_HR], [REASON_NO_SIGNATURE], [REASON_GAP_RESTART],
-     *   [REASON_HOLDING] or [REASON_ACTIVE], followed by the live values that produced it.
+     *   [REASON_HOLDING], [REASON_ACTIVE] or [REASON_EXIT_GRACE], followed by the live values that
+     *   produced it.
      */
     data class Verdict(
         val active: Boolean,
@@ -107,6 +143,7 @@ object StressIsfFloor {
         val signatureSinceMs: Long?,
         val lastEvaluatedMs: Long,
         val reason: String,
+        val breakStartedMs: Long? = null,
     )
 
     /**
@@ -116,10 +153,14 @@ object StressIsfFloor {
      * 1. A heart rate or a resting heart rate of zero or less is **missing data**, not a calm patient.
      *    In this export an absent heart rate is written as 0. Missing data never activates a gesture,
      *    so the verdict is inactive with [REASON_NO_HR].
-     * 2. The signature must hold **without a break**. The moment it stops holding, the start instant
-     *    goes back to null and the hold time goes back to zero.
+     * 2. Getting in and getting out are not the same test. To turn the floor **on**, the signature
+     *    must hold without a break for [MIN_HELD_MINUTES]. To turn an already active floor **off**,
+     *    the signature must stop holding for [EXIT_GRACE_MINUTES]. In between, the floor stays on
+     *    with [REASON_EXIT_GRACE] and the original start instant is kept, so a signature that comes
+     *    back does not have to build its hold time again.
      * 3. More than [MAX_GAP_BETWEEN_EVALUATIONS_MS] between two evaluations breaks continuity, because
-     *    nothing was observed in between. The hold time restarts from now.
+     *    nothing was observed in between. The hold time restarts from now, and an active floor drops
+     *    at once rather than using its grace time.
      *
      * @param hrNowBpm the most recent heart rate, bpm. 0 when unknown.
      * @param rhrRestingBpm the resting heart rate, bpm. 0 when unknown.
@@ -129,6 +170,9 @@ object StressIsfFloor {
      *   or null at start-up.
      * @param lastEvaluatedMs the value of [Verdict.lastEvaluatedMs] returned by the previous call, or
      *   null at start-up. A null means no gap can be measured, so continuity is assumed.
+     * @param wasActive the value of [Verdict.active] returned by the previous call. Only an already
+     *   active floor may use the grace time; a signature that is still building up never does.
+     * @param breakStartedMs the value of [Verdict.breakStartedMs] returned by the previous call.
      */
     fun evaluate(
         hrNowBpm: Int,
@@ -137,6 +181,8 @@ object StressIsfFloor {
         nowMs: Long,
         signatureSinceMs: Long?,
         lastEvaluatedMs: Long? = null,
+        wasActive: Boolean = false,
+        breakStartedMs: Long? = null,
     ): Verdict {
         if (hrNowBpm <= 0 || rhrRestingBpm <= 0) {
             return Verdict(
@@ -145,6 +191,7 @@ object StressIsfFloor {
                 signatureSinceMs = null,
                 lastEvaluatedMs = nowMs,
                 reason = "$REASON_NO_HR hr=$hrNowBpm rest=$rhrRestingBpm steps15=$stepsLast15m",
+                breakStartedMs = null,
             )
         }
 
@@ -152,19 +199,37 @@ object StressIsfFloor {
         val signatureHolds = excessBpm >= HR_ABOVE_RESTING_BPM && stepsLast15m < MAX_STEPS_LAST_15M
         val values = "hr=$hrNowBpm rest=$rhrRestingBpm excess=$excessBpm steps15=$stepsLast15m"
 
+        // A gap, a clock that went backwards, or a first evaluation all mean the hold time restarts.
+        val gapMs = lastEvaluatedMs?.let { nowMs - it }
+        val continuityBroken = gapMs != null && (gapMs < 0L || gapMs > MAX_GAP_BETWEEN_EVALUATIONS_MS)
+
         if (!signatureHolds) {
+            // An already active floor is given [EXIT_GRACE_MINUTES] before it drops, so one step
+            // burst cannot cancel it. A gap still drops it at once: nothing was observed in between.
+            val breakStart = breakStartedMs?.takeIf { it <= nowMs } ?: nowMs
+            val brokenMinutes = ((nowMs - breakStart) / 60_000.0).coerceAtLeast(0.0)
+            val inGrace = wasActive && !continuityBroken && brokenMinutes < EXIT_GRACE_MINUTES
+            if (inGrace) {
+                val brokenText = String.format(Locale.ROOT, "broken=%.1fmin", brokenMinutes)
+                return Verdict(
+                    active = true,
+                    heldMinutes = 0.0,
+                    signatureSinceMs = signatureSinceMs,
+                    lastEvaluatedMs = nowMs,
+                    reason = "$REASON_EXIT_GRACE $values $brokenText",
+                    breakStartedMs = breakStart,
+                )
+            }
             return Verdict(
                 active = false,
                 heldMinutes = 0.0,
                 signatureSinceMs = null,
                 lastEvaluatedMs = nowMs,
                 reason = "$REASON_NO_SIGNATURE $values",
+                breakStartedMs = null,
             )
         }
 
-        // A gap, a clock that went backwards, or a first evaluation all mean the hold time restarts.
-        val gapMs = lastEvaluatedMs?.let { nowMs - it }
-        val continuityBroken = gapMs != null && (gapMs < 0L || gapMs > MAX_GAP_BETWEEN_EVALUATIONS_MS)
         val startedMs = when {
             continuityBroken            -> nowMs
             signatureSinceMs == null    -> nowMs
@@ -185,6 +250,7 @@ object StressIsfFloor {
             signatureSinceMs = startedMs,
             lastEvaluatedMs = nowMs,
             reason = "$code $values $heldText",
+            breakStartedMs = null,
         )
     }
 }

@@ -50,6 +50,7 @@ class AimiBehaviorCausalAnalyzerTest {
             hyperEvents = 5,
             todayTir = null,
             todayTdd = null,
+            dataSufficiency = AdvisorDataSufficiency.GOOD,
         )
 
         val insights = buildAimiBehaviorCausalInsights(
@@ -86,6 +87,7 @@ class AimiBehaviorCausalAnalyzerTest {
             hyperEvents = 6,
             todayTir = null,
             todayTdd = null,
+            dataSufficiency = AdvisorDataSufficiency.GOOD,
         )
 
         val insights = buildAimiBehaviorCausalInsights(
@@ -132,6 +134,7 @@ class AimiBehaviorCausalAnalyzerTest {
             hyperEvents = 4,
             todayTir = null,
             todayTdd = null,
+            dataSufficiency = AdvisorDataSufficiency.GOOD,
         )
 
         val insights = buildAimiBehaviorCausalInsights(

@@ -1388,6 +1388,8 @@
     <string name="aimi_adv_card_render_error" comment="%1$s=card name, %2$s=exception type. Shown in place of a single advisor card that failed to render.">⚠️ %1$s unavailable (%2$s)</string>
     <string name="aimi_adv_report_weekly">Rapport Hebdo</string>
     <string name="aimi_adv_score_label">Score: %1$.1f/10</string>
+    <string name="aimi_adv_not_enough_data">Not enough glucose data for this period. No score and no settings advice.</string>
+    <string name="aimi_adv_value_no_data">No data</string>
     <string name="aimi_adv_apply_btn">APPLIQUER</string>
     <string name="aimi_adv_apply_dialog_title">Confirmation des Ajustements</string>
     <string name="aimi_adv_apply_dialog_prefix">L\'Advisor propose les ajustements suivants :\n\n</string>

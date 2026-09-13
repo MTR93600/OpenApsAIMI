@@ -33,6 +33,8 @@ class StressIsfFloorTest {
         nowMs = nowMs,
         signatureSinceMs = previous?.signatureSinceMs,
         lastEvaluatedMs = previous?.lastEvaluatedMs,
+        wasActive = previous?.active == true,
+        breakStartedMs = previous?.breakStartedMs,
     )
 
     // ---- the hold time ---------------------------------------------------------------------------
@@ -63,7 +65,7 @@ class StressIsfFloorTest {
         verdict = tick(t0 + 5 * oneMinute, previous = verdict)
         assertThat(verdict.heldMinutes).isWithin(1e-9).of(5.0)
 
-        // 100 steps in 15 min is the limit, and the limit itself is already walking.
+        // The limit itself is already walking, and the floor is not active yet so it gets no grace.
         verdict = tick(t0 + 10 * oneMinute, previous = verdict, stepsLast15m = StressIsfFloor.MAX_STEPS_LAST_15M)
         assertThat(verdict.active).isFalse()
         assertThat(verdict.heldMinutes).isWithin(1e-9).of(0.0)
@@ -140,6 +142,117 @@ class StressIsfFloorTest {
         assertThat(verdict.active).isFalse()
         assertThat(verdict.heldMinutes).isWithin(1e-9).of(0.0)
         assertThat(verdict.signatureSinceMs).isNull()
+    }
+
+    // ---- getting out is not getting in -----------------------------------------------------------
+
+    /**
+     * The case of 2026-09-13. Between 08:38 and 09:14 the step count crossed the old limit one tick
+     * at a time - 91, 119, 171, 248 - while the heart rate stayed 24 to 44 bpm over resting. Each
+     * crossing cancelled the floor and the hold time started again, so the floor was active on 8 of
+     * the 420 ticks of that morning while blood glucose fell to 56.
+     */
+    @Test
+    fun `an active floor survives a short step burst`() {
+        var verdict = tick(t0, previous = null)
+        verdict = tick(t0 + 10 * oneMinute, previous = verdict)
+        assertThat(verdict.active).isTrue()
+
+        // One tick of walking. The floor stays on and says why.
+        verdict = tick(t0 + 11 * oneMinute, previous = verdict, stepsLast15m = 600)
+        assertThat(verdict.active).isTrue()
+        assertThat(verdict.reason).startsWith(StressIsfFloor.REASON_EXIT_GRACE)
+        assertThat(verdict.breakStartedMs).isEqualTo(t0 + 11 * oneMinute)
+
+        // The signature comes back. The original start instant is kept, so the hold time is not
+        // built again from scratch.
+        verdict = tick(t0 + 12 * oneMinute, previous = verdict)
+        assertThat(verdict.active).isTrue()
+        assertThat(verdict.reason).startsWith(StressIsfFloor.REASON_ACTIVE)
+        assertThat(verdict.signatureSinceMs).isEqualTo(t0)
+        assertThat(verdict.breakStartedMs).isNull()
+    }
+
+    @Test
+    fun `an active floor drops once the break outlasts the grace time`() {
+        var verdict = tick(t0, previous = null)
+        verdict = tick(t0 + 10 * oneMinute, previous = verdict)
+        assertThat(verdict.active).isTrue()
+
+        // The break starts here. Four minutes later it is still inside the grace time.
+        verdict = tick(t0 + 11 * oneMinute, previous = verdict, stepsLast15m = 600)
+        assertThat(verdict.active).isTrue()
+        verdict = tick(t0 + 15 * oneMinute, previous = verdict, stepsLast15m = 600)
+        assertThat(verdict.active).isTrue()
+        assertThat(verdict.breakStartedMs).isEqualTo(t0 + 11 * oneMinute)
+
+        // Five minutes of walking is walking.
+        verdict = tick(t0 + 16 * oneMinute, previous = verdict, stepsLast15m = 600)
+        assertThat(verdict.active).isFalse()
+        assertThat(verdict.reason).startsWith(StressIsfFloor.REASON_NO_SIGNATURE)
+        assertThat(verdict.signatureSinceMs).isNull()
+        assertThat(verdict.breakStartedMs).isNull()
+    }
+
+    /** Grace belongs to a floor that is already on. A signature still building up never gets it. */
+    @Test
+    fun `a signature that is not yet active gets no grace`() {
+        var verdict = tick(t0, previous = null)
+        verdict = tick(t0 + 5 * oneMinute, previous = verdict)
+        assertThat(verdict.active).isFalse()
+
+        verdict = tick(t0 + 6 * oneMinute, previous = verdict, stepsLast15m = 600)
+        assertThat(verdict.active).isFalse()
+        assertThat(verdict.reason).startsWith(StressIsfFloor.REASON_NO_SIGNATURE)
+        assertThat(verdict.signatureSinceMs).isNull()
+    }
+
+    /** Nothing was observed during a gap, so an active floor cannot claim its grace time either. */
+    @Test
+    fun `a gap drops an active floor at once`() {
+        var verdict = tick(t0, previous = null)
+        verdict = tick(t0 + 10 * oneMinute, previous = verdict)
+        assertThat(verdict.active).isTrue()
+
+        verdict = tick(t0 + 30 * oneMinute, previous = verdict, stepsLast15m = 600)
+        assertThat(verdict.active).isFalse()
+        assertThat(verdict.reason).startsWith(StressIsfFloor.REASON_NO_SIGNATURE)
+    }
+
+    /** A missing heart rate is missing data. It drops the floor whatever the grace time says. */
+    @Test
+    fun `a missing heart rate drops an active floor without grace`() {
+        var verdict = tick(t0, previous = null)
+        verdict = tick(t0 + 10 * oneMinute, previous = verdict)
+        assertThat(verdict.active).isTrue()
+
+        verdict = tick(t0 + 11 * oneMinute, previous = verdict, hrNowBpm = 0)
+        assertThat(verdict.active).isFalse()
+        assertThat(verdict.reason).startsWith(StressIsfFloor.REASON_NO_HR)
+    }
+
+    // ---- how much movement still counts as "not walking" -----------------------------------------
+
+    /**
+     * Measured on 6950 ticks over 8 days: on morning ticks with the heart rate at least 20 bpm over
+     * resting the median step count is 58 and the 90th centile is 303. Getting up and moving around
+     * the house is not a walk, and the old limit of 100 called it one.
+     */
+    @Test
+    fun `an ordinary morning of moving around is still the stress signature`() {
+        var verdict = tick(t0, previous = null, stepsLast15m = 171)
+        verdict = tick(t0 + 10 * oneMinute, previous = verdict, stepsLast15m = 248)
+        assertThat(verdict.active).isTrue()
+    }
+
+    /** Sustained walking is still excluded: the limit stays under the 375 the tree calls a walk. */
+    @Test
+    fun `sustained walking is not the stress signature`() {
+        assertThat(StressIsfFloor.MAX_STEPS_LAST_15M).isLessThan(375)
+
+        val verdict = tick(t0, previous = null, stepsLast15m = 375)
+        assertThat(verdict.active).isFalse()
+        assertThat(verdict.reason).startsWith(StressIsfFloor.REASON_NO_SIGNATURE)
     }
 
     // ---- the floor the signature arms ------------------------------------------------------------
