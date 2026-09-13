@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.aaps.core.ui.compose.htmlToAnnotatedString
 import app.aaps.plugins.main.general.overview.notifications.NotificationStore
 
 // ==========================================
@@ -59,7 +60,7 @@ internal fun PumpStatusNotification(
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = status,
+            text = status.htmlToAnnotatedString(),
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             color = if (isDark) Color(0xFFE2E8F0) else Color(0xFF1E293B),

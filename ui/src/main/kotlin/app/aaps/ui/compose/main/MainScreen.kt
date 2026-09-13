@@ -4,8 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
@@ -38,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -225,7 +225,6 @@ fun MainScreen(
                 val previewMode = maxHeight < PREVIEW_MODE_MIN_HEIGHT
                 var chromeVisible by remember { mutableStateOf(false) }
                 val showChrome = !previewMode || chromeVisible
-                val interactionSource = remember { MutableInteractionSource() }
 
                 // Measure actual bar heights for content padding in non-preview mode
                 var topBarHeightPx by remember { mutableIntStateOf(0) }
@@ -267,7 +266,27 @@ fun MainScreen(
                     val masterReachable by mainViewModel.masterReachable.collectAsStateWithLifecycle()
                     // Stable pairing signal — hides the mutating nav buttons / commands on an unpaired client (upstream parity).
                     val masterOrPairedClient by mainViewModel.masterOrPairedClient.collectAsStateWithLifecycle()
-                    Box(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(
+                                if (previewMode && !chromeVisible) {
+                                    // A modifier on THIS ancestor Box, not a separate full-screen sibling Box
+                                    // drawn on top of the content: a stacked sibling claimed the whole gesture
+                                    // stream and blocked scrolling in the dashboard below it (e.g. in preview
+                                    // mode, which any landscape phone triggers, since landscape height is
+                                    // routinely under PREVIEW_MODE_MIN_HEIGHT). Placed on the ancestor instead,
+                                    // detectTapGestures backs off once a descendant scrollable (e.g. Glass's
+                                    // dashboard column) consumes the drag, so scrolling still works and only a
+                                    // genuine stationary tap reveals the chrome.
+                                    Modifier.pointerInput(previewMode, chromeVisible) {
+                                        detectTapGestures(onTap = { chromeVisible = true })
+                                    }
+                                } else {
+                                    Modifier
+                                }
+                            )
+                    ) {
                         val fabBottomOffset = if (hasToolbar && showChrome) 56.dp else 0.dp
 
                         if (dashboardOverview != null) {
@@ -523,18 +542,6 @@ fun MainScreen(
                                         .padding(end = 16.dp, bottom = 72.dp + fabBottomOffset)
                                 )
                             }
-                        }
-
-                        // Tap overlay to restore chrome in preview mode (only when hidden)
-                        if (previewMode && !chromeVisible) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clickable(
-                                        interactionSource = interactionSource,
-                                        indication = null
-                                    ) { chromeVisible = true }
-                            )
                         }
                     }
                 }

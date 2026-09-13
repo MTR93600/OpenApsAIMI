@@ -23,6 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import app.aaps.core.ui.compose.htmlToAnnotatedString
 import app.aaps.core.ui.R as CoreUiR
 import app.aaps.plugins.main.R
 import app.aaps.plugins.main.general.dashboard.DashboardEmbeddedComposeState
@@ -93,7 +94,7 @@ internal fun DashboardAdjustmentComposeCard(
                     contentDescription = stringResource(R.string.dashboard_pump_pill_sensor_a11y, sensV),
                 )
             }
-            Text(text = state.safetyLine, style = MaterialTheme.typography.bodySmall)
+            Text(text = state.safetyLine.htmlToAnnotatedString(), style = MaterialTheme.typography.bodySmall)
 
             if (state.adjustments.isEmpty()) {
                 Text(
