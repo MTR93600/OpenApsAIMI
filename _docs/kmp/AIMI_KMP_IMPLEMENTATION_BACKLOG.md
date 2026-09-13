@@ -1,5 +1,12 @@
 # AIMI KMP/iOS — backlog d'implémentation ordonné par gates
 
+> **2026-09-06 — ce fichier reste le backlog long (M0–M12).**  
+> Pour les **prochains lots concrets**, utiliser
+> [`docs/kmp-migration/DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md).
+> L'état vérifié est dans [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md).
+> Plusieurs gates M2 (`aimi-engine` réel, replay) ne sont **pas** Done : les modules existent,
+> `evaluate()` est encore un Hold.
+
 > **Usage :** transformer l'étude d'architecture en lots livrables et vérifiables.  
 > **Règle :** une tâche n'est `Done` que si son critère d'acceptation est automatisé ou accompagné
 > d'une preuve archivée.  

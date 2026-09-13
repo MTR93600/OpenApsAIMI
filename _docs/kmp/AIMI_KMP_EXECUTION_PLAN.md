@@ -1,5 +1,14 @@
 # AIMI KMP — execution plan (Android + iOS)
 
+> **2026-09-06 — do not use this file as the live task list.**  
+> Next lots: [`docs/kmp-migration/DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md).  
+> Snapshot: [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md).  
+> The freeze SHA `1ae418e106` and the 2026-08-28 “truth” table below are stale.  
+> Today’s reference tip is `origin/dev_OAPSAIMI` @ `c5db5a0333`. The freeze tag
+> `aimi-baseline-2026-08-26` was **not** present in the clone used for that audit.
+>
+> Keep this file for the dual-platform map and the 45-step tick notes.
+
 > **Use this file to code.** The blueprint stays the architecture bible.  
 > **ADR:** [`adr-g0-defaults.md`](adr-g0-defaults.md)  
 > **AIMI freeze:** `aimi-baseline-2026-08-26` = `origin/dev_OAPSAIMI` @ `1ae418e106`  
