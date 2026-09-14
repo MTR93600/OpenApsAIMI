@@ -488,11 +488,19 @@ class AimiAdvisorService {
             preferences = preferences
         )
 
+        // Metric driven rules (hypos, control, hypers, basal dominance). They led the list before the
+        // plugin system took over, so they are built first here too, and stay first even if a plugin
+        // is ever registered. The informational ones carry no action, which shouldShowRecommendation
+        // always lets through.
+        val recs = metricRecommendations(ctx.metrics, ctx.prefs, rh)
+            .filter { shouldShowRecommendation(it, history) }
+            .toMutableList()
+
         // Collect actions from all plugins
         val actions = pluginManager.collectActions(loopCtx)
 
         // Map actions to recommendations for the UI
-        val recs = actions.map { action ->
+        recs += actions.map { action ->
             AimiRecommendation(
                 title = ApsStrings.aimi_advisor_recommendations_title,
                 description = TextRef.Literal(""), // Should be dynamic
@@ -500,7 +508,7 @@ class AimiAdvisorService {
                 domain = action.domain,
                 action = action
             )
-        }.toMutableList()
+        }
 
         // Pragmatic SMB/PKPD governance recommendations
         if (preferences != null) {

@@ -35,6 +35,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import app.aaps.core.interfaces.maintenance.ImportExportPrefs
@@ -42,12 +43,17 @@ import app.aaps.core.interfaces.protection.ExportPasswordDataStore
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.ui.R as CoreUiR
 import app.aaps.core.ui.compose.AapsSpacing
+import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorMetrics
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorReport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiRecommendation
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.AimiTuningContext
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningApplyResult
@@ -55,15 +61,23 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningContextApplySupport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningContextEngine
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningExportStatus
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningPlan
+import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningPreferenceLabels
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiRecommendationCard
+import app.aaps.plugins.aps.openAPSAIMI.compose.applyPkpdPreferenceUpdate
+import app.aaps.plugins.aps.openAPSAIMI.compose.readPreferenceValueAsString
+import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
+import app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 /**
- * Compose port of the parked `AimiProfileAdvisorActivity` - Tuning Context section only
- * (sub-lot 1/5). Later sub-lots add more cards/sections to this same screen; this one owns
- * loading the [AdvisorReport] since every future section reads from it too.
+ * Compose port of the parked `AimiProfileAdvisorActivity` - Tuning Context (sub-lot 1/5) plus the
+ * metrics grid, the recommendation sections and their Apply flow (sub-lot 2/5). Later sub-lots add
+ * more cards to this same screen; this one owns loading the [AdvisorReport] since every section
+ * reads from it.
  */
 @Composable
 fun AimiProfileAdvisorScreen(
@@ -89,21 +103,33 @@ fun AimiProfileAdvisorScreen(
     var applying by remember { mutableStateOf(false) }
     var applyResult by remember { mutableStateOf<TuningApplyResult?>(null) }
 
+    // The displayed recommendations are held separately from the report: after an Apply the list is
+    // re-filtered in place instead of regenerating the whole (heavy) report.
+    var recommendations by remember { mutableStateOf<List<AimiRecommendation>>(emptyList()) }
+    var pendingRecommendation by remember { mutableStateOf<AimiAction.PreferenceUpdate?>(null) }
+    var applyingRecommendation by remember { mutableStateOf(false) }
+
     val noChangesMessage = stringResource(R.string.aimi_tuning_no_changes)
     val errorPrefix = stringResource(R.string.aimi_adv_error_prefix)
     val errorOom = stringResource(R.string.aimi_adv_error_oom)
+    // The confirm dialog applies exactly one preference key, so the count is one. Derive it from
+    // the apply result instead if this dialog ever applies a batch.
+    val recommendationAppliedMessage = stringResource(R.string.aimi_adv_success_msg, 1)
+    val recommendationNoChangeMessage = stringResource(R.string.aimi_adv_no_change_msg)
 
     LaunchedEffect(Unit) {
         try {
             // history feeds the 48h-cooldown filter on recommendations a later sub-lot renders from
             // this same report; assetContext lets the OREF pipeline load its bundled ML asset. Both
             // silently degrade the report (not a crash) if omitted, so pass them like the original did.
-            report = withContext(Dispatchers.IO) {
+            val loaded = withContext(Dispatchers.IO) {
                 advisorService.generateReport(
                     history = historyRepo.getRecentActions(10),
                     assetContext = context,
                 )
             }
+            report = loaded
+            recommendations = loaded.recommendations
         } catch (t: Throwable) {
             loadError = when (t) {
                 is OutOfMemoryError -> errorOom
@@ -131,7 +157,7 @@ fun AimiProfileAdvisorScreen(
                         IconButton(onClick = onBack) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(app.aaps.core.ui.R.string.back),
+                                contentDescription = stringResource(CoreUiR.string.back),
                             )
                         }
                     },
@@ -179,6 +205,35 @@ fun AimiProfileAdvisorScreen(
                             }
                         },
                     )
+
+                    MetricsCard(currentReport.metrics)
+
+                    val observationRecs = recommendations.filter { it.domain != AimiDomain.Pkpd }
+                    val pkpdRecs = recommendations.filter { it.domain == AimiDomain.Pkpd }
+
+                    if (observationRecs.isNotEmpty()) {
+                        SectionHeader(stringResource(R.string.aimi_adv_section_obs))
+                        observationRecs.forEach { rec ->
+                            AimiRecommendationCard(
+                                recommendation = rec,
+                                applyLabel = ApsStrings.aimi_adv_apply_btn,
+                                showPriority = true,
+                                onApply = { pendingRecommendation = it },
+                            )
+                        }
+                    }
+
+                    if (pkpdRecs.isNotEmpty()) {
+                        SectionHeader(stringResource(R.string.aimi_adv_section_pkpd))
+                        pkpdRecs.forEach { rec ->
+                            AimiRecommendationCard(
+                                recommendation = rec,
+                                applyLabel = ApsStrings.aimi_adv_apply_btn,
+                                showPriority = true,
+                                onApply = { pendingRecommendation = it },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -228,6 +283,73 @@ fun AimiProfileAdvisorScreen(
             },
             dismissButton = {
                 TextButton(enabled = !applying, onClick = { applyPlan = null }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+
+    pendingRecommendation?.let { action ->
+        AlertDialog(
+            onDismissRequest = { if (!applyingRecommendation) pendingRecommendation = null },
+            title = { Text(stringResource(R.string.aimi_adv_apply_dialog_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium)) {
+                    Text(stringResource(R.string.aimi_adv_apply_dialog_prefix))
+                    Text(
+                        stringResource(
+                            R.string.aimi_adv_apply_dialog_change,
+                            TuningPreferenceLabels.shortLabel(action.key),
+                            TuningPreferenceLabels.formatValue(action.newValue),
+                        ),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(action.reason, style = MaterialTheme.typography.bodyMedium)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !applyingRecommendation,
+                    onClick = {
+                        applyingRecommendation = true
+                        scope.launch {
+                            // SharedPreferences + Gson, so never on the main thread.
+                            val applied = withContext(Dispatchers.IO) {
+                                // Read the value the setting really holds before overwriting it. The
+                                // history is fed to the AI Coach, so a placeholder would mislead it.
+                                val oldValue = readPreferenceValueAsString(preferences, action.key)
+                                val ok = applyPkpdPreferenceUpdate(preferences, action)
+                                if (ok) {
+                                    historyRepo.logAction(
+                                        AdvisorHistoryRepository.ActionType.PREFERENCE_CHANGE,
+                                        action.key.key,
+                                        action.reason,
+                                        oldValue,
+                                        action.newValue.toString(),
+                                    )
+                                }
+                                ok
+                            }
+                            if (applied) {
+                                val stillVisible = withContext(Dispatchers.IO) {
+                                    val history = historyRepo.getRecentActions(10)
+                                    recommendations.filter { advisorService.isRecommendationVisible(it, history) }
+                                }
+                                recommendations = stillVisible
+                            }
+                            applyingRecommendation = false
+                            pendingRecommendation = null
+                            snackbarHostState.showSnackbar(
+                                if (applied) recommendationAppliedMessage else recommendationNoChangeMessage,
+                            )
+                        }
+                    },
+                ) {
+                    Text(stringResource(R.string.aimi_adv_apply_btn))
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !applyingRecommendation, onClick = { pendingRecommendation = null }) {
                     Text(stringResource(android.R.string.cancel))
                 }
             },
@@ -299,6 +421,109 @@ private fun TuningContextCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = AapsSpacing.medium),
+    )
+}
+
+/**
+ * The headline numbers of the report. Each cell keeps the identity colour it had in the parked
+ * Activity, mapped to a theme token so it follows light/dark mode.
+ */
+@Composable
+private fun MetricsCard(metrics: AdvisorMetrics) {
+    val percent = CoreUiR.string.format_percent
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(AapsSpacing.extraLarge),
+            verticalArrangement = Arrangement.spacedBy(AapsSpacing.large),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
+            ) {
+                MetricCell(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.aimi_adv_metric_tir),
+                    value = stringResource(percent, (metrics.tir70_180 * 100).roundToInt()),
+                    valueColor = AapsTheme.generalColors.bgInRange,
+                )
+                MetricCell(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.aimi_adv_metric_tdd),
+                    value = stringResource(CoreUiR.string.units_format_insulin_int, metrics.tdd.roundToInt()),
+                    valueColor = AapsTheme.generalColors.activeInsulinText,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
+            ) {
+                MetricCell(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.aimi_adv_metric_gmi),
+                    value = stringResource(R.string.aimi_adv_metric_value_gmi, metrics.gmi),
+                    valueColor = AapsTheme.generalColors.bgHigh,
+                )
+                MetricCell(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.aimi_adv_metric_hypo54),
+                    value = stringResource(percent, (metrics.timeBelow54 * 100).roundToInt()),
+                    valueColor = AapsTheme.generalColors.bgLow,
+                )
+            }
+            val todayTir = metrics.todayTir
+            val todayTdd = metrics.todayTdd
+            if (todayTir != null || todayTdd != null) {
+                val missing = stringResource(R.string.aimi_adv_metric_value_missing)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
+                ) {
+                    MetricCell(
+                        modifier = Modifier.weight(1f),
+                        label = stringResource(R.string.aimi_adv_metric_today_tir),
+                        value = todayTir?.let { stringResource(percent, (it * 100).roundToInt()) } ?: missing,
+                        valueColor = AapsTheme.generalColors.bgInRange,
+                    )
+                    MetricCell(
+                        modifier = Modifier.weight(1f),
+                        label = stringResource(R.string.aimi_adv_metric_today_tdd),
+                        value = todayTdd?.let { stringResource(CoreUiR.string.format_insulin_units1, it) } ?: missing,
+                        valueColor = AapsTheme.generalColors.activeInsulinText,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetricCell(
+    modifier: Modifier,
+    label: String,
+    value: String,
+    valueColor: Color,
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(AapsSpacing.extraSmall),
+    ) {
+        Text(text = value, style = MaterialTheme.typography.headlineSmall, color = valueColor)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

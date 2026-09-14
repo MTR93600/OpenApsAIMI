@@ -1156,6 +1156,85 @@ Verified: `:app:assembleFullDebug` EXIT=0, `:plugins:aps:compileKotlinIosArm64` 
 `:plugins:aps:testAndroidHostTest` 514 tests, 0 failures (unchanged - UI-only, no new tests). The
 staged `AimiProfileAdvisorActivity.kt` is NOT deleted yet - 4 sub-lots still read from it.
 
+## 6q. 2026-09-14: `AimiProfileAdvisorActivity` sub-lot 2/5 - metrics, recommendations and the apply flow
+
+Sub-lot 2 of 5 (staged lines ~635-921 plus their call site ~235-259) is done: the metrics grid, the
+observation/PKPD recommendation cards and the apply flow now render as Compose cards appended to the
+`AimiProfileAdvisorScreen.kt` that 6p created. No second entry point, same `AdvisorReport`.
+
+The definer survey paid for itself again, and harder than usual. `AimiRecommendation` no longer
+carries `titleResId`/`descriptionResId` - it carries `TextRef` - so the staged card's whole
+description logic (a `when` over four specific string ids, injecting metric numbers) was dead code
+against a model that no longer exists. Worse, those four recommendations - hypos, poor control,
+hypers, basal dominance - **were not emitted by any engine anywhere**, not on this branch and not on
+`dev_OAPSAIMI` either. Commit `8c7a6c63a9` (2026-03-13, "Migrate recommendation generation to a
+plugin-based system") had deleted all four rules and replaced them with `SafetyAggressionPlugin` /
+`StableControlPlugin`, which implement a different, real-time-BG rule and which **nothing ever
+registers** - there is not one call to `AimiPluginManager.register(...)` in the tree, so
+`collectActions` has always returned an empty list. The Advisor had been shipping its metric section
+with no metric rules behind it for six months.
+
+Put to the user, who chose to restore the four rules rather than drop them. That made this lot
+engine work as well as a screen port, so the rules were restored from the deleted code with their
+original thresholds rather than invented: hypos `timeBelow70 > 0.04` (Critical/Safety, proposes
+`OApsAIMIMaxSMB` x0.8 only when Max SMB > 1.5), poor control `tir70_180 < 0.70 && timeBelow70 <= 0.03`
+(High/Basal, proposes `OApsAIMILunchFactor` +0.1 only while it is below 1.2), hypers
+`timeAbove180 > 0.20 && timeBelow70 <= 0.03` (Medium/Isf, informational), basal dominance
+`basalPercent > 0.55` (Medium/Basal, informational). Restoring them surfaced a real bug in the
+original: the lunch-factor line read `(prefs.lunchFactor + 0.1 * 10.0).roundToInt() / 10.0`, which by
+operator precedence is `lunchFactor + 1.0` and then `/ 10`, so a lunch factor of 1.0 would have
+proposed **0.2**, not 1.1 - a large unannounced cut to meal aggressiveness, one tap away. Restored
+with the brackets fixed and a test that pins `1.0 -> 1.1`.
+
+The rules went to **commonMain** as a pure `metricRecommendations(metrics, prefs, rh)`
+(`advisor/AdvisorMetricRules.kt`), not into the Android-only service, because everything they need
+(`AdvisorMetrics`, `AimiPrefsSnapshot`, `AimiRecommendation`, `ApsStrings`, `DoubleKey`) is already
+multiplatform. They are therefore unit-testable without a pump, a database or Android, which is how
+17 threshold tests exist at all. The shared recommendation card went to commonMain for the same
+reason and compiles for iOS.
+
+Three things were deduplicated or fixed while the code was open, each of which was live before this
+lot:
+
+- **One recommendation card, not two.** `PkpdAdvisorSuggestionCard` already existed and was live on
+  the PKPD Setup screen; rather than write a second card, it was lifted to a shared
+  `AimiRecommendationCard` that both screens call. Its new parameters (`showPriority`, `applyLabel`)
+  default to the PKPD screen's old behaviour, so that live screen renders exactly as before - checked
+  against the deleted card body, not assumed.
+- **`applyPkpdPreferenceUpdate` silently ignored two key types.** It handled Double/Int/Boolean/String
+  and returned `false` for anything else. `LongPreferenceKey` was simply missing, and
+  `UnitDoublePreferenceKey` does **not** extend `DoubleNonPreferenceKey`, so an `is DoublePreferenceKey`
+  test misses it even though its value is a `Double` - an apply on such a key would have looked like a
+  no-op with no error. Both branches added. Latent today (no current recommendation proposes those
+  types), which is exactly why a build would never have caught it.
+- **The advisor history logged the literal string `"OLD"`** as the previous value. Not cosmetic:
+  `AiCoachingService.kt:261` feeds the history into the LLM prompt as `"<old> -> <new>"`, so the AI
+  Coach was being told `"OLD -> 0.75"`. A new `readPreferenceValueAsString` reads the real value
+  before the write.
+
+The review caught one more thing worth recording: the two action `reason` strings were written as
+hardcoded English literals, while the sibling `PkpdAdvisor` in the same folder resolves its reasons
+through `TextResolver`. That text is user-visible (the confirm dialog) **and** is what gets stored in
+the history the AI coach reads, so it is now resolved through the same `TextResolver`, with the
+nullable-resolver English fallback this file already uses for its score labels. Six dead
+`aimi_adv_rec_*_action_*` strings were deleted in passing - they belonged to an older model where one
+recommendation listed three textual suggestions, and that model is gone (checked against the staged
+Activity too, since sub-lots 3-5 still read it). Eleven more base-English strings that were actually
+French were rewritten, the same bug class 6p fixed for `aimi_adv_error_prefix`.
+
+Kept deliberately: the confirm dialog. Apply writes preference keys the dosing engine reads on the
+next loop tick (`OApsAIMIMaxSMB`, `OApsAIMILunchFactor`, the PKPD/relief/MaxIOB keys), so it is a real
+therapy-parameter change and never becomes a one-tap button. Nothing here writes a therapy-event note,
+so there is no `therapy.kt` substring-matching risk.
+
+Verified independently, not only from the agents' self-reports: `:app:assembleFullDebug` EXIT=0 with
+0 Kotlin errors, `:plugins:aps:compileKotlinIosArm64` EXIT=0, `:plugins:aps:testAndroidHostTest`
+**542 tests, 0 failures** (514 before this lot: +17 threshold tests, +8 apply/read tests, +3 for the
+resolved reasons). The test task was re-run with `--rerun` rather than trusted as UP-TO-DATE. The
+staged `AimiProfileAdvisorActivity.kt` is still NOT deleted - 3 sub-lots still read it.
+
+---
+
 ---
 
 ## 7. Start here next session
@@ -1167,14 +1246,22 @@ Overview screen, wired through a new `:core:interfaces` port (`PluginStatusBadge
 its old View-based toolbar indicator. Staging is down to 2 files (was 17: six deleted in 6k as dead or
 superseded, two permission screens ported in 6l, the Context cluster ported in 6m, Meal Advisor + its
 camera screen ported in 6n, Mode Settings ported in 6o), plus `AimiProfileAdvisorActivity` itself
-still on disk mid-port (6p) - one of its 5 sub-lots (Tuning Context) done, 4 to go, not yet deletable.
+still on disk mid-port (6p, 6q) - two of its 5 sub-lots (Tuning Context, and metrics/recommendations/
+apply) done, 3 to go, not yet deletable.
 Two `kmp` merges and a parallel P0.1-P0.7 porting series (done outside this session, with a Cursor
 agent) have landed since 6i; see 6j for what they were and why neither touches these staged files.
 
-1. **Continue the `AimiProfileAdvisorActivity` sub-lot split from 6p.** 4 sub-lots remain, in this
-   order (smallest/safest first): (i) Metrics + Recommendations + Apply flow, (ii) T3c/Harmonia/RBT
-   runtime-history cards, (iii) Brain + Oref + AI Coach cards, (iv) Header + quick actions (dashboard,
-   basal-profile proposal, model selector). The Behavior Causal Map/Family Bridge section was decided
+1. **Continue the `AimiProfileAdvisorActivity` sub-lot split from 6p.** 3 sub-lots remain, in this
+   order (smallest/safest first): (i) T3c/Harmonia/RBT runtime-history cards, (ii) Brain + Oref +
+   AI Coach cards, (iii) Header + quick actions (dashboard, basal-profile proposal, model selector).
+   Sub-lot Metrics + Recommendations + Apply flow was done in 6q, and it turned out to be engine work
+   as well as a port - do not assume the remaining three are UI only either. Two standing rules came
+   out of it: **do not write a second recommendation card** (there is one shared
+   `AimiRecommendationCard` in commonMain now, used by both the Advisor and the PKPD Setup screen),
+   and **check whether the section you are porting still has a backend that runs at all** - 6q found
+   four rules that no engine had emitted since 2026-03-13 because they were moved into plugins that
+   nothing registers. `AimiPluginManager.register(...)` still has zero callers, so anything reading
+   `pluginManager.collectActions(...)` is dead weight until that changes. The Behavior Causal Map/Family Bridge section was decided
    NOT to be ported (6p - dead backend, zero callers, zero tests, same treatment as the six files
    dropped in 6k) and the support-ZIP section is already superseded by the live
    `AimiSupportPackageScreen` - neither needs a sub-lot. Each new sub-lot adds cards to the same
@@ -1186,7 +1273,11 @@ agent) have landed since 6i; see 6j for what they were and why neither touches t
    Settings turned out to be (6o) and as this whole file turned out to be for the AI Coach card
    (`AiCoachingService` now requires DI-construction, not `AiCoachingService()` bare, per 6p's initial
    survey) - check whether any write feeds `therapy.kt`'s substring-matched therapy-event notes or any
-   other text the dosing engine parses before assuming a label can be freely reworded. **Always pass
+   other text the dosing engine parses before assuming a label can be freely reworded. **Any code that applies a
+   preference the advisor proposes must go through `applyPkpdPreferenceUpdate` and log the real old
+   value via `readPreferenceValueAsString`** (6q - the history feeds the AI coach prompt, and the
+   helper is the only place that knows about `UnitDoublePreferenceKey` not extending
+   `DoubleNonPreferenceKey`). **Always pass
    `tirCalculator` to any new `AimiAdvisorService(...)` construction** (6p found and fixed two
    pre-existing sites that silently omitted it, both computing against hardcoded fake TIR numbers
    instead of the patient's real data) and **always pass `history`/`assetContext` to

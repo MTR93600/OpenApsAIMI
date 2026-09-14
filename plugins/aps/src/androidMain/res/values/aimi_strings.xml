@@ -960,19 +960,13 @@
 
 <string name="aimi_advisor_metric_tdd">TDD : %1$.1f U (basal %2$d %%)</string>
 
-<string name="aimi_advisor_recommendations_title">Recommandations</string>
+<string name="aimi_advisor_recommendations_title">Recommendations</string>
 
-<string name="aimi_adv_rec_hypos_action_isf">Réduire MaxSMB de 10-20%</string>
 
-<string name="aimi_adv_rec_hypos_action_modes">Réduire les facteurs des modes repas</string>
 
-<string name="aimi_adv_rec_hypos_action_basal">Vérifier les basales nocturnes</string>
 
-<string name="aimi_adv_rec_control_action_basal">Augmenter la basale de 5-10%</string>
 
-<string name="aimi_adv_rec_control_action_isf">Réduire l\'ISF (plus d\'insuline)</string>
 
-<string name="aimi_adv_rec_control_action_modes">Utiliser les modes repas systématiquement</string>
 
 <string name="aimi_adv_rec_hypers_action_ratios">Vérifier les ratios glucides/insuline</string>
 
@@ -1098,19 +1092,37 @@
 
 <string name="aimi_adv_score_label">Score: %1$.1f/10</string>
 
-<string name="aimi_adv_apply_btn">APPLIQUER</string>
+<string name="aimi_adv_apply_btn">APPLY</string>
 
-<string name="aimi_adv_apply_dialog_title">Confirmation des Ajustements</string>
+<string name="aimi_adv_apply_dialog_title">Confirm the change</string>
 
-<string name="aimi_adv_apply_dialog_prefix">L\'Advisor propose les ajustements suivants :\n\n</string>
+<string name="aimi_adv_apply_dialog_prefix">The Advisor suggests this change:</string>
 
-<string name="aimi_adv_success_msg">%1$d changements appliqués !</string>
+<string name="aimi_adv_success_msg" comment="%1$d=number of settings that were changed. Example: 1 change applied.">%1$d change applied.</string>
 
-<string name="aimi_adv_no_change_msg">Aucun changement compatible appliqué.</string>
+<string name="aimi_adv_no_change_msg">No change could be applied.</string>
 
 <string name="aimi_adv_section_obs">OBSERVATIONS</string>
 
-<string name="aimi_adv_section_pkpd">AJUSTEMENTS PKPD</string>
+<string name="aimi_adv_section_pkpd">PKPD CHANGES</string>
+
+<string name="aimi_adv_metric_tir">TIR (70-180)</string>
+
+<string name="aimi_adv_metric_tdd" comment="Label of a metric tile. TDD = total daily dose of insulin.">MEAN TDD</string>
+
+<string name="aimi_adv_metric_gmi" comment="Label of a metric tile. GMI = glucose management indicator, shown in percent.">GMI</string>
+
+<string name="aimi_adv_metric_hypo54" comment="Label of a metric tile: share of time spent below 54 mg/dL.">LOW &lt; 54</string>
+
+<string name="aimi_adv_metric_today_tir" comment="Label of a metric tile: time in range for today only.">TODAY TIR</string>
+
+<string name="aimi_adv_metric_today_tdd" comment="Label of a metric tile: total daily dose for today only.">TODAY TDD</string>
+
+<string name="aimi_adv_metric_value_gmi" comment="%1$.1f=GMI value in percent. Example: 6.8%%">%1$.1f%%</string>
+
+<string name="aimi_adv_metric_value_missing" translatable="false">-</string>
+
+<string name="aimi_adv_apply_dialog_change" comment="%1$s=name of the setting, %2$s=new value. Example: Max SMB → 1.2">%1$s → %2$s</string>
 
 <string name="aimi_adv_section_brain">ÉTAT COGNITIF</string>
 
@@ -1186,21 +1198,25 @@
 
 <string name="aimi_advisor_model_title">Choisir le modèle IA</string>
 
-<string name="aimi_adv_rec_hypos_title">Risque d\'Hypoglycémie</string>
+<string name="aimi_adv_rec_hypos_action_reason">Lower Max SMB by 20% because time below 70 mg/dL is high</string>
 
-<string name="aimi_adv_rec_hypos_desc">Détecté %1$d%% de temps sous 54mg/dL. Suggestion de réduire l\'agressivité.</string>
+<string name="aimi_adv_rec_control_action_reason">Raise the lunch factor by 0.1 because time in range is below the goal</string>
 
-<string name="aimi_adv_rec_control_title">Contrôle Glycémique</string>
+<string name="aimi_adv_rec_hypos_title">Hypo risk</string>
 
-<string name="aimi_adv_rec_control_desc">TIR %1$d%% inférieur à l\'objectif. Suggestion d\'augmenter l\'agressivité.</string>
+<string name="aimi_adv_rec_hypos_desc" comment="%1$d=percent of time spent below 54 mg/dL. Example: 5%% of the time was below 54 mg/dL.">%1$d%% of the time was below 54 mg/dL. Dosing less is suggested.</string>
 
-<string name="aimi_adv_rec_hypers_title">Hyperglycémies</string>
+<string name="aimi_adv_rec_control_title">Glucose control</string>
 
-<string name="aimi_adv_rec_hypers_desc">Temps > 180 trop élevé (%1$d%%). Vérifiez vos ratios repas.</string>
+<string name="aimi_adv_rec_control_desc" comment="%1$d=time in range in percent. Example: Time in range is 62%%, below the goal.">Time in range is %1$d%%, below the goal. Dosing a bit more is suggested.</string>
 
-<string name="aimi_adv_rec_basal_title">Dominance Basale</string>
+<string name="aimi_adv_rec_hypers_title">High glucose</string>
 
-<string name="aimi_adv_rec_basal_desc">La part de basale (%1$d%%) est élevée. Vérifiez si votre basale est correcte.</string>
+<string name="aimi_adv_rec_hypers_desc" comment="%1$d=percent of time spent above 180 mg/dL. Example: Time above 180 mg/dL is high (28%%).">Time above 180 mg/dL is high (%1$d%%). Check your meal ratios.</string>
+
+<string name="aimi_adv_rec_basal_title">Basal is dominant</string>
+
+<string name="aimi_adv_rec_basal_desc" comment="%1$d=basal share of the total daily dose in percent. Example: Basal is 60%% of the total daily dose.">Basal is %1$d%% of the total daily dose. Check that your basal rates are right.</string>
 
 <string name="aimi_adv_rec_profile_ok_title">Profil Excellent</string>
 
