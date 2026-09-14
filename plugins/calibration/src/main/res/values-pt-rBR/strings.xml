@@ -3,29 +3,36 @@
 
     <string name="calibration_shortname">CAL</string>
     <string name="no_calibration_name">Sem calibração</string>
-    <string name="description_no_calibration">"Nenhum ajuste de calibração aplicado. Os valores do sensor são usados como vêm. Use isso quando o sensor já vier calibrado de fábrica e certinho."</string>
+    <string name="description_no_calibration">"Nenhuma substituição de calibração aplicada. Os valores do sensor são usados tal como estão. Use isto quando o sensor já estiver calibrado de fábrica e exato."</string>
     <string name="linear_calibration_name">Calibração linear</string>
-    <string name="description_linear_calibration">"Ajuste de calibração linear por sensor (inclinação e offset) calculado com base nos seus testes de ponta de dedo. As entradas mais recentes têm mais peso. O ajuste é aplicado após o início da sessão atual do sensor; as primeiras 2 horas são puladas como aquecimento."</string>
-    <string name="sensor_change_detected_text">Possível troca de sensor detectada às %1$s. Marcar como novo sensor?</string>
-    <string name="sensor_change_detected_action">Marcar troca de sensor</string>
-    <string name="sensor_change_detected_ignore">Não é um sensor novo</string>
+    <string name="description_linear_calibration">"Substituição de calibração linear por sensor (inclinação e desvio) calculada a partir dos seus registos de glicemia capilar. Registos recentes têm maior ponderação. A substituição é aplicada após o início da sessão atual do sensor; as primeiras 2 horas são ignoradas como aquecimento."</string>
+    <string name="sensor_change_detected_text">Possível alteração de sensor detetada em %1$s. Marcar como novo sensor?</string>
+    <string name="sensor_change_detected_action">Marcar alteração de sensor</string>
+    <string name="sensor_change_detected_ignore">Não é um novo sensor</string>
 
     <!-- Calibration management screen -->
-    <string name="cal_status_no_session">Registre uma troca de sensor para ativar a calibração.</string>
-    <string name="cal_status_warmup">Aquecimento do sensor — calibração ativa após as %1$s.</string>
-    <string name="cal_status_need_more_entries">Precisa de pelo menos 2 testes de ponta de dedo (atualmente %1$d).</string>
-    <string name="cal_status_unsafe_fit">Ajuste fora da faixa segura — calibração não aplicada.</string>
+    <string name="cal_status_no_session">Registe uma alteração de sensor para ativar a calibração.</string>
+    <string name="cal_status_warmup">Aquecimento do sensor — calibração ativa após %1$s.</string>
+    <string name="cal_status_need_more_entries">São necessários pelo menos 2 registos de glicemia capilar (atualmente %1$d).</string>
+    <string name="cal_status_unsafe_fit">Ajuste fora do intervalo seguro — calibração não aplicada.</string>
     <string name="cal_status_applied">Calibração aplicada.</string>
-    <string name="cal_status_applied_offset_only">Calibração aplicada apenas com offset — faixa do sensor muito estreita para inclinação.</string>
-    <string name="cal_status_applied_slope_clamped">Calibração aplicada — inclinação limitada à faixa segura. Adicione mais entradas para ajustar.</string>
-    <string name="cal_slope_offset">Inclinação %1$.2f, correção no meio da faixa %2$s</string>
+    <string name="cal_status_applied_offset_only">Calibração apenas de desvio aplicada — intervalo do sensor demasiado estreito para a inclinação.</string>
+    <string name="cal_status_applied_slope_clamped">Calibração aplicada — inclinação limitada ao intervalo seguro. Adicione mais registos para flexibilizar.</string>
+    <string name="cal_slope_offset">Inclinação %1$.2f, correção de ponto médio %2$s</string>
     <string name="cal_session_started">Sessão iniciada: %1$s</string>
-    <string name="cal_mark_sensor_change_now">Registrar troca de sensor</string>
+    <string name="cal_mark_sensor_change_now"> Registar alteração de sensor</string>
     <string name="cal_add_calibration">Adicionar calibração</string>
-    <string name="cal_entries_header">Testes de ponta de dedo (%1$d)</string>
-    <string name="cal_no_entries">Nenhum teste de ponta de dedo ainda.</string>
-    <string name="cal_entry_pair">Ponta de dedo %1$s → sensor %2$s (Δ %3$s)</string>
-    <string name="cal_remove_entry_title">Remover entrada?</string>
-    <string name="cal_remove_entry_message">Isso vai invalidar a entrada. O cálculo será refeito.</string>
-    <string name="cal_chart_entry_readout">Entrada %1$d/%2$d · %3$s · sensor %4$s → glicemia %5$s</string>
+    <string name="cal_entries_header">Registos de glicemia capilar (%1$d)</string>
+    <string name="cal_no_entries">Ainda sem registos de glicemia capilar.</string>
+    <string name="cal_entry_pair">Glicemia capilar %1$s → sensor %2$s (Δ %3$s)</string>
+    <string name="cal_remove_entry_title">Remover registo?</string>
+    <string name="cal_remove_entry_message">Isto invalidará o registo. O ajuste será recalculado.</string>
+    <string name="cal_chart_entry_readout">Registo %1$d/%2$d · %3$s · sensor %4$s → glicemia %5$s</string>
+
+    <!-- Calibration health notifications: proactive, dismissed once the situation resolves. Only
+         one of these is ever shown at a time. -->
+    <string name="cal_notify_need_more_entries">Adicione uma calibração por glicemia capilar para ativar a correção do sensor. Para obter o melhor resultado: espere até que o aquecimento termine, calibre enquanto a sua glicemia estiver estável (sem subir ou descer rapidamente) e use uma leitura de medidor fresca e cuidadosa. São necessárias pelo menos 2 calibrações, idealmente a diferentes níveis de glicemia.</string>
+    <string name="cal_notify_unsafe_fit">As suas calibrações recentes deram um resultado inconsistente e não foram aplicadas — o sensor está a mostrar valores não corrigidos. Adicione uma nova calibração enquanto a sua glicemia estiver estável; verifique duplamente a leitura do seu medidor, pois uma única picada no dedo imprecisa pode estragar isto.</string>
+    <string name="cal_notify_narrow_range">As suas calibrações estão todas próximas em termos de valor de glicemia, pelo que apenas pode ser aplicada uma correção básica. Adicione uma na próxima vez que a sua glicemia estiver claramente mais alta ou mais baixa do que o habitual — espalhar as calibrações por diferentes níveis torna a correção precisa em todo o seu intervalo, e não apenas à volta de um valor.</string>
+    <string name="cal_notify_stale">Já passou algum tempo desde a sua última calibração. Os sensores podem derivar ao longo do seu tempo de uso, pelo que adicionar uma calibração fresca agora — enquanto a sua glicemia está estável — ajuda a manter a correção precisa para o resto da sessão.</string>
 </resources>
