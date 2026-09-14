@@ -24,7 +24,7 @@ data class PatientStatePresentation(
     val reasonSummary: String,
 )
 
-internal object PatientStatePresentationBuilder {
+object PatientStatePresentationBuilder {
 
     fun build(snapshot: PatientRuntimeSnapshot, nowMs: Long): PatientStatePresentation {
         val patientState = snapshot.patientState

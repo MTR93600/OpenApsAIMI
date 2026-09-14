@@ -176,7 +176,7 @@ internal object PatientStateRuntimeRefresher {
     }
 }
 
-internal enum class PatientRefreshSource {
+enum class PatientRefreshSource {
     LOOP_TICK,
     PHYSIO_SIGNAL,
     CONTEXT_INTENT,

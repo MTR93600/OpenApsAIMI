@@ -306,4 +306,10 @@
     <string name="cal_precheck_no_pair">Aucune lecture MGC au cours des 10 dernières minutes. Vérifiez la connexion du capteur.</string>
     <string name="cal_precheck_delta_too_high">La glycémie change trop vite (Δ %1$s %3$s par 5 min, limite %2$s). Attendez que ce soit stabe.</string>
     <string name="cal_precheck_mark_sensor_change">Enregistrer le changement de capteur</string>
+    <!-- DASHBOARD_V2 fixed navigation -->
+    <string name="dashboard_v2_nav_main">Accueil</string>
+    <string name="dashboard_v2_nav_tools">Outils</string>
+    <string name="dashboard_v2_nav_bolus">Bolus</string>
+    <string name="dashboard_v2_nav_configuration">Config</string>
+    <string name="dashboard_v2_nav_preferences">Préférences</string>
 </resources>

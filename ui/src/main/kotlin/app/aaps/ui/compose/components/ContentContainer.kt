@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.aaps.ui.R
@@ -28,6 +29,8 @@ fun ContentContainer(
     isLoading: Boolean,
     isEmpty: Boolean,
     modifier: Modifier = Modifier,
+    emptyIconTint: Color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+    emptyTextColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     content: @Composable () -> Unit
 ) {
     val state = when {
@@ -61,12 +64,12 @@ fun ContentContainer(
                             imageVector = Icons.Outlined.SearchOff,
                             contentDescription = null,
                             modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            tint = emptyIconTint
                         )
                         Text(
                             text = stringResource(R.string.no_records_available),
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = emptyTextColor
                         )
                     }
                 }

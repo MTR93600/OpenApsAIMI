@@ -45,11 +45,13 @@ import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.objects.extensions.iobCalc
 import app.aaps.core.objects.extensions.looksInhaled
-import app.aaps.core.ui.compose.AapsCard
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalDateUtil
 import app.aaps.core.ui.compose.ToolbarConfig
 import app.aaps.core.ui.compose.dialogs.OkCancelDialog
+import app.aaps.core.ui.compose.glass.GlassCard
+import app.aaps.core.ui.compose.glass.GlassColors
+import app.aaps.core.ui.compose.glass.isGlassDarkMode
 import app.aaps.core.ui.compose.icons.Ns
 import app.aaps.core.ui.compose.icons.Pump
 import app.aaps.core.interfaces.navigation.ElementType
@@ -74,6 +76,7 @@ fun BolusCarbsScreen(
     onNavigateBack: () -> Unit = { }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isDark = isGlassDarkMode()
 
     // Dialog state
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -123,7 +126,9 @@ fun BolusCarbsScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             ContentContainer(
                 isLoading = uiState.isLoading,
-                isEmpty = uiState.mealLinks.isEmpty()
+                isEmpty = uiState.mealLinks.isEmpty(),
+                emptyIconTint = GlassColors.textMuted(isDark).copy(alpha = 0.6f),
+                emptyTextColor = GlassColors.textMuted(isDark)
             ) {
                 val haptic = LocalHapticFeedback.current
 
@@ -132,6 +137,8 @@ fun BolusCarbsScreen(
                     getTimestamp = { it.bolusCalculatorResult?.timestamp ?: it.bolus?.timestamp ?: it.carbs?.timestamp ?: 0L },
                     getItemKey = { "b${it.bolus?.id}_c${it.carbs?.id}_bcr${it.bolusCalculatorResult?.id}" },
                     rh = viewModel.rh,
+                    headerBackgroundColor = GlassColors.screenBgTop(isDark),
+                    headerTextColor = GlassColors.skyBlue,
                     itemContent = { ml ->
                         MealLinkItem(
                             mealLink = ml,
@@ -190,8 +197,10 @@ private fun MealLinkItem(
     rh: ResourceHelper,
     showInvalidated: Boolean
 ) {
+    val isDark = isGlassDarkMode()
     val dateUtil = LocalDateUtil.current
-    AapsCard(
+    GlassCard(
+        isDark = isDark,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 2.dp)
@@ -266,7 +275,7 @@ private fun MealLinkItem(
                         Text(
                             text = dateUtil.timeString(bolus.timestamp),
                             fontSize = 14.sp,
-                            color = if (bolus.timestamp > dateUtil.now()) Color(AapsTheme.generalColors.futureRecord.value) else MaterialTheme.colorScheme.onSurface
+                            color = if (bolus.timestamp > dateUtil.now()) Color(AapsTheme.generalColors.futureRecord.value) else GlassColors.textBright(isDark)
                         )
 
                         // Bolus amount with IOB
@@ -323,7 +332,7 @@ private fun MealLinkItem(
                                 text = bolus.iCfg.insulinLabel,
                                 modifier = Modifier.padding(start = 4.dp),
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = GlassColors.textMuted(isDark)
                             )
                         }
 
@@ -342,7 +351,7 @@ private fun MealLinkItem(
                                 else                          -> stringResource(CoreUiR.string.careportal_mealbolus)
                             },
                             fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = GlassColors.textMuted(isDark)
                         )
 
                         if (bolus.ids.nightscoutId != null) {

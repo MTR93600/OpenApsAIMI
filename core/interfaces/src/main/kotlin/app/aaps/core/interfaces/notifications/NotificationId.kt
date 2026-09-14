@@ -223,7 +223,15 @@ enum class NotificationId(
      * file. It has its own id so the two plugins never clear each other's notification.
      * Appended last on purpose, because the system notification id is the ordinal.
      */
-    LIBRE3_DIR_ACCESS_LOST(NORMAL, SYSTEM);
+    LIBRE3_DIR_ACCESS_LOST(NORMAL, SYSTEM),
+
+    /**
+     * The active calibration plugin needs attention: not enough entries yet, the fit was rejected
+     * as unsafe, entries are too clustered to fit a slope, or the last accepted entry is old. Only
+     * one of these reasons is shown at a time (see `LinearCalibrationPlugin`'s health check) and it
+     * is dismissed once the situation resolves. Appended last on purpose, see the comment above.
+     */
+    CALIBRATION_HEALTH(NORMAL, CGM);
 
     companion object {
 

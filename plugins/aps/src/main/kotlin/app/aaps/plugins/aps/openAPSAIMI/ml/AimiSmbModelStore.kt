@@ -7,7 +7,7 @@ import java.io.File
  * SMB model persistence. Thin facade over the shared [AimiNeuralModelStore] that pins the SMB weight filename inside
  * the provided directory; the crash-safe tmp → bak → rename protocol and probe validation live in the shared store.
  */
-internal object AimiSmbModelStore {
+object AimiSmbModelStore {
 
     private const val MODEL_FILE_NAME = "aimi_smb_model.json"
 

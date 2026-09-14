@@ -223,6 +223,10 @@ class GraphViewModel @AssistedInject constructor(
     fun formatBgAxisLabelFromMgdl(mgdlY: Double): String =
         formatBgChartAxisTick(glucoseMgdlToChartY(mgdlY))
 
+    /** Formats an IOB chart value (already insulin units) for display, e.g. a graph tap tooltip. */
+    fun formatIobChartValue(iob: Double): String =
+        rh.gs(R.string.format_insulin_units, iob)
+
     // Individual series flows - each can trigger independent recomposition
     val bgReadingsFlow: StateFlow<List<BgDataPoint>> = cache.bgReadingsFlow
     val bucketedDataFlow: StateFlow<List<BgDataPoint>> = cache.bucketedDataFlow

@@ -34,10 +34,17 @@ class PkpdAdvisor {
     ): List<AimiRecommendation> {
         val suggestions = mutableListOf<AimiRecommendation>()
 
+        // 0. Stop when the period was not measured. These suggestions change insulin settings, so a
+        //    missing number must mean "say nothing", never "assume an average patient".
+        if (metrics.isInsufficient) return suggestions
+        val tir70_180 = metrics.tir70_180 ?: return suggestions
+        val timeBelow70 = metrics.timeBelow70 ?: return suggestions
+        val timeAbove180 = metrics.timeAbove180 ?: return suggestions
+
         // 1. Check if Enabled
         if (!pkpd.pkpdEnabled) {
             // Only suggest enabling if control is significantly poor
-            if (metrics.tir70_180 < 0.70) { // Raised threshold: was 80%
+            if (tir70_180 < 0.70) { // Raised threshold: was 80%
                 val action = AimiAction.PreferenceUpdate(
                     key = app.aaps.core.keys.BooleanKey.OApsAIMIPkpdEnabled,
                     newValue = true,
@@ -58,14 +65,14 @@ class PkpdAdvisor {
 
         // ── Fix #1c: Trend Guard (OREF-aware) ─────────────────────────────────────
         // If today's TIR >= 7-day average, skip PKPD tuning unless on-device OREF/ML still flags risk.
-        val isImproving = metrics.todayTir != null && metrics.todayTir >= metrics.tir70_180
+        val isImproving = metrics.todayTir != null && metrics.todayTir >= tir70_180
         val orefStillRisky = orefContradictsQuietPeriod(oref)
         if (isImproving && !orefStillRisky) return suggestions
         // ─────────────────────────────────────────────────────────────────────────
 
-        val hypoTrigger = hypoPkpdTrigger(metrics, oref)
-        val hyperTrigger = hyperPkpdTrigger(metrics, oref)
-        val mode = resolvePkpdMode(hypoTrigger, hyperTrigger, metrics, oref)
+        val hypoTrigger = hypoPkpdTrigger(timeBelow70, oref)
+        val hyperTrigger = hyperPkpdTrigger(timeBelow70, timeAbove180, oref)
+        val mode = resolvePkpdMode(hypoTrigger, hyperTrigger, timeBelow70, timeAbove180, oref)
 
         // 2. HYPERS Analysis
         // Default threshold 40% >180 (conservative). When OREF marks hyper priority with exposure, allow earlier PKPD hints.
@@ -138,7 +145,7 @@ class PkpdAdvisor {
             // D) Tail damping very strong while hypers dominate and hypos are rare — allow slightly more tail delivery.
             // Stored pref is a multiplicative FLOOR (lower = stronger damping): weakening the guard means RAISING the floor.
             val effectiveDampingHyper = PkpdSmbTailDamping.effectiveStoredValue(pkpd.smbTailDamping)
-            if (effectiveDampingHyper < PkpdSmbTailDamping.DAMPING_LIGHT - 0.02 && metrics.timeBelow70 < 0.035) {
+            if (effectiveDampingHyper < PkpdSmbTailDamping.DAMPING_LIGHT - 0.02 && timeBelow70 < 0.035) {
                 val newDamping = PkpdSmbTailDamping.clampForAdvisor(effectiveDampingHyper + 0.08)
                 if (newDamping > effectiveDampingHyper + 0.01) {
                     val explanation = rh.gs(R.string.aimi_pkpd_hyper_damping_reduce, effectiveDampingHyper.toString(), newDamping.toString())
@@ -267,7 +274,8 @@ class PkpdAdvisor {
     private fun resolvePkpdMode(
         hypoTrigger: Boolean,
         hyperTrigger: Boolean,
-        metrics: AdvisorMetrics,
+        timeBelow70: Double,
+        timeAbove180: Double,
         oref: OrefAnalysisReport?,
     ): PkpdMode {
         if (!hypoTrigger && !hyperTrigger) return PkpdMode.NEITHER
@@ -277,18 +285,18 @@ class PkpdAdvisor {
             OrefGlycemicPriority.HYPO -> return PkpdMode.HYPO_DOMINANT
             OrefGlycemicPriority.HYPER -> return PkpdMode.HYPER_DOMINANT
             OrefGlycemicPriority.BOTH -> {
-                if (metrics.timeBelow70 >= 0.06) return PkpdMode.HYPO_DOMINANT
-                if (metrics.timeAbove180 >= 0.30 && metrics.timeBelow70 < 0.045) return PkpdMode.HYPER_DOMINANT
-                return if (metrics.timeBelow70 * 1.3 >= metrics.timeAbove180) {
+                if (timeBelow70 >= 0.06) return PkpdMode.HYPO_DOMINANT
+                if (timeAbove180 >= 0.30 && timeBelow70 < 0.045) return PkpdMode.HYPER_DOMINANT
+                return if (timeBelow70 * 1.3 >= timeAbove180) {
                     PkpdMode.HYPO_DOMINANT
                 } else {
                     PkpdMode.HYPER_DOMINANT
                 }
             }
             else -> {
-                if (metrics.timeBelow70 >= 0.06) return PkpdMode.HYPO_DOMINANT
-                if (metrics.timeAbove180 >= 0.35 && metrics.timeBelow70 < 0.035) return PkpdMode.HYPER_DOMINANT
-                return if (metrics.timeBelow70 * 1.2 >= metrics.timeAbove180) {
+                if (timeBelow70 >= 0.06) return PkpdMode.HYPO_DOMINANT
+                if (timeAbove180 >= 0.35 && timeBelow70 < 0.035) return PkpdMode.HYPER_DOMINANT
+                return if (timeBelow70 * 1.2 >= timeAbove180) {
                     PkpdMode.HYPO_DOMINANT
                 } else {
                     PkpdMode.HYPER_DOMINANT
@@ -319,9 +327,9 @@ class PkpdAdvisor {
         return hypoSignal || hyperSignal
     }
 
-    private fun hypoPkpdTrigger(metrics: AdvisorMetrics, oref: OrefAnalysisReport?): Boolean {
-        if (metrics.timeBelow70 > 0.07) return true
-        if (metrics.timeBelow70 <= 0.055) return false
+    private fun hypoPkpdTrigger(timeBelow70: Double, oref: OrefAnalysisReport?): Boolean {
+        if (timeBelow70 > 0.07) return true
+        if (timeBelow70 <= 0.055) return false
         val o = oref ?: return false
         if (o.dataSufficiency == OrefDataSufficiency.INSUFFICIENT) return false
         val hypoFocus = o.priority == OrefGlycemicPriority.HYPO || o.priority == OrefGlycemicPriority.BOTH
@@ -331,10 +339,10 @@ class PkpdAdvisor {
             OrefPersonalSignalGate.tripsDecision(o.personalMeanHypoSignalPct, 48.0)
     }
 
-    private fun hyperPkpdTrigger(metrics: AdvisorMetrics, oref: OrefAnalysisReport?): Boolean {
-        val calmHypos = metrics.timeBelow70 < 0.06
-        if (metrics.timeAbove180 > 0.40 && metrics.timeBelow70 < 0.02) return true
-        if (!calmHypos || metrics.timeAbove180 <= 0.20) return false
+    private fun hyperPkpdTrigger(timeBelow70: Double, timeAbove180: Double, oref: OrefAnalysisReport?): Boolean {
+        val calmHypos = timeBelow70 < 0.06
+        if (timeAbove180 > 0.40 && timeBelow70 < 0.02) return true
+        if (!calmHypos || timeAbove180 <= 0.20) return false
         val o = oref ?: return false
         if (o.dataSufficiency == OrefDataSufficiency.INSUFFICIENT) return false
         val hyperFocus = o.priority == OrefGlycemicPriority.HYPER || o.priority == OrefGlycemicPriority.BOTH

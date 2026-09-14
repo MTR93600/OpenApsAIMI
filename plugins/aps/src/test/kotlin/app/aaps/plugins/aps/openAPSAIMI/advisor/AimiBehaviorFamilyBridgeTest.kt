@@ -63,6 +63,7 @@ class AimiBehaviorFamilyBridgeTest {
             hyperEvents = 6,
             todayTir = null,
             todayTdd = null,
+            dataSufficiency = AdvisorDataSufficiency.GOOD,
         )
 
         val suggestions = buildAimiFamilyBridgeSuggestions(preferences, metrics)

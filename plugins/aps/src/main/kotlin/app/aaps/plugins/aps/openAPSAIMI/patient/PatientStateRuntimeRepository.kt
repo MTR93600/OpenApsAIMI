@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import java.util.concurrent.atomic.AtomicReference
 
-internal data class PatientRuntimeSnapshot(
+data class PatientRuntimeSnapshot(
     val patientState: PatientStateSnapshot,
     val patientModeDecision: PatientModeOrchestrator.Decision,
     val updatedAtMs: Long = patientState.timestampMs,
@@ -17,7 +17,7 @@ internal data class PatientRuntimeSnapshot(
     val refreshSource: PatientRefreshSource = PatientRefreshSource.LOOP_TICK,
 )
 
-internal object PatientStateRuntimeRepository {
+object PatientStateRuntimeRepository {
 
     private val latestRef = AtomicReference<PatientRuntimeSnapshot?>(null)
     private val loopCacheRef = AtomicReference<PatientStateLoopCache?>(null)

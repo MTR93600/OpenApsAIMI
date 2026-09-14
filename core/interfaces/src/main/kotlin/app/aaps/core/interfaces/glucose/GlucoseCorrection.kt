@@ -20,6 +20,9 @@ interface GlucoseCorrection {
      * between two points is interpolated. The newest reading gets the value of the newest corrected
      * point, which is exactly the big number on the dashboard.
      *
+     * The answer is a **whole mg/dL**, like the stored reading and like the screen, so a caller can
+     * hand it straight to Nightscout or to an alarm without rounding again.
+     *
      * @return the corrected value, or `null` when none can be worked out: no corrected series yet
      *         (right after app start), a reading older than the series, or a result that failed the
      *         plausibility check. Callers keep [storedMgdl] on `null`.

@@ -7,6 +7,7 @@ import app.aaps.core.interfaces.aps.AutosensData
 import app.aaps.core.interfaces.aps.AutosensDataStore
 import app.aaps.core.interfaces.aps.Sensitivity
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.glucose.GlucoseCorrection
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.overview.OverviewData
@@ -35,6 +36,7 @@ class PrepareGraphDataWorkerTest : TestBaseWithProfile() {
 
     @Mock lateinit var workflowChainData: WorkflowChainData
     @Mock lateinit var persistenceLayer: PersistenceLayer
+    @Mock lateinit var glucoseCorrection: GlucoseCorrection
     @Mock lateinit var profiler: Profiler
     @Mock lateinit var processedDeviceStatusData: ProcessedDeviceStatusData
     @Mock lateinit var mockedRxBus: RxBus
@@ -51,7 +53,7 @@ class PrepareGraphDataWorkerTest : TestBaseWithProfile() {
     private fun worker() =
         PrepareGraphDataWorker(
             context, workerParameters, aapsLogger, fabricPrivacy, workflowChainData, dateUtil, mockedRxBus, persistenceLayer,
-            activePlugin, profileFunction, profileUtil, preferences, config, profiler, rh, decimalFormatter,
+            glucoseCorrection, activePlugin, profileFunction, profileUtil, preferences, config, profiler, rh, decimalFormatter,
             processedDeviceStatusData, autosensDataProvider
         )
 

@@ -24,34 +24,48 @@ object TuningContextEngine {
         runCatching { AimiTuningContext.valueOf(raw?.trim()?.uppercase() ?: "") }
             .getOrDefault(AimiTuningContext.AUTO_BALANCE)
 
+    /** Shown instead of a plan when the period could not be measured. */
+    const val NO_DATA_BLOCK = "Tuning blocked: not enough glucose data in this period to propose a change."
+
     fun computePlan(
         requestedContext: AimiTuningContext,
         metrics: AdvisorMetrics,
         preferences: Preferences,
         t3cBrittleMode: Boolean,
     ): TuningPlan {
+        // These changes reach insulin settings, so an unknown period must produce no change at all.
+        val hypo = metrics.timeBelow70
+        val hyper = metrics.timeAbove180
+        if (metrics.isInsufficient || hypo == null || hyper == null) {
+            return TuningPlan(requestedContext, requestedContext, TuningStepTier.MICRO, emptyList(), NO_DATA_BLOCK)
+        }
         val effective = when (requestedContext) {
             AimiTuningContext.AUTO_BALANCE -> resolveAutoContext(metrics)
             else -> requestedContext
         }
-        val tier = dominantTier(effective, metrics)
-        val blocked = guardBlock(effective, metrics)
+        val tier = dominantTier(effective, hypo, hyper)
+        val blocked = guardBlock(effective, metrics, hypo, hyper)
         if (blocked != null) {
             return TuningPlan(requestedContext, effective, tier, emptyList(), blocked)
         }
         val changes = when (effective) {
-            AimiTuningContext.MEAL_RISE -> buildMealRiseChanges(metrics, preferences, tier, t3cBrittleMode)
-            AimiTuningContext.HYPO_GUARD -> buildHypoGuardChanges(metrics, preferences, tier, t3cBrittleMode)
-            AimiTuningContext.HYPER_STABLE -> buildHyperStableChanges(metrics, preferences, tier, t3cBrittleMode)
-            AimiTuningContext.MIXED_BALANCE -> buildMixedBalanceChanges(metrics, preferences, t3cBrittleMode)
+            AimiTuningContext.MEAL_RISE -> buildMealRiseChanges(hypo, hyper, preferences, tier, t3cBrittleMode)
+            AimiTuningContext.HYPO_GUARD -> buildHypoGuardChanges(hypo, preferences, tier, t3cBrittleMode)
+            AimiTuningContext.HYPER_STABLE -> buildHyperStableChanges(hypo, preferences, tier, t3cBrittleMode)
+            AimiTuningContext.MIXED_BALANCE -> buildMixedBalanceChanges(hypo, hyper, preferences, t3cBrittleMode)
             AimiTuningContext.AUTO_BALANCE -> emptyList()
         }
         return TuningPlan(requestedContext, effective, tier, changes)
     }
 
+    /**
+     * Picks the context that best matches the measured period. An unknown period falls back to
+     * [AimiTuningContext.HYPO_GUARD], the safest of the four, but `computePlan` stops before this
+     * is ever used for a real change.
+     */
     fun resolveAutoContext(metrics: AdvisorMetrics): AimiTuningContext {
-        val hypo = metrics.timeBelow70
-        val hyper = metrics.timeAbove180
+        val hypo = metrics.timeBelow70 ?: return AimiTuningContext.HYPO_GUARD
+        val hyper = metrics.timeAbove180 ?: return AimiTuningContext.HYPO_GUARD
         val hypoSignificant = hypo >= 0.04
         val hyperSignificant = hyper >= 0.12
         val hypoDominates = hypo >= 0.055 && hypo * 1.15 >= hyper
@@ -83,15 +97,15 @@ object TuningContextEngine {
         else -> TuningStepTier.MICRO
     }
 
-    private fun dominantTier(context: AimiTuningContext, metrics: AdvisorMetrics): TuningStepTier =
+    private fun dominantTier(context: AimiTuningContext, hypo: Double, hyper: Double): TuningStepTier =
         when (context) {
-            AimiTuningContext.HYPO_GUARD -> hypoTier(metrics.timeBelow70)
+            AimiTuningContext.HYPO_GUARD -> hypoTier(hypo)
             AimiTuningContext.MEAL_RISE,
             AimiTuningContext.HYPER_STABLE,
-            -> hyperTier(metrics.timeAbove180)
+            -> hyperTier(hyper)
             AimiTuningContext.MIXED_BALANCE -> maxTier(
-                hypoTier(metrics.timeBelow70),
-                hyperTier(metrics.timeAbove180),
+                hypoTier(hypo),
+                hyperTier(hyper),
             )
             AimiTuningContext.AUTO_BALANCE -> TuningStepTier.MICRO
         }
@@ -108,31 +122,32 @@ object TuningContextEngine {
         TuningStepTier.STRONG -> 2
     }
 
-    private fun guardBlock(context: AimiTuningContext, metrics: AdvisorMetrics): String? {
+    private fun guardBlock(context: AimiTuningContext, metrics: AdvisorMetrics, hypo: Double, hyper: Double): String? {
         when (context) {
             AimiTuningContext.MEAL_RISE -> {
-                if (metrics.timeBelow70 > 0.06) {
-                    return "Meal-rise tuning blocked: hypo burden (${pct(metrics.timeBelow70)}% below 70) is too high."
+                if (hypo > 0.06) {
+                    return "Meal-rise tuning blocked: hypo burden (${pct(hypo)}% below 70) is too high."
                 }
-                if (metrics.timeAbove180 < 0.12) {
-                    return "Meal-rise tuning blocked: hyper burden (${pct(metrics.timeAbove180)}% above 180) is too low."
+                if (hyper < 0.12) {
+                    return "Meal-rise tuning blocked: hyper burden (${pct(hyper)}% above 180) is too low."
                 }
             }
             AimiTuningContext.HYPO_GUARD -> {
-                if (metrics.timeBelow70 < 0.025) {
-                    return "Hypo guard blocked: time below 70 (${pct(metrics.timeBelow70)}%) is already low."
+                if (hypo < 0.025) {
+                    return "Hypo guard blocked: time below 70 (${pct(hypo)}%) is already low."
                 }
             }
             AimiTuningContext.HYPER_STABLE -> {
-                if (metrics.timeBelow70 >= 0.045) {
-                    return "Hyper tuning blocked: hypo burden (${pct(metrics.timeBelow70)}% below 70) — use Hypo guard or Auto."
+                if (hypo >= 0.045) {
+                    return "Hyper tuning blocked: hypo burden (${pct(hypo)}% below 70) — use Hypo guard or Auto."
                 }
-                if (metrics.timeAbove180 < 0.10 && metrics.tir70_180 >= 0.72) {
-                    return "Hyper tuning blocked: control is already stable (TIR ${pct(metrics.tir70_180)}%)."
+                val tir = metrics.tir70_180
+                if (hyper < 0.10 && tir != null && tir >= 0.72) {
+                    return "Hyper tuning blocked: control is already stable (TIR ${pct(tir)}%)."
                 }
             }
             AimiTuningContext.MIXED_BALANCE -> {
-                if (metrics.timeBelow70 < 0.035 && metrics.timeAbove180 < 0.10) {
+                if (hypo < 0.035 && hyper < 0.10) {
                     return "Mixed tuning blocked: neither hypo nor hyper burden is significant enough."
                 }
             }
@@ -142,19 +157,20 @@ object TuningContextEngine {
     }
 
     private fun buildMealRiseChanges(
-        metrics: AdvisorMetrics,
+        hypo: Double,
+        hyper: Double,
         preferences: Preferences,
         tier: TuningStepTier,
         t3cBrittle: Boolean,
     ): List<TuningChange> {
         // Complements Hyper Trajectory Release (HTR): when OApsAIMIHyperTrajectoryRelease is on with Autodrive V3,
         // prefer HTR SMB floors over large MaxSMB jumps — avoid double-counting meal-rise aggression.
-        val cappedTier = if (metrics.timeBelow70 >= 0.04) {
+        val cappedTier = if (hypo >= 0.04) {
             capTier(tier, TuningStepTier.MICRO)
         } else {
             tier
         }
-        val moderateHypoRisk = metrics.timeBelow70 >= 0.04
+        val moderateHypoRisk = hypo >= 0.04
         val out = mutableListOf<TuningChange>()
         val smbStep = step(cappedTier, micro = 0.05, moderate = 0.10, strong = 0.20)
         val highBgStep = step(cappedTier, micro = 0.05, moderate = 0.12, strong = 0.25)
@@ -204,10 +220,10 @@ object TuningContextEngine {
                 "Raise Red Carpet restore so explicit contexts recover SMB before hard caps.",
             )
         } else {
-            appendMealFactorReductions(out, preferences, hypoTier(metrics.timeBelow70))
+            appendMealFactorReductions(out, preferences, hypoTier(hypo))
         }
 
-        if (!moderateHypoRisk && metrics.timeAbove180 >= 0.18 && metrics.timeBelow70 < 0.04) {
+        if (!moderateHypoRisk && hyper >= 0.18 && hypo < 0.04) {
             proposeBoolean(
                 out, preferences, BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled, true, cappedTier,
                 "Enable straight-line tube for trajectory-aware meal corrections.",
@@ -229,42 +245,43 @@ object TuningContextEngine {
     }
 
     private fun buildHypoGuardChanges(
-        metrics: AdvisorMetrics,
+        hypo: Double,
         preferences: Preferences,
         tier: TuningStepTier,
         t3cBrittle: Boolean,
     ): List<TuningChange> {
         val out = mutableListOf<TuningChange>()
         appendHypoAggressionReductions(out, preferences, tier, t3cBrittle)
-        if (metrics.timeBelow70 >= 0.04) {
+        if (hypo >= 0.04) {
             appendMealFactorReductions(out, preferences, tier)
         }
-        appendHypoStrongSafetyDisables(out, preferences, metrics, tier)
+        appendHypoStrongSafetyDisables(out, preferences, hypo, tier)
         return out
     }
 
     private fun buildMixedBalanceChanges(
-        metrics: AdvisorMetrics,
+        hypo: Double,
+        hyper: Double,
         preferences: Preferences,
         t3cBrittle: Boolean,
     ): List<TuningChange> {
-        val hypoT = hypoTier(metrics.timeBelow70)
-        val hyperT = hyperTier(metrics.timeAbove180)
+        val hypoT = hypoTier(hypo)
+        val hyperT = hyperTier(hyper)
         val out = mutableListOf<TuningChange>()
 
         appendHypoAggressionReductions(out, preferences, hypoT, t3cBrittle)
-        if (metrics.timeBelow70 >= 0.04) {
+        if (hypo >= 0.04) {
             appendMealFactorReductions(out, preferences, hypoT)
         }
-        appendHypoStrongSafetyDisables(out, preferences, metrics, hypoT)
+        appendHypoStrongSafetyDisables(out, preferences, hypo, hypoT)
 
         // Hyper side: non-conflicting keys only; never raise SMB caps when hypos are significant.
-        if (metrics.timeAbove180 >= 0.14 && hypoT != TuningStepTier.STRONG) {
+        if (hyper >= 0.14 && hypoT != TuningStepTier.STRONG) {
             proposeBoolean(
                 out, preferences, BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled, true, hyperT,
                 "Enable pragmatic relief for post-meal routing without raising SMB caps (mixed pattern).",
             )
-            if (metrics.timeBelow70 < 0.05) {
+            if (hypo < 0.05) {
                 proposeDoubleIncrease(
                     out, preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold,
                     step(hyperT, micro = 0.02, moderate = 0.04, strong = 0.06), hyperT,
@@ -276,7 +293,7 @@ object TuningContextEngine {
     }
 
     private fun buildHyperStableChanges(
-        metrics: AdvisorMetrics,
+        hypo: Double,
         preferences: Preferences,
         tier: TuningStepTier,
         t3cBrittle: Boolean,
@@ -297,7 +314,7 @@ object TuningContextEngine {
             out, preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, reliefStep, tier,
             "Raise PKPD relief minimum for clearer correction intent.",
         )
-        if (!t3cBrittle && metrics.timeBelow70 < 0.035) {
+        if (!t3cBrittle && hypo < 0.035) {
             proposeTailDampingWeaken(
                 out, preferences,
                 step(tier, micro = 0.03, moderate = 0.05, strong = 0.08), tier,
@@ -384,16 +401,16 @@ object TuningContextEngine {
     private fun appendHypoStrongSafetyDisables(
         out: MutableList<TuningChange>,
         preferences: Preferences,
-        metrics: AdvisorMetrics,
+        hypo: Double,
         tier: TuningStepTier,
     ) {
-        if (metrics.timeBelow70 >= 0.045 && preferences.get(BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled)) {
+        if (hypo >= 0.045 && preferences.get(BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled)) {
             proposeBoolean(
                 out, preferences, BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled, false, tier,
                 "Disable straight-line tube while hypo burden is elevated.",
             )
         }
-        if (metrics.timeBelow70 >= 0.055 && preferences.get(BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled)) {
+        if (hypo >= 0.055 && preferences.get(BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled)) {
             proposeBoolean(
                 out, preferences, BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled, false, tier,
                 "Disable pragmatic relief during frequent lows to avoid aggressive SMB routing.",

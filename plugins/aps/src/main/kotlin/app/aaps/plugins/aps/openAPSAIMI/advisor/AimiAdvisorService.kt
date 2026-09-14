@@ -1,7 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor
 
 import android.content.Context
+import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.profile.EffectiveProfile
+import app.aaps.core.interfaces.stats.TIR
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlin.math.roundToInt
@@ -13,6 +15,7 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefGlycemicPriority
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefLocalPipeline
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 import java.util.Locale
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.BooleanKey
@@ -128,7 +131,7 @@ class AimiAdvisorService {
                         personalMlEnabled = personalOrefMl,
                     )
                 } catch (t: Throwable) {
-                    aapsLogger?.error(app.aaps.core.interfaces.logging.LTag.APS, "OrefLocalPipeline failed", t)
+                    aapsLogger?.error(LTag.APS, "OrefLocalPipeline failed", t)
                     null
                 }
             }
@@ -243,7 +246,7 @@ class AimiAdvisorService {
             val context = collectContext(periodDays)
             PkpdAdvisor().analysePkpd(context.metrics, context.pkpdPrefs, rh, null)
         } catch (t: Throwable) {
-            aapsLogger?.error(app.aaps.core.interfaces.logging.LTag.APS, "pkpdRecommendationsForSettings failed", t)
+            aapsLogger?.error(LTag.APS, "pkpdRecommendationsForSettings failed", t)
             emptyList()
         }
     }
@@ -269,20 +272,29 @@ class AimiAdvisorService {
         return if (totalDuration > 0) totalWeightedValue / totalDuration else 0.0
     }
 
+    /**
+     * Read the real metrics for the last [days] days.
+     *
+     * Nothing is invented here. A number stays `null` when its source is missing, fails, or has no
+     * data, and [AdvisorMetrics.dataSufficiency] then tells callers to stop instead of tuning on a
+     * made-up patient.
+     */
     private fun calculateMetrics(days: Int): AdvisorMetrics = runBlocking(Dispatchers.IO) {
-        // Fallback defaults
-        var tir70_180 = 0.65
-        var tir70_140 = 0.40
-        var timeBelow70 = 0.05
-        var timeBelow54 = 0.01
-        var timeAbove180 = 0.30
-        var timeAbove250 = 0.05
-        var meanBg = 160.0
-        var variabilityCv = 0.30
-        var tdd = 45.0
-        var basalPercent = 0.50
+        // No stand-in values: null means "not measured".
+        var tir70_180: Double? = null
+        var tir70_140: Double? = null
+        var timeBelow70: Double? = null
+        var timeBelow54: Double? = null
+        var timeAbove180: Double? = null
+        var timeAbove250: Double? = null
+        var meanBg: Double? = null
+        var variabilityCv: Double? = null
+        var tdd: Double? = null
+        var basalPercent: Double? = null
         var todayTir: Double? = null
         var todayTdd: Double? = null
+        var daysCovered = 0
+        var bgReadingCount = 0
 
         // 1. Calculate Real TIR (70-180)
         if (tirCalculator != null) {
@@ -290,43 +302,32 @@ class AimiAdvisorService {
                 // Main Range (70-180)
                 val tirs = tirCalculator.calculate(days.toLong(), 70.0, 180.0)
                 val avgTir = tirCalculator.averageTIR(tirs)
-                
-                if (avgTir != null) {
-                    tir70_180 = (avgTir.inRangePct() ?: 0.0) / 100.0
-                    timeBelow70 = (avgTir.belowPct() ?: 0.0) / 100.0
-                    timeAbove180 = (avgTir.abovePct() ?: 0.0) / 100.0
-                }
+                daysCovered = tirs.size()
+                tir70_180 = avgTir.inRangePct()?.div(100.0)
+                timeBelow70 = avgTir.belowPct()?.div(100.0)
+                timeAbove180 = avgTir.abovePct()?.div(100.0)
 
                 // Very Low (<54) - Calculate with low=54
                 val tirs54 = tirCalculator.calculate(days.toLong(), 54.0, 180.0)
-                val avg54 = tirCalculator.averageTIR(tirs54)
-                if (avg54 != null) {
-                    timeBelow54 = (avg54.belowPct() ?: 0.0) / 100.0
-                }
-                
+                timeBelow54 = tirCalculator.averageTIR(tirs54).belowPct()?.div(100.0)
+
                 // Very High (>250) - Calculate with high=250
                 val tirs250 = tirCalculator.calculate(days.toLong(), 70.0, 250.0)
-                val avg250 = tirCalculator.averageTIR(tirs250)
-                if (avg250 != null) {
-                    timeAbove250 = (avg250.abovePct() ?: 0.0) / 100.0
-                }
+                timeAbove250 = tirCalculator.averageTIR(tirs250).abovePct()?.div(100.0)
 
                 // Tight Range (70-140)
                 val tirs140 = tirCalculator.calculate(days.toLong(), 70.0, 140.0)
-                val avg140 = tirCalculator.averageTIR(tirs140)
-                if (avg140 != null) {
-                    tir70_140 = (avg140.inRangePct() ?: 0.0) / 100.0
-                }
-                
+                tir70_140 = tirCalculator.averageTIR(tirs140).inRangePct()?.div(100.0)
+
                 // Today's TIR
                 val dailyTirs = tirCalculator.calculateDaily(70.0, 180.0)
-                if (dailyTirs != null && dailyTirs.size() > 0) {
+                if (dailyTirs.size() > 0) {
                      // Get the entry with the largest timestamp (latest)
                      // LongSparseArray doesn't ensure order by key?
                      // Usually appended. Let's iterate or assume logic.
                      // Finding max key
                      var maxDate = 0L
-                     var todayStat: app.aaps.core.interfaces.stats.TIR? = null
+                     var todayStat: TIR? = null
                      for(i in 0 until dailyTirs.size()) {
                          val key = dailyTirs.keyAt(i)
                          if (key > maxDate) {
@@ -335,13 +336,15 @@ class AimiAdvisorService {
                          }
                      }
                      if (todayStat != null) {
-                        todayTir = (todayStat.inRangePct() ?: 0.0) / 100.0
+                        todayTir = todayStat.inRangePct()?.div(100.0)
                      }
                 }
 
             } catch (e: Exception) {
-                e.printStackTrace()
+                aapsLogger?.error(LTag.APS, "Advisor TIR metrics failed", e)
             }
+        } else {
+            aapsLogger?.warn(LTag.APS, "Advisor has no TirCalculator: glucose metrics stay unknown")
         }
 
         // 2. Calculate Real TDD
@@ -349,21 +352,22 @@ class AimiAdvisorService {
             try {
                 val tdds = tddCalculator.calculate(days.toLong(), true)
                 val avgTdd = tddCalculator.averageTDD(tdds)
-                
+
                 if (avgTdd != null) {
-                    tdd = avgTdd.data.totalAmount
-                    if (tdd > 0) {
-                        basalPercent = avgTdd.data.basalAmount / tdd
+                    val total = avgTdd.data.totalAmount
+                    tdd = total
+                    if (total > 0) {
+                        basalPercent = avgTdd.data.basalAmount / total
                     }
                 }
-                
+
                 val today = tddCalculator.calculateToday()
                 if (today != null) {
                     todayTdd = today.totalAmount
                 }
 
             } catch (e: Exception) {
-                e.printStackTrace()
+                aapsLogger?.error(LTag.APS, "Advisor TDD metrics failed", e)
             }
         }
 
@@ -374,69 +378,77 @@ class AimiAdvisorService {
                 val now = System.currentTimeMillis()
                 val fromTime = now - (days * 24 * 3600 * 1000L)
                 val bgReadings = persistenceLayer.getBgReadingsDataFromTimeToTime(fromTime, now, ascending = false)
-                
-                android.util.Log.d("AIMI_ADVISOR", "📊 Mean BG calculation: fetched ${bgReadings.size} BG readings")
-                
-                if (bgReadings.isEmpty()) {
-                    android.util.Log.w("AIMI_ADVISOR", "⚠️ No BG readings found for last $days days. Using fallback meanBg=$meanBg")
+
+                // Extract valid glucose values (GV objects have .value property)
+                val bgValues = bgReadings
+                    .map { it.value }
+                    .filter { it > 30.0 } // Filter out noise
+
+                bgReadingCount = bgValues.size
+                if (bgValues.isEmpty()) {
+                    aapsLogger?.warn(LTag.APS, "Advisor found no usable glucose reading in the last $days days")
                 } else {
-                    // Extract valid glucose values (GV objects have .value property)
-                    val bgValues = bgReadings
-                        .map { it.value }
-                        .filter { it > 30.0 } // Filter out noise
-                    
-                    if (bgValues.isNotEmpty()) {
-                        meanBg = bgValues.average()
-                        val variance = bgValues
-                            .map { value -> (value - meanBg) * (value - meanBg) }
-                            .average()
-                        val sd = kotlin.math.sqrt(variance)
-                        variabilityCv = if (meanBg > 0.0) (sd / meanBg).coerceIn(0.0, 1.0) else 0.0
-                        android.util.Log.d("AIMI_ADVISOR", "✅ Calculated Mean BG: ${meanBg.toInt()} mg/dL from ${bgValues.size} readings")
-                    } else {
-                        android.util.Log.w("AIMI_ADVISOR", "⚠️ No valid BG data after filtering. Using fallback $meanBg")
-                    }
+                    val mean = bgValues.average()
+                    val variance = bgValues
+                        .map { value -> (value - mean) * (value - mean) }
+                        .average()
+                    val sd = sqrt(variance)
+                    meanBg = mean
+                    variabilityCv = if (mean > 0.0) (sd / mean).coerceIn(0.0, 1.0) else null
                 }
             } catch (e: Exception) {
-                android.util.Log.e("AIMI_ADVISOR", "❌ Failed to calculate Mean BG: ${e.message}")
-                e.printStackTrace()
+                aapsLogger?.error(LTag.APS, "Advisor mean glucose failed", e)
             }
+        }
+
+        // The block may be used only when the glucose picture is real.
+        val sufficiency = if (tir70_180 != null && timeBelow70 != null && timeAbove180 != null) {
+            AdvisorDataSufficiency.GOOD
         } else {
-            android.util.Log.w("AIMI_ADVISOR", "⚠️ PersistenceLayer is null, cannot calculate mean BG. Using fallback $meanBg")
+            AdvisorDataSufficiency.INSUFFICIENT
         }
 
         AdvisorMetrics(
             periodLabel = "Last $days days",
             tir70_180 = tir70_180,
             tir70_140 = tir70_140,
-            timeBelow70 = timeBelow70, 
+            timeBelow70 = timeBelow70,
             timeBelow54 = timeBelow54,
             timeAbove180 = timeAbove180,
             timeAbove250 = timeAbove250,
             meanBg = meanBg,
             variabilityCv = variabilityCv,
-            gmi = 3.31 + (0.02392 * meanBg), // GMI = 3.31 + 0.02392 * MeanBG (mg/dL)
+            // GMI = 3.31 + 0.02392 * MeanBG (mg/dL) — only when the mean is real.
+            gmi = meanBg?.let { 3.31 + (0.02392 * it) },
             tdd = tdd,
             basalPercent = basalPercent,
             hypoEvents = 0, // Need Notification/Treatment analysis
             severeHypoEvents = 0,
             hyperEvents = 0,
             todayTir = todayTir,
-            todayTdd = todayTdd
+            todayTdd = todayTdd,
+            dataSufficiency = sufficiency,
+            bgReadingCount = bgReadingCount,
+            daysCovered = daysCovered,
         )
     }
 
-    private fun computeGlobalScore(m: AdvisorMetrics): Double {
+    /** Score of the period, or `null` when the glucose numbers were not measured. */
+    private fun computeGlobalScore(m: AdvisorMetrics): Double? {
         // Simple weighted score
         // TIR (50%), Hypo Avoidance (30%), Stability (20%)
-        val tirScore = m.tir70_180 * 10.0
-        val hypoScore = (1.0 - (m.timeBelow70 * 5).coerceAtMost(1.0)) * 10.0 // penalized heavily
-        val hyperScore = (1.0 - m.timeAbove180) * 10.0
-        
+        val tir = m.tir70_180 ?: return null
+        val below70 = m.timeBelow70 ?: return null
+        val above180 = m.timeAbove180 ?: return null
+        val tirScore = tir * 10.0
+        val hypoScore = (1.0 - (below70 * 5).coerceAtMost(1.0)) * 10.0 // penalized heavily
+        val hyperScore = (1.0 - above180) * 10.0
+
         return (tirScore * 0.5) + (hypoScore * 0.3) + (hyperScore * 0.2)
     }
 
-    private fun classifySeverity(score: Double): AdvisorSeverity {
+    private fun classifySeverity(score: Double?): AdvisorSeverity? {
+        if (score == null) return null
         return when {
             score >= 7.0 -> AdvisorSeverity.Good
             score >= 4.0 -> AdvisorSeverity.Warning
@@ -444,7 +456,8 @@ class AimiAdvisorService {
         }
     }
 
-    private fun getAssessmentLabel(score: Double): String {
+    private fun getAssessmentLabel(score: Double?): String {
+        if (score == null) return notEnoughDataText()
         return when {
             score >= 8.5 -> rh?.gs(R.string.aimi_advisor_score_label_excellent) ?: "Excellent"
             score >= 7.0 -> rh?.gs(R.string.aimi_advisor_score_label_good) ?: "Good"
@@ -454,9 +467,36 @@ class AimiAdvisorService {
         }
     }
 
+    /** Plain sentence for "we could not measure this period". Falls back to English without [rh]. */
+    private fun notEnoughDataText(): String =
+        rh?.gs(R.string.aimi_adv_not_enough_data) ?: "Not enough glucose data for this period."
+
+    /**
+     * Context used when the service has no data source at all. Every metric is unknown on purpose:
+     * zeros would read as a patient with no lows and no highs.
+     */
     private fun getEmptyContext(): AdvisorContext {
         return AdvisorContext(
-            metrics = AdvisorMetrics("N/A",0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0,0,0, null, null),
+            metrics = AdvisorMetrics(
+                periodLabel = "N/A",
+                tir70_180 = null,
+                tir70_140 = null,
+                timeBelow70 = null,
+                timeBelow54 = null,
+                timeAbove180 = null,
+                timeAbove250 = null,
+                meanBg = null,
+                variabilityCv = null,
+                gmi = null,
+                tdd = null,
+                basalPercent = null,
+                hypoEvents = 0,
+                severeHypoEvents = 0,
+                hyperEvents = 0,
+                todayTir = null,
+                todayTdd = null,
+                dataSufficiency = AdvisorDataSufficiency.INSUFFICIENT,
+            ),
             profile = AimiProfileSnapshot(0.0,0.0,0.0,0.0, 5.0, 12.0),
             prefs = AimiPrefsSnapshot(0.0, 0.0, 0.0, 0.0, false, 0.065),
             pkpdPrefs = PkpdPrefsSnapshot(false,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0),
@@ -465,7 +505,11 @@ class AimiAdvisorService {
     }
 
     private fun formatSummary(m: AdvisorMetrics): String {
-        return "TIR: ${(m.tir70_180*100).toInt()}% | Hypos: ${(m.timeBelow70*100).toInt()}% | Mean: ${m.meanBg.toInt()}"
+        val tir = m.tir70_180
+        val below70 = m.timeBelow70
+        val mean = m.meanBg
+        if (tir == null || below70 == null || mean == null) return notEnoughDataText()
+        return "TIR: ${(tir*100).toInt()}% | Hypos: ${(below70*100).toInt()}% | Mean: ${mean.toInt()}"
     }
 
     /**
@@ -477,9 +521,14 @@ class AimiAdvisorService {
         oref: OrefAnalysisReport? = null,
     ): List<AimiRecommendation> {
         if (preferences == null) return emptyList()
+        // Never build advice on a guessed metric: with no real numbers we say nothing.
+        if (ctx.metrics.isInsufficient) return emptyList()
+        val meanBg = ctx.metrics.meanBg ?: return emptyList()
+        val timeBelow70 = ctx.metrics.timeBelow70 ?: return emptyList()
+        val timeAbove180 = ctx.metrics.timeAbove180 ?: return emptyList()
 
         val loopCtx = app.aaps.plugins.aps.openAPSAIMI.model.AimiPluginContext(
-            glucose = app.aaps.core.interfaces.aps.GlucoseStatusAIMI(glucose = ctx.metrics.meanBg),
+            glucose = app.aaps.core.interfaces.aps.GlucoseStatusAIMI(glucose = meanBg),
             profile = createDummyProfile(),
             iob = emptyList(),
             cob = 0.0,
@@ -542,7 +591,7 @@ class AimiAdvisorService {
                     ),
                 )
             }
-            if (autodriveV3Active && !htrEnabled && !rbtAuthorityEnabled && ctx.metrics.timeAbove180 > 0.22 && ctx.metrics.timeBelow70 < 0.05) {
+            if (autodriveV3Active && !htrEnabled && !rbtAuthorityEnabled && timeAbove180 > 0.22 && timeBelow70 < 0.05) {
                 recs.add(
                     AimiRecommendation(
                         titleResId = R.string.aimi_adv_rec_htr_enable_title,
@@ -558,7 +607,7 @@ class AimiAdvisorService {
                 )
             }
 
-            if (!reliefEnabled && ctx.metrics.timeAbove180 > 0.25 && ctx.metrics.timeBelow70 < 0.04) {
+            if (!reliefEnabled && timeAbove180 > 0.25 && timeBelow70 < 0.04) {
                 recs.add(
                     AimiRecommendation(
                         titleResId = R.string.aimi_adv_rec_pkpd_relief_enable_title,
@@ -574,7 +623,7 @@ class AimiAdvisorService {
                 )
             }
 
-            if (reliefEnabled && reliefMinFactor < 0.70 && ctx.metrics.timeAbove180 > 0.25 && ctx.metrics.timeBelow70 <= 0.045) {
+            if (reliefEnabled && reliefMinFactor < 0.70 && timeAbove180 > 0.25 && timeBelow70 <= 0.045) {
                 recs.add(
                     AimiRecommendation(
                         titleResId = R.string.aimi_adv_rec_pkpd_relief_factor_title,
@@ -591,7 +640,7 @@ class AimiAdvisorService {
                 )
             }
 
-            if (reliefEnabled && redCarpetRestore < 0.65 && ctx.metrics.timeAbove180 > 0.25 && ctx.metrics.timeBelow70 <= 0.045) {
+            if (reliefEnabled && redCarpetRestore < 0.65 && timeAbove180 > 0.25 && timeBelow70 <= 0.045) {
                 recs.add(
                     AimiRecommendation(
                         titleResId = R.string.aimi_adv_rec_redcarpet_restore_title,
@@ -608,7 +657,7 @@ class AimiAdvisorService {
                 )
             }
 
-            if (reliefEnabled && (maxIobFactor < 1.10 || maxIobExtra < 1.0) && ctx.metrics.timeAbove180 > 0.30 && ctx.metrics.timeBelow70 < 0.04) {
+            if (reliefEnabled && (maxIobFactor < 1.10 || maxIobExtra < 1.0) && timeAbove180 > 0.30 && timeBelow70 < 0.04) {
                 recs.add(
                     AimiRecommendation(
                         titleResId = R.string.aimi_adv_rec_priority_maxiob_title,
@@ -629,7 +678,7 @@ class AimiAdvisorService {
             }
 
             // Bidirectional: when hypos dominate, prefer lowering aggressive SMB headroom (not only ever-increasing factors).
-            if (reliefEnabled && reliefMinFactor > 0.76 && ctx.metrics.timeBelow70 > 0.055) {
+            if (reliefEnabled && reliefMinFactor > 0.76 && timeBelow70 > 0.055) {
                 val proposed = (reliefMinFactor - 0.06).coerceIn(0.50, 1.0)
                 if (proposed <= reliefMinFactor - 0.02) {
                     recs.add(
@@ -652,7 +701,7 @@ class AimiAdvisorService {
                 }
             }
 
-            if (reliefEnabled && redCarpetRestore > 0.72 && ctx.metrics.timeBelow70 > 0.055) {
+            if (reliefEnabled && redCarpetRestore > 0.72 && timeBelow70 > 0.055) {
                 val proposed = (redCarpetRestore - 0.05).coerceIn(0.50, 0.95)
                 if (proposed <= redCarpetRestore - 0.02) {
                     recs.add(
@@ -675,7 +724,7 @@ class AimiAdvisorService {
                 }
             }
 
-            if (reliefEnabled && maxIobFactor > 1.10 && ctx.metrics.timeBelow70 > 0.05) {
+            if (reliefEnabled && maxIobFactor > 1.10 && timeBelow70 > 0.05) {
                 val proposed = (maxIobFactor - 0.08).coerceIn(1.0, 1.6)
                 if (proposed <= maxIobFactor - 0.03) {
                     recs.add(
@@ -698,7 +747,7 @@ class AimiAdvisorService {
                 }
             }
 
-            if (reliefEnabled && maxIobExtra > 1.6 && ctx.metrics.timeBelow70 > 0.055) {
+            if (reliefEnabled && maxIobExtra > 1.6 && timeBelow70 > 0.055) {
                 val proposed = (maxIobExtra - 0.5).coerceIn(0.0, 5.0)
                 if (proposed <= maxIobExtra - 0.25) {
                     recs.add(
@@ -747,12 +796,14 @@ class AimiAdvisorService {
         recs: MutableList<AimiRecommendation>,
     ) {
         val prefs = preferences ?: return
+        if (ctx.metrics.isInsufficient) return
         if (oref == null || oref.dataSufficiency == OrefDataSufficiency.INSUFFICIENT) return
 
         val hypoFocus = oref.priority == OrefGlycemicPriority.HYPO || oref.priority == OrefGlycemicPriority.BOTH
         val hyperFocus = oref.priority == OrefGlycemicPriority.HYPER || oref.priority == OrefGlycemicPriority.BOTH
-        val hypoLoad = ctx.metrics.timeBelow70
-        val hyperLoad = ctx.metrics.timeAbove180
+        val hypoLoad = ctx.metrics.timeBelow70 ?: return
+        val hyperLoad = ctx.metrics.timeAbove180 ?: return
+        val basalPercent = ctx.metrics.basalPercent
         val mixedOref = hypoFocus && hyperFocus
 
         // ISF guidance: direction depends on whether lows, highs, or both dominate (avoid always “increase” framing).
@@ -798,7 +849,7 @@ class AimiAdvisorService {
             }
         }
 
-        if (hypoFocus && hypoLoad >= 0.04 && ctx.metrics.basalPercent >= 0.48 &&
+        if (hypoFocus && hypoLoad >= 0.04 && basalPercent != null && basalPercent >= 0.48 &&
             !(hyperFocus && hyperLoad > hypoLoad * 1.35)
         ) {
             recs.add(
@@ -808,7 +859,7 @@ class AimiAdvisorService {
                     priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.Medium,
                     domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                     action = null,
-                    descriptionArgs = listOf(percent(ctx.metrics.basalPercent).toString()),
+                    descriptionArgs = listOf(percent(basalPercent).toString()),
                 ),
             )
         }
@@ -827,7 +878,7 @@ class AimiAdvisorService {
         }
 
         if (ctx.pkpdPrefs.pkpdEnabled && (hypoFocus || hyperFocus) &&
-            (ctx.metrics.timeBelow70 >= 0.04 || ctx.metrics.timeAbove180 >= 0.10)
+            (hypoLoad >= 0.04 || hyperLoad >= 0.10)
         ) {
             recs.add(
                 AimiRecommendation(
@@ -841,7 +892,7 @@ class AimiAdvisorService {
         }
 
         if (prefs.get(BooleanKey.OApsAIMIautoDriveActive)) {
-            if (hypoFocus && ctx.metrics.timeBelow70 >= 0.055) {
+            if (hypoFocus && hypoLoad >= 0.055) {
                 recs.add(
                     AimiRecommendation(
                         titleResId = R.string.aimi_adv_rec_oref_autodrive_mpc_hypo_title,
@@ -854,7 +905,7 @@ class AimiAdvisorService {
                         ),
                     ),
                 )
-            } else if (hyperFocus && ctx.metrics.timeAbove180 >= 0.08 && ctx.metrics.timeBelow70 < 0.052) {
+            } else if (hyperFocus && hyperLoad >= 0.08 && hypoLoad < 0.052) {
                 recs.add(
                     AimiRecommendation(
                         titleResId = R.string.aimi_adv_rec_oref_autodrive_mpc_title,
@@ -902,10 +953,13 @@ class AimiAdvisorService {
         val sb = StringBuilder()
         
         if (rh != null) {
-            // Introduction based on score
-            if (report.overallScore >= 8.5) {
+            // Introduction based on score. No score means we could not measure the period.
+            val score = report.overallScore
+            if (score == null) {
+                sb.append(notEnoughDataText() + "\n\n")
+            } else if (score >= 8.5) {
                 sb.append(rh.gs(R.string.aimi_adv_analysis_intro_excellent) + "\n\n")
-            } else if (report.overallScore >= 5.5) {
+            } else if (score >= 5.5) {
                 sb.append(rh.gs(R.string.aimi_adv_analysis_intro_good) + "\n\n")
             } else {
                 sb.append(rh.gs(R.string.aimi_adv_analysis_intro_poor) + "\n\n")
@@ -1038,12 +1092,23 @@ class AimiAdvisorService {
         return header + lines + "\n"
     }
 
+    /**
+     * Basal scaling factor for the proposal. With no measured period the factor is 1.0 (hold),
+     * so an unknown history can never push the proposed basal up or down.
+     */
     private fun computeBasalProposalFactor(metrics: AdvisorMetrics): Triple<Double, String, String> {
+        val below54 = metrics.timeBelow54
+        val below70 = metrics.timeBelow70
+        val above180 = metrics.timeAbove180
+        val tir = metrics.tir70_180
+        if (metrics.isInsufficient || below70 == null) {
+            return Triple(1.00, "NO_DATA", "Not enough glucose data in the lookback window")
+        }
         return when {
-            metrics.timeBelow54 >= 0.01 || metrics.timeBelow70 >= 0.06 -> {
+            (below54 != null && below54 >= 0.01) || below70 >= 0.06 -> {
                 Triple(0.95, "SAFETY_REDUCTION", "Hypo pressure detected in lookback window")
             }
-            metrics.timeAbove180 >= 0.35 && metrics.tir70_180 < 0.60 && metrics.timeBelow70 <= 0.03 -> {
+            above180 != null && tir != null && above180 >= 0.35 && tir < 0.60 && below70 <= 0.03 -> {
                 Triple(1.06, "GENTLE_INCREASE", "Persistent hyperglycemia with low hypo pressure")
             }
             else -> {
@@ -1177,7 +1242,7 @@ class AimiAdvisorService {
             
             // Metabolic
             val mean = if(bgReadings.isNotEmpty()) bgReadings.average() else 0.0
-            val stdDev = if(bgReadings.isNotEmpty()) kotlin.math.sqrt(bgReadings.map { (it-mean)*(it-mean) }.sum() / bgReadings.size) else 0.0
+            val stdDev = if(bgReadings.isNotEmpty()) sqrt(bgReadings.map { (it-mean)*(it-mean) }.sum() / bgReadings.size) else 0.0
             val cv = if(mean > 0) stdDev/mean * 100 else 0.0
             
             // LBGI
@@ -1195,13 +1260,14 @@ class AimiAdvisorService {
                 put("gmi", 3.31 + 0.02392 * mean)
                 put("cv", cv)
                 put("lbgi", lbgi)
-                put("tir", metrics.tir70_180)
+                // JSONObject.NULL keeps the key visible and honest: the value was not measured.
+                put("tir", metrics.tir70_180 ?: JSONObject.NULL)
             })
             
             stats.put("advisor_metrics", JSONObject().apply {
-                put("hypos", metrics.timeBelow70)
-                put("hypers", metrics.timeAbove180)
-                put("basalRatio", metrics.basalPercent)
+                put("hypos", metrics.timeBelow70 ?: JSONObject.NULL)
+                put("hypers", metrics.timeAbove180 ?: JSONObject.NULL)
+                put("basalRatio", metrics.basalPercent ?: JSONObject.NULL)
             })
 
             return stats.toString(2)

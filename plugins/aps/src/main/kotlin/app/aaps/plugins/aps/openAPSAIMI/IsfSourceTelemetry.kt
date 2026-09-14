@@ -148,6 +148,35 @@ object IsfSourceTelemetry {
     }
 
     /**
+     * Verdict of the stress-ISF-floor signature for the current tick, and what it would cost.
+     *
+     * The sensitivity is commanded in `OpenAPSAIMIPlugin`, but the decision snapshot is assembled in
+     * `DetermineBasalAIMI2`, which never sees that value. This object is already the side channel the
+     * ISF chain uses for exactly that hand-over (see [lastProfileStaticMgdl] and
+     * [lastPhysioIsfFactor]), so the three fields below travel the same way rather than adding a field
+     * to `OapsProfileAimi`, which is a dosing input and not a place for observation.
+     *
+     * Written on every tick, armed or not: the gesture has to be measurable before it is armed.
+     * Exported as `baseline_state.stress_isf_floor_*`. Never read by a dose calculation.
+     */
+    @Volatile var lastStressIsfFloorActive: Boolean? = null; private set
+    @Volatile var lastStressIsfFloorReason: String? = null; private set
+
+    /**
+     * Sensitivity that **would** be commanded with the floor at 1.0 x profile, mg/dL per U.
+     *
+     * `null` unless the signature is active and that value really differs from the commanded one, so a
+     * missing field means "nothing to see", never "zero".
+     */
+    @Volatile var lastStressIsfFloorIsfMgdl: Double? = null; private set
+
+    fun recordStressIsfFloor(active: Boolean, reason: String, flooredIsfMgdl: Double?) {
+        lastStressIsfFloorActive = active
+        lastStressIsfFloorReason = reason
+        lastStressIsfFloorIsfMgdl = flooredIsfMgdl?.takeIf { it.isFinite() }
+    }
+
+    /**
      * Lower bound of the shadow exit clamp, as a fraction of the profile ISF.
      *
      * Today the only relative bound in the whole chain lives inside `DynIsfTrajectoryTuning`

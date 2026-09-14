@@ -61,6 +61,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.net.toUri
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
@@ -133,6 +134,10 @@ import app.aaps.core.ui.compose.preference.LocalHashPassword
 import app.aaps.core.ui.compose.preference.LocalVisibilityContext
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopRuntimeGuard
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiProfileAdvisorActivity
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorReportActivity
+import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.MealAdvisorActivity
+import app.aaps.plugins.aps.openAPSAIMI.context.ui.ContextActivity
 import app.aaps.core.ui.compose.pump.PumpActivityDialog
 import app.aaps.core.ui.compose.pump.PumpCommunicationStatus
 import app.aaps.core.ui.locale.LocaleHelper
@@ -144,6 +149,12 @@ import app.aaps.implementation.protection.BiometricCheck
 import app.aaps.plugins.automation.AutomationRuntime
 import app.aaps.plugins.configuration.setupwizard.SWDefinition
 import app.aaps.plugins.main.general.manual.UserManualActivity
+import app.aaps.plugins.main.general.dashboard.DashboardV2ToolAction
+import app.aaps.plugins.main.general.dashboard.DashboardV2ToolDestination
+import app.aaps.plugins.main.general.dashboard.glass.GlassLoopDashboardViewModel
+import app.aaps.plugins.main.general.dashboard.viewmodel.OverviewViewModel
+import app.aaps.plugins.main.skins.DashboardHomeVariant
+import app.aaps.plugins.main.skins.DashboardHomeVariantResolver
 import app.aaps.plugins.main.skins.SkinDashboardPreferenceSync
 import app.aaps.plugins.main.skins.SkinProvider
 import app.aaps.plugins.source.DexcomPlugin
@@ -228,6 +239,7 @@ class ComposeMainActivity : AppCompatActivity() {
     @Inject lateinit var objectives: Objectives
     @Inject lateinit var graphViewModelFactory: GraphViewModel.Factory
     @Inject lateinit var chipsViewModelFactory: ChipsViewModel.Factory
+    @Inject lateinit var overviewViewModelFactory: OverviewViewModel.Factory
     @Inject lateinit var overviewDataCache: OverviewDataCache
 
     private var accessTree: ActivityResultLauncher<Uri?>? = null
@@ -248,7 +260,15 @@ class ComposeMainActivity : AppCompatActivity() {
     private val chipsViewModel: ChipsViewModel by viewModels {
         viewModelFactory { initializer { chipsViewModelFactory.create(overviewDataCache) } }
     }
+    // Keyed the same as AimiDashboardComposeRootView.VIEW_MODEL_KEY ("AimiDashboardCompose") so this is
+    // the SAME instance the dashboard's own DashboardShellController.start()s and keeps refreshed — a
+    // default-keyed `by viewModels()` here would create a second, never-started instance whose
+    // statusCardState LiveData is never populated.
+    private val overviewViewModel: OverviewViewModel by lazy {
+        ViewModelProvider(this, overviewViewModelFactory)["AimiDashboardCompose", OverviewViewModel::class.java]
+    }
     private val treatmentsViewModel: TreatmentsViewModel by viewModels()
+    private val glassLoopDashboardViewModel: GlassLoopDashboardViewModel by viewModels()
     private val insulinManagementViewModel: InsulinManagementViewModel by viewModels()
     private val tempTargetManagementViewModel: TempTargetManagementViewModel by viewModels()
     private val quickWizardManagementViewModel: QuickWizardManagementViewModel by viewModels()
@@ -653,7 +673,12 @@ class ComposeMainActivity : AppCompatActivity() {
         // Keep skin collector alive for the whole shell (not only when Main is composed),
         // so changes made from Preferences still update flows before returning home.
         val generalSkin by preferences.observe(StringKey.GeneralSkin).collectAsStateWithLifecycle()
-        val showHybridDashboard = storedSkinPrefersDashboardHome(generalSkin)
+        val dashboardHomeVariant = DashboardHomeVariantResolver.resolve(
+            storedSkinName = generalSkin,
+            availableSkins = skinProvider.list,
+            fallbackSkin = skinProvider.activeSkin(),
+        )
+        val showDashboardHome = dashboardHomeVariant != DashboardHomeVariant.OVERVIEW
 
         NavHost(
             navController = navController,
@@ -664,6 +689,11 @@ class ComposeMainActivity : AppCompatActivity() {
                 val calcProgress by mainViewModel.calcProgressFlow.collectAsStateWithLifecycle()
                 val notifications by notificationManager.notifications.collectAsStateWithLifecycle()
                 val quickLaunchItems by mainViewModel.quickLaunchItems.collectAsStateWithLifecycle()
+                val availablePluginClassNames = activePlugin.getPluginsList()
+                    .asSequence()
+                    .filter(PluginBase::hasComposeContent)
+                    .map { it.javaClass.simpleName }
+                    .toSet()
 
                 // Pump setup button in bottom bar
                 val pumpPlugin = activePlugin.activePumpInternal as PluginBase
@@ -721,7 +751,7 @@ class ComposeMainActivity : AppCompatActivity() {
                 }
 
 
-                key(showHybridDashboard, generalSkin) {
+                key(dashboardHomeVariant, generalSkin) {
                     MainScreen(
                     mainViewModel = mainViewModel,
                     uiState = state,
@@ -833,16 +863,35 @@ class ComposeMainActivity : AppCompatActivity() {
                         }
                     },
                     useRingHeroHome = false,
-                    dashboardOverview = if (showHybridDashboard) {
+                    dashboardOverview = if (showDashboardHome) {
                         { pad, fab ->
                             DashboardOverviewHost(
                                 paddingValues = pad,
                                 fabBottomOffset = fab,
+                                dashboardHomeVariant = dashboardHomeVariant,
+                                availablePluginClassNames = availablePluginClassNames,
+                                onToolAction = { action ->
+                                    when (val destination = action.destination) {
+                                        DashboardV2ToolDestination.Actions -> manageSheetState.show()
+                                        is DashboardV2ToolDestination.Element -> handleNavigationRequest(
+                                            NavigationRequest.Element(destination.type),
+                                            navController,
+                                        )
+
+                                        is DashboardV2ToolDestination.Plugin -> handleNavigationRequest(
+                                            NavigationRequest.Plugin(destination.className),
+                                            navController,
+                                        )
+
+                                        is DashboardV2ToolDestination.AimiActivity -> launchDashboardV2Aimi(action)
+                                    }
+                                },
                             )
                         }
                     } else {
                         null
                     },
+                    isGlassSkin = dashboardHomeVariant == DashboardHomeVariant.GLASS,
                 )
                 }
             }
@@ -860,9 +909,11 @@ class ComposeMainActivity : AppCompatActivity() {
                 configurationViewModel = configurationViewModel,
                 treatmentsViewModel = treatmentsViewModel,
                 statsViewModel = statsViewModel,
+                glassLoopDashboardViewModel = glassLoopDashboardViewModel,
                 siteRotationManagementViewModel = siteRotationManagementViewModel,
                 graphViewModel = graphViewModel,
                 chipsViewModel = chipsViewModel,
+                overviewViewModel = overviewViewModel,
                 swDefinition = swDefinition,
                 rxBus = rxBus,
                 activePlugin = activePlugin,
@@ -901,6 +952,7 @@ class ComposeMainActivity : AppCompatActivity() {
                         navController.navigate(route) { launchSingleTop = true }
                     }
                 },
+                onOpenAimiContext = { launchDashboardV2Aimi(DashboardV2ToolAction.AIMI_CONTEXT) },
             )
         }
 
@@ -993,21 +1045,18 @@ class ComposeMainActivity : AppCompatActivity() {
         val deferMs = AimiLoopRuntimeGuard.overviewRefreshDeferMs()
         window.decorView.postDelayed({
             if (isDestroyed) return@postDelayed
-            if (storedSkinPrefersDashboardHome(preferences.get(StringKey.GeneralSkin))) {
+            val dashboardHomeVariant = DashboardHomeVariantResolver.resolve(
+                storedSkinName = preferences.get(StringKey.GeneralSkin),
+                availableSkins = skinProvider.list,
+                fallbackSkin = skinProvider.activeSkin(),
+            )
+            if (dashboardHomeVariant != DashboardHomeVariant.OVERVIEW) {
                 rxBus.send(EventRefreshOverview("ComposeMainActivity.afterChildFragmentsResume", now = true))
                 activePlugin.activeOverview.overviewBus.send(
                     EventUpdateOverviewIobCob("ComposeMainActivity.afterChildFragmentsResume"),
                 )
             }
         }, deferMs)
-    }
-
-    private fun storedSkinPrefersDashboardHome(storedGeneralSkin: String): Boolean {
-        val skins = skinProvider.list
-        val skin = skins.firstOrNull { it.javaClass.name == storedGeneralSkin }
-            ?: skins.firstOrNull { it.javaClass.simpleName == storedGeneralSkin }
-            ?: skinProvider.activeSkin()
-        return skin.prefersDashboardHome
     }
 
     override fun onStart() {
@@ -1287,6 +1336,7 @@ class ComposeMainActivity : AppCompatActivity() {
             }
 
             ElementType.PUMP                    -> handlePluginClick(activePlugin.activePumpInternal as PluginBase)
+            ElementType.BGSOURCE                -> handlePluginClick(activePlugin.activeBgSource as PluginBase)
 
             // Non-searchable types — listed explicitly so the compiler catches new enum values
             ElementType.QUICK_WIZARD,
@@ -1307,5 +1357,22 @@ class ComposeMainActivity : AppCompatActivity() {
             navController?.navigate(AppRoute.PluginContent.createRoute(pluginIndex))
         }
     }
-}
 
+    private fun launchDashboardV2Aimi(action: DashboardV2ToolAction) {
+        val destination = action.destination as? DashboardV2ToolDestination.AimiActivity ?: return
+        withProtection(destination.protection) {
+            try {
+                val activityClass = when (action) {
+                    DashboardV2ToolAction.ADVISOR        -> AimiProfileAdvisorActivity::class.java
+                    DashboardV2ToolAction.MEAL_ADVISOR   -> MealAdvisorActivity::class.java
+                    DashboardV2ToolAction.AIMI_CONTEXT   -> ContextActivity::class.java
+                    DashboardV2ToolAction.AUDITOR_REPORT -> AuditorReportActivity::class.java
+                    else                                 -> return@withProtection
+                }
+                startActivity(Intent(this, activityClass))
+            } catch (error: Exception) {
+                aapsLogger.error(LTag.CORE, "Failed to launch DASHBOARD_V2 ${action.name}: ${error.message}")
+            }
+        }
+    }
+}

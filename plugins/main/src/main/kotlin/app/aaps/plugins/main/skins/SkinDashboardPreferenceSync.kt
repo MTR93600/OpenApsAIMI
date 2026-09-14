@@ -8,7 +8,7 @@ import javax.inject.Singleton
 /**
  * Ensures [StringKey.GeneralSkin] has a persisted canonical value on startup.
  *
- * Compose home routing is skin-driven via [SkinInterface.prefersDashboardHome]. The
+ * Compose home routing is skin-driven via [SkinInterface.dashboardHomeVariant]. The
  * [app.aaps.core.keys.BooleanKey.OverviewUseDashboardLayout] toggle remains a legacy/classic-UI preference and
  * must not be forced from skin selection in Compose mode.
  */

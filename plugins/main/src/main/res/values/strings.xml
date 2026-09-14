@@ -203,6 +203,98 @@
     <string name="buttonson_description">Buttons are always displayed on bottom of screen</string>
     <string name="largedisplay_description">Large display</string>
     <string name="minimal_skin_description">New skin dashboard</string>
+    <string name="glass_skin_description">GLASS</string>
+    <string name="dashboard_v2_reservoir">Reservoir</string>
+    <string name="dashboard_v2_battery">Battery</string>
+    <string name="dashboard_glass_loop_label">Loop</string>
+    <string name="dashboard_glass_iob_label">IOB</string>
+    <string name="dashboard_glass_target_label">Target</string>
+    <string name="dashboard_glass_basal_t_label">Basal T</string>
+    <string name="dashboard_glass_last_bolus_label">Last Bolus</string>
+    <string name="dashboard_glass_last_carbs_label">Last Carbs</string>
+    <string name="dashboard_glass_personalize_title">Personalize</string>
+    <string name="dashboard_glass_personalize_button">Personalize</string>
+    <string name="dashboard_glass_personalize_empty_hint">Nothing selected. These items stay hidden on the main screen until you pick at least one below.</string>
+    <string name="dashboard_glass_personalize_section_main_screen">Main screen</string>
+    <string name="dashboard_glass_personalize_section_tools">Tools screen</string>
+    <string name="dashboard_glass_activity_label">Activity</string>
+    <string name="dashboard_glass_tools_label">Tools</string>
+    <string name="dashboard_glass_personalize_pump_label">Pump</string>
+    <string name="dashboard_glass_personalize_cannula_label">Cannula</string>
+    <string name="dashboard_glass_personalize_battery_label">Battery</string>
+    <string name="dashboard_glass_personalize_sensor_label">Sensor</string>
+    <string name="dashboard_glass_activity_value" comment="%1$s=step count e.g. 4200, %2$s=heart rate in bpm e.g. 72">%1$s · %2$s bpm</string>
+    <string name="dashboard_glass_loop_dashboard_title">Loop Dashboard</string>
+    <string name="dashboard_glass_sensor_quality_title">Sensor Quality</string>
+    <string name="dashboard_glass_sensor_quality_empty">No smoothing quality data available. This screen shows data only when the active smoothing plugin reports it.</string>
+    <string name="dashboard_glass_pump_detail_title">Pump</string>
+    <string name="dashboard_glass_battery_detail_title">Battery</string>
+    <string name="dashboard_glass_loop_dashboard_last_run" comment="%1$s=time, e.g. 14:32">Last run: %1$s</string>
+    <string name="dashboard_glass_loop_dashboard_pump_label">PUMP</string>
+    <string name="dashboard_glass_loop_dashboard_requested" comment="%1$s=insulin amount with unit, e.g. 0.50 U">%1$s requested</string>
+    <string name="dashboard_glass_loop_dynamics_title">Glucose &amp; Insulin Dynamics</string>
+    <string name="dashboard_glass_loop_glucose_label">GLUCOSE</string>
+    <string name="dashboard_glass_loop_delta_5m_label" comment="e.g. -1.20 5m delta">5m delta</string>
+    <string name="dashboard_glass_loop_delta_avg_label">DELTA (SHORT / LONG)</string>
+    <string name="dashboard_glass_loop_delta_avg_hint">5m / 15m avg</string>
+    <string name="dashboard_glass_loop_iob_label">IOB</string>
+    <string name="dashboard_glass_loop_iob_hint">Active Insulin</string>
+    <string name="dashboard_glass_loop_target_label">TARGET</string>
+    <string name="dashboard_glass_loop_tdd_label">TDD 7 Days</string>
+    <string name="dashboard_glass_loop_trajectory_title">Trajectory</string>
+    <string name="dashboard_glass_loop_trajectory_hybrid_label">Predicted (4h)</string>
+    <string name="dashboard_glass_loop_trajectory_iob_label" comment="Predicted BG from the insulin-only projection curve, not an insulin amount">Insulin-only BG</string>
+    <string name="dashboard_glass_loop_trajectory_cob_label" comment="Predicted BG from the carbs-only projection curve, not a carb amount">Carbs-only BG</string>
+    <string name="dashboard_glass_loop_trajectory_stale">No recent prediction available.</string>
+    <string name="dashboard_glass_loop_physio_title">Physio</string>
+    <string name="dashboard_glass_loop_physio_mode_label">Mode</string>
+    <string name="dashboard_glass_loop_physio_intent_label">Intent</string>
+    <string name="dashboard_glass_loop_physio_thermal_label">Thermal</string>
+    <string name="dashboard_glass_loop_physio_open_context">Open AIMI Context</string>
+    <string name="dashboard_glass_loop_physio_stale">No recent physio snapshot available.</string>
+    <string name="dashboard_glass_loop_key_factors_title">Key Factors</string>
+    <string name="dashboard_glass_loop_max_iob_label">MAX IOB</string>
+    <string name="dashboard_glass_loop_max_smb_label">MAX SMB</string>
+    <string name="dashboard_glass_loop_isf_label">ISF SENSITIVITY</string>
+    <string name="dashboard_glass_loop_isf_value" comment="%1$s=ISF value with one decimal e.g. 42.3, %2$s=unit e.g. mg/dL/U">%1$.1f %2$s</string>
+    <string name="dashboard_glass_loop_stable_bg_label">BG STABLE</string>
+    <string name="dashboard_glass_loop_weekday">Weekday</string>
+    <string name="dashboard_glass_loop_weekend">Weekend</string>
+    <string name="dashboard_glass_loop_hour_badge" comment="%1$s=2-digit hour e.g. 14, %2$s=Weekday or Weekend">%1$sh • %2$s</string>
+    <string name="dashboard_glass_loop_ml_training_title">ML Training</string>
+    <string name="dashboard_glass_loop_ml_last_trained_label">Last trained</string>
+    <string name="dashboard_glass_loop_ml_samples_label">Samples</string>
+    <string name="dashboard_glass_loop_ml_circuit_open">Training paused (cooling down after recent failures)</string>
+    <string name="dashboard_glass_loop_ml_circuit_closed">Training active</string>
+    <string name="dashboard_glass_loop_ml_never_trained">Never trained yet</string>
+    <string name="dashboard_glass_loop_ml_training_stale">Training subsystem not started yet</string>
+    <string name="dashboard_glass_loop_ml_files_title">Model Files</string>
+    <string name="dashboard_glass_loop_ml_file_basal_label">Basal model</string>
+    <string name="dashboard_glass_loop_ml_file_smb_label">SMB model</string>
+    <string name="dashboard_glass_loop_ml_file_missing">Not created yet</string>
+    <string name="dashboard_glass_loop_safety_title">Safety &amp; Alarms</string>
+    <string name="dashboard_glass_loop_tir_low_label">Low TIR (1h / Today)</string>
+    <string name="dashboard_glass_loop_tir_low_value" comment="%1$s=percent e.g. 5%%, %2$s=percent e.g. 8%%">%1$s / %2$s</string>
+    <string name="dashboard_glass_loop_steps_label">Recent Activity / Steps</string>
+    <string name="dashboard_glass_loop_steps_5m" comment="%1$d=step count">%1$d steps (5m)</string>
+    <string name="dashboard_glass_loop_footer" comment="%1$s=insulin amount with unit e.g. 0.50 U, %2$s=app version e.g. 3.5.0">Requested %1$s to pump • %2$s</string>
+    <string name="dashboard_v2_tools_title">Tools</string>
+    <string name="dashboard_v2_tools_aimi_section">AIMI</string>
+    <string name="dashboard_v2_tools_unavailable">Unavailable in this build</string>
+    <string name="dashboard_v2_tool_actions">Actions</string>
+    <string name="dashboard_v2_tool_rapid_acting">Rapid-Acting Oref</string>
+    <string name="dashboard_v2_tool_profile">Profile</string>
+    <string name="dashboard_v2_tool_automation">Automation</string>
+    <string name="dashboard_v2_tool_nsclient">NSClient</string>
+    <string name="dashboard_v2_tool_tidepool">Tidepool</string>
+    <string name="dashboard_v2_tool_xdrip">xDrip+</string>
+    <string name="dashboard_v2_tool_maintenance">Maintenance</string>
+    <string name="dashboard_v2_tool_xdrip_bg">xDrip+ BG</string>
+    <string name="dashboard_v2_tool_sensor">Sensor</string>
+    <string name="dashboard_v2_tool_advisor">Advisor</string>
+    <string name="dashboard_v2_tool_meal_advisor">Meal Advisor</string>
+    <string name="dashboard_v2_tool_aimi_context">AIMI Context</string>
+    <string name="dashboard_v2_tool_auditor_report">Auditor report</string>
     <string name="notification_iob_short">%1$.1fU</string>
 
     <string name="suspendloopfor1h">Suspend loop for 1h</string>
@@ -432,4 +524,3 @@
     <string name="aimi_adaptation_metric_value_units" comment="%1$.2f=insulin units. Example: 0.50 U">%1$.2f U</string>
     <string name="aimi_adaptation_metric_value_mgdl" comment="%1$.1f=a glucose prediction error in mg/dL. Example: 12.5 mg/dL">%1$.1f mg/dL</string>
 </resources>
-

@@ -43,6 +43,19 @@ sealed class AppRoute(val route: String) {
     }
 
     data object Stats : AppRoute("stats")
+    data object GlassLoopDashboard : AppRoute("glass_loop_dashboard")
+    data object GlassSensorQuality : AppRoute("glass_sensor_quality")
+    data object GlassPumpDetail : AppRoute("glass_pump_detail")
+    data object GlassBatteryDetail : AppRoute("glass_battery_detail")
+    data object GlassInsulinDetail : AppRoute("glass_insulin_detail")
+    data object GlassCannulaDetail : AppRoute("glass_cannula_detail")
+    data object GlassBasalDetail : AppRoute("glass_basal_detail")
+    data object GlassTargetDetail : AppRoute("glass_target_detail")
+    data object GlassLoopDetail : AppRoute("glass_loop_detail")
+    data object GlassSensorInsertDetail : AppRoute("glass_sensor_insert_detail/{eventTypeOrdinal}") {
+
+        fun createRoute(eventTypeOrdinal: Int) = "glass_sensor_insert_detail/$eventTypeOrdinal"
+    }
     data object ProfileHelper : AppRoute("profile_helper")
     data object HistoryBrowser : AppRoute("history_browser")
     data object Preferences : AppRoute("preferences")

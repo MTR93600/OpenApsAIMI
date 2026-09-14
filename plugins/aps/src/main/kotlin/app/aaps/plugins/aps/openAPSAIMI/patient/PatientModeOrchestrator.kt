@@ -28,7 +28,7 @@ enum class PatientStrategyHint {
     PKPD_REASSESS,
 }
 
-internal object PatientModeOrchestrator {
+object PatientModeOrchestrator {
 
     data class Decision(
         val mode: PatientMode,

@@ -28,4 +28,11 @@
     <string name="cal_remove_entry_title">Remove entry?</string>
     <string name="cal_remove_entry_message">This will invalidate the entry. The fit will be recalculated.</string>
     <string name="cal_chart_entry_readout">Entry %1$d/%2$d · %3$s · sensor %4$s → BG %5$s</string>
+
+    <!-- Calibration health notifications: proactive, dismissed once the situation resolves. Only
+         one of these is ever shown at a time. -->
+    <string name="cal_notify_need_more_entries">Add a fingerstick calibration to activate sensor correction. For the best result: wait until warm-up is over, calibrate while your glucose is steady (not rising or falling fast), and use a fresh, careful meter reading. At least 2 calibrations are needed, ideally at different glucose levels.</string>
+    <string name="cal_notify_unsafe_fit">Your recent calibrations gave an inconsistent result and are not applied — the sensor is showing uncorrected values. Add a new calibration while your glucose is steady; double-check your meter reading, since a single inaccurate fingerstick can throw this off.</string>
+    <string name="cal_notify_narrow_range">Your calibrations are all close in glucose value, so only a basic correction can be applied. Add one the next time your glucose is clearly higher or lower than usual — spreading calibrations across different levels makes the correction accurate across your whole range, not just around one value.</string>
+    <string name="cal_notify_stale">It\'s been a while since your last calibration. Sensors can drift over their wear time, so adding a fresh calibration now — while your glucose is steady — helps keep the correction accurate for the rest of the session.</string>
 </resources>

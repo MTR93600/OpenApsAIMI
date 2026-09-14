@@ -13,7 +13,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,12 +36,14 @@ import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.Translator
 import app.aaps.core.objects.extensions.highValueToUnitsToString
 import app.aaps.core.objects.extensions.lowValueToUnitsToString
-import app.aaps.core.ui.compose.AapsCard
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalDateUtil
 import app.aaps.core.ui.compose.LocalProfileUtil
 import app.aaps.core.ui.compose.ToolbarConfig
 import app.aaps.core.ui.compose.dialogs.OkCancelDialog
+import app.aaps.core.ui.compose.glass.GlassCard
+import app.aaps.core.ui.compose.glass.GlassColors
+import app.aaps.core.ui.compose.glass.isGlassDarkMode
 import app.aaps.core.ui.compose.icons.Ns
 import app.aaps.ui.compose.components.ContentContainer
 import app.aaps.ui.compose.treatments.viewmodels.TempTargetViewModel
@@ -66,6 +67,7 @@ fun TempTargetScreen(
     onNavigateBack: () -> Unit = { }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isDark = isGlassDarkMode()
 
     // Dialog state
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -107,7 +109,9 @@ fun TempTargetScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             ContentContainer(
                 isLoading = uiState.isLoading,
-                isEmpty = uiState.tempTargets.isEmpty()
+                isEmpty = uiState.tempTargets.isEmpty(),
+                emptyIconTint = GlassColors.textMuted(isDark).copy(alpha = 0.6f),
+                emptyTextColor = GlassColors.textMuted(isDark)
             ) {
                 val haptic = LocalHapticFeedback.current
 
@@ -116,6 +120,8 @@ fun TempTargetScreen(
                     getTimestamp = { it.timestamp },
                     getItemKey = { it.id },
                     rh = viewModel.rh,
+                    headerBackgroundColor = GlassColors.screenBgTop(isDark),
+                    headerTextColor = GlassColors.skyBlue,
                     itemContent = { tt ->
                         TempTargetItem(
                             tempTarget = tt,
@@ -164,11 +170,13 @@ private fun TempTargetItem(
     translator: Translator,
     decimalFormatter: DecimalFormatter
 ) {
+    val isDark = isGlassDarkMode()
     val profileUtil = LocalProfileUtil.current
     val dateUtil = LocalDateUtil.current
     val units = profileUtil.units
 
-    AapsCard(
+    GlassCard(
+        isDark = isDark,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 2.dp)
@@ -212,7 +220,7 @@ private fun TempTargetItem(
                 color = when {
                     isActive -> Color(AapsTheme.generalColors.activeInsulinText.value)
                     isFuture -> Color(AapsTheme.generalColors.futureRecord.value)
-                    else     -> MaterialTheme.colorScheme.onSurface
+                    else     -> GlassColors.textBright(isDark)
                 }
             )
 

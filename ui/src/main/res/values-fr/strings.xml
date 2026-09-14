@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dashboard_v2_nav_main">Accueil</string>
+    <string name="dashboard_v2_nav_tools">Outils</string>
+    <string name="dashboard_v2_nav_bolus">Bolus</string>
+    <string name="dashboard_v2_nav_configuration">Config</string>
+    <string name="dashboard_v2_nav_preferences">Préférences</string>
+</resources>

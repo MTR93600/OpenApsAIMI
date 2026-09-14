@@ -108,6 +108,46 @@ class GlucoseCorrectionImplTest : TestBaseWithProfile() {
         assertThat(sut.correctedMgdl(head, 200.0)).isNull()
     }
 
+    // ---- whole mg/dL on the way out -------------------------------------------------------------
+
+    /**
+     * The bug seen on Nightscout on 2026-09-13: `sgv` read 83.17856343415423 while the phone showed
+     * 83. Both sensors build their reading from an `Int`, so before calibration existed the value
+     * sent out was always whole and nothing on the way out ever rounded.
+     */
+    @Test
+    fun `an interpolated reading comes back whole`() {
+        givenSeries(80.0, 90.0)
+        // Two minutes past the older point of a five minute span: 90 - (2 / 5) * 10 = 86.0 exactly,
+        // so shift by one more second to land on a value that is not whole.
+        val value = sut.correctedMgdl(head - T.mins(3).msecs() + T.secs(1).msecs(), 85.0)
+        assertThat(value).isNotNull()
+        assertThat(value).isEqualTo(value!!.toLong().toDouble())
+    }
+
+    @Test
+    fun `a corrected value with decimals is rounded to the nearest whole number`() {
+        givenSeries(83.17856343415423)
+        assertThat(sut.correctedMgdl(head, 83.0)).isEqualTo(83.0)
+
+        givenSeries(83.6)
+        assertThat(sut.correctedMgdl(head, 83.0)).isEqualTo(84.0)
+    }
+
+    /** Rounding happens after the plausibility net, so the net keeps working on the exact value. */
+    @Test
+    fun `rounding does not let an implausible correction through`() {
+        // 38.6 is under the 39 floor. Rounding it first would have made it 39 and let it pass.
+        givenSeries(38.6)
+        assertThat(sut.correctedMgdl(head, 56.0)).isNull()
+    }
+
+    @Test
+    fun `rounding does not change a correction that is already whole`() {
+        givenSeries(65.0, 70.0, 75.0)
+        assertThat(sut.correctedMgdl(head, 56.0)).isEqualTo(65.0)
+    }
+
     @Test
     fun `series without smoothing falls back to the calibrated value`() {
         whenever(autosensDataStore.getBucketedDataTableCopy())

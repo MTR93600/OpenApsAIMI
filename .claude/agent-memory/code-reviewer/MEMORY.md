@@ -69,9 +69,18 @@
 
 ## See Also
 
+- `dashboard-v2-protection-bypass.md` — `openComposeMainAtRoute` is a RAW unprotected nav
+  escape hatch (no `navigateProtected`/`withProtection`); checklist for verifying new
+  one-tap shortcuts to CARBS/BOLUS_WIZARD/QUICK_WIZARD_MANAGEMENT/TEMP_TARGET_MANAGEMENT
+  (all default `protection = BOLUS`) go through the protected path, not this one.
+
+
 - `equil-migration.md` — detailed Equil Compose migration review (2026-03-09)
 - Earlier migration reviews (NSClient, Tidepool, Wear, SMS, Preferences, EOPatch2): see conversation
   history from 2026-03-01 and 2026-03-02.
 - `aimi-pkpd-egp-review.md` — AIMI PKPD/EGP endogenous-reversion prediction path (Guard A/B
   review, 2026-07-22): where the physics live, the stale-baseline-constant fragility in
   `PkpdSoftFloorPathMin`, safe cap-pattern reference, test conventions.
+- `vico-chart-markers.md` — Vico 3.3.0 `CartesianMarkerController` contract verified against the
+  real sources jar (Gradle cache has them, don't decompile); recurring "stale tooltip after a
+  swallowed interaction" bug pattern in `ui/compose/overview/graphs/BgGraphCompose.kt` (2026-09-10).

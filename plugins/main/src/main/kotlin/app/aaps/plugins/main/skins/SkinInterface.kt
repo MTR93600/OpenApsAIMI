@@ -16,11 +16,8 @@ interface SkinInterface {
     val mainGraphHeight: Int // in dp
     val secondaryGraphHeight: Int // in dp
 
-    /**
-     * When true, choosing this skin syncs [app.aaps.core.keys.BooleanKey.OverviewUseDashboardLayout]
-     * (AIMI hybrid dashboard vs legacy overview home).
-     */
-    val prefersDashboardHome: Boolean get() = false
+    /** Home renderer selected by this skin in the Compose main shell. */
+    val dashboardHomeVariant: DashboardHomeVariant get() = DashboardHomeVariant.OVERVIEW
 
     fun preProcessLandscapeOverviewLayout(binding: OverviewFragmentBinding, isLandscape: Boolean, isTablet: Boolean, isSmallHeight: Boolean) {
         if (isLandscape) {

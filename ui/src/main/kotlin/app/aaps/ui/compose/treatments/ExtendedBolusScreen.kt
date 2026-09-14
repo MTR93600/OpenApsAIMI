@@ -13,7 +13,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,11 +40,13 @@ import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.objects.extensions.iobCalc
 import app.aaps.core.objects.extensions.isInProgress
-import app.aaps.core.ui.compose.AapsCard
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalDateUtil
 import app.aaps.core.ui.compose.ToolbarConfig
 import app.aaps.core.ui.compose.dialogs.OkCancelDialog
+import app.aaps.core.ui.compose.glass.GlassCard
+import app.aaps.core.ui.compose.glass.GlassColors
+import app.aaps.core.ui.compose.glass.isGlassDarkMode
 import app.aaps.core.ui.compose.icons.Ns
 import app.aaps.core.ui.compose.icons.Pump
 import app.aaps.ui.compose.components.ContentContainer
@@ -68,6 +69,7 @@ fun ExtendedBolusScreen(
     onNavigateBack: () -> Unit = { }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isDark = isGlassDarkMode()
 
     // Dialog state
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -105,7 +107,9 @@ fun ExtendedBolusScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             ContentContainer(
                 isLoading = uiState.isLoading,
-                isEmpty = uiState.extendedBoluses.isEmpty()
+                isEmpty = uiState.extendedBoluses.isEmpty(),
+                emptyIconTint = GlassColors.textMuted(isDark).copy(alpha = 0.6f),
+                emptyTextColor = GlassColors.textMuted(isDark)
             ) {
                 val haptic = LocalHapticFeedback.current
 
@@ -114,6 +118,8 @@ fun ExtendedBolusScreen(
                     getTimestamp = { it.timestamp },
                     getItemKey = { it.id },
                     rh = viewModel.rh,
+                    headerBackgroundColor = GlassColors.screenBgTop(isDark),
+                    headerTextColor = GlassColors.skyBlue,
                     itemContent = { eb ->
                         ExtendedBolusItem(
                             extendedBolus = eb,
@@ -156,6 +162,7 @@ private fun ExtendedBolusItem(
     profileFunction: ProfileFunction,
     rh: ResourceHelper
 ) {
+    val isDark = isGlassDarkMode()
     val dateUtil = LocalDateUtil.current
     val profile by produceState<app.aaps.core.interfaces.profile.EffectiveProfile?>(null, extendedBolus.timestamp) {
         value = profileFunction.getProfile(extendedBolus.timestamp)
@@ -167,7 +174,8 @@ private fun ExtendedBolusItem(
     }
     val isActive = extendedBolus.isInProgress(dateUtil)
 
-    AapsCard(
+    GlassCard(
+        isDark = isDark,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 2.dp)
@@ -221,7 +229,7 @@ private fun ExtendedBolusItem(
                 fontSize = 14.sp,
                 color = when {
                     isActive -> Color(AapsTheme.generalColors.activeInsulinText.value)
-                    else     -> MaterialTheme.colorScheme.onSurface
+                    else     -> GlassColors.textBright(isDark)
                 }
             )
 

@@ -37,10 +37,16 @@ internal object CommandedIsf {
      *
      * @param preFloorMgdlPerU the commanded sensitivity after every multiplier, before the floor.
      * @param profileIsfMgdlPerU the static profile sensitivity for this time of day, or null.
+     * @param floorMultiplier the bound, as a fraction of the profile sensitivity. The default is
+     *   [DynamicSensitivityPolicy.PROFILE_RELATIVE_FLOOR] and reproduces the previous behaviour exactly.
+     *   `StressIsfFloor.ARMED_FLOOR_MULTIPLIER` is passed while the stress signature holds and the
+     *   opt-in key is armed. The shadow witness is unaffected: it always measures the unconditional
+     *   bound, so the two instruments stay comparable across ticks.
      */
     fun floorAgainstProfileAndRecordShadow(
         preFloorMgdlPerU: Double,
         profileIsfMgdlPerU: Double?,
+        floorMultiplier: Double = DynamicSensitivityPolicy.PROFILE_RELATIVE_FLOOR,
     ): Double {
         lastPreFloorMgdlPerU = preFloorMgdlPerU.takeIf { it.isFinite() }
         IsfSourceTelemetry.recordProfileRelativeShadow(
@@ -50,6 +56,7 @@ internal object CommandedIsf {
         return DynamicSensitivityPolicy.floorAgainstProfile(
             commandedMgdlPerU = preFloorMgdlPerU,
             profileIsfMgdlPerU = profileIsfMgdlPerU,
+            floorMultiplier = floorMultiplier,
         )
     }
 }

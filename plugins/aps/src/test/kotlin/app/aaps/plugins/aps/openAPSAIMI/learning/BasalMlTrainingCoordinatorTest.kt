@@ -4,13 +4,10 @@ import android.content.Context
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.plugins.aps.openAPSAIMI.ml.AimiNeuralModelStore
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkObject
-import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
@@ -165,29 +162,21 @@ class BasalMlTrainingCoordinatorTest {
     fun `training is reached even when both feature prefs are off (decoupled from usage)`() = runBlocking {
         // Old behavior returned SKIPPED before any training when the feature prefs were off. New contract: training
         // depends only on data availability; the prefs gate only runtime usage (BasalNeuralLearner). We assert the
-        // training path is REACHED — deterministically, via the model-store read that trainAndMaybePublish performs
-        // before training — rather than the stochastic publish result (the net is unseeded).
-        mockkObject(AimiNeuralModelStore)
-        try {
-            every { AimiNeuralModelStore.load(any(), any()) } returns null
-            every { AimiNeuralModelStore.save(any(), any()) } returns true
-            every { preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled) } returns false
-            every { preferences.get(BooleanKey.OApsAIMIT3cBrittleMode) } returns false
+        // training path is REACHED — via the "label set" debug log that fires right before training each head,
+        // deterministically — rather than the stochastic publish result (the net is unseeded, and publishing no
+        // longer reads an incumbent to compare against — see BasalMlTrainingCoordinator.trainAndMaybePublish).
+        every { preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled) } returns false
+        every { preferences.get(BooleanKey.OApsAIMIT3cBrittleMode) } returns false
 
-            // Enough scorable windows to clear BASAL_MIN_ROWS. One episode cannot do it: see
-            // writeMultiEpisodeCsv.
-            writeMultiEpisodeCsv(csvFile, episodes = 12, rowsPerEpisode = 20)
-            // The incumbent read only happens when a weight file is already there. The content does not
-            // matter here because the store is mocked; only its presence decides.
-            File(tempDir, "basal_adaptive_weights.json").writeText("{}")
+        // Enough scorable windows to clear BASAL_MIN_ROWS. One episode cannot do it: see
+        // writeMultiEpisodeCsv.
+        writeMultiEpisodeCsv(csvFile, episodes = 12, rowsPerEpisode = 20)
 
-            coordinator.runScheduledTraining()
+        val logMock = mockk<AAPSLogger>(relaxed = true)
+        val freshCoordinator = BasalMlTrainingCoordinator(storage, learner, logMock)
+        freshCoordinator.runScheduledTraining()
 
-            // Reached only if the pref-gate is gone: NeuralModelTrainer reads the incumbent before training each head.
-            verify(atLeast = 1) { AimiNeuralModelStore.load(any(), any()) }
-        } finally {
-            unmockkObject(AimiNeuralModelStore)
-        }
+        verify(atLeast = 1) { logMock.debug(any(), match<String> { it.contains("label set") }) }
     }
 
     @Test
@@ -209,12 +198,54 @@ class BasalMlTrainingCoordinatorTest {
 
     @Test
     fun `skips when fewer than min new rows since last train`() = runBlocking {
+        // A weights file already exists: this is the steady-state gate, not bootstrap, so MIN_NEW_ROWS
+        // must still apply. lastTrainMs is recent (well under STALE_TRAINING_MS) so the staleness bypass
+        // does not also apply here — MIN_NEW_ROWS must be the only thing this test exercises.
+        File(tempDir, "basal_adaptive_weights.json").writeText("{}")
         val stateFile = File(tempDir, "basal_ml_training_state.json")
-        stateFile.writeText("""{"lastTrainMs":0,"rowsAtLastTrain":110}""")
+        stateFile.writeText("""{"lastTrainMs":${System.currentTimeMillis() - 5 * 60_000L},"rowsAtLastTrain":110}""")
 
         val freshCoordinator = BasalMlTrainingCoordinator(storage, learner, mockk(relaxed = true))
         val outcome = freshCoordinator.runScheduledTraining()
         assertThat(outcome).isEqualTo(BasalMlTrainingCoordinator.TrainingOutcome.SKIPPED)
+    }
+
+    @Test
+    fun `a stale last-trained timestamp forces training even with too few new rows`() = runBlocking {
+        // Same setup as the min-new-rows skip above (too few new rows since last train), except
+        // lastTrainMs is old enough to cross STALE_TRAINING_MS (4h) — training must be forced anyway,
+        // proven the same deterministic way the "decoupled from usage" test above uses: the "label set"
+        // debug log fires only once the min-new-rows gate has been cleared.
+        File(tempDir, "basal_adaptive_weights.json").writeText("{}")
+        val stateFile = File(tempDir, "basal_ml_training_state.json")
+        stateFile.writeText("""{"lastTrainMs":${System.currentTimeMillis() - 5 * 60 * 60_000L},"rowsAtLastTrain":110}""")
+
+        val logMock = mockk<AAPSLogger>(relaxed = true)
+        val freshCoordinator = BasalMlTrainingCoordinator(storage, learner, logMock)
+        freshCoordinator.runScheduledTraining()
+
+        verify(atLeast = 1) { logMock.debug(any(), match<String> { it.contains("label set") }) }
+        verify(exactly = 0) { logMock.debug(any(), match<String> { it.contains("new rows (need") }) }
+    }
+
+    @Test
+    fun `bootstrap is not blocked by min new rows when no weights exist yet`() = runBlocking {
+        // No basal_adaptive_weights.json here (bootstrapNeeded = true). rowsAtLastTrain is set high enough
+        // that newRows would be far below MIN_NEW_ROWS under the steady-state gate, simulating a persisted
+        // counter left over from before a row-filtering rule change. The bootstrap path must still reach
+        // training instead of waiting forever for newRows to climb back above the threshold.
+        //
+        // The eventual publish is stochastic (unseeded net), so this only asserts on the one thing the fix
+        // changed: the MIN_NEW_ROWS gate must not be the reason for a skip. Same "label set" log proof the
+        // "decoupled from usage" test above uses, checked for absence of the min-rows skip line instead.
+        val logMock = mockk<AAPSLogger>(relaxed = true)
+        val stateFile = File(tempDir, "basal_ml_training_state.json")
+        stateFile.writeText("""{"lastTrainMs":0,"rowsAtLastTrain":100000}""")
+
+        val freshCoordinator = BasalMlTrainingCoordinator(storage, learner, logMock)
+        freshCoordinator.runScheduledTraining()
+
+        verify(exactly = 0) { logMock.debug(any(), match<String> { it.contains("new rows (need") }) }
     }
 
     // ---------------------------------------------------------------- the two windows must not drift apart

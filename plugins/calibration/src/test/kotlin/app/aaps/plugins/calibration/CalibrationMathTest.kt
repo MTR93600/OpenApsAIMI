@@ -165,6 +165,61 @@ class CalibrationMathTest {
         assertThat(fit.offset).isWithin(0.01).of(4.0)
     }
 
+    // ------------ stalenessConfidence() / blendTowardIdentity() ------------
+
+    @Test
+    fun stalenessConfidence_freshEntry_isFullConfidence() {
+        assertThat(stalenessConfidence(now, now)).isEqualTo(1.0)
+        assertThat(stalenessConfidence(now - T.days(STALE_CONFIDENCE_FULL_DAYS).msecs(), now)).isEqualTo(1.0)
+    }
+
+    @Test
+    fun stalenessConfidence_atOrPastZeroThreshold_isZero() {
+        assertThat(stalenessConfidence(now - T.days(STALE_CONFIDENCE_ZERO_DAYS).msecs(), now)).isEqualTo(0.0)
+        assertThat(stalenessConfidence(now - T.days(STALE_CONFIDENCE_ZERO_DAYS + 10).msecs(), now)).isEqualTo(0.0)
+    }
+
+    @Test
+    fun stalenessConfidence_betweenThresholds_fallsOffLinearly() {
+        // Midpoint of [2, 6] days is 4 days -> confidence 0.5.
+        val midpointDays = (STALE_CONFIDENCE_FULL_DAYS + STALE_CONFIDENCE_ZERO_DAYS) / 2
+        val confidence = stalenessConfidence(now - T.days(midpointDays).msecs(), now)
+        assertThat(confidence).isWithin(0.001).of(0.5)
+    }
+
+    @Test
+    fun stalenessConfidence_futureDatedEntry_isFullConfidence() {
+        // Clock skew guard, same idea as fitLinearCalibration_futureDatedEntry_doesNotProduceNaN.
+        assertThat(stalenessConfidence(now + T.mins(5).msecs(), now)).isEqualTo(1.0)
+    }
+
+    @Test
+    fun blendTowardIdentity_fullConfidence_leavesFitUnchanged() {
+        val fit = CalibrationFit(slope = 1.3, offset = -20.0, mode = FitMode.Full)
+        val blended = fit.blendTowardIdentity(1.0)
+        assertThat(blended.slope).isEqualTo(1.3)
+        assertThat(blended.offset).isEqualTo(-20.0)
+        assertThat(blended.mode).isEqualTo(FitMode.Full)
+    }
+
+    @Test
+    fun blendTowardIdentity_zeroConfidence_returnsIdentity() {
+        val fit = CalibrationFit(slope = 1.3, offset = -20.0)
+        val blended = fit.blendTowardIdentity(0.0)
+        assertThat(blended.slope).isEqualTo(1.0)
+        // isWithin, not isEqualTo: 0.0 * -20.0 is -0.0, arithmetically identical to 0.0 but not
+        // Double.equals()-equal to it.
+        assertThat(blended.offset).isWithin(0.0).of(0.0)
+    }
+
+    @Test
+    fun blendTowardIdentity_halfConfidence_isMidwayToIdentity() {
+        val fit = CalibrationFit(slope = 1.4, offset = -20.0)
+        val blended = fit.blendTowardIdentity(0.5)
+        assertThat(blended.slope).isWithin(0.001).of(1.2)
+        assertThat(blended.offset).isWithin(0.001).of(-10.0)
+    }
+
     // ------------ sensorValueForPairing() ------------
 
     @Test

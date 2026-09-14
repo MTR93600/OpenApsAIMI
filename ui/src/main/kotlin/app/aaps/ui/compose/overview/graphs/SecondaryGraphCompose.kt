@@ -2,6 +2,7 @@ package app.aaps.ui.compose.overview.graphs
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -15,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,6 +30,7 @@ import app.aaps.core.interfaces.overview.graph.GraphDataPoint
 import app.aaps.core.interfaces.overview.graph.SeriesType
 import app.aaps.core.interfaces.overview.graph.TreatmentGraphData
 import app.aaps.core.ui.compose.AapsTheme
+import app.aaps.ui.R
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.CartesianDrawingContext
 import com.patrykandpatrick.vico.compose.cartesian.VicoScrollState
@@ -41,14 +44,21 @@ import com.patrykandpatrick.vico.compose.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.compose.cartesian.data.lineModel
 import com.patrykandpatrick.vico.compose.cartesian.layer.LineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.marker.CartesianMarkerController
+import com.patrykandpatrick.vico.compose.cartesian.marker.DefaultCartesianMarker
+import com.patrykandpatrick.vico.compose.cartesian.marker.rememberDefaultCartesianMarker
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.common.Fill
+import com.patrykandpatrick.vico.compose.common.Insets
 import com.patrykandpatrick.vico.compose.common.Position
 import com.patrykandpatrick.vico.compose.common.component.LineComponent
 import com.patrykandpatrick.vico.compose.common.component.ShapeComponent
 import com.patrykandpatrick.vico.compose.common.component.TextComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
 import com.patrykandpatrick.vico.compose.common.data.ExtraStore
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
@@ -871,11 +881,19 @@ fun SecondaryGraphCompose(
             rangeProvider = basalRangeProvider,
             verticalAxisPosition = Axis.Position.Vertical.End
         )
+        val sortedIobForMarker = remember(processedIob) { processedIob.sortedBy { it.first } }
+        val iobValueMarker = rememberIobValueMarker(
+            minTimestamp = minTimestamp,
+            sortedIob = sortedIobForMarker,
+            formatValue = viewModel::formatIobChartValue,
+        )
         CartesianChartHost(
             chart = rememberCartesianChart(
                 primaryLayer, basalLayer,
                 startAxis = startAxis,
-                bottomAxis = bottomAxis, decorations = decorations, getXStep = { _, _, _ -> 1.0 }
+                bottomAxis = bottomAxis, decorations = decorations, getXStep = { _, _, _ -> 1.0 },
+                marker = iobValueMarker,
+                markerController = CartesianMarkerController.rememberShowOnPress(),
             ),
             modelProducer = modelProducer,
             modifier = modifier.fillMaxWidth(),
@@ -909,6 +927,72 @@ fun SecondaryGraphCompose(
             scrollState = scrollState, zoomState = zoomState
         )
     }
+}
+
+/** Linear interpolation between the two points in [sortedAsc] (sorted ascending by x) around [x]. */
+private fun interpolateYForMarker(x: Double, sortedAsc: List<Pair<Double, Double>>): Double? {
+    if (sortedAsc.isEmpty()) return null
+    if (sortedAsc.size == 1) return sortedAsc.first().second
+    if (x <= sortedAsc.first().first) return sortedAsc.first().second
+    if (x >= sortedAsc.last().first) return sortedAsc.last().second
+    for (i in 0 until sortedAsc.lastIndex) {
+        val a = sortedAsc[i]
+        val b = sortedAsc[i + 1]
+        if (x < a.first || x > b.first) continue
+        val span = (b.first - a.first).coerceAtLeast(0.0001)
+        val t = ((x - a.first) / span).coerceIn(0.0, 1.0)
+        return a.second + t * (b.second - a.second)
+    }
+    return sortedAsc.last().second
+}
+
+/**
+ * Marker shown when tapping any point on the IOB line: the IOB value at that time and the time of day.
+ */
+@Composable
+private fun rememberIobValueMarker(
+    minTimestamp: Long,
+    sortedIob: List<Pair<Double, Double>>,
+    formatValue: (Double) -> CharSequence,
+): DefaultCartesianMarker {
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+    val outlineColor = MaterialTheme.colorScheme.outline
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val valueTimeTemplate = stringResource(R.string.graph_point_value_time)
+
+    val labelBackground = remember(surfaceColor, outlineColor) {
+        ShapeComponent(
+            fill = Fill(surfaceColor),
+            shape = RoundedCornerShape(4.dp),
+            strokeFill = Fill(outlineColor),
+            strokeThickness = 1.dp
+        )
+    }
+    val markerLabel = rememberTextComponent(
+        style = TextStyle(color = onSurfaceColor, fontSize = 15.sp),
+        padding = Insets(horizontal = 10.dp, vertical = 5.dp),
+        background = labelBackground
+    )
+    val valueFormatter = remember(minTimestamp, sortedIob, formatValue, valueTimeTemplate) {
+        DefaultCartesianMarker.ValueFormatter { _, targets ->
+            if (sortedIob.isEmpty()) return@ValueFormatter ""
+            val x = targets.firstOrNull()?.x ?: return@ValueFormatter ""
+            val epochMs = minTimestamp + (x * 60000).toLong()
+            val iobValue = interpolateYForMarker(x, sortedIob) ?: return@ValueFormatter ""
+            val valueText = formatValue(iobValue)
+            val timeText = timeFormat.format(Date(epochMs))
+            String.format(valueTimeTemplate, valueText, timeText)
+        }
+    }
+
+    return rememberDefaultCartesianMarker(
+        label = markerLabel,
+        valueFormatter = valueFormatter,
+        labelPosition = DefaultCartesianMarker.LabelPosition.AroundPoint,
+        indicator = null,
+        guideline = null,
+    )
 }
 
 // =========================================================================

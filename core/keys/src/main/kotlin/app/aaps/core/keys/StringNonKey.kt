@@ -40,6 +40,23 @@ enum class StringNonKey(
     QuickLaunchActions(key = "quick_launch_actions", defaultValue = "[{\"type\":\"wizard\"},{\"type\":\"quick_launch_config\"}]"),
     InsulinConfiguration("insulin_configuration", "{}", sync = SyncSpec(SyncChannel.Cold, SyncDirection.Bidirectional)),
     ComposeGraphConfig("compose_graphconfig", ""),
+    // Default lists the Glass top-grid pills that are visible today (defaultSelected = true in
+    // GLASS_PILL_CATALOG, plugins:main). core:keys cannot reference that catalog (wrong dependency
+    // direction), so this literal list must be kept in sync with it by hand.
+    GlassSelectedPills(
+        key = "glass_selected_pills",
+        defaultValue = "PUMP_RESERVOIR,CANNULA,BATTERY,SENSOR,LOOP_STATUS,ACTIVITY",
+        exportable = false
+    ),
+
+    // Default lists all 14 DashboardV2ToolAction entries (all tiles are visible today). plugins:main's
+    // DashboardV2ToolAction is the source of truth; keep this literal list in sync with it by hand
+    // (core:keys cannot depend on plugins:main).
+    GlassSelectedTools(
+        key = "glass_selected_tools",
+        defaultValue = "ACTIONS,RAPID_ACTING,PROFILE,AUTOMATION,NSCLIENT,TIDEPOOL,XDRIP,MAINTENANCE,XDRIP_BG,SENSOR,ADVISOR,MEAL_ADVISOR,AIMI_CONTEXT,AUDITOR_REPORT",
+        exportable = false
+    ),
 
     // Synthetic mirror of the active plugin per single-select category (value = plugin pluginId, defaults to
     // javaClass.simpleName). Bidirectional for APS/SENSITIVITY/SMOOTHING/CALIBRATION (a client may switch the

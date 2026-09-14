@@ -108,9 +108,18 @@ class BasalMlTrainingCoordinator @Inject constructor(
         internal const val MAX_BASELINE_MAE_RATIO = 0.95
         private const val TRAIN_INTERVAL_MS = 1L * 60 * 60 * 1000 // 1h — matches the 1h worker cadence; the MIN_NEW_ROWS gate still prevents retraining without new data
         private const val MIN_NEW_ROWS = 80L
+
+        /**
+         * If no training attempt has completed in this long, force one on the next tick even if
+         * [MIN_NEW_ROWS] has not been reached — same idea as the bootstrap bypass below, for a
+         * coordinator that already has a model but has gone quiet for some other reason (slow data
+         * accumulation, a gate that keeps returning before [markAttemptCompleted]). 4x [TRAIN_INTERVAL_MS]:
+         * long enough that this never fires during normal hourly operation, short enough that a stuck
+         * coordinator is never silently stale for more than about half a day.
+         */
+        private const val STALE_TRAINING_MS = 4L * 60 * 60 * 1000 // 4h
         private const val BASAL_MIN_ROWS = 100
         private const val T3C_MIN_ROWS = 50
-        private const val VAL_LOSS_TOLERANCE = 1.05
         private const val STATE_FILE = "basal_ml_training_state.json"
         private const val CSV_FILE = "basal_adaptive_records.csv"
         private const val BASAL_WEIGHTS = "basal_adaptive_weights.json"
@@ -156,7 +165,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
     suspend fun runScheduledTraining(): TrainingOutcome = trainMutex.withLock {
         val now = System.currentTimeMillis()
         // First-ever model creation bypasses the rate limit: if no basal weights exist yet, train now (bootstrap) so
-        // the model is created ASAP from the already-accumulated CSV, instead of waiting for the next 6h window.
+        // the model is created ASAP from the already-accumulated CSV, instead of waiting for the next 1h window.
         val bootstrapNeeded = !storageHelper.getAimiFile(BASAL_WEIGHTS).exists()
         if (isCircuitOpen(now)) {
             log.debug(LTag.APS, "$TAG: circuit breaker open — skip")
@@ -182,7 +191,20 @@ class BasalMlTrainingCoordinator @Inject constructor(
 
         val totalRows = parsed.rowCount.toLong()
         val newRows = totalRows - rowsAtLastTrain.get()
-        if (newRows < MIN_NEW_ROWS) {
+        // Bootstrap must not be blocked by this gate: rowsAtLastTrain is only meaningful relative to a
+        // previous attempt on the same row-counting rule. If the row-filtering rule changes (for example a
+        // stricter causal-contamination check), the same CSV can suddenly parse into fewer kept rows, making
+        // newRows negative against a stale rowsAtLastTrain — and this gate returns before markAttemptCompleted,
+        // so nothing here ever resets the counter. Without the bootstrap bypass a coordinator that has no
+        // published model yet could wait indefinitely for that gap to close on its own.
+        //
+        // A coordinator that DOES have a model can get stuck the same way if new rows simply accumulate
+        // slower than MIN_NEW_ROWS per TRAIN_INTERVAL_MS — nothing else here would ever force a retry. Past
+        // STALE_TRAINING_MS since the last completed attempt, force one anyway: BASAL_MIN_ROWS/T3C_MIN_ROWS
+        // below still require a minimum corpus, so this cannot train on too little data, only on data that
+        // grew slower than expected.
+        val trainingIsStale = now - lastTrainMs.get() > STALE_TRAINING_MS
+        if (!bootstrapNeeded && !trainingIsStale && newRows < MIN_NEW_ROWS) {
             log.debug(LTag.APS, "$TAG: only $newRows new rows (need $MIN_NEW_ROWS) — skip")
             return TrainingOutcome.SKIPPED
         }
@@ -296,6 +318,13 @@ class BasalMlTrainingCoordinator @Inject constructor(
      * The candidate also has to beat the best constant predictor on the held-out rows
      * ([MAX_BASELINE_MAE_RATIO]). The spread probe alone cannot do that job: measured, a model trained
      * on pure label noise moves MORE across the bg anchors than a model that found the real function.
+     *
+     * `requireIncumbentBeat` is left off (the default) on purpose, same as `AimiSmbTrainer`. Comparing
+     * against the model on disk is what froze this exact basal head for 40+ days: the model shipped on
+     * 12 July 2026 answered a near-constant value, a constant hugs the label mean and so scores a
+     * deceptively low validation loss, and every later candidate — however well trained — was rejected
+     * for not beating it. The liveness probes above (range, spread, baseline-MAE) are the safe way to
+     * keep a bad model out; a val-loss ratchet against a possibly-already-broken incumbent is not.
      */
     private fun trainAndMaybePublish(
         weightsFile: File,
@@ -306,9 +335,8 @@ class BasalMlTrainingCoordinator @Inject constructor(
         config: TrainingConfig,
         outputRange: ClosedFloatingPointRange<Double>,
         minOutputSpread: Double = MIN_OUTPUT_SPREAD,
-    ): Boolean {
-        val hasIncumbent = weightsFile.exists()
-        return NeuralModelTrainer.trainAndPublish(
+    ): Boolean =
+        NeuralModelTrainer.trainAndPublish(
             weightsFile = weightsFile,
             split = NeuralModelTrainer.Split(trainInputs, trainTargets, valInputs, valTargets),
             config = config,
@@ -319,11 +347,17 @@ class BasalMlTrainingCoordinator @Inject constructor(
             spreadSweepValues = SPREAD_SWEEP_BG_MGDL,
             minOutputSpread = minOutputSpread,
             maxBaselineMaeRatio = MAX_BASELINE_MAE_RATIO,
-            requireIncumbentBeat = hasIncumbent,
-            valLossTolerance = VAL_LOSS_TOLERANCE,
             log = { log.info(LTag.APS, "$TAG: $it") },
         ) != null
-    }
+
+    /** Epoch ms of the last completed training run, or 0 if none yet. Read-only, dashboard-facing. */
+    fun lastTrainedAtMs(): Long = lastTrainMs.get()
+
+    /** True while the training circuit breaker is currently open (recent failures cooling down). */
+    fun isCircuitOpenNow(): Boolean = circuitBreaker.isOpen()
+
+    /** File backing the basal adaptive weights, for read-only metadata (dashboard use only). */
+    fun basalWeightsFile(): File = storageHelper.getAimiFile(BASAL_WEIGHTS)
 
     private fun isCircuitOpen(now: Long): Boolean = circuitBreaker.isOpen(now)
 

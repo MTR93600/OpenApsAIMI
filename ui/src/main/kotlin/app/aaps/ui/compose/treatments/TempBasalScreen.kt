@@ -13,7 +13,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,11 +41,13 @@ import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.objects.extensions.iobCalc
-import app.aaps.core.ui.compose.AapsCard
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalDateUtil
 import app.aaps.core.ui.compose.ToolbarConfig
 import app.aaps.core.ui.compose.dialogs.OkCancelDialog
+import app.aaps.core.ui.compose.glass.GlassCard
+import app.aaps.core.ui.compose.glass.GlassColors
+import app.aaps.core.ui.compose.glass.isGlassDarkMode
 import app.aaps.core.ui.compose.icons.Ns
 import app.aaps.core.ui.compose.icons.Pump
 import app.aaps.core.interfaces.navigation.ElementType
@@ -75,6 +76,7 @@ fun TempBasalScreen(
     onNavigateBack: () -> Unit = { }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isDark = isGlassDarkMode()
     val scope = rememberCoroutineScope()
 
     // Dialog state
@@ -115,7 +117,9 @@ fun TempBasalScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             ContentContainer(
                 isLoading = uiState.isLoading,
-                isEmpty = uiState.tempBasals.isEmpty()
+                isEmpty = uiState.tempBasals.isEmpty(),
+                emptyIconTint = GlassColors.textMuted(isDark).copy(alpha = 0.6f),
+                emptyTextColor = GlassColors.textMuted(isDark)
             ) {
                 val haptic = LocalHapticFeedback.current
 
@@ -124,6 +128,8 @@ fun TempBasalScreen(
                     getTimestamp = { it.timestamp },
                     getItemKey = { it.id },
                     rh = viewModel.rh,
+                    headerBackgroundColor = GlassColors.screenBgTop(isDark),
+                    headerTextColor = GlassColors.skyBlue,
                     itemContent = { tb ->
                         TempBasalItem(
                             tempBasal = tb,
@@ -168,6 +174,7 @@ private fun TempBasalItem(
     onLongPress: () -> Unit,
     profileFunction: ProfileFunction
 ) {
+    val isDark = isGlassDarkMode()
     val dateUtil = LocalDateUtil.current
     val now = dateUtil.now()
     val profile by produceState<app.aaps.core.interfaces.profile.EffectiveProfile?>(null, now) {
@@ -179,7 +186,8 @@ private fun TempBasalItem(
         IobTotal(now)
     }
 
-    AapsCard(
+    GlassCard(
+        isDark = isDark,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 2.dp)
@@ -232,7 +240,7 @@ private fun TempBasalItem(
                 color = when {
                     isActive -> Color(AapsTheme.generalColors.activeInsulinText.value)
                     isFuture -> Color(AapsTheme.generalColors.futureRecord.value)
-                    else     -> MaterialTheme.colorScheme.onSurface
+                    else     -> GlassColors.textBright(isDark)
                 }
             )
 

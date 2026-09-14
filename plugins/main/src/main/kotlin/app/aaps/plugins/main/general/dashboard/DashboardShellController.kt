@@ -9,11 +9,13 @@ import android.view.ViewConfiguration
 import androidx.annotation.RequiresApi
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.widget.NestedScrollView
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.TB
+import app.aaps.core.ui.compose.ScreenMode
 import app.aaps.core.data.time.T
 import app.aaps.core.graph.data.BolusDataPoint
 import app.aaps.core.graph.data.DataPointWithLabelInterface
@@ -55,6 +57,7 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
 import app.aaps.plugins.main.R
 import app.aaps.plugins.main.databinding.FragmentDashboardBinding
 import app.aaps.plugins.main.general.dashboard.compose.DashboardHeroCommands
+import app.aaps.plugins.main.general.dashboard.glass.GlassHeroCommands
 import app.aaps.plugins.main.general.dashboard.viewmodel.AdjustmentCardState
 import app.aaps.plugins.main.general.dashboard.viewmodel.OverviewViewModel
 import app.aaps.plugins.main.general.manual.UserManualActivity
@@ -62,6 +65,7 @@ import app.aaps.plugins.main.general.overview.OverviewDataImpl
 import app.aaps.plugins.main.general.overview.graphData.GraphData
 import app.aaps.plugins.main.general.overview.graphData.viewportShouldFollowLiveRange
 import app.aaps.plugins.main.general.overview.notifications.NotificationUiBinder
+import app.aaps.ui.compose.careDialog.CareportalEventType
 import com.jjoe64.graphview.series.LineGraphSeries
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
@@ -136,6 +140,7 @@ internal class DashboardShellController(
     private var lastNonEmptyComposeGraphInput: DashboardEmbeddedComposeState.GraphRenderInput? = null
 
     private val heroCommands: DashboardHeroCommands by lazy { createHeroCommands() }
+    private val glassHeroCommands: GlassHeroCommands by lazy { createGlassHeroCommands() }
 
     /**
      * Compose shell: [runDashboardUiAttachedSide] was invoked in bursts (activity lifecycle + replay),
@@ -173,6 +178,8 @@ internal class DashboardShellController(
     }
 
     internal fun heroCommandsForCompose(): DashboardHeroCommands = heroCommands
+
+    internal fun glassHeroCommandsForCompose(): GlassHeroCommands = glassHeroCommands
 
     fun attachShell(binding: DashboardShellBinding) {
         shellBinding = binding
@@ -782,6 +789,16 @@ internal class DashboardShellController(
         host.activity?.let { activity ->
             protectionCheck.requestProtection(ProtectionCheck.Protection.BOLUS) { result ->
                 if (result == ProtectionResult.GRANTED && host.isBindingAttached()) uiInteraction.openRunningModeScreen(activity)
+            }
+        }
+    }
+
+    /** Runs [action] only after a Protection.BOLUS check passes — same gate ElementType.CARBS /
+     *  BOLUS_WIZARD / QUICK_WIZARD_MANAGEMENT / TEMP_TARGET_MANAGEMENT require everywhere else. */
+    private fun withBolusProtection(action: (FragmentActivity) -> Unit) {
+        host.activity?.let { activity ->
+            protectionCheck.requestProtection(ProtectionCheck.Protection.BOLUS) { result ->
+                if (result == ProtectionResult.GRANTED) action(activity)
             }
         }
     }
@@ -1423,6 +1440,106 @@ internal class DashboardShellController(
             override fun onAimiPulseClicked() {
                 openAdjustmentDetails()
             }
+
+            // Route strings must match AppRoute.Stats.route / AppRoute.Treatments.route in the
+            // :app module (app/src/main/kotlin/app/aaps/compose/navigation/AppRoute.kt) — plugins:main
+            // cannot depend on :app, so these are inlined literals, not a shared constant.
+            // Note: AppRoute.TreatmentDialog ("treatment_dialog") is a single bolus-entry dialog, NOT
+            // this screen — the tabbed treatments history/log browser is AppRoute.Treatments ("treatments").
+            override fun openStatsScreen() =
+                uiInteraction.openComposeMainAtRoute(host.context, "stats")
+
+            override fun openTreatmentsScreen() =
+                uiInteraction.openComposeMainAtRoute(host.context, "treatments")
+
+            // Same inlining rule as above. Defaults match each screen's own AppRoute.createRoute()
+            // default (ScreenMode.EDIT), and the no-arg forms of CarbsDialog/WizardDialog.
+            // ElementType.CARBS / BOLUS_WIZARD / QUICK_WIZARD_MANAGEMENT / TEMP_TARGET_MANAGEMENT
+            // all require Protection.BOLUS everywhere else they're reached (QuickLaunchToolbar,
+            // search, NavigationRequest.Element) — gate these the same way so a PIN/biometric lock
+            // configured for bolus-level actions isn't silently skipped from the dashboard.
+            override fun openCarbsEntry() = withBolusProtection {
+                uiInteraction.openComposeMainAtRoute(host.context, "carbs_dialog")
+            }
+
+            override fun openBolusWizard() = withBolusProtection {
+                uiInteraction.openComposeMainAtRoute(host.context, "wizard_dialog")
+            }
+
+            override fun openQuickWizardManagement() = withBolusProtection {
+                uiInteraction.openComposeMainAtRoute(host.context, "quick_wizard_management?mode=${ScreenMode.EDIT.name}")
+            }
+
+            override fun openTempTargetManagement() = withBolusProtection { activity ->
+                uiInteraction.openTempTargetManagementScreen(activity)
+            }
+        }
+
+    private fun createGlassHeroCommands(): GlassHeroCommands =
+        object : GlassHeroCommands {
+            override fun openLoop() {
+                // Own inlined Protection.BOLUS check (same gate openLoopDialog() applies) rather than reusing
+                // openLoopDialog(): that shared helper also routes the legacy uiInteraction.openRunningModeScreen()
+                // for its other callers (the status card / loop indicator taps, and the legacy hero's
+                // openLoopDialogFromHero()), which must keep that legacy behavior.
+                host.activity?.let { activity ->
+                    protectionCheck.requestProtection(ProtectionCheck.Protection.BOLUS) { result ->
+                        if (result == ProtectionResult.GRANTED && host.isBindingAttached()) {
+                            uiInteraction.openComposeMainAtRoute(host.context, "glass_loop_detail")
+                        }
+                    }
+                }
+            }
+
+            override fun openLoopDashboard() =
+                uiInteraction.openComposeMainAtRoute(host.context, "glass_loop_dashboard")
+
+            override fun openInsulin() {
+                // Own inlined Protection.BOLUS check (same gate openBolus() applies) rather than reusing
+                // openBolus(): that shared helper also routes the legacy uiInteraction.openInsulinScreen()
+                // for other callers (the bottom-nav bolus command), which must keep that legacy behavior.
+                host.activity?.let { activity ->
+                    protectionCheck.requestProtection(ProtectionCheck.Protection.BOLUS) { result ->
+                        if (result == ProtectionResult.GRANTED) {
+                            uiInteraction.openComposeMainAtRoute(host.context, "glass_insulin_detail")
+                        }
+                    }
+                }
+            }
+
+            override fun openTarget() = withBolusProtection {
+                uiInteraction.openComposeMainAtRoute(host.context, "glass_target_detail")
+            }
+
+            override fun openBasal() = withBolusProtection {
+                uiInteraction.openComposeMainAtRoute(host.context, "glass_basal_detail")
+            }
+
+            override fun openCannula() = withBolusProtection {
+                uiInteraction.openComposeMainAtRoute(host.context, "glass_cannula_detail")
+            }
+
+            override fun openPump() =
+                uiInteraction.openComposeMainAtRoute(host.context, "glass_pump_detail")
+
+            override fun openBattery() =
+                uiInteraction.openComposeMainAtRoute(host.context, "glass_battery_detail")
+
+            override fun openSensorInsert() = withBolusProtection {
+                uiInteraction.openComposeMainAtRoute(
+                    host.context,
+                    "glass_sensor_insert_detail/${CareportalEventType.SENSOR_INSERT.ordinal}",
+                )
+            }
+
+            override fun openSensorQuality() =
+                uiInteraction.openComposeMainAtRoute(host.context, "glass_sensor_quality")
+
+            override fun openStatsScreen() =
+                uiInteraction.openComposeMainAtRoute(host.context, "stats")
+
+            override fun openTreatmentsScreen() =
+                uiInteraction.openComposeMainAtRoute(host.context, "treatments")
         }
 
     private fun launchAimiAdaptationStatusActivity() {

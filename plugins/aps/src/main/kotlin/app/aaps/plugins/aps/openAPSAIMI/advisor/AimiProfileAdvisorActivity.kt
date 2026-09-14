@@ -336,7 +336,10 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             }
             
             val scoreText = TextView(this@AimiProfileAdvisorActivity).apply {
-                text = rh.gs(R.string.aimi_adv_score_label, report.overallScore)
+                // No score means the period could not be measured — say so, never print a number.
+                text = report.overallScore
+                    ?.let { rh.gs(R.string.aimi_adv_score_label, it) }
+                    ?: rh.gs(R.string.aimi_adv_not_enough_data)
                 setTextColor(Color.parseColor("#4ADE80")) // Bright Green
                 setTypeface(null, Typeface.BOLD)
                 textSize = 14f
@@ -696,6 +699,12 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     }
 
 
+    /** Short text for a metric card when the value was never measured. */
+    private fun noDataText(): String = rh.gs(R.string.aimi_adv_value_no_data)
+
+    private fun percentOrNoData(fraction: Double?): String =
+        fraction?.let { "${(it * 100).roundToInt()}%" } ?: noDataText()
+
     private fun createMetricsGrid(metrics: AdvisorMetrics, cardColor: Int): LinearLayout {
         val grid = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -708,18 +717,18 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             weightSum = 2f
             setPadding(0, 0, 0, 24)
         }
-        row1.addView(createMetricCard("TIR (70-180)", "${(metrics.tir70_180 * 100).roundToInt()}%", Color.parseColor("#4ADE80"), cardColor), paramHalf())
+        row1.addView(createMetricCard("TIR (70-180)", percentOrNoData(metrics.tir70_180), Color.parseColor("#4ADE80"), cardColor), paramHalf())
         row1.addView(Space(this).apply { layoutParams = LinearLayout.LayoutParams(24, 0) })
-        row1.addView(createMetricCard("TDD MOYEN", "${metrics.tdd.roundToInt()} U", Color.parseColor("#60A5FA"), cardColor), paramHalf())
+        row1.addView(createMetricCard("TDD MOYEN", metrics.tdd?.let { "${it.roundToInt()} U" } ?: noDataText(), Color.parseColor("#60A5FA"), cardColor), paramHalf())
         
         // Row 2
         val row2 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             weightSum = 2f
         }
-        row2.addView(createMetricCard("GMI", "${metrics.gmi}%", Color.parseColor("#FACC15"), cardColor), paramHalf())
+        row2.addView(createMetricCard("GMI", metrics.gmi?.let { "$it%" } ?: noDataText(), Color.parseColor("#FACC15"), cardColor), paramHalf())
         row2.addView(Space(this).apply { layoutParams = LinearLayout.LayoutParams(24, 0) })
-        row2.addView(createMetricCard("HYPO < 54", "${(metrics.timeBelow54 * 100).roundToInt()}%", Color.parseColor("#F87171"), cardColor), paramHalf())
+        row2.addView(createMetricCard("HYPO < 54", percentOrNoData(metrics.timeBelow54), Color.parseColor("#F87171"), cardColor), paramHalf())
 
         grid.addView(row1)
         grid.addView(row2)
@@ -857,13 +866,13 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                     else -> rec.descriptionArgs.joinToString(" ").ifEmpty { "" }
                 }
             }
-            rec.descriptionResId == R.string.aimi_adv_rec_hypos_desc ->
+            rec.descriptionResId == R.string.aimi_adv_rec_hypos_desc && metrics.timeBelow54 != null ->
                 rh.gs(rec.descriptionResId, (metrics.timeBelow54 * 100).roundToInt(), metrics.severeHypoEvents)
-            rec.descriptionResId == R.string.aimi_adv_rec_control_desc ->
+            rec.descriptionResId == R.string.aimi_adv_rec_control_desc && metrics.tir70_180 != null ->
                 rh.gs(rec.descriptionResId, (metrics.tir70_180 * 100).roundToInt())
-            rec.descriptionResId == R.string.aimi_adv_rec_hypers_desc ->
+            rec.descriptionResId == R.string.aimi_adv_rec_hypers_desc && metrics.timeAbove180 != null ->
                 rh.gs(rec.descriptionResId, (metrics.timeAbove180 * 100).roundToInt())
-            rec.descriptionResId == R.string.aimi_adv_rec_basal_desc ->
+            rec.descriptionResId == R.string.aimi_adv_rec_basal_desc && metrics.basalPercent != null ->
                 rh.gs(rec.descriptionResId, (metrics.basalPercent * 100).roundToInt())
             rec.descriptionArgs.isNotEmpty() -> {
                 try {
@@ -2366,10 +2375,11 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         }
     }
     
-    private fun getScoreColor(severity: AdvisorSeverity): Int = when (severity) {
+    private fun getScoreColor(severity: AdvisorSeverity?): Int = when (severity) {
         AdvisorSeverity.Good -> Color.parseColor("#4ADE80")  // Green
         AdvisorSeverity.Warning -> Color.parseColor("#FACC15")  // Warning
         AdvisorSeverity.Critical -> Color.parseColor("#F87171") // Red
+        null -> Color.parseColor("#94A3B8") // Slate: nothing measured
     }
     
     private fun getPriorityEmoji(priority: AimiPriority): String = when (priority) {

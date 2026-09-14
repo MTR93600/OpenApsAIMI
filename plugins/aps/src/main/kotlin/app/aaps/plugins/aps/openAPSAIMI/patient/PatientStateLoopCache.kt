@@ -15,7 +15,7 @@ import app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster
  * Last loop-derived inputs used to refresh patient understanding when wearable signals move
  * between determine_basal ticks.
  */
-internal data class PatientStateLoopCache(
+data class PatientStateLoopCache(
     val phaseOutput: PhysiologicalPhaseClassifier.Output?,
     val mealAbsorptionOutput: MealAbsorptionPhaseEngine.Output?,
     val patternSnapshot: PhysiologicalPatternSnapshot?,

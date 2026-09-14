@@ -48,6 +48,7 @@ class PkpdAdvisorPersonalSignalContainmentTest {
         hyperEvents = 5,
         todayTir = todayTir,
         todayTdd = null,
+        dataSufficiency = AdvisorDataSufficiency.GOOD,
     )
 
     private fun pkpd() = PkpdPrefsSnapshot(

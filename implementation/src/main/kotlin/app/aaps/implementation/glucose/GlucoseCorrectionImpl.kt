@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.glucose.GlucoseCorrection
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import dagger.Reusable
 import javax.inject.Inject
+import kotlin.math.roundToInt
 
 @Reusable
 class GlucoseCorrectionImpl @Inject constructor(
@@ -20,7 +21,13 @@ class GlucoseCorrectionImpl @Inject constructor(
         if (corrected < MIN_PLAUSIBLE_MGDL || corrected > MAX_PLAUSIBLE_MGDL) return null
         val ratio = corrected / storedMgdl
         if (ratio < MIN_PLAUSIBLE_RATIO || ratio > MAX_PLAUSIBLE_RATIO) return null
-        return corrected
+        // Whole mg/dL, like the stored reading and like the screen. Calibration, smoothing and the
+        // interpolation below all return a plain Double, and before this class existed `sgv` was the
+        // stored value, which is always whole: both sensors build it from an Int. So nothing on the
+        // way out ever needed to round, and Nightscout was sent numbers such as 83.17856343415423
+        // while the phone showed 83. The checks above run on the exact value; only the answer is
+        // rounded, and the range makes the conversion safe.
+        return corrected.roundToInt().toDouble()
     }
 
     /**

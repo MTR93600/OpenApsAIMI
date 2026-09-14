@@ -709,7 +709,7 @@ private fun HeroLoopCompactBadge(
 }
 
 @Composable
-private fun HeroCgmCompactBadge(
+internal fun HeroCgmCompactBadge(
     context: android.content.Context,
     state: StatusCardState,
     readingLine: String,
@@ -911,7 +911,7 @@ private fun AimiPulseCard(
     }
 }
 
-private fun buildReadingLineOnly(context: android.content.Context, state: StatusCardState): String {
+internal fun buildReadingLineOnly(context: android.content.Context, state: StatusCardState): String {
     val readingPart = state.timeAgoDescription.trim().ifBlank { "—" }
     return context.getString(R.string.dashboard_hero_status_reading_line, readingPart)
 }

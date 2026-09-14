@@ -17,6 +17,7 @@ import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.calibration.CalibrationContext
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.glucose.GlucoseCorrection
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -91,6 +92,7 @@ class PrepareGraphDataWorker @AssistedInject constructor(
     private val dateUtil: DateUtil,
     private val rxBus: RxBus,
     private val persistenceLayer: PersistenceLayer,
+    private val glucoseCorrection: GlucoseCorrection,
     private val activePlugin: ActivePlugin,
     private val profileFunction: ProfileFunction,
     private val profileUtil: ProfileUtil,
@@ -242,7 +244,10 @@ class PrepareGraphDataWorker @AssistedInject constructor(
         val bgDataPoints = bgReadingsArray
             .filter { it.timestamp in fromTime..toTime }
             .map { bg ->
-                val mgdl = bg.value
+                // bg.value is the raw stored reading; calibration/smoothing only live in the in-memory
+                // bucketed series (see GlucoseCorrection's KDoc). Without this, the chart shows a
+                // different number than the dashboard's hero glucose for the same instant.
+                val mgdl = glucoseCorrection.correctedMgdl(bg.timestamp, bg.value) ?: bg.value
                 BgDataPoint(
                     timestamp = bg.timestamp,
                     value = mgdl,

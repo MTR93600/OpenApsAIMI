@@ -2,6 +2,7 @@ package app.aaps.ui.compose.overview.graphs
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -15,8 +16,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.graph.vico.Square
@@ -32,6 +35,7 @@ import app.aaps.core.interfaces.overview.graph.SeriesType
 import app.aaps.core.interfaces.overview.graph.TargetLineData
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.icons.IcProfile
+import app.aaps.ui.R
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.VicoScrollState
 import com.patrykandpatrick.vico.compose.cartesian.VicoZoomState
@@ -48,13 +52,19 @@ import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLa
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.cartesian.marker.CartesianMarker
 import com.patrykandpatrick.vico.compose.cartesian.marker.CartesianMarkerController
+import com.patrykandpatrick.vico.compose.cartesian.marker.DefaultCartesianMarker
 import com.patrykandpatrick.vico.compose.cartesian.marker.Interaction
 import com.patrykandpatrick.vico.compose.cartesian.marker.LineCartesianLayerMarkerTarget
+import com.patrykandpatrick.vico.compose.cartesian.marker.rememberDefaultCartesianMarker
 import com.patrykandpatrick.vico.compose.common.Fill
+import com.patrykandpatrick.vico.compose.common.Insets
 import com.patrykandpatrick.vico.compose.common.component.LineComponent
 import com.patrykandpatrick.vico.compose.common.component.ShapeComponent
 import com.patrykandpatrick.vico.compose.common.component.TextComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.abs
 
 /** Series identifiers */
@@ -800,7 +810,13 @@ fun BgGraphCompose(
                 onSmbTap = cb,
             )
         }
-    val dashboardSmbTapMarker = remember { object : CartesianMarker {} }
+    val sortedBgAscForMarker = remember(bgReadings) { bgReadings.sortedBy { it.timestamp } }
+    val bgValueMarker = rememberBgValueMarker(
+        minTimestamp = minTimestamp,
+        sortedBg = sortedBgAscForMarker,
+        formatChartYValue = viewModel::formatBgChartAxisTick,
+        mgdlToChartY = viewModel::glucoseMgdlToChartY,
+    )
 
     // =========================================================================
     // Range providers — hoisted out of rememberCartesianChart so keys are re-evaluated on recomposition
@@ -872,7 +888,7 @@ fun BgGraphCompose(
                     guideline = LineComponent(fill = Fill(scheme.outlineVariant.copy(alpha = gridGuideAlpha)))
                 ),
                 decorations = decorations,
-                marker = if (dashboardSmbTapController != null) dashboardSmbTapMarker else null,
+                marker = bgValueMarker,
                 markerController = dashboardSmbTapController ?: defaultMarkerController,
                 getXStep = { _, _, _ -> 1.0 }
             ),
@@ -905,8 +921,62 @@ private fun interpolateBgForDashboardMarker(
 }
 
 /**
- * Shows nothing; enables Vico's tap pipeline so we can match [LineCartesianLayerMarkerTarget]s for the
- * dashboard SMB series without duplicating scroll/zoom → model-X math.
+ * Marker shown when tapping any point on the BG line: the value at that time (in the user's display
+ * unit, via [formatChartYValue] — the same formatter the Y-axis ticks already use) and the time of day.
+ */
+@Composable
+private fun rememberBgValueMarker(
+    minTimestamp: Long,
+    sortedBg: List<BgDataPoint>,
+    formatChartYValue: (Double) -> CharSequence,
+    mgdlToChartY: (Double) -> Double,
+): DefaultCartesianMarker {
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+    val outlineColor = MaterialTheme.colorScheme.outline
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val valueTimeTemplate = stringResource(R.string.graph_point_value_time)
+
+    val labelBackground = remember(surfaceColor, outlineColor) {
+        ShapeComponent(
+            fill = Fill(surfaceColor),
+            shape = RoundedCornerShape(4.dp),
+            strokeFill = Fill(outlineColor),
+            strokeThickness = 1.dp
+        )
+    }
+    val markerLabel = rememberTextComponent(
+        style = TextStyle(color = onSurfaceColor, fontSize = 15.sp),
+        padding = Insets(horizontal = 10.dp, vertical = 5.dp),
+        background = labelBackground
+    )
+    val valueFormatter = remember(minTimestamp, sortedBg, formatChartYValue, mgdlToChartY, valueTimeTemplate) {
+        DefaultCartesianMarker.ValueFormatter { _, targets ->
+            if (sortedBg.isEmpty()) return@ValueFormatter ""
+            val x = targets.firstOrNull()?.x ?: return@ValueFormatter ""
+            val epochMs = minTimestamp + (x * 60000).toLong()
+            val bgMgdl = interpolateBgForDashboardMarker(epochMs, sortedBg, fallbackY = sortedBg.last().value)
+            val valueText = formatChartYValue(mgdlToChartY(bgMgdl))
+            val timeText = timeFormat.format(Date(epochMs))
+            String.format(valueTimeTemplate, valueText, timeText)
+        }
+    }
+
+    return rememberDefaultCartesianMarker(
+        label = markerLabel,
+        valueFormatter = valueFormatter,
+        labelPosition = DefaultCartesianMarker.LabelPosition.AroundPoint,
+        indicator = null,
+        guideline = null,
+    )
+}
+
+/**
+ * Matches [LineCartesianLayerMarkerTarget]s for the dashboard SMB series without duplicating
+ * scroll/zoom → model-X math. Tapping an SMB point fires [onSmbTap] (a toast) and, per the Vico
+ * contract for [shouldAcceptInteraction] (returning `false` only skips updating marker visibility for
+ * that interaction — it does not hide an already-visible marker), leaves the value/time tooltip as it
+ * was. Any other tap on the line falls through to the normal tooltip.
  */
 private class DashboardSmbTapMarkerController(
     private val smbs: List<ChartSmbMarker>,
@@ -915,6 +985,11 @@ private class DashboardSmbTapMarkerController(
 ) : CartesianMarkerController {
 
     override val acceptsLongPress: Boolean get() = false
+
+    // Vico only calls shouldShowMarker after shouldAcceptInteraction returns true for the SAME
+    // interaction, and both run on the UI thread during pointer-input handling, so a plain var is
+    // enough to pass "was this tap an SMB hit" across the two calls.
+    private var lastTapWasSmb = false
 
     override fun shouldAcceptInteraction(
         interaction: Interaction,
@@ -935,14 +1010,17 @@ private class DashboardSmbTapMarkerController(
                 bestSmb = smb
             }
         }
+        lastTapWasSmb = bestSmb != null
         if (bestSmb != null) {
             onSmbTap(bestSmb)
-            return false
         }
+        // Always true: an SMB hit must still reach shouldShowMarker so it can actively hide any
+        // stale value/time tooltip left over from an earlier tap, instead of leaving it on screen.
         return true
     }
 
-    override fun shouldShowMarker(interaction: Interaction, targets: List<CartesianMarker.Target>): Boolean = false
+    override fun shouldShowMarker(interaction: Interaction, targets: List<CartesianMarker.Target>): Boolean =
+        !lastTapWasSmb
 
     private companion object {
         private const val MODEL_X_MATCH_EPS = 0.02

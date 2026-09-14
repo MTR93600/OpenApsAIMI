@@ -16,6 +16,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -34,7 +35,9 @@ fun <T> TreatmentLazyColumn(
     getItemKey: (T) -> Any,
     rh: ResourceHelper,
     itemContent: @Composable (T) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    headerBackgroundColor: Color = MaterialTheme.colorScheme.surface,
+    headerTextColor: Color = MaterialTheme.colorScheme.primary
 ) {
     val dateUtil = LocalDateUtil.current
     val groupedByDay by remember(items) {
@@ -55,12 +58,12 @@ fun <T> TreatmentLazyColumn(
                     text = dateUtil.dateStringRelative(getTimestamp(itemsForDay.first()), rh),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
+                        .background(headerBackgroundColor)
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = headerTextColor
                 )
             }
 

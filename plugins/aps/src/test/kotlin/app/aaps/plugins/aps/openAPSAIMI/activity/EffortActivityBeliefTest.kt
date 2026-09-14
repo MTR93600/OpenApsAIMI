@@ -332,4 +332,60 @@ class EffortActivityBeliefTest {
             }
         }
     }
+
+    /**
+     * `DetermineBasalAIMI2` runs this belief twice over: once on the armed memory, once on a separate
+     * shadow memory so the export can show what the belief asked for while the opt-in key is off. Two
+     * chains over the same ticks must reach the same verdict, otherwise the shadow is not a faithful
+     * preview of what arming the key would do.
+     */
+    @Test
+    fun twoSeparateMemoryChainsOverTheSameTicksAgree() {
+        val ticks = listOf(
+            inputs(steps5 = 350, steps15 = 1000, steps60 = 3000, hrAvg15 = 105, hrResting = 65),
+            inputs(nowMs = t0 + 20 * 60_000L, steps5 = 0, steps15 = 120, steps60 = 3000, hrAvg15 = 88, hrResting = 65),
+            inputs(nowMs = t0 + 50 * 60_000L, steps5 = 0, steps15 = 0, steps60 = 1200, hrAvg15 = 70, hrResting = 65),
+        )
+        var armedMemory = EffortActivityBelief.Memory()
+        var shadowMemory = EffortActivityBelief.Memory()
+        for (tick in ticks) {
+            val (armed, nextArmed) = EffortActivityBelief.assess(tick, armedMemory)
+            val (shadow, nextShadow) = EffortActivityBelief.assess(tick, shadowMemory)
+            assertThat(shadow.smbFactor).isEqualTo(armed.smbFactor)
+            assertThat(shadow.state).isEqualTo(armed.state)
+            assertThat(shadow.posture).isEqualTo(armed.posture)
+            armedMemory = nextArmed
+            shadowMemory = nextShadow
+        }
+        assertThat(shadowMemory).isEqualTo(armedMemory)
+    }
+
+    /**
+     * The shadow chain must never be able to move the armed one. The memory is an immutable data
+     * class, so advancing one is not supposed to touch the other; this pins that down, because the
+     * disarmed export path advances the shadow memory on every tick.
+     */
+    @Test
+    fun advancingTheShadowMemoryLeavesTheArmedMemoryUntouched() {
+        val armedMemory = EffortActivityBelief.Memory()
+        var shadowMemory = armedMemory
+        repeat(5) { i ->
+            val (_, next) = EffortActivityBelief.assess(
+                inputs(nowMs = t0 + i * 60_000L, steps5 = 350, steps15 = 1000, steps60 = 3000, hrAvg15 = 105, hrResting = 65),
+                shadowMemory,
+            )
+            shadowMemory = next
+        }
+        assertThat(shadowMemory).isNotEqualTo(armedMemory)
+        assertThat(armedMemory.lastEffortMs).isEqualTo(0L)
+        assertThat(armedMemory.peakStepsPerMin).isEqualTo(0.0)
+        assertThat(armedMemory.effortMinutes).isEqualTo(0.0)
+        // A cold armed chain must still reach a walking verdict, proving the shadow took nothing from it.
+        val (fresh, _) = EffortActivityBelief.assess(
+            inputs(steps5 = 350, steps15 = 1000, steps60 = 3000, hrAvg15 = 105, hrResting = 65),
+            armedMemory,
+        )
+        assertThat(fresh.state).isEqualTo(EffortActivityBelief.State.ACTIVE)
+        assertThat(fresh.smbFactor).isLessThan(1.0)
+    }
 }

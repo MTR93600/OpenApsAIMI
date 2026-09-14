@@ -23,6 +23,17 @@ const val CORRECTION_AT_CENTER_MAX = 30.0
 
 const val MIN_ENTRIES_FOR_FIT = 2
 
+// A fit built from entries this old or newer is trusted at full strength.
+const val STALE_CONFIDENCE_FULL_DAYS = 2L
+
+// Past this age, the fit is fully blended to identity (see [blendTowardIdentity]) — a calibration
+// this old is not trusted at all, regardless of how good the original fit looked. Between the two
+// thresholds, trust falls off linearly. This is separate from [weightFor]/[TIME_DECAY_TAU_DAYS],
+// which only weighs entries against EACH OTHER: a fit built entirely from old entries would
+// otherwise keep applying its full correction indefinitely, even though none of its inputs have
+// been refreshed and sensor bias is known to drift over wear time.
+const val STALE_CONFIDENCE_ZERO_DAYS = 6L
+
 // Minimum spread of sensor values (mg/dL) required to trust a slope estimate.
 // Below this, leverage is too low: noise in fingerstick values dominates the slope,
 // which then extrapolates wildly outside the cluster. Falls back to offset-only.
@@ -132,6 +143,34 @@ fun fitLinearCalibration(entries: List<CAL>, now: Long): CalibrationFit? {
         CalibrationFit(clampedSlope, offsetForClampedSlope, mode = FitMode.SlopeClamped)
     }
 }
+
+/**
+ * Confidence (0..1) for how much a fit should still be trusted, based on how long ago its NEWEST
+ * entry was recorded. 1.0 while that entry is younger than [STALE_CONFIDENCE_FULL_DAYS], falling
+ * off linearly to 0.0 at [STALE_CONFIDENCE_ZERO_DAYS] or beyond.
+ */
+internal fun stalenessConfidence(newestEntryTimestamp: Long, now: Long): Double {
+    val ageMs = (now - newestEntryTimestamp).coerceAtLeast(0L).toDouble()
+    val fullMs = T.days(STALE_CONFIDENCE_FULL_DAYS).msecs().toDouble()
+    val zeroMs = T.days(STALE_CONFIDENCE_ZERO_DAYS).msecs().toDouble()
+    return when {
+        ageMs <= fullMs -> 1.0
+        ageMs >= zeroMs -> 0.0
+        else            -> (zeroMs - ageMs) / (zeroMs - fullMs)
+    }
+}
+
+/**
+ * Blends this fit toward identity (slope 1.0, offset 0.0) by [confidence] — 1.0 keeps it
+ * unchanged, 0.0 returns pure identity. Meant to be applied AFTER the safety-range checks
+ * ([isApplicable]): staleness reduces trust in an already-safe fit, it must never "age" a
+ * fundamentally unsafe fit into looking safe.
+ */
+fun CalibrationFit.blendTowardIdentity(confidence: Double): CalibrationFit =
+    copy(
+        slope = 1.0 + confidence * (slope - 1.0),
+        offset = confidence * offset,
+    )
 
 /**
  * How many sensor readings around a fingerstick may take part in the paired value.

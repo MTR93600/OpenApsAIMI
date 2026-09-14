@@ -31,6 +31,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.NumberInputRow
+import app.aaps.core.ui.compose.glass.GlassColors
+import app.aaps.core.ui.compose.glass.isGlassDarkMode
 import app.aaps.ui.R
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.Zoom
@@ -70,13 +72,14 @@ fun TddCyclePatternCompose(
     onOffsetChange: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isDark = isGlassDarkMode()
     var showCleaned by remember { mutableStateOf(false) }
 
     Column(modifier = modifier) {
         Text(
             text = stringResource(R.string.cycles_found, data.cycleCount, data.totalDaysAvailable),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = GlassColors.textMuted(isDark),
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
@@ -101,7 +104,7 @@ fun TddCyclePatternCompose(
             Text(
                 text = stringResource(R.string.cleaned_tdd_explanation),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = GlassColors.textMuted(isDark),
                 modifier = Modifier.padding(bottom = 8.dp)
             )
         }
@@ -112,14 +115,14 @@ fun TddCyclePatternCompose(
             Text(
                 text = stringResource(R.string.cycle_day1_date, cycles.first().startDate),
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface
+                color = GlassColors.textBright(isDark)
             )
         }
 
         Crossfade(targetState = showCleaned, label = "tdd_cycle_view") { cleaned ->
             val shownCycles = if (cleaned) data.cleanedCycles else data.rawCycles
             val average = if (cleaned) data.cleanedAverage else data.rawAverage
-            val baseColor = if (cleaned) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+            val baseColor = if (cleaned) GlassColors.emerald else GlassColors.skyBlue
             TddCycleChart(
                 cycles = shownCycles,
                 average = average,
@@ -135,7 +138,7 @@ fun TddCyclePatternCompose(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
         ) {
-            val legendBaseColor = if (showCleaned) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+            val legendBaseColor = if (showCleaned) GlassColors.emerald else GlassColors.skyBlue
             Box(
                 modifier = Modifier
                     .size(12.dp)
@@ -145,7 +148,7 @@ fun TddCyclePatternCompose(
             Text(
                 text = stringResource(R.string.cycle_lines_legend),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = GlassColors.textMuted(isDark)
             )
             Spacer(modifier = Modifier.width(16.dp))
             Box(
@@ -157,7 +160,7 @@ fun TddCyclePatternCompose(
             Text(
                 text = stringResource(app.aaps.core.ui.R.string.average),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = GlassColors.textMuted(isDark)
             )
         }
 
@@ -180,6 +183,7 @@ private fun TddCycleChart(
     baseColor: Color,
     modifier: Modifier = Modifier
 ) {
+    val isDark = isGlassDarkMode()
     val modelProducer = remember { CartesianChartModelProducer() }
     val averageColor = AapsTheme.generalColors.cycleAverage
     val cycleCount = cycles.size
@@ -232,7 +236,7 @@ private fun TddCycleChart(
         CartesianValueFormatter { _, value, _ -> "${value.toInt() + 1}" }
     }
 
-    val axisLabelComponent = rememberTextComponent(style = TextStyle(color = MaterialTheme.colorScheme.onSurface))
+    val axisLabelComponent = rememberTextComponent(style = TextStyle(color = GlassColors.textBright(isDark)))
 
     CartesianChartHost(
         chart = rememberCartesianChart(

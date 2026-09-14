@@ -49,6 +49,7 @@ import app.aaps.core.interfaces.rx.events.EventAPSCalculationFinished
 import app.aaps.core.interfaces.rx.events.EventPreferenceChange
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.interfaces.stats.TddCalculator
+import app.aaps.core.interfaces.stats.TirCalculator
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.HardLimits
@@ -109,6 +110,8 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.floor
 import kotlin.math.max
 import app.aaps.plugins.aps.openAPSAIMI.ISF.IsfBlender
+import app.aaps.plugins.aps.openAPSAIMI.ISF.StressIsfFloor
+import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextRepository
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfFusion
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfFusionBounds
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage
@@ -171,6 +174,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val glucoseStatusProvider: GlucoseStatusProvider,
     private val glucoseStatusCalculatorAimi: GlucoseStatusCalculatorAimi,
     private val tddCalculator: TddCalculator,
+    private val tirCalculator: TirCalculator,
     private val bgQualityCheck: BgQualityCheck,
     private val uiInteraction: UiInteraction,
     private val determineBasalaimiSMB2: DetermineBasalaimiSMB2,
@@ -182,6 +186,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val physioManager: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioManagerMTR, // ?? Physiological Manager MTR
     // ?? Physiological Decision Adapter (The Safety Gate)
     private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR,
+    // Steps / heart rate for the stress-ISF-floor signature. Already refreshed by `physioAdapter`
+    // earlier in the same tick, and self-refreshing when it is not.
+    private val healthContextRepository: HealthContextRepository,
     private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator, // ?? AI Auditor MTR
     private val contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager, // ?? Context Manager
     private val aimiBackupManager: AimiBackupManager, // ?? Cloud Backup Manager (Force Init)
@@ -402,6 +409,23 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
     /** Diagnostic: rx subscription tracing writes to `OApsAIMISmbTailDamping` (PKPD_TAIL_TRACE). */
     private var tailDampingTraceDisposable: Disposable? = null
+
+    /**
+     * Instant the current unbroken stress signature started, or null when there is none.
+     *
+     * Held here because [StressIsfFloor] is pure and keeps no state. Null at start-up, which is what
+     * makes a restart break the hold time, and null again on every break of the signature.
+     */
+    private var stressIsfSignatureSinceMs: Long? = null
+
+    /** Instant of the previous stress evaluation, so a gap longer than 10 min breaks continuity. */
+    private var stressIsfLastEvalMs: Long? = null
+
+    /** Verdict of the previous stress evaluation, so only an active floor may use its grace time. */
+    private var stressIsfWasActive: Boolean = false
+
+    /** Instant the signature stopped holding while the floor was still on, or null when it holds. */
+    private var stressIsfBreakStartedMs: Long? = null
 
     // ?tat EMA persistant (cl? Prefs ? cr?er si tu veux le garder entre runs)
     private var tddEma: Double? = null
@@ -1445,6 +1469,70 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 runCatching { profile.getProfileIsfMgdl() }.getOrNull()
             )
             IsfSourceTelemetry.recordPhysioFactor(physioMults.isfFactor)
+
+            // --- Stress ISF floor -------------------------------------------------------------------
+            // Steps and heart rate come from the snapshot `physioAdapter.getMultipliers` already
+            // refreshed earlier in this same tick (it calls `HealthContextRepository.fetchSnapshot`
+            // before reading anything). `fetchSnapshotForAutodriveGater` therefore serves that
+            // few-hundred-millisecond-old value; on the two paths where `getMultipliers` returns early
+            // (BG under its minimum, or a recent hypoglycaemia) the snapshot is older than the 90 s
+            // reuse window, so the gater falls through to a fresh synchronous read. Both paths read
+            // this tick, never the previous one.
+            val stressSnapshot = runCatching { healthContextRepository.fetchSnapshotForAutodriveGater() }.getOrNull()
+            val stressVerdict = StressIsfFloor.evaluate(
+                hrNowBpm = stressSnapshot?.hrNow ?: 0,
+                rhrRestingBpm = stressSnapshot?.rhrResting ?: 0,
+                stepsLast15m = stressSnapshot?.stepsLast15m ?: 0,
+                nowMs = dateUtil.now(),
+                signatureSinceMs = stressIsfSignatureSinceMs,
+                lastEvaluatedMs = stressIsfLastEvalMs,
+                wasActive = stressIsfWasActive,
+                breakStartedMs = stressIsfBreakStartedMs,
+            )
+            stressIsfSignatureSinceMs = stressVerdict.signatureSinceMs
+            stressIsfLastEvalMs = stressVerdict.lastEvaluatedMs
+            stressIsfWasActive = stressVerdict.active
+            stressIsfBreakStartedMs = stressVerdict.breakStartedMs
+            val stressFloorArmed = preferences.get(BooleanKey.OApsAIMIStressIsfFloor)
+            val stressFloorMultiplier =
+                if (stressVerdict.active && stressFloorArmed) StressIsfFloor.ARMED_FLOOR_MULTIPLIER
+                else DynamicSensitivityPolicy.PROFILE_RELATIVE_FLOOR
+
+            // The commanded sensitivity after every multiplier and before the floor. Read here, at the
+            // same place the old code read it, so the number the loop commands is unchanged.
+            val preFloorIsfMgdl = profile.getIsfMgdl("OpenAPSAIMIPlugin") * physioMults.isfFactor
+            val profileIsfForFloorMgdl = runCatching { profile.getProfileIsfMgdl() }.getOrNull()
+            // The profile-relative lower bound is applied here too, because this is the value that
+            // becomes `profile.sens` — the number read by the predictions, the tube advisor and the
+            // hypoglycaemia guard, and exported as `command_isf_mgdl`. Without it the bound would sit
+            // before the multipliers that undo it, which is the defect ADR 0008 keeps recording: the
+            // physiological factor is applied after the `coerceIn(5.0, 300.0)` on this path, which is
+            // how a commanded sensitivity of 4.54 mg/dL/U was reached on 2026-08-14 (5.00 x 0.908).
+            // The shadow witness of that same bound used to be recorded here, on the value the
+            // floor had **already** raised. Its own lower bound is the same 0.5 x profile, so it
+            // could never fire again: `isf_profile_relative_bound_hit` was false on 709 night
+            // ticks out of 709 while the floor was really setting the value on 244 of them. The
+            // order now lives in [CommandedIsf], which measures first and floors after.
+            // See `docs/adr/0008-isf-decision-architecture.md`.
+            val commandedIsfMgdl = CommandedIsf.floorAgainstProfileAndRecordShadow(
+                preFloorMgdlPerU = preFloorIsfMgdl,
+                profileIsfMgdlPerU = profileIsfForFloorMgdl,
+                floorMultiplier = stressFloorMultiplier,
+            )
+            // Shadow measure, written on every tick whether the key is armed or not: what the floor at
+            // 1.0 x profile would command. Only recorded when the signature is active and the value
+            // really differs, so an absent field stays absent instead of reading as a zero.
+            val stressFlooredIsfMgdl = DynamicSensitivityPolicy.floorAgainstProfile(
+                commandedMgdlPerU = preFloorIsfMgdl,
+                profileIsfMgdlPerU = profileIsfForFloorMgdl,
+                floorMultiplier = StressIsfFloor.ARMED_FLOOR_MULTIPLIER,
+            )
+            IsfSourceTelemetry.recordStressIsfFloor(
+                active = stressVerdict.active,
+                reason = stressVerdict.reason,
+                flooredIsfMgdl = stressFlooredIsfMgdl.takeIf { stressVerdict.active && it != commandedIsfMgdl },
+            )
+
             val oapsProfile = OapsProfileAimi(
                 dia = eff.iCfg.dia,
                 min_5m_carbimpact = 0.0, // not used
@@ -1455,25 +1543,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 max_bg = maxBg,
                 target_bg = targetBg,
                 carb_ratio = profile.getIc(),
-                // The profile-relative lower bound is applied here too, because this is the value that
-                // becomes `profile.sens` — the number read by the predictions, the tube advisor and the
-                // hypoglycaemia guard, and exported as `command_isf_mgdl`. Without it the bound would sit
-                // before the multipliers that undo it, which is the defect ADR 0008 keeps recording: the
-                // physiological factor is applied after the `coerceIn(5.0, 300.0)` on this path, which is
-                // how a commanded sensitivity of 4.54 mg/dL/U was reached on 2026-08-14 (5.00 x 0.908).
-                // The shadow witness of that same bound used to be recorded here, on the value the
-                // floor had **already** raised. Its own lower bound is the same 0.5 x profile, so it
-                // could never fire again: `isf_profile_relative_bound_hit` was false on 709 night
-                // ticks out of 709 while the floor was really setting the value on 244 of them. The
-                // order now lives in [CommandedIsf], which measures first and floors after.
-                // See `docs/adr/0008-isf-decision-architecture.md`.
-                sens = CommandedIsf.floorAgainstProfileAndRecordShadow(
-                    // The commanded sensitivity after every multiplier and before the floor. Read
-                    // here, at the same place the old code read it, so the number the loop commands
-                    // is unchanged.
-                    preFloorMgdlPerU = profile.getIsfMgdl("OpenAPSAIMIPlugin") * physioMults.isfFactor,
-                    profileIsfMgdlPerU = runCatching { profile.getProfileIsfMgdl() }.getOrNull(),
-                ),
+                // Computed just above, together with the stress-floor verdict.
+                sens = commandedIsfMgdl,
                 autosens_adjust_targets = false, // not used
                 max_daily_safety_multiplier = preferences.get(DoubleKey.ApsMaxDailyMultiplier) * physioMults.smbFactor, // ?? SMB Cap modulation
                 current_basal_safety_multiplier = preferences.get(DoubleKey.ApsMaxCurrentBasalMultiplier) * physioMults.basalFactor, // ?? Basal Cap modulation
@@ -1969,6 +2040,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                                 rh = rh,
                                 unifiedReactivityLearner = unifiedReactivityLearner,
                                 tddCalculator = tddCalculator,
+                                // Without this the advisor has no glucose source and must stay silent.
+                                tirCalculator = tirCalculator,
+                                aapsLogger = aapsLogger,
                             ).pkpdRecommendationsForSettings(7)
                         }
                     },
@@ -2305,8 +2379,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 add(DoubleKey.autodriveMaxBasal)
                 add(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep)
                 add(BooleanKey.OApsAIMIautodriveAggressiveSmbFloor)
+                add(BooleanKey.OApsAIMIStressIsfFloor)
                 add(BooleanKey.OApsAIMIEffortActivityProtection)
-                add(BooleanKey.OApsAIMIDescentRedoseGuard)
+                add(BooleanKey.OApsAIMIRiseCeilingGuard)
                 add(DoubleKey.OApsAIMIautodrivesmallPrebolus)
                 add(DoubleKey.OApsAIMIautodrivePrebolus)
                 add(

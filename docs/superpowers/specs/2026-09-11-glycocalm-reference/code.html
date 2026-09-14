@@ -1,0 +1,421 @@
+<!DOCTYPE html><html lang="en" style=""><svg class="inline-defs-container" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"></svg><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+<title>GlycoCalm Dashboard</title>
+<!-- Google Fonts: Plus Jakarta Sans -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            glyco: {
+              bg: '#F3F6FC',
+              card: '#FFFFFF',
+              surfaceDim: '#E8EEF9',
+              teal: '#00A896',
+              cyan: '#028090',
+              accentGreen: '#00C853',
+              accentBlue: '#0090FF',
+              textDark: '#102A43',
+              textMuted: '#627D98',
+              borderLight: '#E2E8F0',
+            }
+          },
+          boxShadow: {
+            'soft-card': '0 10px 25px -4px rgba(16, 42, 67, 0.05), 0 4px 6px -2px rgba(16, 42, 67, 0.025)',
+            'tactile-pill': '0 2px 4px rgba(0, 0, 0, 0.03), inset 0 1px 1px rgba(255, 255, 255, 0.8), 0 1px 2px rgba(16, 42, 67, 0.04)',
+            'floating-dock': '0 14px 35px -6px rgba(16, 42, 67, 0.12), 0 4px 12px -2px rgba(16, 42, 67, 0.06)'
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-scrollbars-and-reset">
+    body {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      background: linear-gradient(180deg, #F8FAFD 0%, #EEF3FA 100%);
+    }
+    /* Hide scrollbar for Chrome, Safari and Opera */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    /* Hide scrollbar for IE, Edge and Firefox */
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="font-sans text-glyco-textDark min-h-screen flex justify-center items-start antialiased selection:bg-teal-100">
+<!-- BEGIN: MobileDeviceFrame -->
+<div class="w-full max-w-[440px] min-h-screen bg-glyco-bg flex flex-col relative pb-2">
+<!-- BEGIN: TopBar -->
+<header class="px-4 pt-3 pb-2 flex items-center justify-between gap-3 sticky top-0 bg-glyco-bg/90 backdrop-blur-md z-30" data-purpose="app-header">
+<!-- Menu Drawer Button -->
+<button aria-label="Menu" class="w-10 h-10 flex items-center justify-center text-glyco-textDark hover:opacity-75 transition-opacity">
+<svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+<path d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+<!-- Search Input -->
+<div class="flex-1 relative">
+<div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-glyco-textMuted">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24">
+<path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<input class="w-full bg-[#E9EDF5] text-glyco-textDark text-sm rounded-full py-2 pl-10 pr-4 placeholder-glyco-textMuted/70 border border-white/60 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all shadow-inner" placeholder="Search" type="text">
+</div>
+<!-- Action Icons -->
+<div class="flex items-center gap-1">
+<!-- Logbook Icon -->
+<button aria-label="Logbook" class="w-9 h-9 flex items-center justify-center text-glyco-textDark hover:opacity-75 transition-opacity">
+<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+<path d="M19 2H6c-1.2 0-2 .8-2 2v16c0 1.2.8 2 2 2h13c.6 0 1-.4 1-1V3c0-.6-.4-1-1-1zm-1 16H7c-.6 0-1-.4-1-1V5c0-.6.4-1 1-1h11v14z"></path>
+<path d="M9 7h7v2H9zm0 4h7v2H9z"></path>
+</svg>
+</button>
+<!-- Settings Gear Icon -->
+<button aria-label="System Settings" class="w-9 h-9 flex items-center justify-center text-glyco-textDark hover:opacity-75 transition-opacity">
+<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+<path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"></path>
+</svg>
+</button>
+</div>
+</header>
+<!-- END: TopBar -->
+<!-- BEGIN: MainContent -->
+<main class="px-3 space-y-3 flex-1">
+<!-- BEGIN: HeroCard -->
+<!-- Main Status Card with 3 Columns and Bottom Sub-pills -->
+<section class="bg-white rounded-3xl p-3.5 shadow-soft-card border border-slate-100" data-purpose="primary-status-card">
+<!-- Top Triple Column Status Overview -->
+<div class="grid grid-cols-12 gap-2 items-center">
+<!-- Column 1: Left Pills (Insulin, Patch Pump, Battery, Tools) -->
+<div class="col-span-4 space-y-1.5" data-purpose="left-device-metrics">
+<!-- Pill 1: Insulin -->
+<div class="bg-gradient-to-b from-white to-[#F3F7FC] rounded-2xl p-1.5 px-2 border border-[#E0E8F3] shadow-tactile-pill flex items-center gap-1.5">
+<div class="w-5 h-5 flex items-center justify-center text-cyan-600">
+<svg class="w-4 h-4 fill-cyan-600" viewBox="0 0 24 24">
+<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+</svg>
+</div>
+<div class="leading-tight">
+<span class="block text-[10px] text-glyco-textMuted font-medium">Insulin</span>
+<span class="block text-xs font-bold text-glyco-textDark">1d 16h</span>
+</div>
+</div>
+<!-- Pill 2: Patch Pump -->
+<div class="bg-gradient-to-b from-white to-[#F3F7FC] rounded-2xl p-1.5 px-2 border border-[#E0E8F3] shadow-tactile-pill flex items-center gap-1.5">
+<div class="w-5 h-5 flex items-center justify-center text-cyan-700">
+<svg class="w-4 h-4 text-cyan-700" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+<circle cx="12" cy="12" r="3"></circle>
+<path d="M12 2v4m0 12v4M2 12h4m12 0h4"></path>
+</svg>
+</div>
+<div class="leading-tight">
+<span class="block text-[10px] text-glyco-textMuted font-medium truncate">Patch pump</span>
+<span class="block text-xs font-bold text-glyco-textDark">1d 16h</span>
+</div>
+</div>
+<!-- Pill 3: Battery -->
+<div class="bg-gradient-to-b from-white to-[#F3F7FC] rounded-2xl p-1.5 px-2 border border-[#E0E8F3] shadow-tactile-pill flex items-center gap-1.5">
+<div class="w-5 h-5 flex items-center justify-center text-slate-500">
+<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+<path d="M16 4h-1V2h-6v2H8c-.55 0-1 .45-1 1v16c0 .55.45 1 1 1h8c.55 0 1-.45 1-1V5c0-.55-.45-1-1-1zm-1 10H9v-2h6v2z"></path>
+</svg>
+</div>
+<div class="leading-tight">
+<span class="block text-[10px] text-glyco-textMuted font-medium">Battery</span>
+<span class="block text-xs font-bold text-glyco-textDark">--</span>
+</div>
+</div>
+<!-- Pill 4: Tools -->
+<button class="w-full bg-gradient-to-b from-white to-[#F3F7FC] rounded-2xl p-1.5 px-2 border border-[#E0E8F3] shadow-tactile-pill flex items-center justify-center gap-1.5 hover:bg-slate-50 transition-colors">
+<svg class="w-3.5 h-3.5 text-glyco-textMuted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round"></path>
+<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="text-xs font-semibold text-glyco-textMuted">Tools</span>
+</button>
+</div>
+<!-- Column 2: Center Big Glucose Value -->
+<div class="col-span-4 flex flex-col items-center justify-center text-center py-1" data-purpose="primary-glucose-display">
+<span class="text-5xl font-extrabold tracking-tight text-emerald-500 leading-none">103</span>
+<span class="text-[11px] font-semibold text-glyco-textMuted mt-1">mg/dL</span>
+<!-- Trend Arrow & Delta -->
+<div class="flex items-center gap-1 mt-2 text-emerald-500 font-bold text-sm">
+<svg class="w-4 h-4 stroke-[3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Δ +2</span>
+</div>
+<span class="text-[11px] text-slate-400 font-medium">(-1)</span>
+</div>
+<!-- Column 3: Right Pills (Sensor, Loop, Activity) -->
+<div class="col-span-4 space-y-1.5" data-purpose="right-loop-metrics">
+<!-- Pill 1: Sensor -->
+<div class="bg-gradient-to-b from-white to-[#F3F7FC] rounded-2xl p-1.5 px-2 border border-[#E0E8F3] shadow-tactile-pill flex items-center gap-1.5 relative overflow-hidden">
+<div class="w-5 h-5 flex items-center justify-center text-indigo-500">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<div class="leading-tight">
+<span class="block text-[10px] text-glyco-textMuted font-medium">Sensor</span>
+<span class="block text-xs font-bold text-glyco-textDark">5d 16h</span>
+</div>
+</div>
+<!-- Pill 2: Closed Loop -->
+<div class="bg-gradient-to-b from-white to-[#F3F7FC] rounded-2xl p-1.5 px-2 border border-[#E0E8F3] shadow-tactile-pill flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm ml-1 flex-shrink-0 animate-pulse"></span>
+<div class="leading-tight">
+<span class="block text-[10px] text-glyco-textMuted font-medium">Loop</span>
+<span class="block text-xs font-bold text-glyco-textDark truncate">Closed Loop</span>
+</div>
+</div>
+<!-- Pill 3: Activity -->
+<div class="bg-gradient-to-b from-white to-[#F3F7FC] rounded-2xl p-1.5 px-2 border border-[#E0E8F3] shadow-tactile-pill flex items-center gap-1.5">
+<div class="w-5 h-5 flex items-center justify-center text-glyco-textMuted flex-shrink-0">
+<svg class="w-4 h-4 text-slate-500" fill="currentColor" viewBox="0 0 24 24">
+<path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"></path>
+</svg>
+</div>
+<div class="leading-tight">
+<span class="block text-[10px] text-glyco-textMuted font-medium">Activity</span>
+<span class="block text-[11px] font-bold text-glyco-textDark truncate">1924 · 76 bpm</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Hero Bottom Sub-Pills (IOB, Target, Basal) -->
+<div class="grid grid-cols-3 gap-2 mt-3 pt-2.5 border-t border-slate-100" data-purpose="bottom-stat-pills">
+<div class="bg-gradient-to-b from-white to-[#F4F7FB] border border-[#DEE6F2] rounded-2xl py-1.5 text-center shadow-tactile-pill">
+<span class="text-[11px] font-bold text-glyco-textDark">IOB: 0.90 U</span>
+</div>
+<div class="bg-gradient-to-b from-white to-[#F4F7FB] border border-[#DEE6F2] rounded-2xl py-1.5 text-center shadow-tactile-pill">
+<span class="text-[11px] font-bold text-glyco-textDark">Target 105</span>
+</div>
+<div class="bg-gradient-to-b from-white to-[#F4F7FB] border border-[#DEE6F2] rounded-2xl py-1.5 text-center shadow-tactile-pill">
+<span class="text-[11px] font-bold text-glyco-textDark">Basal T 4.40 U/h</span>
+</div>
+</div>
+</section>
+<!-- END: HeroCard -->
+<!-- BEGIN: BloodGlucoseChartCard -->
+<section class="bg-white rounded-3xl p-4 shadow-soft-card border border-slate-100" data-purpose="blood-glucose-chart">
+<!-- Header -->
+<div class="flex items-center justify-between mb-2">
+<span class="font-bold text-sm text-glyco-textDark tracking-wide">BG</span>
+<div class="flex items-center gap-1.5">
+<span class="text-xs text-glyco-textMuted font-semibold">13:09</span>
+<span class="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">90</span>
+</div>
+</div>
+<!-- SVG BG Chart Graphic -->
+<div class="relative w-full h-40">
+<svg class="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 360 150">
+<defs>
+<!-- Target in-range soft emerald wash -->
+<linearGradient id="bgRangeGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#34D399" stop-opacity="0.25"></stop>
+<stop offset="100%" stop-color="#34D399" stop-opacity="0.06"></stop>
+</linearGradient>
+</defs>
+<!-- Grid Lines Vertical -->
+<line stroke="#F1F5F9" stroke-width="1" x1="30" x2="30" y1="10" y2="130"></line>
+<line stroke="#F1F5F9" stroke-width="1" x1="90" x2="90" y1="10" y2="130"></line>
+<line stroke="#F1F5F9" stroke-width="1" x1="150" x2="150" y1="10" y2="130"></line>
+<line stroke="#F1F5F9" stroke-width="1" x1="210" x2="210" y1="10" y2="130"></line>
+<line stroke="#F1F5F9" stroke-width="1" x1="270" x2="270" y1="10" y2="130"></line>
+<!-- Target BG Shaded Region (65 - 180 mg/dL) -->
+<rect fill="url(#bgRangeGradient)" height="75" rx="4" width="320" x="0" y="25"></rect>
+<line opacity="0.5" stroke="#34D399" stroke-dasharray="3 3" stroke-width="0.8" x1="0" x2="320" y1="25" y2="25"></line>
+<line opacity="0.5" stroke="#34D399" stroke-dasharray="3 3" stroke-width="0.8" x1="0" x2="320" y1="100" y2="100"></line>
+<!-- Y Axis Reference labels -->
+<text fill="#94A3B8" font-family="Plus Jakarta Sans" font-size="9" x="325" y="28">180</text>
+<text fill="#94A3B8" font-family="Plus Jakarta Sans" font-size="9" x="325" y="103">65</text>
+<!-- Vertical current time line -->
+<line stroke="#94A3B8" stroke-dasharray="2 2" stroke-width="1" x1="240" x2="240" y1="10" y2="130"></line>
+<!-- Historical BG Curve -->
+<path d="M 0,82
+                     C 10,85 15,95 25,98
+                     C 35,102 45,100 55,95
+                     C 65,90 70,82 80,80
+                     C 90,78 95,85 105,82
+                     C 115,79 120,85 130,80
+                     C 140,75 145,62 155,59
+                     C 165,56 168,70 178,73
+                     C 188,76 195,80 205,85
+                     C 215,90 225,89 235,88
+                     L 240,88" fill="none" stroke="#00C49F" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+<!-- Current BG Point -->
+<circle cx="240" cy="88" fill="#FFFFFF" r="4" stroke="#FFA726" stroke-width="2.5"></circle>
+<!-- Predicted BG Range (Yellow & Teal dotted curves) -->
+<!-- Upper Prediction (Yellow) -->
+<path d="M 240,88 C 265,77 290,75 320,78" fill="none" stroke="#FBBF24" stroke-dasharray="2.5 3" stroke-linecap="round" stroke-width="2"></path>
+<!-- Lower Prediction (Teal) -->
+<path d="M 240,88 C 265,92 290,98 320,102" fill="none" stroke="#00C49F" stroke-dasharray="2.5 3" stroke-linecap="round" stroke-width="2"></path>
+<!-- Carbs / Bolus event indicators at 09:00 and 10:00 -->
+<circle cx="85" cy="120" fill="#0284C7" r="3.5"></circle>
+<circle cx="95" cy="120" fill="#0284C7" r="3.5"></circle>
+<circle cx="145" cy="120" fill="#0284C7" r="3.5"></circle>
+<circle cx="152" cy="120" fill="#0284C7" r="3.5"></circle>
+<circle cx="159" cy="120" fill="#0284C7" r="3.5"></circle>
+<circle cx="166" cy="120" fill="#0284C7" r="3.5"></circle>
+<!-- Bottom X-axis Time Marks -->
+<text fill="#94A3B8" font-size="9" font-weight="500" x="0" y="145">07</text>
+<text fill="#94A3B8" font-size="9" font-weight="500" x="48" y="145">08</text>
+<text fill="#94A3B8" font-size="9" font-weight="500" x="96" y="145">09</text>
+<text fill="#94A3B8" font-size="9" font-weight="500" x="144" y="145">10</text>
+<text fill="#94A3B8" font-size="9" font-weight="500" x="192" y="145">11</text>
+<text fill="#94A3B8" font-size="9" font-weight="500" x="238" y="145">13</text>
+</svg>
+</div>
+</section>
+<!-- END: BloodGlucoseChartCard -->
+<!-- BEGIN: InsulinOnBoardChartCard -->
+<section class="bg-white rounded-3xl p-3 shadow-soft-card border border-slate-100" data-purpose="iob-chart">
+<!-- Header -->
+<div class="flex items-center justify-between mb-1">
+<span class="font-bold text-sm text-glyco-textDark tracking-wide">IOB</span>
+<span class="text-xs font-bold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded-full border border-cyan-100">0.77 U</span>
+</div>
+<!-- SVG IOB Chart Graphic -->
+<div class="relative w-full h-24">
+<svg class="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 360 120">
+<defs>
+<linearGradient id="iobAreaGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#38BDF8" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#38BDF8" stop-opacity="0.0"></stop>
+</linearGradient>
+</defs>
+<!-- Vertical Time Grid lines -->
+<line stroke="#F1F5F9" stroke-width="1" x1="30" x2="30" y1="5" y2="95"></line>
+<line stroke="#F1F5F9" stroke-width="1" x1="90" x2="90" y1="5" y2="95"></line>
+<line stroke="#F1F5F9" stroke-width="1" x1="150" x2="150" y1="5" y2="95"></line>
+<line stroke="#F1F5F9" stroke-width="1" x1="210" x2="210" y1="5" y2="95"></line>
+<line stroke="#F1F5F9" stroke-width="1" x1="270" x2="270" y1="5" y2="95"></line>
+<!-- Y Axis indicators -->
+<text fill="#94A3B8" font-family="Plus Jakarta Sans" font-size="9" x="330" y="15">5.0</text>
+<text fill="#94A3B8" font-family="Plus Jakarta Sans" font-size="9" x="330" y="98">0</text>
+<!-- Baseline -->
+<line stroke="#E2E8F0" stroke-width="1" x1="0" x2="320" y1="98" y2="98"></line>
+<!-- IOB Filled Area Graph -->
+<path d="M 0,25
+                     L 8,20
+                     L 75,76
+                     L 90,62
+                     L 142,88
+                     L 162,32
+                     L 240,94
+                     L 240,98
+                     L 0,98 Z" fill="url(#iobAreaGradient)"></path>
+<!-- IOB Primary Stroke Line -->
+<path d="M 0,25
+                     L 8,20
+                     L 75,76
+                     L 90,62
+                     L 142,88
+                     L 162,32
+                     L 240,94" fill="none" stroke="#0EA5E9" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"></path>
+<!-- Current IOB dot -->
+<circle cx="240" cy="94" fill="#FFFFFF" r="3.5" stroke="#0EA5E9" stroke-width="2"></circle>
+<!-- Bottom X-axis Time Labels -->
+<text fill="#94A3B8" font-size="9" font-weight="500" x="0" y="112">07</text>
+<text fill="#94A3B8" font-size="9" font-weight="500" x="48" y="112">08</text>
+<text fill="#94A3B8" font-size="9" font-weight="500" x="96" y="112">09</text>
+<text fill="#94A3B8" font-size="9" font-weight="500" x="144" y="112">10</text>
+<text fill="#94A3B8" font-size="9" font-weight="500" x="192" y="112">11</text>
+<text fill="#94A3B8" font-size="9" font-weight="500" x="238" y="112">13</text>
+</svg>
+</div>
+</section><div class="flex items-center justify-between gap-1.5 pt-0.5" data-purpose="time-selectors-row">
+<button class="px-3.5 py-1.5 rounded-2xl bg-white border border-[#DEE6F2] shadow-tactile-pill text-xs font-bold text-glyco-textDark hover:bg-slate-50 transition-colors">
+          Stats
+        </button>
+<div class="flex items-center bg-[#EDF2F9] p-1 rounded-2xl border border-white/60 shadow-inner">
+<button class="px-2.5 py-1 rounded-xl bg-cyan-600 text-white text-xs font-bold shadow-sm">6h</button>
+<button class="px-2.5 py-1 rounded-xl text-glyco-textMuted hover:text-glyco-textDark text-xs font-semibold transition-colors">12h</button>
+<button class="px-2.5 py-1 rounded-xl text-glyco-textMuted hover:text-glyco-textDark text-xs font-semibold transition-colors">18h</button>
+<button class="px-2.5 py-1 rounded-xl text-glyco-textMuted hover:text-glyco-textDark text-xs font-semibold transition-colors">24h</button>
+</div>
+<button class="px-3.5 py-1.5 rounded-2xl bg-white border border-[#DEE6F2] shadow-tactile-pill text-xs font-bold text-glyco-textDark hover:bg-slate-50 transition-colors">
+          Treatment
+        </button>
+</div>
+<!-- END: InsulinOnBoardChartCard -->
+</main>
+<!-- END: MainContent -->
+<!-- BEGIN: UnifiedFloatingDock -->
+<!-- Elegantly combines time selector pills, fast action pills and persistent tab navigation -->
+<nav class="fixed bottom-0 inset-x-0 max-w-[440px] mx-auto px-3 pb-3 pt-2 bg-gradient-to-t from-white via-white/95 to-transparent backdrop-blur-md z-40 border-t border-slate-100" data-purpose="unified-bottom-controls">
+<div class="bg-white/90 backdrop-blur-md rounded-3xl border border-[#DEE6F2] shadow-soft-card px-3 py-1.5 flex items-center justify-between"><button class="flex flex-col items-center justify-center flex-1 py-1 group">
+<div class="w-6 h-6 flex items-center justify-center text-glyco-textDark group-hover:text-cyan-600 transition-colors">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+<path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<span class="text-[10px] font-semibold text-glyco-textDark group-hover:text-cyan-600 transition-colors mt-0.5">Treatments</span>
+</button>
+<button aria-label="Profiles" class="flex flex-col items-center justify-center flex-1 py-1 text-indigo-600 hover:scale-110 active:scale-95 transition-transform group">
+<div class="w-6 h-6 flex items-center justify-center">
+<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+<path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path>
+</svg>
+</div>
+<span class="text-[10px] font-semibold text-glyco-textDark group-hover:text-indigo-600 transition-colors mt-0.5">Profiles</span>
+</button>
+<button aria-label="Add Bolus" class="flex flex-col items-center justify-center flex-1 py-1 text-rose-500 hover:scale-110 active:scale-95 transition-transform group">
+<div class="w-6 h-6 flex items-center justify-center relative">
+<svg class="w-5 h-5 fill-rose-500" viewBox="0 0 24 24">
+<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+</svg>
+<svg class="w-3.5 h-3.5 fill-rose-500 absolute -bottom-0.5 -right-1" viewBox="0 0 24 24">
+<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+</svg>
+</div>
+<span class="text-[10px] font-semibold text-glyco-textDark group-hover:text-rose-500 transition-colors mt-0.5">Bolus</span>
+</button>
+<button aria-label="Pump Config" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-600 hover:scale-110 active:scale-95 transition-transform group">
+<div class="w-6 h-6 flex items-center justify-center">
+<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+<path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"></path>
+</svg>
+</div>
+<span class="text-[10px] font-semibold text-glyco-textDark group-hover:text-slate-600 transition-colors mt-0.5">Pump</span>
+</button>
+<button class="flex flex-col items-center justify-center flex-1 py-1 group relative">
+<div class="w-6 h-6 flex items-center justify-center text-glyco-textDark group-hover:text-emerald-600 transition-colors relative">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+<path d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="absolute -top-1.5 -right-2 bg-emerald-600 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center border-2 border-white shadow-sm">
+              7
+            </span>
+</div>
+<span class="text-[10px] font-semibold text-glyco-textDark group-hover:text-emerald-600 transition-colors mt-0.5">Scenarios</span>
+</button>
+<button class="flex flex-col items-center justify-center flex-1 py-1 group">
+<div class="w-6 h-6 flex items-center justify-center text-glyco-textDark group-hover:text-cyan-600 transition-colors">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+<path d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<span class="text-[10px] font-semibold text-glyco-textDark group-hover:text-cyan-600 transition-colors mt-0.5">Management</span>
+</button></div></nav>
+<!-- END: UnifiedFloatingDock -->
+</div>
+<!-- END: MobileDeviceFrame -->
+
+
+</body></html>

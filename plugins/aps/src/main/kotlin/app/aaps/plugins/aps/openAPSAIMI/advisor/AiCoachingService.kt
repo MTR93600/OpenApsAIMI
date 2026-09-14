@@ -262,13 +262,17 @@ class AiCoachingService @Inject constructor() {
 
         // 1. Context: Metrics
         sb.append("--- PATIENT METRICS (Advisor period) ---\n")
-        sb.append("Score: ${report.overallScore}/10 | GMI-style index: ${String.format(Locale.US, "%.1f", ctx.metrics.gmi)}\n")
-        sb.append("TIR (70-180): ${(ctx.metrics.tir70_180 * 100).roundToInt()}%\n")
-        sb.append("Hypo (<70): ${(ctx.metrics.timeBelow70 * 100).roundToInt()}% | Severe (<54): ${(ctx.metrics.timeBelow54 * 100).roundToInt()}%\n")
-        sb.append("Hyper (>180): ${(ctx.metrics.timeAbove180 * 100).roundToInt()}%\n")
-        sb.append("Mean Glucose: ${ctx.metrics.meanBg.roundToInt()} mg/dL\n")
-        sb.append("Total Daily Dose (TDD): ${ctx.metrics.tdd.roundToInt()} U\n")
-        sb.append("Basal/Bolus Split: ${(ctx.metrics.basalPercent * 100).roundToInt()}% Basal | ${(100 - (ctx.metrics.basalPercent * 100).roundToInt())}% Bolus\n\n")
+        // "unknown" is written out on purpose: the model must never read a made-up number as a fact.
+        val unknown = "unknown"
+        fun percentOrUnknown(value: Double?): String = value?.let { "${(it * 100).roundToInt()}%" } ?: unknown
+        sb.append("Score: ${report.overallScore ?: unknown}/10 | GMI-style index: ${ctx.metrics.gmi?.let { String.format(Locale.US, "%.1f", it) } ?: unknown}\n")
+        sb.append("TIR (70-180): ${percentOrUnknown(ctx.metrics.tir70_180)}\n")
+        sb.append("Hypo (<70): ${percentOrUnknown(ctx.metrics.timeBelow70)} | Severe (<54): ${percentOrUnknown(ctx.metrics.timeBelow54)}\n")
+        sb.append("Hyper (>180): ${percentOrUnknown(ctx.metrics.timeAbove180)}\n")
+        sb.append("Mean Glucose: ${ctx.metrics.meanBg?.roundToInt() ?: unknown} mg/dL\n")
+        sb.append("Total Daily Dose (TDD): ${ctx.metrics.tdd?.roundToInt() ?: unknown} U\n")
+        val basalPct = ctx.metrics.basalPercent?.let { (it * 100).roundToInt() }
+        sb.append("Basal/Bolus Split: ${basalPct?.let { "$it% Basal | ${100 - it}% Bolus" } ?: unknown}\n\n")
 
         report.orefAnalysis?.let { oref ->
             sb.append(oref.toPromptSection())

@@ -318,22 +318,41 @@ enum class BooleanKey(
         dependency = OApsAIMIautoDriveActive,
     ),
     /**
-     * Opt-in: refuse a **bolus** that re-doses a descent which is already covered by active insulin.
+     * Opt-in: while a stress signature holds, forbid the commanded insulin sensitivity from falling
+     * under the profile sensitivity of this time of day.
      *
-     * Blocks only when all five conditions of `DescentRedoseGuard` hold at once: a peak of at least
-     * 180 mg/dL inside the last 120 min, that peak at least 30 min behind, BG now at least 25 mg/dL
-     * under it, more than 6 U still active, and BG not more than 25 mg/dL above the lowest point
-     * reached since the peak. That last condition is what keeps a new rise out.
+     * The signature is heart rate at least 20 bpm over resting, fewer than 100 steps in the last
+     * 15 min, held without a break for at least 10 min. It is evaluated 24 hours a day, with no time
+     * window. The gesture only ever **raises** the commanded sensitivity, which makes every prediction
+     * attribute a larger effect to the insulin already on board, so it can only make a dose smaller.
+     *
+     * The verdict is computed and exported on every tick even when this key is false, so the effect can
+     * be measured before the gesture is armed. See `StressIsfFloor`.
+     */
+    OApsAIMIStressIsfFloor(
+        key = "key_aimi_stress_isf_floor",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_stress_isf_floor,
+        summaryResId = R.string.pref_summary_aimi_stress_isf_floor,
+    ),
+    /**
+     * Opt-in: refuse a **bolus** that repeats the ceiling dose during a fast rise.
+     *
+     * Refuses only when both conditions of `RiseCeilingGuard` hold: the bolus has come out exactly
+     * at a configured ceiling for 3 ticks in a row, and glucose is rising by at least 8 mg/dL per
+     * 5 min. The first doses of a rise are never touched, only the ones sent while the earlier ones
+     * cannot yet be seen.
      *
      * Bolus channel only: the temporary basal command is untouched. The verdict is computed and
      * exported on every tick even when this key is false, so the effect can be measured before the
-     * gesture is armed.
+     * gesture is armed — the thresholds were chosen after seeing the data and still need a
+     * measurement made in advance.
      */
-    OApsAIMIDescentRedoseGuard(
-        key = "key_aimi_descent_redose_guard",
+    OApsAIMIRiseCeilingGuard(
+        key = "key_aimi_rise_ceiling_guard",
         defaultValue = false,
-        titleResId = R.string.pref_title_aimi_descent_redose_guard,
-        summaryResId = R.string.pref_summary_aimi_descent_redose_guard,
+        titleResId = R.string.pref_title_aimi_rise_ceiling_guard,
+        summaryResId = R.string.pref_summary_aimi_rise_ceiling_guard,
     ),
     /**
      * Opt-in: sensor-driven effort protection. Caps SMB when steps/HR indicate current or recent

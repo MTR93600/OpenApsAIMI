@@ -53,4 +53,13 @@ enum class BooleanNonKey(
      * writeback had forced it off. User may disable again afterward.
      */
     AimiAdaptiveBasalReenabledOnUpgrade("aimi_adaptive_basal_reenabled_on_upgrade", false, exportable = false),
+
+    /**
+     * One-shot: on first launch after the Glass top-grid pills (pump/cannula/battery/sensor/loop/activity)
+     * became personalizable, merges their defaults into any already-persisted [StringNonKey.GlassSelectedPills]
+     * value — installs that customized their pill selection before this shipped would otherwise never see
+     * the new pills (their raw value predates those IDs). No-op for a fresh install (its value already has
+     * them from the class default). See GlassOverviewComposeEmbedded.kt's migration LaunchedEffect.
+     */
+    GlassTopGridPillsMigrated("glass_top_grid_pills_migrated", false, exportable = false),
 }
