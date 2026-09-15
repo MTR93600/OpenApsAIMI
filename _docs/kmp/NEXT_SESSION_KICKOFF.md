@@ -1,11 +1,12 @@
 # Start here — AIMI Compose port, next session
 
-Branch: `kmp-aimi-migration-study`. Last lot finished: sub-lot 2/5 (metrics, recommendations and the
-apply flow), written up as entry `6q`.
+Branch: `kmp-aimi-migration-study`. Last lot finished: sub-lot 3/5 (the T3c / Harmonia / RBT
+runtime-history cards), written up as entry `6r`. Sub-lot 2 is committed as `9184588bf5`; sub-lot 3
+is still in the working tree.
 
 This file is a short, self-contained kickoff for a fresh session with no memory of prior work. For
 full history, reasoning, and every past finding, read `_docs/kmp/AIMI_PORT_STATE.md` in full,
-especially section 7 ("Start here next session") and the most recent lettered entries (6o, 6p, 6q) -
+especially section 7 ("Start here next session") and the most recent lettered entries (6p, 6q, 6r) -
 this file only summarizes what those already say in detail.
 
 ## How to work: multi-agent pipeline, every lot
@@ -43,7 +44,7 @@ been done):
 5. **Fix directly** anything the reviewer finds, if it's small and precisely understood (this has
    been faster and more reliable than sending it back to another agent round-trip for every finding
    this series so far) - only spin up another agent for something that needs real re-investigation.
-6. **Update `AIMI_PORT_STATE.md`** with a new lettered entry (next is `6r`) documenting what was done,
+6. **Update `AIMI_PORT_STATE.md`** with a new lettered entry (next is `6s`) documenting what was done,
    what was found, and why - then refresh section 7's file count/next-steps. Commit the lot with a
    descriptive message (see recent commits for the tone/format), only after independent verification
    passes. Never commit without having actually rebuilt yourself.
@@ -51,7 +52,7 @@ been done):
 Two agent runs each hit a turn/rate limit mid-task in this series and were resumed successfully rather
 than restarted - resuming is cheap (no lost context) and has worked every time so far.
 
-## What's already done (for full detail, see AIMI_PORT_STATE.md 6k-6q)
+## What's already done (for full detail, see AIMI_PORT_STATE.md 6k-6r)
 
 - Staging cleanup: 6 dead/superseded files deleted (6k).
 - Health Connect + Emergency SOS permission screens ported (6l).
@@ -76,25 +77,26 @@ than restarted - resuming is cheap (no lost context) and has worked every time s
 
 ## What's left
 
-**3 more `AimiProfileAdvisorActivity` sub-lots**, in this order (smallest/safest first) - each adds
+**2 more `AimiProfileAdvisorActivity` sub-lots**, in this order (smallest/safest first) - each adds
 cards to the same `AimiProfileAdvisorScreen.kt`/`ApsIntentKey.AimiProfileAdvisor` entry 6p created,
 reading from the same `AdvisorReport` that screen already loads. Do not create a second entry point.
-Sub-lot 1 (Tuning Context) is done (6p); sub-lot 2 (Metrics + Recommendations + Apply flow) is done
-(6q) and turned out to be engine work as well as a port - four of its rules had no live engine behind
-them at all, so do not assume the rest are UI only. There is now ONE shared `AimiRecommendationCard`
-in commonMain, used by both this screen and the PKPD Setup screen - do not write a second one.
+Sub-lots 1 (Tuning Context, 6p), 2 (Metrics + Recommendations + Apply flow, 6q) and 3 (the three
+runtime-history cards, 6r) are done. Sub-lot 2 turned out to be engine work as well as a port - four
+of its rules had no live engine behind them at all - so do not assume the rest are UI only. There is
+now ONE shared `AimiRecommendationCard` in commonMain, used by both this screen and the PKPD Setup
+screen - do not write a second one. Two habits from 6r: when the staged source concatenates
+user-visible text there is no `R.string.` to find, so expect to add a template; and check that a
+lot's new tests actually land on its new code.
 
-1. **T3c/Harmonia/RBT runtime-history cards** (~440 lines, roughly 1664-1747 + 1837-2148) - three
-   read-only diagnostic cards, no writes, lowest risk of the three remaining.
-2. **Brain + Oref + AI Coach cards** (~300 lines, roughly 922-1227) - note `AiCoachingService` now
+1. **Brain + Oref + AI Coach cards** (~300 lines, roughly 922-1227) - note `AiCoachingService` now
    requires DI-construction (`@Inject constructor(rh: ResourceHelper)`), not the staged code's bare
    `AiCoachingService()` - this alone will not compile as staged, confirm the current constructor
    before writing the card.
-3. **Header + quick actions** (~205 lines, roughly 305-448 + 603-632) - dashboard header, basal-
+2. **Header + quick actions** (~205 lines, roughly 305-448 + 603-632) - dashboard header, basal-
    profile-proposal dialog/share, model selector. Explicitly excludes lines ~450-601 (the support-ZIP
    dialogs), which are dropped entirely, already superseded.
 
-**Only after all 3 are done**: delete `_docs/kmp/staging/openAPSAIMI-android-wip/advisor/AimiProfileAdvisorActivity.kt`
+**Only after both are done**: delete `_docs/kmp/staging/openAPSAIMI-android-wip/advisor/AimiProfileAdvisorActivity.kt`
 - not before, since later sub-lots still read it as reference.
 
 **Then, the last staged file**: `_docs/kmp/staging/openAPSAIMI-android-wip/orchestration/AimiLoopRuntimeGuard.kt`

@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import app.aaps.core.interfaces.maintenance.ImportExportPrefs
 import app.aaps.core.interfaces.protection.ExportPasswordDataStore
 import app.aaps.core.keys.BooleanKey
@@ -55,6 +56,11 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorReport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiRecommendation
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeHistoryReader
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeHistorySummary
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.RecursiveBeliefExportReader
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeHistoryReader
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeHistorySummary
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.AimiTuningContext
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningApplyResult
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningContextApplySupport
@@ -68,17 +74,30 @@ import app.aaps.plugins.aps.openAPSAIMI.compose.applyPkpdPreferenceUpdate
 import app.aaps.plugins.aps.openAPSAIMI.compose.readPreferenceValueAsString
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import kotlin.math.roundToInt
 
 /**
  * Compose port of the parked `AimiProfileAdvisorActivity` - Tuning Context (sub-lot 1/5) plus the
- * metrics grid, the recommendation sections and their Apply flow (sub-lot 2/5). Later sub-lots add
- * more cards to this same screen; this one owns loading the [AdvisorReport] since every section
- * reads from it.
+ * metrics grid, the recommendation sections and their Apply flow (sub-lot 2/5), plus the three
+ * read-only runtime-history cards (sub-lot 3/5). Later sub-lots add more cards to this same screen;
+ * this one owns loading the [AdvisorReport] since every section reads from it.
  */
+
+/**
+ * Runs one history load and answers null when it fails, so one unreadable section cannot hide the
+ * other cards.
+ *
+ * Cancellation is not a load failure - the screen was left - so it is rethrown instead of being
+ * turned into "no data". A bare `runCatching` would swallow it and break cancellation.
+ */
+private inline fun <T> loadOrNull(load: () -> T): T? =
+    runCatching(load).getOrElse { if (it is CancellationException) throw it else null }
+
 @Composable
 fun AimiProfileAdvisorScreen(
     preferences: Preferences,
@@ -109,6 +128,14 @@ fun AimiProfileAdvisorScreen(
     var pendingRecommendation by remember { mutableStateOf<AimiAction.PreferenceUpdate?>(null) }
     var applyingRecommendation by remember { mutableStateOf(false) }
 
+    // The three runtime-history cards read the AIMI decisions JSONL, which is slower than the report
+    // and can fail on its own. They load separately so a missing log never delays the report. A null
+    // result is a valid "nothing to show" answer, so a separate flag carries the loading state.
+    var rbtExport by remember { mutableStateOf<JsonObject?>(null) }
+    var t3cHistory by remember { mutableStateOf<T3cRuntimeHistorySummary?>(null) }
+    var harmoniaHistory by remember { mutableStateOf<HarmoniaRuntimeHistorySummary?>(null) }
+    var historyLoaded by remember { mutableStateOf(false) }
+
     val noChangesMessage = stringResource(R.string.aimi_tuning_no_changes)
     val errorPrefix = stringResource(R.string.aimi_adv_error_prefix)
     val errorOom = stringResource(R.string.aimi_adv_error_oom)
@@ -136,6 +163,17 @@ fun AimiProfileAdvisorScreen(
                 else                -> "$errorPrefix${t.localizedMessage ?: t.javaClass.simpleName}"
             }
         }
+    }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            // One load at a time, each on its own: a broken line in one section must not hide the
+            // other two cards.
+            rbtExport = loadOrNull { RecursiveBeliefExportReader.loadLastExport() }
+            t3cHistory = loadOrNull { T3cRuntimeHistoryReader.summarizeLast24Hours() }
+            harmoniaHistory = loadOrNull { HarmoniaRuntimeHistoryReader.summarizeLast24Hours() }
+        }
+        historyLoaded = true
     }
 
     fun buildPlan(): TuningPlan? {
@@ -205,6 +243,22 @@ fun AimiProfileAdvisorScreen(
                             }
                         },
                     )
+
+                    if (historyLoaded) {
+                        RecursiveBeliefUnfoldCard(preferences = preferences, lastExport = rbtExport)
+                        T3cRuntimeHistoryCard(t3cHistory)
+                        HarmoniaRuntimeHistoryCard(harmoniaHistory)
+                    } else {
+                        Text(
+                            text = stringResource(R.string.aimi_adv_loading_details),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = AapsSpacing.large),
+                        )
+                    }
 
                     MetricsCard(currentReport.metrics)
 

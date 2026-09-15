@@ -315,11 +315,11 @@
 
 <string name="aimi_t3c_history_not_enough_data">Not enough data yet. %1$d tick(s) with T3C export were found in the last 24h.</string>
 
-<string name="aimi_t3c_history_period">Period: last 24h</string>
+<string name="aimi_history_period">Period: last 24h</string>
 
-<string name="aimi_t3c_history_ticks">%1$d ticks analyzed</string>
+<string name="aimi_history_ticks">%1$d ticks analyzed</string>
 
-<string name="aimi_t3c_history_dominant">Dominant status: %1$s</string>
+<string name="aimi_history_dominant">Dominant status: %1$s</string>
 
 <string name="aimi_t3c_history_native_applied">Native applied: %1$d (%2$d%%)</string>
 
@@ -329,15 +329,21 @@
 
 <string name="aimi_t3c_history_safety_terminal">Safety terminal: %1$d (%2$d%%)</string>
 
-<string name="aimi_t3c_history_blocker">Main blocker: %1$s</string>
+<string name="aimi_history_blocker">Main blocker: %1$s</string>
 
-<string name="aimi_t3c_history_demand">Basal demand avg/range: %1$s</string>
+<string name="aimi_history_demand">Basal demand avg/range: %1$s</string>
 
-<string name="aimi_t3c_history_applied_rate">Applied rate avg/range: %1$s</string>
+<string name="aimi_history_applied_rate">Applied rate avg/range: %1$s</string>
 
 <string name="aimi_t3c_history_transitions">Ownership transitions: %1$d</string>
 
 <string name="aimi_t3c_history_transition_detail">Most common transition: %1$s</string>
+
+<string name="aimi_t3c_history_transition_arrow" comment="%1$s=ownership the tick came from, %2$s=ownership it moved to. Example: Native RBT → Legacy bypass">%1$s → %2$s</string>
+
+<string name="aimi_history_blocker_unknown" comment="Used in place of a blocker name when the export does not carry one.">unknown runtime blocker</string>
+
+<string name="aimi_history_stats_range" comment="%1$s=average with its unit, %2$s=smallest value, %3$s=largest value. Example: 1.20 U/h (0.40 – 2.10)">%1$s (%2$s – %3$s)</string>
 
 <string name="aimi_t3c_history_observation_applied">T3C native path applied on %1$d%% of observed ticks.</string>
 

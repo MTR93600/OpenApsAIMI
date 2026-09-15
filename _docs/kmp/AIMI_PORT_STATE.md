@@ -1235,6 +1235,77 @@ staged `AimiProfileAdvisorActivity.kt` is still NOT deleted - 3 sub-lots still r
 
 ---
 
+## 6r. 2026-09-15: sub-lot 3/5 - the T3c / Harmonia / RBT runtime-history cards
+
+The three read-only diagnostic cards are ported: the recursive-belief unfold card, the T3c 24h
+runtime history and the Harmonia 24h runtime history, appended to the same
+`AimiProfileAdvisorScreen.kt` between the Tuning Context card and the metrics grid, in the order the
+original inserted them.
+
+This is the first lot in the series where the survey's verdict was **"the data is alive"** rather
+than "the backend is dead". Worth recording, because the check is only useful if it can come back
+either way: the decisions JSONL is written on every loop tick, and the preferences that gate it
+(`OApsAIMIRecursiveBeliefShadow`, `...Authority`, both depending on `OApsAIMIautoDriveActive`) all
+default to true, so these cards render real data on a default install. What had no consumer was the
+*aggregation* - `summarizeLast24Hours` on both readers had zero callers, because its only consumer
+was the parked Activity. The live Control Center screen shows the same two subsystems but only for
+the latest tick; this is the 24h aggregate, so it was ported rather than dropped as a duplicate.
+
+Four decisions were put to the user before any code was written, all resolved the recommended way:
+port all three cards; keep the RBT detail as a raw pretty-printed JSON dialog rather than building
+structured UI (the typed `RecursiveBeliefExport` model exists in commonMain but is **write-only** -
+there is a `toJsonObject` and no decoder, and none of the classes are `@Serializable`, so structured
+UI would have meant changing a model the live dosing path writes, for a developer diagnostic); give
+the three loads their own deferred load; and add tests for the summarisers, which had none.
+
+The staged code's `org.json.JSONObject` was stale in the way this series keeps finding: the writer
+already produces a `kotlinx.serialization.json.JsonObject` and both live readers already parse with
+`Json.parseToJsonElement` plus the `OrgJsonCompat` helper, so the loader was rewritten to kotlinx
+rather than ported as-is. `org.json` is Android-only, and this branch is going multiplatform.
+
+Three new strings were needed even though the survey said none would be, and the reason is worth
+knowing for the remaining sub-lots: the staged code built three pieces of user-visible text **by
+joining strings in Kotlin** (`"$avg U/h ($min-$max)"`, `"$from -> $to"`, and a bare English
+`"unknown runtime blocker"` fallback), so there was no resource to find. A survey that greps for
+`R.string.` cannot see text that was never a resource - when the staged source concatenates, expect
+to add a template.
+
+The review found the lot correct on every dosing-relevant property it was asked to check first
+(format-argument order and type on every row, the four RBT field defaults against the real writer,
+card placement and order, the null-vs-empty distinction, and the read-only guarantee), and found
+three things worth fixing, all fixed directly:
+
+- **The one genuinely new file had no tests.** The 18 tests the lot shipped all landed on the two
+  pre-existing readers and on a pure percentage helper; `RecursiveBeliefExportReader` - the actual
+  new code, with its own tail scan, its text pre-filter and its four defaults - had none. Seven tests
+  added, covering the three different ways it can legitimately return null and, specifically, the two
+  decoys its cheap `contains("recursive_belief")` filter lets through: a line that names the block in
+  a note without carrying it, and a line that carries the block outside `adjustments`.
+- **`runCatching` swallowed `CancellationException`.** Harmless here (the three wrapped calls are
+  synchronous), but it is a pattern that gets copied. Replaced by a `loadOrNull` helper that rethrows
+  cancellation and turns only real failures into "no data".
+- **A test file named after the cards tested only a percentage helper**, which would have told the
+  next reader the cards were covered. Renamed to say what it actually covers.
+
+One cleanup in passing: six string ids named `aimi_t3c_history_*` are rendered by both cards, so a
+reader editing one "T3c" string would silently change the Harmonia card too. Renamed to
+`aimi_history_*`; each was referenced from exactly one Kotlin file, so the rename is contained.
+
+Verified independently, not from the agents' reports: `:app:assembleFullDebug` EXIT=0 with 0 Kotlin
+errors, `:plugins:aps:compileKotlinIosArm64` EXIT=0, `:plugins:aps:testAndroidHostTest` **567 tests,
+0 failures, 0 errors** (542 before this lot: +18 from the lot, +7 from the review fix), re-run with
+`--rerun` rather than trusted as UP-TO-DATE.
+
+Two things this lot deliberately did not fix, recorded so they are not rediscovered as new:
+the writer (`AimiStorageHelper.kt:73`) falls back to app-scoped storage when `Documents/AAPS` is not
+writable while the reader (`T3cRuntimeHistoryReader.kt:132-134`) has no such fallback, so
+"unavailable" can mean "cannot read the file", not "the loop is not exporting" - the card copy is
+worded accordingly and carries a comment saying so. And the T3c reader treats `ownershipReason` as a
+blocker name for non-blocked ticks, which reads oddly in the UI; that is pre-existing reader logic,
+not something a port should change.
+
+---
+
 ---
 
 ## 7. Start here next session
@@ -1246,16 +1317,20 @@ Overview screen, wired through a new `:core:interfaces` port (`PluginStatusBadge
 its old View-based toolbar indicator. Staging is down to 2 files (was 17: six deleted in 6k as dead or
 superseded, two permission screens ported in 6l, the Context cluster ported in 6m, Meal Advisor + its
 camera screen ported in 6n, Mode Settings ported in 6o), plus `AimiProfileAdvisorActivity` itself
-still on disk mid-port (6p, 6q) - two of its 5 sub-lots (Tuning Context, and metrics/recommendations/
-apply) done, 3 to go, not yet deletable.
+still on disk mid-port (6p, 6q, 6r) - three of its 5 sub-lots (Tuning Context, metrics/
+recommendations/apply, and the three runtime-history cards) done, 2 to go, not yet deletable.
 Two `kmp` merges and a parallel P0.1-P0.7 porting series (done outside this session, with a Cursor
 agent) have landed since 6i; see 6j for what they were and why neither touches these staged files.
 
-1. **Continue the `AimiProfileAdvisorActivity` sub-lot split from 6p.** 3 sub-lots remain, in this
-   order (smallest/safest first): (i) T3c/Harmonia/RBT runtime-history cards, (ii) Brain + Oref +
-   AI Coach cards, (iii) Header + quick actions (dashboard, basal-profile proposal, model selector).
-   Sub-lot Metrics + Recommendations + Apply flow was done in 6q, and it turned out to be engine work
-   as well as a port - do not assume the remaining three are UI only either. Two standing rules came
+1. **Continue the `AimiProfileAdvisorActivity` sub-lot split from 6p.** 2 sub-lots remain, in this
+   order (smallest/safest first): (i) Brain + Oref + AI Coach cards, (ii) Header + quick actions
+   (dashboard, basal-profile proposal, model selector). The runtime-history cards were done in 6r and
+   the metrics/recommendations/apply flow in 6q, which turned out to be engine work as well as a port
+   - do not assume the remaining two are UI only either. Two habits from 6r worth keeping: when the
+   staged source **concatenates** user-visible text, a survey that greps for `R.string.` cannot see
+   it, so expect to add a format-string template; and when a lot adds a genuinely new file, check that
+   the tests landed on it rather than on the pre-existing code around it (6r shipped 18 tests, none of
+   them on the one new reader). Two standing rules came
    out of it: **do not write a second recommendation card** (there is one shared
    `AimiRecommendationCard` in commonMain now, used by both the Advisor and the PKPD Setup screen),
    and **check whether the section you are porting still has a backend that runs at all** - 6q found
