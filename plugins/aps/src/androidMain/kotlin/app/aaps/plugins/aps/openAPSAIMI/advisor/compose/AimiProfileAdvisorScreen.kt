@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.compose
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,9 +11,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -24,6 +29,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -41,6 +47,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import app.aaps.core.interfaces.maintenance.ImportExportPrefs
 import app.aaps.core.interfaces.protection.ExportPasswordDataStore
+import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
@@ -53,8 +60,12 @@ import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorMetrics
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorReport
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorSeverity
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiRecommendation
+import app.aaps.plugins.aps.openAPSAIMI.advisor.buildAimiBehaviorCausalInsights
+import app.aaps.plugins.aps.openAPSAIMI.advisor.buildAimiFamilyBridgeSuggestions
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeHistoryReader
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeHistorySummary
@@ -70,6 +81,7 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningPlan
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningPreferenceLabels
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiRecommendationCard
+import app.aaps.plugins.aps.openAPSAIMI.compose.ProviderDropdown
 import app.aaps.plugins.aps.openAPSAIMI.compose.applyPkpdPreferenceUpdate
 import app.aaps.plugins.aps.openAPSAIMI.compose.readPreferenceValueAsString
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
@@ -82,10 +94,16 @@ import kotlinx.serialization.json.JsonObject
 import kotlin.math.roundToInt
 
 /**
- * Compose port of the parked `AimiProfileAdvisorActivity` - Tuning Context (sub-lot 1/5) plus the
- * metrics grid, the recommendation sections and their Apply flow (sub-lot 2/5), plus the three
- * read-only runtime-history cards (sub-lot 3/5). Later sub-lots add more cards to this same screen;
- * this one owns loading the [AdvisorReport] since every section reads from it.
+ * The AIMI Profile Advisor screen.
+ *
+ * This is the finished Compose port of the old `AimiProfileAdvisorActivity`, which is gone: header,
+ * tuning context, metrics, recommendations and their apply flow, the three read-only runtime-history
+ * cards, the brain / OREF / AI coach cards, the quick actions and the footer. Two sections of the
+ * old screen were deliberately not ported - the support ZIP flow, superseded by
+ * [app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiSupportPackageScreen], and the behavior
+ * causal map, which had no live callers. See `_docs/kmp/AIMI_PORT_STATE.md` for the reasoning.
+ *
+ * This function owns loading the [AdvisorReport], because every section reads from it.
  */
 
 /**
@@ -105,6 +123,8 @@ fun AimiProfileAdvisorScreen(
     historyRepo: AdvisorHistoryRepository,
     importExportPrefs: ImportExportPrefs,
     exportPasswordDataStore: ExportPasswordDataStore,
+    aiCoachingService: AiCoachingService,
+    rh: ResourceHelper,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -136,6 +156,23 @@ fun AimiProfileAdvisorScreen(
     var harmoniaHistory by remember { mutableStateOf<HarmoniaRuntimeHistorySummary?>(null) }
     var historyLoaded by remember { mutableStateOf(false) }
 
+    // The AI Coach card loads independently of the report above: with a key configured it makes a
+    // real network call, which must not delay or hide the rest of the screen if it is slow or fails.
+    var coachAdvice by remember { mutableStateOf<String?>(null) }
+    var coachLoading by remember { mutableStateOf(false) }
+    var coachError by remember { mutableStateOf<String?>(null) }
+
+    // The model selector (header) writes this preference; the coach effect below is keyed on it so
+    // picking a different provider re-fetches advice without a full-screen reload (D4 - replaces the
+    // staged Activity's recreate()).
+    var selectedProvider by remember { mutableStateOf(preferences.get(StringKey.AimiAdvisorProvider)) }
+    var showModelSelector by remember { mutableStateOf(false) }
+
+    // Basal proposal (header): preview/export only, see requestBasalProposal() below. A null value
+    // means "no proposal to show"; it never writes anything, so there is no separate "applied" state.
+    var basalProposalLoading by remember { mutableStateOf(false) }
+    var basalProposal by remember { mutableStateOf<AimiAdvisorService.BasalProfileProposal?>(null) }
+
     val noChangesMessage = stringResource(R.string.aimi_tuning_no_changes)
     val errorPrefix = stringResource(R.string.aimi_adv_error_prefix)
     val errorOom = stringResource(R.string.aimi_adv_error_oom)
@@ -143,6 +180,10 @@ fun AimiProfileAdvisorScreen(
     // the apply result instead if this dialog ever applies a batch.
     val recommendationAppliedMessage = stringResource(R.string.aimi_adv_success_msg, 1)
     val recommendationNoChangeMessage = stringResource(R.string.aimi_adv_no_change_msg)
+    val basalGeneratingMessage = stringResource(R.string.aimi_adv_basal_generating_msg)
+    val basalFailedMessage = stringResource(R.string.aimi_adv_basal_failed_msg)
+    val basalShareSubject = stringResource(R.string.aimi_adv_basal_share_subject)
+    val basalShareChooserTitle = stringResource(R.string.aimi_adv_basal_share_chooser_title)
 
     LaunchedEffect(Unit) {
         try {
@@ -176,6 +217,65 @@ fun AimiProfileAdvisorScreen(
         historyLoaded = true
     }
 
+    // Keyed on `report`, not `Unit`: the coach needs the report's AdvisorContext, so this effect
+    // waits for the first LaunchedEffect above to finish before it starts. Also keyed on
+    // `selectedProvider` (D4): picking a different model in the header re-runs this effect instead
+    // of needing a full-screen reload.
+    LaunchedEffect(report, selectedProvider) {
+        val currentReport = report ?: return@LaunchedEffect
+        coachLoading = true
+        coachError = null
+        try {
+            val advisorCtx = currentReport.advisorContext
+            val providerName = selectedProvider
+            val provider = when (providerName.uppercase()) {
+                "GEMINI"   -> AiCoachingService.Provider.GEMINI
+                "DEEPSEEK" -> AiCoachingService.Provider.DEEPSEEK
+                "CLAUDE"   -> AiCoachingService.Provider.CLAUDE
+                else       -> AiCoachingService.Provider.OPENAI
+            }
+            val activeKey = when (provider) {
+                AiCoachingService.Provider.GEMINI   -> preferences.get(StringKey.AimiAdvisorGeminiKey)
+                AiCoachingService.Provider.DEEPSEEK -> preferences.get(StringKey.AimiAdvisorDeepSeekKey)
+                AiCoachingService.Provider.CLAUDE   -> preferences.get(StringKey.AimiAdvisorClaudeKey)
+                else                                 -> preferences.get(StringKey.AimiAdvisorOpenAIKey)
+            }
+            coachAdvice = if (activeKey.isBlank()) {
+                // No key configured: this is what most users see. Same deterministic summary as the
+                // report's own text, plus a note asking for a key - never a network call.
+                val basicAnalysis = advisorService.generatePlainTextAnalysis(advisorCtx, currentReport, insightContext = context)
+                val note = rh.gs(R.string.aimi_coach_placeholder, provider.name)
+                rh.gs(R.string.aimi_coach_basic_with_note, basicAnalysis, note)
+            } else {
+                // familyBridgeSuggestions/causalInsights are prompt input only - never rendered as a
+                // card - and stay inside runCatching like the staged code, since either can throw on
+                // unexpected preference combinations and must not break the coach call.
+                val causalInsights = runCatching {
+                    val familyBridgeSuggestions = buildAimiFamilyBridgeSuggestions(preferences, currentReport.metrics)
+                    buildAimiBehaviorCausalInsights(preferences, currentReport.metrics, familyBridgeSuggestions)
+                }.getOrDefault(emptyList())
+                val history = withContext(Dispatchers.IO) { historyRepo.getRecentActions(7) }
+                val richOref = preferences.get(BooleanKey.OApsAIMIAdvisorLlmRichOref)
+                aiCoachingService.fetchAdvice(
+                    androidContext = context,
+                    context = advisorCtx,
+                    report = currentReport,
+                    apiKey = activeKey,
+                    provider = provider,
+                    history = history,
+                    includeRichOref = richOref,
+                    causalInsights = causalInsights,
+                )
+            }
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            val detail = if (t is OutOfMemoryError) errorOom else (t.localizedMessage ?: t.javaClass.simpleName)
+            coachError = rh.gs(R.string.aimi_coach_error_detail, rh.gs(R.string.aimi_coach_error), detail)
+        } finally {
+            coachLoading = false
+        }
+    }
+
     fun buildPlan(): TuningPlan? {
         val metrics = report?.metrics ?: return null
         return TuningContextEngine.computePlan(
@@ -184,6 +284,26 @@ fun AimiProfileAdvisorScreen(
             preferences = preferences,
             t3cBrittleMode = t3cBrittleMode,
         )
+    }
+
+    // Preview/export only - see the KDoc on the `basalProposal` state above. Uses loadOrNull like the
+    // history cards: a failure becomes a generic snackbar rather than a crash, since this is a
+    // secondary, opt-in action, not something the rest of the screen depends on.
+    fun requestBasalProposal() {
+        if (basalProposalLoading) return
+        basalProposalLoading = true
+        scope.launch { snackbarHostState.showSnackbar(basalGeneratingMessage) }
+        scope.launch {
+            val proposal = withContext(Dispatchers.IO) {
+                loadOrNull { advisorService.generateBasalProfileProposal(periodDays = 7) }
+            }
+            basalProposalLoading = false
+            if (proposal != null) {
+                basalProposal = proposal
+            } else {
+                snackbarHostState.showSnackbar(basalFailedMessage)
+            }
+        }
     }
 
     ProvidePreferenceTheme {
@@ -196,6 +316,20 @@ fun AimiProfileAdvisorScreen(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = stringResource(CoreUiR.string.back),
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { showModelSelector = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = stringResource(R.string.aimi_advisor_model_title),
+                            )
+                        }
+                        IconButton(onClick = { requestBasalProposal() }, enabled = !basalProposalLoading) {
+                            Icon(
+                                imageVector = Icons.Filled.Science,
+                                contentDescription = stringResource(R.string.aimi_adv_basal_dialog_title),
                             )
                         }
                     },
@@ -225,6 +359,12 @@ fun AimiProfileAdvisorScreen(
                         CircularProgressIndicator(modifier = Modifier.padding(AapsSpacing.large))
                     }
                 } else {
+                    DashboardHeader(
+                        periodLabel = currentReport.metrics.periodLabel,
+                        overallScore = currentReport.overallScore,
+                        overallSeverity = currentReport.overallSeverity,
+                    )
+
                     TuningContextCard(
                         selectedContext = selectedTuningContext,
                         onSelectContext = { ctx ->
@@ -288,6 +428,19 @@ fun AimiProfileAdvisorScreen(
                             )
                         }
                     }
+
+                    SectionHeader(stringResource(R.string.aimi_adv_section_brain))
+                    CognitiveBrainCard(currentReport.advisorContext.prefs.unifiedReactivityFactor)
+
+                    currentReport.orefAnalysis?.let { oref ->
+                        SectionHeader(stringResource(R.string.aimi_adv_section_oref))
+                        OrefAnalysisCard(oref = oref, rh = rh)
+                    }
+
+                    SectionHeader(stringResource(R.string.aimi_adv_section_coach))
+                    AiCoachCard(loading = coachLoading, advice = coachAdvice, error = coachError)
+
+                    DashboardFooter(advisorService.formatTime(currentReport.generatedAt))
                 }
             }
         }
@@ -418,6 +571,54 @@ fun AimiProfileAdvisorScreen(
             confirmButton = {
                 TextButton(onClick = { applyResult = null }) {
                     Text(stringResource(android.R.string.ok))
+                }
+            },
+        )
+    }
+
+    if (showModelSelector) {
+        AlertDialog(
+            onDismissRequest = { showModelSelector = false },
+            title = { Text(stringResource(R.string.aimi_advisor_model_title)) },
+            text = {
+                ProviderDropdown(
+                    selected = selectedProvider.uppercase(),
+                    onSelect = { provider ->
+                        selectedProvider = provider
+                        preferences.put(StringKey.AimiAdvisorProvider, provider)
+                        showModelSelector = false
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showModelSelector = false }) {
+                    Text(stringResource(android.R.string.ok))
+                }
+            },
+        )
+    }
+
+    basalProposal?.let { proposal ->
+        AlertDialog(
+            onDismissRequest = { basalProposal = null },
+            title = { Text(stringResource(R.string.aimi_adv_basal_dialog_title)) },
+            text = { Text(formatBasalProposalPreview(proposal)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    shareBasalProposal(
+                        context = context,
+                        content = advisorService.exportBasalProfileProposalText(proposal),
+                        subject = basalShareSubject,
+                        chooserTitle = basalShareChooserTitle,
+                    )
+                    basalProposal = null
+                }) {
+                    Text(stringResource(R.string.aimi_adv_basal_export_btn))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { basalProposal = null }) {
+                    Text(stringResource(android.R.string.cancel))
                 }
             },
         )
@@ -624,4 +825,98 @@ private fun buildTuningResultMessage(result: TuningApplyResult): String {
         },
     )
     return sb.toString().trimEnd()
+}
+
+/**
+ * Sub-lot 5/5: the report's title, period and overall score. Reads only
+ * [AdvisorReport.metrics]`.periodLabel` and [AdvisorReport.overallScore] - `overallAssessment` and
+ * `summary` are never referenced anywhere in the staged Activity either, so they stay un-ported.
+ *
+ * The score pill is coloured by [AdvisorReport.overallSeverity] instead of the staged file's
+ * hardcoded green, following this project's colour-by-state convention.
+ */
+@Composable
+private fun DashboardHeader(
+    periodLabel: String,
+    overallScore: Double,
+    overallSeverity: AdvisorSeverity,
+) {
+    val severityColor = when (overallSeverity) {
+        AdvisorSeverity.Good     -> AapsTheme.generalColors.statusNormal
+        AdvisorSeverity.Warning  -> AapsTheme.generalColors.statusWarning
+        AdvisorSeverity.Critical -> AapsTheme.generalColors.statusCritical
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = stringResource(R.string.aimi_adv_report_weekly), style = MaterialTheme.typography.titleLarge)
+            Text(
+                text = periodLabel,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = severityColor.copy(alpha = 0.15f),
+        ) {
+            Text(
+                text = stringResource(R.string.aimi_adv_score_label, overallScore),
+                style = MaterialTheme.typography.labelLarge,
+                color = severityColor,
+                modifier = Modifier.padding(horizontal = AapsSpacing.medium, vertical = AapsSpacing.small),
+            )
+        }
+    }
+}
+
+/** Sub-lot 5/5: the report's generation time, at the bottom of the screen. */
+@Composable
+private fun DashboardFooter(generatedAtText: String) {
+    Text(
+        text = stringResource(R.string.aimi_adv_generated_footer, generatedAtText),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = AapsSpacing.medium),
+    )
+}
+
+/**
+ * The basal-proposal dialog body. [AimiAdvisorService.generateBasalProfileProposal] writes nothing
+ * and applies nothing - this only formats its result for display, matching the staged
+ * `buildBasalProposalPreview`.
+ */
+@Composable
+private fun formatBasalProposalPreview(proposal: AimiAdvisorService.BasalProfileProposal): String {
+    if (proposal.rows.isEmpty()) return stringResource(R.string.aimi_adv_basal_no_profile_msg)
+    val disclaimer = stringResource(R.string.aimi_adv_basal_disclaimer)
+    val strategyLine = stringResource(R.string.aimi_adv_basal_strategy_line, proposal.strategy)
+    val factorLine = stringResource(R.string.aimi_adv_basal_factor_line, proposal.scalingFactor)
+    val rationaleLine = stringResource(R.string.aimi_adv_basal_rationale_line, proposal.rationale)
+    val previewHeading = stringResource(R.string.aimi_adv_basal_preview_heading)
+    val rowLines = proposal.rows.take(6).map { row ->
+        val deltaPct = if (row.current > 0.0) ((row.proposed / row.current) - 1.0) * 100.0 else 0.0
+        stringResource(R.string.aimi_adv_basal_row_line, row.hour, row.current, row.proposed, deltaPct)
+    }
+    return "$disclaimer\n$strategyLine\n$factorLine\n$rationaleLine\n\n$previewHeading\n${rowLines.joinToString("\n")}"
+}
+
+/**
+ * Shares the basal-proposal export text via `ACTION_SEND`, exactly like the staged
+ * `shareBasalProposal`. This is the only side effect the basal-proposal feature has - no
+ * preference, profile or therapy write.
+ */
+private fun shareBasalProposal(context: Context, content: String, subject: String, chooserTitle: String) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, content)
+    }
+    context.startActivity(Intent.createChooser(intent, chooserTitle))
 }

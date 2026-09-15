@@ -40,11 +40,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -94,13 +89,12 @@ import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.EstimationResult
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.FoodRecognitionService
+import app.aaps.plugins.aps.openAPSAIMI.compose.ProviderDropdown
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
-
-private val ADVISOR_PROVIDERS = listOf("OPENAI", "GEMINI", "DEEPSEEK", "CLAUDE")
 
 /**
  * Compose port of the parked `MealAdvisorActivity` + `MealAdvisorCameraActivity` ("Snap & Go").
@@ -363,51 +357,6 @@ private fun PhotoPreview(bitmap: Bitmap?) {
                     text = stringResource(R.string.aimi_meal_advisor_photo_placeholder),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ProviderDropdown(selected: String, onSelect: (String) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    val displayNames = mapOf(
-        "OPENAI" to stringResource(R.string.aimi_prefs_provider_openai),
-        "GEMINI" to stringResource(R.string.aimi_prefs_provider_gemini),
-        "DEEPSEEK" to stringResource(R.string.aimi_prefs_provider_deepseek),
-        "CLAUDE" to stringResource(R.string.aimi_prefs_provider_claude),
-    )
-    val selectedText = displayNames[selected] ?: displayNames.getValue("OPENAI")
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = !expanded },
-    ) {
-        OutlinedTextField(
-            value = selectedText,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(stringResource(R.string.aimi_meal_advisor_provider_label)) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            ADVISOR_PROVIDERS.forEach { providerId ->
-                DropdownMenuItem(
-                    text = { Text(displayNames.getValue(providerId)) },
-                    onClick = {
-                        onSelect(providerId)
-                        expanded = false
-                    },
-                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
                 )
             }
         }

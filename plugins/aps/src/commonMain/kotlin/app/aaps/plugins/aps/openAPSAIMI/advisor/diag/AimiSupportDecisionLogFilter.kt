@@ -3,7 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.diag
 /**
  * Last-24h filter for `AIMI_Decisions.jsonl` lines in the support ZIP.
  *
- * Same fast heuristic as parked `AimiProfileAdvisorActivity.generateAndShareReport`:
+ * Same fast heuristic as the former `AimiProfileAdvisorActivity.generateAndShareReport`:
  * look for `"timestamp":123456789` without parsing the whole JSON line.
  * Lines with no timestamp are dropped (cleaner log).
  */

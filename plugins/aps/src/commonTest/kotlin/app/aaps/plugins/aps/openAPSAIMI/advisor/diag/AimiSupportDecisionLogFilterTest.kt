@@ -6,7 +6,7 @@ import kotlin.test.assertTrue
 
 /**
  * Last-24h decision-log filter used by the support ZIP.
- * Same heuristic as parked `AimiProfileAdvisorActivity` (not invented).
+ * Same heuristic as the former `AimiProfileAdvisorActivity` (not invented).
  */
 class AimiSupportDecisionLogFilterTest {
 

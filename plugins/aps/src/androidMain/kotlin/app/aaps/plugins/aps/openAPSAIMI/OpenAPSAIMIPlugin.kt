@@ -146,6 +146,7 @@ import androidx.core.util.size
 import androidx.core.net.toUri
 import kotlin.math.abs
 import kotlin.math.exp
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiProfileAdvisorScreen
 import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiSupportPackageScreen
@@ -226,6 +227,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val tirCalculator: TirCalculator,
     private val importExportPrefs: ImportExportPrefs,
     private val exportPasswordDataStore: ExportPasswordDataStore,
+    private val aiCoachingService: AiCoachingService,
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -1931,6 +1933,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         historyRepo = AdvisorHistoryRepository(context),
                         importExportPrefs = importExportPrefs,
                         exportPasswordDataStore = exportPasswordDataStore,
+                        aiCoachingService = aiCoachingService,
+                        rh = rh,
                         onBack = onBack,
                     )
                 },

@@ -1,12 +1,13 @@
 # Start here — AIMI Compose port, next session
 
-Branch: `kmp-aimi-migration-study`. Last lot finished: sub-lot 3/5 (the T3c / Harmonia / RBT
-runtime-history cards), written up as entry `6r`. Sub-lot 2 is committed as `9184588bf5`; sub-lot 3
-is still in the working tree.
+Branch: `kmp-aimi-migration-study`. **The `AimiProfileAdvisorActivity` port is finished.** All five
+sub-lots are done (entries `6p` to `6s`) and the staged file is deleted (`6t`). Sub-lots 1-3 are
+committed (up to `120324ae2e`); sub-lots 4 and 5 plus the deletion are in the working tree, reviewed
+and gate-green, waiting for the user to commit.
 
 This file is a short, self-contained kickoff for a fresh session with no memory of prior work. For
 full history, reasoning, and every past finding, read `_docs/kmp/AIMI_PORT_STATE.md` in full,
-especially section 7 ("Start here next session") and the most recent lettered entries (6p, 6q, 6r) -
+especially section 7 ("Start here next session") and the most recent lettered entries (6r, 6s, 6t) -
 this file only summarizes what those already say in detail.
 
 ## How to work: multi-agent pipeline, every lot
@@ -44,7 +45,7 @@ been done):
 5. **Fix directly** anything the reviewer finds, if it's small and precisely understood (this has
    been faster and more reliable than sending it back to another agent round-trip for every finding
    this series so far) - only spin up another agent for something that needs real re-investigation.
-6. **Update `AIMI_PORT_STATE.md`** with a new lettered entry (next is `6s`) documenting what was done,
+6. **Update `AIMI_PORT_STATE.md`** with a new lettered entry (next is `6u`) documenting what was done,
    what was found, and why - then refresh section 7's file count/next-steps. Commit the lot with a
    descriptive message (see recent commits for the tone/format), only after independent verification
    passes. Never commit without having actually rebuilt yourself.
@@ -52,7 +53,7 @@ been done):
 Two agent runs each hit a turn/rate limit mid-task in this series and were resumed successfully rather
 than restarted - resuming is cheap (no lost context) and has worked every time so far.
 
-## What's already done (for full detail, see AIMI_PORT_STATE.md 6k-6r)
+## What's already done (for full detail, see AIMI_PORT_STATE.md 6k-6t)
 
 - Staging cleanup: 6 dead/superseded files deleted (6k).
 - Health Connect + Emergency SOS permission screens ported (6l).
@@ -77,37 +78,21 @@ than restarted - resuming is cheap (no lost context) and has worked every time s
 
 ## What's left
 
-**2 more `AimiProfileAdvisorActivity` sub-lots**, in this order (smallest/safest first) - each adds
-cards to the same `AimiProfileAdvisorScreen.kt`/`ApsIntentKey.AimiProfileAdvisor` entry 6p created,
-reading from the same `AdvisorReport` that screen already loads. Do not create a second entry point.
-Sub-lots 1 (Tuning Context, 6p), 2 (Metrics + Recommendations + Apply flow, 6q) and 3 (the three
-runtime-history cards, 6r) are done. Sub-lot 2 turned out to be engine work as well as a port - four
-of its rules had no live engine behind them at all - so do not assume the rest are UI only. There is
-now ONE shared `AimiRecommendationCard` in commonMain, used by both this screen and the PKPD Setup
-screen - do not write a second one. Two habits from 6r: when the staged source concatenates
-user-visible text there is no `R.string.` to find, so expect to add a template; and check that a
-lot's new tests actually land on its new code.
+**One staged file**: `_docs/kmp/staging/openAPSAIMI-android-wip/orchestration/AimiLoopRuntimeGuard.kt`
+(16 lines) - it wraps a live telemetry method (`AimiLoopTelemetry.isTickInProgress()` /
+`activeTickAgeMs()`) that nothing calls yet, and no Overview wiring exists for it. The standing
+decision is to hold it rather than port it speculatively - port it together with whatever future
+feature needs it. **Ask the user before changing that decision.**
 
-1. **Brain + Oref + AI Coach cards** (~300 lines, roughly 922-1227) - note `AiCoachingService` now
-   requires DI-construction (`@Inject constructor(rh: ResourceHelper)`), not the staged code's bare
-   `AiCoachingService()` - this alone will not compile as staged, confirm the current constructor
-   before writing the card.
-2. **Header + quick actions** (~205 lines, roughly 305-448 + 603-632) - dashboard header, basal-
-   profile-proposal dialog/share, model selector. Explicitly excludes lines ~450-601 (the support-ZIP
-   dialogs), which are dropped entirely, already superseded.
+Once that is resolved, `_docs/kmp/staging/` can be retired entirely, along with this migration's
+staging-cleanup discipline - worth a final pass to confirm nothing else references the directory.
 
-**Only after both are done**: delete `_docs/kmp/staging/openAPSAIMI-android-wip/advisor/AimiProfileAdvisorActivity.kt`
-- not before, since later sub-lots still read it as reference.
-
-**Then, the last staged file**: `_docs/kmp/staging/openAPSAIMI-android-wip/orchestration/AimiLoopRuntimeGuard.kt`
-(16 lines) - wraps a live telemetry method (`AimiLoopTelemetry.isTickInProgress()`/`activeTickAgeMs()`)
-that nothing calls yet (no Overview wiring exists for it). Decided to hold this one rather than port
-it speculatively - port it together with whatever future feature ends up needing it, not before. Ask
-the user before changing this decision.
-
-**Once both of those are done, staging is empty** - the whole `_docs/kmp/staging/` directory tree
-(and this migration's staging-cleanup discipline) can be retired, worth a final pass to confirm
-nothing else references it.
+The multi-agent pipeline above is still the way to work, and the last two lots also ran it under the
+`superpowers:subagent-driven-development` skill, which adds a written ledger under
+`.superpowers/sdd/<plan-basename>/`: a pre-flight conflict scan, every ruling with what it costs if
+wrong, and a completion line per task. Where that skill and the project's own instructions disagree,
+the project wins - implementers do not commit, and genuine architectural forks go to the user rather
+than being ruled on. Record each such override in the ledger rather than doing it silently.
 
 ## Standing gotchas worth re-reading before starting (all detailed further in AIMI_PORT_STATE.md)
 
