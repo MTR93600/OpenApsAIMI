@@ -9,6 +9,9 @@ import app.aaps.core.interfaces.nsclient.NSSettingsStatus
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.interfaces.overview.OverviewData
 import app.aaps.core.interfaces.profile.Profile
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoPersistence
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoSessionStatus
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -152,7 +155,12 @@ class AimiDiagnosticsManager(
         }
         sb.append("\n")
 
-        // 6. Statistics (Simulé ou récupéré si dispo)
+        // 6. What TPO has written to the preferences above
+        sb.append("[TPO SESSION]\n")
+        appendTpoState(sb, allPrefs)
+        sb.append("\n")
+
+        // 7. Statistics (Simulé ou récupéré si dispo)
         // Note: Accéder aux vraies stats TDD/TIR nécessite des injections complexes (OverviewData/StatsProvider).
         // Pour cette version V1, on met un placeholder ou on essaie de lire des prefs cachées si elles existent.
         sb.append("[VITAL STATS]\n")
@@ -162,6 +170,92 @@ class AimiDiagnosticsManager(
 
         return sb.toString()
     }
+
+    /**
+     * Writes what the time-period override (TPO) has done to the preferences printed above.
+     *
+     * TPO writes preference values from inside a loop tick, with no user action, and puts them back
+     * when the session ends. Until this section existed, a support package showed only the value in
+     * force at export time, so a setting that TPO had changed looked exactly like a setting the user
+     * had changed, and a value left behind by a session that never reverted could not be told from a
+     * deliberate choice.
+     *
+     * Three things are printed for every key a session touched: the value the user had
+     * (`baseline`), the value the session wrote (`overlay`), and the value live right now. A key
+     * marked `USER-OWNED` will **never** be put back, because the session saw it change while it was
+     * running — that is the one path by which a TPO value becomes permanent.
+     *
+     * The absence of a session is stated in words rather than left out: an empty section would read
+     * as "TPO did nothing", which is exactly the conclusion this section exists to stop anyone
+     * drawing for free.
+     */
+    private fun appendTpoState(sb: StringBuilder, allPrefs: Map<String, Any?>) {
+        val enabled = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMITpoEnabled)
+        sb.append("Enabled: ").append(enabled).append(" (default is on)\n")
+        val persistence = try {
+            TpoPersistence(AimiStorageHelper(context, logger))
+        } catch (e: Exception) {
+            logger.error(LTag.CORE, "TPO diagnostics: storage not reachable", e)
+            sb.append("Session store could not be read, so nothing here can be ruled out.\n")
+            return
+        }
+        val reverts = try {
+            persistence.loadLastRevertAtMsByPack()
+        } catch (e: Exception) {
+            logger.error(LTag.CORE, "TPO diagnostics: revert map not readable", e)
+            emptyMap()
+        }
+        if (reverts.isEmpty()) {
+            sb.append("Last revert per pack: none recorded\n")
+        } else {
+            reverts.forEach { (pack, atMs) ->
+                sb.append("Last revert ").append(pack.name).append(": ").append(formatMs(atMs)).append('\n')
+            }
+        }
+        val session = try {
+            persistence.loadSession()
+        } catch (e: Exception) {
+            logger.error(LTag.CORE, "TPO diagnostics: session not readable", e)
+            sb.append("Session file present but unreadable.\n")
+            return
+        }
+        if (session == null) {
+            sb.append("No session stored. Any value above is either the user's own or was left by a\n")
+            sb.append("session whose file is gone - the revert times above are the only trace left.\n")
+            return
+        }
+        sb.append("Session: ").append(session.sessionId).append('\n')
+        sb.append("Pack: ").append(session.packId.name).append("  tier: ").append(session.tier.name).append('\n')
+        sb.append("Status: ").append(session.status.name).append('\n')
+        sb.append("Started: ").append(formatMs(session.startedAtMs)).append('\n')
+        sb.append("Expires: ").append(formatMs(session.expiresAtMs))
+        val live = session.status == TpoSessionStatus.ACTIVE || session.status == TpoSessionStatus.PENDING_LLM
+        if (live && System.currentTimeMillis() > session.expiresAtMs) {
+            sb.append("  PAST ITS EXPIRY AND STILL WRITTEN - the loop has not reverted it")
+        }
+        sb.append('\n')
+        sb.append("Trigger: ").append(session.triggerReasonCodes.joinToString(","))
+            .append("  confidence: ").append(String.format(Locale.US, "%.2f", session.triggerAlgoConfidence)).append('\n')
+        if (session.baseline.isEmpty() && session.overlay.isEmpty()) {
+            sb.append("No key recorded on this session.\n")
+            return
+        }
+        sb.append("Keys (user value -> written value | live now):\n")
+        val keys = (session.baseline.keys + session.overlay.keys).toSortedSet()
+        keys.forEach { key ->
+            val owned = key in session.userOwnedKeys
+            sb.append("  ").append(key).append(": ")
+                .append(session.baseline[key] ?: "?").append(" -> ")
+                .append(session.overlay[key] ?: "?").append(" | ")
+                .append(allPrefs[key] ?: "absent")
+            if (owned) sb.append("  USER-OWNED, will never be put back")
+            sb.append('\n')
+        }
+    }
+
+    /** One date format for every timestamp in this report, so two lines can be compared by eye. */
+    private fun formatMs(atMs: Long): String =
+        if (atMs <= 0L) "not set" else SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(atMs))
 
     /**
      * Writes the running profile, block by block, in mg/dL per U so no unit conversion can hide.

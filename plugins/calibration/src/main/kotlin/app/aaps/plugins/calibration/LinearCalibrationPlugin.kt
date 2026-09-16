@@ -77,6 +77,11 @@ class LinearCalibrationPlugin @Inject constructor(
     @Volatile
     private var lastHealthScanAt: Long = 0L
 
+    /** Reason last told to the user (a `cal_notify_*` string resource id), so the same reason is
+     *  not re-announced on every scan. Null once resolved or not yet checked. */
+    @Volatile
+    private var lastHealthMessageRes: Int? = null
+
     init {
         preferences.registerPreferences(CalibrationLongKey::class.java)
     }
@@ -311,6 +316,14 @@ class LinearCalibrationPlugin @Inject constructor(
      * right after they submit a fingerstick (see `CalibrationDialogViewModel.notYetEffectiveMessage`).
      * Exactly one reason is shown at a time, most actionable first, and the notification is
      * dismissed once the situation resolves — same spaced-scan idea as `detectAndNotifyGap`.
+     *
+     * The same reason is asked about only once, not on every scan (same idea as
+     * `detectAndNotifyGap`'s `lastNotifiedGapAt`): [NotificationManager.post] replaces the existing
+     * `CALIBRATION_HEALTH` notification with a fresh one — new timestamp, and (by default
+     * preference) a fresh Android system notification — on every call, whether or not anything
+     * actually changed. Without this check, a persisting condition (e.g. a sensor nobody
+     * recalibrated in days) reposts every [HEALTH_SCAN_INTERVAL_MS], which reads as a notification
+     * every ~30 minutes for as long as the condition holds — not the single heads-up it should be.
      */
     private suspend fun checkCalibrationHealthAndNotify(sessionStart: Long?, now: Long) {
         if (now - lastHealthScanAt < HEALTH_SCAN_INTERVAL_MS) return
@@ -318,6 +331,7 @@ class LinearCalibrationPlugin @Inject constructor(
 
         if (sessionStart == null) {
             // detectAndNotifyGap already covers this case (offers to log a sensor change).
+            lastHealthMessageRes = null
             notificationManager.dismiss(NotificationId.CALIBRATION_HEALTH)
             return
         }
@@ -336,10 +350,13 @@ class LinearCalibrationPlugin @Inject constructor(
         }
 
         if (messageRes == null) {
+            lastHealthMessageRes = null
             notificationManager.dismiss(NotificationId.CALIBRATION_HEALTH)
-        } else {
-            notificationManager.post(id = NotificationId.CALIBRATION_HEALTH, text = rh.gs(messageRes))
+            return
         }
+        if (messageRes == lastHealthMessageRes) return
+        lastHealthMessageRes = messageRes
+        notificationManager.post(id = NotificationId.CALIBRATION_HEALTH, text = rh.gs(messageRes))
     }
 
     private suspend fun insertSensorChange(timestamp: Long) {

@@ -492,6 +492,84 @@ class LinearCalibrationPluginTest : TestBase() {
         )
     }
 
+    @Test
+    fun calibrate_sameReasonAcrossManyScans_notifiesOnlyOnce() = runTest {
+        // Regression guard: an unresolved reason must not repost every scan interval forever — it
+        // reads to the user as a notification roughly every 30 minutes for as long as it persists,
+        // which for a condition like "stale" can be most of a sensor's life.
+        whenever(rh.gs(eq(R.string.cal_notify_need_more_entries))).thenReturn("NEED_MORE")
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        whenever(dateUtil.now()).thenReturn(now + T.mins(31).msecs())
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        whenever(dateUtil.now()).thenReturn(now + T.mins(62).msecs())
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+
+        verify(notificationManager, times(1)).post(
+            eq(NotificationId.CALIBRATION_HEALTH),
+            eq("NEED_MORE"),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            any<List<NotificationAction>>(),
+            anyOrNull()
+        )
+    }
+
+    @Test
+    fun calibrate_reasonChangesOnLaterScan_notifiesAgainWithTheNewReason() = runTest {
+        whenever(rh.gs(eq(R.string.cal_notify_need_more_entries))).thenReturn("NEED_MORE")
+        whenever(rh.gs(eq(R.string.cal_notify_unsafe_fit))).thenReturn("UNSAFE")
+        // First scan: no entries yet -> "need more entries".
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        // Second scan, past the interval: entries now exist but the fit is unsafe -> a genuinely
+        // different reason, which must still be announced despite the de-dup above.
+        whenever(dateUtil.now()).thenReturn(now + T.mins(31).msecs())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(
+                entry(sensor = 100.0, fs = 200.0, ageDays = 0L),
+                entry(sensor = 200.0, fs = 400.0, ageDays = 0L)
+            )
+        )
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+
+        verifyHealthNotificationPosted("NEED_MORE")
+        verify(notificationManager).post(
+            eq(NotificationId.CALIBRATION_HEALTH),
+            eq("UNSAFE"),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            any<List<NotificationAction>>(),
+            anyOrNull()
+        )
+    }
+
+    @Test
+    fun calibrate_reasonResolvesThenRecurs_notifiesAgain() = runTest {
+        whenever(rh.gs(eq(R.string.cal_notify_need_more_entries))).thenReturn("NEED_MORE")
+        // First scan: no entries -> notifies.
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        // Second scan: healthy fit -> resolves, dismissed, and the "last reason" memory is cleared.
+        whenever(dateUtil.now()).thenReturn(now + T.mins(31).msecs())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        // Third scan: back to no entries (e.g. entries invalidated) -> the SAME reason as the first
+        // scan, but it must be announced again since it had genuinely resolved in between.
+        whenever(dateUtil.now()).thenReturn(now + T.mins(62).msecs())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(emptyList())
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+
+        verify(notificationManager, times(2)).post(
+            eq(NotificationId.CALIBRATION_HEALTH),
+            eq("NEED_MORE"),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            any<List<NotificationAction>>(),
+            anyOrNull()
+        )
+    }
+
     // ------------ addEntry() ------------
 
     @Test

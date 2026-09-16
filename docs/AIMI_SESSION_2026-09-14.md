@@ -23,6 +23,8 @@ user's main complaint.
 | E | Glucose sent to Nightscout was not whole | **shipped**, `9287157672` |
 | F | Autodrive storm at the cap | **new, 2026-09-14** — the real source of the hypoglycaemia (section 9) |
 | G | Rise ceiling guard | **shipped disarmed 2026-09-14** — first candidate to pass the test since the ISF floor (section 10) |
+| H | MCER read the display path-min | **fixed 2026-09-16** (section 11) |
+| I | TPO rewrites preferences from the loop | **export added 2026-09-16**, cause of the change still unknown (section 12) |
 
 Working tree is clean except this file. Everything else below is committed.
 
@@ -703,3 +705,182 @@ of that field. Fixed with `Locale.US`.
 **How to read the next package.** With the key still off, look at `rise_ceiling_guard_would_block`:
 count the distinct bursts it fires on, and the nadir in the 3 h after each. The candidate is
 confirmed if the ratio stays clearly above 1 **with the line drawn at 60 mg/dL**, not only at 70.
+
+---
+
+## 11. MCER: the dose floor was pinned to current glucose
+
+From a field report by Thomas Willems on HEAD `741665c704`, checked line by line here and then
+measured on package `1789506919933` (2026-09-14 23:15 → 2026-09-15 23:15, 1308 ticks). All three of
+its claims hold.
+
+### 11.1 The bug
+
+`DecisionPredictionAuthorityResolver` read `scenarioProjection?.scenarioBest?.pathMinMgdl` — the
+**display** series. `ScenarioProjectionCurve` says in its own KDoc that dose-facing gates must use
+`gatePathMinMgdl` (= `preLiftPathMinMgdl`), and `ScenarioProjectionEngine` computes that pre-lift
+value explicitly, commented *"Gate path-min must reflect the curve BEFORE meal-absorption lift
+(dose-facing safety)"*. `applyMealAbsorptionTerminalFloor` even says it avoids pinning the horizon
+because that "poisoned dose-facing path-min gates". The trap was known and guarded; MCER was the one
+consumer that walked into it. The other three (`DetermineBasalAIMI2` lines ~3861, ~10658, ~10865)
+use the gate value.
+
+The lift ramps every point from `bg` upward, so after it the display trough **cannot** be below
+current glucose. MCER therefore released the dose-governing floor to current glucose, which destroys
+the self-limiting property its own preference KDoc promises ("stacked IOB pulls that trough back
+down automatically"). With 11.6 U on board the released floor was still 269.9.
+
+### 11.2 Measured, which the report could not do
+
+Both values are exported (`best_path_min_mgdl`, `best_gate_path_min_mgdl`), so the report's
+verification ask 2 is answered:
+
+| | |
+|---|---|
+| `best_path_min` equal to current glucose (within 1 mg/dL) | **81.0 %** of 1308 ticks |
+| gap display − gate | median 4.3 · **mean 25.0** · max **192.9** mg/dL |
+| ticks where display is ≥ 20 mg/dL above gate | **43.0 %** |
+| ticks where the gate value already sits at the 39 floor | 23.9 % |
+
+On the 44 ticks carrying the MCER signature (`min_pred` == display path-min, display > gate + 5):
+`min_pred` median **196** against a gate median of **114**. The floor that governs the dose was held
+**36 mg/dL higher** than the gate curve said, up to **159**.
+
+`key_aimi_meal_confirmed_early_release` is `true` on this device too, so this was live here, not only
+on the reporter's phone.
+
+### 11.3 The prediction itself is not usable — measured
+
+The same package, `eventual_bg` against the glucose actually reached 60 minutes later, 710 ticks:
+
+- absolute error **median 69 mg/dL**, mean 97
+- **29.0 %** of ticks predict exactly **39**; glucose actually reached a median of **107**
+- **6.8 %** predict ≥ 400; glucose actually reached a median of **96**
+- even between 60 and 300, the median absolute error is **45 mg/dL**
+
+Saturated against one rail or the other 36 % of the time, and wrong by 45 mg/dL in between — and this
+is the signal that steers the commanded basal and the dose floor. This is the same open subject as
+`pkpd-floor-39-contamination`; it is now quantified end to end.
+
+### 11.4 What was fixed
+
+1. **`DecisionPredictionAuthority.kt` — the gate value.** One identifier, `pathMinMgdl` →
+   `gatePathMinMgdl`.
+2. **The tail breaker is now latched.** New pure object `risk/MealConfirmedEarlyReleaseLatch.kt`; the
+   resolver is an `object`, so the state is carried by `DetermineBasalAIMI2` (`mcerTailLatch`), the
+   same shape as `RiseCeilingGuard`. It latches on the phase or falling breaker, and releases when
+   glucose is back under `target + 20` (below which MCER could not arm anyway) or insulin on board is
+   down to half of what it was at the trip. The IOB breaker is **not** latched — its headroom returns
+   on its own, and latching it would keep MCER off all day. New reason code `tail_latched`.
+   `IOB_RELEASE_FRACTION` 0.5 is a judgement, not a measurement; it is stated as such in the KDoc,
+   and the latch can only keep an opt-in escalation off.
+   Why it was needed: 2026-09-15, peak 13:52, then at 14:38 the absorption phase left
+   `PEAK_CORRECTION` for exactly one tick while the sensor stepped 215.8 → 240.2; all three stateless
+   breakers released together and the loop went back to the ceiling basal with 8.87 U on board.
+3. **The smoothed delta is passed.** `combinedDeltaMgdl5m = tickCombinedDelta.toDouble()` instead of
+   the raw `delta`. The parameter was always named for the combined signal.
+   **Not one-directional:** `tickCombinedDelta` is amplified (`× 1.30`) in one branch, so it can be
+   larger than the raw delta and MCER arming can move either way. What is gained is consistency with
+   the rest of the gate, not a guaranteed reduction.
+
+Left undone from the report: fix 4 (the IOB breaker anchored to `max_iob` with a 1.5 U margin, so
+"stacked" means IOB ≥ 14.5 U on a `max_iob` of 16) and fix 5. Fix 4 needs a measurement first.
+
+`MealConfirmedEarlyReleaseLatchTest`: 12 tests, 0 failures, including the 14:38 tick replayed.
+`:plugins:aps` 292 classes, **1779 tests, 0 failures**; `:core:keys` 8 tests, 0 failures.
+
+---
+
+## 12. TPO rewrites dosing preferences from inside the loop
+
+The user noticed `key_openapsaimi_high_bg_max_smb` change on its own. It did: **1.25 on 2026-09-14,
+2.0 on 2026-09-15**, with `key_openapsaimi_max_smb` unchanged at 0.8. The runtime trace dates it
+between 12:38 and 17:14 on the 15th (at both points the physio multiplier is 1.0, so
+`max_smb_high_bg_u` is the stored value).
+
+### 12.1 The mechanism
+
+Unlike MCER, which only the preference screen writes, this key has automatic writers, and one of
+them runs in the loop:
+
+1. `DetermineBasalAIMI2:2389` calls `tpoOrchestrator.onTickStart(...)`, and `:3688`
+   `onPatientStateReady(...)` — every tick.
+2. `TpoOrchestrator.onPatientStateReady` builds a plan and, when `OApsAIMITpoLlmConfirmEnabled` is
+   off, calls `sessionManager.startSession(plan, preferences, ...)`, which **writes the preferences
+   directly**, with no user action, and sets `prefsChangedThisTick`.
+3. The loop consumes that flag at `:3699` and re-reads the key on the next line.
+4. `BooleanKey.OApsAIMITpoEnabled` defaults to **true**. The autonomy gate is met as soon as
+   autodrive is active, which it is here.
+
+### 12.2 It does revert — the design is sound
+
+`startSession` stores `baseline` and `overlay`, TTL **45 min**. `onTickStart` → `expireIfNeeded`
+every tick, and past the TTL `revertSession` restores every baseline key not in `userOwnedKeys`.
+While the session is live, `trackUserOwnedKeys` marks any key whose current value no longer matches
+the overlay, so a value changed by hand is not clobbered. `revertNow` and `supersedeActiveSession`
+also revert.
+
+### 12.3 Three holes
+
+1. **`userOwnedKeys` cannot tell the user from another writer.** The test is only "current ≠
+   overlay". The advisor tuning plan or the Control Center ladder writing the same key during a
+   session marks it user-owned, and from then on the baseline is **never** restored: the overlay
+   value becomes permanent. This is the one path by which a value stays silently changed.
+2. **The revert lives only in the session file** (`tpo/tpo_session.json`). Lose it while an overlay is
+   written — cleared data, reinstall, a write failure — and nothing ever restores the baseline.
+3. **The support package carried no TPO trace at all** — no session, no baseline, no start/revert
+   record, in neither the report nor the 45 MB JSONL. `AdvisorHistoryRepository` logs
+   `TPO_SESSION_START` / `TPO_SESSION_REVERT` but that history is not exported.
+
+### 12.4 Why the observed change is still unexplained
+
+The TTL is 45 minutes, and `HighBGMaxSMB` read 1.25 continuously from 2026-09-14 23:25 to
+2026-09-15 12:38 — over 13 hours, with the loop ticking every minute. **No live overlay can last
+that long**, so the 1.25 was a stored value, not an active session. Either a session left it there
+through hole 1 or 2, or something else wrote 2.0 later. `TpoDeltaBuilder` only ever steps this key
+**down** (`stepDownLadder` on `[1.00, 1.25, 1.60, 2.20, 3.00]`), and two rungs below 2.0 is exactly
+1.25 — consistent with 2.0 being the user's own value and 1.25 a leftover, but not proof.
+
+### 12.5 What was added
+
+A `[TPO SESSION]` section in `AimiDiagnosticsManager`. It prints whether TPO is enabled, the last
+revert per pack, and — for every key a session touched — the user's value, the value the session
+wrote, and the value live now, with `USER-OWNED, will never be put back` on any key hole 1 has
+captured. A session past its expiry that is still written says so in words. No session is stated in
+words too, because an empty section would read as "TPO did nothing".
+
+`TpoPersistence(AimiStorageHelper(context, logger))` is built locally: same module, no new
+dependency, no injection change, no change at the call site. `AimiDiagnosticsActiveProfileTest` still
+3 tests, 0 failures.
+
+**Second, separate effect, this one by design:** the *runtime* ceiling moves every few minutes
+through `MaxSmbLadder` — branches `STANDARD`, `CONFIRMED_RISE_HIGH`, `CONFIRMED_RISE_HIGH_BY_DELTA`,
+`PLATEAU_MODERATE_75`, `SENSITIVE_85`, values from 0 to 2.0 inside one hour on 2026-09-15. A second
+reason the cap looks unstable, unrelated to the stored preference.
+
+### 12.6 Still open
+
+- **The decision, not a fix:** a subsystem on by default that rewrites `MaxSMB`, `HighBGMaxSMB` and
+  `PriorityMaxIob` from inside the loop without confirmation. Either default `OApsAIMITpoEnabled` to
+  false, or keep it and rely on the new export. Not changed — it is a safety default and the user's
+  call.
+- Hole 1 deserves a real fix: compare against the *baseline* the session wrote, or stamp who wrote a
+  key, instead of inferring ownership from "the value moved".
+
+---
+
+## 13. The rise ceiling guard, first prospective look — not confirmed
+
+Package `1789506919933` is the first with the shadow verdict running. It fired on three bursts, all
+followed by a low:
+
+```
+09-15 12:45->13:17  33 blocking ticks  glucose 148 -> peak 241  low 58
+09-15 17:27->17:34   8 blocking ticks  glucose 149 -> peak 158  low 63
+09-15 20:44->21:18  31 blocking ticks  glucose 149 -> peak 214  low 59
+```
+
+**Three out of three proves nothing here.** On this package the base rate is **75 % under 70** and
+**45.6 % under 60** over the ticks with 3 h of follow-up: almost any window is followed by a low. The
+day ran 29 % of the time under 70. What is confirmed is that the gesture fires where it was predicted
+to; the discrimination needs a day with a real mix of good and bad episodes. Keep collecting.
