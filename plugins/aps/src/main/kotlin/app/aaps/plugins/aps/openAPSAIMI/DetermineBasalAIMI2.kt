@@ -45,6 +45,7 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalTerminalInvariants
+import app.aaps.plugins.aps.openAPSAIMI.basal.AnticipationBasalFloor
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAnticipation
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAutodriveBasalBridge
@@ -3001,12 +3002,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.lowCarbTime = therapy.lowCarbTime
         this.highCarbTime = therapy.highCarbTime
         this.mealTime = therapy.mealTime
+        this.anticipTime = therapy.anticipTime
         this.bfastTime = therapy.bfastTime
         this.lunchTime = therapy.lunchTime
         this.dinnerTime = therapy.dinnerTime
         this.fastingTime = therapy.fastingTime
         this.stopTime = therapy.stopTime
         this.mealruntime = therapy.getTimeElapsedSinceLastEvent("meal")
+        this.anticipruntime = therapy.getTimeElapsedSinceLastEvent("anticip")
         this.bfastruntime = therapy.getTimeElapsedSinceLastEvent("bfast")
         this.lunchruntime = therapy.getTimeElapsedSinceLastEvent("lunch")
         this.dinnerruntime = therapy.getTimeElapsedSinceLastEvent("dinner")
@@ -9027,6 +9030,36 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
 
+        // 🍽️ Declared-meal anticipation — see [AnticipationBasalFloor].
+        // Applied last, after the slew limiter, because a floor that the limiter can clamp away is
+        // not a floor. It only ever RAISES the rate (max of the two), and only while the note window
+        // is open, the opt-in key is on and the declaration still looks true; the gesture stands down
+        // on its own under 80 mg/dL or on a fall, and deleting the note ends it at once.
+        if (preferences.get(BooleanKey.OApsAIMIAnticipBasalFloor) && anticipTime) {
+            AnticipationBasalFloor.floorRateUph(
+                budgetU = preferences.get(DoubleKey.OApsAIMIAnticipBudgetU),
+                elapsedMinutes = anticipruntime.toDouble(),
+                profileBasalUph = b.profile.current_basal,
+                // Same ceiling the declared meal modes use, so a declaration cannot reach higher
+                // than a meal mode already can.
+                maxBasalUph = maxOf(b.profile.max_basal, preferences.get(DoubleKey.meal_modes_MaxBasal)),
+                bgMgdl = bg.toDouble(),
+                deltaMgdl5m = delta.toDouble(),
+            )?.let { floorUph ->
+                if (floorUph > finalProposedRate) {
+                    consoleLog.add(
+                        "🍽️ ANTICIP_BASAL_FLOOR: %.2f→%.2f U/h (budget %.2f U over %.0f min, elapsed %d min)".format(
+                            Locale.US, finalProposedRate, floorUph,
+                            preferences.get(DoubleKey.OApsAIMIAnticipBudgetU),
+                            AnticipationBasalFloor.WINDOW_MINUTES, anticipruntime,
+                        )
+                    )
+                    b.rT.reason.append("; 🍽️anticip ${"%.2f".format(Locale.US, floorUph)}U/h")
+                    finalProposedRate = floorUph
+                }
+            }
+        }
+
         val finalResult = setTempBasal(
             _rate = finalProposedRate,
             duration = finalDuration,
@@ -11046,11 +11079,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             iobU = iob.toDouble(),
             maxIobU = maxIob,
             mcerTailLatched = mcerTailLatch.latched,
+            declaredMeal = anticipTime && preferences.get(BooleanKey.OApsAIMIAnticipMealEvidence),
         )
         // Carry the latch to the next tick. Done after the call because the resolver is stateless and
         // reports the trip; it can only keep an opt-in escalation off, never raise a dose.
         mcerTailLatch = MealConfirmedEarlyReleaseLatch.next(
             previous = mcerTailLatch,
+            armedThisTick = decisionPrediction.mcerArmed,
             tailTripped = decisionPrediction.mcerTailTripped,
             bgMgdl = bg.toDouble(),
             targetBgMgdl = targetBgMgdl,
@@ -11254,6 +11289,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lowCarbTime = false
     private var highCarbTime = false
     private var mealTime = false
+
+    /** A meal the person declared with an "anticip" note; carries no prebolus. See [AnticipationBasalFloor]. */
+    private var anticipTime = false
+
+    /** Minutes since that declaration. Same type as [mealruntime], which this mirrors. */
+    private var anticipruntime: Long = 0
     private var bfastTime = false
     private var lunchTime = false
     private var dinnerTime = false

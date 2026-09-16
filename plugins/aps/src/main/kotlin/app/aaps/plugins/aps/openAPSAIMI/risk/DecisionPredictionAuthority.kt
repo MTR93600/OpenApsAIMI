@@ -42,6 +42,12 @@ data class DecisionPredictionAuthority(
      * cannot re-arm the early release while a stack of insulin is still working.
      */
     val mcerTailTripped: Boolean = false,
+    /**
+     * True when the early release's gate was open on this tick. The caller carries it into
+     * [MealConfirmedEarlyReleaseLatch] so a tail only counts inside an episode where the release
+     * actually armed — a fall with no earlier arm is not a post-peak tail, there was no peak.
+     */
+    val mcerArmed: Boolean = false,
 )
 
 object DecisionPredictionAuthorityResolver {
@@ -82,6 +88,13 @@ object DecisionPredictionAuthorityResolver {
          * tail. Kept by the caller because this resolver is stateless.
          */
         mcerTailLatched: Boolean = false,
+        /**
+         * True when the person has declared a meal and
+         * [app.aaps.core.keys.BooleanKey.OApsAIMIAnticipMealEvidence] is on. A declaration is meal
+         * evidence of the strongest kind, so it joins the tree's own evidence instead of waiting for
+         * glucose to confirm what the person already knows.
+         */
+        declaredMeal: Boolean = false,
     ): DecisionPredictionAuthority {
         val pkpd = pkpdEventualMgdl.takeIf { it.isFinite() } ?: bgMgdl
         val rawScenarioFloor = scenarioProjection?.clinicalFloor?.terminalMgdl?.takeIf { it.isFinite() }
@@ -153,7 +166,8 @@ object DecisionPredictionAuthorityResolver {
                 trajectoryType == TrajectoryType.SLOW_DRIFT
         val strongRiseProjection = scenarioBest > bgMgdl + if (causalDominant == CausalStateId.FAST_MEAL) 12.0 else 15.0
         val treeMealEvidence =
-            trunkGlobalState == GlobalPhysiologicalState.DIGESTION_ACTIVE ||
+            declaredMeal ||
+                trunkGlobalState == GlobalPhysiologicalState.DIGESTION_ACTIVE ||
                 trunkGlobalState == GlobalPhysiologicalState.MEAL_PROBABLE ||
                 mealCertainty?.supportsMealSupport == true
         val mealEvidence =
@@ -176,6 +190,7 @@ object DecisionPredictionAuthorityResolver {
         // sovereign: never engages under false-meal suppression or the post-hypo delivery guard.
         var mcerSuffix = ""
         var tailTripped = false
+        var mcerArmedThisTick = false
         if (mealConfirmedEarlyReleaseEnabled) {
             // The GATE path-min, never the display one. `pathMinMgdl` is the series after the
             // meal-absorption lift, and that lift ramps every point up from the current glucose, so
@@ -204,6 +219,7 @@ object DecisionPredictionAuthorityResolver {
             val tailBreaker = tailByPhase || tailByIob || tailByFall || mcerTailLatched
             val sovereignHypoBlock = falseMealSuppression || postHypoDelivery.active
             val armed = rising && aboveTarget && strongMealConfirmed && !tailBreaker && !sovereignHypoBlock
+            mcerArmedThisTick = armed
             if (armed && scenarioBestPathMin.isFinite() && scenarioBestPathMin > predTerminal) {
                 predTerminal = scenarioBestPathMin
                 mcerSuffix = " | MCER=ARMED release->${scenarioBestPathMin.toInt()}"
@@ -233,6 +249,7 @@ object DecisionPredictionAuthorityResolver {
                 falseMealSuppression = falseMealSuppression,
                 reason = "scenario_consensus lead=${"%.1f".format(scenarioLead)}" + mcerSuffix,
                 mcerTailTripped = tailTripped,
+                mcerArmed = mcerArmedThisTick,
             )
         }
 
@@ -248,6 +265,7 @@ object DecisionPredictionAuthorityResolver {
                 falseMealSuppression = true,
                 reason = "non_meal_guard prob=${"%.2f".format(competingNonMealProb)} cause=${causalDominant.name}" + mcerSuffix,
                 mcerTailTripped = tailTripped,
+                mcerArmed = mcerArmedThisTick,
             )
         }
 
@@ -267,6 +285,7 @@ object DecisionPredictionAuthorityResolver {
                     "trunk=${trunkGlobalState?.name ?: "NONE"} " +
                     "lead=${"%.1f".format(scenarioLead)} cause=${causalDominant.name}" + mcerSuffix,
                     mcerTailTripped = tailTripped,
+                    mcerArmed = mcerArmedThisTick,
             )
         }
 
@@ -283,6 +302,7 @@ object DecisionPredictionAuthorityResolver {
                 falseMealSuppression = falseMealSuppression,
                 reason = "trajectory=${trajectoryType.name} lead=${"%.1f".format(scenarioLead)}" + mcerSuffix,
                 mcerTailTripped = tailTripped,
+                mcerArmed = mcerArmedThisTick,
             )
         }
 
@@ -299,6 +319,7 @@ object DecisionPredictionAuthorityResolver {
                 falseMealSuppression = falseMealSuppression,
                 reason = "guarded_uplift lead=${"%.1f".format(scenarioLead)} meal=${mealEvidence} traj=${trajectoryType?.name ?: "NONE"}" + mcerSuffix,
                 mcerTailTripped = tailTripped,
+                mcerArmed = mcerArmedThisTick,
             )
         }
 
@@ -313,6 +334,7 @@ object DecisionPredictionAuthorityResolver {
             falseMealSuppression = falseMealSuppression,
             reason = "pkpd_retained lead=${"%.1f".format(scenarioLead)}" + mcerSuffix,
             mcerTailTripped = tailTripped,
+            mcerArmed = mcerArmedThisTick,
         )
     }
 

@@ -21,6 +21,13 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
     var lowCarbTime = false
     var highCarbTime = false
     var mealTime = false
+    /**
+     * A meal the person has declared before it shows on the sensor. Unlike [mealTime] it carries no
+     * prebolus: it only tells the loop the meal is a fact, so a bounded anticipation can be spent
+     * without waiting for the rise to confirm anything. Keyword "anticip", window carried by the
+     * note's own duration.
+     */
+    var anticipTime = false
     var bfastTime = false
     var lunchTime = false
     var dinnerTime = false
@@ -83,6 +90,7 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
                 lowCarbTime = findActiveLowCarbEvents(events, now),
                 highCarbTime = findActiveHighCarbEvents(events, now),
                 mealTime = findActiveMealEvents(events, now),
+                anticipTime = findActiveAnticipEvents(events, now),
                 bfastTime = findActivebfastEvents(events, now),
                 lunchTime = findActiveLunchEvents(events, now),
                 dinnerTime = findActiveDinnerEvents(events, now),
@@ -104,6 +112,7 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
             lowCarbTime = false,
             highCarbTime = false,
             mealTime = false,
+            anticipTime = false,
             bfastTime = false,
             lunchTime = false,
             dinnerTime = false,
@@ -124,6 +133,7 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         persistenceLayer.deleteLastEventMatchingKeyword("lowcarb")
         persistenceLayer.deleteLastEventMatchingKeyword("highcarb")
         persistenceLayer.deleteLastEventMatchingKeyword("meal")
+        persistenceLayer.deleteLastEventMatchingKeyword("anticip")
         persistenceLayer.deleteLastEventMatchingKeyword("bfast")
         persistenceLayer.deleteLastEventMatchingKeyword("lunch")
         persistenceLayer.deleteLastEventMatchingKeyword("dinner")
@@ -138,6 +148,7 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         lowCarbTime = snapshot.lowCarbTime
         highCarbTime = snapshot.highCarbTime
         mealTime = snapshot.mealTime
+        anticipTime = snapshot.anticipTime
         bfastTime = snapshot.bfastTime
         lunchTime = snapshot.lunchTime
         dinnerTime = snapshot.dinnerTime
@@ -156,6 +167,7 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         lowCarbTime = false
         highCarbTime = false
         mealTime = false
+        anticipTime = false
         bfastTime = false
         lunchTime = false
         dinnerTime = false
@@ -225,6 +237,18 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
                     now <= (event.timestamp + event.duration)
             }
 
+    /**
+     * A declared meal, with no prebolus attached. The keyword is deliberately not a word containing
+     * "meal": `findActiveMealEvents` matches any note holding "meal", so "premeal" would switch the
+     * meal mode on as well and fire its prebolus, which is the one thing this mode exists to avoid.
+     */
+    private fun findActiveAnticipEvents(events: List<TE>, now: Long): Boolean =
+        events.filter { it.type == TE.Type.NOTE }
+            .any { event ->
+                event.note?.contains("anticip", ignoreCase = true) == true &&
+                    now <= (event.timestamp + event.duration)
+            }
+
     private fun findActivebfastEvents(events: List<TE>, now: Long): Boolean =
         events.filter { it.type == TE.Type.NOTE }
             .any { event ->
@@ -285,6 +309,7 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         val lowCarbTime: Boolean,
         val highCarbTime: Boolean,
         val mealTime: Boolean,
+        val anticipTime: Boolean,
         val bfastTime: Boolean,
         val lunchTime: Boolean,
         val dinnerTime: Boolean,

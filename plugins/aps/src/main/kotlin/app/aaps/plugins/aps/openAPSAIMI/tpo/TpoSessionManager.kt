@@ -8,7 +8,6 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningChange
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
 import java.util.UUID
-import kotlin.math.abs
 
 internal class TpoSessionManager(
     private val persistence: TpoPersistence,
@@ -183,7 +182,16 @@ internal class TpoSessionManager(
     ) {
         var restored = 0
         session.baseline.forEach { (key, oldValue) ->
-            if (key in session.userOwnedKeys) return@forEach
+            // Decided here, per key, on the value in force right now — see [TpoRevertPolicy]. The
+            // old test was `key in session.userOwnedKeys`, a set that only ever grew, so one tick of
+            // divergence kept this session's own value in the preferences for good; and a key the
+            // tracking had not happened to look at was overwritten even when somebody else had moved
+            // it. Comparing against what this session wrote answers both.
+            val liveValue = readPreferenceValue(preferences, key)
+            val sessionWrote = session.overlay[key]
+            if (!TpoRevertPolicy.shouldRestore(liveValue, sessionWrote, key in session.userOwnedKeys)) {
+                return@forEach
+            }
             if (restoreValue(preferences, key, oldValue)) restored++
         }
         val revertMap = persistence.loadLastRevertAtMsByPack().toMutableMap()
@@ -264,10 +272,7 @@ internal class TpoSessionManager(
         }
     }
 
+    /** One definition of value equality for the whole revert path — see [TpoRevertPolicy.sameValue]. */
     private fun valuesDiffer(current: Any, overlayValue: Any): Boolean =
-        when {
-            current is Double && overlayValue is Double -> abs(current - overlayValue) >= 0.0001
-            current is Boolean && overlayValue is Boolean -> current != overlayValue
-            else -> current.toString() != overlayValue.toString()
-        }
+        !TpoRevertPolicy.sameValue(current, overlayValue)
 }

@@ -25,6 +25,9 @@ user's main complaint.
 | G | Rise ceiling guard | **shipped disarmed 2026-09-14** — first candidate to pass the test since the ISF floor (section 10) |
 | H | MCER read the display path-min | **fixed 2026-09-16** (section 11) |
 | I | TPO rewrites preferences from the loop | **export added 2026-09-16**, cause of the change still unknown (section 12) |
+| J | Does the prediction layer stabilise? | **answered 2026-09-16** — the wiring is right, the slope is not (section 14) |
+| K | Declared-meal anticipation | **built disarmed 2026-09-16** (section 16) |
+| L | The tail latch was a regression | **fixed 2026-09-16** (section 17) |
 
 Working tree is clean except this file. Everything else below is committed.
 
@@ -884,3 +887,479 @@ followed by a low:
 **45.6 % under 60** over the ticks with 3 h of follow-up: almost any window is followed by a low. The
 day ran 29 % of the time under 70. What is confirmed is that the gesture fires where it was predicted
 to; the discrimination needs a day with a real mix of good and bad episodes. Keep collecting.
+
+---
+
+## 14. Does the prediction and trajectory layer stabilise the loop?
+
+The user's question, and the most useful hour of the week. Corpus: every package deduplicated,
+2026-09-02 → 2026-09-16, **14755 ticks**. Base rate over it: a reading under 70 follows within 3 h on
+**27.7 %** of ticks, under 60 on 10.6 %.
+
+### 14.1 Yes — the prediction layer brakes, and hard
+
+| | |
+|---|---|
+| prediction **lowered** below the pkpd-only value | **50.7 %** of ticks, median **−75 mg/dL** |
+| prediction raised | 10.8 %, median +3 mg/dL |
+| on a fast rise (delta ≥ +8) | **118 of 118 lowered, 0 raised** |
+| most frequent authority | `SCENARIO_SUPPRESSED_NON_MEAL`, 37.7 % |
+
+It is not a one-way ratchet upward. The scenario layer is overwhelmingly a reducer.
+
+### 14.2 Two numbers, and they are NOT a bug — correction of a wrong reading
+
+`pred_terminal` and `eventual_bg` agree within 5 mg/dL on only 29.1 % of ticks, and on a fast rise
+`eventual_bg` runs a median **+219 mg/dL** higher. That was first read here as "two predictions of the
+same thing disagreeing, and the basal reads the unbraked one". **That reading is wrong.** In
+`DecisionPredictionAuthorityResolver`:
+
+- `predTerminal` starts as `rawScenarioFloor ?: pkpd` — the **clinical floor** curve, insulin only,
+  the pessimistic estimate. It feeds `min_pred`, the tube advisor and the PKPD guards, and it is
+  *supposed* to be low.
+- `eventualTerminalMgdl` is `pkpd` or `max(pkpd, scenarioBest)` — the **expected** estimate. It feeds
+  the correction and the basal, and during a meal it is *supposed* to be higher.
+
+Worst case for the guards, expected case for the corrector. That is the right architecture. The
++219 mg/dL gap on a rise is the design working, not a defect — and it is why the basal sat at profile
+(0.55–0.60 U/h) on the very ticks with the biggest gap.
+
+**The replay that was planned off that misreading — make the basal read `pred_terminal` — was not
+run, and must not be: it would make the corrector dose against the pessimistic floor and never
+correct a meal.**
+
+### 14.3 What IS wrong: the corrector's slope is far steeper than its input's accuracy
+
+The basal as a function of `eventual_bg`, over the corpus:
+
+| `eventual_bg` | ticks | commanded basal, median | profile |
+|---|---|---|---|
+| railed low (39) | 4478 | **0.00** U/h | 0.50 |
+| 40–119 | 4599 | 0.12 | 0.50 |
+| 120–249 | 4029 | 1.18 | 0.53 |
+| 250–399 | 1305 | **5.28** | 0.60 |
+| railed high (≥ 400) | 344 | 5.49 | 0.60 |
+
+**A 4.5× jump in commanded basal across one band boundary**, while the profile stays at 0.60. And
+that input is against a rail **32.7 %** of the time (exactly 39 on 30.3 %, ≥ 400 on 2.3 %; on rising
+ticks ≥ 400 reaches 16.1 %), with a median absolute error of 69 mg/dL at a 60-minute horizon
+(section 11.3).
+
+A near-step corrector steered by a number that is wrong by 69 mg/dL and railed a third of the time is
+the stabilisation failure. Not the absence of a predictive layer — the mismatch between the
+controller's gain and its input's accuracy. **This is the one finding of section 14 that no candidate
+has yet addressed, and it is testable by replay.**
+
+### 14.4 The trajectory layer diagnoses correctly and has almost no authority
+
+Its own verdict on 2026-09-16: `OPEN_DIVERGING` 29.7 %, `TIGHT_SPIRAL` 22.3 % — **52 % diverging or
+spiralling** — against `CLOSING_CONVERGING` 20.6 % and `STABLE_ORBIT` 4.7 %. That matches the
+oscillation measured independently. The diagnosis works. The authority does not:
+
+| route | real power |
+|---|---|
+| prediction authority (`SCENARIO_TRAJECTORY_UPLIFT`) | **0 ticks of 1431** |
+| ISF (`isf_trajectory_multiplier`) | moves on 49.8 % of ticks but bounded to **±10 %** (`aimi_dyn_isf_trajectory_max_fraction: 0.1`), median 0.968 |
+| dosing via HTR | active 27 % of ticks — but HTR **releases** insulin, it does not brake |
+
+A classifier that says "spiral" a fifth of the time and whose largest response is ±10 % on sensitivity
+cannot stabilise anything.
+
+### 14.5 The saturation candidate — strong marker, failed gesture, REJECTED
+
+Matched inside one glucose band, rising ticks only, `eventual_bg ≥ 400` against 250–399:
+
+| glucose | 250–399 | ≥ 400 |
+|---|---|---|
+| 90–130 | n=395, basal 1.05 → **24.8 %** under 70 | n=45, basal 0.59 → **57.8 %** |
+| 130–170 | n=474, basal 5.61 → **23.8 %** | n=94, basal 6.16 → **51.1 %** |
+| 170–400 | n=224, basal 5.49 → **31.2 %** | n=179, basal 6.00 → **51.4 %** |
+
+The risk roughly **doubles** in all three bands, and the basal is nearly identical between the columns
+— in the 90–130 band the railed ticks even get *less* basal and produce *more* lows. So the rail does
+not drive the dose, it **marks** the state.
+
+Six gestures built on it, all replayed with the discrimination test of section 5:
+
+| candidate | channel | ratio at 70 | ratio at 60 |
+|---|---|---|---|
+| eventual ≥ 400 → cap basal at profile | basal | 1.31 | **0.41** |
+| eventual ≥ 400 → cap basal at 2× profile | basal | 1.33 | — |
+| eventual ≥ 400 and rising → cap at profile | basal | 1.31 | — |
+| eventual ≥ 350 → cap basal at profile | basal | **0.90** | — |
+| eventual ≥ 400 → refuse the bolus | SMB | 1.24 | **0.38** |
+| eventual ≥ 350 → refuse the bolus | SMB | 0.91 | — |
+| eventual ≥ 300 → refuse the bolus | SMB | 0.74 | **0.33** |
+
+**All rejected.** None is clearly above 1, and every one gets *worse* at the 60 mg/dL line — it would
+withhold more from episodes that did not go severely low. The reason is the confounding the doc warns
+about: railed ticks concentrate on big meals, which legitimately need insulin, so a uniform gate hits
+the good episodes harder. A strong marginal association is not a gesture.
+
+Two further lessons worth keeping: on the basal channel the candidate withholds only **26.3 U over
+15 days** (≈ 1.8 U/day) because the railed windows are minutes long — the marker is right, the lever
+is tiny. And moving the same signal to the SMB channel, where the damage is, does not help either.
+
+### 14.6 The 39 rail: an artefact, but not a demonstrated dosing harm — correction
+
+`eventual_bg` is exactly 39 on 30.3 % of ticks, and the basal is then a median 0.00 U/h against a
+0.50 profile. That has been carried in this project (and in the memory note
+`pkpd-floor-39-contamination`) as a dosing defect. **On this corpus it is not one.** Of 4064 ticks
+with `eventual == 39` and basal held at or below half profile:
+
+- glucose 60 min later **rose** by more than 10 mg/dL on 42.5 % — but from a median of **85** to 122,
+  and switching basal off at 85 is what one would want;
+- it **fell** by more than 10 on 31.8 %, median 118 → 84 — the zeroing was right;
+- flat on 25.7 %;
+- and of the 64 railed ticks where glucose was already at or above 150, it **fell on every one**
+  (median 159 → 106) — so the zeroing never held basal off through a real high.
+
+The value 39 is still an artefact and it still poisons the basal ML labels and the SMB gate, which is
+the part of the memory note that stands. What does not stand is the claim that it drives hypoglycaemia
+through the basal channel.
+
+### 14.7 Where this leaves the search
+
+Rejected today: the `pred_terminal` rewiring (wrong by construction), six saturation gestures, and
+the 39-rail dosing-harm hypothesis. That brings the running tally to **13 candidates dropped by the
+discrimination test, 2 passed** — the stress ISF floor at 4.29, and the rise ceiling guard at 18.55,
+the second still unconfirmed prospectively (section 13).
+
+The direction named here as "the one live, untested one" — flattening the corrector's gain — was
+replayed the next hour and **also failed**. See section 15.
+
+---
+
+## 15. The corrector's gain: replayed and rejected. And two real bugs in the TPO revert.
+
+### 15.1 The gain candidate — REJECTED, six spans
+
+The gesture: pull the commanded basal back toward profile in proportion to how close `eventual_bg`
+sits to the high rail (401). Reduction only, never raises, never touches a rate at or below profile.
+`span` is the width of the ramp in mg/dL — at `span` 150 the pull-back starts at eventual 251 and is
+complete at 401. Replayed over the same 14755 ticks.
+
+| span | interventions | on LOW | on ok | withheld LOW | withheld ok | ratio @70 | ratio @60 |
+|---|---|---|---|---|---|---|---|
+| 40 | 53 | 21 | 32 | 18.16 U | 16.32 U | 1.11 | **0.37** |
+| 60 | 54 | 20 | 34 | 19.69 | 18.55 | 1.06 | **0.38** |
+| 100 | 73 | 27 | 46 | 22.07 | 24.81 | 0.89 | **0.34** |
+| 150 | 111 | 35 | 76 | 25.42 | 34.79 | 0.73 | **0.30** |
+| 200 | 147 | 38 | 109 | 30.10 | 48.32 | 0.62 | **0.26** |
+| 300 | 242 | 45 | 197 | 42.34 | 76.89 | 0.55 | **0.21** |
+
+Monotone: the wider the ramp, the worse. At the 60 mg/dL line every variant sits between **0.21 and
+0.38**, i.e. it withholds about three times more from episodes that never went severely low.
+
+**The generalisation, now robust.** `eventual_bg` cannot be the trigger of any withholding gesture.
+Thirteen formulations have been replayed — a hard basal cap at profile and at 2× profile, the same
+with a rising condition, a lower threshold, three SMB vetoes, and six graded gains — and **all
+thirteen fail**. The reason is always the same: a high `eventual_bg` marks a big meal, and a big meal
+legitimately needs insulin, so any gate keyed on it hits the good episodes hardest.
+
+The one gesture that did pass (18.55) keys on something different in kind: **the dose being pinned at
+its own ceiling, repeatedly, during a fast rise** — a property of the controller's *behaviour*, not a
+value of the prediction. That distinction is the lesson to carry: gate on what the controller is
+doing, not on what the prediction says.
+
+Running tally: **19 candidates dropped by the discrimination test, 2 passed.**
+
+### 15.2 Two real bugs in the TPO revert — fixed, TDD
+
+Not a dosing candidate: a correctness defect, found by reading section 12.3 hole 1 properly and
+proven by a failing test before any code was written.
+
+`revertSession` decided key by key with `if (key in session.userOwnedKeys) return@forEach`.
+`userOwnedKeys` was filled by `trackUserOwnedKeys` on every tick where the live value differed from
+the overlay, and that set **only ever grew**. Two failure modes, both reproduced as failing tests:
+
+1. **The session's own value became permanent.** One tick of divergence marked the key for the rest
+   of the session, so the revert skipped it for good: the overlay stayed in the preferences and the
+   user's baseline was silently lost. A transient was enough — another writer, a value the loop
+   scaled for a moment, or the user changing a setting and changing it straight back. This is the
+   mechanism that can leave `key_openapsaimi_high_bg_max_smb` stuck at a ladder rung (section 12.4).
+2. **Somebody else's change was overwritten.** For any key *not* in the set the baseline was restored
+   unconditionally, so a change the tracking had not happened to observe — `revertNow` called
+   directly, or a divergence between the last tick and the expiry — was clobbered. This one was not
+   in section 12.3; the test found it.
+
+**The fix.** New pure object `tpo/TpoRevertPolicy.kt`. At revert time, restore the baseline **iff the
+value in force is still the one the session wrote**. If it is, nothing else has touched the key; if it
+is not, somebody else owns it now. `observedDivergence` is still passed from `userOwnedKeys` so the
+call site shows it explicitly, and it deliberately does **not** block a restore — that stickiness is
+the bug. `valuesDiffer` in `TpoSessionManager` now delegates to `TpoRevertPolicy.sameValue`, so the
+whole revert path has one definition of value equality.
+
+The failure this cannot avoid is milder and rarer, and is stated in the KDoc: if somebody sets a key
+to the very value the session wrote, the revert puts the baseline back against their wish. Nothing can
+tell that apart from the session's own write, and losing a baseline for good is the worse of the two.
+
+`TpoRevertPolicyTest` 10 tests, `TpoSessionManagerRevertTest` 4 tests, both 0 failures — the two
+bug-reproducing tests were watched failing first (`put` not called; `put` called when it must not be).
+Whole run: `:plugins:aps` 294 classes, **1793 tests, 0 failures, 0 errors**; `:core:keys` 8 tests, 0
+failures.
+
+### 15.3 Two things found and deliberately not changed
+
+- **`key_oaps_aimi_dynisf_factor_0_1` … `23_24`** — the 24 hourly dynISF factors stored on the device
+  (200 at night, 500 from 12:00 to 16:00) are read by **nothing**: zero references in the repo outside
+  build directories. They are dead preferences from an earlier version. The lever a user would reach
+  for, `IntKey.ApsDynIsfAdjustmentFactor` ("DynISFAdjust", default 100, max 300), is read only by
+  `OpenAPSSMBPlugin`, which is disabled on this device. **There is no dynISF knob in the AIMI path.**
+  Removing or wiring them is a decision, not a fix.
+- **`SCENARIO_TRAJECTORY_UPLIFT`** fired on **0 of 1431** ticks. Its guard needs four conditions at
+  once (`!falseMealSuppression && strongRiseProjection && trajectorySupportsUplift && scenarioLead >=
+  20.0`). It is an *uplift*, so a dead branch here withholds nothing; worth diagnosing, not urgent.
+
+---
+
+## 16. The declared-meal button: what already existed, and what was built
+
+The user asked for a button meaning "I am eating", so the loop stops waiting for the rise to confirm
+a meal. Three rounds of design, and most of the answer was already in the code.
+
+### 16.1 What already existed
+
+`DetermineBasalAIMI2.kt:7240`, label **"Meal Boost 30min (Force MaxBasal)"**:
+
+```kotlin
+(mealTime || lunchTime || dinnerTime || highCarbTime || bfastTime) && (max runtime) in 0..30 -> {
+    val safeMax = if (mealModesMaxBasal > 0.1) mealModesMaxBasal else profileCurrentBasal * 5.0
+    ... setTempBasal(boostedRate, 30, ..., overrideSafetyLimits = true, ...)
+}
+```
+
+A declared meal forces the basal to `meal_modes_max_basal` — **10.0 U/h on this device** — for 30
+minutes, with `overrideSafetyLimits = true` so it passes the 7 U/h `openapsma_max_basal`. That is
+5 U, exactly what the user proposed. `capBasalRateForCorrectionAggression` only caps it under a
+rebound guard or an exercise lockout, so at rest nothing holds it back.
+
+The window and the cancel were already primitives too. `therapy.kt` matches a NOTE event whose text
+holds a keyword **while `now <= event.timestamp + event.duration`** — the window lives in the note, so
+it survives ticks and restarts — and `deleteLastEventMatchingKeyword(...)` at line 126 is the cancel.
+
+**And it has never been used**: `meal_mode_active = true` on **0 of 6973 ticks** over the five most
+recent packages.
+
+### 16.2 Why it is not what he wanted
+
+The meal modes fire a prebolus: `setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIMealPrebolus), "MEAL_P1", mealruntime)`.
+
+| key | default | **minimum** |
+|---|---|---|
+| `OApsAIMIMealPrebolus` | 2.0 U | **0.1** |
+| `OApsAIMILunchPrebolus` | 2.5 U | **0.1** |
+
+Neither is set on the device, so both are at their defaults, and **the minimum is 0.1 — it cannot be
+switched off**. Pressing Lunch would give 2.5 U of prebolus *plus* 5 U of floor: 7.5 U in 30 minutes.
+His objection was right and the separate mode is the correct answer.
+
+### 16.3 Why the temp-target half was dropped
+
+He proposed carrying the state on a temp target at 80 and gating the forced basal on "note AND temp
+target" — a dead-man's switch, which is sound thinking. Two measured reasons not to:
+
+**The loop already targets lower than 80 at lunch.** Every branch of the target `when` is guarded by
+`!profile.temptargetSet`, and the rise branch computes
+`max(baseTarget, profile.target_bg - (bg - target)/3)` with `baseTarget` 70 outside the hours
+0–11/15–19/≥22. On 14755 ticks, the target the loop chose **by itself** on a rising tick
+(delta ≥ +3, BG ≥ 120):
+
+| hour | n | median | min | already under 80 |
+|---|---|---|---|---|
+| 00–11 | 764 | 90 | 90 | 0 % |
+| **11–15** | 573 | **76** | **70** | **61 %** |
+| 15–19 | 299 | 90 | 90 | 0 % |
+| 19–24 | 587 | 90 | 70 | 29 % |
+
+A flat 80 would be **less** aggressive on 61 % of rising lunch ticks — exactly where his worst
+episodes are (nadirs 58, 57, 64) — and it loses the tracking, since the computed target descends as
+glucose climbs.
+
+**And it disables the protective branch.** `!profile.temptargetSet && combinedDelta <= 0 && predictedBg < 120 -> targetBg = min(hypoTarget, 166)`. Pinned at 80, the loop could no longer raise its
+target to 110–166 during the 30 minutes right after 5 U went in. The target cannot be used as a flag
+because `temptargetSet` is itself a control input.
+
+The note's own duration gives the window, and deleting the note gives the cancel, with none of that.
+
+### 16.4 What was built — TDD, both effects disarmed
+
+The user chose: two separate keys, and a fixed unit budget.
+
+**Keyword `anticip`.** Deliberately not a word containing "meal": `findActiveMealEvents` matches any
+note holding "meal", so `premeal` would switch the meal mode on **and fire its 2.0 U prebolus** — the
+one thing this mode exists to avoid. Checked against every keyword the parser matches (bfast,
+breakfast, delete, dinner, fasting, high carb, highcarb, lowcarb, lunch, marche, meal, sleep, snack,
+sport, stop, walk): `anticip` collides with none, `premeal` collides with `meal`. Two tests pin it.
+
+- **`basal/AnticipationBasalFloor.kt`** — pure, no clock, no state. The budget is spread **evenly**
+  over `WINDOW_MINUTES` 30, so the rate does not change as the window runs down and the whole window
+  delivers exactly the budget above profile: nothing accumulates, nothing is left to spend, and it is
+  a front-loaded anticipation rather than a chase. Returns a **floor**; the caller takes the larger of
+  its own rate and this one. Stands down under `MIN_GLUCOSE_MGDL` 80, at a fall of
+  `MAX_FALL_MGDL_PER_5MIN` −3 or faster, past the window, on a clock that moved back, on a zero
+  budget, and on any input that is not a usable number. Both interlocks are judgement, not
+  measurement, and say so in the KDoc — this is the **only gesture in the project that raises a
+  dose**, so a conservative interlock costs little.
+- **`therapy.kt`** — `anticipTime` flag, `findActiveAnticipEvents`, snapshot field, reset, and an
+  entry in `clearActiveEventsOnStop`. Eight edits, mirroring `mealTime` exactly.
+- **Call site** applied **after** the slew limiter, because a floor the limiter can clamp away is not
+  a floor. Ceiling is `max(profile.max_basal, meal_modes_MaxBasal)`, so a declaration can never reach
+  higher than a meal mode already can.
+- **`DecisionPredictionAuthorityResolver.resolve(declaredMeal = ...)`** joins `treeMealEvidence`.
+  With the key off it is `false`, and `false || X == X`, so the tick is bit-identical.
+
+Keys, both **default false**: `OApsAIMIAnticipBasalFloor`, `OApsAIMIAnticipMealEvidence`, plus
+`OApsAIMIAnticipBudgetU` (default 2.0, **min 0.0** unlike the prebolus keys, so a zero budget disarms
+the gesture even with its key on).
+
+**Two keys on purpose.** Tree meal evidence is one of the disjuncts of `strongMealConfirmed`, which
+gates MCER — the gesture section 11 was spent fixing. Switching it on arms that release on demand, a
+far wider effect than the basal floor, so the two must be measurable apart.
+
+### 16.5 The sizing, which is still the weak point
+
+A fixed budget is what the user chose, and it is the honest limitation to record: 5 U is **−250 mg/dL**
+of potential after 11:00 (ISF 50) and **−600 mg/dL** before it (ISF 120), and with IC 8 it covers 40 g.
+One number cannot serve both windows or every meal size. The budget preference is his to set, and the
+carb-derived version remains the better answer if the fixed one proves awkward.
+
+Tests: `AnticipationBasalFloorTest` 14, `TherapyAnticipationDetectionTest` 6, both 0 failures.
+Whole run: `:plugins:aps` 296 classes, **1813 tests, 0 failures, 0 errors**; `:core:keys` 8 tests, 0
+failures.
+
+---
+
+## 17. The tail latch was a regression, and it is mine
+
+Two field reports from Thomas Willems on HEAD `f3de6740ee`, both verified line by line here. One of
+them is about the latch section 11.4 introduced the same day.
+
+### 17.1 What the report said, and it is right
+
+`MealConfirmedEarlyReleaseLatch` tripped on **any** falling tick while MCER was merely enabled:
+
+```kotlin
+tailTripped = tailByPhase || tailByFall      // DecisionPredictionAuthority.kt:201
+```
+
+No check that MCER had armed, and none that there had been a peak. On 2026-09-16 the reporter's
+glucose drifted down from a morning high — a shallow insulin-driven descent at low insulin on board
+— which is exactly `tailByFall`, so the latch set with `iobAtTripU` at the bottom of that descent,
+1.71 U. Then lunch started from 126 and neither way out was reachable: glucose never came back under
+`target + 20` = 120, and insulin on board only grew. The latch held **MCER off for the whole meal**,
+`OFF(tail_latched)` on all 17 rise ticks.
+
+Their measured consequence: the bolus channel graded down to 0.10–0.50 U caps against MPC requests of
+up to 1.81 U — about 92 % closed at the moment the loop wanted it most — and the correction moved
+into the basal channel, 6.3 U above profile through a 5.0 U/h block. Half the insulin of the day
+before, a lower peak, and a **deeper** low: 44.5.
+
+Every claim checked: the unconditional trip (confirmed, line 201), both release conditions
+unreachable during a rise (confirmed in `releases()`), and **no path resets the latch** — it appears
+only at lines 11081, 11086 and 11511, so it persists across meals for the life of the object.
+
+### 17.2 Replayed on this device's own corpus
+
+The latch is pure by design, so it replays. Over 14755 ticks, 09-02 → 09-16, with `tailTripped`
+approximated by `tailByFall` alone (the absorption phase is not in this export, so trips are
+**under**-counted):
+
+| | old latch |
+|---|---|
+| ticks latched | **5321 / 14755 (36.1 %)** |
+| episodes | 3193 — it flickered on every falling tick |
+| longest episode | **165 min** (09-12 15:10 → 17:55) |
+| episodes ≥ 45 min | 15 |
+| ticks blocking an otherwise-armable MCER | **215 (1.5 %)** |
+
+And the reporter's exact trap appears twice here: **09-14 09:39 → 11:07, 88 min, `iobAtTrip` 1.79** —
+a release needing insulin on board ≤ 0.90 U — and 09-15 09:50 → 10:42, 52 min, 1.88 → 0.94 U.
+
+Two corrections to the record. **The report's mechanism detail is slightly off and its conclusion is
+right:** the code latches on the **first** falling tick, not the last, but over a long descent it
+latches, releases, and re-latches, ending up latched at the **lowest** insulin of the descent — which
+produces exactly the pathology described. And **the first measurement made here was circular**: a
+"meal start" was detected as a crossing of `target + 20` from below, which *is* the release condition,
+so it trivially found the latch clear on 9 of 9. The honest metric is the 215 blocked ticks.
+
+### 17.3 The fix
+
+The first version replaced a stateless breaker with **state that had no episode**. The latch is now
+bound to one:
+
+- `State` gains `armedSeen`. Nothing can latch before MCER has armed — a fall with no earlier arm is
+  not a post-peak tail, because there was no peak.
+- `next()` gains `armedThisTick`, fed from a new `DecisionPredictionAuthority.mcerArmed`. The two can
+  never both be true: MCER's `armed` requires `!tailBreaker`, and the breaker holds both tail tests.
+- A release ends the episode and forgets both facts, so the next excursion starts clean.
+- The remembered stack is floored at `MIN_TRIP_IOB_U` **3.0**, so the insulin way out stays reachable:
+  a trip at 1.7 U used to set the threshold at 0.86 U, below what any meal correction immediately
+  creates.
+
+Replayed against the old one on the same corpus:
+
+| | old | fixed |
+|---|---|---|
+| ticks latched | 36.1 % | **13.6 %** |
+| episodes | 3193 | **96** |
+| episodes > 60 min | 10 | 8 |
+| longest | 165 min | 165 min |
+| blocking an armable MCER | 215 | **183** |
+
+**What the fix does not do, stated plainly.** The long episodes remain, because a 165-minute hold
+inside an episode where MCER really armed, with glucose still above `target + 20` and insulin still
+above half the trip stack, is the gesture working as designed. The reporter's fix 2 — also release on
+`rising && aboveTarget && iob <= 3 U` — would shorten them. It was **not** implemented: the
+`MIN_TRIP_IOB_U` floor already makes the insulin release reachable at ≥ 1.5 U, so a new meal starting
+at a low stack releases on its own, and fix 2 adds a threshold that has not been measured. Their fix 5
+(export `latched` and `iobAtTripU` in `smb_binding_trace`) is also still open and is the cheap one:
+this hour was spent reading `reason` strings.
+
+Four existing tests changed their expectations, each because the old expectation encoded the bug: a
+trip now needs an arm first, and an unreadable or negative stack falls back to the floored value
+instead of 0 (which used to close the insulin way out entirely). `MealConfirmedEarlyReleaseLatchTest`
+**17 tests, 0 failures**; whole run `:plugins:aps` 296 classes, **1818 tests, 0 failures, 0 errors**.
+
+### 17.4 The second report — verified, not mine, and not touched
+
+`PR_BasalEngine_LevelOnlyHyperFactor_OverridesZero_PastPeak.md`. Every code claim confirmed at the
+character level:
+
+- `interpolateBasal(bg, combinedDelta)` declares `combinedDelta` and **never reads it**; above 180 the
+  factor is ×5 whatever the direction.
+- `BasalDecisionEngine.kt:517` — `input.bg > 150 && input.delta in -5.0..1.0`, and the reason string is
+  `bg_over_180_stable_basal_factor`: the string says stable, the window is the falling side.
+- `:393` — `combinedDelta in -2.0..15.0 && bgAcceleration > 0.0`.
+- `CorrectionAggressionBasalCap.mergeEngineAndRtRates` returns `maxOf(engine, rt)` when
+  `allowRocketBasalScale`, so a zero written earlier on a low prediction is **discarded**; and
+  `Tier.FULL` sets `allowRocketBasalScale = true` **unconditionally** with `maxBasalScaleCap = 10.0`.
+  MODERATE makes it conditional, REBOUND_GUARD forbids it. This is the most serious finding of the two
+  reports on the merits.
+- `PEAK_CORRECTION` is in the meal-absorption boost's eligible phases; `adjustBasalForMealHyper` uses
+  `risingOrFlat = delta >= 0.3 || shortAvgDelta >= 0.2` with a factor of 8 or 10 and
+  `minutesSinceMealStart in 0..120` as its only time bound.
+
+One doubt raised here **resolved against the doubter**: `adjustBasalForMealHyper` takes
+`isMealModeActive`, and the report says COB = 0 with no note — but the parameter is passed **`true`
+hardcoded** at both call sites (7262 and 7316), so the guard reduces to the time bound and the branch
+runs on the detected absorption phase alone, with no meal note. The report is strengthened.
+
+**Scale on this device is much smaller than on the reporter's**, and worth recording so nobody
+over-reads it:
+
+| situation | n | basal median | × profile | ≥ 4× profile |
+|---|---|---|---|---|
+| BG > 150, rising (Δ > +1) | 1216 | 5.28 | **8.8×** | 99 % |
+| BG > 150, falling in −5..1 | 754 | 0.53 | 1.0× | 27 % |
+| BG > 180, falling in −5..1 | 201 | 1.45 | 2.7× | 37 % |
+| falling faster than −5 | 346 | 0.00 | 0 | 0 % |
+
+Insulin above profile while above 150 **and falling** in −5..1: **11.7 U over 15 days, 0.78 U/day**.
+Ticks at ≥ 4× profile in that state are followed by a reading under 70 on **34.0 %** against a 27.7 %
+base rate, under 60 on 13.9 % against 10.6 % — real but weak. The reporter sees far more because
+their three caps are all 5.0 against a 0.66–0.75 profile, so the same ×8 saturates at 7.6× profile
+instead of being absorbed.
+
+Nothing in that report was changed: it is pre-existing code, it did not get worse, and the `max()`
+merge deserves its own measured pass.
