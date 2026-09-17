@@ -36,7 +36,7 @@
     <string name="openapsma_script_debug_data_label">Depuração de script</string>
     <string name="openapsma_max_basal_summary">Este valor é chamado de basal máx. no contexto do OpenAPS</string>
     <string name="openapsma_max_iob_summary">Este valor é chamado de IOB Máx. no contexto do OpenAPS\nEsta é a insulina máxima em [U] que o APS pode administrar de uma só vez.</string>
-    <string name="openapsama_min_5m_carb_impact_summary">Valor predefinido: 3.0 (AMA) ou 8.0 (SMB). Esta é uma definição para o impacto predefinido da absorção de hidratos de carbono por 5 minutos. O valor predefinido esperado é 3mg/dl/5min. Isto afeta a rapidez com que os COB decaem e quantos hidratos de carbono são considerados no cálculo da glicemia prevista futura, quando a glicemia está a descer mais do que o esperado ou a subir menos do que o esperado.</string>
+    <string name="openapsama_min_5m_carb_impact_summary">Valor predefinido: 3.0 (AMA) ou 8.0 (SMB). Esta é uma definição para o impacto predefinido da absorção de carboidratos por 5 minutos. O valor predefinido esperado é 3mg/dl/5min. Isto afeta a rapidez com que os COB decaem e quantos carboidratos são considerados no cálculo da glicemia prevista futura, quando a glicemia está a descer mais do que o esperado ou a subir menos do que o esperado.</string>
     <string name="openapsama_max_daily_safety_multiplier_summary">Valor predefinido: 3. Este é um limite de segurança chave do OpenAPS. O que isto faz é limitar os seus basais a 3x (nestas pessoas) a sua taxa basal máxima. Provavelmente não precisará de alterar isto, mas deve estar ciente de que é isso que se discute sobre \"3x máx. diário; 4x atual\" para limites de segurança.</string>
     <string name="openapsama_current_basal_safety_multiplier_summary">Valor predefinido: 4. Esta é a outra metade dos limites de segurança chave do OpenAPS e a outra metade de \"3x máx. diário; 4x atual\" dos limites de segurança. Isto significa que o seu basal, independentemente do basal máximo definido na sua bomba, não pode ser superior a este número multiplicado pelo nível atual do seu basal. Isto serve para evitar que as pessoas entrem em território perigoso ao definirem basais máximos excessivamente altos antes de compreenderem como o algoritmo funciona. Mais uma vez, o predefinido é 4x; a maioria das pessoas nunca precisará de ajustar isto e, em vez disso, é mais provável que precise de ajustar outras definições se sentir que está a \"esbarrar\" neste limite de segurança.</string>
     <string name="openapsama_bolus_snooze_dia_divisor_summary">Valor predefinido: 2\nA suspensão de bolus é ativada após realizar um bolus de refeição, para que a ansa (loop) não contrarie com temperaturas baixas quando acabou de comer. O exemplo aqui e o predefinido é 2; portanto, um DIA de 3 horas significa que a suspensão de bolus será gradualmente eliminada ao longo de 1,5 horas (3DIA/2).</string>
@@ -44,7 +44,7 @@
     <string name="openapsama_link_to_preference_json_doc" translatable="false">http://openaps.readthedocs.io/en/latest/docs/walkthrough/phase-3/beyond-low-glucose-suspend.html</string>
     <string name="openapssmb_max_iob_summary">Este valor é chamado de IOB Máx. no contexto do OpenAPS\nO OpenAPS não adicionará mais insulina se a IOB atual for superior a este valor</string>
     <string name="uam_smb_max_minutes">Minutos máximos de SMB UAM</string>
-    <string name="carbs_req_threshold_summary">Gramas mínimas de hidratos de carbono para exibir um alerta de sugestão de hidratos de carbono. As sugestões de hidratos de carbono abaixo deste número não despoletarão uma notificação.</string>
+    <string name="carbs_req_threshold_summary">Gramas mínimas de carboitratos para exibir um alerta de sugestão de carboidratos. As sugestões de carboidratos abaixo deste número não despoletarão uma notificação.</string>
     <string name="lgs_threshold_summary">Valor de glicemia abaixo do qual a insulina é suspensa. O valor predefinido utiliza o modelo de objetivo padrão. O utilizador pode definir um valor entre 60mg/dl (3.3mmol/l) e 100mg/dl (5.5mmol/l). Valores abaixo de 65/3.6 resultam na utilização do modelo predefinido</string>
 
     <string name="increasing_max_basal">A aumentar o valor do basal máximo porque a definição é inferior ao seu basal máximo no perfil</string>
@@ -74,7 +74,7 @@
     <string name="ignore5m">Ignorar 5m</string>
     <string name="ignore15m">Ignorar 15m</string>
     <string name="ignore30m">Ignorar 30m</string>
-    <string name="carbs_suggestion">Sugestão de hidratos de carbono</string>
+    <string name="carbs_suggestion">Sugestão de carboidratos</string>
     <string name="open_loop_new_suggestion">Nova sugestão disponível</string>
     <string name="basal_set_correctly">Basal definido corretamente</string>
     <string name="last_run_label">Última execução</string>
@@ -92,7 +92,7 @@
     <string name="fallback_to_isf_no_tdd">Recurso à sensibilidade do perfil. Dados insuficientes. Motivo: %1$s</string>
 
     <!-- Autotune -->
-    <string name="autotune_description">Ajuda para potenciais ajustes do perfil (ISF, rácio de hidratos de carbono e taxas basais)</string>
+    <string name="autotune_description">Ajuda para potenciais ajustes do perfil (ISF, rácio de carboidratos e taxas basais)</string>
     <string name="autotune_shortname">AT</string>
     <string name="autotune_default_tune_days_title">Número de dias de dados</string>
     <string name="autotune_default_tune_days_summary">Número predefinido de dias de dados a ser processado pelo Autotune (até 30)</string>
@@ -190,8 +190,8 @@
     <string name="prebolus_meal_mode_title">Pré-bolus</string>
     <string name="prebolus_highcarb_mode_title">Pré-bolus 1/2</string>
     <string name="prebolus2_highcarb_mode_title">Pré-bolus 2/2</string>
-    <string name="prebolus_highcarb_mode_summary">Pré-bolus de Modo Rico em Hidratos de Carbono 1/2</string>
-    <string name="prebolus2_highcarb_mode_summary">Pré-bolus de Modo Rico em Hidratos de Carbono 2/2</string>
+    <string name="prebolus_highcarb_mode_summary">Pré-bolus de Modo Rico em carboidratos 1/2</string>
+    <string name="prebolus2_highcarb_mode_summary">Pré-bolus de Modo Rico em carboidratos 2/2</string>
     <string name="number_day_ML_training_summary">Número de dias para treinar o modelo</string>
     <string name="nb_day_ML_training_title">Número de Dias de Treino de Aprendizagem Automática (ML)</string>
     <string name="nb_minutes_ML_training_title">Número de minutos para treinar os dados</string>
@@ -429,8 +429,8 @@
     <string name="oaps_aimi_smb_late_fat_damping_summary">Multiplicador aplicado ao SMB quando se suspeita de uma refeição tardia rica em gordura.</string>
     <string name="oaps_aimi_trajectory_enabled_title">Ativar Proteção de Trajetória (Trajectory Guard)</string>
     <string name="oaps_aimi_trajectory_enabled_summary">Sistema de controlo no espaço de fases que analisa a geometria da trajetória da glicose para evitar sobrecorreção/subcorreção e melhorar a convergência para o objetivo.</string>
-    <string name="oaps_aimi_cho_summary">Média de hidratos de carbono por refeição. Valor estimado, não exato</string>
-    <string name="oaps_aimi_cho_title">Quantidade média de hidratos de carbono almoço/jantar</string>
+    <string name="oaps_aimi_cho_summary">Média de carboidratos por refeição. Valor estimado, não exato</string>
+    <string name="oaps_aimi_cho_title">Quantidade média de carboidratos do almoço/jantar</string>
     <string name="aimi_preferences">Definições do AIMI</string>
     <string name="aimi_advisor_section_settings">Definições do AIMI</string>
     <string name="aimi_adv_support_title">Suporte Especializado</string>
@@ -458,13 +458,13 @@
     <string name="OApsAIMI_MealFactor_title">Reatividade</string>
     <string name="oaps_aimi_meal_interval_summary">Intervalo entre SMB para o Modo Refeição Genérico</string>
     <string name="oaps_aimi_meal_interval_title">Intervalo de SMB do Modo Refeição Genérico</string>
-    <string name="oaps_aimi_highcarbAdjFact_summary">Fator de ajuste DynISF para o Modo Rico em Hidratos de Carbono</string>
-    <string name="oaps_aimi_highcarbAdjFact_title">Fator DynISF do Modo Rico em Hidratos de Carbono</string>
-    <string name="OApsAIMI_HC_Factor_summary">% de insulina necessária pela IA para o Modo Rico em Hidratos de Carbono</string>
+    <string name="oaps_aimi_highcarbAdjFact_summary">Fator de ajuste DynISF para o Modo Rico em carboidratos</string>
+    <string name="oaps_aimi_highcarbAdjFact_title">Fator DynISF do Modo Rico em carboidratos</string>
+    <string name="OApsAIMI_HC_Factor_summary">% de insulina necessária pela IA para o Modo Rico em carboidratos</string>
     <string name="OApsAIMI_HC_Factor_title">Reatividade</string>
 
-    <string name="oaps_aimi_HC_interval_summary">Intervalo entre SMB para o Modo Rico em Hidratos de Carbono</string>
-    <string name="oaps_aimi_HC_interval_title">Intervalo de SMB do Modo Rico em Hidratos de Carbono</string>
+    <string name="oaps_aimi_HC_interval_summary">Intervalo entre SMB para o Modo Rico em carboidratos</string>
+    <string name="oaps_aimi_HC_interval_title">Intervalo de SMB do Modo Rico em carboidratos</string>
     <string name="prebolus_snack_mode_summary">Se definir uma nota na página de ações com a palavra "snack" (lanche), receberá este pré-bolus uma vez.</string>
     <string name="prebolus_snack_mode_title">Pré-bolus</string>
     <string name="oaps_aimi_snackAdjFact_summary">Fator de ajuste DynISF para o Modo Lanche</string>
@@ -708,7 +708,7 @@
     <string name="training_ml_breakfast_modes_preferences">Pequeno-almoço</string>
     <string name="training_ml_lunch_modes_preferences">Almoço</string>
     <string name="training_ml_dinner_modes_preferences">Jantar</string>
-    <string name="training_ml_high_carb_modes_preferences">Rico em Hidratos de Carbono</string>
+    <string name="training_ml_high_carb_modes_preferences">Rico em carboidratos</string>
     <string name="training_ml_snack_modes_preferences">Lanche</string>
     <string name="training_ml_generic_meal_modes_preferences">Refeição Genérica</string>
     <string name="training_ml_sleep_modes_preferences">Descanso</string>
@@ -717,7 +717,7 @@
     <string name="lunch_modes_preferences_title_menu">Almoço - Modo Manual - Definições</string>
     <string name="dinner_modes_preferences_title_menu">Jantar - Modo Manual - Definições</string>
     <string name="snack_modes_preferences_title_menu">Lanche - Modo Manual - Definições</string>
-    <string name="high_carb_modes_preferences_title_menu">Rico em Hidratos de Carbono - Modo Manual - Definições</string>
+    <string name="high_carb_modes_preferences_title_menu">Rico em carboidratos - Modo Manual - Definições</string>
     <string name="generic_meal_modes_preferences_title_menu">Refeição Genérica - Modo Manual - Definições</string>
     <string name="sleep_modes_preferences_title_menu">Descanso - Modo Manual - Definições</string>
 
@@ -730,7 +730,7 @@
     <string name="meal_modes_max_basal_title_dinner">Basal fixo de 30 min no início da refeição (U/h)</string>
     <string name="meal_modes_max_basal_summary_dinner">Modo manual: TBR fixa, após o pré-bolus 1 definir uma TBR fixa durante 30 minutos para o jantar</string>
     <string name="meal_modes_max_basal_title_highcarb">Basal fixo de 30 min no início da refeição (U/h)</string>
-    <string name="meal_modes_max_basal_summary_highcarb">Modo manual: TBR fixa, após o pré-bolus 1 definir uma TBR fixa durante 30 minutos para refeição rica em hidratos de carbono</string>
+    <string name="meal_modes_max_basal_summary_highcarb">Modo manual: TBR fixa, após o pré-bolus 1 definir uma TBR fixa durante 30 minutos para refeição rica em carboidratos</string>
     <string name="meal_modes_max_basal_title_snack">Basal fixo de 30 min no início da refeição (U/h)</string>
     <string name="meal_modes_max_basal_summary_snack">Modo manual: TBR fixa, após o pré-bolus 1 definir uma TBR fixa durante 30 minutos para o lanche</string>
     <string name="meal_modes_max_basal_title_genericmeal">Basal fixo de 30 min no início da refeição (U/h)</string>
@@ -865,8 +865,8 @@
     <string name="table_plugin_manual_modes_3">Descanso</string>
     <string name="table_plugin_manual_modes_4">Desporto</string>
     <string name="table_plugin_manual_modes_5">Lanche</string>
-    <string name="table_plugin_manual_modes_6">Baixo em Hidratos de Carbono</string>
-    <string name="table_plugin_manual_modes_7">Rico em Hidratos de Carbono</string>
+    <string name="table_plugin_manual_modes_6">Baixo em carboidratos</string>
+    <string name="table_plugin_manual_modes_7">Rico em carboidratos</string>
     <string name="table_plugin_manual_modes_8">Refeição</string>
     <string name="table_plugin_manual_modes_9">Pequeno-almoço</string>
     <string name="table_plugin_manual_modes_10">Almoço</string>
@@ -909,7 +909,7 @@
     <string name="table_plugin_mealmodes_prebolus_5">A administrar microbolus de 2/2 Modo Almoço %1$.1fU.</string>
     <string name="table_plugin_mealmodes_prebolus_6">A administrar microbolus de 1/2 Modo Jantar %1$.1fU.</string>
     <string name="table_plugin_mealmodes_prebolus_7">A administrar microbolus de 2/2 Modo Jantar %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_8">A administrar microbolus de Modo Rico em Hidratos de Carbono %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_8">A administrar microbolus de Modo Rico em carboidratos %1$.1fU.</string>
     <string name="table_plugin_mealmodes_prebolus_9">A administrar microbolus de Modo Lanche %1$.1fU.</string>
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BASAL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
@@ -1029,7 +1029,7 @@
     <string name="smb_disabled_high_target">SMB desativado devido a objetivo temporário alto de %1$.0f</string>
     <string name="smb_enabled_always">SMB ativado devido a enableSMB_always</string>
     <string name="smb_enabled_for_cob">SMB ativado para COB de %1$.1f</string>
-    <string name="smb_enabled_after_carb_entry">SMB ativado durante 6h após o registo de hidratos de carbono</string>
+    <string name="smb_enabled_after_carb_entry">SMB ativado durante 6h após o registo de carboidratos</string>
     <string name="smb_enabled_for_temp_target">SMB ativado para o objetivo temporário de %1$s</string>
     <string name="smb_disabled_no_pref_or_condition">SMB desativado (sem preferências enableSMB ativas ou nenhuma condição satisfeita)</string>
     <string name="lgs_triggered">🛑 LGS: Glicemia=%1$s ≤ %2$s → TBR 0U/h (30m)\n</string>
@@ -1097,7 +1097,7 @@
     <string name="retraining_final_model">Treino do modelo final com hiperparâmetros ótimos em todos os dados&#8230;</string>
     <string name="iteration_smb">→ Iteração %1$d | SMB=%2$.2f → %3$.2f | Δ=%4$.2f | Limiar=%5$.2f</string>
     <string name="predicted_smb_higher">O modelo preditivo sugere um SMB superior, ajuste confirmado</string>
-    <string name="console_future_bg">Glicemia Futura: %1$s, Queda Projetada: %2$s, Efeito da Insulina: %3$s, Impacto de COB: %4$.0f, Hidratos de Carbono Necessários: %5$d</string>
+    <string name="console_future_bg">Glicemia Futura: %1$s, Queda Projetada: %2$s, Efeito da Insulina: %3$s, Impacto de COB: %4$.0f, carboidratos Necessários: %5$d</string>
     <string name="insulin_effect">Efeito da insulina: %1$.2f</string>
     <string name="predicted_bg">Glicemia Prevista: %1$.2f</string>
     <string name="bg_note_more_aggressive">mais agressivo</string>
@@ -1132,8 +1132,8 @@
     <string name="reason_prebolus_lunch2">&#160;A administrar microbolus de 2/2 Modo Almoço %.2fU.</string>
     <string name="reason_prebolus_dinner1">&#160;A administrar microbolus de 1/2 Modo Jantar %.2fU.</string>
     <string name="reason_prebolus_dinner2">&#160;A administrar microbolus de 2/2 Modo Jantar %.2fU.</string>
-    <string name="reason_prebolus_highcarb">&#160;A administrar microbolus de 1/2 Modo Rico em Hidratos de Carbono %.2fU.</string>
-    <string name="reason_prebolus_highcarb2">&#160;A administrar microbolus de 2/2 Modo Rico em Hidratos de Carbono %.2fU.</string>
+    <string name="reason_prebolus_highcarb">&#160;A administrar microbolus de 1/2 Modo Rico em carboidratos %.2fU.</string>
+    <string name="reason_prebolus_highcarb2">&#160;A administrar microbolus de 2/2 Modo Rico em carboidratos %.2fU.</string>
     <string name="reason_prebolus_snack">&#160;A administrar microbolus de Modo Lanche %.2fU.</string>
     <string name="aimi_prebolus_not_delivered" comment="%1$s=meal mode pre-bolus phase tag (example: LUNCH_P1), %2$s=requested insulin amount with units (example: 1.50 U). Warning shown when a requested meal pre-bolus was never confirmed as delivered by the pump.">O pré-bolus de refeição %1$s (%2$s) foi pedido mas não confirmado como administrado pela bomba. Verifique o histórico de bolus.</string>
     <string name="reason_maxsmb">&#160;| MaxSMB %.1f U&#160;\n</string>
@@ -1183,9 +1183,9 @@
     <string name="reason_predicted_bg">&#160;Glicemia Prevista: %.0f | Acel.: %.2f | </string>
     <string name="reason_slope_min_dev">&#160;Inclinação Desvio Mín.: %.2f</string>
     <string name="console_profile_sens">Perfil de sensibilidade: %.0f, sens: %.0f, CSF: %.0f</string>
-    <string name="console_limiting_carb_impact">A limitar o impacto dos hidratos de carbono de %.0f para %.0f mg/dL/5m ( %d g/h )</string>
-    <string name="console_carb_impact">Impacto dos hidratos de carbono: %.0f mg/dL por 5m; Duração do Impacto: %.1f horas; impacto restante (~pico de 2h): %.1f mg/dL por 5m</string>
-    <string name="reason_additional_carbs">%d hidratos de carbono adicionais necessários em %dmin;</string>
+    <string name="console_limiting_carb_impact">A limitar o impacto dos carboidratos de %.0f para %.0f mg/dL/5m ( %d g/h )</string>
+    <string name="console_carb_impact">Impacto dos carboidratos: %.0f mg/dL por 5m; Duração do Impacto: %.1f horas; impacto restante (~pico de 2h): %.1f mg/dL por 5m</string>
+    <string name="reason_additional_carbs">%d carboidratos adicionais necessários em %dmin;</string>
     <string name="reason_eventual_bg">Glicemia Eventual %1$s >= %2$s, </string>
     <string name="reason_iob_max">IOB %.2f > maxIOB %.2f</string>
     <string name="reason_bg_dropping">, glicemia a descer (variação %1$.0f), a definir basal para 0.</string>
@@ -1202,7 +1202,7 @@
     <string name="meal_mode_bfast">pequeno-almoço(%1$dm)</string>
     <string name="meal_mode_lunch">almoço(%1$dm)</string>
     <string name="meal_mode_dinner">jantar(%1$dm)</string>
-    <string name="meal_mode_highcarb">rico em hidratos de carbono(%1$dm)</string>
+    <string name="meal_mode_highcarb">rico em carboidratos(%1$dm)</string>
     <string name="meal_mode_first_30">Refeição em modos manuais 0–30m [%1$s] → basal forçado a %2$.2f U/h (substituição).\n</string>
     <string name="manual_basal_override">Basal forçado → %1$.2f U/h (%2$dmin). Modo de refeição manual %3$s\n</string>
     <string name="reason_early_meal">Refeição precoce detetada → TBR forçada para %1$.2fU/h x30 (substituição).\n</string>
@@ -1302,14 +1302,14 @@
 
     <!-- Hypers -->
 
-    <string name="aimi_adv_rec_hypers_action_ratios">Verificar rácios de hidratos de carbono/insulina</string>
+    <string name="aimi_adv_rec_hypers_action_ratios">Verificar rácios de carboidratos/insulina</string>
     <string name="aimi_adv_rec_hypers_action_autodrive">Ativar/ajustar o AutoDrive</string>
     <string name="aimi_adv_rec_hypers_action_factors">Aumentar os fatores dos modos de refeição</string>
 
     <!-- Basal Dominance -->
 
     <string name="aimi_adv_rec_basal_action_night">Rever os basais noturnos</string>
-    <string name="aimi_adv_rec_basal_action_carbs">Melhorar a contagem de hidratos de carbono</string>
+    <string name="aimi_adv_rec_basal_action_carbs">Melhorar a contagem de carboidratos</string>
 
     <!-- Good Profile -->
 
@@ -1458,8 +1458,8 @@
     <string name="aimi_adv_rec_oref_isf_mixed_desc">O OREF assinala pressão tanto de hipoglicemia como de hiperglicemia (cerca de %1$s%% abaixo de 70 e %2$s%% acima de 180). Os movimentos de ISF são ambíguos: siga o problema que dominar semana a semana (mais suave se os valores baixos liderarem, mais forte se os valores altos liderarem) com a sua equipa médica.</string>
     <string name="aimi_adv_rec_oref_basal_hypo_title">Proporção basal e valores baixos</string>
     <string name="aimi_adv_rec_oref_basal_hypo_desc">O basal representa cerca de %1$s%% da DTD enquanto o risco de hipoglicemia está elevado. Reveja os segmentos basais noturnos e diurnos com a sua equipa antes de alterar os rácios de refeição ou o PKPD.</string>
-    <string name="aimi_adv_rec_oref_ic_hyper_title">Valores altos pós-refeição: verifique os rácios de hidratos de carbono</string>
-    <string name="aimi_adv_rec_oref_ic_hyper_desc">O foco do OREF é hiperglicemia com cerca de %1$s%% do tempo acima de 180 mg/dL. Verifique a precisão e o timing do IC (rácio de hidratos de carbono); ajuste apenas em pequenos passos supervisionados.</string>
+    <string name="aimi_adv_rec_oref_ic_hyper_title">Valores altos pós-refeição: verifique os rácios de carboidratos</string>
+    <string name="aimi_adv_rec_oref_ic_hyper_desc">O foco do OREF é hiperglicemia com cerca de %1$s%% do tempo acima de 180 mg/dL. Verifique a precisão e o timing do IC (rácio de carboidratos); ajuste apenas em pequenos passos supervisionados.</string>
     <string name="aimi_adv_rec_oref_pkpd_review_title">PKPD: DIA, pico, atenuação</string>
     <string name="aimi_adv_rec_oref_pkpd_review_desc">O PKPD está ativado e o OREF assinala um desequilíbrio. Com o seu médico, reveja o DIA, o tempo de pico e a atenuação de SMB em conjunto — e não isoladamente — utilizando os cartões do conselheiro acima como lista de verificação.</string>
     <string name="aimi_adv_rec_oref_autodrive_mpc_title">AutoDrive: agressividade de MPC</string>
