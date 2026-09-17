@@ -1574,6 +1574,109 @@ any more code moves.
 
 ---
 
+## 6x. 2026-09-17: four decisions about the storage port, and a cluster nobody had named
+
+6w said the next question was the shape of a file access port. Measuring it first changed the
+question twice, which is the point of this entry.
+
+**The port already exists.** `AimiStorage` is in commonMain (`openAPSAIMI/utils/AimiStorage.kt`), 19
+members, with `AndroidAimiStorage` as its Android half, and its KDoc shows the thinking was already
+done: one storage policy at runtime, one health report, and every write wrapped so a failed AIMI log
+line can never take down a dosing tick. Fourteen files use it. Thirty still call `java.io.File`
+directly. So the work was never "design a port" - it was "finish adopting the one we have".
+
+**Most of the measured gaps were grep artefacts.** The first pass said the contract was missing
+`length()` in 14 files, streams in 15 and `bufferedReader` in 10. Checked against the code: half the
+`length()` hits are `JSONArray.length()`, and **every single** stream and `bufferedReader` hit is an
+`HttpURLConnection`, not a file. The real gaps are much smaller: `delete` (4 files), a tail read (2,
+today via `RandomAccessFile`), a size for diagnostics or an is-it-empty test (~5), a directory listing
+(2), a safe replace (3), a backup copy (1).
+
+**A cluster nobody had named.** Those stream hits are 8 files doing HTTP: the four vision providers,
+the AI coach, the auditor AI service, the Gemini model resolver and the physio analyzer, all on
+`HttpURLConnection`. That is a separate port with a separate answer (Ktor, for a KMP target) and it
+must not be absorbed into the storage work by accident. Also separate: `AimiModelHandler`'s
+`FileChannel.map` of the TFLite model is not storage but "load a model", and TFLite is Android-only
+regardless.
+
+### The four decisions
+
+1. **iOS must eventually run AIMI dosing.** This is the one that commands the others. It means every
+   port needs a real iOS half, and a missing one is a safety matter rather than a todo: the decisions
+   JSONL and the ML model stores feed the algorithm, so an iOS build that silently read nothing would
+   dose differently instead of failing loudly. It also makes the current state a known gap -
+   `AimiStorage` has no iOS binding at all, while 14 files already depend on it.
+2. **Extend the contract by intent, not by mechanism.** `readTailLines(path, maxLines)` rather than
+   random access; bytes rather than streams; no JVM stream types in the shared contract. More work
+   than retyping call sites, and the reason is decision 1: a mechanism-shaped contract is one an iOS
+   half can only imitate badly.
+3. **One dedicated sweep of the 30 stragglers, before any more file moves.** The measurement in 6w
+   says this unblocks no file on its own - no remaining file is blocked by storage alone - but it
+   removes a whole blocker class from the map in one reviewable change instead of scattering it.
+4. **A safe replace is one intent method, not three steps.** Three files today write a `.tmp`, delete
+   a `.bak` and rename, including `AimiNeuralModelStore`, which holds a model the dosing algorithm
+   loads on the next tick. The port offers replace-or-keep-the-old as a single call, with the dance
+   inside each platform half, so no caller owns a three-step protocol it can get wrong and iOS can use
+   its own atomic primitive rather than imitating Android's steps.
+
+---
+
+## 6y. 2026-09-17: the AimiStorage contract, extended by intent
+
+Six members added, one designed and then removed. The contract is at 24 members and the Android half
+implements all of them; there is still deliberately no iOS half (see below). Gates:
+`compileKotlinIosArm64` EXIT=0 - which is the meaningful one here, since the interface lives in
+commonMain and that compile is what proves no JVM type leaked into it - `:app:assembleFullDebug` 0
+Kotlin errors, `testAndroidHostTest --rerun` **583 tests, 0 failures** (569 baseline + 14 new).
+
+What was added, each named for what the caller means rather than what the platform does:
+`delete`, `replaceText`, `readTailLines(path, maxLines)`, `sizeBytes`, `copy`, `lastModifiedMs`.
+
+**`replaceText` is the one with teeth.** Three callers today are supposed to replace a stored file
+safely, and one of them (`ml/AimiNeuralModelStore`) holds a model the dosing algorithm loads on the
+next tick, so a half-written file is a real hazard. The `.tmp`-then-rename now lives inside the
+Android implementation and the contract states the guarantee: on `false`, the previous content is
+still readable. The test proves it by making the parent directory non-writable so the `.tmp` can never
+be created, then asserting the target is untouched - a guarantee with no test behind it is a claim.
+
+**A correction to this session's own brief, found by reading the callers.** The brief asserted that
+three callers do a `.tmp`/`.bak`/rename dance today. Only `AimiNeuralModelStore` does.
+`AutodriveDataBackfiller` does tmp-then-rename with a copy fallback and no `.bak`, and
+**`TpoPersistence` writes directly with no temporary file and no atomicity at all**. So the sweep that
+moves these onto `replaceText` will not merely preserve behaviour for that third one - it will give it
+crash safety it has never had. Worth knowing before the sweep, because "no behaviour change" is the
+usual promise of a sweep and here it would be false in a good way.
+
+**`list` was built, then removed.** The brief asked for it and named two callers. The implementer
+built it, could not find a caller it actually fitted, and said so. Checking that: the only candidate is
+`AimiStorageHelper.listBackupCandidates`, which is recursive and filters by extension and size, so a
+non-recursive files-only listing cannot serve it - and that helper is the Android storage policy
+itself, which has no reason to move to commonMain at all. So the member had no caller today and no
+foreseeable one, which is exactly what `CLAUDE.md` forbids shipping. Removed from the interface, the
+implementation and its two tests.
+
+**`copy` survived the same test, the other way.** The implementer also reported it had no caller,
+because the brief named `AimiBackupManager`, which reads bytes and uploads them rather than copying to
+a second path. Searching wider found two real ones the brief had missed:
+`DetermineBasalAIMI2.kt:13399` backing up the training CSV, and `AutodriveDataBackfiller.kt:227`'s copy
+fallback. The member stays; the brief was wrong about where, not about whether.
+
+**`JsonlTailReader` was kept, not absorbed.** `readTailLines` delegates to it rather than inlining its
+tuned reverse scan (8 KB chunks, a 16 MB cap that exists for Advisor launch on 256 MB heaps), because
+three readers still call it directly and converting them belongs to the sweep. Absorbing it now would
+have meant either duplicating that logic or breaking those readers.
+
+**Why there is still no iOS half, despite the decision that iOS must eventually dose.** The
+interface's own KDoc already says the absence is deliberate, and the reasoning holds: a stub that
+quietly wrote nowhere would leave the learning loops looking alive while they persisted nothing, and
+without a binding the feature is visibly absent and any future iOS graph fails loudly at wiring time.
+Writing the half now would overturn that with code, when what it actually needs is a **storage policy**
+answer: where AIMI may write on iOS, whether the user can retrieve those files, and whether the
+support ZIP still works there. That is the next decision to put to the user, and it is a product
+question, not an API mapping.
+
+---
+
 ---
 
 ## 7. Start here next session

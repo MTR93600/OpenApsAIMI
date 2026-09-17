@@ -108,4 +108,38 @@ interface AimiStorage {
      * no app scoped external directory, exactly as the loop has always done.
      */
     fun fallbackFile(name: String): AimiPath
+
+    /** Removes [path]. `true` when nothing is left there afterwards, including when it never existed. */
+    fun delete(path: AimiPath): Boolean
+
+    /**
+     * Replaces the content of [path] with [text], or leaves what was there before untouched.
+     *
+     * The guarantee: on `false`, whatever [path] held before this call is still there and still
+     * readable. This is not academic - one of the callers this exists for is `AimiNeuralModelStore`,
+     * whose weight file the dosing algorithm loads on the next loop tick, so a write that dies halfway
+     * must never leave a corrupt file in its place. Three callers today hand-roll a
+     * write-tmp/drop-bak/rename protocol to get this; that dance moves into the Android
+     * implementation here, so no caller has to own it, or get it wrong, on its own.
+     */
+    fun replaceText(path: AimiPath, text: String): Boolean
+
+    /**
+     * The last [maxLines] complete lines of [path], newest first.
+     *
+     * For a journal that only ever grows - a decision log, a training CSV - reading the whole file to
+     * see its tail does not scale, so this scans backward from the end instead of loading everything.
+     * A missing or unreadable file, or a line that cannot be decoded, is skipped rather than thrown:
+     * a broken history line must not take down the read.
+     */
+    fun readTailLines(path: AimiPath, maxLines: Int): List<String>
+
+    /** How big [path] is, in bytes. `0` when it is missing or unreadable. */
+    fun sizeBytes(path: AimiPath): Long
+
+    /** Copies [from] to [to], overwriting [to] if it exists. `false` on failure; [from] is untouched. */
+    fun copy(from: AimiPath, to: AimiPath): Boolean
+
+    /** When [path] last changed, in epoch milliseconds. `null` when it is missing or unknown. */
+    fun lastModifiedMs(path: AimiPath): Long?
 }

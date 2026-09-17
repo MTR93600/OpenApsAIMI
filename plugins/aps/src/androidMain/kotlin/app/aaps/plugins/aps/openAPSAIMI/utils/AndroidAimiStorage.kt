@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.utils
 
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.JsonlTailReader
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -68,4 +69,32 @@ class AndroidAimiStorage @Inject constructor(
 
     override fun fallbackFile(name: String): AimiPath =
         AimiPath(File(File(helper.appScopedExternalDir() ?: helper.getAimiDirectory(), "AAPS"), name).absolutePath)
+
+    override fun delete(path: AimiPath): Boolean =
+        runCatching { fileOf(path).let { it.delete(); !it.exists() } }.getOrDefault(false)
+
+    override fun replaceText(path: AimiPath, text: String): Boolean {
+        val tmpFile = fileOf(sibling(path, ".tmp"))
+        val target = fileOf(path)
+        return try {
+            tmpFile.writeText(text)
+            val replaced = tmpFile.renameTo(target)
+            if (!replaced) tmpFile.delete()
+            replaced
+        } catch (e: Exception) {
+            runCatching { tmpFile.delete() }
+            false
+        }
+    }
+
+    override fun readTailLines(path: AimiPath, maxLines: Int): List<String> =
+        runCatching { JsonlTailReader.readTailLines(fileOf(path), maxLines) }.getOrDefault(emptyList())
+
+    override fun sizeBytes(path: AimiPath): Long = runCatching { fileOf(path).length() }.getOrDefault(0L)
+
+    override fun copy(from: AimiPath, to: AimiPath): Boolean =
+        runCatching { fileOf(from).copyTo(fileOf(to), overwrite = true); true }.getOrDefault(false)
+
+    override fun lastModifiedMs(path: AimiPath): Long? =
+        runCatching { fileOf(path).lastModified().takeIf { it != 0L } }.getOrNull()
 }
