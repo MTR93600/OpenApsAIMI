@@ -48,6 +48,7 @@ import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
 import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -154,7 +155,7 @@ fun AimiModeSettingsScreen(
             try {
                 withContext(Dispatchers.IO) {
                     val te = TE(
-                        timestamp = System.currentTimeMillis(),
+                        timestamp = aimiWallClockMs(),
                         type = TE.Type.NOTE,
                         note = modeNote,
                         duration = durationMs,

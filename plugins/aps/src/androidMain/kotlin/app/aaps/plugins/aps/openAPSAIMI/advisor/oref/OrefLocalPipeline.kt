@@ -5,6 +5,7 @@ import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiProfileSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import kotlin.math.min
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -25,7 +26,7 @@ class OrefLocalPipeline(
     ): OrefAnalysisReport = withContext(Dispatchers.Default) {
         // APS rows carry large JSON per loop; loading 30d on a 256MB heap can OOM (see APSResultDao cursor).
         val effectiveWindowDays = min(windowDays, MAX_HISTORY_DAYS_FOR_MEMORY)
-        val end = System.currentTimeMillis()
+        val end = aimiWallClockMs()
         val start = end - T.days(effectiveWindowDays).msecs()
 
         val gvList = persistenceLayer.getBgReadingsDataFromTimeToTime(start, end, ascending = true)

@@ -48,6 +48,7 @@ import app.aaps.core.ui.compose.SliderWithButtons
 import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoActiveSessionUi
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
@@ -130,7 +131,7 @@ fun AimiControlCenterScreen(
     val tpoActiveSessionUi = remember(tpoUiRevision) {
         TpoUiSupport.buildActiveSessionUi(
             session = tpoOrchestrator.currentSession(),
-            nowMs = System.currentTimeMillis(),
+            nowMs = aimiWallClockMs(),
         )
     }
 

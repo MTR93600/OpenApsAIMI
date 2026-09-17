@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.tpo
 
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiTpo
 import android.content.Context
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -56,7 +57,7 @@ class TpoOrchestrator @Inject constructor(
     fun currentSession(): TpoSessionDocument? = sessionManager.currentSession()
 
     fun revertNow(): Boolean {
-        val changed = sessionManager.revertNow(preferences, historyRepo, System.currentTimeMillis())
+        val changed = sessionManager.revertNow(preferences, historyRepo, aimiWallClockMs())
         if (changed) {
             prefsChangedThisTick = true
             tpoNotificationManager.showSessionEnded(TpoEndReason.MANUAL_REVERT)

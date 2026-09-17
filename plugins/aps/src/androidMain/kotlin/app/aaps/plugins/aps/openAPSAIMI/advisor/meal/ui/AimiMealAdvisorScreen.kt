@@ -89,6 +89,7 @@ import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.EstimationResult
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.FoodRecognitionService
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.compose.ProviderDropdown
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -200,7 +201,7 @@ fun AimiMealAdvisorScreen(
         scope.launch(Dispatchers.IO) {
             try {
                 val ca = CA(
-                    timestamp = System.currentTimeMillis(),
+                    timestamp = aimiWallClockMs(),
                     isValid = true,
                     duration = 0,
                     amount = carbs,
@@ -211,7 +212,7 @@ fun AimiMealAdvisorScreen(
 
                 preferences.put(BooleanKey.OApsAIMIMealAdvisorTrigger, true)
                 preferences.put(DoubleKey.OApsAIMILastEstimatedCarbs, carbs)
-                val nowMs = System.currentTimeMillis()
+                val nowMs = aimiWallClockMs()
                 preferences.put(DoubleKey.OApsAIMILastEstimatedCarbTime, nowMs.toDouble())
                 aapsLogger.debug(
                     LTag.APS,

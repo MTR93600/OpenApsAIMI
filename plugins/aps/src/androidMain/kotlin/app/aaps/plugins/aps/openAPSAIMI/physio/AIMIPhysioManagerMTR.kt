@@ -11,6 +11,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.keys.BooleanKey
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -113,7 +114,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
         // 2. Never synced (lastUpdateTime == 0)
         // 3. Data is invalid/empty (confidence low)
         
-        val timeSinceUpdate = System.currentTimeMillis() - lastUpdateTime
+        val timeSinceUpdate = aimiWallClockMs() - lastUpdateTime
         val stale = timeSinceUpdate > (4 * 60 * 60 * 1000)
         
         // Check current confidence to spot empty/failed states
@@ -289,7 +290,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
     }
 
     private suspend fun runPhysioPipeline(daysBack: Int, runLLM: Boolean): Boolean {
-        val startTime = System.currentTimeMillis()
+        val startTime = aimiWallClockMs()
         var fetchMs = 0L
         var extractMs = 0L
         var analyzeMs = 0L
@@ -303,14 +304,14 @@ class AIMIPhysioManagerMTR @Inject constructor(
             }
 
             // Step 1: Fetch raw data (HC) + optional enrichment from unified DB (Wear / HC sync rows)
-            val t0 = System.currentTimeMillis()
+            val t0 = aimiWallClockMs()
             val rawData = try {
                 enrichRawFromUnifiedIfNeeded(dataRepository.fetchAllData(daysBack = daysBack))
             } catch (e: Exception) {
                 aapsLogger.error(LTag.APS, "[$TAG] ❌ Fetch error", e)
                 return false
             }
-            fetchMs = System.currentTimeMillis() - t0
+            fetchMs = aimiWallClockMs() - t0
 
             if (!rawData.hasAnyData()) {
                 aapsLogger.warn(LTag.APS, "[$TAG] ⚠️ No physiological data available")
@@ -319,18 +320,18 @@ class AIMIPhysioManagerMTR @Inject constructor(
             }
 
             // Step 2: Extract features
-            val t1 = System.currentTimeMillis()
+            val t1 = aimiWallClockMs()
             val features = featureExtractor.extractFeatures(rawData, previousFeatures)
             previousFeatures = features
-            extractMs = System.currentTimeMillis() - t1
+            extractMs = aimiWallClockMs() - t1
 
             // Step 3: Update baseline
             val baseline = baselineModel.updateBaseline(features)
 
             // Step 4: Analyze context
-            val t2 = System.currentTimeMillis()
+            val t2 = aimiWallClockMs()
             var context = contextEngine.analyze(features, baseline)
-            analyzeMs = System.currentTimeMillis() - t2
+            analyzeMs = aimiWallClockMs() - t2
 
             // 🤖 Step 4b: Cognitive Analysis (LLM - Optional)
             if (runLLM && isLLMEnabled()) {
@@ -347,10 +348,10 @@ class AIMIPhysioManagerMTR @Inject constructor(
             // Step 5: Store
             contextStore.updateContext(context, baseline)
 
-            lastUpdateTime = System.currentTimeMillis()
+            lastUpdateTime = aimiWallClockMs()
             sp.putLong(PREF_KEY_LAST_UPDATE, lastUpdateTime)
 
-            val totalMs = System.currentTimeMillis() - startTime
+            val totalMs = aimiWallClockMs() - startTime
 
             // STRUCTURED LOG (Production Level)
             aapsLogger.info(
@@ -374,7 +375,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
      */
     private fun enrichRawFromUnifiedIfNeeded(raw: RawPhysioDataMTR): RawPhysioDataMTR {
         if (raw.hasAnyData()) return raw
-        val now = System.currentTimeMillis()
+        val now = aimiWallClockMs()
         val hr = unifiedActivityProvider.getLatestHeartRate(60 * 60 * 1000L)?.bpm?.toInt() ?: 0
         val stepsWin = unifiedActivityProvider.getStepsTotalSince(now - 24 * 60 * 60 * 1000L)?.steps ?: 0
         if (hr <= 0 && stepsWin <= 0) return raw
@@ -399,7 +400,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
     // ═══════════════════════════════════════════════════════════════════════
     
     fun getStatus(): Map<String, String> {
-        val now = System.currentTimeMillis()
+        val now = aimiWallClockMs()
         val timeSinceUpdate = now - lastUpdateTime
         
         return mapOf(

@@ -1517,6 +1517,63 @@ owns dosing safety review, not with a KMP-move implementer.
 
 ---
 
+## 6w. 2026-09-17: the whole-tree probe - a complete blocker map, and what it kills
+
+6u measured one cluster by moving 16 files. This entry measures **all of them at once**, which turns
+out to be the better technique and is worth reusing: `git mv` every remaining androidMain AIMI file
+into commonMain, run `compileKotlinIosArm64` once, read the error ranking, then `git mv` everything
+back. One compile, complete map, and the revert is exact because nothing but paths changed.
+
+All 114 files moved; 6425 errors across 108 of them. Six had no *intrinsic* blocker - but note
+carefully what that means: they were error-free **in a world where their dependencies had also moved**,
+not error-free on their own. The probe measures intrinsic platform coupling, not movability.
+
+**The finding that killed the obvious plan.** The tempting next step was a horizontal sweep - fix one
+whole class of blocker across the tree and watch files fall out. Measured against the probe, that
+plan yields nothing:
+
+| sweep | files it would unblock on its own |
+|---|---|
+| `String.format`/`Locale` | 0 |
+| resource strings (`R`/`getString`/`stringResource`) | 0 |
+| both together | 0 |
+| both plus `org.json` | 0 |
+
+Every one of the 108 files has at least one blocker outside any single theme. The remaining AIMI code
+is not one knot with a few threads; it is genuinely platform-coupled, file by file.
+
+**The map, by how many files each blocker touches** (not by error count - error count over-weights a
+single file that formats numbers in a loop):
+
+| blocker | files | nature |
+|---|---|---|
+| `java` / `android` | 68 / 66 | the bulk, mostly the specific things below |
+| `Context` | 46 | platform port, or an unused parameter - check before assuming |
+| `System.currentTimeMillis` | 33 | mechanical, **done in this entry** |
+| `File` + `exists`/`readText`/`writeText` | ~28 | wants one file-access port; the biggest structural item left |
+| `R` / `getString` / `stringResource` / `res` | ~27 | the `ApsStrings`/`TextRef` swap |
+| `@Volatile` / `TimeUnit` / `ReentrantLock` | ~18 | JVM concurrency, `AapsLock` is the house replacement |
+| `JSONObject` / `json` | ~14 | `kotlinx.serialization`, as done for the RBT reader in 6r |
+
+Distribution is long-tailed: 8 files have only 2 distinct blockers, and one has 65.
+
+**Done in this entry:** `System.currentTimeMillis()` swept to `aimiWallClockMs()` across 31 files and
+147 call sites, including one KDoc example. The helper already existed in commonMain
+(`openAPSAIMI/AimiWallClock.kt`) and was already used by 47 files, so this is convergence on the house
+pattern rather than a new one. Identical semantics - both return epoch milliseconds. Gates:
+`:app:assembleFullDebug` 0 Kotlin errors, `testAndroidHostTest --rerun` 569 tests / 0 failures.
+
+It unblocks no file on its own, and that is expected - it is on the path for 33 of them.
+
+**What the next decision actually is.** Not "which files move next" but "what shape should the file
+access port take". Around 28 files read or write files, and they are the largest coherent group left.
+The project rule is that a port expresses intent rather than steps, and that a target which cannot
+honour the contract should make the feature visibly absent rather than silently dead - which for
+files-on-disk is a real question on iOS, not a formality. That is a design conversation to have before
+any more code moves.
+
+---
+
 ---
 
 ## 7. Start here next session

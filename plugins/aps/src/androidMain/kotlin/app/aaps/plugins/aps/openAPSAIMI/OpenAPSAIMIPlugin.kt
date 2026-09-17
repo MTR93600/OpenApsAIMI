@@ -468,11 +468,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         if (!cannulaSiteRefreshInFlight.compareAndSet(false, true)) return
         aimiPluginIoScope.launch {
             try {
-                val fromTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7)
+                val fromTime = aimiWallClockMs() - TimeUnit.DAYS.toMillis(7)
                 val siteChanges = persistenceLayer.getTherapyEventDataFromTime(fromTime, TE.Type.CANNULA_CHANGE, true)
                 cachedCannulaSiteAgeDays = if (siteChanges.isNotEmpty()) {
                     val latestChangeTimestamp = siteChanges.last().timestamp
-                    ((System.currentTimeMillis() - latestChangeTimestamp).toFloat() / (1000f * 60f * 60f * 24f))
+                    ((aimiWallClockMs() - latestChangeTimestamp).toFloat() / (1000f * 60f * 60f * 24f))
                 } else {
                     0f
                 }
@@ -889,7 +889,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             profileIsf = profileIsf,
             sippConfidence = sippConfidence,
             kalmanVar = kalmanVarProxy,
-            nowMs = System.currentTimeMillis()
+            nowMs = aimiWallClockMs()
         )
         aapsLogger.debug(LTag.APS, "Adaptive ISF via IsfAdjustmentEngine: $isfAdj (tddEma=$tddEma, sipp=$sippConfidence, var=$kalmanVarProxy)")
 
@@ -909,7 +909,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             fusedIsf = fusedSlowIsf,
             kalmanIsf = fastConservative,
             trustFast = kalmanTrustProxy,
-            nowMs = System.currentTimeMillis()
+            nowMs = aimiWallClockMs()
         )
 
         // 10) facteur dynamique + bornes globales
@@ -1364,7 +1364,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val peakTimeMinutesForProfile = kineticsView.effective.peakMinutes
             var currentActivity = 0.0
             for (i in -4..0) { //MP: -4 to 0 calculates all the insulin active during the last 5 minutes
-                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(i.toLong()), profile)
+                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(aimiWallClockMs() - TimeUnit.MINUTES.toMillis(i.toLong()), profile)
                 currentActivity += iob.activity
             }
             var futureActivity = 0.0
@@ -1373,20 +1373,20 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val safepk = peakTimeMinutesForProfile.toInt().coerceAtLeast(35)
             
             for (i in -4..0) { //MP: calculate 5-minute-insulin activity centering around peakTime
-                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(safepk.toLong() - i), profile)
+                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(aimiWallClockMs() + TimeUnit.MINUTES.toMillis(safepk.toLong() - i), profile)
                 futureActivity += iob.activity
             }
             val sensorLag = -10L //MP Assume that the glucose value measurement reflect the BG value from 'sensorlag' minutes ago & calculate the insulin activity then
             var sensorLagActivity = 0.0
             for (i in -4..0) {
-                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(sensorLag - i), profile)
+                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(aimiWallClockMs() + TimeUnit.MINUTES.toMillis(sensorLag - i), profile)
                 sensorLagActivity += iob.activity
             }
 
             val activityHistoric = -20L //MP Activity at the time in minutes from now. Used to calculate activity in the past to use as target activity.
             var historicActivity = 0.0
             for (i in -2..2) {
-                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(activityHistoric - i), profile)
+                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(aimiWallClockMs() + TimeUnit.MINUTES.toMillis(activityHistoric - i), profile)
                 historicActivity += iob.activity
             }
 // R?cup?re GS standard + features AIMI

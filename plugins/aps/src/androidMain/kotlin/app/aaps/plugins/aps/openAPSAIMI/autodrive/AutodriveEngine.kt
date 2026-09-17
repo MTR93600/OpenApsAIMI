@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.autodrive
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveCommand
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstimator // 🧠 PSE
@@ -238,7 +239,7 @@ class AutodriveEngine @Inject constructor(
         steps: Int,
         hr: Int,
         rhr: Int,
-        currentEpochMs: Long = System.currentTimeMillis(),
+        currentEpochMs: Long = aimiWallClockMs(),
         tickId: Long = 0L,
         observationId: Long = 0L,
         /** Relayed to `tick`; without it this path silently took the 0.0 default. */
@@ -293,7 +294,7 @@ class AutodriveEngine @Inject constructor(
         steps: Int,
         hr: Int,
         rhr: Int,
-        currentEpochMs: Long = System.currentTimeMillis(),
+        currentEpochMs: Long = aimiWallClockMs(),
         /**
          * Hyper-trajectory Ra floor, in mg/dL/min, or 0.0 for none.
          *

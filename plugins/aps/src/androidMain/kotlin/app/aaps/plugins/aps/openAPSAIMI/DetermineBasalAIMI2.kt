@@ -1579,11 +1579,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (!pumpAgeRefreshInFlight.compareAndSet(false, true)) return
         determineIoScope.launch {
             try {
-                val fromTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7)
+                val fromTime = aimiWallClockMs() - TimeUnit.DAYS.toMillis(7)
                 val siteChanges = persistenceLayer.getTherapyEventDataFromTime(fromTime, TE.Type.CANNULA_CHANGE, true)
                 cachedPumpAgeDays = if (siteChanges.isNotEmpty()) {
                     val latestChangeTimestamp = siteChanges.last().timestamp
-                    ((System.currentTimeMillis() - latestChangeTimestamp).toFloat() / (1000f * 60f * 60f * 24f))
+                    ((aimiWallClockMs() - latestChangeTimestamp).toFloat() / (1000f * 60f * 60f * 24f))
                 } else {
                     0f
                 }
@@ -2868,7 +2868,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         tirbasal3A = tirSnapshot.tirBasal3Above
         tirbasalhAP = tirSnapshot.tirBasalHourAbove
         //this.enablebasal = preferences.get(BooleanKey.OApsAIMIEnableBasal)
-        this.now = System.currentTimeMillis()
+        this.now = aimiWallClockMs()
         automateDeletionIfBadDay(tir1DAYIR.toInt())
 
         this.weekend = if (dayOfWeek == Calendar.SUNDAY || dayOfWeek == Calendar.SATURDAY) 1 else 0
@@ -3069,14 +3069,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 3. Absolute IOB Cap (Emergency fallback)
 
         val t3cCapWindowMs = 20 * 60 * 1000L
-        val t3cCapCutoff   = System.currentTimeMillis() - t3cCapWindowMs
+        val t3cCapCutoff   = aimiWallClockMs() - t3cCapWindowMs
 
         // 1. Check Database (Harden: count ALL bolus types, not just SMB)
         val recentBolusCount = getBolusesFromTimeCached(t3cCapCutoff, true)
             .count { it.type == BS.Type.SMB || it.type == BS.Type.NORMAL }
 
         // 2. Check Internal Memory (Ensures 1 tick = 1 dose max even if DB is slow)
-        val timeSinceInternalSmbMs = System.currentTimeMillis() - internalLastSmbMillis
+        val timeSinceInternalSmbMs = aimiWallClockMs() - internalLastSmbMillis
         val internalBlock = timeSinceInternalSmbMs < t3cCapWindowMs
 
         // 3. Absolute IOB Guard (Safety Floor)
@@ -3195,7 +3195,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             duraISFaverage = ctx.glucoseStatus.duraISFaverage,
             profile = profile,
             currenttemp = ctx.currentTemp,
-            iob = ctx.iobDataArray.firstOrNull() ?: IobTotal(System.currentTimeMillis()),
+            iob = ctx.iobDataArray.firstOrNull() ?: IobTotal(aimiWallClockMs()),
             targetBg = originalProfile.target_bg,
             variableSensitivity = variableSensitivity.toDouble(),
             maxIob = maxIob,
@@ -3320,7 +3320,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val skipLegacySmbBlender: Boolean,
     )
 
-    private fun updateHyperDwellAboveHighBgClock(nowMs: Long = System.currentTimeMillis()) {
+    private fun updateHyperDwellAboveHighBgClock(nowMs: Long = aimiWallClockMs()) {
         val highBgPref = preferences.get(DoubleKey.OApsAIMIHighBg)
         val band = HyperTrajectoryHypoCredibility.highBgBandMgdl(targetBg.toDouble(), highBgPref)
         if (bg >= targetBg + band) {
@@ -3332,7 +3332,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
-    private fun dwellAboveHighBgMinutes(nowMs: Long = System.currentTimeMillis()): Int {
+    private fun dwellAboveHighBgMinutes(nowMs: Long = aimiWallClockMs()): Int {
         if (hyperDwellAboveHighBgSinceMs <= 0L) return 0
         return ((nowMs - hyperDwellAboveHighBgSinceMs) / 60_000L).toInt().coerceAtLeast(0)
     }
@@ -5377,7 +5377,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val recentEstimateCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
         val recentEstimateTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
         val estimateAgeMinutes = if (recentEstimateTime > 0L) {
-            (System.currentTimeMillis() - recentEstimateTime) / 60000.0
+            (aimiWallClockMs() - recentEstimateTime) / 60000.0
         } else {
             Double.MAX_VALUE
         }
@@ -6028,7 +6028,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         consoleError.add("CR:${profile.carb_ratio}")
 
-        val now = System.currentTimeMillis()
+        val now = aimiWallClockMs()
         val timeMillis5 = now - 5 * 60 * 1000
         val timeMillis10 = now - 10 * 60 * 1000
         val timeMillis15 = now - 15 * 60 * 1000
@@ -7389,7 +7389,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         estimatedCarbsTimeMs: Long,
     ): AimiMealHyperBasalBoostTickResult {
         val timeSinceEstimateMin =
-            if (estimatedCarbsTimeMs > 0L) (System.currentTimeMillis() - estimatedCarbsTimeMs) / 60000.0 else Double.MAX_VALUE
+            if (estimatedCarbsTimeMs > 0L) (aimiWallClockMs() - estimatedCarbsTimeMs) / 60000.0 else Double.MAX_VALUE
         return when (
             val o = resolveMealHyperBasalBoostOutcome(
                 ctx = ctx,
@@ -8731,7 +8731,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 🌀 TRAJECTORY VISUALIZATION (AIMI 2.1)
         try {
-            val now = System.currentTimeMillis()
+            val now = aimiWallClockMs()
             val currentActivity = (iob_data.iob * 1.0) // simplified activity equivalent
             val targetOrb = app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit(targetBg = targetBg.toDouble(), targetActivity = 0.0)
 
@@ -10700,7 +10700,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var averageBeatsPerMinute60 = 0.0
     private var averageBeatsPerMinute180 = 0.0
     private var eventualBG = 0.0
-    private var now = System.currentTimeMillis()
+    private var now = aimiWallClockMs()
     private var iob = 0.0f
     private var cob = 0.0f
     private var predictedBg = 0.0f
@@ -12313,7 +12313,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val recentEstimateCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
         val recentEstimateTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
         val estimateAgeMin = if (recentEstimateTime > 0L) {
-            (System.currentTimeMillis() - recentEstimateTime) / 60000.0
+            (aimiWallClockMs() - recentEstimateTime) / 60000.0
         } else {
             Double.MAX_VALUE
         }
@@ -14602,7 +14602,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private data class AimiPostAutodrivePostHypoBundle(
         val postHypoState: PostHypoState,
         val estimatedCarbs: Double,
-        /** Horodatage prefs advisor (ms) ; l’âge se recalcule en aval avec `System.currentTimeMillis()`. */
+        /** Horodatage prefs advisor (ms) ; l’âge se recalcule en aval avec `aimiWallClockMs()`. */
         val estimatedCarbsTimeMs: Long,
     )
 
@@ -14665,7 +14665,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         estimatedCarbsAgeMs: Long,
         localHour: Int,
         reason: StringBuilder,
-        now: Long = System.currentTimeMillis()
+        now: Long = aimiWallClockMs()
     ): PostHypoState {
         // Fenêtre de détection : 60 min ≈ 12 lectures G6 à 5 min
         val recentHypo = recentBGs.take(12).any { it < 70f }
@@ -14758,7 +14758,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val estimatedCarbsTimeDouble = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime)
         val estimatedCarbsTime = estimatedCarbsTimeDouble.toLong()
         val estimatedCarbsAgeMs =
-            if (estimatedCarbsTime > 0L) System.currentTimeMillis() - estimatedCarbsTime else Long.MAX_VALUE
+            if (estimatedCarbsTime > 0L) aimiWallClockMs() - estimatedCarbsTime else Long.MAX_VALUE
         val explicitMealMode =
             mealTime || lunchTime || dinnerTime || bfastTime || highCarbTime || snackTime
         val postHypoState = classifyPostHypoState(
@@ -15363,7 +15363,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         eventualBg: Double,
         threshold: Double,
         deltaMgdlPer5min: Double,
-        now: Long = System.currentTimeMillis(),
+        now: Long = aimiWallClockMs(),
     ): Boolean {
         fun safe(v: Double) = if (v.isFinite()) v else Double.POSITIVE_INFINITY
         val minBg = minOf(safe(bg), safe(predictedBg), safe(eventualBg))
@@ -15487,7 +15487,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         maxSMB: Double,
         lastBolusTimeMs: Long?,           // null si inconnu
         mealFlags: MealFlags,
-        nowMs: Long = dateUtil.now()      // ou System.currentTimeMillis()
+        nowMs: Long = dateUtil.now()      // ou aimiWallClockMs()
     ): Boolean {
         val hoursSinceBolus = lastBolusTimeMs?.let { (nowMs - it) / 3_600_000.0 } ?: Double.POSITIVE_INFINITY
         val rising = delta >= 1.0 && (shortAvgDelta >= 0.5 || longAvgDelta >= 0.3)
@@ -16817,7 +16817,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
-    private fun refreshAimiContextActivityFlag(nowMs: Long = System.currentTimeMillis()) {
+    private fun refreshAimiContextActivityFlag(nowMs: Long = aimiWallClockMs()) {
         aimiContextActivityActive = false
         if (!preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIContextEnabled)) return
         try {
@@ -16967,7 +16967,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (contextEnabled) {
             try {
                 consoleLog.add("═══ CONTEXT MODULE ═══")
-                val contextSnapshot = contextManager.getSnapshot(System.currentTimeMillis())
+                val contextSnapshot = contextManager.getSnapshot(aimiWallClockMs())
                 // Keep the fresh snapshot as the tick's source of truth so the meal-priority guards
                 // (legacy prebolus / meal advisor) read the same context as the finalize gate.
                 lastContextSnapshot = contextSnapshot
@@ -18609,7 +18609,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun appendDecisionFinalTickLine(diag: DecisionFinalDiagSnapshot, activityThreshold: Double) {
         val tickLine =
-            "TICK ts=${System.currentTimeMillis()} bg=${diag.bgValue.roundToInt()} d=${"%.1f".format(Locale.US, diag.deltaValue)} iob=${"%.2f".format(Locale.US, iob)} act=${"%.3f".format(Locale.US, iobActivityNow)} th=${"%.3f".format(Locale.US, activityThreshold)} " +
+            "TICK ts=${aimiWallClockMs()} bg=${diag.bgValue.roundToInt()} d=${"%.1f".format(Locale.US, diag.deltaValue)} iob=${"%.2f".format(Locale.US, iob)} act=${"%.3f".format(Locale.US, iobActivityNow)} th=${"%.3f".format(Locale.US, activityThreshold)} " +
                 "cob=${"%.1f".format(Locale.US, cob)} mode=${diag.modeLabel} autodriveState=$lastAutodriveState pred=${diag.predChunk} " +
                 "safety=$lastSafetySource ref=${diag.refractoryStatus} maxIOB=${"%.2f".format(Locale.US, maxIob)} maxSMB=${"%.2f".format(Locale.US, maxSMB)} " +
                 "smb=${"%.2f".format(Locale.US, lastSmbProposed)}->${"%.2f".format(Locale.US, lastSmbCapped)}->${"%.2f".format(Locale.US, diag.smbFinal)} " +
@@ -18759,7 +18759,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
         val estimatedCarbsTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
         val timeSinceEstimateMin = if (estimatedCarbsTime > 0L) {
-            (System.currentTimeMillis() - estimatedCarbsTime) / 60000.0
+            (aimiWallClockMs() - estimatedCarbsTime) / 60000.0
         } else {
             Double.POSITIVE_INFINITY
         }
@@ -18923,7 +18923,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val recentEstCarbsT3c = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
             val recentEstTimeT3c = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
             val estAgeMinT3c =
-                if (recentEstTimeT3c > 0L) (System.currentTimeMillis() - recentEstTimeT3c) / 60000.0
+                if (recentEstTimeT3c > 0L) (aimiWallClockMs() - recentEstTimeT3c) / 60000.0
                 else Double.MAX_VALUE
             val hasRecentMealEstT3c = recentEstCarbsT3c > 10.0 && estAgeMinT3c in 0.0..45.0
             val applyHypoRecoveryRaT3c = postHypoRecoveryActive() &&
@@ -19009,7 +19009,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         autodriveBasalProposal: AutodriveEngine.BasalOnlyTbrProposal? = null,
     ): RT {
         rT.reason = StringBuilder("")
-        rT.deliverAt = System.currentTimeMillis()
+        rT.deliverAt = aimiWallClockMs()
         // maxSMB = 0.0 is enforced: this function ONLY sets TBR, never rT.units
         // rT.units is preserved for pre-bolus from applyLegacyMealModes
 

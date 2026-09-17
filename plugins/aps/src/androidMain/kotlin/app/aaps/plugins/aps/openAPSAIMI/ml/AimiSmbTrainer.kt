@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.ml
 import android.util.Log
 import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
 import kotlinx.coroutines.CoroutineScope
@@ -106,7 +107,7 @@ object AimiSmbTrainer {
      * Never blocks the caller.
      */
     fun maybeTrainAsync(dir: File, csvFile: File) {
-        val now = System.currentTimeMillis()
+        val now = aimiWallClockMs()
 
         // Rate limit guard (fast path, no coroutine needed)
         if (now - lastTrainMs.get() < TRAIN_INTERVAL_MS) return
@@ -141,7 +142,7 @@ object AimiSmbTrainer {
     ): Float {
         if (features.size != INPUT_SIZE) return predictedSmb
 
-        val now = System.currentTimeMillis()
+        val now = aimiWallClockMs()
         if (isCircuitOpen(now)) return predictedSmb
 
         val model = modelRef.get() ?: return predictedSmb
@@ -225,7 +226,7 @@ object AimiSmbTrainer {
         )
         if (net != null) {
             modelRef.set(net)
-            lastTrainMs.set(System.currentTimeMillis())
+            lastTrainMs.set(aimiWallClockMs())
             rowsAtLastTrain.set(totalRows)
             circuitBreaker.reset()   // reset circuit breaker on success
             Log.i(TAG, "Model trained and saved successfully (${inputs.size} rows)")

@@ -4,6 +4,7 @@ import android.content.Context
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlin.math.roundToInt
@@ -155,7 +156,7 @@ class AimiAdvisorService {
         val visibleRecommendations = recommendations.filter { isRecommendationVisible(it, history) }
 
         return AdvisorReport(
-            generatedAt = System.currentTimeMillis(),
+            generatedAt = aimiWallClockMs(),
             metrics = context.metrics,
             overallScore = score,
             overallSeverity = severity,
@@ -380,7 +381,7 @@ class AimiAdvisorService {
         if (persistenceLayer != null) {
             try {
                 // Fetch BG readings directly for the period
-                val now = System.currentTimeMillis()
+                val now = aimiWallClockMs()
                 val fromTime = now - (days * 24 * 3600 * 1000L)
                 val bgReadings = persistenceLayer.getBgReadingsDataFromTimeToTime(fromTime, now, ascending = false)
                 
@@ -1007,7 +1008,7 @@ class AimiAdvisorService {
             val profile = profileFunction?.let { runBlocking(Dispatchers.IO) { it.getProfile() } }
             if (profile == null) {
                 return BasalProfileProposal(
-                    generatedAt = System.currentTimeMillis(),
+                    generatedAt = aimiWallClockMs(),
                     periodDays = periodDays,
                     strategyCode = "NO_PROFILE",
                     strategy = rh?.gs(R.string.aimi_adv_basal_strategy_no_profile) ?: "No profile available",
@@ -1032,7 +1033,7 @@ class AimiAdvisorService {
             }
 
             return BasalProfileProposal(
-                generatedAt = System.currentTimeMillis(),
+                generatedAt = aimiWallClockMs(),
                 periodDays = periodDays,
                 strategyCode = proposalFactor.code,
                 strategy = proposalFactor.label,
@@ -1178,7 +1179,7 @@ class AimiAdvisorService {
         history: List<AdvisorHistoryRepository.AdvisorActionLog>,
         update: app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate,
     ): Boolean {
-        val threshold = System.currentTimeMillis() - (48 * 3600 * 1000L)
+        val threshold = aimiWallClockMs() - (48 * 3600 * 1000L)
         val keyStr = update.key.key
         return history.any { entry ->
             entry.timestamp >= threshold &&
@@ -1197,7 +1198,7 @@ class AimiAdvisorService {
             }
 
             // 1. Fetch Raw Data
-            val now = System.currentTimeMillis()
+            val now = aimiWallClockMs()
             val fromTime = now - (periodDays * 24 * 3600 * 1000L)
             
             val bgReadings = try {

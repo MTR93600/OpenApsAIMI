@@ -7,6 +7,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningChange
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import java.util.UUID
 import kotlin.math.abs
 
@@ -187,7 +188,7 @@ internal class TpoSessionManager(
             if (restoreValue(preferences, key, oldValue)) restored++
         }
         val revertMap = persistence.loadLastRevertAtMsByPack().toMutableMap()
-        revertMap[session.packId] = session.lastRevertAtMs ?: System.currentTimeMillis()
+        revertMap[session.packId] = session.lastRevertAtMs ?: aimiWallClockMs()
         persistence.saveLastRevertAtMsByPack(revertMap)
         persistence.saveSession(null)
         historyRepo?.logAction(
