@@ -55,6 +55,27 @@ class KalmanISFCalculator(
     private val logger: AAPSLogger
 ) {
     companion object {
+
+        /**
+         * Smallest total daily dose this calculator will treat as a measurement, in units.
+         *
+         * Below it the value is missing data, not a small dose: nobody on insulin therapy has a real
+         * daily total under this, and a near-zero one collapses the effective dose that scales the
+         * whole sensitivity estimate.
+         */
+        const val MIN_USABLE_TDD_U: Double = 1.0
+
+        /**
+         * True when a total daily dose can be used as a measurement.
+         *
+         * `averageTDD(...)?.data?.totalAmount` returns 0.0 when there is no history yet — and a
+         * relaxed test double returns 0.0 too. Caching that made the effective dose zero and the
+         * sensitivity it produced was out by more than a factor of ten, which is how this check was
+         * found: a full-suite run returned 223.29 mg/dL/U where 15.0 was expected, once, and never
+         * reproduced.
+         */
+        fun isUsableTdd(value: Double?): Boolean =
+            value != null && value.isFinite() && value >= MIN_USABLE_TDD_U
         private const val MIN_ISF = 5.0
         private const val MAX_ISF = 300.0
         private const val BASE_CONSTANT = 75.0
@@ -120,15 +141,19 @@ class KalmanISFCalculator(
         if (!tddRefreshInFlight.compareAndSet(false, true)) return
         ioScope.launch {
             try {
-                cachedTdd7Days = tddCalculator.averageTDD(
+                // Only cache what is a measurement. A zero or absent total is missing data, and
+                // caching it collapsed the effective dose that scales the whole estimate — see
+                // [isUsableTdd]. A refused value leaves the previous cache, or the preference
+                // fallback in [computeEffectiveTDD], in place.
+                tddCalculator.averageTDD(
                     tddCalculator.calculate(7, allowMissingDays = false)
-                )?.data?.totalAmount
-                cachedTdd2Days = tddCalculator.averageTDD(
+                )?.data?.totalAmount?.takeIf { isUsableTdd(it) }?.let { cachedTdd7Days = it }
+                tddCalculator.averageTDD(
                     tddCalculator.calculate(2, allowMissingDays = false)
-                )?.data?.totalAmount
-                cachedTdd1Day = tddCalculator.averageTDD(
+                )?.data?.totalAmount?.takeIf { isUsableTdd(it) }?.let { cachedTdd2Days = it }
+                tddCalculator.averageTDD(
                     tddCalculator.calculate(1, allowMissingDays = false)
-                )?.data?.totalAmount
+                )?.data?.totalAmount?.takeIf { isUsableTdd(it) }?.let { cachedTdd1Day = it }
             } finally {
                 tddRefreshInFlight.set(false)
             }

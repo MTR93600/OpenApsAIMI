@@ -1488,6 +1488,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 lastEvaluatedMs = stressIsfLastEvalMs,
                 wasActive = stressIsfWasActive,
                 breakStartedMs = stressIsfBreakStartedMs,
+                // The heart rate may not take this protection away during a fast rise — see
+                // [StressIsfFloor.REASON_RISE_HOLD].
+                deltaMgdl5m = gs.delta,
             )
             stressIsfSignatureSinceMs = stressVerdict.signatureSinceMs
             stressIsfLastEvalMs = stressVerdict.lastEvaluatedMs

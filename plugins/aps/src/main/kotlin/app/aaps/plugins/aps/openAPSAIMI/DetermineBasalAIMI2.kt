@@ -46,12 +46,14 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalTerminalInvariants
 import app.aaps.plugins.aps.openAPSAIMI.basal.AnticipationBasalFloor
+import app.aaps.plugins.aps.openAPSAIMI.basal.FclMealBasal
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAnticipation
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAutodriveBasalBridge
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cTrajectoryContext
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
+import app.aaps.plugins.aps.openAPSAIMI.ISF.HeartRateTrendIsf
 import app.aaps.plugins.aps.openAPSAIMI.ISF.CommandedIsf
 import app.aaps.plugins.aps.openAPSAIMI.ISF.ObservedSensitivityMeter
 import app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
@@ -3003,6 +3005,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.highCarbTime = therapy.highCarbTime
         this.mealTime = therapy.mealTime
         this.anticipTime = therapy.anticipTime
+        this.fclTime = therapy.fclTime
         this.bfastTime = therapy.bfastTime
         this.lunchTime = therapy.lunchTime
         this.dinnerTime = therapy.dinnerTime
@@ -3010,6 +3013,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.stopTime = therapy.stopTime
         this.mealruntime = therapy.getTimeElapsedSinceLastEvent("meal")
         this.anticipruntime = therapy.getTimeElapsedSinceLastEvent("anticip")
+        this.fclruntime = therapy.getTimeElapsedSinceLastEvent("fcl")
         this.bfastruntime = therapy.getTimeElapsedSinceLastEvent("bfast")
         this.lunchruntime = therapy.getTimeElapsedSinceLastEvent("lunch")
         this.dinnerruntime = therapy.getTimeElapsedSinceLastEvent("dinner")
@@ -6184,6 +6188,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
 
             val hr60List = getRateForWindow(60 * 60 * 1000)
+            // The 80.0 below is a substitute, not a measurement. It stays because other readers
+            // (ActivityManager's avgHrResting) depend on a non-zero number, but anything that
+            // STRENGTHENS a dose must know the difference — see [HeartRateTrendIsf].
+            this.heartRateBaselineIsReal = hr60List.isNotEmpty()
             this.averageBeatsPerMinute60 = if (hr60List.isNotEmpty()) {
                 hr60List.map { it.beatsPerMinute.toInt() }.average()
             } else {
@@ -6202,11 +6210,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             averageBeatsPerMinute10 = 80.0
             averageBeatsPerMinute60 = 80.0
             averageBeatsPerMinute180 = 80.0
+            heartRateBaselineIsReal = false
         }
-        val heartRateTrend = averageBeatsPerMinute10 / averageBeatsPerMinute60
-        if (recentSteps10Minutes < 100 && heartRateTrend > 1.1 && bg > 110) {
-            this.variableSensitivity *= 0.9f
-            consoleLog.add("ISF réduit de 10% (tendance FC anormale).")
+        // 💓 Heart-rate trend — the ONE heart-rate path that strengthens a dose. It now stands down
+        // during a fast rise, where an elevated heart rate is a consequence of the rise rather than
+        // information about its cause, and on a baseline that was substituted rather than measured.
+        // See [HeartRateTrendIsf].
+        val heartRateTrendMultiplier = HeartRateTrendIsf.multiplier(
+            steps10m = recentSteps10Minutes,
+            avgBpm10 = averageBeatsPerMinute10,
+            avgBpm60 = averageBeatsPerMinute60,
+            baselineIsReal = heartRateBaselineIsReal,
+            bgMgdl = bg.toDouble(),
+            deltaMgdl5m = delta.toDouble(),
+        )
+        if (heartRateTrendMultiplier < 1.0) {
+            this.variableSensitivity *= heartRateTrendMultiplier.toFloat()
+            consoleLog.add(
+                "💓 HR_TREND_ISF x%.2f (hr10 %.0f / hr60 %.0f, steps10 %d)".format(
+                    Locale.US, heartRateTrendMultiplier,
+                    averageBeatsPerMinute10, averageBeatsPerMinute60, recentSteps10Minutes,
+                )
+            )
         }
 
         return AimiPostBasalBootstrapActivityVitals(
@@ -9060,6 +9085,40 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
 
+        // 🍽️ FCL declared meal — see [FclMealBasal]. Applied here, beside the declared-meal floor and
+        // for the same two reasons: this is the last point where the rate can still be raised, and the
+        // SMB stage has already run by now, so the bolus channel stays alive. An early return from the
+        // meal-boost stage would have skipped it, which is how the declared meal modes behave and is
+        // not what was asked for here.
+        FclMealBasal.rateUph(
+            fclNoteActive = fclTime,
+            sportNoteActive = sportTime,
+            tempTargetSet = b.profile.temptargetSet,
+            // The raw profile target on purpose: it carries the temp target the person set, while the
+            // engine's own working target has already been reshaped by this point.
+            targetBgMgdl = b.profile.target_bg,
+            mealModesMaxBasalUph = preferences.get(DoubleKey.meal_modes_MaxBasal),
+            profileMaxBasalUph = b.profile.max_basal,
+            profileBasalUph = b.profile.current_basal,
+            bgMgdl = bg.toDouble(),
+            deltaMgdl5m = delta.toDouble(),
+        )?.let { floorUph ->
+            if (floorUph > finalProposedRate) {
+                consoleLog.add(
+                    "🍽️ FCL_MEAL_BASAL: %.2f→%.2f U/h (temp target %.0f mg/dL, note %d min ago)".format(
+                        Locale.US, finalProposedRate, floorUph, b.profile.target_bg, fclruntime,
+                    )
+                )
+                b.rT.reason.append("; 🍽️FCL ${"%.2f".format(Locale.US, floorUph)}U/h")
+                finalProposedRate = floorUph
+                // The same bypass the declared meal modes already use, so FCL is "lunch without the
+                // prebolus" and not a weaker version of it. It lifts one clamp only — the daily-safety
+                // one — up to max_basal. The LGS block, the DynamicBasalController brake and the
+                // max_basal hard cap inside setTempBasal all still apply.
+                finalOverrideSafetyLimits = true
+            }
+        }
+
         val finalResult = setTempBasal(
             _rate = finalProposedRate,
             duration = finalDuration,
@@ -10782,6 +10841,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var averageBeatsPerMinute = 0.0
     private var averageBeatsPerMinute10 = 0.0
     private var averageBeatsPerMinute60 = 0.0
+
+    /**
+     * True when [averageBeatsPerMinute60] came from real records rather than the 80 bpm substitute.
+     * Read only by [HeartRateTrendIsf], which is the one gesture that can strengthen a dose.
+     */
+    private var heartRateBaselineIsReal = false
     private var averageBeatsPerMinute180 = 0.0
     private var eventualBG = 0.0
     private var now = System.currentTimeMillis()
@@ -11295,6 +11360,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     /** Minutes since that declaration. Same type as [mealruntime], which this mirrors. */
     private var anticipruntime: Long = 0
+
+    /**
+     * The FCL mode: a declared meal that forces the meal basal ceiling while a low temp target runs,
+     * and sends no prebolus. See [FclMealBasal].
+     */
+    private var fclTime = false
+
+    /** Minutes since that declaration. Logging only: the temp target is what ends the mode. */
+    private var fclruntime: Long = 0
     private var bfastTime = false
     private var lunchTime = false
     private var dinnerTime = false

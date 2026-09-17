@@ -123,4 +123,70 @@ class UndeclaredCobEstimatorTest {
         val r = UndeclaredCobEstimator.estimate(bad)
         assertThat(r.reason).isEqualTo("invalid_csf")
     }
+
+    // ---- heart rate has no authority during a fast rise -----------------------------------------
+
+    /**
+     * The gate exists only on this path: the whole estimator runs only when declared carbs are zero.
+     * So a postprandial heart-rate rise — which is what a meal produces — switches off the estimator
+     * written to catch the meal. It is self-defeating, and it is the same mistake as letting a heart
+     * rate end the stress insulin-sensitivity floor mid-rise.
+     *
+     * The rule is the one already applied there: above
+     * [UndeclaredCobEstimator.HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN] the rise is too fast to be
+     * hormonal, so the heart-rate elevation is a consequence of it and may not gate anything.
+     */
+    @Test
+    fun `an elevated heart rate does not gate the estimate while glucose rises fast`() {
+        val result = UndeclaredCobEstimator.estimate(
+            baseInput(
+                hrInflammationElevated = true,
+                deltaMgdl5m = UndeclaredCobEstimator.HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN,
+            )
+        )
+        assertThat(result.reason).doesNotContain("hr_inflammation")
+    }
+
+    @Test
+    fun `an elevated heart rate still gates the estimate on a gentle rise`() {
+        val result = UndeclaredCobEstimator.estimate(
+            baseInput(
+                hrInflammationElevated = true,
+                deltaMgdl5m = UndeclaredCobEstimator.HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN - 0.1,
+            )
+        )
+        assertThat(result.gated).isTrue()
+        assertThat(result.reason).contains("hr_inflammation")
+    }
+
+    @Test
+    fun `the other safety gates still stand during a fast rise`() {
+        // The rise rule lifts the HEART RATE gate only. Everything more protective keeps its say.
+        val fast = UndeclaredCobEstimator.HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN + 5.0
+        assertThat(
+            UndeclaredCobEstimator.estimate(
+                baseInput(falseMealSuppression = true, deltaMgdl5m = fast)
+            ).gated
+        ).isTrue()
+        assertThat(
+            UndeclaredCobEstimator.estimate(baseInput(postHypoActive = true, deltaMgdl5m = fast)).gated
+        ).isTrue()
+        assertThat(
+            UndeclaredCobEstimator.estimate(
+                baseInput(cfrdExacerbationActive = true, deltaMgdl5m = fast)
+            ).gated
+        ).isTrue()
+        assertThat(
+            UndeclaredCobEstimator.estimate(baseInput(activityDetected = true, deltaMgdl5m = fast)).gated
+        ).isTrue()
+    }
+
+    @Test
+    fun `a rise that is not a usable number leaves the heart rate gate in force`() {
+        val result = UndeclaredCobEstimator.estimate(
+            baseInput(hrInflammationElevated = true, deltaMgdl5m = Double.NaN)
+        )
+        assertThat(result.gated).isTrue()
+        assertThat(result.reason).contains("hr_inflammation")
+    }
 }

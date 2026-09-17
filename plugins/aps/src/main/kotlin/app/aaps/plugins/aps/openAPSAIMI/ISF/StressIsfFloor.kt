@@ -121,6 +121,31 @@ object StressIsfFloor {
     const val REASON_EXIT_GRACE: String = "exit_grace"
 
     /**
+     * Longest the floor may be held by a heart-rate reading that never moves, in minutes.
+     *
+     * Needed because the release now waits for a fresh sample: without a cap, a value frozen by the
+     * wearable would hold the floor for ever. 20 minutes covers the 90th centile of the observed
+     * refresh interval (median 9 min, p90 18 min over 11 644 logged minutes).
+     */
+    const val EXIT_GRACE_MAX_MINUTES: Double = 20.0
+
+    /**
+     * Glucose rise, in mg/dL per 5 minutes, above which the heart rate loses its say.
+     *
+     * The value is not invented here: it is the threshold `PhysiologicalPhaseClassifier` already
+     * measured as "too steep to be cortisol alone" (genuine cortisol never rose faster than
+     * 9.1 mg/dL per 5 min over 952 ticks and 14 episodes). The reasoning is the same in both places:
+     * a rise this fast is not a hormonal rise, so a heart rate reading says nothing about its cause.
+     */
+    const val RISE_HOLD_MGDL_PER_5MIN: Double = 11.0
+
+    /**
+     * The signature has broken, but glucose is rising too fast for the heart rate to mean anything,
+     * so the floor keeps whatever state it had.
+     */
+    const val REASON_RISE_HOLD: String = "rise_hold"
+
+    /**
      * What the signature looks like at one instant.
      *
      * @param active true only when the signature holds **and** has held for at least
@@ -144,6 +169,11 @@ object StressIsfFloor {
         val lastEvaluatedMs: Long,
         val reason: String,
         val breakStartedMs: Long? = null,
+        /**
+         * The heart-rate value that broke the signature, kept so the release can tell a fresh sample
+         * from the same one read again. Null whenever the floor is not in its exit grace.
+         */
+        val breakHrBpm: Int? = null,
     )
 
     /**
@@ -183,6 +213,17 @@ object StressIsfFloor {
         lastEvaluatedMs: Long? = null,
         wasActive: Boolean = false,
         breakStartedMs: Long? = null,
+        /**
+         * Glucose change over the last 5 minutes, in mg/dL. Above [RISE_HOLD_MGDL_PER_5MIN] the
+         * heart rate is not allowed to take an active floor away — see [REASON_RISE_HOLD]. Zero, or
+         * any value that is not a usable number, changes nothing.
+         */
+        deltaMgdl5m: Double = 0.0,
+        /**
+         * The heart-rate value carried from the last tick's [Verdict.breakHrBpm]. Null on the first
+         * tick of a break.
+         */
+        breakHrBpm: Int? = null,
     ): Verdict {
         if (hrNowBpm <= 0 || rhrRestingBpm <= 0) {
             return Verdict(
@@ -192,6 +233,7 @@ object StressIsfFloor {
                 lastEvaluatedMs = nowMs,
                 reason = "$REASON_NO_HR hr=$hrNowBpm rest=$rhrRestingBpm steps15=$stepsLast15m",
                 breakStartedMs = null,
+                breakHrBpm = null,
             )
         }
 
@@ -204,20 +246,59 @@ object StressIsfFloor {
         val continuityBroken = gapMs != null && (gapMs < 0L || gapMs > MAX_GAP_BETWEEN_EVALUATIONS_MS)
 
         if (!signatureHolds) {
-            // An already active floor is given [EXIT_GRACE_MINUTES] before it drops, so one step
-            // burst cannot cancel it. A gap still drops it at once: nothing was observed in between.
-            val breakStart = breakStartedMs?.takeIf { it <= nowMs } ?: nowMs
-            val brokenMinutes = ((nowMs - breakStart) / 60_000.0).coerceAtLeast(0.0)
-            val inGrace = wasActive && !continuityBroken && brokenMinutes < EXIT_GRACE_MINUTES
-            if (inGrace) {
-                val brokenText = String.format(Locale.ROOT, "broken=%.1fmin", brokenMinutes)
+            // The heart rate has no authority during a fast rise. Measured on the 2026-09-17 01:00
+            // episode: the reading went 88, then 62, then 100 within twenty minutes while glucose
+            // climbed 83 to 195, and the only thing the 62 did was end the protection five minutes
+            // later — at the exact tick the bolus reached its ceiling, with 8 U following. During a
+            // rise that steep the reading carries no information about the cause, so it may not
+            // remove a protection. A data gap and a missing heart rate still drop the floor: there is
+            // no observed state worth keeping in either case.
+            val riseHolds = deltaMgdl5m.isFinite() && deltaMgdl5m >= RISE_HOLD_MGDL_PER_5MIN
+            if (wasActive && riseHolds && !continuityBroken) {
                 return Verdict(
                     active = true,
                     heldMinutes = 0.0,
                     signatureSinceMs = signatureSinceMs,
                     lastEvaluatedMs = nowMs,
-                    reason = "$REASON_EXIT_GRACE $values $brokenText",
+                    reason = "$REASON_RISE_HOLD $values " +
+                        String.format(Locale.ROOT, "delta=%.1f", deltaMgdl5m),
+                    breakStartedMs = breakStartedMs,
+                    breakHrBpm = breakHrBpm,
+                )
+            }
+            // An already active floor is given [EXIT_GRACE_MINUTES] before it drops, so one step
+            // burst cannot cancel it. A gap still drops it at once: nothing was observed in between.
+            val breakStart = breakStartedMs?.takeIf { it <= nowMs } ?: nowMs
+            val breakHr = breakHrBpm ?: hrNowBpm
+            val brokenMinutes = ((nowMs - breakStart) / 60_000.0).coerceAtLeast(0.0)
+            // The exported heart rate is a staircase, refreshed about every 9 minutes, and
+            // `hr_now_bpm` equals `hr_avg_15m_bpm` on every tick — it is one held sample, not a
+            // per-minute measurement. Measured over 11 644 logged minutes: of 42 floor releases, 20
+            // came from this grace and ALL 20 rested on a single unrefreshed reading, because a
+            // 5-minute grace is shorter than the refresh cadence and always expires on the very
+            // value that broke the signature. A protection may not end on a number nobody has looked
+            // at twice, so the release also waits for the sample to move — bounded by
+            // [EXIT_GRACE_MAX_MINUTES] so a frozen value cannot hold the floor for ever.
+            // Only when the HEART RATE is what broke the signature. If the person is walking, the
+            // step count broke it, steps refresh on their own clock, and the heart rate's freshness
+            // has nothing to say about it — the plain grace governs there, as before.
+            val heartRateBrokeIt = excessBpm < HR_ABOVE_RESTING_BPM
+            val sampleRefreshed = hrNowBpm != breakHr
+            val waitForFreshSample = heartRateBrokeIt && !sampleRefreshed
+            val graceElapsed = brokenMinutes >= EXIT_GRACE_MINUTES
+            val capReached = brokenMinutes >= EXIT_GRACE_MAX_MINUTES
+            val releases = capReached || (graceElapsed && !waitForFreshSample)
+            if (wasActive && !continuityBroken && !releases) {
+                val brokenText = String.format(Locale.ROOT, "broken=%.1fmin", brokenMinutes)
+                val freshText = if (waitForFreshSample) "same=$breakHr" else "fresh"
+                return Verdict(
+                    active = true,
+                    heldMinutes = 0.0,
+                    signatureSinceMs = signatureSinceMs,
+                    lastEvaluatedMs = nowMs,
+                    reason = "$REASON_EXIT_GRACE $values $brokenText $freshText",
                     breakStartedMs = breakStart,
+                    breakHrBpm = breakHr,
                 )
             }
             return Verdict(
@@ -227,6 +308,7 @@ object StressIsfFloor {
                 lastEvaluatedMs = nowMs,
                 reason = "$REASON_NO_SIGNATURE $values",
                 breakStartedMs = null,
+                breakHrBpm = null,
             )
         }
 

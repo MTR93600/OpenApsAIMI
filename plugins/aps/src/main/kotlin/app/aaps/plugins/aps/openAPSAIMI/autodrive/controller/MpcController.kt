@@ -125,7 +125,15 @@ class MpcController @Inject constructor(
             // on rend l'IA extrêmement prudente sur l'envoi de bolus (SMB).
             val isDawnWindow = state.hour in 4..10
             val isLowActivity = state.steps < 200
-            val legacyDawnRise = isDawnWindow && isLowActivity && (state.hr > state.rhr + 5) && state.cob < 0.1
+            // No heart-rate term. It used to read `state.hr > state.rhr + 5`, which on a resting rate
+            // of 50 means "over 55" — true almost every morning — and this branch sits ABOVE the one
+            // commented "Unannounced Meal Crushing", so a heart rate 5 bpm over resting made that
+            // branch unreachable and a real undeclared breakfast was treated as cortisol. The same
+            // guard in ContinuousStateEstimator (`legacyDawn`) already does this job with no heart
+            // rate at all; the two are now consistent. The hour, the step count, the carbs test and
+            // `physioExtendedDawnGuard` — which comes from the physiological phase, not from the
+            // heart rate — all keep their say.
+            val legacyDawnRise = isDawnWindow && isLowActivity && state.cob < 0.1
             val isDawnRiseSuspected = (state.physioExtendedDawnGuard && state.cob < 0.1) || legacyDawnRise
 
             if (isDawnRiseSuspected) {

@@ -26,6 +26,7 @@ class StressIsfFloorTest {
         hrNowBpm: Int = stressBpm,
         rhrRestingBpm: Int = restingBpm,
         stepsLast15m: Int = calmSteps,
+        deltaMgdl5m: Double = 0.0,
     ) = StressIsfFloor.evaluate(
         hrNowBpm = hrNowBpm,
         rhrRestingBpm = rhrRestingBpm,
@@ -35,6 +36,8 @@ class StressIsfFloorTest {
         lastEvaluatedMs = previous?.lastEvaluatedMs,
         wasActive = previous?.active == true,
         breakStartedMs = previous?.breakStartedMs,
+        deltaMgdl5m = deltaMgdl5m,
+        breakHrBpm = previous?.breakHrBpm,
     )
 
     // ---- the hold time ---------------------------------------------------------------------------
@@ -386,5 +389,175 @@ class StressIsfFloorTest {
             ),
         )
         assertThat(commanded).isEqualTo(67.4)
+    }
+
+    // ---- heart rate has no authority during an undeclared meal rise -----------------------------
+
+    /**
+     * The 2026-09-17 01:00 episode. Glucose went 83 -> 195 in about half an hour. At 00:36 the
+     * exported heart rate fell from 88 to 62 in one minute, which is under the resting + 20 the
+     * signature needs, so the floor entered its 5-minute grace and dropped at 00:42 — the exact tick
+     * the bolus reached its ceiling. The commanded sensitivity halved from 120 to 67.4 and 8 U went
+     * in. The heart rate then returned to 100 at 00:54, but re-entering needs 10 unbroken minutes, so
+     * the protection came back at 01:05 with the insulin already delivered.
+     *
+     * During a rise that steep the heart rate carries no information about the cause — measured on
+     * that episode it read 88, then 62, then 100 within twenty minutes — and its only effect is to
+     * remove a protection. So it must not be allowed to.
+     */
+    @Test
+    fun `an active floor is not dropped by a heart rate reading while glucose rises fast`() {
+        var verdict = tick(t0, previous = null)
+        for (i in 1..12) verdict = tick(t0 + i * oneMinute, verdict)
+        assertThat(verdict.active).isTrue()
+
+        // The heart rate collapses to resting + 12 for longer than the exit grace, while glucose
+        // climbs faster than anything cortisol can do.
+        for (i in 13..30) {
+            verdict = tick(t0 + i * oneMinute, verdict, hrNowBpm = restingBpm + 12, deltaMgdl5m = 13.7)
+        }
+        assertThat(verdict.active).isTrue()
+        assertThat(verdict.reason).startsWith(StressIsfFloor.REASON_RISE_HOLD)
+    }
+
+    @Test
+    fun `the same heart rate collapse still drops the floor when glucose is flat`() {
+        var verdict = tick(t0, previous = null)
+        for (i in 1..12) verdict = tick(t0 + i * oneMinute, verdict)
+        assertThat(verdict.active).isTrue()
+
+        // The reading moves each tick, so the fresh-sample rule does not come into it: this test is
+        // about the rise freeze alone.
+        for (i in 13..30) {
+            verdict = tick(
+                t0 + i * oneMinute, verdict,
+                hrNowBpm = restingBpm + 11 + (i % 2),
+                deltaMgdl5m = 0.5,
+            )
+        }
+        assertThat(verdict.active).isFalse()
+    }
+
+    /**
+     * The freeze holds the state, it does not create one. An inactive floor must not be switched on
+     * by a rise: that would withhold insulin from a real meal on no evidence at all.
+     */
+    @Test
+    fun `a fast rise never switches an inactive floor on`() {
+        val verdict = tick(t0, previous = null, hrNowBpm = restingBpm + 2, deltaMgdl5m = 30.0)
+        assertThat(verdict.active).isFalse()
+    }
+
+    @Test
+    fun `a rise below the threshold does not freeze anything`() {
+        var verdict = tick(t0, previous = null)
+        for (i in 1..12) verdict = tick(t0 + i * oneMinute, verdict)
+        for (i in 13..30) {
+            verdict = tick(
+                t0 + i * oneMinute, verdict,
+                hrNowBpm = restingBpm + 11 + (i % 2),
+                deltaMgdl5m = StressIsfFloor.RISE_HOLD_MGDL_PER_5MIN - 0.1,
+            )
+        }
+        assertThat(verdict.active).isFalse()
+    }
+
+    @Test
+    fun `a rise that is not a usable number does not freeze anything`() {
+        var verdict = tick(t0, previous = null)
+        for (i in 1..12) verdict = tick(t0 + i * oneMinute, verdict)
+        for (i in 13..30) {
+            verdict = tick(
+                t0 + i * oneMinute, verdict,
+                hrNowBpm = restingBpm + 11 + (i % 2),
+                deltaMgdl5m = Double.NaN,
+            )
+        }
+        assertThat(verdict.active).isFalse()
+    }
+
+    /**
+     * A data gap must still drop the floor, rise or no rise: nothing was observed in between, so
+     * there is no state worth freezing.
+     */
+    @Test
+    fun `a data gap drops the floor even while glucose rises fast`() {
+        var verdict = tick(t0, previous = null)
+        for (i in 1..12) verdict = tick(t0 + i * oneMinute, verdict)
+        assertThat(verdict.active).isTrue()
+        verdict = tick(
+            t0 + 40 * oneMinute, verdict,
+            hrNowBpm = restingBpm + 12,
+            deltaMgdl5m = 20.0,
+        )
+        assertThat(verdict.active).isFalse()
+    }
+
+    @Test
+    fun `a missing heart rate drops the floor even while glucose rises fast`() {
+        var verdict = tick(t0, previous = null)
+        for (i in 1..12) verdict = tick(t0 + i * oneMinute, verdict)
+        verdict = tick(t0 + 13 * oneMinute, verdict, hrNowBpm = 0, deltaMgdl5m = 20.0)
+        assertThat(verdict.active).isFalse()
+        assertThat(verdict.reason).startsWith(StressIsfFloor.REASON_NO_HR)
+    }
+
+    // ---- the grace must outlast the heart-rate refresh cadence ----------------------------------
+
+    /**
+     * Measured on 11 644 logged minutes over 12 days: the exported heart rate is not a per-minute
+     * measurement but a staircase refreshed about every 9 minutes (median 9, 45 % of intervals
+     * exactly 9, and `hr_now_bpm` equals `hr_avg_15m_bpm` on every single tick). Of 42 floor
+     * releases, 20 came from the exit grace, and **all 20 rested on one unrefreshed sample**: the
+     * 5-minute grace is shorter than the cadence, so it always expires on the very reading that
+     * broke the signature, having never seen a second one.
+     *
+     * A protection may not be ended by a number nobody has looked at twice.
+     */
+    @Test
+    fun `the floor is not released while the heart rate reading has never been refreshed`() {
+        var verdict = tick(t0, previous = null)
+        for (i in 1..12) verdict = tick(t0 + i * oneMinute, verdict)
+        assertThat(verdict.active).isTrue()
+
+        // The same held sample for far longer than the grace.
+        val heldSample = restingBpm + 12
+        for (i in 13..25) verdict = tick(t0 + i * oneMinute, verdict, hrNowBpm = heldSample)
+        assertThat(verdict.active).isTrue()
+        assertThat(verdict.reason).startsWith(StressIsfFloor.REASON_EXIT_GRACE)
+    }
+
+    @Test
+    fun `a fresh reading past the grace does release the floor`() {
+        var verdict = tick(t0, previous = null)
+        for (i in 1..12) verdict = tick(t0 + i * oneMinute, verdict)
+        for (i in 13..19) verdict = tick(t0 + i * oneMinute, verdict, hrNowBpm = restingBpm + 12)
+        assertThat(verdict.active).isTrue()
+        // A new sample arrives, still out of signature, and the grace has long elapsed.
+        verdict = tick(t0 + 20 * oneMinute, verdict, hrNowBpm = restingBpm + 11)
+        assertThat(verdict.active).isFalse()
+    }
+
+    /**
+     * And it cannot hold for ever on a reading that never moves: past
+     * [StressIsfFloor.EXIT_GRACE_MAX_MINUTES] the floor drops whatever the sample does.
+     */
+    @Test
+    fun `a reading that never moves still drops the floor at the hard cap`() {
+        var verdict = tick(t0, previous = null)
+        for (i in 1..12) verdict = tick(t0 + i * oneMinute, verdict)
+        val heldSample = restingBpm + 12
+        val cap = StressIsfFloor.EXIT_GRACE_MAX_MINUTES.toInt()
+        for (i in 13..(13 + cap + 2)) verdict = tick(t0 + i * oneMinute, verdict, hrNowBpm = heldSample)
+        assertThat(verdict.active).isFalse()
+    }
+
+    @Test
+    fun `the fresh-reading rule does not delay a release when the sample moves at once`() {
+        var verdict = tick(t0, previous = null)
+        for (i in 1..12) verdict = tick(t0 + i * oneMinute, verdict)
+        // Out of signature with a new value on every tick: the old 5-minute grace still governs.
+        for (i in 13..19) verdict = tick(t0 + i * oneMinute, verdict, hrNowBpm = restingBpm + 12 - (i - 13))
+        assertThat(verdict.active).isFalse()
     }
 }

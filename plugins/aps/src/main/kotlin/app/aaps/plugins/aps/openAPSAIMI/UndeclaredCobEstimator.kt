@@ -25,6 +25,22 @@ object UndeclaredCobEstimator {
     /** Minimum fused meal probability required to consider an undeclared meal at all. */
     private const val MEAL_PROB_THRESHOLD = 0.55
 
+    /**
+     * Glucose rise, in mg/dL per 5 minutes, at or above which the heart-rate gate stands down.
+     *
+     * This estimator only runs when declared carbs are zero, so its heart-rate gate exists **only**
+     * on the undeclared path — and a meal is exactly what raises the heart rate by the 15 bpm the
+     * gate keys on. Left as it was, the estimator written to catch an undeclared meal was switched
+     * off by the sign of that meal.
+     *
+     * Same value and same reasoning as
+     * [app.aaps.plugins.aps.openAPSAIMI.ISF.StressIsfFloor.RISE_HOLD_MGDL_PER_5MIN] and
+     * [app.aaps.plugins.aps.openAPSAIMI.ISF.HeartRateTrendIsf.RISE_SUSPEND_MGDL_PER_5MIN]: above it
+     * the rise is too fast to be hormonal, so a heart rate says nothing about its cause. Below it,
+     * a high heart rate with a gentle rise keeps its meaning and the gate keeps its say.
+     */
+    const val HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN: Double = 11.0
+
     /** BG must be genuinely rising to attribute a Ra signal to a meal. */
     private const val MIN_DELTA_MGDL_5M = 1.0
     private const val MIN_SLOPE_FROM_MIN_DEVIATION = 1.0
@@ -92,7 +108,12 @@ object UndeclaredCobEstimator {
         if (input.postHypoActive) return Result.gated("post_hypo")
         if (input.bgMgdl <= HYPO_GUARD_MGDL) return Result.gated("hypo_zone")
         if (input.cfrdExacerbationActive) return Result.gated("cfrd_exacerbation")
-        if (input.hrInflammationElevated) return Result.gated("hr_inflammation")
+        // The heart rate keeps its say only while the rise is slow enough for it to mean something.
+        val riseTooFastForHeartRate = input.deltaMgdl5m.isFinite() &&
+            input.deltaMgdl5m >= HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN
+        if (input.hrInflammationElevated && !riseTooFastForHeartRate) {
+            return Result.gated("hr_inflammation")
+        }
         if (input.exerciseLockoutActive || input.activityDetected) return Result.gated("exercise_activity")
         if (input.mealProb < MEAL_PROB_THRESHOLD) return Result.gated("meal_prob_low")
 

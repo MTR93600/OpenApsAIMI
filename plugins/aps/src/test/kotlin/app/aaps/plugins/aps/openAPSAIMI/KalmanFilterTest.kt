@@ -8,6 +8,8 @@ import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class KalmanFilterTest {
@@ -141,5 +143,40 @@ class KalmanFilterTest {
 
         assertEquals(223.3, isf, 1.0)
         assertTrue(isf < 300.0, "the floor must not have been pushed to MAX_ISF, isf was $isf")
+    }
+
+    // ---- a total daily dose of zero may not be cached -------------------------------------------
+
+    /**
+     * Found by a flaky failure of `the floor is relative to the profile when the profile is known`,
+     * which returned 223.29 instead of 15.0 once in a full-suite run and never again.
+     *
+     * `refreshTddAsync` writes whatever `averageTDD(...)?.data?.totalAmount` gives straight into the
+     * cache, and a relaxed mock — or a real calculator with no history yet — hands back 0.0. The
+     * effective dose is then `0.2*0 + 0.4*0 + 0.4*0 = 0`, and the sensitivity it produces is off by
+     * more than a factor of ten. A dose of zero is missing data, not a measurement.
+     */
+    @Test
+    fun `a total daily dose of zero or less is not usable`() {
+        assertFalse(KalmanISFCalculator.isUsableTdd(0.0))
+        assertFalse(KalmanISFCalculator.isUsableTdd(-5.0))
+    }
+
+    @Test
+    fun `a total daily dose that is not a number is not usable`() {
+        assertFalse(KalmanISFCalculator.isUsableTdd(null))
+        assertFalse(KalmanISFCalculator.isUsableTdd(Double.NaN))
+        assertFalse(KalmanISFCalculator.isUsableTdd(Double.POSITIVE_INFINITY))
+    }
+
+    @Test
+    fun `an implausibly small total daily dose is not usable`() {
+        assertFalse(KalmanISFCalculator.isUsableTdd(KalmanISFCalculator.MIN_USABLE_TDD_U - 0.01))
+    }
+
+    @Test
+    fun `a real total daily dose is usable`() {
+        assertTrue(KalmanISFCalculator.isUsableTdd(KalmanISFCalculator.MIN_USABLE_TDD_U))
+        assertTrue(KalmanISFCalculator.isUsableTdd(55.0))
     }
 }

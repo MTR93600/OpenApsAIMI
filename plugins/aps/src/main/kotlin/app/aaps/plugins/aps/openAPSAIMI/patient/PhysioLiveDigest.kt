@@ -25,6 +25,14 @@ data class PhysioLiveDigest(
     val thermalDeltaVsBaselineC: Double = 0.0,
     val thermalInflammationIndex: Double = 0.0,
     val thermalNarrative: String = "",
+    /**
+     * Age of the heart-rate SAMPLE, in milliseconds, or null when there is no usable reading.
+     *
+     * Distinct from [snapshotAgeMs], which is the age of the snapshot object and has a median of
+     * about 18 ms. Before this field the export carried no way to tell a heart rate measured this
+     * minute from one carried forward — the only clue was the staircase shape of the series.
+     */
+    val hrSampleAgeMs: Long? = null,
 ) {
     fun toJsonObject(): JSONObject =
         JSONObject().apply {
@@ -39,6 +47,7 @@ data class PhysioLiveDigest(
             put("asleep_live_confidence", asleepLiveConfidence)
             put("asleep_live_source", asleepLiveSource)
             put("snapshot_age_ms", snapshotAgeMs)
+            put("hr_sample_age_ms", hrSampleAgeMs ?: JSONObject.NULL)
             put("source", source)
             put("confidence", confidence)
             put("thermal_hypothesis", thermalHypothesis)
@@ -66,6 +75,9 @@ data class PhysioLiveDigest(
                 asleepLiveConfidence = snapshot.asleepLiveConfidence,
                 asleepLiveSource = snapshot.asleepLiveSource,
                 snapshotAgeMs = ageMs,
+                hrSampleAgeMs = snapshot.hrMeasuredAtMs
+                    .takeIf { it > 0L }
+                    ?.let { (nowMs - it).coerceAtLeast(0L) },
                 source = snapshot.source,
                 confidence = snapshot.confidence,
                 thermalHypothesis = snapshot.thermalBelief.hypothesis.name,

@@ -24,6 +24,15 @@ data class HealthContextSnapshot(
     // ❤️ Heart Metrics
     val hrNow: Int = 0,           // Most recent HR sample
     val hrAvg15m: Int = 0,        // Average HR last 15m
+    /**
+     * When [hrNow] was actually measured, or 0 when there is no usable reading.
+     *
+     * Kept apart from [timestamp] on purpose. A snapshot is re-stamped on every refresh, so before
+     * this field existed a heart rate carried forward from an earlier refresh was indistinguishable
+     * from one measured this minute — and the re-dating compounded tick after tick. See
+     * [HeartRateCarryForward].
+     */
+    val hrMeasuredAtMs: Long = 0L,
     val hrvRmssd: Double = 0.0,   // Most recent valid HRV (Nocturnal preferred)
     val rhrResting: Int = 0,      // Today's RHR (or 7d baseline if missing)
     

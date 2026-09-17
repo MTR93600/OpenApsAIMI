@@ -184,6 +184,7 @@ class HealthContextRepository @Inject constructor(
             activityState = activityState,
             hrNow = currentHR,
             hrAvg15m = currentHR, // Approximation if simple point
+            hrMeasuredAtMs = if (currentHR > 0) System.currentTimeMillis() else 0L,
             hrvRmssd = hrv,
             rhrResting = rhr,
             sleepDebtMinutes = sleepDebt,
@@ -199,6 +200,14 @@ class HealthContextRepository @Inject constructor(
         )
         // Do not freeze steps/FC when Unified refreshed but HC-only confidence is low (e.g. no HRV/sleep yet).
         if (!snapshot.isValid && lastSnapshot.isValid) {
+            val carriedHeartRate = HeartRateCarryForward.resolve(
+                freshHrNow = snapshot.hrNow,
+                freshHrAvg15m = snapshot.hrAvg15m,
+                nowMs = snapshot.timestamp,
+                previousHrNow = lastSnapshot.hrNow,
+                previousHrAvg15m = lastSnapshot.hrAvg15m,
+                previousMeasuredAtMs = lastSnapshot.hrMeasuredAtMs,
+            )
             val merged = lastSnapshot.copy(
                 stepsLast5m = snapshot.stepsLast5m,
                 stepsLast15m = snapshot.stepsLast15m,
@@ -207,8 +216,14 @@ class HealthContextRepository @Inject constructor(
                 hcSleepSessionActive = snapshot.hcSleepSessionActive,
                 asleepLiveConfidence = snapshot.asleepLiveConfidence,
                 asleepLiveSource = snapshot.asleepLiveSource,
-                hrNow = if (snapshot.hrNow > 0) snapshot.hrNow else lastSnapshot.hrNow,
-                hrAvg15m = if (snapshot.hrAvg15m > 0) snapshot.hrAvg15m else lastSnapshot.hrAvg15m,
+                // The heart rate keeps its OWN age — see [HeartRateCarryForward]. Before this, a
+                // carried reading was stamped with the new snapshot's timestamp and stored as the
+                // new previous one, so the re-dating compounded and an hours-old value was presented
+                // as current for ever. Past the provider's own 15-minute lookback the reading is
+                // dropped to 0, which every consumer already reads as missing.
+                hrNow = carriedHeartRate.hrNow,
+                hrAvg15m = carriedHeartRate.hrAvg15m,
+                hrMeasuredAtMs = carriedHeartRate.measuredAtMs,
                 timestamp = snapshot.timestamp,
                 source = snapshot.source,
             )
