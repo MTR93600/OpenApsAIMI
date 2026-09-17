@@ -81,6 +81,21 @@ interface AimiStorage {
      */
     fun readFirstLine(path: AimiPath): String?
 
+    /**
+     * Walks the lines of [path] one at a time, without ever holding the whole file.
+     *
+     * Separate from [readLines] for the same reason [readFirstLine] is: AIMI's journals grow by a
+     * line every loop tick and are never truncated, so a file this code reads can be tens of
+     * megabytes on a device whose heap is 256 MB. [readLines] is right for a file you know is small;
+     * this is right for a journal. The support package export and the training CSV readers are the
+     * callers that need it.
+     *
+     * Answers `false` when the file is missing or unreadable, or when the walk stopped early because
+     * of an I/O failure - so a caller that must not present a truncated file as a complete one can
+     * tell the difference. [action] is called once per line, in file order.
+     */
+    fun forEachLine(path: AimiPath, action: (String) -> Unit): Boolean
+
     /** Replaces the content. `false` on failure. */
     fun writeText(path: AimiPath, text: String): Boolean
 

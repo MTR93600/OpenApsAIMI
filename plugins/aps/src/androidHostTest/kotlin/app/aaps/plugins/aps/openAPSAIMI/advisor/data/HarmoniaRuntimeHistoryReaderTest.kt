@@ -1,9 +1,14 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.data
 
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AndroidAimiStorage
 import com.google.common.truth.Truth.assertThat
 import java.io.File
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 
 /**
  * The 24h Harmonia summary the Profile Advisor renders.
@@ -23,8 +28,10 @@ class HarmoniaRuntimeHistoryReaderTest {
 
     @Test
     fun a_missing_file_gives_null() {
+        // Nothing was ever written under this storage's "AIMI_Decisions.jsonl" - the reader resolves
+        // the path itself now, so "missing" means an empty directory rather than a differently named file.
         val summary = HarmoniaRuntimeHistoryReader.summarizeLast24Hours(
-            file = File(tempDir, "no_such_file.jsonl"),
+            storage = storageFor(tempDir),
             nowMs = nowMs,
         )
         assertThat(summary).isNull()
@@ -32,14 +39,14 @@ class HarmoniaRuntimeHistoryReaderTest {
 
     @Test
     fun ticks_older_than_the_window_give_an_empty_summary() {
-        val file = writeLines(
+        val storage = writeLines(
             listOf(
                 harmoniaLine(nowMs - 30 * oneHourMs, productionMode = "APPLIED"),
                 harmoniaLine(nowMs - 29 * oneHourMs, productionMode = "APPLIED"),
             ),
         )
 
-        val summary = HarmoniaRuntimeHistoryReader.summarizeLast24Hours(file = file, nowMs = nowMs)
+        val summary = HarmoniaRuntimeHistoryReader.summarizeLast24Hours(storage = storage, nowMs = nowMs)
 
         assertThat(summary).isNotNull()
         assertThat(summary!!.tickCount).isEqualTo(0)
@@ -50,7 +57,7 @@ class HarmoniaRuntimeHistoryReaderTest {
 
     @Test
     fun a_full_window_is_counted_per_status() {
-        val summary = HarmoniaRuntimeHistoryReader.summarizeLast24Hours(file = writeLines(eightTickWindow()), nowMs = nowMs)
+        val summary = HarmoniaRuntimeHistoryReader.summarizeLast24Hours(storage = writeLines(eightTickWindow()), nowMs = nowMs)
 
         assertThat(summary).isNotNull()
         assertThat(summary!!.tickCount).isEqualTo(8)
@@ -65,7 +72,7 @@ class HarmoniaRuntimeHistoryReaderTest {
 
     @Test
     fun smb_modulation_is_counted_on_its_own() {
-        val summary = HarmoniaRuntimeHistoryReader.summarizeLast24Hours(file = writeLines(eightTickWindow()), nowMs = nowMs)!!
+        val summary = HarmoniaRuntimeHistoryReader.summarizeLast24Hours(storage = writeLines(eightTickWindow()), nowMs = nowMs)!!
 
         assertThat(summary.smbAppliedCount).isEqualTo(5)
         assertThat(summary.smbReadyCount).isEqualTo(5)
@@ -76,7 +83,7 @@ class HarmoniaRuntimeHistoryReaderTest {
 
     @Test
     fun rate_statistics_skip_the_ticks_that_applied_nothing() {
-        val summary = HarmoniaRuntimeHistoryReader.summarizeLast24Hours(file = writeLines(eightTickWindow()), nowMs = nowMs)!!
+        val summary = HarmoniaRuntimeHistoryReader.summarizeLast24Hours(storage = writeLines(eightTickWindow()), nowMs = nowMs)!!
 
         assertThat(summary.demandStats!!.count).isEqualTo(8)
         assertThat(summary.demandStats!!.min).isWithin(TOLERANCE).of(0.90)
@@ -91,7 +98,7 @@ class HarmoniaRuntimeHistoryReaderTest {
         lines.add(4, "{\"timestamp\": broken")
         lines.add(5, """{"timestamp":${nowMs - 4 * oneHourMs},"reason":"no adjustments here"}""")
 
-        val summary = HarmoniaRuntimeHistoryReader.summarizeLast24Hours(file = writeLines(lines), nowMs = nowMs)!!
+        val summary = HarmoniaRuntimeHistoryReader.summarizeLast24Hours(storage = writeLines(lines), nowMs = nowMs)!!
 
         assertThat(summary.tickCount).isEqualTo(8)
         assertThat(summary.nativeAppliedCount).isEqualTo(5)
@@ -134,8 +141,18 @@ class HarmoniaRuntimeHistoryReaderTest {
         )
     }
 
-    private fun writeLines(lines: List<String>): File =
-        File(tempDir, "AIMI_Decisions.jsonl").apply { writeText(lines.joinToString(separator = "\n", postfix = "\n")) }
+    /** Writes the fixture as the real "AIMI_Decisions.jsonl" the reader now resolves by itself. */
+    private fun writeLines(lines: List<String>): AimiStorage {
+        File(tempDir, "AIMI_Decisions.jsonl").writeText(lines.joinToString(separator = "\n", postfix = "\n"))
+        return storageFor(tempDir)
+    }
+
+    /** An [AimiStorage] whose AIMI directory is [dir] - the mocked helper is never asked anything else. */
+    private fun storageFor(dir: File): AimiStorage {
+        val helper = mock<AimiStorageHelper>()
+        whenever(helper.getAimiFile("AIMI_Decisions.jsonl")).thenReturn(File(dir, "AIMI_Decisions.jsonl"))
+        return AndroidAimiStorage(helper)
+    }
 
     private fun harmoniaLine(
         timestampMs: Long,

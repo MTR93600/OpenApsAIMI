@@ -1,9 +1,14 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.data
 
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AndroidAimiStorage
 import com.google.common.truth.Truth.assertThat
 import java.io.File
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 
 /**
  * The 24h T3C summary the Profile Advisor renders.
@@ -22,8 +27,10 @@ class T3cRuntimeHistoryReaderTest {
 
     @Test
     fun a_missing_file_gives_null() {
+        // Nothing was ever written under this storage's "AIMI_Decisions.jsonl" - the reader resolves
+        // the path itself now, so "missing" means an empty directory rather than a differently named file.
         val summary = T3cRuntimeHistoryReader.summarizeLast24Hours(
-            file = File(tempDir, "no_such_file.jsonl"),
+            storage = storageFor(tempDir),
             nowMs = nowMs,
         )
         assertThat(summary).isNull()
@@ -31,7 +38,7 @@ class T3cRuntimeHistoryReaderTest {
 
     @Test
     fun ticks_older_than_the_window_give_an_empty_summary() {
-        val file = writeLines(
+        val storage = writeLines(
             listOf(
                 t3cLine(nowMs - 30 * oneHourMs, mode = "NATIVE_APPLIED", reason = APPLIED_REASON),
                 t3cLine(nowMs - 29 * oneHourMs, mode = "NATIVE_APPLIED", reason = APPLIED_REASON),
@@ -39,7 +46,7 @@ class T3cRuntimeHistoryReaderTest {
             ),
         )
 
-        val summary = T3cRuntimeHistoryReader.summarizeLast24Hours(file = file, nowMs = nowMs)
+        val summary = T3cRuntimeHistoryReader.summarizeLast24Hours(storage = storage, nowMs = nowMs)
 
         assertThat(summary).isNotNull()
         assertThat(summary!!.tickCount).isEqualTo(0)
@@ -50,7 +57,7 @@ class T3cRuntimeHistoryReaderTest {
 
     @Test
     fun a_full_window_is_counted_per_status() {
-        val summary = T3cRuntimeHistoryReader.summarizeLast24Hours(file = writeLines(tenTickWindow()), nowMs = nowMs)
+        val summary = T3cRuntimeHistoryReader.summarizeLast24Hours(storage = writeLines(tenTickWindow()), nowMs = nowMs)
 
         assertThat(summary).isNotNull()
         assertThat(summary!!.tickCount).isEqualTo(10)
@@ -64,7 +71,7 @@ class T3cRuntimeHistoryReaderTest {
 
     @Test
     fun rate_statistics_skip_the_ticks_that_applied_nothing() {
-        val summary = T3cRuntimeHistoryReader.summarizeLast24Hours(file = writeLines(tenTickWindow()), nowMs = nowMs)!!
+        val summary = T3cRuntimeHistoryReader.summarizeLast24Hours(storage = writeLines(tenTickWindow()), nowMs = nowMs)!!
 
         // Every tick carries a bounded demand, only the six applied ones carry an applied rate.
         assertThat(summary.demandStats!!.count).isEqualTo(10)
@@ -76,7 +83,7 @@ class T3cRuntimeHistoryReaderTest {
 
     @Test
     fun the_ownership_change_at_the_end_of_the_window_is_reported() {
-        val summary = T3cRuntimeHistoryReader.summarizeLast24Hours(file = writeLines(tenTickWindow()), nowMs = nowMs)!!
+        val summary = T3cRuntimeHistoryReader.summarizeLast24Hours(storage = writeLines(tenTickWindow()), nowMs = nowMs)!!
 
         assertThat(summary.transitionCount).isEqualTo(1)
         assertThat(summary.dominantTransition).isEqualTo(
@@ -90,7 +97,7 @@ class T3cRuntimeHistoryReaderTest {
 
     @Test
     fun family_signals_are_ordered_by_weight() {
-        val summary = T3cRuntimeHistoryReader.summarizeLast24Hours(file = writeLines(tenTickWindow()), nowMs = nowMs)!!
+        val summary = T3cRuntimeHistoryReader.summarizeLast24Hours(storage = writeLines(tenTickWindow()), nowMs = nowMs)!!
 
         assertThat(summary.familyObservations.map { it.family })
             .containsExactly(
@@ -109,7 +116,7 @@ class T3cRuntimeHistoryReaderTest {
         // A well formed line of another kind must be skipped just as quietly.
         lines.add(6, """{"timestamp":${nowMs - 5 * oneHourMs},"reason":"no adjustments here"}""")
 
-        val summary = T3cRuntimeHistoryReader.summarizeLast24Hours(file = writeLines(lines), nowMs = nowMs)!!
+        val summary = T3cRuntimeHistoryReader.summarizeLast24Hours(storage = writeLines(lines), nowMs = nowMs)!!
 
         assertThat(summary.tickCount).isEqualTo(10)
         assertThat(summary.nativeAppliedCount).isEqualTo(6)
@@ -153,8 +160,18 @@ class T3cRuntimeHistoryReaderTest {
         }
     }
 
-    private fun writeLines(lines: List<String>): File =
-        File(tempDir, "AIMI_Decisions.jsonl").apply { writeText(lines.joinToString(separator = "\n", postfix = "\n")) }
+    /** Writes the fixture as the real "AIMI_Decisions.jsonl" the reader now resolves by itself. */
+    private fun writeLines(lines: List<String>): AimiStorage {
+        File(tempDir, "AIMI_Decisions.jsonl").writeText(lines.joinToString(separator = "\n", postfix = "\n"))
+        return storageFor(tempDir)
+    }
+
+    /** An [AimiStorage] whose AIMI directory is [dir] - the mocked helper is never asked anything else. */
+    private fun storageFor(dir: File): AimiStorage {
+        val helper = mock<AimiStorageHelper>()
+        whenever(helper.getAimiFile("AIMI_Decisions.jsonl")).thenReturn(File(dir, "AIMI_Decisions.jsonl"))
+        return AndroidAimiStorage(helper)
+    }
 
     private fun t3cLine(
         timestampMs: Long,

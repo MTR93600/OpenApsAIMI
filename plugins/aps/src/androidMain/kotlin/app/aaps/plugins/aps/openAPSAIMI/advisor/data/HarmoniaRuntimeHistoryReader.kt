@@ -8,7 +8,7 @@ import app.aaps.core.data.json.OrgJsonCompat.optJsonObjectCompat
 import app.aaps.core.data.json.OrgJsonCompat.optLongCompat
 import app.aaps.core.data.json.OrgJsonCompat.optStringCompat
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
-import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -90,10 +90,11 @@ internal object HarmoniaRuntimeHistoryReader {
     private const val MIN_HISTORY_TICKS = 6
 
     fun readLatestTick(
-        file: File = T3cRuntimeHistoryReader.aimiDecisionsJsonlFile(),
+        storage: AimiStorage,
     ): HarmoniaRuntimeTickRecord? {
-        if (!file.exists() || !file.canRead()) return null
-        val tail = JsonlTailReader.readTailLines(file, maxLines = MAX_LATEST_LINES)
+        val path = T3cRuntimeHistoryReader.aimiDecisionsJsonlPath(storage)
+        if (!storage.exists(path) || !storage.canRead(path)) return null
+        val tail = storage.readTailLines(path, maxLines = MAX_LATEST_LINES)
         for (line in tail) {
             try {
                 parseTick(Json.parseToJsonElement(line).jsonObject)?.let { return it }
@@ -105,12 +106,13 @@ internal object HarmoniaRuntimeHistoryReader {
     }
 
     fun summarizeLast24Hours(
-        file: File = T3cRuntimeHistoryReader.aimiDecisionsJsonlFile(),
+        storage: AimiStorage,
         nowMs: Long = aimiWallClockMs(),
     ): HarmoniaRuntimeHistorySummary? {
-        if (!file.exists() || !file.canRead()) return null
+        val path = T3cRuntimeHistoryReader.aimiDecisionsJsonlPath(storage)
+        if (!storage.exists(path) || !storage.canRead(path)) return null
         val cutoffMs = nowMs - WINDOW_24H_MS
-        val tail = JsonlTailReader.readTailLines(file, maxLines = MAX_HISTORY_LINES)
+        val tail = storage.readTailLines(path, maxLines = MAX_HISTORY_LINES)
         val records = mutableListOf<HarmoniaRuntimeTickRecord>()
 
         for (line in tail) {

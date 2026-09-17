@@ -54,6 +54,7 @@ import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoActiveSessionUi
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoSessionStatus
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoUiSupport
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -61,6 +62,7 @@ import kotlinx.coroutines.launch
 fun AimiControlCenterScreen(
     preferences: Preferences,
     tpoOrchestrator: TpoOrchestrator,
+    storage: AimiStorage,
     onBack: () -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -72,8 +74,8 @@ fun AimiControlCenterScreen(
             preferenceRevision++
         }
     }
-    val currentT3cRuntime = remember(preferenceRevision) { loadLatestT3cRuntimeSnapshot() }
-    val currentHarmoniaRuntime = remember(preferenceRevision) { loadLatestHarmoniaRuntimeSnapshot() }
+    val currentT3cRuntime = remember(preferenceRevision) { loadLatestT3cRuntimeSnapshot(storage) }
+    val currentHarmoniaRuntime = remember(preferenceRevision) { loadLatestHarmoniaRuntimeSnapshot(storage) }
     val currentSnapshot = remember(preferenceRevision, currentT3cRuntime, currentHarmoniaRuntime) {
         buildAimiControlCenterSnapshot(
             preferences = preferences,

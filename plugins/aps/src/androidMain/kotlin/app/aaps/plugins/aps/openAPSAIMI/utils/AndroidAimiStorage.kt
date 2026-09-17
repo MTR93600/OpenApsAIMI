@@ -57,6 +57,18 @@ class AndroidAimiStorage @Inject constructor(
     override fun readFirstLine(path: AimiPath): String? =
         runCatching { fileOf(path).bufferedReader().use { it.readLine() } }.getOrNull()
 
+    override fun forEachLine(path: AimiPath, action: (String) -> Unit): Boolean =
+        runCatching {
+            fileOf(path).bufferedReader().use { reader ->
+                var line = reader.readLine()
+                while (line != null) {
+                    action(line)
+                    line = reader.readLine()
+                }
+            }
+            true
+        }.getOrDefault(false)
+
     override fun writeText(path: AimiPath, text: String): Boolean =
         runCatching { fileOf(path).writeText(text); true }.getOrDefault(false)
 

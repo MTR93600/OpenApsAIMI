@@ -1677,6 +1677,54 @@ question, not an API mapping.
 
 ---
 
+## 6z. 2026-09-17: storage sweep, batch A - the readers, and a real bug fixed on the way
+
+Five of the six targeted readers now reach the disk through `AimiStorage` instead of `java.io.File`:
+`T3cRuntimeHistoryReader`, `HarmoniaRuntimeHistoryReader`, `RecursiveBeliefExportReader`,
+`AimiControlCenterRuntimeLoaders` and `ComparisonCsvParser`, plus the call sites that had to learn to
+pass the port - `AimiControlCenterScreen`, `AimiProfileAdvisorScreen`, `AimiSupportPackageExporter`
+and three construction sites in `OpenAPSAIMIPlugin`. Twelve files in all, then three more for the fix
+described below. Gates: `compileKotlinIosArm64` EXIT=0, `:app:assembleFullDebug` 0 Kotlin errors,
+`testAndroidHostTest --rerun` **585 tests, 0 failures**.
+
+**The readers stayed `object`s.** Converting them to injected classes would have rippled into every
+call site including two Compose screens, which is a refactor wearing a sweep's clothes. Instead the
+port is a parameter, replacing the `file: File = aimiDecisionsJsonlFile()` they already carried:
+`summarizeLast24Hours(storage, nowMs)`. Their tests changed only in how the fixture reaches them, not
+in what they assert.
+
+**A production bug is fixed, deliberately.** `aimiDecisionsJsonlFile()` resolved the decisions journal
+with `Environment.getExternalStoragePublicDirectory` and no fallback, while the writer
+(`DetermineBasalAIMI2`, through `AimiStorageHelper`) falls back to app-scoped storage when
+`Documents/AAPS` is not writable. On any device where that fallback had happened, **the readers were
+blind to what the loop was writing** - the Control Center, the Advisor's history cards and the support
+package all silently saw nothing while the journal filled up elsewhere. Both sides now resolve through
+`storage.file("AIMI_Decisions.jsonl")`, which is the same call the writer already made. This was known
+as a hypothesis since 6r ("do not treat unavailable as proof the feature is dead"); it is now closed.
+
+**A regression the sweep introduced, caught in review.** Converting
+`AimiSupportPackageExporter.addDecisionLogLast24h` replaced a line-by-line `BufferedReader` walk with
+`storage.readLines(path)`, which holds the whole file. That journal gains a line every loop tick and
+is never truncated, and the T3c reader carries a 16 MB scan cap whose comment says it exists for
+256 MB heaps - so the support export would have risked running the heap out on exactly the device
+whose problem it exists to capture. The port gained `forEachLine(path) { }`: walk the lines without
+ever holding them, answering `false` when the walk stopped early, so a caller can tell a truncated
+file from a complete one. The exporter uses it, with a comment saying why. Batch B will want it too -
+the training CSVs have the same shape.
+
+**`AimiNeuralNetworkFiles` was deferred, correctly.** Its only caller is `ml/AimiNeuralModelStore`, an
+`object` with no DI whose own callers are two more `ml/*` objects. Giving it the port means either an
+object-to-class conversion one hop further out, or a late-init singleton bolted on for one call. It is
+a writer, so it belongs to batch B anyway, where that knot can be untied deliberately rather than as a
+side effect.
+
+**One process note.** This lot cost a round trip because the brief said "do not touch" about files it
+only meant "do not convert in this batch". The implementer read it absolutely, correctly refused to
+edit a call site it believed was frozen, and delivered one file with a clear explanation rather than
+guessing - which is the behaviour you want. The wording was the defect, not the reading.
+
+---
+
 ---
 
 ## 7. Start here next session

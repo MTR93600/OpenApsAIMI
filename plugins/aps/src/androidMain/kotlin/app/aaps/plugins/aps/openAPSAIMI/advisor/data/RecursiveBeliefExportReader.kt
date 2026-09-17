@@ -1,7 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.data
 
 import app.aaps.core.data.json.OrgJsonCompat.optJsonObjectCompat
-import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -18,10 +18,11 @@ internal object RecursiveBeliefExportReader {
     private const val MAX_TAIL_LINES = 80
 
     fun loadLastExport(
-        file: File = T3cRuntimeHistoryReader.aimiDecisionsJsonlFile(),
+        storage: AimiStorage,
     ): JsonObject? {
-        if (!file.exists() || !file.canRead()) return null
-        val tail = JsonlTailReader.readTailLines(file, maxLines = MAX_TAIL_LINES)
+        val path = T3cRuntimeHistoryReader.aimiDecisionsJsonlPath(storage)
+        if (!storage.exists(path) || !storage.canRead(path)) return null
+        val tail = storage.readTailLines(path, maxLines = MAX_TAIL_LINES)
         for (line in tail) {
             if (!line.contains("recursive_belief")) continue
             try {

@@ -2,31 +2,32 @@ package app.aaps.plugins.aps.openAPSAIMI.comparison
 
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
-import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import dev.zacsweers.metro.Inject
 import kotlin.math.abs
 
-class ComparisonCsvParser {
+class ComparisonCsvParser @Inject constructor(
+    private val storage: AimiStorage,
+) {
 
-    fun parse(file: File): List<ComparisonEntry> {
-        if (!file.exists() || !file.canRead()) {
+    fun parse(path: AimiPath): List<ComparisonEntry> {
+        if (!storage.exists(path) || !storage.canRead(path)) {
             return emptyList()
         }
 
         val entries = mutableListOf<ComparisonEntry>()
-        
+
         try {
-            file.bufferedReader().use { reader ->
-                // Skip header
-                reader.readLine()
-                
-                reader.lineSequence().forEach { line ->
-                    parseLine(line)?.let { entries.add(it) }
-                }
+            // Skip header, then parse every remaining line - same as the old bufferedReader().use
+            // { reader.readLine(); reader.lineSequence()... } walk, just through the port.
+            storage.readLines(path).drop(1).forEach { line ->
+                parseLine(line)?.let { entries.add(it) }
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        
+
         return entries
     }
 

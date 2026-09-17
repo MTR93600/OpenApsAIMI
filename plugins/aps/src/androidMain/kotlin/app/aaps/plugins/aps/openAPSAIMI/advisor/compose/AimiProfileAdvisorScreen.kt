@@ -86,6 +86,7 @@ import app.aaps.plugins.aps.openAPSAIMI.compose.applyPkpdPreferenceUpdate
 import app.aaps.plugins.aps.openAPSAIMI.compose.readPreferenceValueAsString
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -125,6 +126,7 @@ fun AimiProfileAdvisorScreen(
     exportPasswordDataStore: ExportPasswordDataStore,
     aiCoachingService: AiCoachingService,
     rh: ResourceHelper,
+    storage: AimiStorage,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -210,9 +212,9 @@ fun AimiProfileAdvisorScreen(
         withContext(Dispatchers.IO) {
             // One load at a time, each on its own: a broken line in one section must not hide the
             // other two cards.
-            rbtExport = loadOrNull { RecursiveBeliefExportReader.loadLastExport() }
-            t3cHistory = loadOrNull { T3cRuntimeHistoryReader.summarizeLast24Hours() }
-            harmoniaHistory = loadOrNull { HarmoniaRuntimeHistoryReader.summarizeLast24Hours() }
+            rbtExport = loadOrNull { RecursiveBeliefExportReader.loadLastExport(storage) }
+            t3cHistory = loadOrNull { T3cRuntimeHistoryReader.summarizeLast24Hours(storage) }
+            harmoniaHistory = loadOrNull { HarmoniaRuntimeHistoryReader.summarizeLast24Hours(storage) }
         }
         historyLoaded = true
     }

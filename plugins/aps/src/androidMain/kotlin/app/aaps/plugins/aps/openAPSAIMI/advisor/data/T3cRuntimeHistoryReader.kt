@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.data
 
-import android.os.Environment
 import app.aaps.core.data.json.OrgJsonCompat.hasCompat
 import app.aaps.core.data.json.OrgJsonCompat.optBooleanCompat
 import app.aaps.core.data.json.OrgJsonCompat.optDoubleCompat
@@ -9,7 +8,8 @@ import app.aaps.core.data.json.OrgJsonCompat.optJsonObjectCompat
 import app.aaps.core.data.json.OrgJsonCompat.optLongCompat
 import app.aaps.core.data.json.OrgJsonCompat.optStringCompat
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
-import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -129,16 +129,23 @@ internal object T3cRuntimeHistoryReader {
     private const val MAX_LATEST_LINES = 120
     private const val MIN_HISTORY_TICKS = 6
 
-    fun aimiDecisionsJsonlFile(): File {
-        val externalDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-        return File(externalDir, "AAPS/AIMI_Decisions.jsonl")
-    }
+    /**
+     * Where the loop's decision journal lives, resolved through the port.
+     *
+     * Before this, the path was built by hand with `Environment.getExternalStoragePublicDirectory`
+     * and no fallback, while the writer (`DetermineBasalAIMI2`, through [AimiStorage]) falls back to
+     * app-scoped storage when `Documents/AAPS` is not writable. That let this reader be blind to
+     * what the loop had actually written whenever the fallback was in play. Resolving through
+     * [AimiStorage.file] fixes it: reader and writer now share one path and one fallback policy.
+     */
+    fun aimiDecisionsJsonlPath(storage: AimiStorage): AimiPath = storage.file("AIMI_Decisions.jsonl")
 
     fun readLatestTick(
-        file: File = aimiDecisionsJsonlFile(),
+        storage: AimiStorage,
     ): T3cRuntimeTickRecord? {
-        if (!file.exists() || !file.canRead()) return null
-        val tail = JsonlTailReader.readTailLines(file, maxLines = MAX_LATEST_LINES)
+        val path = aimiDecisionsJsonlPath(storage)
+        if (!storage.exists(path) || !storage.canRead(path)) return null
+        val tail = storage.readTailLines(path, maxLines = MAX_LATEST_LINES)
         for (line in tail) {
             try {
                 parseTick(Json.parseToJsonElement(line).jsonObject)?.let { return it }
@@ -150,12 +157,13 @@ internal object T3cRuntimeHistoryReader {
     }
 
     fun summarizeLast24Hours(
-        file: File = aimiDecisionsJsonlFile(),
+        storage: AimiStorage,
         nowMs: Long = aimiWallClockMs(),
     ): T3cRuntimeHistorySummary? {
-        if (!file.exists() || !file.canRead()) return null
+        val path = aimiDecisionsJsonlPath(storage)
+        if (!storage.exists(path) || !storage.canRead(path)) return null
         val cutoffMs = nowMs - WINDOW_24H_MS
-        val tail = JsonlTailReader.readTailLines(file, maxLines = MAX_HISTORY_LINES)
+        val tail = storage.readTailLines(path, maxLines = MAX_HISTORY_LINES)
         val records = mutableListOf<T3cRuntimeTickRecord>()
 
         for (line in tail) {

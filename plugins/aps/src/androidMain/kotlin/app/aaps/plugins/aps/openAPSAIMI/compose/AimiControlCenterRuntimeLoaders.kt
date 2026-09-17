@@ -9,17 +9,18 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeHistoryReader
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeOwnershipCategory
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeTickRecord
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeTickStatus
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 
-// These two loaders and their formatters stay in androidMain: T3cRuntimeHistoryReader and
-// HarmoniaRuntimeHistoryReader read history files through android.os.Environment/java.io.File, and
-// the tick-record types they return (T3cRuntimeTickRecord/HarmoniaRuntimeTickRecord) are declared
-// inside those same androidMain reader files. Everything else that used to live in
-// AimiControlCenterSnapshot.kt moved to commonMain with this file's move to androidMain - see that
-// file for the pure model types (AimiT3cRuntimeSnapshot, AimiControlDetail, ...) these functions
-// build.
+// These two loaders and their formatters stay in androidMain: the tick-record types they return
+// (T3cRuntimeTickRecord/HarmoniaRuntimeTickRecord) are declared inside the androidMain reader files
+// T3cRuntimeHistoryReader and HarmoniaRuntimeHistoryReader, which are themselves still objects and
+// still androidMain (batch A of the storage sweep only removed their java.io.File dependency, it did
+// not move them). Everything else that used to live in AimiControlCenterSnapshot.kt moved to
+// commonMain with this file's move to androidMain - see that file for the pure model types
+// (AimiT3cRuntimeSnapshot, AimiControlDetail, ...) these functions build.
 
-internal fun loadLatestT3cRuntimeSnapshot(): AimiT3cRuntimeSnapshot {
-    val tick = T3cRuntimeHistoryReader.readLatestTick() ?: return unavailableT3cRuntimeSnapshot()
+internal fun loadLatestT3cRuntimeSnapshot(storage: AimiStorage): AimiT3cRuntimeSnapshot {
+    val tick = T3cRuntimeHistoryReader.readLatestTick(storage) ?: return unavailableT3cRuntimeSnapshot()
     val status = when (tick.status) {
         T3cRuntimeTickStatus.NATIVE_APPLIED -> AimiT3cRuntimeStatus.NativeApplied
         T3cRuntimeTickStatus.NATIVE_READY -> AimiT3cRuntimeStatus.NativeReady
@@ -97,8 +98,8 @@ internal fun loadLatestT3cRuntimeSnapshot(): AimiT3cRuntimeSnapshot {
     )
 }
 
-internal fun loadLatestHarmoniaRuntimeSnapshot(): AimiHarmoniaRuntimeSnapshot {
-    val tick = HarmoniaRuntimeHistoryReader.readLatestTick() ?: return unavailableHarmoniaRuntimeSnapshot()
+internal fun loadLatestHarmoniaRuntimeSnapshot(storage: AimiStorage): AimiHarmoniaRuntimeSnapshot {
+    val tick = HarmoniaRuntimeHistoryReader.readLatestTick(storage) ?: return unavailableHarmoniaRuntimeSnapshot()
     val status = when (tick.status) {
         HarmoniaRuntimeTickStatus.NATIVE_APPLIED -> AimiHarmoniaRuntimeStatus.NativeApplied
         HarmoniaRuntimeTickStatus.NATIVE_READY -> AimiHarmoniaRuntimeStatus.NativeReady

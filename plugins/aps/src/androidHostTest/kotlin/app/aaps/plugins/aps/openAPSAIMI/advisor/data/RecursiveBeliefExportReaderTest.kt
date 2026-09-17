@@ -2,10 +2,15 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.data
 
 import app.aaps.core.data.json.OrgJsonCompat.optJsonObjectCompat
 import app.aaps.core.data.json.OrgJsonCompat.optStringCompat
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AndroidAimiStorage
 import com.google.common.truth.Truth.assertThat
 import java.io.File
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 
 /**
  * The last recursive belief export the Profile Advisor shows.
@@ -25,25 +30,27 @@ class RecursiveBeliefExportReaderTest {
 
     @Test
     fun a_missing_file_gives_null() {
-        val export = RecursiveBeliefExportReader.loadLastExport(File(tempDir, "no_such_file.jsonl"))
+        // Nothing was ever written under this storage's "AIMI_Decisions.jsonl" - the reader resolves
+        // the path itself now, so "missing" means an empty directory rather than a differently named file.
+        val export = RecursiveBeliefExportReader.loadLastExport(storageFor(tempDir))
 
         assertThat(export).isNull()
     }
 
     @Test
     fun a_log_without_any_export_gives_null() {
-        val file = writeLines(listOf(lineWithoutExport(1L), lineWithoutExport(2L)))
+        val storage = writeLines(listOf(lineWithoutExport(1L), lineWithoutExport(2L)))
 
-        val export = RecursiveBeliefExportReader.loadLastExport(file)
+        val export = RecursiveBeliefExportReader.loadLastExport(storage)
 
         assertThat(export).isNull()
     }
 
     @Test
     fun the_block_itself_is_returned_not_the_whole_line() {
-        val file = writeLines(listOf(exportLine(1L, authority = "SOFT")))
+        val storage = writeLines(listOf(exportLine(1L, authority = "SOFT")))
 
-        val export = RecursiveBeliefExportReader.loadLastExport(file)
+        val export = RecursiveBeliefExportReader.loadLastExport(storage)
 
         assertThat(export).isNotNull()
         // The root keys must be gone - what comes back is the recursive_belief object.
@@ -55,7 +62,7 @@ class RecursiveBeliefExportReaderTest {
 
     @Test
     fun the_newest_export_wins() {
-        val file = writeLines(
+        val storage = writeLines(
             listOf(
                 exportLine(1L, authority = "NONE"),
                 exportLine(2L, authority = "SOFT"),
@@ -63,7 +70,7 @@ class RecursiveBeliefExportReaderTest {
             ),
         )
 
-        val export = RecursiveBeliefExportReader.loadLastExport(file)
+        val export = RecursiveBeliefExportReader.loadLastExport(storage)
 
         assertThat(export?.optJsonObjectCompat("resolution")?.optStringCompat("release_authority"))
             .isEqualTo("FULL")
@@ -71,14 +78,14 @@ class RecursiveBeliefExportReaderTest {
 
     @Test
     fun a_line_that_is_not_json_is_skipped_and_an_older_export_is_used() {
-        val file = writeLines(
+        val storage = writeLines(
             listOf(
                 exportLine(1L, authority = "SOFT"),
                 """{"timestamp": 2, "adjustments": {"recursive_belief": {""",
             ),
         )
 
-        val export = RecursiveBeliefExportReader.loadLastExport(file)
+        val export = RecursiveBeliefExportReader.loadLastExport(storage)
 
         assertThat(export?.optJsonObjectCompat("resolution")?.optStringCompat("release_authority"))
             .isEqualTo("SOFT")
@@ -89,9 +96,9 @@ class RecursiveBeliefExportReaderTest {
         // Valid JSON, and it contains the word, so the cheap text filter lets it through - only the
         // parsed lookup can tell it apart.
         val decoy = """{"timestamp": 2, "adjustments": {"note": "recursive_belief was skipped"}}"""
-        val file = writeLines(listOf(exportLine(1L, authority = "SOFT"), decoy))
+        val storage = writeLines(listOf(exportLine(1L, authority = "SOFT"), decoy))
 
-        val export = RecursiveBeliefExportReader.loadLastExport(file)
+        val export = RecursiveBeliefExportReader.loadLastExport(storage)
 
         assertThat(export?.optJsonObjectCompat("resolution")?.optStringCompat("release_authority"))
             .isEqualTo("SOFT")
@@ -100,16 +107,26 @@ class RecursiveBeliefExportReaderTest {
     @Test
     fun a_line_with_no_adjustments_at_all_is_skipped() {
         val decoy = """{"timestamp": 2, "recursive_belief": {"shadow_only": false}}"""
-        val file = writeLines(listOf(exportLine(1L, authority = "SOFT"), decoy))
+        val storage = writeLines(listOf(exportLine(1L, authority = "SOFT"), decoy))
 
-        val export = RecursiveBeliefExportReader.loadLastExport(file)
+        val export = RecursiveBeliefExportReader.loadLastExport(storage)
 
         assertThat(export?.optJsonObjectCompat("resolution")?.optStringCompat("release_authority"))
             .isEqualTo("SOFT")
     }
 
-    private fun writeLines(lines: List<String>): File =
-        File(tempDir, "AIMI_Decisions.jsonl").apply { writeText(lines.joinToString(separator = "\n", postfix = "\n")) }
+    /** Writes the fixture as the real "AIMI_Decisions.jsonl" the reader now resolves by itself. */
+    private fun writeLines(lines: List<String>): AimiStorage {
+        File(tempDir, "AIMI_Decisions.jsonl").writeText(lines.joinToString(separator = "\n", postfix = "\n"))
+        return storageFor(tempDir)
+    }
+
+    /** An [AimiStorage] whose AIMI directory is [dir] - the mocked helper is never asked anything else. */
+    private fun storageFor(dir: File): AimiStorage {
+        val helper = mock<AimiStorageHelper>()
+        whenever(helper.getAimiFile("AIMI_Decisions.jsonl")).thenReturn(File(dir, "AIMI_Decisions.jsonl"))
+        return AndroidAimiStorage(helper)
+    }
 
     private fun exportLine(timestampMs: Long, authority: String): String =
         """{"timestamp": $timestampMs, "adjustments": {"recursive_belief": {""" +

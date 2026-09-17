@@ -126,6 +126,29 @@ class AndroidAimiStorageTest {
 
     // --- list -----------------------------------------------------------------------------------
 
+    // --- forEachLine ----------------------------------------------------------------------------
+
+    @Test
+    fun forEachLine_walks_every_line_in_file_order(@TempDir dir: File) {
+        val file = File(dir, "journal.jsonl").apply { writeText("a\nb\nc\n") }
+        val seen = mutableListOf<String>()
+
+        val ok = storage.forEachLine(pathOf(file)) { seen += it }
+
+        assertThat(ok).isTrue()
+        assertThat(seen).containsExactly("a", "b", "c").inOrder()
+    }
+
+    @Test
+    fun forEachLine_on_a_missing_file_answers_false_and_calls_nothing(@TempDir dir: File) {
+        val seen = mutableListOf<String>()
+
+        val ok = storage.forEachLine(pathOf(File(dir, "never_created"))) { seen += it }
+
+        assertThat(ok).isFalse()
+        assertThat(seen).isEmpty()
+    }
+
     // --- copy -----------------------------------------------------------------------------------
 
     @Test

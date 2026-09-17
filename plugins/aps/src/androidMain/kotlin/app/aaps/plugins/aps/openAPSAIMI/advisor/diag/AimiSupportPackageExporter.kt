@@ -11,13 +11,12 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeHistoryReader
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import java.io.BufferedOutputStream
-import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileOutputStream
-import java.io.FileReader
 import java.io.OutputStreamWriter
 import java.util.Date
 import java.util.zip.ZipEntry
@@ -40,6 +39,7 @@ class AimiSupportPackageExporter(
     private val storageHelper: AimiStorageHelper,
     private val profileFunction: ProfileFunction,
     private val rh: ResourceHelper,
+    private val storage: AimiStorage,
 ) {
 
     sealed class Result {
@@ -125,25 +125,21 @@ class AimiSupportPackageExporter(
     }
 
     private fun addDecisionLogLast24h(out: ZipOutputStream) {
-        val jsonFile = T3cRuntimeHistoryReader.aimiDecisionsJsonlFile()
-        if (!jsonFile.exists() || !jsonFile.canRead()) return
+        val path = T3cRuntimeHistoryReader.aimiDecisionsJsonlPath(storage)
+        if (!storage.exists(path) || !storage.canRead(path)) return
         out.putNextEntry(ZipEntry("AIMI_Decisions_Last24h.jsonl"))
         val cutoffTime = aimiWallClockMs() - (24 * 60 * 60 * 1000L)
-        val reader = BufferedReader(FileReader(jsonFile))
         val writer = BufferedWriter(OutputStreamWriter(out))
-        try {
-            var line = reader.readLine()
-            while (line != null) {
-                if (AimiSupportDecisionLogFilter.keep(line, cutoffTime)) {
-                    writer.write(line)
-                    writer.newLine()
-                }
-                line = reader.readLine()
+        // Streamed, not readLines: this journal gains a line every loop tick and is never truncated,
+        // so holding it whole would risk the export running the heap out on the very device whose
+        // problem it is meant to capture.
+        storage.forEachLine(path) { line ->
+            if (AimiSupportDecisionLogFilter.keep(line, cutoffTime)) {
+                writer.write(line)
+                writer.newLine()
             }
-            writer.flush()
-        } finally {
-            reader.close()
         }
+        writer.flush()
         out.closeEntry()
     }
 }

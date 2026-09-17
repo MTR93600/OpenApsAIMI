@@ -1850,6 +1850,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     AimiControlCenterScreen(
                         preferences = preferences,
                         tpoOrchestrator = tpoOrchestrator,
+                        storage = storage,
                         onBack = onBack,
                     )
                 },
@@ -1865,6 +1866,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         storageHelper = storageHelper,
                         profileFunction = profileFunction,
                         rh = rh,
+                        storage = storage,
                     )
                     AimiSupportPackageScreen(
                         onBack = onBack,
@@ -1935,6 +1937,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         exportPasswordDataStore = exportPasswordDataStore,
                         aiCoachingService = aiCoachingService,
                         rh = rh,
+                        storage = storage,
                         onBack = onBack,
                     )
                 },
