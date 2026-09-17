@@ -7,6 +7,8 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.SP
+import app.aaps.plugins.aps.openAPSAIMI.keys.ACTIVITY_SOURCE_MODE_DISABLED
+import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -45,7 +47,9 @@ class UnifiedActivityProviderMTR @Inject constructor(
         const val MODE_PREFER_WEAR = "prefer_wear"
         const val MODE_AUTO_FALLBACK = "auto"
         const val MODE_HEALTH_CONNECT_ONLY = "hc_only"
-        const val MODE_DISABLED = "disabled"
+
+        /** Shared with commonMain via [ACTIVITY_SOURCE_MODE_DISABLED] — see its KDoc. */
+        const val MODE_DISABLED = ACTIVITY_SOURCE_MODE_DISABLED
 
         const val DEFAULT_MODE = MODE_AUTO_FALLBACK
 

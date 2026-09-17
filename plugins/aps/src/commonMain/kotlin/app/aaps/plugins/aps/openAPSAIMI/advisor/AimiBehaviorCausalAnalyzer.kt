@@ -1,7 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor
 
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiAutonomyMode
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId
 import app.aaps.plugins.aps.openAPSAIMI.compose.authorityRank
@@ -10,9 +9,6 @@ import kotlin.math.roundToInt
 
 internal data class AimiBehaviorCausalInsight(
     val id: String,
-    val titleResId: Int,
-    val bodyResId: Int,
-    val bodyArgs: List<Any> = emptyList(),
     val primaryFamily: AimiBehaviorFamilyId,
     val secondaryFamilies: List<AimiBehaviorFamilyId> = emptyList(),
     val confidence: Float,
@@ -32,13 +28,6 @@ internal fun buildAimiBehaviorCausalInsights(
     if (metrics.variabilityCv >= 0.36 && metrics.timeBelow70 >= 0.03 && metrics.timeAbove180 >= 0.12) {
         insights += AimiBehaviorCausalInsight(
             id = "yoyo_instability",
-            titleResId = R.string.aimi_behavior_causal_yoyo_title,
-            bodyResId = R.string.aimi_behavior_causal_yoyo_body,
-            bodyArgs = listOf(
-                pct(metrics.variabilityCv),
-                pct(metrics.timeBelow70),
-                pct(metrics.timeAbove180),
-            ),
             primaryFamily = AimiBehaviorFamilyId.Stability,
             secondaryFamilies = listOf(AimiBehaviorFamilyId.Protection, AimiBehaviorFamilyId.MealCapture),
             confidence = 0.90f,
@@ -56,12 +45,6 @@ internal fun buildAimiBehaviorCausalInsights(
     ) {
         insights += AimiBehaviorCausalInsight(
             id = "meal_latency",
-            titleResId = R.string.aimi_behavior_causal_meal_latency_title,
-            bodyResId = R.string.aimi_behavior_causal_meal_latency_body,
-            bodyArgs = listOf(
-                pct(metrics.timeAbove180),
-                pct(metrics.timeBelow70),
-            ),
             primaryFamily = AimiBehaviorFamilyId.MealCapture,
             secondaryFamilies = listOf(AimiBehaviorFamilyId.Autonomy, AimiBehaviorFamilyId.Protection),
             confidence = if (draft.mealCaptureLevel <= 1) 0.88f else 0.80f,
@@ -76,12 +59,6 @@ internal fun buildAimiBehaviorCausalInsights(
     if (metrics.timeBelow70 >= 0.05 || metrics.severeHypoEvents > 0) {
         insights += AimiBehaviorCausalInsight(
             id = "hypo_overshoot",
-            titleResId = R.string.aimi_behavior_causal_hypo_title,
-            bodyResId = R.string.aimi_behavior_causal_hypo_body,
-            bodyArgs = listOf(
-                pct(metrics.timeBelow70),
-                metrics.severeHypoEvents,
-            ),
             primaryFamily = AimiBehaviorFamilyId.Protection,
             secondaryFamilies = listOf(AimiBehaviorFamilyId.Stability),
             confidence = if (metrics.timeBelow70 >= 0.07 || metrics.severeHypoEvents > 0) 0.92f else 0.82f,
@@ -99,12 +76,6 @@ internal fun buildAimiBehaviorCausalInsights(
     ) {
         insights += AimiBehaviorCausalInsight(
             id = "hyper_passive",
-            titleResId = R.string.aimi_behavior_causal_hyper_passive_title,
-            bodyResId = R.string.aimi_behavior_causal_hyper_passive_body,
-            bodyArgs = listOf(
-                pct(metrics.timeAbove180),
-                pct(metrics.timeBelow70),
-            ),
             primaryFamily = AimiBehaviorFamilyId.Protection,
             secondaryFamilies = listOf(AimiBehaviorFamilyId.Autonomy),
             confidence = 0.84f,
@@ -122,12 +93,6 @@ internal fun buildAimiBehaviorCausalInsights(
     ) {
         insights += AimiBehaviorCausalInsight(
             id = "physio_ambiguity",
-            titleResId = R.string.aimi_behavior_causal_physio_title,
-            bodyResId = R.string.aimi_behavior_causal_physio_body,
-            bodyArgs = listOf(
-                pct(metrics.variabilityCv),
-                pct(metrics.timeAbove180),
-            ),
             primaryFamily = AimiBehaviorFamilyId.Physio,
             secondaryFamilies = listOf(AimiBehaviorFamilyId.MealCapture),
             confidence = 0.76f,

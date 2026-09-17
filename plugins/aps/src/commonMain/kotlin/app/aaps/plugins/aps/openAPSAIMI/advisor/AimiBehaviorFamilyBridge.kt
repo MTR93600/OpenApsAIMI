@@ -3,7 +3,6 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.AimiTuningContext
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningContextEngine
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningPlan
@@ -18,13 +17,9 @@ import app.aaps.plugins.aps.openAPSAIMI.compose.buildAimiControlCenterAdvisorRec
 import app.aaps.plugins.aps.openAPSAIMI.compose.buildAimiControlCenterPendingChanges
 import app.aaps.plugins.aps.openAPSAIMI.compose.readAimiControlCenterDraft
 import app.aaps.plugins.aps.openAPSAIMI.compose.authorityRank
-import kotlin.math.roundToInt
 
 internal data class AimiFamilyBridgeSuggestion(
     val id: String,
-    val titleResId: Int,
-    val bodyResId: Int,
-    val bodyArgs: List<Any> = emptyList(),
     val affectedFamilies: List<AimiBehaviorFamilyId>,
     val currentDraft: AimiControlCenterDraft,
     val targetDraft: AimiControlCenterDraft,
@@ -60,13 +55,6 @@ internal fun buildAimiFamilyBridgeSuggestions(
         )
         suggestions += draftSuggestion(
             id = "swing_variability",
-            titleResId = R.string.aimi_family_bridge_yoyo_title,
-            bodyResId = R.string.aimi_family_bridge_yoyo_body,
-            bodyArgs = listOf(
-                pct(metrics.variabilityCv),
-                pct(metrics.timeBelow70),
-                pct(metrics.timeAbove180),
-            ),
             currentDraft = currentDraft,
             targetDraft = draft,
             preferences = preferences,
@@ -94,12 +82,6 @@ internal fun buildAimiFamilyBridgeSuggestions(
             )
             suggestions += draftSuggestion(
                 id = "meal_rise",
-                titleResId = R.string.aimi_family_bridge_meal_rise_title,
-                bodyResId = R.string.aimi_family_bridge_meal_rise_body,
-                bodyArgs = listOf(
-                    pct(metrics.timeAbove180),
-                    pct(metrics.timeBelow70),
-                ),
                 currentDraft = currentDraft,
                 targetDraft = draft,
                 preferences = preferences,
@@ -122,9 +104,6 @@ internal fun buildAimiFamilyBridgeSuggestions(
             )
             suggestions += draftSuggestion(
                 id = "hypo_guard",
-                titleResId = R.string.aimi_family_bridge_hypo_guard_title,
-                bodyResId = R.string.aimi_family_bridge_hypo_guard_body,
-                bodyArgs = listOf(pct(metrics.timeBelow70)),
                 currentDraft = currentDraft,
                 targetDraft = draft,
                 preferences = preferences,
@@ -151,12 +130,6 @@ internal fun buildAimiFamilyBridgeSuggestions(
             )
             suggestions += draftSuggestion(
                 id = "hyper_stable",
-                titleResId = R.string.aimi_family_bridge_hyper_stable_title,
-                bodyResId = R.string.aimi_family_bridge_hyper_stable_body,
-                bodyArgs = listOf(
-                    pct(metrics.timeAbove180),
-                    pct(metrics.timeBelow70),
-                ),
                 currentDraft = currentDraft,
                 targetDraft = draft,
                 preferences = preferences,
@@ -183,12 +156,6 @@ internal fun buildAimiFamilyBridgeSuggestions(
             )
             suggestions += draftSuggestion(
                 id = "mixed_balance",
-                titleResId = R.string.aimi_family_bridge_mixed_title,
-                bodyResId = R.string.aimi_family_bridge_mixed_body,
-                bodyArgs = listOf(
-                    pct(metrics.timeAbove180),
-                    pct(metrics.timeBelow70),
-                ),
                 currentDraft = currentDraft,
                 targetDraft = draft,
                 preferences = preferences,
@@ -218,9 +185,6 @@ internal fun applyAimiFamilyBridgeSuggestion(
 
 private fun draftSuggestion(
     id: String,
-    titleResId: Int,
-    bodyResId: Int,
-    bodyArgs: List<Any>,
     currentDraft: AimiControlCenterDraft,
     targetDraft: AimiControlCenterDraft,
     preferences: Preferences,
@@ -233,9 +197,6 @@ private fun draftSuggestion(
     )
     return AimiFamilyBridgeSuggestion(
         id = id,
-        titleResId = titleResId,
-        bodyResId = bodyResId,
-        bodyArgs = bodyArgs,
         affectedFamilies = affectedFamilies(currentDraft, targetDraft),
         currentDraft = currentDraft,
         targetDraft = targetDraft,
@@ -288,5 +249,3 @@ private fun affectedFamilies(
     if (current.physioLevel != target.physioLevel) add(AimiBehaviorFamilyId.Physio)
     if (current.autonomyMode != target.autonomyMode) add(AimiBehaviorFamilyId.Autonomy)
 }
-
-private fun pct(value: Double): Int = (value * 100.0).roundToInt()

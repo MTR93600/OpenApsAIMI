@@ -1400,6 +1400,123 @@ is unchanged and should be put to the user before it is revisited.
 
 ---
 
+## 6u. 2026-09-17: the first real KMP lot, and why it moved one file instead of sixteen
+
+With the Profile Advisor port finished, the next work is the KMP migration proper: 122 of the 478
+AIMI files were still in `androidMain`. A grep for files importing none of `android.`, `androidx.`,
+`java.io`, `java.util`, `java.text` or `org.json` gave 16 candidates that looked ready to move.
+
+**Fourteen of the sixteen failed the iOS compile**, exactly as `kmp-module-flip` warns ("counting
+files with no android/androidx/java import over-estimates badly... compile for iOS to find out").
+The grep cannot see the two things that actually block this code: `app.aaps.plugins.aps.R` (no
+android/java substring anywhere in that import) and a dependency on a *type* that is itself still in
+`androidMain`. A fifteenth, `AndroidAimiBehaviorProfileSource`, compiled on its own and then failed
+once its one dependency was reverted - coupling the grep also cannot see.
+
+So exactly one file moved: `di/WCycleModule.kt`. Gates green (`:app:assembleFullDebug` 0 errors,
+`compileKotlinIosArm64` EXIT=0, 569 tests / 0 failures).
+
+**The useful output of this lot is the measurement, not the move.** The 351 compile errors rank the
+real blockers, and they say the remaining `androidMain` AIMI code is not a list of independent files
+but one connected cluster that has to move in dependency order:
+
+| blocker | error count | what it is |
+|---|---|---|
+| `AimiBehaviorFamilyId` | 48 | a type still in androidMain, referenced across the behaviour cluster |
+| `R` (`R.string`) | 22 | needs the `ApsStrings`/`TextRef` swap the skill describes |
+| `AimiControlCenterDraft` | 12 | Control Center state, still androidMain |
+| `StepService` | 11 | a genuine Android service - a platform port, not a move |
+| `AuditorUIState` / `AuditorAIService` | 14 | auditor types, still androidMain |
+
+The next lot should therefore be defined by *what everything else references*, not by what looks
+unblocked: move `AimiBehaviorFamilyId` and the behaviour-family types first, then their readers, and
+only then the analysers that use them. `StepService` is the opposite case - it is Android by nature
+and wants an interface in commonMain with the service behind it, per the "lift the platform call out,
+keep the rule" rule.
+
+One fact worth recording for planning: `dev` and `kmp` contain **zero** `openAPSAIMI` files - the
+whole 529-file AIMI tree exists only on this branch. So AIMI KMP work cannot conflict with the `dev`
+catch-up, and the two can proceed independently.
+
+---
+
+## 6v. 2026-09-17: the AimiBehaviorFamilyId cluster, moved
+
+Entry 6u measured the cluster; this one moves it. AIMI code in `androidMain` went from **121 files to
+114**, and `commonMain` from 356 to 365 - the counts do not simply swap because one 787-line file was
+split in two.
+
+Run as two tranches with a checkpoint between them, because the seven steps are one dependency chain
+with exactly one clean internal seam and every other boundary leaves unresolved references.
+
+**Tranche 1 - the foundation.** `AimiBehaviorFamilyRegistry.kt` moved unchanged;
+`AimiControlCenterSnapshot.kt` split along the IO-purity line (the pure model, the five `build*Family`
+functions and the whole scoring tail to commonMain; the two `loadLatest*RuntimeSnapshot()` functions
+and their five formatters stay in a new androidMain `AimiControlCenterRuntimeLoaders.kt`, because they
+read files through `android.os.Environment`); `AimiControlCenterSupport.kt` moved with
+`AimiAutonomyMode.labelResId()` replaced by a commonMain `controlCenterLabel(): TextRef`. About 24
+label fields changed type from `@StringRes Int` to `TextRef`, and `AimiControlCenterScreen.kt` (1015
+lines, stays androidMain) was updated in the same change to resolve `TextRef`, or the module would
+have stopped compiling for Android too.
+
+**Tranche 2 - the four files the whole lot was aiming at.** `AimiControlCenterAdvisor.kt`,
+`AimiBehaviorCausalAnalyzer.kt`, `AimiBehaviorFamilyBridge.kt` and `AimiBehaviorRuntimeProfileReader.kt`,
+plus `AndroidAimiBehaviorProfileSource.kt`, which failed 6u's attempt only because its one dependency
+was still on the Android side and now compiles for iOS untouched. Its name is a misnomer now - it
+holds nothing Android and its Metro binding contributes from commonMain, which is the target state -
+but renaming was left out of a move-only lot.
+
+Six dead fields were deleted rather than converted: `titleResId`, `bodyResId` and `bodyArgs` on both
+`AimiBehaviorCausalInsight` and `AimiFamilyBridgeSuggestion`. They were written at ten call sites and
+read nowhere - the one live consumer, `AiCoachingService.formatAimiBehaviorCausalInsightsForCoach`,
+reads only `id`, `primaryFamily`, `secondaryFamilies`, `confidence` and `evidence`. Deleting them
+removed 20 `R.string` references that would otherwise have been converted for nothing.
+
+**What only the compiler found, again.** Three things the survey called pure moves were not:
+`Map.putIfAbsent` is `java.util` and does not exist on Kotlin/Native (replaced by `getOrPut`, same
+first-wins semantics); `String.format(Locale.US, ...)` in the snapshot's own formatter, which would
+have compiled for Android and failed for iOS (replaced by the existing `aimiFmt1`/`aimiFmt2` helpers,
+whose own KDoc says not to use `String.format` in commonMain); and two `private` helpers that had to
+widen to `internal` once their callers moved to a separate file, since Kotlin's `private` does not
+cross files even inside one module. That is now three lots in a row where `compileKotlinIosArm64` -
+not a grep, not a survey - was the thing that told the truth.
+
+**One correction made during verification.** The hoisted constant that keeps
+`UnifiedActivityProviderMTR.MODE_DISABLED` (androidMain) and the commonMain comparison in step were
+reported as leaving "exactly one literal", and there were two: the enum's own `entries` map, 40 lines
+above, carried the same `"disabled"` string. Fixing it surfaced a Kotlin rule worth recording: a
+constant an enum's **own entries** need cannot live in that enum's companion object
+("Companion object of enum class is uninitialized here"), even as a `const val`. It went to a
+top-level `const val` in the same file instead. There is now one definition, and the only other
+`"disabled"` literals in the tree are unrelated telemetry reason strings.
+
+Review found **zero defects**. The check that mattered - that no threshold, coefficient or comparison
+changed in the moved scoring functions, which feed `UamHypothesisTuning` and the dosing algorithm's
+heuristics - was done twice: read function by function against `git show HEAD:<old path>`, then by
+extracting every numeric literal from both versions and diffing the sorted lists. Zero literal added,
+zero lost.
+
+Gates, verified independently at each tranche: `:plugins:aps:compileKotlinIosArm64` EXIT=0,
+`:app:assembleFullDebug` 0 Kotlin errors, `:plugins:aps:testAndroidHostTest --rerun` **569 tests,
+0 failures** - the same 569 as before the lot, which is the point: this lot moved code and changed no
+behaviour.
+
+**Next, by the same logic 6u established** - define the lot by what everything else references, not by
+what looks unblocked. The remaining named clusters are the Auditor types
+(`AuditorUIState`/`AuditorAIService`/`AuditorOrchestrator`, verified to have zero coupling with this
+one), `StepService`, and the two JSONL runtime-history readers whose tick-record types keep the
+Control Center loaders on the Android side.
+
+**A safety note carried forward from the survey, for whoever ports `StepService` to iOS.** It is an
+Android `SensorEventListener` step counter, and its output gates a live dosing branch
+(`DetermineBasalAIMI2.kt:5909`, where `recentSteps30Minutes >= 500 || recentSteps180Minutes > 1500`
+changes SMB behaviour). The honest iOS analogue is `CMPedometer`/HealthKit, which is asynchronous,
+batched, and can lag by minutes. An iOS implementation that silently returns 0 when data is not fresh
+would change the algorithm's behaviour rather than failing loudly. That decision belongs with whoever
+owns dosing safety review, not with a KMP-move implementer.
+
+---
+
 ---
 
 ## 7. Start here next session

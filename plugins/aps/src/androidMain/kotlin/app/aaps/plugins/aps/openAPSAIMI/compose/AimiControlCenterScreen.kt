@@ -40,11 +40,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.SliderWithButtons
 import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
+import app.aaps.core.ui.compose.stringResource
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoActiveSessionUi
@@ -325,7 +327,7 @@ fun AimiControlCenterScreen(
                             )
                             AimiBehaviorFamilyId.Autonomy -> AimiFamilyCard(
                                 snapshot = family,
-                                targetLabelResId = autonomyMode.labelResId(),
+                                targetLabelResId = autonomyMode.controlCenterLabel(),
                                 pendingPlan = familyPlan,
                                 onResetFamily = { autonomyMode = currentDraft.autonomyMode },
                                 control = {
@@ -543,7 +545,7 @@ private fun AdvisorRecommendationItem(
 @Composable
 private fun AimiFamilyCard(
     snapshot: AimiBehaviorFamilySnapshot,
-    targetLabelResId: Int,
+    targetLabelResId: TextRef,
     pendingPlan: AimiFamilyWritebackPlan?,
     onResetFamily: () -> Unit,
     control: @Composable () -> Unit,
@@ -746,8 +748,8 @@ private fun FamilyLevelSlider(
     value: Int,
     maxLevel: Int,
     onValueChange: (Int) -> Unit,
-    leftAnchorResId: Int,
-    rightAnchorResId: Int,
+    leftAnchorResId: TextRef,
+    rightAnchorResId: TextRef,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.small)) {
         SliderWithButtons(
@@ -789,7 +791,7 @@ private fun AutonomyModeSelector(
             FilterChip(
                 selected = selectedMode == mode,
                 onClick = { onModeSelected(mode) },
-                label = { Text(stringResource(mode.labelResId())) },
+                label = { Text(stringResource(mode.controlCenterLabel())) },
             )
         }
     }
@@ -970,8 +972,9 @@ private fun DetailRow(detail: AimiControlDetail) {
 
 @Composable
 private fun detailTitle(detail: AimiControlDetail): String =
-    if (detail.titleResId != 0) stringResource(detail.titleResId)
-    else stringResource(R.string.aimi_control_center_unlabeled_preference)
+    // titleResId is now a non-null TextRef (was an Int with a 0 sentinel that no construction site
+    // ever actually used) - the fallback branch was dead code, so this collapses to a direct read.
+    stringResource(detail.titleResId)
 
 @Composable
 private fun detailText(detail: AimiControlDetail): String =

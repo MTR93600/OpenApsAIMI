@@ -8,9 +8,9 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
 /**
- * Delegates to [readAimiBehaviorRuntimeProfile], which stays here because it walks the Control
- * Center's draft/snapshot chain - two runtime history readers and the preference-derived autonomy
- * mode. No state, no I/O at construction: safe to bind.
+ * Delegates to [readAimiBehaviorRuntimeProfile], which walks the Control Center's draft/snapshot
+ * chain - two runtime history readers and the preference-derived autonomy mode. No state, no I/O
+ * at construction: safe to bind.
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)

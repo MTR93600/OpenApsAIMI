@@ -1,15 +1,15 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
-import androidx.annotation.StringRes
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.plugins.aps.R
+import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.plugins.aps.ApsStrings
+import app.aaps.plugins.aps.openAPSAIMI.keys.ACTIVITY_SOURCE_MODE_DISABLED
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
-import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 
 internal data class AimiControlCenterAdvisorRecommendation(
     val id: String,
-    @StringRes val titleResId: Int,
-    @StringRes val bodyResId: Int,
+    val titleResId: TextRef,
+    val bodyResId: TextRef,
     val affectedFamilies: List<AimiBehaviorFamilyId>,
     val targetDraft: AimiControlCenterDraft,
 )
@@ -23,8 +23,8 @@ internal fun buildAimiControlCenterAdvisorRecommendations(
     if (draft.mealCaptureLevel >= 4 && draft.physioLevel == 0) {
         recommendations += AimiControlCenterAdvisorRecommendation(
             id = "meal_physio_guard",
-            titleResId = R.string.aimi_control_center_advisor_meal_physio_guard_title,
-            bodyResId = R.string.aimi_control_center_advisor_meal_physio_guard_body,
+            titleResId = ApsStrings.aimi_control_center_advisor_meal_physio_guard_title,
+            bodyResId = ApsStrings.aimi_control_center_advisor_meal_physio_guard_body,
             affectedFamilies = listOf(AimiBehaviorFamilyId.Physio),
             targetDraft = draft.copy(physioLevel = 1),
         )
@@ -33,8 +33,8 @@ internal fun buildAimiControlCenterAdvisorRecommendations(
     if (draft.mealCaptureLevel >= 3 && autonomyRank(draft.autonomyMode) < autonomyRank(AimiAutonomyMode.AssistedApplication)) {
         recommendations += AimiControlCenterAdvisorRecommendation(
             id = "meal_autonomy_alignment",
-            titleResId = R.string.aimi_control_center_advisor_meal_autonomy_title,
-            bodyResId = R.string.aimi_control_center_advisor_meal_autonomy_body,
+            titleResId = ApsStrings.aimi_control_center_advisor_meal_autonomy_title,
+            bodyResId = ApsStrings.aimi_control_center_advisor_meal_autonomy_body,
             affectedFamilies = listOf(AimiBehaviorFamilyId.Autonomy),
             targetDraft = draft.copy(autonomyMode = AimiAutonomyMode.AssistedApplication),
         )
@@ -44,8 +44,8 @@ internal fun buildAimiControlCenterAdvisorRecommendations(
         if (draft.mealCaptureLevel < recommendedMealLevel) {
             recommendations += AimiControlCenterAdvisorRecommendation(
                 id = "autonomy_meal_alignment",
-                titleResId = R.string.aimi_control_center_advisor_autonomy_meal_title,
-                bodyResId = R.string.aimi_control_center_advisor_autonomy_meal_body,
+                titleResId = ApsStrings.aimi_control_center_advisor_autonomy_meal_title,
+                bodyResId = ApsStrings.aimi_control_center_advisor_autonomy_meal_body,
                 affectedFamilies = listOf(AimiBehaviorFamilyId.MealCapture),
                 targetDraft = draft.copy(mealCaptureLevel = recommendedMealLevel),
             )
@@ -54,11 +54,11 @@ internal fun buildAimiControlCenterAdvisorRecommendations(
 
     val sourceMode = preferences.get(AimiStringKey.ActivitySourceMode)
     val ouraConfigured = preferences.get(AimiStringKey.OuraPersonalAccessToken).isNotBlank()
-    if (draft.physioLevel == 2 && sourceMode == UnifiedActivityProviderMTR.MODE_DISABLED && !ouraConfigured) {
+    if (draft.physioLevel == 2 && sourceMode == ACTIVITY_SOURCE_MODE_DISABLED && !ouraConfigured) {
         recommendations += AimiControlCenterAdvisorRecommendation(
             id = "physio_sources_alignment",
-            titleResId = R.string.aimi_control_center_advisor_physio_sources_title,
-            bodyResId = R.string.aimi_control_center_advisor_physio_sources_body,
+            titleResId = ApsStrings.aimi_control_center_advisor_physio_sources_title,
+            bodyResId = ApsStrings.aimi_control_center_advisor_physio_sources_body,
             affectedFamilies = listOf(AimiBehaviorFamilyId.Physio),
             targetDraft = draft.copy(physioLevel = 1),
         )

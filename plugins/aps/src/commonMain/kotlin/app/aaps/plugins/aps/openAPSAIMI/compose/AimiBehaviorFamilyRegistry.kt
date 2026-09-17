@@ -134,10 +134,13 @@ internal object AimiBehaviorFamilyRegistry {
         ),
     )
 
+    // putIfAbsent (java.util.Map) is not available on Kotlin/Native's MutableMap; getOrPut is the
+    // cross-platform equivalent here - it only writes when the key is still missing, same
+    // first-family-wins priority as putIfAbsent gave.
     private val familyByKey: Map<String, AimiBehaviorFamilyId> = buildMap {
         coverageByFamily.forEach { (family, coverage) ->
-            coverage.managedKeys.forEach { putIfAbsent(it, family) }
-            coverage.expertKeys.forEach { putIfAbsent(it, family) }
+            coverage.managedKeys.forEach { getOrPut(it) { family } }
+            coverage.expertKeys.forEach { getOrPut(it) { family } }
         }
     }
 
