@@ -13,8 +13,11 @@ Branch: `kmp-aimi-migration-study`, cut from `kmp` at `4957c26eb8`.
 Written 2026-08-25. All numbers were measured on this machine, on the branches named.
 Reference document under review: `_docs/KMP_IOS_FEASIBILITY.md` (Milos, 2026-08-05, 2115 lines).
 
-> **Mise a jour 2026-09-02, en complement de la banniere ci-dessus.** L'etat courant du portage est
-> dans [AIMI_PORT_STATE.md](AIMI_PORT_STATE.md).
+> **Mise a jour 2026-09-06.** L'etat verifie et les lots restants sont dans
+> [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md) et
+> [`docs/kmp-migration/DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md)
+> (tip `6f66e63565` ; P0.1 DONE via PR #71 ; l'ancien snapshot PR #69 @ `f237f2d3d0` n'est plus HEAD).
+> [AIMI_PORT_STATE.md](AIMI_PORT_STATE.md) reste le journal des lots 0–6i, pas la source de verite.
 >
 > Sur le fond, la banniere ci-dessus a raison et ce rapport avait tort sur un point qui compte :
 > l'annexe 5 a releve la signature du modele (`modelUAM.tflite`, 4 504 octets, entree `[1,18]`

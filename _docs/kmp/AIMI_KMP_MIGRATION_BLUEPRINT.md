@@ -1,5 +1,11 @@
 # AIMI KMP/iOS — blueprint d'architecture et de migration
 
+> **2026-09-06 — architecture cible, pas l'état du code.**  
+> Snapshot vérifié : [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md)
+> (tip `6f66e63565`, P0.1 DONE).  
+> Lots suivants : [`docs/kmp-migration/DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md).  
+> Les SHA ci-dessous (25 août) ne sont plus les tips.
+
 > **Statut :** document directeur consolidé, prêt pour décisions G0.  
 > **Référence auditée :** `dev_OAPSAIMI` à `06e7bc5021ca8fdd976505d1fefb03cc88681c19`.  
 > **Fondation KMP :** `kmp` à `4957c26eb85a71103e649498e7e991cb473e3098`.  
