@@ -6,6 +6,17 @@ import app.aaps.core.keys.interfaces.StringPreferenceKey
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.plugins.aps.ApsStrings
 
+/**
+ * Value of [AimiStringKey.ActivitySourceMode] that means "no activity source".
+ *
+ * Top level rather than in the enum's companion, because the enum's own entries need it and a
+ * companion is not initialized yet while its entries are being constructed. Shared with
+ * `UnifiedActivityProviderMTR.MODE_DISABLED` (androidMain) so the two definitions cannot drift
+ * apart: that class cannot move to commonMain (it is Health Connect coupled), but commonMain code
+ * still needs to compare against this value.
+ */
+const val ACTIVITY_SOURCE_MODE_DISABLED = "disabled"
+
 enum class AimiStringKey(
     override val key: String,
     override val defaultValue: String,
@@ -60,7 +71,7 @@ enum class AimiStringKey(
             "prefer_wear" to ApsStrings.pref_aimi_steps_source_wear,
             "auto" to ApsStrings.pref_aimi_steps_source_auto,
             "hc_only" to ApsStrings.pref_aimi_steps_source_hc,
-            "disabled" to ApsStrings.pref_aimi_steps_source_disabled,
+            ACTIVITY_SOURCE_MODE_DISABLED to ApsStrings.pref_aimi_steps_source_disabled,
         ),
     ),
 
@@ -91,5 +102,6 @@ enum class AimiStringKey(
         showInApsMode = false,
         showInNsClientMode = false,
         showInPumpControlMode = false
-    ),
+    );
+
 }

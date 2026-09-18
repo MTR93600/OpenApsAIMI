@@ -6,6 +6,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.plugins.aps.openAPSAIMI.StepService
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import java.util.Timer
 import java.util.TimerTask
 import dev.zacsweers.metro.Inject
@@ -90,7 +91,7 @@ class AIMIPhoneStepsSyncServiceMTR @Inject constructor(
      */
     private fun syncStepsToDatabase() {
         try {
-            val now = System.currentTimeMillis()
+            val now = aimiWallClockMs()
             
             // Read all windows from StepService
             val steps5 = StepService.getRecentStepCount5Min()

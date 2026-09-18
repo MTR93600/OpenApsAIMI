@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
 import android.content.Context
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -68,7 +69,7 @@ class HealthContextRepository @Inject constructor(
      * Throttled snapshot for Autodrive V3 gater — avoids four DB reads every 5 min when unchanged.
      */
     override fun fetchSnapshotForAutodriveGater(): HealthContextSnapshot {
-        val ageMs = System.currentTimeMillis() - lastSnapshot.timestamp
+        val ageMs = aimiWallClockMs() - lastSnapshot.timestamp
         if (lastSnapshot.isValid && ageMs in 0..AUTODRIVE_GATER_SNAPSHOT_MAX_AGE_MS) {
             return lastSnapshot
         }
@@ -91,9 +92,9 @@ class HealthContextRepository @Inject constructor(
             sleepData == null && hrvList.isEmpty() && rhrList.isEmpty() && lastSnapshot.isValid
 
         // 2. Fetch Real-Time Data (Unified Provider: Watch > Phone > HC)
-        val steps5Result = unifiedProvider.getStepsTotalSince(System.currentTimeMillis() - 5 * 60 * 1000)
-        val steps15Result = unifiedProvider.getStepsTotalSince(System.currentTimeMillis() - 15 * 60 * 1000)
-        val steps60Result = unifiedProvider.getStepsTotalSince(System.currentTimeMillis() - 60 * 60 * 1000)
+        val steps5Result = unifiedProvider.getStepsTotalSince(aimiWallClockMs() - 5 * 60 * 1000)
+        val steps15Result = unifiedProvider.getStepsTotalSince(aimiWallClockMs() - 15 * 60 * 1000)
+        val steps60Result = unifiedProvider.getStepsTotalSince(aimiWallClockMs() - 60 * 60 * 1000)
         val hrResult = unifiedProvider.getLatestHeartRate(15 * 60 * 1000)
 
         // Extract values or defaults
@@ -160,8 +161,8 @@ class HealthContextRepository @Inject constructor(
             confidence = (confidence + 0.15).coerceAtMost(1.0)
         }
 
-        val hcSleepActive = sleepData?.isOngoingAt(System.currentTimeMillis()) == true
-        val clockIsNight = clockIsNightHour(System.currentTimeMillis())
+        val hcSleepActive = sleepData?.isOngoingAt(aimiWallClockMs()) == true
+        val clockIsNight = clockIsNightHour(aimiWallClockMs())
         val sleepLive = SleepLiveDetector.evaluate(
             SleepLiveDetector.Input(
                 stepsLast15m = steps15,
@@ -196,7 +197,7 @@ class HealthContextRepository @Inject constructor(
             asleepLiveConfidence = sleepLive.confidence,
             asleepLiveSource = sleepLive.source.name,
             thermalBelief = thermalBelief,
-            timestamp = System.currentTimeMillis(),
+            timestamp = aimiWallClockMs(),
             confidence = confidence.coerceIn(0.0, 1.0),
             source = "Merged(Unified+HC)",
             isValid = confidence > 0.3
@@ -241,7 +242,7 @@ class HealthContextRepository @Inject constructor(
         }
         PatientStateRuntimeRefresher.refreshFromHealthSnapshot(
             healthSnapshot = snapshot,
-            nowMs = System.currentTimeMillis(),
+            nowMs = aimiWallClockMs(),
         )
     }
 

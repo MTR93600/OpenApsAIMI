@@ -41,7 +41,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Study Compose stand-in for parked `AimiProfileAdvisorActivity` support-ZIP flow.
+ * Study Compose stand-in for the former `AimiProfileAdvisorActivity` support-ZIP flow.
  *
  * Expert-code gate, optional ticket text, then a ZIP with the diagnostic report
  * (`[ACTIVE PROFILE]`), last-24h decision log, and `oapsaimiML2_records.csv` tail.

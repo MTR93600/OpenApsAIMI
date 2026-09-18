@@ -1,8 +1,10 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor
 
 import android.content.Context
+import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlin.math.roundToInt
@@ -25,6 +27,7 @@ import app.aaps.core.keys.interfaces.StringPreferenceKey
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import org.json.JSONObject
 
 /**
@@ -46,6 +49,9 @@ class AimiAdvisorService {
     data class BasalProfileProposal(
         val generatedAt: Long,
         val periodDays: Int,
+        /** Stable machine code for the shared export. Never localized - a parser keys on it. */
+        val strategyCode: String,
+        /** Localized label for the dialog. Never written to the export. */
         val strategy: String,
         val scalingFactor: Double,
         val rationale: String,
@@ -61,6 +67,7 @@ class AimiAdvisorService {
     private val rh: app.aaps.core.interfaces.resources.ResourceHelper?
     private val aapsLogger: app.aaps.core.interfaces.logging.AAPSLogger?
     private val pluginManager: app.aaps.plugins.aps.openAPSAIMI.plugins.AimiPluginManager
+    private val storage: AimiStorage?
 
     // Constructor injection for dependencies
     constructor(
@@ -72,7 +79,8 @@ class AimiAdvisorService {
         tddCalculator: app.aaps.core.interfaces.stats.TddCalculator? = null,
         tirCalculator: app.aaps.core.interfaces.stats.TirCalculator? = null,
         pluginManager: app.aaps.plugins.aps.openAPSAIMI.plugins.AimiPluginManager? = null,
-        aapsLogger: app.aaps.core.interfaces.logging.AAPSLogger? = null
+        aapsLogger: app.aaps.core.interfaces.logging.AAPSLogger? = null,
+        storage: AimiStorage? = null,
     ) {
         this.profileFunction = profileFunction
         this.persistenceLayer = persistenceLayer
@@ -82,6 +90,7 @@ class AimiAdvisorService {
         this.tddCalculator = tddCalculator
         this.tirCalculator = tirCalculator
         this.aapsLogger = aapsLogger
+        this.storage = storage
         this.pluginManager = pluginManager ?: app.aaps.plugins.aps.openAPSAIMI.plugins.AimiPluginManager(aapsLogger ?: object : app.aaps.core.interfaces.logging.AAPSLogger {
             override fun debug(message: String) {}
             override fun debug(enable: Boolean, tag: app.aaps.core.interfaces.logging.LTag, message: String) {}
@@ -123,7 +132,7 @@ class AimiAdvisorService {
         val orefInsight = if (persistenceLayer != null) {
             runBlocking(Dispatchers.IO) {
                 try {
-                    OrefLocalPipeline(persistenceLayer).run(
+                    OrefLocalPipeline(persistenceLayer, storage).run(
                         profileSnapshot = context.profile,
                         windowDays = orefWindowDays,
                         assetContext = assetContext,
@@ -151,7 +160,7 @@ class AimiAdvisorService {
         val visibleRecommendations = recommendations.filter { isRecommendationVisible(it, history) }
 
         return AdvisorReport(
-            generatedAt = System.currentTimeMillis(),
+            generatedAt = aimiWallClockMs(),
             metrics = context.metrics,
             overallScore = score,
             overallSeverity = severity,
@@ -179,11 +188,14 @@ class AimiAdvisorService {
         // 2. Snapshot Profile
         val profile = runBlocking(Dispatchers.IO) { profileFunction.getProfile() }
         val profileSnapshot = if (profile != null) {
-            val totalBasalCalc = (0 until 24).sumOf { h -> profile.getBasal((h * 3600).toLong()) }
+            // getBasal(timestamp) expects epoch millis, not seconds from midnight - h * 3600 lands
+            // every hour inside the first 83 seconds of 1 January 1970, so all 24 rows would read
+            // the same midnight block. getBasalTimeFromMidnight takes seconds from midnight directly.
+            val totalBasalCalc = (0 until 24).sumOf { h -> profile.getBasalTimeFromMidnight(h * 3600) }
             val dia = (profile as? EffectiveProfile)?.iCfg?.dia ?: 5.0
 
             AimiProfileSnapshot(
-                nightBasal = profile.getBasal(0L), // 00:00 basal
+                nightBasal = profile.getBasalTimeFromMidnight(0), // 00:00 basal
                 icRatio = calculateWeightedAverage(profile.getIcsValues()),
                 isf = calculateWeightedAverage(profile.getIsfsMgdlValues()),
                 targetBg = calculateWeightedAverage(profile.getSingleTargetsMgdl()),
@@ -373,7 +385,7 @@ class AimiAdvisorService {
         if (persistenceLayer != null) {
             try {
                 // Fetch BG readings directly for the period
-                val now = System.currentTimeMillis()
+                val now = aimiWallClockMs()
                 val fromTime = now - (days * 24 * 3600 * 1000L)
                 val bgReadings = persistenceLayer.getBgReadingsDataFromTimeToTime(fromTime, now, ascending = false)
                 
@@ -488,11 +500,19 @@ class AimiAdvisorService {
             preferences = preferences
         )
 
+        // Metric driven rules (hypos, control, hypers, basal dominance). They led the list before the
+        // plugin system took over, so they are built first here too, and stay first even if a plugin
+        // is ever registered. The informational ones carry no action, which shouldShowRecommendation
+        // always lets through.
+        val recs = metricRecommendations(ctx.metrics, ctx.prefs, rh)
+            .filter { shouldShowRecommendation(it, history) }
+            .toMutableList()
+
         // Collect actions from all plugins
         val actions = pluginManager.collectActions(loopCtx)
 
         // Map actions to recommendations for the UI
-        val recs = actions.map { action ->
+        recs += actions.map { action ->
             AimiRecommendation(
                 title = ApsStrings.aimi_advisor_recommendations_title,
                 description = TextRef.Literal(""), // Should be dynamic
@@ -500,7 +520,7 @@ class AimiAdvisorService {
                 domain = action.domain,
                 action = action
             )
-        }.toMutableList()
+        }
 
         // Pragmatic SMB/PKPD governance recommendations
         if (preferences != null) {
@@ -948,7 +968,9 @@ class AimiAdvisorService {
         return sb.toString()
     }
     
-    private fun formatTime(time: Long): String {
+    // internal, not private: the Profile Advisor Compose screen's footer formats the report's
+    // generatedAt timestamp the same way, and this is the one place that pattern is defined.
+    internal fun formatTime(time: Long): String {
          return java.text.SimpleDateFormat("dd MMM HH:mm", java.util.Locale.getDefault()).format(java.util.Date(time))
     }
 
@@ -980,47 +1002,73 @@ class AimiAdvisorService {
         """.trimIndent()
     }
 
+    // The Compose screen wraps its call to this in loadOrNull, which discards the throwable by
+    // design (one bad section must not hide the rest of the report). That means the detail has to
+    // be captured here, at the source, before it is thrown away upstream - hence the log-then-rethrow
+    // below instead of a bare try/catch at the call site.
     fun generateBasalProfileProposal(periodDays: Int = 7): BasalProfileProposal {
-        val metrics = calculateMetrics(periodDays)
-        val profile = profileFunction?.let { runBlocking(Dispatchers.IO) { it.getProfile() } }
-        if (profile == null) {
+        try {
+            val metrics = calculateMetrics(periodDays)
+            val profile = profileFunction?.let { runBlocking(Dispatchers.IO) { it.getProfile() } }
+            if (profile == null) {
+                return BasalProfileProposal(
+                    generatedAt = aimiWallClockMs(),
+                    periodDays = periodDays,
+                    strategyCode = "NO_PROFILE",
+                    strategy = rh?.gs(R.string.aimi_adv_basal_strategy_no_profile) ?: "No profile available",
+                    scalingFactor = 1.0,
+                    rationale = "Profile unavailable",
+                    rows = emptyList()
+                )
+            }
+
+            val proposalFactor = computeBasalProposalFactor(metrics)
+            val factor = proposalFactor.factor
+            val rows = (0 until 24).map { hour ->
+                // See the same fix in collectContext(): getBasalTimeFromMidnight takes seconds from
+                // midnight, getBasal(timestamp) takes epoch millis - the two are not interchangeable.
+                val current = profile.getBasalTimeFromMidnight(hour * 3600)
+                val proposed = (current * factor).coerceIn(current * 0.85, current * 1.15)
+                BasalHourProposal(
+                    hour = hour,
+                    current = current,
+                    proposed = proposed
+                )
+            }
+
             return BasalProfileProposal(
-                generatedAt = System.currentTimeMillis(),
+                generatedAt = aimiWallClockMs(),
                 periodDays = periodDays,
-                strategy = "NO_PROFILE",
-                scalingFactor = 1.0,
-                rationale = "Profile unavailable",
-                rows = emptyList()
+                strategyCode = proposalFactor.code,
+                strategy = proposalFactor.label,
+                scalingFactor = factor,
+                rationale = proposalFactor.rationale,
+                rows = rows
             )
+        } catch (t: Throwable) {
+            // Catching Throwable is safe only while this function and calculateMetrics stay
+            // non-suspend: each roots its own runBlocking job, so a screen leaving composition
+            // cannot deliver a CancellationException in here. Make either one a suspend fun and this
+            // catch starts logging cancellations as failures - rethrow CancellationException first.
+            aapsLogger?.error(LTag.APS, "generateBasalProfileProposal failed", t)
+            throw t
         }
-
-        val (factor, strategy, rationale) = computeBasalProposalFactor(metrics)
-        val rows = (0 until 24).map { hour ->
-            val current = profile.getBasal((hour * 3600).toLong())
-            val proposed = (current * factor).coerceIn(current * 0.85, current * 1.15)
-            BasalHourProposal(
-                hour = hour,
-                current = current,
-                proposed = proposed
-            )
-        }
-
-        return BasalProfileProposal(
-            generatedAt = System.currentTimeMillis(),
-            periodDays = periodDays,
-            strategy = strategy,
-            scalingFactor = factor,
-            rationale = rationale,
-            rows = rows
-        )
     }
 
+    // Only the title line is natural-language prose - this text goes out through ACTION_SEND for a
+    // person to read (and plausibly forward to their doctor), so it is localized like the dialog.
+    // Every other line is a key=value or CSV row meant to stay machine-parseable, so those stay as
+    // literal English: translating "generatedAt=", "hour,current,proposed,deltaPct" or the row
+    // format would not change what a human reads, only break anything that parses this export.
+    // That is why `strategy=` writes [BasalProfileProposal.strategyCode] and not the localized
+    // [BasalProfileProposal.strategy] the dialog shows: the two must not be the same string, or the
+    // first translator to touch that label silently changes the export's value per language.
     fun exportBasalProfileProposalText(proposal: BasalProfileProposal): String {
         val header = buildString {
-            appendLine("AIMI BASAL PROPOSAL (NOT APPLIED)")
+            appendLine(rh?.gs(R.string.aimi_adv_basal_export_header_title) ?: "AIMI BASAL PROPOSAL (NOT APPLIED)")
             appendLine("generatedAt=${proposal.generatedAt}")
             appendLine("periodDays=${proposal.periodDays}")
-            appendLine("strategy=${proposal.strategy}")
+            appendLine("strategy=${proposal.strategyCode}")
             appendLine("scalingFactor=${"%.3f".format(java.util.Locale.US, proposal.scalingFactor)}")
             appendLine("rationale=${proposal.rationale}")
             appendLine("hour,current,proposed,deltaPct")
@@ -1040,17 +1088,38 @@ class AimiAdvisorService {
         return header + lines + "\n"
     }
 
-    private fun computeBasalProposalFactor(metrics: AdvisorMetrics): Triple<Double, String, String> {
+    // strategy/rationale are shown in the basal-proposal dialog (AimiProfileAdvisorScreen), so they
+    // are resolved through rh when it is available. rh is only nullable for tests that construct
+    // this service without it; the literal is the same text the resource carries.
+    private data class BasalProposalFactor(
+        val factor: Double,
+        /** Stable code for the export. */
+        val code: String,
+        /** Localized label for the dialog. */
+        val label: String,
+        val rationale: String,
+    )
+
+    private fun computeBasalProposalFactor(metrics: AdvisorMetrics): BasalProposalFactor {
         return when {
-            metrics.timeBelow54 >= 0.01 || metrics.timeBelow70 >= 0.06 -> {
-                Triple(0.95, "SAFETY_REDUCTION", "Hypo pressure detected in lookback window")
-            }
-            metrics.timeAbove180 >= 0.35 && metrics.tir70_180 < 0.60 && metrics.timeBelow70 <= 0.03 -> {
-                Triple(1.06, "GENTLE_INCREASE", "Persistent hyperglycemia with low hypo pressure")
-            }
-            else -> {
-                Triple(1.00, "HOLD_BASELINE", "No robust pattern for profile-level shift")
-            }
+            metrics.timeBelow54 >= 0.01 || metrics.timeBelow70 >= 0.06 -> BasalProposalFactor(
+                factor = 0.95,
+                code = "SAFETY_REDUCTION",
+                label = rh?.gs(R.string.aimi_adv_basal_strategy_safety_reduction) ?: "Reduce basal for safety",
+                rationale = rh?.gs(R.string.aimi_adv_basal_rationale_safety_reduction) ?: "There is hypo risk in the recent data.",
+            )
+            metrics.timeAbove180 >= 0.35 && metrics.tir70_180 < 0.60 && metrics.timeBelow70 <= 0.03 -> BasalProposalFactor(
+                factor = 1.06,
+                code = "GENTLE_INCREASE",
+                label = rh?.gs(R.string.aimi_adv_basal_strategy_gentle_increase) ?: "Increase basal a little",
+                rationale = rh?.gs(R.string.aimi_adv_basal_rationale_gentle_increase) ?: "Blood glucose is often high and hypo risk is low.",
+            )
+            else -> BasalProposalFactor(
+                factor = 1.00,
+                code = "HOLD_BASELINE",
+                label = rh?.gs(R.string.aimi_adv_basal_strategy_hold_baseline) ?: "Keep the current basal",
+                rationale = rh?.gs(R.string.aimi_adv_basal_rationale_hold_baseline) ?: "There is no clear pattern to change the basal profile.",
+            )
         }
     }
     
@@ -1114,7 +1183,7 @@ class AimiAdvisorService {
         history: List<AdvisorHistoryRepository.AdvisorActionLog>,
         update: app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate,
     ): Boolean {
-        val threshold = System.currentTimeMillis() - (48 * 3600 * 1000L)
+        val threshold = aimiWallClockMs() - (48 * 3600 * 1000L)
         val keyStr = update.key.key
         return history.any { entry ->
             entry.timestamp >= threshold &&
@@ -1133,7 +1202,7 @@ class AimiAdvisorService {
             }
 
             // 1. Fetch Raw Data
-            val now = System.currentTimeMillis()
+            val now = aimiWallClockMs()
             val fromTime = now - (periodDays * 24 * 3600 * 1000L)
             
             val bgReadings = try {
