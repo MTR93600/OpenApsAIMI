@@ -72,6 +72,13 @@ object DecisionPredictionAuthorityResolver {
         targetBgMgdl: Double = 100.0,
         iobU: Double = 0.0,
         maxIobU: Double = 0.0,
+        /**
+         * True when the person has declared a meal and
+         * [app.aaps.core.keys.BooleanKey.OApsAIMIAnticipMealEvidence] is on. A declaration is meal
+         * evidence of the strongest kind, so it joins the tree's own evidence instead of waiting for
+         * glucose to confirm what the person already knows.
+         */
+        declaredMeal: Boolean = false,
     ): DecisionPredictionAuthority {
         val pkpd = pkpdEventualMgdl.takeIf { it.isFinite() } ?: bgMgdl
         val rawScenarioFloor = scenarioProjection?.clinicalFloor?.terminalMgdl?.takeIf { it.isFinite() }
@@ -143,7 +150,8 @@ object DecisionPredictionAuthorityResolver {
                 trajectoryType == TrajectoryType.SLOW_DRIFT
         val strongRiseProjection = scenarioBest > bgMgdl + if (causalDominant == CausalStateId.FAST_MEAL) 12.0 else 15.0
         val treeMealEvidence =
-            trunkGlobalState == GlobalPhysiologicalState.DIGESTION_ACTIVE ||
+            declaredMeal ||
+                trunkGlobalState == GlobalPhysiologicalState.DIGESTION_ACTIVE ||
                 trunkGlobalState == GlobalPhysiologicalState.MEAL_PROBABLE ||
                 mealCertainty?.supportsMealSupport == true
         val mealEvidence =

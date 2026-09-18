@@ -415,6 +415,18 @@ enum class DoubleKey(
     // ❌ HYPER REACTIVITY REMOVED - replaced by UnifiedReactivityLearner.globalFactor
     // Previously: OApsAIMIHyperFactor
     OApsAIMIsleepFactor("key_oaps_aimi_sleep_factor", 60.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_sleep_factor),
+    /**
+     * Insulin spent above profile over the declared-meal window, in units. 0 disarms the gesture even
+     * when its key is on. Min is 0 on purpose, unlike the prebolus keys whose min is 0.1.
+     */
+    OApsAIMIAnticipBudgetU(
+        "key_aimi_anticip_budget_u",
+        2.0,
+        0.0,
+        10.0,
+        title = KeysStrings.pref_title_aimi_anticip_budget_u,
+        unitType = UnitType.INSULIN,
+    ),
     OApsAIMIMealPrebolus("key_prebolus_meal_mode", 2.0, 0.1, 10.0, title = KeysStrings.pref_title_oaps_aimi_meal_prebolus),
     OApsAIMIautodrivePrebolus("key_prebolus_autodrive_mode", 1.0, 0.1, 10.0, title = KeysStrings.pref_title_oaps_aimi_autodrive_prebolus),
     OApsAIMIautodrivesmallPrebolus("key_prebolussmall_autodrive_mode", 0.1, 0.05, 2.0, title = KeysStrings.pref_title_oaps_aimi_autodrivesmall_prebolus),
