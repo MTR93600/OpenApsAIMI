@@ -3,8 +3,8 @@ package app.aaps.plugins.aps.openAPSAIMI.tpo
 import app.aaps.core.data.json.OrgJsonCompat.hasCompat
 import app.aaps.core.data.json.OrgJsonCompat.optJsonObjectCompat
 import app.aaps.core.data.json.OrgJsonCompat.optLongCompat
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
-import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlinx.serialization.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -13,7 +13,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 
 internal class TpoPersistence(
-    private val storageHelper: AimiStorageHelper,
+    private val storage: AimiStorage,
 ) {
     private val directoryName = "tpo"
     private val sessionFileName = "tpo_session.json"
@@ -26,38 +26,38 @@ internal class TpoPersistence(
     }
 
     fun loadSession(): TpoSessionDocument? {
-        val file = sessionFile()
-        if (!file.exists()) return null
+        val path = sessionFile()
+        if (!storage.exists(path)) return null
         return runCatching {
-            TpoSessionDocument.fromJsonObject(Json.parseToJsonElement(file.readText()).jsonObject)
+            TpoSessionDocument.fromJsonObject(Json.parseToJsonElement(storage.readText(path).orEmpty()).jsonObject)
         }.getOrNull()
     }
 
     fun saveSession(document: TpoSessionDocument?) {
-        val file = sessionFile()
+        val path = sessionFile()
         if (document == null) {
-            if (file.exists()) file.delete()
+            if (storage.exists(path)) storage.delete(path)
             return
         }
-        storageHelper.saveFileSafe(file, prettyJson.encodeToString(serializer<JsonElement>(), document.toJsonObject()))
+        storage.replaceText(path, prettyJson.encodeToString(serializer<JsonElement>(), document.toJsonObject()))
     }
 
     fun loadLedger(): TpoEpisodeLedger {
-        val file = ledgerFile()
-        if (!file.exists()) return TpoEpisodeLedger()
+        val path = ledgerFile()
+        if (!storage.exists(path)) return TpoEpisodeLedger()
         return runCatching {
-            TpoEpisodeLedger.fromJsonObject(Json.parseToJsonElement(file.readText()).jsonObject)
+            TpoEpisodeLedger.fromJsonObject(Json.parseToJsonElement(storage.readText(path).orEmpty()).jsonObject)
         }.getOrDefault(TpoEpisodeLedger())
     }
 
     fun saveLedger(ledger: TpoEpisodeLedger) {
-        storageHelper.saveFileSafe(ledgerFile(), prettyJson.encodeToString(serializer<JsonElement>(), ledger.toJsonObject()))
+        storage.replaceText(ledgerFile(), prettyJson.encodeToString(serializer<JsonElement>(), ledger.toJsonObject()))
     }
 
     fun loadLastRevertAtMsByPack(): Map<TpoPackId, Long> {
-        val file = metaFile()
-        if (!file.exists()) return emptyMap()
-        val json = runCatching { Json.parseToJsonElement(file.readText()).jsonObject }.getOrNull() ?: return emptyMap()
+        val path = metaFile()
+        if (!storage.exists(path)) return emptyMap()
+        val json = runCatching { Json.parseToJsonElement(storage.readText(path).orEmpty()).jsonObject }.getOrNull() ?: return emptyMap()
         val revertObj = json.optJsonObjectCompat("last_revert_at_ms_by_pack") ?: return emptyMap()
         return buildMap {
             TpoPackId.entries.forEach { pack ->
@@ -77,12 +77,12 @@ internal class TpoPersistence(
                 },
             )
         }
-        storageHelper.saveFileSafe(metaFile(), prettyJson.encodeToString(serializer<JsonElement>(), json))
+        storage.replaceText(metaFile(), prettyJson.encodeToString(serializer<JsonElement>(), json))
     }
 
-    private fun sessionFile(): File = storageHelper.getAimiFile(directoryName, sessionFileName)
+    private fun sessionFile(): AimiPath = storage.file(directoryName, sessionFileName)
 
-    private fun ledgerFile(): File = storageHelper.getAimiFile(directoryName, ledgerFileName)
+    private fun ledgerFile(): AimiPath = storage.file(directoryName, ledgerFileName)
 
-    private fun metaFile(): File = storageHelper.getAimiFile(directoryName, metaFileName)
+    private fun metaFile(): AimiPath = storage.file(directoryName, metaFileName)
 }

@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.learning
 
-import android.content.Context
 import app.aaps.core.data.format.NumberFormat
 import app.aaps.core.data.format.NumberFormatPlatform
 import app.aaps.core.data.json.OrgJsonCompat.optDoubleCompat
@@ -10,11 +9,11 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt0
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.exp
@@ -37,9 +36,8 @@ import kotlinx.serialization.json.put
  */
 @SingleIn(AppScope::class)
 class BasalLearner @Inject constructor(
-    private val context: Context,
     private val log: AAPSLogger,
-    private val storageHelper: AimiStorageHelper
+    private val storage: AimiStorage,
 ) {
     data class StatusSnapshot(
         val shortTermMultiplier: Double,
@@ -59,7 +57,7 @@ class BasalLearner @Inject constructor(
     )
 
     private val fileName = "aimi_basal_learner.json"
-    private val file by lazy { storageHelper.getAimiFile(fileName) }
+    private val path: AimiPath by lazy { storage.file(fileName) }
 
     // === Multi-Scale Multipliers ===
     var shortTermMultiplier = 1.0   // Updated every 30 min
@@ -427,22 +425,24 @@ class BasalLearner @Inject constructor(
     // === Persistence ===
 
     private fun load() {
-        storageHelper.loadFileSafe(file,
-            onSuccess = { content ->
-                val json = Json.parseToJsonElement(content).jsonObject
-                shortTermMultiplier = json.optDoubleCompat("shortTermMultiplier", 1.0)
-                mediumTermMultiplier = json.optDoubleCompat("mediumTermMultiplier", 1.0)
-                longTermMultiplier = json.optDoubleCompat("longTermMultiplier", 1.0)
-                lastShortUpdate = json.optLongCompat("lastShortUpdate", 0L)
-                lastMediumUpdate = json.optLongCompat("lastMediumUpdate", 0L)
-                lastLongUpdate = json.optLongCompat("lastLongUpdate", 0L)
-                log.info(LTag.AIMI, "BasalLearner: ✅ Loaded multipliers S=${fmt3(shortTermMultiplier)} " +
-                    "M=${fmt3(mediumTermMultiplier)} L=${fmt3(longTermMultiplier)}")
-            },
-            onError = { e ->
-                log.warn(LTag.AIMI, "BasalLearner: Load failed, using defaults (multiplier=1.0)")
-            }
-        )
+        // Mirrors AimiStorageHelper.loadFileSafe: missing / unreadable / empty file silently keeps the
+        // defaults (multiplier=1.0), a parse failure on real content logs and keeps the defaults too.
+        if (!storage.exists(path) || !storage.canRead(path)) return
+        val content = storage.readText(path)
+        if (content.isNullOrEmpty()) return
+        try {
+            val json = Json.parseToJsonElement(content).jsonObject
+            shortTermMultiplier = json.optDoubleCompat("shortTermMultiplier", 1.0)
+            mediumTermMultiplier = json.optDoubleCompat("mediumTermMultiplier", 1.0)
+            longTermMultiplier = json.optDoubleCompat("longTermMultiplier", 1.0)
+            lastShortUpdate = json.optLongCompat("lastShortUpdate", 0L)
+            lastMediumUpdate = json.optLongCompat("lastMediumUpdate", 0L)
+            lastLongUpdate = json.optLongCompat("lastLongUpdate", 0L)
+            log.info(LTag.AIMI, "BasalLearner: ✅ Loaded multipliers S=${fmt3(shortTermMultiplier)} " +
+                "M=${fmt3(mediumTermMultiplier)} L=${fmt3(longTermMultiplier)}")
+        } catch (e: Exception) {
+            log.warn(LTag.AIMI, "BasalLearner: Load failed, using defaults (multiplier=1.0)")
+        }
     }
 
     private fun save() {
@@ -454,7 +454,7 @@ class BasalLearner @Inject constructor(
             put("lastMediumUpdate", lastMediumUpdate)
             put("lastLongUpdate", lastLongUpdate)
         }
-        storageHelper.saveFileSafe(file, json.toString())
+        storage.writeText(path, json.toString())
     }
 
     fun statusSnapshot(): StatusSnapshot = statusRef.get()

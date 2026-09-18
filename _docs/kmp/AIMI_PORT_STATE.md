@@ -1725,6 +1725,51 @@ guessing - which is the behaviour you want. The wording was the defect, not the 
 
 ---
 
+## 6aa. 2026-09-17: storage sweep, batch B1 - and `forEachLine` pays for itself a second time
+
+Five writers and stores converted from `AimiStorageHelper`/`java.io.File` to the `AimiStorage` port:
+`tpo/TpoPersistence` (plus its one call site in `TpoOrchestrator`),
+`learning/BasalMlTrainingCoordinator`, `learning/BasalLearner`, `learning/UnifiedReactivityLearner`
+and `autodrive/learning/AutodriveDataLake`. Gates: `compileKotlinIosArm64` EXIT=0,
+`:app:assembleFullDebug` 0 Kotlin errors, `testAndroidHostTest --rerun` **585 tests, 0 failures** -
+the same 585, which is what a sweep should produce.
+
+Each converted class came out holding the port and **not** the helper, which is the direction
+`DetermineBasalAIMI2.kt:1458` already documented: `AimiStorage` is the seam, `AimiStorageHelper` is
+transitional.
+
+**`Context` was dead weight in both learners.** The brief asked whether the `Context` those two take
+was only there to resolve a file path, in which case the conversion would remove it. It was not used
+*at all* - zero references in either class, apparently left from before `AimiStorageHelper` existed.
+Both parameters are gone. That is two files off the `Context` blocker list (46 files at the last
+count) for no work, and a reminder that this migration's biggest blocker is partly an illusion: some
+of those 46 may not use the thing they hold either. Worth checking before designing a port for them.
+
+**A second unbounded read, this one pre-existing.** `BasalMlDatasetParser.parse()` inside
+`BasalMlTrainingCoordinator` read `basal_adaptive_records.csv` with `readLines()` - a training CSV
+that gains a row every loop tick and is never truncated. Unlike batch A's, this one was **not
+introduced by a sweep**; it has been there. Rewritten to `readFirstLine` for the header plus
+`forEachLine` for the rows, with a line count reproducing the old "fewer than two lines gives null"
+short circuit exactly. So the member added in 6z has now caught two out-of-memory risks in two lots,
+which is a good sign the intent-shaped read was the right call rather than an over-design.
+
+**`TpoPersistence` is atomic now.** All three save paths (`saveSession`, `saveLedger`,
+`saveLastRevertAtMsByPack`) go through `storage.replaceText`, so a crash or a full disk mid-write
+leaves the previous session, ledger or meta readable instead of truncated. It had none of that
+before - a plain `writeText`. This is the deliberate behaviour change of the lot.
+
+**One bridge, documented, and temporary.** `BasalMlTrainingCoordinator` hands its two weight files to
+`NeuralModelTrainer.trainAndPublish(weightsFile: File, ...)`, which lives in the `ml/*` chain that
+batch B2 has not untangled yet. Rather than change an out-of-scope signature, the file keeps
+`AimiPath` as its own source of truth and converts to a `File` on that one call line, with a comment
+saying why. B2 removes it.
+
+`AutodriveDataLake`'s carried-forward rows used to be several `FileWriter.append()` calls inside one
+open handle and are now one `appendText` of the concatenated string - same bytes, same order. Noted
+only because it sits next to crash-safety code: `appendText` is not atomic and was not made so.
+
+---
+
 ---
 
 ## 7. Start here next session

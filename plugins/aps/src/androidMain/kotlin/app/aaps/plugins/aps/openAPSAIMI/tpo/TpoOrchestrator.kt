@@ -15,7 +15,7 @@ import app.aaps.plugins.aps.openAPSAIMI.compose.authorityRank
 import app.aaps.plugins.aps.openAPSAIMI.compose.readAimiControlCenterDraft
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,14 +29,14 @@ import dev.zacsweers.metro.AppScope
 @SingleIn(AppScope::class)
 class TpoOrchestrator @Inject constructor(
     private val preferences: Preferences,
-    private val storageHelper: AimiStorageHelper,
+    private val storage: AimiStorage,
     private val aiCoachingService: AiCoachingService,
     private val sp: SP,
     private val aapsLogger: AAPSLogger,
     private val tpoNotificationManager: TpoNotificationManager,
     private val context: Context,
 ) : AimiTpo {
-    private val persistence = TpoPersistence(storageHelper)
+    private val persistence = TpoPersistence(storage)
     private val sessionManager = TpoSessionManager(persistence)
     private val llmValidator = TpoLlmValidator(context, sp, aiCoachingService, aapsLogger)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

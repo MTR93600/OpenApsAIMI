@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.learning
 
-import android.content.Context
 import app.aaps.core.data.format.NumberFormat
 import app.aaps.core.data.format.NumberFormatPlatform
 import app.aaps.core.data.json.OrgJsonCompat.optDoubleCompat
@@ -17,12 +16,11 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import java.io.File
-import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -51,12 +49,11 @@ import kotlinx.serialization.json.put
  */
 @SingleIn(AppScope::class)
 class UnifiedReactivityLearner @Inject constructor(
-    private val context: Context,
     private val persistenceLayer: PersistenceLayer,
     private val dateUtil: DateUtil,
     private val preferences: Preferences,
     private val log: AAPSLogger,
-    private val storageHelper: AimiStorageHelper
+    private val storage: AimiStorage,
 ) {
     internal data class BgSample(val value: Double, val timestamp: Long)
 
@@ -121,16 +118,16 @@ class UnifiedReactivityLearner @Inject constructor(
     var lastAnalysis: AnalysisSnapshot? = null
         private set
 
-    // 📁 Utilise AimiStorageHelper pour stockage robuste
+    // 📁 Utilise AimiStorage (le port partagé) pour stockage robuste
     private val fileName = "aimi_unified_reactivity.json"
     private val csvFileName = "aimi_reactivity_analysis.csv"
-    
-    private val file by lazy { storageHelper.getAimiFile(fileName) }
-    
-    private val csvFile by lazy {
-        storageHelper.getAimiFile(csvFileName).apply {
-            if (!exists()) {
-                storageHelper.saveFileSafe(this, 
+
+    private val path: AimiPath by lazy { storage.file(fileName) }
+
+    private val csvPath: AimiPath by lazy {
+        storage.file(csvFileName).also { p ->
+            if (!storage.exists(p)) {
+                storage.writeText(p,
                     "Timestamp,Date,TIR_70_180,TIR_70_140,TIR_140_180,TIR_180_250,TIR_Above_250," +
                     "Hypo_Count,CV_Percent,Crossing_Count,Mean_BG,GlobalFactor,Adjustment_Reason\n")
             }
@@ -755,7 +752,7 @@ class UnifiedReactivityLearner @Inject constructor(
                 "\"${reasonsStr.replace("\"", "'")}\""
             ).joinToString(",") + "\n"
             
-            FileWriter(csvFile, true).use { it.append(line) }
+            storage.appendText(csvPath, line)
             log.debug(LTag.AIMI, "UnifiedReactivityLearner: Exported analysis to CSV")
         } catch (e: Exception) {
             log.error(LTag.AIMI, "UnifiedReactivityLearner: CSV export error", e)
@@ -768,36 +765,39 @@ class UnifiedReactivityLearner @Inject constructor(
      * En cas d'erreur (permissions, fichier corrompu, etc.), utilise les valeurs par défaut.
      */
     private fun load() {
-        storageHelper.loadFileSafe(file, 
-            onSuccess = { content ->
-                val json = Json.parseToJsonElement(content).jsonObject
-                globalFactor = json.optDoubleCompat("globalFactor", 1.0).coerceIn(0.5, 1.5)
-                shortTermFactor = json.optDoubleCompat("shortTermFactor", 1.0).coerceIn(0.5, 1.5)
-                lastAnalysisTime = json.optLongCompat("lastAnalysisTime", 0L)
-                lastShortAnalysisTime = json.optLongCompat("lastShortAnalysisTime", 0L)
-                lastSeenHypoBurdenPct = json.optDoubleCompat("lastSeenHypoBurdenPct", 0.0)
-                val segmentJson = json.optJsonObjectCompat("segmentFactors")
-                ReactivityDaypart.entries.forEach { daypart ->
-                    segmentFactors[daypart] = segmentJson
-                        ?.optDoubleCompat(daypart.jsonKey(), globalFactor)
-                        ?.coerceIn(ReactivityDaypart.FACTOR_MIN, ReactivityDaypart.FACTOR_MAX)
-                        ?: globalFactor
-                }
-                log.info(LTag.AIMI, "UnifiedReactivityLearner: ✅ Loaded state")
-                log.info(LTag.AIMI, "  → globalFactor=$globalFactor, shortTerm=$shortTermFactor")
-            },
-            onError = { e ->
-                log.warn(LTag.AIMI, "UnifiedReactivityLearner: Load failed, using defaults (factor=1.0)")
-                globalFactor = 1.0
-                shortTermFactor = 1.0
-                lastAnalysisTime = 0L
-                lastShortAnalysisTime = 0L
-                lastSeenHypoBurdenPct = 0.0
-                ReactivityDaypart.entries.forEach { daypart ->
-                    segmentFactors[daypart] = 1.0
-                }
+        // Mirrors AimiStorageHelper.loadFileSafe: missing / unreadable / empty file silently keeps the
+        // defaults already set on the properties above, a parse failure on real content resets to the
+        // same defaults explicitly and logs.
+        if (!storage.exists(path) || !storage.canRead(path)) return
+        val content = storage.readText(path)
+        if (content.isNullOrEmpty()) return
+        try {
+            val json = Json.parseToJsonElement(content).jsonObject
+            globalFactor = json.optDoubleCompat("globalFactor", 1.0).coerceIn(0.5, 1.5)
+            shortTermFactor = json.optDoubleCompat("shortTermFactor", 1.0).coerceIn(0.5, 1.5)
+            lastAnalysisTime = json.optLongCompat("lastAnalysisTime", 0L)
+            lastShortAnalysisTime = json.optLongCompat("lastShortAnalysisTime", 0L)
+            lastSeenHypoBurdenPct = json.optDoubleCompat("lastSeenHypoBurdenPct", 0.0)
+            val segmentJson = json.optJsonObjectCompat("segmentFactors")
+            ReactivityDaypart.entries.forEach { daypart ->
+                segmentFactors[daypart] = segmentJson
+                    ?.optDoubleCompat(daypart.jsonKey(), globalFactor)
+                    ?.coerceIn(ReactivityDaypart.FACTOR_MIN, ReactivityDaypart.FACTOR_MAX)
+                    ?: globalFactor
             }
-        )
+            log.info(LTag.AIMI, "UnifiedReactivityLearner: ✅ Loaded state")
+            log.info(LTag.AIMI, "  → globalFactor=$globalFactor, shortTerm=$shortTermFactor")
+        } catch (e: Exception) {
+            log.warn(LTag.AIMI, "UnifiedReactivityLearner: Load failed, using defaults (factor=1.0)")
+            globalFactor = 1.0
+            shortTermFactor = 1.0
+            lastAnalysisTime = 0L
+            lastShortAnalysisTime = 0L
+            lastSeenHypoBurdenPct = 0.0
+            ReactivityDaypart.entries.forEach { daypart ->
+                segmentFactors[daypart] = 1.0
+            }
+        }
     }
 
     fun statusSnapshot(): StatusSnapshot {
@@ -854,7 +854,7 @@ class UnifiedReactivityLearner @Inject constructor(
             )
         }
 
-        if (storageHelper.saveFileSafe(file, json.toString())) {
+        if (storage.writeText(path, json.toString())) {
             log.debug(LTag.AIMI, "UnifiedReactivityLearner: ✅ Saved state")
             log.debug(LTag.AIMI, "  → globalFactor=$globalFactor, shortTerm=$shortTermFactor")
         }
