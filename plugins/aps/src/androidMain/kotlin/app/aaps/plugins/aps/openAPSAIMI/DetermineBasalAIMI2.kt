@@ -10676,6 +10676,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
     private val csvfile by lazy { storageHelper.getAimiFile("oapsaimiML2_records.csv") }
     private val csvfile2 by lazy { storageHelper.getAimiFile("oapsaimi2_records.csv") }
+    // AimiPath equivalents of externalDir/csvfile above, for the ml/* chain which takes the storage
+    // port. Same locations as the File-based fields (both resolve through AimiStorageHelper).
+    private val externalDirPath: AimiPath by lazy { storage.directory() }
+    private val csvfilePath: AimiPath by lazy { storage.file("oapsaimiML2_records.csv") }
     private val appExternalFallbackDir by lazy {
         File(context.getExternalFilesDir(null) ?: storageHelper.getAimiDirectory(), "AAPS")
     }
@@ -13360,7 +13364,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun ensureCsvHeaderIsCurrent(file: File, headerRow: String) {
         if (!csvHeaderCheckedPaths.add(file.absolutePath)) return
         runCatching {
-            val outcome = TrainingCsvHeader.ensureCurrent(file, headerRow)
+            val outcome = TrainingCsvHeader.ensureCurrent(storage, AimiPath(file.absolutePath), headerRow)
             if (outcome == TrainingCsvHeader.Outcome.REPLACED) {
                 aapsLogger.info(LTag.APS, "CSV header replaced in place for ${file.name}")
             }
@@ -15557,8 +15561,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 🔥 Trigger async training (fire-and-forget, rate-limited to 1/6h, never blocks)
         AimiSmbTrainer.maybeTrainAsync(
-            dir = externalDir,
-            csvFile = csvfile
+            storage = storage,
+            dir = externalDirPath,
+            csvFile = csvfilePath
         )
 
         // 🎯 Inference-only O(1): fallback to predictedSMB on any issue
@@ -16313,7 +16318,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): SmbInstructionExecutor.Result {
         return SmbInstructionExecutor.execute(
             SmbInstructionExecutor.Input(
-                context = context, preferences = preferences, csvFile = csvfile, rT = rT,
+                context = context, preferences = preferences, csvFile = csvfilePath, rT = rT,
                 consoleLog = consoleLog, consoleError = consoleError,
                 combinedDelta = combinedDeltaLocal.toDouble(), shortAvgDelta = shortAvgDelta.toFloat(), longAvgDelta = longAvgDelta.toFloat(),
                 profile = profile, glucoseStatus = glucoseStatusLocal,

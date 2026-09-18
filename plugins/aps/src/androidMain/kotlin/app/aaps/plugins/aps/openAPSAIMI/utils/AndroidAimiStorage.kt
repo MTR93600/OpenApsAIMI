@@ -99,6 +99,26 @@ class AndroidAimiStorage @Inject constructor(
         }
     }
 
+    override fun replaceKeepingBackup(path: AimiPath, text: String): Boolean {
+        createParentDirectories(path)
+        val tmpFile = fileOf(sibling(path, ".tmp"))
+        val bakFile = fileOf(sibling(path, ".bak"))
+        val target = fileOf(path)
+        return try {
+            tmpFile.writeText(text)
+            if (target.exists()) {
+                bakFile.delete()
+                target.renameTo(bakFile)
+            }
+            val replaced = tmpFile.renameTo(target)
+            if (!replaced) tmpFile.delete()
+            replaced
+        } catch (e: Exception) {
+            runCatching { tmpFile.delete() }
+            false
+        }
+    }
+
     override fun readTailLines(path: AimiPath, maxLines: Int): List<String> =
         runCatching { JsonlTailReader.readTailLines(fileOf(path), maxLines) }.getOrDefault(emptyList())
 

@@ -79,6 +79,50 @@ class AndroidAimiStorageTest {
         }
     }
 
+    // --- replaceKeepingBackup ---------------------------------------------------------------------
+
+    @Test
+    fun replaceKeepingBackup_keeps_the_previous_content_in_the_bak_sibling(@TempDir dir: File) {
+        val file = File(dir, "weights.json").apply { writeText("old model") }
+
+        val ok = storage.replaceKeepingBackup(pathOf(file), "new model")
+
+        assertThat(ok).isTrue()
+        assertThat(file.readText()).isEqualTo("new model")
+        assertThat(File(dir, "weights.json.bak").readText()).isEqualTo("old model")
+    }
+
+    @Test
+    fun replaceKeepingBackup_creates_the_file_when_it_did_not_exist(@TempDir dir: File) {
+        val file = File(dir, "fresh.json")
+
+        val ok = storage.replaceKeepingBackup(pathOf(file), "first write")
+
+        assertThat(ok).isTrue()
+        assertThat(file.readText()).isEqualTo("first write")
+        assertThat(File(dir, "fresh.json.bak").exists()).isFalse()
+    }
+
+    @Test
+    fun replaceKeepingBackup_leaves_the_target_readable_when_the_write_fails(@TempDir dir: File) {
+        val lockedDir = File(dir, "locked").apply { mkdirs() }
+        val file = File(lockedDir, "weights.json").apply { writeText("previous model") }
+
+        // Same deterministic failure as replaceText's equivalent test: no write permission on the
+        // directory means the sibling ".tmp" file can never be created, so the rotate-to-.bak step
+        // never runs and the target is never touched.
+        assertThat(lockedDir.setWritable(false)).isTrue()
+        try {
+            val ok = storage.replaceKeepingBackup(pathOf(file), "new model")
+
+            assertThat(ok).isFalse()
+            assertThat(file.readText()).isEqualTo("previous model")
+        } finally {
+            // JUnit's @TempDir cleanup needs write access back to delete the tree.
+            lockedDir.setWritable(true)
+        }
+    }
+
     // --- readTailLines ----------------------------------------------------------------------------
 
     @Test

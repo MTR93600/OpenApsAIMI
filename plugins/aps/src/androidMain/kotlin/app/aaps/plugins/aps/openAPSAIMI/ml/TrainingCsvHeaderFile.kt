@@ -1,25 +1,27 @@
 package app.aaps.plugins.aps.openAPSAIMI.ml
 
-import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 
 /**
- * File half of [TrainingCsvHeader]: rewrite the first line of a CSV on disk.
+ * Storage-port half of [TrainingCsvHeader]: rewrite the first line of a CSV on disk.
  *
- * Lives in androidMain because the SMB training writer still uses `java.io.File` (P0.7 left File
- * I/O on the tick). The rewrite rule itself is [TrainingCsvHeader.apply] in commonMain.
+ * Lives in androidMain because the SMB training writer still uses [AimiPath] directly on the tick
+ * writer's own file handling (P0.7 left File I/O there). The rewrite rule itself is
+ * [TrainingCsvHeader.apply] in commonMain.
  *
  * Any I/O problem is thrown to the caller, which is expected to log it and carry on: a header that
  * could not be fixed must never stop a row from being written.
  */
-internal fun TrainingCsvHeader.ensureCurrent(file: File, headerLine: String): TrainingCsvHeader.Outcome {
-    val applied = if (!file.exists()) {
-        file.parentFile?.mkdirs()
+internal fun TrainingCsvHeader.ensureCurrent(storage: AimiStorage, path: AimiPath, headerLine: String): TrainingCsvHeader.Outcome {
+    val applied = if (!storage.exists(path)) {
+        storage.createParentDirectories(path)
         TrainingCsvHeader.apply(null, headerLine)
     } else {
-        TrainingCsvHeader.apply(file.readLines(Charsets.UTF_8), headerLine)
+        TrainingCsvHeader.apply(storage.readLines(path), headerLine)
     }
     if (applied.outcome != TrainingCsvHeader.Outcome.ALREADY_CURRENT) {
-        file.writeText(applied.lines.joinToString("\n") + "\n", Charsets.UTF_8)
+        storage.writeText(path, applied.lines.joinToString("\n") + "\n")
     }
     return applied.outcome
 }

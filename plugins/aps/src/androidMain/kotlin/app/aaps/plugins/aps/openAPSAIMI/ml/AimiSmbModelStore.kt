@@ -1,7 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.ml
 
 import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
-import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 
 /**
  * SMB model persistence. Thin facade over the shared [AimiNeuralModelStore] that pins the SMB weight filename inside
@@ -12,13 +13,13 @@ internal object AimiSmbModelStore {
     private const val MODEL_FILE_NAME = "aimi_smb_model.json"
 
     /** The SMB weight file inside [dir] (exposed so the trainer can publish through the shared training pipeline). */
-    fun modelFile(dir: File): File = File(dir, MODEL_FILE_NAME)
+    fun modelFile(storage: AimiStorage, dir: AimiPath): AimiPath = storage.resolve(dir, MODEL_FILE_NAME)
 
-    fun save(dir: File, network: AimiNeuralNetwork): Boolean =
-        AimiNeuralModelStore.save(modelFile(dir), network)
+    fun save(storage: AimiStorage, dir: AimiPath, network: AimiNeuralNetwork): Boolean =
+        AimiNeuralModelStore.save(storage, modelFile(storage, dir), network)
 
-    fun load(dir: File, expectedInputSize: Int): AimiNeuralNetwork? =
-        AimiNeuralModelStore.load(modelFile(dir), expectedInputSize)
+    fun load(storage: AimiStorage, dir: AimiPath, expectedInputSize: Int): AimiNeuralNetwork? =
+        AimiNeuralModelStore.load(storage, modelFile(storage, dir), expectedInputSize)
 
     /**
      * Removes the stored SMB weights from [dir].
@@ -37,5 +38,5 @@ internal object AimiSmbModelStore {
      * ⚠️ ASYNC IMPACT: File I/O. Called from the trainer's IO coroutine after the corpus guard
      * refuses the CSV; not on the `refine()` hot path.
      */
-    fun delete(dir: File): Boolean = AimiNeuralModelStore.delete(modelFile(dir))
+    fun delete(storage: AimiStorage, dir: AimiPath): Boolean = AimiNeuralModelStore.delete(storage, modelFile(storage, dir))
 }

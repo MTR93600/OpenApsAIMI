@@ -363,10 +363,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         // ?? Pre-load ML model into memory for O(1) SMB inference on hot path
         try {
-            val aimiDir = storageHelper.getAimiDirectory()
             val (status, path, error) = storageHelper.getStorageStatus()
             PkPdCsvLogger.configureStorage(storage, aapsLogger)
-            AimiSmbTrainer.loadModel(aimiDir)
+            AimiSmbTrainer.loadModel(storage, storage.directory())
             aapsLogger.info(LTag.APS, "AIMI storage status=$status path=${path ?: "n/a"} error=${error ?: "none"}")
             aapsLogger.info(LTag.APS, "? AimiSmbTrainer: model load requested (async)")
         } catch (e: Exception) {
@@ -1928,6 +1927,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         tddCalculator = tddCalculator,
                         tirCalculator = tirCalculator,
                         aapsLogger = aapsLogger,
+                        storage = storage,
                     )
                     AimiProfileAdvisorScreen(
                         preferences = preferences,
@@ -2037,6 +2037,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                                 tddCalculator = tddCalculator,
                                 tirCalculator = tirCalculator,
                                 aapsLogger = aapsLogger,
+                                storage = storage,
                             ).pkpdRecommendationsForSettings(7)
                         }
                     },

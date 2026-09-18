@@ -27,6 +27,7 @@ import app.aaps.core.keys.interfaces.StringPreferenceKey
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import org.json.JSONObject
 
 /**
@@ -66,6 +67,7 @@ class AimiAdvisorService {
     private val rh: app.aaps.core.interfaces.resources.ResourceHelper?
     private val aapsLogger: app.aaps.core.interfaces.logging.AAPSLogger?
     private val pluginManager: app.aaps.plugins.aps.openAPSAIMI.plugins.AimiPluginManager
+    private val storage: AimiStorage?
 
     // Constructor injection for dependencies
     constructor(
@@ -77,7 +79,8 @@ class AimiAdvisorService {
         tddCalculator: app.aaps.core.interfaces.stats.TddCalculator? = null,
         tirCalculator: app.aaps.core.interfaces.stats.TirCalculator? = null,
         pluginManager: app.aaps.plugins.aps.openAPSAIMI.plugins.AimiPluginManager? = null,
-        aapsLogger: app.aaps.core.interfaces.logging.AAPSLogger? = null
+        aapsLogger: app.aaps.core.interfaces.logging.AAPSLogger? = null,
+        storage: AimiStorage? = null,
     ) {
         this.profileFunction = profileFunction
         this.persistenceLayer = persistenceLayer
@@ -87,6 +90,7 @@ class AimiAdvisorService {
         this.tddCalculator = tddCalculator
         this.tirCalculator = tirCalculator
         this.aapsLogger = aapsLogger
+        this.storage = storage
         this.pluginManager = pluginManager ?: app.aaps.plugins.aps.openAPSAIMI.plugins.AimiPluginManager(aapsLogger ?: object : app.aaps.core.interfaces.logging.AAPSLogger {
             override fun debug(message: String) {}
             override fun debug(enable: Boolean, tag: app.aaps.core.interfaces.logging.LTag, message: String) {}
@@ -128,7 +132,7 @@ class AimiAdvisorService {
         val orefInsight = if (persistenceLayer != null) {
             runBlocking(Dispatchers.IO) {
                 try {
-                    OrefLocalPipeline(persistenceLayer).run(
+                    OrefLocalPipeline(persistenceLayer, storage).run(
                         profileSnapshot = context.profile,
                         windowDays = orefWindowDays,
                         assetContext = assetContext,

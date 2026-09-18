@@ -11,7 +11,6 @@ import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCircuitBreaker
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
-import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
@@ -317,11 +316,9 @@ class BasalMlTrainingCoordinator @Inject constructor(
         minOutputSpread: Double = MIN_OUTPUT_SPREAD,
     ): Boolean {
         val hasIncumbent = storage.exists(weightsPath)
-        // NeuralModelTrainer (ml/*) is out of scope for this sweep and still takes a java.io.File;
-        // bridge locally rather than change its signature.
-        val weightsFile = File(weightsPath.value)
         return NeuralModelTrainer.trainAndPublish(
-            weightsFile = weightsFile,
+            storage = storage,
+            weightsPath = weightsPath,
             split = NeuralModelTrainer.Split(trainInputs, trainTargets, valInputs, valTargets),
             config = config,
             inputSize = INPUT_SIZE,

@@ -140,6 +140,21 @@ interface AimiStorage {
     fun replaceText(path: AimiPath, text: String): Boolean
 
     /**
+     * Replaces the content of [path] with [text], keeping the version that was there before as a
+     * `.bak` sibling (see [sibling]). `false` on failure.
+     *
+     * This exists next to [replaceText], not instead of it, because one caller needs a different
+     * guarantee. `AimiNeuralModelStore` persists a weight file the dosing algorithm loads on the
+     * next tick, and its `.bak` is the rollback: `load` tries the target and then the `.bak`, and
+     * `delete` removes both, precisely so a model just judged dead cannot come back through the
+     * backup. Routing that save through plain [replaceText] would delete that rollback, not tidy
+     * it - so this method keeps it. Implementations write a `.tmp` sibling, rotate the current
+     * target to `.bak`, then rename the `.tmp` over the target; a crash between steps must leave
+     * either the previous target or the `.bak` intact.
+     */
+    fun replaceKeepingBackup(path: AimiPath, text: String): Boolean
+
+    /**
      * The last [maxLines] complete lines of [path], newest first.
      *
      * For a journal that only ever grows - a decision log, a training CSV - reading the whole file to

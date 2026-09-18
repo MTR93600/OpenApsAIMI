@@ -2,7 +2,8 @@ package app.aaps.plugins.aps.openAPSAIMI.ml
 
 import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
-import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -261,7 +262,7 @@ internal object NeuralModelTrainer {
     }
 
     /**
-     * Train a fresh candidate on [split], validate it, and publish to [weightsFile] on success.
+     * Train a fresh candidate on [split], validate it, and publish to [weightsPath] on success.
      *
      * Before training, the per-feature mean and standard deviation of `split.trainInputs` are installed on the
      * candidate, so training and later inference see the same scaling.
@@ -299,7 +300,8 @@ internal object NeuralModelTrainer {
      * @return the published network, or null if nothing was published.
      */
     fun trainAndPublish(
-        weightsFile: File,
+        storage: AimiStorage,
+        weightsPath: AimiPath,
         split: Split,
         config: TrainingConfig,
         inputSize: Int,
@@ -337,10 +339,10 @@ internal object NeuralModelTrainer {
             ?: FloatArray(inputSize) { i -> mean[i].toFloat() }
 
         // The incumbent must prove it is alive before it is allowed to block anything.
-        val incumbent = if (requireIncumbentBeat) AimiNeuralModelStore.load(weightsFile, inputSize) else null
+        val incumbent = if (requireIncumbentBeat) AimiNeuralModelStore.load(storage, weightsPath, inputSize) else null
         val incumbentUsable = incumbent != null && passesPublishProbes(
             predict = incumbent::predict,
-            label = "incumbent ${weightsFile.name}",
+            label = "incumbent ${storage.displayPath(weightsPath)}",
             inputSize = inputSize,
             probeInput = effectiveProbe,
             outputRange = outputRange,
@@ -349,8 +351,8 @@ internal object NeuralModelTrainer {
             log = log,
         )
         if (incumbent != null && !incumbentUsable) {
-            log("incumbent ${weightsFile.name} is dead — remove it and train from scratch")
-            AimiNeuralModelStore.delete(weightsFile)
+            log("incumbent ${storage.displayPath(weightsPath)} is dead — remove it and train from scratch")
+            AimiNeuralModelStore.delete(storage, weightsPath)
         }
         val incumbentLoss = if (incumbentUsable) incumbent!!.validate(split.valInputs, split.valTargets) else Double.MAX_VALUE
 
@@ -376,7 +378,7 @@ internal object NeuralModelTrainer {
         if (maxBaselineMaeRatio > 0.0) {
             val (candidateMae, baselineMae) = heldOutMaeAgainstConstant(candidate::predict, split)
             if (!candidateMae.isFinite() || !baselineMae.isFinite()) {
-                log("cannot measure the held-out error of ${weightsFile.name} — discard")
+                log("cannot measure the held-out error of ${storage.displayPath(weightsPath)} — discard")
                 return null
             }
             if (baselineMae <= 0.0) {
@@ -395,18 +397,18 @@ internal object NeuralModelTrainer {
             if (!candidateLoss.isFinite()) return null
             val maxAllowed = incumbentLoss * valLossTolerance + 1e-6
             if (candidateLoss > maxAllowed) {
-                log("reject ${weightsFile.name} val=$candidateLoss > incumbent=$incumbentLoss (tol=$valLossTolerance)")
+                log("reject ${storage.displayPath(weightsPath)} val=$candidateLoss > incumbent=$incumbentLoss (tol=$valLossTolerance)")
                 return null
             }
         } else if (requireIncumbentBeat && !candidate.lastBestValidationLoss().isFinite()) {
             return null
         }
 
-        if (!AimiNeuralModelStore.save(weightsFile, candidate)) {
-            log("atomic save failed for ${weightsFile.name}")
+        if (!AimiNeuralModelStore.save(storage, weightsPath, candidate)) {
+            log("atomic save failed for ${storage.displayPath(weightsPath)}")
             return null
         }
-        log("published ${weightsFile.name}")
+        log("published ${storage.displayPath(weightsPath)}")
         return candidate
     }
 }

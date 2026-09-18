@@ -5,7 +5,8 @@ import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
 import app.aaps.plugins.aps.openAPSAIMI.saveToFile
 import app.aaps.plugins.aps.openAPSAIMI.ml.NeuralModelTrainer
-import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlin.math.exp
 import kotlin.random.Random
 
@@ -39,12 +40,22 @@ object OrefPersonalMlTrainer {
     const val MIN_LABELLED_SAMPLES = 120
     private const val HIDDEN = 16
 
-    private fun dir(ctx: Context): File = File(ctx.filesDir, "oref_personal").apply { mkdirs() }
+    /**
+     * `filesDir`/oref_personal, resolved through the storage port even though it is not inside the
+     * AIMI directory [AimiStorage] otherwise manages - [AimiStorage.resolve] exists exactly for a
+     * directory that did not come from [AimiStorage.directory]. Same location as before the port.
+     */
+    private fun dir(storage: AimiStorage, ctx: Context): AimiPath {
+        val filesDir = AimiPath(ctx.filesDir.absolutePath)
+        val oref = storage.resolve(filesDir, "oref_personal")
+        storage.createDirectories(oref)
+        return oref
+    }
 
     // These two files are written after every training run but nothing loads them back yet: the head is always
     // retrained from the current window. They are kept so a later change can reuse the weights.
-    fun hypoFile(ctx: Context): File = File(dir(ctx), "personal_hypo_mlp.json")
-    fun hyperFile(ctx: Context): File = File(dir(ctx), "personal_hyper_mlp.json")
+    fun hypoFile(storage: AimiStorage, ctx: Context): AimiPath = storage.resolve(dir(storage, ctx), "personal_hypo_mlp.json")
+    fun hyperFile(storage: AimiStorage, ctx: Context): AimiPath = storage.resolve(dir(storage, ctx), "personal_hyper_mlp.json")
 
     data class PersonalMlOutcome(
         val status: OrefPersonalMlStatus,
@@ -56,6 +67,7 @@ object OrefPersonalMlTrainer {
     )
 
     fun trainAndSummarize(
+        storage: AimiStorage,
         ctx: Context,
         slices: List<Triple<Int, DoubleArray, Long>>,
         outcomePerSlice: List<OrefOutcomeComputer.Outcome>,
@@ -76,9 +88,12 @@ object OrefPersonalMlTrainer {
         }
         return try {
             val hypoNet = trainOneHead(hypoPairs, Random(42L))
-            hypoNet.saveToFile(hypoFile(ctx))
             val hyperNet = trainOneHead(hyperPairs, Random(43L))
-            hyperNet.saveToFile(hyperFile(ctx))
+            val savedHypo = hypoNet.saveToFile(storage, hypoFile(storage, ctx))
+            val savedHyper = hyperNet.saveToFile(storage, hyperFile(storage, ctx))
+            if (!savedHypo || !savedHyper) {
+                return PersonalMlOutcome(OrefPersonalMlStatus.TRAIN_FAILED, detail = "failed to persist trained weights")
+            }
 
             // Uncalibrated scores, not risk percentages — see the class KDoc before using them anywhere.
             val meanH = meanSigmoid(hypoNet, slices)

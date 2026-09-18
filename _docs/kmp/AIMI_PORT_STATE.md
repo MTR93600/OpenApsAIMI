@@ -1770,6 +1770,58 @@ only because it sits next to crash-safety code: `appendText` is not atomic and w
 
 ---
 
+## 6ab. 2026-09-18: storage sweep, batch B2 - the ml chain, and the sweep is done
+
+The `ml/*` chain is on the port. With batches A, B1 and B2 together, **AIMI files calling
+`java.io.File` directly went from 31 to 14**, and every one of the 14 that remains is there on
+purpose: the storage layer itself (`AndroidAimiStorage`, `AimiStorageHelper`, `JsonlTailReader`), TFLite
+model loading, two Compose screens, the SAF backup manager, and the deeply-Android exporters and
+physio store. Gates: `compileKotlinIosArm64` EXIT=0, `:app:assembleFullDebug` 0 Kotlin errors,
+`testAndroidHostTest --rerun` **588 tests, 0 failures** (585 + 3 for the new member).
+
+**`replaceKeepingBackup` was added, reversing an earlier decision on new information.** When the
+contract was designed, a backup-keeping replace was declined as an escape hatch that would become the
+default path - a good rule, decided while the alternative was hypothetical. Reading
+`AimiNeuralModelStore` made it concrete: its `.bak` is not a convenience, it is the **rollback**. The
+load path tries the target and then the `.bak`, and `delete` deliberately removes both so a model
+judged dead cannot be resurrected by the next load. Converting that file with plain `replaceText`
+would have deleted a safety mechanism on a model the dosing algorithm runs. The user was asked again,
+with the protocol in front of them, and chose to add the member. The Android implementation mirrors
+the old hand-rolled sequence line for line, including what happens when the final rename fails, and
+three tests pin it.
+
+**The hazard this batch exposed, worth carrying to any future port work.** `AimiNeuralNetworkFiles.saveToFile`
+returned `Unit` and signalled failure by throwing. `AimiStorage` writes never throw - they answer
+`false`, by deliberate design, so an AIMI log line can never take down a dosing tick. Converting the
+function without noticing would have left `OrefPersonalMlTrainer`'s "write failure → `TRAIN_FAILED`"
+branch **silently unreachable**: training would have reported success while persisting nothing. The
+signature became `Boolean` and the caller now checks it. The general shape: **when converting code
+that detected failure by catching an exception, the port's non-throwing contract silently deletes that
+detection unless the return value is checked.** Nothing about that fails a build.
+
+A third unbounded read was converted on the way - `AimiSmbTrainer.trainNow` was reading
+`oapsaimiML2_records.csv` whole, a file that gains a row every loop tick. That is three
+out-of-memory risks this sweep has found, one introduced by itself and two pre-existing, all now on
+`forEachLine`.
+
+The bridge B1 left in `BasalMlTrainingCoordinator` is gone, as planned. Threading the port went deeper
+than the eight-file list suggested - the OREF advisor path needed a nullable `storage` parameter on
+`AimiAdvisorService` and `OrefLocalPipeline` - but nothing was converted to an injected class, so the
+house pattern held.
+
+One diagnostics-only change: `NeuralModelTrainer`'s log lines now print `storage.displayPath(...)`
+rather than a bare filename, because an `AimiPath` may not be taken apart from outside the Android
+half. Log text only, no protocol change.
+
+**Left for a later lot, with a real caller.** `BasalMlModelStore` in commonMain is load-only and its
+KDoc explains why: the write side needs directory creation, rename and delete, *"and the AIMI storage
+seam offers none of the three"*. It now offers all three. No `save` was added, because nothing would
+call it yet and this project does not ship an API with no consumer - but the stated blocker is gone
+and that KDoc is stale. A lot that brings a real writer should add the save and fix the comment in the
+same change.
+
+---
+
 ---
 
 ## 7. Start here next session
