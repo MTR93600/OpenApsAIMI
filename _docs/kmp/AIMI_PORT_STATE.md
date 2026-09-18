@@ -1822,6 +1822,49 @@ same change.
 
 ---
 
+## 6ac. 2026-09-18: eleven files cross into commonMain - what the three sweeps bought
+
+The storage, clock and behaviour-family work had moved almost nothing on its own, by design: 6w
+measured that no remaining file was blocked by a single class of problem, so each sweep was a
+payment towards a move rather than a move. This entry collects the change.
+
+Re-running 6w's whole-tree probe - `git mv` every remaining androidMain AIMI file into commonMain,
+compile for iOS once, read the ranking, revert - shows **files with no intrinsic platform blocker went
+from 6 to 16**. That number is the sweeps' receipt.
+
+Then the second question, which the probe cannot answer on its own: of those 16, which compile when
+only *they* move, rather than when everything moves? Reverting the failures and iterating took one
+round. **Eleven files now live in commonMain**: `AimiNeuralNetworkFiles`, the three runtime-history
+readers (`T3cRuntimeHistoryReader`, `HarmoniaRuntimeHistoryReader`, `RecursiveBeliefExportReader`),
+`AimiControlCenterRuntimeLoaders`, `ComparisonCsvParser`, `TpoPersistence`, and the four `ml/*`
+persistence files (`AimiNeuralModelStore`, `AimiSmbModelStore`, `NeuralModelTrainer`,
+`TrainingCsvHeaderFile`).
+
+AIMI is now **103 files in androidMain against 376 in commonMain**, from 121/356 when this series of
+lots began.
+
+Five of the 16 did not survive alone - `AimiClinicalReportEngine`, `AimiAdaptationStatusBuilder`,
+`AimiDetermineBasalTickOrchestrator` and the two step providers - each waiting on a collaborator that
+has not moved (`AIMIPhysioManagerMTR`, `BasalLearner`, `UnifiedReactivityLearner`). They are queued
+behind a name, not behind a platform, which is a much better place to be.
+
+Gates: `compileKotlinIosArm64` EXIT=0, `:app:assembleFullDebug` 0 Kotlin errors,
+`testAndroidHostTest --rerun` **588 tests, 0 failures** - unchanged, as a move should leave them.
+
+**One comment corrected.** `AimiControlCenterRuntimeLoaders.kt` was created in 6v to hold the part of
+the Control Center snapshot that had to stay on Android, and its header said exactly that. The file
+has now moved to commonMain itself, so the sentence had become false. The split no longer separates
+platform from model and is kept only because the grouping reads well - which is what the header says
+now. A comment that survives the reason it describes is worse than none.
+
+**A note on method, since it has now been decided twice by measurement rather than by argument.** The
+crude approach - grep for files that import nothing Android and move those - has produced a wrong
+answer every time it has been tried: 14 of 16 failed in 6u, and an attempt this session to find
+unused `Context` parameters by regex flagged files that plainly use theirs on the next line. The
+probe works because it asks the compiler, and it costs one compile. Prefer it.
+
+---
+
 ---
 
 ## 7. Start here next session

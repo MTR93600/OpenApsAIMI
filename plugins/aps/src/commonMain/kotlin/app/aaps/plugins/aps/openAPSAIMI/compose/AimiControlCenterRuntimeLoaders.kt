@@ -11,13 +11,13 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeTickRecord
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeTickStatus
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 
-// These two loaders and their formatters stay in androidMain: the tick-record types they return
-// (T3cRuntimeTickRecord/HarmoniaRuntimeTickRecord) are declared inside the androidMain reader files
-// T3cRuntimeHistoryReader and HarmoniaRuntimeHistoryReader, which are themselves still objects and
-// still androidMain (batch A of the storage sweep only removed their java.io.File dependency, it did
-// not move them). Everything else that used to live in AimiControlCenterSnapshot.kt moved to
-// commonMain with this file's move to androidMain - see that file for the pure model types
-// (AimiT3cRuntimeSnapshot, AimiControlDetail, ...) these functions build.
+// These two loaders turn a runtime tick record into the pure snapshot types the Control Center
+// renders. They were split out of AimiControlCenterSnapshot.kt when they still had to stay on
+// Android - the readers they call reached the disk through java.io.File back then. The storage sweep
+// removed that, and both they and the readers are shared code now, so the split no longer separates
+// platform from model. It is kept only because the grouping still reads well: see
+// AimiControlCenterSnapshot.kt for the model types (AimiT3cRuntimeSnapshot, AimiControlDetail, ...)
+// these functions build.
 
 internal fun loadLatestT3cRuntimeSnapshot(storage: AimiStorage): AimiT3cRuntimeSnapshot {
     val tick = T3cRuntimeHistoryReader.readLatestTick(storage) ?: return unavailableT3cRuntimeSnapshot()
