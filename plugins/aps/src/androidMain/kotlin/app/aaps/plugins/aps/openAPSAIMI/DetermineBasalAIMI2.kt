@@ -73,7 +73,7 @@ import app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCsvHeader
 import app.aaps.plugins.aps.openAPSAIMI.ml.ensureCurrent
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorJsonlExport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdict
-import app.aaps.plugins.aps.openAPSAIMI.smb.DescentRedoseGuard
+import app.aaps.plugins.aps.openAPSAIMI.smb.RiseCeilingGuard
 import app.aaps.plugins.aps.openAPSAIMI.smb.MaxSmbLadder
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbIntervalPolicy
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefPredictionReasonSuffix
@@ -559,22 +559,25 @@ internal data class AimiDecisionContext(
         /** The same reason with its live numbers, for reading. */
         var autodrive_gate_reason: String? = null,
         /**
-         * Shadow measurement of the descent re-dose guard (`DescentRedoseGuard`).
+         * Shadow measurement of the rise ceiling guard (`RiseCeilingGuard`).
          *
          * Written on every tick that reaches the universal SMB exit, whether
-         * [app.aaps.core.keys.BooleanKey.OApsAIMIDescentRedoseGuard] is on or off. That is the whole
-         * point: the gesture can be counted in production for weeks before it is armed.
+         * [app.aaps.core.keys.BooleanKey.OApsAIMIRiseCeilingGuard] is on or off. That is the whole
+         * point: the thresholds were chosen after seeing the data, so they need a measurement made
+         * in advance before the gesture is armed.
          */
-        var descent_redose_guard_would_block: Boolean? = null,
-        /** Reason token plus its live numbers (peak, peak age, drop, trough, rebound, BG, IOB). */
-        var descent_redose_guard_reason: String? = null,
+        var rise_ceiling_guard_would_block: Boolean? = null,
+        /** Reason token plus its live numbers (ticks in a row at the ceiling, rise). */
+        var rise_ceiling_guard_reason: String? = null,
+        /** How many ticks in a row the bolus has come out at a ceiling, this tick included. */
+        var rise_ceiling_guard_repeats: Int? = null,
         /**
-         * Bolus the guard would have withheld, U.
+         * Bolus the guard would have refused, U.
          *
-         * Set only when the verdict is "block", so a tick that did not block leaves the field
-         * absent instead of reporting a zero that means nothing.
+         * Set only when the verdict is "block", so a tick that did not block leaves the field absent
+         * instead of reporting a zero that means nothing.
          */
-        var descent_redose_guard_withheld_u: Double? = null,
+        var rise_ceiling_guard_withheld_u: Double? = null,
         /**
          * Effort SMB reduction, as actually applied at the universal SMB exit.
          *
@@ -900,9 +903,10 @@ internal data class AimiDecisionContext(
             base.put("autodrive_gate_engaged", baseline_state.autodrive_gate_engaged ?: AimiJson.NULL)
             base.put("autodrive_gate_kind", baseline_state.autodrive_gate_kind ?: AimiJson.NULL)
             base.put("autodrive_gate_reason", baseline_state.autodrive_gate_reason ?: AimiJson.NULL)
-            base.put("descent_redose_guard_would_block", baseline_state.descent_redose_guard_would_block ?: AimiJson.NULL)
-            base.put("descent_redose_guard_reason", baseline_state.descent_redose_guard_reason ?: AimiJson.NULL)
-            base.put("descent_redose_guard_withheld_u", baseline_state.descent_redose_guard_withheld_u ?: AimiJson.NULL)
+            base.put("rise_ceiling_guard_would_block", baseline_state.rise_ceiling_guard_would_block ?: AimiJson.NULL)
+            base.put("rise_ceiling_guard_reason", baseline_state.rise_ceiling_guard_reason ?: AimiJson.NULL)
+            base.put("rise_ceiling_guard_repeats", baseline_state.rise_ceiling_guard_repeats ?: AimiJson.NULL)
+            base.put("rise_ceiling_guard_withheld_u", baseline_state.rise_ceiling_guard_withheld_u ?: AimiJson.NULL)
             base.put("effort_smb_factor_requested", baseline_state.effort_smb_factor_requested ?: AimiJson.NULL)
             base.put("effort_smb_factor_applied", baseline_state.effort_smb_factor_applied ?: AimiJson.NULL)
             base.put("effort_smb_before_u", baseline_state.effort_smb_before_u ?: AimiJson.NULL)
@@ -11428,6 +11432,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     /** SMB leaving the effort reduction, in units. Per tick. */
     private var lastEffortSmbAfterU: Double? = null
+
+    /**
+     * Ticks in a row where the bolus came out exactly at a configured ceiling. Cross-tick on purpose
+     * — the whole point of [RiseCeilingGuard] is what happens across several ticks, so this must NOT
+     * be reset per tick.
+     */
+    private var ceilingRepeatCount: Int = 0
+
+    /** Clock of the last tick counted in [ceilingRepeatCount]; a hole restarts the count. */
+    private var ceilingRepeatLastMs: Long = 0L
     private var mealAdvisorOneShotThisTick: Boolean = false
     private var lastTubeAdvisorSmbCapScale: Double? = null
 
@@ -12578,29 +12592,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (v < minVal) minVal = v
         }
         return if (minVal == Double.MAX_VALUE) 200.0 else minVal
-    }
-
-    /**
-     * Runs [DescentRedoseGuard] on the bucketed glucose table and the current IOB.
-     *
-     * Rows are filtered exactly like [minBgInLastMinutes]: gap fillers and the 39 mg/dL sentinel are
-     * dropped, and the recalculated (smoothed) value is used. Dropping the fillers leaves real holes
-     * in the series, which is what the guard's own gap rule is there to cut on.
-     */
-    private fun evaluateDescentRedoseGuard(): DescentRedoseGuard.Verdict {
-        val data = iobCobCalculator.ads.getBucketedDataTableCopy()
-        val readings = ArrayList<DescentRedoseGuard.Reading>()
-        if (data != null) {
-            for (row in data) {
-                if (row.value <= 39 || row.filledGap) continue
-                readings.add(DescentRedoseGuard.Reading(row.timestamp, row.recalculated))
-            }
-        }
-        return DescentRedoseGuard.evaluate(
-            readings = readings,
-            nowMs = dateUtil.now(),
-            iobU = this.iob.toDouble(),
-        )
     }
 
     fun appendCompactLog(
@@ -14113,28 +14104,50 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
             rT.reason.append("🏃effort×${"%.2f".format(Locale.US, effortFactor)} ")
         }
-        // 🛑 Descent re-dose guard — see [app.aaps.plugins.aps.openAPSAIMI.smb.DescentRedoseGuard].
+        // 🧱 Rise ceiling guard — see [app.aaps.plugins.aps.openAPSAIMI.smb.RiseCeilingGuard].
         // The verdict is ALWAYS computed and exported, so the gesture can be measured in production
-        // long before it is armed. It changes the dose only when the opt-in key is on; with the key
-        // off nothing here writes to finalUnits, the console or the reason, so the tick stays
+        // before it is armed. It changes the dose only when the opt-in key is on; with the key off
+        // nothing here writes to finalUnits, the console or the reason, so the tick stays
         // bit-identical to what it was before this block existed.
-        val descentGuardVerdict = evaluateDescentRedoseGuard()
+        //
+        // The count is taken on the bolus BEFORE this block refuses anything. Counting the refused
+        // value would drop the run back to zero on every second tick, and the gesture would then
+        // hold back only one tick in three instead of the whole repeat that was measured.
+        val ceilingTickMs = dateUtil.now()
+        val atSmbCeiling = RiseCeilingGuard.isAtCeiling(
+            units = finalUnits,
+            ceilingU = baseLimit,
+            highGlucoseCeilingU = maxSMBHB,
+        )
+        ceilingRepeatCount = RiseCeilingGuard.nextRepeatCount(
+            previous = ceilingRepeatCount,
+            previousMs = ceilingRepeatLastMs,
+            nowMs = ceilingTickMs,
+            atCeiling = atSmbCeiling,
+        )
+        if (atSmbCeiling) ceilingRepeatLastMs = ceilingTickMs
+        val riseCeilingVerdict = RiseCeilingGuard.evaluate(
+            atCeiling = atSmbCeiling,
+            repeats = ceilingRepeatCount,
+            deltaMgdl5m = this.delta.toDouble(),
+        )
         pendingDecisionCtxForExport?.baseline_state?.let { baseline ->
-            baseline.descent_redose_guard_would_block = descentGuardVerdict.block
-            baseline.descent_redose_guard_reason = descentGuardVerdict.reason
-            if (descentGuardVerdict.block) baseline.descent_redose_guard_withheld_u = finalUnits
+            baseline.rise_ceiling_guard_would_block = riseCeilingVerdict.block
+            baseline.rise_ceiling_guard_reason = riseCeilingVerdict.reason
+            baseline.rise_ceiling_guard_repeats = riseCeilingVerdict.repeats
+            if (riseCeilingVerdict.block) baseline.rise_ceiling_guard_withheld_u = finalUnits
         }
-        if (DescentRedoseGuard.shouldWithhold(
-                verdict = descentGuardVerdict,
-                armed = preferences.get(BooleanKey.OApsAIMIDescentRedoseGuard),
+        if (RiseCeilingGuard.shouldWithhold(
+                verdict = riseCeilingVerdict,
+                armed = preferences.get(BooleanKey.OApsAIMIRiseCeilingGuard),
                 isExplicitUserAction = isExplicitUserAction,
                 proposedUnits = finalUnits,
             )
         ) {
             consoleLog.add(
-                "🛑 DESCENT_REDOSE_GUARD: ${"%.2f".format(Locale.US, finalUnits)}→0.00U (${descentGuardVerdict.reason})",
+                "🧱 RISE_CEILING_GUARD: ${"%.2f".format(Locale.US, finalUnits)}→0.00U (${riseCeilingVerdict.reason})",
             )
-            rT.reason.append("🛑descent re-dose ")
+            rT.reason.append("🧱rise ceiling ")
             finalUnits = 0.0
         }
 
