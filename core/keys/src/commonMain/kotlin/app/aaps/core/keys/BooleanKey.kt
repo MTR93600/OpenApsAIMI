@@ -311,6 +311,25 @@ enum class BooleanKey(
         dependency = OApsAIMIautoDriveActive,
     ),
     /**
+     * Opt-in: while a stress signature holds, forbid the commanded insulin sensitivity from falling
+     * under the profile sensitivity of this time of day.
+     *
+     * The signature is heart rate at least 20 bpm over resting, fewer than 100 steps in the last
+     * 15 min, held without a break for at least 10 min. It is evaluated 24 hours a day, with no time
+     * window. The gesture only ever **raises** the commanded sensitivity, which makes every prediction
+     * attribute a larger effect to the insulin already on board, so it can only make a dose smaller.
+     *
+     * The verdict is computed and exported on every tick even when this key is false, so the effect can
+     * be measured before the gesture is armed. See `StressIsfFloor`. Default **false** (shadow /
+     * observation), matching `origin/dev_OAPSAIMI` @ `f61474bb73`.
+     */
+    OApsAIMIStressIsfFloor(
+        key = "key_aimi_stress_isf_floor",
+        defaultValue = false,
+        title = KeysStrings.pref_title_aimi_stress_isf_floor,
+        summary = KeysStrings.pref_summary_aimi_stress_isf_floor,
+    ),
+    /**
      * Opt-in: refuse a **bolus** that re-doses a descent which is already covered by active insulin.
      *
      * Blocks only when all five conditions of `DescentRedoseGuard` hold at once: a peak of at least

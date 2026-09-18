@@ -475,6 +475,21 @@ internal data class AimiDecisionContext(
          * field could say while the shadow witness was reading the already-floored value.
          */
         val isf_pre_floor_mgdl: Double? = null,
+        /**
+         * Stress-ISF-floor signature of the tick: does it hold, and why.
+         *
+         * Written on every tick whether `BooleanKey.OApsAIMIStressIsfFloor` is armed or not, so the
+         * gesture can be measured before it is armed. See `StressIsfFloor`.
+         */
+        val stress_isf_floor_active: Boolean? = null,
+        val stress_isf_floor_reason: String? = null,
+        /**
+         * Sensitivity that would be commanded with the floor at 1.0 x profile, mg/dL per U.
+         *
+         * Present only when the signature is active and the floor would really change the value.
+         * Absent otherwise — absent means "nothing to see", not zero.
+         */
+        val stress_isf_floor_isf_mgdl: Double? = null,
         /** Shadow: sensitivity an unconditional exit clamp relative to the profile would command. */
         val isf_profile_relative_shadow_mgdl: Double? = null,
         /** Shadow: true when that clamp would have changed the value. */
@@ -861,6 +876,9 @@ internal data class AimiDecisionContext(
             base.put("estimated_ra_mgdl_per_min", baseline_state.estimated_ra_mgdl_per_min ?: AimiJson.NULL)
             base.put("physio_isf_factor", baseline_state.physio_isf_factor ?: AimiJson.NULL)
             base.put("isf_pre_floor_mgdl", baseline_state.isf_pre_floor_mgdl ?: AimiJson.NULL)
+            base.put("stress_isf_floor_active", baseline_state.stress_isf_floor_active ?: AimiJson.NULL)
+            base.put("stress_isf_floor_reason", baseline_state.stress_isf_floor_reason ?: AimiJson.NULL)
+            base.put("stress_isf_floor_isf_mgdl", baseline_state.stress_isf_floor_isf_mgdl ?: AimiJson.NULL)
             base.put("isf_profile_relative_shadow_mgdl", baseline_state.isf_profile_relative_shadow_mgdl ?: AimiJson.NULL)
             base.put("isf_profile_relative_bound_hit", baseline_state.isf_profile_relative_bound_hit ?: AimiJson.NULL)
             base.put("sensitivity_ratio_r", baseline_state.sensitivity_ratio_r ?: AimiJson.NULL)
@@ -2265,6 +2283,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 estimated_ra_mgdl_per_min = runCatching { continuousStateEstimator.getLastRa() }.getOrNull(),
                 physio_isf_factor = IsfSourceTelemetry.lastPhysioIsfFactor,
                 isf_pre_floor_mgdl = CommandedIsf.lastPreFloorMgdlPerU,
+                stress_isf_floor_active = IsfSourceTelemetry.lastStressIsfFloorActive,
+                stress_isf_floor_reason = IsfSourceTelemetry.lastStressIsfFloorReason,
+                stress_isf_floor_isf_mgdl = IsfSourceTelemetry.lastStressIsfFloorIsfMgdl,
                 isf_profile_relative_shadow_mgdl = IsfSourceTelemetry.lastProfileRelativeShadowMgdl,
                 isf_profile_relative_bound_hit = IsfSourceTelemetry.lastProfileRelativeBoundHit,
                 sensitivity_ratio_r = runCatching { sensitivityRatioEstimator.ratio }.getOrNull(),
