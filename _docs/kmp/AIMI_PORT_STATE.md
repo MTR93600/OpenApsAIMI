@@ -1865,6 +1865,58 @@ probe works because it asks the compiler, and it costs one compile. Prefer it.
 
 ---
 
+## 6ad. 2026-09-18: the two learners, and a Buddhist-calendar bug fixed on the way
+
+`BasalLearner` and `UnifiedReactivityLearner` were the last two files standing in front of a queue,
+and their only remaining blockers were JVM concurrency primitives and `java.util.Calendar`. Both are
+now converted, and **three more files crossed into commonMain**: the two learners and
+`AimiAdaptationStatusBuilder`, which was waiting on both. AIMI is at **100 androidMain / 379
+commonMain**. Gates: `compileKotlinIosArm64` EXIT=0, `:app:assembleFullDebug` 0 Kotlin errors,
+`testAndroidHostTest --rerun` **589 tests, 0 failures** (588 + 1 new).
+
+**The conversion was chosen per field, not applied as a pattern**, because the wrong choice here is
+silent. Several fields were `AtomicReference` snapshots read on the dosing path; replacing those with
+a lock would let a dosing tick block behind a background refresh. The house answer was already in the
+module - `advisor/auditor/AuditorVerdictCache.kt` publishes with `@Volatile` from `kotlin.concurrent`
+and reserves `AapsLock` for what genuinely needs mutual exclusion - so:
+
+- the `AtomicReference<List<...>>` snapshots became `@Volatile`, keeping reads lock-free;
+- the `AtomicBoolean` "refresh in flight" guards became `AapsLock` plus a `@Volatile` flag, tested and
+  set inside one `withLock`, copied from the same shape already in `KalmanFilter.kt`;
+- the `AtomicLong` counters became `@Volatile` with a plain increment, on evidence rather than
+  assumption: `LoopPlugin.invoke()` holds `invokeMutex` around the whole tick with the comment
+  "serialize loop runs so they cannot overlap", and the only writers are inside that call chain.
+
+The single-writer claim is the one that would have been easy to assert and wrong. It was established
+by reading the Loop's own serialization, which is the right kind of evidence for it.
+
+**The timezone hazard held.** Both `Calendar.getInstance().get(HOUR_OF_DAY)` calls read the *device's*
+zone implicitly, and this learner buckets its factors by hour, so `TimeZone.UTC` in the replacement
+would have shifted every bucket - a dosing change disguised as a date-library swap. Both use
+`TimeZone.currentSystemDefault()`.
+
+**And a latent bug went with it.** Moving the file surfaced a `SimpleDateFormat("yyyy-MM-dd HH:mm:ss",
+Locale.getDefault())` writing the CSV timestamp. The module already has `aimiCsvTimestamp()`, whose
+KDoc explains precisely why it exists: a locale-defaulted pattern writes *that locale's calendar*, and
+"a Thai phone wrote Buddhist years into wire timestamps". The old call used `Locale.getDefault()`, so
+this learner's CSV had the same defect. Swapped to the helper, with a comment recording what it fixed.
+
+**What the queue is actually waiting on now** - all three are structural, not incidental:
+
+| file | blocked by | nature |
+|---|---|---|
+| `AimiDetermineBasalTickOrchestrator` | `DetermineBasalaimiSMB2` | the algorithm core; the endgame, not a lot |
+| `AimiClinicalReportEngine` | `AIMIPhysioManagerMTR` | `WorkManager` - a scheduling port, not a move |
+| the two step providers | `StepService` | an Android `SensorEventListener`; the port was deferred in 6v with a dosing-safety flag still open |
+
+A note on method, again: these two files' `SimpleDateFormat` did **not** appear in the whole-tree
+probe's blocker list. It was masked - the file failed earlier on its atomics, and the compiler never
+got far enough to complain about the date formatter. **A probe ranks the blockers it can see, and
+removing one can reveal another underneath.** Expect the remaining counts to grow slightly as layers
+come off, rather than falling monotonically.
+
+---
+
 ---
 
 ## 7. Start here next session

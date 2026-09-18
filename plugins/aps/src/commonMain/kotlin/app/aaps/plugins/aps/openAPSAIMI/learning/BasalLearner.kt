@@ -14,8 +14,7 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.Volatile
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -80,10 +79,19 @@ class BasalLearner @Inject constructor(
     private var fastingSamples = 0
     private var fastingSlopeSum = 0.0
     private var fastingBgSum = 0.0
-    private val shortUpdateCount = AtomicLong(0L)
-    private val mediumUpdateCount = AtomicLong(0L)
-    private val longUpdateCount = AtomicLong(0L)
-    private val statusRef = AtomicReference<StatusSnapshot>()
+
+    // Incremented only from process(), which only runs from DetermineBasalAIMI2's basal-determination
+    // tick. That tick is serialized by LoopPlugin's invokeMutex (no two loop ticks run concurrently,
+    // and this class has no other caller of process()), so a plain increment on a @Volatile field is
+    // safe: single writer, no lost updates. A lock would only add contention no reader needs.
+    @Volatile private var shortUpdateCount = 0L
+    @Volatile private var mediumUpdateCount = 0L
+    @Volatile private var longUpdateCount = 0L
+
+    // Published immutable snapshot: publishStatus() writes it whole, statusSnapshot() reads it
+    // lock-free. Never null once the object exists: init() below calls publishStatus() before the
+    // constructor returns, so no external caller can observe a null value.
+    @Volatile private var statusRef: StatusSnapshot? = null
 
     // === Lot 4 — exclusion post-hypo ===
     /** Horodatage de la dernière hypo signalée par [onHypoDetected]. */
@@ -197,14 +205,14 @@ class BasalLearner @Inject constructor(
         if (now - lastShortUpdate >= SHORT_INTERVAL_MS && shortTermBuffer.size >= 3) {
             updateShortTerm(now)
             lastShortUpdate = now
-            shortUpdateCount.incrementAndGet()
+            shortUpdateCount++
         }
 
         // === MEDIUM-TERM UPDATE (every 6 hours) ===
         if (now - lastMediumUpdate >= MEDIUM_INTERVAL_MS && mediumTermBuffer.size >= 12) {
             updateMediumTerm(now)
             lastMediumUpdate = now
-            mediumUpdateCount.incrementAndGet()
+            mediumUpdateCount++
         }
 
         // === LONG-TERM UPDATE (every 24 hours, fasting-based) ===
@@ -217,7 +225,7 @@ class BasalLearner @Inject constructor(
         if (now - lastLongUpdate >= LONG_INTERVAL_MS) {
             updateLongTerm(tdd7Days, tdd30Days)
             lastLongUpdate = now
-            longUpdateCount.incrementAndGet()
+            longUpdateCount++
             // Reset fasting accumulators
             fastingSamples = 0
             fastingSlopeSum = 0.0
@@ -457,27 +465,25 @@ class BasalLearner @Inject constructor(
         storage.writeText(path, json.toString())
     }
 
-    fun statusSnapshot(): StatusSnapshot = statusRef.get()
+    fun statusSnapshot(): StatusSnapshot = statusRef!!
 
     private fun publishStatus(observedAt: Long? = null) {
         val lastEngineUpdate = maxOf(lastShortUpdate, lastMediumUpdate, lastLongUpdate)
-        statusRef.set(
-            StatusSnapshot(
-                shortTermMultiplier = shortTermMultiplier,
-                mediumTermMultiplier = mediumTermMultiplier,
-                longTermMultiplier = longTermMultiplier,
-                combinedMultiplier = getMultiplier(),
-                shortBufferCount = shortTermBuffer.size,
-                mediumBufferCount = mediumTermBuffer.size,
-                fastingSampleCount = fastingSamples,
-                shortUpdateCount = shortUpdateCount.get(),
-                mediumUpdateCount = mediumUpdateCount.get(),
-                longUpdateCount = longUpdateCount.get(),
-                lastShortUpdate = lastShortUpdate,
-                lastMediumUpdate = lastMediumUpdate,
-                lastLongUpdate = lastLongUpdate,
-                updatedAt = observedAt ?: lastEngineUpdate.takeIf { it > 0L },
-            )
+        statusRef = StatusSnapshot(
+            shortTermMultiplier = shortTermMultiplier,
+            mediumTermMultiplier = mediumTermMultiplier,
+            longTermMultiplier = longTermMultiplier,
+            combinedMultiplier = getMultiplier(),
+            shortBufferCount = shortTermBuffer.size,
+            mediumBufferCount = mediumTermBuffer.size,
+            fastingSampleCount = fastingSamples,
+            shortUpdateCount = shortUpdateCount,
+            mediumUpdateCount = mediumUpdateCount,
+            longUpdateCount = longUpdateCount,
+            lastShortUpdate = lastShortUpdate,
+            lastMediumUpdate = lastMediumUpdate,
+            lastLongUpdate = lastLongUpdate,
+            updatedAt = observedAt ?: lastEngineUpdate.takeIf { it > 0L },
         )
     }
 

@@ -7,7 +7,9 @@ import app.aaps.core.data.json.OrgJsonCompat.optJsonObjectCompat
 import app.aaps.core.data.json.OrgJsonCompat.optLongCompat
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.TE
+import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -15,24 +17,23 @@ import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import app.aaps.plugins.aps.openAPSAIMI.aimiCsvTimestamp
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.Volatile
 import kotlin.math.pow
 import kotlin.math.sqrt
+import kotlin.time.Clock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -78,15 +79,37 @@ class UnifiedReactivityLearner @Inject constructor(
     )
 
     private val ioScope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
-    private val bg24hRef = AtomicReference<List<BgSample>>(emptyList())
-    private val bg2hRef = AtomicReference<List<BgSample>>(emptyList())
-    private val exerciseEventsRef = AtomicReference<List<Long>>(emptyList())
-    private val bg24hRefreshInFlight = AtomicBoolean(false)
-    private val bg2hRefreshInFlight = AtomicBoolean(false)
-    private val exerciseRefreshInFlight = AtomicBoolean(false)
-    private val shortAnalysisCount = AtomicLong(0L)
-    private val longAnalysisCount = AtomicLong(0L)
-    private val statusRef = AtomicReference<StatusSnapshot>()
+
+    // Published snapshots: a background refresh (ioScope, on aapsIoDispatcher) writes the whole list;
+    // the dosing-tick thread reads it lock-free from analyzeLast24h()/analyzeLast2h()/
+    // updateSegmentFactors(). Same house pattern as KalmanFilter.cachedTdd7Days: a lock here would let
+    // a dosing tick block behind a background refresh holding it.
+    @Volatile private var bg24hRef: List<BgSample> = emptyList()
+    @Volatile private var bg2hRef: List<BgSample> = emptyList()
+    @Volatile private var exerciseEventsRef: List<Long> = emptyList()
+
+    // "Refresh already in flight" guards: the test-and-set must be atomic, which a plain @Volatile
+    // boolean cannot do. One AapsLock per guard (KalmanFilter.tddLock is the house precedent for this
+    // exact shape), tested and set inside a single withLock so two racing refreshes can't both start.
+    private val bg24hRefreshLock = AapsLock()
+    @Volatile private var bg24hRefreshInFlight = false
+    private val bg2hRefreshLock = AapsLock()
+    @Volatile private var bg2hRefreshInFlight = false
+    private val exerciseRefreshLock = AapsLock()
+    @Volatile private var exerciseRefreshInFlight = false
+
+    // Single writer: both counters are only incremented from processIfNeeded() / computeAdjustment(),
+    // which only run inside the Loop tick's determine-basal call chain (OpenAPSAIMIPlugin.invoke() and
+    // DetermineBasalAIMI2.determine_basal()). That chain is serialized end-to-end by LoopPlugin's
+    // invokeMutex, so no two ticks ever execute concurrently. A plain increment on a @Volatile field is
+    // safe here; a lock would only add contention nothing needs.
+    @Volatile private var shortAnalysisCount = 0L
+    @Volatile private var longAnalysisCount = 0L
+
+    // Published immutable snapshot: publishStatus() writes it whole, statusSnapshot() reads it
+    // lock-free. Never null once the object exists: init() below calls publishStatus() before the
+    // constructor returns, so no external caller can observe a null value.
+    @Volatile private var statusRef: StatusSnapshot? = null
     private var last24hSampleCount = 0
     private var last2hSampleCount = 0
     
@@ -181,10 +204,8 @@ class UnifiedReactivityLearner @Inject constructor(
         return segmentFactors[daypart] ?: globalFactor
     }
 
-    private fun currentHourOfDay(): Int {
-        val calendar = Calendar.getInstance()
-        return calendar.get(Calendar.HOUR_OF_DAY)
-    }
+    private fun currentHourOfDay(): Int =
+        Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
     
     /**
      * Métriques de performance glycémique détaillées
@@ -214,7 +235,7 @@ class UnifiedReactivityLearner @Inject constructor(
         try {
             refreshBg24hAsync(start)
             refreshExerciseEventsAsync(start)
-            val bgSamples = bg24hRef.get()
+            val bgSamples = bg24hRef
             val bgReadings = bgSamples.map { it.value }
             
             if (bgReadings.isEmpty() || bgReadings.size < 12) {
@@ -478,7 +499,7 @@ class UnifiedReactivityLearner @Inject constructor(
             totalReadings = perf.total_readings,
         )
         last24hSampleCount = perf.total_readings
-        longAnalysisCount.incrementAndGet()
+        longAnalysisCount++
         publishStatus(now)
         
         save()
@@ -488,10 +509,10 @@ class UnifiedReactivityLearner @Inject constructor(
     }
 
     private fun updateSegmentFactors(windowStart: Long, windowEnd: Long) {
-        val samples = bg24hRef.get()
+        val samples = bg24hRef
         if (samples.size < 12) return
 
-        val exerciseTimestamps = exerciseEventsRef.get()
+        val exerciseTimestamps = exerciseEventsRef
         for (daypart in ReactivityDaypart.entries) {
             val segmentSamples = samples.filter { sample ->
                 ReactivityDaypart.fromHour(hourFromTimestamp(sample.timestamp)) == daypart
@@ -530,11 +551,8 @@ class UnifiedReactivityLearner @Inject constructor(
         }
     }
 
-    private fun hourFromTimestamp(timestamp: Long): Int {
-        val calendar = Calendar.getInstance()
-        calendar.timeInMillis = timestamp
-        return calendar.get(Calendar.HOUR_OF_DAY)
-    }
+    private fun hourFromTimestamp(timestamp: Long): Int =
+        Instant.fromEpochMilliseconds(timestamp).toLocalDateTime(TimeZone.currentSystemDefault()).hour
     
     /**
      * Appeler toutes les 5 min depuis DetermineBasalAIMI2.
@@ -554,7 +572,7 @@ class UnifiedReactivityLearner @Inject constructor(
             if (shortPerf != null) {
                 computeShortTermAdjustment(shortPerf)
                 last2hSampleCount = shortPerf.total_readings
-                shortAnalysisCount.incrementAndGet()
+                shortAnalysisCount++
             }
             lastShortAnalysisTime = now
             publishStatus(now)
@@ -581,7 +599,7 @@ class UnifiedReactivityLearner @Inject constructor(
         
         try {
             refreshBg2hAsync(start)
-            val bgSamples = bg2hRef.get()
+            val bgSamples = bg2hRef
             val bgReadings = bgSamples.map { it.value }
             
             if (bgReadings.isEmpty() || bgReadings.size < 6) {
@@ -625,47 +643,56 @@ class UnifiedReactivityLearner @Inject constructor(
     }
 
     private fun refreshBg24hAsync(start: Long) {
-        if (!bg24hRefreshInFlight.compareAndSet(false, true)) return
+        bg24hRefreshLock.withLock {
+            if (bg24hRefreshInFlight) return
+            bg24hRefreshInFlight = true
+        }
         ioScope.launch {
             try {
                 val values = persistenceLayer.getBgReadingsDataFromTime(start, ascending = false)
                     .mapNotNull { gv -> toBgSample(gv) }
-                bg24hRef.set(values)
+                bg24hRef = values
             } catch (_: Exception) {
-                bg24hRef.set(emptyList())
+                bg24hRef = emptyList()
             } finally {
-                bg24hRefreshInFlight.set(false)
+                bg24hRefreshLock.withLock { bg24hRefreshInFlight = false }
             }
         }
     }
 
     private fun refreshBg2hAsync(start: Long) {
-        if (!bg2hRefreshInFlight.compareAndSet(false, true)) return
+        bg2hRefreshLock.withLock {
+            if (bg2hRefreshInFlight) return
+            bg2hRefreshInFlight = true
+        }
         ioScope.launch {
             try {
                 val values = persistenceLayer.getBgReadingsDataFromTime(start, ascending = false)
                     .mapNotNull { gv -> toBgSample(gv) }
-                bg2hRef.set(values)
+                bg2hRef = values
             } catch (_: Exception) {
-                bg2hRef.set(emptyList())
+                bg2hRef = emptyList()
             } finally {
-                bg2hRefreshInFlight.set(false)
+                bg2hRefreshLock.withLock { bg2hRefreshInFlight = false }
             }
         }
     }
 
     private fun refreshExerciseEventsAsync(start: Long) {
-        if (!exerciseRefreshInFlight.compareAndSet(false, true)) return
+        exerciseRefreshLock.withLock {
+            if (exerciseRefreshInFlight) return
+            exerciseRefreshInFlight = true
+        }
         ioScope.launch {
             try {
                 val timestamps = persistenceLayer.getTherapyEventDataFromTime(start, ascending = true)
                     .filter { event -> event.isValid && event.type == TE.Type.EXERCISE }
                     .map { event -> event.timestamp }
-                exerciseEventsRef.set(timestamps)
+                exerciseEventsRef = timestamps
             } catch (_: Exception) {
-                exerciseEventsRef.set(emptyList())
+                exerciseEventsRef = emptyList()
             } finally {
-                exerciseRefreshInFlight.set(false)
+                exerciseRefreshLock.withLock { exerciseRefreshInFlight = false }
             }
         }
     }
@@ -732,9 +759,10 @@ class UnifiedReactivityLearner @Inject constructor(
      */
     private fun exportToCSV(perf: GlycemicPerformance, reasonsStr: String) {
         try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
             val timestamp = aimiWallClockMs()
-            val date = sdf.format(Date(timestamp))
+            // aimiCsvTimestamp, not SimpleDateFormat: the old call passed Locale.getDefault(), so on a
+            // phone set to a non-Gregorian calendar it wrote that calendar's year into the CSV.
+            val date = aimiCsvTimestamp(timestamp)
             
             val line = listOf(
                 timestamp,
@@ -801,7 +829,7 @@ class UnifiedReactivityLearner @Inject constructor(
     }
 
     fun statusSnapshot(): StatusSnapshot {
-        val snapshot = statusRef.get()
+        val snapshot = statusRef!!
         return snapshot.copy(segmentFactors = snapshot.segmentFactors.toList())
     }
 
@@ -811,25 +839,23 @@ class UnifiedReactivityLearner @Inject constructor(
             SegmentFactorSnapshot(daypart, segmentFactors[daypart] ?: globalFactor)
         }
         val lastEngineUpdate = maxOf(lastAnalysisTime, lastShortAnalysisTime, lastAnalysis?.timestamp ?: 0L)
-        statusRef.set(
-            StatusSnapshot(
-                globalFactor = globalFactor,
-                shortTermFactor = shortTermFactor,
-                combinedFactor = ReactivityDaypart.combineFactors(
-                    globalFactor,
-                    shortTermFactor,
-                    segmentFactors[currentDaypart] ?: globalFactor,
-                ),
-                segmentFactors = immutableSegments,
-                lastAnalysis = lastAnalysis,
-                last24hSampleCount = last24hSampleCount,
-                last2hSampleCount = last2hSampleCount,
-                shortAnalysisCount = shortAnalysisCount.get(),
-                longAnalysisCount = longAnalysisCount.get(),
-                lastShortAnalysisTime = lastShortAnalysisTime,
-                lastAnalysisTime = lastAnalysisTime,
-                updatedAt = observedAt ?: lastEngineUpdate.takeIf { it > 0L },
-            )
+        statusRef = StatusSnapshot(
+            globalFactor = globalFactor,
+            shortTermFactor = shortTermFactor,
+            combinedFactor = ReactivityDaypart.combineFactors(
+                globalFactor,
+                shortTermFactor,
+                segmentFactors[currentDaypart] ?: globalFactor,
+            ),
+            segmentFactors = immutableSegments,
+            lastAnalysis = lastAnalysis,
+            last24hSampleCount = last24hSampleCount,
+            last2hSampleCount = last2hSampleCount,
+            shortAnalysisCount = shortAnalysisCount,
+            longAnalysisCount = longAnalysisCount,
+            lastShortAnalysisTime = lastShortAnalysisTime,
+            lastAnalysisTime = lastAnalysisTime,
+            updatedAt = observedAt ?: lastEngineUpdate.takeIf { it > 0L },
         )
     }
     
