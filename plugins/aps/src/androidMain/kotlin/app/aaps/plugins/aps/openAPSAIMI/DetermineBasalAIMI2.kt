@@ -51,6 +51,7 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAutodriveBasalBridge
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cTrajectoryContext
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
+import app.aaps.plugins.aps.openAPSAIMI.ISF.HeartRateTrendIsf
 import app.aaps.plugins.aps.openAPSAIMI.ISF.CommandedIsf
 import app.aaps.plugins.aps.openAPSAIMI.ISF.ObservedSensitivityMeter
 import app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
@@ -6116,6 +6117,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
 
             val hr60List = getRateForWindow(60 * 60 * 1000)
+            // The 80.0 below is a substitute, not a measurement. It stays because other readers
+            // (ActivityManager's avgHrResting) depend on a non-zero number, but anything that
+            // STRENGTHENS a dose must know the difference — see [HeartRateTrendIsf].
+            this.heartRateBaselineIsReal = hr60List.isNotEmpty()
             this.averageBeatsPerMinute60 = if (hr60List.isNotEmpty()) {
                 hr60List.map { it.beatsPerMinute.toInt() }.average()
             } else {
@@ -6134,11 +6139,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             averageBeatsPerMinute10 = 80.0
             averageBeatsPerMinute60 = 80.0
             averageBeatsPerMinute180 = 80.0
+            heartRateBaselineIsReal = false
         }
-        val heartRateTrend = averageBeatsPerMinute10 / averageBeatsPerMinute60
-        if (recentSteps10Minutes < 100 && heartRateTrend > 1.1 && bg > 110) {
-            this.variableSensitivity *= 0.9f
-            consoleLog.add("ISF réduit de 10% (tendance FC anormale).")
+        // 💓 Heart-rate trend — the ONE heart-rate path that strengthens a dose. It now stands down
+        // during a fast rise, where an elevated heart rate is a consequence of the rise rather than
+        // information about its cause, and on a baseline that was substituted rather than measured.
+        // See [HeartRateTrendIsf].
+        val heartRateTrendMultiplier = HeartRateTrendIsf.multiplier(
+            steps10m = recentSteps10Minutes,
+            avgBpm10 = averageBeatsPerMinute10,
+            avgBpm60 = averageBeatsPerMinute60,
+            baselineIsReal = heartRateBaselineIsReal,
+            bgMgdl = bg.toDouble(),
+            deltaMgdl5m = delta.toDouble(),
+        )
+        if (heartRateTrendMultiplier < 1.0) {
+            this.variableSensitivity *= heartRateTrendMultiplier.toFloat()
+            consoleLog.add(
+                "💓 HR_TREND_ISF x%.2f (hr10 %.0f / hr60 %.0f, steps10 %d)".format(
+                    Locale.US, heartRateTrendMultiplier,
+                    averageBeatsPerMinute10, averageBeatsPerMinute60, recentSteps10Minutes,
+                )
+            )
         }
 
         return AimiPostBasalBootstrapActivityVitals(
@@ -10702,6 +10724,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var averageBeatsPerMinute = 0.0
     private var averageBeatsPerMinute10 = 0.0
     private var averageBeatsPerMinute60 = 0.0
+
+    /**
+     * True when [averageBeatsPerMinute60] came from real records rather than the 80 bpm substitute.
+     * Read only by [HeartRateTrendIsf], which is the one gesture that can strengthen a dose.
+     */
+    private var heartRateBaselineIsReal = false
     private var averageBeatsPerMinute180 = 0.0
     private var eventualBG = 0.0
     private var now = aimiWallClockMs()
