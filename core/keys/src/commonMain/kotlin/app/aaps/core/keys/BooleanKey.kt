@@ -330,6 +330,38 @@ enum class BooleanKey(
         summary = KeysStrings.pref_summary_aimi_stress_isf_floor,
     ),
     /**
+     * Opt-in: spend a bounded budget of insulin as a basal floor once a meal has been **declared**.
+     *
+     * The person writes a note holding "anticip" with a duration; while that note is open and the
+     * declaration still looks true, the basal is held at profile plus
+     * `OApsAIMIAnticipBudgetU` spread over the 30-minute window of `AnticipationBasalFloor`. No
+     * prebolus is attached, unlike the meal modes, and the target is not touched.
+     *
+     * ⚠️ This is the one AIMI gesture that **raises** a dose. It is bounded three ways — the budget,
+     * the window, and the pump ceiling — it stands down under 80 mg/dL or on a fall of 3 mg/dL per
+     * 5 min, and deleting the note ends it at once. Default OFF.
+     */
+    OApsAIMIAnticipBasalFloor(
+        key = "key_aimi_anticip_basal_floor",
+        defaultValue = false,
+        title = KeysStrings.pref_title_aimi_anticip_basal_floor,
+        summary = KeysStrings.pref_summary_aimi_anticip_basal_floor,
+    ),
+    /**
+     * Opt-in: let a declared meal count as tree meal evidence.
+     *
+     * Separate from `OApsAIMIAnticipBasalFloor` on purpose. Tree meal evidence is one of the
+     * disjuncts of the early release's `strongMealConfirmed` gate, so switching this on arms that
+     * release on demand — a much wider effect than the basal floor. Two keys keep the two effects
+     * measurable apart. Default OFF.
+     */
+    OApsAIMIAnticipMealEvidence(
+        key = "key_aimi_anticip_meal_evidence",
+        defaultValue = false,
+        title = KeysStrings.pref_title_aimi_anticip_meal_evidence,
+        summary = KeysStrings.pref_summary_aimi_anticip_meal_evidence,
+    ),
+    /**
      * Opt-in: refuse a **bolus** that repeats the ceiling dose during a fast rise.
      *
      * Refuses only when both conditions of `RiseCeilingGuard` hold: the bolus has come out exactly

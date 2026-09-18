@@ -2264,6 +2264,7 @@
 <string name="limits_smb">🧱 Limits: %1$.2f → %2$.2f U</string>
 <string name="manual_basal_override">Forced basal → %1$.2f U/h (%2$dmin). Manual meal mode %3$s\n</string>
 <string name="manual_meal_prebolus">&#160;Microbolusing Meal Mode %1$.2fU.</string>
+<string name="fcl_prebolus" comment="%1$.2f = prebolus size in insulin units, for example 1.00. Appended to the loop reason line.">&#160;Microbolusing FCL mode %1$.2fU.</string>
 <string name="meal_dinner_maintain">Dinner mode maintain (%.1f floor)</string>
 <string name="meal_mode_first_30">Manual modes meal 0&#8211;30m [%1$s] → forced basal at %2$.2f U/h (override).\n</string>
 <string name="meal_modes_max_basal_title">Fixed basal 30 min at meal start (U/h)</string>

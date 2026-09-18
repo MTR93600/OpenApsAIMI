@@ -45,6 +45,8 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalTerminalInvariants
+import app.aaps.plugins.aps.openAPSAIMI.basal.AnticipationBasalFloor
+import app.aaps.plugins.aps.openAPSAIMI.basal.FclMealBasal
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAnticipation
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAutodriveBasalBridge
@@ -2957,12 +2959,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.lowCarbTime = therapy.lowCarbTime
         this.highCarbTime = therapy.highCarbTime
         this.mealTime = therapy.mealTime
+        this.anticipTime = therapy.anticipTime
+        this.fclTime = therapy.fclTime
         this.bfastTime = therapy.bfastTime
         this.lunchTime = therapy.lunchTime
         this.dinnerTime = therapy.dinnerTime
         this.fastingTime = therapy.fastingTime
         this.stopTime = therapy.stopTime
         this.mealruntime = therapy.getTimeElapsedSinceLastEvent("meal")
+        this.anticipruntime = therapy.getTimeElapsedSinceLastEvent("anticip")
+        this.fclruntime = therapy.getTimeElapsedSinceLastEvent("fcl")
         this.bfastruntime = therapy.getTimeElapsedSinceLastEvent("bfast")
         this.lunchruntime = therapy.getTimeElapsedSinceLastEvent("lunch")
         this.dinnerruntime = therapy.getTimeElapsedSinceLastEvent("dinner")
@@ -5414,7 +5420,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             combinedDelta = combinedDelta.toDouble(),
             cob = ctx.mealData.mealCOB,
             uamConfidence = AimiUamHandler.confidenceOrZero(),
-            explicitMealMode = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime,
+            // FCL is a declared meal too. Without it `implicitMealContext` is false at COB 0, so
+            // `isMealRising` (delta > 0.25) is dead and the gate falls back to the glycaemic
+            // thresholds — which under 120 mg/dL need delta > 2.0 AND no low in the last 75 min.
+            // Eating at ~100 with the target at 80, neither holds. Measured over 1443 ticks of the
+            // 2026-09-16/17 export: GateKind.MEAL_AWARE_RISE never fired once.
+            explicitMealMode = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime ||
+                snackTime || fclDeclaredThisTick(profile),
             hasRecentMealEstimate = hasRecentMealEstimate,
             minBgLookback75m = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
             estimatedRa = continuousStateEstimator.getLastRa(),
@@ -9009,6 +9021,70 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
 
+        // 🍽️ Declared-meal anticipation — see [AnticipationBasalFloor].
+        // Applied last, after the slew limiter, because a floor that the limiter can clamp away is
+        // not a floor. It only ever RAISES the rate (max of the two), and only while the note window
+        // is open, the opt-in key is on and the declaration still looks true; the gesture stands down
+        // on its own under 80 mg/dL or on a fall, and deleting the note ends it at once.
+        if (preferences.get(BooleanKey.OApsAIMIAnticipBasalFloor) && anticipTime) {
+            AnticipationBasalFloor.floorRateUph(
+                budgetU = preferences.get(DoubleKey.OApsAIMIAnticipBudgetU),
+                elapsedMinutes = anticipruntime.toDouble(),
+                profileBasalUph = b.profile.current_basal,
+                // Same ceiling the declared meal modes use, so a declaration cannot reach higher
+                // than a meal mode already can.
+                maxBasalUph = maxOf(b.profile.max_basal, preferences.get(DoubleKey.meal_modes_MaxBasal)),
+                bgMgdl = bg.toDouble(),
+                deltaMgdl5m = delta.toDouble(),
+            )?.let { floorUph ->
+                if (floorUph > finalProposedRate) {
+                    consoleLog.add(
+                        "🍽️ ANTICIP_BASAL_FLOOR: %.2f→%.2f U/h (budget %.2f U over %.0f min, elapsed %d min)".format(
+                            Locale.US, finalProposedRate, floorUph,
+                            preferences.get(DoubleKey.OApsAIMIAnticipBudgetU),
+                            AnticipationBasalFloor.WINDOW_MINUTES, anticipruntime,
+                        )
+                    )
+                    b.rT.reason.append("; 🍽️anticip ${"%.2f".format(Locale.US, floorUph)}U/h")
+                    finalProposedRate = floorUph
+                }
+            }
+        }
+
+        // 🍽️ FCL declared meal — see [FclMealBasal]. Applied here, beside the declared-meal floor and
+        // for the same two reasons: this is the last point where the rate can still be raised, and the
+        // SMB stage has already run by now, so the bolus channel stays alive. An early return from the
+        // meal-boost stage would have skipped it, which is how the declared meal modes behave and is
+        // not what was asked for here.
+        FclMealBasal.rateUph(
+            fclNoteActive = fclTime,
+            sportNoteActive = sportTime,
+            tempTargetSet = b.profile.temptargetSet,
+            // The raw profile target on purpose: it carries the temp target the person set, while the
+            // engine's own working target has already been reshaped by this point.
+            targetBgMgdl = b.profile.target_bg,
+            mealModesMaxBasalUph = preferences.get(DoubleKey.meal_modes_MaxBasal),
+            profileMaxBasalUph = b.profile.max_basal,
+            profileBasalUph = b.profile.current_basal,
+            bgMgdl = bg.toDouble(),
+            deltaMgdl5m = delta.toDouble(),
+        )?.let { floorUph ->
+            if (floorUph > finalProposedRate) {
+                consoleLog.add(
+                    "🍽️ FCL_MEAL_BASAL: %.2f→%.2f U/h (temp target %.0f mg/dL, note %d min ago)".format(
+                        Locale.US, finalProposedRate, floorUph, b.profile.target_bg, fclruntime,
+                    )
+                )
+                b.rT.reason.append("; 🍽️FCL ${"%.2f".format(Locale.US, floorUph)}U/h")
+                finalProposedRate = floorUph
+                // The same bypass the declared meal modes already use, so FCL is "lunch without the
+                // prebolus" and not a weaker version of it. It lifts one clamp only — the daily-safety
+                // one — up to max_basal. The LGS block, the DynamicBasalController brake and the
+                // max_basal hard cap inside setTempBasal all still apply.
+                finalOverrideSafetyLimits = true
+            }
+        }
+
         val finalResult = setTempBasal(
             _rate = finalProposedRate,
             duration = finalDuration,
@@ -11048,6 +11124,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             targetBgMgdl = targetBgMgdl,
             iobU = iob.toDouble(),
             maxIobU = maxIob,
+            declaredMeal = anticipTime && preferences.get(BooleanKey.OApsAIMIAnticipMealEvidence),
         )
         lastDecisionPredictionAuthority = decisionPrediction
         consoleLog.add(
@@ -11247,6 +11324,34 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lowCarbTime = false
     private var highCarbTime = false
     private var mealTime = false
+
+    /** A meal the person declared with an "anticip" note; carries no prebolus. See [AnticipationBasalFloor]. */
+    private var anticipTime = false
+
+    /** Minutes since that declaration. Same type as [mealruntime], which this mirrors. */
+    private var anticipruntime: Long = 0
+
+    /**
+     * The FCL mode: a declared meal that forces the meal basal ceiling while a low temp target runs,
+     * and sends no prebolus. See [FclMealBasal].
+     */
+    private var fclTime = false
+
+    /** Minutes since that declaration. Also the activation window for the one-shot prebolus latch. */
+    private var fclruntime: Long = 0
+
+    /**
+     * Is an FCL meal declared right now. Single source of truth for the places that need it — see
+     * [FclMealBasal.declared]. Takes the profile because the raw `target_bg` is what carries the temp
+     * target the person set; the engine's own working target has already been reshaped by then.
+     */
+    private fun fclDeclaredThisTick(profile: OapsProfileAimi): Boolean =
+        FclMealBasal.declared(
+            fclNoteActive = fclTime,
+            sportNoteActive = sportTime,
+            tempTargetSet = profile.temptargetSet,
+            targetBgMgdl = profile.target_bg,
+        )
     private var bfastTime = false
     private var lunchTime = false
     private var dinnerTime = false
@@ -13218,7 +13323,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 eventualBgMgdl = eventualBG.takeIf { it.isFinite() && it > 1.0 },
                 deltaMgdl5m = delta.toDouble(),
                 iobU = iobNet,
-                mealModeActive = isMealMode,
+                // A manually declared mode exempts these invariants — that is this module's own
+                // stated contract ("Modes repas exclus"), and FCL is a manually declared mode.
+                // Leaving it out pinned the FCL basal to the profile rate: the floor raised it to the
+                // meal ceiling and postHypoCap pulled it straight back to profile.current_basal a few
+                // lines later. Reported from the field 2026-09-17.
+                // `isMealMode` itself is deliberately NOT widened: it also builds MealSafetyContext,
+                // which loosens an LGS guard, and FCL must not buy a weaker hypo interlock.
+                mealModeActive = isMealMode || fclDeclaredThisTick(profile),
                 postHypoActive = lastPostHypoDeliveryAuthority.active,
             )
         )
@@ -16678,6 +16790,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Option A : contrôle a posteriori de la délivrance des prébolus déjà demandés (alerte seule,
         // ne modifie ni le latch ni la décision de ce tick). Doit tourner AVANT les branches P1/P2/MAINT
         // car à runtime 8-14 la branche P1 n'est plus exécutée.
+        // 🍽️ FCL takes part in the two mechanisms below — the delivery carry-forward and the one-shot
+        // latch — but NOT in the `legacyMealMaint` block further down: that one ends the tick for
+        // thirty minutes on a bare TBR, and FCL must leave the bolus channel alive.
+        val fclDeclared = fclDeclaredThisTick(profile)
+
         checkLegacyPrebolusDeliveryAndAlert(rT)
 
         // 🍱 Carry-forward (garantie de délivrance) : un prébolus demandé mais jamais confirmé en base
@@ -16692,6 +16809,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 dinnerTime   -> dinnerruntime
                 highCarbTime -> highCarbrunTime
                 snackTime    -> snackrunTime
+                // The delivery guarantee is exactly the anti-redundancy mechanism FCL needs: while a
+                // requested prebolus is still unconfirmed, no insulin has landed, so the same amount
+                // is re-proposed instead of an SMB being stacked on top of an unknown outcome.
+                fclDeclared  -> fclruntime
                 else         -> null
             }
             if (activeModeRuntime != null) {
@@ -16810,6 +16931,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             markLegacyMealDecision()
             return rT
         }
+        // 🍽️ FCL: ONE prebolus per activation, and then the tick flows normally for the rest of the
+        // window so SMB and Autodrive stay alive. Three things make that true:
+        //  - the 0..7 window, the same one every other P1 phase uses;
+        //  - the one-shot latch, checked HERE and not only inside setLegacyPrebolusUnits, because this
+        //    branch returns and would otherwise end the tick on all eight of those minutes;
+        //  - the absence of FCL from `legacyMealMaint` below.
+        // The amount is the Autodrive prebolus the person already set, so there is nothing new to
+        // configure. The Autodrive aggressive-rise floor is NOT used for this: it has no per-episode
+        // budget by design (removed 2026-08-10 after a measured hyperglycaemia), so it would fire on
+        // every tick of the window — the documented bolus-storm mechanism. One shot behind a latch
+        // instead.
+        if (fclDeclared && fclruntime in 0..7 && !prebolusAlreadyFiredThisActivation("FCL_P1", fclruntime)) {
+            manualMealModeTbr(fclruntime, "FCL_P1", overrideSafetyLimits = false)
+            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIautodrivePrebolus), "FCL_P1", fclruntime) { u ->
+                rT.reason.append(context.getString(R.string.fcl_prebolus, u))
+                consoleLog.add("🍽️ FCL_PREBOLUS P1=${"%.2f".format(Locale.US, u)}U rt=${fclruntime}m")
+            }
+            markLegacyMealDecision()
+            return rT
+        }
+
         // Même priorité que les blocs prébolus ci‑dessus : premier mode actif dans les 30 premières minutes gagne.
         val legacyMealMaint = when {
             mealTime && mealruntime in 0..29 -> mealruntime to "MEAL_MAINT"
