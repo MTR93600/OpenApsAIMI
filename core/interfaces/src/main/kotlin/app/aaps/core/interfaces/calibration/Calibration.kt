@@ -57,4 +57,18 @@ interface Calibration {
      * The default plugin has nothing to fit and always returns [CalibrationStatus.Applied].
      */
     suspend fun status(): CalibrationStatus
+
+    /**
+     * Drop every fingerstick entry older than [timestamp] from the running fit.
+     *
+     * Called when a sensor is swapped in a way that leaves the entries of the PREVIOUS sensor
+     * inside the new sensor's session. A pre-soak promotion does exactly that: the new sensor's
+     * session is dated at its own activation, hours before the swap, so every fingerstick the user
+     * took in between — all of them paired against the OLD sensor — would otherwise be fitted onto
+     * the new one, and applied from its first minute with no warm-up left.
+     *
+     * The entries themselves are kept: they are true history of the sensor that recorded them, and
+     * only the fit stops using them. The default plugin has no fit and does nothing.
+     */
+    suspend fun ignoreEntriesBefore(timestamp: Long) {}
 }

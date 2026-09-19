@@ -4,8 +4,10 @@ import android.content.Context
 import android.content.SharedPreferences
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.ble.BleRadioPriority
+import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.PromotionResult
 import app.aaps.core.interfaces.source.StagingState
@@ -58,6 +60,10 @@ class Libre3PromotionHandoverTest : TestBase() {
     @Mock lateinit var persistenceLayer: PersistenceLayer
 
     private val bleRadioPriority: BleRadioPriority = mock()
+
+    /** Promotion tells the active calibration plugin to drop the retired sensor's fingersticks. */
+    private val activeCalibration: Calibration = mock()
+    private val activePlugin: ActivePlugin = mock<ActivePlugin>().also { whenever(it.activeCalibration).thenReturn(activeCalibration) }
     private val availabilityProvider: Libre3AvailabilityProvider = mock()
 
     private val productionPrefs: SharedPreferences = SharedPreferencesMock()
@@ -82,7 +88,7 @@ class Libre3PromotionHandoverTest : TestBase() {
         Libre3MacArbiter.reset()
         Libre3CgmDrivers.releaseStagingInstance()?.let { runCatching { it.shutdown() } }
         plugin = Libre3NativePlugin(
-            rh, aapsLogger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority,
+            rh, aapsLogger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin,
         )
     }
 
@@ -114,6 +120,18 @@ class Libre3PromotionHandoverTest : TestBase() {
     )
 
     // ---------------- The retired sensor must not poison the new one ----------------
+
+    @Test
+    fun `promotion tells calibration to drop the retired sensor's fingersticks`() = runTest {
+        // The sensor change is dated at the pre-soak NFC activation, hours before this swap, so the
+        // new sensor's session covers fingersticks that were taken on the sensor just retired.
+        storeRunningSensorLateInItsLife()
+        startPresoak()
+
+        assertThat(plugin.promoteStagingToProduction()).isEqualTo(PromotionResult.Ok)
+
+        verify(activeCalibration).ignoreEntriesBefore(any())
+    }
 
     @Test
     fun `a reading of the retired sensor after a promotion changes no ingest mark`() = runTest {

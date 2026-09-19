@@ -23,6 +23,7 @@ class GlassUiStateBuilderTest {
         trendDescription = "",
         deltaText = "",
         iobText = "",
+        iobTotalU = 0.0,
         cobText = "",
         loopStatusText = "",
         loopIsRunning = false,

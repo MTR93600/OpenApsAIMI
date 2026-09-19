@@ -1122,6 +1122,7 @@
     <string name="reason_max_iob">Adjustments : MaxIob %.2f U </string>
     <string name="reason_autodrive_early_meal">Autodrive early meal/snack detection: Microbolusing %.2fU, CombinedDelta: %.2f, Predicted: %.2f, Accel.: %.2f.\n</string>
     <string name="manual_meal_prebolus">&#160;Microbolusing Meal Mode %1$.2fU.</string>
+    <string name="fcl_prebolus" comment="%1$.2f = prebolus size in insulin units, for example 1.00. Appended to the loop reason line.">&#160;Microbolusing FCL mode %1$.2fU.</string>
     <string name="autodrive_meal_prebolus">→ Microbolusing Autodrive Mode %1$.2fU</string>
     <string name="target_bg">&#160;• Target BG: %1$.0f</string>
     <string name="slope_from_min_deviation">&#160;• Slope from min deviation: %1$.2f</string>

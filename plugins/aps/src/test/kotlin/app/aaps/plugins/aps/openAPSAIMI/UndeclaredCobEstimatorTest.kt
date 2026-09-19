@@ -127,24 +127,25 @@ class UndeclaredCobEstimatorTest {
     // ---- heart rate has no authority during a fast rise -----------------------------------------
 
     /**
-     * The gate exists only on this path: the whole estimator runs only when declared carbs are zero.
-     * So a postprandial heart-rate rise — which is what a meal produces — switches off the estimator
-     * written to catch the meal. It is self-defeating, and it is the same mistake as letting a heart
-     * rate end the stress insulin-sensitivity floor mid-rise.
+     * The heart rate protects, it never argues for a meal.
      *
-     * The rule is the one already applied there: above
-     * [UndeclaredCobEstimator.HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN] the rise is too fast to be
-     * hormonal, so the heart-rate elevation is a consequence of it and may not gate anything.
+     * This gate used to step aside on a fast rise, so that a postprandial heart rate would not switch
+     * off the estimator written to catch the meal. The cost of that was the reverse mistake: on a
+     * stress rise — no food, heart rate up, glucose climbing fast — the estimator invented carbs and
+     * fed them to the prediction curves. The user asked for the simple rule, and this is it. A real
+     * undeclared meal that raises the heart rate is no longer caught by this path; the kinetic and
+     * trajectory evidence still is.
      */
     @Test
-    fun `an elevated heart rate does not gate the estimate while glucose rises fast`() {
-        val result = UndeclaredCobEstimator.estimate(
+    fun `an elevated heart rate gates the estimate however fast glucose rises`() {
+        val fastRise = UndeclaredCobEstimator.estimate(
             baseInput(
                 hrInflammationElevated = true,
-                deltaMgdl5m = UndeclaredCobEstimator.HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN,
+                deltaMgdl5m = UndeclaredCobEstimator.HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN + 5.0,
             )
         )
-        assertThat(result.reason).doesNotContain("hr_inflammation")
+        assertThat(fastRise.gated).isTrue()
+        assertThat(fastRise.reason).contains("hr_inflammation")
     }
 
     @Test

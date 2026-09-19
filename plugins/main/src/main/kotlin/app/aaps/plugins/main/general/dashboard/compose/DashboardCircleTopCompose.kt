@@ -924,6 +924,7 @@ private fun placeholderStatusCardState(): StatusCardState =
         trendDescription = "",
         deltaText = "--",
         iobText = "--",
+        iobTotalU = 0.0,
         cobText = "0g",
         loopStatusText = "Loop",
         loopIsRunning = true,

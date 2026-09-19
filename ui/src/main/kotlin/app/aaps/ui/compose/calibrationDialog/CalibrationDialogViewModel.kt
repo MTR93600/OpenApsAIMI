@@ -20,6 +20,7 @@ import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.source.SensorCalibrationResult
 import app.aaps.core.interfaces.source.XDripSource
 import app.aaps.core.interfaces.sync.XDripBroadcast
 import app.aaps.core.interfaces.utils.DateUtil
@@ -35,6 +36,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import app.aaps.core.ui.R as CoreUiR
 
 @HiltViewModel
@@ -78,7 +81,8 @@ class CalibrationDialogViewModel @Inject constructor(
 
     init {
         val units = profileUtil.units
-        val currentBg = profileUtil.fromMgdlToUnits(glucoseStatusProvider.glucoseStatusData?.glucose ?: 0.0)
+        val sensorBgMgdl = glucoseStatusProvider.glucoseStatusData?.glucose ?: 0.0
+        val currentBg = profileUtil.fromMgdlToUnits(sensorBgMgdl)
         val isMmol = units == GlucoseUnit.MMOL
 
         _uiState.update {
@@ -87,7 +91,8 @@ class CalibrationDialogViewModel @Inject constructor(
                 units = units,
                 bgRange = if (isMmol) 2.0..30.0 else 36.0..500.0,
                 bgStep = if (isMmol) 0.1 else 1.0,
-                bgDecimalPlaces = if (isMmol) 1 else 0
+                bgDecimalPlaces = if (isMmol) 1 else 0,
+                sensorBgMgdl = sensorBgMgdl
             )
         }
         refreshPreconditions()
@@ -129,7 +134,23 @@ class CalibrationDialogViewModel @Inject constructor(
     }
 
     fun updateBg(value: Double) {
-        _uiState.update { it.copy(bg = value) }
+        _uiState.update { it.copy(bg = value, gapWarning = gapWarningFor(value, it)) }
+    }
+
+    /**
+     * Advisory check only. The calibration engine needs at least two entries before it corrects
+     * anything, so a single very different fingerstick value changes nothing. Tell the user that
+     * instead of letting them believe the sensor was fixed.
+     */
+    private fun gapWarningFor(value: Double, state: CalibrationDialogUiState): CalibrationGapWarning? {
+        val sensorBgMgdl = state.sensorBgMgdl
+        if (value <= 0.0 || sensorBgMgdl <= 0.0) return null
+        val bloodMgdl = profileUtil.convertToMgdl(value, state.units)
+        if (!isLargeGap(bloodMgdl, sensorBgMgdl)) return null
+        return CalibrationGapWarning(
+            bloodValue = value,
+            sensorValue = profileUtil.fromMgdlToUnits(sensorBgMgdl, state.units)
+        )
     }
 
     fun hasAction(): Boolean = uiState.value.bg > 0.0
@@ -155,8 +176,9 @@ class CalibrationDialogViewModel @Inject constructor(
         val timestamp = dateUtil.now()
         viewModelScope.launch {
             try {
-                val result = activePlugin.activeCalibration.addEntry(bgMgdl, timestamp)
                 val unitValue = ValueWithUnit.fromGlucoseUnit(state.bg, state.units)
+                if (sendToSensor(bgMgdl, timestamp, unitValue)) return@launch
+                val result = activePlugin.activeCalibration.addEntry(bgMgdl, timestamp)
                 when (result) {
                     AddEntryResult.Accepted    -> {
                         uel.log(action = Action.CALIBRATION, source = Sources.CalibrationDialog, value = unitValue)
@@ -180,6 +202,51 @@ class CalibrationDialogViewModel @Inject constructor(
                 _uiState.update { it.copy(submitting = false) }
             }
         }
+    }
+
+    /**
+     * Hand the value to the sensor instead of fitting a line on top of it, when the source does that.
+     *
+     * Never both. A sensor that holds its own calibration re-bases its algorithm, so a line fitted
+     * in the app on top of the corrected readings would apply the correction a second time. The way
+     * that is enforced is simply not to store a calibration entry at all — with nothing to fit, the
+     * software plugin stays identity for this sensor by itself, which is also what xDrip does for
+     * this sensor family.
+     *
+     * The value is only on its way when this returns: the sensor sleeps between its radio windows,
+     * and this one does not report back in a way the app can read (see
+     * docs/DEXCOM_ONEPLUS_CALIBRATION_TO_SENSOR.md §2c). So the user is told it was sent and told to
+     * check, never told it was accepted.
+     *
+     * @return true when the value was routed to the sensor and nothing else should be done with it
+     */
+    private suspend fun sendToSensor(bgMgdl: Double, timestamp: Long, unitValue: ValueWithUnit): Boolean {
+        val source = activePlugin.activeBgSource
+        if (!source.calibratesInSensor()) return false
+        when (val sent = source.calibrateSensor(bgMgdl.roundToInt(), timestamp)) {
+            SensorCalibrationResult.Queued       -> {
+                uel.log(
+                    action = Action.CALIBRATION,
+                    source = Sources.CalibrationDialog,
+                    note = "sent to sensor",
+                    value = unitValue
+                )
+                _sideEffect.emit(SideEffect.EntryAccepted(rh.gs(R.string.cal_sent_to_sensor)))
+            }
+
+            is SensorCalibrationResult.Refused   -> {
+                uel.log(
+                    action = Action.CALIBRATION,
+                    source = Sources.CalibrationDialog,
+                    note = "sensor refused: ${sent.reason}",
+                    value = unitValue
+                )
+                _sideEffect.emit(SideEffect.EntryRejected(sent.reason))
+            }
+
+            SensorCalibrationResult.NotSupported -> return false
+        }
+        return true
     }
 
     // NoSession/WarmUp are unreachable here: addEntry() already required a running, past-warm-up
@@ -220,5 +287,24 @@ class CalibrationDialogViewModel @Inject constructor(
     private fun formatDeltaInDisplayUnit(mgdlPer5Min: Double): String {
         val displayDelta = profileUtil.fromMgdlToUnits(mgdlPer5Min)
         return if (profileUtil.units == GlucoseUnit.MMOL) "%.1f".format(displayDelta) else "%.0f".format(displayDelta)
+    }
+
+    companion object {
+
+        /** A gap of this share of the sensor value is already large, whatever the glucose level. */
+        const val GAP_WARN_FRACTION = 0.25
+
+        /** A gap of this many mg/dL is large even when the sensor value is high. */
+        const val GAP_WARN_MGDL = 50.0
+
+        /**
+         * True when the fingerstick value is far away from the sensor value. Both inputs are in
+         * mg/dL. Either rule is enough: the share rule catches low glucose, the absolute rule
+         * catches high glucose.
+         */
+        fun isLargeGap(bloodMgdl: Double, sensorMgdl: Double): Boolean {
+            val gap = abs(bloodMgdl - sensorMgdl)
+            return gap >= GAP_WARN_MGDL || gap >= sensorMgdl * GAP_WARN_FRACTION
+        }
     }
 }

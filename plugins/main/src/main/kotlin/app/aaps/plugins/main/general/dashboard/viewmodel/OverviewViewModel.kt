@@ -867,6 +867,7 @@ class OverviewViewModel(
             trendDescription = trendDescription,
             deltaText = deltaText,
             iobText = iobText,
+            iobTotalU = bolusSnap.iob + basalSnap.basaliob,
             cobText = cobText,
             loopStatusText = loopStatusText(loopRunningMode),
             loopIsRunning = !loopRunningMode.pausesLoopExecution(),
@@ -1513,6 +1514,15 @@ data class StatusCardState(
     val trendDescription: String,
     val deltaText: String,
     val iobText: String,
+    /**
+     * The same total as [iobText], as a number.
+     *
+     * Insulin on board decays continuously, so any screen that computes it again, or reads it off
+     * the last plotted point of a five-minute graph grid, lands on a slightly different figure — a
+     * user reported 7.88 U in the header and 7.82 U on the chart card at the same moment. One value,
+     * computed once here, is published for every surface that wants to print it.
+     */
+    val iobTotalU: Double,
     val cobText: String,
     val loopStatusText: String,
     val loopIsRunning: Boolean,

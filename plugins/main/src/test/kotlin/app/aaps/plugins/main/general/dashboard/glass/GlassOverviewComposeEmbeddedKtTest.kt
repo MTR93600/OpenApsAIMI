@@ -26,6 +26,7 @@ class GlassOverviewComposeEmbeddedKtTest {
             trendDescription = "",
             deltaText = "+1",
             iobText = "1.0 U",
+            iobTotalU = 0.0,
             cobText = "0 g",
             loopStatusText = "Loop",
             loopIsRunning = loopIsRunning,

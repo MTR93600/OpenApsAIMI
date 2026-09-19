@@ -181,6 +181,11 @@ internal class TpoSessionManager(
         reason: String,
     ) {
         var restored = 0
+        // Counted and reported: a key that is skipped because somebody else owns it now is normal,
+        // a key that is refused by the writer is a defect, and the two used to look identical —
+        // `restored` simply came out lower, with nothing saying why (see [applyChange]).
+        var skipped = 0
+        var refused = 0
         session.baseline.forEach { (key, oldValue) ->
             // Decided here, per key, on the value in force right now — see [TpoRevertPolicy]. The
             // old test was `key in session.userOwnedKeys`, a set that only ever grew, so one tick of
@@ -190,9 +195,10 @@ internal class TpoSessionManager(
             val liveValue = readPreferenceValue(preferences, key)
             val sessionWrote = session.overlay[key]
             if (!TpoRevertPolicy.shouldRestore(liveValue, sessionWrote, key in session.userOwnedKeys)) {
+                skipped++
                 return@forEach
             }
-            if (restoreValue(preferences, key, oldValue)) restored++
+            if (restoreValue(preferences, key, oldValue)) restored++ else refused++
         }
         val revertMap = persistence.loadLastRevertAtMsByPack().toMutableMap()
         revertMap[session.packId] = session.lastRevertAtMs ?: System.currentTimeMillis()
@@ -201,7 +207,7 @@ internal class TpoSessionManager(
         historyRepo?.logAction(
             AdvisorHistoryRepository.ActionType.TPO_SESSION_REVERT,
             session.packId.name,
-            "TPO revert ($reason, $restored keys)",
+            "TPO revert ($reason, $restored keys, $skipped skipped, $refused refused)",
             session.packId.name,
             restored.toString(),
         )
@@ -247,12 +253,20 @@ internal class TpoSessionManager(
         )
     }
 
+    /**
+     * Write one value, or say it could not.
+     *
+     * Any number is accepted for a `Double` key, not only a `Double`: a value read back from the
+     * session file can be an `Int` (JSON drops the decimal point of a whole number), and refusing it
+     * here is what silently lost the user's baseline. `TpoSessionDocument` normalises on read too —
+     * this is the second line of defence, and the reason a refusal is now logged instead of silent.
+     */
     private fun applyChange(preferences: Preferences, change: TuningChange): Boolean {
         val key = change.key
         val newValue = change.newValue
         return when {
-            newValue is Double && key is DoublePreferenceKey -> {
-                preferences.put(key, newValue)
+            newValue is Number && key is DoublePreferenceKey -> {
+                preferences.put(key, newValue.toDouble())
                 true
             }
             newValue is Boolean && key is BooleanPreferenceKey -> {

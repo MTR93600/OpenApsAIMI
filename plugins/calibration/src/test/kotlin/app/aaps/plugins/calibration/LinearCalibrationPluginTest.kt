@@ -29,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
 import org.mockito.kotlin.any
+import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
@@ -81,7 +82,7 @@ class LinearCalibrationPluginTest : TestBase() {
     fun calibrate_inWarmUp_returnsIdentity() = runTest {
         // Session started 1h ago — within 2h warm-up
         whenever(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)).thenReturn(sensorChange(now - T.hours(1).msecs()))
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(goodEntriesWithSlope())
         val data = bucketed(timestamps(now, every = 5))
         plugin.calibrate(data, CalibrationContext.NONE)
         assertThat(data.all { it.calibrated == null }).isTrue()
@@ -91,7 +92,7 @@ class LinearCalibrationPluginTest : TestBase() {
     fun calibrate_noSessionStart_returnsIdentity() = runTest {
         // No SENSOR_CHANGE recorded — calibration must NOT blend across sensor sessions
         whenever(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)).thenReturn(null)
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(goodEntriesWithSlope())
         val data = bucketed(listOf(now to 150.0))
         plugin.calibrate(data, CalibrationContext.NONE)
         assertThat(data[0].calibrated).isNull()
@@ -186,7 +187,7 @@ class LinearCalibrationPluginTest : TestBase() {
         // Session start 6h ago. Old (8h ago) point should NOT be calibrated.
         val sessionStart = now - T.hours(6).msecs()
         whenever(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)).thenReturn(sensorChange(sessionStart))
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(eq(sessionStart))).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(eq(sessionStart))).thenReturn(goodEntriesWithSlope())
         val data = bucketed(
             listOf(
                 now to 150.0,
@@ -224,7 +225,7 @@ class LinearCalibrationPluginTest : TestBase() {
         // when the caller's bucketed data looks like it has a hole in it.
         // A healthy, fresh fit keeps the (unrelated) calibration-health check quiet too, so this
         // test only exercises gap detection.
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(goodEntriesWithSlope())
         val data = mutableListOf(
             value(now, 150.0),
             value(now - T.mins(60).msecs(), 150.0),
@@ -247,7 +248,7 @@ class LinearCalibrationPluginTest : TestBase() {
         whenever(rh.gs(any<Int>(), any())).thenReturn("Possible sensor change")
         // A healthy, fresh fit keeps the (unrelated) calibration-health check quiet, so the only
         // notification in play is the gap one this test is actually about.
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(goodEntriesWithSlope())
         whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
         plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
         plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
@@ -273,7 +274,7 @@ class LinearCalibrationPluginTest : TestBase() {
     @Test
     fun calibrate_gapWithNearbySensorChange_skipsNotification() = runTest {
         // A healthy, fresh fit keeps the (unrelated) calibration-health check quiet too.
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(goodEntriesWithSlope())
         whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
         whenever(persistenceLayer.getTherapyEventDataFromToTime(any(), any())).thenReturn(
             listOf(sensorChange(now - T.mins(35).msecs()))
@@ -295,7 +296,7 @@ class LinearCalibrationPluginTest : TestBase() {
         whenever(rh.gs(any<Int>(), any())).thenReturn("Possible sensor change")
         // A healthy, fresh fit keeps the (unrelated) calibration-health check from posting a second,
         // competing notification — this test only wants the gap-detection one.
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(goodEntriesWithSlope())
         whenever(persistenceLayer.insertPumpTherapyEventIfNewByTimestamp(any(), any(), any(), any(), any(), any()))
             .thenReturn(PersistenceLayer.TransactionResult())
         whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
@@ -323,7 +324,7 @@ class LinearCalibrationPluginTest : TestBase() {
         whenever(rh.gs(any<Int>(), any())).thenReturn("Possible sensor change")
         // A healthy, fresh fit keeps the (unrelated) calibration-health check from posting a second,
         // competing notification — this test only wants the gap-detection one.
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(goodEntriesWithSlope())
         whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
         plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
 
@@ -350,7 +351,7 @@ class LinearCalibrationPluginTest : TestBase() {
     fun calibrate_ignoredGap_doesNotRenotifyAfterRestart() = runTest {
         whenever(rh.gs(any<Int>(), any())).thenReturn("Possible sensor change")
         // A healthy, fresh fit keeps the (unrelated) calibration-health check quiet too.
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(goodEntriesWithSlope())
         whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
         val ignoredAt = now - T.mins(30).msecs()
         whenever(preferences.get(CalibrationLongKey.IgnoredSensorGapAt)).thenReturn(ignoredAt)
@@ -452,6 +453,7 @@ class LinearCalibrationPluginTest : TestBase() {
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
             listOf(
                 entry(sensor = 100.0, fs = 110.0, ageDays = 3L),
+                entry(sensor = 150.0, fs = 165.0, ageDays = 3L),
                 entry(sensor = 200.0, fs = 220.0, ageDays = 3L)
             )
         )
@@ -461,7 +463,7 @@ class LinearCalibrationPluginTest : TestBase() {
 
     @Test
     fun calibrate_healthyFreshFit_dismissesAnyExistingHealthNotification() = runTest {
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(goodEntriesWithSlope())
         plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
         verifyNoHealthNotificationPosted()
         verify(notificationManager).dismiss(NotificationId.CALIBRATION_HEALTH)
@@ -551,7 +553,7 @@ class LinearCalibrationPluginTest : TestBase() {
         plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
         // Second scan: healthy fit -> resolves, dismissed, and the "last reason" memory is cleared.
         whenever(dateUtil.now()).thenReturn(now + T.mins(31).msecs())
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(goodEntriesWithSlope())
         plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
         // Third scan: back to no entries (e.g. entries invalidated) -> the SAME reason as the first
         // scan, but it must be announced again since it had genuinely resolved in between.
@@ -626,9 +628,9 @@ class LinearCalibrationPluginTest : TestBase() {
 
     @Test
     fun addEntry_deltaThresholdScaledBySlopeWhenFitApplicable() = runTest {
-        // Two entries imply slope = 1.05, well inside clamps → fit is applicable.
+        // Three entries imply slope = 1.05, well inside clamps → fit is applicable.
         // Effective threshold becomes 5.0 * 1.05 = 5.25 mg/dL/5min.
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(goodEntriesWithSlope())
         // Delta 5.2: would be rejected without scaling, accepted with slope-scaled threshold.
         whenever(glucoseStatusProvider.glucoseStatusData).thenReturn(glucoseStatus(shortAvgDelta = 5.2))
         whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), eq(false)))
@@ -640,7 +642,7 @@ class LinearCalibrationPluginTest : TestBase() {
     @Test
     fun addEntry_deltaExceedsScaledThreshold_rejectsWithScaledThreshold() = runTest {
         // Same fit (slope=1.05), but delta 6.0 still exceeds the scaled threshold 5.25.
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(goodEntriesWithSlope())
         whenever(glucoseStatusProvider.glucoseStatusData).thenReturn(glucoseStatus(shortAvgDelta = 6.0))
         val result = plugin.addEntry(bgMgdl = 150.0, timestamp = now)
         assertThat(result).isInstanceOf(AddEntryResult.Rejected.DeltaTooHigh::class.java)
@@ -768,7 +770,7 @@ class LinearCalibrationPluginTest : TestBase() {
 
     @Test
     fun status_validFit_returnsApplied() = runTest {
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(goodEntriesWithSlope())
         assertThat(plugin.status()).isEqualTo(CalibrationStatus.Applied)
     }
 
@@ -796,9 +798,15 @@ class LinearCalibrationPluginTest : TestBase() {
             sensorMgdlAtPairing = sensor
         )
 
-    private fun twoGoodEntries() = listOf(
-        entry(sensor = 100.0, fs = 105.0, ageDays = 1L),
-        entry(sensor = 200.0, fs = 210.0, ageDays = 1L)
+    /**
+     * Three, because MIN_ENTRIES_FOR_SLOPE: with two the fit is offset-only and carries no slope.
+     * Dated now, so the stored pairing is used as-is — an older entry is re-paired against the
+     * readings that follow it (see the plugin's `entriesForFit`), which these tests do not set up.
+     */
+    private fun goodEntriesWithSlope() = listOf(
+        entry(sensor = 100.0, fs = 105.0, ageDays = 0L),
+        entry(sensor = 150.0, fs = 157.5, ageDays = 0L),
+        entry(sensor = 200.0, fs = 210.0, ageDays = 0L)
     )
 
     private fun sensorChange(timestamp: Long): TE =
@@ -813,6 +821,119 @@ class LinearCalibrationPluginTest : TestBase() {
         bgReading(now - T.mins(60).msecs(), 150.0),
         bgReading(now - T.mins(61).msecs(), 150.0)
     )
+
+    // ------------ a promoted pre-soak sensor ------------
+
+    @Test
+    fun `entries of the retired sensor are left out of the fit after a promotion`() = runTest {
+        // A promoted pre-soak sensor is given a session dated at its own activation, hours before
+        // the swap, so its session covers fingersticks that were taken on the sensor just retired.
+        val promotedAt = now - T.hours(1).msecs()
+        whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(0L)
+
+        plugin.ignoreEntriesBefore(promotedAt)
+
+        verify(preferences).put(CalibrationLongKey.EntriesValidFrom, promotedAt)
+    }
+
+    @Test
+    fun `the fit only reads entries newer than the promotion`() = runTest {
+        val promotedAt = now - T.hours(1).msecs()
+        whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(promotedAt)
+
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+
+        // Not the session start, which is 12 h ago and belongs to the pre-soak. (calibrate() also
+        // runs the health check, so the entries are read more than once per call.)
+        verify(persistenceLayer, atLeastOnce()).getValidCalibrationEntriesSince(promotedAt)
+        verify(persistenceLayer, never()).getValidCalibrationEntriesSince(defaultSessionStart)
+    }
+
+    @Test
+    fun `a cut-off older than the session start changes nothing`() = runTest {
+        whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(now - T.days(5).msecs())
+
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+
+        verify(persistenceLayer, atLeastOnce()).getValidCalibrationEntriesSince(defaultSessionStart)
+    }
+
+    // ------------ lag pairing and the stability gate ------------
+
+    @Test
+    fun `an old entry is paired again with the readings that follow it`() = runTest {
+        // A fingerstick of 150 typed while the sensor still showed 120 because the fluid it reads
+        // lags the blood. Ten minutes later the sensor is at 150 too. The stored pair says the
+        // sensor is 30 low; the pair re-made against the later readings says it is right.
+        val stickAt = now - T.hours(1).msecs()
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(CAL(id = 7L, timestamp = stickAt, fingerstickMgdl = 150.0, sensorMgdlAtPairing = 120.0))
+        )
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(eq(stickAt), eq(stickAt + T.mins(15).msecs()), any()))
+            .thenReturn(
+                listOf(
+                    bgReading(stickAt + T.mins(10).msecs(), 150.0),
+                    bgReading(stickAt + T.mins(5).msecs(), 140.0)
+                )
+            )
+
+        val status = plugin.status()
+
+        // One entry only, so no line can be fitted — but the pair it now carries is the corrected
+        // one, which is what the next entry will be fitted against.
+        assertThat(status).isEqualTo(CalibrationStatus.NeedMoreEntries(1))
+        verify(persistenceLayer).getBgReadingsDataFromTimeToTime(eq(stickAt), eq(stickAt + T.mins(15).msecs()), any())
+        // The stored entry itself is never rewritten.
+        verify(persistenceLayer, never()).insertOrUpdateCalibrationEntry(any())
+    }
+
+    @Test
+    fun `a fresh entry keeps the pair it was stored with`() = runTest {
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(CAL(id = 8L, timestamp = now - T.mins(2).msecs(), fingerstickMgdl = 150.0, sensorMgdlAtPairing = 120.0))
+        )
+
+        plugin.status()
+
+        // The window after the fingerstick is not complete yet, so nothing is read for it.
+        verify(persistenceLayer, never()).getBgReadingsDataFromTimeToTime(
+            eq(now - T.mins(2).msecs()),
+            any(),
+            any()
+        )
+    }
+
+    @Test
+    fun `a rising sensor is refused even when the glucose status has nothing to say`() = runTest {
+        // The provider answers only for a reading of the last few minutes, so a user whose last
+        // reading is 8 min old used to skip the stability check completely. The readings are still
+        // there: 20 mg/dL in 10 min is 10 per 5 min, far above the gate.
+        whenever(glucoseStatusProvider.glucoseStatusData).thenReturn(null)
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), eq(false))).thenReturn(
+            listOf(
+                bgReading(now - T.mins(8).msecs(), 170.0),
+                bgReading(now - T.mins(18).msecs(), 150.0)
+            )
+        )
+
+        val result = plugin.addEntry(bgMgdl = 175.0, timestamp = now)
+
+        assertThat(result).isInstanceOf(AddEntryResult.Rejected.DeltaTooHigh::class.java)
+        assertThat((result as AddEntryResult.Rejected.DeltaTooHigh).deltaMgdlPer5Min).isWithin(0.1).of(10.0)
+    }
+
+    @Test
+    fun `a flat sensor is still accepted when the glucose status has nothing to say`() = runTest {
+        whenever(glucoseStatusProvider.glucoseStatusData).thenReturn(null)
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), eq(false))).thenReturn(
+            listOf(
+                bgReading(now - T.mins(8).msecs(), 151.0),
+                bgReading(now - T.mins(18).msecs(), 150.0)
+            )
+        )
+
+        assertThat(plugin.addEntry(bgMgdl = 155.0, timestamp = now)).isEqualTo(AddEntryResult.Accepted)
+    }
 
     private fun bgReading(timestamp: Long, value: Double): GV = GV(
         timestamp = timestamp,

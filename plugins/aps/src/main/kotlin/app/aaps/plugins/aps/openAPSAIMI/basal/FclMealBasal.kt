@@ -73,6 +73,40 @@ object FclMealBasal {
     const val MAX_FALL_MGDL_PER_5MIN: Double = -3.0
 
     /**
+     * Is an FCL meal declared right now: an "fcl" note, a low temp target, and no sport note.
+     *
+     * This is the **arming half** of the gate and nothing more — it says the person has declared the
+     * meal, not that a dose is safe. Four places need it and they must not each re-spell it:
+     *
+     *  - [rateUph], which then adds its own glucose and fall stand-downs;
+     *  - the terminal-invariants exemption, so a declared mode is not pulled back to the profile rate
+     *    (`BasalTerminalInvariants` exempts declared meal modes by its own contract, and FCL is one);
+     *  - the Autodrive gate, so its meal channel opens on a declared meal instead of waiting for a
+     *    rise it cannot see yet;
+     *  - the one-shot prebolus.
+     *
+     * Pure: it reads no clock and keeps no state.
+     *
+     * @param fclNoteActive whether an "fcl" note is live.
+     * @param sportNoteActive whether a "sport" note is live. Two manual notes that disagree are not a
+     *   tie: the one that withholds insulin wins, so this undeclares the meal.
+     * @param tempTargetSet whether a temp target is running right now.
+     * @param targetBgMgdl the target in force this tick, temp target included.
+     */
+    fun declared(
+        fclNoteActive: Boolean,
+        sportNoteActive: Boolean,
+        tempTargetSet: Boolean,
+        targetBgMgdl: Double,
+    ): Boolean {
+        if (!fclNoteActive) return false
+        if (sportNoteActive) return false
+        if (!tempTargetSet) return false
+        if (!targetBgMgdl.isFinite()) return false
+        return targetBgMgdl <= MAX_TEMP_TARGET_MGDL
+    }
+
+    /**
      * The basal rate FCL asks for this tick, in U/h, or null when the mode does not apply.
      *
      * This is a **floor**: the caller must never let it lower a rate the loop had already chosen for
@@ -102,15 +136,12 @@ object FclMealBasal {
         bgMgdl: Double,
         deltaMgdl5m: Double,
     ): Double? {
-        if (!fclNoteActive) return null
-        if (sportNoteActive) return null
-        if (!tempTargetSet) return null
-        if (!targetBgMgdl.isFinite() || !mealModesMaxBasalUph.isFinite() || !profileMaxBasalUph.isFinite() ||
+        if (!declared(fclNoteActive, sportNoteActive, tempTargetSet, targetBgMgdl)) return null
+        if (!mealModesMaxBasalUph.isFinite() || !profileMaxBasalUph.isFinite() ||
             !profileBasalUph.isFinite() || !bgMgdl.isFinite() || !deltaMgdl5m.isFinite()
         ) {
             return null
         }
-        if (targetBgMgdl > MAX_TEMP_TARGET_MGDL) return null
         if (bgMgdl < MIN_GLUCOSE_MGDL) return null
         if (deltaMgdl5m <= MAX_FALL_MGDL_PER_5MIN) return null
 

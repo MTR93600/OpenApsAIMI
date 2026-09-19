@@ -4,7 +4,8 @@ import kotlin.math.min
 
 /**
  * 🔒 Invariants terminaux du canal basal (lot 2), gouvernés par
- * `BooleanKey.OApsAIMIBasalTerminalInvariants` (défaut `false` → comportement historique).
+ * `BooleanKey.OApsAIMIBasalTerminalInvariants` (défaut **`true`**, voir `BooleanKey.kt` — mettre la clé à
+ * `false` rétablit le comportement historique).
  *
  * ## Pourquoi un point terminal
  *

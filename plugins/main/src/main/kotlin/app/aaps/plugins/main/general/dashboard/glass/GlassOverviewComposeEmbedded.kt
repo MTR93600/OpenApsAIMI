@@ -106,10 +106,14 @@ internal fun GlassOverviewComposeEmbedded(
         val chartConfig by graphViewModel.chartConfigFlow.collectAsStateWithLifecycle()
         val predictions by graphViewModel.predictionsFlow.collectAsStateWithLifecycle()
         val nowEpochMs = System.currentTimeMillis()
-        val chartState = remember(rangeHours, bgReadings, iobData, basalData, treatmentData, chartConfig, predictions, status?.pumpStatusText) {
+        val chartState = remember(
+            rangeHours, bgReadings, iobData, basalData, treatmentData, chartConfig, predictions,
+            status?.pumpStatusText, status?.iobTotalU,
+        ) {
             buildGlassChartState(
                 rangeHours = rangeHours,
                 nowEpochMs = nowEpochMs,
+                iobTotalU = status?.iobTotalU,
                 bgReadings = bgReadings,
                 iobPoints = iobData.iob,
                 iobPredictionPoints = iobData.predictions,
@@ -312,6 +316,8 @@ internal fun buildGlassChartState(
     iobPredictionPoints: List<GraphDataPoint> = emptyList(),
     basalData: BasalGraphData = BasalGraphData(emptyList(), emptyList(), 0.0),
     predictionHorizonHours: Int = 2,
+    /** Insulin on board as the header prints it; null falls back to the last plotted point. */
+    iobTotalU: Double? = null,
 ): GlassChartState {
     val windowStart = nowEpochMs - rangeHours * 3_600_000L
     fun progress(timestamp: Long): Float =
@@ -454,7 +460,11 @@ internal fun buildGlassChartState(
         maxBasalRateUh = basalData.maxBasal.toFloat().coerceAtLeast(0.1f),
         historyFraction = historyFraction,
         currentBgValue = bgReadingPoints.lastOrNull()?.value ?: 0f,
-        currentIob = iobReadingPoints.lastOrNull()?.iob ?: 0f,
+        // The headline number is the one the header shows, not the last point of the five-minute
+        // grid this curve is drawn on: the two are computed at different moments, and insulin on
+        // board decays between them, so they used to disagree by a few hundredths of a unit in front
+        // of the user. The curve keeps its own points; only the figure is shared.
+        currentIob = iobTotalU?.toFloat() ?: iobReadingPoints.lastOrNull()?.iob ?: 0f,
         lowLine = chartConfig.lowMark.toFloat(),
         highLine = chartConfig.highMark.toFloat(),
         axisMinValue = mgdlToChartY(30.0).toFloat(),

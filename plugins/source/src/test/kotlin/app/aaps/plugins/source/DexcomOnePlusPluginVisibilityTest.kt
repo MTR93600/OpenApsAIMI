@@ -4,8 +4,10 @@ import android.content.Context
 import androidx.documentfile.provider.DocumentFile
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.ble.BleRadioPriority
+import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.maintenance.FileListProvider
 import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -44,6 +46,10 @@ class DexcomOnePlusPluginVisibilityTest : TestBase() {
     private val markerFile: DocumentFile = mock()
     private val bleRadioPriority: BleRadioPriority = mock()
 
+    /** Promotion tells the active calibration plugin to drop the retired sensor's fingersticks. */
+    private val activeCalibration: Calibration = mock()
+    private val activePlugin: ActivePlugin = mock<ActivePlugin>().also { whenever(it.activeCalibration).thenReturn(activeCalibration) }
+
     private lateinit var plugin: DexcomOnePlusPlugin
 
     @BeforeEach
@@ -55,7 +61,7 @@ class DexcomOnePlusPluginVisibilityTest : TestBase() {
         whenever(extraDir.findFile(ONE_PLUS_ACCESS_FILE_NAME)).thenReturn(markerFile)
         val availabilityProvider =
             DexcomOnePlusAvailabilityProvider(aapsLogger, Lazy { fileListProvider }, preferences, notificationManager, dateUtil)
-        plugin = DexcomOnePlusPlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority)
+        plugin = DexcomOnePlusPlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus)
     }
 
     @Test

@@ -18,10 +18,73 @@ const val SLOPE_MAX = 1.6
 // Picked as a typical mid-range BG so the clamp value below maps directly to
 // "the most this calibration can shift the sensor at typical BG".
 const val CENTER_MGDL = 100.0
-const val CORRECTION_AT_CENTER_MIN = -30.0
 const val CORRECTION_AT_CENTER_MAX = 30.0
 
+// The centre check alone does NOT bound the line: it fixes one point, and a slope still swings the
+// ends far away from it. Two fingersticks (sensor 110 -> 135, sensor 180 -> 175) fit slope 0.571,
+// offset 72.1 — correction at 100 is +29, so the centre check passes, yet a sensor reading 55 is
+// handed to the loop as 104, and the hypo alarm never fires.
+//
+// Both ends are therefore checked as well, and ONE-SIDED, because only one direction is dangerous:
+// a line that reads LOWER than the sensor makes the loop more careful, while a line that reads
+// HIGHER hides a hypo at the low end and invents a hyper at the high end. Same asymmetry as xDrip+'s
+// Libre offset window [-40, +20].
+const val LOW_MGDL = 40.0
+
+/** Most a calibration may ADD to a reading of [LOW_MGDL] — a bigger lift can hide a hypo. */
+const val CORRECTION_AT_LOW_MAX = 20.0
+
+/**
+ * Most a calibration may TAKE OFF a reading of [LOW_MGDL].
+ *
+ * The downward direction has no bound at the centre, because reading lower than the sensor is the
+ * careful direction: the loop gives less insulin, not more. A sensor that over-reads by a third is a
+ * real case (blood 209 while the sensor says 309) and the loop dosing for 309 is the harm we are
+ * trying to stop.
+ *
+ * It still needs a bound somewhere, and the low end is where the damage shows. The fit that has to
+ * be refused is the FLAT one: two fingersticks 100 mg/dL apart give slope 1 and offset −100, which
+ * turns a reading of 60 into −40. The loop would see the floor value for ever and stop dosing
+ * altogether — not a hypo, but a real harm in the other direction.
+ *
+ * Checking at [LOW_MGDL] separates the two cases by itself. A MULTIPLICATIVE correction — what an
+ * over-reading sensor actually does, the error growing with the reading — is small down here and
+ * passes; a flat offset is just as big down here as it is at 300 and is refused. Same shape of
+ * reasoning as [MAX_RATIO_AT_HIGH] on the other side, mirrored.
+ *
+ * The number is set by the two cases it has to separate, not picked for roundness. It has to keep
+ * the steepest line this plugin already accepts — the clamped compression fit at slope [SLOPE_MAX]
+ * with offset −55.4, which takes 31.4 mg/dL off a reading of 40 — and it has to refuse a flat offset
+ * past about the old two-sided centre bound of 30. Anything in between does both; −35 leaves the
+ * first a small margin. For a slope of 1 it is very nearly the old behaviour, which is the point:
+ * nothing gets looser for flat fits, only for fits whose correction grows with the reading.
+ */
+const val CORRECTION_AT_LOW_MIN = -35.0
+
+const val HIGH_MGDL = 300.0
+
+/**
+ * Most a calibration may multiply a reading of [HIGH_MGDL] by.
+ *
+ * A ratio, not a number of mg/dL: with a legitimate steep slope the correction grows with the
+ * reading, so a fixed mg/dL cap here would reject sensors that exaggerate (the ones a slope is for).
+ * It still stops the extreme — slope 1.6 with offset −30 would turn 300 into 450.
+ */
+const val MAX_RATIO_AT_HIGH = 1.45
+
 const val MIN_ENTRIES_FOR_FIT = 2
+
+/**
+ * Entries needed before a SLOPE is fitted at all; below this the fit is offset-only.
+ *
+ * Two fingersticks define a line exactly, so every bit of their noise — and of the lag between a
+ * fingerstick and the interstitial sensor — goes straight into the slope, which then extrapolates
+ * far outside the two points. The sensors this plugin sits on top of (Dexcom ONE+, Libre 3) are
+ * factory calibrated, so their remaining error is mostly a shift, not a wrong scale: correcting the
+ * shift is the safe default, and a scale is only fitted once three sticks agree on it. xDrip+ takes
+ * the same line for factory-calibrated Libre sensors, where it allows an offset and locks the slope.
+ */
+const val MIN_ENTRIES_FOR_SLOPE = 3
 
 // A fit built from entries this old or newer is trusted at full strength.
 const val STALE_CONFIDENCE_FULL_DAYS = 2L
@@ -69,11 +132,38 @@ data class CalibrationFit(
      * The applicability clamp is on this value rather than `offset` (which is the line's
      * intercept at sensor=0 — meaningless to the user when slope ≠ 1).
      */
-    val correctionAtCenter: Double get() = (slope - 1) * CENTER_MGDL + offset
+    val correctionAtCenter: Double get() = correctionAt(CENTER_MGDL)
+
+    /** Correction (mg/dL) this line applies to a sensor reading of [sensorMgdl]: `y − x`. */
+    fun correctionAt(sensorMgdl: Double): Double = (slope - 1) * sensorMgdl + offset
+
+    val correctionAtLow: Double get() = correctionAt(LOW_MGDL)
+    val correctionAtHigh: Double get() = correctionAt(HIGH_MGDL)
+
+    /** How much the line multiplies a reading of [HIGH_MGDL] by. */
+    val ratioAtHigh: Double get() = (slope * HIGH_MGDL + offset) / HIGH_MGDL
 
     val slopeInRange: Boolean get() = slope in SLOPE_MIN..SLOPE_MAX
-    val correctionInRange: Boolean get() = correctionAtCenter in CORRECTION_AT_CENTER_MIN..CORRECTION_AT_CENTER_MAX
-    val isApplicable: Boolean get() = slopeInRange && correctionInRange
+
+    /**
+     * A lift at typical BG is bounded; a drop is not.
+     *
+     * One-sided, like the two end checks, and for the same reason: lifting the reading hides a hypo
+     * and invents a hyper, while lowering it only makes the loop more careful. The downward
+     * direction is bounded at the low end instead, by [CORRECTION_AT_LOW_MIN].
+     */
+    val correctionInRange: Boolean get() = correctionAtCenter <= CORRECTION_AT_CENTER_MAX
+
+    /**
+     * Both directions are checked at the low end, for two different harms: a lift hides a hypo, and
+     * a big flat drop pins the reading at the floor so the loop stops dosing.
+     */
+    val lowEndSafe: Boolean get() = correctionAtLow in CORRECTION_AT_LOW_MIN..CORRECTION_AT_LOW_MAX
+
+    /** A lift at the high end invents a hyper the loop then answers with insulin. */
+    val highEndSafe: Boolean get() = ratioAtHigh <= MAX_RATIO_AT_HIGH
+
+    val isApplicable: Boolean get() = slopeInRange && correctionInRange && lowEndSafe && highEndSafe
 }
 
 /**
@@ -99,7 +189,7 @@ fun fitLinearCalibration(entries: List<CAL>, now: Long): CalibrationFit? {
     if (entries.size < MIN_ENTRIES_FOR_FIT) return null
 
     val sensorRange = entries.maxOf { it.sensorMgdlAtPairing } - entries.minOf { it.sensorMgdlAtPairing }
-    if (sensorRange < MIN_SENSOR_RANGE_FOR_SLOPE) {
+    if (entries.size < MIN_ENTRIES_FOR_SLOPE || sensorRange < MIN_SENSOR_RANGE_FOR_SLOPE) {
         // Offset-only: weighted mean of (fingerstick - sensor), slope locked to 1.
         var sumW = 0.0
         var sumWDelta = 0.0

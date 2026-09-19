@@ -55,6 +55,9 @@
     <string name="dexcom_oneplus_permissions_needed">Bluetooth permission is required before starting the sensor</string>
     <string name="dexcom_oneplus_use_real_skeleton">Use Real BLE skeleton (engineering)</string>
     <string name="dexcom_oneplus_use_real_skeleton_summary">Routes to the Real GATT+KEKS+EGV driver (default on). Disable only to force the Stub. Not a production BLE claim until device-confirmed.</string>
+    <string name="dexcom_oneplus_send_calibration_to_sensor">Send calibration to the sensor (engineering)</string>
+    <string name="dexcom_oneplus_send_calibration_to_sensor_summary">Off: a finger prick value is used to correct readings inside the app, and can be removed later. On: the value is sent to the sensor itself. The sensor keeps it for good and it cannot be edited or deleted, this sensor does not report clearly whether it took the value, and the app stops correcting readings on its own.</string>
+    <string name="dexcom_oneplus_calibration_not_sent">The value could not be sent to the sensor. The sensor may be out of range, still warming up, or another value may still be on its way.</string>
     <string name="dexcom_oneplus_start_sensor">Start sensor</string>
     <string name="dexcom_oneplus_start_action">Start / new sensor</string>
     <string name="dexcom_oneplus_warmup_open">Open warm-up screen</string>
@@ -185,10 +188,27 @@
     <string name="dexcom_oneplus_production_no_reading">No reading received yet.</string>
     <string name="dexcom_oneplus_staging_readings_label">Readings collected</string>
     <string name="dexcom_oneplus_staging_last_label">Last reading</string>
+    <string name="dexcom_oneplus_correct_insertion_date">Correct insertion date</string>
+    <string name="dexcom_oneplus_insertion_date_future" comment="%1$s=current start time of the sensor. Example: 14:05">A sensor cannot be inserted in the future. The sensor still starts at %1$s.</string>
+    <string name="dexcom_oneplus_insertion_date_too_old" comment="%1$s=current start time of the sensor. Example: 14:05">That date is older than a full sensor life, so it belongs to another sensor. The sensor still starts at %1$s.</string>
+    <string name="dexcom_oneplus_insertion_date_no_session" comment="%1$s=current start time of the sensor. Example: 14:05">No sensor session is running, so there is no date to correct.</string>
     <string name="dexcom_oneplus_end_of_life_title">Sensor is near its end</string>
     <string name="dexcom_oneplus_end_of_life_text">Starting a pre-soak sensor now means the next one is already warm when this one stops.</string>
     <string name="dexcom_oneplus_start_presoak">Start a pre-soak sensor</string>
     <string name="dexcom_oneplus_staging_none_short">A pre-soak sensor collects readings alongside the one in use. It never feeds the loop until you promote it here.</string>
+
+    <!-- Status screen: finger prick values sent to the sensor itself (engineering setting only) -->
+    <string name="dexcom_oneplus_calibration_heading">Sensor calibration</string>
+    <string name="dexcom_oneplus_calibration_none">No finger prick value has been sent to this sensor yet.</string>
+    <string name="dexcom_oneplus_calibration_waiting">Your value is waiting to be sent to the sensor. It goes out the next time the app and the sensor talk, which is usually within a few minutes.</string>
+    <string name="dexcom_oneplus_calibration_accepted">The sensor says it took your value.</string>
+    <string name="dexcom_oneplus_calibration_refused">The sensor says it did not take your value. Your reading was not changed.</string>
+    <string name="dexcom_oneplus_calibration_unknown">The sensor answered something this app cannot read, so it is not possible to say whether your value was used. This is what a Dexcom ONE+ normally answers. It is not an app error and it is not a success. Compare the sensor with a finger prick within the next hour before you rely on its readings, and ask your care team if you are unsure.</string>
+    <string name="dexcom_oneplus_calibration_detail" comment="%1$s=what the sensor answered, as a short technical line, often raw bytes. Example: Sensor answered 34000100 - this firmware does not send a readable result">Sensor answer: %1$s</string>
+    <string name="dexcom_oneplus_calibration_state_needs">The sensor is asking for a calibration.</string>
+    <string name="dexcom_oneplus_calibration_state_needs_first">The sensor is asking for its first calibration.</string>
+    <string name="dexcom_oneplus_calibration_state_needs_second">The sensor is asking for a second calibration.</string>
+    <string name="dexcom_oneplus_calibration_state_sent">The sensor reports that a calibration has reached it.</string>
 
     <!-- Libre 3 / Libre 3 Plus native BLE source -->
     <string name="libre3_native">Libre 3 / Libre 3 Plus</string>

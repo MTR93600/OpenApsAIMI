@@ -173,12 +173,22 @@ object MealAbsorptionPhaseEngine {
         return score.coerceIn(0.0, 1.0)
     }
 
+    /**
+     * Body signals that a meal is being absorbed — steps only.
+     *
+     * **The heart rate deliberately says nothing here.** It used to add 0.35 to this score for a rise
+     * of 5 to 18 bpm over rest, which is a shape a meal makes and also the shape stress, a hurry, a
+     * hot room or a climb up the stairs make. The engine cannot tell them apart, and the user's own
+     * episode showed the cost: a rush to fetch the children, no food, a real stress rise, and the
+     * meal machinery reading it as absorption. The rule now is the one the user asked for — the
+     * heart rate may protect, it may never be evidence of a meal.
+     *
+     * The old penalty for a very high heart rate was dead anyway: the score starts at 0 and is
+     * clamped at 0, so a negative term could only ever cancel the steps bonus.
+     */
     internal fun physioScore(input: Input): Double {
-        val hrDelta = input.heartRateBpm - input.restingHeartRateBpm
         var score = 0.0
-        if (hrDelta in 5..18 && input.deltaMgdlPer5 >= 1.5) score += 0.35
         if (input.stepsLast15m >= 80 && input.deltaMgdlPer5 >= 2.0) score += 0.10
-        if (hrDelta > 18 && input.deltaMgdlPer5 >= 4.0) score -= 0.20
         return score.coerceIn(0.0, 1.0)
     }
 
@@ -187,7 +197,14 @@ object MealAbsorptionPhaseEngine {
             input.shortAvgDeltaMgdlPer5 >= FAST_RISE_SHORT ||
             input.combinedDeltaMgdlPer5 >= FAST_RISE_COMBINED
 
-    /** Mirrors [InsulinStackingStance.iobFloorU] — kept local to avoid physio→safety coupling. */
+    /**
+     * Insulin on board above which a very high glucose counts as the PEAK_CORRECTION phase.
+     *
+     * It used to mirror `InsulinStackingStance.iobFloorU`, and it deliberately does **not** any more.
+     * There the number means "enough insulin on board to start watching for stacking", so lowering
+     * it adds protection; here it is one of the conditions of a phase that **switches that watching
+     * off**, so lowering it would remove protection. Same number, opposite meaning — keep them apart.
+     */
     internal fun iobFloorU(maxIob: Double): Double {
         val maxIobSafe = maxIob.coerceAtLeast(0.5)
         return max(3.2, maxIobSafe * 0.26)

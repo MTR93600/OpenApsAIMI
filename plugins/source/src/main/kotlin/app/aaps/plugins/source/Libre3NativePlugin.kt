@@ -9,6 +9,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.BgSource
@@ -79,6 +80,7 @@ class Libre3NativePlugin @Inject constructor(
     private val persistenceLayer: PersistenceLayer,
     private val availabilityProvider: Libre3AvailabilityProvider,
     private val bleRadioPriority: BleRadioPriority,
+    private val activePlugin: ActivePlugin,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -1047,6 +1049,10 @@ class Libre3NativePlugin @Inject constructor(
         // mark is gone. Dated on the real activation of the pre-soak sensor, so the sensor age and
         // the calibration session are right from the first minute.
         logSensorChangeOnce(staged.activatedAtMs)
+        // The session is dated at the pre-soak activation, hours before this swap. Without this,
+        // every fingerstick taken during the pre-soak — all paired against the OLD sensor — would
+        // be fitted onto the new one, and applied from its first minute with no warm-up left.
+        runCatching { activePlugin.activeCalibration.ignoreEntriesBefore(System.currentTimeMillis()) }
         // Make the promoted instance the driver the plugin really talks to from now on. `true` is
         // written here and not read back from the preference on purpose: a promoted sensor IS a
         // real sensor, and a `select(false)` at this point would stop the instance that has just

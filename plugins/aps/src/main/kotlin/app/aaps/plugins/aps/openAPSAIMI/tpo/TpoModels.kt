@@ -159,15 +159,27 @@ data class TpoSessionDocument(
                 }
             }
 
+        /**
+         * Read a `baseline` / `overlay` map back, with every number as a `Double`.
+         *
+         * JSON has no idea that 1.0 is a preference value rather than a count: it writes a double
+         * with nothing after the point **without a decimal point**, and reads `1` back as an `Int`.
+         * The revert path then compares that `Int` with the live preference (always a `Double`) and
+         * hands it to a writer that only accepts a `Double` — so a user value that happened to be a
+         * whole number was silently never put back, and the session's own value stayed for good.
+         * Field report 2026-09-18: `max_smb` 1.0 stuck at 0.80, `high_bg_max_smb` 2.0 stuck at 1.25.
+         *
+         * Normalising here fixes the write-back, the restore gate, the user-owned tracking and the
+         * overlay application in one place. Safe because `TpoPreferenceKeys` whitelists nothing but
+         * `Double` and `Boolean` keys — there is no number in these maps that is not a preference.
+         */
         private fun jsonToMap(json: JSONObject?): Map<String, Any> {
             if (json == null) return emptyMap()
             val out = linkedMapOf<String, Any>()
             json.keys().forEach { key ->
                 when (val value = json.get(key)) {
                     is Boolean -> out[key] = value
-                    is Int -> out[key] = value
-                    is Long -> out[key] = value
-                    is Double -> out[key] = value
+                    is Number -> out[key] = value.toDouble()
                     is String -> out[key] = value
                 }
             }

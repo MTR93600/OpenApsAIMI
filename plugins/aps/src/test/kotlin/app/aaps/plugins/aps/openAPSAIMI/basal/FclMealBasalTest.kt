@@ -113,6 +113,78 @@ class FclMealBasalTest {
         assertThat(rate(mealModesMaxBasalUph = 0.0, profileMaxBasalUph = 0.0, profileBasalUph = 0.0)).isNull()
     }
 
+    // ----- the arming half, shared with the callers that are not the basal floor -----
+
+    /**
+     * Three other places need to know "is an FCL meal declared right now" without asking for a rate:
+     * the terminal-invariants exemption, the Autodrive gate, and the one-shot prebolus. They must not
+     * each re-spell the gate, or they will drift apart.
+     */
+    private fun declared(
+        fclNoteActive: Boolean = true,
+        sportNoteActive: Boolean = false,
+        tempTargetSet: Boolean = true,
+        targetBgMgdl: Double = 80.0,
+    ) = FclMealBasal.declared(
+        fclNoteActive = fclNoteActive,
+        sportNoteActive = sportNoteActive,
+        tempTargetSet = tempTargetSet,
+        targetBgMgdl = targetBgMgdl,
+    )
+
+    @Test
+    fun aNoteWithALowTempTargetIsADeclaredFclMeal() {
+        assertThat(declared()).isTrue()
+    }
+
+    @Test
+    fun withoutTheNoteNothingIsDeclared() {
+        assertThat(declared(fclNoteActive = false)).isFalse()
+    }
+
+    @Test
+    fun withoutATempTargetNothingIsDeclared() {
+        assertThat(declared(tempTargetSet = false)).isFalse()
+    }
+
+    @Test
+    fun aTempTargetOverTheCeilingIsNotADeclaredFclMeal() {
+        assertThat(declared(targetBgMgdl = FclMealBasal.MAX_TEMP_TARGET_MGDL + 0.1)).isFalse()
+    }
+
+    @Test
+    fun aTempTargetAtTheCeilingIsADeclaredFclMeal() {
+        assertThat(declared(targetBgMgdl = FclMealBasal.MAX_TEMP_TARGET_MGDL)).isTrue()
+    }
+
+    @Test
+    fun aSportNoteUndeclaresIt() {
+        assertThat(declared(sportNoteActive = true)).isFalse()
+    }
+
+    @Test
+    fun aTargetThatIsNotAUsableNumberIsNotADeclaredFclMeal() {
+        for (x in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
+            assertThat(declared(targetBgMgdl = x)).isFalse()
+        }
+    }
+
+    /** The rate can only be asked for when the meal is declared: one gate, not two. */
+    @Test
+    fun aRateIsNeverReturnedWhenNothingIsDeclared() {
+        for (note in listOf(true, false)) {
+            for (sport in listOf(true, false)) {
+                for (tt in listOf(true, false)) {
+                    for (target in listOf(80.0, 100.0)) {
+                        val armed = declared(note, sport, tt, target)
+                        val r = rate(fclNoteActive = note, sportNoteActive = sport, tempTargetSet = tt, targetBgMgdl = target)
+                        if (!armed) assertThat(r).isNull()
+                    }
+                }
+            }
+        }
+    }
+
     // ----- numbers that are not numbers -----
 
     @Test

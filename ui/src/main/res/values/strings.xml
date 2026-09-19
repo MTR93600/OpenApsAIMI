@@ -339,6 +339,10 @@
     <string name="cal_saved_need_more_entries" comment="%1$d=number of valid fingerstick entries recorded so far for the current sensor session (always less than 2 when this shows)">Calibration saved. It will take effect once you add one more fingerstick entry for this sensor (currently %1$d).</string>
     <string name="cal_saved_unsafe_fit">Calibration saved, but the calculated correction is outside the safe range, so it was not applied. Add another entry, or check your fingerstick value.</string>
 
+    <!-- Calibration: entered fingerstick value is far away from the sensor value -->
+    <string name="cal_sent_to_sensor">Sent to the sensor. It arrives at the next sensor connection, normally within a few minutes. This sensor does not tell the app whether it used the value, so please compare your readings with your meter over the next hour.</string>
+    <string name="cal_large_gap_warning" comment="%1$s=fingerstick value with unit, for example 209 mg/dl. %2$s=current sensor value with unit, for example 309 mg/dl. Shown as advice only, the user can still save the entry.">Your blood value (%1$s) is very far from the sensor value (%2$s). One calibration cannot correct a gap this big. A sensor that stays this far off is usually replaced, and the maker normally sends a free replacement. Please talk about it with your care team.</string>
+
     <!-- Afrezza Inhaled Insulin -->
     <string name="log_afrezza_dose">Log Afrezza Dose</string>
     <string name="afrezza_confirm_log">Log %1$dU Afrezza?</string>

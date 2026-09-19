@@ -71,10 +71,36 @@ object InsulinStackingStance {
         }
     }
 
+    /** Lowest the floor may go, whatever the user's own dosing scale is. */
+    const val IOB_FLOOR_MIN_U = 1.0
+
+    /** Fraction of the user's own `maxIob` that counts as "enough insulin on board to watch". */
+    const val IOB_FLOOR_MAX_IOB_FRACTION = 0.26
+
+    /**
+     * Insulin on board above which this layer starts watching for stacking.
+     *
+     * It used to be `max(3.2, maxIob * 0.26)`: a fixed 3.2 U, the same for someone using 20 units a
+     * day and someone using 80, and in practice 3.2 always won, because `maxIob * 0.26` only passes
+     * it above a `maxIob` of 12.3 U. Everything below 3.2 U of IOB was therefore delivered with no
+     * stacking brake at all — which is exactly the band a user sat in when a stress episode stacked
+     * more than 2 U on top of 2 U already active (field report 2026-09-18).
+     *
+     * The floor now follows the user's own scale. With a `maxIob` of 7 U it is 1.8 U instead of 3.2.
+     *
+     * ⚠️ `MealAbsorptionPhaseEngine` has a copy of the OLD formula on purpose. There the same number
+     * means the opposite thing — it is a condition for the PEAK_CORRECTION phase, which SWITCHES OFF
+     * this surveillance — so lowering it there would remove protection instead of adding it. The two
+     * must not be changed together again.
+     */
     fun iobFloorU(maxIob: Double): Double {
         val maxIobSafe = maxIob.coerceAtLeast(0.5)
-        return max(3.2, maxIobSafe * 0.26)
+        return max(IOB_FLOOR_MIN_U, maxIobSafe * IOB_FLOOR_MAX_IOB_FRACTION)
     }
+
+    /** Glucose band where a rise is acceptable but must not be answered at full strength. */
+    const val CAUTION_BAND_MIN_MGDL = 70.0
+    const val CAUTION_BAND_MAX_MGDL = 130.0
 
     /**
      * Static text for JSONL / support: what to change in code when tuning this layer.
@@ -83,7 +109,8 @@ object InsulinStackingStance {
         "Pref: BooleanKey.OApsAIMIIobSurveillanceGuard (key_aimi_iob_surveillance_guard). " +
             "Logic: InsulinStackingStance.kt. IOB floor=max(3.2,0.26*maxIob). " +
             "Plateau: delta<=2.25 AND shortAvgDelta<=4. Sharp-rise escape: delta/shortAvg>=4.5 OR dual gate (3.2/3.0). " +
-            "BG band: need bg>=target+18; extreme hyper escape bg>target+85 with upward delta. " +
+            "BG band: need bg>=target+18, or bg in [${CAUTION_BAND_MIN_MGDL}, ${CAUTION_BAND_MAX_MGDL}] with no meal mode / priority / phase; " +
+            "extreme hyper escape bg>target+85 with upward delta. " +
             "Signals: eventual<bg-6 OR minPred<bg-10 OR trajEnergy>2. SMB damp: mult=0.32 cap=0.38U redCarpet=off TBR floor>=1.12. " +
             "Meal alignment: if mealPriorityContext AND (delta>=${MEAL_RISE_DELTA_BYPASS} OR shortAvg>=${MEAL_RISE_SHORTAVG_BYPASS}), surveillance off (absorption rise). " +
             "JSONL: smb_u_after_cap_smb_dose, smb_u_final_for_delivery (pump-aligned), smb_final_source (red_carpet|standard_safe_cap)."
@@ -108,6 +135,7 @@ object InsulinStackingStance {
         mealPriorityContext: Boolean = false,
         endogenousCounterRegulatory: Boolean = false,
         mealAbsorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.NONE,
+        mealModeActive: Boolean = false,
     ): Evaluation {
         fun active(reason: String?) = Evaluation(
             kind = Kind.CORRECTION_ACTIVE,
@@ -161,7 +189,17 @@ object InsulinStackingStance {
             return active("extreme_hyper_upward_pressure")
         }
 
-        if (bg < targetBg + 18) {
+        // Between 70 and 130 a rise is not an emergency, and answering it at full strength is how a
+        // hypo is built. So when nothing says "meal" — no meal mode, no meal priority, no absorption
+        // phase — the surveillance may also work below the usual target+18 band. It still needs
+        // everything else: a plateau velocity AND a prediction that glucose is coming down. A real
+        // rise escapes above, long before this point.
+        val cautionBand = bg >= CAUTION_BAND_MIN_MGDL &&
+            bg <= CAUTION_BAND_MAX_MGDL &&
+            !mealModeActive &&
+            !mealPriorityContext &&
+            !mealAbsorptionPhase.isActive
+        if (bg < targetBg + 18 && !cautionBand) {
             return active("bg_below_surveillance_band")
         }
 

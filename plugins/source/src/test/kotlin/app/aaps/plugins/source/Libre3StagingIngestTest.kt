@@ -4,8 +4,10 @@ import android.content.Context
 import android.content.SharedPreferences
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.ble.BleRadioPriority
+import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.PromotionRejectReason
 import app.aaps.core.interfaces.source.PromotionResult
@@ -53,6 +55,10 @@ class Libre3StagingIngestTest : TestBase() {
     @Mock lateinit var persistenceLayer: PersistenceLayer
 
     private val bleRadioPriority: BleRadioPriority = mock()
+
+    /** Promotion tells the active calibration plugin to drop the retired sensor's fingersticks. */
+    private val activeCalibration: Calibration = mock()
+    private val activePlugin: ActivePlugin = mock<ActivePlugin>().also { whenever(it.activeCalibration).thenReturn(activeCalibration) }
     private val availabilityProvider: Libre3AvailabilityProvider = mock()
 
     private val productionPrefs: SharedPreferences = SharedPreferencesMock()
@@ -94,7 +100,7 @@ class Libre3StagingIngestTest : TestBase() {
         }
         Libre3Ingest.reset()
         plugin = Libre3NativePlugin(
-            rh, aapsLogger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority,
+            rh, aapsLogger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin,
         )
     }
 

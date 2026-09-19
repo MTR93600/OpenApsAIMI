@@ -10,6 +10,7 @@ import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClient
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClientUnimplemented
 import app.aaps.plugins.dexcomoneplus.oem.DeviceProfileRegistry
 import app.aaps.plugins.dexcomoneplus.oem.OemDeviceProfile
+import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrateRx
 import app.aaps.plugins.dexcomoneplus.reconnect.OemAwareReconnectPolicy
 import app.aaps.plugins.dexcomoneplus.reconnect.OnePlusReconnectPolicy
 import app.aaps.plugins.dexcomoneplus.warmup.OnePlusWarmupClock
@@ -297,6 +298,17 @@ class OnePlusBleSessionSkeleton(
     private val appContext: Context? = null,
     /** Sensor slot owning this session (`prod` / `staging`) — logged on every marker. */
     private val slot: String = OnePlusLogMarkers.SLOT_PRODUCTION,
+    /**
+     * Fingersticks waiting to be handed to the sensor's own algorithm, or null when this session may
+     * not calibrate.
+     *
+     * Null is the default and stays the default: the driver only passes a queue for the production
+     * slot, and only while the user has switched sending on. A pre-soak sensor must never be
+     * calibrated — it is not the one feeding the loop, and a sensor keeps a calibration for good.
+     */
+    private val calibrationQueue: OnePlusCalibrationQueue? = null,
+    /** What the sensor answered to a calibration, so a refusal or an unreadable answer reaches the user. */
+    private val onCalibrationResult: (OnePlusCalibrateRx?) -> Unit = {},
 ) : OnePlusBleSession {
 
     @Volatile
@@ -694,6 +706,8 @@ class OnePlusBleSessionSkeleton(
                 },
                 onError = onError,
                 requestNewSensorStart = requestNewSensorStart,
+                calibrationQueue = calibrationQueue,
+                onCalibrationResult = onCalibrationResult,
             )
             try {
                 egv.run(shouldContinue = { running && gatt.isConnected() })

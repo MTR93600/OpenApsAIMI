@@ -108,12 +108,14 @@ object UndeclaredCobEstimator {
         if (input.postHypoActive) return Result.gated("post_hypo")
         if (input.bgMgdl <= HYPO_GUARD_MGDL) return Result.gated("hypo_zone")
         if (input.cfrdExacerbationActive) return Result.gated("cfrd_exacerbation")
-        // The heart rate keeps its say only while the rise is slow enough for it to mean something.
-        val riseTooFastForHeartRate = input.deltaMgdl5m.isFinite() &&
-            input.deltaMgdl5m >= HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN
-        if (input.hrInflammationElevated && !riseTooFastForHeartRate) {
-            return Result.gated("hr_inflammation")
-        }
+        // An elevated heart rate always closes this gate, whatever the glucose is doing.
+        //
+        // It used to step aside above HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN, on the argument that a fast
+        // rise cannot be hormonal — which also means the estimator invented carbs during exactly the
+        // episodes where a raised heart rate has another cause. The user's instruction is the simple
+        // one: the heart rate may protect, it may never be a reason to believe in a meal. The cost is
+        // known and accepted: a real undeclared meal that raises the heart rate is not caught here.
+        if (input.hrInflammationElevated) return Result.gated("hr_inflammation")
         if (input.exerciseLockoutActive || input.activityDetected) return Result.gated("exercise_activity")
         if (input.mealProb < MEAL_PROB_THRESHOLD) return Result.gated("meal_prob_low")
 

@@ -51,10 +51,16 @@ object TpoRevertPolicy {
         return sameValue(liveValue, overlayValue)
     }
 
-    /** Value equality as the preference store sees it: doubles within [DOUBLE_TOLERANCE], the rest exact. */
+    /**
+     * Value equality as the preference store sees it: numbers within [DOUBLE_TOLERANCE], the rest exact.
+     *
+     * Every number is compared as a number, never through [toString]. A stored value that came back
+     * from JSON as an `Int` used to make `"1.0" == "1"` false, which closed the gate on exactly the
+     * keys whose value is a whole number — see `TpoSessionDocument.jsonToMap`.
+     */
     fun sameValue(a: Any, b: Any): Boolean =
         when {
-            a is Double && b is Double   -> abs(a - b) < DOUBLE_TOLERANCE
+            a is Number && b is Number   -> abs(a.toDouble() - b.toDouble()) < DOUBLE_TOLERANCE
             a is Boolean && b is Boolean -> a == b
             else                         -> a.toString() == b.toString()
         }

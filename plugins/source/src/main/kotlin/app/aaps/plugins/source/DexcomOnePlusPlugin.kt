@@ -4,14 +4,19 @@ import android.content.Context
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.plugin.PluginType
+import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
+import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.rx.events.EventRefreshOverview
 import app.aaps.core.interfaces.source.BgSource
 import app.aaps.core.interfaces.source.CgmSensorLifecycle
 import app.aaps.core.interfaces.source.CgmSensorStatusProvider
@@ -19,6 +24,7 @@ import app.aaps.core.interfaces.source.CgmStagingEvidence
 import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.core.interfaces.source.PromotionRejectReason
 import app.aaps.core.interfaces.source.PromotionResult
+import app.aaps.core.interfaces.source.SensorCalibrationResult
 import app.aaps.core.interfaces.source.SensorSlot
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.keys.BooleanKey
@@ -72,6 +78,8 @@ class DexcomOnePlusPlugin @Inject constructor(
     private val warmupBasalGuard: DexcomOnePlusWarmupBasalGuard,
     private val availabilityProvider: DexcomOnePlusAvailabilityProvider,
     private val bleRadioPriority: BleRadioPriority,
+    private val activePlugin: ActivePlugin,
+    private val rxBus: RxBus,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -146,6 +154,10 @@ class DexcomOnePlusPlugin @Inject constructor(
     /** Collector that drives the safety basal guard from the warm-up state (cancelled in onStop). */
     private var warmupGuardJob: Job? = null
 
+    /** Session start already checked by [healMissingSensorChange], so a deletion is not undone twice. */
+    @Volatile
+    private var healedSensorChangeStartMs: Long = 0L
+
     // ---- Dual-sensor (staging / pre-soak) state — see docs/DEXCOM_ONEPLUS_DUAL_SENSOR_STAGING_PLAN.md ----
 
     private val _lifecycle = MutableStateFlow<CgmSensorLifecycle?>(null)
@@ -212,6 +224,25 @@ class DexcomOnePlusPlugin @Inject constructor(
      */
     override fun specialShowInListCondition(): Boolean = availabilityProvider.isAvailable()
 
+    /**
+     * A fingerstick goes to the sensor only while the engineering switch is on.
+     *
+     * See [DexcomOnePlusBooleanKey.SendCalibrationToSensor] for why this is not on by default. When
+     * it is true the app stores no calibration entry for this sensor at all, so the software fit
+     * has nothing to fit and cannot correct the same readings a second time.
+     */
+    override fun calibratesInSensor(): Boolean =
+        preferences.get(DexcomOnePlusBooleanKey.SendCalibrationToSensor)
+
+    override fun calibrateSensor(glucoseMgdl: Int, bloodAtMs: Long): SensorCalibrationResult {
+        if (!calibratesInSensor()) return SensorCalibrationResult.NotSupported
+        // Only the production driver: a pre-soak sensor is not the one feeding the loop, and a
+        // calibration it accepted would stay in it for the whole of its own life.
+        val queued = driver.offerCalibration(glucoseMgdl, bloodAtMs)
+        return if (queued) SensorCalibrationResult.Queued
+        else SensorCalibrationResult.Refused(rh.gs(R.string.dexcom_oneplus_calibration_not_sent))
+    }
+
     override fun getPreferenceScreenContent() = PreferenceSubScreenDef(
         key = "dexcom_oneplus_settings",
         titleResId = R.string.dexcom_oneplus_native,
@@ -221,6 +252,7 @@ class DexcomOnePlusPlugin @Inject constructor(
             DexcomOnePlusIntentKey.Start.withActivity(DexcomOnePlusStartActivity::class.java),
             DexcomOnePlusIntentKey.Warmup.withActivity(DexcomOnePlusWarmupActivity::class.java),
             DexcomOnePlusBooleanKey.UseRealSkeleton,
+            DexcomOnePlusBooleanKey.SendCalibrationToSensor,
             // Sensor age on the dashboard comes from the SENSOR_CHANGE therapy event this writes.
             BooleanKey.BgSourceCreateSensorChange,
         ),
@@ -444,19 +476,97 @@ class DexcomOnePlusPlugin @Inject constructor(
      */
     private fun logSensorChange(startMs: Long) {
         if (!preferences.get(BooleanKey.BgSourceCreateSensorChange)) return
-        ioScope.launch {
-            val result = persistenceLayer.insertCgmSourceData(
-                Sources.DexcomOnePlus,
-                emptyList(),
-                emptyList(),
-                sensorInsertionTime = startMs,
-            )
+        ioScope.launch { writeSensorChange(startMs) }
+    }
+
+    /** @return true when a sensor change was really written (the DB refuses a duplicate timestamp). */
+    private suspend fun writeSensorChange(startMs: Long): Boolean {
+        val result = persistenceLayer.insertCgmSourceData(
+            Sources.DexcomOnePlus,
+            emptyList(),
+            emptyList(),
+            sensorInsertionTime = startMs,
+        )
+        val inserted = result.sensorInsertionsInserted.isNotEmpty()
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_SESSION: sensor change logged startMs=$startMs inserted=$inserted",
+        )
+        return inserted
+    }
+
+    /**
+     * Move the insertion time of the sensor that feeds the loop — the Status screen's "correct the
+     * insertion date".
+     *
+     * Two clocks have to agree, or the correction is only half visible: this source's own session
+     * start (the ring, the Status screen, the end-of-life warning) and the `SENSOR_CHANGE` therapy
+     * event (the dashboard age, and the session the calibration is fitted in). So this writes the
+     * store, clears the `SENSOR_CHANGE` events of the session being corrected — otherwise the
+     * plugin's own, later event stays the "last sensor change" and hides the corrected one — and
+     * writes a single event at the new time.
+     *
+     * The calibration entries are deliberately kept: the sensor has not changed, only the moment it
+     * went in (that is the opposite of a pre-soak promotion, see `promoteStagingToProduction`).
+     */
+    suspend fun correctProductionSensorStart(newStartMs: Long): DexcomOnePlusSensorStartCorrection.Verdict {
+        val currentStartMs = sensorStore.loadSessionStart()
+        val now = System.currentTimeMillis()
+        val verdict = DexcomOnePlusSensorStartCorrection.validate(newStartMs, currentStartMs, now)
+        if (verdict != DexcomOnePlusSensorStartCorrection.Verdict.Accepted) {
             aapsLogger.info(
                 LTag.BGSOURCE,
-                "DEXCOM_ONEPLUS_SESSION: sensor change logged startMs=$startMs " +
-                    "inserted=${result.sensorInsertionsInserted.size}",
+                "DEXCOM_ONEPLUS_SESSION: insertion date refused verdict=$verdict " +
+                    "newStartMs=$newStartMs currentStartMs=$currentStartMs",
+            )
+            return verdict
+        }
+        val from = DexcomOnePlusSensorStartCorrection.cleanupFrom(newStartMs, currentStartMs)
+        // Invalid ones count here: the database looks for a duplicate timestamp WITHOUT checking
+        // validity, so an event invalidated just below still blocks the new one. See freeTimestamp.
+        val taken = persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(from, true)
+            .filter { it.type == TE.Type.SENSOR_CHANGE }
+            .map { it.timestamp }
+            .toSet()
+        val stampMs = DexcomOnePlusSensorStartCorrection.freeTimestamp(newStartMs, taken)
+        val stale = persistenceLayer.getTherapyEventDataFromToTime(from, now)
+            .filter { it.type == TE.Type.SENSOR_CHANGE }
+        stale.forEach { event ->
+            persistenceLayer.invalidateTherapyEvent(
+                id = event.id,
+                action = Action.CAREPORTAL_REMOVED,
+                source = Sources.DexcomOnePlus,
+                note = event.note,
+                listValues = listOf(
+                    ValueWithUnit.Timestamp(event.timestamp),
+                    ValueWithUnit.TEType(event.type),
+                ),
             )
         }
+        // Both clocks get the SAME moment, so the plugin screen and the dashboard cannot drift apart
+        // by the second this may have moved.
+        sensorStore.overwriteSessionStart(stampMs)
+        // Written even when `BgSourceCreateSensorChange` is off. That preference governs what this
+        // source logs BY ITSELF; this is the user saying "the sensor went in at this time", and the
+        // dashboard age, the status line and the calibration session all read the therapy event. A
+        // correction that moved only the driver's own clock left the two disagreeing, which is the
+        // bug this whole action exists to end.
+        val written = writeSensorChange(stampMs)
+        // This session is settled: the repair net must not write a second event behind this one.
+        healedSensorChangeStartMs = stampMs
+        refreshProductionLifecycle()
+        // Nothing else tells the dashboard: it refreshes on glucose and on this event, and a sensor
+        // whose link is down sends neither — so the corrected age would have stayed invisible until
+        // the next reading, which is exactly when the user is looking at it.
+        rxBus.send(EventRefreshOverview(from = "DexcomOnePlus insertion date"))
+        val nowShowing = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_SESSION: insertion date corrected from=$currentStartMs to=$stampMs " +
+                "asked=$newStartMs removedSensorChanges=${stale.size} written=$written " +
+                "lastSensorChangeNow=$nowShowing",
+        )
+        return verdict
     }
 
     override fun onSession(up: Boolean, reason: String?) {
@@ -744,24 +854,24 @@ class DexcomOnePlusPlugin @Inject constructor(
      * reconnect watchdog) now sees it too.
      */
     override suspend fun promoteStagingToProduction(allowEarly: Boolean): PromotionResult {
-        if (!stagingPresent) return PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT)
+        if (!stagingPresent) return rejectPromotion(PromotionRejectReason.STAGING_ABSENT, allowEarly)
         if (stagingValidEgvCount < DexcomOnePlusStaging.STAGING_MIN_VALID_EGV)
-            return PromotionResult.Rejected(PromotionRejectReason.STAGING_NO_VALID_GLUCOSE)
+            return rejectPromotion(PromotionRejectReason.STAGING_NO_VALID_GLUCOSE, allowEarly)
         // Defense-in-depth: re-verify the REAL soak time from the trusted persisted start rather than
         // trusting the cached _stagingState — a stale start (e.g. cancel/restage) must never authorise
         // an under-soaked promotion onto the loop.
         val startMs = stagingStore.loadSessionStart()
-        if (startMs <= 0L) return PromotionResult.Rejected(PromotionRejectReason.STAGING_NOT_SETTLED)
+        if (startMs <= 0L) return rejectPromotion(PromotionRejectReason.STAGING_NOT_SETTLED, allowEarly)
         if (allowEarly) {
             // The user knowingly gives up the soak (production sensor stopped early). The evidence
             // gates stay: enough valid readings, and one of them recent — never a silent sensor.
             if (!DexcomOnePlusStaging.canPromoteEarly(stagingValidEgvCount, stagingLastValueAtMs, System.currentTimeMillis()))
-                return PromotionResult.Rejected(PromotionRejectReason.STAGING_NO_RECENT_GLUCOSE)
+                return rejectPromotion(PromotionRejectReason.STAGING_NO_RECENT_GLUCOSE, allowEarly)
         } else {
             if (System.currentTimeMillis() - startMs < DexcomOnePlusStaging.STAGING_MIN_SETTLE_MS)
-                return PromotionResult.Rejected(PromotionRejectReason.STAGING_NOT_SETTLED)
+                return rejectPromotion(PromotionRejectReason.STAGING_NOT_SETTLED, allowEarly)
             if (_stagingState.value != StagingState.READY)
-                return PromotionResult.Rejected(PromotionRejectReason.STAGING_NOT_SETTLED)
+                return rejectPromotion(PromotionRejectReason.STAGING_NOT_SETTLED, allowEarly)
         }
 
         aapsLogger.info(
@@ -789,27 +899,11 @@ class DexcomOnePlusPlugin @Inject constructor(
         // 2) New sensor = different EGV sequence space → reset the persistent dedup floor.
         DexcomOnePlusIngest.reset()
         // 3) Durability: migrate the staging identity into the production store so a later restart
-        //    resumes the promoted sensor on the production driver. Then retire the staging store.
+        //    resumes the promoted sensor on the production driver.
         stagingStore.load()?.let { sensorStore.adopt(it, startMs) }
-        stagingStore.clearAll()
-        // The promoted sensor becomes the loop's sensor: its age must show on the dashboard from the
-        // moment it was applied (its staging start, verified above), not from the promotion.
-        logSensorChange(startMs)
-        // 4) Swap the registry: `OnePlusCgmDrivers.default()` now hands out the promoted instance
-        // everywhere — the Status/Warmup screens and the reconnect watchdog read it directly, and
-        // before this swap they kept reading the retired instance for the rest of the session (the
-        // "Status stuck at IDLE" and "no reconnect after a dropped link" bugs).
-        val retired = OnePlusCgmDrivers.promoteStagingInstance()
-        runCatching { retired?.shutdown() }
-        runCatching { if (outgoing !== promoted && outgoing !== retired) outgoing.shutdown() }
-        // Flips `useRealSkeleton` for THIS session too — the preferences write above only takes
-        // effect after a restart, so without this `default()` kept handing out the Stub.
-        runCatching { OnePlusCgmDrivers.select(useReal = true, watcher = this) }
-        // The production status (_warmup) was last set by the OLD production driver and nothing else
-        // pushes to it here: a steady-state promoted driver emits no new phase-change event, so
-        // without this the Status screen keeps showing whatever phase production had before the
-        // promotion (e.g. stuck at IDLE) until the app restarts and onStart() re-polls the driver.
-        onWarmup(promoted.warmupState())
+        // 4) Close the pre-soak slot BEFORE its file is wiped (same order as Libre 3): the staging
+        // callbacks are guarded on [stagingPresent], so a reading still in flight can no longer
+        // write `slot_warmup_done` / `slot_present` back into the file that is about to be cleared.
         stagingPresent = false
         stagingWarming = false
         stagingWarmupDone = false
@@ -821,6 +915,31 @@ class DexcomOnePlusPlugin @Inject constructor(
         _stagingLifecycle.value = null
         _stagingEvidence.value = null
         _stagingState.value = StagingState.ABSENT
+        // 5) Swap the registry: `OnePlusCgmDrivers.default()` now hands out the promoted instance
+        // everywhere — the Status/Warmup screens and the reconnect watchdog read it directly, and
+        // before this swap they kept reading the retired instance for the rest of the session (the
+        // "Status stuck at IDLE" and "no reconnect after a dropped link" bugs).
+        // It also rebinds the promoted instance onto the production file, so it must happen BEFORE
+        // the staging file is cleared: its live link reads that file on every reconnect.
+        val retired = OnePlusCgmDrivers.promoteStagingInstance()
+        runCatching { retired?.shutdown() }
+        runCatching { if (outgoing !== promoted && outgoing !== retired) outgoing.shutdown() }
+        // 6) Only now retire the staging store — nothing points at it any more.
+        stagingStore.clearAll()
+        // The promoted sensor becomes the loop's sensor: its age must show on the dashboard from the
+        // moment it was applied (its staging start, verified above), not from the promotion.
+        logSensorChange(startMs)
+        // That back-dated session start would otherwise pull every fingerstick taken during the
+        // pre-soak into this sensor's fit — all of them paired against the sensor just retired.
+        runCatching { activePlugin.activeCalibration.ignoreEntriesBefore(System.currentTimeMillis()) }
+        // Flips `useRealSkeleton` for THIS session too — the preferences write above only takes
+        // effect after a restart, so without this `default()` kept handing out the Stub.
+        runCatching { OnePlusCgmDrivers.select(useReal = true, watcher = this) }
+        // The production status (_warmup) was last set by the OLD production driver and nothing else
+        // pushes to it here: a steady-state promoted driver emits no new phase-change event, so
+        // without this the Status screen keeps showing whatever phase production had before the
+        // promotion (e.g. stuck at IDLE) until the app restarts and onStart() re-polls the driver.
+        onWarmup(promoted.warmupState())
         refreshProductionLifecycle()
         // One sensor moved from the pre-soak slot into production, so the service is still wanted,
         // but the reason for it has changed. Asked again so the two slots are counted as they are.
@@ -829,6 +948,22 @@ class DexcomOnePlusPlugin @Inject constructor(
         // without a sensor until the watchdog wakes up 5 min later.
         runCatching { if (!promoted.isSessionUp()) promoted.resumeStoredSession() }
         return PromotionResult.Ok
+    }
+
+    /**
+     * A refused promotion used to be visible only as a toast, so a support package could not say why
+     * the user's "Promote" did nothing. Every refusal now leaves one line, with the state it saw.
+     */
+    private fun rejectPromotion(reason: PromotionRejectReason, allowEarly: Boolean): PromotionResult {
+        val startMs = stagingStore.loadSessionStart()
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_PROMOTE: refused reason=$reason early=$allowEarly present=$stagingPresent " +
+                "state=${_stagingState.value} egvCount=$stagingValidEgvCount " +
+                "soakMs=${if (startMs > 0L) System.currentTimeMillis() - startMs else -1L} " +
+                "lastValueAgeMs=${stagingLastValueAtMs?.let { System.currentTimeMillis() - it } ?: -1L}",
+        )
+        return PromotionResult.Rejected(reason)
     }
 
     private fun handleStagingWarmup(state: OnePlusWarmupState) {
@@ -889,8 +1024,60 @@ class DexcomOnePlusPlugin @Inject constructor(
     }
 
     private fun refreshProductionLifecycle() {
+        val startMs = sensorStore.loadSessionStart()
         _lifecycle.value =
-            DexcomOnePlusStaging.computeLifecycle(SensorSlot.PRODUCTION, sensorStore.loadSessionStart(), System.currentTimeMillis())
+            DexcomOnePlusStaging.computeLifecycle(SensorSlot.PRODUCTION, startMs, System.currentTimeMillis())
+        if (startMs > 0L) ioScope.launch { healMissingSensorChange(startMs) }
+    }
+
+    /**
+     * Put back the `SENSOR_CHANGE` of the running sensor when the database has none.
+     *
+     * The driver knows when its sensor started; the dashboard, the Glass skin, the status line and
+     * the calibration session all read a therapy event instead. When that event is missing, every one
+     * of them falls back to the previous sensor — a user saw "13 d 0 h" on a sensor the plugin itself
+     * reported as one day old, which is not even a possible age for a ONE+.
+     *
+     * The event can go missing in more than one way: a write refused as a duplicate, a deletion in
+     * Care, a Nightscout round trip. Rather than depend on one write succeeding once, the age is
+     * repaired here, on the refresh that already runs at every reading.
+     *
+     * Healed once per session start: if the user deliberately deletes the event again, it is not
+     * resurrected on the next reading.
+     */
+    private suspend fun healMissingSensorChange(startMs: Long) {
+        if (healedSensorChangeStartMs == startMs) return
+        if (!preferences.get(BooleanKey.BgSourceCreateSensorChange)) {
+            // Said once per session, because it explains an age that can never be right: with this
+            // setting off nothing writes a sensor change, so every screen that reads the therapy
+            // event keeps showing the sensor before this one.
+            healedSensorChangeStartMs = startMs
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "DEXCOM_ONEPLUS_SESSION: sensor age not repaired — 'create sensor change' is off " +
+                    "(driver start $startMs)",
+            )
+            return
+        }
+        val last = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp
+        // A valid event at or after this session's start means the age is already right.
+        if (last != null && last >= startMs - SENSOR_CHANGE_MATCH_TOLERANCE_MS) {
+            healedSensorChangeStartMs = startMs
+            return
+        }
+        healedSensorChangeStartMs = startMs
+        val taken = persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(startMs - SENSOR_CHANGE_MATCH_TOLERANCE_MS, true)
+            .filter { it.type == TE.Type.SENSOR_CHANGE }
+            .map { it.timestamp }
+            .toSet()
+        val stampMs = DexcomOnePlusSensorStartCorrection.freeTimestamp(startMs, taken)
+        val written = writeSensorChange(stampMs)
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_SESSION: sensor age had no therapy event — rewritten at $stampMs " +
+                "(driver start $startMs, previous last=$last, written=$written)",
+        )
+        if (written) rxBus.send(EventRefreshOverview(from = "DexcomOnePlus sensor age repair"))
     }
 
     private fun refreshStagingLifecycle() {
@@ -925,6 +1112,14 @@ class DexcomOnePlusPlugin @Inject constructor(
     }
 
     companion object {
+
+        /**
+         * How far before the driver's own session start a therapy event may sit and still count as
+         * this sensor's. Covers the second the correction may have shifted, and a manual entry made
+         * a few minutes before the sensor was paired.
+         */
+        private const val SENSOR_CHANGE_MATCH_TOLERANCE_MS = 15L * 60L * 1000L
+
 
         /** How far back to seed the ingest dedup from the DB on start — wide enough to cover any
          *  plausible on-reconnect backfill, capped downstream by [DexcomOnePlusIngest] RECENT_CAP. */

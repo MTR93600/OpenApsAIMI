@@ -3,8 +3,10 @@ package app.aaps.plugins.source
 import android.content.Context
 import android.content.SharedPreferences
 import app.aaps.core.interfaces.ble.BleRadioPriority
+import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.PromotionResult
 import app.aaps.core.keys.interfaces.Preferences
@@ -43,6 +45,10 @@ class DexcomOnePlusPromotionWarmupSyncTest : TestBase() {
     private val availabilityProvider: DexcomOnePlusAvailabilityProvider = mock()
     private val bleRadioPriority: BleRadioPriority = mock()
 
+    /** Promotion tells the active calibration plugin to drop the retired sensor's fingersticks. */
+    private val activeCalibration: Calibration = mock()
+    private val activePlugin: ActivePlugin = mock<ActivePlugin>().also { whenever(it.activeCalibration).thenReturn(activeCalibration) }
+
     private val productionPrefs: SharedPreferences = SharedPreferencesMock()
     private val stagingPrefs: SharedPreferences = SharedPreferencesMock()
 
@@ -54,7 +60,7 @@ class DexcomOnePlusPromotionWarmupSyncTest : TestBase() {
         whenever(context.getSharedPreferences(PRODUCTION_PREFS_NAME, Context.MODE_PRIVATE)).thenReturn(productionPrefs)
         whenever(context.getSharedPreferences(STAGING_PREFS_NAME, Context.MODE_PRIVATE)).thenReturn(stagingPrefs)
         plugin = DexcomOnePlusPlugin(
-            rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority,
+            rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus,
         )
     }
 
