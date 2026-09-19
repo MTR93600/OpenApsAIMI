@@ -1,13 +1,14 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
+import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisTuning
 
 /**
  * How much production authority AIMI has been given, from Observation (nothing applied) up to
  * ControlledAuthority. Plain enum in commonMain - the display label used to live on it as a
- * `@StringRes Int`, which is why this type used to be Android-only. The label is now a UI-only
- * extension function in the androidMain Compose screen that reads it - see
- * `AimiAutonomyMode.labelResId()` in AimiControlCenterSupport.kt.
+ * `@StringRes Int`, which is why this type used to be Android-only. The label is now the
+ * commonMain [controlCenterLabel] extension below, backed by [TextRef] instead.
  */
 enum class AimiAutonomyMode {
     Observation,
@@ -22,6 +23,19 @@ internal fun AimiAutonomyMode.authorityRank(): Int =
         AimiAutonomyMode.Recommendations -> 1
         AimiAutonomyMode.AssistedApplication -> 2
         AimiAutonomyMode.ControlledAuthority -> 3
+    }
+
+/**
+ * Display label for the autonomy ladder. Replaces the old androidMain-only
+ * `AimiAutonomyMode.labelResId()` extension (which returned a bare `@StringRes Int`) now that the
+ * type moved to commonMain - same four `ApsStrings.aimi_control_center_autonomy_*` entries.
+ */
+internal fun AimiAutonomyMode.controlCenterLabel(): TextRef =
+    when (this) {
+        AimiAutonomyMode.Observation -> ApsStrings.aimi_control_center_autonomy_observation
+        AimiAutonomyMode.Recommendations -> ApsStrings.aimi_control_center_autonomy_recommendations
+        AimiAutonomyMode.AssistedApplication -> ApsStrings.aimi_control_center_autonomy_assisted
+        AimiAutonomyMode.ControlledAuthority -> ApsStrings.aimi_control_center_autonomy_controlled
     }
 
 data class AimiBehaviorRuntimeProfile(

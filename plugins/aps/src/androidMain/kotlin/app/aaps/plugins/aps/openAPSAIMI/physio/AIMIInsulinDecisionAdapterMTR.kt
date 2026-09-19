@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPhysioSource
 import android.os.Looper
@@ -308,7 +309,7 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         vetoReason: String?
     ) {
         lastDecisionTrace = PhysioDecisionTraceMTR(
-            timestamp = System.currentTimeMillis(),
+            timestamp = aimiWallClockMs(),
             physioState = state,
             physioConfidence = confidence,
             physioDataQuality = dataQuality,
@@ -483,7 +484,7 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
      * @return true if hypo occurred in last 2 hours
      */
     private fun hasRecentHypoglycemia(explicitTimestamp: Long?): Boolean {
-        val now = System.currentTimeMillis()
+        val now = aimiWallClockMs()
         
         // Check explicit timestamp first
         if (explicitTimestamp != null && (now - explicitTimestamp) < RECENT_HYPO_WINDOW_MS) {
@@ -599,7 +600,7 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         return mapOf(
             "source" to snapshot.source,
             "confidence" to "${(snapshot.confidence * 100).toInt()}%",
-            "age" to "${(System.currentTimeMillis() - snapshot.timestamp) / 1000}s",
+            "age" to "${(aimiWallClockMs() - snapshot.timestamp) / 1000}s",
             "isValid" to snapshot.isValid.toString()
         )
     }
@@ -618,7 +619,7 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
             return "🏥 Physio: NO DATA / WAITING | Check Health Connect permissions & Sync"
         }
         
-        val ageMin = (System.currentTimeMillis() - snapshot.timestamp) / 60000
+        val ageMin = (aimiWallClockMs() - snapshot.timestamp) / 60000
         val sb = StringBuilder()
         
         // Header

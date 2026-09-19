@@ -18,6 +18,7 @@ import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
 import java.util.Locale
 
@@ -66,11 +67,11 @@ class AiCoachingService @Inject constructor(
         includeRichOref: Boolean = true,
         causalInsights: List<AimiBehaviorCausalInsight> = emptyList(),
     ): String = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) return@withContext "Clé API manquante. Veuillez configurer votre clé ${provider.name}."
+        if (apiKey.isBlank()) return@withContext rh.gs(R.string.aimi_coach_svc_missing_key, provider.name)
 
         try {
             val prompt = buildPrompt(androidContext, context, report, history, includeRichOref, causalInsights)
-            
+
             return@withContext when (provider) {
                 Provider.GEMINI -> callGemini(androidContext, apiKey, prompt)
                 Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
@@ -80,7 +81,7 @@ class AiCoachingService @Inject constructor(
 
         } catch (e: Exception) {
             e.printStackTrace()
-            return@withContext "Erreur de connexion (${provider.name}) : ${e.localizedMessage}"
+            return@withContext rh.gs(R.string.aimi_coach_svc_connection_error, provider.name, e.localizedMessage)
         }
     }
     
@@ -98,9 +99,9 @@ class AiCoachingService @Inject constructor(
         apiKey: String,
         provider: Provider
     ): String = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) return@withContext "Clé API manquante."
-        if (prompt.isBlank()) return@withContext "Prompt vide."
-        
+        if (apiKey.isBlank()) return@withContext rh.gs(R.string.aimi_coach_svc_missing_key_simple)
+        if (prompt.isBlank()) return@withContext rh.gs(R.string.aimi_coach_svc_empty_prompt)
+
         try {
             return@withContext when (provider) {
                 Provider.GEMINI -> callGemini(context, apiKey, prompt)
@@ -110,7 +111,7 @@ class AiCoachingService @Inject constructor(
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            return@withContext "Erreur: ${e.localizedMessage}"
+            return@withContext rh.gs(R.string.aimi_coach_svc_generic_error, e.localizedMessage)
         }
     }
 
@@ -152,7 +153,7 @@ class AiCoachingService @Inject constructor(
             var line: String?
             while (reader.readLine().also { line = it } != null) err.append(line)
             if (LlmHttpRetry.isTransientStatus(responseCode)) throw java.io.IOException("OpenAI Error ($responseCode): $err")
-            "Erreur OpenAI ($responseCode): $err"
+            rh.gs(R.string.aimi_coach_svc_error_openai, responseCode, err.toString())
         }
     }
 
@@ -395,7 +396,7 @@ class AiCoachingService @Inject constructor(
             val root = JSONObject(jsonStr)
             root.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
         } catch (e: Exception) {
-            "Erreur lecture OpenAI."
+            rh.gs(R.string.aimi_coach_svc_read_error_openai)
         }
     }
 
@@ -407,7 +408,7 @@ class AiCoachingService @Inject constructor(
             parts.getJSONObject(0).getString("text").trim()
         } catch (e: Exception) {
              // Fallback for safety blocked
-             if (jsonStr.contains("finishReason")) "Contenu bloqué par sécurité Gemini." else "Erreur lecture Gemini."
+             if (jsonStr.contains("finishReason")) rh.gs(R.string.aimi_coach_svc_gemini_blocked) else rh.gs(R.string.aimi_coach_svc_read_error_gemini)
         }
     }
     
@@ -447,7 +448,7 @@ class AiCoachingService @Inject constructor(
             var line: String?
             while (reader.readLine().also { line = it } != null) err.append(line)
             if (LlmHttpRetry.isTransientStatus(responseCode)) throw java.io.IOException("DeepSeek Error ($responseCode): $err")
-            "Erreur DeepSeek ($responseCode): $err"
+            rh.gs(R.string.aimi_coach_svc_error_deepseek, responseCode, err.toString())
         }
     }
     
@@ -498,17 +499,17 @@ class AiCoachingService @Inject constructor(
             while (reader.readLine().also { line = it } != null) err.append(line)
             // 503/529/500… → throw so it is retried with backoff; other errors surface as-is.
             if (LlmHttpRetry.isTransientStatus(responseCode)) throw java.io.IOException("Claude Error ($responseCode): $err")
-            "Erreur Claude ($responseCode): $err"
+            rh.gs(R.string.aimi_coach_svc_error_claude, responseCode, err.toString())
         }
     }
-    
+
     private fun parseClaudeResponse(jsonStr: String): String {
         return try {
             val root = JSONObject(jsonStr)
             val content = root.getJSONArray("content")
             content.getJSONObject(0).getString("text").trim()
         } catch (e: Exception) {
-            "Erreur lecture Claude."
+            rh.gs(R.string.aimi_coach_svc_read_error_claude)
         }
     }
 }

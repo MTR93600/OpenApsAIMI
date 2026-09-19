@@ -315,11 +315,11 @@
 
 <string name="aimi_t3c_history_not_enough_data">Not enough data yet. %1$d tick(s) with T3C export were found in the last 24h.</string>
 
-<string name="aimi_t3c_history_period">Period: last 24h</string>
+<string name="aimi_history_period">Period: last 24h</string>
 
-<string name="aimi_t3c_history_ticks">%1$d ticks analyzed</string>
+<string name="aimi_history_ticks">%1$d ticks analyzed</string>
 
-<string name="aimi_t3c_history_dominant">Dominant status: %1$s</string>
+<string name="aimi_history_dominant">Dominant status: %1$s</string>
 
 <string name="aimi_t3c_history_native_applied">Native applied: %1$d (%2$d%%)</string>
 
@@ -329,15 +329,21 @@
 
 <string name="aimi_t3c_history_safety_terminal">Safety terminal: %1$d (%2$d%%)</string>
 
-<string name="aimi_t3c_history_blocker">Main blocker: %1$s</string>
+<string name="aimi_history_blocker">Main blocker: %1$s</string>
 
-<string name="aimi_t3c_history_demand">Basal demand avg/range: %1$s</string>
+<string name="aimi_history_demand">Basal demand avg/range: %1$s</string>
 
-<string name="aimi_t3c_history_applied_rate">Applied rate avg/range: %1$s</string>
+<string name="aimi_history_applied_rate">Applied rate avg/range: %1$s</string>
 
 <string name="aimi_t3c_history_transitions">Ownership transitions: %1$d</string>
 
 <string name="aimi_t3c_history_transition_detail">Most common transition: %1$s</string>
+
+<string name="aimi_t3c_history_transition_arrow" comment="%1$s=ownership the tick came from, %2$s=ownership it moved to. Example: Native RBT → Legacy bypass">%1$s → %2$s</string>
+
+<string name="aimi_history_blocker_unknown" comment="Used in place of a blocker name when the export does not carry one.">unknown runtime blocker</string>
+
+<string name="aimi_history_stats_range" comment="%1$s=average with its unit, %2$s=smallest value, %3$s=largest value. Example: 1.20 U/h (0.40 – 2.10)">%1$s (%2$s – %3$s)</string>
 
 <string name="aimi_t3c_history_observation_applied">T3C native path applied on %1$d%% of observed ticks.</string>
 
@@ -583,9 +589,36 @@
 
 <string name="aimi_sos_permissions_summary">Tap to authorize AAPS to send SOS SMS and access location for emergencies. Automatic phone calls are not used.</string>
 
+<string name="aimi_sos_permission_screen_title">Emergency SOS permissions</string>
+<string name="aimi_sos_permission_intro">Emergency SOS sends an SMS with your blood glucose and location to your emergency contact during a severe low. Grant the permissions below so it can work.</string>
+<string name="aimi_sos_permission_name_sms">Send SMS</string>
+<string name="aimi_sos_permission_name_fine_location">Precise location</string>
+<string name="aimi_sos_permission_name_coarse_location">Approximate location</string>
+<string name="aimi_sos_permission_name_background_location">Location in the background</string>
+<string name="aimi_sos_permission_grant_button">Grant access</string>
+<string name="aimi_sos_permission_all_granted_button">All permissions granted</string>
+<string name="aimi_sos_permission_open_settings_button">Open app settings</string>
+<string name="aimi_sos_permission_foreground_denied_message">Some permissions were denied</string>
+<string name="aimi_sos_permission_all_granted_message">All Emergency SOS permissions granted</string>
+<string name="aimi_sos_permission_background_denied_message">Background location denied. Emergency SOS may not work while the app is closed.</string>
+
 <string name="aimi_physio_hc_permissions_title">Health Connect permissions</string>
 
 <string name="aimi_physio_hc_permissions_summary">Open the screen to grant sleep, HRV, and heart rate access via Health Connect.</string>
+
+<string name="aimi_hc_permission_screen_title">Health Connect permissions</string>
+<string name="aimi_hc_permission_intro">AIMI uses Health Connect to read your sleep, heart rate, and step data for the physiological assistant. Grant the permissions below.</string>
+<string name="aimi_hc_permission_required_header">Required</string>
+<string name="aimi_hc_permission_optional_header">Optional: skin temperature (Garmin / Oura)</string>
+<string name="aimi_hc_permission_thermal_note">If temperature is not listed here, your device or Health Connect version may not support it. AIMI still works without it.</string>
+<string name="aimi_hc_permission_grant_button_with_count" comment="%1$d = number of required permissions still missing. Example: Grant access (2 required)">Grant access (%1$d required)</string>
+<string name="aimi_hc_permission_optional_only_button">Core granted — grant optional access</string>
+<string name="aimi_hc_permission_all_granted_button">All permissions granted</string>
+<string name="aimi_hc_permission_open_settings_button">Open Health Connect settings</string>
+<string name="aimi_hc_permission_sdk_unavailable">Health Connect is not available on this device.</string>
+<string name="aimi_hc_permission_update_required">Health Connect needs to be installed or updated.</string>
+<string name="aimi_hc_permission_client_error">Could not reach Health Connect. Open settings to check the app.</string>
+<string name="aimi_hc_permission_granted_message">Health Connect access granted</string>
 
 <string name="aimi_inflammatory_diseases_title">Inflammatory / autoimmune diseases</string>
 
@@ -933,19 +966,13 @@
 
 <string name="aimi_advisor_metric_tdd">TDD : %1$.1f U (basal %2$d %%)</string>
 
-<string name="aimi_advisor_recommendations_title">Recommandations</string>
+<string name="aimi_advisor_recommendations_title">Recommendations</string>
 
-<string name="aimi_adv_rec_hypos_action_isf">Réduire MaxSMB de 10-20%</string>
 
-<string name="aimi_adv_rec_hypos_action_modes">Réduire les facteurs des modes repas</string>
 
-<string name="aimi_adv_rec_hypos_action_basal">Vérifier les basales nocturnes</string>
 
-<string name="aimi_adv_rec_control_action_basal">Augmenter la basale de 5-10%</string>
 
-<string name="aimi_adv_rec_control_action_isf">Réduire l\'ISF (plus d\'insuline)</string>
 
-<string name="aimi_adv_rec_control_action_modes">Utiliser les modes repas systématiquement</string>
 
 <string name="aimi_adv_rec_hypers_action_ratios">Vérifier les ratios glucides/insuline</string>
 
@@ -1061,33 +1088,51 @@
 
 <string name="aimi_adv_loading_details" comment="Shown under the main Advisor report while RBT/T3c history sections load">Loading detailed history…</string>
 
-<string name="aimi_adv_error_prefix">Erreur: </string>
+<string name="aimi_adv_error_prefix">Error: </string>
 
 <string name="aimi_adv_error_oom">Not enough memory to finish. Close other apps and try again.</string>
 
 <string name="aimi_adv_card_render_error" comment="%1$s=card name, %2$s=exception type. Shown in place of a single advisor card that failed to render.">⚠️ %1$s unavailable (%2$s)</string>
 
-<string name="aimi_adv_report_weekly">Rapport Hebdo</string>
+<string name="aimi_adv_report_weekly">Weekly Report</string>
 
 <string name="aimi_adv_score_label">Score: %1$.1f/10</string>
 
-<string name="aimi_adv_apply_btn">APPLIQUER</string>
+<string name="aimi_adv_apply_btn">APPLY</string>
 
-<string name="aimi_adv_apply_dialog_title">Confirmation des Ajustements</string>
+<string name="aimi_adv_apply_dialog_title">Confirm the change</string>
 
-<string name="aimi_adv_apply_dialog_prefix">L\'Advisor propose les ajustements suivants :\n\n</string>
+<string name="aimi_adv_apply_dialog_prefix">The Advisor suggests this change:</string>
 
-<string name="aimi_adv_success_msg">%1$d changements appliqués !</string>
+<string name="aimi_adv_success_msg" comment="%1$d=number of settings that were changed. Example: 1 change applied.">%1$d change applied.</string>
 
-<string name="aimi_adv_no_change_msg">Aucun changement compatible appliqué.</string>
+<string name="aimi_adv_no_change_msg">No change could be applied.</string>
 
 <string name="aimi_adv_section_obs">OBSERVATIONS</string>
 
-<string name="aimi_adv_section_pkpd">AJUSTEMENTS PKPD</string>
+<string name="aimi_adv_section_pkpd">PKPD CHANGES</string>
 
-<string name="aimi_adv_section_brain">ÉTAT COGNITIF</string>
+<string name="aimi_adv_metric_tir">TIR (70-180)</string>
 
-<string name="aimi_adv_section_oref">ANALYSE OREF (LOCAL)</string>
+<string name="aimi_adv_metric_tdd" comment="Label of a metric tile. TDD = total daily dose of insulin.">MEAN TDD</string>
+
+<string name="aimi_adv_metric_gmi" comment="Label of a metric tile. GMI = glucose management indicator, shown in percent.">GMI</string>
+
+<string name="aimi_adv_metric_hypo54" comment="Label of a metric tile: share of time spent below 54 mg/dL.">LOW &lt; 54</string>
+
+<string name="aimi_adv_metric_today_tir" comment="Label of a metric tile: time in range for today only.">TODAY TIR</string>
+
+<string name="aimi_adv_metric_today_tdd" comment="Label of a metric tile: total daily dose for today only.">TODAY TDD</string>
+
+<string name="aimi_adv_metric_value_gmi" comment="%1$.1f=GMI value in percent. Example: 6.8%%">%1$.1f%%</string>
+
+<string name="aimi_adv_metric_value_missing" translatable="false">-</string>
+
+<string name="aimi_adv_apply_dialog_change" comment="%1$s=name of the setting, %2$s=new value. Example: Max SMB → 1.2">%1$s → %2$s</string>
+
+<string name="aimi_adv_section_brain">COGNITIVE STATE</string>
+
+<string name="aimi_adv_section_oref">OREF ANALYSIS (LOCAL)</string>
 
 <string name="aimi_adv_oref_show_chart">Show CGM range chart</string>
 
@@ -1121,59 +1166,133 @@
 
 <string name="aimi_adv_oref_user_personal_uncalibrated">Personal on-device model: trained. Its score is still an internal number. It has not been checked against real outcomes, so it is not shown as a risk percentage and it does not change any suggestion. Talk to your care team about patterns that keep coming back.</string>
 
-<string name="aimi_adv_section_coach">COACH IA</string>
+<string name="aimi_adv_section_coach">AI COACH</string>
 
-<string name="aimi_adv_brain_protect">PROTECTEUR (x%1$.2f)</string>
+<string name="aimi_adv_brain_protect" comment="%1$.2f=the reactivity factor. Example: PROTECTIVE (x0.85)">PROTECTIVE (x%1$.2f)</string>
 
-<string name="aimi_adv_brain_offense">OFFENSIF (x%1$.2f)</string>
+<string name="aimi_adv_brain_offense" comment="%1$.2f=the reactivity factor. Example: OFFENSIVE (x1.20)">OFFENSIVE (x%1$.2f)</string>
 
-<string name="aimi_adv_brain_neutral">NEUTRE (x%1$.2f)</string>
+<string name="aimi_adv_brain_neutral" comment="%1$.2f=the reactivity factor. Example: NEUTRAL (x1.00)">NEUTRAL (x%1$.2f)</string>
 
-<string name="aimi_adv_brain_protect_desc">Le système a détecté une instabilité/hypo récente et a réduit l\'agressivité globale.</string>
+<string name="aimi_adv_brain_protect_desc">The system detected recent instability or a hypo and lowered overall aggressiveness.</string>
 
-<string name="aimi_adv_brain_offense_desc">Le système combat une hyperglycémie persistante ou une résistance détectée.</string>
+<string name="aimi_adv_brain_offense_desc">The system is fighting persistent high blood glucose or detected resistance.</string>
 
-<string name="aimi_adv_brain_neutral_desc">Le système fonctionne avec ses paramètres de base. Aucune anomalie détectée.</string>
+<string name="aimi_adv_brain_neutral_desc">The system is running with its base settings. No anomaly detected.</string>
 
-<string name="aimi_coach_title">Coach IA</string>
+<string name="aimi_coach_title">AI Coach</string>
 
-<string name="aimi_coach_loading">Génération des conseils personnalisés...</string>
+<string name="aimi_coach_header_title" comment="%1$s=the AI Coach title (see aimi_coach_title). The star is decorative.">✨ %1$s</string>
 
-<string name="aimi_coach_placeholder">Configurez une clé API OpenAI ou Gemini dans les préférences pour activer le Coach IA.</string>
+<string name="aimi_coach_loading">Generating personalized advice...</string>
 
-<string name="aimi_coach_error">Erreur lors de la récupération des conseils IA.</string>
+<string name="aimi_coach_placeholder" comment="%1$s=the LLM provider name, e.g. OPENAI or GEMINI">Configure an API key for %1$s in preferences to turn on the AI Coach.</string>
 
-<string name="aimi_adv_analysis_intro_excellent">Excellent travail ! Vos résultats sont impressionnants.</string>
+<string name="aimi_coach_basic_with_note" comment="%1$s=the deterministic analysis text, %2$s=the note asking to configure an API key (see aimi_coach_placeholder)">%1$s\n\n⚙️ %2$s</string>
 
-<string name="aimi_adv_analysis_intro_good">Bon travail, mais quelques ajustements sont possibles.</string>
+<string name="aimi_coach_error">Could not get AI coaching advice.</string>
 
-<string name="aimi_adv_analysis_intro_poor">Attention, des ajustements sont nécessaires pour améliorer l\'équilibre.</string>
+<string name="aimi_coach_error_detail" comment="%1$s=the error message (see aimi_coach_error), %2$s=technical detail">%1$s\n%2$s</string>
 
-<string name="aimi_adv_analysis_issues_header">Points d\'attention identifiés :</string>
+<string name="aimi_coach_svc_missing_key" comment="%1$s=the LLM provider name, e.g. OPENAI or GEMINI">API key missing. Please configure your %1$s key.</string>
 
-<string name="aimi_adv_analysis_all_good">Aucun problème majeur détecté.</string>
+<string name="aimi_coach_svc_missing_key_simple">API key missing.</string>
 
-<string name="aimi_adv_analysis_footer">Ceci est une analyse automatisée basée sur vos données.</string>
+<string name="aimi_coach_svc_empty_prompt">Prompt is empty.</string>
 
-<string name="aimi_adv_generated_footer">Généré le %1$s • OpenAPS AIMI</string>
+<string name="aimi_coach_svc_connection_error" comment="%1$s=the LLM provider name, %2$s=the underlying error detail">Connection error (%1$s): %2$s</string>
 
-<string name="aimi_advisor_model_title">Choisir le modèle IA</string>
+<string name="aimi_coach_svc_generic_error" comment="%1$s=the underlying error detail">Error: %1$s</string>
 
-<string name="aimi_adv_rec_hypos_title">Risque d\'Hypoglycémie</string>
+<string name="aimi_coach_svc_error_openai" comment="%1$d=HTTP status code, %2$s=the raw error body">OpenAI error (%1$d): %2$s</string>
 
-<string name="aimi_adv_rec_hypos_desc">Détecté %1$d%% de temps sous 54mg/dL. Suggestion de réduire l\'agressivité.</string>
+<string name="aimi_coach_svc_read_error_openai">Could not read the OpenAI response.</string>
 
-<string name="aimi_adv_rec_control_title">Contrôle Glycémique</string>
+<string name="aimi_coach_svc_gemini_blocked">Content blocked by Gemini safety filters.</string>
 
-<string name="aimi_adv_rec_control_desc">TIR %1$d%% inférieur à l\'objectif. Suggestion d\'augmenter l\'agressivité.</string>
+<string name="aimi_coach_svc_read_error_gemini">Could not read the Gemini response.</string>
 
-<string name="aimi_adv_rec_hypers_title">Hyperglycémies</string>
+<string name="aimi_coach_svc_error_deepseek" comment="%1$d=HTTP status code, %2$s=the raw error body">DeepSeek error (%1$d): %2$s</string>
 
-<string name="aimi_adv_rec_hypers_desc">Temps > 180 trop élevé (%1$d%%). Vérifiez vos ratios repas.</string>
+<string name="aimi_coach_svc_error_claude" comment="%1$d=HTTP status code, %2$s=the raw error body">Claude error (%1$d): %2$s</string>
 
-<string name="aimi_adv_rec_basal_title">Dominance Basale</string>
+<string name="aimi_coach_svc_read_error_claude">Could not read the Claude response.</string>
 
-<string name="aimi_adv_rec_basal_desc">La part de basale (%1$d%%) est élevée. Vérifiez si votre basale est correcte.</string>
+<string name="aimi_adv_analysis_intro_excellent">Excellent work! Your results are impressive.</string>
+
+<string name="aimi_adv_analysis_intro_good">Good work, but a few adjustments are possible.</string>
+
+<string name="aimi_adv_analysis_intro_poor">Attention: adjustments are needed to improve balance.</string>
+
+<string name="aimi_adv_analysis_issues_header">Issues identified:</string>
+
+<string name="aimi_adv_analysis_all_good">No major issue detected.</string>
+
+<string name="aimi_adv_generated_footer" comment="%1$s=formatted date/time the report was generated. Example: Generated on 15 Sep 14:30 - OpenAPS AIMI">Generated on %1$s - OpenAPS AIMI</string>
+
+<string name="aimi_advisor_model_title">Choose AI Model</string>
+
+<string name="aimi_adv_basal_dialog_title">Basal Proposal (Preview)</string>
+
+<string name="aimi_adv_basal_export_header_title">AIMI BASAL PROPOSAL (NOT APPLIED)</string>
+
+<string name="aimi_adv_basal_export_btn">Export</string>
+
+<string name="aimi_adv_basal_generating_msg">Generating basal proposal...</string>
+
+<string name="aimi_adv_basal_failed_msg">Basal proposal failed. Please try again.</string>
+
+<string name="aimi_adv_basal_no_profile_msg">No profile data available. No proposal was generated.</string>
+
+<string name="aimi_adv_basal_disclaimer">This is a proposal only. No automatic profile change is made.</string>
+
+<string name="aimi_adv_basal_strategy_line" comment="%1$s=the proposed strategy name, e.g. Keep the current basal">Strategy: %1$s</string>
+
+<string name="aimi_adv_basal_factor_line" comment="%1$.3f=the scaling factor applied to every hour. Example: Factor: 0.950">Factor: %1$.3f</string>
+
+<string name="aimi_adv_basal_rationale_line" comment="%1$s=the reason for the proposed strategy">Rationale: %1$s</string>
+
+<string name="aimi_adv_basal_preview_heading">Preview (first 6 hours):</string>
+
+<string name="aimi_adv_basal_row_line" comment="%1$d=hour of day 0-23, %2$s=current rate U/h, %3$s=proposed rate U/h, %4$s=change in percent with sign. Example: 06h 0.80 to 0.76 U/h (-5.0%%)">%1$02dh  %2$.2f -&gt; %3$.2f U/h (%4$+.1f%%)</string>
+
+<string name="aimi_adv_basal_share_subject">AIMI Basal Proposal</string>
+
+<string name="aimi_adv_basal_share_chooser_title">Export basal proposal</string>
+
+<string name="aimi_adv_basal_strategy_no_profile">No profile available</string>
+
+<string name="aimi_adv_basal_strategy_safety_reduction">Reduce basal for safety</string>
+
+<string name="aimi_adv_basal_strategy_gentle_increase">Increase basal a little</string>
+
+<string name="aimi_adv_basal_strategy_hold_baseline">Keep the current basal</string>
+
+<string name="aimi_adv_basal_rationale_safety_reduction">There is hypo risk in the recent data.</string>
+
+<string name="aimi_adv_basal_rationale_gentle_increase">Blood glucose is often high and hypo risk is low.</string>
+
+<string name="aimi_adv_basal_rationale_hold_baseline">There is no clear pattern to change the basal profile.</string>
+
+<string name="aimi_adv_rec_hypos_action_reason">Lower Max SMB by 20% because time below 70 mg/dL is high</string>
+
+<string name="aimi_adv_rec_control_action_reason">Raise the lunch factor by 0.1 because time in range is below the goal</string>
+
+<string name="aimi_adv_rec_hypos_title">Hypo risk</string>
+
+<string name="aimi_adv_rec_hypos_desc" comment="%1$d=percent of time spent below 54 mg/dL. Example: 5%% of the time was below 54 mg/dL.">%1$d%% of the time was below 54 mg/dL. Dosing less is suggested.</string>
+
+<string name="aimi_adv_rec_control_title">Glucose control</string>
+
+<string name="aimi_adv_rec_control_desc" comment="%1$d=time in range in percent. Example: Time in range is 62%%, below the goal.">Time in range is %1$d%%, below the goal. Dosing a bit more is suggested.</string>
+
+<string name="aimi_adv_rec_hypers_title">High glucose</string>
+
+<string name="aimi_adv_rec_hypers_desc" comment="%1$d=percent of time spent above 180 mg/dL. Example: Time above 180 mg/dL is high (28%%).">Time above 180 mg/dL is high (%1$d%%). Check your meal ratios.</string>
+
+<string name="aimi_adv_rec_basal_title">Basal is dominant</string>
+
+<string name="aimi_adv_rec_basal_desc" comment="%1$d=basal share of the total daily dose in percent. Example: Basal is 60%% of the total daily dose.">Basal is %1$d%% of the total daily dose. Check that your basal rates are right.</string>
 
 <string name="aimi_adv_rec_profile_ok_title">Profil Excellent</string>
 
@@ -1256,6 +1375,62 @@
 <string name="aimi_pkpd_hyper_damping_reduce">Persistent highs with strong SMB tail damping (floor %1$s): if hypos are rare, consider weakening the damping by raising the tail floor to ~%2$s to allow more late delivery.</string>
 
 <string name="aimi_meal_advisor_title">AIMI Meal Advisor</string>
+
+<string name="aimi_meal_advisor_intro">Take a photo of your meal. AIMI will estimate the carbs and protein, so you can review them before logging.</string>
+
+<string name="aimi_meal_advisor_provider_label">AI model</string>
+
+<string name="aimi_meal_advisor_description_hint">Optional notes about the meal, for example the type of pasta or bread</string>
+
+<string name="aimi_meal_advisor_photo_placeholder">No photo yet. Tap Analyze meal to take one.</string>
+
+<string name="aimi_meal_advisor_photo_content_description">Photo of the meal</string>
+
+<string name="aimi_meal_advisor_analyze_button">Analyze meal</string>
+
+<string name="aimi_meal_advisor_analyzing_button">Analyzing…</string>
+
+<string name="aimi_meal_advisor_analyze_error_prefix" comment="%1$s = the underlying error message. Example: Could not analyze the photo: timeout">Could not analyze the photo: %1$s</string>
+
+<string name="aimi_meal_advisor_confirm_error_prefix" comment="%1$s = the underlying error message. Example: Could not log carbs: database error">Could not log carbs: %1$s</string>
+
+<string name="aimi_meal_advisor_camera_error_message" comment="%1$d = the Camera2 error code reported by the system. Example: Camera error (code 2). Please try again.">Camera error (code %1$d). Please try again.</string>
+
+<string name="aimi_meal_advisor_camera_not_ready_message">Camera is not available right now. Please try again.</string>
+
+<string name="aimi_meal_advisor_camera_permission_denied_message">Camera access was not granted. Allow camera access in system settings to use Meal Advisor.</string>
+
+<string name="aimi_meal_advisor_capture_button">Capture</string>
+
+<string name="aimi_meal_advisor_carbs_field_label">Carbs (g)</string>
+
+<string name="aimi_meal_advisor_confidence_high">High confidence</string>
+
+<string name="aimi_meal_advisor_confidence_medium">Medium confidence</string>
+
+<string name="aimi_meal_advisor_confidence_low">Low confidence</string>
+
+<string name="aimi_meal_advisor_confirm_button" comment="%1$d = grams of carbs to log, %2$.1f = the insulin dose in units this implies at the current carb ratio. Example: Log 45 g carbs and 4.5 U dose">Log %1$d g carbs and %2$.1f U dose</string>
+
+<string name="aimi_meal_advisor_confirmed_message">Carbs logged.</string>
+
+<string name="aimi_meal_advisor_identified_items_title">Identified items</string>
+
+<string name="aimi_meal_advisor_item_row" comment="%1$s = food item name, %2$s = amount description. Example: Rice (about 1 cup)">%1$s (%2$s)</string>
+
+<string name="aimi_meal_advisor_macro_summary" comment="%1$.0f = protein grams, %2$.0f = fat grams, %3$s = fat-protein-unit equivalent used for extended dosing. Example: Protein: 20 g | Fat: 15 g | FPU: 1.2">Protein: %1$.0f g | Fat: %2$.0f g | FPU: %3$s</string>
+
+<string name="aimi_meal_advisor_reasoning_prefix" comment="%1$s = the AI's reasoning text for its estimate. Example: Why: Portion sizes were estimated from the plate diameter">Why: %1$s</string>
+
+<string name="aimi_meal_advisor_risk_banner" comment="%1$s = risk severity label (e.g. High hidden-carb risk), %2$s = specific notes from the AI. Example: High hidden-carb risk: Bread and rice portions were hard to size from the photo.">%1$s: %2$s</string>
+
+<string name="aimi_meal_advisor_risk_high">High hidden-carb risk</string>
+
+<string name="aimi_meal_advisor_risk_high_and_manual">High risk and manual check needed</string>
+
+<string name="aimi_meal_advisor_risk_manual">Manual check advised</string>
+
+<string name="aimi_meal_advisor_risk_notes_default">Review the estimate before confirming.</string>
 
 <string name="aimi_auditor_enabled_title">Enable AI Decision Auditor</string>
 
@@ -1973,6 +2148,93 @@
 <string name="console_temp_target_set">Temp Target set, not adjusting with autosens</string>
 <string name="context_patient_state_empty">No AIMI understanding yet. It updates on each loop tick and when body signals or user context change.</string>
 <string name="context_title">AIMI Context</string>
+
+<string name="pref_title_aimi_context">AIMI Context</string>
+<string name="pref_summary_aimi_context">Tell AIMI about exercise, illness, stress, or travel, and see how it currently reads your body.</string>
+
+<string name="pref_title_aimi_meal_advisor">AIMI Meal Advisor</string>
+<string name="pref_summary_aimi_meal_advisor">Take a photo of your meal and let AIMI estimate the carbs before you log them.</string>
+
+<string name="pref_title_aimi_mode_settings">AIMI Mode Settings</string>
+<string name="pref_summary_aimi_mode_settings">Set the prebolus doses, reactivity and timing for lunch, dinner, breakfast and high-carb meals, and turn a mode on right now.</string>
+
+<string name="pref_title_aimi_profile_advisor">AIMI Profile Advisor</string>
+<string name="pref_summary_aimi_profile_advisor">Review your 7-day metrics and apply a graduated tuning adjustment for the pattern you are seeing now.</string>
+
+<string name="aimi_mode_settings_title">Mode Settings</string>
+<string name="aimi_mode_settings_tab_lunch">Lunch</string>
+<string name="aimi_mode_settings_tab_dinner">Dinner</string>
+<string name="aimi_mode_settings_tab_bfast">Breakfast</string>
+<string name="aimi_mode_settings_tab_highcarb">High Carb</string>
+<string name="aimi_mode_settings_prebolus1_label">Prebolus 1 (U)</string>
+<string name="aimi_mode_settings_prebolus2_label">Prebolus 2 (U)</string>
+<string name="aimi_mode_settings_reactivity_label">Reactivity (%)</string>
+<string name="aimi_mode_settings_duration_label">Duration (min)</string>
+<string name="aimi_mode_settings_interval_label">Interval (min)</string>
+<string name="aimi_mode_settings_prebolus1_hint">2.5</string>
+<string name="aimi_mode_settings_prebolus2_hint">2.0</string>
+<string name="aimi_mode_settings_reactivity_hint">100</string>
+<string name="aimi_mode_settings_duration_hint">60</string>
+<string name="aimi_mode_settings_interval_hint">5</string>
+<string name="aimi_mode_settings_save_button">Save settings</string>
+<string name="aimi_mode_settings_activate_button" comment="%1$s = mode name (Lunch, Dinner, Breakfast, High Carb). Example: Activate Lunch">Activate %1$s</string>
+<string name="aimi_mode_settings_activate_confirm_title" comment="%1$s = mode name. Example: Activate Lunch mode?">Activate %1$s mode?</string>
+<string name="aimi_mode_settings_activate_confirm_message" comment="%1$s = mode name, %2$d = duration in minutes. Example: This creates a note named &quot;Lunch&quot; that lasts 60 minutes. AIMI uses this note to switch into Lunch mode.">This creates a note named \"%1$s\" that lasts %2$d minutes. AIMI uses this note to switch into %1$s mode.</string>
+<string name="aimi_mode_settings_activated_message" comment="%1$s = mode name, %2$d = duration in minutes. Example: Lunch mode is now active for 60 minutes.">%1$s mode is now active for %2$d minutes.</string>
+<string name="aimi_mode_settings_activate_error" comment="%1$s = the error message. Example: Could not activate mode: network error">Could not activate mode: %1$s</string>
+
+<string name="aimi_context_intro">Tell AIMI what is going on (exercise, illness, stress, travel...) and it will adjust for the next few hours. Type a sentence or tap a preset below.</string>
+<string name="aimi_context_chat_hint">Describe what is happening</string>
+<string name="aimi_context_send_button">Analyze</string>
+<string name="aimi_context_clear_button">Clear</string>
+<string name="aimi_context_llm_failure_message">Could not detect a context from that text. Try a simpler sentence, or tap a preset instead.</string>
+<string name="aimi_context_offline_failure_message">No context matched those words. Try a simple keyword (Sport, Illness, Stress), or tap a preset instead.</string>
+<string name="aimi_context_error_prefix" comment="%1$s = the error message that follows the colon">Error</string>
+<string name="aimi_context_intent_added" comment="%1$d = how many contexts were added from the typed text. Example: 2 context(s) added">%1$d context(s) added</string>
+<string name="aimi_context_parse_failed_title">Could not understand this</string>
+
+<string name="aimi_context_presets_title">Quick presets</string>
+<string name="aimi_context_active_intents_title">Active contexts</string>
+<string name="aimi_context_clear_all_button">Clear all</string>
+<string name="aimi_context_empty_state">No active context. AIMI is using its normal, unmodified settings.</string>
+<string name="aimi_context_remove_action">Remove</string>
+<string name="aimi_context_extend_action">Extend</string>
+<string name="aimi_context_extend_dialog_title">Extend by</string>
+<string name="aimi_context_duration_minutes" comment="%1$d = number of minutes">%1$d min</string>
+<string name="aimi_context_duration_hours" comment="%1$d = number of hours">%1$d h</string>
+<string name="aimi_context_clear_all_confirm_title">Remove all active contexts?</string>
+<string name="aimi_context_clear_all_confirm_message">AIMI will go back to reading only your normal loop data.</string>
+<string name="aimi_context_clear_all_confirm_button">Remove all</string>
+
+<string name="aimi_context_settings_title">Settings</string>
+<string name="aimi_context_module_enabled_label">Context module enabled</string>
+<string name="aimi_context_llm_enabled_label">Use AI to read free text</string>
+
+<string name="aimi_context_time_expired">Expired</string>
+<string name="aimi_context_time_minutes" comment="%1$d = minutes left">%1$d min left</string>
+<string name="aimi_context_time_hours_minutes" comment="%1$d = hours left, %2$d = extra minutes left">%1$dh %2$dmin left</string>
+<string name="aimi_context_confidence_high">High confidence</string>
+<string name="aimi_context_confidence_medium">Medium confidence</string>
+<string name="aimi_context_confidence_low">Low confidence</string>
+
+<string name="aimi_context_intent_activity" comment="%1$s = activity type (e.g. Cardio), %2$s = intensity (e.g. High)">Activity: %1$s (%2$s)</string>
+<string name="aimi_context_intent_illness" comment="%1$s = symptom type, %2$s = intensity">Illness: %1$s (%2$s)</string>
+<string name="aimi_context_intent_stress" comment="%1$s = stress type, %2$s = intensity">Stress: %1$s (%2$s)</string>
+<string name="aimi_context_intent_meal_risk" comment="%1$s = intensity">Unannounced meal risk (%1$s)</string>
+<string name="aimi_context_intent_alcohol" comment="%1$.1f = units of alcohol, %2$s = intensity">Alcohol: %1$.1f U (%2$s)</string>
+<string name="aimi_context_intent_travel" comment="%1$d = timezone shift in hours, %2$s = intensity">Travel: %1$dh shift (%2$s)</string>
+<string name="aimi_context_intent_cycle" comment="%1$s = menstrual cycle phase">Menstrual cycle: %1$s</string>
+<string name="aimi_context_intent_slow_carb" comment="%1$s = intensity">Slow-carb meal (%1$s)</string>
+<string name="aimi_context_intent_hypo_recovery" comment="%1$s = intensity">Hypo recovery (%1$s)</string>
+
+<string name="aimi_context_patient_state_title">Patient state</string>
+<string name="aimi_context_patient_state_live_body_label">Live body signals</string>
+<string name="aimi_context_patient_state_thermal_label">Temperature</string>
+<string name="aimi_context_patient_state_phase_label">Physiological phase</string>
+<string name="aimi_context_patient_state_intent_label">Dominant context</string>
+<string name="aimi_context_patient_state_signals_label">Signal breakdown</string>
+<string name="aimi_context_patient_state_bias_label">Delivery strategy</string>
+<string name="aimi_context_patient_state_reasons_label">Reasons</string>
 <string name="dia_base_info">Base DIA: %1$f h = %2$f min\n</string>
 <string name="dia_calculation_details">DIA Calculation Details:</string>
 <string name="endo_enable_title">Enable Endometriosis Logic</string>
@@ -2002,6 +2264,7 @@
 <string name="limits_smb">🧱 Limits: %1$.2f → %2$.2f U</string>
 <string name="manual_basal_override">Forced basal → %1$.2f U/h (%2$dmin). Manual meal mode %3$s\n</string>
 <string name="manual_meal_prebolus">&#160;Microbolusing Meal Mode %1$.2fU.</string>
+<string name="fcl_prebolus" comment="%1$.2f = prebolus size in insulin units, for example 1.00. Appended to the loop reason line.">&#160;Microbolusing FCL mode %1$.2fU.</string>
 <string name="meal_dinner_maintain">Dinner mode maintain (%.1f floor)</string>
 <string name="meal_mode_first_30">Manual modes meal 0&#8211;30m [%1$s] → forced basal at %2$.2f U/h (override).\n</string>
 <string name="meal_modes_max_basal_title">Fixed basal 30 min at meal start (U/h)</string>

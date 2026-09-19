@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
 import app.aaps.core.ui.R as CoreR
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 
 /**
  * AIMI Auditor UI State
@@ -93,7 +94,7 @@ data class AuditorUIState(
     /**
      * Get age in milliseconds
      */
-    fun getAgeMs(): Long = System.currentTimeMillis() - timestampMs
+    fun getAgeMs(): Long = aimiWallClockMs() - timestampMs
     
     companion object {
         
@@ -111,7 +112,7 @@ data class AuditorUIState(
             shouldNotify = false,
             insightCount = 0,
             statusMessage = "Auditor idle",
-            timestampMs = System.currentTimeMillis()
+            timestampMs = aimiWallClockMs()
         )
         
         /**
@@ -128,7 +129,7 @@ data class AuditorUIState(
             shouldNotify = false,
             insightCount = 0,
             statusMessage = "Analyzing...",
-            timestampMs = System.currentTimeMillis()
+            timestampMs = aimiWallClockMs()
         )
         
         /**
@@ -146,7 +147,7 @@ data class AuditorUIState(
             shouldNotify = shouldNotify && insightCount > 0,
             insightCount = insightCount,
             statusMessage = "$insightCount insight${if (insightCount != 1) "s" else ""} available",
-            timestampMs = System.currentTimeMillis()
+            timestampMs = aimiWallClockMs()
         )
         
         /**
@@ -164,7 +165,7 @@ data class AuditorUIState(
             shouldNotify = shouldNotify,
             insightCount = 1,
             statusMessage = message,
-            timestampMs = System.currentTimeMillis()
+            timestampMs = aimiWallClockMs()
         )
         
         /**
@@ -182,7 +183,7 @@ data class AuditorUIState(
             shouldNotify = false,
             insightCount = 0,
             statusMessage = message,
-            timestampMs = System.currentTimeMillis()
+            timestampMs = aimiWallClockMs()
         )
     }
 }
