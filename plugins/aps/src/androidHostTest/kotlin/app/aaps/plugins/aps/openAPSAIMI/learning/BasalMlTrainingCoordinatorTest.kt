@@ -1,12 +1,12 @@
 package app.aaps.plugins.aps.openAPSAIMI.learning
 
+import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.utils.AndroidAimiStorage
-import app.aaps.shared.tests.AAPSLoggerTest
 import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
@@ -115,13 +115,36 @@ class BasalMlTrainingCoordinatorTest : TestBase() {
         assertThat(log.debugMessages.any { it.contains("new rows (need") }).isFalse()
     }
 
-    private class CapturingLogger : AAPSLoggerTest() {
+    /** Study `AAPSLoggerTest` is final; capture debug lines the way the tip mockk verify did. */
+    private class CapturingLogger : AAPSLogger {
         val debugMessages = mutableListOf<String>()
 
+        override fun debug(message: String) = println("DEBUG: $message")
+        override fun debug(enable: Boolean, tag: LTag, message: String) = debug(tag, message)
         override fun debug(tag: LTag, message: String) {
             debugMessages += message
-            super.debug(tag, message)
+            println("DEBUG: ${tag.tag} $message")
         }
+        override fun debug(tag: LTag, accessor: () -> String) = debug(tag, accessor())
+        override fun debug(tag: LTag, format: String, vararg arguments: Any?) = debug(tag, format)
+        override fun warn(tag: LTag, message: String) = println("WARN: ${tag.tag} $message")
+        override fun warn(tag: LTag, format: String, vararg arguments: Any?) = warn(tag, format)
+        override fun info(tag: LTag, message: String) = println("INFO: ${tag.tag} $message")
+        override fun info(tag: LTag, format: String, vararg arguments: Any?) = info(tag, format)
+        override fun error(tag: LTag, message: String) = println("ERROR: ${tag.tag} $message")
+        override fun error(message: String) = println("ERROR: $message")
+        override fun error(message: String, throwable: Throwable) = println("ERROR: $message $throwable")
+        override fun error(format: String, vararg arguments: Any?) = println("ERROR: $format")
+        override fun error(tag: LTag, message: String, throwable: Throwable) = println("ERROR: ${tag.tag} $message $throwable")
+        override fun error(tag: LTag, format: String, vararg arguments: Any?) = error(tag, format)
+        override fun debug(className: String, methodName: String, lineNumber: Int, tag: LTag, message: String) =
+            debug(tag, message)
+        override fun info(className: String, methodName: String, lineNumber: Int, tag: LTag, message: String) =
+            info(tag, message)
+        override fun warn(className: String, methodName: String, lineNumber: Int, tag: LTag, message: String) =
+            warn(tag, message)
+        override fun error(className: String, methodName: String, lineNumber: Int, tag: LTag, message: String) =
+            error(tag, message)
     }
 
     /**
