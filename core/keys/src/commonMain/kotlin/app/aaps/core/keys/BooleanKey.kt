@@ -311,6 +311,77 @@ enum class BooleanKey(
         dependency = OApsAIMIautoDriveActive,
     ),
     /**
+     * Opt-in: while a stress signature holds, forbid the commanded insulin sensitivity from falling
+     * under the profile sensitivity of this time of day.
+     *
+     * The signature is heart rate at least 20 bpm over resting, fewer than 100 steps in the last
+     * 15 min, held without a break for at least 10 min. It is evaluated 24 hours a day, with no time
+     * window. The gesture only ever **raises** the commanded sensitivity, which makes every prediction
+     * attribute a larger effect to the insulin already on board, so it can only make a dose smaller.
+     *
+     * The verdict is computed and exported on every tick even when this key is false, so the effect can
+     * be measured before the gesture is armed. See `StressIsfFloor`. Default **false** (shadow /
+     * observation), matching `origin/dev_OAPSAIMI` @ `f61474bb73`.
+     */
+    OApsAIMIStressIsfFloor(
+        key = "key_aimi_stress_isf_floor",
+        defaultValue = false,
+        title = KeysStrings.pref_title_aimi_stress_isf_floor,
+        summary = KeysStrings.pref_summary_aimi_stress_isf_floor,
+    ),
+    /**
+     * Opt-in: spend a bounded budget of insulin as a basal floor once a meal has been **declared**.
+     *
+     * The person writes a note holding "anticip" with a duration; while that note is open and the
+     * declaration still looks true, the basal is held at profile plus
+     * `OApsAIMIAnticipBudgetU` spread over the 30-minute window of `AnticipationBasalFloor`. No
+     * prebolus is attached, unlike the meal modes, and the target is not touched.
+     *
+     * ⚠️ This is the one AIMI gesture that **raises** a dose. It is bounded three ways — the budget,
+     * the window, and the pump ceiling — it stands down under 80 mg/dL or on a fall of 3 mg/dL per
+     * 5 min, and deleting the note ends it at once. Default OFF.
+     */
+    OApsAIMIAnticipBasalFloor(
+        key = "key_aimi_anticip_basal_floor",
+        defaultValue = false,
+        title = KeysStrings.pref_title_aimi_anticip_basal_floor,
+        summary = KeysStrings.pref_summary_aimi_anticip_basal_floor,
+    ),
+    /**
+     * Opt-in: let a declared meal count as tree meal evidence.
+     *
+     * Separate from `OApsAIMIAnticipBasalFloor` on purpose. Tree meal evidence is one of the
+     * disjuncts of the early release's `strongMealConfirmed` gate, so switching this on arms that
+     * release on demand — a much wider effect than the basal floor. Two keys keep the two effects
+     * measurable apart. Default OFF.
+     */
+    OApsAIMIAnticipMealEvidence(
+        key = "key_aimi_anticip_meal_evidence",
+        defaultValue = false,
+        title = KeysStrings.pref_title_aimi_anticip_meal_evidence,
+        summary = KeysStrings.pref_summary_aimi_anticip_meal_evidence,
+    ),
+    /**
+     * Opt-in: refuse a **bolus** that repeats the ceiling dose during a fast rise.
+     *
+     * Refuses only when both conditions of `RiseCeilingGuard` hold: the bolus has come out exactly
+     * at a configured ceiling for 3 ticks in a row, and glucose is rising by at least 8 mg/dL per
+     * 5 min. The first doses of a rise are never touched, only the ones sent while the earlier ones
+     * cannot yet be seen.
+     *
+     * Bolus channel only: the temporary basal command is untouched. The verdict is computed and
+     * exported on every tick even when this key is false, so the effect can be measured before the
+     * gesture is armed — the thresholds were chosen after seeing the data and still need a
+     * measurement made in advance. Default **false** (shadow / observation), matching
+     * `origin/dev_OAPSAIMI` @ `9a234151c7` (unchanged on tip `acdc2b118e` / `f61474bb73`).
+     */
+    OApsAIMIRiseCeilingGuard(
+        key = "key_aimi_rise_ceiling_guard",
+        defaultValue = false,
+        title = KeysStrings.pref_title_aimi_rise_ceiling_guard,
+        summary = KeysStrings.pref_summary_aimi_rise_ceiling_guard,
+    ),
+    /**
      * Opt-in: sensor-driven effort protection. Caps SMB when steps/HR indicate current or recent
      * physical effort, independent of any declared AIMI Context activity intent. Reduction-only
      * (fail-safe); never reduces under a stress posture. See docs/AIMI_ARCHITECTURE_MAP.md §11.

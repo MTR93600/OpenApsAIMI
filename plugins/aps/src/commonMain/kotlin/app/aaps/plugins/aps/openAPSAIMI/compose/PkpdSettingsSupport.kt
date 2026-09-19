@@ -4,8 +4,11 @@ import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.DoublePreferenceKey
 import app.aaps.core.keys.interfaces.IntPreferenceKey
+import app.aaps.core.keys.interfaces.LongPreferenceKey
+import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.StringPreferenceKey
+import app.aaps.core.keys.interfaces.UnitDoublePreferenceKey
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import kotlin.math.abs
@@ -140,27 +143,66 @@ fun PkpdLearningPace.applyTo(preferences: Preferences) {
     }
 }
 
+/**
+ * Writes one advisor preference change.
+ *
+ * [UnitDoublePreferenceKey] and [LongPreferenceKey] are handled as well. No recommendation uses
+ * those two types today, so this is closing a latent gap and not a change of behaviour: a
+ * `UnitDoublePreferenceKey` does not extend `DoubleNonPreferenceKey`, so the plain
+ * `is DoublePreferenceKey` test misses it even though its value is a `Double`, and the whole call
+ * would have silently returned false.
+ */
 fun applyPkpdPreferenceUpdate(preferences: Preferences, action: AimiAction.PreferenceUpdate): Boolean {
+    val key = action.key
     return when (val value = action.newValue) {
-        is Double -> (action.key as? DoublePreferenceKey)?.let {
+        is Double  -> when (key) {
+            is DoublePreferenceKey     -> {
+                preferences.put(key, value)
+                true
+            }
+            is UnitDoublePreferenceKey -> {
+                preferences.put(key, value)
+                true
+            }
+            else                       -> false
+        }
+        is Int     -> (key as? IntPreferenceKey)?.let {
             preferences.put(it, value)
             true
         } ?: false
-        is Int -> (action.key as? IntPreferenceKey)?.let {
+        is Long    -> (key as? LongPreferenceKey)?.let {
             preferences.put(it, value)
             true
         } ?: false
-        is Boolean -> (action.key as? BooleanPreferenceKey)?.let {
+        is Boolean -> (key as? BooleanPreferenceKey)?.let {
             preferences.put(it, value)
             true
         } ?: false
-        is String -> (action.key as? StringPreferenceKey)?.let {
+        is String  -> (key as? StringPreferenceKey)?.let {
             preferences.put(it, value)
             true
         } ?: false
-        else -> false
+        else       -> false
     }
 }
+
+/**
+ * Reads the value a preference holds right now, as text.
+ *
+ * The advisor history stores the old value as a string and the AI Coach feeds that history straight
+ * into its prompt, so an apply must log what the setting really was. Returns an empty string for a
+ * key type this cannot read.
+ */
+fun readPreferenceValueAsString(preferences: Preferences, key: PreferenceKey): String =
+    when (key) {
+        is DoublePreferenceKey     -> preferences.get(key).toString()
+        is UnitDoublePreferenceKey -> preferences.get(key).toString()
+        is IntPreferenceKey        -> preferences.get(key).toString()
+        is LongPreferenceKey       -> preferences.get(key).toString()
+        is BooleanPreferenceKey    -> preferences.get(key).toString()
+        is StringPreferenceKey     -> preferences.get(key)
+        else                       -> ""
+    }
 
 fun detectPkpdInsulinPreset(preferences: Preferences): PkpdInsulinPreset {
     fun near(a: Double, b: Double, eps: Double = 0.15) = abs(a - b) <= eps

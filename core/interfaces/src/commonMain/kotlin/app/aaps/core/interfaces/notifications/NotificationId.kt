@@ -197,7 +197,16 @@ enum class NotificationId(
     HYPO_RISK_ALARM(URGENT, LOOP, allowMultiple = true),
 
     /** AIMI AI Decision Auditor — new insight available (in-app + optional system notification). */
-    AIMI_AUDITOR_INSIGHT(INFO, LOOP);
+    AIMI_AUDITOR_INSIGHT(INFO, LOOP),
+
+    /**
+     * The active calibration plugin needs attention: not enough entries yet, the fit was rejected
+     * as unsafe, entries are too clustered to fit a slope, or the last accepted entry is old. Only
+     * one of these reasons is shown at a time (see `LinearCalibrationPlugin`'s health check) and it
+     * is dismissed once the situation resolves. Appended last on purpose, because the system
+     * notification id is the ordinal.
+     */
+    CALIBRATION_HEALTH(NORMAL, CGM);
 
     companion object {
 

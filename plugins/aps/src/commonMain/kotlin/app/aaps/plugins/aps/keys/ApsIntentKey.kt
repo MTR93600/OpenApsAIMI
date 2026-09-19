@@ -30,11 +30,46 @@ enum class ApsIntentKey(
         preferenceType = PreferenceType.CLICK,
     ),
 
+    AimiSupportPackage(
+        key = "aimi_support_package_compose",
+        title = ApsStrings.pref_title_aimi_support_package,
+        summary = ApsStrings.pref_summary_aimi_support_package,
+        preferenceType = PreferenceType.CLICK,
+    ),
+
+    AimiContext(
+        key = "aimi_context_compose",
+        title = ApsStrings.pref_title_aimi_context,
+        summary = ApsStrings.pref_summary_aimi_context,
+        preferenceType = PreferenceType.CLICK,
+    ),
+
+    AimiMealAdvisor(
+        key = "aimi_meal_advisor_compose",
+        title = ApsStrings.pref_title_aimi_meal_advisor,
+        summary = ApsStrings.pref_summary_aimi_meal_advisor,
+        preferenceType = PreferenceType.CLICK,
+    ),
+
+    AimiModeSettings(
+        key = "aimi_mode_settings_compose",
+        title = ApsStrings.pref_title_aimi_mode_settings,
+        summary = ApsStrings.pref_summary_aimi_mode_settings,
+        preferenceType = PreferenceType.CLICK,
+    ),
+
+    AimiProfileAdvisor(
+        key = "aimi_profile_advisor_compose",
+        title = ApsStrings.pref_title_aimi_profile_advisor,
+        summary = ApsStrings.pref_summary_aimi_profile_advisor,
+        preferenceType = PreferenceType.CLICK,
+    ),
+
     AimiSosPermissions(
         key = "aimi_sos_permissions_compose",
         title = ApsStrings.pref_title_aimi_sos_permissions,
         summary = ApsStrings.pref_summary_aimi_sos_permissions,
-        preferenceType = PreferenceType.ACTIVITY,
+        preferenceType = PreferenceType.CLICK,
     ),
 
     AimiHypoRiskAlarmInfo(
@@ -55,7 +90,7 @@ enum class ApsIntentKey(
         key = "aimi_physio_hc_permissions_compose",
         title = ApsStrings.pref_title_aimi_health_connect_permissions,
         summary = ApsStrings.pref_summary_aimi_health_connect_permissions,
-        preferenceType = PreferenceType.ACTIVITY,
+        preferenceType = PreferenceType.CLICK,
     ),
 
     HormonitorViewer(

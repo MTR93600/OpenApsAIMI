@@ -8,9 +8,8 @@ import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveCommand
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
-import java.io.File
-import java.io.FileWriter
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import java.text.SimpleDateFormat
 import java.util.ArrayDeque
 import java.util.Date
@@ -39,10 +38,10 @@ import dev.zacsweers.metro.SingleIn
 @SingleIn(AppScope::class)
 class AutodriveDataLake @Inject constructor(
     private val aapsLogger: AAPSLogger,
-    private val storageHelper: AimiStorageHelper // Injection du centralisateur
+    private val storage: AimiStorage, // Injection du centralisateur (le port partagé)
 ) {
 
-    private val logFile: File by lazy { storageHelper.getAimiFile(FILE_NAME) }
+    private val path: AimiPath by lazy { storage.file(FILE_NAME) }
 
     private val deferredMonitor = Any()
     private val deferred = ArrayDeque<String>()
@@ -146,27 +145,26 @@ class AutodriveDataLake @Inject constructor(
      */
     private fun appendPendingAnd(line: String): Boolean {
         val carried = synchronized(deferredMonitor) { deferred.toList() }
-        return try {
-            ensureHeader()
-            FileWriter(logFile, true).use { writer ->
-                carried.forEach { writer.append(it) }
-                writer.append(line)
-            }
-            synchronized(deferredMonitor) {
-                repeat(carried.size) { if (deferred.isNotEmpty()) deferred.pollFirst() }
-                deferredRowCount = deferred.size
-            }
-            true
-        } catch (e: Exception) {
-            aapsLogger.error(LTag.AIMI, "Autodrive Data Lake write failed: ${e.message}")
-            false
+        ensureHeader()
+        val payload = buildString {
+            carried.forEach { append(it) }
+            append(line)
         }
+        if (!storage.appendText(path, payload)) {
+            aapsLogger.error(LTag.AIMI, "Autodrive Data Lake write failed")
+            return false
+        }
+        synchronized(deferredMonitor) {
+            repeat(carried.size) { if (deferred.isNotEmpty()) deferred.pollFirst() }
+            deferredRowCount = deferred.size
+        }
+        return true
     }
 
     /** Creates the file with the canonical header on first use. Caller holds the dataset lock. */
     private fun ensureHeader() {
-        if (!logFile.exists()) {
-            logFile.writeText(AutodriveDatasetSchema.HEADER + "\n")
+        if (!storage.exists(path)) {
+            storage.writeText(path, AutodriveDatasetSchema.HEADER + "\n")
         }
     }
 

@@ -1,21 +1,33 @@
 package app.aaps.plugins.aps.openAPSAIMI.ml
 
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AndroidAimiStorage
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.mockito.kotlin.mock
 import java.io.File
 
 /**
- * File/store half of the `6c0c0285ff` corpus contract.
+ * Storage-port half of the `6c0c0285ff` corpus contract.
  *
  * The rewrite rule and the header guard are locked in commonTest
- * ([AimiSmbCorpusGuardTest]). These tests cover the androidMain File wrapper and
- * [AimiSmbModelStore.delete], which commonMain cannot see. No mocks.
+ * ([AimiSmbCorpusGuardTest]). These tests cover the androidMain [AimiStorage] wrapper and
+ * [AimiSmbModelStore.delete], which commonMain cannot see. The storage here is a real
+ * [AndroidAimiStorage] over a mocked [AimiStorageHelper] - every path in this file is resolved by
+ * the test itself, so the helper is never asked to do anything (same pattern as
+ * `AndroidAimiStorageTest`).
  *
  * Dose-facing: deleting the weight file (and, on this study tree, its `.bak` / `.tmp` siblings)
  * leaves `refine()` on the rule-based dose until a clean training run publishes new weights.
  */
 class AimiSmbCorpusFileTest {
+
+    private val storage: AimiStorage = AndroidAimiStorage(mock<AimiStorageHelper>())
+
+    private fun pathOf(file: File): AimiPath = AimiPath(file.absolutePath)
 
     private val staleProductionHeader: List<String> = listOf(
         "dateStr",
@@ -54,7 +66,7 @@ class AimiSmbCorpusFileTest {
         val dataRows = listOf(legacyShapeRow(), currentShapeRow())
         file.writeText(staleProductionHeader.joinToString(", ") + "\n" + dataRows.joinToString("\n") + "\n")
 
-        val outcome = TrainingCsvHeader.ensureCurrent(file, SmbRefinementFeatureSchema.trainingCsvHeaderLine() + "\n")
+        val outcome = TrainingCsvHeader.ensureCurrent(storage, pathOf(file), SmbRefinementFeatureSchema.trainingCsvHeaderLine() + "\n")
 
         assertThat(outcome).isEqualTo(TrainingCsvHeader.Outcome.REPLACED)
         val lines = file.readLines()
@@ -69,7 +81,7 @@ class AimiSmbCorpusFileTest {
         val content = SmbRefinementFeatureSchema.trainingCsvHeaderLine() + "\n" + currentShapeRow() + "\n"
         file.writeText(content)
 
-        val outcome = TrainingCsvHeader.ensureCurrent(file, SmbRefinementFeatureSchema.trainingCsvHeaderLine() + "\n")
+        val outcome = TrainingCsvHeader.ensureCurrent(storage, pathOf(file), SmbRefinementFeatureSchema.trainingCsvHeaderLine() + "\n")
 
         assertThat(outcome).isEqualTo(TrainingCsvHeader.Outcome.ALREADY_CURRENT)
         assertThat(file.readText()).isEqualTo(content)
@@ -79,7 +91,7 @@ class AimiSmbCorpusFileTest {
     fun a_missing_file_is_created_with_the_current_header(@TempDir dir: File) {
         val file = File(dir, "oapsaimiML2_records.csv")
 
-        val outcome = TrainingCsvHeader.ensureCurrent(file, SmbRefinementFeatureSchema.trainingCsvHeaderLine() + "\n")
+        val outcome = TrainingCsvHeader.ensureCurrent(storage, pathOf(file), SmbRefinementFeatureSchema.trainingCsvHeaderLine() + "\n")
 
         assertThat(outcome).isEqualTo(TrainingCsvHeader.Outcome.CREATED)
         assertThat(file.readLines()).containsExactly(SmbRefinementFeatureSchema.trainingCsvHeaderLine())
@@ -87,15 +99,16 @@ class AimiSmbCorpusFileTest {
 
     @Test
     fun deleting_the_weight_file_leaves_refine_on_the_rule_based_dose(@TempDir dir: File) {
-        val weights = AimiSmbModelStore.modelFile(dir)
-        weights.writeText("{}")
-        File(dir, weights.name + ".bak").writeText("{}")
-        assertThat(weights.exists()).isTrue()
+        val dirPath = pathOf(dir)
+        val weights = AimiSmbModelStore.modelFile(storage, dirPath)
+        storage.writeText(weights, "{}")
+        storage.writeText(storage.sibling(weights, ".bak"), "{}")
+        assertThat(storage.exists(weights)).isTrue()
 
-        assertThat(AimiSmbModelStore.delete(dir)).isTrue()
+        assertThat(AimiSmbModelStore.delete(storage, dirPath)).isTrue()
 
-        assertThat(weights.exists()).isFalse()
-        assertThat(File(dir, weights.name + ".bak").exists()).isFalse()
+        assertThat(storage.exists(weights)).isFalse()
+        assertThat(storage.exists(storage.sibling(weights, ".bak"))).isFalse()
         // With no model in memory, refine hands the rule-based dose back untouched.
         val predictedSmb = 0.62f
         assertThat(
@@ -108,6 +121,6 @@ class AimiSmbCorpusFileTest {
 
     @Test
     fun deleting_an_absent_weight_file_reports_success(@TempDir dir: File) {
-        assertThat(AimiSmbModelStore.delete(dir)).isTrue()
+        assertThat(AimiSmbModelStore.delete(storage, pathOf(dir))).isTrue()
     }
 }

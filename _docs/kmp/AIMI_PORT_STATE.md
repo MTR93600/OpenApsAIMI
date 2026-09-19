@@ -1,8 +1,13 @@
 # AIMI port - state of play, and where to start next
 
+> **2026-09-06 — superseded as the live snapshot.** Re-verified status and the remaining
+> lots are in [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md) and
+> [`docs/kmp-migration/DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md).
+> This file is still the best diary of lots 0–6i (how the tick and plugin landed). Do not
+> use its file counts, “2 files from commonMain”, or “330 tests” as today’s truth.
+
 Updated 2026-09-02, on `kmp-aimi-migration-study` at `1f6ca62fe8` (the second `kmp` merge).
-**Read this first.** It supersedes the stale parts of the older documents in this folder; each of
-those is marked below with what to still trust it for.
+**Was** “read this first” until 2026-09-06. Keep it for the lot history only.
 
 Tree is clean. `:app:assembleFullDebug` EXIT=0. `:plugins:aps:compileKotlinIosArm64` EXIT=0.
 `:plugins:aps:testAndroidHostTest` **330 tests, 0 failures**. `:ios:shell:checkMigratedModules` EXIT=0.
@@ -865,28 +870,1090 @@ EXIT=0; `:plugins:aps:testAndroidHostTest` 419 tests (was 330 - the ~89 new P0.x
 
 ---
 
+## 6k. 2026-09-12: staging cleanup lot - 6 of the 17 files were dead, not pending
+
+Before starting the Compose port of the last 17 staged files, a survey pass checked each one for live
+callers and live successors, instead of assuming all 17 still needed porting (the same question that
+made `AuditorReportActivity` turn out to need no port at all, back in 6i). Six did not:
+
+- `AimiDiagnosticsManager.kt` - a live file of the same name already exists in `androidMain`, and is a
+  strict superset (English text, plus the 2026-09-06 active-profile fix from 6-something's support
+  report work). Diffed line by line to confirm before deleting.
+- `StateTransitionManager.kt` (`advisor/auditor/model/`) - superseded by the live
+  `AimiStateTransitionManager` (`advisor/auditor/`), which `AuditorOrchestrator` actually constructs.
+  Same job (Auditor state machine), different name, so a grep for the old name found nothing live.
+- `AimiSmbSimulator.kt` (class `DualEngineSimulator`) - its whole supporting cast
+  (`VirtualGlucoseEngine`, `VirtualInsulinReservoir`, `VirtualIobCalculator`, `PerformanceScorer`) is
+  already live and already consumed by `AimiSmbComparator`, a different top-level class doing the same
+  comparison job. Zero references to `DualEngineSimulator` anywhere.
+- `AIMIHealthConnectStepsProviderMTR.kt` and `AIMICompositeStepsProviderMTR.kt` - the steps
+  architecture moved to a sync-to-database model (`AIMIHealthConnectSyncServiceMTR` /
+  `AIMIDatabaseStepsProviderMTR` / `AIMIStepsManagerMTR`) after these two were written; neither has a
+  caller left.
+- `AimiMemberInjectors.kt` - a DI wiring template for a `MembersInjector`-per-Activity pattern the
+  project has moved away from (see `PluginStatusBadgeSource`, a plain interface + `@ContributesBinding`
+  instead). It was already stale against its own staging tree - it imports `AuditorReportActivity`,
+  removed back in 6i.
+
+Verified each with a grep across the whole repo excluding `_docs/kmp/staging/` before deleting, same
+discipline as 6i. `_docs/kmp/staging/` is not part of any Gradle source set (confirmed: no
+`build.gradle*` references it), so this cleanup needed no build re-verification.
+
+**11 files are left** (was 17), all confirmed genuine UI still to port, backend already live in every
+case - see 7.1 for the lot split. One of the 11, `AimiLoopRuntimeGuard.kt`, wraps a live telemetry
+method that nothing calls yet (no Overview wiring exists for it) - held rather than ported, per the
+"don't ship a registration nothing consumes yet" rule; port it together with whatever feature ends up
+needing it, not before.
+
+---
+
+## 6l. 2026-09-12: lot 2 - the two permission screens, ported to Compose
+
+`AIMIHealthConnectPermissionActivityMTR` and `AIMIEmergencySosPermissionActivityMTR` are gone from
+staging, replaced by `AimiHealthConnectPermissionScreen.kt` (`openAPSAIMI/physio/`) and
+`AimiSosPermissionScreen.kt` (`openAPSAIMI/sos/`) - self-contained `@Composable` functions in the same
+androidMain packages as the backend they wrap, not new Activities. **9 files left** (was 11).
+
+Neither screen is an Activity any more. Both are wired the same way `AimiSupportPackageScreen` and
+`AimiControlCenterScreen` already are: `ApsIntentKey.AimiHealthConnectPermissions` /
+`.AimiSosPermissions` now carry `.withCompose { onBack -> ... }` at their `add(...)` call site in
+`OpenAPSAIMIPlugin.kt`, and their `preferenceType` moved from the leftover `PreferenceType.ACTIVITY`
+to `PreferenceType.CLICK`, matching every other Compose-backed entry in that same enum (the type had
+no actual effect on rendering - `IntentPreferenceKey` picks compose-vs-click-vs-url by which field is
+set, not by this enum - but every sibling entry uses `CLICK`, so the two leftover `ACTIVITY` values
+were corrected for consistency, not because anything depended on them).
+
+One reusable decision made here, worth remembering for the rest of this lot split: **there is already
+an app-wide permission sheet** (`app.aaps.ui.compose.permissionsSheet.PermissionsSheet`, backed by
+`PermissionGroup`/`PluginPermissionsImpl`), and it was deliberately **not** used for either screen.
+Two independent reasons: (a) `:plugins:aps` does not depend on `:ui` today, and adding that edge
+without discussion is against this project's own inter-module rule; (b) that sheet's "is it granted"
+check is synchronous (`ContextCompat.checkSelfPermission`-shaped), while Health Connect's is a suspend
+call through its own `PermissionController` - a different model the sheet's existing wiring does not
+handle. Both screens instead check permissions themselves, the same way the Activities they replace
+did, and only borrow that sheet's *visual* language (a `ListItem` row with a
+`CheckCircle`/`Warning` leading icon) by hand, once per screen - a small, accepted duplication rather
+than a new cross-module dependency for two screens.
+
+The SOS screen keeps the two-stage request Android itself requires: foreground (SMS + fine/coarse
+location) first, then, only after those are granted, a *second*, separate request for background
+location - Android will not grant background location in the same dialog as foreground permissions
+(confirmed against the one other place in this repo that already does the same split,
+`AndroidLocationPermissions.kt` in `:plugins:automation`).
+
+Dropped from the original Activities, deliberately: the old HC Activity's `onNewIntent` handler for
+Health Connect's system `ACTION_SHOW_PERMISSIONS_RATIONALE` intent (this module has no
+`AndroidManifest.xml` entry that could ever receive it - confirmed before dropping, not assumed), and
+its post-grant "test read 5 minutes of steps" diagnostic probe (developer-facing debugging output, not
+something a real user needs to see on a settings screen).
+
+Verified: `:app:assembleFullDebug` EXIT=0 (after the usual stale-KSP purge - a Dagger/Hilt-referencing
+generated file broke the first attempt, unrelated to this change, see 6h/6i for why that keeps
+happening after any DI-graph-touching change), `:plugins:aps:compileKotlinIosArm64` EXIT=0,
+`:plugins:aps:testAndroidHostTest` 514 tests, 0 failures.
+
+---
+
+## 6m. 2026-09-12: lot 3 - the Context cluster, ported to Compose
+
+`ContextActivity.kt`, `ContextIntentAdapter.kt`, `PatientSignalGaugeBinder.kt` and their 3 layout XMLs
+are gone from staging, replaced by one file: `AimiContextScreen.kt` (`openAPSAIMI/context/ui/`). **5
+files left** (was 9): Meal Advisor + camera, Mode Settings, Profile Advisor, and the held
+`AimiLoopRuntimeGuard`.
+
+`ContextViewModel.kt` was **not** ported - it was dead weight even in staging. Its own package
+(`context.ui`) had two competing implementations sitting side by side: the Activity called
+`ContextManager` directly and said so in its own doc comment ("Simplified version without ViewModel
+for quick implementation"), while `ContextViewModel` wrapped the same calls in `LiveData` and was
+never once referenced by the Activity or anything else. Grepped to confirm zero live callers before
+dropping it - same check as every other deletion in this port, see 6k.
+
+This lot needed a real backend survey before writing any UI, not just a port: `ContextManager` -
+already a plugin constructor field, used elsewhere - had four call shapes the staged Activity had
+subtly wrong (`addPreset` returns one `String` id, not a list; `getAllIntents()` returns a `Map`, not
+a `List<Pair<...>>`, though `.toList()` on either produces the right shape so this one didn't matter;
+`removeIntent`/`extendDuration` return `Boolean`, ignored same as before). `ContextPreset.ALL_PRESETS`
+has grown to 12 entries since the Activity was parked (it assumed 10, hardcoded by index) - the new
+screen iterates the list and reads each preset's own `displayName`/`icon` instead of hardcoding a
+chip per index, so it will not go stale again the next time a preset is added. Two `ContextIntent`
+subtypes (`SlowCarbMeal`, `HypoRecovery`) existed in the model but were never handled by the staged
+Activity's display code at all - both are handled now.
+
+This feature had **no live entry point anywhere** before this lot - not a leftover Activity reference,
+an actually-missing one: no `ApsIntentKey` entry, no preference-tree `add(...)`, most of its
+`context_*` string resources were never created. Added `ApsIntentKey.AimiContext` (top-level, same
+shape as `AimiControlCenter`/`AimiSupportPackage`) and wired it with `.withCompose` right next to
+those two. `HealthContextRepository` (needed for the same on-resume snapshot refresh the old Activity
+did) was Metro-injectable but not yet a plugin constructor field either - added as one, the same way
+`preferences`/`tpoOrchestrator` already were, since Metro resolves it automatically at construction;
+this is a same-module Metro dependency addition, not the kind of new inter-module Gradle edge the
+project's dependency rule is about.
+
+Verified: `:app:assembleFullDebug` EXIT=0 on the first attempt (no stale-KSP issue this time),
+`:plugins:aps:compileKotlinIosArm64` EXIT=0, `:plugins:aps:testAndroidHostTest` 514 tests, 0 failures
+(unchanged - a UI-only lot, same as 6l, adds no new tests).
+
+---
+
+## 6n. 2026-09-12: lot 4 - Meal Advisor + its camera screen, ported to Compose (multi-agent lot)
+
+`MealAdvisorActivity.kt` and `MealAdvisorCameraActivity.kt` are gone from staging, replaced by one
+file: `AimiMealAdvisorScreen.kt` (`openAPSAIMI/advisor/meal/ui/`). **4 files left** (was 5):
+`AimiModeSettingsActivity`, `AimiProfileAdvisorActivity`, and the held `AimiLoopRuntimeGuard`.
+
+This lot ran as definer -> coder -> reviewer, each a separate agent, rather than one pass done
+directly - the first lot in this port done that way on request. Worth recording what that bought and
+what it cost, since more lots may use it:
+
+- **The definer (a research-only agent) surfaced one real architectural fork before any code was
+  written**: `MealAdvisorCameraActivity` uses raw Camera2 (not CameraX - this repo had zero CameraX
+  usage anywhere), so porting it is a materially different decision from a layout port - Camera2
+  wrapped in a Compose `AndroidView`, or adopt CameraX as this repo's first precedent. Put to the user
+  rather than guessed (per the standing rule in section 7.1): **Camera2-in-`AndroidView`, no new
+  dependency**. The same survey also found two real bugs in the original - rotation hardcoded to a
+  fixed 90° regardless of device orientation, and a silent no-op on camera-permission denial (the
+  Activity called `requestPermissions` but never implemented `onRequestPermissionsResult` at all) -
+  also put to the user: **fix both**, rather than port them as-is.
+- **The two staged Activities became one Compose screen**, not two, same choice as 6m's Context
+  screen and for the same reason: there is no cross-screen "launch and get a result back" contract in
+  this app's preference-Compose-screen mechanism (`ComposeScreenContent { onBack -> ... }`, one screen
+  per entry). A local `showCamera` boolean toggles between the input/result view and a full-screen
+  Camera2 capture view inside one composable, instead of inventing a new navigation contract for two.
+- **The coder agent's first run was cut off mid-task by a platform rate limit**, after writing the
+  main screen file and the manifest permission but before the string resources, the `ApsIntentKey`
+  wiring, or a build check. Resumed via the same agent (not restarted, so the ~200K tokens of context
+  it had already built were not thrown away) with a message pointing at exactly what survived and
+  what was still missing - it finished the rest in one more pass and reported `BUILD SUCCESSFUL`.
+- **The reviewer agent hit its own turn limit before reporting**, mid-check of one detail
+  (`ExposedDropdownMenu` used with no matching top-level import - not a bug, it resolves as a
+  `ExposedDropdownMenuBoxScope` member, same as every other dropdown in this codebase). Resumed with
+  an explicit instruction to converge and call `ReportFindings` rather than open new lines of
+  investigation. Found one real, verified issue the coder's own build-passing self-check could not
+  have caught: **the camera was never reopened after `ON_PAUSE`** - only `stop()` was wired to
+  `ON_PAUSE`, with no `ON_RESUME` counterpart, so backgrounding the app while the capture screen was
+  open and returning left a frozen preview and a capture button that always failed. The reviewer
+  cross-checked the dosing-relevant confirm-flow contract (`persistenceLayer.insertOrUpdateCarbs`,
+  then `BooleanKey.OApsAIMIMealAdvisorTrigger`/`DoubleKey.OApsAIMILastEstimatedCarbs`/
+  `DoubleKey.OApsAIMILastEstimatedCarbTime`) against every live reader in `DetermineBasalAIMI2.kt` and
+  confirmed it unchanged - the one thing in this lot that would have been a real dosing-safety defect,
+  not a UX one, had it drifted.
+- **Fixed directly rather than sent back to an agent**: the ON_RESUME gap was a small, precisely
+  understood fix once named - added a `wasStoppedForPause` flag so the restart only fires after a
+  genuine pause, not on Lifecycle's synchronous ON_RESUME replay to an observer added while already
+  resumed (which would otherwise restart the camera a second time right at screen entry, on top of
+  the `AndroidView` factory's own first `start()`).
+
+Verified after the fix: `:app:assembleFullDebug` EXIT=0, `:plugins:aps:compileKotlinIosArm64` EXIT=0,
+`:plugins:aps:testAndroidHostTest` 514 tests, 0 failures (unchanged - UI-only, no new tests, same as
+6l/6m).
+
+---
+
+## 6o. 2026-09-13: lot 5 - Mode Settings, ported to Compose (multi-agent lot, clean this time)
+
+`AimiModeSettingsActivity.kt` is gone from staging, replaced by `AimiModeSettingsScreen.kt`
+(`openAPSAIMI/advisor/modesettings/ui/`). **3 files left** (was 4): `AimiProfileAdvisorActivity`
+(2321 lines, next), and the held `AimiLoopRuntimeGuard`.
+
+Same definer -> coder -> reviewer split as 6n, but no agent needed resuming this time - both finished
+their turn budget cleanly in one pass each.
+
+**Unlike every advisor screen ported before it (Context, Meal Advisor), this one is not advisory - it
+is a live control surface for the dosing engine.** The "Activate <mode>" button writes a therapy-event
+NOTE whose exact text ("Lunch" / "Dinner" / "Breakfast" / "High Carb") is matched by substring in
+`therapy.kt` (`findActiveLunchEvents` and its three siblings) to drive real prebolus/`smbMult`/meal-mode
+decisions in `DetermineBasalAIMI2.kt`. That raised the review bar: the definer's survey confirmed no
+backend drift at all (a first for this port series - every prior lot found at least one stale
+assumption), but flagged the one thing that mattered most - the note text has to survive translation
+untouched. The coder kept it as a separate, deliberately non-localized `noteText` field on the mode
+enum, apart from the translatable tab-label string shown in the UI, so a future translator can never
+touch the substring the dosing matcher depends on. The reviewer verified this by checking which of the
+two strings actually gets written to `TE.note` (the plain `noteText`, never the localized display
+label) - the trap a careless port could fall into without ever failing a build or a test, since nothing
+in this repo tests `therapy.kt`'s note-matching against a live Compose screen's output.
+
+One design call, made explicit rather than defaulted: the screen's 4 "Duration (min)" values live in a
+private `SharedPreferences` file (`"aimi_mode_activity"`) entirely outside the `Preferences`/`IntKey`
+system, and nothing else in the app reads them. Asked whether to keep that as-is or promote them to
+real `IntKey` entries for consistency with the other 10 mode settings (which are already
+`DoubleKey`/`IntKey`) - kept as-is, since nothing depends on the inconsistency and promoting it would
+be scope beyond what this lot needed.
+
+Also dropped, confirmed dead by the definer before any code was written: unused `automation`/`rh`
+injected fields, a never-wired "AI Settings" input trio (`inputOpenAiKey`/`inputGeminiKey`/
+`switchProvider` - declared, never initialized, never added to any layout, never read), and an unused
+`getInputBackground()` helper.
+
+Not fixed, flagged for later as a shared follow-up across all three advisor screens rather than
+patched here alone: none of `AimiContextScreen`/`AimiMealAdvisorScreen`/`AimiModeSettingsScreen` set
+`CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)` on their `Card`s
+or have a `@Preview`, and all three expose their top-level composable as `public` rather than
+`internal` - cosmetic/consistency items, not correctness bugs, worth doing as one pass over all three
+rather than three separate touch-ups.
+
+Verified: `:app:assembleFullDebug` EXIT=0, `:plugins:aps:compileKotlinIosArm64` EXIT=0,
+`:plugins:aps:testAndroidHostTest` 514 tests, 0 failures (unchanged - UI-only, no new tests).
+
+---
+
+## 6p. 2026-09-13: `AimiProfileAdvisorActivity` split into 5 sub-lots; sub-lot 1/5 (Tuning Context) done
+
+The last screen-shaped staged file, `AimiProfileAdvisorActivity.kt` (2321 lines, ~5x any screen
+ported so far), was surveyed and split before any code was written, same discipline as every prior
+lot but at a larger scale. Ten distinct sections were found (bootstrap, dashboard header, a
+support-ZIP flow, model selector, metrics/recommendations, brain/Oref/CGM-range chart, AI Coach,
+Tuning Context, Behavior Causal Map/Family Bridge, T3c/Harmonia runtime history, footer). Two were
+resolved before any porting: the support-ZIP flow (lines ~450-601) is fully superseded by the
+already-live `AimiSupportPackageScreen` from an earlier lot - confirmed the live version does
+strictly more (adds `[ACTIVE PROFILE]` and an ML-training-CSV tail the staged code never had) - so
+that section is simply dropped, not ported. The Behavior Causal Map / Family Bridge section (~390
+lines) was put to the user: it has zero live callers anywhere and zero tests, was built only for this
+Activity and never wired anywhere else - decided **not to port it**, same treatment as the six files
+already dropped in 6k, rather than resurrecting ~390 lines of code nothing exercises.
+
+The remaining 5 sections became the sub-lot plan, smallest/safest first: (1) Tuning Context - done
+this entry; (2) Metrics + Recommendations + Apply flow; (3) T3c/Harmonia/RBT runtime history cards;
+(4) Brain + Oref + AI Coach cards; (5) Header + quick actions (dashboard, basal-profile proposal,
+model selector). Confirmed via grep that this file shares no classes or preference keys with
+`AimiModeSettingsActivity` (6o) - the two needed no coordination.
+
+**Sub-lot 1 (Tuning Context, ~230 lines) is done.** New screen:
+`AimiProfileAdvisorScreen.kt` (`openAPSAIMI/advisor/compose/`), wired via a new top-level
+`ApsIntentKey.AimiProfileAdvisor` entry - added now, not deferred, because every future sub-lot's
+cards read from the same `AdvisorReport` this sub-lot's screen already loads; building the
+loading/error state once now means sub-lots 2-5 just add cards to the existing `Column`, not
+redesign the state model. The screen will look sparse (one card) until more sub-lots land - an
+accepted, explicit trade for having something real and testable now instead of an unwired composable
+sitting in the tree for 4 more lots.
+
+A design/wiring decision surfaced and made without needing to go back to the user: constructing
+`AimiAdvisorService` for the new screen exposed that its `calculateMetrics` silently falls back to
+hardcoded fake TIR numbers (`tir70_180=0.65`, `timeBelow70=0.05`, `timeAbove180=0.30` - not derived
+from the patient's real data at all) whenever no `TirCalculator` is supplied, and `TuningContextEngine`
+gates its whole tiering decision on those numbers. `TirCalculator` is already Metro-bound and already
+injected elsewhere in this same plugin (`DetermineBasalAIMI2.kt`) - added as a new `OpenAPSAIMIPlugin`
+constructor field (same-module Metro addition, not a new Gradle dependency, same pattern as
+`HealthContextRepository` in 6m) and threaded through. Review confirmed the fix genuinely takes effect
+for the new screen, and caught the same bug still live at a **second**, pre-existing
+`AimiAdvisorService` construction site (`aimiComposePkpdSetupItem`'s PKPD-recommendations loader,
+`OpenAPSAIMIPlugin.kt`) that this lot's change didn't originally touch - fixed too, same one-line
+addition, since the plugin now has `tirCalculator` as a field either way. **Any card in a future
+sub-lot, or any other code path, that constructs `AimiAdvisorService` without `tirCalculator` will
+silently compute against fake TIR data - always pass it now that it exists as a plugin field.**
+
+Review also found the async report-load had no error handling at all (unlike the original, which
+caught `Throwable`, special-cased `OutOfMemoryError`, and showed a worded message) - an uncaught
+exception would have meant either a crash or an infinite spinner with no way for the user to tell
+what happened. Fixed: same try/catch shape as the original, an `aimi_adv_error_prefix`/`_error_oom`
+message shown in place of the spinner. Also found and fixed while touching that code path: the new
+screen called `generateReport()` with no arguments, silently dropping the `history` argument
+(defaults to `emptyList()`) that a *later* sub-lot's recommendation cards need for their 48h-cooldown
+filter (`isRecommendationVisible`/`wasPreferenceKeyAppliedInLast48h` - without real history, a
+recommendation could resurface immediately after being applied, instead of staying hidden for 48h)
+and the `assetContext` the OREF pipeline uses to load its bundled ML asset. Both are invisible today
+(sub-lot 1 renders nothing that depends on either) but would have silently degraded sub-lot 2 and
+sub-lot 4 once built on top of the same `report` this sub-lot loads - fixed now while the call site was
+already open, rather than left for a future sub-lot to rediscover. One unrelated, pre-existing base
+resource bug fixed in passing: `aimi_adv_error_prefix` (the string this fix now actually renders) was
+`"Erreur: "` in the base (non-French) `values/aimi_strings.xml` - corrected to `"Error: "`.
+
+Verified: `:app:assembleFullDebug` EXIT=0, `:plugins:aps:compileKotlinIosArm64` EXIT=0,
+`:plugins:aps:testAndroidHostTest` 514 tests, 0 failures (unchanged - UI-only, no new tests). The
+staged `AimiProfileAdvisorActivity.kt` is NOT deleted yet - 4 sub-lots still read from it.
+
+## 6q. 2026-09-14: `AimiProfileAdvisorActivity` sub-lot 2/5 - metrics, recommendations and the apply flow
+
+Sub-lot 2 of 5 (staged lines ~635-921 plus their call site ~235-259) is done: the metrics grid, the
+observation/PKPD recommendation cards and the apply flow now render as Compose cards appended to the
+`AimiProfileAdvisorScreen.kt` that 6p created. No second entry point, same `AdvisorReport`.
+
+The definer survey paid for itself again, and harder than usual. `AimiRecommendation` no longer
+carries `titleResId`/`descriptionResId` - it carries `TextRef` - so the staged card's whole
+description logic (a `when` over four specific string ids, injecting metric numbers) was dead code
+against a model that no longer exists. Worse, those four recommendations - hypos, poor control,
+hypers, basal dominance - **were not emitted by any engine anywhere**, not on this branch and not on
+`dev_OAPSAIMI` either. Commit `8c7a6c63a9` (2026-03-13, "Migrate recommendation generation to a
+plugin-based system") had deleted all four rules and replaced them with `SafetyAggressionPlugin` /
+`StableControlPlugin`, which implement a different, real-time-BG rule and which **nothing ever
+registers** - there is not one call to `AimiPluginManager.register(...)` in the tree, so
+`collectActions` has always returned an empty list. The Advisor had been shipping its metric section
+with no metric rules behind it for six months.
+
+Put to the user, who chose to restore the four rules rather than drop them. That made this lot
+engine work as well as a screen port, so the rules were restored from the deleted code with their
+original thresholds rather than invented: hypos `timeBelow70 > 0.04` (Critical/Safety, proposes
+`OApsAIMIMaxSMB` x0.8 only when Max SMB > 1.5), poor control `tir70_180 < 0.70 && timeBelow70 <= 0.03`
+(High/Basal, proposes `OApsAIMILunchFactor` +0.1 only while it is below 1.2), hypers
+`timeAbove180 > 0.20 && timeBelow70 <= 0.03` (Medium/Isf, informational), basal dominance
+`basalPercent > 0.55` (Medium/Basal, informational). Restoring them surfaced a real bug in the
+original: the lunch-factor line read `(prefs.lunchFactor + 0.1 * 10.0).roundToInt() / 10.0`, which by
+operator precedence is `lunchFactor + 1.0` and then `/ 10`, so a lunch factor of 1.0 would have
+proposed **0.2**, not 1.1 - a large unannounced cut to meal aggressiveness, one tap away. Restored
+with the brackets fixed and a test that pins `1.0 -> 1.1`.
+
+The rules went to **commonMain** as a pure `metricRecommendations(metrics, prefs, rh)`
+(`advisor/AdvisorMetricRules.kt`), not into the Android-only service, because everything they need
+(`AdvisorMetrics`, `AimiPrefsSnapshot`, `AimiRecommendation`, `ApsStrings`, `DoubleKey`) is already
+multiplatform. They are therefore unit-testable without a pump, a database or Android, which is how
+17 threshold tests exist at all. The shared recommendation card went to commonMain for the same
+reason and compiles for iOS.
+
+Three things were deduplicated or fixed while the code was open, each of which was live before this
+lot:
+
+- **One recommendation card, not two.** `PkpdAdvisorSuggestionCard` already existed and was live on
+  the PKPD Setup screen; rather than write a second card, it was lifted to a shared
+  `AimiRecommendationCard` that both screens call. Its new parameters (`showPriority`, `applyLabel`)
+  default to the PKPD screen's old behaviour, so that live screen renders exactly as before - checked
+  against the deleted card body, not assumed.
+- **`applyPkpdPreferenceUpdate` silently ignored two key types.** It handled Double/Int/Boolean/String
+  and returned `false` for anything else. `LongPreferenceKey` was simply missing, and
+  `UnitDoublePreferenceKey` does **not** extend `DoubleNonPreferenceKey`, so an `is DoublePreferenceKey`
+  test misses it even though its value is a `Double` - an apply on such a key would have looked like a
+  no-op with no error. Both branches added. Latent today (no current recommendation proposes those
+  types), which is exactly why a build would never have caught it.
+- **The advisor history logged the literal string `"OLD"`** as the previous value. Not cosmetic:
+  `AiCoachingService.kt:261` feeds the history into the LLM prompt as `"<old> -> <new>"`, so the AI
+  Coach was being told `"OLD -> 0.75"`. A new `readPreferenceValueAsString` reads the real value
+  before the write.
+
+The review caught one more thing worth recording: the two action `reason` strings were written as
+hardcoded English literals, while the sibling `PkpdAdvisor` in the same folder resolves its reasons
+through `TextResolver`. That text is user-visible (the confirm dialog) **and** is what gets stored in
+the history the AI coach reads, so it is now resolved through the same `TextResolver`, with the
+nullable-resolver English fallback this file already uses for its score labels. Six dead
+`aimi_adv_rec_*_action_*` strings were deleted in passing - they belonged to an older model where one
+recommendation listed three textual suggestions, and that model is gone (checked against the staged
+Activity too, since sub-lots 3-5 still read it). Eleven more base-English strings that were actually
+French were rewritten, the same bug class 6p fixed for `aimi_adv_error_prefix`.
+
+Kept deliberately: the confirm dialog. Apply writes preference keys the dosing engine reads on the
+next loop tick (`OApsAIMIMaxSMB`, `OApsAIMILunchFactor`, the PKPD/relief/MaxIOB keys), so it is a real
+therapy-parameter change and never becomes a one-tap button. Nothing here writes a therapy-event note,
+so there is no `therapy.kt` substring-matching risk.
+
+Verified independently, not only from the agents' self-reports: `:app:assembleFullDebug` EXIT=0 with
+0 Kotlin errors, `:plugins:aps:compileKotlinIosArm64` EXIT=0, `:plugins:aps:testAndroidHostTest`
+**542 tests, 0 failures** (514 before this lot: +17 threshold tests, +8 apply/read tests, +3 for the
+resolved reasons). The test task was re-run with `--rerun` rather than trusted as UP-TO-DATE. The
+staged `AimiProfileAdvisorActivity.kt` is still NOT deleted - 3 sub-lots still read it.
+
+---
+
+## 6r. 2026-09-15: sub-lot 3/5 - the T3c / Harmonia / RBT runtime-history cards
+
+The three read-only diagnostic cards are ported: the recursive-belief unfold card, the T3c 24h
+runtime history and the Harmonia 24h runtime history, appended to the same
+`AimiProfileAdvisorScreen.kt` between the Tuning Context card and the metrics grid, in the order the
+original inserted them.
+
+This is the first lot in the series where the survey's verdict was **"the data is alive"** rather
+than "the backend is dead". Worth recording, because the check is only useful if it can come back
+either way: the decisions JSONL is written on every loop tick, and the preferences that gate it
+(`OApsAIMIRecursiveBeliefShadow`, `...Authority`, both depending on `OApsAIMIautoDriveActive`) all
+default to true, so these cards render real data on a default install. What had no consumer was the
+*aggregation* - `summarizeLast24Hours` on both readers had zero callers, because its only consumer
+was the parked Activity. The live Control Center screen shows the same two subsystems but only for
+the latest tick; this is the 24h aggregate, so it was ported rather than dropped as a duplicate.
+
+Four decisions were put to the user before any code was written, all resolved the recommended way:
+port all three cards; keep the RBT detail as a raw pretty-printed JSON dialog rather than building
+structured UI (the typed `RecursiveBeliefExport` model exists in commonMain but is **write-only** -
+there is a `toJsonObject` and no decoder, and none of the classes are `@Serializable`, so structured
+UI would have meant changing a model the live dosing path writes, for a developer diagnostic); give
+the three loads their own deferred load; and add tests for the summarisers, which had none.
+
+The staged code's `org.json.JSONObject` was stale in the way this series keeps finding: the writer
+already produces a `kotlinx.serialization.json.JsonObject` and both live readers already parse with
+`Json.parseToJsonElement` plus the `OrgJsonCompat` helper, so the loader was rewritten to kotlinx
+rather than ported as-is. `org.json` is Android-only, and this branch is going multiplatform.
+
+Three new strings were needed even though the survey said none would be, and the reason is worth
+knowing for the remaining sub-lots: the staged code built three pieces of user-visible text **by
+joining strings in Kotlin** (`"$avg U/h ($min-$max)"`, `"$from -> $to"`, and a bare English
+`"unknown runtime blocker"` fallback), so there was no resource to find. A survey that greps for
+`R.string.` cannot see text that was never a resource - when the staged source concatenates, expect
+to add a template.
+
+The review found the lot correct on every dosing-relevant property it was asked to check first
+(format-argument order and type on every row, the four RBT field defaults against the real writer,
+card placement and order, the null-vs-empty distinction, and the read-only guarantee), and found
+three things worth fixing, all fixed directly:
+
+- **The one genuinely new file had no tests.** The 18 tests the lot shipped all landed on the two
+  pre-existing readers and on a pure percentage helper; `RecursiveBeliefExportReader` - the actual
+  new code, with its own tail scan, its text pre-filter and its four defaults - had none. Seven tests
+  added, covering the three different ways it can legitimately return null and, specifically, the two
+  decoys its cheap `contains("recursive_belief")` filter lets through: a line that names the block in
+  a note without carrying it, and a line that carries the block outside `adjustments`.
+- **`runCatching` swallowed `CancellationException`.** Harmless here (the three wrapped calls are
+  synchronous), but it is a pattern that gets copied. Replaced by a `loadOrNull` helper that rethrows
+  cancellation and turns only real failures into "no data".
+- **A test file named after the cards tested only a percentage helper**, which would have told the
+  next reader the cards were covered. Renamed to say what it actually covers.
+
+One cleanup in passing: six string ids named `aimi_t3c_history_*` are rendered by both cards, so a
+reader editing one "T3c" string would silently change the Harmonia card too. Renamed to
+`aimi_history_*`; each was referenced from exactly one Kotlin file, so the rename is contained.
+
+Verified independently, not from the agents' reports: `:app:assembleFullDebug` EXIT=0 with 0 Kotlin
+errors, `:plugins:aps:compileKotlinIosArm64` EXIT=0, `:plugins:aps:testAndroidHostTest` **567 tests,
+0 failures, 0 errors** (542 before this lot: +18 from the lot, +7 from the review fix), re-run with
+`--rerun` rather than trusted as UP-TO-DATE.
+
+Two things this lot deliberately did not fix, recorded so they are not rediscovered as new:
+the writer (`AimiStorageHelper.kt:73`) falls back to app-scoped storage when `Documents/AAPS` is not
+writable while the reader (`T3cRuntimeHistoryReader.kt:132-134`) has no such fallback, so
+"unavailable" can mean "cannot read the file", not "the loop is not exporting" - the card copy is
+worded accordingly and carries a comment saying so. And the T3c reader treats `ownershipReason` as a
+blocker name for non-blocked ticks, which reads oddly in the UI; that is pre-existing reader logic,
+not something a port should change.
+
+---
+
+## 6s. 2026-09-15: sub-lots 4/5 and 5/5, and the end of the staged file
+
+The last two sub-lots were run through the `superpowers:subagent-driven-development` skill at the
+user's request, on top of the kickoff's own definer/coder/reviewer pipeline. What the skill added
+that the previous lots did not have was a written ledger
+(`.superpowers/sdd/NEXT_SESSION_KICKOFF/progress.md`): a pre-flight conflict scan of the remaining
+tasks, every ruling with what it costs if wrong, and a completion line per task. Three of the skill's
+own rules were overridden because project instructions outrank a skill, and each override is recorded
+there rather than done silently: implementers do not commit (`CLAUDE.md`), genuine architectural
+forks still go to the user instead of being ruled on (the kickoff says so explicitly, and it keeps
+earning its keep), and a read-only definer runs before each implementer.
+
+**Sub-lot 4 - brain, OREF and AI coach.** The user chose Vico for the CGM range chart over a
+hand-drawn Compose alternative. That turned out to cost nothing in build terms: `:core:graph` already
+exposes Vico as `api(...)` and `:plugins:aps` already depends on `:core:graph`, so no dependency was
+added and no build file was touched. `AiCoachingService` needed real wiring - the staged bare
+`AiCoachingService()` has not compiled since it gained `@Inject constructor(rh: ResourceHelper)` - so
+it became an `OpenAPSAIMIPlugin` constructor field, the same pattern `tirCalculator` follows.
+`OrefUserInsightFormatter.buildParagraph` had also changed from taking an Android `Context` to taking
+a `TextResolver`, which is the KMP direction this whole branch is moving in.
+
+Nineteen more base-English strings turned out to be French, and six of them are the ones most users
+actually see: with no API key configured - the default for all four providers - the coach card never
+calls the network at all, it falls back to `generatePlainTextAnalysis`, and that fallback was
+entirely French. That is the third lot in a row to find this bug class.
+
+**Sub-lot 5 - header, quick actions, footer, and a real bug.** The survey of the basal-proposal
+dialog found a genuine defect in its producer, not in the staged UI:
+`AimiAdvisorService.generateBasalProfileProposal` computed each hourly rate with
+`profile.getBasal((hour * 3600).toLong())`. `Profile.getBasal(timestamp)` routes through
+`MidnightUtils.secondsFromMidnight(timestamp)`, which expects **epoch milliseconds**, so every one of
+the 24 hours landed inside the first 83 seconds of 1 January 1970 and returned the same midnight
+block. A "basal proposal" would have shown 24 identical rows. The correct API was sitting next to it
+the whole time: `Profile.getBasalTimeFromMidnight(timeAsSeconds: Int)`.
+
+The same mistake was **already shipping** at two other sites in that file: `totalBasalCalc` summed 24
+copies of the midnight rate into `AimiProfileSnapshot.totalBasal`, and `nightBasal = getBasal(0L)`
+reads the wrong block in any timezone that is not UTC. Both feed the AI coach's prompt, so an LLM has
+been advising the user from a wrong total basal. The user chose to fix all three sites in this lot
+rather than defer, with a regression test that uses a genuine two-rate profile - under the bug the
+total is 24.0, fixed it is 42.0, so the test cannot pass either way.
+
+The model selector was the third place in the app to choose the same AI provider, after the settings
+tree and the Meal Advisor screen. Rather than add a third copy of the widget, the Meal Advisor's
+private `ProviderDropdown` was lifted into a shared composable both screens call, reusing the
+existing localized provider labels instead of the staged hardcoded marketing names, which had already
+gone stale. The staged `recreate()` - an Activity reload used to make the coach re-run with the new
+provider - became a `selectedProvider` state value added to the coach effect's keys.
+
+Two sections were dropped rather than ported, as decided earlier: the support-ZIP flow, superseded by
+the live `AimiSupportPackageScreen`, and the behavior causal map. The header's support button went
+with it, because this codebase has no mechanism for one registered Compose preference screen to
+navigate into another - `ComposeScreenContent` only ever receives `onBack` - and inventing one for a
+dropped feature would have been the wrong trade.
+
+**Review found four things across the two lots**, all fixed: a KDoc that described the opposite of
+what its code did; the basal-proposal failure message losing the exception detail, which was this
+session's own brief mandating the `loadOrNull` helper that discards the throwable; prose left
+hardcoded in the text the proposal shares out to a human, which was split line by line so the
+`key=value` and CSV lines stay literal while the one real sentence became a resource; and a latent
+trap now carrying a comment - the new `catch (Throwable)` is safe only while
+`generateBasalProfileProposal` and `calculateMetrics` stay non-suspend, since each roots its own
+`runBlocking` job.
+
+One project rule was broken and is recorded rather than hidden: the sub-lot 4 implementer read Vico's
+own library sources to find the `ColumnCartesianLayer` API. `CLAUDE.md` says not to read library
+sources locally without asking first, and names Vico. The code is correct and the gates are green,
+but the rule was not followed.
+
+Verified independently at every step, never from an agent's self-report: `:app:assembleFullDebug`
+EXIT=0 with 0 Kotlin errors (the gate that matters, since a missing Metro binding shows up only at
+app-graph resolution), `:plugins:aps:compileKotlinIosArm64` EXIT=0, and
+`:plugins:aps:testAndroidHostTest --rerun` **569 tests, 0 failures** (567 before these lots, +2 for
+the basal regression test). Zero `build.gradle` files touched.
+
+## 6t. 2026-09-15: the staged directory is empty of screens
+
+`AimiProfileAdvisorActivity.kt` is deleted. Before deleting it, the definer took a full inventory of
+all 2321 lines against what is live, function by function, and every one of them is either ported or
+inside one of the two deliberately dropped sections. Two functions were dead even inside the staged
+file and went with it: `getScoreColor`, defined and never called - evidence that colouring the score
+by severity was intended and never wired up, which the Compose port now actually does - and
+`Int.dpToPx()`, meaningless in Compose.
+
+Four KDoc comments in live files referred to the Activity as "parked"; they now say "the former", so
+a reader who greps for it is not left looking for a file that no longer exists.
+
+**One staged file remains**: `orchestration/AimiLoopRuntimeGuard.kt` (16 lines). The standing
+decision is to hold it rather than port it speculatively - it wraps a live telemetry method that
+nothing calls yet - and to port it together with whatever feature ends up needing it. That decision
+is unchanged and should be put to the user before it is revisited.
+
+---
+
+## 6u. 2026-09-17: the first real KMP lot, and why it moved one file instead of sixteen
+
+With the Profile Advisor port finished, the next work is the KMP migration proper: 122 of the 478
+AIMI files were still in `androidMain`. A grep for files importing none of `android.`, `androidx.`,
+`java.io`, `java.util`, `java.text` or `org.json` gave 16 candidates that looked ready to move.
+
+**Fourteen of the sixteen failed the iOS compile**, exactly as `kmp-module-flip` warns ("counting
+files with no android/androidx/java import over-estimates badly... compile for iOS to find out").
+The grep cannot see the two things that actually block this code: `app.aaps.plugins.aps.R` (no
+android/java substring anywhere in that import) and a dependency on a *type* that is itself still in
+`androidMain`. A fifteenth, `AndroidAimiBehaviorProfileSource`, compiled on its own and then failed
+once its one dependency was reverted - coupling the grep also cannot see.
+
+So exactly one file moved: `di/WCycleModule.kt`. Gates green (`:app:assembleFullDebug` 0 errors,
+`compileKotlinIosArm64` EXIT=0, 569 tests / 0 failures).
+
+**The useful output of this lot is the measurement, not the move.** The 351 compile errors rank the
+real blockers, and they say the remaining `androidMain` AIMI code is not a list of independent files
+but one connected cluster that has to move in dependency order:
+
+| blocker | error count | what it is |
+|---|---|---|
+| `AimiBehaviorFamilyId` | 48 | a type still in androidMain, referenced across the behaviour cluster |
+| `R` (`R.string`) | 22 | needs the `ApsStrings`/`TextRef` swap the skill describes |
+| `AimiControlCenterDraft` | 12 | Control Center state, still androidMain |
+| `StepService` | 11 | a genuine Android service - a platform port, not a move |
+| `AuditorUIState` / `AuditorAIService` | 14 | auditor types, still androidMain |
+
+The next lot should therefore be defined by *what everything else references*, not by what looks
+unblocked: move `AimiBehaviorFamilyId` and the behaviour-family types first, then their readers, and
+only then the analysers that use them. `StepService` is the opposite case - it is Android by nature
+and wants an interface in commonMain with the service behind it, per the "lift the platform call out,
+keep the rule" rule.
+
+One fact worth recording for planning: `dev` and `kmp` contain **zero** `openAPSAIMI` files - the
+whole 529-file AIMI tree exists only on this branch. So AIMI KMP work cannot conflict with the `dev`
+catch-up, and the two can proceed independently.
+
+---
+
+## 6v. 2026-09-17: the AimiBehaviorFamilyId cluster, moved
+
+Entry 6u measured the cluster; this one moves it. AIMI code in `androidMain` went from **121 files to
+114**, and `commonMain` from 356 to 365 - the counts do not simply swap because one 787-line file was
+split in two.
+
+Run as two tranches with a checkpoint between them, because the seven steps are one dependency chain
+with exactly one clean internal seam and every other boundary leaves unresolved references.
+
+**Tranche 1 - the foundation.** `AimiBehaviorFamilyRegistry.kt` moved unchanged;
+`AimiControlCenterSnapshot.kt` split along the IO-purity line (the pure model, the five `build*Family`
+functions and the whole scoring tail to commonMain; the two `loadLatest*RuntimeSnapshot()` functions
+and their five formatters stay in a new androidMain `AimiControlCenterRuntimeLoaders.kt`, because they
+read files through `android.os.Environment`); `AimiControlCenterSupport.kt` moved with
+`AimiAutonomyMode.labelResId()` replaced by a commonMain `controlCenterLabel(): TextRef`. About 24
+label fields changed type from `@StringRes Int` to `TextRef`, and `AimiControlCenterScreen.kt` (1015
+lines, stays androidMain) was updated in the same change to resolve `TextRef`, or the module would
+have stopped compiling for Android too.
+
+**Tranche 2 - the four files the whole lot was aiming at.** `AimiControlCenterAdvisor.kt`,
+`AimiBehaviorCausalAnalyzer.kt`, `AimiBehaviorFamilyBridge.kt` and `AimiBehaviorRuntimeProfileReader.kt`,
+plus `AndroidAimiBehaviorProfileSource.kt`, which failed 6u's attempt only because its one dependency
+was still on the Android side and now compiles for iOS untouched. Its name is a misnomer now - it
+holds nothing Android and its Metro binding contributes from commonMain, which is the target state -
+but renaming was left out of a move-only lot.
+
+Six dead fields were deleted rather than converted: `titleResId`, `bodyResId` and `bodyArgs` on both
+`AimiBehaviorCausalInsight` and `AimiFamilyBridgeSuggestion`. They were written at ten call sites and
+read nowhere - the one live consumer, `AiCoachingService.formatAimiBehaviorCausalInsightsForCoach`,
+reads only `id`, `primaryFamily`, `secondaryFamilies`, `confidence` and `evidence`. Deleting them
+removed 20 `R.string` references that would otherwise have been converted for nothing.
+
+**What only the compiler found, again.** Three things the survey called pure moves were not:
+`Map.putIfAbsent` is `java.util` and does not exist on Kotlin/Native (replaced by `getOrPut`, same
+first-wins semantics); `String.format(Locale.US, ...)` in the snapshot's own formatter, which would
+have compiled for Android and failed for iOS (replaced by the existing `aimiFmt1`/`aimiFmt2` helpers,
+whose own KDoc says not to use `String.format` in commonMain); and two `private` helpers that had to
+widen to `internal` once their callers moved to a separate file, since Kotlin's `private` does not
+cross files even inside one module. That is now three lots in a row where `compileKotlinIosArm64` -
+not a grep, not a survey - was the thing that told the truth.
+
+**One correction made during verification.** The hoisted constant that keeps
+`UnifiedActivityProviderMTR.MODE_DISABLED` (androidMain) and the commonMain comparison in step were
+reported as leaving "exactly one literal", and there were two: the enum's own `entries` map, 40 lines
+above, carried the same `"disabled"` string. Fixing it surfaced a Kotlin rule worth recording: a
+constant an enum's **own entries** need cannot live in that enum's companion object
+("Companion object of enum class is uninitialized here"), even as a `const val`. It went to a
+top-level `const val` in the same file instead. There is now one definition, and the only other
+`"disabled"` literals in the tree are unrelated telemetry reason strings.
+
+Review found **zero defects**. The check that mattered - that no threshold, coefficient or comparison
+changed in the moved scoring functions, which feed `UamHypothesisTuning` and the dosing algorithm's
+heuristics - was done twice: read function by function against `git show HEAD:<old path>`, then by
+extracting every numeric literal from both versions and diffing the sorted lists. Zero literal added,
+zero lost.
+
+Gates, verified independently at each tranche: `:plugins:aps:compileKotlinIosArm64` EXIT=0,
+`:app:assembleFullDebug` 0 Kotlin errors, `:plugins:aps:testAndroidHostTest --rerun` **569 tests,
+0 failures** - the same 569 as before the lot, which is the point: this lot moved code and changed no
+behaviour.
+
+**Next, by the same logic 6u established** - define the lot by what everything else references, not by
+what looks unblocked. The remaining named clusters are the Auditor types
+(`AuditorUIState`/`AuditorAIService`/`AuditorOrchestrator`, verified to have zero coupling with this
+one), `StepService`, and the two JSONL runtime-history readers whose tick-record types keep the
+Control Center loaders on the Android side.
+
+**A safety note carried forward from the survey, for whoever ports `StepService` to iOS.** It is an
+Android `SensorEventListener` step counter, and its output gates a live dosing branch
+(`DetermineBasalAIMI2.kt:5909`, where `recentSteps30Minutes >= 500 || recentSteps180Minutes > 1500`
+changes SMB behaviour). The honest iOS analogue is `CMPedometer`/HealthKit, which is asynchronous,
+batched, and can lag by minutes. An iOS implementation that silently returns 0 when data is not fresh
+would change the algorithm's behaviour rather than failing loudly. That decision belongs with whoever
+owns dosing safety review, not with a KMP-move implementer.
+
+---
+
+## 6w. 2026-09-17: the whole-tree probe - a complete blocker map, and what it kills
+
+6u measured one cluster by moving 16 files. This entry measures **all of them at once**, which turns
+out to be the better technique and is worth reusing: `git mv` every remaining androidMain AIMI file
+into commonMain, run `compileKotlinIosArm64` once, read the error ranking, then `git mv` everything
+back. One compile, complete map, and the revert is exact because nothing but paths changed.
+
+All 114 files moved; 6425 errors across 108 of them. Six had no *intrinsic* blocker - but note
+carefully what that means: they were error-free **in a world where their dependencies had also moved**,
+not error-free on their own. The probe measures intrinsic platform coupling, not movability.
+
+**The finding that killed the obvious plan.** The tempting next step was a horizontal sweep - fix one
+whole class of blocker across the tree and watch files fall out. Measured against the probe, that
+plan yields nothing:
+
+| sweep | files it would unblock on its own |
+|---|---|
+| `String.format`/`Locale` | 0 |
+| resource strings (`R`/`getString`/`stringResource`) | 0 |
+| both together | 0 |
+| both plus `org.json` | 0 |
+
+Every one of the 108 files has at least one blocker outside any single theme. The remaining AIMI code
+is not one knot with a few threads; it is genuinely platform-coupled, file by file.
+
+**The map, by how many files each blocker touches** (not by error count - error count over-weights a
+single file that formats numbers in a loop):
+
+| blocker | files | nature |
+|---|---|---|
+| `java` / `android` | 68 / 66 | the bulk, mostly the specific things below |
+| `Context` | 46 | platform port, or an unused parameter - check before assuming |
+| `System.currentTimeMillis` | 33 | mechanical, **done in this entry** |
+| `File` + `exists`/`readText`/`writeText` | ~28 | wants one file-access port; the biggest structural item left |
+| `R` / `getString` / `stringResource` / `res` | ~27 | the `ApsStrings`/`TextRef` swap |
+| `@Volatile` / `TimeUnit` / `ReentrantLock` | ~18 | JVM concurrency, `AapsLock` is the house replacement |
+| `JSONObject` / `json` | ~14 | `kotlinx.serialization`, as done for the RBT reader in 6r |
+
+Distribution is long-tailed: 8 files have only 2 distinct blockers, and one has 65.
+
+**Done in this entry:** `System.currentTimeMillis()` swept to `aimiWallClockMs()` across 31 files and
+147 call sites, including one KDoc example. The helper already existed in commonMain
+(`openAPSAIMI/AimiWallClock.kt`) and was already used by 47 files, so this is convergence on the house
+pattern rather than a new one. Identical semantics - both return epoch milliseconds. Gates:
+`:app:assembleFullDebug` 0 Kotlin errors, `testAndroidHostTest --rerun` 569 tests / 0 failures.
+
+It unblocks no file on its own, and that is expected - it is on the path for 33 of them.
+
+**What the next decision actually is.** Not "which files move next" but "what shape should the file
+access port take". Around 28 files read or write files, and they are the largest coherent group left.
+The project rule is that a port expresses intent rather than steps, and that a target which cannot
+honour the contract should make the feature visibly absent rather than silently dead - which for
+files-on-disk is a real question on iOS, not a formality. That is a design conversation to have before
+any more code moves.
+
+---
+
+## 6x. 2026-09-17: four decisions about the storage port, and a cluster nobody had named
+
+6w said the next question was the shape of a file access port. Measuring it first changed the
+question twice, which is the point of this entry.
+
+**The port already exists.** `AimiStorage` is in commonMain (`openAPSAIMI/utils/AimiStorage.kt`), 19
+members, with `AndroidAimiStorage` as its Android half, and its KDoc shows the thinking was already
+done: one storage policy at runtime, one health report, and every write wrapped so a failed AIMI log
+line can never take down a dosing tick. Fourteen files use it. Thirty still call `java.io.File`
+directly. So the work was never "design a port" - it was "finish adopting the one we have".
+
+**Most of the measured gaps were grep artefacts.** The first pass said the contract was missing
+`length()` in 14 files, streams in 15 and `bufferedReader` in 10. Checked against the code: half the
+`length()` hits are `JSONArray.length()`, and **every single** stream and `bufferedReader` hit is an
+`HttpURLConnection`, not a file. The real gaps are much smaller: `delete` (4 files), a tail read (2,
+today via `RandomAccessFile`), a size for diagnostics or an is-it-empty test (~5), a directory listing
+(2), a safe replace (3), a backup copy (1).
+
+**A cluster nobody had named.** Those stream hits are 8 files doing HTTP: the four vision providers,
+the AI coach, the auditor AI service, the Gemini model resolver and the physio analyzer, all on
+`HttpURLConnection`. That is a separate port with a separate answer (Ktor, for a KMP target) and it
+must not be absorbed into the storage work by accident. Also separate: `AimiModelHandler`'s
+`FileChannel.map` of the TFLite model is not storage but "load a model", and TFLite is Android-only
+regardless.
+
+### The four decisions
+
+1. **iOS must eventually run AIMI dosing.** This is the one that commands the others. It means every
+   port needs a real iOS half, and a missing one is a safety matter rather than a todo: the decisions
+   JSONL and the ML model stores feed the algorithm, so an iOS build that silently read nothing would
+   dose differently instead of failing loudly. It also makes the current state a known gap -
+   `AimiStorage` has no iOS binding at all, while 14 files already depend on it.
+2. **Extend the contract by intent, not by mechanism.** `readTailLines(path, maxLines)` rather than
+   random access; bytes rather than streams; no JVM stream types in the shared contract. More work
+   than retyping call sites, and the reason is decision 1: a mechanism-shaped contract is one an iOS
+   half can only imitate badly.
+3. **One dedicated sweep of the 30 stragglers, before any more file moves.** The measurement in 6w
+   says this unblocks no file on its own - no remaining file is blocked by storage alone - but it
+   removes a whole blocker class from the map in one reviewable change instead of scattering it.
+4. **A safe replace is one intent method, not three steps.** Three files today write a `.tmp`, delete
+   a `.bak` and rename, including `AimiNeuralModelStore`, which holds a model the dosing algorithm
+   loads on the next tick. The port offers replace-or-keep-the-old as a single call, with the dance
+   inside each platform half, so no caller owns a three-step protocol it can get wrong and iOS can use
+   its own atomic primitive rather than imitating Android's steps.
+
+---
+
+## 6y. 2026-09-17: the AimiStorage contract, extended by intent
+
+Six members added, one designed and then removed. The contract is at 24 members and the Android half
+implements all of them; there is still deliberately no iOS half (see below). Gates:
+`compileKotlinIosArm64` EXIT=0 - which is the meaningful one here, since the interface lives in
+commonMain and that compile is what proves no JVM type leaked into it - `:app:assembleFullDebug` 0
+Kotlin errors, `testAndroidHostTest --rerun` **583 tests, 0 failures** (569 baseline + 14 new).
+
+What was added, each named for what the caller means rather than what the platform does:
+`delete`, `replaceText`, `readTailLines(path, maxLines)`, `sizeBytes`, `copy`, `lastModifiedMs`.
+
+**`replaceText` is the one with teeth.** Three callers today are supposed to replace a stored file
+safely, and one of them (`ml/AimiNeuralModelStore`) holds a model the dosing algorithm loads on the
+next tick, so a half-written file is a real hazard. The `.tmp`-then-rename now lives inside the
+Android implementation and the contract states the guarantee: on `false`, the previous content is
+still readable. The test proves it by making the parent directory non-writable so the `.tmp` can never
+be created, then asserting the target is untouched - a guarantee with no test behind it is a claim.
+
+**A correction to this session's own brief, found by reading the callers.** The brief asserted that
+three callers do a `.tmp`/`.bak`/rename dance today. Only `AimiNeuralModelStore` does.
+`AutodriveDataBackfiller` does tmp-then-rename with a copy fallback and no `.bak`, and
+**`TpoPersistence` writes directly with no temporary file and no atomicity at all**. So the sweep that
+moves these onto `replaceText` will not merely preserve behaviour for that third one - it will give it
+crash safety it has never had. Worth knowing before the sweep, because "no behaviour change" is the
+usual promise of a sweep and here it would be false in a good way.
+
+**`list` was built, then removed.** The brief asked for it and named two callers. The implementer
+built it, could not find a caller it actually fitted, and said so. Checking that: the only candidate is
+`AimiStorageHelper.listBackupCandidates`, which is recursive and filters by extension and size, so a
+non-recursive files-only listing cannot serve it - and that helper is the Android storage policy
+itself, which has no reason to move to commonMain at all. So the member had no caller today and no
+foreseeable one, which is exactly what `CLAUDE.md` forbids shipping. Removed from the interface, the
+implementation and its two tests.
+
+**`copy` survived the same test, the other way.** The implementer also reported it had no caller,
+because the brief named `AimiBackupManager`, which reads bytes and uploads them rather than copying to
+a second path. Searching wider found two real ones the brief had missed:
+`DetermineBasalAIMI2.kt:13399` backing up the training CSV, and `AutodriveDataBackfiller.kt:227`'s copy
+fallback. The member stays; the brief was wrong about where, not about whether.
+
+**`JsonlTailReader` was kept, not absorbed.** `readTailLines` delegates to it rather than inlining its
+tuned reverse scan (8 KB chunks, a 16 MB cap that exists for Advisor launch on 256 MB heaps), because
+three readers still call it directly and converting them belongs to the sweep. Absorbing it now would
+have meant either duplicating that logic or breaking those readers.
+
+**Why there is still no iOS half, despite the decision that iOS must eventually dose.** The
+interface's own KDoc already says the absence is deliberate, and the reasoning holds: a stub that
+quietly wrote nowhere would leave the learning loops looking alive while they persisted nothing, and
+without a binding the feature is visibly absent and any future iOS graph fails loudly at wiring time.
+Writing the half now would overturn that with code, when what it actually needs is a **storage policy**
+answer: where AIMI may write on iOS, whether the user can retrieve those files, and whether the
+support ZIP still works there. That is the next decision to put to the user, and it is a product
+question, not an API mapping.
+
+---
+
+## 6z. 2026-09-17: storage sweep, batch A - the readers, and a real bug fixed on the way
+
+Five of the six targeted readers now reach the disk through `AimiStorage` instead of `java.io.File`:
+`T3cRuntimeHistoryReader`, `HarmoniaRuntimeHistoryReader`, `RecursiveBeliefExportReader`,
+`AimiControlCenterRuntimeLoaders` and `ComparisonCsvParser`, plus the call sites that had to learn to
+pass the port - `AimiControlCenterScreen`, `AimiProfileAdvisorScreen`, `AimiSupportPackageExporter`
+and three construction sites in `OpenAPSAIMIPlugin`. Twelve files in all, then three more for the fix
+described below. Gates: `compileKotlinIosArm64` EXIT=0, `:app:assembleFullDebug` 0 Kotlin errors,
+`testAndroidHostTest --rerun` **585 tests, 0 failures**.
+
+**The readers stayed `object`s.** Converting them to injected classes would have rippled into every
+call site including two Compose screens, which is a refactor wearing a sweep's clothes. Instead the
+port is a parameter, replacing the `file: File = aimiDecisionsJsonlFile()` they already carried:
+`summarizeLast24Hours(storage, nowMs)`. Their tests changed only in how the fixture reaches them, not
+in what they assert.
+
+**A production bug is fixed, deliberately.** `aimiDecisionsJsonlFile()` resolved the decisions journal
+with `Environment.getExternalStoragePublicDirectory` and no fallback, while the writer
+(`DetermineBasalAIMI2`, through `AimiStorageHelper`) falls back to app-scoped storage when
+`Documents/AAPS` is not writable. On any device where that fallback had happened, **the readers were
+blind to what the loop was writing** - the Control Center, the Advisor's history cards and the support
+package all silently saw nothing while the journal filled up elsewhere. Both sides now resolve through
+`storage.file("AIMI_Decisions.jsonl")`, which is the same call the writer already made. This was known
+as a hypothesis since 6r ("do not treat unavailable as proof the feature is dead"); it is now closed.
+
+**A regression the sweep introduced, caught in review.** Converting
+`AimiSupportPackageExporter.addDecisionLogLast24h` replaced a line-by-line `BufferedReader` walk with
+`storage.readLines(path)`, which holds the whole file. That journal gains a line every loop tick and
+is never truncated, and the T3c reader carries a 16 MB scan cap whose comment says it exists for
+256 MB heaps - so the support export would have risked running the heap out on exactly the device
+whose problem it exists to capture. The port gained `forEachLine(path) { }`: walk the lines without
+ever holding them, answering `false` when the walk stopped early, so a caller can tell a truncated
+file from a complete one. The exporter uses it, with a comment saying why. Batch B will want it too -
+the training CSVs have the same shape.
+
+**`AimiNeuralNetworkFiles` was deferred, correctly.** Its only caller is `ml/AimiNeuralModelStore`, an
+`object` with no DI whose own callers are two more `ml/*` objects. Giving it the port means either an
+object-to-class conversion one hop further out, or a late-init singleton bolted on for one call. It is
+a writer, so it belongs to batch B anyway, where that knot can be untied deliberately rather than as a
+side effect.
+
+**One process note.** This lot cost a round trip because the brief said "do not touch" about files it
+only meant "do not convert in this batch". The implementer read it absolutely, correctly refused to
+edit a call site it believed was frozen, and delivered one file with a clear explanation rather than
+guessing - which is the behaviour you want. The wording was the defect, not the reading.
+
+---
+
+## 6aa. 2026-09-17: storage sweep, batch B1 - and `forEachLine` pays for itself a second time
+
+Five writers and stores converted from `AimiStorageHelper`/`java.io.File` to the `AimiStorage` port:
+`tpo/TpoPersistence` (plus its one call site in `TpoOrchestrator`),
+`learning/BasalMlTrainingCoordinator`, `learning/BasalLearner`, `learning/UnifiedReactivityLearner`
+and `autodrive/learning/AutodriveDataLake`. Gates: `compileKotlinIosArm64` EXIT=0,
+`:app:assembleFullDebug` 0 Kotlin errors, `testAndroidHostTest --rerun` **585 tests, 0 failures** -
+the same 585, which is what a sweep should produce.
+
+Each converted class came out holding the port and **not** the helper, which is the direction
+`DetermineBasalAIMI2.kt:1458` already documented: `AimiStorage` is the seam, `AimiStorageHelper` is
+transitional.
+
+**`Context` was dead weight in both learners.** The brief asked whether the `Context` those two take
+was only there to resolve a file path, in which case the conversion would remove it. It was not used
+*at all* - zero references in either class, apparently left from before `AimiStorageHelper` existed.
+Both parameters are gone. That is two files off the `Context` blocker list (46 files at the last
+count) for no work, and a reminder that this migration's biggest blocker is partly an illusion: some
+of those 46 may not use the thing they hold either. Worth checking before designing a port for them.
+
+**A second unbounded read, this one pre-existing.** `BasalMlDatasetParser.parse()` inside
+`BasalMlTrainingCoordinator` read `basal_adaptive_records.csv` with `readLines()` - a training CSV
+that gains a row every loop tick and is never truncated. Unlike batch A's, this one was **not
+introduced by a sweep**; it has been there. Rewritten to `readFirstLine` for the header plus
+`forEachLine` for the rows, with a line count reproducing the old "fewer than two lines gives null"
+short circuit exactly. So the member added in 6z has now caught two out-of-memory risks in two lots,
+which is a good sign the intent-shaped read was the right call rather than an over-design.
+
+**`TpoPersistence` is atomic now.** All three save paths (`saveSession`, `saveLedger`,
+`saveLastRevertAtMsByPack`) go through `storage.replaceText`, so a crash or a full disk mid-write
+leaves the previous session, ledger or meta readable instead of truncated. It had none of that
+before - a plain `writeText`. This is the deliberate behaviour change of the lot.
+
+**One bridge, documented, and temporary.** `BasalMlTrainingCoordinator` hands its two weight files to
+`NeuralModelTrainer.trainAndPublish(weightsFile: File, ...)`, which lives in the `ml/*` chain that
+batch B2 has not untangled yet. Rather than change an out-of-scope signature, the file keeps
+`AimiPath` as its own source of truth and converts to a `File` on that one call line, with a comment
+saying why. B2 removes it.
+
+`AutodriveDataLake`'s carried-forward rows used to be several `FileWriter.append()` calls inside one
+open handle and are now one `appendText` of the concatenated string - same bytes, same order. Noted
+only because it sits next to crash-safety code: `appendText` is not atomic and was not made so.
+
+---
+
+## 6ab. 2026-09-18: storage sweep, batch B2 - the ml chain, and the sweep is done
+
+The `ml/*` chain is on the port. With batches A, B1 and B2 together, **AIMI files calling
+`java.io.File` directly went from 31 to 14**, and every one of the 14 that remains is there on
+purpose: the storage layer itself (`AndroidAimiStorage`, `AimiStorageHelper`, `JsonlTailReader`), TFLite
+model loading, two Compose screens, the SAF backup manager, and the deeply-Android exporters and
+physio store. Gates: `compileKotlinIosArm64` EXIT=0, `:app:assembleFullDebug` 0 Kotlin errors,
+`testAndroidHostTest --rerun` **588 tests, 0 failures** (585 + 3 for the new member).
+
+**`replaceKeepingBackup` was added, reversing an earlier decision on new information.** When the
+contract was designed, a backup-keeping replace was declined as an escape hatch that would become the
+default path - a good rule, decided while the alternative was hypothetical. Reading
+`AimiNeuralModelStore` made it concrete: its `.bak` is not a convenience, it is the **rollback**. The
+load path tries the target and then the `.bak`, and `delete` deliberately removes both so a model
+judged dead cannot be resurrected by the next load. Converting that file with plain `replaceText`
+would have deleted a safety mechanism on a model the dosing algorithm runs. The user was asked again,
+with the protocol in front of them, and chose to add the member. The Android implementation mirrors
+the old hand-rolled sequence line for line, including what happens when the final rename fails, and
+three tests pin it.
+
+**The hazard this batch exposed, worth carrying to any future port work.** `AimiNeuralNetworkFiles.saveToFile`
+returned `Unit` and signalled failure by throwing. `AimiStorage` writes never throw - they answer
+`false`, by deliberate design, so an AIMI log line can never take down a dosing tick. Converting the
+function without noticing would have left `OrefPersonalMlTrainer`'s "write failure → `TRAIN_FAILED`"
+branch **silently unreachable**: training would have reported success while persisting nothing. The
+signature became `Boolean` and the caller now checks it. The general shape: **when converting code
+that detected failure by catching an exception, the port's non-throwing contract silently deletes that
+detection unless the return value is checked.** Nothing about that fails a build.
+
+A third unbounded read was converted on the way - `AimiSmbTrainer.trainNow` was reading
+`oapsaimiML2_records.csv` whole, a file that gains a row every loop tick. That is three
+out-of-memory risks this sweep has found, one introduced by itself and two pre-existing, all now on
+`forEachLine`.
+
+The bridge B1 left in `BasalMlTrainingCoordinator` is gone, as planned. Threading the port went deeper
+than the eight-file list suggested - the OREF advisor path needed a nullable `storage` parameter on
+`AimiAdvisorService` and `OrefLocalPipeline` - but nothing was converted to an injected class, so the
+house pattern held.
+
+One diagnostics-only change: `NeuralModelTrainer`'s log lines now print `storage.displayPath(...)`
+rather than a bare filename, because an `AimiPath` may not be taken apart from outside the Android
+half. Log text only, no protocol change.
+
+**Left for a later lot, with a real caller.** `BasalMlModelStore` in commonMain is load-only and its
+KDoc explains why: the write side needs directory creation, rename and delete, *"and the AIMI storage
+seam offers none of the three"*. It now offers all three. No `save` was added, because nothing would
+call it yet and this project does not ship an API with no consumer - but the stated blocker is gone
+and that KDoc is stale. A lot that brings a real writer should add the save and fix the comment in the
+same change.
+
+---
+
+## 6ac. 2026-09-18: eleven files cross into commonMain - what the three sweeps bought
+
+The storage, clock and behaviour-family work had moved almost nothing on its own, by design: 6w
+measured that no remaining file was blocked by a single class of problem, so each sweep was a
+payment towards a move rather than a move. This entry collects the change.
+
+Re-running 6w's whole-tree probe - `git mv` every remaining androidMain AIMI file into commonMain,
+compile for iOS once, read the ranking, revert - shows **files with no intrinsic platform blocker went
+from 6 to 16**. That number is the sweeps' receipt.
+
+Then the second question, which the probe cannot answer on its own: of those 16, which compile when
+only *they* move, rather than when everything moves? Reverting the failures and iterating took one
+round. **Eleven files now live in commonMain**: `AimiNeuralNetworkFiles`, the three runtime-history
+readers (`T3cRuntimeHistoryReader`, `HarmoniaRuntimeHistoryReader`, `RecursiveBeliefExportReader`),
+`AimiControlCenterRuntimeLoaders`, `ComparisonCsvParser`, `TpoPersistence`, and the four `ml/*`
+persistence files (`AimiNeuralModelStore`, `AimiSmbModelStore`, `NeuralModelTrainer`,
+`TrainingCsvHeaderFile`).
+
+AIMI is now **103 files in androidMain against 376 in commonMain**, from 121/356 when this series of
+lots began.
+
+Five of the 16 did not survive alone - `AimiClinicalReportEngine`, `AimiAdaptationStatusBuilder`,
+`AimiDetermineBasalTickOrchestrator` and the two step providers - each waiting on a collaborator that
+has not moved (`AIMIPhysioManagerMTR`, `BasalLearner`, `UnifiedReactivityLearner`). They are queued
+behind a name, not behind a platform, which is a much better place to be.
+
+Gates: `compileKotlinIosArm64` EXIT=0, `:app:assembleFullDebug` 0 Kotlin errors,
+`testAndroidHostTest --rerun` **588 tests, 0 failures** - unchanged, as a move should leave them.
+
+**One comment corrected.** `AimiControlCenterRuntimeLoaders.kt` was created in 6v to hold the part of
+the Control Center snapshot that had to stay on Android, and its header said exactly that. The file
+has now moved to commonMain itself, so the sentence had become false. The split no longer separates
+platform from model and is kept only because the grouping reads well - which is what the header says
+now. A comment that survives the reason it describes is worse than none.
+
+**A note on method, since it has now been decided twice by measurement rather than by argument.** The
+crude approach - grep for files that import nothing Android and move those - has produced a wrong
+answer every time it has been tried: 14 of 16 failed in 6u, and an attempt this session to find
+unused `Context` parameters by regex flagged files that plainly use theirs on the next line. The
+probe works because it asks the compiler, and it costs one compile. Prefer it.
+
+---
+
+## 6ad. 2026-09-18: the two learners, and a Buddhist-calendar bug fixed on the way
+
+`BasalLearner` and `UnifiedReactivityLearner` were the last two files standing in front of a queue,
+and their only remaining blockers were JVM concurrency primitives and `java.util.Calendar`. Both are
+now converted, and **three more files crossed into commonMain**: the two learners and
+`AimiAdaptationStatusBuilder`, which was waiting on both. AIMI is at **100 androidMain / 379
+commonMain**. Gates: `compileKotlinIosArm64` EXIT=0, `:app:assembleFullDebug` 0 Kotlin errors,
+`testAndroidHostTest --rerun` **589 tests, 0 failures** (588 + 1 new).
+
+**The conversion was chosen per field, not applied as a pattern**, because the wrong choice here is
+silent. Several fields were `AtomicReference` snapshots read on the dosing path; replacing those with
+a lock would let a dosing tick block behind a background refresh. The house answer was already in the
+module - `advisor/auditor/AuditorVerdictCache.kt` publishes with `@Volatile` from `kotlin.concurrent`
+and reserves `AapsLock` for what genuinely needs mutual exclusion - so:
+
+- the `AtomicReference<List<...>>` snapshots became `@Volatile`, keeping reads lock-free;
+- the `AtomicBoolean` "refresh in flight" guards became `AapsLock` plus a `@Volatile` flag, tested and
+  set inside one `withLock`, copied from the same shape already in `KalmanFilter.kt`;
+- the `AtomicLong` counters became `@Volatile` with a plain increment, on evidence rather than
+  assumption: `LoopPlugin.invoke()` holds `invokeMutex` around the whole tick with the comment
+  "serialize loop runs so they cannot overlap", and the only writers are inside that call chain.
+
+The single-writer claim is the one that would have been easy to assert and wrong. It was established
+by reading the Loop's own serialization, which is the right kind of evidence for it.
+
+**The timezone hazard held.** Both `Calendar.getInstance().get(HOUR_OF_DAY)` calls read the *device's*
+zone implicitly, and this learner buckets its factors by hour, so `TimeZone.UTC` in the replacement
+would have shifted every bucket - a dosing change disguised as a date-library swap. Both use
+`TimeZone.currentSystemDefault()`.
+
+**And a latent bug went with it.** Moving the file surfaced a `SimpleDateFormat("yyyy-MM-dd HH:mm:ss",
+Locale.getDefault())` writing the CSV timestamp. The module already has `aimiCsvTimestamp()`, whose
+KDoc explains precisely why it exists: a locale-defaulted pattern writes *that locale's calendar*, and
+"a Thai phone wrote Buddhist years into wire timestamps". The old call used `Locale.getDefault()`, so
+this learner's CSV had the same defect. Swapped to the helper, with a comment recording what it fixed.
+
+**What the queue is actually waiting on now** - all three are structural, not incidental:
+
+| file | blocked by | nature |
+|---|---|---|
+| `AimiDetermineBasalTickOrchestrator` | `DetermineBasalaimiSMB2` | the algorithm core; the endgame, not a lot |
+| `AimiClinicalReportEngine` | `AIMIPhysioManagerMTR` | `WorkManager` - a scheduling port, not a move |
+| the two step providers | `StepService` | an Android `SensorEventListener`; the port was deferred in 6v with a dosing-safety flag still open |
+
+A note on method, again: these two files' `SimpleDateFormat` did **not** appear in the whole-tree
+probe's blocker list. It was masked - the file failed earlier on its atomics, and the compiler never
+got far enough to complain about the date formatter. **A probe ranks the blockers it can see, and
+removing one can reveal another underneath.** Expect the remaining counts to grow slightly as layers
+come off, rather than falling monotonically.
+
+---
+
+---
+
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at
 `@MetroIntKey(250)` and its whole reachable dependency closure compiling. All eight collaborator ports
 now have exactly one implementation each. The AIMI Auditor now has a real Compose status chip on the
 Overview screen, wired through a new `:core:interfaces` port (`PluginStatusBadgeSource`) rather than
-its old View-based toolbar indicator. Staging is down to 17 files, all View-based Android Activities
-(or their direct support classes) with no Compose equivalent yet - not 247, see 6i and its addenda.
+its old View-based toolbar indicator. Staging is down to 2 files (was 17: six deleted in 6k as dead or
+superseded, two permission screens ported in 6l, the Context cluster ported in 6m, Meal Advisor + its
+camera screen ported in 6n, Mode Settings ported in 6o), `AimiProfileAdvisorActivity` is gone: all five of its sub-lots
+are ported (6p, 6q, 6r, 6s) and the file is deleted (6t). Exactly one staged file remains,
+`orchestration/AimiLoopRuntimeGuard.kt`, deliberately held.
 Two `kmp` merges and a parallel P0.1-P0.7 porting series (done outside this session, with a Cursor
-agent) have landed since 6i; see 6j for what they were and why neither touches the 17 staged files.
+agent) have landed since 6i; see 6j for what they were and why neither touches these staged files.
 
-1. **The 17 remaining staged files are all legacy View-based Android Activities or their support
-   classes**, not AIMI's dosing logic - `AimiModeSettingsActivity`, `AimiProfileAdvisorActivity`,
-   `ContextActivity`, `MealAdvisorActivity`/`MealAdvisorCameraActivity`, plus a handful of the smaller
-   view models/adapters/permission Activities that go with them. The meal-photo vision pipeline and
-   the Auditor's notification/status-badge cluster both moved this same day (see the two addenda right
-   above); their Activities are the only pieces still parked. None of the 17 blocks what already runs.
-   Porting an Activity at all is itself a design decision this codebase has been moving away from
-   (Compose over View) - don't assume "port it as-is" is even the right call before asking, the same
-   way `AuditorReportActivity` turned out not to need porting at all once its real dependency
-   (`showOkDialog`) turned out to be gone rather than just unfound.
-2. **Before moving any of those 17, or anything from a future upstream merge, check for the recurring
+1. **The Profile Advisor port is finished; the next decision is `AimiLoopRuntimeGuard`.** It is the
+   last staged file (16 lines), and the standing decision is to hold it rather than port it
+   speculatively: it wraps `AimiLoopTelemetry.isTickInProgress()`/`activeTickAgeMs()`, which nothing
+   calls yet, and no Overview wiring exists for it. Port it together with whatever feature needs it.
+   **Ask the user before changing that decision.** Once it is resolved one way or the other,
+   `_docs/kmp/staging/` can be retired entirely - worth a final pass to confirm nothing else
+   references it.
+   Habits worth carrying into whatever comes next, each of which caught something real in this
+   series: check that a section's backend still runs at all before porting its UI (6q found four
+   rules no engine had emitted for six months); when the staged source **concatenates** user-visible
+   text there is no `R.string.` to grep for, so expect to add a template (6r, 6s); check that a lot's
+   new tests landed on its new code rather than on the pre-existing code around it (6r shipped 18
+   tests, none on the one new reader); and when a survey turns up a defect in a *producer* rather
+   than in the UI being ported, check whether that same defect is already shipping elsewhere (6s
+   found the basal timestamp bug at three sites, two of them live and feeding the AI coach).
+2. **Before moving `AimiLoopRuntimeGuard`, or anything from a future upstream merge, check for the recurring
    failure shapes from 6g through 6i, in order:** (a) a class implementing a port interface but missing
    `@ContributesBinding(AppScope::class)` - compiles fine alone, fails only at `:app:compileFullDebugKotlin`,
    so that has to be the gate, not `:plugins:aps:compileAndroidMain`; (b) `.titleResId`/`.descriptionResId`/
