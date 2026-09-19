@@ -37,6 +37,19 @@ data class DecisionPredictionAuthority(
     val scenarioUpliftApplied: Boolean,
     val falseMealSuppression: Boolean,
     val reason: String,
+    /**
+     * True when the post-peak tail showed itself on this tick (absorption phase at peak correction,
+     * or the rise breaking). The caller carries this into
+     * [app.aaps.plugins.aps.openAPSAIMI.risk.MealConfirmedEarlyReleaseLatch] so one noisy tick
+     * cannot re-arm the early release while a stack of insulin is still working.
+     */
+    val mcerTailTripped: Boolean = false,
+    /**
+     * True when the early release's gate was open on this tick. The caller carries it into
+     * [MealConfirmedEarlyReleaseLatch] so a tail only counts inside an episode where the release
+     * actually armed — a fall with no earlier arm is not a post-peak tail, there was no peak.
+     */
+    val mcerArmed: Boolean = false,
 )
 
 object DecisionPredictionAuthorityResolver {
@@ -72,6 +85,11 @@ object DecisionPredictionAuthorityResolver {
         targetBgMgdl: Double = 100.0,
         iobU: Double = 0.0,
         maxIobU: Double = 0.0,
+        /**
+         * True while [MealConfirmedEarlyReleaseLatch] holds the early release off after a post-peak
+         * tail. Kept by the caller because this resolver is stateless.
+         */
+        mcerTailLatched: Boolean = false,
         /**
          * True when the person has declared a meal and
          * [app.aaps.core.keys.BooleanKey.OApsAIMIAnticipMealEvidence] is on. A declaration is meal
@@ -173,8 +191,16 @@ object DecisionPredictionAuthorityResolver {
         // consumed, or the rise breaking — so it cannot set up a post-peak hypo. Genuine hypo is
         // sovereign: never engages under false-meal suppression or the post-hypo delivery guard.
         var mcerSuffix = ""
+        var tailTripped = false
+        var mcerArmedThisTick = false
         if (mealConfirmedEarlyReleaseEnabled) {
-            val scenarioBestPathMin = scenarioProjection?.scenarioBest?.pathMinMgdl ?: scenarioBest
+            // The GATE path-min, never the display one. `pathMinMgdl` is the series after the
+            // meal-absorption lift, and that lift ramps every point up from the current glucose, so
+            // the display trough is welded to current glucose for the whole meal — which made the
+            // released floor equal current glucose on 81 % of the ticks of 2026-09-15 and defeated
+            // the "self-limiting" property this release is documented to rely on. The pre-lift value
+            // still contains insulin action, so a stacked IOB pulls the released floor back down.
+            val scenarioBestPathMin = scenarioProjection?.scenarioBest?.gatePathMinMgdl ?: scenarioBest
             val rising = combinedDeltaMgdl5m >= MCER_RISE_DELTA_MIN_MGDL
             val aboveTarget = bgMgdl >= targetBgMgdl + MCER_BG_MARGIN_MGDL
             val strongMealConfirmed =
@@ -189,15 +215,19 @@ object DecisionPredictionAuthorityResolver {
             val tailByPhase = mealAbsorptionOutput?.phase == MealAbsorptionPhase.PEAK_CORRECTION
             val tailByIob = maxIobU > 0.0 && iobHeadroomU <= MCER_IOB_HEADROOM_MIN_U
             val tailByFall = combinedDeltaMgdl5m < MCER_TAIL_FALL_DELTA_MGDL
-            val tailBreaker = tailByPhase || tailByIob || tailByFall
+            // Latched so the breaker cannot be undone by a single tick: the absorption phase leaving
+            // PEAK_CORRECTION for one tick, plus one sensor step up, used to be enough to re-arm.
+            tailTripped = tailByPhase || tailByFall
+            val tailBreaker = tailByPhase || tailByIob || tailByFall || mcerTailLatched
             val sovereignHypoBlock = falseMealSuppression || postHypoDelivery.active
             val armed = rising && aboveTarget && strongMealConfirmed && !tailBreaker && !sovereignHypoBlock
+            mcerArmedThisTick = armed
             if (armed && scenarioBestPathMin.isFinite() && scenarioBestPathMin > predTerminal) {
                 predTerminal = scenarioBestPathMin
                 mcerSuffix = " | MCER=ARMED release->${scenarioBestPathMin.toInt()}"
             } else {
                 val offTag = when {
-                    tailBreaker        -> if (tailByPhase) "tail_phase" else if (tailByIob) "tail_iob" else "tail_fall"
+                    tailBreaker        -> if (tailByPhase) "tail_phase" else if (tailByIob) "tail_iob" else if (tailByFall) "tail_fall" else "tail_latched"
                     sovereignHypoBlock -> "hypo_sovereign"
                     !strongMealConfirmed -> "not_confirmed"
                     !rising            -> "not_rising"
@@ -220,6 +250,8 @@ object DecisionPredictionAuthorityResolver {
                 scenarioUpliftApplied = false,
                 falseMealSuppression = falseMealSuppression,
                 reason = "scenario_consensus lead=${aimiFmt1(scenarioLead)}" + mcerSuffix,
+                mcerTailTripped = tailTripped,
+                mcerArmed = mcerArmedThisTick,
             )
         }
 
@@ -234,6 +266,8 @@ object DecisionPredictionAuthorityResolver {
                 scenarioUpliftApplied = false,
                 falseMealSuppression = true,
                 reason = "non_meal_guard prob=${aimiFmt2(competingNonMealProb)} cause=${causalDominant.name}" + mcerSuffix,
+                mcerTailTripped = tailTripped,
+                mcerArmed = mcerArmedThisTick,
             )
         }
 
@@ -252,6 +286,8 @@ object DecisionPredictionAuthorityResolver {
                     "mealCert=${mealCertainty?.level?.name ?: "NONE"} " +
                     "trunk=${trunkGlobalState?.name ?: "NONE"} " +
                     "lead=${aimiFmt1(scenarioLead)} cause=${causalDominant.name}" + mcerSuffix,
+                    mcerTailTripped = tailTripped,
+                    mcerArmed = mcerArmedThisTick,
             )
         }
 
@@ -267,6 +303,8 @@ object DecisionPredictionAuthorityResolver {
                 scenarioUpliftApplied = uplift > pkpd + 0.5,
                 falseMealSuppression = falseMealSuppression,
                 reason = "trajectory=${trajectoryType.name} lead=${aimiFmt1(scenarioLead)}" + mcerSuffix,
+                mcerTailTripped = tailTripped,
+                mcerArmed = mcerArmedThisTick,
             )
         }
 
@@ -282,6 +320,8 @@ object DecisionPredictionAuthorityResolver {
                 scenarioUpliftApplied = uplift > pkpd + 0.5,
                 falseMealSuppression = falseMealSuppression,
                 reason = "guarded_uplift lead=${aimiFmt1(scenarioLead)} meal=${mealEvidence} traj=${trajectoryType?.name ?: "NONE"}" + mcerSuffix,
+                mcerTailTripped = tailTripped,
+                mcerArmed = mcerArmedThisTick,
             )
         }
 
@@ -295,6 +335,8 @@ object DecisionPredictionAuthorityResolver {
             scenarioUpliftApplied = false,
             falseMealSuppression = falseMealSuppression,
             reason = "pkpd_retained lead=${aimiFmt1(scenarioLead)}" + mcerSuffix,
+            mcerTailTripped = tailTripped,
+            mcerArmed = mcerArmedThisTick,
         )
     }
 
