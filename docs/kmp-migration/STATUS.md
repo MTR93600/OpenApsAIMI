@@ -1,232 +1,155 @@
 # AIMI / OpenApsAIMI KMP status
 
-**Verified:** 2026-09-06  
-**This branch tip (when measured):** `kmp-aimi-migration-study` @ `f237f2d3d0` (2026-09-03)  
-**Reference tip:** `origin/dev_OAPSAIMI` @ `c5db5a0333` (2026-09-06)  
-**Merge-base:** `283a184f60` (2026-08-25, nightscout dependabot)  
-**Ahead / behind reference:** study is **875** unique commits ahead, **2746** behind.
+**Live snapshot:** 2026-09-19 (docs tracker, post-P3.8)  
+**This branch tip:** `kmp-aimi-migration-study` @ `c9ff5e2f0ef785422114aa3bd9cf45159506dd75`  
+**Last clinical lot on study:** P3.8 [#115](https://github.com/MTR93600/OpenApsAIMI/pull/115) @ `f4ed4e401cb88e8a08907c0c3cec4661cc1094a4`  
+**P0 clinical freeze:** `origin/dev_OAPSAIMI` @ `c5db5a033379390bceb7851ff92004b72ef055bf` (2026-09-06)  
+**Current AIMI ref tip:** `origin/dev_OAPSAIMI` @ `c653fc4485dd985088d9a30a42c99af4e3b285e4` (2026-09-19)  
+**Ahead / behind reference (recomputed):** study is **1057** unique commits ahead, **2797** behind.
 
-This file is the live snapshot. Older notes under `_docs/kmp/` are history. They were useful, but several claims are now false. See [DELTA-remaining.md](DELTA-remaining.md) for the next lots.
+Re-verified with `git fetch origin kmp-aimi-migration-study` and `git fetch origin dev_OAPSAIMI`.  
+`c9ff5e2f` **is** `origin/kmp-aimi-migration-study`. `c653fc4485` **is** `origin/dev_OAPSAIMI`.  
+`c5db5a0333` is an ancestor of today’s AIMI tip (P0 freeze; loop re-grid commit, still out of AIMI lots).
 
-**Not re-run in this session:** `:app:assembleFullDebug`, `:plugins:aps:compileKotlinIosArm64`, `:plugins:aps:testAndroidHostTest`. Last written claim of those gates being green is 2026-09-03 in `_docs/kmp/AIMI_PORT_STATE.md`. Treat that as last-known, not re-proven today.
+This file is the live snapshot. Agent roles / triple feu: [`_docs/kmp/AGENT_OPS.md`](../../_docs/kmp/AGENT_OPS.md).  
+Remaining work: [DELTA-remaining.md](DELTA-remaining.md).  
+Older notes under `_docs/kmp/` are history (lots 0–6i diary, per-lot `P*-ANCHOR.md`). Do not use their file counts or “330 tests” as today’s truth.
+
+**Not re-run in this session:** `:app:assembleFullDebug`, `:plugins:aps:compileKotlinIosArm64`, `:plugins:aps:testAndroidHostTest`. Last written claims of those gates being green are lot-PR announcements + 2026-09-03 diary notes. Treat them as last-known, not re-proven today.
 
 ---
 
-## 1. Two-line summary
+## 0. At a glance
 
-The Android AIMI **plugin path is live in the KMP tree**: `OpenAPSAIMIPlugin` sits in `androidMain` and registers itself with `@MetroIntKey(250)`. A large share of AIMI math is already in `commonMain`.
+| Anchor | SHA | What it is |
+|---|---|---|
+| Study tip (docs batch after P3.8) | `c9ff5e2f0ef785422114aa3bd9cf45159506dd75` | `docs(kmp): ancre P3.8 … (#116)` on `kmp-aimi-migration-study` |
+| Study tip after clinical P3.8 | `f4ed4e401cb88e8a08907c0c3cec4661cc1094a4` | merge of [#115](https://github.com/MTR93600/OpenApsAIMI/pull/115) |
+| P0 clinical freeze | `c5db5a033379390bceb7851ff92004b72ef055bf` | AIMI ref when P0.1–P0.8 were planned ([P0.8-ANCHOR](../../_docs/kmp/P0.8-ANCHOR.md)) |
+| AIMI ref tip now | `c653fc4485dd985088d9a30a42c99af4e3b285e4` | `feat(calibration): add new strings…` on `dev_OAPSAIMI` |
 
-That is **not** “AIMI runs on iOS”. The 18 886-line tick is still Android-only. The dedicated `:plugins:aimi-engine` module is still a **Hold stub**. iOS is still a **follower** (`APS = false`). And `dev_OAPSAIMI` moved the dose path again on 2026-09-04…06.
+**P3.1–P3.8 clinical gap is closed** (lots [#101](https://github.com/MTR93600/OpenApsAIMI/pull/101) / [#103](https://github.com/MTR93600/OpenApsAIMI/pull/103) / [#105](https://github.com/MTR93600/OpenApsAIMI/pull/105) / [#107](https://github.com/MTR93600/OpenApsAIMI/pull/107) / [#109](https://github.com/MTR93600/OpenApsAIMI/pull/109) / [#111](https://github.com/MTR93600/OpenApsAIMI/pull/111) / [#113](https://github.com/MTR93600/OpenApsAIMI/pull/113) / [#115](https://github.com/MTR93600/OpenApsAIMI/pull/115), all **MERGED**).  
+That does **not** mean “AIMI runs on iOS”, and it does **not** invent leftover CGM / driver / Trio work. Named leftovers stay in [DELTA](DELTA-remaining.md). No formulas in this file.
 
 ---
 
-## 2. What is already shared (verified)
+## 1. Lot ledger P0 → P3.8 (all MERGED)
 
-### 2.1 Repo-wide KMP spine
+Merge SHA = first-parent commit on `kmp-aimi-migration-study` that landed the lot (`git log --first-parent`, `gh` `mergedAt` set).  
+Ancre column = docs-only proof PR when one merged (later than the clinical PR in several cases).
 
-| Item | Count today | Notes |
-|---|---:|---|
-| Modules with `kotlin("multiplatform")` | **34** | Includes `:plugins:aps`, `:plugins:aimi-*`, `:ios:shell`, core, database, UI, workflow |
-| `commonMain` Kotlin files (whole repo) | **2203** | Up from the Aug 25 study (~1002) |
-| `iosMain` Kotlin files (whole repo) | **75** | None of them are `openAPSAIMI` |
-| `expect` declarations (repo) | **11 files** | UI/platform (`TextRef`, `AapsLock`, map picker, …). **Zero** in AIMI |
-| iOS app | **yes** | `ios/app/AAPSClient.xcodeproj` + `ios/shell` |
-| iOS product kind | **follower** | `IosClientConfig.APS = false`, `PUMPCONTROL = false`, `PUMPDRIVERS = false`, `AAPSCLIENT = true` |
+### P0 — catch `dev_OAPSAIMI` (types + tick hunks + leftovers)
 
-`:ios:shell` `migratedModules` already lists `:plugins:aps` and all five `:plugins:aimi-*` modules.
+| Lot | PR | Merge SHA | Title | Ancre | Status |
+|---|---|---|---|---|---|
+| P0.1 | [#71](https://github.com/MTR93600/OpenApsAIMI/pull/71) | `6f66e63565546a243a569a0b6d205fce39ee334f` | PkPdLearnedState | — | MERGED |
+| P0.2 | [#72](https://github.com/MTR93600/OpenApsAIMI/pull/72) | `a613bb3c27263cda00bc4a7c98c6064065709d96` | DynIsfCache | — | MERGED |
+| P0.3 | [#75](https://github.com/MTR93600/OpenApsAIMI/pull/75) | `4ccd0d73ced489bd5ab35a691d5697a347eae582` | ObservedSensitivityMeter | — | MERGED |
+| P0.4 | [#76](https://github.com/MTR93600/OpenApsAIMI/pull/76) | `2ffbfa32d91dbb4f771f8ccf56b78705e5cf1b52` | CommandedIsf | — | MERGED |
+| P0.5 | [#77](https://github.com/MTR93600/OpenApsAIMI/pull/77) | `b30a62ea76208b239abef032a6c6f9e3e5061bcb` | MaxSmbLadder | — | MERGED |
+| P0.6 | [#78](https://github.com/MTR93600/OpenApsAIMI/pull/78) | `c666ad3b49afd6abaad4ff8875b95547b3c6a6bc` | HarmoniaCounterfactual + InsulinOriginMeter | — | MERGED |
+| P0.7 | [#79](https://github.com/MTR93600/OpenApsAIMI/pull/79) | `91b076ae6d9c5041b787f98054f26217eacc5a7e` | SmbTrainingRowBuffer | — | MERGED |
+| P0.8 | [#80](https://github.com/MTR93600/OpenApsAIMI/pull/80) | `bff270393a228d72f03a43c0ae43734cd06a382e` | clinical tick/plugin hunk sync | [#81](https://github.com/MTR93600/OpenApsAIMI/pull/81) `04aa568a67` | MERGED |
+| P0.9 | [#82](https://github.com/MTR93600/OpenApsAIMI/pull/82) | `172654f2619c0ee131452062ab4c6154e472233b` | Autodrive observation leftovers | docs #83 **closed superseded** | MERGED |
+| P0.10 | [#84](https://github.com/MTR93600/OpenApsAIMI/pull/84) | `3201700fe8fc9b7a2e7d54db813ecc86b9dfbb68` | Autodrive GateKind + meal-first label | docs #85 **closed superseded** | MERGED |
+| P0.11 | [#86](https://github.com/MTR93600/OpenApsAIMI/pull/86) | `f9c086992e62bfa18582149b64a02b1534600f92` | IAM barrier floor as sensitivity | docs #87 **closed superseded** | MERGED |
+| P0.12 | [#88](https://github.com/MTR93600/OpenApsAIMI/pull/88) | `70823d0d327bf778c872e7b80a5ea6843184b645` | Barrier replay harness | docs #89 **closed superseded** | MERGED |
 
-### 2.2 AIMI inside `:plugins:aps`
+### P1 — clinical follow-ons (not the old “move DB2” plan)
 
-Package: `app.aaps.plugins.aps.openAPSAIMI`.
+| Lot | PR | Merge SHA | Title | Ancre | Status |
+|---|---|---|---|---|---|
+| P1.1 | [#90](https://github.com/MTR93600/OpenApsAIMI/pull/90) | `55f832d2eb3eddc132fd91b8c9a11f8b4cb2ce6f` | SMB train on smbGiven | [#91](https://github.com/MTR93600/OpenApsAIMI/pull/91) `8b36427e15` | MERGED |
+| P1.2 | [#92](https://github.com/MTR93600/OpenApsAIMI/pull/92) | `181ba03b3f897a7350073e50c207aa144e447465` | DescentRedoseGuard | [#93](https://github.com/MTR93600/OpenApsAIMI/pull/93) `a722f19b63` | MERGED |
 
-| Source set | `.kt` files | Code lines | Role |
-|---|---:|---:|---|
-| `commonMain` | **339** | **47 554** | Math, models, safety, recursive belief, most physio/advisor types |
-| `androidMain` | **109** | **50 515** | Tick, plugin, Health Connect, TFLite/ONNX, trainers, Compose screens, SOS |
-| `iosMain` | **0** | 0 | No AIMI actuals. Only `loop/IosLoopNotifier.kt` exists in this module |
-| `androidHostTest` (AIMI package) | **11** | — | Small math tests only |
-| `commonTest` (AIMI) | **0** | — | The two `commonTest` files in `:plugins:aps` are loop/TDD, not AIMI |
+### P2 — product / tests
 
-`commonMain` AIMI has **no** `android.*` / `java.io` / `org.json` imports. JSON construction uses the local `AimiJson` / `JsonObj` shim over kotlinx serialization.
+| Lot | PR | Merge SHA | Title | Ancre | Status |
+|---|---|---|---|---|---|
+| P2.1 | [#94](https://github.com/MTR93600/OpenApsAIMI/pull/94) | `3029f0779acef5283ec39db504ceb6532b07c197` | AIMI Flutter viewer (`tools/aimi_viewer`) | [#95](https://github.com/MTR93600/OpenApsAIMI/pull/95) `7f8a8bdb63` | MERGED |
+| P2.2 | [#96](https://github.com/MTR93600/OpenApsAIMI/pull/96) | `c19eccfb14c691e76c6f2de2162938b0837800a3` | Advisor support ZIP + active profile | [#97](https://github.com/MTR93600/OpenApsAIMI/pull/97) `157537343c` | MERGED |
+| P2.5.1 | [#98](https://github.com/MTR93600/OpenApsAIMI/pull/98) | `90a95b7b3ba79d3444a6df4922807af479ee785b` | AIMI pure tests package 1 (≤15) | [#99](https://github.com/MTR93600/OpenApsAIMI/pull/99) `40d13e6359` | MERGED |
 
-Largest first-level `commonMain` packages (file count):
+### P3 — clinical port series (P3.1–P3.8 gap closed)
 
-`physio` 51 · `advisor` 34 · `pkpd` 29 · `safety` 24 · `recursive` 22 · root 20 · `patient` 19 · `wcycle` 10 · `scenario` / `basal` / `autodrive` 9 each.
+| Lot | PR | Merge SHA | Title | Ancre | Status |
+|---|---|---|---|---|---|
+| P3.1 | [#101](https://github.com/MTR93600/OpenApsAIMI/pull/101) | `fd41bdc4d5ca2ffa57c7a59814bdd773a5de9fee` | HeartRateTrendIsf + COB HR rise-suspend | [#102](https://github.com/MTR93600/OpenApsAIMI/pull/102) `cb1da2246e` | MERGED |
+| P3.2 | [#103](https://github.com/MTR93600/OpenApsAIMI/pull/103) | `54e50c28d18b98a69a03060bd27e3fccfc4ddddf` | StressIsfFloor + HeartRateCarryForward | [#104](https://github.com/MTR93600/OpenApsAIMI/pull/104) `c8a2a96d54` | MERGED |
+| P3.3 | [#105](https://github.com/MTR93600/OpenApsAIMI/pull/105) | `28010b205838062b2d73a4b38f0e6f1a3728fcb1` | RiseCeilingGuard replaces DescentRedose | [#106](https://github.com/MTR93600/OpenApsAIMI/pull/106) `b5656c86f0` | MERGED |
+| P3.4 | [#107](https://github.com/MTR93600/OpenApsAIMI/pull/107) | `6b5aa275f719108a7f6ce5976f0e960d3c86302e` | AnticipationBasalFloor + FCL meal basal | [#108](https://github.com/MTR93600/OpenApsAIMI/pull/108) `866934fd33` | MERGED |
+| P3.5 | [#109](https://github.com/MTR93600/OpenApsAIMI/pull/109) | `a5067a028bd3719a9d4e4a4665c7ef253bf94656` | MealConfirmedEarlyReleaseLatch (MCER) | [#110](https://github.com/MTR93600/OpenApsAIMI/pull/110) `c58c0c27ef` | MERGED |
+| P3.6 | [#111](https://github.com/MTR93600/OpenApsAIMI/pull/111) | `dde9b5e27ad794e20e166116336ad6313baaa4b1` | TpoRevertPolicy | [#112](https://github.com/MTR93600/OpenApsAIMI/pull/112) `80bd3f01cf` | MERGED |
+| P3.7 | [#113](https://github.com/MTR93600/OpenApsAIMI/pull/113) | `6b5c49cb76b31f2930222ab041308d465a88ba85` | STALE_TRAINING_MS | [#114](https://github.com/MTR93600/OpenApsAIMI/pull/114) `7cc638d325` | MERGED |
+| P3.8 | [#115](https://github.com/MTR93600/OpenApsAIMI/pull/115) | `f4ed4e401cb88e8a08907c0c3cec4661cc1094a4` | calibration health notifications | [#116](https://github.com/MTR93600/OpenApsAIMI/pull/116) `c9ff5e2f0e` | MERGED |
 
-WCycle **is still in live `commonMain`** (10 files). Commit `a4a303eac6` only deleted **staging copies**. The commit subject is misleading.
+**Do not reuse P3.x numbers** for a new iOS-engine series. The 2026-09-06 DELTA used P3.1–P3.5 for Native extract; that numbering was consumed by the clinical port lots above.
 
-### 2.3 Dedicated AIMI KMP modules (scaffolding only)
+---
 
-These compile for JVM + `iosArm64` + `iosSimulatorArm64` and are linked by `ios/shell`. **`:plugins:aps` does not depend on them.** Nothing in the running plugin calls them.
+## 2. Two-line summary (still true)
 
-| Module | What is actually there |
+The Android AIMI **plugin path is live in the KMP tree**. A large share of AIMI math is in `commonMain`.  
+That is **not** “AIMI runs on iOS”. The tick is still Android-only. `:plugins:aimi-engine` is still a **Hold stub**. iOS is still a **follower** (`APS = false`). P3.1–P3.8 closed the **named clinical port gap**; they did not flip the iOS product.
+
+---
+
+## 3. Corrections to older docs (2026-09-19)
+
+| Old claim | Reality 2026-09-19 |
 |---|---|
-| `:plugins:aimi-contracts` | Envelope DTOs (`AimiInputSnapshot`, `AimiTickResult`, …) + `hello()` |
-| `:plugins:aimi-engine` | `AimiEngine.evaluate(...)` implemented only by `HoldAimiEngine` → always `Hold("ENGINE_NOT_EXTRACTED")` |
-| `:plugins:aimi-learning` | `hello()` |
-| `:plugins:aimi-io` | `hello()` |
+| STATUS / DELTA tip `f237f2d3d0` / ref `c5db5a0333` as “today” (2026-09-06) | Study tip is `c9ff5e2f`. Freeze `c5db5a0333` is historical P0. Current AIMI tip is `c653fc4485`. |
+| DELTA P0.1–P0.8 / P3.1–P3.5 still “next lots” | Those **IDs landed** (P0 as planned; P3.x as the later clinical series). See ledger. |
+| “DetermineBasalAIMI2 is 2 files from `commonMain`” (`AIMI_PORT_STATE` §1) | The tick **compiles in `androidMain`**. Not an iOS loop. |
+| Freeze tag `aimi-baseline-2026-08-26` = `1ae418e106` | Tag **not** today’s reference. Use the SHA table in §0. |
+| Docs ancre PRs #73 / #74 / #83 / #85 / #87 / #89 are open / authoritative | **Closed unmerged** (superseded). Use this file + `P*-ANCHOR.md` that did merge. |
+
+---
+
+## 4. Historical measurement (2026-09-06) — not re-counted
+
+The sections below were measured on 2026-09-06 against study `f237f2d3d0` and ref `c5db5a0333`.  
+**File counts, line counts, and “11 AIMI tests” are stale.** P0–P3.8 have landed since. Kept as the last whole-tree census, not as today’s inventory.
+
+### 4.1 Repo-wide KMP spine (2026-09-06)
+
+| Item | Count then | Notes |
+|---|---:|---|
+| Modules with `kotlin("multiplatform")` | **34** | Includes `:plugins:aps`, `:plugins:aimi-*`, `:ios:shell` |
+| `commonMain` Kotlin files (whole repo) | **2203** | |
+| `iosMain` Kotlin files (whole repo) | **75** | None of them are `openAPSAIMI` |
+| iOS product kind | **follower** | `IosClientConfig.APS = false` |
+
+### 4.2 Dedicated AIMI KMP modules (still scaffolding unless a later lot says otherwise)
+
+| Module | What was there on 2026-09-06 |
+|---|---|
+| `:plugins:aimi-contracts` | Envelope DTOs + `hello()` |
+| `:plugins:aimi-engine` | `HoldAimiEngine` → always `Hold("ENGINE_NOT_EXTRACTED")` |
+| `:plugins:aimi-learning` / `:plugins:aimi-io` | `hello()` |
 | `:plugins:aimi-testkit` | empty snapshot helpers + a hello test |
 
-So: **module graph for an extracted engine exists. The engine does not.**
+**Module graph for an extracted engine exists. The engine does not.** No later P0–P3.8 lot claimed otherwise.
 
-### 2.4 Plugin registration and ports
+### 4.3 CGM plugins AIMI cares about (2026-09-06 — still the product shape)
 
-- `OpenAPSAIMIPlugin` is in `androidMain`, Metro `@MetroIntKey(250)`, `@Inject` constructor.
-- `ApsPluginRegistrations` still lists only AMA / SMB / AutoISF (210–230). AIMI is **not** in that object. That is fine: AIMI self-registers.
-- Eight collaborator ports in `ports/AimiCollaboratorPorts.kt` **do have Android implementations** (`AuditorOrchestrator`, `TpoOrchestrator`, `AimiSmbComparator`, `AndroidAimiEmergencySos`, `ContextLLMClient`, `HealthContextRepository`, `AIMIPhysioDataRepositoryMTR`, `AndroidAimiBehaviorProfileSource`). The file header that still says “no implementation yet” is **stale**.
-- `ports/Ports.kt` (`Clock`, `PkpdPort`, `MlUamPort`, actuators) is a **planned** extract surface. The live tick does not call it.
-- Storage seam exists: `AimiStorage` (common) / `AndroidAimiStorage` + `AimiStorageHelper` (android).
-- UAM model is still `app/src/main/assets/modelUAM.tflite`. `AimiModelHandler` is androidMain + TensorFlow Lite.
-
-### 2.5 CGM plugins that AIMI cares about
-
-| Module | KMP? | Files | iOS |
-|---|---|---:|---|
-| `:plugins:source` | **yes** | Dexcom ONE+ / Libre 3 **Activities stay androidMain** (29 android files vs 2 common countdown composables) | no drivers |
-| `:plugins:dexcom_oneplus` | **no** (`com.android.library`) | 72 kt | no |
-| `:plugins:libre3` | **no** | 107 kt | no |
-| `:plugins:libkeks` | **no** | 24 | no |
-
-`:plugins:source` still has Metro `includeDagger()` for **7** `javax.inject` leftovers (PORT_STATE said 14; that number is now wrong).
-
----
-
-## 3. What is partial
-
-| Area | Shared today | Still Android | iOS |
-|---|---|---|---|
-| Dose tick `DetermineBasalaimiSMB2` | many callees in commonMain | **the 18 886-line class itself** (`Context`, `File`, `java.time`, `Atomic*`) | not compiled |
-| Plugin shell | some prefs/keys | `OpenAPSAIMIPlugin` 2 337 lines | not registered; `APS=false` |
-| UAM / TFLite | schema + `aimiNeuralNetwork` math in commonMain | `AimiModelHandler`, model asset, LiteRT | no adapter |
-| On-device trainers | some math | WorkManager workers, file stores | no |
-| Health / steps | snapshot types + ports | Health Connect repo/workers | no HealthKit |
-| Auditor / TPO | models, some rules | orchestrators, notifications, LLM | chip port is common; impl android |
-| Meal vision | models / prompt parse in commonMain | HTTP providers, Activities parked | no |
-| Compose Control Center / PKPD / Hormonitor | some types | screens in androidMain | no |
-| Extracted `evaluate()` | interface + Hold stub | unused | unused |
-
-**A `commonMain` compile of `:plugins:aps` is not “AIMI runs on Native”.** iOS compiles the shared callees and `IosLoopNotifier`. It does not compile the tick.
-
----
-
-## 4. What remains Android-only or parked
-
-### 4.1 Live androidMain (must stay or be seamed)
-
-The tick and the plugin. Health Connect. TFLite / ONNX. Autodrive / basal trainers and workers. SOS SMS. Compose screens. File-backed history readers. Phone step services.
-
-### 4.2 Staging leftovers (17 Kotlin files)
-
-`_docs/kmp/staging/openAPSAIMI-android-wip/` is **not** on any source set. Remaining files are legacy View Activities and a few support types:
-
-- `AimiModeSettingsActivity`, `AimiProfileAdvisorActivity`
-- `MealAdvisorActivity`, `MealAdvisorCameraActivity`
-- `ContextActivity` + ViewModel / adapter / gauge binder
-- Health Connect / SOS permission Activities
-- `AimiSmbSimulator`, `AimiDiagnosticsManager`, `AimiLoopRuntimeGuard`
-- `AIMICompositeStepsProviderMTR`, `AIMIHealthConnectStepsProviderMTR`
-- `StateTransitionManager`, `AimiMemberInjectors`
-
-These do **not** block the plugin from compiling. Porting a View Activity as-is is often the wrong call (see Auditor trampoline → `EventShowDialog` + Overview chip).
-
----
-
-## 5. Diff vs `dev_OAPSAIMI` (plugin area)
-
-Reference still uses `plugins/aps/src/main/...` (plain Android). Study split that tree into `commonMain` / `androidMain`.
-
-By **basename**:
-
-| | count |
-|---|---:|
-| Names on both sides | **421** |
-| Only on reference | **28** |
-| Only on study | **37** (KMP seams, ports, Android adapters, extra host tests) |
-
-### 5.1 Only on reference — new clinical / extract files (high priority)
-
-Added on reference **after or around** the study tip. Study’s `DetermineBasalAIMI2.kt` does **not** mention these names (except the inline max-SMB ladder tags):
-
-| File | First landed on reference | Why it matters |
+| Module | KMP? | iOS |
 |---|---|---|
-| `ISF/CommandedIsf.kt` | 2026-09-06 `db21308e6c` | Read each instrument before the brake it measures |
-| `ISF/ObservedSensitivityMeter.kt` | 2026-09-04 `eb84e078f5` | Passive observed sensitivity |
-| `ISF/DynIsfCache.kt` | 2026-09-03 `dd9979ca4d` | Fresh ISF cache (no `class DynIsfCache` on study) |
-| `patient/HarmoniaCounterfactual.kt` | 2026-09-05 `da9bc789ce` | Cost of refusing Harmonia |
-| `quality/InsulinOriginMeter.kt` | 2026-09-05 `da9bc789ce` | Who actually decided the insulin |
-| `smb/MaxSmbLadder.kt` | 2026-09-05 `f03fa321a6` | Extract of the maxSMB ladder; **logic still inline** in study DB2 (`lastMaxSmbLadderBranch`) |
-| `ml/SmbTrainingRowBuffer.kt` | 2026-09-05 `7f8aa0109c` | SMB training rows / outcomes |
-| `pkpd/PkPdLearnedState.kt` | 2026-09-01 `0761e9c00a` | Shared learned DIA/peak between the two `PkPdIntegration` copies |
+| `:plugins:source` | yes (Activities stay androidMain) | no drivers |
+| `:plugins:dexcom_oneplus` | **no** (`com.android.library`) | no |
+| `:plugins:libre3` | **no** | no |
+| `:plugins:libkeks` | **no** | no |
 
-`MaxSmbLadder` may be an extract of behaviour study already has. The others look like **new reference behaviour** that study does not have under those names.
+See [DELTA](DELTA-remaining.md) — these are **post-AIMI** work, not a P3.9 formula lot.
 
-### 5.2 Only on reference — Activities / DI still parked on study
-
-The 17 staging files above, plus `AuditorReportActivity` / `AuditorStatusIndicator` (already replaced on study by the Overview chip), `AIMIStepsProviderModuleMTR` (Hilt module; study is Metro), and `AIMI_ORCHESTRATION_ROADMAP.md`.
-
-### 5.3 Tick / plugin size drift
-
-| File | Study | Reference | Δ (ref − study) |
-|---|---:|---:|---:|
-| `DetermineBasalAIMI2.kt` | 18 886 | 19 312 | **+426** |
-| `OpenAPSAIMIPlugin.kt` | 2 337 | 2 333 | −4 |
-
-Sample of overlapping math files (`SmbQuantizer`, `SafetyNet`, `RecursiveBeliefEngine`) is 0-line drift. `AdaptivePkPdEstimator` is +2 on reference. **This is not a full numeric-literal audit.** Overlapping files were not re-diffed one by one today.
-
-Recent reference AIMI commits **after** study tip `f237f2d3d0` (2026-09-03 23:39):
-
-1. `eb84e078f5` observed sensitivity  
-2. `81e370bfbf` late-fat damping floor  
-3. `f03fa321a6` confirmed-rise SMB ceiling  
-4. `da9bc789ce` decision owner + Harmonia counterfactual  
-5. `7f8aa0109c` SMB training row buffer  
-6. `db21308e6c` instrument-before-brake  
-7. `02c90656b1` training corpus / running profile in support package  
-8. later same day: `c5db5a0333` loop glucose re-grid (not only AIMI)
-
-### 5.4 Tests
-
-| | Reference `src/test/.../openAPSAIMI` | Study AIMI `androidHostTest` |
-|---|---:|---:|
-| Files | **259** | **11** |
-
-Almost the whole AIMI test corpus is **not** on the KMP study branch. `:plugins:aps` has 44 host-test files in total (SMB/AMA/AutoISF + 11 AIMI). PORT_STATE’s “330 tests” was the **whole module**, last claimed 2026-09-03, **not re-counted as methods today**.
-
----
-
-## 6. Corrections to older docs
-
-| Old claim | Reality 2026-09-06 |
-|---|---|
-| “DetermineBasalAIMI2 is 2 files from `commonMain`” (`AIMI_PORT_STATE` §1) | The tick **compiles in `androidMain`**. It is not in `commonMain`. Remaining work is seams + JSON already done, not “two files”. |
-| “Plugin is not registered” (`AIMI_PORT_VERIFICATION`) | **False.** `@MetroIntKey(250)` in `androidMain`. |
-| “AIMI commonMain 356 / androidMain 100” (PORT_STATE 6h) | **339 / 109** for the `openAPSAIMI` package. Counting method in the old note may have included extras. |
-| “`aimi-engine` is the place the tick lives” (blueprint / backlog M2) | Modules exist. **Evaluate is Hold.** Live tick is still `:plugins:aps`. |
-| “Room / Dagger untouched” (Aug 25 study) | Already retired. Database modules are KMP. Metro is the DI. |
-| “No iOS app” (Aug 25 study) | Retired. Follower app exists. Master on iPhone does not. |
-| Freeze tag `aimi-baseline-2026-08-26` = `1ae418e106` | Tag **not present** in this clone. Do not treat that SHA as today’s reference. Today’s reference tip is `c5db5a0333`. |
-| WCycle removed | Staging copies removed. **Live WCycle sources remain.** |
-
----
-
-## 7. Uncertainties (do not guess)
-
-1. **Build gates were not re-run today.** Last written green assemble / iOS klib / 330 host tests: 2026-09-03.
-2. **Numeric fidelity** of the 421 overlapping files vs current `dev_OAPSAIMI` was not re-diffed. Older lots used a literal-multiset check; that check is stale against this week’s reference.
-3. **`MaxSmbLadder`:** extract vs behaviour change. Study still has ladder tags inside DB2. Compare before porting, do not paste blindly.
-4. **`PkPdLearnedState`:** reference added it so two `PkPdIntegration` copies share learned DIA/peak. Study has one `PkPdIntegration.kt` in androidMain. Whether the two-copy bug exists here was **not** proven.
-5. **`HarmoniaDecisionEngine`:** no file of that name on either tip. Tests on reference use that name; implementation is `HarmoniaHarmonizer` / types in `HarmoniaDecision.kt` / logic inside DB2.
-6. **Clinical behaviour:** this study branch and `dev_OAPSAIMI` are **not** the same AIMI. Do not ship the KMP plugin as “current AIMI” until the §5.1 files and the 426-line tick delta are reconciled — or an explicit decision says the freeze stays 2026-09-03.
-
----
-
-## 8. What “done” would mean (unchanged goal)
+### 4.4 What “done” still means
 
 Android + iOS from **one** `commonMain` engine, no clinical rewrite.
 
 Today:
 
-- Android plugin path: **reachable in a KMP app graph** (last-known assemble green).
-- Shared math: **large, real, not extracted**.
-- iOS: **shared spine + follower UI**. No AIMI tick. No pump. No HealthKit. No TFLite.
+- Android plugin path: reachable in a KMP app graph (last-known assemble green).
+- Shared math: large, real, not extracted into `aimi-engine`.
+- Clinical named gap P3.1–P3.8: **ported and anchored**.
+- iOS: shared spine + follower UI. No AIMI tick. No pump. No HealthKit. No TFLite adapter claimed here.
 - Extracted engine API: **stub**.

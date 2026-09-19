@@ -13,9 +13,10 @@ Branch: `kmp-aimi-migration-study`, cut from `kmp` at `4957c26eb8`.
 Written 2026-08-25. All numbers were measured on this machine, on the branches named.
 Reference document under review: `_docs/KMP_IOS_FEASIBILITY.md` (Milos, 2026-08-05, 2115 lines).
 
-> **Mise a jour 2026-09-06.** L'etat verifie et les lots restants sont dans
+> **Mise a jour 2026-09-19.** L'etat verifie, le ledger P0→P3.8 et les lots restants sont dans
 > [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md) et
 > [`docs/kmp-migration/DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md).
+> Agents / triple feu : [`AGENT_OPS.md`](AGENT_OPS.md).
 > [AIMI_PORT_STATE.md](AIMI_PORT_STATE.md) reste le journal des lots 0–6i, pas la source de verite.
 >
 > Sur le fond, la banniere ci-dessus a raison et ce rapport avait tort sur un point qui compte :

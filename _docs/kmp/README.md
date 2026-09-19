@@ -1,6 +1,11 @@
 # Dossier de décision — migration AIMI vers KMP/iOS
 
-> **Référence AIMI gelée :** tag `aimi-baseline-2026-08-26` = `dev_OAPSAIMI` @ `1ae418e106`  
+> **Suivi vivant (2026-09-19, post-P3.8) :**  
+> [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md) — tip study `c9ff5e2f` · freeze P0 `c5db5a0333` · tip AIMI `c653fc4485` · ledger P0→P3.8  
+> [`docs/kmp-migration/DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md) — backlog restant (ONE+/Libre3, pompes iOS via Trio, choix produit)  
+> [`AGENT_OPS.md`](AGENT_OPS.md) — orchestrateur + spécialistes + triple feu
+>
+> **Référence AIMI gelée (audit août) :** tag `aimi-baseline-2026-08-26` = `dev_OAPSAIMI` @ `1ae418e106` — **n’est plus** le tip ni le freeze P0.  
 > **Audit initial AIMI :** `06e7bc5021ca8fdd976505d1fefb03cc88681c19` (25 août 2026)  
 > **Référence KMP (audit) :** `kmp` @ `4957c26eb85a71103e649498e7e991cb473e3098`  
 > **Date d'audit :** 2026-08-25 · **plan d'exécution :** 2026-08-26
@@ -69,6 +74,7 @@ blueprint et ces annexes spécialisées font autorité sur `AIMI_KMP_MIGRATION_S
 
 ## Ordre de lecture recommandé
 
+0. [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md), [`docs/kmp-migration/DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md), [`AGENT_OPS.md`](AGENT_OPS.md) — tip, ledger, backlog, agents ;
 1. [`AIMI_KMP_EXECUTION_PLAN.md`](AIMI_KMP_EXECUTION_PLAN.md) et [`adr-g0-defaults.md`](adr-g0-defaults.md) ;
 2. blueprint ;
 3. annexe 8 pour comprendre la frontière et le replay ;

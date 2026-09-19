@@ -1,8 +1,10 @@
 # AIMI port - state of play, and where to start next
 
-> **2026-09-06 — superseded as the live snapshot.** Re-verified status and the remaining
-> lots are in [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md) and
-> [`docs/kmp-migration/DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md).
+> **2026-09-19 — superseded as the live snapshot (post-P3.8).**
+> Read first: [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md)
+> (study tip `c9ff5e2f` + P0 freeze `c5db5a0333` + AIMI ref tip `c653fc4485` + lot ledger P0→P3.8).
+> Remaining work: [`docs/kmp-migration/DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md).
+> Agent team / triple feu: [`AGENT_OPS.md`](AGENT_OPS.md).
 > This file is still the best diary of lots 0–6i (how the tick and plugin landed). Do not
 > use its file counts, “2 files from commonMain”, or “330 tests” as today’s truth.
 

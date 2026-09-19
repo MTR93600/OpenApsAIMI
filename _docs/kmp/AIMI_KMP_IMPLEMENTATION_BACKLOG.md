@@ -1,9 +1,11 @@
 # AIMI KMP/iOS — backlog d'implémentation ordonné par gates
 
-> **2026-09-06 — ce fichier reste le backlog long (M0–M12).**  
-> Pour les **prochains lots concrets**, utiliser
+> **2026-09-19 — ce fichier reste le backlog long (M0–M12).**  
+> Tip / ledger P0→P3.8 / agents :
+> [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md),
+> [`AGENT_OPS.md`](AGENT_OPS.md).  
+> Pour les **prochains lots concrets** (post-P3.8 : ONE+/Libre3, Trio, choix produit),
 > [`docs/kmp-migration/DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md).
-> L'état vérifié est dans [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md).
 > Plusieurs gates M2 (`aimi-engine` réel, replay) ne sont **pas** Done : les modules existent,
 > `evaluate()` est encore un Hold.
 

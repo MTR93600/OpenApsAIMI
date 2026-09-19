@@ -1,133 +1,115 @@
-# AIMI KMP — remaining delta (prioritized lots)
+# AIMI KMP — remaining delta (post-P3.8)
 
-**Verified:** 2026-09-06  
-**Base:** `kmp-aimi-migration-study` @ `f237f2d3d0`  
-**Reference to catch:** `origin/dev_OAPSAIMI` @ `c5db5a0333`  
-**Companion:** [STATUS.md](STATUS.md)
+**Verified:** 2026-09-19  
+**Study tip:** `kmp-aimi-migration-study` @ `c9ff5e2f0ef785422114aa3bd9cf45159506dd75`  
+**Last clinical lot:** P3.8 [#115](https://github.com/MTR93600/OpenApsAIMI/pull/115) @ `f4ed4e401c`  
+**P0 freeze:** `c5db5a033379390bceb7851ff92004b72ef055bf`  
+**AIMI ref tip now:** `origin/dev_OAPSAIMI` @ `c653fc4485dd985088d9a30a42c99af4e3b285e4`  
+**Companion:** [STATUS.md](STATUS.md) · [`AGENT_OPS.md`](../../_docs/kmp/AGENT_OPS.md)
 
-Rule: one lot is small enough to compile and (where it touches numbers) to check against a baseline. No clinical “improvements”. Medical closed-loop: move or copy behaviour, do not invent it.
+Rule: one lot is small enough to compile and (where it touches numbers) to check against a baseline. **No clinical “improvements”.** Medical closed-loop: move or copy behaviour, do not invent it. Do not invent formulas in this file.
 
 Do **not** start by copying `DetermineBasalAIMI2` into `:plugins:aimi-engine`. The live path is still `:plugins:aps`. The Hold stub stays Hold until a later extract lot has a real `evaluate()` with replay.
 
----
-
-## How to read the priorities
-
-| Priority | Meaning |
-|---|---|
-| **P0** | Reference AIMI moved. Study does not have it. Dose / safety risk if we keep coding as if the trees match. |
-| **P1** | Unblocks a later move (tick toward commonMain, or honest tests). |
-| **P2** | Product / Android-only surface. Does not block iOS engine extract. |
-| **P3** | iOS / Native engine. Only after P0–P1, or in parallel on ports that do not touch the tick. |
-| **P4** | Later (CGM drivers, iOS master app, full product parity). |
+**P0.1 → P3.8 are MERGED.** See the [STATUS ledger](STATUS.md#1-lot-ledger-p0--p38-all-merged). Do not reopen those IDs. Do not reuse **P3.x** for a new iOS-engine series.
 
 ---
 
-## P0 — catch `dev_OAPSAIMI` (clinical delta)
+## Closed on this tip (do not restart)
 
-These landed on the reference between 2026-09-01 and 2026-09-06. They are **not** on this study tip (except the inline max-SMB ladder).
-
-Do them as **separate lots**. Each lot: copy from `origin/dev_OAPSAIMI`, adapt only KMP primitives already used in `:plugins:aps` (`aimiWallClockMs`, `AapsLock`, kotlinx time, Metro not Hilt/javax if the file has `@Inject`), compile `:plugins:aps`, then `:app:assembleFullDebug`. If the file has tests on reference, bring the tests in the same lot.
-
-| Lot | Files on reference | Gate | Notes |
-|---|---|---|---|
-| **P0.1** | `pkpd/PkPdLearnedState.kt` + its call sites in both `PkPdIntegration` copies | `:plugins:aps:compileAndroidMain` + existing PKPD tests if any can be moved | Shared learned DIA/peak. Added 2026-09-01. Confirm first whether study still has two consumers. If only one copy exists here, **say so and stop** — do not invent a second copy. |
-| **P0.2** | `ISF/DynIsfCache.kt` + `DynIsfCacheTest` | compile + that test | Study plugin only has a “cache empty” **warning**. No cache type. |
-| **P0.3** | `ISF/ObservedSensitivityMeter.kt` + test | compile + test | New 2026-09-04. Wire only the same call sites as reference. |
-| **P0.4** | `ISF/CommandedIsf.kt` + `CommandedIsfOrderTest` | compile + test | New 2026-09-06. “Read the instrument before the brake.” |
-| **P0.5** | `smb/MaxSmbLadder.kt` + the two ladder tests | compile + tests + **diff against study DB2** | Likely an extract. If study’s inline ladder already matches, extract only. If reference changed the rise rule (`f03fa321a6`), take that rule, do not mix. |
-| **P0.6** | `patient/HarmoniaCounterfactual.kt` + `quality/InsulinOriginMeter.kt` + their tests | compile + tests | Pair from `da9bc789ce`. |
-| **P0.7** | `ml/SmbTrainingRowBuffer.kt` + test | compile + test | New 2026-09-05. Android file store can stay androidMain; buffer math can be commonMain if it is pure. |
-| **P0.8** | Tick / plugin call-site sync | line-count + reason-tag review of `DetermineBasalAIMI2` (18 886 vs 19 312) and the 7 later reference commits | **Do not replace the whole file.** Study already has KMP seams (ports, `AimiJson`, TextRef). Cherry-pick the clinical hunks from those 7 commits onto the study file. |
-
-**P0.8 is the hard lot.** Treat P0.1–P0.7 as the types the hunks will need.
-
-Also bring, with P0.8 if they are in those commits: late-fat damping floor (`81e370bfbf`) and “training corpus in the support package” (`02c90656b1`).
-
-**Out of P0:** glucose re-grid `c5db5a0333` is a **loop** change, not only AIMI. Assign it only if the orchestrator wants loop parity too.
-
----
-
-## P1 — make the Android tick honest and movable
-
-| Lot | Work | Gate | Why this size |
-|---|---|---|---|
-| **P1.1** | Fix the stale header in `ports/AimiCollaboratorPorts.kt` (“no implementation yet”) | docs / comment only | Stops the next agent from re-doing finished ports. |
-| **P1.2** | Inventory remaining `android.*` / `java.time` / `File` / `Atomic*` in `DetermineBasalAIMI2` (16 such imports today) | a checklist in this folder or a short appendix | Needed before any “move DB2 to commonMain” claim. |
-| **P1.3** | Replace `java.time` in DB2 with the same `kotlinx.datetime` aliases already used by collaborators | compile | Three sites were already known (PORT_STATE 6d). Re-measure; do not assume the old list. |
-| **P1.4** | Rewire remaining `File` / `Environment` uses onto `AimiStorage` | compile | `AimiStorageHelper` stays androidMain. |
-| **P1.5** | Drop or wrap `Context` in DB2 | compile | Same pattern as `AimiEmergencySos`: Context stays in the Android impl. |
-| **P1.6** | Port the **pure** AIMI tests from reference whose subject is already in `commonMain` (safety, smb math, recursive, trajectory, …) | `testAndroidHostTest` for each batch of ≤15 files | 259 → 11 is the biggest honesty gap. Do **not** try to land all 259 in one lot. Start with files whose production twin is already commonMain and has no Android import. |
-| **P1.7** | After P0 + P1.3–P1.5: try `DetermineBasalAIMI2` in `commonMain` again | `:plugins:aps:compileKotlinIosArm64` **and** `:app:assembleFullDebug` | Last attempts failed on JSON (now done) then on collaborators (now ported). The remaining wall is platform types in the tick itself. If it fails, paste the compiler list into STATUS; do not guess a 20-file move. |
-
-`:app:assembleFullDebug` remains the Metro-binding gate. `:plugins:aps:compileAndroidMain` alone can hide a missing `@ContributesBinding`.
-
----
-
-## P2 — leftover product surface (does not block the engine)
-
-| Lot | Work | Decision required |
+| Series | What landed | PRs |
 |---|---|---|
-| **P2.1** | 17 staging View Activities | Ask before port-as-View. Prefer Compose or drop, like `AuditorReportActivity`. |
-| **P2.2** | Meal Advisor camera / Context Activity | Needs a host screen in current `:ui` navigation. |
-| **P2.3** | `AimiLoopRuntimeGuard` / `AimiSmbSimulator` / diagnostics | Confirm they are still called on reference. If dead, do not port. |
-| **P2.4** | `plugins/source` : remove `includeDagger()` by converting **7** `javax.inject` Dexcom/Libre files to Metro | `:app:assembleFullDebug` | Standing merge conflict with upstream. |
+| P0.1–P0.8 | Types + clinical tick/plugin hunks vs freeze `c5db5a0333` | #71–#80 |
+| P0.9–P0.12 | Autodrive leftovers, GateKind, IAM floor, barrier replay | #82 #84 #86 #88 |
+| P1.1–P1.2 | smbGiven training; DescentRedoseGuard | #90 #92 |
+| P2.1 / P2.2 / P2.5.1 | Flutter viewer; support ZIP; first pure-test package | #94 #96 #98 |
+| P3.1–P3.8 | Clinical port gap closed | #101 #103 #105 #107 #109 #111 #113 #115 |
+
+Docs ancre PRs [#73](https://github.com/MTR93600/OpenApsAIMI/pull/73) / [#74](https://github.com/MTR93600/OpenApsAIMI/pull/74) / [#83](https://github.com/MTR93600/OpenApsAIMI/pull/83) / [#85](https://github.com/MTR93600/OpenApsAIMI/pull/85) / [#87](https://github.com/MTR93600/OpenApsAIMI/pull/87) / [#89](https://github.com/MTR93600/OpenApsAIMI/pull/89) were **closed unmerged** (superseded). Merged anchors are listed in STATUS.
 
 ---
 
-## P3 — iOS / Native engine (after P0, or ports only)
+## Remaining — post-AIMI (drivers, Trio, product)
 
-`:plugins:aimi-*` already link on iOS. Filling them is **not** the same as making the Android plugin call them.
+These are **not** a hidden P3.9 clinical formula lot. Open a **new** ID when the orchestrator asks for GO.
 
-| Lot | Work | Gate |
+### R1 — Dexcom ONE+ / Libre 3 (Android drivers, later KMP host)
+
+| Item | State | Do not |
 |---|---|---|
-| **P3.1** | Keep `HoldAimiEngine`. Add one **read-only** capture: build `AimiInputSnapshot` from the Android tick inputs (no dose change) | unit test: snapshot round-trip |
-| **P3.2** | iOS `actual` for `AimiStorage` (documents directory) | `compileKotlinIosArm64` |
-| **P3.3** | iOS UAM adapter (TFLite C / chosen runtime) behind `MlUamPort` or today’s handler interface | same UAM vector → same double as Android, on a fixture |
-| **P3.4** | HealthKit behind `AimiHealthContext` / `AimiPhysioSource` | mapping table: HR, steps, **HRV RMSSD vs SDNN**, sleep, skin temp. Missing/Denied/Stale, not silent zero |
-| **P3.5** | Only after replay exists: move `evaluate()` body. Until then the Android plugin remains the only dose path | JVM + iOS simulator parity on a frozen corpus |
+| Host plugins | Android Metro `@IntKey(446)` / `@IntKey(447)` already landed | Re-port inside an AIMI math lot |
+| Driver modules | `:plugins:dexcom_oneplus`, `:plugins:libre3`, `:plugins:libkeks` still `com.android.library` | Flip with `android-module-dependencies` (kmp-module-flip forbids it) |
+| GATT / NFC | Stay platform | Pretend they are `commonMain` |
+| iOS drivers | None | Claim One+/Libre3 on iPhone from this study branch |
+| `:plugins:source` | KMP tree + leftover `includeDagger()` / `javax.inject` (7 files, 2026-09-06 count) | Copy AIMI-parent `com.android.library` + Hilt gradle |
+| CI `:ios:shell` | Repeated `ApiElements` fails vs these three modules (same on P0.9–P3.8) | Treat as a regression of a clinical lot |
 
-**Do not** turn `IosClientConfig.APS` to `true`. That is an iOS **master** app (pumps, BLE heartbeat, Critical Alerts). Out of scope for these lots.
+**CGM follow-ons named by [P3.8-ANCHOR](../../_docs/kmp/P3.8-ANCHOR.md) (no math here):** later lots may copy from the AIMI tip — `entriesForFit`, tip commit `1b81e356` applicability policy, ONE+/Libre3 calibration handling. **Copy the tip when a lot is opened. Do not invent thresholds or predicates in docs.**
+
+ADR G0: first CGM is **Dexcom ONE+ / G7**. Libre 3 is **wave 2**.
+
+### R2 — iOS pumps via Trio
+
+| Item | Decision / leftover | Source |
+|---|---|---|
+| iOS host | **Trio**. AIMI is `AimiKit`. No `OpenAPSAIMIPlugin` on iOS. | [`adr-g0-defaults.md`](../../_docs/kmp/adr-g0-defaults.md) |
+| First iOS pump | **Medtrum** via Trio `MedtrumKit` after W8. Until then **VirtualPump**. No Dana-i first. No Bluetooth Classic. | [`adr-g0-d2-ios-pump-medtrum.md`](../../_docs/kmp/adr-g0-d2-ios-pump-medtrum.md) |
+| Android pump | `:pump:medtrum` stays Android | Do **not** put it in `iosMain` |
+| Trio kit | Two BLE stacks, two repos | Do **not** vendor `MedtrumKit` into this tree |
+| Still open | W8 go/no-go to drop VirtualPump; exact Trio / MedtrumKit pin | ADR G0-D2 “Still open” |
+| Follower flag | `IosClientConfig.APS = false` | Do **not** flip to iOS master in a driver lot |
+
+### R3 — open product choices (do not guess)
+
+From [`_docs/kmp/README.md`](../../_docs/kmp/README.md) + ADR G0. **Ask the user.**
+
+- UAM: embedded-only vs versioned user import
+- Persistence / rebuild of memories after restart
+- Private corpus and shadow criteria
+- v1 extras: learners, HealthKit, Hormonitor viewer, Advisor/TPO
+- Apple distribution + Critical Alerts entitlement
+- Parity threshold after pump quantification
+- `AimiLoopRuntimeGuard` still staged (hold until a feature needs it — ask)
+- Loop glucose re-grid `c5db5a0333` (`LoopHubImpl`) — **loop**, not AIMI, unless the orchestrator wants loop parity
+- `:plugins:aimi-engine.evaluate()` remains `Hold("ENGINE_NOT_EXTRACTED")` until a dedicated extract + replay lot
+
+### R4 — KMP tick / Native engine (still true, unnumbered)
+
+Not a clinical formula catch-up. Same standing work as 2026-09-06:
+
+1. Inventory / seam platform types still inside `DetermineBasalAIMI2` (`Context`, `File`, `java.time`, `Atomic*`) before any “tick in commonMain” claim.
+2. Port **pure** AIMI tests whose subject is already `commonMain` (P2.5.1 was package 1 only).
+3. iOS `actual`s (storage, UAM adapter, HealthKit) only behind existing ports. Missing/Denied/Stale, never silent zero.
+4. Move `evaluate()` body only after replay exists. Android plugin stays the only dose path until then.
+
+`:app:assembleFullDebug` remains the Metro-binding gate.
 
 ---
 
-## P4 — later
+## How to open the next lot
 
-| Lot | Work |
-|---|---|
-| **P4.1** | Flip `:plugins:dexcom_oneplus`, `:plugins:libre3`, `:plugins:libkeks` only when a KMP host needs parse/policy. GATT/NFC stay platform. |
-| **P4.2** | iOS master (SC-C): pump drivers, `bluetooth-central` restore, APNs / Critical Alerts. Not “the next AIMI lot”. |
-| **P4.3** | Fill `:plugins:aimi-learning` / `:plugins:aimi-io` when trainers leave WorkManager. Empty `hello()` is fine until then. |
-| **P4.4** | Trio / XCFramework product wrap — only after P3.5 is real. |
-
----
-
-## Suggested assignment order for the orchestrator
-
-1. **P0.1 → P0.7** (one agent or one agent per file; no shared edits to DB2 until P0.8).  
-2. **P0.8** (one agent, after the types exist).  
-3. **P1.1** (minutes). **P1.6** can run in parallel on commonMain subjects.  
-4. **P1.2–P1.5** then **P1.7** (tick toward commonMain).  
-5. **P3.1** can start once P0.8 is merged (capture only).  
-6. **P2** and **P4** when product asks.
+1. Orchestrator writes a **new** lot id (do not recycle P0–P3.8).  
+2. One cloud agent, one GitHub PR, base `kmp-aimi-migration-study`.  
+3. Triple feu (Ancre + Qualité + Delta + Portage) = GO/MERGEABLE — see [`AGENT_OPS.md`](../../_docs/kmp/AGENT_OPS.md).  
+4. User GO, then merge.
 
 ---
 
 ## Recurring failure shapes (still true)
-
-Copy these into every lot brief:
 
 1. A class that implements a port but lacks `@ContributesBinding(AppScope::class)` compiles in `:plugins:aps` and fails only in `:app`.  
 2. `*ResId: Int` almost always became a `TextRef`.  
 3. `Atomic*` / `synchronized` → `AapsLock`; `System.currentTimeMillis()` → `aimiWallClockMs()`; `String.format` → `aimiFmtN`; `java.time` → `kotlinx.datetime`.  
 4. Duplicate top-level types (by **declaration**, not filename).  
 5. Capabilities dropped in the KMP rewrite (restore from `dev_OAPSAIMI` only after confirming they still exist there).  
-6. Do not rebase `dev_OAPSAIMI` onto this branch. Cherry-pick or copy files. Strategy S2 still stands.
+6. Do not rebase `dev_OAPSAIMI` onto this branch. Cherry-pick or copy files. Strategy S2 still stands.  
+7. No Hilt in `commonMain`.
 
 ---
 
 ## What this backlog is not
 
-- Not a new 12-milestone plan. M0–M12 in `_docs/kmp/AIMI_KMP_IMPLEMENTATION_BACKLOG.md` is still the long architecture. **These lots are the next concrete work.**
-- Not permission to change SMB / basal / ISF formulae while “cleaning”.
+- Not a new 12-milestone plan. M0–M12 in `_docs/kmp/AIMI_KMP_IMPLEMENTATION_BACKLOG.md` is still the long architecture.
+- Not permission to change SMB / basal / ISF / calibration formulae while “cleaning”.
 - Not a claim that iOS can close the loop.
+- Not a claim that P3.8 brought ONE+ / Libre3 / `entriesForFit` / tip `1b81e356` policy onto study.
