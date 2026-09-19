@@ -230,7 +230,7 @@ object AimiUamHandler {
                     interpreter = it
                     lastLoadOk = true
                     lastLoadError = null
-                    lastLoadTime = System.currentTimeMillis()
+                    lastLoadTime = aimiWallClockMs()
                     lastModelPath = file.absolutePath
                     //reason?.appendLine("📦 Chargé ✓ : ${file.name} (${file.length()} B)")
                     reason?.appendLine(context.getString(R.string.model_loaded, file.name, "%.1f".format(file.length().toDouble() / 1024)))

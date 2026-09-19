@@ -13,6 +13,7 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.R as CoreUiR
 import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -44,7 +45,7 @@ class TpoNotificationManager @Inject constructor(
         if (!preferences.get(BooleanKey.OApsAIMITpoNotifyOnApply)) return
         if (session.status != TpoSessionStatus.ACTIVE) return
 
-        val ui = TpoUiSupport.buildActiveSessionUi(session, System.currentTimeMillis()) ?: return
+        val ui = TpoUiSupport.buildActiveSessionUi(session, aimiWallClockMs()) ?: return
         val packLabel = context.getString(ui.packTitleResId)
         val title = context.getString(R.string.aimi_tpo_notification_started_title)
         val text = context.getString(

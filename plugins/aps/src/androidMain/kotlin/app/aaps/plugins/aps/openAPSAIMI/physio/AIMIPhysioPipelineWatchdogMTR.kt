@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.SP
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.steps.AIMIHealthConnectSyncServiceMTR
 import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import dev.zacsweers.metro.Inject
@@ -41,7 +42,7 @@ class AIMIPhysioPipelineWatchdogMTR @Inject constructor(
      * Runs diagnostics and best-effort recovery (HC sync + physio refresh). Safe on any thread.
      */
     suspend fun runCheckAndRecover() {
-        val now = System.currentTimeMillis()
+        val now = aimiWallClockMs()
         val start = now - DB_LOOKBACK_MS
 
         val hrCount = try {

@@ -9,8 +9,8 @@ import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ml.NeuralModelTrainer
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCircuitBreaker
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
-import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
@@ -32,7 +32,7 @@ import dev.zacsweers.metro.SingleIn
  */
 @SingleIn(AppScope::class)
 class BasalMlTrainingCoordinator @Inject constructor(
-    private val storageHelper: AimiStorageHelper,
+    private val storage: AimiStorage,
     private val basalNeuralLearner: BasalNeuralLearner,
     private val log: AAPSLogger,
 ) {
@@ -116,6 +116,16 @@ class BasalMlTrainingCoordinator @Inject constructor(
         internal const val MAX_BASELINE_MAE_RATIO = 0.95
         private const val TRAIN_INTERVAL_MS = 1L * 60 * 60 * 1000 // 1h — matches the 1h worker cadence; the MIN_NEW_ROWS gate still prevents retraining without new data
         private const val MIN_NEW_ROWS = 80L
+
+        /**
+         * If no training attempt has completed in this long, force one on the next tick even if
+         * [MIN_NEW_ROWS] has not been reached — same idea as the bootstrap bypass below, for a
+         * coordinator that already has a model but has gone quiet for some other reason (slow data
+         * accumulation, a gate that keeps returning before [markAttemptCompleted]). 4x [TRAIN_INTERVAL_MS]:
+         * long enough that this never fires during normal hourly operation, short enough that a stuck
+         * coordinator is never silently stale for more than about half a day.
+         */
+        private const val STALE_TRAINING_MS = 4L * 60 * 60 * 1000 // 4h
         private const val BASAL_MIN_ROWS = 100
         private const val T3C_MIN_ROWS = 50
         private const val VAL_LOSS_TOLERANCE = 1.05
@@ -164,8 +174,8 @@ class BasalMlTrainingCoordinator @Inject constructor(
     suspend fun runScheduledTraining(): TrainingOutcome = trainMutex.withLock {
         val now = aimiWallClockMs()
         // First-ever model creation bypasses the rate limit: if no basal weights exist yet, train now (bootstrap) so
-        // the model is created ASAP from the already-accumulated CSV, instead of waiting for the next 6h window.
-        val bootstrapNeeded = !storageHelper.getAimiFile(BASAL_WEIGHTS).exists()
+        // the model is created ASAP from the already-accumulated CSV, instead of waiting for the next 1h window.
+        val bootstrapNeeded = !storage.exists(storage.file(BASAL_WEIGHTS))
         if (isCircuitOpen(now)) {
             log.debug(LTag.AIMI, "$TAG: circuit breaker open — skip")
             return TrainingOutcome.SKIPPED
@@ -175,13 +185,13 @@ class BasalMlTrainingCoordinator @Inject constructor(
             return TrainingOutcome.SKIPPED
         }
 
-        val csvFile = storageHelper.getAimiFile(CSV_FILE)
-        if (!csvFile.exists()) {
+        val csvPath = storage.file(CSV_FILE)
+        if (!storage.exists(csvPath)) {
             log.debug(LTag.AIMI, "$TAG: CSV missing — skip")
             return TrainingOutcome.SKIPPED
         }
 
-        val parsed = BasalMlDatasetParser.parse(csvFile) ?: run {
+        val parsed = BasalMlDatasetParser.parse(storage, csvPath) ?: run {
             log.debug(LTag.AIMI, "$TAG: CSV parse failed — skip")
             return TrainingOutcome.SKIPPED
         }
@@ -190,7 +200,20 @@ class BasalMlTrainingCoordinator @Inject constructor(
 
         val totalRows = parsed.rowCount.toLong()
         val newRows = totalRows - rowsAtLastTrain.get()
-        if (newRows < MIN_NEW_ROWS) {
+        // Bootstrap must not be blocked by this gate: rowsAtLastTrain is only meaningful relative to a
+        // previous attempt on the same row-counting rule. If the row-filtering rule changes (for example a
+        // stricter causal-contamination check), the same CSV can suddenly parse into fewer kept rows, making
+        // newRows negative against a stale rowsAtLastTrain — and this gate returns before markAttemptCompleted,
+        // so nothing here ever resets the counter. Without the bootstrap bypass a coordinator that has no
+        // published model yet could wait indefinitely for that gap to close on its own.
+        //
+        // A coordinator that DOES have a model can get stuck the same way if new rows simply accumulate
+        // slower than MIN_NEW_ROWS per TRAIN_INTERVAL_MS — nothing else here would ever force a retry. Past
+        // STALE_TRAINING_MS since the last completed attempt, force one anyway: BASAL_MIN_ROWS/T3C_MIN_ROWS
+        // below still require a minimum corpus, so this cannot train on too little data, only on data that
+        // grew slower than expected.
+        val trainingIsStale = now - lastTrainMs.get() > STALE_TRAINING_MS
+        if (!bootstrapNeeded && !trainingIsStale && newRows < MIN_NEW_ROWS) {
             log.debug(LTag.AIMI, "$TAG: only $newRows new rows (need $MIN_NEW_ROWS) — skip")
             return TrainingOutcome.SKIPPED
         }
@@ -256,10 +279,10 @@ class BasalMlTrainingCoordinator @Inject constructor(
 
     private fun trainBasalHead(parsed: BasalMlDataset): HeadTrainResult {
         val split = parsed.split80_20()
-        val weightsFile = storageHelper.getAimiFile(BASAL_WEIGHTS)
+        val weightsPath = storage.file(BASAL_WEIGHTS)
         val config = TrainingConfig(learningRate = 0.0005, epochs = 200, patience = 20)
         val published = trainAndMaybePublish(
-            weightsFile = weightsFile,
+            weightsPath = weightsPath,
             trainInputs = split.trainInputs,
             trainTargets = split.trainBasalTargets,
             valInputs = split.valInputs,
@@ -275,10 +298,10 @@ class BasalMlTrainingCoordinator @Inject constructor(
 
     private fun trainT3cHead(parsed: BasalMlDataset): HeadTrainResult {
         val split = parsed.split80_20()
-        val weightsFile = storageHelper.getAimiFile(T3C_WEIGHTS)
+        val weightsPath = storage.file(T3C_WEIGHTS)
         val config = TrainingConfig(learningRate = 0.001, epochs = 300, patience = 20)
         val published = trainAndMaybePublish(
-            weightsFile = weightsFile,
+            weightsPath = weightsPath,
             trainInputs = split.trainInputs,
             trainTargets = split.trainT3cTargets,
             valInputs = split.valInputs,
@@ -306,7 +329,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
      * on pure label noise moves MORE across the bg anchors than a model that found the real function.
      */
     private fun trainAndMaybePublish(
-        weightsFile: File,
+        weightsPath: AimiPath,
         trainInputs: List<FloatArray>,
         trainTargets: List<DoubleArray>,
         valInputs: List<FloatArray>,
@@ -315,9 +338,10 @@ class BasalMlTrainingCoordinator @Inject constructor(
         outputRange: ClosedFloatingPointRange<Double>,
         minOutputSpread: Double = MIN_OUTPUT_SPREAD,
     ): Boolean {
-        val hasIncumbent = weightsFile.exists()
+        val hasIncumbent = storage.exists(weightsPath)
         return NeuralModelTrainer.trainAndPublish(
-            weightsFile = weightsFile,
+            storage = storage,
+            weightsPath = weightsPath,
             split = NeuralModelTrainer.Split(trainInputs, trainTargets, valInputs, valTargets),
             config = config,
             inputSize = INPUT_SIZE,
@@ -342,10 +366,11 @@ class BasalMlTrainingCoordinator @Inject constructor(
     }
 
     private fun loadPersistedState() {
-        val stateFile = storageHelper.getAimiFile(STATE_FILE)
-        if (!stateFile.exists()) return
+        val statePath = storage.file(STATE_FILE)
+        if (!storage.exists(statePath)) return
         try {
-            val json = Json.parseToJsonElement(stateFile.readText()).jsonObject
+            val text = storage.readText(statePath) ?: return
+            val json = Json.parseToJsonElement(text).jsonObject
             lastTrainMs.set(json.optLongCompat("lastTrainMs", 0L))
             rowsAtLastTrain.set(json.optLongCompat("rowsAtLastTrain", 0L))
         } catch (e: Exception) {
@@ -368,13 +393,13 @@ class BasalMlTrainingCoordinator @Inject constructor(
 
     private fun persistState() {
         try {
-            val stateFile = storageHelper.getAimiFile(STATE_FILE)
-            stateFile.parentFile?.mkdirs()
+            val statePath = storage.file(STATE_FILE)
+            storage.createParentDirectories(statePath)
             val json = buildJsonObject {
                 put("lastTrainMs", lastTrainMs.get())
                 put("rowsAtLastTrain", rowsAtLastTrain.get())
             }
-            stateFile.writeText(json.toString())
+            storage.writeText(statePath, json.toString())
         } catch (e: Exception) {
             log.warn(LTag.AIMI, "$TAG: could not persist training state", e)
         }
@@ -558,11 +583,9 @@ internal object BasalMlDatasetParser {
         LEGACY_UNKNOWN,
     }
 
-    fun parse(csvFile: File): BasalMlDataset? {
-        val allLines = csvFile.readLines()
-        if (allLines.size < 2) return null
-
-        val header = allLines.first().split(",")
+    fun parse(storage: AimiStorage, csvPath: AimiPath): BasalMlDataset? {
+        val headerLine = storage.readFirstLine(csvPath) ?: return null
+        val header = headerLine.split(",")
         val iTs = header.indexOf("timestamp")
         val iBg = header.indexOf("bg")
         val iBasal = header.indexOf("basal")
@@ -592,22 +615,31 @@ internal object BasalMlDatasetParser {
         val physioIdx = physioNames.map { header.indexOf(it) }
 
         // 1) Parse + filtre de validité (BG plausible), puis tri chronologique pour la jointure du label.
-        val raw = ArrayList<RawRow>(allLines.size)
-        for (line in allLines.drop(1)) {
+        //
+        // Walked with forEachLine, not readLines: this CSV gains a row every loop tick and is never
+        // truncated, so loading the whole file as a List<String> is an unbounded-memory read on a
+        // journal that keeps growing. See AimiStorage.forEachLine.
+        val raw = ArrayList<RawRow>()
+        var dataLineCount = 0
+        var lineIndex = 0
+        val walkedOk = storage.forEachLine(csvPath) { line ->
+            lineIndex++
+            if (lineIndex == 1) return@forEachLine // header, already parsed via readFirstLine
+            dataLineCount++
             val cols = line.split(",")
             // Require only the base columns (physio columns are optional → neutral backfill for legacy rows).
-            if (cols.size <= requiredMaxIdx) continue
-            val ts = cols[iTs].toLongOrNull() ?: continue
-            val bg = cols[iBg].toDoubleOrNull() ?: continue
-            if (!bg.isFinite() || bg < MIN_VALID_BG || bg > MAX_VALID_BG) continue
-            val basal = cols[iBasal].toFloatOrNull() ?: continue
-            val accel = cols[iAccel].toFloatOrNull() ?: continue
-            val duraMin = cols[iDuraMin].toFloatOrNull() ?: continue
-            val duraAvg = cols[iDuraAvg].toFloatOrNull() ?: continue
-            val iob = cols[iIob].toFloatOrNull() ?: continue
-            val target = cols[iTarget].toDoubleOrNull() ?: continue
-            val currentScale = cols[iBasalScale].toDoubleOrNull() ?: continue
-            val currentAgg = cols[iT3cAgg].toDoubleOrNull() ?: continue
+            if (cols.size <= requiredMaxIdx) return@forEachLine
+            val ts = cols[iTs].toLongOrNull() ?: return@forEachLine
+            val bg = cols[iBg].toDoubleOrNull() ?: return@forEachLine
+            if (!bg.isFinite() || bg < MIN_VALID_BG || bg > MAX_VALID_BG) return@forEachLine
+            val basal = cols[iBasal].toFloatOrNull() ?: return@forEachLine
+            val accel = cols[iAccel].toFloatOrNull() ?: return@forEachLine
+            val duraMin = cols[iDuraMin].toFloatOrNull() ?: return@forEachLine
+            val duraAvg = cols[iDuraAvg].toFloatOrNull() ?: return@forEachLine
+            val iob = cols[iIob].toFloatOrNull() ?: return@forEachLine
+            val target = cols[iTarget].toDoubleOrNull() ?: return@forEachLine
+            val currentScale = cols[iBasalScale].toDoubleOrNull() ?: return@forEachLine
+            val currentAgg = cols[iT3cAgg].toDoubleOrNull() ?: return@forEachLine
             val physio = FloatArray(physioNames.size) { j ->
                 val idx = physioIdx[j]
                 if (idx >= 0) cols.getOrNull(idx)?.toFloatOrNull() ?: neutralPhysio[j] else neutralPhysio[j]
@@ -629,6 +661,8 @@ internal object BasalMlDatasetParser {
                 )
             )
         }
+        if (!walkedOk) return null
+        if (dataLineCount < 1) return null // same as the old "allLines.size < 2" (header + >=1 data line)
         if (raw.size < 2) return null
         raw.sortBy { it.ts }
 

@@ -182,6 +182,7 @@ private fun PhysioLiveDigest.toHealthSnapshot(nowMs: Long): HealthContextSnapsho
         stepsLast60m = stepsLast60m,
         hrNow = hrNowBpm,
         hrAvg15m = hrAvg15mBpm,
+        hrMeasuredAtMs = hrSampleAgeMs?.let { (nowMs - it).coerceAtLeast(0L) } ?: 0L,
         rhrResting = rhrRestingBpm,
         activityState = activityState,
         sleepDebtMinutes = sleepDebtMinutes,
