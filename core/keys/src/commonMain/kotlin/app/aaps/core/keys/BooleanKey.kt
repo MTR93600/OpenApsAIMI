@@ -330,22 +330,56 @@ enum class BooleanKey(
         summary = KeysStrings.pref_summary_aimi_stress_isf_floor,
     ),
     /**
-     * Opt-in: refuse a **bolus** that re-doses a descent which is already covered by active insulin.
+     * Opt-in: spend a bounded budget of insulin as a basal floor once a meal has been **declared**.
      *
-     * Blocks only when all five conditions of `DescentRedoseGuard` hold at once: a peak of at least
-     * 180 mg/dL inside the last 120 min, that peak at least 30 min behind, BG now at least 25 mg/dL
-     * under it, more than 6 U still active, and BG not more than 25 mg/dL above the lowest point
-     * reached since the peak. That last condition is what keeps a new rise out.
+     * The person writes a note holding "anticip" with a duration; while that note is open and the
+     * declaration still looks true, the basal is held at profile plus
+     * `OApsAIMIAnticipBudgetU` spread over the 30-minute window of `AnticipationBasalFloor`. No
+     * prebolus is attached, unlike the meal modes, and the target is not touched.
+     *
+     * ⚠️ This is the one AIMI gesture that **raises** a dose. It is bounded three ways — the budget,
+     * the window, and the pump ceiling — it stands down under 80 mg/dL or on a fall of 3 mg/dL per
+     * 5 min, and deleting the note ends it at once. Default OFF.
+     */
+    OApsAIMIAnticipBasalFloor(
+        key = "key_aimi_anticip_basal_floor",
+        defaultValue = false,
+        title = KeysStrings.pref_title_aimi_anticip_basal_floor,
+        summary = KeysStrings.pref_summary_aimi_anticip_basal_floor,
+    ),
+    /**
+     * Opt-in: let a declared meal count as tree meal evidence.
+     *
+     * Separate from `OApsAIMIAnticipBasalFloor` on purpose. Tree meal evidence is one of the
+     * disjuncts of the early release's `strongMealConfirmed` gate, so switching this on arms that
+     * release on demand — a much wider effect than the basal floor. Two keys keep the two effects
+     * measurable apart. Default OFF.
+     */
+    OApsAIMIAnticipMealEvidence(
+        key = "key_aimi_anticip_meal_evidence",
+        defaultValue = false,
+        title = KeysStrings.pref_title_aimi_anticip_meal_evidence,
+        summary = KeysStrings.pref_summary_aimi_anticip_meal_evidence,
+    ),
+    /**
+     * Opt-in: refuse a **bolus** that repeats the ceiling dose during a fast rise.
+     *
+     * Refuses only when both conditions of `RiseCeilingGuard` hold: the bolus has come out exactly
+     * at a configured ceiling for 3 ticks in a row, and glucose is rising by at least 8 mg/dL per
+     * 5 min. The first doses of a rise are never touched, only the ones sent while the earlier ones
+     * cannot yet be seen.
      *
      * Bolus channel only: the temporary basal command is untouched. The verdict is computed and
      * exported on every tick even when this key is false, so the effect can be measured before the
-     * gesture is armed. Default **false** (shadow/observation).
+     * gesture is armed — the thresholds were chosen after seeing the data and still need a
+     * measurement made in advance. Default **false** (shadow / observation), matching
+     * `origin/dev_OAPSAIMI` @ `9a234151c7` (unchanged on tip `acdc2b118e` / `f61474bb73`).
      */
-    OApsAIMIDescentRedoseGuard(
-        key = "key_aimi_descent_redose_guard",
+    OApsAIMIRiseCeilingGuard(
+        key = "key_aimi_rise_ceiling_guard",
         defaultValue = false,
-        title = KeysStrings.pref_title_aimi_descent_redose_guard,
-        summary = KeysStrings.pref_summary_aimi_descent_redose_guard,
+        title = KeysStrings.pref_title_aimi_rise_ceiling_guard,
+        summary = KeysStrings.pref_summary_aimi_rise_ceiling_guard,
     ),
     /**
      * Opt-in: sensor-driven effort protection. Caps SMB when steps/HR indicate current or recent

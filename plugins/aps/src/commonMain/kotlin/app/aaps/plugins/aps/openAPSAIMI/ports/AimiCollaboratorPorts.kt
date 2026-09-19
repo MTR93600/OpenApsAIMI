@@ -33,8 +33,10 @@ import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
  * pulls in `SmsManager` and `LocationManager`. The loop needs one or two members of each. Naming just
  * those members here means the implementations can stay on Android.
  *
- * These have no implementation yet. The classes that will implement them are still outside every
- * source set; they get their supertype when they move into `androidMain`.
+ * Each port has exactly one Android implementation in `androidMain` (AuditorOrchestrator,
+ * TpoOrchestrator, AimiSmbComparator, AndroidAimiEmergencySos, ContextLLMClient,
+ * HealthContextRepository, AIMIPhysioDataRepositoryMTR, AndroidAimiBehaviorProfileSource).
+ * iOS has no implementations yet.
  */
 
 /**
