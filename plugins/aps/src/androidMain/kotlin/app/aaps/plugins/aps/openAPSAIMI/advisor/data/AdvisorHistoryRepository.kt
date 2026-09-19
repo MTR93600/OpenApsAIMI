@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.Collections
@@ -42,7 +43,7 @@ class AdvisorHistoryRepository(context: Context) {
     fun logAction(type: ActionType, key: String, desc: String, oldVal: Any, newVal: Any) {
         val currentList = loadHistory().toMutableList()
         val entry = AdvisorActionLog(
-            timestamp = System.currentTimeMillis(),
+            timestamp = aimiWallClockMs(),
             type = type,
             description = desc,
             key = key,
@@ -61,7 +62,7 @@ class AdvisorHistoryRepository(context: Context) {
      * Get actions from the last N days.
      */
     fun getRecentActions(days: Int): List<AdvisorActionLog> {
-        val cutoff = System.currentTimeMillis() - (days * 24 * 60 * 60 * 1000L)
+        val cutoff = aimiWallClockMs() - (days * 24 * 60 * 60 * 1000L)
         return loadHistory().filter { it.timestamp >= cutoff }
     }
 

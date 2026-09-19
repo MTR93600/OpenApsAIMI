@@ -3,21 +3,21 @@ package app.aaps.plugins.aps.openAPSAIMI.ml
 import android.util.Log
 import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.math.abs
-import kotlin.math.exp
 import kotlin.math.min
-import kotlin.math.sqrt
 
 /**
  * AimiSmbTrainer — Singleton managing the ML model lifecycle for SMB refinement.
@@ -84,12 +84,15 @@ object AimiSmbTrainer {
     private val lastTrainMs   = AtomicLong(0L)
     private val rowsAtLastTrain = AtomicLong(0L)
 
+    /** Set once the weights trained on an unreadable corpus have been thrown away. */
+    private val staleModelDiscarded = AtomicBoolean(false)
+
     // ---- Public API ----------------------------------------------------------
 
     /** Load previously saved model from disk. Call once on plugin start. */
-    fun loadModel(dir: File) {
+    fun loadModel(storage: AimiStorage, dir: AimiPath) {
         scope.launch {
-            val net = AimiSmbModelStore.load(dir, INPUT_SIZE)
+            val net = AimiSmbModelStore.load(storage, dir, INPUT_SIZE)
             modelRef.set(net)
             if (net != null) {
                 Log.i(TAG, "Model loaded from disk (${INPUT_SIZE} inputs)")
@@ -104,8 +107,8 @@ object AimiSmbTrainer {
      * Respects rate limit (6h) and minimum new-rows requirement (200).
      * Never blocks the caller.
      */
-    fun maybeTrainAsync(dir: File, csvFile: File) {
-        val now = System.currentTimeMillis()
+    fun maybeTrainAsync(storage: AimiStorage, dir: AimiPath, csvFile: AimiPath) {
+        val now = aimiWallClockMs()
 
         // Rate limit guard (fast path, no coroutine needed)
         if (now - lastTrainMs.get() < TRAIN_INTERVAL_MS) return
@@ -117,7 +120,7 @@ object AimiSmbTrainer {
             if (trainMutex.isLocked) return@launch  // Another training in progress
             trainMutex.withLock {
                 try {
-                    trainNow(dir, csvFile)
+                    trainNow(storage, dir, csvFile)
                 } catch (e: Exception) {
                     recordFailure()
                     Log.e(TAG, "Training failed: ${e.message}")
@@ -140,7 +143,7 @@ object AimiSmbTrainer {
     ): Float {
         if (features.size != INPUT_SIZE) return predictedSmb
 
-        val now = System.currentTimeMillis()
+        val now = aimiWallClockMs()
         if (isCircuitOpen(now)) return predictedSmb
 
         val model = modelRef.get() ?: return predictedSmb
@@ -165,14 +168,32 @@ object AimiSmbTrainer {
 
     // ---- Internal training ---------------------------------------------------
 
-    private suspend fun trainNow(dir: File, csvFile: File) {
-        if (!csvFile.exists()) {
+    private suspend fun trainNow(storage: AimiStorage, dir: AimiPath, csvFile: AimiPath) {
+        if (!storage.exists(csvFile)) {
             Log.d(TAG, "CSV not found — skip training")
             return
         }
 
-        val allLines = csvFile.readLines()
-        val dataLines = allLines.drop(1).filter { it.isNotBlank() }
+        val headerLine = storage.readFirstLine(csvFile)
+        if (headerLine == null) {
+            Log.d(TAG, "CSV not found — skip training")
+            return
+        }
+
+        // Walked with forEachLine, not readLines: this CSV gains a row every loop tick and is never
+        // truncated, so loading the whole file as a List<String> is an unbounded-memory read on a
+        // journal that keeps growing. See AimiStorage.forEachLine.
+        val dataLines = ArrayList<String>()
+        var lineIndex = 0
+        val walkedOk = storage.forEachLine(csvFile) { line ->
+            lineIndex++
+            if (lineIndex == 1) return@forEachLine // header, already read via readFirstLine
+            if (line.isNotBlank()) dataLines.add(line)
+        }
+        if (!walkedOk) {
+            Log.w(TAG, "CSV walk failed — skip training")
+            return
+        }
         val totalRows = dataLines.size.toLong()
 
         val newRows = totalRows - rowsAtLastTrain.get()
@@ -181,32 +202,16 @@ object AimiSmbTrainer {
             return
         }
 
-        val headers = allLines.firstOrNull()?.split(",")?.map { it.trim() } ?: return
-        val targetName = "smbGiven"
-        val targetIndex    = headers.indexOf(targetName)
-
-        if (targetIndex == -1) {
-            Log.w(TAG, "CSV missing required columns — skip training")
+        val headers = headerLine.split(",").map { it.trim() }
+        val headerCheck = AimiSmbCorpus.checkCorpusHeader(headers)
+        if (!headerCheck.valid) {
+            Log.e(TAG, "SMB corpus refused — no training. ${headerCheck.reason}")
+            discardModelTrainedOnUnreadableCorpus(storage, dir)
             return
         }
-
-        val inputs  = mutableListOf<FloatArray>()
-        val targets = mutableListOf<DoubleArray>()
-
-        for (line in dataLines) {
-            val cols = line.split(",").map { it.trim() }
-            if (cols.size <= targetIndex) continue
-
-            val raw = SmbRefinementFeatureSchema.parseTrainingFeatures(headers, cols) ?: continue
-            if (!SmbRefinementFeatureSchema.shouldUseCsvRowForTraining(headers, cols, raw)) continue
-
-            // Approximate trendIndicator for offline training
-            val trendIndicator = computeTrendIndicator(raw)
-            val enhanced = raw.copyOf(raw.size + 1).also { it[raw.size] = trendIndicator }
-
-            targets.add(doubleArrayOf(cols[targetIndex].toDoubleOrNull() ?: continue))
-            inputs.add(enhanced)
-        }
+        val corpus = AimiSmbCorpus.buildTrainingCorpus(headers, dataLines) ?: return
+        val inputs = corpus.inputs
+        val targets = corpus.targets
 
         if (inputs.size < 10) {
             Log.w(TAG, "Insufficient training samples (${inputs.size}) — skip")
@@ -226,7 +231,8 @@ object AimiSmbTrainer {
         // candidate was dropped. The liveness probes are the safe way to keep a bad model out; a
         // val-loss ratchet is not.
         val net = NeuralModelTrainer.trainAndPublish(
-            weightsFile = AimiSmbModelStore.modelFile(dir),
+            storage = storage,
+            weightsPath = AimiSmbModelStore.modelFile(storage, dir),
             split = NeuralModelTrainer.split80_20(inputs, targets),
             config = TrainingConfig(learningRate = 0.001, epochs = 300),
             inputSize = INPUT_SIZE,
@@ -240,7 +246,7 @@ object AimiSmbTrainer {
         )
         if (net != null) {
             modelRef.set(net)
-            lastTrainMs.set(System.currentTimeMillis())
+            lastTrainMs.set(aimiWallClockMs())
             rowsAtLastTrain.set(totalRows)
             circuitBreaker.reset()   // reset circuit breaker on success
             Log.i(TAG, "Model trained and saved successfully (${inputs.size} rows)")
@@ -251,19 +257,32 @@ object AimiSmbTrainer {
 
     // ---- Helpers -------------------------------------------------------------
 
-    private fun computeTrendIndicator(raw: FloatArray): Float {
-        // raw: [bg, iob, cob, delta, shortAvgDelta, longAvgDelta, ...]
-        val bg           = raw.getOrElse(0) { 120f }.toDouble()
-        val iob          = raw.getOrElse(1) { 0f }.toDouble()
-        val delta        = raw.getOrElse(3) { 0f }
-        val shortAvgDelta = raw.getOrElse(4) { 0f }
-        val longAvgDelta  = raw.getOrElse(5) { 0f }
-        val combinedDelta = (delta + shortAvgDelta + longAvgDelta) / 3f
-        val stressScore   = if (bg > 150) 40.0 else 0.0
-        val metabolicLoad = iob * 5.0
-        val baseTrend = (combinedDelta * 5.0f) + (stressScore * 0.1).toFloat() - (metabolicLoad * 0.5).toFloat()
-        val sig = (1f / (1f + exp(-baseTrend.toDouble()))).toFloat()
-        return 0.5f + sig * 0.7f
+    /**
+     * Throws away the stored SMB weights, once, after the corpus guard refused the file.
+     *
+     * The weights on disk were fitted against whatever column the stale header pointed at, so they
+     * answer in the wrong unit and `refine` keeps using them until a training run succeeds. Clearing
+     * [modelRef] and deleting the weight file sends `refine` back to returning `predictedSmb`
+     * unchanged, which is already what it does when no model is loaded.
+     *
+     * It runs at most once per app start: a corpus that stays unreadable must not turn into a delete
+     * on every tick.
+     *
+     * ⚠️ ASYNC IMPACT: runs on the existing `Dispatchers.IO` training coroutine (same as `trainNow`).
+     * `modelRef.set(null)` is visible to the hot-path `refine()`; the File delete is IO-only.
+     * `loadModel` is also fire-and-forget on that dispatcher — same pre-existing race as a training
+     * publish vs a plugin-start load.
+     */
+    private fun discardModelTrainedOnUnreadableCorpus(storage: AimiStorage, dir: AimiPath) {
+        if (!staleModelDiscarded.compareAndSet(false, true)) return
+        modelRef.set(null)
+        val removed = AimiSmbModelStore.delete(storage, dir)
+        Log.w(
+            TAG,
+            "SMB weights discarded: they were trained on an unreadable corpus. " +
+                "Weight file removed=$removed. refine() now returns the rule-based dose until a " +
+                "training run on a readable corpus publishes new weights.",
+        )
     }
 
     internal fun correctionClamp(

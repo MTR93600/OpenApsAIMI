@@ -49,8 +49,11 @@ import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventAPSCalculationFinished
 import app.aaps.core.interfaces.rx.events.EventPreferenceChange
+import app.aaps.core.interfaces.maintenance.ImportExportPrefs
+import app.aaps.core.interfaces.protection.ExportPasswordDataStore
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.interfaces.stats.TddCalculator
+import app.aaps.core.interfaces.stats.TirCalculator
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.InterfacesStrings
@@ -94,6 +97,7 @@ import app.aaps.plugins.aps.openAPSAIMI.ISF.DynIsfCache
 import app.aaps.plugins.aps.openAPSAIMI.ISF.DynIsfTrajectoryTuning
 import app.aaps.plugins.aps.openAPSAIMI.ISF.DynamicSensitivityPolicy
 import app.aaps.plugins.aps.openAPSAIMI.ISF.IsfAdjustmentEngine
+import app.aaps.plugins.aps.openAPSAIMI.ISF.StressIsfFloor
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousPhaseHysteresis
 import app.aaps.plugins.aps.openAPSAIMI.scenario.InsulinSlopePreserveHysteresis
@@ -143,9 +147,21 @@ import androidx.core.util.size
 import androidx.core.net.toUri
 import kotlin.math.abs
 import kotlin.math.exp
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
+import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiProfileAdvisorScreen
+import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiSupportPackageScreen
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
+import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager
+import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiSupportPackageExporter
+import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.ui.AimiMealAdvisorScreen
+import app.aaps.plugins.aps.openAPSAIMI.advisor.modesettings.ui.AimiModeSettingsScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiControlCenterScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPkpdSettingsScreen
+import app.aaps.plugins.aps.openAPSAIMI.context.ui.AimiContextScreen
+import app.aaps.plugins.aps.openAPSAIMI.physio.AimiHealthConnectPermissionScreen
+import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextRepository
+import app.aaps.plugins.aps.openAPSAIMI.sos.AimiSosPermissionScreen
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import kotlinx.coroutines.withContext
@@ -197,6 +213,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR,
     private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator, // ?? AI Auditor MTR
     private val contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager, // ?? Context Manager
+    private val healthContextRepository: HealthContextRepository,
     private val aimiBackupManager: AimiBackupManager, // ?? Cloud Backup Manager (Force Init)
     private val aimiMlTrainingScheduler: AimiMlTrainingScheduler,
     private val storageHelper: AimiStorageHelper,
@@ -208,6 +225,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val dynIsfTrajectoryTuning: DynIsfTrajectoryTuning,
     private val tpoOrchestrator: TpoOrchestrator,
     private val fabricPrivacy: FabricPrivacy,
+    private val tirCalculator: TirCalculator,
+    private val importExportPrefs: ImportExportPrefs,
+    private val exportPasswordDataStore: ExportPasswordDataStore,
+    private val aiCoachingService: AiCoachingService,
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -343,10 +364,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         // ?? Pre-load ML model into memory for O(1) SMB inference on hot path
         try {
-            val aimiDir = storageHelper.getAimiDirectory()
             val (status, path, error) = storageHelper.getStorageStatus()
             PkPdCsvLogger.configureStorage(storage, aapsLogger)
-            AimiSmbTrainer.loadModel(aimiDir)
+            AimiSmbTrainer.loadModel(storage, storage.directory())
             aapsLogger.info(LTag.APS, "AIMI storage status=$status path=${path ?: "n/a"} error=${error ?: "none"}")
             aapsLogger.info(LTag.APS, "? AimiSmbTrainer: model load requested (async)")
         } catch (e: Exception) {
@@ -418,6 +438,23 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     /** Diagnostic: rx subscription tracing writes to `OApsAIMISmbTailDamping` (PKPD_TAIL_TRACE). */
     private var tailDampingTraceJob: Job? = null
 
+    /**
+     * Instant the current unbroken stress signature started, or null when there is none.
+     *
+     * Held here because [StressIsfFloor] is pure and keeps no state. Null at start-up, which is what
+     * makes a restart break the hold time, and null again on every break of the signature.
+     */
+    private var stressIsfSignatureSinceMs: Long? = null
+
+    /** Instant of the previous stress evaluation, so a gap longer than 10 min breaks continuity. */
+    private var stressIsfLastEvalMs: Long? = null
+
+    /** Verdict of the previous stress evaluation, so only an active floor may use its grace time. */
+    private var stressIsfWasActive: Boolean = false
+
+    /** Instant the signature stopped holding while the floor was still on, or null when it holds. */
+    private var stressIsfBreakStartedMs: Long? = null
+
     // ?tat EMA persistant (cl? Prefs ? cr?er si tu veux le garder entre runs)
     private var tddEma: Double? = null
     private val TDD_EMA_ALPHA = 0.2 // ou pref
@@ -448,11 +485,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         if (!cannulaSiteRefreshInFlight.compareAndSet(false, true)) return
         aimiPluginIoScope.launch {
             try {
-                val fromTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7)
+                val fromTime = aimiWallClockMs() - TimeUnit.DAYS.toMillis(7)
                 val siteChanges = persistenceLayer.getTherapyEventDataFromTime(fromTime, TE.Type.CANNULA_CHANGE, true)
                 cachedCannulaSiteAgeDays = if (siteChanges.isNotEmpty()) {
                     val latestChangeTimestamp = siteChanges.last().timestamp
-                    ((System.currentTimeMillis() - latestChangeTimestamp).toFloat() / (1000f * 60f * 60f * 24f))
+                    ((aimiWallClockMs() - latestChangeTimestamp).toFloat() / (1000f * 60f * 60f * 24f))
                 } else {
                     0f
                 }
@@ -869,7 +906,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             profileIsf = profileIsf,
             sippConfidence = sippConfidence,
             kalmanVar = kalmanVarProxy,
-            nowMs = System.currentTimeMillis()
+            nowMs = aimiWallClockMs()
         )
         aapsLogger.debug(LTag.APS, "Adaptive ISF via IsfAdjustmentEngine: $isfAdj (tddEma=$tddEma, sipp=$sippConfidence, var=$kalmanVarProxy)")
 
@@ -889,7 +926,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             fusedIsf = fusedSlowIsf,
             kalmanIsf = fastConservative,
             trustFast = kalmanTrustProxy,
-            nowMs = System.currentTimeMillis()
+            nowMs = aimiWallClockMs()
         )
 
         // 10) facteur dynamique + bornes globales
@@ -1344,7 +1381,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val peakTimeMinutesForProfile = kineticsView.effective.peakMinutes
             var currentActivity = 0.0
             for (i in -4..0) { //MP: -4 to 0 calculates all the insulin active during the last 5 minutes
-                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(i.toLong()), profile)
+                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(aimiWallClockMs() - TimeUnit.MINUTES.toMillis(i.toLong()), profile)
                 currentActivity += iob.activity
             }
             var futureActivity = 0.0
@@ -1353,20 +1390,20 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val safepk = peakTimeMinutesForProfile.toInt().coerceAtLeast(35)
             
             for (i in -4..0) { //MP: calculate 5-minute-insulin activity centering around peakTime
-                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(safepk.toLong() - i), profile)
+                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(aimiWallClockMs() + TimeUnit.MINUTES.toMillis(safepk.toLong() - i), profile)
                 futureActivity += iob.activity
             }
             val sensorLag = -10L //MP Assume that the glucose value measurement reflect the BG value from 'sensorlag' minutes ago & calculate the insulin activity then
             var sensorLagActivity = 0.0
             for (i in -4..0) {
-                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(sensorLag - i), profile)
+                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(aimiWallClockMs() + TimeUnit.MINUTES.toMillis(sensorLag - i), profile)
                 sensorLagActivity += iob.activity
             }
 
             val activityHistoric = -20L //MP Activity at the time in minutes from now. Used to calculate activity in the past to use as target activity.
             var historicActivity = 0.0
             for (i in -2..2) {
-                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(activityHistoric - i), profile)
+                val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(aimiWallClockMs() + TimeUnit.MINUTES.toMillis(activityHistoric - i), profile)
                 historicActivity += iob.activity
             }
 // R?cup?re GS standard + features AIMI
@@ -1415,6 +1452,73 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 runCatching { profile.getProfileIsfMgdl() }.getOrNull()
             )
             IsfSourceTelemetry.recordPhysioFactor(physioMults.isfFactor)
+
+            // --- Stress ISF floor -------------------------------------------------------------------
+            // Steps and heart rate come from the snapshot `physioAdapter.getMultipliers` already
+            // refreshed earlier in this same tick (it calls `HealthContextRepository.fetchSnapshot`
+            // before reading anything). `fetchSnapshotForAutodriveGater` therefore serves that
+            // few-hundred-millisecond-old value; on the two paths where `getMultipliers` returns early
+            // (BG under its minimum, or a recent hypoglycaemia) the snapshot is older than the 90 s
+            // reuse window, so the gater falls through to a fresh synchronous read. Both paths read
+            // this tick, never the previous one.
+            val stressSnapshot = runCatching { healthContextRepository.fetchSnapshotForAutodriveGater() }.getOrNull()
+            val stressVerdict = StressIsfFloor.evaluate(
+                hrNowBpm = stressSnapshot?.hrNow ?: 0,
+                rhrRestingBpm = stressSnapshot?.rhrResting ?: 0,
+                stepsLast15m = stressSnapshot?.stepsLast15m ?: 0,
+                nowMs = dateUtil.now(),
+                signatureSinceMs = stressIsfSignatureSinceMs,
+                lastEvaluatedMs = stressIsfLastEvalMs,
+                wasActive = stressIsfWasActive,
+                breakStartedMs = stressIsfBreakStartedMs,
+                // The heart rate may not take this protection away during a fast rise — see
+                // [StressIsfFloor.REASON_RISE_HOLD].
+                deltaMgdl5m = gs.delta,
+            )
+            stressIsfSignatureSinceMs = stressVerdict.signatureSinceMs
+            stressIsfLastEvalMs = stressVerdict.lastEvaluatedMs
+            stressIsfWasActive = stressVerdict.active
+            stressIsfBreakStartedMs = stressVerdict.breakStartedMs
+            val stressFloorArmed = preferences.get(BooleanKey.OApsAIMIStressIsfFloor)
+            val stressFloorMultiplier =
+                if (stressVerdict.active && stressFloorArmed) StressIsfFloor.ARMED_FLOOR_MULTIPLIER
+                else DynamicSensitivityPolicy.PROFILE_RELATIVE_FLOOR
+
+            // The commanded sensitivity after every multiplier and before the floor. Read here, at the
+            // same place the old code read it, so the number the loop commands is unchanged.
+            val preFloorIsfMgdl = profile.getIsfMgdl("OpenAPSAIMIPlugin") * physioMults.isfFactor
+            val profileIsfForFloorMgdl = runCatching { profile.getProfileIsfMgdl() }.getOrNull()
+            // The profile-relative lower bound is applied here too, because this is the value that
+            // becomes `profile.sens` — the number read by the predictions, the tube advisor and the
+            // hypoglycaemia guard, and exported as `command_isf_mgdl`. Without it the bound would sit
+            // before the multipliers that undo it, which is the defect ADR 0008 keeps recording: the
+            // physiological factor is applied after the `coerceIn(5.0, 300.0)` on this path, which is
+            // how a commanded sensitivity of 4.54 mg/dL/U was reached on 2026-08-14 (5.00 x 0.908).
+            // The shadow witness of that same bound used to be recorded here, on the value the
+            // floor had **already** raised. Its own lower bound is the same 0.5 x profile, so it
+            // could never fire again: `isf_profile_relative_bound_hit` was false on 709 night
+            // ticks out of 709 while the floor was really setting the value on 244 of them. The
+            // order now lives in [CommandedIsf], which measures first and floors after.
+            // See `docs/adr/0008-isf-decision-architecture.md`.
+            val commandedIsfMgdl = CommandedIsf.floorAgainstProfileAndRecordShadow(
+                preFloorMgdlPerU = preFloorIsfMgdl,
+                profileIsfMgdlPerU = profileIsfForFloorMgdl,
+                floorMultiplier = stressFloorMultiplier,
+            )
+            // Shadow measure, written on every tick whether the key is armed or not: what the floor at
+            // 1.0 x profile would command. Only recorded when the signature is active and the value
+            // really differs, so an absent field stays absent instead of reading as a zero.
+            val stressFlooredIsfMgdl = DynamicSensitivityPolicy.floorAgainstProfile(
+                commandedMgdlPerU = preFloorIsfMgdl,
+                profileIsfMgdlPerU = profileIsfForFloorMgdl,
+                floorMultiplier = StressIsfFloor.ARMED_FLOOR_MULTIPLIER,
+            )
+            IsfSourceTelemetry.recordStressIsfFloor(
+                active = stressVerdict.active,
+                reason = stressVerdict.reason,
+                flooredIsfMgdl = stressFlooredIsfMgdl.takeIf { stressVerdict.active && it != commandedIsfMgdl },
+            )
+
             val oapsProfile = OapsProfileAimi(
                 dia = eff.iCfg.dia,
                 min_5m_carbimpact = 0.0, // not used
@@ -1425,25 +1529,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 max_bg = maxBg,
                 target_bg = targetBg,
                 carb_ratio = profile.getIc(),
-                // The profile-relative lower bound is applied here too, because this is the value that
-                // becomes `profile.sens` — the number read by the predictions, the tube advisor and the
-                // hypoglycaemia guard, and exported as `command_isf_mgdl`. Without it the bound would sit
-                // before the multipliers that undo it, which is the defect ADR 0008 keeps recording: the
-                // physiological factor is applied after the `coerceIn(5.0, 300.0)` on this path, which is
-                // how a commanded sensitivity of 4.54 mg/dL/U was reached on 2026-08-14 (5.00 x 0.908).
-                // The shadow witness of that same bound used to be recorded here, on the value the
-                // floor had **already** raised. Its own lower bound is the same 0.5 x profile, so it
-                // could never fire again: `isf_profile_relative_bound_hit` was false on 709 night
-                // ticks out of 709 while the floor was really setting the value on 244 of them. The
-                // order now lives in [CommandedIsf], which measures first and floors after.
-                // See `docs/adr/0008-isf-decision-architecture.md`.
-                sens = CommandedIsf.floorAgainstProfileAndRecordShadow(
-                    // The commanded sensitivity after every multiplier and before the floor. Read
-                    // here, at the same place the old code read it, so the number the loop commands
-                    // is unchanged.
-                    preFloorMgdlPerU = profile.getIsfMgdl("OpenAPSAIMIPlugin") * physioMults.isfFactor,
-                    profileIsfMgdlPerU = runCatching { profile.getProfileIsfMgdl() }.getOrNull(),
-                ),
+                // Computed just above, together with the stress-floor verdict.
+                sens = commandedIsfMgdl,
                 autosens_adjust_targets = false, // not used
                 max_daily_safety_multiplier = preferences.get(DoubleKey.ApsMaxDailyMultiplier) * physioMults.smbFactor, // ?? SMB Cap modulation
                 current_basal_safety_multiplier = preferences.get(DoubleKey.ApsMaxCurrentBasalMultiplier) * physioMults.basalFactor, // ?? Basal Cap modulation
@@ -1830,6 +1917,95 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     AimiControlCenterScreen(
                         preferences = preferences,
                         tpoOrchestrator = tpoOrchestrator,
+                        storage = storage,
+                        onBack = onBack,
+                    )
+                },
+            ),
+        )
+        add(
+            ApsIntentKey.AimiSupportPackage.withCompose(
+                ComposeScreenContent { onBack ->
+                    val exporter = AimiSupportPackageExporter(
+                        context = context,
+                        preferences = preferences,
+                        logger = aapsLogger,
+                        storageHelper = storageHelper,
+                        profileFunction = profileFunction,
+                        rh = rh,
+                        storage = storage,
+                    )
+                    AimiSupportPackageScreen(
+                        onBack = onBack,
+                        verifyCode = { code -> AimiDiagnosticsManager.verifyCode(code) },
+                        buildPackage = { issue -> exporter.build(issue) },
+                        sharePackage = { zip, issue -> exporter.share(zip, issue) },
+                    )
+                },
+            ),
+        )
+        add(
+            ApsIntentKey.AimiContext.withCompose(
+                ComposeScreenContent { onBack ->
+                    AimiContextScreen(
+                        contextManager = contextManager,
+                        preferences = preferences,
+                        healthContextRepository = healthContextRepository,
+                        aapsLogger = aapsLogger,
+                        dateUtil = dateUtil,
+                        onBack = onBack,
+                    )
+                },
+            ),
+        )
+        add(
+            ApsIntentKey.AimiMealAdvisor.withCompose(
+                ComposeScreenContent { onBack ->
+                    AimiMealAdvisorScreen(
+                        preferences = preferences,
+                        persistenceLayer = persistenceLayer,
+                        profileFunction = profileFunction,
+                        aapsLogger = aapsLogger,
+                        onBack = onBack,
+                    )
+                },
+            ),
+        )
+        add(
+            ApsIntentKey.AimiModeSettings.withCompose(
+                ComposeScreenContent { onBack ->
+                    AimiModeSettingsScreen(
+                        preferences = preferences,
+                        persistenceLayer = persistenceLayer,
+                        aapsLogger = aapsLogger,
+                        onBack = onBack,
+                    )
+                },
+            ),
+        )
+        add(
+            ApsIntentKey.AimiProfileAdvisor.withCompose(
+                ComposeScreenContent { onBack ->
+                    val advisorService = AimiAdvisorService(
+                        profileFunction = profileFunction,
+                        persistenceLayer = persistenceLayer,
+                        preferences = preferences,
+                        rh = rh,
+                        unifiedReactivityLearner = unifiedReactivityLearner,
+                        tddCalculator = tddCalculator,
+                        tirCalculator = tirCalculator,
+                        aapsLogger = aapsLogger,
+                        storage = storage,
+                    )
+                    AimiProfileAdvisorScreen(
+                        preferences = preferences,
+                        advisorService = advisorService,
+                        historyRepo = AdvisorHistoryRepository(context),
+                        importExportPrefs = importExportPrefs,
+                        exportPasswordDataStore = exportPasswordDataStore,
+                        aiCoachingService = aiCoachingService,
+                        rh = rh,
+                        storage = storage,
                         onBack = onBack,
                     )
                 },
@@ -1848,7 +2024,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     add(IntKey.AimiEmergencySosThreshold)
                     add(IntKey.AimiEmergencySosImmediateThreshold)
                     add(IntKey.AimiEmergencySosStaleThreshold)
-                    add(ApsIntentKey.AimiSosPermissions)
+                    add(
+                        ApsIntentKey.AimiSosPermissions.withCompose(
+                            ComposeScreenContent { onBack -> AimiSosPermissionScreen(onBack = onBack) },
+                        ),
+                    )
                     add(
                         ApsIntentKey.AimiHypoRiskAlarmInfo.withCompose(
                             ComposeScreenContent { onBack ->
@@ -1880,7 +2060,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             },
                         ),
                     )
-                    add(ApsIntentKey.AimiHealthConnectPermissions)
+                    add(
+                        ApsIntentKey.AimiHealthConnectPermissions.withCompose(
+                            ComposeScreenContent { onBack -> AimiHealthConnectPermissionScreen(onBack = onBack) },
+                        ),
+                    )
                     add(AimiStringKey.ActivitySourceMode)
                     add(AimiStringKey.OuraPersonalAccessToken)
                     add(BooleanKey.AimiPhysioSleepDataEnable)
@@ -1919,6 +2103,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                                 rh = rh,
                                 unifiedReactivityLearner = unifiedReactivityLearner,
                                 tddCalculator = tddCalculator,
+                                tirCalculator = tirCalculator,
+                                aapsLogger = aapsLogger,
+                                storage = storage,
                             ).pkpdRecommendationsForSettings(7)
                         }
                     },
@@ -2327,7 +2514,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 add(DoubleKey.autodriveMaxBasal)
                 add(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep)
                 add(BooleanKey.OApsAIMIautodriveAggressiveSmbFloor)
+                add(BooleanKey.OApsAIMIStressIsfFloor)
                 add(BooleanKey.OApsAIMIEffortActivityProtection)
+                add(BooleanKey.OApsAIMIRiseCeilingGuard)
+                add(BooleanKey.OApsAIMIAnticipBasalFloor)
+                add(DoubleKey.OApsAIMIAnticipBudgetU)
+                add(BooleanKey.OApsAIMIAnticipMealEvidence)
                 add(DoubleKey.OApsAIMIautodrivesmallPrebolus)
                 add(DoubleKey.OApsAIMIautodrivePrebolus)
                 add(

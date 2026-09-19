@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.IobTotal
@@ -165,7 +166,7 @@ class AuditorOrchestrator @Inject constructor(
         onSyncDisposition: (AuditorJsonlExport.TickDisposition) -> Unit,
         callback: ((AuditorVerdict?, DecisionResult) -> Unit)?
     ) {
-        val now = System.currentTimeMillis()
+        val now = aimiWallClockMs()
         // Reset each tick; set again below only if the Sentinel actually runs, so early-exit dispositions
         // (DISABLED / SKIPPED_*) don't carry a stale agreement/factor into the JSONL telemetry.
         lastSentinelAdvice = null
@@ -611,7 +612,7 @@ class AuditorOrchestrator @Inject constructor(
      * Performance: Cached bucket calculation 
      */
     private fun getCurrentTimeBucket(): Long {
-        val now = System.currentTimeMillis()
+        val now = aimiWallClockMs()
         if (cachedTimeBucket == -1L || now - cachedTimeBucket > 300_000) {
             cachedTimeBucket = now / (5 * 60 * 1000) * (5 * 60 * 1000)
         }

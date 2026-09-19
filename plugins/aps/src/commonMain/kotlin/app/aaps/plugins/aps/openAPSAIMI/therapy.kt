@@ -20,6 +20,21 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
     var lowCarbTime = false
     var highCarbTime = false
     var mealTime = false
+    /**
+     * A meal the person has declared before it shows on the sensor. Unlike [mealTime] it carries no
+     * prebolus: it only tells the loop the meal is a fact, so a bounded anticipation can be spent
+     * without waiting for the rise to confirm anything. Keyword "anticip", window carried by the
+     * note's own duration.
+     */
+    var anticipTime = false
+    /**
+     * The FCL mode: a declared meal that forces the meal basal ceiling for as long as a low temp
+     * target is set, and sends no prebolus. Keyword "fcl". Unlike every other keyword the window is
+     * at least [FCL_MIN_WINDOW_MS], because the temp target is what ends the mode and a scenario
+     * usually writes the note with no duration of its own. See
+     * `app.aaps.plugins.aps.openAPSAIMI.basal.FclMealBasal`.
+     */
+    var fclTime = false
     var bfastTime = false
     var lunchTime = false
     var dinnerTime = false
@@ -85,6 +100,8 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
                 lowCarbTime = findActiveLowCarbEvents(events, now),
                 highCarbTime = findActiveHighCarbEvents(events, now),
                 mealTime = findActiveMealEvents(events, now),
+                anticipTime = findActiveAnticipEvents(events, now),
+                fclTime = findActiveFclEvents(events, now),
                 bfastTime = findActivebfastEvents(events, now),
                 lunchTime = findActiveLunchEvents(events, now),
                 dinnerTime = findActiveDinnerEvents(events, now),
@@ -106,6 +123,8 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
             lowCarbTime = false,
             highCarbTime = false,
             mealTime = false,
+            anticipTime = false,
+            fclTime = false,
             bfastTime = false,
             lunchTime = false,
             dinnerTime = false,
@@ -126,6 +145,8 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         persistenceLayer.deleteLastEventMatchingKeyword("lowcarb")
         persistenceLayer.deleteLastEventMatchingKeyword("highcarb")
         persistenceLayer.deleteLastEventMatchingKeyword("meal")
+        persistenceLayer.deleteLastEventMatchingKeyword("anticip")
+        persistenceLayer.deleteLastEventMatchingKeyword("fcl")
         persistenceLayer.deleteLastEventMatchingKeyword("bfast")
         persistenceLayer.deleteLastEventMatchingKeyword("lunch")
         persistenceLayer.deleteLastEventMatchingKeyword("dinner")
@@ -140,6 +161,8 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         lowCarbTime = snapshot.lowCarbTime
         highCarbTime = snapshot.highCarbTime
         mealTime = snapshot.mealTime
+        anticipTime = snapshot.anticipTime
+        fclTime = snapshot.fclTime
         bfastTime = snapshot.bfastTime
         lunchTime = snapshot.lunchTime
         dinnerTime = snapshot.dinnerTime
@@ -158,6 +181,8 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         lowCarbTime = false
         highCarbTime = false
         mealTime = false
+        anticipTime = false
+        fclTime = false
         bfastTime = false
         lunchTime = false
         dinnerTime = false
@@ -223,6 +248,32 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
                     now <= (event.timestamp + event.duration)
             }
 
+    /**
+     * A declared meal, with no prebolus attached. The keyword is deliberately not a word containing
+     * "meal": `findActiveMealEvents` matches any note holding "meal", so "premeal" would switch the
+     * meal mode on as well and fire its prebolus, which is the one thing this mode exists to avoid.
+     */
+    private fun findActiveAnticipEvents(events: List<TE>, now: Long): Boolean =
+        events.filter { it.type == TE.Type.NOTE }
+            .any { event ->
+                event.note?.contains("anticip", ignoreCase = true) == true &&
+                    now <= (event.timestamp + event.duration)
+            }
+
+    /**
+     * The FCL mode. The window is the note's own duration, but never shorter than
+     * [FCL_MIN_WINDOW_MS]: a scenario that posts the note next to a temp target normally gives it no
+     * duration, and with the plain duration test such a note would arm nothing. What really ends the
+     * mode is the temp target, checked by
+     * `app.aaps.plugins.aps.openAPSAIMI.basal.FclMealBasal`, so the note only has to be recent.
+     */
+    private fun findActiveFclEvents(events: List<TE>, now: Long): Boolean =
+        events.filter { it.type == TE.Type.NOTE }
+            .any { event ->
+                event.note?.contains("fcl", ignoreCase = true) == true &&
+                    now <= (event.timestamp + maxOf(event.duration, FCL_MIN_WINDOW_MS))
+            }
+
     private fun findActivebfastEvents(events: List<TE>, now: Long): Boolean =
         events.filter { it.type == TE.Type.NOTE }
             .any { event ->
@@ -283,6 +334,8 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         val lowCarbTime: Boolean,
         val highCarbTime: Boolean,
         val mealTime: Boolean,
+        val anticipTime: Boolean,
+        val fclTime: Boolean,
         val bfastTime: Boolean,
         val lunchTime: Boolean,
         val dinnerTime: Boolean,
@@ -296,6 +349,15 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
     )
 
     companion object {
+
+        /**
+         * Shortest time an "fcl" note stays live, whatever duration it carries.
+         *
+         * One hour, the same lookback [getTimeElapsedSinceLastEvent] already uses, so a note cannot
+         * arm the mode on the far side of the day. The temp target is the real leash and it is
+         * normally much shorter than this.
+         */
+        const val FCL_MIN_WINDOW_MS = 60 * 60_000L
         private const val SNAPSHOT_TTL_MS = 30_000L
         private val lock = AapsLock()
         private var snapshot: TherapySnapshot? = null

@@ -80,7 +80,8 @@ class SmbDamping(
             // the delayed rise fades over ~4h. `elapsedSinceMealMin` is now passed in explicitly by the
             // caller — the previous reflection into `ModeState.timeSinceMealMin` always threw (no such field)
             // so `elapsed` was pinned at 0 and the whole ladder collapsed to a constant 0.85.
-            val base = policy.lateFattyMealDamping
+            // The preference range allows 0.0, which would zero the SMB for up to four hours. Floor it.
+            val base = policy.lateFattyMealDamping.coerceIn(0.5, 1.0)
             val progress = (elapsedSinceMealMin / 240.0).coerceIn(0.0, 1.0)
             lateMult = base + (0.95 - base).coerceAtLeast(0.0) * progress
             out *= lateMult

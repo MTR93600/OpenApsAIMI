@@ -19,6 +19,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.PeriodicWorkRequest
 import androidx.work.WorkManager
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -158,7 +159,7 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
             return
         }
 
-        val now = System.currentTimeMillis()
+        val now = aimiWallClockMs()
         val syncStart = now - SYNC_INTERVAL_MS // Last 5 minutes (steps)
 
         // Audit existing data (for logging only, NOT for skipping)
@@ -379,7 +380,7 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
         val enabled = isEnabled()
         val clientAvailable = healthConnectClient != null
         val lastSync = if (lastSyncTimestamp > 0) {
-            val ageSeconds = (System.currentTimeMillis() - lastSyncTimestamp) / 1000
+            val ageSeconds = (aimiWallClockMs() - lastSyncTimestamp) / 1000
             "${ageSeconds}s ago"
         } else {
             "Never"

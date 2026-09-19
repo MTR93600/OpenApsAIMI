@@ -181,7 +181,7 @@ fun PkpdSimpleSettingsContent(
     recommendations.filter { it.domain == AimiDomain.Pkpd && it.action is AimiAction.PreferenceUpdate }
         .take(2)
         .forEach { rec ->
-            PkpdAdvisorSuggestionCard(
+            AimiRecommendationCard(
                 recommendation = rec,
                 onApply = { onApplyRecommendation(it) },
             )
@@ -567,40 +567,6 @@ private fun PkpdTechnicalPeakDetails(preferences: Preferences) {
     }
 }
 
-@Composable
-private fun formatPkpdRecommendationDescription(recommendation: AimiRecommendation): String {
-    val args = recommendation.descriptionArgs
-    return when (args.size) {
-        0 -> stringResource(recommendation.description)
-        1 -> stringResource(recommendation.description, args[0])
-        2 -> stringResource(recommendation.description, args[0], args[1])
-        else -> stringResource(recommendation.description)
-    }
-}
-
-@Composable
-fun PkpdAdvisorSuggestionCard(
-    recommendation: AimiRecommendation,
-    onApply: (AimiAction.PreferenceUpdate) -> Unit,
-) {
-    val action = recommendation.action as? AimiAction.PreferenceUpdate ?: return
-    val description = formatPkpdRecommendationDescription(recommendation)
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-    ) {
-        Column(Modifier.padding(AapsSpacing.medium)) {
-            Text(stringResource(recommendation.title), style = MaterialTheme.typography.titleSmall)
-            Text(description, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = AapsSpacing.extraSmall))
-            Button(
-                onClick = { onApply(action) },
-                modifier = Modifier.padding(top = AapsSpacing.small),
-            ) {
-                Text(stringResource(R.string.aimi_pkpd_advisor_apply))
-            }
-        }
-    }
-}
 
 @Composable
 fun PkpdPresetChipRow(
