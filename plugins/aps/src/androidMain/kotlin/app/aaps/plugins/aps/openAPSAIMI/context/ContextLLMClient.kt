@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.context
 
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiContextLlm
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -394,7 +395,7 @@ Output:
             val jsonArray = JSONArray(cleanJson)
             
             val intents = mutableListOf<ContextIntent>()
-            val now = System.currentTimeMillis()
+            val now = aimiWallClockMs()
             
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)

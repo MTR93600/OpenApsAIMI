@@ -5,6 +5,8 @@ import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiProfileSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlin.math.min
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -15,6 +17,7 @@ import kotlinx.coroutines.withContext
  */
 class OrefLocalPipeline(
     private val persistenceLayer: PersistenceLayer,
+    private val storage: AimiStorage? = null,
 ) {
 
     suspend fun run(
@@ -25,7 +28,7 @@ class OrefLocalPipeline(
     ): OrefAnalysisReport = withContext(Dispatchers.Default) {
         // APS rows carry large JSON per loop; loading 30d on a 256MB heap can OOM (see APSResultDao cursor).
         val effectiveWindowDays = min(windowDays, MAX_HISTORY_DAYS_FOR_MEMORY)
-        val end = System.currentTimeMillis()
+        val end = aimiWallClockMs()
         val start = end - T.days(effectiveWindowDays).msecs()
 
         val gvList = persistenceLayer.getBgReadingsDataFromTimeToTime(start, end, ascending = true)
@@ -140,8 +143,8 @@ class OrefLocalPipeline(
         var personalHypoPct: Double? = null
         var personalHyperPct: Double? = null
         var personalDetail: String? = null
-        if (personalMlEnabled && assetContext != null) {
-            val pr = OrefPersonalMlTrainer.trainAndSummarize(assetContext, slices, outcomePerSlice)
+        if (personalMlEnabled && assetContext != null && storage != null) {
+            val pr = OrefPersonalMlTrainer.trainAndSummarize(storage, assetContext, slices, outcomePerSlice)
             personalStatus = pr.status
             personalHypoPct = pr.meanHypoSignalPct
             personalHyperPct = pr.meanHyperSignalPct

@@ -7,6 +7,7 @@ import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringKey
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningContextApplySupport
 import kotlinx.coroutines.Dispatchers
@@ -30,13 +31,13 @@ internal class TpoLlmValidator(
         input: TpoTickInput,
         ledger: TpoEpisodeLedger,
     ): TpoLlmResult = withContext(Dispatchers.IO) {
-        val started = System.currentTimeMillis()
+        val started = aimiWallClockMs()
         if (!sp.getBoolean(BooleanKey.OApsAIMIContextLLMEnabled.key, false)) {
             return@withContext TpoLlmResult(
                 verdict = TpoLlmVerdict.CONFIRM,
                 confidence = 1.0,
                 rationale = "LLM master disabled — algo only",
-                latencyMs = System.currentTimeMillis() - started,
+                latencyMs = aimiWallClockMs() - started,
             )
         }
         val provider = resolveProvider()
@@ -46,7 +47,7 @@ internal class TpoLlmValidator(
                 verdict = TpoLlmVerdict.UNCERTAIN,
                 confidence = 0.0,
                 rationale = "Missing API key",
-                latencyMs = System.currentTimeMillis() - started,
+                latencyMs = aimiWallClockMs() - started,
             )
         }
         val prompt = buildPrompt(proposal, plan, input, ledger)
@@ -58,7 +59,7 @@ internal class TpoLlmValidator(
                 verdict = TpoLlmVerdict.UNCERTAIN,
                 confidence = 0.0,
                 rationale = error.message ?: "LLM error",
-                latencyMs = System.currentTimeMillis() - started,
+                latencyMs = aimiWallClockMs() - started,
             )
         }
         if (raw.startsWith("Erreur") || raw.startsWith("Clé API")) {
@@ -66,10 +67,10 @@ internal class TpoLlmValidator(
                 verdict = TpoLlmVerdict.UNCERTAIN,
                 confidence = 0.0,
                 rationale = raw.take(240),
-                latencyMs = System.currentTimeMillis() - started,
+                latencyMs = aimiWallClockMs() - started,
             )
         }
-        parseResponse(raw, System.currentTimeMillis() - started)
+        parseResponse(raw, aimiWallClockMs() - started)
     }
 
     fun shouldApply(result: TpoLlmResult, llmConfirmEnabled: Boolean): Boolean {

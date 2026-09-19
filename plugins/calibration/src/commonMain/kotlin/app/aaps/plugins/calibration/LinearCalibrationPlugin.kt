@@ -27,6 +27,7 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventCalibrationChanged
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.compose.icons.IcCalibration
 import app.aaps.plugins.calibration.compose.CalibrationComposeContent
 import dev.zacsweers.metro.AppScope
@@ -41,6 +42,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlin.concurrent.Volatile
 import kotlin.math.abs
 
 @Inject
@@ -70,6 +72,15 @@ class LinearCalibrationPlugin(
 ), Calibration {
 
     private var scope: CoroutineScope? = null
+
+    /** When calibration health was last checked. See `checkCalibrationHealthAndNotify`. */
+    @Volatile
+    private var lastHealthScanAt: Long = 0L
+
+    /** Reason last told to the user (a `cal_notify_*` TextRef), so the same reason is
+     *  not re-announced on every scan. Null once resolved or not yet checked. */
+    @Volatile
+    private var lastHealthMessageRes: TextRef? = null
 
     override suspend fun onStart() {
         super.onStart()
@@ -113,6 +124,7 @@ class LinearCalibrationPlugin(
         }
 
         detectAndNotifyGap(data, sessionStart)
+        checkCalibrationHealthAndNotify(sessionStart, now)
 
         // Without a recorded SENSOR_CHANGE, entries can span multiple sensors with
         // different bias — fitting across them is unsafe. Gap detection above will
@@ -140,13 +152,18 @@ class LinearCalibrationPlugin(
             return data
         }
 
+        // Blend toward identity if the newest entry has gone stale — see stalenessConfidence's
+        // KDoc. Applied only now, after both safety checks above passed on the RAW fit.
+        val confidence = stalenessConfidence(entries.maxOf { it.timestamp }, now)
+        val effective = fit.blendTowardIdentity(confidence)
+
         for (entry in data) {
             if (entry.timestamp >= sessionStart) {
-                entry.calibrated = fit.slope * entry.value + fit.offset
+                entry.calibrated = effective.slope * entry.value + effective.offset
             }
         }
         aapsLogger.debug(LTag.GLUCOSE) {
-            "LinearCalibration: slope=${fit.slope}, offset=${fit.offset}, applied to ${data.count { it.calibrated != null }}/${data.size}"
+            "LinearCalibration: slope=${effective.slope}, offset=${effective.offset}, confidence=$confidence, applied to ${data.count { it.calibrated != null }}/${data.size}"
         }
         return data
     }
@@ -164,8 +181,8 @@ class LinearCalibrationPlugin(
             // fit is in place, so its magnitude scales with slope. Scale the raw-units threshold
             // by the active slope so a sensor rate of e.g. 5 mg/dL/5min (the "stable enough"
             // bar) is treated identically whether or not calibration is multiplying the signal.
-            val activeFit = fitLinearCalibration(persistenceLayer.getValidCalibrationEntriesSince(sessionStart), timestamp)
-            val effectiveThreshold = if (activeFit != null && activeFit.isApplicable) {
+            val activeFit = effectiveFit(persistenceLayer.getValidCalibrationEntriesSince(sessionStart), timestamp)
+            val effectiveThreshold = if (activeFit != null) {
                 DELTA_GATE_MGDL_PER_5MIN * activeFit.slope
             } else {
                 DELTA_GATE_MGDL_PER_5MIN
@@ -178,6 +195,17 @@ class LinearCalibrationPlugin(
             ascending = false
         ).firstOrNull() ?: return AddEntryResult.Rejected.NoSensorPair
         return AddEntryResult.Accepted
+    }
+
+    /**
+     * The fit actually in effect right now, or null if there is none or it fails the safety-range
+     * checks. Never a stale-but-unsafe fit "aged into" looking safe: [CalibrationFit.isApplicable]
+     * is checked on the RAW fit, and staleness blending only runs afterwards.
+     */
+    private fun effectiveFit(entries: List<CAL>, now: Long): CalibrationFit? {
+        val fit = fitLinearCalibration(entries, now) ?: return null
+        if (!fit.isApplicable) return null
+        return fit.blendTowardIdentity(stalenessConfidence(entries.maxOf { it.timestamp }, now))
     }
 
     override suspend fun addEntry(bgMgdl: Double, timestamp: Long): AddEntryResult {
@@ -230,6 +258,54 @@ class LinearCalibrationPlugin(
         )
     }
 
+    /**
+     * Proactively tells the user when calibration needs attention, instead of only saying so once,
+     * right after they submit a fingerstick (see `CalibrationDialogViewModel.notYetEffectiveMessage`).
+     * Exactly one reason is shown at a time, most actionable first, and the notification is
+     * dismissed once the situation resolves — same spaced-scan idea as `detectAndNotifyGap`.
+     *
+     * The same reason is asked about only once, not on every scan (same idea as
+     * `detectAndNotifyGap`'s `lastNotifiedGapAt`): [NotificationManager.post] replaces the existing
+     * `CALIBRATION_HEALTH` notification with a fresh one — new timestamp, and (by default
+     * preference) a fresh Android system notification — on every call, whether or not anything
+     * actually changed. Without this check, a persisting condition (e.g. a sensor nobody
+     * recalibrated in days) reposts every [HEALTH_SCAN_INTERVAL_MS], which reads as a notification
+     * every ~30 minutes for as long as the condition holds — not the single heads-up it should be.
+     */
+    private suspend fun checkCalibrationHealthAndNotify(sessionStart: Long?, now: Long) {
+        if (now - lastHealthScanAt < HEALTH_SCAN_INTERVAL_MS) return
+        lastHealthScanAt = now
+
+        if (sessionStart == null) {
+            // detectAndNotifyGap already covers this case (offers to log a sensor change).
+            lastHealthMessageRes = null
+            notificationManager.dismiss(NotificationId.CALIBRATION_HEALTH)
+            return
+        }
+
+        val entries = persistenceLayer.getValidCalibrationEntriesSince(sessionStart)
+        val fit = fitLinearCalibration(entries, now)
+        val newestEntryAgeMs = entries.maxOfOrNull { now - it.timestamp }
+        val isStale = newestEntryAgeMs != null && newestEntryAgeMs >= T.days(STALE_CONFIDENCE_FULL_DAYS).msecs()
+
+        val messageRes = when {
+            fit == null                               -> CalibrationStrings.cal_notify_need_more_entries
+            !fit.isApplicable                         -> CalibrationStrings.cal_notify_unsafe_fit
+            fit.mode == FitMode.OffsetOnly && isStale  -> CalibrationStrings.cal_notify_narrow_range
+            isStale                                    -> CalibrationStrings.cal_notify_stale
+            else                                        -> null
+        }
+
+        if (messageRes == null) {
+            lastHealthMessageRes = null
+            notificationManager.dismiss(NotificationId.CALIBRATION_HEALTH)
+            return
+        }
+        if (messageRes == lastHealthMessageRes) return
+        lastHealthMessageRes = messageRes
+        notificationManager.post(id = NotificationId.CALIBRATION_HEALTH, text = rh.gs(messageRes))
+    }
+
     private suspend fun insertSensorChange(timestamp: Long) {
         persistenceLayer.insertPumpTherapyEventIfNewByTimestamp(
             therapyEvent = TE(
@@ -251,6 +327,14 @@ class LinearCalibrationPlugin(
 
         const val GAP_THRESHOLD_MIN = 30L
         const val WARM_UP_HOURS = 2L
+
+        /**
+         * How often calibration health (need more entries / unsafe fit / narrow range / stale) may
+         * be checked. Slower than gap detection: none of these conditions change on a
+         * per-minute timescale, so checking every 30 minutes is plenty responsive without adding
+         * noise.
+         */
+        val HEALTH_SCAN_INTERVAL_MS = T.mins(30).msecs()
 
         // GlucoseStatus.shortAvgDelta is mg/dL per 5 min — match the unit here. 5 mg/dL / 5 min
         // ≈ 1 mg/dL / min, the conventional "stable enough to calibrate" threshold across CGM apps.
