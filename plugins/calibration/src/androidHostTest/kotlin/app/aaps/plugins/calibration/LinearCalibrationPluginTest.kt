@@ -32,6 +32,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
@@ -198,6 +199,9 @@ class LinearCalibrationPluginTest : TestBase() {
     @Test
     fun calibrate_gapDetected_postsNotification() = runTest {
         whenever(rh.gs(any<TextRef>(), any())).thenReturn("Possible sensor change")
+        // A healthy, fresh fit keeps the (unrelated) calibration-health check quiet too, so this
+        // test only exercises gap detection.
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
         // Gap of 60min between data[0] and data[1]; default sessionStart is 12h ago so gap is within session
         val data = mutableListOf(
             value(now, 150.0),
@@ -218,6 +222,8 @@ class LinearCalibrationPluginTest : TestBase() {
 
     @Test
     fun calibrate_gapWithNearbySensorChange_skipsNotification() = runTest {
+        // A healthy, fresh fit keeps the (unrelated) calibration-health check quiet too.
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
         whenever(persistenceLayer.getTherapyEventDataFromToTime(any(), any())).thenReturn(
             listOf(sensorChange(now - T.mins(35).msecs()))
         )
@@ -241,6 +247,9 @@ class LinearCalibrationPluginTest : TestBase() {
     @Test
     fun calibrate_notificationAction_insertsSensorChange() = runTest {
         whenever(rh.gs(any<TextRef>(), any())).thenReturn("Possible sensor change")
+        // A healthy, fresh fit keeps the (unrelated) calibration-health check from posting a second,
+        // competing notification — this test only wants the gap-detection one.
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
         whenever(persistenceLayer.insertPumpTherapyEventIfNewByTimestamp(any(), any(), any(), any(), any(), any()))
             .thenReturn(PersistenceLayer.TransactionResult())
         val data = mutableListOf(
@@ -264,6 +273,205 @@ class LinearCalibrationPluginTest : TestBase() {
 
         verify(persistenceLayer).insertPumpTherapyEventIfNewByTimestamp(
             any(), any(), any(), any(), anyOrNull(), any()
+        )
+    }
+
+    // ------------ calibration health notifications ------------
+
+    private fun verifyHealthNotificationPosted(expectedText: String) {
+        verify(notificationManager).post(
+            eq(NotificationId.CALIBRATION_HEALTH),
+            eq(expectedText),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            any<List<NotificationAction>>(),
+            anyOrNull()
+        )
+    }
+
+    private fun verifyNoHealthNotificationPosted() {
+        verify(notificationManager, never()).post(
+            eq(NotificationId.CALIBRATION_HEALTH),
+            any<String>(),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            any<List<NotificationAction>>(),
+            anyOrNull()
+        )
+    }
+
+    @Test
+    fun calibrate_needsMoreEntries_notifiesToAddCalibration() = runTest {
+        whenever(rh.gs(eq(CalibrationStrings.cal_notify_need_more_entries))).thenReturn("NEED_MORE")
+        // getValidCalibrationEntriesSince defaults to emptyList() from setUp().
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        verifyHealthNotificationPosted("NEED_MORE")
+    }
+
+    @Test
+    fun calibrate_unsafeFit_notifiesInconsistentCalibration() = runTest {
+        whenever(rh.gs(eq(CalibrationStrings.cal_notify_unsafe_fit))).thenReturn("UNSAFE")
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(
+                entry(sensor = 100.0, fs = 200.0, ageDays = 0L),
+                entry(sensor = 200.0, fs = 400.0, ageDays = 0L)
+            )
+        )
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        verifyHealthNotificationPosted("UNSAFE")
+    }
+
+    @Test
+    fun calibrate_narrowRangeAndStale_notifiesToSpreadCalibrations() = runTest {
+        whenever(rh.gs(eq(CalibrationStrings.cal_notify_narrow_range))).thenReturn("NARROW")
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(
+                entry(sensor = 140.0, fs = 143.0, ageDays = 3L),
+                entry(sensor = 141.0, fs = 146.0, ageDays = 3L)
+            )
+        )
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        verifyHealthNotificationPosted("NARROW")
+    }
+
+    @Test
+    fun calibrate_narrowRangeButFresh_doesNotNotifyYet() = runTest {
+        // Same narrow-range shape as above, but the entries were just added — too soon to nag
+        // about spreading calibrations out.
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(
+                entry(sensor = 140.0, fs = 143.0, ageDays = 0L),
+                entry(sensor = 141.0, fs = 146.0, ageDays = 0L)
+            )
+        )
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        verifyNoHealthNotificationPosted()
+        verify(notificationManager).dismiss(NotificationId.CALIBRATION_HEALTH)
+    }
+
+    @Test
+    fun calibrate_goodFitButStale_notifiesToRecalibrate() = runTest {
+        whenever(rh.gs(eq(CalibrationStrings.cal_notify_stale))).thenReturn("STALE")
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(
+                entry(sensor = 100.0, fs = 110.0, ageDays = 3L),
+                entry(sensor = 200.0, fs = 220.0, ageDays = 3L)
+            )
+        )
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        verifyHealthNotificationPosted("STALE")
+    }
+
+    @Test
+    fun calibrate_healthyFreshFit_dismissesAnyExistingHealthNotification() = runTest {
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        verifyNoHealthNotificationPosted()
+        verify(notificationManager).dismiss(NotificationId.CALIBRATION_HEALTH)
+    }
+
+    @Test
+    fun calibrate_noSessionStart_dismissesHealthNotificationInsteadOfNagging() = runTest {
+        // detectAndNotifyGap already owns this case (offers to log a sensor change) — the health
+        // check must stay quiet rather than pile on a second, redundant notification.
+        whenever(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)).thenReturn(null)
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        verifyNoHealthNotificationPosted()
+        verify(notificationManager).dismiss(NotificationId.CALIBRATION_HEALTH)
+    }
+
+    @Test
+    fun calibrate_repeatedCalls_healthCheckOnlyOncePerInterval() = runTest {
+        whenever(rh.gs(eq(CalibrationStrings.cal_notify_need_more_entries))).thenReturn("NEED_MORE")
+        repeat(5) { plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE) }
+        verify(notificationManager, times(1)).post(
+            eq(NotificationId.CALIBRATION_HEALTH),
+            eq("NEED_MORE"),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            any<List<NotificationAction>>(),
+            anyOrNull()
+        )
+    }
+
+    @Test
+    fun calibrate_sameReasonAcrossManyScans_notifiesOnlyOnce() = runTest {
+        // Regression guard: an unresolved reason must not repost every scan interval forever — it
+        // reads to the user as a notification roughly every 30 minutes for as long as it persists,
+        // which for a condition like "stale" can be most of a sensor's life.
+        whenever(rh.gs(eq(CalibrationStrings.cal_notify_need_more_entries))).thenReturn("NEED_MORE")
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        whenever(dateUtil.now()).thenReturn(now + T.mins(31).msecs())
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        whenever(dateUtil.now()).thenReturn(now + T.mins(62).msecs())
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+
+        verify(notificationManager, times(1)).post(
+            eq(NotificationId.CALIBRATION_HEALTH),
+            eq("NEED_MORE"),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            any<List<NotificationAction>>(),
+            anyOrNull()
+        )
+    }
+
+    @Test
+    fun calibrate_reasonChangesOnLaterScan_notifiesAgainWithTheNewReason() = runTest {
+        whenever(rh.gs(eq(CalibrationStrings.cal_notify_need_more_entries))).thenReturn("NEED_MORE")
+        whenever(rh.gs(eq(CalibrationStrings.cal_notify_unsafe_fit))).thenReturn("UNSAFE")
+        // First scan: no entries yet -> "need more entries".
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        // Second scan, past the interval: entries now exist but the fit is unsafe -> a genuinely
+        // different reason, which must still be announced despite the de-dup above.
+        whenever(dateUtil.now()).thenReturn(now + T.mins(31).msecs())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(
+                entry(sensor = 100.0, fs = 200.0, ageDays = 0L),
+                entry(sensor = 200.0, fs = 400.0, ageDays = 0L)
+            )
+        )
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+
+        verifyHealthNotificationPosted("NEED_MORE")
+        verify(notificationManager).post(
+            eq(NotificationId.CALIBRATION_HEALTH),
+            eq("UNSAFE"),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            any<List<NotificationAction>>(),
+            anyOrNull()
+        )
+    }
+
+    @Test
+    fun calibrate_reasonResolvesThenRecurs_notifiesAgain() = runTest {
+        whenever(rh.gs(eq(CalibrationStrings.cal_notify_need_more_entries))).thenReturn("NEED_MORE")
+        // First scan: no entries -> notifies.
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        // Second scan: healthy fit -> resolves, dismissed, and the "last reason" memory is cleared.
+        whenever(dateUtil.now()).thenReturn(now + T.mins(31).msecs())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+        // Third scan: back to no entries (e.g. entries invalidated) -> the SAME reason as the first
+        // scan, but it must be announced again since it had genuinely resolved in between.
+        whenever(dateUtil.now()).thenReturn(now + T.mins(62).msecs())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(emptyList())
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+
+        verify(notificationManager, times(2)).post(
+            eq(NotificationId.CALIBRATION_HEALTH),
+            eq("NEED_MORE"),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            any<List<NotificationAction>>(),
+            anyOrNull()
         )
     }
 
