@@ -144,6 +144,7 @@ import app.aaps.plugins.aps.openAPSAIMI.risk.AimiRiskEnvelope
 import app.aaps.plugins.aps.openAPSAIMI.risk.AimiRiskEnvelopeBuilder
 import app.aaps.plugins.aps.openAPSAIMI.risk.DecisionPredictionAuthority
 import app.aaps.plugins.aps.openAPSAIMI.risk.DecisionPredictionAuthorityResolver
+import app.aaps.plugins.aps.openAPSAIMI.risk.MealConfirmedEarlyReleaseLatch
 import app.aaps.plugins.aps.openAPSAIMI.risk.IobConsensus
 import app.aaps.plugins.aps.openAPSAIMI.risk.IobDecisionSource
 import app.aaps.plugins.aps.openAPSAIMI.risk.PredictionPathBounds
@@ -11120,11 +11121,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             mealCertainty = lastMealCertainty,
             trunkGlobalState = lastPhysiologicalTreeSnapshot?.trunk?.globalState,
             mealConfirmedEarlyReleaseEnabled = preferences.get(BooleanKey.OApsAIMIMealConfirmedEarlyRelease),
-            combinedDeltaMgdl5m = delta.toDouble(),
+            // The smoothed combined delta, not the raw 5-minute one. The parameter has always been
+            // named for the combined signal; passing the raw delta let a single sensor step of +24
+            // satisfy the "rising" test and clear the "falling" breaker on the same tick.
+            combinedDeltaMgdl5m = tickCombinedDelta.toDouble(),
             targetBgMgdl = targetBgMgdl,
             iobU = iob.toDouble(),
             maxIobU = maxIob,
+            mcerTailLatched = mcerTailLatch.latched,
             declaredMeal = anticipTime && preferences.get(BooleanKey.OApsAIMIAnticipMealEvidence),
+        )
+        // Carry the latch to the next tick. Done after the call because the resolver is stateless and
+        // reports the trip; it can only keep an opt-in escalation off, never raise a dose.
+        mcerTailLatch = MealConfirmedEarlyReleaseLatch.next(
+            previous = mcerTailLatch,
+            armedThisTick = decisionPrediction.mcerArmed,
+            tailTripped = decisionPrediction.mcerTailTripped,
+            bgMgdl = bg.toDouble(),
+            targetBgMgdl = targetBgMgdl,
+            iobU = iob.toDouble(),
         )
         lastDecisionPredictionAuthority = decisionPrediction
         consoleLog.add(
@@ -11547,6 +11562,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     /** Clock of the last tick counted in [ceilingRepeatCount]; a hole restarts the count. */
     private var ceilingRepeatLastMs: Long = 0L
+
+    /**
+     * Holds the meal-confirmed early release off after a post-peak tail. Cross-tick on purpose — the
+     * whole point of [MealConfirmedEarlyReleaseLatch] is that one noisy tick must not undo the
+     * breaker, so this must NOT be reset per tick.
+     */
+    private var mcerTailLatch = MealConfirmedEarlyReleaseLatch.State()
     private var mealAdvisorOneShotThisTick: Boolean = false
     private var lastTubeAdvisorSmbCapScale: Double? = null
 
