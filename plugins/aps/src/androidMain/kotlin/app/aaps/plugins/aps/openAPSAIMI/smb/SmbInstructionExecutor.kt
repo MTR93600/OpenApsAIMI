@@ -16,7 +16,7 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.safety.HighBgOverride
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbDampingUsecase
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbQuantizer
-import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
@@ -27,7 +27,7 @@ object SmbInstructionExecutor {
     data class Input(
         val context: Context,
         val preferences: Preferences,
-        val csvFile: File,
+        val csvFile: AimiPath,
         val rT: RT,
         val consoleLog: MutableList<String>,
         val consoleError: MutableList<String>,

@@ -93,7 +93,7 @@ internal class DetermineBasalInvocationCaches {
                 total == null -> AsyncDataState.Missing("tdd24h_missing")
                 ts == null -> AsyncDataState.Stale(total, STALE_AGE_MS)
                 else -> {
-                    val age = (System.currentTimeMillis() - ts).coerceAtLeast(0L)
+                    val age = (aimiWallClockMs() - ts).coerceAtLeast(0L)
                     if (age <= STALE_AGE_MS) AsyncDataState.Fresh(total, age) else AsyncDataState.Stale(total, age)
                 }
             }
@@ -119,7 +119,7 @@ internal class DetermineBasalInvocationCaches {
                 r == null -> AsyncDataState.Missing("tdd_1day_sparse_missing")
                 ts == null -> AsyncDataState.Stale(r, STALE_AGE_MS)
                 else -> {
-                    val age = (System.currentTimeMillis() - ts).coerceAtLeast(0L)
+                    val age = (aimiWallClockMs() - ts).coerceAtLeast(0L)
                     if (age <= STALE_AGE_MS) AsyncDataState.Fresh(r, age) else AsyncDataState.Stale(r, age)
                 }
             }
@@ -145,7 +145,7 @@ internal class DetermineBasalInvocationCaches {
         if (r.size() == 0) return AsyncDataState.Missing("tir_1day_65180_missing")
         val ts = tir1DayTsRef.get()
         if (ts == null) return AsyncDataState.Stale(r, STALE_AGE_MS)
-        val age = (System.currentTimeMillis() - ts).coerceAtLeast(0L)
+        val age = (aimiWallClockMs() - ts).coerceAtLeast(0L)
         return if (age <= STALE_AGE_MS) AsyncDataState.Fresh(r, age) else AsyncDataState.Stale(r, age)
     }
 
@@ -155,7 +155,7 @@ internal class DetermineBasalInvocationCaches {
             cachedTir65180Seq = invocationSeq
         }
         tir1DayRef.set(result)
-        tir1DayTsRef.set(System.currentTimeMillis())
+        tir1DayTsRef.set(aimiWallClockMs())
     }
 
     private fun refreshTdd24hAsync(tddCalculator: TddCalculator) {
@@ -163,7 +163,7 @@ internal class DetermineBasalInvocationCaches {
         ioScope.launch {
             try {
                 tdd24Ref.set(tddCalculator.calculateDaily(-24, 0)?.totalAmount)
-                tdd24TsRef.set(System.currentTimeMillis())
+                tdd24TsRef.set(aimiWallClockMs())
             } finally {
                 tdd24InFlight.set(false)
             }
@@ -175,7 +175,7 @@ internal class DetermineBasalInvocationCaches {
         ioScope.launch {
             try {
                 tdd1DayRef.set(tddCalculator.calculate(1, allowMissingDays = false))
-                tdd1DayTsRef.set(System.currentTimeMillis())
+                tdd1DayTsRef.set(aimiWallClockMs())
             } finally {
                 tdd1DayInFlight.set(false)
             }
@@ -187,7 +187,7 @@ internal class DetermineBasalInvocationCaches {
         ioScope.launch {
             try {
                 tir1DayRef.set(tirCalculator.calculate(1, 65.0, 180.0))
-                tir1DayTsRef.set(System.currentTimeMillis())
+                tir1DayTsRef.set(aimiWallClockMs())
             } finally {
                 tir1DayInFlight.set(false)
             }

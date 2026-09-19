@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.utils
 
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.JsonlTailReader
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -56,6 +57,18 @@ class AndroidAimiStorage @Inject constructor(
     override fun readFirstLine(path: AimiPath): String? =
         runCatching { fileOf(path).bufferedReader().use { it.readLine() } }.getOrNull()
 
+    override fun forEachLine(path: AimiPath, action: (String) -> Unit): Boolean =
+        runCatching {
+            fileOf(path).bufferedReader().use { reader ->
+                var line = reader.readLine()
+                while (line != null) {
+                    action(line)
+                    line = reader.readLine()
+                }
+            }
+            true
+        }.getOrDefault(false)
+
     override fun writeText(path: AimiPath, text: String): Boolean =
         runCatching { fileOf(path).writeText(text); true }.getOrDefault(false)
 
@@ -68,4 +81,52 @@ class AndroidAimiStorage @Inject constructor(
 
     override fun fallbackFile(name: String): AimiPath =
         AimiPath(File(File(helper.appScopedExternalDir() ?: helper.getAimiDirectory(), "AAPS"), name).absolutePath)
+
+    override fun delete(path: AimiPath): Boolean =
+        runCatching { fileOf(path).let { it.delete(); !it.exists() } }.getOrDefault(false)
+
+    override fun replaceText(path: AimiPath, text: String): Boolean {
+        val tmpFile = fileOf(sibling(path, ".tmp"))
+        val target = fileOf(path)
+        return try {
+            tmpFile.writeText(text)
+            val replaced = tmpFile.renameTo(target)
+            if (!replaced) tmpFile.delete()
+            replaced
+        } catch (e: Exception) {
+            runCatching { tmpFile.delete() }
+            false
+        }
+    }
+
+    override fun replaceKeepingBackup(path: AimiPath, text: String): Boolean {
+        createParentDirectories(path)
+        val tmpFile = fileOf(sibling(path, ".tmp"))
+        val bakFile = fileOf(sibling(path, ".bak"))
+        val target = fileOf(path)
+        return try {
+            tmpFile.writeText(text)
+            if (target.exists()) {
+                bakFile.delete()
+                target.renameTo(bakFile)
+            }
+            val replaced = tmpFile.renameTo(target)
+            if (!replaced) tmpFile.delete()
+            replaced
+        } catch (e: Exception) {
+            runCatching { tmpFile.delete() }
+            false
+        }
+    }
+
+    override fun readTailLines(path: AimiPath, maxLines: Int): List<String> =
+        runCatching { JsonlTailReader.readTailLines(fileOf(path), maxLines) }.getOrDefault(emptyList())
+
+    override fun sizeBytes(path: AimiPath): Long = runCatching { fileOf(path).length() }.getOrDefault(0L)
+
+    override fun copy(from: AimiPath, to: AimiPath): Boolean =
+        runCatching { fileOf(from).copyTo(fileOf(to), overwrite = true); true }.getOrDefault(false)
+
+    override fun lastModifiedMs(path: AimiPath): Long? =
+        runCatching { fileOf(path).lastModified().takeIf { it != 0L } }.getOrNull()
 }

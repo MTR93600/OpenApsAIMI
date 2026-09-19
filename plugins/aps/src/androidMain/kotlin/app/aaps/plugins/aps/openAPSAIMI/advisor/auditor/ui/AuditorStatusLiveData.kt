@@ -4,6 +4,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorStatusTracker
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model.AuditorUIState
 import dev.zacsweers.metro.Inject
@@ -64,7 +65,7 @@ class AuditorStatusLiveData @Inject constructor() {
 
   fun markAsRead() {
     val verdictTimestamp = AuditorVerdictCache.resolveForDisplay()?.cached?.timestamp
-    lastReadTimestampMs = verdictTimestamp ?: System.currentTimeMillis()
+    lastReadTimestampMs = verdictTimestamp ?: aimiWallClockMs()
     notifyUpdate()
   }
 
