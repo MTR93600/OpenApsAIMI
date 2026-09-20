@@ -1917,6 +1917,51 @@ come off, rather than falling monotonically.
 
 ---
 
+## 6ae. 2026-09-20: the branch is measured against live AIMI, and the gap is mostly tests
+
+Three days of work landed on `dev_OAPSAIMI` while this branch moved files between source sets, so the
+first job was measuring how far apart they are. The headline number is misleading and the real one is
+more useful.
+
+**532 AIMI files here against 762 on `dev_OAPSAIMI`** - 299 present there and missing here. But
+**260 of those 299 are tests**. Only **39 are production files**, and roughly fourteen of those are
+deliberately absent: the Activities replaced by Compose, `ContextViewModel` dropped as dead in 6m,
+`AimiLoopRuntimeGuard` held on purpose. So the production gap is about **25 real files** - the
+`retention/` package (9 files, new), the new ISF work (`HeartRateTrendIsf`, `StressIsfFloor`),
+`FclMealBasal`, `AnticipationBasalFloor`, `TpoRevertPolicy`, `RiseCeilingGuard` and a handful more.
+
+**The test gap is the serious one: 52 AIMI test files here against 294 there.** This migration has
+been moving and rewriting dosing code with under a fifth of the coverage the live fork has.
+
+Of the 260 missing tests, **154 have their subject already present on this branch** - they can be
+ported now, without porting any feature first. 119 of those 154 use no MockK; this module is wired for
+Mockito, so the other 35 need a dependency decision before they can land.
+
+### The pilot, and what it says about the migration
+
+Thirteen non-MockK `pkpd` tests were copied from `dev_OAPSAIMI:plugins/aps/src/test/kotlin` into
+`androidHostTest` (the KMP equivalent per the `kmp-module-flip` skill).
+
+**Twelve compiled unchanged and all passed** - 589 tests became 643, zero failures. That is the useful
+result: those twelve engine files have **not** drifted. Everything those tests assert about the
+migrated code still holds, which is the first real evidence that the port preserved behaviour rather
+than merely preserving compilation.
+
+**One failed to compile, and it is a finding rather than a nuisance.** `IsfFusionTest` calls
+`IsfFusion.fused(..., nowMs = ..., authoritative = ...)`. This branch's `IsfFusion` has neither
+parameter: production gained a time argument and an authority flag that this branch's copy does not
+have. **This branch is running an older ISF fusion engine than production.**
+
+So porting these tests is not only coverage. It is an **audit of the drift**: a test that compiles and
+passes says its engine file is faithful, and a test that refuses to compile names a file that is
+behind and says exactly how. That makes the remaining 141 a measuring instrument as much as a safety
+net, and it is the cheapest way to find out which of this branch's engine files are stale.
+
+`IsfFusionTest` is parked at `.superpowers/sdd/.../IsfFusionTest.kt.deferred` until `IsfFusion` is
+brought up to date, so the finding is not lost.
+
+---
+
 ---
 
 ## 7. Start here next session
