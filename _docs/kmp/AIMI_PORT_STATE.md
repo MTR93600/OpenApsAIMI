@@ -1,8 +1,13 @@
 # AIMI port - state of play, and where to start next
 
+> **2026-09-06 — superseded as the live snapshot.** Re-verified status and the remaining
+> lots are in [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md) and
+> [`docs/kmp-migration/DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md).
+> This file is still the best diary of lots 0–6i (how the tick and plugin landed). Do not
+> use its file counts, “2 files from commonMain”, or “330 tests” as today’s truth.
+
 Updated 2026-09-02, on `kmp-aimi-migration-study` at `1f6ca62fe8` (the second `kmp` merge).
-**Read this first.** It supersedes the stale parts of the older documents in this folder; each of
-those is marked below with what to still trust it for.
+**Was** “read this first” until 2026-09-06. Keep it for the lot history only.
 
 Tree is clean. `:app:assembleFullDebug` EXIT=0. `:plugins:aps:compileKotlinIosArm64` EXIT=0.
 `:plugins:aps:testAndroidHostTest` **330 tests, 0 failures**. `:ios:shell:checkMigratedModules` EXIT=0.

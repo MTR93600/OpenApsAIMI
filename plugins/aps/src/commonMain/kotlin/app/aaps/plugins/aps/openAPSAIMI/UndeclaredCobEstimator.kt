@@ -34,10 +34,11 @@ object UndeclaredCobEstimator {
      * gate keys on. Left as it was, the estimator written to catch an undeclared meal was switched
      * off by the sign of that meal.
      *
-     * Same value and same reasoning as `StressIsfFloor.RISE_HOLD_MGDL_PER_5MIN` and
-     * `HeartRateTrendIsf.RISE_SUSPEND_MGDL_PER_5MIN`: above it the rise is too fast to be hormonal,
-     * so a heart rate says nothing about its cause. Below it, a high heart rate with a gentle rise
-     * keeps its meaning and the gate keeps its say.
+     * Same value and same reasoning as
+     * [app.aaps.plugins.aps.openAPSAIMI.ISF.StressIsfFloor.RISE_HOLD_MGDL_PER_5MIN] and
+     * [app.aaps.plugins.aps.openAPSAIMI.ISF.HeartRateTrendIsf.RISE_SUSPEND_MGDL_PER_5MIN]: above it
+     * the rise is too fast to be hormonal, so a heart rate says nothing about its cause. Below it,
+     * a high heart rate with a gentle rise keeps its meaning and the gate keeps its say.
      */
     const val HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN: Double = 11.0
 
@@ -108,14 +109,12 @@ object UndeclaredCobEstimator {
         if (input.postHypoActive) return Result.gated("post_hypo")
         if (input.bgMgdl <= HYPO_GUARD_MGDL) return Result.gated("hypo_zone")
         if (input.cfrdExacerbationActive) return Result.gated("cfrd_exacerbation")
-        // An elevated heart rate always closes this gate, whatever the glucose is doing.
-        //
-        // It used to step aside above HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN, on the argument that a fast
-        // rise cannot be hormonal — which also means the estimator invented carbs during exactly the
-        // episodes where a raised heart rate has another cause. The simple rule: the heart rate may
-        // protect, it may never be a reason to believe in a meal. The cost is known and accepted: a
-        // real undeclared meal that raises the heart rate is not caught here.
-        if (input.hrInflammationElevated) return Result.gated("hr_inflammation")
+        // The heart rate keeps its say only while the rise is slow enough for it to mean something.
+        val riseTooFastForHeartRate = input.deltaMgdl5m.isFinite() &&
+            input.deltaMgdl5m >= HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN
+        if (input.hrInflammationElevated && !riseTooFastForHeartRate) {
+            return Result.gated("hr_inflammation")
+        }
         if (input.exerciseLockoutActive || input.activityDetected) return Result.gated("exercise_activity")
         if (input.mealProb < MEAL_PROB_THRESHOLD) return Result.gated("meal_prob_low")
 

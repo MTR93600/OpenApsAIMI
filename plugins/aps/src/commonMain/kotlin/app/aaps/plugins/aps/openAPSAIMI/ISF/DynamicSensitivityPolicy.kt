@@ -92,20 +92,31 @@ object DynamicSensitivityPolicy {
     internal const val PROFILE_RELATIVE_FLOOR: Double = 0.5
 
     /**
-     * Raises [commandedMgdlPerU] to at least [PROFILE_RELATIVE_FLOOR] of the profile sensitivity.
+     * Raises [commandedMgdlPerU] to at least [floorMultiplier] times the profile sensitivity.
      *
-     * Reduction is impossible by construction — the result is never below the input. Fails open: a
-     * missing, non-finite or non-positive profile sensitivity returns the input unchanged, so a bad
-     * profile read can never make the loop more aggressive than it already was.
+     * Reduction is impossible by construction — the result is never below the input, whatever the
+     * multiplier is. Fails open: a missing, non-finite or non-positive profile sensitivity, or a
+     * non-finite or non-positive multiplier, returns the input unchanged, so a bad read can never make
+     * the loop more aggressive than it already was.
      *
      * @param commandedMgdlPerU the commanded sensitivity, after every multiplier, mg/dL per U.
      * @param profileIsfMgdlPerU the static profile sensitivity, mg/dL per U, or null when unavailable.
+     * @param floorMultiplier the bound, as a fraction of the profile sensitivity. The default is
+     *   [PROFILE_RELATIVE_FLOOR], which is the unconditional behaviour and is bit-for-bit what this
+     *   function did before the parameter existed. `StressIsfFloor.ARMED_FLOOR_MULTIPLIER` (1.0) is
+     *   passed instead while the stress signature holds and the opt-in key is armed, so the commanded
+     *   sensitivity may not fall under the profile value of this time of day. See [StressIsfFloor].
      */
-    fun floorAgainstProfile(commandedMgdlPerU: Double, profileIsfMgdlPerU: Double?): Double {
+    fun floorAgainstProfile(
+        commandedMgdlPerU: Double,
+        profileIsfMgdlPerU: Double?,
+        floorMultiplier: Double = PROFILE_RELATIVE_FLOOR,
+    ): Double {
         if (!commandedMgdlPerU.isFinite()) return commandedMgdlPerU
         val profile = profileIsfMgdlPerU ?: return commandedMgdlPerU
         if (!profile.isFinite() || profile <= 0.0) return commandedMgdlPerU
-        return maxOf(commandedMgdlPerU, profile * PROFILE_RELATIVE_FLOOR)
+        if (!floorMultiplier.isFinite() || floorMultiplier <= 0.0) return commandedMgdlPerU
+        return maxOf(commandedMgdlPerU, profile * floorMultiplier)
     }
 
     /**
