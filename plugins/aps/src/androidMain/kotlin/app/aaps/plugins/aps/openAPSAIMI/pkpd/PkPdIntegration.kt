@@ -134,6 +134,12 @@ class PkPdIntegration(
         estimatedRaMgdlPerMin: Double? = null,
         causalStatePosterior: CausalStatePosterior? = null,
         allowLearning: Boolean = true,
+        /**
+         * Only the per-tick dosing path may consume the ISF slew budget and move the anchor.
+         * Read-only callers get a bounded value without touching state.
+         * Defaults to allowLearning: same "one writer per tick" rule as the estimator.
+         */
+        isfRateLimitAuthority: Boolean = allowLearning,
         patientEventMemory: PatientEventMemory? = null,
     ): PkPdRuntime? {
         val structural = readStructuralConfig()
@@ -300,7 +306,15 @@ class PkPdIntegration(
                 "mealF=${"%.2f".format(familyMealFactor)} physBlend=${"%.2f".format(behaviorProfile.pkpdPhysioBlendFraction())}",
         )
 
-        val fusedIsf = fusion.fused(profileIsf, tddIsf, pkpdScale, isRising, aggressionMultiplier)
+        val fusedIsf = fusion.fused(
+            profileIsf = profileIsf,
+            tddIsf = tddIsf,
+            pkpdScale = pkpdScale,
+            nowMs = epochMillis,
+            authoritative = isfRateLimitAuthority,
+            isRising = isRising,
+            aggressionMultiplier = aggressionMultiplier
+        )
         return PkPdRuntime(
             params = params,
             tailFraction = tailFraction,

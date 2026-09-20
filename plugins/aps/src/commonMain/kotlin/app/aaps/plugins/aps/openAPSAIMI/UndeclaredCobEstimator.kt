@@ -26,6 +26,21 @@ object UndeclaredCobEstimator {
     /** Minimum fused meal probability required to consider an undeclared meal at all. */
     private const val MEAL_PROB_THRESHOLD = 0.55
 
+    /**
+     * Glucose rise, in mg/dL per 5 minutes, at or above which the heart-rate gate stands down.
+     *
+     * This estimator only runs when declared carbs are zero, so its heart-rate gate exists **only**
+     * on the undeclared path — and a meal is exactly what raises the heart rate by the 15 bpm the
+     * gate keys on. Left as it was, the estimator written to catch an undeclared meal was switched
+     * off by the sign of that meal.
+     *
+     * Same value and same reasoning as `StressIsfFloor.RISE_HOLD_MGDL_PER_5MIN` and
+     * `HeartRateTrendIsf.RISE_SUSPEND_MGDL_PER_5MIN`: above it the rise is too fast to be hormonal,
+     * so a heart rate says nothing about its cause. Below it, a high heart rate with a gentle rise
+     * keeps its meaning and the gate keeps its say.
+     */
+    const val HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN: Double = 11.0
+
     /** BG must be genuinely rising to attribute a Ra signal to a meal. */
     private const val MIN_DELTA_MGDL_5M = 1.0
     private const val MIN_SLOPE_FROM_MIN_DEVIATION = 1.0
@@ -93,6 +108,13 @@ object UndeclaredCobEstimator {
         if (input.postHypoActive) return Result.gated("post_hypo")
         if (input.bgMgdl <= HYPO_GUARD_MGDL) return Result.gated("hypo_zone")
         if (input.cfrdExacerbationActive) return Result.gated("cfrd_exacerbation")
+        // An elevated heart rate always closes this gate, whatever the glucose is doing.
+        //
+        // It used to step aside above HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN, on the argument that a fast
+        // rise cannot be hormonal — which also means the estimator invented carbs during exactly the
+        // episodes where a raised heart rate has another cause. The simple rule: the heart rate may
+        // protect, it may never be a reason to believe in a meal. The cost is known and accepted: a
+        // real undeclared meal that raises the heart rate is not caught here.
         if (input.hrInflammationElevated) return Result.gated("hr_inflammation")
         if (input.exerciseLockoutActive || input.activityDetected) return Result.gated("exercise_activity")
         if (input.mealProb < MEAL_PROB_THRESHOLD) return Result.gated("meal_prob_low")

@@ -1,8 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.replay
 
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Self-check of the replay harness.
@@ -11,7 +11,8 @@ import org.junit.jupiter.api.Test
  * was regenerated or the harness stopped reading the export the same way — both need to be
  * explained before any behaviour-changing ADR is trusted.
  *
- * See `docs/adr/0001-replay-harness.md`.
+ * See `docs/adr/0001-replay-harness.md`. `commonTest` + `kotlin.test` (not JUnit), same as
+ * [BarrierReplayTest] and the rest of this study tree.
  */
 class ReplayCorpusTest {
 

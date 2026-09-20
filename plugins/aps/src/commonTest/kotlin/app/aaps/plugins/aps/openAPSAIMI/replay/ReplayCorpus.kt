@@ -16,10 +16,17 @@ package app.aaps.plugins.aps.openAPSAIMI.replay
  * Tests that only need regression use [load]. Tests that calibrate use [loadLocal] and skip
  * themselves when the private corpus is absent.
  *
- * Study port of `79588b42cb`. P0.12 bundles only [BARRIER_TICKS]: the day fixtures stay on
- * `origin/dev_OAPSAIMI` and are out of this lot. [load] of a missing name fails clearly; it does
- * not pretend the day was empty. [loadLocal] is a no-op in `commonTest` (no `java.io.File` /
- * `System.getenv` on Native).
+ * Study port of `79588b42cb`. P0.12 bundled only [BARRIER_TICKS]; all four fixtures — the three
+ * days plus the barrier ticks — are now bundled as Kotlin string constants (`DayInRangeJsonl`,
+ * `DayReboundCyclesJsonl`, `DayHyperJsonl`, `BarrierTicksJsonl`), byte-identical to commit
+ * `556580a886`, so [bundled] and [ReplaySummary] can actually be exercised on every KMP target.
+ * A day of real ticks is much larger than the round-robin-sampled barrier fixture: roughly 150 KB
+ * ([DAY_IN_RANGE]), 152 KB ([DAY_REBOUND_CYCLES]) and 173 KB ([DAY_HYPER]) of source each, against
+ * 42 KB for [BARRIER_TICKS]. Worth knowing before adding a fifth: three more days of this size is
+ * three more embedded string constants of this size, compiled into every target.
+ *
+ * [load] of a missing name still fails clearly; it does not pretend the day was empty. [loadLocal]
+ * is a no-op in `commonTest` (no `java.io.File` / `System.getenv` on Native).
  *
  * This is the APS barrier harness — not `quality/ReplayQualityExport`.
  */
@@ -65,6 +72,9 @@ object ReplayCorpus {
 
     private fun bundledText(name: String): String? = when (name) {
         BARRIER_TICKS -> BarrierTicksJsonl.TEXT
+        DAY_IN_RANGE -> DayInRangeJsonl.TEXT
+        DAY_REBOUND_CYCLES -> DayReboundCyclesJsonl.TEXT
+        DAY_HYPER -> DayHyperJsonl.TEXT
         else -> null
     }
 

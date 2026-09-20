@@ -2024,6 +2024,89 @@ Gates: `:app:assembleFullDebug` 0 Kotlin errors (after the documented stale-KSP 
 
 ---
 
+## 6ag. 2026-09-20: the seven artefacts adapted, and three of the four drifts closed
+
+Continuing 6af. The eleven tests that would not compile split cleanly once the compiler's cascading
+was accounted for - removing one broken file made others look broken, so the first categorisation
+over-counted the drift.
+
+**Seven were migration artefacts**, i.e. the test spoke a JVM API this branch had deliberately
+replaced: `java.time` (1), `java.io.File` (2) and `org.json` (4). All seven now land, adapted only in
+how they reach the code, with **no assertion touched**. None of them revealed drift: every production
+class they name still had exactly the fields, types and constants they assumed. Suite 1151 -> 1191.
+
+**Four were genuine engine drift.** Three are now closed, taking the suite to **1235 tests, 0
+failures**:
+
+- **`UndeclaredCobEstimator`** turned out to need only the missing constant
+  (`HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN = 11.0`) and its documentation. Production's KDoc records a
+  past-tense design change - the heart-rate gate used to stand down above that rise rate and now
+  always fires - and this branch's gate was *already* unconditional. So the behaviour matched; only
+  the name the test reaches for was absent.
+- **`IsfFusion`** was the real one. Production turned the fixed one-tick slew limiter into a
+  clock-driven budget: `fused(..., nowMs, authoritative)`, elapsed time clamped to two ticks scaling
+  the allowed movement, downside slew 1.375x the upside, backward clock jumps freezing the value
+  rather than ratcheting, and a re-stamp each call so a bad jump self-heals in one tick. Note this sits
+  directly on top of the anchor regression fixed earlier the same day (6af) - same file, same
+  structure, and production's newer version already carries the anchor form.
+- **`InsulinStackingStance`** brought two behaviour changes: the IOB floor moves from a hard-coded
+  `max(3.2, maxIob*0.26)` to `max(1.0, maxIob*0.26)` - production's KDoc cites a field report where a
+  stress episode with 2 U on board got no stacking protection at all - and a new 70-130 mg/dL caution
+  band that engages surveillance below the usual gate, but only when nothing says meal. That needed
+  the new `mealModeActive` parameter, passed at all four call sites with the same expression
+  production's own callers use.
+
+### The fourth is a decision, not a task
+
+`ReplaySummary` is ported and appears correct, but `ReplayCorpusTest` cannot be un-parked. The test
+needs three bundled day fixtures that **this branch deliberately does not carry**: `ReplayCorpus`'s
+KDoc says the day fixtures stay on `dev_OAPSAIMI`, and that boundary is not just a comment - an
+already-committed test, `BarrierReplayTest.dayFixturesAreNotBundledOnTheStudyTree`, asserts that
+loading them throws.
+
+The implementer tried restoring them, saw all five `ReplayCorpusTest` methods pass with production's
+exact figures, then noticed the full suite had gone red on that boundary test and **reverted the
+whole attempt** rather than quietly reversing another engineer's tested decision. That is the right
+instinct and worth recording as the behaviour to expect.
+
+The numbers that decided it: the three fixtures are **149 + 152 + 172 KB**, against the single fixture
+already bundled at **43 KB** - eleven times the embedded test data, as Kotlin string constants the
+compiler must parse. Put to the user with those numbers, and **reversed deliberately**: see 6ah.
+
+---
+
+## 6ah. 2026-09-21: the replay day fixtures, restored on purpose
+
+The boundary 6ag stopped at is now reversed, by the person whose call it was rather than by an agent
+mid-task. All three day fixtures are bundled, `ReplayCorpusTest` is un-parked, and the suite is at
+**1240 tests, 0 failures** (`compileKotlinIosArm64` and `compileTestKotlinIosSimulatorArm64` both
+green - the second matters here, because the fixtures land in `commonTest` and large embedded string
+constants are exactly the sort of thing Kotlin/Native can object to).
+
+The fixtures produced production's figures bit for bit: 284 / 285 / 409 ticks, 27.46 U total SMB with
+95.4% time in range on the in-range day, 56.76 U total with 10.96 U at `REBOUND_GUARD` on the rebound
+day. That is a stronger statement than "the tests pass" - it says this branch's replay harness and
+`ReplaySummary` reproduce the live fork's numbers exactly on three full days of real ticks.
+
+**The boundary test was inverted, not deleted.** `dayFixturesAreNotBundledOnTheStudyTree` asserted
+that loading a day fixture throws; it is now
+`dayFixturesAreBundledAndCarryTheirExpectedTickCounts`, asserting 284/285/409, with a comment
+recording that it used to check the opposite and why. Deleting it would have removed the only thing
+watching whether the fixtures are present and parseable - the check still exists, it just checks the
+new truth. `ReplayCorpus`'s KDoc was rewritten for the same reason, and now carries the sizes so that
+whoever considers a fourth day fixture sees what the first three cost.
+
+`ReplaySummary` therefore ships with a real consumer rather than none, which is what 6ag said was the
+condition for shipping it at all.
+
+**Worth keeping as a pattern.** The agent that hit this boundary had already made the change work -
+five tests passing, production figures matching - and then found the full suite red on a committed
+test asserting the opposite. It reverted its own working change and asked, rather than deleting the
+test in its way. The cost was one round trip; the alternative was silently reversing a documented,
+tested decision belonging to someone else. Expect and reward that.
+
+---
+
 ---
 
 ## 7. Start here next session
