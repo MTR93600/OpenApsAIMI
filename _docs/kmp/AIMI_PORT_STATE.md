@@ -1962,6 +1962,68 @@ brought up to date, so the finding is not lost.
 
 ---
 
+## 6af. 2026-09-20: 104 tests ported, and the audit found two real ISF regressions
+
+The pilot in 6ae said porting `dev_OAPSAIMI`'s tests would be both coverage and an audit of the drift.
+Scaled to all 119 non-MockK portable tests, it was both, and the audit part paid first.
+
+**The suite went from 589 to 1151 tests, 0 failures.** 104 of the 107 copied compiled unchanged, which
+is itself the headline result: the migrated engine agrees with production everywhere those tests look.
+
+### Two regressions this branch had introduced, found by running production's own tests
+
+`IsfBlender` and `IsfAdjustmentEngine` both returned **50.0** where production returns 75.0 and 71.0 -
+an ISF a third lower, which is a third more aggressive on every correction that uses it.
+
+Same cause in both, and it is a porting artefact rather than a missing feature. Production keeps one
+nullable object:
+
+```kotlin
+private data class Anchor(val isf: Double, val tsMs: Long)
+/** No anchor yet (first call of the process): the target is returned as is. */
+private fun rateLimit(target: Double, nowMs: Long): Double {
+    val a = anchor ?: return target
+```
+
+This branch had split that into two nullable fields, `lastIsf` and `lastTsMs`, and the early return
+went with it. On the first call `elapsedMs` came out as zero, so the hourly budget was zero, so the
+limiter clamped the result to the fallback value - discarding the Kalman contribution entirely. The
+failing tests are named `first blend is not rate limited` and `first adjustment is not rate limited`,
+so the intent was written down; only the code had lost it.
+
+Both are restored to the anchor form, with a comment saying why one nullable object and not two. **The
+design lesson is worth more than the fix: splitting a two-field invariant into two independent
+nullables removes the compiler's ability to make you handle the "neither is set yet" case.** It reads
+like a harmless refactor and it is not.
+
+### What the 11 parked tests mean
+
+Each one names something, and they are kept in `_docs/kmp/deferred-tests/` rather than deleted:
+
+- **Migration artefacts** - the test uses a JVM type this branch deliberately replaced:
+  `NightGrowthResistanceMonitorTest` (`java.time.LocalTime`/`ZoneId` vs `kotlinx.datetime`),
+  `aimiNeuralNetworkTest` and `ComparisonCsvParserTest` (`File` vs `AimiStorage`/`AimiPath`). These
+  need their types swapped and then they should pass.
+- **Real engine drift** - the test names something this branch does not have:
+  `UndeclaredCobEstimatorTest` wants `HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN`, from Grok's recent
+  heart-rate gating work. `IsfFusionTest` wants `fused(..., nowMs, authoritative)`: production's ISF
+  fusion gained a time argument and an authority flag that this branch's copy does not have.
+- The remaining six (`DoseTerminalSnapshotTest`, `InsulinStackingStanceTest`,
+  `PostHypoDeliveryAuthorityTest`, `PredictionDivergenceAuditorTest`, `ReplayCorpusTest`,
+  `SmbBindingTraceTest`) were parked by the same iterate-and-compile loop and have not been
+  categorised yet - that is the next job, and each is either a type swap or a named missing feature.
+
+### Still outstanding
+
+35 portable tests use MockK and this module is wired for Mockito - a dependency decision, not work.
+106 more tests need their feature ported first. And roughly 25 production files are genuinely missing,
+the `retention/` package being the largest.
+
+Gates: `:app:assembleFullDebug` 0 Kotlin errors (after the documented stale-KSP purge),
+`compileKotlinIosArm64` EXIT=0, `testAndroidHostTest --rerun` **1151 tests, 0 failures**.
+
+---
+
 ---
 
 ## 7. Start here next session
