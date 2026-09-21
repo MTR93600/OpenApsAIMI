@@ -12,6 +12,7 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveBackfillWork
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataBackfiller
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveNeuralTrainer
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveNeuralTrainerWorker
+import app.aaps.plugins.aps.openAPSAIMI.retention.AimiRetentionWorker
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -88,11 +89,21 @@ class AimiMlTrainingScheduler @Inject constructor(
                 ExistingPeriodicWorkPolicy.UPDATE,
                 PeriodicWorkRequestBuilder<AutodriveNeuralTrainerWorker>(24, TimeUnit.HOURS).build(),
             )
+            // AIMI telemetry retention: trims/archives the JSONL and CSV telemetry files once a day.
+            // No constraints, for the same reason as the trainers above: charging plus device-idle
+            // almost never coincide on a real phone, and work registered with those constraints never
+            // ran.
+            wm.enqueueUniquePeriodicWork(
+                WORK_AIMI_RETENTION,
+                ExistingPeriodicWorkPolicy.UPDATE,
+                PeriodicWorkRequestBuilder<AimiRetentionWorker>(24, TimeUnit.HOURS).build(),
+            )
             aapsLogger.info(
                 LTag.APS,
                 "AimiMlTrainingScheduler: basal/T3C trainer scheduled (1h, no constraints) + bootstrap " +
                     "enqueued (policy=$bootstrapPolicy, needed=$bootstrapNeeded); " +
-                    "autodrive backfill (6h) + attention trainer (24h) scheduled",
+                    "autodrive backfill (6h) + attention trainer (24h) scheduled; " +
+                    "telemetry retention (24h) scheduled",
             )
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "AimiMlTrainingScheduler: schedule failed", e)
@@ -105,7 +116,12 @@ class AimiMlTrainingScheduler @Inject constructor(
             wm.cancelUniqueWork(WORK_BASAL_ML)
             wm.cancelUniqueWork(WORK_AUTODRIVE_BACKFILL)
             wm.cancelUniqueWork(WORK_AUTODRIVE_ATTENTION)
-            aapsLogger.info(LTag.APS, "AimiMlTrainingScheduler: basal/T3C + autodrive trainers cancelled")
+            // WORK_AIMI_RETENTION is deliberately NOT cancelled here. It is storage hygiene, not an
+            // AIMI feature: a user who switches the APS algorithm away from AIMI stops new telemetry
+            // writes, but the gigabytes already on disk still need the daily janitor to reclaim them.
+            // The backlog outlives the plugin being in use, so retention keeps running even when AIMI
+            // itself is stopped. It is only registered in schedule(), never cancelled here.
+            aapsLogger.info(LTag.APS, "AimiMlTrainingScheduler: basal/T3C + autodrive trainers cancelled (retention left running)")
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "AimiMlTrainingScheduler: cancel failed", e)
         }
@@ -116,6 +132,7 @@ class AimiMlTrainingScheduler @Inject constructor(
         const val WORK_BASAL_ML_BOOTSTRAP = "AIMI_BASAL_ML_TRAINER_BOOTSTRAP"
         const val WORK_AUTODRIVE_BACKFILL = "AIMI_AUTODRIVE_BACKFILL"
         const val WORK_AUTODRIVE_ATTENTION = "AIMI_AUTODRIVE_ATTENTION_TRAINER"
+        const val WORK_AIMI_RETENTION = "AIMI_RETENTION"
         private const val LEGACY_AUTODRIVE_6H_WORK = "AIMINeuralTrainer"
         private const val LEGACY_AUTODRIVE_BACKFILLER = "AIMI_AUTODRIVE_BACKFILLER"
         private const val LEGACY_AUTODRIVE_NEURAL_TRAINER = "AIMI_AUTODRIVE_NEURAL_TRAINER"

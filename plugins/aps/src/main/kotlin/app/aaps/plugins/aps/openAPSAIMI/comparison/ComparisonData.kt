@@ -156,6 +156,99 @@ enum class ScoringMode {
     OVERNIGHT
 }
 
+/**
+ * Why the two algorithms did not decide the same thing at one tick.
+ *
+ * Each value maps to one flag column of `comparison_aimi_smb.csv`. The values carry no text on
+ * purpose: the labels are shown to the user, so they must come from string resources of the module
+ * that displays them.
+ */
+enum class DivergenceCause {
+
+    /** AIMI was in its meal priority context. */
+    AIMI_MEAL_PRIORITY,
+
+    /** AIMI was inside its refractory window. */
+    AIMI_REFRACTORY,
+
+    /** AIMI throttled the dose from the pkpd model. */
+    AIMI_THROTTLE,
+
+    /** The AIMI barrier function (CBF) limited the dose. */
+    AIMI_CBF,
+
+    /** The reference SMB algorithm was inside its bolus interval. */
+    SMB_REFRACTORY,
+
+    /** The reference SMB algorithm throttled the dose. */
+    SMB_THROTTLE,
+
+    /** The barrier function (CBF) limited the reference SMB dose. */
+    SMB_CBF,
+
+    /** Glucose was rising like after a meal. */
+    CONTEXT_MEAL_RISE,
+
+    /** Carbs were still on board. */
+    CONTEXT_COB_ACTIVE,
+
+    /** At least one algorithm read the rise as an undeclared meal (UAM). */
+    CONTEXT_UAM_BIAS
+}
+
+/**
+ * A coarse three-level rating shared by several comparator metrics: BG variability, estimated hypo
+ * risk, and recommendation confidence. The values carry no text on purpose, same as
+ * [DivergenceCause]: the labels are shown to the user, so they must come from string resources of the
+ * module that displays them.
+ *
+ * One French word has more than one spelling depending on the grammatical gender of the noun it
+ * describes (for example "modéré" for a score, "modérée" for a confidence), so the UI module keeps
+ * more than one set of string resources for this same enum instead of a single shared one.
+ */
+enum class ComparisonLevel {
+    LOW,
+    MODERATE,
+    HIGH
+}
+
+/**
+ * The fixed safety note attached to a [Recommendation]. Carries no text, see [DivergenceCause].
+ */
+enum class SafetyNoteKind {
+
+    /** Estimated hypo risk is high. */
+    INCREASED_MONITORING_RECOMMENDED,
+
+    /** BG variability is high. */
+    SIGNIFICANT_VARIABILITY_DETECTED,
+
+    /** The two algorithms deliver very different total insulin. */
+    LARGE_INSULIN_DIFFERENCE,
+
+    /** None of the above triggered. */
+    ACCEPTABLE_SAFETY_PROFILE
+}
+
+/**
+ * Why one algorithm (or neither) was recommended. Carries no text, see [DivergenceCause].
+ *
+ * A few kinds need a number or a [ComparisonLevel] to fill their string resource template. Those are
+ * carried as separate, optional fields on [Recommendation] instead of inside this enum, so this stays
+ * a plain enum:
+ *  - [SMB_MORE_AGGRESSIVE_WITH_VARIABILITY] needs [Recommendation.reasonAggressivenessRatio] and
+ *    [Recommendation.reasonVariability].
+ *  - [MORE_CONSERVATIVE_WITH_VARIABILITY] needs [Recommendation.reasonVariability].
+ *  - [SIMILAR_PERFORMANCE] needs [Recommendation.reasonAgreementRate].
+ *  - [MORE_REACTIVE_TO_GLUCOSE_CHANGES] needs no extra data.
+ */
+enum class RecommendationReasonKind {
+    SMB_MORE_AGGRESSIVE_WITH_VARIABILITY,
+    MORE_CONSERVATIVE_WITH_VARIABILITY,
+    MORE_REACTIVE_TO_GLUCOSE_CHANGES,
+    SIMILAR_PERFORMANCE
+}
+
 // ============================================================================
 // COMPARISON REPORT
 // ============================================================================
@@ -218,8 +311,36 @@ data class ComparisonEntry(
     // New Interpretation Fields
     val verdict: String = "",
     val artifactFlag: String = "",
-    val diffSign: String = ""
-)
+    val diffSign: String = "",
+    // Cause flags. Only rows of the current layout carry them, older rows keep the defaults.
+    val aimiFlagMealPriority: Boolean = false,
+    val aimiFlagRefractory: Boolean = false,
+    val aimiFlagThrottle: Boolean = false,
+    val aimiFlagCbf: Boolean = false,
+    val smbFlagRefractory: Boolean = false,
+    val smbFlagThrottle: Boolean = false,
+    val smbFlagCbf: Boolean = false,
+    val contextMealRise: Boolean = false,
+    val contextCobActive: Boolean = false,
+    val contextUamBias: Boolean = false,
+    /** Minutes since the last bolus seen by the reference SMB algorithm, null when not written. */
+    val smbLastBolusAgeMin: Double? = null
+) {
+
+    /** The causes that are set on this row, in reading order. */
+    fun causes(): List<DivergenceCause> = buildList {
+        if (aimiFlagMealPriority) add(DivergenceCause.AIMI_MEAL_PRIORITY)
+        if (aimiFlagRefractory) add(DivergenceCause.AIMI_REFRACTORY)
+        if (aimiFlagThrottle) add(DivergenceCause.AIMI_THROTTLE)
+        if (aimiFlagCbf) add(DivergenceCause.AIMI_CBF)
+        if (smbFlagRefractory) add(DivergenceCause.SMB_REFRACTORY)
+        if (smbFlagThrottle) add(DivergenceCause.SMB_THROTTLE)
+        if (smbFlagCbf) add(DivergenceCause.SMB_CBF)
+        if (contextMealRise) add(DivergenceCause.CONTEXT_MEAL_RISE)
+        if (contextCobActive) add(DivergenceCause.CONTEXT_COB_ACTIVE)
+        if (contextUamBias) add(DivergenceCause.CONTEXT_UAM_BIAS)
+    }
+}
 
 data class ComparisonStats(
     val totalEntries: Int,
@@ -232,8 +353,8 @@ data class ComparisonStats(
 
 data class SafetyMetrics(
     val variabilityScore: Double,
-    val variabilityLabel: String,
-    val estimatedHypoRisk: String,
+    val variabilityLevel: ComparisonLevel,
+    val estimatedHypoRisk: ComparisonLevel,
     val aimiVariability: Double,
     val smbVariability: Double
 )
@@ -270,14 +391,32 @@ data class CriticalMoment(
     val divergenceRate: Double?,
     val divergenceSmb: Double?,
     val reasonAimi: String,
-    val reasonSmb: String
+    val reasonSmb: String,
+    /** Verdict of the row, so the screen does not have to look the entry up again. */
+    val verdict: String = "",
+    /** Artifact flag of the row, for example `SCREAMING_SHADOW` or `VALID`. */
+    val artifactFlag: String = "",
+    /** Why the two algorithms diverged here. Empty for rows written before the flag columns. */
+    val causes: List<DivergenceCause> = emptyList()
 )
 
+/**
+ * @param preferredAlgorithm `null` means the two algorithms are equivalent, the same convention
+ *   [AlgorithmsComparison.winner] already uses.
+ * @param reasonVariability set only when [reasonKind] is [RecommendationReasonKind.SMB_MORE_AGGRESSIVE_WITH_VARIABILITY]
+ *   or [RecommendationReasonKind.MORE_CONSERVATIVE_WITH_VARIABILITY].
+ * @param reasonAggressivenessRatio set only when [reasonKind] is
+ *   [RecommendationReasonKind.SMB_MORE_AGGRESSIVE_WITH_VARIABILITY].
+ * @param reasonAgreementRate set only when [reasonKind] is [RecommendationReasonKind.SIMILAR_PERFORMANCE].
+ */
 data class Recommendation(
-    val preferredAlgorithm: String,
-    val reason: String,
-    val confidenceLevel: String,
-    val safetyNote: String
+    val preferredAlgorithm: AlgorithmType?,
+    val reasonKind: RecommendationReasonKind,
+    val reasonVariability: ComparisonLevel? = null,
+    val reasonAggressivenessRatio: Double? = null,
+    val reasonAgreementRate: Double? = null,
+    val confidenceLevel: ComparisonLevel,
+    val safetyNote: SafetyNoteKind
 )
 
 data class ComparisonTir(

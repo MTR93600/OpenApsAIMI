@@ -11,6 +11,8 @@ import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysioLiveDigest
 import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefDigest
+import app.aaps.plugins.aps.openAPSAIMI.retention.AimiAppendGuard
+import app.aaps.plugins.aps.openAPSAIMI.retention.AimiAppendOutcome
 import java.io.File
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
@@ -18,6 +20,7 @@ import java.util.Date
 import java.util.LinkedHashMap
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -214,6 +217,10 @@ class AimiHormonitorStudyExporterMTR(
 
     private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val droppedWrites = AtomicLong(0)
+
+    /** Paths already warned about for AimiAppendGuard.ROTATED / OVERFLOW_ALREADY_PRESENT, so a
+     *  stuck overflow file cannot flood the log: at most one warning per file per process. */
+    private val appendGuardLoggedPaths = ConcurrentHashMap.newKeySet<String>()
     private val writeQueue = Channel<WriteTask>(
         capacity = WRITE_QUEUE_CAPACITY,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
@@ -489,14 +496,6 @@ class AimiHormonitorStudyExporterMTR(
         )
     }
 
-    private fun appendLine(file: File, line: String) {
-        if (!file.exists()) {
-            file.parentFile?.mkdirs()
-            file.createNewFile()
-        }
-        file.appendText("$line\n")
-    }
-
     private fun appVersion(): String {
         return try {
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
@@ -699,9 +698,22 @@ class AimiHormonitorStudyExporterMTR(
             file.createNewFile()
         }
         when (mode) {
-            WriteMode.APPEND_LINE -> file.appendText("$payload\n")
-            WriteMode.OVERWRITE -> file.writeText(payload)
+            WriteMode.APPEND_LINE -> {
+                val outcome = AimiAppendGuard.beforeAppend(file, payload.length + 1)
+                logAppendGuardOutcomeOnce(file, outcome)
+                file.appendText("$payload\n")
+            }
+
+            WriteMode.OVERWRITE   -> file.writeText(payload)
         }
+    }
+
+    /** Logs a ROTATED or OVERFLOW_ALREADY_PRESENT outcome once per file per process. A file stuck
+     *  at OVERFLOW_ALREADY_PRESENT would otherwise warn on every write forever. */
+    private fun logAppendGuardOutcomeOnce(file: File, outcome: AimiAppendOutcome) {
+        if (outcome != AimiAppendOutcome.ROTATED && outcome != AimiAppendOutcome.OVERFLOW_ALREADY_PRESENT) return
+        if (!appendGuardLoggedPaths.add(file.absolutePath)) return
+        aapsLogger.warn(LTag.APS, "[$TAG] Append guard: $outcome for ${file.absolutePath}")
     }
 
     private data class WriteTask(

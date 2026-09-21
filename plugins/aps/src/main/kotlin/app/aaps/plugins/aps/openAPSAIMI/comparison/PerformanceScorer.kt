@@ -187,26 +187,34 @@ object PerformanceScorer {
             append("• Score: ${f1(aimiScore.totalScore)}/10 vs ${f1(smbScore.totalScore)}/10")
         }
         
-        // Generate recommendation
+        // Generate recommendation.
+        //
+        // This report (`AlgorithmsComparison`) has no UI consumer today (only `AimiSmbSimulator`
+        // references this class in a KDoc example, and that file itself has no caller), so this text
+        // is not shown to a person. It is kept in plain English, the same choice already made for
+        // `ComparisonCsvParser.generateLlmSummary`'s "Causes" line, rather than routed through string
+        // resources of a module this one does not depend on. If this report is ever wired to a
+        // screen, follow job 3(b) of the coherence report: introduce a closed-vocabulary enum here and
+        // map it to string resources in the UI module, the same way `Recommendation` was done.
         val recommendation = when (winner) {
             AlgorithmType.AIMI -> {
                 val tirDiff = aimiKpi.tir70_180 - smbKpi.tir70_180
                 val hypoDiff = smbKpi.timeBelow70 - aimiKpi.timeBelow70
                 when {
-                    tirDiff > 5 && hypoDiff > 1 -> "AIMI recommandé: +${f0(tirDiff)}% TIR et moins d'hypos"
-                    tirDiff > 5 -> "AIMI recommandé: meilleur contrôle (+${f0(tirDiff)}% TIR)"
-                    hypoDiff > 1 -> "AIMI recommandé: moins d'hypos (-${f1(hypoDiff)}%)"
-                    else -> "AIMI légèrement supérieur"
+                    tirDiff > 5 && hypoDiff > 1 -> "AIMI recommended: +${f0(tirDiff)}% TIR and fewer hypos"
+                    tirDiff > 5 -> "AIMI recommended: better control (+${f0(tirDiff)}% TIR)"
+                    hypoDiff > 1 -> "AIMI recommended: fewer hypos (-${f1(hypoDiff)}%)"
+                    else -> "AIMI slightly better"
                 }
             }
             AlgorithmType.OPENAPS_SMB -> {
                 val tirDiff = smbKpi.tir70_180 - aimiKpi.tir70_180
                 when {
-                    tirDiff > 5 -> "SMB classique recommandé: meilleur TIR"
-                    else -> "SMB classique légèrement supérieur"
+                    tirDiff > 5 -> "Reference SMB recommended: better TIR"
+                    else -> "Reference SMB slightly better"
                 }
             }
-            null -> "Performance équivalente entre les deux algorithmes"
+            null -> "Equivalent performance between the two algorithms"
         }
         
         return AlgorithmsComparison(

@@ -11,12 +11,16 @@ class ComparisonCsvParser {
         }
 
         val entries = mutableListOf<ComparisonEntry>()
-        
+
         try {
             file.bufferedReader().use { reader ->
-                // Skip header
-                reader.readLine()
-                
+                val firstLine = reader.readLine()
+                // The header is normally the first line. A file that lost its header still holds
+                // valid rows, so only skip the first line when it really is a header.
+                if (firstLine != null && !isHeaderLine(firstLine)) {
+                    parseLine(firstLine)?.let { entries.add(it) }
+                }
+
                 reader.lineSequence().forEach { line ->
                     parseLine(line)?.let { entries.add(it) }
                 }
@@ -24,80 +28,115 @@ class ComparisonCsvParser {
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        
+
         return entries
     }
 
+    private fun isHeaderLine(line: String): Boolean =
+        line.startsWith("SchemaVersion,") || line.startsWith("Timestamp,")
+
+    /**
+     * Reads one data row of `comparison_aimi_smb.csv`.
+     *
+     * Three layouts have been written over time, and one file can hold rows of more than one of
+     * them, because the header is written only when the file is created. So the layout is detected
+     * per row, not from the header:
+     *  - schema 3 (current, see `AimiSmbComparator.CSV_HEADER`): 49 columns, first column is
+     *    SchemaVersion, then Timestamp, Date, BG, ...
+     *  - older layout: 37 columns, starts at Timestamp, carries Verdict, Artifact_Flag, Diff_Sign.
+     *  - oldest layout: 34 columns, starts at Timestamp, no Verdict block.
+     *
+     * Column indexes below are relative to Timestamp, so they hold for all three layouts. The two
+     * reason columns have always been written last, so they are read from the end of the row.
+     *
+     * The Verdict block and the cause flag block are read only when the row is long enough to
+     * really hold them, so an old row keeps the defaults of [ComparisonEntry].
+     */
     private fun parseLine(line: String): ComparisonEntry? {
         return try {
-            // Nouveau format CSV (voir header dans AimiSmbComparator)
-            // Timestamp,Date,BG,Delta,ShortAvgDelta,LongAvgDelta,IOB,COB,
-            // AIMI_Rate,AIMI_SMB,AIMI_Duration,AIMI_EventualBG,AIMI_TargetBG,
-            // SMB_Rate,SMB_SMB,SMB_Duration,SMB_EventualBG,SMB_TargetBG,
-            // Diff_Rate,Diff_SMB,Diff_EventualBG,
-            // MaxIOB,MaxBasal,MicroBolus_Allowed,
-            // AIMI_Insulin_30min,SMB_Insulin_30min,Cumul_Diff,
-            // AIMI_Active,SMB_Active,Both_Active,
-            // AIMI_UAM_Last,SMB_UAM_Last,
-            // Reason_AIMI,Reason_SMB
+            val parts = line.split(FIELD_SEPARATOR)
+            val offset = schemaOffset(parts)
+            val columns = parts.size - offset
+            if (columns < MIN_COLUMNS) return null
 
-            val parts = line.split(
-                ",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex()
-            )
+            fun field(index: Int): String = parts.getOrNull(offset + index)?.trim() ?: ""
 
-            if (parts.size < 34) return null
+            val hasVerdictBlock = columns >= VERDICT_COLUMNS
+            // Only the current layout carries the flag block. On an older row the columns do not
+            // exist at all, so the entry keeps its defaults instead of reporting a false that would
+            // look like a real "this cause did not fire".
+            val hasFlagBlock = columns >= FLAG_COLUMNS
+            fun flag(index: Int): Boolean = hasFlagBlock && field(index) == "1"
+            val reasonAimi = parts[parts.size - 2].trim().trim('"')
+            val reasonSmb = parts[parts.size - 1].trim().trim('"')
 
             ComparisonEntry(
-                timestamp = parts[0].toLongOrNull() ?: return null,
-                date = parts[1],
-                bg = parts[2].toDoubleOrNull() ?: return null,
-                delta = parts[3].toDoubleOrNull(),
-                shortAvgDelta = parts[4].toDoubleOrNull(),
-                longAvgDelta = parts[5].toDoubleOrNull(),
-                iob = parts[6].toDoubleOrNull() ?: 0.0,
-                cob = parts[7].toDoubleOrNull() ?: 0.0,
-                aimiRate = parts[8].toDoubleOrNull(),
-                aimiSmb = parts[9].toDoubleOrNull(),
-                aimiDuration = parts[10].toIntOrNull() ?: 0,
-                aimiEventualBg = parts[11].toDoubleOrNull(),
-                aimiTargetBg = parts[12].toDoubleOrNull(),
-                smbRate = parts[13].toDoubleOrNull(),
-                smbSmb = parts[14].toDoubleOrNull(),
-                smbDuration = parts[15].toIntOrNull() ?: 0,
-                smbEventualBg = parts[16].toDoubleOrNull(),
-                smbTargetBg = parts[17].toDoubleOrNull(),
-                diffRate = parts[18].toDoubleOrNull(),
-                diffSmb = parts[19].toDoubleOrNull(),
-                diffEventualBg = parts[20].toDoubleOrNull(),
-                maxIob = parts[21].toDoubleOrNull(),
-                maxBasal = parts[22].toDoubleOrNull(),
-                microBolusAllowed = parts[23] == "1",
-                aimiInsulin30 = parts[24].toDoubleOrNull(),
-                smbInsulin30 = parts[25].toDoubleOrNull(),
-                cumulativeDiff = parts[26].toDoubleOrNull(),
-                aimiActive = parts[27] == "1",
-                smbActive = parts[28] == "1",
-                bothActive = parts[29] == "1",
-                aimiUamLast = parts.getOrNull(30)?.toDoubleOrNull(),
-                smbUamLast = parts.getOrNull(31)?.toDoubleOrNull(),
-                
-                // Handle versioning (Logic Update Step 6904)
-                // Old Schema (size ~34): reasons at 32, 33
-                // New Schema (size ~37): 32=Verdict, 33=Artifact, 34=Sign, 35=ReasonAimi, 36=ReasonSmb
-                
-                reasonAimi = if (parts.size >= 37) parts.getOrNull(35)?.trim('"') ?: "" else parts.getOrNull(32)?.trim('"') ?: "",
-                reasonSmb = if (parts.size >= 37) parts.getOrNull(36)?.trim('"') ?: "" else parts.getOrNull(33)?.trim('"') ?: "",
-                
-                // New Fields Population
-                verdict = if (parts.size >= 37) parts.getOrNull(32) ?: "" else "",
-                artifactFlag = if (parts.size >= 37) parts.getOrNull(33) ?: "" else "",
-                diffSign = if (parts.size >= 37) parts.getOrNull(34) ?: "" else ""
+                timestamp = field(0).toLongOrNull() ?: return null,
+                date = field(1),
+                bg = field(2).toDoubleOrNull() ?: return null,
+                delta = field(3).toDoubleOrNull(),
+                shortAvgDelta = field(4).toDoubleOrNull(),
+                longAvgDelta = field(5).toDoubleOrNull(),
+                iob = field(6).toDoubleOrNull() ?: 0.0,
+                cob = field(7).toDoubleOrNull() ?: 0.0,
+                aimiRate = field(8).toDoubleOrNull(),
+                aimiSmb = field(9).toDoubleOrNull(),
+                aimiDuration = field(10).toIntOrNull() ?: 0,
+                aimiEventualBg = field(11).toDoubleOrNull(),
+                aimiTargetBg = field(12).toDoubleOrNull(),
+                smbRate = field(13).toDoubleOrNull(),
+                smbSmb = field(14).toDoubleOrNull(),
+                smbDuration = field(15).toIntOrNull() ?: 0,
+                smbEventualBg = field(16).toDoubleOrNull(),
+                smbTargetBg = field(17).toDoubleOrNull(),
+                diffRate = field(18).toDoubleOrNull(),
+                diffSmb = field(19).toDoubleOrNull(),
+                diffEventualBg = field(20).toDoubleOrNull(),
+                maxIob = field(21).toDoubleOrNull(),
+                maxBasal = field(22).toDoubleOrNull(),
+                microBolusAllowed = field(23) == "1",
+                aimiInsulin30 = field(24).toDoubleOrNull(),
+                smbInsulin30 = field(25).toDoubleOrNull(),
+                cumulativeDiff = field(26).toDoubleOrNull(),
+                aimiActive = field(27) == "1",
+                smbActive = field(28) == "1",
+                bothActive = field(29) == "1",
+                aimiUamLast = field(30).toDoubleOrNull(),
+                smbUamLast = field(31).toDoubleOrNull(),
+                reasonAimi = reasonAimi,
+                reasonSmb = reasonSmb,
+                verdict = if (hasVerdictBlock) field(32) else "",
+                artifactFlag = if (hasVerdictBlock) field(33) else "",
+                diffSign = if (hasVerdictBlock) field(34) else "",
+                aimiFlagMealPriority = flag(35),
+                aimiFlagRefractory = flag(36),
+                aimiFlagThrottle = flag(37),
+                aimiFlagCbf = flag(38),
+                smbFlagRefractory = flag(39),
+                smbFlagThrottle = flag(40),
+                smbFlagCbf = flag(41),
+                contextMealRise = flag(42),
+                contextCobActive = flag(43),
+                contextUamBias = flag(44),
+                smbLastBolusAgeMin = if (hasFlagBlock) field(45).toDoubleOrNull() else null
             )
         } catch (e: Exception) {
             null
         }
     }
-    // TIR réel basé sur BG
+
+    /**
+     * Returns 1 when the row starts with a SchemaVersion column, and 0 for the older layouts that
+     * start with the timestamp. Epoch milliseconds are far larger than any schema number, so a
+     * small first field followed by a numeric second field can only be a schema version.
+     */
+    private fun schemaOffset(parts: List<String>): Int {
+        val first = parts.firstOrNull()?.trim()?.toLongOrNull() ?: return 0
+        if (first < 1L || first > MAX_SCHEMA_VERSION) return 0
+        return if (parts.getOrNull(1)?.trim()?.toLongOrNull() != null) 1 else 0
+    }
+
+    // Actual TIR, based on measured BG.
     fun calculateTimeInRange(
         entries: List<ComparisonEntry>,
         lower: Double,
@@ -108,7 +147,7 @@ class ComparisonCsvParser {
         return inRange.toDouble() / entries.size * 100.0
     }
 
-    // TIR prédit basé sur eventualBG de chaque algo
+    // Predicted TIR, based on each algorithm's eventualBG.
     fun calculatePredictedTimeInRange(
         entries: List<ComparisonEntry>,
         lower: Double,
@@ -176,7 +215,7 @@ class ComparisonCsvParser {
 
     fun calculateSafetyMetrics(entries: List<ComparisonEntry>): SafetyMetrics {
         if (entries.isEmpty()) {
-            return SafetyMetrics(0.0, "Faible", "Faible", 0.0, 0.0)
+            return SafetyMetrics(0.0, ComparisonLevel.LOW, ComparisonLevel.LOW, 0.0, 0.0)
         }
 
         // Calculate rate variability (standard deviation)
@@ -194,28 +233,28 @@ class ComparisonCsvParser {
         } else 0.0
 
         val variabilityScore = ((smbVariability / (aimiVariability + 0.1)) * 50).coerceIn(0.0, 100.0)
-        
-        val variabilityLabel = when {
-            variabilityScore < 30 -> "Faible"
-            variabilityScore < 60 -> "Modéré"
-            else -> "Élevé"
+
+        val variabilityLevel = when {
+            variabilityScore < 30 -> ComparisonLevel.LOW
+            variabilityScore < 60 -> ComparisonLevel.MODERATE
+            else -> ComparisonLevel.HIGH
         }
 
         // Estimate hypo risk based on aggressive low basal decisions
-        val aggressiveLowCount = entries.count { 
+        val aggressiveLowCount = entries.count {
             (it.aimiRate ?: 0.0) < 0.5 || (it.smbRate ?: 0.0) < 0.5
         }
         val hypoRiskPercent = (aggressiveLowCount.toDouble() / entries.size) * 100
 
         val estimatedHypoRisk = when {
-            hypoRiskPercent < 20 -> "Faible"
-            hypoRiskPercent < 40 -> "Modéré"
-            else -> "Élevé"
+            hypoRiskPercent < 20 -> ComparisonLevel.LOW
+            hypoRiskPercent < 40 -> ComparisonLevel.MODERATE
+            else -> ComparisonLevel.HIGH
         }
 
         return SafetyMetrics(
             variabilityScore = variabilityScore,
-            variabilityLabel = variabilityLabel,
+            variabilityLevel = variabilityLevel,
             estimatedHypoRisk = estimatedHypoRisk,
             aimiVariability = aimiVariability,
             smbVariability = smbVariability
@@ -326,7 +365,10 @@ class ComparisonCsvParser {
                     divergenceRate = entry.diffRate,
                     divergenceSmb = entry.diffSmb,
                     reasonAimi = entry.reasonAimi,
-                    reasonSmb = entry.reasonSmb
+                    reasonSmb = entry.reasonSmb,
+                    verdict = entry.verdict,
+                    artifactFlag = entry.artifactFlag,
+                    causes = entry.causes()
                 ) to totalDivergence
             }
             .sortedByDescending { it.second }
@@ -355,41 +397,53 @@ class ComparisonCsvParser {
         val smbBiasThreshold = 2.0 + modeShift
         val aimiBiasThreshold = -2.0 + modeShift
         val preferredAlgorithm = when {
-            stats.agreementRate > 70 -> "Équivalent"
-            impact.cumulativeDiff > smbBiasThreshold -> "SMB" // AIMI delivered significantly more
-            impact.cumulativeDiff < aimiBiasThreshold && safety.variabilityScore < 50 -> "AIMI" // SMB more aggressive but stable
-            impact.cumulativeDiff < aimiBiasThreshold && safety.variabilityScore >= 50 -> "AIMI" // SMB more aggressive and variable
-            else -> "Équivalent"
+            stats.agreementRate > 70 -> null
+            impact.cumulativeDiff > smbBiasThreshold -> AlgorithmType.OPENAPS_SMB // AIMI delivered significantly more
+            impact.cumulativeDiff < aimiBiasThreshold && safety.variabilityScore < 50 -> AlgorithmType.AIMI // SMB more aggressive but stable
+            impact.cumulativeDiff < aimiBiasThreshold && safety.variabilityScore >= 50 -> AlgorithmType.AIMI // SMB more aggressive and variable
+            else -> null
         }
 
-        val reason = when (preferredAlgorithm) {
-            "AIMI" -> {
+        val reasonKind: RecommendationReasonKind
+        var reasonVariability: ComparisonLevel? = null
+        var reasonAggressivenessRatio: Double? = null
+        var reasonAgreementRate: Double? = null
+        when (preferredAlgorithm) {
+            AlgorithmType.AIMI -> {
+                reasonVariability = safety.variabilityLevel
                 if (aggressivenessRatio > 2.0) {
-                    "SMB ${String.format("%.1f", aggressivenessRatio)}x plus agressif avec variabilité ${safety.variabilityLabel.lowercase()}"
+                    reasonKind = RecommendationReasonKind.SMB_MORE_AGGRESSIVE_WITH_VARIABILITY
+                    reasonAggressivenessRatio = aggressivenessRatio
                 } else {
-                    "Approche plus conservatrice avec variabilité ${safety.variabilityLabel.lowercase()}"
+                    reasonKind = RecommendationReasonKind.MORE_CONSERVATIVE_WITH_VARIABILITY
                 }
             }
-            "SMB" -> "Plus réactif aux variations glycémiques"
-            else -> "Les deux algorithmes montrent des performances similaires (${String.format("%.1f", stats.agreementRate)}% d'accord)"
+            AlgorithmType.OPENAPS_SMB -> reasonKind = RecommendationReasonKind.MORE_REACTIVE_TO_GLUCOSE_CHANGES
+            null -> {
+                reasonKind = RecommendationReasonKind.SIMILAR_PERFORMANCE
+                reasonAgreementRate = stats.agreementRate
+            }
         }
 
         val confidenceLevel = when {
-            stats.totalEntries < 10 -> "Faible"
-            stats.totalEntries < 30 -> "Modérée"
-            else -> "Élevée"
+            stats.totalEntries < 10 -> ComparisonLevel.LOW
+            stats.totalEntries < 30 -> ComparisonLevel.MODERATE
+            else -> ComparisonLevel.HIGH
         }
 
         val safetyNote = when {
-            safety.estimatedHypoRisk == "Élevé" -> "⚠️ Surveillance accrue recommandée"
-            safety.variabilityScore > 70 -> "⚠️ Variabilité importante détectée"
-            impact.cumulativeDiff < -5.0 -> "⚠️ Grande différence d'insuline totale"
-            else -> "Profil de sécurité acceptable"
+            safety.estimatedHypoRisk == ComparisonLevel.HIGH -> SafetyNoteKind.INCREASED_MONITORING_RECOMMENDED
+            safety.variabilityScore > 70 -> SafetyNoteKind.SIGNIFICANT_VARIABILITY_DETECTED
+            impact.cumulativeDiff < -5.0 -> SafetyNoteKind.LARGE_INSULIN_DIFFERENCE
+            else -> SafetyNoteKind.ACCEPTABLE_SAFETY_PROFILE
         }
 
         return Recommendation(
             preferredAlgorithm = preferredAlgorithm,
-            reason = reason,
+            reasonKind = reasonKind,
+            reasonVariability = reasonVariability,
+            reasonAggressivenessRatio = reasonAggressivenessRatio,
+            reasonAgreementRate = reasonAgreementRate,
             confidenceLevel = confidenceLevel,
             safetyNote = safetyNote
         )
@@ -431,6 +485,29 @@ class ComparisonCsvParser {
         return entries.filter { it.timestamp >= now - window }
     }
 
+    /**
+     * Plain English rendering of [Recommendation.reasonKind] for [generateLlmSummary]. Not shown in
+     * the UI, so it does not need string resources — the UI module maps the same enum to translated
+     * templates instead, see `ComparatorActivity.recommendationReasonText`.
+     */
+    private fun recommendationReasonForLlm(recommendation: Recommendation): String =
+        when (recommendation.reasonKind) {
+            RecommendationReasonKind.SMB_MORE_AGGRESSIVE_WITH_VARIABILITY ->
+                "SMB %.1fx more aggressive with %s variability".format(
+                    recommendation.reasonAggressivenessRatio ?: 0.0,
+                    recommendation.reasonVariability?.name ?: ComparisonLevel.LOW.name
+                )
+            RecommendationReasonKind.MORE_CONSERVATIVE_WITH_VARIABILITY ->
+                "More conservative approach with %s variability".format(
+                    recommendation.reasonVariability?.name ?: ComparisonLevel.LOW.name
+                )
+            RecommendationReasonKind.MORE_REACTIVE_TO_GLUCOSE_CHANGES -> "More reactive to glucose changes"
+            RecommendationReasonKind.SIMILAR_PERFORMANCE ->
+                "Both algorithms show similar performance (%.1f%% agreement)".format(
+                    recommendation.reasonAgreementRate ?: 0.0
+                )
+        }
+
     fun generateLlmSummary(
         periodLabel: String,
         stats: ComparisonStats,
@@ -450,28 +527,55 @@ class ComparisonCsvParser {
         sb.append("- SMB More Aggressive: %.1f%%\n".format(stats.smbWinRate))
         sb.append("- Total Insulin Difference: %.2f U (AIMI - SMB)\n".format(impact.cumulativeDiff))
         
+        // This text is read by a model, not shown in the UI, so plain enum names are enough (same
+        // reasoning as the "Causes" line below).
         sb.append("\n## 2. Safety Analysis\n")
-        sb.append("- Variability Score: %.1f/100 (%s)\n".format(safety.variabilityScore, safety.variabilityLabel))
-        sb.append("- Estimated Hypo Risk: %s\n".format(safety.estimatedHypoRisk))
-        sb.append("- Safety Note: %s\n".format(recommendation.safetyNote))
+        sb.append("- Variability Score: %.1f/100 (%s)\n".format(safety.variabilityScore, safety.variabilityLevel.name))
+        sb.append("- Estimated Hypo Risk: %s\n".format(safety.estimatedHypoRisk.name))
+        sb.append("- Safety Note: %s\n".format(recommendation.safetyNote.name))
 
         sb.append("\n## 3. Recommendation\n")
-        sb.append("- Preferred Algorithm: **${recommendation.preferredAlgorithm}**\n")
-        sb.append("- Reason: ${recommendation.reason}\n")
-        sb.append("- Confidence: ${recommendation.confidenceLevel}\n")
+        sb.append("- Preferred Algorithm: **${recommendation.preferredAlgorithm?.name ?: "EQUIVALENT"}**\n")
+        sb.append("- Reason: ${recommendationReasonForLlm(recommendation)}\n")
+        sb.append("- Confidence: ${recommendation.confidenceLevel.name}\n")
 
         sb.append("\n## 4. Critical Moments (Top Divergences)\n")
         criticalMoments.take(3).forEach { m ->
             sb.append("- [${m.date}] BG: ${m.bg} | IOB: ${m.iob} | COB: ${m.cob}\n")
+            // This text is read by a model, not shown in the UI, so plain names are enough.
+            val causes = if (m.causes.isEmpty()) "none recorded" else m.causes.joinToString(", ") { it.name }
+            sb.append("  Causes: $causes\n")
+            if (m.verdict.isNotEmpty()) sb.append("  Verdict: ${m.verdict}\n")
+            if (m.artifactFlag.isNotEmpty()) sb.append("  Artifact flag: ${m.artifactFlag}\n")
             sb.append("  AIMI Reason: ${m.reasonAimi}\n")
             sb.append("  SMB Reason: ${m.reasonSmb}\n")
             sb.append("  (Diff Rate: ${m.divergenceRate}, Diff SMB: ${m.divergenceSmb})\n\n")
         }
 
         sb.append("\n## 5. Request to LLM\n")
-        sb.append("Based on this data, analyze why the algorithms diverged. Focus on the 'Critical Moments' and the 'Safety Analysis'. Does the aggressive behavior of the winner seem justified given the glucose context?")
+        sb.append("Based on this data, analyze why the algorithms diverged. Focus on the 'Causes' of the 'Critical Moments' and on the 'Safety Analysis'. Does the aggressive behavior of the winner seem justified given the glucose context?")
         
         return sb.toString()
     }
-}
 
+    private companion object {
+
+        /** Splits on commas that are outside quotes: the two reason columns are quoted. */
+        val FIELD_SEPARATOR = ",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex()
+
+        /** Column count of the oldest layout, from Timestamp to Reason_SMB. */
+        const val MIN_COLUMNS = 34
+
+        /** From this column count on, the row also carries Verdict, Artifact_Flag and Diff_Sign. */
+        const val VERDICT_COLUMNS = 37
+
+        /**
+         * From this column count on, the row also carries the ten cause flags and
+         * SMB_LastBolusAgeMin. This is the current layout, 48 columns from Timestamp on.
+         */
+        const val FLAG_COLUMNS = 48
+
+        /** Highest value the first field may have to be read as a schema version. */
+        const val MAX_SCHEMA_VERSION = 999L
+    }
+}

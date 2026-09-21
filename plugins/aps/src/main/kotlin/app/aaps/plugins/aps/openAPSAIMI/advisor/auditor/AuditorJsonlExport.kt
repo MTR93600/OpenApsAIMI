@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
+import app.aaps.plugins.aps.openAPSAIMI.retention.AimiAppendGuard
 import org.json.JSONObject
 import java.io.File
 
@@ -105,6 +106,9 @@ object AuditorJsonlExport {
             decisionsFile.parentFile?.mkdirs()
             decisionsFile.createNewFile()
         }
+        // Rotates the file aside if it ever passes its hard cap. Costs one size check per megabyte
+        // written, and never blocks: this runs on the loop thread.
+        AimiAppendGuard.beforeAppend(decisionsFile, jsonLine.length + 1)
         decisionsFile.appendText("$jsonLine\n")
     }
 }

@@ -17,8 +17,10 @@ import java.io.File
 import java.io.FileOutputStream
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 import java.util.concurrent.Executors
+import java.util.zip.GZIPInputStream
 
 /** Read-only SAF bridge. Large cumulative exports are filtered while streaming. */
 class MainActivity : FlutterActivity() {
@@ -33,6 +35,13 @@ class MainActivity : FlutterActivity() {
 
         const val DECISIONS_24H = "AIMI_Decisions_Last24h.jsonl"
         const val DECISIONS_FULL = "AIMI_Decisions.jsonl"
+        const val ARCHIVE_DIR = "archive"
+
+        // Matches the janitor's own naming exactly (AimiArchive.evict's pattern), so this never
+        // drifts looser than the writer side. A prefix/suffix check alone would also match
+        // AIMI_Decisions_Last24h (no .gz, but startsWith/endsWith checks done separately can be
+        // fooled by future names); the capture groups double as the month key for C1's filter.
+        val ARCHIVE_MEMBER_PATTERN = Regex("""^AIMI_Decisions_(\d{4})-(\d{2})\.jsonl\.gz$""")
         const val PKPD = "oapsaimi_pkpd_records.csv"
         const val EVENTS = "AIMI_HORMONITOR_event_stream_v1.jsonl"
         const val DAILY = "AIMI_HORMONITOR_daily_outcomes_v1.jsonl"
@@ -68,6 +77,10 @@ class MainActivity : FlutterActivity() {
         var maxTimestampMs: Long? = null,
         var recordsWritten: Int = 0,
         var oversizedLines: Int = 0,
+        // A source (an archive member, or the archive directory listing itself) that could not be
+        // read counts as damage too: the caller must not report "complete coverage" over a hole
+        // it silently skipped.
+        var failedSources: Int = 0,
     ) {
         fun observe(timestamp: Long?) {
             if (timestamp == null) return
@@ -75,6 +88,13 @@ class MainActivity : FlutterActivity() {
             maxTimestampMs = maxTimestampMs?.let { maxOf(it, timestamp) } ?: timestamp
         }
     }
+
+    /** A `archive/AIMI_Decisions_<YYYY-MM>.jsonl.gz` member with its calendar-month bounds. */
+    private data class ArchiveMember(
+        val entry: DocumentEntry,
+        val monthStartMs: Long,
+        val monthEndExclusiveMs: Long,
+    )
 
     private val ioExecutor = Executors.newSingleThreadExecutor()
     private var pendingPickerResult: MethodChannel.Result? = null
@@ -306,8 +326,26 @@ class MainActivity : FlutterActivity() {
             }.also(store::save)
         }
 
+        // Archives are read forward and (for the months that can contain the request) scanned in
+        // full, so their own stats give the true archive coverage for those months, the same way
+        // `index` gives the true coverage of the live file. Keep them separate from `stats`, which
+        // only sees the requested-window slice of the live file, so a request outside that slice
+        // cannot be misreported as "archives have no data" just because the live scan alone did
+        // not see it.
         val stats = ExtractionStats()
+        val archiveStats = ExtractionStats()
+        // The live file's own index already tells us whether it alone covers the request (its
+        // segments span every day the index has ever seen, not just the requested window). When
+        // it does, opening any archive would only decompress and JSON-parse months of data that
+        // cannot change the staged result - at ~200 MB compressed / ~2 GB of JSONL for a full
+        // 12-month retention window, that cost is not acceptable to pay on every stage call for
+        // what is the common case (a recent window fully inside the 7-day live file).
+        val liveStart = index.coverageStartMs
+        val liveCoversRequest = liveStart != null && liveStart <= startMs
         BufferedOutputStream(FileOutputStream(target, false)).use { output ->
+            if (!liveCoversRequest) {
+                stageArchivedDecisionLines(treeUri, output, startMs, endMs, zoneId, archiveStats)
+            }
             val range = index.byteRange(startMs, endMs)
             if (range != null) {
                 val descriptor = contentResolver.openFileDescriptor(entry.uri, "r")
@@ -334,22 +372,166 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+        val coverageStartMs = listOfNotNull(archiveStats.minTimestampMs, index.coverageStartMs).minOrNull()
+        val coverageEndMs = listOfNotNull(archiveStats.maxTimestampMs?.plus(1L), index.coverageEndMs).maxOrNull()
+        // A skipped or unreadable archive member is invisible to the rest of this function, so
+        // without failedSources here the coverage union above could span a hole that was never
+        // actually read (e.g. the current month's archive member truncated by a power cut) and
+        // still be reported as complete.
+        val damaged = stats.oversizedLines > 0 || archiveStats.oversizedLines > 0 || archiveStats.failedSources > 0
         return stagedMap(
             logicalName = DECISIONS_FULL,
             entry = entry,
             target = target,
-            coverageStartMs = index.coverageStartMs,
-            coverageEndMs = index.coverageEndMs,
+            coverageStartMs = coverageStartMs,
+            coverageEndMs = coverageEndMs,
             coverageComplete = requestedWindowCovered(
                 requestedStartMs = startMs,
                 requestedEndMs = endMs,
-                sourceStartMs = index.coverageStartMs,
-                sourceEndMs = index.coverageEndMs,
-                damaged = stats.oversizedLines > 0,
+                sourceStartMs = coverageStartMs,
+                sourceEndMs = coverageEndMs,
+                damaged = damaged,
             ),
             extractionMode = "indexed_seek",
-            truncated = stats.oversizedLines > 0,
+            truncated = damaged,
         )
+    }
+
+    /**
+     * Writes the `archive/AIMI_Decisions_<YYYY-MM>.jsonl.gz` members that sit beside the live
+     * decisions file, oldest first, into [output]. Each member is streamed forward (a gzip member
+     * cannot be seeked into), so the byte-offset index only ever applies to the live file that is
+     * written after this call.
+     *
+     * A member whose calendar month cannot intersect `[startMs, endMs)` is not opened at all - at
+     * up to ~200 MB compressed for a year of retention, decompressing and JSON-parsing every month
+     * on every call would turn a sub-second stage into minutes. A skipped member still contributes
+     * its month's calendar bounds to [stats] (a safe, if approximate, proxy for its true content
+     * range) so coverage does not silently narrow just because the member was never opened.
+     *
+     * A missing `archive` folder is the common case today and is treated as "no archives". A
+     * corrupt or truncated member, or a member that cannot be listed, is skipped and counted in
+     * [ExtractionStats.failedSources] so it cannot hide the members read before it, cannot stop the
+     * live file from being staged, and cannot be silently reported as complete coverage.
+     */
+    private fun stageArchivedDecisionLines(
+        treeUri: Uri,
+        output: BufferedOutputStream,
+        startMs: Long,
+        endMs: Long,
+        zoneId: String,
+        stats: ExtractionStats,
+    ) {
+        runCatching {
+            val rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
+            val archiveDocumentId = findChildDirectory(treeUri, rootDocumentId, ARCHIVE_DIR) ?: return
+            val zone = ZoneId.of(zoneId)
+            val members = listArchiveDecisionFiles(treeUri, archiveDocumentId, zone)
+            for (member in members) {
+                val intersectsRequest = member.monthStartMs < endMs && member.monthEndExclusiveMs > startMs
+                if (!intersectsRequest) {
+                    stats.observe(member.monthStartMs)
+                    stats.observe(member.monthEndExclusiveMs - 1L)
+                    continue
+                }
+                runCatching {
+                    val input = contentResolver.openInputStream(member.entry.uri)
+                        ?: error("Unable to open ${member.entry.name}")
+                    // `.use` on `input` itself, wrapping the fallible `GZIPInputStream(...)`
+                    // construction inside it, so a bad gzip header (thrown from the constructor,
+                    // before any `.use` on the GZIPInputStream can attach) still closes `input`.
+                    input.use {
+                        GZIPInputStream(it).use { gzip ->
+                            val scan = BoundedUtf8LineScanner.scan(gzip, emitUnterminatedTail = true) { line ->
+                                writeJsonLineIfSelected(
+                                    line.text,
+                                    output,
+                                    startMs,
+                                    endMs,
+                                    stats,
+                                    ::compactDecision,
+                                    { parseTimestamp(it.opt("timestamp")) },
+                                )
+                            }
+                            stats.oversizedLines += scan.skippedOversizedLines
+                        }
+                    }
+                }.onFailure { error ->
+                    stats.failedSources++
+                    Log.w(TAG, "Skipping unreadable decision archive ${member.entry.name}", error)
+                }
+            }
+        }.onFailure { error ->
+            stats.failedSources++
+            Log.w(TAG, "Unable to list decision archives", error)
+        }
+    }
+
+    /** Returns the document id of the directory named [name] directly under [parentDocumentId], or null. */
+    private fun findChildDirectory(treeUri: Uri, parentDocumentId: String, name: String): String? {
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocumentId)
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+        )
+        contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+            val idIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+            val nameIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            val mimeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+            while (cursor.moveToNext()) {
+                if (cursor.getString(mimeIndex) != DocumentsContract.Document.MIME_TYPE_DIR) continue
+                if (cursor.getString(nameIndex) == name) return cursor.getString(idIndex)
+            }
+        }
+        return null
+    }
+
+    /**
+     * Lists `AIMI_Decisions_<YYYY-MM>.jsonl.gz` members under the archive directory, oldest month
+     * first, with each member's calendar-month bounds parsed from its own filename (the same
+     * pattern the janitor writes it with).
+     */
+    private fun listArchiveDecisionFiles(treeUri: Uri, archiveDocumentId: String, zone: ZoneId): List<ArchiveMember> {
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, archiveDocumentId)
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+        )
+        val result = ArrayList<ArchiveMember>()
+        contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+            val idIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+            val nameIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            val mimeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+            val sizeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_SIZE)
+            val modifiedIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+            while (cursor.moveToNext()) {
+                if (cursor.getString(mimeIndex) == DocumentsContract.Document.MIME_TYPE_DIR) continue
+                val name = cursor.getString(nameIndex) ?: continue
+                val match = ARCHIVE_MEMBER_PATTERN.find(name) ?: continue
+                val year = match.groupValues[1].toInt()
+                val month = match.groupValues[2].toInt()
+                val yearMonth = runCatching { YearMonth.of(year, month) }.getOrNull() ?: continue
+                val monthStartMs = yearMonth.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                val monthEndExclusiveMs = yearMonth.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                val childDocumentId = cursor.getString(idIndex)
+                result += ArchiveMember(
+                    entry = DocumentEntry(
+                        name = name,
+                        documentId = childDocumentId,
+                        uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocumentId),
+                        size = if (cursor.isNull(sizeIndex)) 0L else cursor.getLong(sizeIndex),
+                        lastModifiedMs = if (cursor.isNull(modifiedIndex)) 0L else cursor.getLong(modifiedIndex),
+                    ),
+                    monthStartMs = monthStartMs,
+                    monthEndExclusiveMs = monthEndExclusiveMs,
+                )
+            }
+        }
+        return result.sortedBy { it.entry.name }
     }
 
     private fun stageStreamedFile(

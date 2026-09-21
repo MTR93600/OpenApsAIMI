@@ -7,10 +7,22 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.graphics.Color
+import androidx.annotation.StringRes
 import app.aaps.R
 import app.aaps.databinding.ActivityComparatorBinding
 import app.aaps.plugins.configuration.activities.DaggerAppCompatActivityWithResult
-import app.aaps.plugins.aps.openAPSAIMI.comparison.*
+import app.aaps.plugins.aps.openAPSAIMI.comparison.AlgorithmType
+import app.aaps.plugins.aps.openAPSAIMI.comparison.ClinicalImpact
+import app.aaps.plugins.aps.openAPSAIMI.comparison.ComparisonCsvParser
+import app.aaps.plugins.aps.openAPSAIMI.comparison.ComparisonEntry
+import app.aaps.plugins.aps.openAPSAIMI.comparison.ComparisonLevel
+import app.aaps.plugins.aps.openAPSAIMI.comparison.CriticalMoment
+import app.aaps.plugins.aps.openAPSAIMI.comparison.DivergenceCause
+import app.aaps.plugins.aps.openAPSAIMI.comparison.Recommendation
+import app.aaps.plugins.aps.openAPSAIMI.comparison.RecommendationReasonKind
+import app.aaps.plugins.aps.openAPSAIMI.comparison.SafetyMetrics
+import app.aaps.plugins.aps.openAPSAIMI.comparison.SafetyNoteKind
+import app.aaps.plugins.aps.openAPSAIMI.comparison.ScoringMode
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -38,6 +50,9 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
     
     companion object {
         const val MENU_ID_EXPORT_LLM = 1001
+
+        /** Artifact flag written when the divergence is only the reference algorithm catching up. */
+        private const val ARTIFACT_SCREAMING_SHADOW = "SCREAMING_SHADOW"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -101,8 +116,14 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
         binding.avgRateDiffValue.text = String.format(Locale.US, "%.2f U/h", stats.avgRateDiff)
         binding.avgSmbDiffValue.text = String.format(Locale.US, "%.2f U", stats.avgSmbDiff)
         binding.agreementRateValue.text = String.format(Locale.US, "%.1f%%", stats.agreementRate)
-        binding.aimiWinRateValue.text = String.format(Locale.US, "%.1f%% (Activité)", stats.aimiWinRate)
-        binding.smbWinRateValue.text = String.format(Locale.US, "%.1f%% (Activité)", stats.smbWinRate)
+        binding.aimiWinRateValue.text = getString(
+            R.string.comparator_win_rate_value,
+            String.format(Locale.US, "%.1f%%", stats.aimiWinRate)
+        )
+        binding.smbWinRateValue.text = getString(
+            R.string.comparator_win_rate_value,
+            String.format(Locale.US, "%.1f%%", stats.smbWinRate)
+        )
     }
 
     private fun displayAnalytics() {
@@ -124,82 +145,158 @@ class ComparatorActivity : DaggerAppCompatActivityWithResult() {
     }
 
     private fun displaySafetyAnalysis(safety: SafetyMetrics) {
-        binding.variabilityScoreValue.text = "${safety.variabilityLabel} (SMB)"
-        binding.hypoRiskValue.text = safety.estimatedHypoRisk
+        binding.variabilityScoreValue.text = getString(
+            R.string.comparator_variability_value,
+            getString(levelLabel(safety.variabilityLevel))
+        )
+        binding.hypoRiskValue.text = getString(levelLabel(safety.estimatedHypoRisk))
+    }
+
+    /** The user facing label of a [ComparisonLevel], worded for a score or a risk (masculine in French). */
+    @StringRes
+    private fun levelLabel(level: ComparisonLevel): Int = when (level) {
+        ComparisonLevel.LOW      -> R.string.comparator_level_low
+        ComparisonLevel.MODERATE -> R.string.comparator_level_moderate
+        ComparisonLevel.HIGH     -> R.string.comparator_level_high
+    }
+
+    /** The user facing label of a [ComparisonLevel], worded for a confidence (feminine in French). */
+    @StringRes
+    private fun confidenceLabel(level: ComparisonLevel): Int = when (level) {
+        ComparisonLevel.LOW      -> R.string.comparator_confidence_low
+        ComparisonLevel.MODERATE -> R.string.comparator_confidence_moderate
+        ComparisonLevel.HIGH     -> R.string.comparator_confidence_high
     }
 
     private fun displayClinicalImpact(impact: ClinicalImpact) {
         binding.totalInsulinAimiValue.text = String.format(Locale.US, "%.1f U", impact.totalInsulinAimi)
         binding.totalInsulinSmbValue.text = String.format(Locale.US, "%.1f U", impact.totalInsulinSmb)
-        
+
+        val formattedDiff = String.format(
+            Locale.US,
+            if (impact.cumulativeDiff > 0) "+%.1f U" else "%.1f U",
+            impact.cumulativeDiff
+        )
         val diffText = if (impact.cumulativeDiff > 0) {
-            String.format(Locale.US, "+%.1f U (AIMI plus agressif)", impact.cumulativeDiff)
+            getString(R.string.comparator_cumulative_diff_aimi_more, formattedDiff)
         } else {
-            String.format(Locale.US, "%.1f U (SMB plus agressif)", impact.cumulativeDiff)
+            getString(R.string.comparator_cumulative_diff_smb_more, formattedDiff)
         }
         binding.cumulativeDiffValue.text = diffText
     }
 
     private fun displayCriticalMoments(moments: List<CriticalMoment>) {
         binding.criticalMomentsContainer.removeAllViews()
-        
-        // Filter out Screaming Shadow artifacts
-        moments.filter { 
-             // Logic: Check associated entry for artifact flag (need access to entries, or enhance CriticalMoment)
-             // Simpler: Check if divergence is massive (>2U) and reason mentions specific keywords
-             // Better: CriticalMoment doesn't have the flag yet. I will rely on the divergence magnitude heuristic for now
-             // or check if entry exists.
-             // Actually, I can't easily filter by the new flag because CriticalMoment doesn't have it.
-             // I'll add a label instead.
-             true 
-        }.forEach { moment ->
-             // Try to find the original entry to get the flag (inefficient but works for 5 items)
-             val entry = displayedEntries.getOrNull(moment.index)
-             val isArtifact = entry?.artifactFlag == "SCREAMING_SHADOW"
-             
-             if (!isArtifact) { // Only show real moments
-                val momentView = TextView(this).apply {
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    ).apply {
-                        setMargins(0, 0, 0, 16)
-                    }
-                    setPadding(0, 8, 0, 8)
-                    
-                    val entryText = getString(
+
+        // A "screaming shadow" is not a real divergence: the reference algorithm is only catching up
+        // on its own history, so those moments are not shown.
+        moments.filterNot { it.artifactFlag == ARTIFACT_SCREAMING_SHADOW }.forEach { moment ->
+            val momentView = TextView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    setMargins(0, 0, 0, 16)
+                }
+                setPadding(0, 8, 0, 8)
+
+                val lines = mutableListOf<String>()
+                lines.add(
+                    getString(
                         R.string.comparator_critical_moment_entry,
                         moment.index,
                         moment.bg,
                         moment.iob
                     )
-                    
-                    val divergenceText = getString(
+                )
+                lines.add(
+                    getString(
                         R.string.comparator_critical_moment_divergence,
                         moment.divergenceRate?.let { String.format(Locale.US, "%+.2f", it) } ?: "--",
                         moment.divergenceSmb?.let { String.format(Locale.US, "%+.2f", it) } ?: "--"
                     )
-                    
-                    val verdictText = if (entry?.verdict?.isNotEmpty() == true) " | ${entry.verdict}" else ""
-                    
-                    text = "$entryText\n$divergenceText$verdictText"
-                    textSize = 13f
+                )
+                if (moment.verdict.isNotEmpty()) {
+                    lines.add(getString(R.string.comparator_critical_moment_verdict, moment.verdict))
                 }
-                binding.criticalMomentsContainer.addView(momentView)
-             }
+                if (moment.causes.isNotEmpty()) {
+                    val causeList = moment.causes.joinToString(getString(R.string.comparator_cause_separator)) {
+                        getString(causeLabel(it))
+                    }
+                    lines.add(getString(R.string.comparator_critical_moment_causes, causeList))
+                }
+
+                text = lines.joinToString("\n")
+                textSize = 13f
+            }
+            binding.criticalMomentsContainer.addView(momentView)
         }
+    }
+
+    /** The user facing label of one divergence cause. */
+    @StringRes
+    private fun causeLabel(cause: DivergenceCause): Int = when (cause) {
+        DivergenceCause.AIMI_MEAL_PRIORITY -> R.string.comparator_cause_aimi_meal_priority
+        DivergenceCause.AIMI_REFRACTORY   -> R.string.comparator_cause_aimi_refractory
+        DivergenceCause.AIMI_THROTTLE     -> R.string.comparator_cause_aimi_throttle
+        DivergenceCause.AIMI_CBF          -> R.string.comparator_cause_aimi_cbf
+        DivergenceCause.SMB_REFRACTORY    -> R.string.comparator_cause_smb_refractory
+        DivergenceCause.SMB_THROTTLE      -> R.string.comparator_cause_smb_throttle
+        DivergenceCause.SMB_CBF           -> R.string.comparator_cause_smb_cbf
+        DivergenceCause.CONTEXT_MEAL_RISE -> R.string.comparator_cause_context_meal_rise
+        DivergenceCause.CONTEXT_COB_ACTIVE -> R.string.comparator_cause_context_cob_active
+        DivergenceCause.CONTEXT_UAM_BIAS  -> R.string.comparator_cause_context_uam_bias
     }
 
     private fun displayRecommendation(rec: Recommendation) {
         binding.recommendationAlgorithm.text = getString(
             R.string.comparator_recommended_algorithm,
-            rec.preferredAlgorithm
+            getString(algorithmLabel(rec.preferredAlgorithm))
         )
-        binding.recommendationReason.text = rec.reason
-        binding.recommendationSafetyNote.text = rec.safetyNote
+        binding.recommendationReason.text = reasonText(rec)
+        binding.recommendationSafetyNote.text = getString(safetyNoteLabel(rec.safetyNote))
         binding.recommendationConfidence.text = getString(
             R.string.comparator_confidence,
-            rec.confidenceLevel
+            getString(confidenceLabel(rec.confidenceLevel))
+        )
+    }
+
+    /** The user facing label of the recommended algorithm. `null` means the two are equivalent. */
+    @StringRes
+    private fun algorithmLabel(algorithm: AlgorithmType?): Int = when (algorithm) {
+        AlgorithmType.AIMI        -> R.string.comparator_algorithm_aimi
+        AlgorithmType.OPENAPS_SMB -> R.string.comparator_algorithm_smb
+        null                      -> R.string.comparator_algorithm_equivalent
+    }
+
+    /** The user facing label of a [SafetyNoteKind]. */
+    @StringRes
+    private fun safetyNoteLabel(note: SafetyNoteKind): Int = when (note) {
+        SafetyNoteKind.INCREASED_MONITORING_RECOMMENDED  -> R.string.comparator_safety_note_increased_monitoring
+        SafetyNoteKind.SIGNIFICANT_VARIABILITY_DETECTED  -> R.string.comparator_safety_note_significant_variability
+        SafetyNoteKind.LARGE_INSULIN_DIFFERENCE          -> R.string.comparator_safety_note_large_insulin_difference
+        SafetyNoteKind.ACCEPTABLE_SAFETY_PROFILE         -> R.string.comparator_safety_note_acceptable
+    }
+
+    /**
+     * Fills the string resource template for [Recommendation.reasonKind] with the numbers or level
+     * carried alongside it. Falls back to a neutral value when a field the template needs is missing
+     * (should not happen: `ComparisonCsvParser.generateRecommendation` always sets it).
+     */
+    private fun reasonText(rec: Recommendation): String = when (rec.reasonKind) {
+        RecommendationReasonKind.SMB_MORE_AGGRESSIVE_WITH_VARIABILITY -> getString(
+            R.string.comparator_reason_smb_more_aggressive_variability,
+            String.format(Locale.US, "%.1f", rec.reasonAggressivenessRatio ?: 0.0),
+            getString(levelLabel(rec.reasonVariability ?: ComparisonLevel.LOW))
+        )
+        RecommendationReasonKind.MORE_CONSERVATIVE_WITH_VARIABILITY -> getString(
+            R.string.comparator_reason_more_conservative_variability,
+            getString(levelLabel(rec.reasonVariability ?: ComparisonLevel.LOW))
+        )
+        RecommendationReasonKind.MORE_REACTIVE_TO_GLUCOSE_CHANGES -> getString(R.string.comparator_reason_more_reactive)
+        RecommendationReasonKind.SIMILAR_PERFORMANCE -> getString(
+            R.string.comparator_reason_similar_performance,
+            String.format(Locale.US, "%.1f", rec.reasonAgreementRate ?: 0.0)
         )
     }
 

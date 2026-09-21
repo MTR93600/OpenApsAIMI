@@ -25,43 +25,81 @@
     <string name="insulin_migration_default_used" comment="Shown once after the database migration when no profile was active, so the insulin actually used could not be determined. %1$s is the substituted insulin name, e.g. Ultra-Rapid-Oref. The already migrated records are NOT corrected later.">Older records had no insulin configuration and no profile was active, so %1$s was used for them. Check your insulin settings — already migrated records are not updated afterwards.</string>
 
     <!-- Comparator -->
-    <string name="menu_comparator">Comparateur Plugin AIMI-SMB</string>
-    <string name="comparator_title">Analyse de Performance</string>
-    <string name="comparator_no_data">Aucune donnée disponible. Le fichier CSV sera créé après la première comparaison.</string>
-    <string name="comparator_summary">Résumé</string>
-    <string name="comparator_total_entries">Nombre d\'entrées</string>
-    <string name="comparator_avg_rate_diff">Diff. basale moyenne</string>
-    <string name="comparator_avg_smb_diff">Diff. SMB moyenne</string>
-    <string name="comparator_agreement">Taux d\'accord</string>
-    <string name="comparator_aimi_win_rate">AIMI plus agressif</string>
-    <string name="comparator_smb_win_rate">SMB plus agressif</string>
-    <string name="comparator_rate_chart_title">Débits Basaux Comparés</string>
-    <string name="comparator_rate_chart_desc">AIMI vs SMB - Débits Basaux (U/h)</string>
-    <string name="comparator_smb_chart_title">SMB Comparés</string>
+    <string name="menu_comparator">AIMI-SMB Comparator Plugin</string>
+    <string name="comparator_title">Performance Analysis</string>
+    <string name="comparator_no_data">No data available yet. The CSV file will be created after the first comparison.</string>
+    <string name="comparator_summary">Summary</string>
+    <string name="comparator_total_entries">Number of entries</string>
+    <string name="comparator_avg_rate_diff">Average basal rate difference</string>
+    <string name="comparator_avg_smb_diff">Average SMB difference</string>
+    <string name="comparator_agreement">Agreement rate</string>
+    <string name="comparator_aimi_win_rate">AIMI more aggressive</string>
+    <string name="comparator_smb_win_rate">SMB more aggressive</string>
+    <string name="comparator_rate_chart_title">Basal Rates Compared</string>
+    <string name="comparator_rate_chart_desc">AIMI vs SMB - Basal Rates (U/h)</string>
+    <string name="comparator_smb_chart_title">SMB Compared</string>
     <string name="comparator_smb_chart_desc">AIMI vs SMB - Super Micro Bolus (U)</string>
-    <string name="comparator_bg_chart_title">Profil glycémique</string>
-    <string name="comparator_bg_chart_desc">Glycémie réelle avec seuils cliniques (mg/dL)</string>
+    <string name="comparator_bg_chart_title">Glucose Profile</string>
+    <string name="comparator_bg_chart_desc">Actual glucose with clinical thresholds (mg/dL)</string>
 
     <!-- Safety Analysis -->
-    <string name="comparator_safety_title">Analyse de Sécurité</string>
-    <string name="comparator_variability_score">Score de variabilité</string>
-    <string name="comparator_hypo_risk">Risque d\'hypo estimé</string>
+    <string name="comparator_safety_title">Safety Analysis</string>
+    <string name="comparator_variability_score">Variability score</string>
+    <string name="comparator_hypo_risk">Estimated hypo risk</string>
 
     <!-- Clinical Impact -->
-    <string name="comparator_clinical_impact_title">Impact Clinique</string>
-    <string name="comparator_total_insulin_aimi">Insuline totale AIMI</string>
-    <string name="comparator_total_insulin_smb">Insuline totale SMB</string>
-    <string name="comparator_cumulative_diff">Différence cumulée</string>
+    <string name="comparator_clinical_impact_title">Clinical Impact</string>
+    <string name="comparator_total_insulin_aimi">Total insulin AIMI</string>
+    <string name="comparator_total_insulin_smb">Total insulin SMB</string>
+    <string name="comparator_cumulative_diff">Cumulative difference</string>
 
     <!-- Critical Moments -->
-    <string name="comparator_critical_moments_title">Moments Critiques</string>
-    <string name="comparator_critical_moment_entry">Entrée #%1$d - BG: %2$.0f mg/dL, IOB: %3$.1f U</string>
-    <string name="comparator_critical_moment_divergence">Divergence: Basal %1$s U/h, SMB %2$s U</string>
+    <string name="comparator_critical_moments_title">Critical Moments</string>
+    <string name="comparator_critical_moment_entry">Entry #%1$d - BG: %2$.0f mg/dL, IOB: %3$.1f U</string>
+    <string name="comparator_critical_moment_divergence">Difference: Basal %1$s U/h, SMB %2$s U</string>
+    <string name="comparator_critical_moment_verdict">Verdict: %1$s</string>
+    <string name="comparator_critical_moment_causes" comment="%1$s=the list of causes already joined with the separator below. Example: Causes: Meal priority (AIMI), Carbs on board">Causes: %1$s</string>
+    <string name="comparator_cause_separator" comment="Put between two cause labels in the causes line. Keep the trailing space.">, </string>
+    <string name="comparator_cause_aimi_meal_priority">Meal priority (AIMI)</string>
+    <string name="comparator_cause_aimi_refractory">Waiting time after last bolus (AIMI)</string>
+    <string name="comparator_cause_aimi_throttle">Dose slowed down (AIMI)</string>
+    <string name="comparator_cause_aimi_cbf">Safety barrier (AIMI)</string>
+    <string name="comparator_cause_smb_refractory">Waiting time after last bolus (SMB)</string>
+    <string name="comparator_cause_smb_throttle">Dose slowed down (SMB)</string>
+    <string name="comparator_cause_smb_cbf">Safety barrier (SMB)</string>
+    <string name="comparator_cause_context_meal_rise">Glucose rising like after a meal</string>
+    <string name="comparator_cause_context_cob_active">Carbs still active</string>
+    <string name="comparator_cause_context_uam_bias">Read as an unannounced meal</string>
 
     <!-- Recommendation -->
-    <string name="comparator_recommendation_title">Recommandation</string>
-    <string name="comparator_recommended_algorithm">Algorithme recommandé: %1$s</string>
-    <string name="comparator_confidence">Confiance: %1$s</string>
+    <string name="comparator_recommendation_title">Recommendation</string>
+    <string name="comparator_recommended_algorithm">Recommended algorithm: %1$s</string>
+    <string name="comparator_confidence">Confidence: %1$s</string>
+    <string name="comparator_algorithm_aimi">AIMI</string>
+    <string name="comparator_algorithm_smb">SMB</string>
+    <string name="comparator_algorithm_equivalent">Equivalent</string>
+    <!-- Three-level ratings (variability score, estimated hypo risk). Grammatical gender in French
+         needs a separate set from comparator_confidence_* below, which describes "confidence"
+         (feminine in French) instead of a "score"/"risk" (masculine in French). -->
+    <string name="comparator_level_low">Low</string>
+    <string name="comparator_level_moderate">Moderate</string>
+    <string name="comparator_level_high">High</string>
+    <!-- Same three levels, worded to agree with "confidence" (feminine in French). -->
+    <string name="comparator_confidence_low">Low</string>
+    <string name="comparator_confidence_moderate">Moderate</string>
+    <string name="comparator_confidence_high">High</string>
+    <string name="comparator_reason_smb_more_aggressive_variability" comment="%1$s=how many times more aggressive SMB is, formatted like 2.3. %2$s=the variability level label (Low/Moderate/High). Example: SMB 2.3x more aggressive with Moderate variability">SMB %1$sx more aggressive with %2$s variability</string>
+    <string name="comparator_reason_more_conservative_variability" comment="%1$s=the variability level label (Low/Moderate/High)">More conservative approach with %1$s variability</string>
+    <string name="comparator_reason_more_reactive">More reactive to glucose changes</string>
+    <string name="comparator_reason_similar_performance" comment="%1$s=agreement rate percentage, formatted like 72.3">Both algorithms show similar performance (%1$s%% agreement)</string>
+    <string name="comparator_safety_note_increased_monitoring">⚠️ Increased monitoring recommended</string>
+    <string name="comparator_safety_note_significant_variability">⚠️ Significant variability detected</string>
+    <string name="comparator_safety_note_large_insulin_difference">⚠️ Large difference in total insulin</string>
+    <string name="comparator_safety_note_acceptable">Acceptable safety profile</string>
+    <string name="comparator_variability_value" comment="%1$s=the variability level label (Low/Moderate/High). This score compares SMB basal-rate variability against AIMI, hence the fixed '(SMB)' suffix.">%1$s (SMB)</string>
+    <string name="comparator_win_rate_value" comment="%1$s=percentage already formatted, e.g. 34.2%">%1$s (Activity)</string>
+    <string name="comparator_cumulative_diff_aimi_more" comment="%1$s=insulin difference already formatted with sign and unit, e.g. +1.5 U">%1$s (AIMI more aggressive)</string>
+    <string name="comparator_cumulative_diff_smb_more" comment="%1$s=insulin difference already formatted with sign and unit, e.g. -1.5 U">%1$s (SMB more aggressive)</string>
     <string name="comparator_scoring_mode_balanced">Balanced</string>
     <string name="comparator_scoring_mode_post_meal">Post-meal</string>
     <string name="comparator_scoring_mode_overnight">Overnight</string>
@@ -81,13 +119,13 @@
     <string name="comparator_dataset_smb">SMB</string>
     <string name="comparator_dataset_aimi_smb">AIMI SMB</string>
     <string name="comparator_dataset_smb_smb">SMB SMB</string>
-    <string name="comparator_dataset_bg_actual">BG réel</string>
+    <string name="comparator_dataset_bg_actual">Actual BG</string>
     <string name="comparator_dataset_bg_low">BG &lt; 70</string>
     <string name="comparator_dataset_bg_in_range">BG 70-180</string>
     <string name="comparator_dataset_bg_high">BG &gt; 180</string>
-    <string name="comparator_bg_threshold_54">&lt;54 sévère</string>
+    <string name="comparator_bg_threshold_54">&lt;54 severe</string>
     <string name="comparator_bg_threshold_70">70 hypo</string>
-    <string name="comparator_bg_threshold_180">180 haut</string>
+    <string name="comparator_bg_threshold_180">180 high</string>
     <string name="comparator_bg_threshold_250">250 hyper</string>
 
 

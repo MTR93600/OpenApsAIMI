@@ -43,8 +43,28 @@ class AimiSmbComparator @Inject constructor(
     private val storageHelper: AimiStorageHelper,
     private val preferences: Preferences
 ) {
-    private companion object {
+    internal companion object {
+
         const val CSV_SCHEMA_VERSION = "3"
+
+        /**
+         * Header of the current CSV layout (schema 3). It is written once, when the file is
+         * created. `ComparisonCsvParser` reads rows back, so both must agree on the column order.
+         */
+        const val CSV_HEADER =
+            "SchemaVersion,Timestamp,Date,BG,Delta,ShortAvgDelta,LongAvgDelta,IOB,COB," +
+                "AIMI_Rate,AIMI_SMB,AIMI_Duration,AIMI_EventualBG,AIMI_TargetBG," +
+                "SMB_Rate,SMB_SMB,SMB_Duration,SMB_EventualBG,SMB_TargetBG," +
+                "Diff_Rate,Diff_SMB,Diff_EventualBG," +
+                "MaxIOB,MaxBasal,MicroBolus_Allowed," +
+                "AIMI_Insulin_30min,SMB_Insulin_30min,Cumul_Diff," +
+                "AIMI_Active,SMB_Active,Both_Active," +
+                "AIMI_UAM_Last,SMB_UAM_Last," +
+                "Verdict,Artifact_Flag,Diff_Sign," +
+                "AIMI_Flag_MealPriority,AIMI_Flag_Refractory,AIMI_Flag_Throttle,AIMI_Flag_CBF," +
+                "SMB_Flag_Refractory,SMB_Flag_Throttle,SMB_Flag_CBF," +
+                "Context_MealRise,Context_COB_Active,Context_UAM_Bias,SMB_LastBolusAgeMin," +
+                "Reason_AIMI,Reason_SMB\n"
     }
     // 🧠 VIRTUAL PATIENT STATE (Lyra Reality System)
     // Allows SMB to run "Counter-Factually" (deciding based on its own past, not AIMI's)
@@ -59,21 +79,7 @@ class AimiSmbComparator @Inject constructor(
         storageHelper.getAimiFile("comparison_aimi_smb.csv").apply {
             parentFile?.mkdirs()
             if (!exists()) {
-                writeText(
-                    "SchemaVersion,Timestamp,Date,BG,Delta,ShortAvgDelta,LongAvgDelta,IOB,COB," +
-                        "AIMI_Rate,AIMI_SMB,AIMI_Duration,AIMI_EventualBG,AIMI_TargetBG," +
-                        "SMB_Rate,SMB_SMB,SMB_Duration,SMB_EventualBG,SMB_TargetBG," +
-                        "Diff_Rate,Diff_SMB,Diff_EventualBG," +
-                        "MaxIOB,MaxBasal,MicroBolus_Allowed," +
-                        "AIMI_Insulin_30min,SMB_Insulin_30min,Cumul_Diff," +
-                        "AIMI_Active,SMB_Active,Both_Active," +
-                        "AIMI_UAM_Last,SMB_UAM_Last," +
-                        "Verdict,Artifact_Flag,Diff_Sign," +
-                        "AIMI_Flag_MealPriority,AIMI_Flag_Refractory,AIMI_Flag_Throttle,AIMI_Flag_CBF," +
-                        "SMB_Flag_Refractory,SMB_Flag_Throttle,SMB_Flag_CBF," +
-                        "Context_MealRise,Context_COB_Active,Context_UAM_Bias,SMB_LastBolusAgeMin," +
-                        "Reason_AIMI,Reason_SMB\n"
-                )
+                writeText(CSV_HEADER)
             }
         }.also {
             val (status, path, error) = storageHelper.getStorageStatus()
@@ -194,15 +200,17 @@ class AimiSmbComparator @Inject constructor(
             }
 
             logComparison(
-                aimiResult, 
-                smbResult, 
-                glucoseStatus, 
-                iobData.firstOrNull()?.iob ?: 0.0, 
+                aimiResult,
+                smbResult,
+                glucoseStatus,
+                iobData.firstOrNull()?.iob ?: 0.0,
                 mealData.mealCOB,
                 profileAimi.max_iob,
                 profileAimi.max_basal,
                 microBolusAllowed,
-                currentTime
+                currentTime,
+                smbIobArray,
+                profileSmb.SMBInterval
             )
 
         } catch (e: Exception) {
@@ -315,7 +323,9 @@ class AimiSmbComparator @Inject constructor(
         maxIOB: Double,
         maxBasal: Double,
         microBolusAllowed: Boolean,
-        currentTime: Long
+        currentTime: Long,
+        smbIobArray: Array<IobTotal>,
+        smbIntervalMinutes: Int
     ) {
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         // On loggue la vraie date de la décision
@@ -382,9 +392,27 @@ class AimiSmbComparator @Inject constructor(
             aimiReason.contains("MEAL_PRIORITY_RELAX", ignoreCase = true)
         val aimiFlagRefractory = aimiReason.contains("REFRACTORY", ignoreCase = true)
         val aimiFlagThrottle = aimiReason.contains("PKPD_THROTTLE", ignoreCase = true)
-        val aimiFlagCbf = aimiReason.contains("CBF", ignoreCase = true)
-        val smbFlagRefractory = smbReason.contains("SMB interval=", ignoreCase = true) ||
-            smbReason.contains("lastBolusAge=", ignoreCase = true)
+        // AIMI_Flag_CBF is left unset (empty column) on purpose. The real control-barrier state
+        // (`ControlBarrierShield.enforce`, called through `AutodriveEngine`) only runs inside the
+        // conditional Autodrive V3 branch, and its outcome is exposed as a class-level "last call"
+        // singleton (`autodriveEngine.lastBarrierDiagnostics` / `lastCbfPermittedU`) that is not reset
+        // between ticks. Reading it from here, at a call site the Autodrive branch does not itself
+        // reach, would attribute a possibly much older tick's barrier state to this row. That is worse
+        // than the substring match it replaces, so the column is left empty rather than guessed. See
+        // the job-1 write-up in the coherence report for the source considered and why it was rejected.
+        // The parser already reads an empty column as "false" (`field(index) == "1"`), which is the
+        // right default until a genuine per-tick source exists, but it cannot yet distinguish "false"
+        // from "unknown" — flagged in the report.
+
+        // SMB_Flag_Refractory: the same lastBolusTime/SMBInterval arithmetic DetermineBasalSMB itself
+        // runs to decide whether it is inside its bolus interval (see DetermineBasalSMB.kt, around
+        // "lastBolusAge > SMBInterval - 6.0"). `smbIobArray[0].lastBolusTime` is the counterfactual
+        // SMB's own last virtual bolus (VirtualSmbState), matching what determine_basal read for this
+        // same call, so this reproduces the real refractory state instead of guessing from the reason.
+        val smbLastBolusTime = smbIobArray.firstOrNull()?.lastBolusTime ?: 0L
+        val smbIntervalSeconds = kotlin.math.min(10, kotlin.math.max(1, smbIntervalMinutes)) * 60.0
+        val smbLastBolusAgeSeconds = (currentTime - smbLastBolusTime) / 1000.0
+        val smbFlagRefractory = smbLastBolusTime > 0L && smbLastBolusAgeSeconds <= smbIntervalSeconds - 6.0
         val smbFlagThrottle = smbReason.contains("THROTTLE", ignoreCase = true)
         val smbFlagCbf = smbReason.contains("CBF", ignoreCase = true)
 
@@ -479,7 +507,7 @@ class AimiSmbComparator @Inject constructor(
             if (aimiFlagMealPriority) "1" else "0",
             if (aimiFlagRefractory) "1" else "0",
             if (aimiFlagThrottle) "1" else "0",
-            if (aimiFlagCbf) "1" else "0",
+            "", // AIMI_Flag_CBF: no reliable per-tick source at this call site, see comment above
             if (smbFlagRefractory) "1" else "0",
             if (smbFlagThrottle) "1" else "0",
             if (smbFlagCbf) "1" else "0",
