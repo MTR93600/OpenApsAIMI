@@ -1,9 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
-import android.content.Context
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
+import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -32,7 +32,7 @@ import dev.zacsweers.metro.AppScope
 @SingleIn(AppScope::class)
 class AuditorAIService @Inject constructor(
     private val preferences: Preferences,
-    private val context: Context,
+    private val geminiResolver: GeminiModelResolver,
     private val auditorStatusLiveData: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
 ) {
     
@@ -199,8 +199,6 @@ class AuditorAIService @Inject constructor(
         return response.toString()
     }
     
-    private val geminiResolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
-
     /**
      * Call Gemini API
      */

@@ -10,12 +10,11 @@ import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
+import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 
-class GeminiVisionProvider(private val context: android.content.Context) : AIVisionProvider {
+class GeminiVisionProvider(private val geminiResolver: GeminiModelResolver) : AIVisionProvider {
     override val displayName = "Gemini (Flash)"
     override val providerId = "GEMINI"
-    
-    private val geminiResolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
 
     override suspend fun estimateFromImage(bitmap: Bitmap, userDescription: String, apiKey: String): EstimationResult = withContext(Dispatchers.IO) {
         try {

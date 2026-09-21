@@ -90,6 +90,7 @@ import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.EstimationResult
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.FoodRecognitionService
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.compose.ProviderDropdown
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -118,12 +119,13 @@ fun AimiMealAdvisorScreen(
     persistenceLayer: PersistenceLayer,
     profileFunction: ProfileFunction,
     aapsLogger: AAPSLogger,
+    geminiModelResolver: GeminiModelResolver,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    val recognitionService = remember { FoodRecognitionService(context, preferences) }
+    val recognitionService = remember { FoodRecognitionService(geminiModelResolver, preferences) }
 
     var showCamera by remember { mutableStateOf(false) }
     var provider by remember { mutableStateOf(preferences.get(StringKey.AimiAdvisorProvider).uppercase(Locale.ROOT)) }

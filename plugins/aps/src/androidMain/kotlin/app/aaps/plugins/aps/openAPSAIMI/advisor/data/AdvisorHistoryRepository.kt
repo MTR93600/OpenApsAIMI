@@ -1,8 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.data
 
-import android.content.Context
-import android.content.SharedPreferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.Collections
@@ -11,11 +10,10 @@ import java.util.Collections
  * Tracks the history of actions applied via the AIMI Advisor.
  * Helps prevent "ping-pong" advice by providing context about recent changes.
  */
-class AdvisorHistoryRepository(context: Context) {
+class AdvisorHistoryRepository(private val cache: AimiKeyValueCache) {
 
     private val PREF_NAME = "AimiAdvisorHistory"
     private val KEY_HISTORY = "history_log"
-    private val prefs: SharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
     private val gson = Gson()
 
     data class AdvisorActionLog(
@@ -67,7 +65,7 @@ class AdvisorHistoryRepository(context: Context) {
     }
 
     private fun loadHistory(): List<AdvisorActionLog> {
-        val json = prefs.getString(KEY_HISTORY, null) ?: return emptyList()
+        val json = cache.getString(PREF_NAME, KEY_HISTORY) ?: return emptyList()
         val type = object : TypeToken<List<AdvisorActionLog>>() {}.type
         return try {
             gson.fromJson(json, type)
@@ -78,7 +76,8 @@ class AdvisorHistoryRepository(context: Context) {
 
     private fun saveHistory(list: List<AdvisorActionLog>) {
         val json = gson.toJson(list)
-        // commit() so a immediate recreate() (e.g. after Apply) sees the new entry before 48h de-dup runs.
-        prefs.edit().putString(KEY_HISTORY, json).commit()
+        // AimiKeyValueCache.putString commits synchronously, so an immediate recreate() (e.g. after
+        // Apply) sees the new entry before 48h de-dup runs.
+        cache.putString(PREF_NAME, KEY_HISTORY, json)
     }
 }

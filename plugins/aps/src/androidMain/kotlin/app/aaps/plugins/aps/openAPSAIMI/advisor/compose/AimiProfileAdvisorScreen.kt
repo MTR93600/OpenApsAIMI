@@ -259,7 +259,6 @@ fun AimiProfileAdvisorScreen(
                 val history = withContext(Dispatchers.IO) { historyRepo.getRecentActions(7) }
                 val richOref = preferences.get(BooleanKey.OApsAIMIAdvisorLlmRichOref)
                 aiCoachingService.fetchAdvice(
-                    androidContext = context,
                     context = advisorCtx,
                     report = currentReport,
                     apiKey = activeKey,

@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
+import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.plugins.aps.ApsStrings
@@ -218,6 +220,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val aimiMlTrainingScheduler: AimiMlTrainingScheduler,
     private val storageHelper: AimiStorageHelper,
     private val storage: AimiStorage,
+    private val keyValueCache: AimiKeyValueCache,
+    private val geminiModelResolver: GeminiModelResolver,
     private val behaviorProfileSource: AimiBehaviorProfileSource,
     private val ch: ConcentrationHelper,
     private val trajectoryHistoryProvider: TrajectoryHistoryProvider,
@@ -1977,6 +1981,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         persistenceLayer = persistenceLayer,
                         profileFunction = profileFunction,
                         aapsLogger = aapsLogger,
+                        geminiModelResolver = geminiModelResolver,
                         onBack = onBack,
                     )
                 },
@@ -2011,7 +2016,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     AimiProfileAdvisorScreen(
                         preferences = preferences,
                         advisorService = advisorService,
-                        historyRepo = AdvisorHistoryRepository(context),
+                        historyRepo = AdvisorHistoryRepository(keyValueCache),
                         importExportPrefs = importExportPrefs,
                         exportPasswordDataStore = exportPasswordDataStore,
                         aiCoachingService = aiCoachingService,

@@ -1,9 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.llm.gemini
 
-import android.content.Context
-import android.content.SharedPreferences
 import android.util.Log
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -19,7 +18,7 @@ import dev.zacsweers.metro.AppScope
  */
 @SingleIn(AppScope::class)
 class GeminiModelResolver @Inject constructor(
-    private val context: Context
+    private val cache: AimiKeyValueCache
 ) {
 
     companion object {
@@ -100,11 +99,8 @@ class GeminiModelResolver @Inject constructor(
         }
 
         // 2. Check Disk Cache Validity
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val diskTs = prefs.getLong(KEY_CACHE_TIMESTAMP, 0)
-        
-        if (aimiWallClockMs() - diskTs < CACHE_TTL_MS) {
-            val jsonStr = prefs.getString(KEY_AVAILABLE_MODELS, null)
+        if (cache.isFresh(PREFS_NAME, KEY_CACHE_TIMESTAMP, CACHE_TTL_MS)) {
+            val jsonStr = cache.getString(PREFS_NAME, KEY_AVAILABLE_MODELS)
             if (jsonStr != null) {
                 val set = parseModelsSet(jsonStr)
                 if (set.isNotEmpty()) {
@@ -118,22 +114,20 @@ class GeminiModelResolver @Inject constructor(
         return try {
             val freshModels = fetchModelsFromApi(apiKey)
             if (freshModels.isEmpty()) throw Exception("Empty model list returned")
-            
+
             // Save to Disk
-            prefs.edit()
-                .putLong(KEY_CACHE_TIMESTAMP, aimiWallClockMs())
-                .putString(KEY_AVAILABLE_MODELS, freshModels.joinToString(","))
-                .apply()
-            
+            cache.putLong(PREFS_NAME, KEY_CACHE_TIMESTAMP, aimiWallClockMs())
+            cache.putString(PREFS_NAME, KEY_AVAILABLE_MODELS, freshModels.joinToString(","))
+
             updateMemoryCache(freshModels)
             freshModels
         } catch (e: Exception) {
             Log.e(TAG, "Failed to fetch models: ${e.message}. Using cache/fallback.")
             // If we have STALE memory cache, use it
             if (memoryCache.isNotEmpty()) return memoryCache.keys
-            
+
             // If we have STALE disk cache, use it
-            val jsonStr = prefs.getString(KEY_AVAILABLE_MODELS, null)
+            val jsonStr = cache.getString(PREFS_NAME, KEY_AVAILABLE_MODELS)
              if (jsonStr != null) {
                 val set = parseModelsSet(jsonStr)
                 if (set.isNotEmpty()) {

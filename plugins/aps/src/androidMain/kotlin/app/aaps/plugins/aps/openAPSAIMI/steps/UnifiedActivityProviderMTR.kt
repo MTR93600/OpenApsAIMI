@@ -67,10 +67,12 @@ class UnifiedActivityProviderMTR @Inject constructor(
         /** Match requested window to [SC] column (±2.5 min). */
         private const val WINDOW_SLACK_MS = 150_000L
 
-        fun getMode(context: android.content.Context): String {
-            val prefs = context.getSharedPreferences(context.packageName + "_preferences", android.content.Context.MODE_PRIVATE)
-            return prefs.getString(PREF_KEY_SOURCE_MODE, DEFAULT_MODE) ?: DEFAULT_MODE
-        }
+        /**
+         * Same read as the instance [getMode], for a caller that has no [SP] to inject - this is
+         * the platform's default preference store either way, via [cache]'s `null`-store convention.
+         */
+        fun getMode(cache: app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache): String =
+            cache.getString(null, PREF_KEY_SOURCE_MODE) ?: DEFAULT_MODE
 
         /**
          * Picks the freshest HR row for [mode] (Garmin / Wear / HC priority).

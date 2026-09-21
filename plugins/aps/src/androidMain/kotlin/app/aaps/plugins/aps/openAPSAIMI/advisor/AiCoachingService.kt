@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor
 
-import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -16,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
+import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.plugins.aps.R
@@ -34,6 +34,7 @@ import java.util.Locale
 @SingleIn(AppScope::class)
 class AiCoachingService @Inject constructor(
     private val rh: ResourceHelper,
+    private val geminiModelResolver: GeminiModelResolver,
 ) {
 
     enum class Provider { OPENAI, GEMINI, DEEPSEEK, CLAUDE }
@@ -58,9 +59,8 @@ class AiCoachingService @Inject constructor(
      * Fetch advice asynchronously.
      */
     internal suspend fun fetchAdvice(
-        androidContext: Context,
-        context: AdvisorContext, 
-        report: AdvisorReport, 
+        context: AdvisorContext,
+        report: AdvisorReport,
         apiKey: String,
         provider: Provider,
         history: List<app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.AdvisorActionLog> = emptyList(),
@@ -70,10 +70,10 @@ class AiCoachingService @Inject constructor(
         if (apiKey.isBlank()) return@withContext rh.gs(R.string.aimi_coach_svc_missing_key, provider.name)
 
         try {
-            val prompt = buildPrompt(androidContext, context, report, history, includeRichOref, causalInsights)
+            val prompt = buildPrompt(context, report, history, includeRichOref, causalInsights)
 
             return@withContext when (provider) {
-                Provider.GEMINI -> callGemini(androidContext, apiKey, prompt)
+                Provider.GEMINI -> callGemini(apiKey, prompt)
                 Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
                 Provider.CLAUDE -> callClaude(apiKey, prompt)
                 else -> callOpenAI(apiKey, prompt)
@@ -84,17 +84,16 @@ class AiCoachingService @Inject constructor(
             return@withContext rh.gs(R.string.aimi_coach_svc_connection_error, provider.name, e.localizedMessage)
         }
     }
-    
+
     /**
      * Simple text generation for Context Module.
-     * 
+     *
      * @param prompt Complete prompt (system + user message)
      * @param apiKey API key for the provider
      * @param provider Which LLM provider to use
      * @return Generated text or error message
      */
     suspend fun fetchText(
-        context: Context,
         prompt: String,
         apiKey: String,
         provider: Provider
@@ -104,7 +103,7 @@ class AiCoachingService @Inject constructor(
 
         try {
             return@withContext when (provider) {
-                Provider.GEMINI -> callGemini(context, apiKey, prompt)
+                Provider.GEMINI -> callGemini(apiKey, prompt)
                 Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
                 Provider.CLAUDE -> callClaude(apiKey, prompt)
                 else -> callOpenAI(apiKey, prompt)
@@ -157,33 +156,30 @@ class AiCoachingService @Inject constructor(
         }
     }
 
-    private fun callGemini(context: Context, apiKey: String, prompt: String): String {
-        val resolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
-        
+    private fun callGemini(apiKey: String, prompt: String): String {
         // 1. Try Preferred Model (efficient flash tier; durable *-latest alias tracks current GA)
-        val primaryModel = resolver.resolveGenerateContentModel(apiKey, "gemini-flash-latest")
-        
+        val primaryModel = geminiModelResolver.resolveGenerateContentModel(apiKey, "gemini-flash-latest")
+
         try {
             // Transient overload (503/UNAVAILABLE) is retried with bounded backoff on the same model.
-            return LlmHttpRetry.withTransientRetry { executeGeminiRequest(resolver, apiKey, prompt, primaryModel) }
+            return LlmHttpRetry.withTransientRetry { executeGeminiRequest(apiKey, prompt, primaryModel) }
         } catch (e: Exception) {
             // 2. Quota (429) OR still-overloaded after retries → fallback to the resilient flash alias (also retried).
             if (LlmHttpRetry.isQuota(e) || LlmHttpRetry.isTransient(e)) {
                 val fallbackModel = "gemini-flash-latest" // Durable flash alias (current GA)
                 android.util.Log.w("AIMI_GEMINI", "⚠️ $primaryModel failed (${e.message?.take(80)}). Fallback to $fallbackModel")
-                return LlmHttpRetry.withTransientRetry { executeGeminiRequest(resolver, apiKey, prompt, fallbackModel) }
+                return LlmHttpRetry.withTransientRetry { executeGeminiRequest(apiKey, prompt, fallbackModel) }
             }
             throw e // Re-throw other errors
         }
     }
 
     private fun executeGeminiRequest(
-        resolver: app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver,
-        apiKey: String, 
-        prompt: String, 
+        apiKey: String,
+        prompt: String,
         modelId: String
     ): String {
-        val urlStr = resolver.getGenerateContentUrl(modelId, apiKey)
+        val urlStr = geminiModelResolver.getGenerateContentUrl(modelId, apiKey)
         val url = URL(urlStr)
         val connection = url.openConnection() as HttpURLConnection
         
@@ -236,8 +232,7 @@ class AiCoachingService @Inject constructor(
     }
 
     private fun buildPrompt(
-        androidContext: Context, 
-        ctx: AdvisorContext, 
+        ctx: AdvisorContext,
         report: AdvisorReport,
         history: List<app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.AdvisorActionLog>,
         includeRichOref: Boolean,

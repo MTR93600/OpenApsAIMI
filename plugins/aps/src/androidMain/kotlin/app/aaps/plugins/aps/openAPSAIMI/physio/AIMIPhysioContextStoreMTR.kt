@@ -43,7 +43,6 @@ import kotlinx.serialization.json.put
  */
 @SingleIn(AppScope::class)
 class AIMIPhysioContextStoreMTR @Inject constructor(
-    private val context: Context,
     private val aapsLogger: AAPSLogger
 ) {
     

@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.keys.StringKey
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
+import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -46,7 +47,7 @@ import dev.zacsweers.metro.AppScope
 class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     private val sp: SP,
     private val aapsLogger: AAPSLogger,
-    private val context: android.content.Context
+    private val geminiResolver: GeminiModelResolver
 ) {
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lastNarrativeRef = AtomicReference("")
@@ -70,10 +71,6 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         private const val CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
         private const val DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
     }
-
-    private val geminiResolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
-    
-    // ...
 
     private fun analyzeWithGemini(
         features: PhysioFeaturesMTR,

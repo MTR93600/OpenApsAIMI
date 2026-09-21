@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.tpo
 
-import android.content.Context
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.SP
@@ -16,7 +15,6 @@ import org.json.JSONObject
 import java.util.Locale
 
 internal class TpoLlmValidator(
-    private val context: Context,
     private val sp: SP,
     private val aiCoachingService: AiCoachingService,
     private val aapsLogger: AAPSLogger,
@@ -52,7 +50,7 @@ internal class TpoLlmValidator(
         }
         val prompt = buildPrompt(proposal, plan, input, ledger)
         val raw = runCatching {
-            aiCoachingService.fetchText(context, prompt, apiKey, provider)
+            aiCoachingService.fetchText(prompt, apiKey, provider)
         }.getOrElse { error ->
             aapsLogger.error(LTag.APS, "TPO LLM error: ${error.message}")
             return@withContext TpoLlmResult(
