@@ -21,6 +21,7 @@ import app.aaps.implementation.receivers.KeepAliveWorker
 import app.aaps.implementation.scenes.SceneExpiryWorker
 import app.aaps.plugins.aps.loop.runningMode.RunningModeExpiryScheduler
 import app.aaps.plugins.aps.loop.runningMode.RunningModeExpiryWorker
+import app.aaps.plugins.aps.openAPSAIMI.retention.AimiRetentionWorker
 import dev.zacsweers.metro.GraphExtension
 import dev.zacsweers.metro.IntoMap
 import dev.zacsweers.metro.Provides
@@ -46,6 +47,11 @@ interface AppWorkersGraph {
     @IntoMap
     @WorkerKey(RunningModeExpiryWorker::class)
     fun bindRunningModeExpiryWorker(factory: RunningModeExpiryWorker.Factory): MetroWorkerCreator = factory
+
+    @Provides
+    @IntoMap
+    @WorkerKey(AimiRetentionWorker::class)
+    fun bindAimiRetentionWorker(factory: AimiRetentionWorker.Factory): MetroWorkerCreator = factory
 
     @Provides
     @IntoMap

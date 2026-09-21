@@ -63,6 +63,7 @@ import app.aaps.plugins.aps.openAPSAIMI.quality.InsulinOriginMeter
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.retention.AimiAppendCap
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
@@ -1485,6 +1486,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // CircadianMealProfileStore entry points took `AimiStorage` when they were restored, while the
     // File-typed members below still need the helper.
     @Inject lateinit var storage: AimiStorage
+
+    // Keeps the decisions journal under its hard cap between retention passes. See AimiAppendCap.
+    @Inject lateinit var appendCap: AimiAppendCap
     
     // Helper to safely access learner (handles potential early access before injection)
     private val safeReactivityFactor: Double
@@ -9877,7 +9881,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun appendAimiDecisionsJsonlLine(jsonLine: String) {
         try {
-            AuditorJsonlExport.appendLine(storage, aimiDecisionsJsonlFile(), jsonLine)
+            AuditorJsonlExport.appendLine(storage, appendCap, aimiDecisionsJsonlFile(), jsonLine)
         } catch (e: Exception) {
             consoleError.add("Failed to save AIMI Decision JSON: ${e.message}")
         }

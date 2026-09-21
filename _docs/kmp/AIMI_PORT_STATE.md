@@ -2161,6 +2161,58 @@ is worth knowing, because it means a test suite being green said nothing about t
 Gates: `testAndroidHostTest --rerun` **1377 tests, 0 failures**, `:app:assembleFullDebug` and
 `compileKotlinIosArm64` both clean.
 
+## 6aj. 2026-09-21: the `retention/` package, ported
+
+The biggest missing piece of production code, and not housekeeping: it is production's fix for AIMI's
+telemetry files that grow without limit. Production's own KDoc measures the decisions journal at
+**2.10 GB**.
+
+**Where the files went** (the user decided this):
+
+| File | Source set | Why |
+|---|---|---|
+| `AimiRetentionPolicy` | commonMain | data only, 15 rules, same as production |
+| `AimiTimestampKey` | commonMain | byte scanning; `Charsets.US_ASCII` swapped for `encodeToByteArray()`/`decodeToString()` (the keys `timestamp`/`wall_ms` are ASCII, so the bytes are the same) |
+| `AimiLineScanner`, `AimiCutPlanner`, `AimiArchive`, `AimiFileLock`, `AimiRetentionManager`, `AimiAppendGuard` | androidMain | copied as-is. They rely on `RandomAccessFile.seek`, fsync, gzip, `ATOMIC_MOVE`, `fileKey()` and a non-blocking `tryLock()`. `AapsLock` blocks, so it cannot replace `tryWithFile` |
+| `AimiRetentionWorker` | androidMain | Hilt → Metro, see below |
+
+**The one new interface: `AimiAppendCap`** (commonMain, one method `beforeAppend(path, bytes)`). On this
+branch `AuditorJsonlExport` is already shared code and only has an `AimiPath`, so it could not call the
+`File`-based guard. Without this interface the decisions journal, the 2.10 GB file itself, would have
+lost its cap without any sign. `AndroidAimiAppendCap` passes the call to `AimiAppendGuard`.
+`DetermineBasalAIMI2` injects it and passes it to `AuditorJsonlExport.appendLine`. There is no iOS
+implementation, and the KDoc says why: `AimiStorage` has none either, so on iOS these files are never
+written. Production's own warning is carried across word for word: "one cap per file between janitor
+runs, not an unlimited bound".
+
+**The worker.** `@HiltWorker` became `@AssistedInject` plus an `@AssistedFactory` that extends
+`MetroWorkerCreator`, registered with `@WorkerKey` in `AppWorkersGraph`. The `@Assisted` parameters
+must be called `context`/`params` to match `MetroWorkerCreator`, or Metro fails with "Missing from
+factory". The two pure functions stay in the same file, as production has them. The brief suggested
+moving the body into a `RunnerWorker` runner, but that was not needed to port it. `now` is
+`::aimiWallClockMs`. `AimiMlTrainingScheduler` schedules it every 24 h (`UPDATE` policy), and its
+`cancel()` does not cancel it on purpose, with production's comment copied across.
+
+**Tests: all 13 files, 107 tests, ported to `androidHostTest`. None were parked and no assertion was
+changed.** One call site had to change: `AimiRetentionEndToEndTest` calls `ComparisonCsvParser.parse`,
+which here takes an `AimiPath` through `AimiStorage`, not a `File`. The test now builds the parser on
+an `AndroidAimiStorage` with a mocked helper. The path is absolute, so the helper is never asked
+anything. The brief's plan to put the two commonMain files' tests in `commonTest` was not followed.
+They run on the host with the rest; moving them to `kotlin.test` is a small follow-up.
+
+Gates: `testAndroidHostTest --rerun` **1484 tests, 0 failures** (1377 + 107),
+`compileKotlinIosArm64` and `:app:assembleFullDebug` both clean.
+
+### Found while doing it: the basal ML trainer never runs on this branch
+
+`BasalMlTrainerWorker` has a Metro `Factory`, and `AimiMlTrainingScheduler` enqueues it every hour
+and once at start-up. But **no `@WorkerKey` in `AppWorkersGraph` registers it**. Without a key, WorkManager
+falls back to reflection, which needs a `(Context, WorkerParameters)` constructor. This worker takes
+five parameters, so every run fails. Every other AIMI worker takes only those two and works.
+
+**Not fixed, on purpose.** Registering it is one `@Provides` block, but it turns on a learning loop
+that affects basal dosing. That is a decision for the user, not part of a port.
+
 ---
 
 ---
