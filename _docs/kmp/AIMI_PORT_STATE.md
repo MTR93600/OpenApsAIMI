@@ -2112,6 +2112,57 @@ tested decision belonging to someone else. Expect and reward that.
 
 ---
 
+## 6ai. 2026-09-21: the anchored lot series, and a dosing gate the branch had gone backwards on
+
+Resuming after a merge brought in work this session had not seen. The important part is not the
+merge itself but what it revealed about how this port is actually being run.
+
+**There is an anchored lot process, and it is more rigorous than this session's file-count
+arithmetic.** `_docs/kmp/P*-ANCHOR.md` runs P0.8 through P3.8, one clinical topic per lot (P3.5 MCER
+latch, P3.6 TPO revert, P3.7 ML stale training, P3.8 calibration health), each with a PR, a
+`GO_WITH_CAVEATS` verdict, and blob-level SHA comparison against named `dev_OAPSAIMI` commits with
+out-of-scope items marked explicitly. Any future gap analysis should start there rather than
+diffing file lists.
+
+The merge moved AIMI from **532 to 674 files** here, and the production gap from ~25 real files to
+**16** - nine of which are the `retention/` package. 129 tests still missing.
+
+**Four duplicate test classes had to be removed**, and the direction matters: this session had ported
+`UndeclaredCobEstimatorTest`, `UamInputSchemaValidatorTest`, `SmbRefinementFeatureSchemaTest` and
+`TrainingCircuitBreakerTest` into `androidHostTest`, while the anchored series had already placed them
+in `commonTest` with `kotlin.test`. The `commonTest` copies won: same assertions, but they also run on
+Native, and their KDoc records the provenance and why the source set was chosen. Suite: **1377 tests,
+0 failures**.
+
+### The finding: the branch was running a dosing gate production had deliberately reverted
+
+`UndeclaredCobEstimator`'s heart-rate gate stood down when glucose rose faster than
+11 mg/dL per 5 min. Production's gate fires unconditionally, and its comment says why - quoting the
+user's own instruction:
+
+> the heart rate may protect, it may never be a reason to believe in a meal. The cost is known and
+> accepted: a real undeclared meal that raises the heart rate is not caught here.
+
+The history is the instructive part. `5220fc5e2f` **introduced** the rise-suspend four days ago; P3.1
+ported that behaviour here, with four tests locking it in. Production then **reverted it** in
+`57c6e0cc30` - a commit whose message is *"Enhance Dexcom One+ plugin to handle sensor change
+timestamps and prevent duplicates"*. A revert of a dosing gate, carried in a commit named after
+something else entirely.
+
+**That is exactly the failure mode an anchor process cannot catch**: it compares against named
+commits, and this change is invisible from the name. Only reading the file settles it.
+
+The branch is now aligned: the gate is unconditional, with production's reasoning copied across, and
+the one test that asserted the opposite is flipped rather than deleted - the constant stays as the
+threshold that was considered and rejected, and the tests use it to say "even well above this, the
+gate holds". The three neighbouring tests needed no change; they passed under either behaviour, which
+is worth knowing, because it means a test suite being green said nothing about this divergence.
+
+Gates: `testAndroidHostTest --rerun` **1377 tests, 0 failures**, `:app:assembleFullDebug` and
+`compileKotlinIosArm64` both clean.
+
+---
+
 ---
 
 ## 7. Start here next session
