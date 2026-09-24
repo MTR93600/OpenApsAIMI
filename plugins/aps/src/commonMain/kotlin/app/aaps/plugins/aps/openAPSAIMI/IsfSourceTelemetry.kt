@@ -141,17 +141,33 @@ object IsfSourceTelemetry {
     @Volatile var lastStressIsfFloorReason: String? = null; private set
 
     /**
-     * Sensitivity that **would** be commanded with the floor at 1.0 x profile, mg/dL per U.
+     * Sensitivity commanded with the floor at 1.0 x profile, mg/dL per U.
      *
-     * `null` unless the signature is active and that value really differs from the commanded one, so a
-     * missing field means "nothing to see", never "zero".
+     * `null` unless the signature is active, so a missing field means "the signature does not hold",
+     * never "zero". It used to be null while the value merely equalled the commanded one, which is
+     * what happens on every armed tick, so the field was silent exactly when the gesture was on.
      */
     @Volatile var lastStressIsfFloorIsfMgdl: Double? = null; private set
 
-    fun recordStressIsfFloor(active: Boolean, reason: String, flooredIsfMgdl: Double?) {
+    /**
+     * Awake resting heart rate the signature was measured against, bpm, or `null` when none.
+     *
+     * `null` means the gesture stood down for want of data, which is a different state from "the
+     * signature does not hold" and has to be told apart in a support package. See
+     * `AwakeRestingHeartRate`.
+     */
+    @Volatile var lastStressIsfFloorAwakeRestingBpm: Int? = null; private set
+
+    fun recordStressIsfFloor(
+        active: Boolean,
+        reason: String,
+        flooredIsfMgdl: Double?,
+        awakeRestingBpm: Int? = null,
+    ) {
         lastStressIsfFloorActive = active
         lastStressIsfFloorReason = reason
         lastStressIsfFloorIsfMgdl = flooredIsfMgdl?.takeIf { it.isFinite() }
+        lastStressIsfFloorAwakeRestingBpm = awakeRestingBpm?.takeIf { it > 0 }
     }
 
     /**

@@ -180,5 +180,6 @@ Not new lot IDs. Already on `ce1384814e`. Detail and the **remaining** order are
 | `91dc6106a4` | retention worker / policy / archive / trim + tests | matches ref `505b848fb6` except KMP seams |
 | `ce1384814e` | docs #117 | tracker only; SHAs inside it are the 2026-09-19 snapshot |
 
-**Next lot:** P4.1 (WorkingIsf + awake resting HR, ref `6a6561caab` AIMI subset).  
-**Not re-run in this session:** `:app:assembleFullDebug`, `:plugins:aps:compileKotlinIosArm64`, `:plugins:aps:testAndroidHostTest`.
+**P4.1 (this change):** WorkingIsf + awake resting HR + meal-window basal numerator `pre_floor_isf_mgdl`. Ref commit `6a6561caabed433fe8b7d22c295809cf54077855`. Study base `044cad88851072de8257f3acff85a5d5d56072b5`. Ref tip `166ddb6db0cec3b5195006db1d5fa77f544f88c3`. Stress key `OApsAIMIStressIsfFloor` stays default **false**. Detail in [DELTA](DELTA-remaining.md) C1.  
+**Next lot:** P4.2 (auditor ISF/target factors, ref `b7e05f3037`).  
+**Not re-run here:** `:app:assembleFullDebug`, `:plugins:aps:compileKotlinIosArm64`.
