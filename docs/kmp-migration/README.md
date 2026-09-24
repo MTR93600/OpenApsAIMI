@@ -16,4 +16,5 @@ Last verification: **2026-09-24** (`git fetch` + `gh`). Clinical content invento
 | Last clinical lot | P3.8 #115 @ `f4ed4e401cb88e8a08907c0c3cec4661cc1094a4` |
 | P0 clinical freeze | `origin/dev_OAPSAIMI` @ `c5db5a033379390bceb7851ff92004b72ef055bf` |
 | AIMI ref tip now | `origin/dev_OAPSAIMI` @ `166ddb6db0cec3b5195006db1d5fa77f544f88c3` |
-| Next lot | P4.1 — WorkingIsf + awake resting HR (ref `6a6561caab`, AIMI subset) |
+| P4.1 | WorkingIsf + awake resting HR + `pre_floor_isf` basal boost (ref `6a6561caab`, AIMI subset) — ported |
+| Next lot | P4.2 — auditor ISF/target factors (ref `b7e05f3037`) |

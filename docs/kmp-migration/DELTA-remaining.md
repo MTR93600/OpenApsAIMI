@@ -60,28 +60,35 @@ Ref commits after the P3.8 anchor tip `c653fc4485` (oldest first):
 |---|---|---|---|
 | `505b848fb6` | 2026-09-20 | Retention system + comparison CSV schema + tests | Retention **yes** (KMP). Comparison schema **no** |
 | `468cf7a034` | 2026-09-20 | Docs only (`plans/2026-09-19-aimi-telemetry-retention*.md`) | Ignore for code |
-| `6a6561caab` | 2026-09-23 | Awake resting HR + `WorkingIsf` + SMB trainer state + Glass/Garmin hunks | **Absent** (AIMI subset) |
+| `6a6561caab` | 2026-09-23 | Awake resting HR + `WorkingIsf` + SMB trainer state + Glass/Garmin hunks | **P4.1 AIMI subset ported** (SMB trainer / Glass / Garmin still absent) |
 | `b7e05f3037` | 2026-09-23 | Auditor profile-factor gate + tests | **Absent** |
 | `4b0675549d` | 2026-09-23 | Meal boost cap + shadow export test | **Absent** |
 | `166ddb6db0` | 2026-09-24 | Garmin `sport` mode + FCL temporary target | **Absent** |
 
-`git grep` on study: `evaluateMealBoostCap`, `class WorkingIsf`, `AwakeRestingHeartRate`, `applyAuditorIsfFactorToWorkingIsf`, `class AuditorProfileFactorGate`, `REASON_NO_BASELINE`, `entriesForFit`, `lowEndSafe`, `MIN_ENTRIES_FOR_SLOPE`, `CalibrationLongKey` → **0 files**. Each symbol is present on ref.
+`git grep` on study after P4.1: `evaluateMealBoostCap`, `applyAuditorIsfFactorToWorkingIsf`, `class AuditorProfileFactorGate`, `entriesForFit`, `lowEndSafe`, `MIN_ENTRIES_FOR_SLOPE`, `CalibrationLongKey` → still **0 files**. `class WorkingIsf`, `AwakeRestingHeartRate`, `REASON_NO_BASELINE` are present (P4.1).
 
-### C1 — Awake resting HR + WorkingIsf (severity: high)
+### C1 — Awake resting HR + WorkingIsf (severity: high) — **ported P4.1**
 
-Insulin-sensitivity path on the tick. Ref `6a6561caab` (AIMI files only; split the SMB trainer and the Garmin/Glass hunks into later lots).
+Insulin-sensitivity path on the tick. Ref `6a6561caabed433fe8b7d22c295809cf54077855` (AIMI files only). Study base at port time: `044cad88851072de8257f3acff85a5d5d56072b5`. Ref tip at port time: `166ddb6db0cec3b5195006db1d5fa77f544f88c3`.
 
-| Evidence on ref | Study |
+| Evidence on ref `6a6561caab` | Study after P4.1 |
 |---|---|
-| `plugins/aps/src/main/.../ISF/WorkingIsf.kt` (new, ~170 lines) | **No file** |
-| `plugins/aps/src/main/.../physio/AwakeRestingHeartRate.kt` (new) | **No file** |
-| `ISF/StressIsfFloor.kt` — decl `REASON_NO_BASELINE` only on ref | shared file, missing that decl |
-| `physio/HealthContextRepository.kt` — awake-resting refresh decls only on ref | `androidMain` copy, those decls absent |
-| `IsfSourceTelemetry.kt` — `recordCalcPath` / `recordCommandFloorMultiplier` only on ref | shared, missing |
-| `core/interfaces/.../OapsProfileAimi.kt` — vals `pre_floor_isf_mgdl`, `stress_floor_isf_mgdl` only on ref | `commonMain` interface missing both |
-| `DetermineBasalAIMI2.kt`, `OpenAPSAIMIPlugin.kt`, `basal/BasalDecisionEngine.kt` | hunks from this SHA not ported |
-| `KalmanFilter.kt` | this SHA is **+9 lines**. Older decls (`physiologicalFloor`, `isUsableTdd`, …) also differ. **Copy the +9 with this lot. Do not widen the lot to the older Kalman file.** |
-| Tests in the same SHA: `StressIsfFloorAwakeBaselineTest.kt`, `WorkingIsfStressFloorTest.kt`, `AwakeRestingHeartRateTest.kt` | **Absent** |
+| `ISF/WorkingIsf.kt` | `commonMain/.../ISF/WorkingIsf.kt` |
+| `physio/AwakeRestingHeartRate.kt` (centile 0.10, 50 samples, 3 distinct days, local 6h–23h, window 7 days) | `commonMain`, `kotlinx.datetime.TimeZone` instead of `java.time.ZoneId` |
+| `StressIsfFloor.REASON_NO_BASELINE` | present |
+| `HealthContextRepository` awake-resting refresh | `androidMain`; clock is `aimiWallClockMs` (not `System.currentTimeMillis`); Metro `PersistenceLayer` |
+| `OapsProfileAimi.pre_floor_isf_mgdl`, `stress_floor_isf_mgdl` | present, default null |
+| `DetermineBasalAIMI2`, `OpenAPSAIMIPlugin`, `BasalDecisionEngine` meal-window numerator | hunks ported. Boost uses `pre_floor_isf` and is **not** behind `OApsAIMIStressIsfFloor` (already default **false**) |
+| Tests `StressIsfFloorAwakeBaselineTest`, `WorkingIsfStressFloorTest`, `AwakeRestingHeartRateTest`, meal-window boost | `commonTest` (`kotlin.test`) |
+
+Left out of this lot, still on the same SHA or later:
+
+- `ml/AimiSmbTrainer` + `AimiSmbTrainingStateTest` → **P4.4**
+- Garmin / Glass / `AimiDiagnosticsManager` SMB block → **G1** (not this lot)
+- `evaluateMealBoostCap` (`4b0675549d`) → **P4.3**
+- Auditor profile factors (`b7e05f3037`), including `recordCommandFloorMultiplier` → **P4.2**
+- `recordCalcPath` is `dd9979ca4d`, not this SHA
+- `KalmanFilter` +9 lines are KDoc on `physiologicalFloor`. That function is **not** on study (older Kalman divergence). The comment was not copied. The formula was not invented. Do not widen Kalman in a later comment-only pass.
 
 ### C2 — Auditor profile-factor gate (severity: high)
 
@@ -222,7 +229,7 @@ Do not recycle P0–P3.8. Base `kmp-aimi-migration-study`. Copy the cited SHA. N
 
 | Order | ID | Why this order | Ref SHA | Severity |
 |---|---|---|---|---|
-| 1 | **P4.1** | Newest tick ISF path; later auditor lot calls `WorkingIsf` | `6a6561caab` AIMI subset = C1 | high |
+| 1 | **P4.1** | Newest tick ISF path; later auditor lot calls `WorkingIsf` | `6a6561caab` AIMI subset = C1 | **ported** (this lot) |
 | 2 | **P4.2** | Auditor ISF/target factors; needs P4.1 | `b7e05f3037` = C2 | high |
 | 3 | **P4.3** | Meal boost cap on the same tick file | `4b0675549d` = C3 | high |
 | 4 | **P4.4** | SMB trainer state from the same commit as P4.1, split so P4.1 stays reviewable | `6a6561caab` `AimiSmbTrainer` + test = C4 | medium |
@@ -232,7 +239,7 @@ Do not recycle P0–P3.8. Base `kmp-aimi-migration-study`. Copy the cited SHA. N
 | — | **Guard** | `AimiLoopRuntimeGuard` call sites | ask first | low |
 | — | **D1 / T1** | Drivers, Trio pin, W8 VirtualPump | ADR G0 | not a formula lot |
 
-**Next lot to open: P4.1.**
+**Next lot to open: P4.2** (auditor profile-factor gate, ref `b7e05f3037`). P4.1 is the WorkingIsf / awake resting HR / `pre_floor_isf` basal-boost lot.
 
 ---
 

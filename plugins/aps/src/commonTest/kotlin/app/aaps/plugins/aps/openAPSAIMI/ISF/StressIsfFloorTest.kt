@@ -143,7 +143,9 @@ class StressIsfFloorTest {
         val noResting = tick(t0, previous = null, rhrRestingBpm = 0)
         assertFalse(noResting.active)
         assertNull(noResting.signatureSinceMs)
-        assertTrue(noResting.reason.startsWith(StressIsfFloor.REASON_NO_HR))
+        // The heart rate is present here, only the baseline is missing: the reason must say so
+        // instead of blaming the heart rate, otherwise a support report sends us hunting the wrong input.
+        assertTrue(noResting.reason.startsWith(StressIsfFloor.REASON_NO_BASELINE))
     }
 
     @Test
