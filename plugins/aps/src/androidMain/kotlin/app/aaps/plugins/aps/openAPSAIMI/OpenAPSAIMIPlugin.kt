@@ -1507,6 +1507,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val stressFloorMultiplier =
                 if (stressVerdict.active && stressFloorArmed) StressIsfFloor.ARMED_FLOOR_MULTIPLIER
                 else DynamicSensitivityPolicy.PROFILE_RELATIVE_FLOOR
+            // Observation only: which bound the commanded sensitivity was held against this tick.
+            IsfSourceTelemetry.recordCommandFloorMultiplier(stressFloorMultiplier)
 
             // The commanded sensitivity after every multiplier and before the floor. Read here, at the
             // same place the old code read it, so the number the loop commands is unchanged.
@@ -2422,6 +2424,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             titleResId = R.string.aimi_ai_auditor_section_title,
             items = buildList {
                 add(BooleanKey.AimiAuditorEnabled)
+                add(BooleanKey.OApsAIMIAuditorProfileFactors)
                 add(
                     StringKey.AimiAuditorMode.withEntries(
                         aimiComposeEntries(

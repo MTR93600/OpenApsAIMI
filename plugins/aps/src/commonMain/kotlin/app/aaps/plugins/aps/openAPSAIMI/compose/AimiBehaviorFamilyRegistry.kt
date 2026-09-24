@@ -126,6 +126,7 @@ internal object AimiBehaviorFamilyRegistry {
                 BooleanKey.OApsAIMIAutodriveV3EnhancedGater.key,
                 BooleanKey.OApsAIMIMLtraining.key,
                 BooleanKey.AimiAuditorEnabled.key,
+                BooleanKey.OApsAIMIAuditorProfileFactors.key,
                 StringKey.AimiAuditorMode.key,
                 IntKey.AimiAuditorMaxPerHour.key,
                 IntKey.AimiAuditorTimeoutSeconds.key,

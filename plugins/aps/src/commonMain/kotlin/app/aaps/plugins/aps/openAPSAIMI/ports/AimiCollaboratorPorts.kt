@@ -14,7 +14,10 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorJsonlExport
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorProfileFactorRequest
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorProfileProposal
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdict
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.SnapshotIsfTargetLevels
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.LocalSentinel
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaHarmonizer
@@ -93,6 +96,9 @@ interface AimiAuditor {
         mealCertainty: MealCertainty? = null,
         harmoniaProduction: HarmoniaProductionDecision? = null,
         harmonizerOutcome: HarmoniaHarmonizer.Outcome? = null,
+        levels: SnapshotIsfTargetLevels? = null,
+        profileFactorRequest: AuditorProfileFactorRequest? = null,
+        onProfileProposal: (AuditorProfileProposal) -> Unit = {},
         onSyncDisposition: (AuditorJsonlExport.TickDisposition) -> Unit = {},
         callback: ((AuditorVerdict?, DecisionResult) -> Unit)? = null
     )
