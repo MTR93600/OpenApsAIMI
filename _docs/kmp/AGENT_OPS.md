@@ -5,6 +5,10 @@
 
 **Verified 2026-09-19** after `git fetch origin kmp-aimi-migration-study` and `git fetch origin dev_OAPSAIMI`.
 
+**Inventaire 2026-09-24 :** le tip code étudié est `ce1384814e` ; le tip ref est `166ddb6db0` (plus `c653fc4485`). Lots suivants : [DELTA](../../docs/kmp-migration/DELTA-remaining.md). Ce fichier d’ops ne change pas de rôles.
+
+**Inventory 2026-09-24:** studied code tip is `ce1384814e`; ref tip is `166ddb6db0` (not `c653fc4485`). Next lots: [DELTA](../../docs/kmp-migration/DELTA-remaining.md). Roles in this file are unchanged.
+
 ---
 
 ## FR — modèle d’exploitation
