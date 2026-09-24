@@ -100,7 +100,6 @@ import app.aaps.plugins.aps.openAPSAIMI.ISF.DynIsfTrajectoryTuning
 import app.aaps.plugins.aps.openAPSAIMI.ISF.DynamicSensitivityPolicy
 import app.aaps.plugins.aps.openAPSAIMI.ISF.IsfAdjustmentEngine
 import app.aaps.plugins.aps.openAPSAIMI.ISF.StressIsfFloor
-import app.aaps.plugins.aps.openAPSAIMI.physio.AwakeRestingHeartRate
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousPhaseHysteresis
 import app.aaps.plugins.aps.openAPSAIMI.scenario.InsulinSlopePreserveHysteresis

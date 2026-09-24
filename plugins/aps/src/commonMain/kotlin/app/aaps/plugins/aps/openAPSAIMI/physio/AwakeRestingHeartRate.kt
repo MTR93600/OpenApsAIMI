@@ -111,6 +111,6 @@ object AwakeRestingHeartRate {
         return hour in AWAKE_FIRST_HOUR until NIGHT_FIRST_HOUR
     }
 
-    private fun localDay(timestampMs: Long, zoneId: TimeZone): Int =
+    private fun localDay(timestampMs: Long, zoneId: TimeZone): Long =
         Instant.fromEpochMilliseconds(timestampMs).toLocalDateTime(zoneId).date.toEpochDays()
 }
