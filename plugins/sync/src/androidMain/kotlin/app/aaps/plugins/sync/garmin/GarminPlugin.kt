@@ -52,8 +52,9 @@ import kotlinx.coroutines.flow.drop
 /** Support communication with Garmin devices.
  *
  * This plugin supports sending glucose values to Garmin devices and receiving
- * carbs, heart rate and pump disconnect events from the device. It communicates
- * via HTTP on localhost or Garmin's native CIQ library.
+ * carbs, heart rate, AIMI `/mode` (sport, and the FCL temporary target) and pump
+ * disconnect events from the device. It communicates via HTTP on localhost or
+ * Garmin's native CIQ library.
  */
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @IntKey(370)
@@ -166,6 +167,7 @@ class GarminPlugin @Inject constructor(
             server = HttpServer(aapsLogger, port).apply {
                 registerEndpoint("/get", requestHandler(::onGetBloodGlucose))
                 registerEndpoint("/carbs", requestHandler(::onPostCarbs))
+                registerEndpoint("/mode", requestHandler(::onPostMode))
                 registerEndpoint("/connect", requestHandler(::onConnectPump))
                 registerEndpoint("/sgv.json", requestHandler(::onSgv))
                 awaitReady(wait)
@@ -395,6 +397,37 @@ class GarminPlugin @Inject constructor(
     private fun postCarbs(carbs: Int) {
         if (carbs > 0) {
             loopHub.postCarbs(carbs)
+        }
+    }
+
+    /**
+     * Activates an AIMI mode from the watch.
+     * NOTE text = keyword only; duration query sets TherapyEvent.duration.
+     * FCL also starts a temporary target 80 mg/dL for 30 minutes.
+     * Query: /mode?mode=lunch&duration=60&key=...
+     */
+    @VisibleForTesting
+    fun onPostMode(uri: URI): CharSequence {
+        val decision = GarminTherapyMode.decide(
+            getQueryParameter(uri, "mode"),
+            getQueryParameter(uri, "duration"),
+        )
+        return when (decision) {
+            is GarminTherapyMode.Rejected -> {
+                aapsLogger.warn(LTag.GARMIN, "Rejected therapy mode '${decision.rawMode}'")
+                decision.json
+            }
+
+            is GarminTherapyMode.Accepted -> {
+                if (decision.durationInvalid) {
+                    aapsLogger.error(LTag.GARMIN, "invalid duration value '${decision.durationRaw}'")
+                }
+                loopHub.postTherapyMode(decision.mode, decision.reportedDurationMin)
+                decision.tempTarget?.let { target ->
+                    loopHub.postTempTarget(target.mgdl, target.durationMin)
+                }
+                decision.json
+            }
         }
     }
 

@@ -54,6 +54,16 @@ interface LoopHub {
     /** Notifies the system that carbs were eaten and stores the value. */
     fun postCarbs(carbohydrates: Int)
 
+    /** Stores or cancels a temporary target. A target or duration of zero cancels the current one. */
+    fun postTempTarget(target: Double, duration: Int)
+
+    /**
+     * Activates an AIMI therapy mode via a Careportal NOTE (keyword only, e.g. "lunch", "fcl", "sport").
+     * Duration belongs on the TherapyEvent.duration field. AIMI `Therapy` matches with `note.contains`
+     * and uses `event.duration` for the active window.
+     */
+    fun postTherapyMode(keyword: String, durationMin: Int)
+
     /** Stores hear rate readings that a taken and averaged of the given interval. */
     fun storeHeartRate(
         samplingStart: Instant, samplingEnd: Instant,
