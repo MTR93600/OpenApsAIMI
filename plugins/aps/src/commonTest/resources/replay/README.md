@@ -8,14 +8,28 @@ APS barrier harness — not `quality/ReplayQualityExport`.
 
 ## What is bundled here
 
-Day fixtures (`day_in_range.jsonl`, `day_rebound_cycles.jsonl`, `day_hyper.jsonl`) live on
-`origin/dev_OAPSAIMI` and are **out of P0.12**. They are not copied into the study tree.
+### Day fixtures
+
+| File | Day | Size | Why it is kept |
+|---|---|---|---|
+| `day_in_range.jsonl` | 2026-08-03 | ~150 KB | 95.4 % time in range, 0 % below 70. **The non-regression reference**: no change may alter this day's decision stream unless the ADR states the expected delta. |
+| `day_rebound_cycles.jsonl` | 2026-08-04 | ~152 KB | Four chained post-hypo correction cycles, 56.76 U of SMB, 10.96 U of it delivered on ticks the engine classified `REBOUND_GUARD`. The day ADR 0006 targets. |
+| `day_hyper.jsonl` | 2026-07-22 | ~173 KB | 21 % above 180 with 36 U delivered during the hyper. Shows the loop dosing hard rather than being held back, which is what ruled out a "missing hyper guard" hypothesis. |
+
+P0.12 bundled only the barrier ticks below; these three were left on `origin/dev_OAPSAIMI` at that
+point ("out of P0.12"). They are now restored, byte-identical to commit `556580a886`, read from the
+same `DayInRangeJsonl` / `DayReboundCyclesJsonl` / `DayHyperJsonl` Kotlin-string pattern as
+`BarrierTicksJsonl`, so `ReplayCorpus.bundled` and `ReplaySummary` are actually exercisable on every
+KMP target, not just documented.
 
 ### Barrier ticks
 
-| File | Why it is kept |
-|---|---|
-| `barrier_ticks.jsonl` | 72 real ticks where `ControlBarrierShield` actually ran, used by `BarrierReplay`. **The input of the replay the coefficient floor needs** — see the note on `InsulinActionModel.controlCoefficient`. |
+| File | Size | Why it is kept |
+|---|---|---|
+| `barrier_ticks.jsonl` | ~42 KB | 72 real ticks where `ControlBarrierShield` actually ran, used by `BarrierReplay`. **The input of the replay the coefficient floor needs** — see the note on `InsulinActionModel.controlCoefficient`. |
+
+A day fixture above is 3.5-4x the size of this one, because it holds every tick of a real day rather
+than 72 round-robin-sampled ones — worth checking before bundling a fifth day.
 
 This one is **not a day** and is not listed in `ReplayCorpus.bundled`. The barrier only runs on about
 a third of ticks, so a day of it would be two thirds empty, and a day summary of it would be

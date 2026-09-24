@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.autodrive.learning
 
-import android.content.Context
 import app.aaps.core.data.json.OrgJsonCompat.optDoubleCompat
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -65,7 +64,6 @@ import dev.zacsweers.metro.SingleIn
  */
 @SingleIn(AppScope::class)
 class AutodriveNeuralTrainer @Inject constructor(
-    private val context: Context,
     private val aapsLogger: AAPSLogger,
     private val storageHelper: AimiStorageHelper
 ) {

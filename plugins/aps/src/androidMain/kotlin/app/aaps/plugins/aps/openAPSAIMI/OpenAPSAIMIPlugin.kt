@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
+import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.plugins.aps.ApsStrings
@@ -218,6 +220,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val aimiMlTrainingScheduler: AimiMlTrainingScheduler,
     private val storageHelper: AimiStorageHelper,
     private val storage: AimiStorage,
+    private val keyValueCache: AimiKeyValueCache,
+    private val geminiModelResolver: GeminiModelResolver,
     private val behaviorProfileSource: AimiBehaviorProfileSource,
     private val ch: ConcentrationHelper,
     private val trajectoryHistoryProvider: TrajectoryHistoryProvider,
@@ -884,7 +888,18 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val profileIsf = profileFunction.getProfile()?.getProfileIsfMgdl() ?: 20.0
         val tddIsf = tddIsf24hOr(profileIsf)
         val fusedSlowIsf = fusedSlowIsfOverride?.takeIf { it.isFinite() && it > 0.0 }
-            ?: isfFusion().fused(profileIsf, tddIsf, pkpdScaleForTick)
+            // isfFusion() builds a throwaway instance, so its slew limiter is inert anyway:
+            // there is no anchor to carry over between ticks. Downstream smoothing is done by
+            // isfBlender.
+            ?: isfFusion().fused(
+                profileIsf = profileIsf,
+                tddIsf = tddIsf,
+                pkpdScale = pkpdScaleForTick,
+                nowMs = timestamp,
+                // The slew anchor stays with the loop. The background refresh runs off the tick, so
+                // it must not move the anchor the loop measures its next step against.
+                authoritative = useDbShortcut
+            )
         aapsLogger.debug(LTag.APS, "Fused slow ISF: $fusedSlowIsf (profile=$profileIsf, tddIsf=$tddIsf, pkpdScale=$pkpdScaleForTick)")
 
         // 5) EMA TDD (stabilise l?ajustement AF)
@@ -1966,6 +1981,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         persistenceLayer = persistenceLayer,
                         profileFunction = profileFunction,
                         aapsLogger = aapsLogger,
+                        geminiModelResolver = geminiModelResolver,
                         onBack = onBack,
                     )
                 },
@@ -2000,7 +2016,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     AimiProfileAdvisorScreen(
                         preferences = preferences,
                         advisorService = advisorService,
-                        historyRepo = AdvisorHistoryRepository(context),
+                        historyRepo = AdvisorHistoryRepository(keyValueCache),
                         importExportPrefs = importExportPrefs,
                         exportPasswordDataStore = exportPasswordDataStore,
                         aiCoachingService = aiCoachingService,

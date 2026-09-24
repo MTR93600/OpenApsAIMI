@@ -38,7 +38,6 @@ import dev.zacsweers.metro.AppScope
 class AimiSmbComparator @Inject constructor(
     private val determineBasalSMB: DetermineBasalSMB,
     private val iobCobCalculator: IobCobCalculator,  // ⭐ NOUVEAU - Pour calculer IOB comme SMB
-    private val context: Context,
     private val constraintsChecker: ConstraintsChecker,
     private val profileFunction: ProfileFunction,
     private val aapsLogger: AAPSLogger,

@@ -2,7 +2,6 @@ package app.aaps.plugins.aps.openAPSAIMI.tpo
 
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiTpo
-import android.content.Context
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.SP
@@ -15,6 +14,7 @@ import app.aaps.plugins.aps.openAPSAIMI.compose.authorityRank
 import app.aaps.plugins.aps.openAPSAIMI.compose.readAimiControlCenterDraft
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,13 +34,13 @@ class TpoOrchestrator @Inject constructor(
     private val sp: SP,
     private val aapsLogger: AAPSLogger,
     private val tpoNotificationManager: TpoNotificationManager,
-    private val context: Context,
+    private val keyValueCache: AimiKeyValueCache,
 ) : AimiTpo {
     private val persistence = TpoPersistence(storage)
     private val sessionManager = TpoSessionManager(persistence)
-    private val llmValidator = TpoLlmValidator(context, sp, aiCoachingService, aapsLogger)
+    private val llmValidator = TpoLlmValidator(sp, aiCoachingService, aapsLogger)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val historyRepo by lazy { AdvisorHistoryRepository(context) }
+    private val historyRepo by lazy { AdvisorHistoryRepository(keyValueCache) }
 
     @Volatile
     private var prefsChangedThisTick: Boolean = false

@@ -36,7 +36,6 @@ import java.time.ZoneId
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class HealthContextRepository @Inject constructor(
-    private val context: Context,
     private val hcRepo: AIMIPhysioDataRepositoryMTR,
     private val featureExtractor: AIMIPhysioFeatureExtractorMTR,
     private val aggregator: PhysioAggregator,

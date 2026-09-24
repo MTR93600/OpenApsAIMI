@@ -63,6 +63,7 @@ import app.aaps.plugins.aps.openAPSAIMI.quality.InsulinOriginMeter
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.retention.AimiAppendCap
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
@@ -1485,6 +1486,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // CircadianMealProfileStore entry points took `AimiStorage` when they were restored, while the
     // File-typed members below still need the helper.
     @Inject lateinit var storage: AimiStorage
+
+    // Keeps the decisions journal under its hard cap between retention passes. See AimiAppendCap.
+    @Inject lateinit var appendCap: AimiAppendCap
     
     // Helper to safely access learner (handles potential early access before injection)
     private val safeReactivityFactor: Double
@@ -2580,6 +2584,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 causalStatePosterior = lastPatientState?.causalPosterior,
                 patientEventMemory = lastPatientState?.eventMemory,
                 allowLearning = !singleLearnPath,
+                // Substitute TDD (max basal x 24): read-only for the slew limiter too, otherwise
+                // this call would pin the whole tick on a lower-quality input.
+                isfRateLimitAuthority = false,
             )
         } catch (e: Exception) {
             consoleError.add("❌ Early PKPD Runtime init failed: ${e.message}")
@@ -4450,6 +4457,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     lastUamHypothesisState?.suppressMealInterpretation != true,
             endogenousCounterRegulatory = endogenousCounterRegulatory,
             mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
+            mealModeActive = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime,
         )
         lastInsulinStackingEvaluation = stackingEval
         ensureWCycleInfo()
@@ -7062,6 +7070,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             mealPriorityContext = isAggressivePriorityContext,
             endogenousCounterRegulatory = lastPhysiologicalPhaseOutput?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY,
             mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
+            mealModeActive = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime,
         )
         val suppressRedCarpetRestoreV3 = stackingEvalV3.suppressRedCarpetRestore
 
@@ -9872,7 +9881,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun appendAimiDecisionsJsonlLine(jsonLine: String) {
         try {
-            AuditorJsonlExport.appendLine(storage, aimiDecisionsJsonlFile(), jsonLine)
+            AuditorJsonlExport.appendLine(storage, appendCap, aimiDecisionsJsonlFile(), jsonLine)
         } catch (e: Exception) {
             consoleError.add("Failed to save AIMI Decision JSON: ${e.message}")
         }
@@ -11218,6 +11227,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     lastUamHypothesisState?.suppressMealInterpretation != true,
             endogenousCounterRegulatory = endogenousCounterRegulatory,
             mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
+            mealModeActive = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime,
         )
         lastInsulinStackingEvaluation = stackingEval
         val refreshed = mergeRbtHyperTrajectoryRelease(
@@ -13744,6 +13754,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             mealPriorityContext = smbDeliveryPriorityContext,
             endogenousCounterRegulatory = endogenousCounterRegulatory,
             mealAbsorptionPhase = mealAbsorption?.phase ?: MealAbsorptionPhase.NONE,
+            mealModeActive = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime,
         )
         var iobSurveillanceSuppressRedCarpet = stackingEval.suppressRedCarpetRestore
 

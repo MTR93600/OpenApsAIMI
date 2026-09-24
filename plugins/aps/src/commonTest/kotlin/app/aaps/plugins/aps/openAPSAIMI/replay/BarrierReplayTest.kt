@@ -40,15 +40,14 @@ class BarrierReplayTest {
     }
 
     @Test
-    fun dayFixturesAreNotBundledOnTheStudyTree() {
-        // Day fixtures live on origin/dev_OAPSAIMI JVM test resources and are out of P0.12 scope.
-        // load() of an absent day fixture must fail clearly, not pretend the day was empty.
-        val error = runCatching { ReplayCorpus.load(ReplayCorpus.DAY_IN_RANGE) }.exceptionOrNull()
-        assertNotNull(error)
-        assertTrue(
-            error!!.message!!.contains(ReplayCorpus.DAY_IN_RANGE),
-            "missing day fixture must name the file: ${error.message}",
-        )
+    fun dayFixturesAreBundledAndCarryTheirExpectedTickCounts() {
+        // Day fixtures used to live on origin/dev_OAPSAIMI JVM test resources only, out of P0.12
+        // scope: load() of a day fixture threw here. They are now bundled the same way as
+        // BARRIER_TICKS (a Kotlin string constant per fixture), so this checks presence and
+        // parsing, not absence.
+        assertEquals(284, ReplayCorpus.load(ReplayCorpus.DAY_IN_RANGE).size)
+        assertEquals(285, ReplayCorpus.load(ReplayCorpus.DAY_REBOUND_CYCLES).size)
+        assertEquals(409, ReplayCorpus.load(ReplayCorpus.DAY_HYPER).size)
         assertTrue(BarrierReplay.replayable(emptyList()).isEmpty())
         assertTrue(ReplayCorpus.loadLocal().isEmpty(), "commonTest has no AIMI_REPLAY_CORPUS host dir")
     }

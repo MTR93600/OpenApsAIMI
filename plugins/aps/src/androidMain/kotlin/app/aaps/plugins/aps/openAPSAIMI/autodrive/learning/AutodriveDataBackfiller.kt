@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.autodrive.learning
 
-import android.content.Context
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -29,7 +28,6 @@ import dev.zacsweers.metro.AppScope
  */
 @SingleIn(AppScope::class)
 class AutodriveDataBackfiller @Inject constructor(
-    private val context: Context,
     private val aapsLogger: AAPSLogger,
     private val storageHelper: AimiStorageHelper,
     private val persistenceLayer: PersistenceLayer,

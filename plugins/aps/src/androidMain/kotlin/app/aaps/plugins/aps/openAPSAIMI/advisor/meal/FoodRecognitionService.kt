@@ -1,9 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.meal
 
-import android.content.Context
 import android.graphics.Bitmap
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,19 +14,19 @@ import kotlinx.coroutines.withContext
  * Uses Factory pattern to select provider based on preferences
  */
 class FoodRecognitionService(
-    private val context: Context,
+    private val geminiModelResolver: GeminiModelResolver,
     private val preferences: Preferences
 ) {
-    
+
     /**
      * Factory: Create appropriate provider based on preferences
      */
     private fun getProvider(): AIVisionProvider {
         val providerName = preferences.get(StringKey.AimiAdvisorProvider)
-        
+
         return when (providerName.uppercase()) {
             "OPENAI" -> OpenAIVisionProvider()
-            "GEMINI" -> GeminiVisionProvider(context)
+            "GEMINI" -> GeminiVisionProvider(geminiModelResolver)
             "DEEPSEEK" -> DeepSeekVisionProvider()
             "CLAUDE" -> ClaudeVisionProvider()
             else -> {

@@ -1924,6 +1924,299 @@ come off, rather than falling monotonically.
 
 ---
 
+## 6ae. 2026-09-20: the branch is measured against live AIMI, and the gap is mostly tests
+
+Three days of work landed on `dev_OAPSAIMI` while this branch moved files between source sets, so the
+first job was measuring how far apart they are. The headline number is misleading and the real one is
+more useful.
+
+**532 AIMI files here against 762 on `dev_OAPSAIMI`** - 299 present there and missing here. But
+**260 of those 299 are tests**. Only **39 are production files**, and roughly fourteen of those are
+deliberately absent: the Activities replaced by Compose, `ContextViewModel` dropped as dead in 6m,
+`AimiLoopRuntimeGuard` held on purpose. So the production gap is about **25 real files** - the
+`retention/` package (9 files, new), the new ISF work (`HeartRateTrendIsf`, `StressIsfFloor`),
+`FclMealBasal`, `AnticipationBasalFloor`, `TpoRevertPolicy`, `RiseCeilingGuard` and a handful more.
+
+**The test gap is the serious one: 52 AIMI test files here against 294 there.** This migration has
+been moving and rewriting dosing code with under a fifth of the coverage the live fork has.
+
+Of the 260 missing tests, **154 have their subject already present on this branch** - they can be
+ported now, without porting any feature first. 119 of those 154 use no MockK; this module is wired for
+Mockito, so the other 35 need a dependency decision before they can land.
+
+### The pilot, and what it says about the migration
+
+Thirteen non-MockK `pkpd` tests were copied from `dev_OAPSAIMI:plugins/aps/src/test/kotlin` into
+`androidHostTest` (the KMP equivalent per the `kmp-module-flip` skill).
+
+**Twelve compiled unchanged and all passed** - 589 tests became 643, zero failures. That is the useful
+result: those twelve engine files have **not** drifted. Everything those tests assert about the
+migrated code still holds, which is the first real evidence that the port preserved behaviour rather
+than merely preserving compilation.
+
+**One failed to compile, and it is a finding rather than a nuisance.** `IsfFusionTest` calls
+`IsfFusion.fused(..., nowMs = ..., authoritative = ...)`. This branch's `IsfFusion` has neither
+parameter: production gained a time argument and an authority flag that this branch's copy does not
+have. **This branch is running an older ISF fusion engine than production.**
+
+So porting these tests is not only coverage. It is an **audit of the drift**: a test that compiles and
+passes says its engine file is faithful, and a test that refuses to compile names a file that is
+behind and says exactly how. That makes the remaining 141 a measuring instrument as much as a safety
+net, and it is the cheapest way to find out which of this branch's engine files are stale.
+
+`IsfFusionTest` is parked at `.superpowers/sdd/.../IsfFusionTest.kt.deferred` until `IsfFusion` is
+brought up to date, so the finding is not lost.
+
+---
+
+## 6af. 2026-09-20: 104 tests ported, and the audit found two real ISF regressions
+
+The pilot in 6ae said porting `dev_OAPSAIMI`'s tests would be both coverage and an audit of the drift.
+Scaled to all 119 non-MockK portable tests, it was both, and the audit part paid first.
+
+**The suite went from 589 to 1151 tests, 0 failures.** 104 of the 107 copied compiled unchanged, which
+is itself the headline result: the migrated engine agrees with production everywhere those tests look.
+
+### Two regressions this branch had introduced, found by running production's own tests
+
+`IsfBlender` and `IsfAdjustmentEngine` both returned **50.0** where production returns 75.0 and 71.0 -
+an ISF a third lower, which is a third more aggressive on every correction that uses it.
+
+Same cause in both, and it is a porting artefact rather than a missing feature. Production keeps one
+nullable object:
+
+```kotlin
+private data class Anchor(val isf: Double, val tsMs: Long)
+/** No anchor yet (first call of the process): the target is returned as is. */
+private fun rateLimit(target: Double, nowMs: Long): Double {
+    val a = anchor ?: return target
+```
+
+This branch had split that into two nullable fields, `lastIsf` and `lastTsMs`, and the early return
+went with it. On the first call `elapsedMs` came out as zero, so the hourly budget was zero, so the
+limiter clamped the result to the fallback value - discarding the Kalman contribution entirely. The
+failing tests are named `first blend is not rate limited` and `first adjustment is not rate limited`,
+so the intent was written down; only the code had lost it.
+
+Both are restored to the anchor form, with a comment saying why one nullable object and not two. **The
+design lesson is worth more than the fix: splitting a two-field invariant into two independent
+nullables removes the compiler's ability to make you handle the "neither is set yet" case.** It reads
+like a harmless refactor and it is not.
+
+### What the 11 parked tests mean
+
+Each one names something, and they are kept in `_docs/kmp/deferred-tests/` rather than deleted:
+
+- **Migration artefacts** - the test uses a JVM type this branch deliberately replaced:
+  `NightGrowthResistanceMonitorTest` (`java.time.LocalTime`/`ZoneId` vs `kotlinx.datetime`),
+  `aimiNeuralNetworkTest` and `ComparisonCsvParserTest` (`File` vs `AimiStorage`/`AimiPath`). These
+  need their types swapped and then they should pass.
+- **Real engine drift** - the test names something this branch does not have:
+  `UndeclaredCobEstimatorTest` wants `HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN`, from Grok's recent
+  heart-rate gating work. `IsfFusionTest` wants `fused(..., nowMs, authoritative)`: production's ISF
+  fusion gained a time argument and an authority flag that this branch's copy does not have.
+- The remaining six (`DoseTerminalSnapshotTest`, `InsulinStackingStanceTest`,
+  `PostHypoDeliveryAuthorityTest`, `PredictionDivergenceAuditorTest`, `ReplayCorpusTest`,
+  `SmbBindingTraceTest`) were parked by the same iterate-and-compile loop and have not been
+  categorised yet - that is the next job, and each is either a type swap or a named missing feature.
+
+### Still outstanding
+
+35 portable tests use MockK and this module is wired for Mockito - a dependency decision, not work.
+106 more tests need their feature ported first. And roughly 25 production files are genuinely missing,
+the `retention/` package being the largest.
+
+Gates: `:app:assembleFullDebug` 0 Kotlin errors (after the documented stale-KSP purge),
+`compileKotlinIosArm64` EXIT=0, `testAndroidHostTest --rerun` **1151 tests, 0 failures**.
+
+---
+
+## 6ag. 2026-09-20: the seven artefacts adapted, and three of the four drifts closed
+
+Continuing 6af. The eleven tests that would not compile split cleanly once the compiler's cascading
+was accounted for - removing one broken file made others look broken, so the first categorisation
+over-counted the drift.
+
+**Seven were migration artefacts**, i.e. the test spoke a JVM API this branch had deliberately
+replaced: `java.time` (1), `java.io.File` (2) and `org.json` (4). All seven now land, adapted only in
+how they reach the code, with **no assertion touched**. None of them revealed drift: every production
+class they name still had exactly the fields, types and constants they assumed. Suite 1151 -> 1191.
+
+**Four were genuine engine drift.** Three are now closed, taking the suite to **1235 tests, 0
+failures**:
+
+- **`UndeclaredCobEstimator`** turned out to need only the missing constant
+  (`HR_GATE_RISE_SUSPEND_MGDL_PER_5MIN = 11.0`) and its documentation. Production's KDoc records a
+  past-tense design change - the heart-rate gate used to stand down above that rise rate and now
+  always fires - and this branch's gate was *already* unconditional. So the behaviour matched; only
+  the name the test reaches for was absent.
+- **`IsfFusion`** was the real one. Production turned the fixed one-tick slew limiter into a
+  clock-driven budget: `fused(..., nowMs, authoritative)`, elapsed time clamped to two ticks scaling
+  the allowed movement, downside slew 1.375x the upside, backward clock jumps freezing the value
+  rather than ratcheting, and a re-stamp each call so a bad jump self-heals in one tick. Note this sits
+  directly on top of the anchor regression fixed earlier the same day (6af) - same file, same
+  structure, and production's newer version already carries the anchor form.
+- **`InsulinStackingStance`** brought two behaviour changes: the IOB floor moves from a hard-coded
+  `max(3.2, maxIob*0.26)` to `max(1.0, maxIob*0.26)` - production's KDoc cites a field report where a
+  stress episode with 2 U on board got no stacking protection at all - and a new 70-130 mg/dL caution
+  band that engages surveillance below the usual gate, but only when nothing says meal. That needed
+  the new `mealModeActive` parameter, passed at all four call sites with the same expression
+  production's own callers use.
+
+### The fourth is a decision, not a task
+
+`ReplaySummary` is ported and appears correct, but `ReplayCorpusTest` cannot be un-parked. The test
+needs three bundled day fixtures that **this branch deliberately does not carry**: `ReplayCorpus`'s
+KDoc says the day fixtures stay on `dev_OAPSAIMI`, and that boundary is not just a comment - an
+already-committed test, `BarrierReplayTest.dayFixturesAreNotBundledOnTheStudyTree`, asserts that
+loading them throws.
+
+The implementer tried restoring them, saw all five `ReplayCorpusTest` methods pass with production's
+exact figures, then noticed the full suite had gone red on that boundary test and **reverted the
+whole attempt** rather than quietly reversing another engineer's tested decision. That is the right
+instinct and worth recording as the behaviour to expect.
+
+The numbers that decided it: the three fixtures are **149 + 152 + 172 KB**, against the single fixture
+already bundled at **43 KB** - eleven times the embedded test data, as Kotlin string constants the
+compiler must parse. Put to the user with those numbers, and **reversed deliberately**: see 6ah.
+
+---
+
+## 6ah. 2026-09-21: the replay day fixtures, restored on purpose
+
+The boundary 6ag stopped at is now reversed, by the person whose call it was rather than by an agent
+mid-task. All three day fixtures are bundled, `ReplayCorpusTest` is un-parked, and the suite is at
+**1240 tests, 0 failures** (`compileKotlinIosArm64` and `compileTestKotlinIosSimulatorArm64` both
+green - the second matters here, because the fixtures land in `commonTest` and large embedded string
+constants are exactly the sort of thing Kotlin/Native can object to).
+
+The fixtures produced production's figures bit for bit: 284 / 285 / 409 ticks, 27.46 U total SMB with
+95.4% time in range on the in-range day, 56.76 U total with 10.96 U at `REBOUND_GUARD` on the rebound
+day. That is a stronger statement than "the tests pass" - it says this branch's replay harness and
+`ReplaySummary` reproduce the live fork's numbers exactly on three full days of real ticks.
+
+**The boundary test was inverted, not deleted.** `dayFixturesAreNotBundledOnTheStudyTree` asserted
+that loading a day fixture throws; it is now
+`dayFixturesAreBundledAndCarryTheirExpectedTickCounts`, asserting 284/285/409, with a comment
+recording that it used to check the opposite and why. Deleting it would have removed the only thing
+watching whether the fixtures are present and parseable - the check still exists, it just checks the
+new truth. `ReplayCorpus`'s KDoc was rewritten for the same reason, and now carries the sizes so that
+whoever considers a fourth day fixture sees what the first three cost.
+
+`ReplaySummary` therefore ships with a real consumer rather than none, which is what 6ag said was the
+condition for shipping it at all.
+
+**Worth keeping as a pattern.** The agent that hit this boundary had already made the change work -
+five tests passing, production figures matching - and then found the full suite red on a committed
+test asserting the opposite. It reverted its own working change and asked, rather than deleting the
+test in its way. The cost was one round trip; the alternative was silently reversing a documented,
+tested decision belonging to someone else. Expect and reward that.
+
+---
+
+## 6ai. 2026-09-21: the anchored lot series, and a dosing gate the branch had gone backwards on
+
+Resuming after a merge brought in work this session had not seen. The important part is not the
+merge itself but what it revealed about how this port is actually being run.
+
+**There is an anchored lot process, and it is more rigorous than this session's file-count
+arithmetic.** `_docs/kmp/P*-ANCHOR.md` runs P0.8 through P3.8, one clinical topic per lot (P3.5 MCER
+latch, P3.6 TPO revert, P3.7 ML stale training, P3.8 calibration health), each with a PR, a
+`GO_WITH_CAVEATS` verdict, and blob-level SHA comparison against named `dev_OAPSAIMI` commits with
+out-of-scope items marked explicitly. Any future gap analysis should start there rather than
+diffing file lists.
+
+The merge moved AIMI from **532 to 674 files** here, and the production gap from ~25 real files to
+**16** - nine of which are the `retention/` package. 129 tests still missing.
+
+**Four duplicate test classes had to be removed**, and the direction matters: this session had ported
+`UndeclaredCobEstimatorTest`, `UamInputSchemaValidatorTest`, `SmbRefinementFeatureSchemaTest` and
+`TrainingCircuitBreakerTest` into `androidHostTest`, while the anchored series had already placed them
+in `commonTest` with `kotlin.test`. The `commonTest` copies won: same assertions, but they also run on
+Native, and their KDoc records the provenance and why the source set was chosen. Suite: **1377 tests,
+0 failures**.
+
+### The finding: the branch was running a dosing gate production had deliberately reverted
+
+`UndeclaredCobEstimator`'s heart-rate gate stood down when glucose rose faster than
+11 mg/dL per 5 min. Production's gate fires unconditionally, and its comment says why - quoting the
+user's own instruction:
+
+> the heart rate may protect, it may never be a reason to believe in a meal. The cost is known and
+> accepted: a real undeclared meal that raises the heart rate is not caught here.
+
+The history is the instructive part. `5220fc5e2f` **introduced** the rise-suspend four days ago; P3.1
+ported that behaviour here, with four tests locking it in. Production then **reverted it** in
+`57c6e0cc30` - a commit whose message is *"Enhance Dexcom One+ plugin to handle sensor change
+timestamps and prevent duplicates"*. A revert of a dosing gate, carried in a commit named after
+something else entirely.
+
+**That is exactly the failure mode an anchor process cannot catch**: it compares against named
+commits, and this change is invisible from the name. Only reading the file settles it.
+
+The branch is now aligned: the gate is unconditional, with production's reasoning copied across, and
+the one test that asserted the opposite is flipped rather than deleted - the constant stays as the
+threshold that was considered and rejected, and the tests use it to say "even well above this, the
+gate holds". The three neighbouring tests needed no change; they passed under either behaviour, which
+is worth knowing, because it means a test suite being green said nothing about this divergence.
+
+Gates: `testAndroidHostTest --rerun` **1377 tests, 0 failures**, `:app:assembleFullDebug` and
+`compileKotlinIosArm64` both clean.
+
+## 6aj. 2026-09-21: the `retention/` package, ported
+
+The biggest missing piece of production code, and not housekeeping: it is production's fix for AIMI's
+telemetry files that grow without limit. Production's own KDoc measures the decisions journal at
+**2.10 GB**.
+
+**Where the files went** (the user decided this):
+
+| File | Source set | Why |
+|---|---|---|
+| `AimiRetentionPolicy` | commonMain | data only, 15 rules, same as production |
+| `AimiTimestampKey` | commonMain | byte scanning; `Charsets.US_ASCII` swapped for `encodeToByteArray()`/`decodeToString()` (the keys `timestamp`/`wall_ms` are ASCII, so the bytes are the same) |
+| `AimiLineScanner`, `AimiCutPlanner`, `AimiArchive`, `AimiFileLock`, `AimiRetentionManager`, `AimiAppendGuard` | androidMain | copied as-is. They rely on `RandomAccessFile.seek`, fsync, gzip, `ATOMIC_MOVE`, `fileKey()` and a non-blocking `tryLock()`. `AapsLock` blocks, so it cannot replace `tryWithFile` |
+| `AimiRetentionWorker` | androidMain | Hilt → Metro, see below |
+
+**The one new interface: `AimiAppendCap`** (commonMain, one method `beforeAppend(path, bytes)`). On this
+branch `AuditorJsonlExport` is already shared code and only has an `AimiPath`, so it could not call the
+`File`-based guard. Without this interface the decisions journal, the 2.10 GB file itself, would have
+lost its cap without any sign. `AndroidAimiAppendCap` passes the call to `AimiAppendGuard`.
+`DetermineBasalAIMI2` injects it and passes it to `AuditorJsonlExport.appendLine`. There is no iOS
+implementation, and the KDoc says why: `AimiStorage` has none either, so on iOS these files are never
+written. Production's own warning is carried across word for word: "one cap per file between janitor
+runs, not an unlimited bound".
+
+**The worker.** `@HiltWorker` became `@AssistedInject` plus an `@AssistedFactory` that extends
+`MetroWorkerCreator`, registered with `@WorkerKey` in `AppWorkersGraph`. The `@Assisted` parameters
+must be called `context`/`params` to match `MetroWorkerCreator`, or Metro fails with "Missing from
+factory". The two pure functions stay in the same file, as production has them. The brief suggested
+moving the body into a `RunnerWorker` runner, but that was not needed to port it. `now` is
+`::aimiWallClockMs`. `AimiMlTrainingScheduler` schedules it every 24 h (`UPDATE` policy), and its
+`cancel()` does not cancel it on purpose, with production's comment copied across.
+
+**Tests: all 13 files, 107 tests, ported to `androidHostTest`. None were parked and no assertion was
+changed.** One call site had to change: `AimiRetentionEndToEndTest` calls `ComparisonCsvParser.parse`,
+which here takes an `AimiPath` through `AimiStorage`, not a `File`. The test now builds the parser on
+an `AndroidAimiStorage` with a mocked helper. The path is absolute, so the helper is never asked
+anything. The brief's plan to put the two commonMain files' tests in `commonTest` was not followed.
+They run on the host with the rest; moving them to `kotlin.test` is a small follow-up.
+
+Gates: `testAndroidHostTest --rerun` **1484 tests, 0 failures** (1377 + 107),
+`compileKotlinIosArm64` and `:app:assembleFullDebug` both clean.
+
+### Found while doing it: the basal ML trainer never runs on this branch
+
+`BasalMlTrainerWorker` has a Metro `Factory`, and `AimiMlTrainingScheduler` enqueues it every hour
+and once at start-up. But **no `@WorkerKey` in `AppWorkersGraph` registers it**. Without a key, WorkManager
+falls back to reflection, which needs a `(Context, WorkerParameters)` constructor. This worker takes
+five parameters, so every run fails. Every other AIMI worker takes only those two and works.
+
+**Not fixed, on purpose.** Registering it is one `@Provides` block, but it turns on a learning loop
+that affects basal dosing. That is a decision for the user, not part of a port.
+
+---
+
 ---
 
 ## 7. Start here next session
