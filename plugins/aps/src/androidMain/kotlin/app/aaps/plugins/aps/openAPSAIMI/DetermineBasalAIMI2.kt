@@ -75,8 +75,17 @@ import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbTrainingRowBuffer
 import app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCsvHeader
 import app.aaps.plugins.aps.openAPSAIMI.ml.ensureCurrent
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorIsfRaw
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorJsonlExport
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorProfileFactorCache
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorProfileFactorCodes
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorProfileFactorGate
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorProfileFactorRequest
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorProfileTickState
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorTickFact
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorTickRing
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdict
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.TickSafety
 import app.aaps.plugins.aps.openAPSAIMI.smb.RiseCeilingGuard
 import app.aaps.plugins.aps.openAPSAIMI.smb.MaxSmbLadder
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbIntervalPolicy
@@ -733,6 +742,11 @@ internal data class AimiDecisionContext(
         /** Loop vs auditor binding for this tick (sync disposition; follow-up may arrive async). */
         var auditor_tick: JsonObject? = null,
         /**
+         * ISF and target of this tick at every level, plus the state of the auditor profile-factor
+         * key. Written on every tick, key on or off. Observation only; no dose reads it.
+         */
+        var auditor_profile_factors: JsonObject? = null,
+        /**
          * Post-hypo delivery authority for this tick: whether it applied, which condition declined
          * it, and the SMB before / after its cap. See `docs/adr/0006-autodrive-consumes-authority.md`.
          */
@@ -1180,6 +1194,9 @@ internal data class AimiDecisionContext(
             }
             adjustments.auditor_tick?.let { auditorTick ->
                 adj.put("auditor_tick", auditorTick)
+            }
+            adjustments.auditor_profile_factors?.let { profileFactors ->
+                adj.put("auditor_profile_factors", profileFactors)
             }
             adjustments.post_hypo_delivery?.let { postHypoDelivery ->
                 adj.put("post_hypo_delivery", postHypoDelivery)
@@ -2339,6 +2356,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 htr_ra_floor_mgdl_per_min = null
             )
         )
+        // ISF and target levels of this tick for the auditor and the JSONL. Read once, here, where
+        // `baseline_state` reads the same numbers, so the rest of the tick works from this object
+        // instead of reading the telemetry singletons again. The gestational and thyroid modules
+        // have already changed `profile.sens` above, so these are the values the tick really uses.
+        // The working target is added later, where the basal schedule sets it.
+        auditorProfileTick = AuditorProfileTickState().apply {
+            profileStaticIsfMgdl = IsfSourceTelemetry.lastProfileStaticMgdl
+            dynamicIsfMgdl = ctx.profile.variable_sens
+            commandIsfMgdl = ctx.profile.sens
+            commandPreFloorIsfMgdl = CommandedIsf.lastPreFloorMgdlPerU
+            commandFloorMultiplier = IsfSourceTelemetry.lastCommandFloorMultiplier
+            profileTargetMgdl = ctx.profile.target_bg
+            tempTargetActive = ctx.profile.temptargetSet
+            keyOn = preferences.get(BooleanKey.OApsAIMIAuditorProfileFactors)
+            // Read once per tick, so every later step of the tick judges the same proposal even if
+            // a new answer lands from the auditor coroutine in the middle of the tick.
+            //
+            // Turning the auditor itself off drops whatever it had already proposed. The key
+            // dependency only hides the factor switch in the settings, it does not clear it, so
+            // without this a user who switches the auditor off would keep dosing on a cached
+            // proposal until it expired.
+            if (!preferences.get(BooleanKey.AimiAuditorEnabled)) AuditorProfileFactorCache.clear()
+            proposal = AuditorProfileFactorCache.latest()
+        }
         val rT = RT(
             algorithm = APSResult.Algorithm.AIMI,
             runningDynamicIsf = ctx.dynIsfMode,
@@ -6462,6 +6503,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             physioIsfFactor = physioMultipliers.isfFactor,
             stressFloorIsfMgdlPerU = profile.stress_floor_isf_mgdl,
         ).toFloat()
+        applyAuditorIsfFactorToWorkingIsf(profile)
         WorkingIsf.lastApplied?.let { applied ->
             val floorMgdl = applied.floorMgdlPerU ?: return@let
             consoleLog.add(
@@ -6479,6 +6521,185 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         return variableSensitivity.toDouble()
     }
+
+    /**
+     * The one place the auditor's ISF factor reaches a dose.
+     *
+     * It runs straight after `WorkingIsf.finalize`, which is the last step of the dose-facing
+     * sensitivity and the step that applies the stress floor. Two things follow from that order and
+     * both are deliberate:
+     *
+     * - the factor lands on the number the SMB, the basal engine and the predictions really read,
+     *   not on the commanded ISF, which sits on a floor about half the time and would swallow it;
+     * - the floor is applied BEFORE the factor, and `AuditorProfileFactorGate.scaleIsf` may never
+     *   pull the value back under it, so a protective floor always wins over a factor that asks for
+     *   more insulin.
+     *
+     * With the opt-in key off nothing is assigned: the shadow decision is recorded and the
+     * sensitivity keeps the very bits `WorkingIsf.finalize` returned.
+     */
+    private fun applyAuditorIsfFactorToWorkingIsf(profile: OapsProfileAimi) {
+        val decision = auditorProfileTick.isfDecision ?: return
+        val raw = AuditorIsfRaw(
+            workingMgdl = this.variableSensitivity.toDouble(),
+            stressFloorMgdl = profile.stress_floor_isf_mgdl,
+            profileStaticMgdl = auditorProfileTick.profileStaticIsfMgdl,
+        )
+        val floored = AuditorProfileFactorGate.applyIsfFloor(decision, raw, auditorProfileTick.keyOn)
+        auditorProfileTick.isfDecision = floored
+        auditorProfileTick.isfPath =
+            if (floored.applied) AuditorProfileFactorCodes.PATH_APPLIED
+            else AuditorProfileFactorCodes.PATH_SHADOW
+        if (!floored.applied) return
+        auditorProfileTick.isfAppliedFactor = floored.effective
+        this.variableSensitivity = (floored.workingAdjustedMgdl ?: raw.workingMgdl).toFloat()
+        consoleLog.add(
+            "🧪 AUDITOR_ISF %.1f -> %.1f (x%.3f, floor %.1f)".format(
+                Locale.US,
+                raw.workingMgdl,
+                this.variableSensitivity.toDouble(),
+                floored.effective,
+                floored.lowerBoundMgdl ?: 0.0,
+            )
+        )
+    }
+
+    /**
+     * Judges the auditor's ISF factor against the live state of this tick. Changes nothing.
+     *
+     * It runs early, before the target decision, because the two factors share one budget and the
+     * ISF has priority. The floor step happens later, where the sensitivity is final, in
+     * [applyAuditorIsfFactorToWorkingIsf].
+     *
+     * The minimum predicted glucose comes from the PREVIOUS tick: this tick has no predictions yet.
+     */
+    private fun decideAuditorIsfFactorForTick(ctx: AimiTickContext) {
+        val glucoseStatus = ctx.glucoseStatus
+        val previous = auditorTickRing.latest()
+        val safety = TickSafety(
+            bgMgdl = glucoseStatus.glucose,
+            deltaMgdl5m = glucoseStatus.delta,
+            shortAvgDeltaMgdl5m = glucoseStatus.shortAvgDelta,
+            cgmNoise = glucoseStatus.noise,
+            hypoThresholdMgdl = HypoThresholdMath.computeHypoThreshold(ctx.profile.min_bg, ctx.profile.lgsThreshold),
+            minPredBgMgdl = previous?.minPredBgMgdl,
+            minPredThresholdMgdl = previous?.hypoThresholdMgdl,
+            minPredFromPreviousTick = true,
+            postHypoActive = lastPostHypoDeliveryAuthority.active,
+            minBg75mMgdl = minBgInLastMinutesOrNull(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
+            exerciseLockout = exerciseInsulinLockoutActive || sportTime,
+        )
+        auditorProfileTick.safetyAtA = safety
+        auditorProfileTick.isfDecision = AuditorProfileFactorGate.evaluateIsf(
+            proposal = auditorProfileTick.proposal,
+            keyOn = auditorProfileTick.keyOn,
+            tickTimestampMs = ctx.currentTime,
+            safety = safety,
+        )
+    }
+
+    /**
+     * Judges the auditor's target factor. Changes nothing, not even the local target.
+     *
+     * Every target-relative guard of the engine keeps the raw target; only the two dose formulas see
+     * the ratio, through [auditorDoseTarget]. A lower target must never be able to loosen a guard.
+     */
+    private fun decideAuditorTargetFactorForTick(
+        ctx: AimiTickContext,
+        workingTargetRawMgdl: Double,
+        hypoThresholdMgdl: Double,
+        minPredBgMgdl: Double?,
+    ) {
+        val glucoseStatus = ctx.glucoseStatus
+        val safety = TickSafety(
+            bgMgdl = glucoseStatus.glucose,
+            deltaMgdl5m = glucoseStatus.delta,
+            shortAvgDeltaMgdl5m = glucoseStatus.shortAvgDelta,
+            cgmNoise = glucoseStatus.noise,
+            hypoThresholdMgdl = hypoThresholdMgdl,
+            minPredBgMgdl = minPredBgMgdl,
+            minPredThresholdMgdl = hypoThresholdMgdl,
+            minPredFromPreviousTick = false,
+            postHypoActive = lastPostHypoDeliveryAuthority.active,
+            minBg75mMgdl = minBgInLastMinutesOrNull(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
+            exerciseLockout = exerciseInsulinLockoutActive || sportTime,
+        )
+        auditorProfileTick.safetyAtB = safety
+        val decision = AuditorProfileFactorGate.evaluateTarget(
+            proposal = auditorProfileTick.proposal,
+            keyOn = auditorProfileTick.keyOn,
+            tickTimestampMs = ctx.currentTime,
+            workingTargetRawMgdl = workingTargetRawMgdl,
+            // The shadow uses the shadow ISF factor, so the logged target is what the key being on
+            // would really have produced.
+            //
+            // Note the two points read different predictions on purpose: the early ISF point has
+            // only the previous tick's, this one has this tick's own. So a tick where the previous
+            // prediction was low and this one is not refuses the ISF (`effective` 1.0) and then hands
+            // the target the whole budget, because the budget formula reads "the ISF spent nothing".
+            // That is what the spec asks for, and the target still passes every live rule here, but
+            // the more careful A-rule does not carry over to B.
+            isfEffectiveFactor = auditorProfileTick.isfDecision?.effective ?: 1.0,
+            safety = safety,
+        )
+        auditorProfileTick.targetDecision = decision
+        auditorProfileTick.targetPath =
+            if (decision.applied) AuditorProfileFactorCodes.PATH_APPLIED
+            else AuditorProfileFactorCodes.PATH_SHADOW
+    }
+
+    /**
+     * The target one dose formula must use, bounded against that formula's own target.
+     *
+     * The two sites do not hold the same number: the SMB site reads the local working target, the
+     * basal engine reads the loop target member, and the step-activity branch moves one without the
+     * other. So the shared budget is re-computed here, on the value this site will really use, with
+     * the ISF factor that really reached the dose. A ratio decided somewhere else would not be a
+     * bound here.
+     */
+    private fun auditorDoseTarget(targetMgdl: Double, site: String): Double {
+        val decision = auditorProfileTick.targetDecision ?: return targetMgdl
+        if (!decision.applied) return targetMgdl
+        val adjusted = AuditorProfileFactorGate.targetForDoseSite(
+            targetMgdl = targetMgdl,
+            decision = decision,
+            bgMgdl = auditorProfileTick.safetyAtB?.bgMgdl ?: bg,
+            isfEffectiveFactor = auditorProfileTick.isfAppliedFactor,
+        )
+        if (adjusted == targetMgdl) return targetMgdl
+        auditorProfileTick.targetDoseSites.add(site)
+        return adjusted
+    }
+
+    /** This tick as the auditor must remember it: raw values, plus what the auditor really changed. */
+    private fun buildAuditorTickFact(ctx: AimiTickContext, profile: OapsProfileAimi): AuditorTickFact =
+        AuditorTickFact(
+            timestampMs = ctx.currentTime,
+            bgMgdl = ctx.glucoseStatus.glucose,
+            deltaMgdl5m = ctx.glucoseStatus.delta,
+            shortAvgDeltaMgdl5m = ctx.glucoseStatus.shortAvgDelta,
+            iobU = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
+            cobG = ctx.mealData.mealCOB,
+            profileIsfStaticMgdl = auditorProfileTick.profileStaticIsfMgdl,
+            dynamicIsfRawMgdl = auditorProfileTick.dynamicIsfMgdl ?: profile.variable_sens,
+            commandIsfRawMgdl = auditorProfileTick.commandIsfMgdl ?: profile.sens,
+            commandIsfPreFloorMgdl = auditorProfileTick.commandPreFloorIsfMgdl,
+            commandFloorMultiplier = auditorProfileTick.commandFloorMultiplier,
+            workingIsfRawMgdl = auditorProfileTick.isfDecision?.workingRawMgdl,
+            profileTargetMgdl = auditorProfileTick.profileTargetMgdl ?: profile.target_bg,
+            tempTargetActive = auditorProfileTick.tempTargetActive,
+            workingTargetRawMgdl = auditorProfileTick.workingTargetMgdl,
+            minPredBgMgdl = auditorProfileTick.safetyAtB?.minPredBgMgdl,
+            hypoThresholdMgdl = auditorProfileTick.safetyAtB?.hypoThresholdMgdl
+                ?: auditorProfileTick.safetyAtA?.hypoThresholdMgdl,
+            runningBasalUph = if (ctx.currentTemp.duration > 0) ctx.currentTemp.rate else profile.current_basal,
+            profileBasalUph = profile.current_basal,
+            postHypoActive = lastPostHypoDeliveryAuthority.active,
+            exerciseLockout = exerciseInsulinLockoutActive || sportTime,
+            isfFactorApplied = auditorProfileTick.isfAppliedFactor,
+            targetFactorApplied =
+                auditorProfileTick.targetDecision?.takeIf { it.applied }?.effective ?: 1.0,
+        )
 
     /**
      * PKPD eventual BG → membres + [rT], BGI / deviation 30m, eventual « legacy » pour heuristiques,
@@ -9312,6 +9533,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val reasonTags = finalResult.reason.toString().split(". ").map { it.trim() }
                 val auditorEffectiveProfile: EffectiveProfile? = effectiveProfileCached(dateUtil.now())
                 lastAuditorAuditStartedAtMs = dateUtil.now()
+                // Captured here, not read again inside the callback: `currentTickDecisionEventId` is
+                // reset on the next tick (see its declaration), and the profile proposal can land
+                // after that has already happened.
+                val auditEventId = currentTickDecisionEventId ?: ""
+                // The audited tick itself, built the same way every ring entry is, so the window the
+                // profile checker is shown always ends on a fact of the same shape as the rest of it.
+                val currentAuditorFact = buildAuditorTickFact(b.ctx, b.profile)
+                val profileFactorRequest = AuditorProfileFactorRequest(
+                    auditEventId = auditEventId,
+                    ticks = auditorTickRing.snapshot(b.ctx.currentTime) + currentAuditorFact,
+                    mealCertainty = lastMealCertainty,
+                    mealModeName = modeType,
+                    minBg75mMgdl = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
+                    cgmNoise = b.ctx.glucoseStatus.noise,
+                    keyOn = auditorProfileTick.keyOn,
+                    contextBuiltAtMs = b.ctx.currentTime,
+                )
                 auditorOrchestrator.auditDecision(
                     bg = bg,
                     delta = delta.toDouble(),
@@ -9348,6 +9586,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     mealCertainty = lastMealCertainty,
                     harmoniaProduction = lastHarmoniaProductionDecision,
                     harmonizerOutcome = lastHarmonizerOutcome,
+                    // Null while the key is off, and the auditor then gets exactly the fields it
+                    // has always been given.
+                    levels = auditorProfileTick.snapshotLevelsIfArmed(),
+                    profileFactorRequest = profileFactorRequest,
+                    // One line per proposal, in the same JSONL the loop already writes to. The parent
+                    // event id was captured above, before this closure can run.
+                    onProfileProposal = { proposal ->
+                        appendAimiDecisionsJsonlLine(proposal.toJsonLine(auditEventId))
+                    },
                     onSyncDisposition = { disposition ->
                         recordAuditorSyncDisposition(
                             disposition = disposition,
@@ -9821,6 +10068,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastAuditorLoopSnapshot?.let { snapshot ->
             decisionCtx.adjustments.auditor_tick = snapshot.toJsonObject()
         }
+        // Written on every tick, key on or off: the levels the auditor works from, so a support
+        // package shows what it was given before any factor is ever applied.
+        decisionCtx.adjustments.auditor_profile_factors = auditorProfileTick.toJsonObject()
+        // Feeds the 30-minute context the next audit is judged against. Every exit path runs through
+        // this stage (main path, T3C, early exits), so the ring never misses a tick. Recorded last,
+        // after every auditor field of this tick is final, so a later audit sees exactly what this
+        // tick's own export saw.
+        auditorTickRing.record(buildAuditorTickFact(ctx, profile))
         decisionCtx.adjustments.post_hypo_delivery = PostHypoDeliveryAuthority.toJsonObject(
             decision = lastPostHypoDeliveryAuthority,
             smbBeforeCapU = lastPostHypoSmbBeforeCapU,
@@ -11346,6 +11601,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastAuditorLoopSnapshot: AuditorJsonlExport.TickSnapshot? = null
     private var currentTickDecisionEventId: String? = null
     private var lastAuditorAuditStartedAtMs: Long = 0L
+
+    /**
+     * ISF and target of the running tick, at every level, for the auditor and for the JSONL.
+     *
+     * A fresh instance per tick, filled where the loop already holds each value. It also carries the
+     * profile factor decision of the tick; `isfAppliedFactor` is the only field a dose path reads,
+     * and it is exactly 1.0 unless the opt-in key is on.
+     */
+    private var auditorProfileTick = AuditorProfileTickState()
+
+    /**
+     * The last 45 minutes of ticks, as the engine saw them, for the auditor's 30-minute window.
+     *
+     * Written once per tick in the export stage, which every exit path runs. Read by the auditor
+     * coroutine. Empty after a restart, and the window is then incomplete, which refuses every
+     * proposal for half an hour.
+     */
+    private val auditorTickRing = AuditorTickRing()
     private val auditorFollowupAppendInProgress = AtomicBoolean(false)
     private var lastLoadGovernorMultiplierG: Double = 1.0
     private var lastPhysiologicalPhaseOutput: PhysiologicalPhaseClassifier.Output? = null
@@ -12797,9 +13070,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * Used for AutoDrive post-hypo rescue rebound guard (companion: AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES).
      * Returns a high sentinel if no valid points.
      */
-    private fun minBgInLastMinutes(lookbackMinutes: Int): Double {
-        val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return 200.0
-        if (data.isEmpty()) return 200.0
+    private fun minBgInLastMinutes(lookbackMinutes: Int): Double =
+        minBgInLastMinutesOrNull(lookbackMinutes) ?: 200.0
+
+    /**
+     * The same minimum, but null instead of the high sentinel when the history cannot answer.
+     *
+     * [minBgInLastMinutes] returns 200.0 when the bucketed table is missing, empty, or made only of
+     * gap-filled rows. For the engine's own rebound guard that fails open on purpose. For the auditor
+     * gate it must not: "no history" would read as "no low in 75 minutes" right after a sensor gap,
+     * which is when a low is most likely. The auditor reads this one and refuses on null.
+     */
+    private fun minBgInLastMinutesOrNull(lookbackMinutes: Int): Double? {
+        val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return null
+        if (data.isEmpty()) return null
         val nowTimestamp = data.first().timestamp
         val cutoff = nowTimestamp - lookbackMinutes * 60_000L
         var minVal = Double.MAX_VALUE
@@ -12810,7 +13094,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val v = row.recalculated
             if (v < minVal) minVal = v
         }
-        return if (minVal == Double.MAX_VALUE) 200.0 else minVal
+        return if (minVal == Double.MAX_VALUE) null else minVal
     }
 
     fun appendCompactLog(
@@ -17805,6 +18089,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             reason = StringBuilder(),
         )
 
+        // Judges the auditor's ISF factor against this tick. It changes nothing here: the value is
+        // put on the dose-facing sensitivity later, under its floor. It has to be decided before the
+        // target, because the two factors share one budget and the ISF has priority.
+        decideAuditorIsfFactorForTick(ctx)
+
         val activeModeName = when (val mealModesGate = runManualMealModesAfterTherapyGate(ctx, profile, rT)) {
             is AimiManualMealModesGate.ReturnEarly -> return mealModesGate.rT
             is AimiManualMealModesGate.Continue -> mealModesGate.activeModeName
@@ -18093,6 +18382,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         var basal = basalScheduleBasal
         var target_bg = basalScheduleTargetBg
+        // The target the engine really works with, before any later adjustment. Observation only:
+        // the auditor is told this level next to the profile target. A tick that ends earlier never
+        // reaches this line, and the field then stays null, which is what the JSONL reports.
+        auditorProfileTick.workingTargetMgdl = target_bg
+        // The target decision itself is NOT taken here: it needs the ISF factor's final, floor-
+        // adjusted effective value for the combined bound (see the call below,
+        // `applyIsfBoundsAndPhysioMultipliersAfterEndoActivity` is where that floor is decided), and
+        // that runs later in this same tick. `target_bg`, `threshold` and `minBg` are read there, not
+        // reassigned between here and there, so capturing `workingTargetMgdl` this early is still the
+        // pre-adjustment value the spec asks for.
         var min_bg = basalScheduleMinBg
         var max_bg = basalScheduleMaxBg
         var sensitivityRatio = basalScheduleSensitivityRatio
@@ -18138,6 +18437,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             profile = profile,
             physioMultipliers = physioMultipliers,
             exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
+        )
+        // Judges the auditor's target factor now, not at the basal-schedule bootstrap: the combined
+        // bound (`AuditorProfileFactorGate.combinedTargetBudgetMgdl`) needs the ISF factor's final
+        // effective value, after the stress floor of `applyIsfBoundsAndPhysioMultipliersAfterEndoActivity`
+        // has had its say — the ISF is applied first and has priority, so the target must see what is
+        // really left, not the pre-floor request. `target_bg`, `threshold` and `minBg` are unchanged
+        // since the basal-schedule bootstrap above, so this is still the tick's raw working target.
+        decideAuditorTargetFactorForTick(
+            ctx = ctx,
+            workingTargetRawMgdl = target_bg,
+            hypoThresholdMgdl = threshold,
+            minPredBgMgdl = minBg,
         )
         trajectoryGuard.getLastAnalysis()?.takeIf { it.classification == TrajectoryType.TIGHT_SPIRAL }?.let { analysis ->
             applyTrajectoryTightSpiralStandardSmbCapIfNeeded(
@@ -18206,7 +18517,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             sens = sens,
             tp = tp,
             variableSensitivity = variableSensitivity,
-            targetBg = target_bg,
+            // The only SMB site that sees the auditor's target ratio. Every target-relative guard
+            // above still reads the raw `target_bg`.
+            targetBg = auditorDoseTarget(target_bg, AuditorProfileFactorCodes.DOSE_SITE_SMB),
             basalaimi = basalaimi,
             basal = basal,
             honeymoon = honeymoon,
@@ -18439,7 +18752,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 tdd7Days = tdd7Days,
                 variableSensitivity = variableSensitivity.toDouble(),
                 predictedBg = predictedBg.toDouble(),
-                targetBg = targetBg.toDouble(),
+                // The only basal site that sees the auditor's target ratio. The member `targetBg`
+                // itself is never reassigned, so the learners and the ML CSV keep the raw value.
+                targetBg = auditorDoseTarget(targetBg.toDouble(), AuditorProfileFactorCodes.DOSE_SITE_BASAL),
                 tickIobForEngine = iob.toDouble(),
                 engineMaxIob = maxIob,
                 eventualBg = eventualBG,

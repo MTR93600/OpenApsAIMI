@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -164,7 +165,15 @@ data class Snapshot(
     val decisionAimi: DecisionSnapshot,
     
     // Last delivery
-    val lastDelivery: LastDeliverySnapshot
+    val lastDelivery: LastDeliverySnapshot,
+
+    /**
+     * ISF and target at every level the loop really has.
+     *
+     * Null keeps the three old fields `isfProfile`, `isfUsed` and `target`, which hold dynamic
+     * values under profile names. When it is given, those three are replaced by the correct levels.
+     */
+    val levels: SnapshotIsfTargetLevels? = null
 ) {
     fun toJSON(): JsonObject = buildJsonObject {
         put("bg", bg)
@@ -178,10 +187,24 @@ data class Snapshot(
         put("iob", iob)
         put("iobActivity", iobActivity)
         put("cob", cob)
-        put("isfProfile", isfProfile)
-        put("isfUsed", isfUsed)
-        put("ic", ic)
-        put("target", target)
+        if (levels != null) {
+            // A null reference must stay an explicit JSON null. The prompt tells the model these
+            // fields read `null` when they are not known, and dropping the key would look like a
+            // missing block.
+            put("isfProfileStatic", levels.isfProfileStatic.toJsonNumberOrNull())
+            put("isfDynamic", levels.isfDynamic)
+            put("isfCommand", levels.isfCommand)
+            put("isfCommandOverProfile", levels.isfCommandOverProfile.toJsonNumberOrNull())
+            put("isfOnProfileFloor", levels.isfOnProfileFloor)
+            put("ic", ic)
+            put("targetProfile", levels.targetProfile)
+            put("targetWorking", levels.targetWorking.toJsonNumberOrNull())
+        } else {
+            put("isfProfile", isfProfile)
+            put("isfUsed", isfUsed)
+            put("ic", ic)
+            put("target", target)
+        }
         put("pkpd", pkpd.toJSON())
         put("activity", activity.toJSON())
         if (physio != null) put("physio", physio.toJSON())
@@ -442,3 +465,7 @@ data class PhysioSnapshot(
         put("hrvZ", hrvZ)
     }
 }
+
+/** Explicit JSON null when the number is missing or not finite. The key stays present. */
+private fun Double?.toJsonNumberOrNull() =
+    if (this != null && isFinite()) JsonPrimitive(this) else JsonNull

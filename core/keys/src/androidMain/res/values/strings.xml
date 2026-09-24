@@ -602,6 +602,8 @@
     <string name="pref_title_oaps_aimi_effective_iob_release_enabled">AIMI effective IOB release enabled</string>
     <string name="pref_title_oaps_aimi_unified_reactivity_enabled">AIMI unified reactivity enabled</string>
     <string name="pref_title_aimi_auditor_enabled">AIMI auditor enabled</string>
+    <string name="pref_title_aimi_auditor_profile_factors">Auditor may adjust ISF and target</string>
+    <string name="pref_summary_aimi_auditor_profile_factors">Lets the AI auditor change the insulin sensitivity (ISF) and the glucose target used by the loop by at most 15 %, up or down, for 15 to 30 minutes. The loop checks every proposal against the last 30 minutes of data and refuses it if one number is wrong. More insulin is never allowed when glucose is under 120 mg/dL, falling, predicted low, after a low, during exercise or with a noisy sensor. The ISF never goes below its usual floor, and all your limits (max SMB, max IOB, max basal, low glucose suspend) still apply. When this is off, the auditor still makes its proposals and writes them to the log, but nothing in your therapy changes.</string>
     <string name="pref_title_oaps_aimi_trajectory_guard_enabled">AIMI trajectory guard enabled</string>
     <string name="pref_title_oaps_aimi_context_enabled">AIMI context enabled</string>
     <string name="pref_title_oaps_aimi_pkpd_hyper_reversion">AIMI PKPD hyper reversion</string>

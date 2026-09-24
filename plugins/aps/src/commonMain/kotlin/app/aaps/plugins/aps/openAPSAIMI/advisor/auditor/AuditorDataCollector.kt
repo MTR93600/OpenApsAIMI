@@ -97,6 +97,7 @@ class AuditorDataCollector @Inject constructor(
         harmonizerOutcome: HarmoniaHarmonizer.Outcome? = null,
         physiologicalPatterns: JsonObject? = null,
         harmoniaSmbAuthority: JsonObject? = null,
+        levels: SnapshotIsfTargetLevels? = null,
     ): AuditorInput {
         
         val now = dateUtil.now()
@@ -130,6 +131,7 @@ class AuditorDataCollector @Inject constructor(
             tbrMaxMode = tbrMaxMode,
             tbrMaxAutoDrive = tbrMaxAutoDrive,
             physio = physio,
+            levels = levels,
             now = now
         )
         
@@ -184,6 +186,58 @@ class AuditorDataCollector @Inject constructor(
             harmonizerOutcome = harmonizerOutcome,
             physiologicalPatterns = physiologicalPatterns,
             harmoniaSmbAuthority = harmoniaSmbAuthority,
+        )
+    }
+
+    /**
+     * Builds the 30 minutes the profile checker is shown, and the claims are checked against.
+     *
+     * The per-tick values come from the loop's own ring, because they are what the loop really dosed
+     * on: the database holds the raw sensor value, the loop works on the calibrated one. The insulin
+     * and the carbs come from the database, because a decided SMB is not a delivered SMB.
+     *
+     * @param ticks the ring plus the audited tick, oldest first.
+     * @param nowMs the timestamp of the audited tick.
+     */
+    suspend fun buildProfileContext30m(
+        ticks: List<AuditorTickFact>,
+        nowMs: Long,
+        mealCertainty: MealCertainty?,
+        mealModeName: String?,
+        minBg75mMgdl: Double,
+        cgmNoise: Double,
+    ): AuditorProfileContext {
+        val startMs = AuditorProfileContextBuilder.windowStartMs(ticks, nowMs)
+        var bolusU = 0.0
+        var carbsG = 0.0
+        if (startMs != null) {
+            bolusU = try {
+                persistenceLayer.getBolusesFromTimeToTime(startMs + 1, nowMs, true)
+                    .filter { it.isValid }
+                    .sumOf { it.amount }
+            } catch (e: Exception) {
+                aapsLogger.error(LTag.APS, "Auditor profile context: boluses failed", e)
+                0.0
+            }
+            carbsG = try {
+                persistenceLayer.getCarbsFromTimeToTimeExpanded(startMs + 1, nowMs, true)
+                    .filter { it.isValid }
+                    .sumOf { it.amount }
+            } catch (e: Exception) {
+                aapsLogger.error(LTag.APS, "Auditor profile context: carbs failed", e)
+                0.0
+            }
+        }
+        return AuditorProfileContextBuilder.build(
+            ticks = ticks,
+            nowMs = nowMs,
+            bolusU = bolusU,
+            carbsG = carbsG,
+            mealModeName = mealModeName,
+            mealCertaintyLevel = mealCertainty?.level?.name,
+            mealSupport = mealCertainty?.supportsMealSupport == true,
+            minBg75mMgdl = minBg75mMgdl,
+            cgmNoise = cgmNoise,
         )
     }
 
@@ -251,6 +305,7 @@ class AuditorDataCollector @Inject constructor(
         tbrMaxMode: Double?,
         tbrMaxAutoDrive: Double?,
         physio: PhysioSnapshot?,
+        levels: SnapshotIsfTargetLevels?,
         now: Long
     ): Snapshot {
         
@@ -336,7 +391,8 @@ class AuditorDataCollector @Inject constructor(
             states = states,
             limits = limits,
             decisionAimi = decision,
-            lastDelivery = lastDelivery
+            lastDelivery = lastDelivery,
+            levels = levels
         )
     }
     
