@@ -128,14 +128,20 @@ class BasalDecisionEngineTest {
         delta: Double = 3.0,
         nightMode: Boolean = false,
         forcedBasal: Double = 5.0,
+        variableSensitivity: Double = 50.0,
+        profileSens: Double = 50.0,
+        preFloorCommandedSens: Double? = null,
+        lunchTime: Boolean = false,
+        lunchRuntimeMin: Int = 0,
     ) = BasalDecisionEngine.Input(
         bg = 145.0,
         profileCurrentBasal = 0.8,
         basalEstimate = 0.8,
         tdd7P = 40.0,
         tdd7Days = 40.0,
-        variableSensitivity = 50.0,
-        profileSens = 50.0,
+        variableSensitivity = variableSensitivity,
+        profileSens = profileSens,
+        preFloorCommandedSens = preFloorCommandedSens,
         predictedBg = 160.0,
         targetBg = 100.0,
         minBg = 70.0,
@@ -167,8 +173,8 @@ class BasalDecisionEngineTest {
         mealRuntimeMin = 0,
         bfastTime = false,
         bfastRuntimeMin = 0,
-        lunchTime = false,
-        lunchRuntimeMin = 0,
+        lunchTime = lunchTime,
+        lunchRuntimeMin = lunchRuntimeMin,
         dinnerTime = false,
         dinnerRuntimeMin = 0,
         highCarbTime = false,
@@ -187,6 +193,63 @@ class BasalDecisionEngineTest {
         minutesSinceLastChange = 0,
         pumpCaps = mockk<PumpCaps>(relaxed = true)
     )
+
+    // ---- Meal-window boost: the numerator must be the PRE-FLOOR commanded sensitivity ------------
+    // The stress ISF floor raises the commanded sensitivity to make doses smaller. This boost divides
+    // by the working sensitivity, so feeding it the floored value made the basal larger - the exact
+    // opposite of what the floor is for. Numbers come from tick 1790021540129 (2026-09-21 22:12):
+    // profile 60, pre-floor 36.6, working 21.6, and the floor had raised the commanded value to 60.
+    // `calculateBasalRate` is stubbed to return the multiplier, and the multiplier is delta x boost,
+    // so with delta 3.0 the rate IS 3 x boost.
+
+    private fun noMealOnsetHelpers() = BasalDecisionEngine.Helpers(
+        calculateRate = { _, _, mult, _ -> 1.0 * mult },
+        calculateBasalRate = { _, _, mult -> 1.0 * mult },
+        detectMealOnset = { _, _, _, _, _ -> false },
+        round = { v, _ -> v }
+    )
+
+    private fun decideMealWindow(preFloor: Double?, working: Double, commanded: Double): Pair<BasalDecisionEngine.Decision, RT> {
+        every { basalPlanner.plan(any()) } returns null
+        val input = forcedTbrInput(
+            variableSensitivity = working,
+            profileSens = commanded,
+            preFloorCommandedSens = preFloor,
+            lunchTime = true,
+            lunchRuntimeMin = 45,
+        )
+        val rt = RT(algorithm = APSResult.Algorithm.AIMI, runningDynamicIsf = true)
+        return engine.decide(input, rt, noMealOnsetHelpers()) to rt
+    }
+
+    @Test
+    fun `meal-window boost divides the pre-floor sensitivity, not the floored one`() {
+        val (decision, _) = decideMealWindow(preFloor = 36.6, working = 21.6, commanded = 60.0)
+        // 36.6 / 21.6 = 1.69 -> rate 5.08. The floored numerator would have given 60 / 21.6 = 2.78 -> 8.34.
+        assertEquals(5.08, decision.rate, 0.05)
+        assertTrue(decision.rate < 8.0) { "the floor must not inflate the meal-window basal" }
+    }
+
+    @Test
+    fun `meal-window boost is unchanged when the floor raises the commanded sensitivity`() {
+        val floorInactive = decideMealWindow(preFloor = 36.6, working = 21.6, commanded = 36.6).first
+        val floorActive = decideMealWindow(preFloor = 36.6, working = 21.6, commanded = 60.0).first
+        assertEquals(floorInactive.rate, floorActive.rate, 0.001)
+    }
+
+    @Test
+    fun `meal-window boost stands down when the pre-floor sensitivity is missing`() {
+        val (decision, rt) = decideMealWindow(preFloor = null, working = 21.6, commanded = 60.0)
+        // No boost at all: rate is delta x 1.0.
+        assertEquals(3.0, decision.rate, 0.001)
+        assertFalse(rt.reason.toString().contains("boost x")) { rt.reason.toString() }
+    }
+
+    @Test
+    fun `meal-window boost stands down on a non-finite pre-floor sensitivity`() {
+        val (decision, _) = decideMealWindow(preFloor = Double.NaN, working = 21.6, commanded = 60.0)
+        assertEquals(3.0, decision.rate, 0.001)
+    }
 
     private fun mealOnsetHelpers() = BasalDecisionEngine.Helpers(
         calculateRate = { _, _, mult, _ -> 1.0 * mult },

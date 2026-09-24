@@ -1,6 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
 import android.content.Context
+import app.aaps.core.data.model.HR
+import app.aaps.core.data.model.SC
+import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRefresher
@@ -36,13 +39,32 @@ class HealthContextRepository @Inject constructor(
     private val featureExtractor: AIMIPhysioFeatureExtractorMTR,
     private val aggregator: PhysioAggregator,
     private val unifiedProvider: app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR, // 🚀 NEW INJECTION
+    private val persistenceLayer: PersistenceLayer,
     private val aapsLogger: AAPSLogger
 ) {
-    
+
     companion object {
         private const val TAG = "HealthContextRepo"
         /** Re-use steps/HR snapshot for Autodrive gating when loop ticks are frequent. */
         private const val AUTODRIVE_GATER_SNAPSHOT_MAX_AGE_MS = 90_000L
+        /**
+         * How often the awake resting heart rate is measured again.
+         *
+         * It is a centile over seven days, so it moves by about one beat from one day to the next.
+         * Once an hour is far more often than it can change, and it keeps the seven-day read off the
+         * loop's own cadence. See [AwakeRestingHeartRate].
+         */
+        private const val AWAKE_RESTING_REFRESH_MS = 60 * 60 * 1000L
+        /**
+         * How old a step record may be and still describe the moment of a heart-rate reading.
+         *
+         * `SC.steps15min` at time T counts the steps of `[T-15 min, T]`, so a record 14 minutes older
+         * than the reading describes a window that does not contain it. Five minutes keeps the
+         * overlap real. Being too generous here is the safe direction anyway — it keeps samples that
+         * should be dropped, which can only lower the baseline and make the gesture fire more often —
+         * but "the steps of that moment" should mean what it says.
+         */
+        private const val STEPS_MATCH_WINDOW_MS = 5 * 60 * 1000L
     }
 
     // In-memory cache of the last valid snapshot
@@ -53,6 +75,9 @@ class HealthContextRepository @Inject constructor(
     private val rhrRef = AtomicReference<List<Any>>(emptyList())
     private val thermalRef = AtomicReference<ThermalDataWindowMTR?>(null)
     private val refreshInFlight = AtomicBoolean(false)
+    private val awakeRestingRef = AtomicReference<Int?>(null)
+    private val awakeRestingMeasuredAtMs = AtomicReference(0L)
+    private val awakeRestingInFlight = AtomicBoolean(false)
     
     /**
      * Fetches and builds the current Health Snapshot.
@@ -266,6 +291,84 @@ class HealthContextRepository @Inject constructor(
     fun forceHeavyRefresh() {
         refreshCoreDataAsync(daysHrv = 7, force = true)
         fetchSnapshot()
+    }
+
+    /**
+     * The awake resting heart rate of the last [AwakeRestingHeartRate.WINDOW_DAYS] days, or null.
+     *
+     * Null means "not measured", and every caller must read it as "stand down", never as a number to
+     * replace. [HealthContextSnapshot.rhrResting] keeps its own meaning — the lowest morning value —
+     * for the readers that already use it; this is a second, awake quantity and only the stress ISF
+     * floor reads it today.
+     *
+     * The value is measured on a background scope and served from memory, so this call never touches
+     * the database. It is null until the first measurement lands, which is the safe direction: the
+     * gesture that reads it can only withhold insulin.
+     *
+     * A measurement that **fails** keeps the last value for one more cycle — a database error must not
+     * end a protection. A measurement that **succeeds with too little data** does return null: that is
+     * an honest answer, not an error.
+     */
+    fun awakeRestingHeartRateBpm(): Int? {
+        refreshAwakeRestingHeartRateAsync()
+        return awakeRestingRef.get()
+    }
+
+    private fun refreshAwakeRestingHeartRateAsync() {
+        val now = System.currentTimeMillis()
+        val measuredAt = awakeRestingMeasuredAtMs.get()
+        if (measuredAt != 0L && now - measuredAt in 0..AWAKE_RESTING_REFRESH_MS) return
+        if (!awakeRestingInFlight.compareAndSet(false, true)) return
+        ioScope.launch {
+            try {
+                val windowStart = now - AwakeRestingHeartRate.WINDOW_DAYS * 24 * 60 * 60 * 1000L
+                val heartRates = persistenceLayer.getHeartRatesFromTimeToTime(windowStart, now)
+                val steps = persistenceLayer.getStepsCountFromTimeToTime(windowStart, now)
+                val samples = buildAwakeSamples(heartRates, steps)
+                val estimate = AwakeRestingHeartRate.estimate(samples, ZoneId.systemDefault())
+                awakeRestingRef.set(estimate)
+                awakeRestingMeasuredAtMs.set(System.currentTimeMillis())
+                aapsLogger.debug(
+                    LTag.APS,
+                    "[$TAG] awake resting HR: ${estimate ?: "stand down"} from ${samples.size} samples",
+                )
+            } catch (e: Exception) {
+                // The last good baseline is KEPT for one more cycle. Nulling it here would drop an
+                // active stress floor at once and with no grace, because a missing baseline stands the
+                // gesture down — so a database hiccup would end a protection. One hour of a baseline
+                // that moves by about one beat a day is a far smaller error than that.
+                aapsLogger.warn(LTag.APS, "[$TAG] awake resting HR measurement failed, keeping the last value", e)
+                awakeRestingMeasuredAtMs.set(System.currentTimeMillis())
+            } finally {
+                awakeRestingInFlight.set(false)
+            }
+        }
+    }
+
+    /**
+     * Pairs each heart-rate reading with the step count of that moment, when one is known.
+     *
+     * Both lists come from the same database the loop reads its live heart rate from, so the baseline
+     * is measured on exactly the signal it will be compared against.
+     */
+    private fun buildAwakeSamples(heartRates: List<HR>, steps: List<SC>): List<AwakeRestingHeartRate.Sample> {
+        val stepsByTime = steps.sortedBy { it.timestamp }
+        val heartRatesByTime = heartRates.sortedBy { it.timestamp }
+        var stepsIndex = 0
+        return heartRatesByTime.map { hr ->
+            // Both lists are sorted, so one walk over each is enough: advance to the last step record
+            // that is not newer than this reading, then keep it only if it is recent enough.
+            while (stepsIndex + 1 < stepsByTime.size && stepsByTime[stepsIndex + 1].timestamp <= hr.timestamp) {
+                stepsIndex++
+            }
+            val candidate = stepsByTime.getOrNull(stepsIndex)
+                ?.takeIf { it.timestamp <= hr.timestamp && hr.timestamp - it.timestamp <= STEPS_MATCH_WINDOW_MS }
+            AwakeRestingHeartRate.Sample(
+                timestampMs = hr.timestamp,
+                bpm = hr.beatsPerMinute,
+                stepsLast15m = candidate?.steps15min,
+            )
+        }
     }
 
     private fun clockIsNightHour(nowMs: Long): Boolean {

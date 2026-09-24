@@ -14,16 +14,24 @@ object AuditorPromptBuilder {
     
     /**
      * Build complete prompt from auditor input
+     *
+     * @param profileFactorsArmed true when the user opted in to the profile factors. It swaps one
+     *   rule line, so the model knows the ISF and the target CAN move a little, but never here.
+     *   With false the built string is exactly the one of before, character for character.
      */
-    fun buildPrompt(input: AuditorInput): String {
+    fun buildPrompt(input: AuditorInput, profileFactorsArmed: Boolean = false): String {
+        // The extra block exists only when the caller gave the ISF and target levels. Without them
+        // the prompt is exactly the one the auditor has always been sent, character for character.
+        val levelsSection =
+            if (input.snapshot.levels != null) "${getIsfTargetLevelsSection()}\n\n" else ""
         return """
-${getSystemPrompt()}
+${getSystemPrompt(profileFactorsArmed)}
 
 ${LlmWorldConservativePreamble.FOR_JSON_CONTRACT}
 
 ${getSafetyAssertionsSection()}
 
-${getInputDataSection(input)}
+$levelsSection${getInputDataSection(input)}
 
 ${getInstructionsSection()}
 
@@ -32,9 +40,22 @@ ${getOutputSchemaSection()}
     }
     
     /**
+     * The one rule line that changes when the profile factors are armed.
+     *
+     * The model must still never change a profile here. What changes is that it is told the ISF and
+     * the target CAN move, a little, through the separate profile check, so it does not treat a
+     * moved value as a fault of the loop.
+     */
+    private fun getProfileChangeRuleLine(profileFactorsArmed: Boolean): String =
+        if (profileFactorsArmed)
+            "2. ❌ **Free profile change** : \"Set ISF to 40\" → FORBIDDEN. ISF and target can only move by at most 15 %, through the separate profile check. Never in this verdict."
+        else
+            "2. ❌ **Modification profil** : \"Changer ISF à 40\" → INTERDIT"
+
+    /**
      * System role: Define the auditor's identity and constraints
      */
-    private fun getSystemPrompt(): String = """
+    private fun getSystemPrompt(profileFactorsArmed: Boolean): String = """
 # TU ES DIABY - Le Second Cerveau d'AIMI
 
 ## TON IDENTITÉ
@@ -80,7 +101,7 @@ Tu sais identifier les **Faux Hypos** (Compression Lows) typiques des capteurs D
 
 ### Ce que tu ne PEUX PAS faire (même si tu voulais) :
 1. ❌ **Dosage libre** : "Administrer 1.7U" → INTERDIT
-2. ❌ **Modification profil** : "Changer ISF à 40" → INTERDIT
+${getProfileChangeRuleLine(profileFactorsArmed)}
 3. ❌ **Commande directe pompe** : "Lancer bolus maintenant" → INTERDIT
 4. ❌ **Bloquer P1/P2** : Les prebolus sont sacrés → INTERDIT de réduire
 
@@ -149,6 +170,36 @@ Before verdict, you MUST validate these hard rules. If any rule triggers, it ove
    - If you don't know, state: `riskFlags: ["uncertain_data"]`, `confidence: 0.3`.
     """.trimIndent()
     
+    /**
+     * Explains the ISF and target levels of the snapshot.
+     *
+     * Only added when the snapshot really carries them, so the prompt does not change for a reader
+     * that does not get them. The rule "no profile change" above stays in force: these fields are
+     * there to be read, not to be changed.
+     */
+    private fun getIsfTargetLevelsSection(): String = """
+## ISF AND TARGET LEVELS (read this before you judge the numbers)
+
+The snapshot gives the insulin sensitivity (ISF) at three levels, all in mg/dL per unit:
+- `isfProfileStatic`: the value written in the user profile for this time of day. `null` when it is
+  not known.
+- `isfDynamic`: the value the dynamic sensitivity computed for this tick.
+- `isfCommand`: the value the loop really commands. This is the one the doses are built on.
+
+`isfCommandOverProfile` is `isfCommand / isfProfileStatic`. Under 1.0 means the loop is more
+aggressive than the user profile, over 1.0 means it is more careful.
+`isfOnProfileFloor` is true when a floor raised the commanded value: the chain asked for a lower ISF
+and was not allowed to use it, so more insulin was not possible on this tick.
+
+The glucose target is given at two levels, both in mg/dL:
+- `targetProfile`: the profile target, or the temporary target while one runs.
+- `targetWorking`: the target the engine really aims at on this tick. It can be lower than
+  `targetProfile`. `null` means this tick ended before the engine set it.
+
+Use `isfCommand` and `targetWorking` when you judge the dose, and say which level you used in your
+evidence. You still must not propose any profile change: the rule above stays in force.
+    """.trimIndent()
+
     /**
      * Input data section: The JSON payload
      */

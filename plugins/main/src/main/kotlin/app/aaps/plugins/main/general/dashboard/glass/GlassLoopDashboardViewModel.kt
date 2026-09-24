@@ -20,6 +20,9 @@ import app.aaps.plugins.aps.openAPSAIMI.GlucoseStatusCalculatorAimi
 import app.aaps.plugins.aps.openAPSAIMI.learning.BasalMlTrainingCoordinator
 import app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbModelStore
+import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
+import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer.TrainingOutcome
+import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer.TrainingResult
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStatePresentationBuilder
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.TrajectoryRuntimeRepository
@@ -175,6 +178,19 @@ class GlassLoopDashboardViewModel @Inject constructor(
                 val smbModelFileText = smbModelFile.takeIf { it.exists() }?.let { dateUtil.dateAndTimeString(it.lastModified()) }
                     ?: resourceHelper.gs(R.string.dashboard_glass_loop_ml_file_missing)
 
+                val smbResult = AimiSmbTrainer.lastResult()
+                val smbTrainingStatusText = if (smbResult != null)
+                    resourceHelper.gs(
+                        R.string.dashboard_glass_loop_ml_smb_status_value,
+                        resourceHelper.gs(smbOutcomeStringId(smbResult.outcome)),
+                        dateUtil.minAgoLong(resourceHelper, smbResult.atMs),
+                    )
+                else
+                    resourceHelper.gs(R.string.dashboard_glass_loop_ml_smb_never_attempted)
+                // The detail line carries what the status word cannot: why a model was refused, and how
+                // many rows the quality filter kept. A user whose training never publishes needs both.
+                val smbTrainingDetailText = smbTrainingDetailText(smbResult)
+
                 GlassLoopDashboardState(
                     isLoading = false,
                     lastRunTime = lastRunTime,
@@ -214,10 +230,43 @@ class GlassLoopDashboardViewModel @Inject constructor(
                     mlCircuitOpen = mlCircuitOpen,
                     basalModelFileText = basalModelFileText,
                     smbModelFileText = smbModelFileText,
+                    smbTrainingStatusText = smbTrainingStatusText,
+                    smbTrainingDetailText = smbTrainingDetailText,
                 )
             }
 
             _uiState.update { newState }
         }
+    }
+
+    /** One plain sentence per outcome, so the dashboard never shows a raw enum name. */
+    private fun smbOutcomeStringId(outcome: TrainingOutcome): Int = when (outcome) {
+        TrainingOutcome.TRAINED           -> R.string.dashboard_glass_loop_ml_smb_outcome_trained
+        TrainingOutcome.SKIPPED_NO_CSV    -> R.string.dashboard_glass_loop_ml_smb_outcome_no_csv
+        TrainingOutcome.REFUSED_HEADER    -> R.string.dashboard_glass_loop_ml_smb_outcome_refused_header
+        TrainingOutcome.TOO_FEW_SAMPLES   -> R.string.dashboard_glass_loop_ml_smb_outcome_too_few_samples
+        TrainingOutcome.REJECTED_BY_GATES -> R.string.dashboard_glass_loop_ml_smb_outcome_rejected
+        TrainingOutcome.ERROR             -> R.string.dashboard_glass_loop_ml_smb_outcome_error
+        // Waiting states never reach `lastResult`; they come from `currentWaitingStatus`.
+        TrainingOutcome.SKIPPED_NOT_DUE   -> R.string.dashboard_glass_loop_ml_smb_waiting_not_due
+        TrainingOutcome.CIRCUIT_OPEN      -> R.string.dashboard_glass_loop_ml_smb_waiting_circuit_open
+    }
+
+    /**
+     * The second line: the gate message when a model was refused, otherwise how many rows the quality
+     * filter kept, otherwise why the trainer is waiting. Empty when there is nothing to add.
+     */
+    private fun smbTrainingDetailText(result: TrainingResult?): String {
+        val gateDetail = result?.gateDetail.orEmpty()
+        if (gateDetail.isNotEmpty()) return gateDetail
+        if (result != null && result.samplesAfterFilter > 0) {
+            return resourceHelper.gs(
+                R.string.dashboard_glass_loop_ml_smb_rows,
+                result.samplesAfterFilter,
+                result.rowsRejectedByFilter.toInt(),
+            )
+        }
+        val waiting = AimiSmbTrainer.currentWaitingStatus() ?: return ""
+        return resourceHelper.gs(smbOutcomeStringId(waiting.outcome))
     }
 }

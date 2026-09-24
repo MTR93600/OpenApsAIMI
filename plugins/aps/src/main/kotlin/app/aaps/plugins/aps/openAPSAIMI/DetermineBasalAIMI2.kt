@@ -57,6 +57,7 @@ import app.aaps.plugins.aps.openAPSAIMI.ISF.HeartRateTrendIsf
 import app.aaps.plugins.aps.openAPSAIMI.ISF.CommandedIsf
 import app.aaps.plugins.aps.openAPSAIMI.ISF.ObservedSensitivityMeter
 import app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
+import app.aaps.plugins.aps.openAPSAIMI.ISF.WorkingIsf
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaCounterfactual
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSafetyVerdict
 import app.aaps.plugins.aps.openAPSAIMI.quality.InsulinOriginMeter
@@ -71,6 +72,15 @@ import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbTrainingRowBuffer
 import app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCsvHeader
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorJsonlExport
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorIsfRaw
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorProfileFactorCache
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorProfileFactorCodes
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorProfileFactorGate
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorProfileFactorRequest
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorProfileTickState
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorTickFact
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorTickRing
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.TickSafety
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdict
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbIntervalPolicy
 import app.aaps.plugins.aps.openAPSAIMI.smb.RiseCeilingGuard
@@ -299,6 +309,57 @@ import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
+/**
+ * The value for a JSON number field, or `JSONObject.NULL` when there is none or it is not finite.
+ *
+ * `JSONObject.put(String, double)` throws on NaN and infinity. In [AimiDecisionContext.toMedicalJson]
+ * one such value would replace the whole tick record with the error string of its catch block, which
+ * loses the forensics exactly on the ticks that went wrong.
+ */
+internal fun Double?.finiteOrJsonNull(): Any = this?.takeIf { it.isFinite() } ?: JSONObject.NULL
+
+/**
+ * One reading of `CorrectionAggressionBasalCap.mergeEngineAndRtRates`, for the export only.
+ *
+ * The merge keeps the smaller of the basal engine's own rate and `rT.rate` outside tier `FULL`, and the
+ * larger inside it. Every 0.0 the engine returns is a safety decision, so inside `FULL` a boost on
+ * `rT.rate` can win over one. Nothing today exports the engine's own rate, so that cannot be counted.
+ * This record carries the two inputs, which side of the merge ran, and which input the merged rate came
+ * from. It is never read back into a decision.
+ */
+internal data class AimiBasalMergeRecord(
+    val engineRateUph: Double,
+    val rtRateUph: Double?,
+    val mergeMode: String,
+    val mergeWinner: String,
+)
+
+/**
+ * Copies the two passive basal records of a tick into the exported baseline state.
+ *
+ * A `null` record leaves its fields alone. Both records are cleared at the start of every tick, so a
+ * tick that did not reach the meal-absorption boost branch, or did not reach the merge, exports nothing
+ * for it instead of repeating the previous tick's numbers.
+ */
+internal fun AimiDecisionContext.BaselineState.applyBasalShadowRecords(
+    mealBoost: CorrectionAggressionBasalCap.MealBoostCapRecord?,
+    merge: AimiBasalMergeRecord?,
+) {
+    mealBoost?.let { record ->
+        meal_boost_requested_uph = record.requestedUph
+        meal_boost_cap_tier = record.tier?.name
+        meal_boost_cap_max_uph = record.maxAllowedUph
+        meal_boost_capped_uph = record.cappedUph
+        meal_boost_cap_would_bind = record.wouldBind
+    }
+    merge?.let { record ->
+        engine_rate_uph = record.engineRateUph
+        rt_rate_uph = record.rtRateUph
+        merge_mode = record.mergeMode
+        merge_winner = record.mergeWinner
+    }
+}
+
 internal data class AimiDecisionContext(
     val event_id: String,
     val timestamp: Long,
@@ -480,12 +541,33 @@ internal data class AimiDecisionContext(
         val stress_isf_floor_active: Boolean? = null,
         val stress_isf_floor_reason: String? = null,
         /**
-         * Sensitivity that would be commanded with the floor at 1.0 x profile, mg/dL per U.
+         * Sensitivity commanded with the floor at 1.0 x profile, mg/dL per U.
          *
-         * Present only when the signature is active and the floor would really change the value.
-         * Absent otherwise — absent means "nothing to see", not zero.
+         * Present whenever the signature is active, armed or not. Absent means "the signature does
+         * not hold", not zero.
          */
         val stress_isf_floor_isf_mgdl: Double? = null,
+        /**
+         * Awake resting heart rate the signature was measured against, bpm.
+         *
+         * Absent means the gesture stood down for want of data. It is not the same quantity as the
+         * exported `rhr_resting_bpm`, which is the lowest SLEEPING value of the last seven days and
+         * was pinned at 50 on every tick of three packages. See `AwakeRestingHeartRate`.
+         */
+        val stress_floor_awake_resting_bpm: Int? = null,
+        /**
+         * Dose-facing sensitivity before the stress floor, mg/dL per U.
+         *
+         * `var`, and set late: the value only exists once the working sensitivity is finalised,
+         * thousands of lines after this object is built at tick bootstrap. Without these three fields
+         * no support package can say whether the wiring works — `variable_sens_mgdl` is read after
+         * every multiplier and cannot show what the floor moved.
+         */
+        var stress_floor_isf_before_mgdl: Double? = null,
+        /** Dose-facing sensitivity after the stress floor, mg/dL per U. */
+        var stress_floor_isf_after_mgdl: Double? = null,
+        /** True when the floor really raised the dose-facing sensitivity this tick. */
+        var stress_floor_raised_isf: Boolean? = null,
         /** Shadow: sensitivity an unconditional exit clamp relative to the profile would command. */
         val isf_profile_relative_shadow_mgdl: Double? = null,
         /** Shadow: true when that clamp would have changed the value. */
@@ -621,6 +703,54 @@ internal data class AimiDecisionContext(
          * direct instruments contradict it.
          */
         var variable_sens_mgdl: Double? = null,
+        /**
+         * Where the meal-absorption basal boost stands against the correction-aggression tier ceiling, at
+         * the moment the branch asks for it. Written on every tick where that branch produced a rate,
+         * `null` otherwise.
+         *
+         * **Measurement only. These five fields say nothing about the delivered rate.** Nothing applies
+         * the ceiling here, and nothing needs to: the merged rate meets the same ceiling, with the same
+         * gate, at `FINAL_BASAL_MERGE`. The branch rate can also be dropped before it ever gets there —
+         * the `min` merge can pick the engine rate, T3C or Harmonia can replace the whole plan, an LGS
+         * halt can zero it, and three early returns skip the merge altogether. So a bound ceiling here is
+         * not a dose that was cut; it is one branch asking above its tier.
+         *
+         * The base is `profile.current_basal`, the same one `FINAL_BASAL_MERGE` uses, so the two ceilings
+         * are the same number. The exercise ceiling in `capBasalRateForCorrectionAggression` is not part
+         * of this measurement.
+         */
+        var meal_boost_requested_uph: Double? = null,
+        /** Correction-aggression tier of the tick: `FULL`, `MODERATE` or `REBOUND_GUARD`. */
+        var meal_boost_cap_tier: String? = null,
+        /**
+         * Tier ceiling in U/h. `null` whenever no ceiling was computed: tier `FULL` always waives it,
+         * `MODERATE` waives it too on a fast rise, there may be no gate decision yet, and a requested
+         * rate that is zero, negative or non-finite is returned before the ceiling is worked out.
+         */
+        var meal_boost_cap_max_uph: Double? = null,
+        /** The requested rate after the tier ceiling. Never above `meal_boost_requested_uph`. */
+        var meal_boost_capped_uph: Double? = null,
+        /**
+         * True when the tier ceiling is below the rate this branch asked for, i.e. the branch asked for
+         * more than its tier allows. This is the 87 % against 1 % figure to watch. It does **not** mean a
+         * dose was or would be changed.
+         */
+        var meal_boost_cap_would_bind: Boolean? = null,
+        /**
+         * The engine / rT basal merge, as `CorrectionAggressionBasalCap.mergeEngineAndRtRates` saw it.
+         *
+         * Strictly passive, no key, no behaviour attached. The merge takes the smaller of the two rates
+         * outside tier `FULL` and the larger inside it, so a rate the basal engine set to 0.0 for a hypo
+         * reason can lose to a boost. Today no exported field carries the engine's own rate, so the
+         * question "how often does a safety zero lose" cannot be answered. These four fields carry it.
+         */
+        var engine_rate_uph: Double? = null,
+        /** `rT.rate` at the merge, `null` when nothing earlier in the tick wrote it. */
+        var rt_rate_uph: Double? = null,
+        /** `min` or `max`: which side of the merge ran, i.e. whether `allowRocketBasalScale` was set. */
+        var merge_mode: String? = null,
+        /** `engine`, `rt` or `equal`: which input the merged rate came from. */
+        var merge_winner: String? = null,
     )
     data class Adjustments(
         var dynamic_isf: DynamicIsf? = null,
@@ -707,6 +837,11 @@ internal data class AimiDecisionContext(
         var t3c_runtime_ownership: T3cRuntimeOwnershipExport? = null,
         /** Loop vs auditor binding for this tick (sync disposition; follow-up may arrive async). */
         var auditor_tick: org.json.JSONObject? = null,
+        /**
+         * ISF and target of this tick at every level, plus the state of the auditor profile-factor
+         * key. Written on every tick, key on or off. Observation only; no dose reads it.
+         */
+        var auditor_profile_factors: org.json.JSONObject? = null,
         /**
          * Post-hypo delivery authority for this tick: whether it applied, which condition declined
          * it, and the SMB before / after its cap. See `docs/adr/0006-autodrive-consumes-authority.md`.
@@ -921,6 +1056,10 @@ internal data class AimiDecisionContext(
             base.put("stress_isf_floor_active", baseline_state.stress_isf_floor_active ?: org.json.JSONObject.NULL)
             base.put("stress_isf_floor_reason", baseline_state.stress_isf_floor_reason ?: org.json.JSONObject.NULL)
             base.put("stress_isf_floor_isf_mgdl", baseline_state.stress_isf_floor_isf_mgdl ?: org.json.JSONObject.NULL)
+            base.put("stress_floor_awake_resting_bpm", baseline_state.stress_floor_awake_resting_bpm ?: JSONObject.NULL)
+            base.put("stress_floor_isf_before_mgdl", baseline_state.stress_floor_isf_before_mgdl ?: JSONObject.NULL)
+            base.put("stress_floor_isf_after_mgdl", baseline_state.stress_floor_isf_after_mgdl ?: JSONObject.NULL)
+            base.put("stress_floor_raised_isf", baseline_state.stress_floor_raised_isf ?: JSONObject.NULL)
             base.put("isf_profile_relative_shadow_mgdl", baseline_state.isf_profile_relative_shadow_mgdl ?: org.json.JSONObject.NULL)
             base.put("isf_profile_relative_bound_hit", baseline_state.isf_profile_relative_bound_hit ?: org.json.JSONObject.NULL)
             base.put("sensitivity_ratio_r", baseline_state.sensitivity_ratio_r ?: org.json.JSONObject.NULL)
@@ -958,6 +1097,19 @@ internal data class AimiDecisionContext(
                 "rise_floor_minutes_since_contribution",
                 baseline_state.rise_floor_minutes_since_contribution ?: org.json.JSONObject.NULL,
             )
+            // JSONObject.put(String, double) throws on NaN and infinity, and the whole tick record would
+            // then be replaced by the "JSON Generation Failed" string of the catch below. engine_rate_uph
+            // is the raw basal engine output, taken before setTempBasal hardens non-finite rates, so it is
+            // the one that can really arrive non-finite. Write JSON null instead of losing the record.
+            base.put("meal_boost_requested_uph", baseline_state.meal_boost_requested_uph.finiteOrJsonNull())
+            base.put("meal_boost_cap_tier", baseline_state.meal_boost_cap_tier ?: JSONObject.NULL)
+            base.put("meal_boost_cap_max_uph", baseline_state.meal_boost_cap_max_uph.finiteOrJsonNull())
+            base.put("meal_boost_capped_uph", baseline_state.meal_boost_capped_uph.finiteOrJsonNull())
+            base.put("meal_boost_cap_would_bind", baseline_state.meal_boost_cap_would_bind ?: JSONObject.NULL)
+            base.put("engine_rate_uph", baseline_state.engine_rate_uph.finiteOrJsonNull())
+            base.put("rt_rate_uph", baseline_state.rt_rate_uph.finiteOrJsonNull())
+            base.put("merge_mode", baseline_state.merge_mode ?: JSONObject.NULL)
+            base.put("merge_winner", baseline_state.merge_winner ?: JSONObject.NULL)
             json.put("baseline_state", base)
 
             val adj = org.json.JSONObject()
@@ -1190,6 +1342,9 @@ internal data class AimiDecisionContext(
             }
             adjustments.auditor_tick?.let { auditorTick ->
                 adj.put("auditor_tick", auditorTick)
+            }
+            adjustments.auditor_profile_factors?.let { profileFactors ->
+                adj.put("auditor_profile_factors", profileFactors)
             }
             adjustments.post_hypo_delivery?.let { postHypoDelivery ->
                 adj.put("post_hypo_delivery", postHypoDelivery)
@@ -1680,21 +1835,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             try {
                 val tir1Day = tirCalculator.calculate(1, 65.0, 180.0)
                 determineBasalInvocationCaches.storeTir65180FromWarmup(tir1Day)
+                // Each calculate* call reads the BG table again: compute each window once, then read all its percentages.
+                val tir1DayAvg = tirCalculator.averageTIR(tir1Day)
+                val tirToday = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0))
+                val tirBasal3 = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0))
                 tirWarmupSnapshotRef.set(
                     TirWarmupSnapshot(
-                        tir1DayAbove = tirCalculator.averageTIR(tir1Day).abovePct() ?: 0.0,
-                        tir1DayInRange = tirCalculator.averageTIR(tir1Day).inRangePct() ?: 0.0,
-                        currentTirLow = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0)).belowPct() ?: 0.0,
-                        currentTirRange = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0)).inRangePct() ?: 0.0,
-                        currentTirAbove = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0)).abovePct() ?: 0.0,
+                        tir1DayAbove = tir1DayAvg.abovePct() ?: 0.0,
+                        tir1DayInRange = tir1DayAvg.inRangePct() ?: 0.0,
+                        currentTirLow = tirToday.belowPct() ?: 0.0,
+                        currentTirRange = tirToday.inRangePct() ?: 0.0,
+                        currentTirAbove = tirToday.abovePct() ?: 0.0,
                         lastHourTirLow = tirCalculator.averageTIR(tirCalculator.calculateHour(80.0, 140.0)).belowPct() ?: 0.0,
                         lastHourTirAbove = tirCalculator.averageTIR(tirCalculator.calculateHour(72.0, 140.0)).abovePct(),
                         lastHourTirLow100 = tirCalculator.averageTIR(tirCalculator.calculateHour(100.0, 140.0)).belowPct() ?: 0.0,
                         lastHourTirAbove170 = tirCalculator.averageTIR(tirCalculator.calculateHour(100.0, 170.0)).abovePct() ?: 0.0,
                         lastHourTirAbove120 = tirCalculator.averageTIR(tirCalculator.calculateHour(100.0, 120.0)).abovePct() ?: 0.0,
-                        tirBasal3InRange = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0)).inRangePct(),
-                        tirBasal3Below = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0)).belowPct(),
-                        tirBasal3Above = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0)).abovePct(),
+                        tirBasal3InRange = tirBasal3.inRangePct(),
+                        tirBasal3Below = tirBasal3.belowPct(),
+                        tirBasal3Above = tirBasal3.abovePct(),
                         tirBasalHourAbove = tirCalculator.averageTIR(tirCalculator.calculateHour(65.0, 100.0)).abovePct(),
                     )
                 )
@@ -2289,6 +2448,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // so every one of them was a tick where setTempBasal returned early. `adjustments.basal_terminal`
         // is read with `?.let`, so a null simply leaves the key out, which is the honest answer.
         lastBasalTerminalTelemetry = null
+        // Same reason as the block above: what the stress floor did belongs to this tick only. A tick
+        // that returns before the working sensitivity is finalised must export nothing rather than
+        // the previous tick's numbers.
+        WorkingIsf.resetLastApplied()
         val decisionCtx = AimiDecisionContext(
             event_id = "evt_${ctx.currentTime}".also { currentTickDecisionEventId = it },
             timestamp = ctx.currentTime,
@@ -2340,6 +2503,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 stress_isf_floor_active = IsfSourceTelemetry.lastStressIsfFloorActive,
                 stress_isf_floor_reason = IsfSourceTelemetry.lastStressIsfFloorReason,
                 stress_isf_floor_isf_mgdl = IsfSourceTelemetry.lastStressIsfFloorIsfMgdl,
+                stress_floor_awake_resting_bpm = IsfSourceTelemetry.lastStressIsfFloorAwakeRestingBpm,
                 isf_profile_relative_shadow_mgdl = IsfSourceTelemetry.lastProfileRelativeShadowMgdl,
                 isf_profile_relative_bound_hit = IsfSourceTelemetry.lastProfileRelativeBoundHit,
                 sensitivity_ratio_r = runCatching { sensitivityRatioEstimator.ratio }.getOrNull(),
@@ -2352,6 +2516,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 htr_ra_floor_mgdl_per_min = null
             )
         )
+        // ISF and target levels of this tick for the auditor and the JSONL. Read once, here, where
+        // `baseline_state` reads the same numbers, so the rest of the tick works from this object
+        // instead of reading the telemetry singletons again. The gestational and thyroid modules
+        // have already changed `profile.sens` above, so these are the values the tick really uses.
+        // The working target is added later, where the basal schedule sets it.
+        auditorProfileTick = AuditorProfileTickState().apply {
+            profileStaticIsfMgdl = IsfSourceTelemetry.lastProfileStaticMgdl
+            dynamicIsfMgdl = ctx.profile.variable_sens
+            commandIsfMgdl = ctx.profile.sens
+            commandPreFloorIsfMgdl = CommandedIsf.lastPreFloorMgdlPerU
+            commandFloorMultiplier = IsfSourceTelemetry.lastCommandFloorMultiplier
+            profileTargetMgdl = ctx.profile.target_bg
+            tempTargetActive = ctx.profile.temptargetSet
+            keyOn = preferences.get(BooleanKey.OApsAIMIAuditorProfileFactors)
+            // Read once per tick, so every later step of the tick judges the same proposal even if
+            // a new answer lands from the auditor coroutine in the middle of the tick.
+            //
+            // Turning the auditor itself off drops whatever it had already proposed. The key
+            // dependency only hides the factor switch in the settings, it does not clear it, so
+            // without this a user who switches the auditor off would keep dosing on a cached
+            // proposal until it expired.
+            if (!preferences.get(BooleanKey.AimiAuditorEnabled)) AuditorProfileFactorCache.clear()
+            proposal = AuditorProfileFactorCache.latest()
+        }
         val rT = RT(
             algorithm = APSResult.Algorithm.AIMI,
             runningDynamicIsf = ctx.dynIsfMode,
@@ -5355,6 +5543,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 b.effort_smb_floored_by_meal = lastEffortSmbFlooredByMeal
                 b.effort_smb_armed = lastEffortSmbArmed
                 b.variable_sens_mgdl = variableSensitivity.toDouble().takeIf { it.isFinite() && it > 0.0 }
+                // Written here for the same reason as the block above: this is the one point every
+                // export path goes through, and the floor is applied thousands of lines after the
+                // decision context is built.
+                WorkingIsf.lastApplied?.let { applied ->
+                    b.stress_floor_isf_before_mgdl = applied.beforeMgdlPerU.takeIf { it.isFinite() }
+                    b.stress_floor_isf_after_mgdl = applied.afterMgdlPerU.takeIf { it.isFinite() }
+                    b.stress_floor_raised_isf = applied.raised
+                }
+                // The before/after pair above measures the late application only. A tick can be
+                // floored early — the call that guards the AutodriveV3 fallback — and never reach
+                // the late one, so without this the export would say the floor changed nothing on
+                // exactly the ticks where it changed a bolus.
+                if (WorkingIsf.raisedEarly) b.stress_floor_raised_isf = true
                 b.rise_floor_spent_u = riseFloorSpentU
                 b.rise_floor_minutes_since_contribution =
                     lastRiseFloorContributionMs
@@ -6435,17 +6636,40 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     /**
-     * Immediately after [applyEndoAndActivityAdjustments]: clamp [variableSensitivity], then physio ISF/basal/SMB factors.
+     * Immediately after [applyEndoAndActivityAdjustments]: clamp [variableSensitivity], then physio ISF/basal/SMB factors,
+     * then the stress ISF floor.
      * Mutates [variableSensitivity], [profile.max_daily_basal], [maxSMB] / [maxSMBHB] (lockout). Returns the same value
      * historically assigned to local `sens` via `variableSensitivity.toDouble()`.
+     *
+     * This is the LAST place in a tick where [variableSensitivity] changes, which is why the stress
+     * floor is applied here rather than where the value is assembled: `HeartRateTrendIsf` multiplies
+     * the same member by 0.9 on nearly the same signature, and it runs earlier (the assembly in
+     * [runTddRatesAndIsfFusionAfterContext], then the trend, then the endocrine and activity factors,
+     * then this function). The protective gesture has to win when the two fire together. The three
+     * steps live in `WorkingIsf` so a test can hold that order in place.
+     *
+     * With `BooleanKey.OApsAIMIStressIsfFloor` off, `profile.stress_floor_isf_mgdl` is null and this
+     * function is bit-for-bit what it was before.
      */
     private fun applyIsfBoundsAndPhysioMultipliersAfterEndoActivity(
         profile: OapsProfileAimi,
         physioMultipliers: PhysioMultipliersMTR,
         exerciseInsulinLockoutActive: Boolean,
     ): Double {
-        this.variableSensitivity = this.variableSensitivity.coerceIn(5.0f, 300.0f)
-        this.variableSensitivity = (this.variableSensitivity * physioMultipliers.isfFactor).toFloat()
+        this.variableSensitivity = WorkingIsf.finalize(
+            workingIsfMgdlPerU = this.variableSensitivity.toDouble(),
+            physioIsfFactor = physioMultipliers.isfFactor,
+            stressFloorIsfMgdlPerU = profile.stress_floor_isf_mgdl,
+        ).toFloat()
+        applyAuditorIsfFactorToWorkingIsf(profile)
+        WorkingIsf.lastApplied?.let { applied ->
+            val floorMgdl = applied.floorMgdlPerU ?: return@let
+            consoleLog.add(
+                "🧷 STRESS_ISF_FLOOR %.1f -> %.1f (floor %.1f)".format(
+                    Locale.US, applied.beforeMgdlPerU, applied.afterMgdlPerU, floorMgdl,
+                )
+            )
+        }
         profile.max_daily_basal = profile.max_daily_basal * physioMultipliers.basalFactor
         if (exerciseInsulinLockoutActive) {
             this.maxSMB = 0.0
@@ -6455,6 +6679,185 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         return variableSensitivity.toDouble()
     }
+
+    /**
+     * The one place the auditor's ISF factor reaches a dose.
+     *
+     * It runs straight after `WorkingIsf.finalize`, which is the last step of the dose-facing
+     * sensitivity and the step that applies the stress floor. Two things follow from that order and
+     * both are deliberate:
+     *
+     * - the factor lands on the number the SMB, the basal engine and the predictions really read,
+     *   not on the commanded ISF, which sits on a floor about half the time and would swallow it;
+     * - the floor is applied BEFORE the factor, and `AuditorProfileFactorGate.scaleIsf` may never
+     *   pull the value back under it, so a protective floor always wins over a factor that asks for
+     *   more insulin.
+     *
+     * With the opt-in key off nothing is assigned: the shadow decision is recorded and the
+     * sensitivity keeps the very bits `WorkingIsf.finalize` returned.
+     */
+    private fun applyAuditorIsfFactorToWorkingIsf(profile: OapsProfileAimi) {
+        val decision = auditorProfileTick.isfDecision ?: return
+        val raw = AuditorIsfRaw(
+            workingMgdl = this.variableSensitivity.toDouble(),
+            stressFloorMgdl = profile.stress_floor_isf_mgdl,
+            profileStaticMgdl = auditorProfileTick.profileStaticIsfMgdl,
+        )
+        val floored = AuditorProfileFactorGate.applyIsfFloor(decision, raw, auditorProfileTick.keyOn)
+        auditorProfileTick.isfDecision = floored
+        auditorProfileTick.isfPath =
+            if (floored.applied) AuditorProfileFactorCodes.PATH_APPLIED
+            else AuditorProfileFactorCodes.PATH_SHADOW
+        if (!floored.applied) return
+        auditorProfileTick.isfAppliedFactor = floored.effective
+        this.variableSensitivity = (floored.workingAdjustedMgdl ?: raw.workingMgdl).toFloat()
+        consoleLog.add(
+            "🧪 AUDITOR_ISF %.1f -> %.1f (x%.3f, floor %.1f)".format(
+                Locale.US,
+                raw.workingMgdl,
+                this.variableSensitivity.toDouble(),
+                floored.effective,
+                floored.lowerBoundMgdl ?: 0.0,
+            )
+        )
+    }
+
+    /**
+     * Judges the auditor's ISF factor against the live state of this tick. Changes nothing.
+     *
+     * It runs early, before the target decision, because the two factors share one budget and the
+     * ISF has priority. The floor step happens later, where the sensitivity is final, in
+     * [applyAuditorIsfFactorToWorkingIsf].
+     *
+     * The minimum predicted glucose comes from the PREVIOUS tick: this tick has no predictions yet.
+     */
+    private fun decideAuditorIsfFactorForTick(ctx: AimiTickContext) {
+        val glucoseStatus = ctx.glucoseStatus
+        val previous = auditorTickRing.latest()
+        val safety = TickSafety(
+            bgMgdl = glucoseStatus.glucose,
+            deltaMgdl5m = glucoseStatus.delta,
+            shortAvgDeltaMgdl5m = glucoseStatus.shortAvgDelta,
+            cgmNoise = glucoseStatus.noise,
+            hypoThresholdMgdl = HypoThresholdMath.computeHypoThreshold(ctx.profile.min_bg, ctx.profile.lgsThreshold),
+            minPredBgMgdl = previous?.minPredBgMgdl,
+            minPredThresholdMgdl = previous?.hypoThresholdMgdl,
+            minPredFromPreviousTick = true,
+            postHypoActive = lastPostHypoDeliveryAuthority.active,
+            minBg75mMgdl = minBgInLastMinutesOrNull(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
+            exerciseLockout = exerciseInsulinLockoutActive || sportTime,
+        )
+        auditorProfileTick.safetyAtA = safety
+        auditorProfileTick.isfDecision = AuditorProfileFactorGate.evaluateIsf(
+            proposal = auditorProfileTick.proposal,
+            keyOn = auditorProfileTick.keyOn,
+            tickTimestampMs = ctx.currentTime,
+            safety = safety,
+        )
+    }
+
+    /**
+     * Judges the auditor's target factor. Changes nothing, not even the local target.
+     *
+     * Every target-relative guard of the engine keeps the raw target; only the two dose formulas see
+     * the ratio, through [auditorDoseTarget]. A lower target must never be able to loosen a guard.
+     */
+    private fun decideAuditorTargetFactorForTick(
+        ctx: AimiTickContext,
+        workingTargetRawMgdl: Double,
+        hypoThresholdMgdl: Double,
+        minPredBgMgdl: Double?,
+    ) {
+        val glucoseStatus = ctx.glucoseStatus
+        val safety = TickSafety(
+            bgMgdl = glucoseStatus.glucose,
+            deltaMgdl5m = glucoseStatus.delta,
+            shortAvgDeltaMgdl5m = glucoseStatus.shortAvgDelta,
+            cgmNoise = glucoseStatus.noise,
+            hypoThresholdMgdl = hypoThresholdMgdl,
+            minPredBgMgdl = minPredBgMgdl,
+            minPredThresholdMgdl = hypoThresholdMgdl,
+            minPredFromPreviousTick = false,
+            postHypoActive = lastPostHypoDeliveryAuthority.active,
+            minBg75mMgdl = minBgInLastMinutesOrNull(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
+            exerciseLockout = exerciseInsulinLockoutActive || sportTime,
+        )
+        auditorProfileTick.safetyAtB = safety
+        val decision = AuditorProfileFactorGate.evaluateTarget(
+            proposal = auditorProfileTick.proposal,
+            keyOn = auditorProfileTick.keyOn,
+            tickTimestampMs = ctx.currentTime,
+            workingTargetRawMgdl = workingTargetRawMgdl,
+            // The shadow uses the shadow ISF factor, so the logged target is what the key being on
+            // would really have produced.
+            //
+            // Note the two points read different predictions on purpose: the early ISF point has
+            // only the previous tick's, this one has this tick's own. So a tick where the previous
+            // prediction was low and this one is not refuses the ISF (`effective` 1.0) and then hands
+            // the target the whole budget, because the budget formula reads "the ISF spent nothing".
+            // That is what the spec asks for, and the target still passes every live rule here, but
+            // the more careful A-rule does not carry over to B.
+            isfEffectiveFactor = auditorProfileTick.isfDecision?.effective ?: 1.0,
+            safety = safety,
+        )
+        auditorProfileTick.targetDecision = decision
+        auditorProfileTick.targetPath =
+            if (decision.applied) AuditorProfileFactorCodes.PATH_APPLIED
+            else AuditorProfileFactorCodes.PATH_SHADOW
+    }
+
+    /**
+     * The target one dose formula must use, bounded against that formula's own target.
+     *
+     * The two sites do not hold the same number: the SMB site reads the local working target, the
+     * basal engine reads the loop target member, and the step-activity branch moves one without the
+     * other. So the shared budget is re-computed here, on the value this site will really use, with
+     * the ISF factor that really reached the dose. A ratio decided somewhere else would not be a
+     * bound here.
+     */
+    private fun auditorDoseTarget(targetMgdl: Double, site: String): Double {
+        val decision = auditorProfileTick.targetDecision ?: return targetMgdl
+        if (!decision.applied) return targetMgdl
+        val adjusted = AuditorProfileFactorGate.targetForDoseSite(
+            targetMgdl = targetMgdl,
+            decision = decision,
+            bgMgdl = auditorProfileTick.safetyAtB?.bgMgdl ?: bg,
+            isfEffectiveFactor = auditorProfileTick.isfAppliedFactor,
+        )
+        if (adjusted == targetMgdl) return targetMgdl
+        auditorProfileTick.targetDoseSites.add(site)
+        return adjusted
+    }
+
+    /** This tick as the auditor must remember it: raw values, plus what the auditor really changed. */
+    private fun buildAuditorTickFact(ctx: AimiTickContext, profile: OapsProfileAimi): AuditorTickFact =
+        AuditorTickFact(
+            timestampMs = ctx.currentTime,
+            bgMgdl = ctx.glucoseStatus.glucose,
+            deltaMgdl5m = ctx.glucoseStatus.delta,
+            shortAvgDeltaMgdl5m = ctx.glucoseStatus.shortAvgDelta,
+            iobU = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
+            cobG = ctx.mealData.mealCOB,
+            profileIsfStaticMgdl = auditorProfileTick.profileStaticIsfMgdl,
+            dynamicIsfRawMgdl = auditorProfileTick.dynamicIsfMgdl ?: profile.variable_sens,
+            commandIsfRawMgdl = auditorProfileTick.commandIsfMgdl ?: profile.sens,
+            commandIsfPreFloorMgdl = auditorProfileTick.commandPreFloorIsfMgdl,
+            commandFloorMultiplier = auditorProfileTick.commandFloorMultiplier,
+            workingIsfRawMgdl = auditorProfileTick.isfDecision?.workingRawMgdl,
+            profileTargetMgdl = auditorProfileTick.profileTargetMgdl ?: profile.target_bg,
+            tempTargetActive = auditorProfileTick.tempTargetActive,
+            workingTargetRawMgdl = auditorProfileTick.workingTargetMgdl,
+            minPredBgMgdl = auditorProfileTick.safetyAtB?.minPredBgMgdl,
+            hypoThresholdMgdl = auditorProfileTick.safetyAtB?.hypoThresholdMgdl
+                ?: auditorProfileTick.safetyAtA?.hypoThresholdMgdl,
+            runningBasalUph = if (ctx.currentTemp.duration > 0) ctx.currentTemp.rate else profile.current_basal,
+            profileBasalUph = profile.current_basal,
+            postHypoActive = lastPostHypoDeliveryAuthority.active,
+            exerciseLockout = exerciseInsulinLockoutActive || sportTime,
+            isfFactorApplied = auditorProfileTick.isfAppliedFactor,
+            targetFactorApplied =
+                auditorProfileTick.targetDecision?.takeIf { it.applied }?.effective ?: 1.0,
+        )
 
     /**
      * PKPD eventual BG → membres + [rT], BGI / deviation 30m, eventual « legacy » pour heuristiques,
@@ -7371,6 +7774,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 } else {
                     null
                 }
+                // Measurement only — see `CorrectionAggressionBasalCap.MealBoostCapRecord`. This branch
+                // does not apply the tier ceiling itself, and it does not need to: the merged rate meets
+                // the same ceiling, with the same gate, at `FINAL_BASAL_MERGE`. The record counts how
+                // often the branch asks for more than its tier allows at the moment it asks. It is read
+                // only by the export and never by a dose. The base is `profile.current_basal`, the same
+                // one `FINAL_BASAL_MERGE` uses, so the two ceilings are comparable.
+                optionalRate?.let { requested ->
+                    mealBoostCapRecord = CorrectionAggressionBasalCap.evaluateMealBoostCap(
+                        requestedRateUph = requested,
+                        profileBasalUph = profile.current_basal,
+                        gate = aggressionDecision,
+                    )
+                }
                 consoleLog.add(
                     "🍽️ MEAL_ABSORPTION_BASAL: phase=${lastMealAbsorptionOutput?.phase?.name} " +
                         "rate=${optionalRate?.let { r -> "%.2f".format(r) } ?: "skip"}",
@@ -8224,6 +8640,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             tdd7Days = bundle.tdd7Days,
             variableSensitivity = bundle.variableSensitivity,
             profileSens = bundle.profile.sens,
+            // Carried on the profile of THIS tick, never read from a diagnostic global: `profile.sens`
+            // is the commanded value and carries both floors, and a process-global would hand this
+            // basal a value captured at another time of day.
+            preFloorCommandedSens = bundle.profile.pre_floor_isf_mgdl,
             predictedBg = bundle.predictedBg,
             targetBg = bundle.targetBg,
             minBg = bundle.profile.min_bg,
@@ -8957,6 +9377,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rtRateUph = b.rT.rate,
             gate = correctionAggressionDecision,
         )
+        // Telemetry only — see [AimiBasalMergeRecord]. Reads what the merge just did, changes nothing.
+        basalMergeRecord = AimiBasalMergeRecord(
+            engineRateUph = engineRate,
+            rtRateUph = b.rT.rate,
+            mergeMode = CorrectionAggressionBasalCap.mergeMode(correctionAggressionDecision),
+            mergeWinner = CorrectionAggressionBasalCap.mergeWinner(engineRate, b.rT.rate, mergedRate),
+        )
         var finalProposedRate = capBasalRateForCorrectionAggression(
             requestedRateUph = mergedRate,
             profileBasalUph = b.profile.current_basal,
@@ -9284,6 +9711,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val reasonTags = finalResult.reason.toString().split(". ").map { it.trim() }
                 val auditorEffectiveProfile: EffectiveProfile? = effectiveProfileCached(dateUtil.now())
                 lastAuditorAuditStartedAtMs = dateUtil.now()
+                // Captured here, not read again inside the callback: `currentTickDecisionEventId` is
+                // reset on the next tick (see its declaration), and the profile proposal can land
+                // after that has already happened.
+                val auditEventId = currentTickDecisionEventId ?: ""
+                // The audited tick itself, built the same way every ring entry is, so the window the
+                // profile checker is shown always ends on a fact of the same shape as the rest of it.
+                val currentAuditorFact = buildAuditorTickFact(b.ctx, b.profile)
+                val profileFactorRequest = AuditorProfileFactorRequest(
+                    auditEventId = auditEventId,
+                    ticks = auditorTickRing.snapshot(b.ctx.currentTime) + currentAuditorFact,
+                    mealCertainty = lastMealCertainty,
+                    mealModeName = modeType,
+                    minBg75mMgdl = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
+                    cgmNoise = b.ctx.glucoseStatus.noise,
+                    keyOn = auditorProfileTick.keyOn,
+                    contextBuiltAtMs = b.ctx.currentTime,
+                )
                 auditorOrchestrator.auditDecision(
                     bg = bg,
                     delta = delta.toDouble(),
@@ -9320,6 +9764,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     mealCertainty = lastMealCertainty,
                     harmoniaProduction = lastHarmoniaProductionDecision,
                     harmonizerOutcome = lastHarmonizerOutcome,
+                    // Null while the key is off, and the auditor then gets exactly the fields it
+                    // has always been given.
+                    levels = auditorProfileTick.snapshotLevelsIfArmed(),
+                    profileFactorRequest = profileFactorRequest,
+                    // One line per proposal, in the same JSONL the loop already writes to. The parent
+                    // event id was captured above, before this closure can run.
+                    onProfileProposal = { proposal ->
+                        appendAimiDecisionsJsonlLine(proposal.toJsonLine(auditEventId))
+                    },
                     onSyncDisposition = { disposition ->
                         recordAuditorSyncDisposition(
                             disposition = disposition,
@@ -9514,6 +9967,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             decisionCtx.baseline_state.late_fat_rise_flag = lateFatRiseFlagForExport
             decisionCtx.baseline_state.late_fat_onset_age_min =
                 MealAbsorptionMemory.onsetAgeMin(decisionCtx.timestamp)?.roundToInt()
+        }
+
+        // Measurement only — the meal-absorption boost against its tier ceiling, and the engine / rT
+        // basal merge. Nothing downstream reads these nine fields and nothing applies them.
+        runCatching {
+            decisionCtx.baseline_state.applyBasalShadowRecords(mealBoostCapRecord, basalMergeRecord)
         }
 
         // Observation only — the Harmonia counterfactual. It answers two questions and changes
@@ -9779,6 +10238,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastAuditorLoopSnapshot?.let { snapshot ->
             decisionCtx.adjustments.auditor_tick = snapshot.toJsonObject()
         }
+        // Written on every tick, key on or off: the levels the auditor works from, so a support
+        // package shows what it was given before any factor is ever applied.
+        decisionCtx.adjustments.auditor_profile_factors = auditorProfileTick.toJsonObject()
+        // Feeds the 30-minute context the next audit is judged against. Every exit path runs through
+        // this stage (main path, T3C, early exits), so the ring never misses a tick. Recorded last,
+        // after every auditor field of this tick is final, so a later audit sees exactly what this
+        // tick's own export saw.
+        auditorTickRing.record(buildAuditorTickFact(ctx, profile))
         decisionCtx.adjustments.post_hypo_delivery = PostHypoDeliveryAuthority.toJsonObject(
             decision = lastPostHypoDeliveryAuthority,
             smbBeforeCapU = lastPostHypoSmbBeforeCapU,
@@ -10186,6 +10653,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      *
      * @return `sens` (Double) pour [applyAdvancedPredictions] et le reste du tick ; peut être réassigné plus bas
      *         (ex. [applyIsfBoundsAndPhysioMultipliersAfterEndoActivity]).
+     *
+     * The stress ISF floor is applied here, on the assembled value, and **again** at the end of
+     * [applyIsfBoundsAndPhysioMultipliersAfterEndoActivity]. Both are needed and neither is enough:
+     * - here, because the AutodriveV3 stage runs between the two and falls back to
+     *   [variableSensitivity] when the PKPD runtime is missing or failed to build;
+     * - there, because `HeartRateTrendIsf` multiplies the same member by 0.9 after this point, on
+     *   nearly the same signature, and the protective gesture has to win.
+     *
+     * The floor is a `max` against a number that does not change inside a tick, so applying it twice
+     * gives exactly what applying it once gives. See `WorkingIsf.raiseToStressFloor`.
      */
     private fun runTddRatesAndIsfFusionAfterContext(
         profile: OapsProfileAimi,
@@ -10214,6 +10691,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             else -> min(fusedSensitivity, dynSensitivity)
         }
         if (sens <= 0.0) sens = baseSensitivity
+        // First of the two applications of the stress floor — see this function's KDoc. Idempotent,
+        // and inert when the key is off (`stress_floor_isf_mgdl` is null then).
+        sens = WorkingIsf.raiseToStressFloor(sens, profile.stress_floor_isf_mgdl)
         variableSensitivity = sens.toFloat()
 
         if (fusedSensitivity != null) {
@@ -11287,6 +11767,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastAuditorLoopSnapshot: AuditorJsonlExport.TickSnapshot? = null
     private var currentTickDecisionEventId: String? = null
     private var lastAuditorAuditStartedAtMs: Long = 0L
+
+    /**
+     * ISF and target of the running tick, at every level, for the auditor and for the JSONL.
+     *
+     * A fresh instance per tick, filled where the loop already holds each value. It also carries the
+     * profile factor decision of the tick; `isfAppliedFactor` is the only field a dose path reads,
+     * and it is exactly 1.0 unless the opt-in key is on.
+     */
+    private var auditorProfileTick = AuditorProfileTickState()
+
+    /**
+     * The last 45 minutes of ticks, as the engine saw them, for the auditor's 30-minute window.
+     *
+     * Written once per tick in the export stage, which every exit path runs. Read by the auditor
+     * coroutine. Empty after a restart, and the window is then incomplete, which refuses every
+     * proposal for half an hour.
+     */
+    private val auditorTickRing = AuditorTickRing()
     private val auditorFollowupAppendInProgress = AtomicBoolean(false)
     private var lastLoadGovernorMultiplierG: Double = 1.0
     private var lastPhysiologicalPhaseOutput: PhysiologicalPhaseClassifier.Output? = null
@@ -11444,6 +11942,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * [basalLearningCobGrams].
      */
     private var tickCobGrams: Double = Double.NaN
+
+    /**
+     * Tier ceiling record of the meal-absorption basal boost for the current tick, `null` when that
+     * branch did not produce a rate. Reset at the start of every tick, so a tick without the branch
+     * never repeats the previous tick's numbers. Exported to `baseline_state.meal_boost_*`.
+     */
+    private var mealBoostCapRecord: CorrectionAggressionBasalCap.MealBoostCapRecord? = null
+
+    /**
+     * What the engine / rT basal merge saw this tick. Telemetry only, nothing reads it back.
+     * Exported to `baseline_state.engine_rate_uph`, `rt_rate_uph`, `merge_mode` and `merge_winner`.
+     */
+    private var basalMergeRecord: AimiBasalMergeRecord? = null
 
     /** 🔭 Lot 0 — `true` dès qu'une ligne `AIMI_Decisions.jsonl` a été écrite pour le tick courant. */
     private var aimiDecisionExportedThisTick: Boolean = false
@@ -12759,9 +13270,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * Used for AutoDrive post-hypo rescue rebound guard (companion: AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES).
      * Returns a high sentinel if no valid points.
      */
-    private fun minBgInLastMinutes(lookbackMinutes: Int): Double {
-        val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return 200.0
-        if (data.isEmpty()) return 200.0
+    private fun minBgInLastMinutes(lookbackMinutes: Int): Double =
+        minBgInLastMinutesOrNull(lookbackMinutes) ?: 200.0
+
+    /**
+     * The same minimum, but null instead of the high sentinel when the history cannot answer.
+     *
+     * [minBgInLastMinutes] returns 200.0 when the bucketed table is missing, empty, or made only of
+     * gap-filled rows. For the engine's own rebound guard that fails open on purpose. For the auditor
+     * gate it must not: "no history" would read as "no low in 75 minutes" right after a sensor gap,
+     * which is when a low is most likely. The auditor reads this one and refuses on null.
+     */
+    private fun minBgInLastMinutesOrNull(lookbackMinutes: Int): Double? {
+        val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return null
+        if (data.isEmpty()) return null
         val nowTimestamp = data.first().timestamp
         val cutoff = nowTimestamp - lookbackMinutes * 60_000L
         var minVal = Double.MAX_VALUE
@@ -12772,7 +13294,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val v = row.recalculated
             if (v < minVal) minVal = v
         }
-        return if (minVal == Double.MAX_VALUE) 200.0 else minVal
+        return if (minVal == Double.MAX_VALUE) null else minVal
     }
 
     fun appendCompactLog(
@@ -12904,9 +13426,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         if (!risingOrFlat || !moderatelyHigh) return suggestedBasalUph
 
+        // These are multipliers on the profile basal, not percentages: 10x and 8x. In practice the number
+        // that binds is almost always [mealMaxBasalUph] below, because 8x profile basal is above it on
+        // most profiles. The multipliers themselves are being measured separately; do not change them here.
         val boostFactor = when {
-            veryHigh -> 10    // ex : 250+ → +50 %
-            else -> 8       // ex : 180–250 → +25 %
+            veryHigh -> 10  // 10x profile basal, e.g. target 100 and BG above 190
+            else -> 8       // 8x profile basal, e.g. target 100 and BG 130 to 190
         }
 
         val boosted = suggestedBasalUph * boostFactor
@@ -17711,6 +18236,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Causal censoring of the basal label needs the carbs of THIS tick, and the basal-learning hook
         // runs on paths that have no access to `ctx`. See [basalLearningCobGrams].
         tickCobGrams = ctx.mealData.mealCOB.takeIf { it.isFinite() && it >= 0.0 } ?: Double.NaN
+        // Shadow records of this tick only. Cleared here so a tick that does not reach the meal boost
+        // branch or the basal merge exports nothing instead of the previous tick's numbers.
+        mealBoostCapRecord = null
+        basalMergeRecord = null
         val (
             originalProfile,
             isExplicitAdvisorRun,
@@ -17781,6 +18310,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
             reason = StringBuilder(),
         )
+
+        // Judges the auditor's ISF factor against this tick. It changes nothing here: the value is
+        // put on the dose-facing sensitivity later, under its floor. It has to be decided before the
+        // target, because the two factors share one budget and the ISF has priority.
+        decideAuditorIsfFactorForTick(ctx)
 
         val activeModeName = when (val mealModesGate = runManualMealModesAfterTherapyGate(ctx, profile, rT)) {
             is AimiManualMealModesGate.ReturnEarly -> return mealModesGate.rT
@@ -18070,6 +18604,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         var basal = basalScheduleBasal
         var target_bg = basalScheduleTargetBg
+        // The target the engine really works with, before any later adjustment. Observation only:
+        // the auditor is told this level next to the profile target. A tick that ends earlier never
+        // reaches this line, and the field then stays null, which is what the JSONL reports.
+        auditorProfileTick.workingTargetMgdl = target_bg
+        // The target decision itself is NOT taken here: it needs the ISF factor's final, floor-
+        // adjusted effective value for the combined bound (see the call below,
+        // `applyIsfBoundsAndPhysioMultipliersAfterEndoActivity` is where that floor is decided), and
+        // that runs later in this same tick. `target_bg`, `threshold` and `minBg` are read there, not
+        // reassigned between here and there, so capturing `workingTargetMgdl` this early is still the
+        // pre-adjustment value the spec asks for.
         var min_bg = basalScheduleMinBg
         var max_bg = basalScheduleMaxBg
         var sensitivityRatio = basalScheduleSensitivityRatio
@@ -18115,6 +18659,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             profile = profile,
             physioMultipliers = physioMultipliers,
             exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
+        )
+        // Judges the auditor's target factor now, not at the basal-schedule bootstrap: the combined
+        // bound (`AuditorProfileFactorGate.combinedTargetBudgetMgdl`) needs the ISF factor's final
+        // effective value, after the stress floor of `applyIsfBoundsAndPhysioMultipliersAfterEndoActivity`
+        // has had its say — the ISF is applied first and has priority, so the target must see what is
+        // really left, not the pre-floor request. `target_bg`, `threshold` and `minBg` are unchanged
+        // since the basal-schedule bootstrap above, so this is still the tick's raw working target.
+        decideAuditorTargetFactorForTick(
+            ctx = ctx,
+            workingTargetRawMgdl = target_bg,
+            hypoThresholdMgdl = threshold,
+            minPredBgMgdl = minBg,
         )
         trajectoryGuard.getLastAnalysis()?.takeIf { it.classification == TrajectoryType.TIGHT_SPIRAL }?.let { analysis ->
             applyTrajectoryTightSpiralStandardSmbCapIfNeeded(
@@ -18184,7 +18740,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             sens = sens,
             tp = tp,
             variableSensitivity = variableSensitivity,
-            targetBg = target_bg,
+            // The only SMB site that sees the auditor's target ratio. Every target-relative guard
+            // above still reads the raw `target_bg`.
+            targetBg = auditorDoseTarget(target_bg, AuditorProfileFactorCodes.DOSE_SITE_SMB),
             basalaimi = basalaimi,
             basal = basal,
             honeymoon = honeymoon,
@@ -18417,7 +18975,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 tdd7Days = tdd7Days,
                 variableSensitivity = variableSensitivity.toDouble(),
                 predictedBg = predictedBg.toDouble(),
-                targetBg = targetBg.toDouble(),
+                // The only basal site that sees the auditor's target ratio. The member `targetBg`
+                // itself is never reassigned, so the learners and the ML CSV keep the raw value.
+                targetBg = auditorDoseTarget(targetBg.toDouble(), AuditorProfileFactorCodes.DOSE_SITE_BASAL),
                 tickIobForEngine = iob.toDouble(),
                 engineMaxIob = maxIob,
                 eventualBg = eventualBG,

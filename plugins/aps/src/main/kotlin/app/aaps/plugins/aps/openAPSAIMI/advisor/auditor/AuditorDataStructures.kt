@@ -153,7 +153,15 @@ data class Snapshot(
     val decisionAimi: DecisionSnapshot,
     
     // Last delivery
-    val lastDelivery: LastDeliverySnapshot
+    val lastDelivery: LastDeliverySnapshot,
+
+    /**
+     * ISF and target at every level the loop really has.
+     *
+     * Null keeps the three old fields `isfProfile`, `isfUsed` and `target`, which hold dynamic
+     * values under profile names. When it is given, those three are replaced by the correct levels.
+     */
+    val levels: SnapshotIsfTargetLevels? = null
 ) {
     fun toJSON(): JSONObject = JSONObject().apply {
         put("bg", bg)
@@ -167,10 +175,23 @@ data class Snapshot(
         put("iob", iob)
         put("iobActivity", iobActivity)
         put("cob", cob)
-        put("isfProfile", isfProfile)
-        put("isfUsed", isfUsed)
-        put("ic", ic)
-        put("target", target)
+        if (levels != null) {
+            // org.json DROPS a key whose value is a null reference, and the prompt tells the model
+            // these fields read `null` when they are not known. Write the explicit JSON null.
+            put("isfProfileStatic", levels.isfProfileStatic ?: JSONObject.NULL)
+            put("isfDynamic", levels.isfDynamic)
+            put("isfCommand", levels.isfCommand)
+            put("isfCommandOverProfile", levels.isfCommandOverProfile ?: JSONObject.NULL)
+            put("isfOnProfileFloor", levels.isfOnProfileFloor)
+            put("ic", ic)
+            put("targetProfile", levels.targetProfile)
+            put("targetWorking", levels.targetWorking ?: JSONObject.NULL)
+        } else {
+            put("isfProfile", isfProfile)
+            put("isfUsed", isfUsed)
+            put("ic", ic)
+            put("target", target)
+        }
         put("pkpd", pkpd.toJSON())
         put("activity", activity.toJSON())
         if (physio != null) put("physio", physio.toJSON())

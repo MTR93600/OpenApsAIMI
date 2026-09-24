@@ -80,6 +80,27 @@ class GarminPlugin @Inject constructor(
     companion object {
         private const val PREF_GARMIN_LAST_STEPS = "garmin_http_last_steps"
         private const val PREF_GARMIN_LAST_TS = "garmin_http_last_steps_ts"
+
+        /** Keywords accepted from Garmin /mode (must match therapy.kt detection). */
+        private val ALLOWED_THERAPY_MODES = setOf(
+            "bfast", "lunch", "dinner", "highcarb", "fcl", "sport", "stop", "meal", "snack"
+        )
+
+        private val DEFAULT_MODE_DURATIONS_MIN = mapOf(
+            "bfast" to 60,
+            "lunch" to 60,
+            "dinner" to 60,
+            "highcarb" to 90,
+            "fcl" to 30,
+            "sport" to 120,
+            "meal" to 60,
+            "snack" to 30,
+            "stop" to 1,
+        )
+
+        /** FCL companion temporary target (mg/dL) — ends FCL meal basal with the TT. */
+        private const val FCL_TEMP_TARGET_MGDL = 80.0
+        private const val FCL_TEMP_TARGET_DURATION_MIN = 30
     }
 
     @VisibleForTesting
@@ -171,6 +192,7 @@ class GarminPlugin @Inject constructor(
                 registerEndpoint("/carbs", requestHandler(::onPostCarbs))
                 registerEndpoint("/bolus", requestHandler(::onPostBolus))
                 registerEndpoint("/temptarget", requestHandler(::onPostTempTarget))
+                registerEndpoint("/mode", requestHandler(::onPostMode))
                 registerEndpoint("/connect", requestHandler(::onConnectPump))
                 registerEndpoint("/sgv.json", requestHandler(::onSgv))
                 awaitReady(wait)
@@ -723,6 +745,28 @@ class GarminPlugin @Inject constructor(
         val duration: Int = getQueryParameter(uri, "duration", 0)
         loopHub.postTempTarget(target, duration)
         return ""
+    }
+
+    /**
+     * Activates an AIMI mode from the watch.
+     * NOTE text = keyword only; duration query sets TherapyEvent.duration.
+     * FCL also starts a temporary target 80 mg/dL for 30 minutes.
+     * Query: /mode?mode=lunch&duration=60&key=...
+     */
+    @VisibleForTesting
+    fun onPostMode(uri: URI): CharSequence {
+        val rawMode = getQueryParameter(uri, "mode")?.trim()?.lowercase().orEmpty()
+        if (rawMode.isEmpty() || rawMode !in ALLOWED_THERAPY_MODES) {
+            aapsLogger.warn(LTag.GARMIN, "Rejected therapy mode '$rawMode'")
+            return """{"ok":false,"error":"invalid_mode"}"""
+        }
+        val defaultDuration = DEFAULT_MODE_DURATIONS_MIN[rawMode] ?: 60
+        val duration = getQueryParameter(uri, "duration", defaultDuration).coerceIn(0, 480)
+        loopHub.postTherapyMode(rawMode, duration)
+        if (rawMode == "fcl") {
+            loopHub.postTempTarget(FCL_TEMP_TARGET_MGDL, FCL_TEMP_TARGET_DURATION_MIN)
+        }
+        return """{"ok":true,"mode":"$rawMode","duration":$duration}"""
     }
     // end mod
 

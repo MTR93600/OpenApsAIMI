@@ -596,6 +596,27 @@ enum class BooleanKey(
     ),
     OApsAIMIUnifiedReactivityEnabled("key_use_unified_reactivity", true),  // 🎯 NEW: Enable UnifiedReactivityLearner
     AimiAuditorEnabled("aimi_auditor_enabled", false),  // 🧠 AI Decision Auditor
+
+    /**
+     * Opt-in: let the AI auditor move the ISF and the glucose target by at most 15 %, up or down.
+     *
+     * The factor comes from a separate LLM request made after each external audit. Kotlin checks
+     * every number the LLM quotes against the last 30 minutes, refuses more insulin in any
+     * low-glucose context, keeps the ISF above its profile floor, and caps ISF + target together at
+     * the effect of a single 15 % change. A factor for more insulin lives 15 minutes, a factor for
+     * less insulin 30 minutes. All dose limits still apply after it.
+     *
+     * With this key off nothing changes: the auditor gets the fields it has always been sent, and
+     * the ISF and target levels of every tick are written to AIMI_Decisions.jsonl
+     * (`adjustments.auditor_profile_factors`) for study only.
+     */
+    OApsAIMIAuditorProfileFactors(
+        key = "key_aimi_auditor_profile_factors",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_auditor_profile_factors,
+        summaryResId = R.string.pref_summary_aimi_auditor_profile_factors,
+        dependency = AimiAuditorEnabled,
+    ),
     OApsAIMITrajectoryGuardEnabled("key_aimi_trajectory_guard_enabled", false),  // 🌀 Phase-Space Trajectory Control
     /** Discrete tube + straight-command regularizer on max SMB (uses PKPD min-pred curve). Off by default. */
     OApsAIMIStraightLineTubeAdvisorEnabled(

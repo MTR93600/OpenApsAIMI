@@ -70,6 +70,9 @@ class AuditorOrchestrator @Inject constructor(
     
     // Rate limiting
     private var lastAuditTime: Long = 0L
+
+    /** When the last profile factor request was sent, for `AuditorProfileFactorRateLimit`. */
+    private var lastProfileFactorRequestMs: Long = 0L
     private val MIN_AUDIT_INTERVAL_ROUTINE_MS = 60 * 60 * 1000L // 60 min (Routine)
     private val MIN_AUDIT_INTERVAL_DRIFT_MS = 45 * 60 * 1000L // 45 min (Slow Drift)
     private val MIN_AUDIT_INTERVAL_RISK_MS = 30 * 60 * 1000L // 30 min (High Risk)
@@ -115,6 +118,11 @@ class AuditorOrchestrator @Inject constructor(
      * @param predictionAvailable Is prediction available
      * @param inPrebolusWindow Is in prebolus window (P1/P2)
      * @param effectiveProfile When non-null, trajectory history for the auditor uses time-correct IOB samples.
+     * @param levels ISF and target of the tick at every level. Null keeps the old snapshot fields.
+     * @param profileFactorRequest Everything the separate profile check needs. Null skips that
+     *   second request, which is what every old caller and every old test gets.
+     * @param onProfileProposal Called once per profile check, with the validated proposal, so the
+     *   loop can write its one JSONL line. It is called whether the opt-in key is on or off.
      * @param callback Optional callback with verdict and modulated decision
      */
     /** Last Tier-1 Sentinel advice — coherence-agreement "gendarme" score, exposed for JSONL telemetry. */
@@ -158,6 +166,9 @@ class AuditorOrchestrator @Inject constructor(
         mealCertainty: MealCertainty? = null,
         harmoniaProduction: HarmoniaProductionDecision? = null,
         harmonizerOutcome: HarmoniaHarmonizer.Outcome? = null,
+        levels: SnapshotIsfTargetLevels? = null,
+        profileFactorRequest: AuditorProfileFactorRequest? = null,
+        onProfileProposal: (AuditorProfileProposal) -> Unit = {},
         onSyncDisposition: (AuditorJsonlExport.TickDisposition) -> Unit = {},
         callback: ((AuditorVerdict?, DecisionResult) -> Unit)? = null
     ) {
@@ -368,6 +379,7 @@ class AuditorOrchestrator @Inject constructor(
                     harmonizerOutcome = harmonizerOutcome,
                     physiologicalPatterns = AimiCascadeArbitrationArtifacts.physiologicalPatterns(),
                     harmoniaSmbAuthority = AimiCascadeArbitrationArtifacts.harmoniaSmbAuthority(),
+                    levels = levels,
                 )
                 
                 // Get provider
@@ -378,7 +390,10 @@ class AuditorOrchestrator @Inject constructor(
                 
                 // Call AI (Pass complexity flag)
                 val useHighPerf = (triggerType == TriggerType.HIGH_RISK || triggerType == TriggerType.MEAL)
-                val verdict = aiService.getVerdict(input, provider, timeoutMs, useHighPerf)
+                val verdict = aiService.getVerdict(
+                    input, provider, timeoutMs, useHighPerf,
+                    profileFactorsArmed = profileFactorRequest?.keyOn == true,
+                )
                 
                 // Update rate limiting
                 updateRateLimit(now, triggerType)
@@ -434,6 +449,16 @@ class AuditorOrchestrator @Inject constructor(
                     auditorStatusLiveData.notifyUpdate()
                     
                     callback?.invoke(guardedVerdict, modulated)
+
+                    // The profile check runs only AFTER the verdict has been delivered, so it can
+                    // never delay or change the path that already moves doses today.
+                    runProfileFactorRequest(
+                        request = profileFactorRequest,
+                        verdict = guardedVerdict,
+                        provider = provider,
+                        timeoutMs = timeoutMs,
+                        onProfileProposal = onProfileProposal,
+                    )
                 } else {
                     aapsLogger.warn(LTag.APS, "AI Auditor: No verdict received (timeout or error)")
                     stateManager.transitionTo(AuditorUIState.Error("Timeout: No verdict received"), "External timeout")
@@ -448,6 +473,79 @@ class AuditorOrchestrator @Inject constructor(
         }
     }
     
+    /**
+     * The second, separate request: the profile check.
+     *
+     * It is sent whether the opt-in key is on or off. With the key off the answer is still parsed,
+     * still checked, still published and still written to the log, marked `advisory_only`. That
+     * shadow is the whole point: weeks of it are needed before anyone can say whether the factors
+     * are worth applying.
+     *
+     * It is sent at most once every 15 minutes
+     * (`AuditorProfileFactorLimits.REQUEST_MIN_INTERVAL_MS`) and only after a verdict that really
+     * came back. It is a second call on the same provider key as that verdict, and in soft
+     * modulation the verdict moves real doses, so a quota burned by the shadow would reach today's
+     * dosing through a failed verdict. Fifteen minutes is also the shortest life of a factor, so the
+     * limit costs nothing.
+     *
+     * Its own try/catch. Whatever happens here, the main verdict has already been delivered and
+     * nothing can reach it any more.
+     */
+    private suspend fun runProfileFactorRequest(
+        request: AuditorProfileFactorRequest?,
+        verdict: AuditorVerdict,
+        provider: AuditorAIService.Provider,
+        timeoutMs: Long,
+        onProfileProposal: (AuditorProfileProposal) -> Unit,
+    ) {
+        if (request == null) return
+        val now = System.currentTimeMillis()
+        if (!AuditorProfileFactorRateLimit.allow(now, lastProfileFactorRequestMs)) {
+            aapsLogger.info(LTag.APS, "🧪 Profile factors: skipped, one request per 15 minutes")
+            return
+        }
+        lastProfileFactorRequestMs = now
+        try {
+            val context = dataCollector.buildProfileContext30m(
+                ticks = request.ticks,
+                nowMs = request.contextBuiltAtMs,
+                mealCertainty = request.mealCertainty,
+                mealModeName = request.mealModeName,
+                minBg75mMgdl = request.minBg75mMgdl,
+                cgmNoise = request.cgmNoise,
+            )
+            val contextJson = context.toPromptJson().toString()
+            val sentAtMs = System.currentTimeMillis()
+            val output = aiService.getProfileFactorProposal(
+                prompt = AuditorProfileFactorPromptBuilder.buildPrompt(context, verdict),
+                provider = provider,
+                timeoutMs = timeoutMs,
+            )
+            val receivedAtMs = System.currentTimeMillis()
+            val proposal = AuditorProfileFactorValidator.validate(
+                output = output,
+                context = context,
+                minConfidence = preferences.get(IntKey.AimiAuditorMinConfidence) / 100.0,
+                auditId = request.auditEventId,
+                receivedAtMs = receivedAtMs,
+                keyOnAtArrival = request.keyOn,
+                providerName = provider.name,
+                mainVerdictName = verdict.verdict.name,
+                latencyMs = receivedAtMs - sentAtMs,
+                contextJson = contextJson,
+            )
+            AuditorProfileFactorCache.publish(proposal)
+            aapsLogger.info(
+                LTag.APS,
+                "🧪 Profile factors: isf=${proposal.isfFactor} target=${proposal.targetFactor} " +
+                    "dir=${proposal.direction} refused=${proposal.refusedBy} keyOn=${request.keyOn}",
+            )
+            onProfileProposal(proposal)
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "AI Auditor: profile factor request failed", e)
+        }
+    }
+
     /**
      * Check if auditor is enabled in preferences
      */

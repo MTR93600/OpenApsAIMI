@@ -56,15 +56,18 @@ class AuditorAIService @Inject constructor(
      * @param input Complete auditor input
      * @param provider AI provider to use
      * @param timeoutMs Timeout in milliseconds
+     * @param profileFactorsArmed True when the user opted in to the profile factors. It only swaps
+     *   one rule line of the prompt; with false the prompt is exactly the one of before.
      * @return Auditor verdict or null if failed/timeout
      */
     suspend fun getVerdict(
         input: AuditorInput,
         provider: Provider,
         timeoutMs: Long = DEFAULT_TIMEOUT_MS,
-        useHighPerf: Boolean = false
+        useHighPerf: Boolean = false,
+        profileFactorsArmed: Boolean = false
     ): AuditorVerdict? = withContext(Dispatchers.IO) {
-        
+
         // Get API key
         val apiKey = getApiKey(provider)
         if (apiKey.isBlank()) {
@@ -72,9 +75,9 @@ class AuditorAIService @Inject constructor(
             auditorStatusLiveData.notifyUpdate()
             return@withContext null
         }
-        
+
         // Build prompt
-        val prompt = AuditorPromptBuilder.buildPrompt(input)
+        val prompt = AuditorPromptBuilder.buildPrompt(input, profileFactorsArmed)
         
         // --- ROCKET SAUVAGE: RETRY LOGIC (3 attempts) ---
         var lastException: Exception? = null
@@ -364,21 +367,54 @@ class AuditorAIService @Inject constructor(
     }
     
     /**
-     * Parse verdict from API response
+     * Asks the profile checker for its two factors. One attempt, never null, never throws.
+     *
+     * It is a separate request on purpose, sent after the main verdict has already been handled, so
+     * it cannot delay or change the verdict path in any way. It deliberately does NOT touch
+     * [AuditorStatusTracker]: the status the user sees stays the status of the main verdict.
+     *
+     * Every failure — no key, timeout, network, bad JSON — comes back as a neutral answer that
+     * carries its reason, so the log always has one line per request.
      */
-    private fun parseVerdict(responseJson: String, provider: Provider): AuditorVerdict {
+    suspend fun getProfileFactorProposal(
+        prompt: String,
+        provider: Provider,
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS
+    ): AuditorProfileFactorLlmOutput = withContext(Dispatchers.IO) {
+        val apiKey = getApiKey(provider)
+        if (apiKey.isBlank()) return@withContext AuditorProfileFactorLlmOutput.failed("no_api_key")
+        try {
+            val responseJson = withTimeoutOrNull(timeoutMs) {
+                when (provider) {
+                    Provider.OPENAI   -> callOpenAI(apiKey, prompt, useHighPerf = false)
+                    Provider.GEMINI   -> callGemini(apiKey, prompt, useHighPerf = false)
+                    Provider.DEEPSEEK -> callDeepSeek(apiKey, prompt)
+                    Provider.CLAUDE   -> callClaude(apiKey, prompt, useHighPerf = false)
+                }
+            } ?: return@withContext AuditorProfileFactorLlmOutput.failed("timeout")
+            val text = extractContentText(responseJson, provider)
+            return@withContext AuditorProfileFactorParser.parse(text)
+        } catch (e: Exception) {
+            return@withContext AuditorProfileFactorLlmOutput.failed("exception:${e.javaClass.simpleName}")
+        }
+    }
+
+    /**
+     * Pulls the model's own text out of the provider envelope and strips a code fence.
+     *
+     * Shared by the verdict and by the profile check, so both read the same four provider shapes.
+     */
+    private fun extractContentText(responseJson: String, provider: Provider): String {
         val root = JSONObject(responseJson)
-        
+
         val contentJson = when (provider) {
             Provider.OPENAI, Provider.DEEPSEEK -> {
-                // OpenAI/DeepSeek format: choices[0].message.content
                 root.getJSONArray("choices")
                     .getJSONObject(0)
                     .getJSONObject("message")
                     .getString("content")
             }
-            Provider.GEMINI -> {
-                // Gemini format: candidates[0].content.parts[0].text
+            Provider.GEMINI                    -> {
                 root.getJSONArray("candidates")
                     .getJSONObject(0)
                     .getJSONObject("content")
@@ -386,16 +422,14 @@ class AuditorAIService @Inject constructor(
                     .getJSONObject(0)
                     .getString("text")
             }
-            Provider.CLAUDE -> {
-                // Claude format: content[0].text
+            Provider.CLAUDE                    -> {
                 root.getJSONArray("content")
                     .getJSONObject(0)
                     .getString("text")
             }
         }
-        
-        // Extract JSON from markdown code block if present
-        val jsonStr = if (contentJson.contains("```json")) {
+
+        return if (contentJson.contains("```json")) {
             contentJson.substringAfter("```json")
                 .substringBefore("```")
                 .trim()
@@ -406,7 +440,14 @@ class AuditorAIService @Inject constructor(
         } else {
             contentJson.trim()
         }
-        
+    }
+
+    /**
+     * Parse verdict from API response
+     */
+    private fun parseVerdict(responseJson: String, provider: Provider): AuditorVerdict {
+        val jsonStr = extractContentText(responseJson, provider)
+
         // Parse verdict JSON
         val verdictJson = JSONObject(jsonStr)
         val verdict = AuditorVerdict.fromJSON(verdictJson)

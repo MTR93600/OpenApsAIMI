@@ -206,6 +206,10 @@
     <string name="glass_skin_description">GLASS</string>
     <string name="dashboard_v2_reservoir">Reservoir</string>
     <string name="dashboard_v2_battery">Battery</string>
+    <string name="dashboard_glass_tir_empty" comment="TIR = time in range. Shown early in the day, when there is not enough data yet.">TIR --</string>
+    <string name="dashboard_glass_tir_value" comment="TIR = time in range today. %1$s=percent. Example: TIR 78%">TIR %1$s</string>
+    <string name="dashboard_glass_tir_up" comment="TIR = time in range today, better than yesterday. %1$s=percent today, %2$d=points gained vs yesterday. Example: TIR 78% ↑6">TIR %1$s ↑%2$d</string>
+    <string name="dashboard_glass_tir_down" comment="TIR = time in range today, worse than yesterday. %1$s=percent today, %2$d=points lost vs yesterday. Example: TIR 72% ↓4">TIR %1$s ↓%2$d</string>
     <string name="dashboard_glass_loop_label">Loop</string>
     <string name="dashboard_glass_iob_label">IOB</string>
     <string name="dashboard_glass_target_label">Target</string>
@@ -268,6 +272,19 @@
     <string name="dashboard_glass_loop_ml_circuit_closed">Training active</string>
     <string name="dashboard_glass_loop_ml_never_trained">Never trained yet</string>
     <string name="dashboard_glass_loop_ml_training_stale">Training subsystem not started yet</string>
+    <string name="dashboard_glass_loop_ml_smb_label">SMB training</string>
+    <string name="dashboard_glass_loop_ml_smb_status_value" comment="%1$s=what happened, already translated, e.g. Trained; %2$s=relative time e.g. 5 minutes ago">%1$s (%2$s)</string>
+    <string name="dashboard_glass_loop_ml_smb_never_attempted">Never attempted yet</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_trained">Trained</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_no_csv">No data file yet</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_refused_header">Data file refused: wrong columns</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_too_few_samples">Not enough usable rows</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_rejected">Model rejected by a quality check</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_error">Training failed with an error</string>
+    <string name="dashboard_glass_loop_ml_smb_detail_label">SMB training detail</string>
+    <string name="dashboard_glass_loop_ml_smb_rows" comment="%1$d=rows kept by the quality filter, %2$d=rows dropped by it. Example: 260 rows kept, 1740 dropped">%1$d rows kept, %2$d dropped</string>
+    <string name="dashboard_glass_loop_ml_smb_waiting_not_due">Waiting: next attempt not due yet</string>
+    <string name="dashboard_glass_loop_ml_smb_waiting_circuit_open">Waiting: training paused after repeated failures</string>
     <string name="dashboard_glass_loop_ml_files_title">Model Files</string>
     <string name="dashboard_glass_loop_ml_file_basal_label">Basal model</string>
     <string name="dashboard_glass_loop_ml_file_smb_label">SMB model</string>

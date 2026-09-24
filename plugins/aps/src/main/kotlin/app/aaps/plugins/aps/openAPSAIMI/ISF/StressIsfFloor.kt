@@ -25,8 +25,18 @@ import java.util.Locale
  * It is pure: it holds no state, reads no clock and touches no preference. The caller keeps
  * [Verdict.signatureSinceMs] and [Verdict.lastEvaluatedMs] and feeds them back on the next tick. It
  * decides nothing about insulin either — it only reports the signature. The dose side of the gesture
- * is a floor multiplier handed to [DynamicSensitivityPolicy.floorAgainstProfile], and raising the
- * commanded sensitivity can only make a dose smaller, never larger.
+ * is a floor multiplier handed to [DynamicSensitivityPolicy.floorAgainstProfile] for the commanded
+ * sensitivity, and the same floor carried to the dose paths as `OapsProfileAimi.stress_floor_isf_mgdl`
+ * and applied in `WorkingIsf`.
+ *
+ * Raising a sensitivity makes the dose smaller on every path that divides by it, which is all the
+ * arithmetic ones. It is not a guarantee on the legacy neural refinement path, where the same number
+ * is an input feature and the model's answer is not monotone in it; that exception is written out in
+ * full in `WorkingIsf`.
+ *
+ * The second half was added because the first one barely reached the insulin: every SMB path rebuilds
+ * its own sensitivity from the PKPD fusion and `variable_sens`, and measured end to end only 16 % to
+ * 42 % of the lift ever arrived.
  *
  * There is **no time window**: the signature is evaluated 24 hours a day.
  */
@@ -37,6 +47,12 @@ object StressIsfFloor {
      *
      * The 15 measured episodes were selected with this threshold. On the real case of 2026-09-12 the
      * heart rate was 82 against a resting rate of 50, an excess of 32.
+     *
+     * The threshold is unchanged, but the resting rate it is measured against is not. It used to be
+     * the lowest SLEEPING value of the last seven days, pinned at 50 bpm, so the real trigger was
+     * "heart rate at least 70" and the signature held for half of every day. The caller now passes an
+     * AWAKE resting rate, measured at 69 bpm over 275 hours, so the same +20 lands at 86 to 91 bpm
+     * and the signature holds about 4 % of the time. See `AwakeRestingHeartRate`.
      */
     const val HR_ABOVE_RESTING_BPM: Int = 20
 
@@ -97,8 +113,18 @@ object StressIsfFloor {
      */
     const val ARMED_FLOOR_MULTIPLIER: Double = 1.0
 
-    /** Heart rate or resting heart rate missing from the export. Never activates anything. */
+    /** Heart rate missing. Never activates anything. */
     const val REASON_NO_HR: String = "no_hr"
+
+    /**
+     * The heart rate is there but the resting baseline is not. Never activates anything.
+     *
+     * A separate code on purpose. The caller passes a resting rate of 0 when no honest awake baseline
+     * could be measured, and a support package must not read "no heart rate" on a tick that has a
+     * perfectly good one. The export says the same thing in a field,
+     * `stress_floor_awake_resting_bpm`, but the reason string is what gets read first.
+     */
+    const val REASON_NO_BASELINE: String = "no_baseline"
 
     /** The signature does not hold at this instant. */
     const val REASON_NO_SIGNATURE: String = "no_signature"
@@ -158,9 +184,9 @@ object StressIsfFloor {
      * @param breakStartedMs the instant the signature stopped holding while the floor was still on,
      *   or null when it holds. The caller stores it and feeds it back so the grace time can be
      *   measured across ticks.
-     * @param reason a code taken from [REASON_NO_HR], [REASON_NO_SIGNATURE], [REASON_GAP_RESTART],
-     *   [REASON_HOLDING], [REASON_ACTIVE] or [REASON_EXIT_GRACE], followed by the live values that
-     *   produced it.
+     * @param reason a code taken from [REASON_NO_HR], [REASON_NO_BASELINE], [REASON_NO_SIGNATURE],
+     *   [REASON_GAP_RESTART], [REASON_HOLDING], [REASON_ACTIVE] or [REASON_EXIT_GRACE], followed by
+     *   the live values that produced it.
      */
     data class Verdict(
         val active: Boolean,
@@ -181,8 +207,10 @@ object StressIsfFloor {
      *
      * Hard rules, in order:
      * 1. A heart rate or a resting heart rate of zero or less is **missing data**, not a calm patient.
-     *    In this export an absent heart rate is written as 0. Missing data never activates a gesture,
-     *    so the verdict is inactive with [REASON_NO_HR].
+     *    In this export an absent heart rate is written as 0, and the caller passes a resting rate of
+     *    0 when no honest awake baseline could be measured. Missing data never activates a gesture,
+     *    and it drops an active floor at once, with no grace: the verdict is inactive with
+     *    [REASON_NO_HR] or [REASON_NO_BASELINE] depending on which of the two is missing.
      * 2. Getting in and getting out are not the same test. To turn the floor **on**, the signature
      *    must hold without a break for [MIN_HELD_MINUTES]. To turn an already active floor **off**,
      *    the signature must stop holding for [EXIT_GRACE_MINUTES]. In between, the floor stays on
@@ -226,12 +254,16 @@ object StressIsfFloor {
         breakHrBpm: Int? = null,
     ): Verdict {
         if (hrNowBpm <= 0 || rhrRestingBpm <= 0) {
+            // Missing data drops the floor at once, with no grace and no rise hold: those two branches
+            // sit below this guard and cannot be reached from here, whatever `wasActive` says. That is
+            // deliberate — a protection may not be held by a number nobody could read.
+            val code = if (hrNowBpm > 0) REASON_NO_BASELINE else REASON_NO_HR
             return Verdict(
                 active = false,
                 heldMinutes = 0.0,
                 signatureSinceMs = null,
                 lastEvaluatedMs = nowMs,
-                reason = "$REASON_NO_HR hr=$hrNowBpm rest=$rhrRestingBpm steps15=$stepsLast15m",
+                reason = "$code hr=$hrNowBpm rest=$rhrRestingBpm steps15=$stepsLast15m",
                 breakStartedMs = null,
                 breakHrBpm = null,
             )

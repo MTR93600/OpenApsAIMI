@@ -44,4 +44,6 @@ data class GlassLoopDashboardState(
     val mlCircuitOpen: Boolean = false,
     val basalModelFileText: String = "--",
     val smbModelFileText: String = "--",
+    val smbTrainingStatusText: String = "--",
+    val smbTrainingDetailText: String = "",
 )

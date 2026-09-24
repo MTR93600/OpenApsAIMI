@@ -95,8 +95,13 @@ class KalmanISFCalculator(
          * an absolute number: it follows the profile ISF and the TDD, so it moves with them.
          *
          * It can only raise the fast estimate. A higher ISF makes the loop assume insulin acts more
-         * strongly, so it doses less. The floor can therefore only make a dose smaller, never
-         * larger.
+         * strongly, so on every arithmetic dose path it doses less.
+         *
+         * That is not a guarantee on the neural path. The working sensitivity also reaches
+         * `insulinEffect = iob * variableSensitivity / insulinDivisor`, which feeds the trend
+         * indicator FEATURE of the SMB refinement network, and a model's answer is not monotone in
+         * one of its inputs. What bounds that path is the model's own correction clamp of
+         * `min(0.05 U, 25 % of the dose)`, not this floor. See `ISF/WorkingIsf`.
          *
          * In steady state it decides nothing. `OpenAPSAIMIPlugin` takes `max(kalmanFastIsf, isfAdj)`
          * and the blend inside `IsfAdjustmentEngine` cannot fall below 0.58 times the profile ISF

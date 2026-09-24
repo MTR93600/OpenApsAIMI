@@ -54,6 +54,7 @@ import app.aaps.plugins.main.general.dashboard.DashboardV2ToolAction
 import app.aaps.plugins.main.general.dashboard.DashboardV2ToolsScreen
 import app.aaps.plugins.main.general.dashboard.viewmodel.OverviewViewModel
 import app.aaps.plugins.main.general.dashboard.viewmodel.StatusCardState
+import kotlin.math.roundToInt
 import app.aaps.ui.compose.overview.graphs.ChartConfig
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
 import app.aaps.ui.compose.overview.statusLights.StatusItem
@@ -512,5 +513,18 @@ internal fun buildGlassUiState(
         hrText = status.hrText ?: "--",
         lastBolusText = treatmentData.boluses.filter { it.isValid && it.timestamp <= System.currentTimeMillis() }.maxByOrNull { it.timestamp }?.label ?: "--",
         lastCarbsText = treatmentData.carbs.filter { it.isValid && it.timestamp <= System.currentTimeMillis() }.maxByOrNull { it.timestamp }?.label ?: "--",
+        tir = buildGlassTir(status),
+    )
+}
+
+/** Reuses the TIR-of-day already computed by the dashboard ViewModel: no extra DB read here. */
+private fun buildGlassTir(status: StatusCardState): GlassTir? {
+    if (!status.tirDayReady) return null
+    val inRange = status.tirTarget ?: return null
+    return GlassTir(
+        belowPct = ((status.tirVeryLow ?: 0.0) + (status.tirLow ?: 0.0)).toFloat(),
+        inRangePct = inRange.toFloat(),
+        abovePct = ((status.tirHigh ?: 0.0) + (status.tirVeryHigh ?: 0.0)).toFloat(),
+        deltaVsYesterday = status.tirYesterdayTarget?.let { (inRange - it).roundToInt() },
     )
 }

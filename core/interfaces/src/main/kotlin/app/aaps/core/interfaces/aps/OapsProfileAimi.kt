@@ -59,5 +59,36 @@ data class OapsProfileAimi(
     var futureActivity: Double,
     var sensorLagActivity: Double,
     var historicActivity: Double,
-    var currentActivity: Double
+    var currentActivity: Double,
+    /**
+     * Lower bound the stress ISF floor puts on the sensitivity the dose really uses, mg/dL per U.
+     *
+     * `null` means "no floor", and that is the value on every tick where the signature does not hold,
+     * where the opt-in key is off, or where no honest resting heart rate could be measured. The dose
+     * side may only ever RAISE its sensitivity to this value, never lower it.
+     *
+     * Raising a sensitivity makes the dose smaller on every path that divides by it — the correction
+     * line, the MPC proportional term, the prediction stage. It is **not** a guarantee on the legacy
+     * neural refinement path, where the same number is an input FEATURE (`insulinEffect = iob *
+     * sensitivity / insulinDivisor` feeds the trend indicator) and the model's answer is not monotone
+     * in it. That path is bypassed today and its own change is clamped, but the guarantee is
+     * arithmetic, not universal. See `WorkingIsf`.
+     *
+     * It is carried here, next to [sens], because the loop commands the sensitivity in one class and
+     * sizes the dose in another, and the working sensitivity is rebuilt from [variable_sens] and the
+     * PKPD fusion rather than from [sens]. See `StressIsfFloor` and `WorkingIsf`.
+     */
+    var stress_floor_isf_mgdl: Double? = null,
+    /**
+     * Commanded sensitivity of this tick **before** the profile-relative floor, mg/dL per U.
+     *
+     * The same number exported as `isf_pre_floor_mgdl`: what the dynamic chain asked for, after every
+     * multiplier and before any floor. `null` when it is not a usable number.
+     *
+     * It is carried per tick, and not read from a diagnostic global, because it sizes a basal: the
+     * meal-window boost of `BasalDecisionEngine` divides it by the dose-facing sensitivity. [sens] is
+     * the wrong numerator there — it carries both the 0.5 x profile bound and the stress floor, so a
+     * protection would make that basal larger.
+     */
+    var pre_floor_isf_mgdl: Double? = null
 )

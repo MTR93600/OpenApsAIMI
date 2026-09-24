@@ -421,6 +421,24 @@ fun GlassLoopDashboardScreen(
                 } else {
                     Text(stringResource(R.string.dashboard_glass_loop_ml_training_stale), color = textMuted, fontSize = 11.sp)
                 }
+                SafetyRow(
+                    stringResource(R.string.dashboard_glass_loop_ml_smb_label),
+                    uiState.smbTrainingStatusText,
+                    textMuted,
+                    labelColor = textMuted,
+                    dividerColor = dividerSoft,
+                    showDivider = false,
+                )
+                if (uiState.smbTrainingDetailText.isNotEmpty()) {
+                    SafetyRow(
+                        stringResource(R.string.dashboard_glass_loop_ml_smb_detail_label),
+                        uiState.smbTrainingDetailText,
+                        textMuted,
+                        labelColor = textMuted,
+                        dividerColor = dividerSoft,
+                        showDivider = false,
+                    )
+                }
             }
 
             // CARD 2c: MODEL FILES

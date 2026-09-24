@@ -30,6 +30,21 @@ class BasalDecisionEngine @Inject constructor(
         val tdd7Days: Double,
         val variableSensitivity: Double,
         val profileSens: Double,
+        /**
+         * Commanded sensitivity before any floor, mg/dL per U, or null when unknown.
+         *
+         * The numerator of the meal-window boost. Not [profileSens]: that one is the commanded value
+         * AFTER the floors, so the stress floor raised it and made a protective gesture add insulin —
+         * on the tick of 2026-09-21 22:12 the boost was 2.78x instead of 1.69x, 65 % larger.
+         *
+         * Not the static profile block either, which was the first attempt: the commanded value is
+         * bounded below at 0.5 x profile and therefore usually sits UNDER the profile block. Measured
+         * on 3083 ticks of three packages, the static value is the larger one on 32.7 % of them, and
+         * using it would have grown this basal by a median factor of 1.69, with the largest boost
+         * going from 5.13 to 9.31. This value can never be larger than [profileSens], so the fix can
+         * only ever make the basal smaller or leave it where it was.
+         */
+        val preFloorCommandedSens: Double? = null,
         val predictedBg: Double,
         val targetBg: Double, // Added targetBg
         val minBg: Double, // Min BG from profile for LGS fallback
@@ -464,8 +479,21 @@ class BasalDecisionEngine @Inject constructor(
                     rT.reason.append(" [MODE_TBR_TRIGGER rate=${chosenRate} reason=ModeActiveFirst30min]")
                     break
                 } else if (runtimeMin > 30 && input.delta > 0) {
-                    val sensitivityRatio = if (input.variableSensitivity > 0.1) {
-                        input.profileSens / input.variableSensitivity
+                    // The numerator is the commanded sensitivity BEFORE any floor. The commanded
+                    // value itself carries the stress ISF floor, and a floor that exists to make
+                    // doses smaller was making this basal 65 % larger. A missing or non-positive
+                    // pre-floor value gives no boost at all, which is the only safe answer: it can
+                    // never add insulin on a number nobody could read. This correction is a bug fix
+                    // and is NOT behind `BooleanKey.OApsAIMIStressIsfFloor` — the direction was wrong
+                    // with the key off too, through the unconditional 0.5 x profile bound.
+                    val preFloorSens = input.preFloorCommandedSens
+                    val sensitivityRatio = if (
+                        input.variableSensitivity > 0.1 &&
+                        preFloorSens != null &&
+                        preFloorSens.isFinite() &&
+                        preFloorSens > 0.0
+                    ) {
+                        preFloorSens / input.variableSensitivity
                     } else 1.0
                     val boost = max(1.0, sensitivityRatio)
                     val multiplier = input.delta * boost

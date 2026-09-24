@@ -5,6 +5,7 @@ import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.IntNonKey
 import app.aaps.core.keys.StringNonKey
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.Mock
+import org.mockito.Mockito.`when`
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.atLeastOnce
@@ -50,11 +52,12 @@ class GarminPluginTest : TestBaseWithProfile() {
 
     @Mock private lateinit var loopHub: LoopHub
     @Mock private lateinit var persistenceLayer: PersistenceLayer
+    @Mock private lateinit var sp: SP
     private val clock = Clock.fixed(Instant.ofEpochMilli(10_000), ZoneId.of("UTC"))
 
     @BeforeEach
     fun setup() {
-        gp = GarminPlugin(aapsLogger, rh, preferences, context, loopHub, persistenceLayer)
+        gp = GarminPlugin(aapsLogger, rh, preferences, sp, context, loopHub, persistenceLayer)
         gp.clock = clock
         whenever(loopHub.currentProfileName).thenReturn("Default")
         whenever(preferences.get(GarminIntKey.LocalHttpPort)).thenReturn(28890)
@@ -89,6 +92,8 @@ class GarminPluginTest : TestBaseWithProfile() {
             any(),
             anyOrNull(),
         )
+        verify(loopHub, atMost(1)).postTherapyMode(any(), any())
+        verify(loopHub, atMost(1)).postCarbs(any())
         verifyNoMoreInteractions(loopHub)
     }
 
@@ -467,6 +472,44 @@ class GarminPluginTest : TestBaseWithProfile() {
         val uri = createUri(mapOf("carbs" to "12"))
         assertEquals("", gp.onPostCarbs(uri))
         verify(loopHub).postCarbs(12)
+    }
+
+    @Test
+    fun testOnPostMode_Lunch() {
+        val uri = createUri(mapOf("mode" to "lunch", "duration" to "60"))
+        assertEquals("""{"ok":true,"mode":"lunch","duration":60}""", gp.onPostMode(uri))
+        verify(loopHub).postTherapyMode("lunch", 60)
+        verify(loopHub, times(0)).postTempTarget(any(), any())
+    }
+
+    @Test
+    fun testOnPostMode_FclDefaultDuration() {
+        val uri = createUri(mapOf("mode" to "FCL"))
+        assertEquals("""{"ok":true,"mode":"fcl","duration":30}""", gp.onPostMode(uri))
+        verify(loopHub).postTherapyMode("fcl", 30)
+        verify(loopHub).postTempTarget(80.0, 30)
+    }
+
+    @Test
+    fun testOnPostMode_Sport() {
+        val uri = createUri(mapOf("mode" to "sport", "duration" to "120"))
+        assertEquals("""{"ok":true,"mode":"sport","duration":120}""", gp.onPostMode(uri))
+        verify(loopHub).postTherapyMode("sport", 120)
+        verify(loopHub, times(0)).postTempTarget(any(), any())
+    }
+
+    @Test
+    fun testOnPostMode_InvalidRejected() {
+        val uri = createUri(mapOf("mode" to "hack"))
+        assertEquals("""{"ok":false,"error":"invalid_mode"}""", gp.onPostMode(uri))
+        verify(loopHub, times(0)).postTherapyMode(any(), any())
+    }
+
+    @Test
+    fun testOnPostMode_Stop() {
+        val uri = createUri(mapOf("mode" to "stop"))
+        assertEquals("""{"ok":true,"mode":"stop","duration":1}""", gp.onPostMode(uri))
+        verify(loopHub).postTherapyMode("stop", 1)
     }
 
     @Test

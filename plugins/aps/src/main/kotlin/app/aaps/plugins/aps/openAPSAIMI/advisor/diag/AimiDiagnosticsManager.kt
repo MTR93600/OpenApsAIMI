@@ -9,6 +9,7 @@ import app.aaps.core.interfaces.nsclient.NSSettingsStatus
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.interfaces.overview.OverviewData
 import app.aaps.core.interfaces.profile.Profile
+import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoPersistence
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoSessionStatus
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
@@ -160,6 +161,13 @@ class AimiDiagnosticsManager(
         appendTpoState(sb, allPrefs)
         sb.append("\n")
 
+        // 6b. The SMB ML trainer's own account of its last attempt: without this, "training does not
+        // work" support tickets had no way to tell "waiting for data" from "a gate keeps rejecting it"
+        // from "never even tried since the last restart".
+        sb.append("[SMB ML TRAINING]\n")
+        appendSmbTrainingState(sb)
+        sb.append("\n")
+
         // 7. Statistics (Simulé ou récupéré si dispo)
         // Note: Accéder aux vraies stats TDD/TIR nécessite des injections complexes (OverviewData/StatsProvider).
         // Pour cette version V1, on met un placeholder ou on essaie de lire des prefs cachées si elles existent.
@@ -250,6 +258,30 @@ class AimiDiagnosticsManager(
                 .append(allPrefs[key] ?: "absent")
             if (owned) sb.append("  USER-OWNED, will never be put back")
             sb.append('\n')
+        }
+    }
+
+    /**
+     * Writes the SMB trainer's own record of its last attempt (`AimiSmbTrainer.lastResult`).
+     *
+     * The trainer used to fail silently: a support package showed only whether a weight file existed,
+     * never why it had not been refreshed. This prints the outcome, the row counts, and — for a
+     * rejected candidate or a refused header — the measured value against its threshold, so a support
+     * ticket can be answered from the report alone.
+     */
+    private fun appendSmbTrainingState(sb: StringBuilder) {
+        val result = AimiSmbTrainer.lastResult()
+        if (result == null) {
+            sb.append("No attempt recorded since the app was last started (and none was persisted).\n")
+            return
+        }
+        sb.append("Last attempt: ").append(formatMs(result.atMs)).append('\n')
+        sb.append("Outcome: ").append(result.outcome.name).append('\n')
+        sb.append("CSV rows: ").append(result.totalRows).append('\n')
+        sb.append("Samples after quality filter: ").append(result.samplesAfterFilter)
+            .append("  rejected by filter: ").append(result.rowsRejectedByFilter).append('\n')
+        if (result.gateDetail.isNotBlank()) {
+            sb.append("Detail: ").append(result.gateDetail).append('\n')
         }
     }
 

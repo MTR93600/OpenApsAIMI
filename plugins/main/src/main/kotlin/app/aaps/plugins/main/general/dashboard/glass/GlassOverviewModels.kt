@@ -32,4 +32,19 @@ data class GlassUiState(
     val hrText: String = "--",
     val lastBolusText: String = "--",
     val lastCarbsText: String = "--",
+    /** Today's time in range since midnight; null early in the day or without data (ring shows an empty track). */
+    val tir: GlassTir? = null,
+)
+
+/**
+ * Today's time-in-range split (70–180 mg/dL) for the ring around the glucose value.
+ * The three shares are percentages of today's readings and add up to about 100.
+ *
+ * @param deltaVsYesterday today's in-range % minus yesterday's, rounded; null when yesterday has no data
+ */
+data class GlassTir(
+    val belowPct: Float,
+    val inRangePct: Float,
+    val abovePct: Float,
+    val deltaVsYesterday: Int?,
 )

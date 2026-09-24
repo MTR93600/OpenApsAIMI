@@ -155,6 +155,10 @@ class OverviewViewModel(
      */
     private var debouncedStatusJob: Job? = null
 
+    /** Midnight of the day [yesterdayTirTarget] was read for; the value is read again only after midnight. */
+    private var yesterdayTirDayStart: Long = -1L
+    private var yesterdayTirTarget: Double? = null
+
     private fun scheduleDebouncedStatusRefresh(debounceMs: Long = 120L) {
         val scope = updateScope ?: return
         debouncedStatusJob?.cancel()
@@ -734,6 +738,7 @@ class OverviewViewModel(
         var tirTarget: Double? = null
         var tirHigh: Double? = null
         var tirVeryHigh: Double? = null
+        var tirDayReady = false
         var avgBgMgdl: Double? = null
         var bgCv: Double? = null
         var a1c: Double? = null
@@ -769,7 +774,18 @@ class OverviewViewModel(
                 // GMI / Estimated A1C Formula: (mean + 46.7) / 28.7
                 a1c = (mean + 46.7) / 28.7
             }
-            
+
+            // Yesterday's TIR does not change during the day: read it once per day, not on every refresh.
+            // Same formula as today's tirTarget above, so both values can be compared.
+            if (yesterdayTirDayStart != from) {
+                val bgsYesterday = persistenceLayer.getBgReadingsDataFromTimeToTime(dateUtil.beginOfDay(from - 1), from, true)
+                yesterdayTirTarget = bgsYesterday.takeIf { it.isNotEmpty() }
+                    ?.let { list -> list.count { it.value in 70.0..180.0 } * 100.0 / list.size }
+                yesterdayTirDayStart = from
+            }
+            // Early in the day, today's TIR rests on too few readings to mean anything.
+            tirDayReady = tirTarget != null && now - from >= T.hours(TIR_DAY_READY_HOURS).msecs()
+
             // --- Steps (Today): max(HC aggregate, persistence) when HC is in play ---
             // Persistence uses max per-device 5‑min buckets → cannot merge complementary phone+watch like
             // Health Connect / Santé, often ~1k low. HC [COUNT_TOTAL] can lag; taking the max of both
@@ -919,6 +935,8 @@ class OverviewViewModel(
             tirTarget = tirTarget,
             tirHigh = tirHigh,
             tirVeryHigh = tirVeryHigh,
+            tirYesterdayTarget = yesterdayTirTarget,
+            tirDayReady = tirDayReady,
             avgBgMgdl = avgBgMgdl,
             bgCv = bgCv,
             a1c = a1c,
@@ -1489,6 +1507,8 @@ class OverviewViewModel(
     private data class ModeKeyword(val token: String, val labelRes: Int)
 
     companion object {
+        /** Hours after midnight before today's TIR is shown and compared with yesterday. */
+        private const val TIR_DAY_READY_HOURS = 6L
         private const val SAFETY_LIMITED_BG = 90.0
         private const val SAFETY_CRITICAL_BG = 70.0
         private val ADAPTATION_FRESHNESS_TICK_MS = TimeUnit.MINUTES.toMillis(1)
@@ -1570,6 +1590,10 @@ data class StatusCardState(
     val tirTarget: Double? = null,
     val tirHigh: Double? = null,
     val tirVeryHigh: Double? = null,
+    /** Yesterday's full-day time in range 70–180 (%), null when yesterday has no reading. */
+    val tirYesterdayTarget: Double? = null,
+    /** True once today has enough hours of data for its TIR to be shown and compared. */
+    val tirDayReady: Boolean = false,
     val avgBgMgdl: Double? = null,
     val bgCv: Double? = null,
     val a1c: Double? = null,

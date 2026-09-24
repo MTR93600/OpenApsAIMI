@@ -1479,9 +1479,18 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             // reuse window, so the gater falls through to a fresh synchronous read. Both paths read
             // this tick, never the previous one.
             val stressSnapshot = runCatching { healthContextRepository.fetchSnapshotForAutodriveGater() }.getOrNull()
+            // The baseline is the AWAKE resting heart rate, not `stressSnapshot.rhrResting`, which is
+            // the lowest SLEEPING value of the last seven days and was pinned at 50 bpm on every tick
+            // of three support packages. Against that sleeping number the signature really meant
+            // "heart rate at least 70 bpm" and held for 36 % to 57 % of each day. A null here means no
+            // honest baseline could be measured, and it is passed on as a resting rate of 0, which
+            // `StressIsfFloor` already reads as missing data and never activates. The verdict then
+            // names the baseline, not the heart rate, as the missing input — see
+            // [StressIsfFloor.REASON_NO_BASELINE] and [AwakeRestingHeartRate].
+            val awakeRestingBpm = runCatching { healthContextRepository.awakeRestingHeartRateBpm() }.getOrNull()
             val stressVerdict = StressIsfFloor.evaluate(
                 hrNowBpm = stressSnapshot?.hrNow ?: 0,
-                rhrRestingBpm = stressSnapshot?.rhrResting ?: 0,
+                rhrRestingBpm = awakeRestingBpm ?: 0,
                 stepsLast15m = stressSnapshot?.stepsLast15m ?: 0,
                 nowMs = dateUtil.now(),
                 signatureSinceMs = stressIsfSignatureSinceMs,
@@ -1500,6 +1509,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val stressFloorMultiplier =
                 if (stressVerdict.active && stressFloorArmed) StressIsfFloor.ARMED_FLOOR_MULTIPLIER
                 else DynamicSensitivityPolicy.PROFILE_RELATIVE_FLOOR
+            // Observation only: which bound the commanded sensitivity was held against this tick.
+            IsfSourceTelemetry.recordCommandFloorMultiplier(stressFloorMultiplier)
 
             // The commanded sensitivity after every multiplier and before the floor. Read here, at the
             // same place the old code read it, so the number the loop commands is unchanged.
@@ -1523,17 +1534,28 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 floorMultiplier = stressFloorMultiplier,
             )
             // Shadow measure, written on every tick whether the key is armed or not: what the floor at
-            // 1.0 x profile would command. Only recorded when the signature is active and the value
-            // really differs, so an absent field stays absent instead of reading as a zero.
+            // 1.0 x profile would command.
             val stressFlooredIsfMgdl = DynamicSensitivityPolicy.floorAgainstProfile(
                 commandedMgdlPerU = preFloorIsfMgdl,
                 profileIsfMgdlPerU = profileIsfForFloorMgdl,
                 floorMultiplier = StressIsfFloor.ARMED_FLOOR_MULTIPLIER,
             )
+            // The lower bound the dose-facing sensitivity may not fall under while the signature holds
+            // and the key is armed. `null` on every other tick, and `null` means "no floor", so with
+            // the key off nothing downstream changes. The commanded value above keeps the floor
+            // exactly as before, so `command_isf_mgdl` stays comparable with the past packages.
+            val stressFloorForDoseMgdl = profileIsfForFloorMgdl
+                ?.takeIf { stressVerdict.active && stressFloorArmed && it.isFinite() && it > 0.0 }
+                ?.times(StressIsfFloor.ARMED_FLOOR_MULTIPLIER)
             IsfSourceTelemetry.recordStressIsfFloor(
                 active = stressVerdict.active,
                 reason = stressVerdict.reason,
-                flooredIsfMgdl = stressFlooredIsfMgdl.takeIf { stressVerdict.active && it != commandedIsfMgdl },
+                // Written whenever the signature is active, armed or not. It used to carry
+                // `takeIf { it != commandedIsfMgdl }`, and while the key is armed those two values are
+                // equal by construction, so the one field added to measure the gesture was null on
+                // 0 of 159, 0 of 953 and 0 of 710 active ticks — silent exactly when the gesture was on.
+                flooredIsfMgdl = stressFlooredIsfMgdl.takeIf { stressVerdict.active },
+                awakeRestingBpm = awakeRestingBpm,
             )
 
             val oapsProfile = OapsProfileAimi(
@@ -1585,7 +1607,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 futureActivity = futureActivity,
                 sensorLagActivity = sensorLagActivity,
                 historicActivity = historicActivity,
-                currentActivity = currentActivity
+                currentActivity = currentActivity,
+                // The floor the DOSE must respect. `sens` above carries the same floor for the
+                // predictions and the guards, but every SMB path rebuilds its own sensitivity from
+                // `variable_sens` and the PKPD fusion and never reads `sens`, so the floor has to
+                // travel to them as its own number. See `WorkingIsf`.
+                stress_floor_isf_mgdl = stressFloorForDoseMgdl,
+                // What the chain commanded before ANY floor. Carried per tick because a basal is
+                // sized with it — see `BasalDecisionEngine.Input.preFloorCommandedSens`.
+                pre_floor_isf_mgdl = preFloorIsfMgdl.takeIf { it.isFinite() && it > 0.0 }
             )
 
             // Keep AIMI aligned with the upstream SMB/AutoISF crash guard: these values feed divisions in
@@ -2254,6 +2284,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         )
                     )
                 )
+                add(BooleanKey.OApsAIMIAuditorProfileFactors)
                 add(IntKey.AimiAuditorMaxPerHour)
                 add(IntKey.AimiAuditorTimeoutSeconds)
                 add(IntKey.AimiAuditorMinConfidence)
