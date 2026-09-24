@@ -1,15 +1,18 @@
 # AIMI / OpenApsAIMI KMP status
 
-**Live snapshot:** 2026-09-19 (docs tracker, post-P3.8)  
-**This branch tip:** `kmp-aimi-migration-study` @ `c9ff5e2f0ef785422114aa3bd9cf45159506dd75`  
+**Live snapshot:** 2026-09-24 (docs tracker, inventaire post-P3)  
+**Code tip inventoried (parent of this docs commit):** `kmp-aimi-migration-study` @ `ce1384814e53a73d1566006b56dd8006f7121559`  
 **Last clinical lot on study:** P3.8 [#115](https://github.com/MTR93600/OpenApsAIMI/pull/115) @ `f4ed4e401cb88e8a08907c0c3cec4661cc1094a4`  
+**Docs consolidated on that tip:** [#117](https://github.com/MTR93600/OpenApsAIMI/pull/117)  
 **P0 clinical freeze:** `origin/dev_OAPSAIMI` @ `c5db5a033379390bceb7851ff92004b72ef055bf` (2026-09-06)  
-**Current AIMI ref tip:** `origin/dev_OAPSAIMI` @ `c653fc4485dd985088d9a30a42c99af4e3b285e4` (2026-09-19)  
-**Ahead / behind reference (recomputed):** study is **1057** unique commits ahead, **2797** behind.
+**Current AIMI ref tip:** `origin/dev_OAPSAIMI` @ `166ddb6db0cec3b5195006db1d5fa77f544f88c3` (2026-09-24)  
+**Ahead / behind reference (recomputed):** study is **1066** unique commits ahead, **2803** behind. Status **diverged**. Merge-base `283a184f60eb8b18dac42e228faebbe260c3aa22`.
 
-Re-verified with `git fetch origin kmp-aimi-migration-study` and `git fetch origin dev_OAPSAIMI`.  
-`c9ff5e2f` **is** `origin/kmp-aimi-migration-study`. `c653fc4485` **is** `origin/dev_OAPSAIMI`.  
-`c5db5a0333` is an ancestor of today’s AIMI tip (P0 freeze; loop re-grid commit, still out of AIMI lots).
+Re-verified with `git fetch origin kmp-aimi-migration-study`, `git fetch origin dev_OAPSAIMI`, and `gh api` compare (`ahead_by=1066`, `behind_by=2803`).  
+At fetch time, `ce1384814e` **is** `origin/kmp-aimi-migration-study` and `166ddb6db0` **is** `origin/dev_OAPSAIMI`.  
+This file is a docs commit **on top of** `ce1384814e`. After it merges, the branch tip is this docs commit; clinical content stays `ce1384814e`.  
+`c5db5a0333` is an ancestor of today’s AIMI tip (P0 freeze; loop re-grid commit, still out of AIMI lots).  
+`c653fc4485` (ref tip in the 2026-09-19 tracker) is an ancestor of `166ddb6db0`, not the tip.
 
 This file is the live snapshot. Agent roles / triple feu: [`_docs/kmp/AGENT_OPS.md`](../../_docs/kmp/AGENT_OPS.md).  
 Remaining work: [DELTA-remaining.md](DELTA-remaining.md).  
@@ -23,13 +26,17 @@ Older notes under `_docs/kmp/` are history (lots 0–6i diary, per-lot `P*-ANCHO
 
 | Anchor | SHA | What it is |
 |---|---|---|
-| Study tip (docs batch after P3.8) | `c9ff5e2f0ef785422114aa3bd9cf45159506dd75` | `docs(kmp): ancre P3.8 … (#116)` on `kmp-aimi-migration-study` |
+| Study code tip inventoried | `ce1384814e53a73d1566006b56dd8006f7121559` | `docs(kmp): suivi consolidé … (#117)` — parent of this docs commit |
+| Study tip before #117 | `91dc6106a484c066dacf69884417968a0ca59a14` | `feat: Implement Aimi retention management system` |
+| Previous docs inventory | `c9ff5e2f0ef785422114aa3bd9cf45159506dd75` | `docs(kmp): ancre P3.8 … (#116)` — superseded as “today” |
 | Study tip after clinical P3.8 | `f4ed4e401cb88e8a08907c0c3cec4661cc1094a4` | merge of [#115](https://github.com/MTR93600/OpenApsAIMI/pull/115) |
 | P0 clinical freeze | `c5db5a033379390bceb7851ff92004b72ef055bf` | AIMI ref when P0.1–P0.8 were planned ([P0.8-ANCHOR](../../_docs/kmp/P0.8-ANCHOR.md)) |
-| AIMI ref tip now | `c653fc4485dd985088d9a30a42c99af4e3b285e4` | `feat(calibration): add new strings…` on `dev_OAPSAIMI` |
+| AIMI ref tip now | `166ddb6db0cec3b5195006db1d5fa77f544f88c3` | `feat(garmin): … sport mode and FCL temporary target` |
+| AIMI ref at P3.8 ancre | `c653fc4485dd985088d9a30a42c99af4e3b285e4` | historical; six commits behind today’s ref tip |
 
-**P3.1–P3.8 clinical gap is closed** (lots [#101](https://github.com/MTR93600/OpenApsAIMI/pull/101) / [#103](https://github.com/MTR93600/OpenApsAIMI/pull/103) / [#105](https://github.com/MTR93600/OpenApsAIMI/pull/105) / [#107](https://github.com/MTR93600/OpenApsAIMI/pull/107) / [#109](https://github.com/MTR93600/OpenApsAIMI/pull/109) / [#111](https://github.com/MTR93600/OpenApsAIMI/pull/111) / [#113](https://github.com/MTR93600/OpenApsAIMI/pull/113) / [#115](https://github.com/MTR93600/OpenApsAIMI/pull/115), all **MERGED**).  
-That does **not** mean “AIMI runs on iOS”, and it does **not** invent leftover CGM / driver / Trio work. Named leftovers stay in [DELTA](DELTA-remaining.md). No formulas in this file.
+**P3.1–P3.8 named clinical series is MERGED** (lots [#101](https://github.com/MTR93600/OpenApsAIMI/pull/101) / [#103](https://github.com/MTR93600/OpenApsAIMI/pull/103) / [#105](https://github.com/MTR93600/OpenApsAIMI/pull/105) / [#107](https://github.com/MTR93600/OpenApsAIMI/pull/107) / [#109](https://github.com/MTR93600/OpenApsAIMI/pull/109) / [#111](https://github.com/MTR93600/OpenApsAIMI/pull/111) / [#113](https://github.com/MTR93600/OpenApsAIMI/pull/113) / [#115](https://github.com/MTR93600/OpenApsAIMI/pull/115)).  
+That closed the series **against ref `c653fc4485`**, not against today’s ref `166ddb6db0`. New tick/CGM holes are in [DELTA](DELTA-remaining.md). No formulas in this file.  
+That does **not** mean “AIMI runs on iOS”.
 
 ---
 
@@ -94,15 +101,17 @@ That is **not** “AIMI runs on iOS”. The tick is still Android-only. `:plugin
 
 ---
 
-## 3. Corrections to older docs (2026-09-19)
+## 3. Corrections to older docs (2026-09-24)
 
-| Old claim | Reality 2026-09-19 |
+| Old claim | Reality 2026-09-24 |
 |---|---|
-| STATUS / DELTA tip `f237f2d3d0` / ref `c5db5a0333` as “today” (2026-09-06) | Study tip is `c9ff5e2f`. Freeze `c5db5a0333` is historical P0. Current AIMI tip is `c653fc4485`. |
-| DELTA P0.1–P0.8 / P3.1–P3.5 still “next lots” | Those **IDs landed** (P0 as planned; P3.x as the later clinical series). See ledger. |
-| “DetermineBasalAIMI2 is 2 files from `commonMain`” (`AIMI_PORT_STATE` §1) | The tick **compiles in `androidMain`**. Not an iOS loop. |
+| STATUS / DELTA tip `c9ff5e2f` / ref `c653fc4485` as “today” (2026-09-19, including #117) | Code tip inventoried is `ce1384814e`. Current AIMI tip is `166ddb6db0`. Freeze `c5db5a0333` stays historical P0. |
+| “P3.1–P3.8 clinical gap is closed” means nothing clinical remains vs ref | True **for that series vs `c653fc4485`**. Ref then added WorkingIsf / awake HR, auditor profile factors, meal boost cap, Garmin sport. See [DELTA](DELTA-remaining.md). |
+| DELTA P0.1–P0.8 / P3.1–P3.5 still “next lots” | Those **IDs landed**. Next ids are **P4.1+** / named tracks. Do not reuse P3.x. |
+| “DetermineBasalAIMI2 is 2 files from `commonMain`” (`AIMI_PORT_STATE` §1) | The tick **compiles in `androidMain` only**. Not an iOS loop. |
 | Freeze tag `aimi-baseline-2026-08-26` = `1ae418e106` | Tag **not** today’s reference. Use the SHA table in §0. |
 | Docs ancre PRs #73 / #74 / #83 / #85 / #87 / #89 are open / authoritative | **Closed unmerged** (superseded). Use this file + `P*-ANCHOR.md` that did merge. |
+| Claude retention / cache / tests after `c9ff5e2f` are an open port vs ref | Retention and those test filenames are **on both tips**. Cache is **study-only** (keep). HR gating on `UndeclaredCobEstimator` **matches** ref decls. |
 
 ---
 
@@ -150,6 +159,26 @@ Today:
 
 - Android plugin path: reachable in a KMP app graph (last-known assemble green).
 - Shared math: large, real, not extracted into `aimi-engine`.
-- Clinical named gap P3.1–P3.8: **ported and anchored**.
+- Clinical named gap P3.1–P3.8: **ported and anchored** against ref `c653fc4485`. Newer ref commits are §5 and [DELTA](DELTA-remaining.md), not this 2026-09-06 census.
 - iOS: shared spine + follower UI. No AIMI tick. No pump. No HealthKit. No TFLite adapter claimed here.
 - Extracted engine API: **stub**.
+
+---
+
+## 5. Ledger note — code that landed after P3.8 ancre `c9ff5e2f`
+
+Not new lot IDs. Already on `ce1384814e`. Detail and the **remaining** order are in [DELTA](DELTA-remaining.md).
+
+| SHA | On study | Class |
+|---|---|---|
+| `b423b73af3` | PKPD unit tests | same filenames on ref |
+| `c6b0e10d83` | safety / SMB tests; `rateLimit` signature aligned with ref | not a remaining gap |
+| `6d753ebff0` | APS component tests | same filenames on ref |
+| `0e2ed12bc3` | readability + replay JSONL | study tooling |
+| `6a6afc40bb` | `UndeclaredCobEstimator` HR gating | decls match ref |
+| `ec7783a509` | `AimiKeyValueCache` | study-only KMP prefs |
+| `91dc6106a4` | retention worker / policy / archive / trim + tests | matches ref `505b848fb6` except KMP seams |
+| `ce1384814e` | docs #117 | tracker only; SHAs inside it are the 2026-09-19 snapshot |
+
+**Next lot:** P4.1 (WorkingIsf + awake resting HR, ref `6a6561caab` AIMI subset).  
+**Not re-run in this session:** `:app:assembleFullDebug`, `:plugins:aps:compileKotlinIosArm64`, `:plugins:aps:testAndroidHostTest`.

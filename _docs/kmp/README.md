@@ -1,9 +1,11 @@
 # Dossier de décision — migration AIMI vers KMP/iOS
 
-> **Suivi vivant (2026-09-19, post-P3.8) :**  
-> [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md) — tip study `c9ff5e2f` · freeze P0 `c5db5a0333` · tip AIMI `c653fc4485` · ledger P0→P3.8  
-> [`docs/kmp-migration/DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md) — backlog restant (ONE+/Libre3, pompes iOS via Trio, choix produit)  
-> [`AGENT_OPS.md`](AGENT_OPS.md) — orchestrateur + spécialistes + triple feu
+> **Suivi vivant (2026-09-24, inventaire post-P3) :**  
+> [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md) — code tip `ce1384814e` (parent du commit docs) · freeze P0 `c5db5a0333` · tip AIMI `166ddb6db0` · ledger P0→P3.8  
+> [`docs/kmp-migration/DELTA-remaining.md`](../../docs/kmp-migration/DELTA-remaining.md) — delta restant vs tip ref (P4.1 WorkingIsf / HR, puis P4.2–P4.6, Garmin, drivers, Trio). Rétention + cache Claude : déjà classés.  
+> [`AGENT_OPS.md`](AGENT_OPS.md) — orchestrateur + spécialistes + triple feu  
+>
+> Les SHA cités plus bas dans ce dossier (audit août, `c9ff5e2f`, `c653fc4485`) sont l’historique. Le tip du jour est le tableau ci-dessus.
 >
 > **Référence AIMI gelée (audit août) :** tag `aimi-baseline-2026-08-26` = `dev_OAPSAIMI` @ `1ae418e106` — **n’est plus** le tip ni le freeze P0.  
 > **Audit initial AIMI :** `06e7bc5021ca8fdd976505d1fefb03cc88681c19` (25 août 2026)  
