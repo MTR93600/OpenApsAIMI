@@ -64,6 +64,7 @@ class LinearCalibrationPluginTest : TestBase() {
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(emptyList())
         whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(emptyList())
         whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(0L)
+        whenever(preferences.get(CalibrationLongKey.IgnoredSensorGapAt)).thenReturn(0L)
         plugin = LinearCalibrationPlugin(
             aapsLogger, rh, dateUtil, persistenceLayer, notificationManager, glucoseStatusProvider, rxBus, profileUtil, preferences
         )
@@ -207,7 +208,8 @@ class LinearCalibrationPluginTest : TestBase() {
         // A healthy, fresh fit keeps the (unrelated) calibration-health check quiet too, so this
         // test only exercises gap detection.
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
-        // Gap of 60min between data[0] and data[1]; default sessionStart is 12h ago so gap is within session
+        // The break is in the stored readings, not in the bucketed series passed to calibrate.
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
         val data = mutableListOf(
             value(now, 150.0),
             value(now - T.mins(60).msecs(), 150.0),
@@ -229,6 +231,7 @@ class LinearCalibrationPluginTest : TestBase() {
     fun calibrate_gapWithNearbySensorChange_skipsNotification() = runTest {
         // A healthy, fresh fit keeps the (unrelated) calibration-health check quiet too.
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
         whenever(persistenceLayer.getTherapyEventDataFromToTime(any(), any())).thenReturn(
             listOf(sensorChange(now - T.mins(35).msecs()))
         )
@@ -257,6 +260,7 @@ class LinearCalibrationPluginTest : TestBase() {
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
         whenever(persistenceLayer.insertPumpTherapyEventIfNewByTimestamp(any(), any(), any(), any(), any(), any()))
             .thenReturn(PersistenceLayer.TransactionResult())
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
         val data = mutableListOf(
             value(now, 150.0),
             value(now - T.mins(60).msecs(), 150.0),
@@ -274,11 +278,37 @@ class LinearCalibrationPluginTest : TestBase() {
             actionsCaptor.capture(),
             anyOrNull()
         )
-        actionsCaptor.firstValue.single().action.invoke()
+        actionsCaptor.firstValue.first().action.invoke()
 
         verify(persistenceLayer).insertPumpTherapyEventIfNewByTimestamp(
             any(), any(), any(), any(), anyOrNull(), any()
         )
+    }
+
+    @Test
+    fun calibrate_gapDetected_ignoreWritesTheKeyAndDoesNotLogASensorChange() = runTest {
+        whenever(rh.gs(any<TextRef>(), any())).thenReturn("Possible sensor change")
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+
+        val actionsCaptor = argumentCaptor<List<NotificationAction>>()
+        verify(notificationManager).post(
+            eq(NotificationId.SENSOR_CHANGE_DETECTED),
+            any<String>(),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            actionsCaptor.capture(),
+            anyOrNull()
+        )
+        assertThat(actionsCaptor.firstValue).hasSize(2)
+        actionsCaptor.firstValue[1].action.invoke()
+
+        verify(persistenceLayer, never()).insertPumpTherapyEventIfNewByTimestamp(
+            any(), any(), any(), any(), anyOrNull(), any()
+        )
+        verify(preferences).put(CalibrationLongKey.IgnoredSensorGapAt, now - T.mins(30).msecs())
     }
 
     // ------------ calibration health notifications ------------
@@ -494,7 +524,8 @@ class LinearCalibrationPluginTest : TestBase() {
 
     @Test
     fun addEntry_nullGlucoseStatus_inserts() = runTest {
-        // No glucose status available -> delta gate falls through, insert proceeds
+        // No glucose status, and a single reading: fallbackDeltaPer5Min is null (fewer than two
+        // readings), so the gate stays open and the insert proceeds. A rising pair is refused.
         whenever(glucoseStatusProvider.glucoseStatusData).thenReturn(null)
         whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), eq(false)))
             .thenReturn(listOf(bgReading(now, 145.0)))
@@ -652,6 +683,12 @@ class LinearCalibrationPluginTest : TestBase() {
 
     private fun glucoseStatus(shortAvgDelta: Double): GlucoseStatusSMB =
         GlucoseStatusSMB(glucose = 150.0, shortAvgDelta = shortAvgDelta, date = now)
+
+    private fun readingsWithGap(): List<GV> = listOf(
+        bgReading(now, 150.0),
+        bgReading(now - T.mins(60).msecs(), 150.0),
+        bgReading(now - T.mins(61).msecs(), 150.0)
+    )
 
     private fun bgReading(timestamp: Long, value: Double): GV = GV(
         timestamp = timestamp,
