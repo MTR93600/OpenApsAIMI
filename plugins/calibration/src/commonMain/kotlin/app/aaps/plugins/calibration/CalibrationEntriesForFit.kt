@@ -21,9 +21,11 @@ import app.aaps.core.data.model.GV
  * - L305 pair target `timestamp + PAIR_LAG_MS`, median via [sensorValueForPairing]
  * - L521 `PAIR_LAG_MS = 10 min`, L524 `PAIR_LAG_WINDOW_MS = 15 min`
  *
- * ONE+ writes the cutoff at promotion (`DexcomOnePlusPlugin.kt` L934). Libre 3 writes the same
- * cutoff at promotion (`Libre3NativePlugin.kt` L1055). Study Libre 3 has no successful promotion
- * path; that call site is not invented here.
+ * ONE+ writes the cutoff at promotion (`DexcomOnePlusPlugin.kt` L778, ref L934). Libre 3 on the
+ * ref writes the same instant only after a successful promotion (`Libre3NativePlugin.kt` L1055,
+ * `System.currentTimeMillis()`, just after `logSensorChangeOnce` L1051). Study Libre 3 still
+ * returns `STAGING_ABSENT` and does not call it: `:plugins:libre3` is not KMP, and a call from
+ * `onSensorChanged` or the glucose path would not match the ref. Hook: `_docs/kmp/P4.8-Libre3-Staging-ANCHOR.md`.
  */
 object CalibrationEntriesForFit {
 
