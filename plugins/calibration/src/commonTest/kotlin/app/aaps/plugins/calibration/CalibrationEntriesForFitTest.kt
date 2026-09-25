@@ -65,17 +65,16 @@ class CalibrationEntriesForFitTest {
         val stickAt = now - T.hours(1).msecs()
         val stored = entry(id = 7L, timestamp = stickAt, fingerstick = 150.0, sensor = 120.0)
         val step = CalibrationEntriesForFit.beginLagRepair(stored, now, cachedSensorMgdl = null)
-        assertTrue(step is CalibrationEntriesForFit.LagRepairStep.ReadWindow)
-        val window = step as CalibrationEntriesForFit.LagRepairStep.ReadWindow
-        assertEquals(stickAt, window.startMs)
-        assertEquals(stickAt + T.mins(15).msecs(), window.endMs)
-        assertEquals(stickAt + T.mins(10).msecs(), window.targetMs)
+        check(step is CalibrationEntriesForFit.LagRepairStep.ReadWindow)
+        assertEquals(stickAt, step.startMs)
+        assertEquals(stickAt + T.mins(15).msecs(), step.endMs)
+        assertEquals(stickAt + T.mins(10).msecs(), step.targetMs)
 
         val readings = listOf(
             reading(stickAt + T.mins(10).msecs(), 150.0),
             reading(stickAt + T.mins(5).msecs(), 140.0)
         )
-        val finished = CalibrationEntriesForFit.finishLagRepair(stored, readings, window.targetMs)
+        val finished = CalibrationEntriesForFit.finishLagRepair(stored, readings, step.targetMs)
         assertEquals(145.0, finished.entry.sensorMgdlAtPairing, 0.01)
         assertEquals(150.0, finished.entry.fingerstickMgdl, 0.01)
         assertEquals(145.0, finished.storeInCache!!, 0.01)
@@ -89,8 +88,8 @@ class CalibrationEntriesForFitTest {
         val stickAt = now - T.mins(2).msecs()
         val stored = entry(id = 8L, timestamp = stickAt, fingerstick = 150.0, sensor = 120.0)
         val step = CalibrationEntriesForFit.beginLagRepair(stored, now, cachedSensorMgdl = null)
-        assertTrue(step is CalibrationEntriesForFit.LagRepairStep.Keep)
-        assertEquals(120.0, (step as CalibrationEntriesForFit.LagRepairStep.Keep).entry.sensorMgdlAtPairing, 0.01)
+        check(step is CalibrationEntriesForFit.LagRepairStep.Keep)
+        assertEquals(120.0, step.entry.sensorMgdlAtPairing, 0.01)
     }
 
     @Test
@@ -111,9 +110,8 @@ class CalibrationEntriesForFitTest {
         val stickAt = now - T.hours(1).msecs()
         val stored = entry(id = 7L, timestamp = stickAt, fingerstick = 150.0, sensor = 120.0)
         val step = CalibrationEntriesForFit.beginLagRepair(stored, now, cachedSensorMgdl = 150.0)
-        assertTrue(step is CalibrationEntriesForFit.LagRepairStep.Keep)
-        val kept = (step as CalibrationEntriesForFit.LagRepairStep.Keep).entry
-        assertEquals(150.0, kept.sensorMgdlAtPairing, 0.01)
+        check(step is CalibrationEntriesForFit.LagRepairStep.Keep)
+        assertEquals(150.0, step.entry.sensorMgdlAtPairing, 0.01)
         assertEquals(120.0, stored.sensorMgdlAtPairing, 0.01)
     }
 
