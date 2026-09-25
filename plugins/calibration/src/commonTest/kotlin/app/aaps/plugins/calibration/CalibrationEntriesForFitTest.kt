@@ -50,6 +50,61 @@ class CalibrationEntriesForFitTest {
     }
 
     @Test
+    fun a_libre3_promotion_cutoff_changes_the_glucose_the_patient_sees() {
+        // Ref Libre3NativePlugin.kt L1052–1055 @ 6598201d: the session is dated at pre-soak
+        // activation, so fingersticks taken on the retired sensor sit inside the new session.
+        // The cutoff is the promotion wall clock. The DAO keeps timestamp >= from
+        // (CalibrationEntryDao.kt L35). Points on a straight line stay on it under the
+        // time-decay weights, so the glucose numbers are the line, not a new formula.
+        val sessionStart = now - T.hours(12).msecs()
+        val promotedAt = now - T.hours(1).msecs()
+        val retired = listOf(
+            entry(1L, now - T.hours(8).msecs(), fingerstick = 110.0, sensor = 100.0),
+            entry(2L, now - T.hours(6).msecs(), fingerstick = 176.0, sensor = 160.0),
+            entry(3L, now - T.hours(4).msecs(), fingerstick = 242.0, sensor = 220.0),
+        )
+        val current = listOf(
+            entry(4L, now - T.mins(40).msecs(), fingerstick = 105.0, sensor = 100.0),
+            entry(5L, now - T.mins(30).msecs(), fingerstick = 165.0, sensor = 160.0),
+            entry(6L, now - T.mins(20).msecs(), fingerstick = 225.0, sensor = 220.0),
+        )
+        fun since(entries: List<CAL>, entriesValidFrom: Long): List<CAL> {
+            val from = CalibrationEntriesForFit.fitCutoff(sessionStart, entriesValidFrom)
+            return entries.filter { it.timestamp >= from }
+        }
+
+        // At the swap the database still holds only the retired sensor's fingersticks.
+        val beforePromotion = fitLinearCalibration(since(retired, 0L), now)!!
+        assertEquals(1.1, beforePromotion.slope, absoluteTolerance = 1e-6)
+        assertEquals(0.0, beforePromotion.offset, absoluteTolerance = 1e-6)
+        assertTrue(beforePromotion.isApplicable)
+        // Sensor 150 mg/dL is handed to the loop as 165. Warm-up (2 h) ended 10 h ago
+        // because the session was dated at activation, not at the swap.
+        assertEquals(165.0, beforePromotion.slope * 150.0 + beforePromotion.offset, absoluteTolerance = 1e-6)
+
+        // The promotion cutoff drops those three rows. No new fingerstick yet: no line.
+        assertEquals(emptyList(), since(retired, promotedAt))
+        assertNull(fitLinearCalibration(since(retired, promotedAt), now))
+
+        val afterNewSticks = fitLinearCalibration(since(retired + current, promotedAt), now)!!
+        assertEquals(1.0, afterNewSticks.slope, absoluteTolerance = 1e-6)
+        assertEquals(5.0, afterNewSticks.offset, absoluteTolerance = 1e-6)
+        assertTrue(afterNewSticks.isApplicable)
+        assertEquals(155.0, afterNewSticks.slope * 150.0 + afterNewSticks.offset, absoluteTolerance = 1e-6)
+
+        // Same six rows if the cutoff were forgotten: both sensors in one line.
+        val mixed = fitLinearCalibration(since(retired + current, 0L), now)!!
+        assertEquals(159.7344700763133, mixed.slope * 150.0 + mixed.offset, absoluteTolerance = 1e-6)
+        assertTrue(mixed.isApplicable)
+
+        // A cutoff older than the session does not drop the retired rows.
+        val fiveDaysAgo = now - T.days(5).msecs()
+        assertEquals(sessionStart, CalibrationEntriesForFit.fitCutoff(sessionStart, fiveDaysAgo))
+        val unchanged = fitLinearCalibration(since(retired, fiveDaysAgo), now)!!
+        assertEquals(165.0, unchanged.slope * 150.0 + unchanged.offset, absoluteTolerance = 1e-6)
+    }
+
+    @Test
     fun cutoff_advances_only_when_the_new_timestamp_is_strictly_later() {
         // L288: if (timestamp <= current) return
         val promotedAt = now - T.hours(1).msecs()

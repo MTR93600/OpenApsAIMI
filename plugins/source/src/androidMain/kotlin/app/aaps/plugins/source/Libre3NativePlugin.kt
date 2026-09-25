@@ -170,6 +170,20 @@ class Libre3NativePlugin @Inject constructor(
     private val _stagingEvidence = MutableStateFlow<CgmStagingEvidence?>(null)
     override val stagingEvidence: StateFlow<CgmStagingEvidence?> = _stagingEvidence.asStateFlow()
 
+    /**
+     * Pre-soak promotion is not in this build, so the calibration cutoff is not written here.
+     *
+     * On `origin/dev_OAPSAIMI` @ `6598201d`, the only Libre 3 writer is the success path of this
+     * function: `logSensorChangeOnce(staged.activatedAtMs)` then
+     * `activePlugin.activeCalibration.ignoreEntriesBefore(System.currentTimeMillis())`
+     * (`Libre3NativePlugin.kt` L1051–1055). Early returns (L981–1007) do not write it.
+     * `onSensorChanged` (ref L479, here the scan path) and the glucose path (ref L649, here
+     * `logSensorChangeOnce` from the reading) date the `SENSOR_CHANGE` and do not call
+     * `ignoreEntriesBefore`. `:plugins:libre3` is still an Android library, so the staging
+     * driver (`Libre3Staging`, the second store, `Libre3CgmDrivers.staging()`) stays out of this lot.
+     * The fit already honours [app.aaps.plugins.calibration.keys.CalibrationLongKey.EntriesValidFrom]
+     * when some other writer, today the ONE+ promotion, sets it.
+     */
     override suspend fun promoteStagingToProduction(allowEarly: Boolean): PromotionResult =
         PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT)
 
