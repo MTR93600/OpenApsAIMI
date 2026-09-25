@@ -13,7 +13,7 @@ import app.aaps.core.data.ui.ConfirmationRole
 import app.aaps.core.data.ui.confirmationLines
 import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.calibration.AddEntryResult
-import app.aaps.plugins.calibration.notYetEffectiveMessage
+import app.aaps.core.interfaces.calibration.CalibrationStatus
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.logging.UserEntryLogger
@@ -223,4 +223,17 @@ class CalibrationDialogViewModel @Inject constructor(
         val displayDelta = profileUtil.fromMgdlToUnits(mgdlPer5Min)
         return if (profileUtil.units == GlucoseUnit.MMOL) decimalFormatter.to1Decimal(displayDelta) else decimalFormatter.to0Decimal(displayDelta)
     }
+}
+
+/**
+ * Ref `CalibrationDialogViewModel.notYetEffectiveMessage` L254–257 @ `6598201d`.
+ *
+ * Internal, not a public API: the commonTest of this module calls it. The dialog is the only
+ * production caller, and only after [AddEntryResult.Accepted]. NoSession and WarmUp do not
+ * produce a sentence. The text is [UiStrings], generated from this module's `strings.xml`.
+ */
+internal fun notYetEffectiveMessage(status: CalibrationStatus, rh: TextResolver): String? = when (status) {
+    is CalibrationStatus.NeedMoreEntries -> rh.gs(UiStrings.cal_saved_need_more_entries, status.entryCount)
+    CalibrationStatus.UnsafeFit          -> rh.gs(UiStrings.cal_saved_unsafe_fit)
+    else                                  -> null
 }

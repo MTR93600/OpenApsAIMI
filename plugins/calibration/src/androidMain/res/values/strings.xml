@@ -35,10 +35,4 @@
     <string name="cal_notify_unsafe_fit">Your recent calibrations gave an inconsistent result and are not applied — the sensor is showing uncorrected values. Add a new calibration while your glucose is steady; double-check your meter reading, since a single inaccurate fingerstick can throw this off.</string>
     <string name="cal_notify_narrow_range">Your calibrations are all close in glucose value, so only a basic correction can be applied. Add one the next time your glucose is clearly higher or lower than usual — spreading calibrations across different levels makes the correction accurate across your whole range, not just around one value.</string>
     <string name="cal_notify_stale">It\'s been a while since your last calibration. Sensors can drift over their wear time, so adding a fresh calibration now — while your glucose is steady — helps keep the correction accurate for the rest of the session.</string>
-
-    <!-- After a saved fingerstick that did not yet change the sensor value.
-         Ref ui/src/main/res/values/strings.xml L339–340 @ 6598201d. English only, same as the ref.
-         Generated as CalibrationStrings. The dialog in :ui resolves them; it does not own the XML. -->
-    <string name="cal_saved_need_more_entries" comment="%1$d=number of valid fingerstick entries recorded so far for the current sensor session (always less than 2 when this shows)">Calibration saved. It will take effect once you add one more fingerstick entry for this sensor (currently %1$d).</string>
-    <string name="cal_saved_unsafe_fit">Calibration saved, but the calculated correction is outside the safe range, so it was not applied. Add another entry, or check your fingerstick value.</string>
 </resources>

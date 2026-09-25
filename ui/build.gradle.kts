@@ -75,9 +75,6 @@ kotlin {
                 implementation(project(":core:keys"))
                 implementation(project(":core:objects"))
                 implementation(project(":core:ui"))
-                // The post-save sentences are CalibrationStrings (plugin strings.xml). The dialog
-                // resolves them; it does not keep a second copy in :ui.
-                implementation(project(":plugins:calibration"))
 
                 api(libs.cmp.runtime)
                 api(libs.cmp.foundation)

@@ -5,6 +5,7 @@ import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.calibration.CalibrationStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -65,9 +66,10 @@ class CalibrationStatusTest {
         assertEquals(CalibrationStatus.UnsafeFit, unsafe)
         val unsafeFit = fitLinearCalibration(listOf(entry(100.0, 200.0), entry(200.0, 400.0)), now)!!
         assertEquals(FitMode.SlopeClamped, unsafeFit.mode)
-        assertTrue(!unsafeFit.isApplicable)
+        assertFalse(unsafeFit.isApplicable)
 
-        // 5. OffsetOnly. Ref fixture: sensor values 1 mg/dL apart, under MIN_SENSOR_RANGE_FOR_SLOPE.
+        // 5. OffsetOnly and still applicable. Ref fixture: sensor values 1 mg/dL apart,
+        // under MIN_SENSOR_RANGE_FOR_SLOPE. Deltas +3 and +5, offset +4, centre inside [-30, 30].
         assertEquals(
             CalibrationStatus.AppliedOffsetOnly,
             calibrationStatus(
@@ -76,6 +78,18 @@ class CalibrationStatusTest {
                 listOf(entry(140.0, 143.0), entry(141.0, 146.0)),
                 warmUpHours
             )
+        )
+
+        // The UnsafeFit branch is checked before FitMode. An OffsetOnly fit whose centre
+        // correction is outside [-30, 30] is UnsafeFit, not AppliedOffsetOnly.
+        // Slope stays 1 (range 1 mg/dL); both deltas are +60.
+        val offsetUnsafe = listOf(entry(140.0, 200.0), entry(141.0, 201.0))
+        val offsetUnsafeFit = fitLinearCalibration(offsetUnsafe, now)!!
+        assertEquals(FitMode.OffsetOnly, offsetUnsafeFit.mode)
+        assertFalse(offsetUnsafeFit.isApplicable)
+        assertEquals(
+            CalibrationStatus.UnsafeFit,
+            calibrationStatus(running, now, offsetUnsafe, warmUpHours)
         )
 
         // 6. SlopeClamped and still applicable. Three points on the free line of slope 12/7,
@@ -97,13 +111,21 @@ class CalibrationStatusTest {
 
     @Test
     fun a_fit_the_reference_rejects_at_the_low_end_stays_applied_until_c5() {
-        // Ref CalibrationMath.kt KDoc above LOW_MGDL: sensor 110→135 and 180→175, correction at
-        // 100 is about +29 (centre check passes) and a reading of 55 is handed back near 104.
-        // Ref isApplicable also requires lowEndSafe, so this is UnsafeFit there. Study isApplicable
-        // is only slopeInRange && correctionInRange, so status() returns Applied.
-        val hiding = listOf(entry(110.0, 135.0), entry(180.0, 175.0))
+        // Three points, so both sides fit a slope (ref MIN_ENTRIES_FOR_SLOPE = 3, not ported,
+        // is not what separates them here). 110→135, 145→155, 180→175, equal weights:
+        // slope 4/7, offset 505/7, correction at 100 = 205/7 (centre check passes on both sides).
+        // Correction at 40 mg/dL is 385/7 = +55, above the ref ceiling of 20, so ref lowEndSafe
+        // fails and status() is UnsafeFit. Study isApplicable is only slope and centre, so Applied.
+        //
+        // Two points 110→135 and 180→175 are not that case. The ref forces OffsetOnly
+        // (deltas +25 and −5, offset +10) and returns AppliedOffsetOnly. Study fits the slope.
+        val hiding = listOf(entry(110.0, 135.0), entry(145.0, 155.0), entry(180.0, 175.0))
         val fit = fitLinearCalibration(hiding, now)!!
         assertEquals(FitMode.Full, fit.mode)
+        assertEquals(4.0 / 7.0, fit.slope, absoluteTolerance = 1e-9)
+        assertEquals(505.0 / 7.0, fit.offset, absoluteTolerance = 1e-9)
+        assertEquals(205.0 / 7.0, fit.correctionAtCenter, absoluteTolerance = 1e-9)
+        assertEquals(55.0, (fit.slope - 1.0) * 40.0 + fit.offset, absoluteTolerance = 1e-9)
         assertTrue(fit.isApplicable)
         val running = now - T.hours(12).msecs()
         assertEquals(CalibrationStatus.Applied, calibrationStatus(running, now, hiding, warmUpHours))

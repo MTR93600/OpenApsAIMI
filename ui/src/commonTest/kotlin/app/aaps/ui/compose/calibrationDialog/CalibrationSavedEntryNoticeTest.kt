@@ -1,8 +1,9 @@
-package app.aaps.plugins.calibration
+package app.aaps.ui.compose.calibrationDialog
 
 import app.aaps.core.interfaces.calibration.CalibrationStatus
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.ui.UiStrings
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -19,12 +20,12 @@ class CalibrationSavedEntryNoticeTest {
     fun only_need_more_entries_and_unsafe_fit_are_told_to_the_user() {
         val needMore = notYetEffectiveMessage(CalibrationStatus.NeedMoreEntries(1), rh)
         assertEquals("need-more", needMore)
-        assertEquals(CalibrationStrings.cal_saved_need_more_entries, rh.lastRef)
+        assertEquals(UiStrings.cal_saved_need_more_entries, rh.lastRef)
         assertEquals(listOf(1), rh.lastArgs)
 
         val unsafe = notYetEffectiveMessage(CalibrationStatus.UnsafeFit, rh)
         assertEquals("unsafe", unsafe)
-        assertEquals(CalibrationStrings.cal_saved_unsafe_fit, rh.lastRef)
+        assertEquals(UiStrings.cal_saved_unsafe_fit, rh.lastRef)
         assertNull(rh.lastArgs)
 
         val quiet = listOf(
@@ -48,7 +49,7 @@ class CalibrationSavedEntryNoticeTest {
         override fun gs(ref: TextRef): String {
             lastRef = ref
             lastArgs = null
-            return if (ref == CalibrationStrings.cal_saved_unsafe_fit) "unsafe" else "other"
+            return if (ref == UiStrings.cal_saved_unsafe_fit) "unsafe" else "other"
         }
 
         override fun gs(ref: TextRef, vararg args: Any?): String {

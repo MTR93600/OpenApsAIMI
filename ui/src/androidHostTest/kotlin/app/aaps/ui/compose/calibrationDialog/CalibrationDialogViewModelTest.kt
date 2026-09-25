@@ -15,7 +15,7 @@ import app.aaps.core.interfaces.source.XDripSource
 import app.aaps.core.interfaces.sync.XDripBroadcast
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
-import app.aaps.plugins.calibration.CalibrationStrings
+import app.aaps.ui.UiStrings
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -88,7 +88,7 @@ internal class CalibrationDialogViewModelTest {
     fun `confirmAndSave on an accepted first entry tells the user it did not apply yet`() = runTest {
         whenever(activeCalibration.addEntry(any(), any())).thenReturn(AddEntryResult.Accepted)
         whenever(activeCalibration.status()).thenReturn(CalibrationStatus.NeedMoreEntries(1))
-        whenever(rh.gs(eq(CalibrationStrings.cal_saved_need_more_entries), any())).thenReturn("one more entry needed")
+        whenever(rh.gs(eq(UiStrings.cal_saved_need_more_entries), any())).thenReturn("one more entry needed")
 
         sut.updateBg(120.0)
         sut.buildConfirmationSummary()
