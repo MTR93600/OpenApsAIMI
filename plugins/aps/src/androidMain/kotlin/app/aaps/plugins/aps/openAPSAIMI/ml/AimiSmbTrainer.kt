@@ -36,9 +36,8 @@ object AimiSmbTrainer {
     // 3 causal-context features + 1 trendIndicator
     const val INPUT_SIZE = SmbRefinementFeatureSchema.INPUT_SIZE
 
-    // Training rate limit
-    private const val TRAIN_INTERVAL_MS  = 6 * 60 * 60 * 1000L  // 6h
-    private const val MIN_NEW_ROWS_TO_RETRAIN = 200
+    // Training rate limit and the 24h stale-attempt gate live in [AimiSmbTrainingSchedule].
+    // The numbers are the reference trainer's (`6a6561caab`); this object only applies them.
 
     /** Index of the bg column in the SMB feature vector (`SmbRefinementFeatureSchema` lists it first). */
     private const val BG_FEATURE_INDEX = 0
@@ -80,18 +79,40 @@ object AimiSmbTrainer {
     // Circuit breaker (shared component)
     private val circuitBreaker = TrainingCircuitBreaker()
 
-    // Training rate limit
-    private val lastTrainMs   = AtomicLong(0L)
+    // Training rate limit / bootstrap-and-staleness state, persisted across app restarts (see
+    // [loadPersistedState] / [persistState]). [lastTrainMs] is the last SUCCESSFUL publish, unchanged
+    // from before; [lastAttemptMs] is the last time an attempt actually RAN past the gates, whether or
+    // not it published a model. The rate limit and the 24h staleness trigger key on the attempt, not
+    // the success, so a run of rejected candidates does not freeze the clock.
+    private val lastAttemptMs   = AtomicLong(0L)
+    private val lastTrainMs     = AtomicLong(0L)
     private val rowsAtLastTrain = AtomicLong(0L)
+
+    /**
+     * Guards [loadPersistedState] to run exactly once, whichever of [loadModel] or [trainNow] reaches it
+     * first.
+     */
+    private val stateLoaded = AtomicBoolean(false)
 
     /** Set once the weights trained on an unreadable corpus have been thrown away. */
     private val staleModelDiscarded = AtomicBoolean(false)
 
     // ---- Public API ----------------------------------------------------------
 
-    /** Load previously saved model from disk. Call once on plugin start. */
+    /**
+     * Load previously saved model from disk, and the persisted training state. Call once on plugin start.
+     *
+     * The state load is guarded by [ensureStateLoadedLocked] under [trainMutex] — same guard [trainNow]
+     * uses — so whichever of the two runs first on a given app start performs the actual disk read, and
+     * the other is a no-op.
+     *
+     * ⚠️ ASYNC IMPACT: runs on the existing `Dispatchers.IO` scope. The mutex is held only for the state
+     * read, then released before the weight load, so [trainNow] (already inside [trainMutex]) cannot
+     * decide on zeroed counters, and this function does not re-enter the mutex.
+     */
     fun loadModel(storage: AimiStorage, dir: AimiPath) {
         scope.launch {
+            trainMutex.withLock { ensureStateLoadedLocked(storage, dir) }
             val net = AimiSmbModelStore.load(storage, dir, INPUT_SIZE)
             modelRef.set(net)
             if (net != null) {
@@ -104,14 +125,19 @@ object AimiSmbTrainer {
 
     /**
      * Fire-and-forget training trigger.
-     * Respects rate limit (6h) and minimum new-rows requirement (200).
+     * Respects the rate limit (6h since the last ATTEMPT) and the gates in [AimiSmbTrainingSchedule.shouldAttempt].
      * Never blocks the caller.
      */
     fun maybeTrainAsync(storage: AimiStorage, dir: AimiPath, csvFile: AimiPath) {
         val now = aimiWallClockMs()
 
-        // Rate limit guard (fast path, no coroutine needed)
-        if (now - lastTrainMs.get() < TRAIN_INTERVAL_MS) return
+        // Rate limit guard (fast path, no coroutine needed). This alone cannot tell bootstrap or staleness
+        // apart from a plain "not due" skip — that needs the row count from the CSV — so it only ever
+        // short-circuits the case every path in [AimiSmbTrainingSchedule.shouldAttempt] agrees on: too soon
+        // since the last attempt. Clamped the same way `shouldAttempt` clamps it: a future value in memory
+        // must not block this pre-check forever either.
+        val safeLastAttempt = AimiSmbTrainingSchedule.sanitizeTimestamp(lastAttemptMs.get(), now)
+        if (now - safeLastAttempt < AimiSmbTrainingSchedule.TRAIN_INTERVAL_MS) return
 
         // Circuit breaker guard
         if (isCircuitOpen(now)) return
@@ -169,6 +195,9 @@ object AimiSmbTrainer {
     // ---- Internal training ---------------------------------------------------
 
     private suspend fun trainNow(storage: AimiStorage, dir: AimiPath, csvFile: AimiPath) {
+        // Caller already holds [trainMutex] (`maybeTrainAsync`). Do not take it again: Mutex is not reentrant.
+        ensureStateLoadedLocked(storage, dir)
+
         if (!storage.exists(csvFile)) {
             Log.d(TAG, "CSV not found — skip training")
             return
@@ -196,11 +225,32 @@ object AimiSmbTrainer {
         }
         val totalRows = dataLines.size.toLong()
 
-        val newRows = totalRows - rowsAtLastTrain.get()
-        if (newRows < MIN_NEW_ROWS_TO_RETRAIN) {
-            Log.d(TAG, "Only $newRows new rows (need $MIN_NEW_ROWS_TO_RETRAIN) — skip training")
+        val now = aimiWallClockMs()
+        // No model in memory AND no weight file yet: the first attempt must not wait on 200 new rows.
+        val modelAvailable = modelRef.get() != null ||
+            storage.exists(AimiSmbModelStore.modelFile(storage, dir))
+        val decision = AimiSmbTrainingSchedule.shouldAttempt(
+            nowMs = now,
+            lastAttemptMs = lastAttemptMs.get(),
+            rowsAtLastTrain = rowsAtLastTrain.get(),
+            totalRows = totalRows,
+            modelAvailable = modelAvailable,
+        )
+        // The row-counter correction (CSV shrank below rowsAtLastTrain) must be kept even when this
+        // attempt is skipped, or the negative-newRows condition would recur on every call.
+        if (decision.effectiveRowsAtLastTrain != rowsAtLastTrain.get()) {
+            rowsAtLastTrain.set(decision.effectiveRowsAtLastTrain)
+            persistState(storage, dir)
+        }
+        if (!decision.attempt) {
+            Log.d(TAG, "Skip training: ${decision.reason}")
             return
         }
+
+        // This attempt is really running past the gates: the rate limit and the 24h trigger both
+        // measure from here, whatever the outcome below turns out to be.
+        lastAttemptMs.set(now)
+        persistState(storage, dir)
 
         val headers = headerLine.split(",").map { it.trim() }
         val headerCheck = AimiSmbCorpus.checkCorpusHeader(headers)
@@ -213,7 +263,7 @@ object AimiSmbTrainer {
         val inputs = corpus.inputs
         val targets = corpus.targets
 
-        if (inputs.size < 10) {
+        if (inputs.size < AimiSmbTrainingSchedule.MIN_TRAINING_SAMPLES) {
             Log.w(TAG, "Insufficient training samples (${inputs.size}) — skip")
             return
         }
@@ -248,10 +298,17 @@ object AimiSmbTrainer {
             modelRef.set(net)
             lastTrainMs.set(aimiWallClockMs())
             rowsAtLastTrain.set(totalRows)
+            persistState(storage, dir)
             circuitBreaker.reset()   // reset circuit breaker on success
             Log.i(TAG, "Model trained and saved successfully (${inputs.size} rows)")
         } else {
-            recordFailure()
+            // RULING R-CB (tip 6a6561caab): a rejected candidate must not disable the model already in
+            // service. recordFailure feeds the breaker, which after 3 failures makes refine return the
+            // raw dose for 6h. Only count this when modelRef is null — nothing is in service yet.
+            // The 6h / 24h clocks stay on lastAttemptMs, set above, either way.
+            if (AimiSmbTrainingSchedule.countGateRejectionAsBreakerFailure(modelRef.get() != null)) {
+                recordFailure()
+            }
         }
     }
 
@@ -300,6 +357,66 @@ object AimiSmbTrainer {
     private fun recordFailure() {
         if (circuitBreaker.recordFailure()) {
             Log.w(TAG, "Circuit breaker OPEN — ML disabled for 6h after ${TrainingCircuitBreaker.DEFAULT_MAX_FAILURES} consecutive failures")
+        }
+    }
+
+    // ---- Persistence -----------------------------------------------------
+    // Same three counters as the reference `smb_ml_training_state.json`. The bytes go through
+    // [AimiStorage.replaceText] (tmp then rename), which is the study equivalent of the reference
+    // `File.renameTo`. Not a preference key, so import/export is unchanged.
+
+    private fun stateFile(storage: AimiStorage, dir: AimiPath): AimiPath =
+        storage.resolve(dir, AimiSmbTrainingSchedule.STATE_FILE_NAME)
+
+    /**
+     * Loads the persisted state exactly once. The caller MUST already hold [trainMutex] (or be the
+     * single-threaded path inside it): this function does not take the lock, because [trainNow] is
+     * already called from inside `trainMutex.withLock` and [Mutex] is not reentrant.
+     */
+    private fun ensureStateLoadedLocked(storage: AimiStorage, dir: AimiPath) {
+        if (stateLoaded.compareAndSet(false, true)) {
+            loadPersistedState(storage, dir)
+        }
+    }
+
+    /**
+     * Missing or unreadable file leaves the in-memory defaults (all zero), which is the same as
+     * "never trained" — safe, since it only makes the next attempt run a little sooner, never later.
+     *
+     * A loaded timestamp more than [AimiSmbTrainingSchedule.CLOCK_SKEW_TOLERANCE_MS] in the future is
+     * reset to 0. Neither timestamp is ever moved backwards by a load: the larger of the current
+     * in-memory value and the loaded one wins.
+     */
+    private fun loadPersistedState(storage: AimiStorage, dir: AimiPath) {
+        val file = stateFile(storage, dir)
+        if (!storage.exists(file)) return
+        try {
+            val text = storage.readText(file) ?: return
+            val loaded = AimiSmbTrainingSchedule.decodeCounters(text, aimiWallClockMs()) ?: return
+            lastAttemptMs.set(maxOf(lastAttemptMs.get(), loaded.lastAttemptMs))
+            lastTrainMs.set(maxOf(lastTrainMs.get(), loaded.lastTrainMs))
+            rowsAtLastTrain.set(loaded.rowsAtLastTrain)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not load SMB training state: ${e.message}")
+        }
+    }
+
+    private fun persistState(storage: AimiStorage, dir: AimiPath) {
+        try {
+            val file = stateFile(storage, dir)
+            storage.createParentDirectories(file)
+            val text = AimiSmbTrainingSchedule.encodeCounters(
+                AimiSmbTrainingSchedule.Counters(
+                    lastAttemptMs = lastAttemptMs.get(),
+                    lastTrainMs = lastTrainMs.get(),
+                    rowsAtLastTrain = rowsAtLastTrain.get(),
+                ),
+            )
+            if (!storage.replaceText(file, text)) {
+                Log.w(TAG, "Could not persist SMB training state")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not persist SMB training state: ${e.message}")
         }
     }
 }
