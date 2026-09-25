@@ -180,13 +180,35 @@ class LinearCalibrationPlugin(
         if (!fit.correctionInRange) {
             aapsLogger.warn(
                 LTag.GLUCOSE,
-                "LinearCalibration: mid-range correction ${fit.correctionAtCenter} mg/dL outside [$CORRECTION_AT_CENTER_MIN, $CORRECTION_AT_CENTER_MAX], identity"
+                "LinearCalibration: mid-range lift ${fit.correctionAtCenter} mg/dL above $CORRECTION_AT_CENTER_MAX, identity"
+            )
+            return data
+        }
+        // The centre alone does not bound the line: a fit that looks fine at 100 mg/dL can still lift
+        // a 55 into the normal range (hypo hidden from the loop AND from the alarms) or turn a 300
+        // into a 450. Same four predicates as [CalibrationFit.isApplicable], in the ref order
+        // (`LinearCalibrationPlugin.kt` L158–188 @ `6598201d`). Not a second fit.
+        if (!fit.lowEndSafe) {
+            val why =
+                if (fit.correctionAtLow > CORRECTION_AT_LOW_MAX) "would hide a hypo"
+                else "flat drop, would pin the reading at the floor"
+            aapsLogger.warn(
+                LTag.GLUCOSE,
+                "LinearCalibration: low-end correction ${fit.correctionAtLow} mg/dL at $LOW_MGDL " +
+                    "outside [$CORRECTION_AT_LOW_MIN, $CORRECTION_AT_LOW_MAX] ($why), identity"
+            )
+            return data
+        }
+        if (!fit.highEndSafe) {
+            aapsLogger.warn(
+                LTag.GLUCOSE,
+                "LinearCalibration: high-end ratio ${fit.ratioAtHigh} at $HIGH_MGDL above $MAX_RATIO_AT_HIGH, identity"
             )
             return data
         }
 
         // Blend toward identity if the newest entry has gone stale — see stalenessConfidence's
-        // KDoc. Applied only now, after both safety checks above passed on the RAW fit.
+        // KDoc. Applied only now, after the safety checks above passed on the RAW fit.
         val confidence = stalenessConfidence(entries.maxOf { it.timestamp }, now)
         val effective = fit.blendTowardIdentity(confidence)
 
@@ -208,7 +230,7 @@ class LinearCalibrationPlugin(
      * [calibrate] uses, and only after warm-up: the ref returns before that read. The order of
      * the seven results lives in [calibrationStatus], which calls [fitLinearCalibration] and
      * [CalibrationFit.isApplicable]. It does not blend for staleness and it does not repeat the
-     * slope or centre checks.
+     * slope, centre, or end checks. [calibrate] tests those four predicates on the same fit.
      */
     override suspend fun status(): CalibrationStatus {
         val now = dateUtil.now()

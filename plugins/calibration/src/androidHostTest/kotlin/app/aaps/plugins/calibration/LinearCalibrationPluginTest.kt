@@ -393,6 +393,7 @@ class LinearCalibrationPluginTest : TestBase() {
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
             listOf(
                 entry(sensor = 100.0, fs = 110.0, ageDays = 3L),
+                entry(sensor = 150.0, fs = 165.0, ageDays = 3L),
                 entry(sensor = 200.0, fs = 220.0, ageDays = 3L)
             )
         )
@@ -548,15 +549,17 @@ class LinearCalibrationPluginTest : TestBase() {
 
     @Test
     fun addEntry_deltaThresholdScaledBySlopeWhenFitApplicable() = runTest {
-        // Two entries imply slope = 1.05, well inside clamps → fit is applicable.
+        // Three entries imply slope = 1.05, well inside clamps → fit is applicable.
         // Effective threshold becomes 5.0 * 1.05 = 5.25 mg/dL/5min.
         // Fresh pairs: an entry older than PAIR_LAG_WINDOW_MS is re-paired (entriesForFit) and the
         // broad glucose stub below would replace the stored sensor values. Age 0 keeps the stored pair,
         // which is what this slope check is about. Ref dates its slope fixtures at now for the same reason.
+        // Two points would be offset-only (slope 1) and the 5.2 delta would be rejected.
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
             listOf(
                 CAL(id = 1L, timestamp = now, fingerstickMgdl = 105.0, sensorMgdlAtPairing = 100.0),
-                CAL(id = 2L, timestamp = now, fingerstickMgdl = 210.0, sensorMgdlAtPairing = 200.0)
+                CAL(id = 2L, timestamp = now, fingerstickMgdl = 157.5, sensorMgdlAtPairing = 150.0),
+                CAL(id = 3L, timestamp = now, fingerstickMgdl = 210.0, sensorMgdlAtPairing = 200.0)
             )
         )
         // Delta 5.2: would be rejected without scaling, accepted with slope-scaled threshold.
@@ -570,7 +573,14 @@ class LinearCalibrationPluginTest : TestBase() {
     @Test
     fun addEntry_deltaExceedsScaledThreshold_rejectsWithScaledThreshold() = runTest {
         // Same fit (slope=1.05), but delta 6.0 still exceeds the scaled threshold 5.25.
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        // Three points: two would lock the slope at 1 and the threshold would stay 5.0.
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(
+                entry(sensor = 100.0, fs = 105.0, ageDays = 0L),
+                entry(sensor = 150.0, fs = 157.5, ageDays = 0L),
+                entry(sensor = 200.0, fs = 210.0, ageDays = 0L)
+            )
+        )
         whenever(glucoseStatusProvider.glucoseStatusData).thenReturn(glucoseStatus(shortAvgDelta = 6.0))
         val result = plugin.addEntry(bgMgdl = 150.0, timestamp = now)
         assertThat(result).isInstanceOf(AddEntryResult.Rejected.DeltaTooHigh::class.java)
