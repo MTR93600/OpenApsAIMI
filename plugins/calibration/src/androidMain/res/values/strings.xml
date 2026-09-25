@@ -8,6 +8,7 @@
     <string name="description_linear_calibration">"Per-sensor linear calibration override (slope and offset) computed from your fingerstick entries. Recent entries are weighted higher. Override is applied after the current sensor session start; first 2 hours are skipped as warm-up."</string>
     <string name="sensor_change_detected_text">Possible sensor change detected at %1$s. Mark as new sensor?</string>
     <string name="sensor_change_detected_action">Mark sensor change</string>
+    <string name="sensor_change_detected_ignore">Not a new sensor</string>
 
     <!-- Calibration management screen -->
     <string name="cal_status_no_session">Log a sensor change to enable calibration.</string>

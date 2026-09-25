@@ -217,3 +217,59 @@ fun sensorValueForPairing(
     val middle = nearest.size / 2
     return if (nearest.size % 2 == 1) nearest[middle] else (nearest[middle - 1] + nearest[middle]) / 2.0
 }
+
+/**
+ * Span read when [app.aaps.core.interfaces.iob.GlucoseStatusProvider] has no `shortAvgDelta`.
+ *
+ * Ref `LinearCalibrationPlugin.kt` L527 @ `6598201d` (`1b81e356c8`).
+ */
+const val DELTA_FALLBACK_WINDOW_MS = 20L * 60L * 1000L
+
+/**
+ * Rate of change, mg/dL per 5 min, from stored readings newest-first.
+ *
+ * Ref `LinearCalibrationPlugin.fallbackDeltaPer5Min` L324–332 @ `6598201d`
+ * (introduced `1b81e356c8`). The plugin applies the 20 min window before calling this.
+ * Fewer than two readings, or a non-positive span, cannot produce a rate.
+ */
+@Suppress("UNUSED_PARAMETER") // window is applied by the caller; ref L322–323 uses timestamp only there
+fun fallbackDeltaPer5Min(readings: List<GV>, timestamp: Long): Double? {
+    if (readings.size < 2) return null
+    val newest = readings.first()
+    val oldest = readings.last()
+    val spanMs = newest.timestamp - oldest.timestamp
+    if (spanMs <= 0L) return null
+    return (newest.value - oldest.value) / spanMs * T.mins(5).msecs()
+}
+
+/**
+ * Delta the precondition gate compares to its threshold.
+ *
+ * Ref L231: `shortAvgDelta ?: fallbackDeltaPer5Min(timestamp)`.
+ * A present short average is used as-is. The timestamp is the one the fallback
+ * formula is defined against; the rate itself uses the reading timestamps.
+ */
+fun preconditionDelta(shortAvgDelta: Double?, readings: List<GV>, timestamp: Long): Double? =
+    shortAvgDelta ?: fallbackDeltaPer5Min(readings, timestamp)
+
+/**
+ * Middle of the newest break longer than [gapThresholdMs] in [readings], or null when there is none.
+ *
+ * Fed the **stored** readings, never bucketed data: bucketing fills every break, so a bucketed
+ * series is evenly spaced and no break can be seen in it.
+ *
+ * Ref `CalibrationMath.newestGapMidpoint` L318–330 @ `6598201d` (introduced `8452e845f6`).
+ *
+ * @param readings sensor readings, newest first.
+ * @param gapThresholdMs how long a break has to be to count as one.
+ * @param notBefore stop looking once the readings are older than this. Null looks through everything given.
+ */
+fun newestGapMidpoint(readings: List<GV>, gapThresholdMs: Long, notBefore: Long? = null): Long? {
+    for (i in 0 until readings.size - 1) {
+        val newer = readings[i].timestamp
+        val older = readings[i + 1].timestamp
+        if (notBefore != null && newer <= notBefore) return null
+        if (newer - older > gapThresholdMs) return older + (newer - older) / 2
+    }
+    return null
+}

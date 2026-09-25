@@ -2,6 +2,7 @@ package app.aaps.plugins.calibration
 
 import app.aaps.core.data.iob.InMemoryGlucoseValue
 import app.aaps.core.data.model.CAL
+import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.plugin.PluginType
@@ -78,6 +79,17 @@ class LinearCalibrationPlugin(
 
     private var scope: CoroutineScope? = null
 
+    /**
+     * When the stored readings were last searched for a break.
+     * @Volatile, same as the ref (L69) and as [lastHealthScanAt]: two longs, not a map.
+     */
+    @Volatile
+    private var lastGapScanAt: Long = 0L
+
+    /** Break already told this process, so the same one is not reported again until restart. Ref L74. */
+    @Volatile
+    private var lastNotifiedGapAt: Long = 0L
+
     /** When calibration health was last checked. See `checkCalibrationHealthAndNotify`. */
     @Volatile
     private var lastHealthScanAt: Long = 0L
@@ -143,7 +155,7 @@ class LinearCalibrationPlugin(
             return data
         }
 
-        detectAndNotifyGap(data, sessionStart)
+        detectAndNotifyGap(sessionStart, now)
         checkCalibrationHealthAndNotify(sessionStart, now)
 
         // Without a recorded SENSOR_CHANGE, entries can span multiple sensors with
@@ -195,7 +207,11 @@ class LinearCalibrationPlugin(
             ?: return AddEntryResult.Rejected.NoSession
         val warmUpEndsAt = sessionStart + T.hours(WARM_UP_HOURS).msecs()
         if (timestamp < warmUpEndsAt) return AddEntryResult.Rejected.InWarmUp(warmUpEndsAt)
-        val delta = glucoseStatusProvider.glucoseStatusData?.shortAvgDelta
+        // Ref L231: shortAvgDelta ?: fallbackDeltaPer5Min(timestamp). The fallback reads the
+        // stored window only when the provider has nothing (the ?: does not evaluate it otherwise).
+        val shortAvgDelta = glucoseStatusProvider.glucoseStatusData?.shortAvgDelta
+        val fallbackReadings = if (shortAvgDelta == null) fallbackReadings(timestamp) else emptyList()
+        val delta = preconditionDelta(shortAvgDelta, fallbackReadings, timestamp)
         if (delta != null) {
             // shortAvgDelta is computed on .recalculated (calibrated) values once an applicable
             // fit is in place, so its magnitude scales with slope. Scale the raw-units threshold
@@ -209,11 +225,7 @@ class LinearCalibrationPlugin(
             }
             if (abs(delta) > effectiveThreshold) return AddEntryResult.Rejected.DeltaTooHigh(delta, effectiveThreshold)
         }
-        persistenceLayer.getBgReadingsDataFromTimeToTime(
-            start = timestamp - PAIR_LOOKBACK_MS,
-            end = timestamp,
-            ascending = false
-        ).firstOrNull() ?: return AddEntryResult.Rejected.NoSensorPair
+        pairingReadings(timestamp).firstOrNull() ?: return AddEntryResult.Rejected.NoSensorPair
         return AddEntryResult.Accepted
     }
 
@@ -282,32 +294,64 @@ class LinearCalibrationPlugin(
             aapsLogger.warn(LTag.GLUCOSE, "LinearCalibration.addEntry rejected: $pre")
             return pre
         }
-        // checkPreconditionsAt has already verified the pair exists; re-fetch for the actual sensor value.
-        val pair = persistenceLayer.getBgReadingsDataFromTimeToTime(
-            start = timestamp - PAIR_LOOKBACK_MS,
-            end = timestamp,
-            ascending = false
-        ).first()
-        persistenceLayer.insertOrUpdateCalibrationEntry(CAL(timestamp = timestamp, fingerstickMgdl = bgMgdl, sensorMgdlAtPairing = pair.value))
+        // Ref L356–358 (`8452e845f6`): the stored pair is the median, not the newest reading.
+        // sensorValueForPairing is the existing commonMain function. It is not reimplemented here.
+        val readings = pairingReadings(timestamp)
+        val sensorAtPairing = sensorValueForPairing(readings, timestamp) ?: return AddEntryResult.Rejected.NoSensorPair
+        persistenceLayer.insertOrUpdateCalibrationEntry(
+            CAL(timestamp = timestamp, fingerstickMgdl = bgMgdl, sensorMgdlAtPairing = sensorAtPairing)
+        )
         aapsLogger.debug(LTag.GLUCOSE) {
-            "LinearCalibration.addEntry: fingerstick=$bgMgdl sensorAtPairing=${pair.value}"
+            "LinearCalibration.addEntry: fingerstick=$bgMgdl sensorAtPairing=$sensorAtPairing from ${readings.size} reading(s)"
         }
         return AddEntryResult.Accepted
     }
 
-    private suspend fun detectAndNotifyGap(data: List<InMemoryGlucoseValue>, sessionStart: Long?) {
-        val gapThresholdMs = T.mins(GAP_THRESHOLD_MIN).msecs()
-        var gapTime: Long? = null
-        for (i in 0 until data.size - 1) {
-            val newer = data[i].timestamp
-            val older = data[i + 1].timestamp
-            if (sessionStart != null && newer <= sessionStart) break
-            if (newer - older > gapThresholdMs) {
-                gapTime = older + (newer - older) / 2
-                break
-            }
-        }
-        val detectedAt = gapTime ?: return
+    /**
+     * Sensor readings a fingerstick at [timestamp] may be paired with: the ones just before it.
+     * Ref L343–348. Only the past is read.
+     */
+    private suspend fun pairingReadings(timestamp: Long): List<GV> =
+        persistenceLayer.getBgReadingsDataFromTimeToTime(
+            start = timestamp - PAIR_LOOKBACK_MS,
+            end = timestamp,
+            ascending = false
+        )
+
+    /** Ref L321–326. The rate is [fallbackDeltaPer5Min]; this is only the window. */
+    private suspend fun fallbackReadings(timestamp: Long): List<GV> =
+        persistenceLayer.getBgReadingsDataFromTimeToTime(
+            start = timestamp - DELTA_FALLBACK_WINDOW_MS,
+            end = timestamp,
+            ascending = false
+        )
+
+    /**
+     * Looks for a break in the **stored** readings that suggests a sensor change nobody wrote down.
+     *
+     * Ref L381–416 @ `6598201d`. The bucketed series passed to [calibrate] is not scanned: bucketing
+     * fills every slot, so it has no breaks left. [now] is the plugin clock (`dateUtil.now()`),
+     * not a direct system clock. `aimiWallClockMs` lives in `:plugins:aps` and is not a CGM dependency.
+     *
+     * ⚠️ ASYNC IMPACT: still called from the existing [calibrate] suspend path. The ignore action
+     * writes a preference; it does not start a coroutine. Scan timestamps are `@Volatile`, like the
+     * ref and like [lastHealthScanAt].
+     */
+    private suspend fun detectAndNotifyGap(sessionStart: Long?, now: Long) {
+        if (!CalibrationGap.shouldScan(now, lastGapScanAt)) return
+        lastGapScanAt = now
+
+        val readings = persistenceLayer.getBgReadingsDataFromTimeToTime(
+            start = now - CalibrationGap.SCAN_WINDOW_MS,
+            end = now,
+            ascending = false
+        )
+        val detectedAt = CalibrationGap.gapWorthAsking(
+            readings = readings,
+            sessionStart = sessionStart,
+            lastNotifiedGapAt = lastNotifiedGapAt,
+            ignoredGapAt = { preferences.get(CalibrationLongKey.IgnoredSensorGapAt) }
+        ) ?: return
 
         val nearby = persistenceLayer.getTherapyEventDataFromToTime(
             from = detectedAt - SENSOR_CHANGE_PROXIMITY_MS,
@@ -315,12 +359,17 @@ class LinearCalibrationPlugin(
         ).any { it.type == TE.Type.SENSOR_CHANGE }
         if (nearby) return
 
+        lastNotifiedGapAt = detectedAt
+        aapsLogger.debug(LTag.GLUCOSE) { "LinearCalibration: possible sensor change at ${dateUtil.timeString(detectedAt)}" }
         notificationManager.post(
             id = NotificationId.SENSOR_CHANGE_DETECTED,
             text = rh.gs(CalibrationStrings.sensor_change_detected_text, dateUtil.timeString(detectedAt)),
             actions = listOf(
                 NotificationAction(CalibrationStrings.sensor_change_detected_action) {
                     runBlocking { insertSensorChange(detectedAt) }
+                },
+                NotificationAction(CalibrationStrings.sensor_change_detected_ignore) {
+                    preferences.put(CalibrationLongKey.IgnoredSensorGapAt, detectedAt)
                 }
             )
         )
@@ -393,7 +442,6 @@ class LinearCalibrationPlugin(
 
     private companion object {
 
-        const val GAP_THRESHOLD_MIN = 30L
         const val WARM_UP_HOURS = 2L
 
         /**
