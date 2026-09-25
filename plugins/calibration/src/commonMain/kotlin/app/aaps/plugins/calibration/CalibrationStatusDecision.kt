@@ -9,8 +9,8 @@ import app.aaps.core.interfaces.calibration.CalibrationStatus
  *
  * One classification, shared with the test. It does not fit a second line and it does not
  * restate the safety checks: a missing line is [fitLinearCalibration] returning null, and an
- * unsafe line is the study [CalibrationFit.isApplicable]. That property is still only
- * `slopeInRange && correctionInRange`. `lowEndSafe` and `highEndSafe` are not added here.
+ * unsafe line is [CalibrationFit.isApplicable] (`slopeInRange && correctionInRange && lowEndSafe
+ * && highEndSafe`, ref `CalibrationMath.kt` L166 @ `6598201d`).
  *
  * [entries] must already be the list [entriesForFit] would return. The plugin loads them, and
  * only once warm-up is over, because the ref returns before that read. Passing them in keeps

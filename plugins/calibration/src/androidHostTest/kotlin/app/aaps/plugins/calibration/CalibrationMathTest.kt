@@ -21,9 +21,10 @@ class CalibrationMathTest {
 
     @Test
     fun fitLinearCalibration_wideSpread_returnsFullMode() {
-        // 100 mg/dL spread — well above MIN_SENSOR_RANGE_FOR_SLOPE (54)
+        // 100 mg/dL spread — well above MIN_SENSOR_RANGE_FOR_SLOPE (54) — and three entries,
+        // which is what MIN_ENTRIES_FOR_SLOPE asks for before a slope is trusted at all.
         val fit = fitLinearCalibration(
-            listOf(entry(100.0, 110.0), entry(200.0, 220.0)),
+            listOf(entry(100.0, 110.0), entry(150.0, 165.0), entry(200.0, 220.0)),
             now
         )!!
         assertThat(fit.mode).isEqualTo(FitMode.Full)
@@ -46,7 +47,7 @@ class CalibrationMathTest {
     fun fitLinearCalibration_atThreshold_returnsFullMode() {
         // Exactly at threshold (54 mg/dL spread) — still trusts slope.
         val fit = fitLinearCalibration(
-            listOf(entry(120.0, 120.0), entry(174.0, 174.0)),
+            listOf(entry(120.0, 120.0), entry(147.0, 147.0), entry(174.0, 174.0)),
             now
         )!!
         assertThat(fit.mode).isEqualTo(FitMode.Full)
@@ -60,6 +61,7 @@ class CalibrationMathTest {
         val fit = fitLinearCalibration(
             listOf(
                 entry(100.0, 110.0, ageDays = 0L),
+                entry(150.0, 165.0, ageDays = 0L),
                 CAL(
                     id = 0L,
                     timestamp = now + T.mins(5).msecs(),
@@ -95,7 +97,7 @@ class CalibrationMathTest {
         // Two Syai-style entries — free slope ≈ 1.72, above SLOPE_MAX = 1.6.
         // Expected: slope clamped to 1.6, offset recomputed = mean(y) − 1.6·mean(x) = 140.4 − 195.84 ≈ −55.44.
         val fit = fitLinearCalibration(
-            listOf(entry(sensor = 72.0, fs = 54.0), entry(sensor = 172.8, fs = 226.8)),
+            listOf(entry(sensor = 72.0, fs = 54.0), entry(sensor = 122.4, fs = 140.4), entry(sensor = 172.8, fs = 226.8)),
             now
         )!!
         assertThat(fit.mode).isEqualTo(FitMode.SlopeClamped)
@@ -110,7 +112,7 @@ class CalibrationMathTest {
     fun fitLinearCalibration_slopeBelowMin_clampsAndRefitsOffset() {
         // Entries imply slope ≈ 0.4 (sensor exaggerates). Clamp to SLOPE_MIN = 0.55, re-fit.
         val fit = fitLinearCalibration(
-            listOf(entry(sensor = 100.0, fs = 80.0), entry(sensor = 200.0, fs = 120.0)),
+            listOf(entry(sensor = 100.0, fs = 80.0), entry(sensor = 150.0, fs = 100.0), entry(sensor = 200.0, fs = 120.0)),
             now
         )!!
         assertThat(fit.mode).isEqualTo(FitMode.SlopeClamped)
@@ -122,25 +124,27 @@ class CalibrationMathTest {
         // Line y = 1.5·x − 54. At sensor=100: y = 150 − 54 = 96; correction = −4.
         val fit = CalibrationFit(slope = 1.5, offset = -54.0)
         assertThat(fit.correctionAtCenter).isWithin(0.001).of(-4.0)
-        assertThat(fit.isApplicable).isTrue() // slope ∈ [0.55, 1.6] and correction ∈ [−30, 30]
+        // Slope in [0.55, 1.6], centre lift ≤ 30, low end in [−35, 20], high-end ratio ≤ 1.45.
+        assertThat(fit.isApplicable).isTrue()
     }
 
     @Test
     fun calibrationFit_steepSlopeWithLargeOffset_clampedByCorrectionNotOffset() {
-        // Old clamp on offset would reject offset = −270 instantly; new clamp on
-        // correction-at-center sees correction = (2.87 − 1)·100 + (−270) = −83, still rejected
-        // because slope is also out of range — but the rejection reason is now meaningful.
+        // Old clamp on offset would reject offset = −270 instantly; the clamp on
+        // correction-at-center sees correction = (2.87 − 1)·100 + (−270) = −83.
+        // The centre no longer refuses a drop — the low end does, and so does the slope.
         val fit = CalibrationFit(slope = 2.87, offset = -270.0)
         assertThat(fit.slopeInRange).isFalse()
-        assertThat(fit.correctionInRange).isFalse()
         assertThat(fit.correctionAtCenter).isWithin(0.5).of(-83.0)
+        assertThat(fit.lowEndSafe).isFalse()
+        assertThat(fit.isApplicable).isFalse()
     }
 
     @Test
     fun fitLinearCalibration_negativeDeltas_handledCorrectly() {
         // Sensor reads HIGHER than fingerstick — negative offset.
         val fit = fitLinearCalibration(
-            listOf(entry(120.0, 110.0), entry(220.0, 210.0)),
+            listOf(entry(120.0, 110.0), entry(170.0, 160.0), entry(220.0, 210.0)),
             now
         )!!
         assertThat(fit.mode).isEqualTo(FitMode.Full)

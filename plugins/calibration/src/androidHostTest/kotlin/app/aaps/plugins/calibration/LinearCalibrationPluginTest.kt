@@ -138,7 +138,9 @@ class LinearCalibrationPluginTest : TestBase() {
 
     @Test
     fun calibrate_slopeOutOfRange_returnsIdentity() = runTest {
-        // y = 2x — slope 2.0 is way outside [0.6, 1.4]
+        // Two points on y = 2x. Fewer than three entries stay offset-only (slope locked at 1).
+        // The offset is +150, so the centre lift is above 30 and the line is not applied.
+        // Slope bounds, when a slope is fitted, are [0.55, 1.6].
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
             listOf(
                 entry(sensor = 100.0, fs = 200.0, ageDays = 1L),
@@ -172,7 +174,7 @@ class LinearCalibrationPluginTest : TestBase() {
 
     @Test
     fun calibrate_offsetOutOfRange_returnsIdentity() = runTest {
-        // y = x + 50 — offset 50 is outside [-30, +30]
+        // y = x + 50. The centre bounds a lift only: +50 is above 30, so the line is not applied.
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
             listOf(
                 entry(sensor = 100.0, fs = 150.0, ageDays = 1L),
@@ -181,6 +183,91 @@ class LinearCalibrationPluginTest : TestBase() {
         )
         val data = bucketed(listOf(now to 150.0))
         plugin.calibrate(data, CalibrationContext.NONE)
+        assertThat(data[0].calibrated).isNull()
+    }
+
+    @Test
+    fun calibrate_lowEndUnsafeFit_returnsRawValue() = runTest {
+        // Three points 110→135, 145→155, 180→175. Full slope 4/7, correction at 40 mg/dL is +55.
+        // status() is UnsafeFit. calibrate() must leave the raw reading untouched.
+        // Age 0 keeps the stored pairs: an older entry would be re-paired.
+        val entries = listOf(
+            entry(sensor = 110.0, fs = 135.0, ageDays = 0L),
+            entry(sensor = 145.0, fs = 155.0, ageDays = 0L),
+            entry(sensor = 180.0, fs = 175.0, ageDays = 0L)
+        )
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(entries)
+        val fit = fitLinearCalibration(entries, now)!!
+        assertThat(fit.mode).isEqualTo(FitMode.Full)
+        assertThat((fit.slope - 1.0) * LOW_MGDL + fit.offset).isWithin(1e-6).of(55.0)
+        assertThat(fit.lowEndSafe).isFalse()
+        assertThat(fit.isApplicable).isFalse()
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.UnsafeFit)
+
+        val data = bucketed(listOf(now to 40.0))
+        plugin.calibrate(data, CalibrationContext.NONE)
+        assertThat(data[0].value).isEqualTo(40.0)
+        assertThat(data[0].calibrated).isNull()
+    }
+
+    @Test
+    fun calibrate_steepestCompressionFit_appliesTheExactLine() = runTest {
+        // Ref CalibrationMathTest slopeAboveMax, and the constructed fit
+        // CalibrationFit(SLOPE_MAX, −55.44). The KDoc of CORRECTION_AT_LOW_MIN keeps the
+        // ref's rounded « −55.4 / −31.4 ». The fit and the ref tests are exact:
+        // offset −55.44, correction at 40 = −31.44, sensor 300 → 424.56, ratio 1.4152.
+        // Every guard passes, so calibrate() writes that line. It does not return the raw value.
+        // Age 0 keeps the stored pairs: an older entry would be re-paired.
+        val entries = listOf(
+            entry(sensor = 72.0, fs = 54.0, ageDays = 0L),
+            entry(sensor = 122.4, fs = 140.4, ageDays = 0L),
+            entry(sensor = 172.8, fs = 226.8, ageDays = 0L)
+        )
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(entries)
+        val fit = fitLinearCalibration(entries, now)!!
+        assertThat(fit.mode).isEqualTo(FitMode.SlopeClamped)
+        assertThat(fit.slope).isEqualTo(1.6)
+        assertThat(fit.offset).isWithin(1e-9).of(-55.44)
+        assertThat(fit.correctionAt(LOW_MGDL)).isWithin(1e-9).of(-31.44)
+        assertThat(fit.slope * HIGH_MGDL + fit.offset).isWithin(1e-9).of(424.56)
+        assertThat(fit.ratioAtHigh).isWithin(1e-9).of(1.4152)
+        assertThat(fit.correctionInRange).isTrue()
+        assertThat(fit.lowEndSafe).isTrue()
+        assertThat(fit.highEndSafe).isTrue()
+        assertThat(fit.isApplicable).isTrue()
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.AppliedSlopeClamped)
+
+        val data = bucketed(listOf(now to 300.0))
+        plugin.calibrate(data, CalibrationContext.NONE)
+        assertThat(data[0].value).isEqualTo(300.0)
+        assertThat(data[0].calibrated).isWithin(1e-9).of(424.56)
+    }
+
+    @Test
+    fun calibrate_justPastTheHighRatio_returnsRawValue() = runTest {
+        // Starts from the exact compression fit above (offset −55.44, correction at 40 = −31.44,
+        // 300 → 424.56, ratio 1.4152), which calibrate() applies. The inclusive cap is ratio 1.45
+        // (offset −45). These three points sit on y = 1.6x − 44: centre +16, low end −20,
+        // ratio 436/300 ≈ 1.453. highEndSafe is the only refusal, so calibrate() leaves 300 raw.
+        val entries = listOf(
+            entry(sensor = 100.0, fs = 116.0, ageDays = 0L),
+            entry(sensor = 150.0, fs = 196.0, ageDays = 0L),
+            entry(sensor = 200.0, fs = 276.0, ageDays = 0L)
+        )
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(entries)
+        val fit = fitLinearCalibration(entries, now)!!
+        assertThat(fit.mode).isEqualTo(FitMode.Full)
+        assertThat(fit.slope).isWithin(1e-9).of(1.6)
+        assertThat(fit.offset).isWithin(1e-9).of(-44.0)
+        assertThat(fit.correctionInRange).isTrue()
+        assertThat(fit.lowEndSafe).isTrue()
+        assertThat(fit.highEndSafe).isFalse()
+        assertThat(fit.isApplicable).isFalse()
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.UnsafeFit)
+
+        val data = bucketed(listOf(now to 300.0))
+        plugin.calibrate(data, CalibrationContext.NONE)
+        assertThat(data[0].value).isEqualTo(300.0)
         assertThat(data[0].calibrated).isNull()
     }
 
@@ -393,6 +480,7 @@ class LinearCalibrationPluginTest : TestBase() {
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
             listOf(
                 entry(sensor = 100.0, fs = 110.0, ageDays = 3L),
+                entry(sensor = 150.0, fs = 165.0, ageDays = 3L),
                 entry(sensor = 200.0, fs = 220.0, ageDays = 3L)
             )
         )
@@ -548,15 +636,17 @@ class LinearCalibrationPluginTest : TestBase() {
 
     @Test
     fun addEntry_deltaThresholdScaledBySlopeWhenFitApplicable() = runTest {
-        // Two entries imply slope = 1.05, well inside clamps → fit is applicable.
+        // Three entries imply slope = 1.05, well inside clamps → fit is applicable.
         // Effective threshold becomes 5.0 * 1.05 = 5.25 mg/dL/5min.
         // Fresh pairs: an entry older than PAIR_LAG_WINDOW_MS is re-paired (entriesForFit) and the
         // broad glucose stub below would replace the stored sensor values. Age 0 keeps the stored pair,
         // which is what this slope check is about. Ref dates its slope fixtures at now for the same reason.
+        // Two points would be offset-only (slope 1) and the 5.2 delta would be rejected.
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
             listOf(
                 CAL(id = 1L, timestamp = now, fingerstickMgdl = 105.0, sensorMgdlAtPairing = 100.0),
-                CAL(id = 2L, timestamp = now, fingerstickMgdl = 210.0, sensorMgdlAtPairing = 200.0)
+                CAL(id = 2L, timestamp = now, fingerstickMgdl = 157.5, sensorMgdlAtPairing = 150.0),
+                CAL(id = 3L, timestamp = now, fingerstickMgdl = 210.0, sensorMgdlAtPairing = 200.0)
             )
         )
         // Delta 5.2: would be rejected without scaling, accepted with slope-scaled threshold.
@@ -570,7 +660,14 @@ class LinearCalibrationPluginTest : TestBase() {
     @Test
     fun addEntry_deltaExceedsScaledThreshold_rejectsWithScaledThreshold() = runTest {
         // Same fit (slope=1.05), but delta 6.0 still exceeds the scaled threshold 5.25.
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        // Three points: two would lock the slope at 1 and the threshold would stay 5.0.
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(
+                entry(sensor = 100.0, fs = 105.0, ageDays = 0L),
+                entry(sensor = 150.0, fs = 157.5, ageDays = 0L),
+                entry(sensor = 200.0, fs = 210.0, ageDays = 0L)
+            )
+        )
         whenever(glucoseStatusProvider.glucoseStatusData).thenReturn(glucoseStatus(shortAvgDelta = 6.0))
         val result = plugin.addEntry(bgMgdl = 150.0, timestamp = now)
         assertThat(result).isInstanceOf(AddEntryResult.Rejected.DeltaTooHigh::class.java)
