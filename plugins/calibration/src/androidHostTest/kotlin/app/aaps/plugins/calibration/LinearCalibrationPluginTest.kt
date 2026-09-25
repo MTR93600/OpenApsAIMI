@@ -11,6 +11,7 @@ import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.GlucoseStatusSMB
 import app.aaps.core.interfaces.calibration.AddEntryResult
 import app.aaps.core.interfaces.calibration.CalibrationContext
+import app.aaps.core.interfaces.calibration.CalibrationStatus
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.notifications.NotificationAction
@@ -647,6 +648,79 @@ class LinearCalibrationPluginTest : TestBase() {
         whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), eq(false)))
             .thenReturn(listOf(bgReading(now, 145.0)))
         assertThat(plugin.checkPreconditions()).isEqualTo(AddEntryResult.Accepted)
+    }
+
+    // ------------ status() — ref LinearCalibrationPluginTest L725–775 @ 6598201d ------------
+    // The seven results are decided by calibrationStatus (commonTest). These lock the plugin
+    // wiring: dateUtil.now(), the session read, and entriesForFit only after warm-up.
+
+    @Test
+    fun status_noSession_returnsNoSession() = runTest {
+        whenever(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)).thenReturn(null)
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.NoSession)
+        verify(persistenceLayer, never()).getValidCalibrationEntriesSince(any())
+    }
+
+    @Test
+    fun status_inWarmUp_returnsWarmUpWithEndsAt() = runTest {
+        val sessionStart = now - T.hours(1).msecs()
+        whenever(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)).thenReturn(sensorChange(sessionStart))
+        val result = plugin.status()
+        assertThat(result).isEqualTo(CalibrationStatus.WarmUp(sessionStart + T.hours(2).msecs()))
+        verify(persistenceLayer, never()).getValidCalibrationEntriesSince(any())
+    }
+
+    @Test
+    fun status_oneEntry_returnsNeedMoreEntriesWithCount() = runTest {
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any()))
+            .thenReturn(listOf(entry(sensor = 100.0, fs = 110.0, ageDays = 0L)))
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.NeedMoreEntries(1))
+    }
+
+    @Test
+    fun status_slopeOutOfRange_returnsUnsafeFit() = runTest {
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(
+                entry(sensor = 100.0, fs = 200.0, ageDays = 0L),
+                entry(sensor = 200.0, fs = 400.0, ageDays = 0L)
+            )
+        )
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.UnsafeFit)
+    }
+
+    @Test
+    fun status_clusteredEntries_returnsAppliedOffsetOnly() = runTest {
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(
+                entry(sensor = 140.0, fs = 143.0, ageDays = 0L),
+                entry(sensor = 141.0, fs = 146.0, ageDays = 0L)
+            )
+        )
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.AppliedOffsetOnly)
+    }
+
+    @Test
+    fun status_slopeClamped_returnsAppliedSlopeClamped() = runTest {
+        val slope = 12.0 / 7.0
+        val intercept = 54.0 - slope * 72.0
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(72.0, 120.0, 172.8).map { sensor ->
+                entry(sensor = sensor, fs = slope * sensor + intercept, ageDays = 0L)
+            }
+        )
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.AppliedSlopeClamped)
+    }
+
+    @Test
+    fun status_validFit_returnsApplied() = runTest {
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(
+                entry(sensor = 100.0, fs = 105.0, ageDays = 0L),
+                entry(sensor = 150.0, fs = 157.5, ageDays = 0L),
+                entry(sensor = 200.0, fs = 210.0, ageDays = 0L)
+            )
+        )
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.Applied)
     }
 
     // ------------ helpers ------------

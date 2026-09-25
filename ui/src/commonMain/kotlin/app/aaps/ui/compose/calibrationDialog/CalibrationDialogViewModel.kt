@@ -13,6 +13,7 @@ import app.aaps.core.data.ui.ConfirmationRole
 import app.aaps.core.data.ui.confirmationLines
 import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.calibration.AddEntryResult
+import app.aaps.plugins.calibration.notYetEffectiveMessage
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.logging.UserEntryLogger
@@ -64,7 +65,13 @@ class CalibrationDialogViewModel @Inject constructor(
     val uiState: StateFlow<CalibrationDialogUiState> = _uiState.asStateFlow()
 
     sealed class SideEffect {
-        data object EntryAccepted : SideEffect()
+
+        /**
+         * @param message set when the entry was saved but did not yet change the sensor value
+         *   (e.g. the session's first entry, or a fit outside the safe range) — the dialog shows
+         *   it before navigating back, so the user is not left thinking nothing happened.
+         */
+        data class EntryAccepted(val message: String?) : SideEffect()
         data class EntryRejected(val message: String) : SideEffect()
     }
 
@@ -163,7 +170,9 @@ class CalibrationDialogViewModel @Inject constructor(
                     AddEntryResult.Accepted    -> {
                         uel.log(action = Action.CALIBRATION, source = Sources.CalibrationDialog, value = unitValue)
                         if (xDripSource.isEnabled()) xDripBroadcast.sendCalibration(state.bg)
-                        _sideEffect.emit(SideEffect.EntryAccepted)
+                        // Ref L186. status() is the plugin's, not a second fit done here.
+                        val message = notYetEffectiveMessage(activePlugin.activeCalibration.status(), rh)
+                        _sideEffect.emit(SideEffect.EntryAccepted(message))
                     }
 
                     is AddEntryResult.Rejected -> {

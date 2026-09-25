@@ -13,6 +13,7 @@ import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.interfaces.calibration.AddEntryResult
 import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.calibration.CalibrationContext
+import app.aaps.core.interfaces.calibration.CalibrationStatus
 import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -201,6 +202,25 @@ class LinearCalibrationPlugin(
     }
 
     override suspend fun checkPreconditions(): AddEntryResult = checkPreconditionsAt(dateUtil.now())
+
+    /**
+     * Ref L209–224. The clock is [dateUtil]. Entries come from [entriesForFit], the same read
+     * [calibrate] uses, and only after warm-up: the ref returns before that read. The order of
+     * the seven results lives in [calibrationStatus], which calls [fitLinearCalibration] and
+     * [CalibrationFit.isApplicable]. It does not blend for staleness and it does not repeat the
+     * slope or centre checks.
+     */
+    override suspend fun status(): CalibrationStatus {
+        val now = dateUtil.now()
+        val sessionStart = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp
+        val warmUpMs = T.hours(WARM_UP_HOURS).msecs()
+        val entries = if (sessionStart != null && now >= sessionStart + warmUpMs) {
+            entriesForFit(sessionStart, now)
+        } else {
+            emptyList()
+        }
+        return calibrationStatus(sessionStart, now, entries, WARM_UP_HOURS)
+    }
 
     private suspend fun checkPreconditionsAt(timestamp: Long): AddEntryResult {
         val sessionStart = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp
