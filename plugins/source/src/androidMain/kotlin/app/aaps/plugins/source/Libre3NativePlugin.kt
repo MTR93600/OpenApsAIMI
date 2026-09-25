@@ -181,8 +181,9 @@ class Libre3NativePlugin @Inject constructor(
      * `logSensorChangeOnce` from the reading) date the `SENSOR_CHANGE` and do not call
      * `ignoreEntriesBefore`. `:plugins:libre3` is still an Android library, so the staging
      * driver (`Libre3Staging`, the second store, `Libre3CgmDrivers.staging()`) stays out of this lot.
-     * The fit already honours [app.aaps.plugins.calibration.keys.CalibrationLongKey.EntriesValidFrom]
-     * when some other writer, today the ONE+ promotion, sets it.
+     * The fit already honours `CalibrationLongKey.EntriesValidFrom`
+     * when some other writer, today the ONE+ promotion, sets it. `:plugins:source` does not
+     * depend on `:plugins:calibration`.
      */
     override suspend fun promoteStagingToProduction(allowEarly: Boolean): PromotionResult =
         PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT)
