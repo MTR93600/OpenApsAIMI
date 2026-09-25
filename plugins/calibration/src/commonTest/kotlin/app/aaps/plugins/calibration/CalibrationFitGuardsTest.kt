@@ -204,7 +204,20 @@ class CalibrationFitGuardsTest {
         assertTrue(aboveCenter.highEndSafe)
         assertFalse(aboveCenter.isApplicable)
 
-        // y = 1.6x − 45. Ratio at 300 is 1.45. Centre is +15, low end is −21.
+        // Exact ref compression fit. The KDoc rounds it to offset −55.4 taking 31.4 mg/dL
+        // off a reading of 40. The fit and the ref tests are offset −55.44: correction at 40
+        // is −31.44, a sensor at 300 becomes 424.56, ratio 1.4152. Inside every bound.
+        val compression = CalibrationFit(slope = SLOPE_MAX, offset = -55.44)
+        assertEquals(-31.44, compression.correctionAtLow, absoluteTolerance = 1e-9)
+        assertEquals(424.56, compression.slope * HIGH_MGDL + compression.offset)
+        assertEquals(1.4152, compression.ratioAtHigh)
+        assertTrue(compression.correctionInRange)
+        assertTrue(compression.lowEndSafe)
+        assertTrue(compression.highEndSafe)
+        assertTrue(compression.isApplicable)
+
+        // Inclusive cap above that ratio: y = 1.6x − 45 gives 1.45 at 300.
+        // Centre is +15, low end is −21. The next whole offset, −44, is the only failure.
         val highCeiling = CalibrationFit(slope = SLOPE_MAX, offset = -45.0)
         assertEquals(MAX_RATIO_AT_HIGH, highCeiling.ratioAtHigh, absoluteTolerance = 1e-12)
         assertTrue(highCeiling.highEndSafe)

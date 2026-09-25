@@ -211,21 +211,54 @@ class LinearCalibrationPluginTest : TestBase() {
     }
 
     @Test
-    fun calibrate_highEndUnsafeFit_returnsRawValue() = runTest {
-        // Ref fixture is slope 1.6, offset −30 (a sensor at 300 would become 450, ratio 1.5).
-        // These three points sit on y = 1.6x − 31: same slope, centre lift +29 (still ≤ 30),
-        // low end safe, high-end ratio ≈ 1.497 > 1.45. highEndSafe is the only refusal.
-        // status() is UnsafeFit, so calibrate() must not apply the line.
+    fun calibrate_steepestCompressionFit_appliesTheExactLine() = runTest {
+        // Ref CalibrationMathTest slopeAboveMax, and the constructed fit
+        // CalibrationFit(SLOPE_MAX, −55.44). The KDoc of CORRECTION_AT_LOW_MIN keeps the
+        // ref's rounded « −55.4 / −31.4 ». The fit and the ref tests are exact:
+        // offset −55.44, correction at 40 = −31.44, sensor 300 → 424.56, ratio 1.4152.
+        // Every guard passes, so calibrate() writes that line. It does not return the raw value.
+        // Age 0 keeps the stored pairs: an older entry would be re-paired.
         val entries = listOf(
-            entry(sensor = 100.0, fs = 129.0, ageDays = 0L),
-            entry(sensor = 150.0, fs = 209.0, ageDays = 0L),
-            entry(sensor = 200.0, fs = 289.0, ageDays = 0L)
+            entry(sensor = 72.0, fs = 54.0, ageDays = 0L),
+            entry(sensor = 122.4, fs = 140.4, ageDays = 0L),
+            entry(sensor = 172.8, fs = 226.8, ageDays = 0L)
+        )
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(entries)
+        val fit = fitLinearCalibration(entries, now)!!
+        assertThat(fit.mode).isEqualTo(FitMode.SlopeClamped)
+        assertThat(fit.slope).isEqualTo(1.6)
+        assertThat(fit.offset).isWithin(1e-9).of(-55.44)
+        assertThat(fit.correctionAt(LOW_MGDL)).isWithin(1e-9).of(-31.44)
+        assertThat(fit.slope * HIGH_MGDL + fit.offset).isWithin(1e-9).of(424.56)
+        assertThat(fit.ratioAtHigh).isWithin(1e-9).of(1.4152)
+        assertThat(fit.correctionInRange).isTrue()
+        assertThat(fit.lowEndSafe).isTrue()
+        assertThat(fit.highEndSafe).isTrue()
+        assertThat(fit.isApplicable).isTrue()
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.AppliedSlopeClamped)
+
+        val data = bucketed(listOf(now to 300.0))
+        plugin.calibrate(data, CalibrationContext.NONE)
+        assertThat(data[0].value).isEqualTo(300.0)
+        assertThat(data[0].calibrated).isWithin(1e-9).of(424.56)
+    }
+
+    @Test
+    fun calibrate_justPastTheHighRatio_returnsRawValue() = runTest {
+        // Starts from the exact compression fit above (offset −55.44, correction at 40 = −31.44,
+        // 300 → 424.56, ratio 1.4152), which calibrate() applies. The inclusive cap is ratio 1.45
+        // (offset −45). These three points sit on y = 1.6x − 44: centre +16, low end −20,
+        // ratio 436/300 ≈ 1.453. highEndSafe is the only refusal, so calibrate() leaves 300 raw.
+        val entries = listOf(
+            entry(sensor = 100.0, fs = 116.0, ageDays = 0L),
+            entry(sensor = 150.0, fs = 196.0, ageDays = 0L),
+            entry(sensor = 200.0, fs = 276.0, ageDays = 0L)
         )
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(entries)
         val fit = fitLinearCalibration(entries, now)!!
         assertThat(fit.mode).isEqualTo(FitMode.Full)
         assertThat(fit.slope).isWithin(1e-9).of(1.6)
-        assertThat(fit.offset).isWithin(1e-9).of(-31.0)
+        assertThat(fit.offset).isWithin(1e-9).of(-44.0)
         assertThat(fit.correctionInRange).isTrue()
         assertThat(fit.lowEndSafe).isTrue()
         assertThat(fit.highEndSafe).isFalse()
