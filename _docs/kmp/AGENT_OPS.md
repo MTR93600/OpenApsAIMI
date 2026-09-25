@@ -93,7 +93,11 @@ Cursor lit `.cursor/environment.json` de la révision démarrée (schéma public
 bash .cursor/scripts/install-android-sdk.sh
 ```
 
-Le script pose cmdline-tools 23.0 (sha1 vérifié), `platform-tools`, `platforms/android-37.0` (`Versions.compileSdk = 37`) et `build-tools/36.0.0` (minimum et défaut d’AGP `9.4.0` dans `gradle/libs.versions.toml`). JDK 21 est requis (`JAVA_HOME` par défaut `/usr/lib/jvm/java-21-openjdk-amd64`) ; le script installe `openjdk-21-jdk-headless` seulement s’il manque. `sdk.dir` est écrit dans `local.properties` (gitignoré, ne pas committer). Les variables sont aussi dans `/etc/profile.d/android-sdk.sh`. Le code 141 de `yes | sdkmanager` (SIGPIPE) est attendu.
+**Ne pas lancer ce script en local.** Il écrit dans `~/.gradle` (dont `init.d/cursor-cloud-test-forks.gradle`, qui s’applique à tous les builds Gradle de l’utilisateur), fait des `sudo` et écrit `/etc/profile.d`. En tête, il s’arrête avec un message et un code non nul si le processus n’est pas dans une VM d’agent cloud Cursor, sauf opt-in explicite `AAPS_ALLOW_LOCAL_SDK_INSTALL=1`.
+
+Signal retenu, vérifié sur une VM cloud : `/proc/self/cgroup` contient `cursor-agent`. Le shell agent est dans `…/cursor-agent/workload`, et `exec-daemon` (celui qui exécute `install`) est dans `…/cursor-agent/daemon`. `CURSOR_AGENT=1` est présent dans le shell agent mais absent de l’environnement d’`exec-daemon`, donc ce n’est pas le signal.
+
+Le script pose cmdline-tools 23.0 (sha1 vérifié), `platform-tools`, `platforms/android-37.0` (`Versions.compileSdk = 37`) et `build-tools/36.0.0` (minimum et défaut d’AGP `9.4.0` dans `gradle/libs.versions.toml`). JDK 21 : si `JAVA_HOME` pointe déjà vers un JDK 21 il est gardé ; sinon le script prend `/usr/lib/jvm/java-21-openjdk-*` (architecture non figée) ou un `java` 21 déjà sur le `PATH`, et n’installe `openjdk-21-jdk-headless` que s’il manque. Limite : les layouts autres que Debian/Ubuntu (Homebrew, SDKMAN, etc.) ne sont pas sondés — poser `JAVA_HOME` vers un JDK 21. `sdk.dir` est écrit dans `local.properties` (gitignoré, ne pas committer). Les variables sont aussi dans `/etc/profile.d/android-sdk.sh`. Le code 141 de `yes | sdkmanager` (SIGPIPE) est attendu.
 
 Tests hôte Android de ce lot (après l’install) :
 
@@ -101,7 +105,7 @@ Tests hôte Android de ce lot (après l’install) :
 ./gradlew :plugins:calibration:jvmTest :plugins:calibration:testAndroidHostTest
 ```
 
-Mémoire : ne pas modifier le `gradle.properties` du dépôt. Sur Gradle 9.7, `~/.gradle/gradle.properties` (utilisateur) prime sur le fichier du projet, donc le script y écrit `org.gradle.jvmargs=-Xmx3g -XX:+UseParallelGC -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8` (remplace le `-Xmx8g -Xss1024m` du dépôt pour cet utilisateur). `maxParallelForks` n’est pas une clé `gradle.properties` : `buildSrc` le calcule avec `availableProcessors() / 2` (au moins 1). Le script écrit donc `~/.gradle/init.d/cursor-cloud-test-forks.gradle`, appliqué après l’évaluation des projets, pour forcer `maxParallelForks = 1`.
+Mémoire : ne pas modifier le `gradle.properties` du dépôt. Sur Gradle 9.7, `~/.gradle/gradle.properties` (utilisateur) prime sur le fichier du projet, donc le script y écrit `org.gradle.jvmargs=-Xmx3g -XX:+UseParallelGC -Xss1024m` : seul `-Xmx` passe de 8g à 3g, `-Xss1024m` du dépôt est conservé. `maxParallelForks` n’est pas une clé `gradle.properties` : `buildSrc` le calcule avec `availableProcessors() / 2` (au moins 1). Le script écrit donc `~/.gradle/init.d/cursor-cloud-test-forks.gradle`, appliqué après l’évaluation des projets, pour forcer `maxParallelForks = 1`.
 
 Espace disque : prévoir environ **12 Go** une fois le cache Gradle du monorepo rempli (SDK + distributions + dépendances), en plus du checkout.
 
@@ -115,7 +119,11 @@ Cursor reads `.cursor/environment.json` from the revision the agent starts on (p
 bash .cursor/scripts/install-android-sdk.sh
 ```
 
-The script installs cmdline-tools 23.0 (sha1 checked), `platform-tools`, `platforms/android-37.0` (`Versions.compileSdk = 37`), and `build-tools/36.0.0` (AGP `9.4.0` minimum and default, from `gradle/libs.versions.toml`). JDK 21 is required (default `JAVA_HOME` `/usr/lib/jvm/java-21-openjdk-amd64`); the script installs `openjdk-21-jdk-headless` only when it is missing. `sdk.dir` is written to gitignored `local.properties` (do not commit it). The same variables are written to `/etc/profile.d/android-sdk.sh`. Exit code 141 from `yes | sdkmanager` (SIGPIPE) is expected.
+**Do not run this script locally.** It writes `~/.gradle` (including `init.d/cursor-cloud-test-forks.gradle`, which applies to every Gradle build of that user), uses `sudo`, and writes `/etc/profile.d`. At the top it exits with a message and a non-zero status unless the process is on a Cursor cloud agent VM, or `AAPS_ALLOW_LOCAL_SDK_INSTALL=1` is set.
+
+Signal, checked on a cloud VM: `/proc/self/cgroup` contains `cursor-agent`. The agent shell is in `…/cursor-agent/workload`, and `exec-daemon` (the process that runs `install`) is in `…/cursor-agent/daemon`. `CURSOR_AGENT=1` is set in the agent shell but not in the exec-daemon environment, so it is not the signal.
+
+The script installs cmdline-tools 23.0 (sha1 checked), `platform-tools`, `platforms/android-37.0` (`Versions.compileSdk = 37`), and `build-tools/36.0.0` (AGP `9.4.0` minimum and default, from `gradle/libs.versions.toml`). JDK 21: an existing `JAVA_HOME` that is already 21 is kept; otherwise the script picks `/usr/lib/jvm/java-21-openjdk-*` (architecture not pinned) or a JDK 21 `java` already on `PATH`, and installs `openjdk-21-jdk-headless` only when none is found. Limit: non-Debian/Ubuntu layouts (Homebrew, SDKMAN, and similar) are not searched — set `JAVA_HOME` to a JDK 21. `sdk.dir` is written to gitignored `local.properties` (do not commit it). The same variables are written to `/etc/profile.d/android-sdk.sh`. Exit code 141 from `yes | sdkmanager` (SIGPIPE) is expected.
 
 Host Android tests for this lot (after install):
 
@@ -123,6 +131,6 @@ Host Android tests for this lot (after install):
 ./gradlew :plugins:calibration:jvmTest :plugins:calibration:testAndroidHostTest
 ```
 
-Memory: do not edit the repo `gradle.properties`. On Gradle 9.7, the user `~/.gradle/gradle.properties` overrides the project file, so the script writes `org.gradle.jvmargs=-Xmx3g -XX:+UseParallelGC -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8` there (replaces the repo `-Xmx8g -Xss1024m` for this user). `maxParallelForks` is not a `gradle.properties` key: `buildSrc` sets it from `availableProcessors() / 2` (at least 1). The script therefore writes `~/.gradle/init.d/cursor-cloud-test-forks.gradle`, applied after project evaluation, to force `maxParallelForks = 1`.
+Memory: do not edit the repo `gradle.properties`. On Gradle 9.7, the user `~/.gradle/gradle.properties` overrides the project file, so the script writes `org.gradle.jvmargs=-Xmx3g -XX:+UseParallelGC -Xss1024m` there: only `-Xmx` changes from 8g to 3g, and the repo `-Xss1024m` is kept. `maxParallelForks` is not a `gradle.properties` key: `buildSrc` sets it from `availableProcessors() / 2` (at least 1). The script therefore writes `~/.gradle/init.d/cursor-cloud-test-forks.gradle`, applied after project evaluation, to force `maxParallelForks = 1`.
 
 Disk: allow about **12 GB** once the monorepo Gradle cache is warm (SDK + distributions + dependencies), on top of the checkout.
