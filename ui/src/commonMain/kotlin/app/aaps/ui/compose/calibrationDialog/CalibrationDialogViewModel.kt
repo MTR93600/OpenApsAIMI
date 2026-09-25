@@ -13,6 +13,7 @@ import app.aaps.core.data.ui.ConfirmationRole
 import app.aaps.core.data.ui.confirmationLines
 import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.calibration.AddEntryResult
+import app.aaps.core.interfaces.calibration.CalibrationStatus
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.logging.UserEntryLogger
@@ -64,7 +65,13 @@ class CalibrationDialogViewModel @Inject constructor(
     val uiState: StateFlow<CalibrationDialogUiState> = _uiState.asStateFlow()
 
     sealed class SideEffect {
-        data object EntryAccepted : SideEffect()
+
+        /**
+         * @param message set when the entry was saved but did not yet change the sensor value
+         *   (e.g. the session's first entry, or a fit outside the safe range) — the dialog shows
+         *   it before navigating back, so the user is not left thinking nothing happened.
+         */
+        data class EntryAccepted(val message: String?) : SideEffect()
         data class EntryRejected(val message: String) : SideEffect()
     }
 
@@ -163,7 +170,9 @@ class CalibrationDialogViewModel @Inject constructor(
                     AddEntryResult.Accepted    -> {
                         uel.log(action = Action.CALIBRATION, source = Sources.CalibrationDialog, value = unitValue)
                         if (xDripSource.isEnabled()) xDripBroadcast.sendCalibration(state.bg)
-                        _sideEffect.emit(SideEffect.EntryAccepted)
+                        // Ref L186. status() is the plugin's, not a second fit done here.
+                        val message = notYetEffectiveMessage(activePlugin.activeCalibration.status(), rh)
+                        _sideEffect.emit(SideEffect.EntryAccepted(message))
                     }
 
                     is AddEntryResult.Rejected -> {
@@ -214,4 +223,17 @@ class CalibrationDialogViewModel @Inject constructor(
         val displayDelta = profileUtil.fromMgdlToUnits(mgdlPer5Min)
         return if (profileUtil.units == GlucoseUnit.MMOL) decimalFormatter.to1Decimal(displayDelta) else decimalFormatter.to0Decimal(displayDelta)
     }
+}
+
+/**
+ * Ref `CalibrationDialogViewModel.notYetEffectiveMessage` L254–257 @ `6598201d`.
+ *
+ * Internal, not a public API: the commonTest of this module calls it. The dialog is the only
+ * production caller, and only after [AddEntryResult.Accepted]. NoSession and WarmUp do not
+ * produce a sentence. The text is [UiStrings], generated from this module's `strings.xml`.
+ */
+internal fun notYetEffectiveMessage(status: CalibrationStatus, rh: TextResolver): String? = when (status) {
+    is CalibrationStatus.NeedMoreEntries -> rh.gs(UiStrings.cal_saved_need_more_entries, status.entryCount)
+    CalibrationStatus.UnsafeFit          -> rh.gs(UiStrings.cal_saved_unsafe_fit)
+    else                                  -> null
 }

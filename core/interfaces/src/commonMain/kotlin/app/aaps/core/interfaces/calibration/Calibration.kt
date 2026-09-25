@@ -49,6 +49,18 @@ interface Calibration {
     suspend fun checkPreconditions(): AddEntryResult
 
     /**
+     * Current [CalibrationStatus] for the running sensor session, evaluated now.
+     *
+     * Meant for feedback right after [addEntry] returns [AddEntryResult.Accepted]: an accepted
+     * entry can still leave the sensor value unchanged (e.g. the session's first entry, with
+     * [CalibrationStatus.NeedMoreEntries]), and the caller needs to say so instead of going quiet.
+     * The default plugin has nothing to fit and always returns [CalibrationStatus.Applied].
+     *
+     * Ref `Calibration.kt` L59 @ `6598201d`.
+     */
+    suspend fun status(): CalibrationStatus
+
+    /**
      * Leave every calibration entry older than [timestamp] out of the fit.
      *
      * A promoted pre-soak sensor is given a session dated at its own activation, hours before the
