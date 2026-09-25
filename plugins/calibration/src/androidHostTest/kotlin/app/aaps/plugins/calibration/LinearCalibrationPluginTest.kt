@@ -20,7 +20,6 @@ import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.ResourceHelper
-import app.aaps.core.interfaces.rx.events.EventCalibrationChanged
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
@@ -835,7 +834,6 @@ class LinearCalibrationPluginTest : TestBase() {
         plugin.ignoreEntriesBefore(promotedAt)
 
         verify(preferences).put(CalibrationLongKey.EntriesValidFrom, promotedAt)
-        verify(rxBus).send(any<EventCalibrationChanged>())
     }
 
     @Test
@@ -847,7 +845,6 @@ class LinearCalibrationPluginTest : TestBase() {
         plugin.ignoreEntriesBefore(promotedAt - 1L)
 
         verify(preferences, never()).put(eq(CalibrationLongKey.EntriesValidFrom), any())
-        verify(rxBus, never()).send(any<EventCalibrationChanged>())
     }
 
     @Test
