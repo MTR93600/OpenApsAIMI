@@ -112,13 +112,15 @@ Same ref commit as C1 (`6a6561caab`) but a different concern: `ml/AimiSmbTrainer
 
 Re-checked 2026-09-24. Still the hole named in [`P3.8-ANCHOR`](../../_docs/kmp/P3.8-ANCHOR.md). `1b81e356c8` (**ancestor** of `166ddb6db0`) is `feat: Implement calibration handling for Dexcom ONE+ and Libre3 plugins`.
 
-| Symbol / file on ref | Study |
-|---|---|
-| `entriesForFit` in `plugins/calibration/src/main/.../LinearCalibrationPlugin.kt` | **0** |
-| `lowEndSafe`, `MIN_ENTRIES_FOR_SLOPE` in `CalibrationMath.kt` | **0** |
-| `plugins/calibration/src/main/.../keys/CalibrationLongKey.kt` | **No file** |
+**P4.5 (selection only).** `entriesForFit` / `EntriesValidFrom` / lag 10–15 min / `sensorValueForPairing` are ported on study — see [`P4.5-entriesForFit-ANCHOR`](../../_docs/kmp/P4.5-entriesForFit-ANCHOR.md). `lowEndSafe`, `MIN_ENTRIES_FOR_SLOPE` and `IgnoredSensorGapAt` are still **not** ported. Libre 3 promotion on study is still the v1 stub, so the ref call at `Libre3NativePlugin` L1055 has no success path.
 
-P3.8 ported stale/blend health only. Do not invent thresholds. Copy `1b81e356` / current ref blobs when the lot opens. This is calibration **policy** on `:plugins:calibration`, not the GATT drivers (those stay D1).
+| Symbol / file on ref | Study after P4.5 |
+|---|---|
+| `entriesForFit` | `CalibrationEntriesForFit` + `LinearCalibrationPlugin.entriesForFit` |
+| `lowEndSafe`, `MIN_ENTRIES_FOR_SLOPE` in `CalibrationMath.kt` | **still 0** |
+| `CalibrationLongKey.EntriesValidFrom` | present, `exportable = false`. `IgnoredSensorGapAt` still absent |
+
+P3.8 ported stale/blend health only. Do not invent thresholds. The selection half of `1b81e356` is ported; the applicability half is not. This is calibration **policy** on `:plugins:calibration`, not the GATT drivers (those stay D1).
 
 ### C6 — Comparison CSV schema from the retention commit (severity: low)
 
@@ -233,7 +235,7 @@ Do not recycle P0–P3.8. Base `kmp-aimi-migration-study`. Copy the cited SHA. N
 | 2 | **P4.2** | Auditor ISF/target factors; needs P4.1 | `b7e05f3037` = C2 | high |
 | 3 | **P4.3** | Meal boost cap on the same tick file | `4b0675549d` = C3 | high |
 | 4 | **P4.4** | SMB trainer state from the same commit as P4.1, split so P4.1 stays reviewable | `6a6561caab` `AimiSmbTrainer` + test = C4 | medium |
-| 5 | **P4.5** | Calibration applicability still open since P3.8. Separate module; may run **in parallel** with P4.4 if the orchestrator wants CGM before more tick edits | `1b81e356` / tip `CalibrationMath` + `LinearCalibrationPlugin` + `CalibrationLongKey` = C5 | high |
+| 5 | **P4.5** | Selection `entriesForFit` ported (lag + `EntriesValidFrom` + ONE+ promotion cutoff). Applicability `lowEndSafe` / `MIN_ENTRIES_FOR_SLOPE` still open. See the anchor | `1b81e356` selection half = C5 | high, partial |
 | 6 | **P4.6** | Comparison CSV schema left behind by the retention port | `505b848fb6` comparison hunks = C6 | low |
 | 7 | **G1** | Garmin `sport` + FCL temporary target (`postTempTarget` present on ref, absent on study `GarminPlugin.kt`) plus Glass `TrajectoryRuntimeRepository` publish. Constants stay in the SHA | `166ddb6db0` + Garmin/Glass hunks of `6a6561caab` + C7 | low (insulin) / product |
 | — | **Guard** | `AimiLoopRuntimeGuard` call sites | ask first | low |

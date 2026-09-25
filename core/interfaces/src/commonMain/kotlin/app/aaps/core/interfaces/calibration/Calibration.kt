@@ -47,4 +47,16 @@ interface Calibration {
      * re-evaluates everything. This is a UX hint, not a contract.
      */
     suspend fun checkPreconditions(): AddEntryResult
+
+    /**
+     * Leave every calibration entry older than [timestamp] out of the fit.
+     *
+     * A promoted pre-soak sensor is given a session dated at its own activation, hours before the
+     * swap. Without this, fingersticks taken on the sensor just retired are fitted onto the new one.
+     * The default does nothing: a plugin that does not fit a line has nothing to cut off.
+     *
+     * Ref `Calibration.kt` L73 @ `6598201d` (`1b81e356c8`). ONE+ calls it from
+     * `DexcomOnePlusPlugin` promotion; Libre 3 calls it from `Libre3NativePlugin` promotion.
+     */
+    suspend fun ignoreEntriesBefore(timestamp: Long) {}
 }

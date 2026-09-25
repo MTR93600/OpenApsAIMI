@@ -8,6 +8,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.maintenance.FileListProvider
 import app.aaps.core.interfaces.notifications.NotificationManager
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.StringKey
@@ -42,6 +43,7 @@ class DexcomOnePlusPluginVisibilityTest : TestBase() {
     private val extraDir: DocumentFile = mock()
     private val markerFile: DocumentFile = mock()
     private val bleRadioPriority: BleRadioPriority = mock()
+    @Mock lateinit var activePlugin: ActivePlugin
 
     private lateinit var plugin: DexcomOnePlusPlugin
 
@@ -54,7 +56,7 @@ class DexcomOnePlusPluginVisibilityTest : TestBase() {
         whenever(extraDir.findFile(ONE_PLUS_ACCESS_FILE_NAME)).thenReturn(markerFile)
         val availabilityProvider =
             DexcomOnePlusAvailabilityProvider(aapsLogger, { fileListProvider }, preferences, notificationManager, dateUtil)
-        plugin = DexcomOnePlusPlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority)
+        plugin = DexcomOnePlusPlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin)
     }
 
     @Test

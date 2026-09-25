@@ -1,7 +1,9 @@
 package app.aaps.plugins.calibration
 
 import app.aaps.core.data.model.CAL
+import app.aaps.core.data.model.GV
 import app.aaps.core.data.time.T
+import kotlin.math.abs
 import kotlin.math.exp
 
 const val TIME_DECAY_TAU_DAYS = 2L
@@ -169,3 +171,49 @@ fun CalibrationFit.blendTowardIdentity(confidence: Double): CalibrationFit =
         slope = 1.0 + confidence * (slope - 1.0),
         offset = confidence * offset,
     )
+
+/**
+ * How many sensor readings around a fingerstick may take part in the paired value.
+ *
+ * Five is chosen for a sensor that speaks once a minute, where it covers the few minutes around
+ * the fingerstick. A sensor that speaks every five minutes simply has fewer readings in the same
+ * window, and the median then runs over whatever is there, down to the single reading that the
+ * older code always used.
+ *
+ * Ref `origin/dev_OAPSAIMI` @ `6598201d`, `CalibrationMath.kt` L273. Introduced `8452e845f6`,
+ * used by the lag re-pair of `1b81e356c8`.
+ */
+const val PAIR_MEDIAN_MAX_SAMPLES = 5
+
+/**
+ * Sensor value to store next to a fingerstick: the median of the readings closest to [timestamp].
+ *
+ * A calibration line is fitted through very few points, so the sensor side of each pair carries a
+ * lot of weight. Taking one single reading makes that side as noisy as that one reading, and a
+ * sensor that reports every minute is noisier per reading than one that reports every five. A
+ * median over the nearest few readings takes that noise out without following it, which a mean
+ * would do. The entries are only accepted while glucose is steady, so a short window cannot hide a
+ * real move.
+ *
+ * Ref `CalibrationMath.kt` L291–304 @ `6598201d`.
+ *
+ * @param readings sensor readings to choose from, in any order. Only their distance in time to
+ *   [timestamp] matters.
+ * @param timestamp moment the pair is aimed at (the fingerstick, or the fingerstick plus the lag).
+ * @param maxSamples how many of the nearest readings take part.
+ * @return the paired sensor value in mg/dL, or null when there is no reading to pair with.
+ */
+fun sensorValueForPairing(
+    readings: List<GV>,
+    timestamp: Long,
+    maxSamples: Int = PAIR_MEDIAN_MAX_SAMPLES
+): Double? {
+    if (readings.isEmpty() || maxSamples <= 0) return null
+    val nearest = readings
+        .sortedBy { abs(it.timestamp - timestamp) }
+        .take(maxSamples)
+        .map { it.value }
+        .sorted()
+    val middle = nearest.size / 2
+    return if (nearest.size % 2 == 1) nearest[middle] else (nearest[middle - 1] + nearest[middle]) / 2.0
+}
