@@ -124,7 +124,8 @@ class CalibrationMathTest {
         // Line y = 1.5·x − 54. At sensor=100: y = 150 − 54 = 96; correction = −4.
         val fit = CalibrationFit(slope = 1.5, offset = -54.0)
         assertThat(fit.correctionAtCenter).isWithin(0.001).of(-4.0)
-        assertThat(fit.isApplicable).isTrue() // slope ∈ [0.55, 1.6] and correction ∈ [−30, 30]
+        // Slope in [0.55, 1.6], centre lift ≤ 30, low end in [−35, 20], high-end ratio ≤ 1.45.
+        assertThat(fit.isApplicable).isTrue()
     }
 
     @Test

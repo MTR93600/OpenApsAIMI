@@ -161,6 +161,65 @@ class CalibrationFitGuardsTest {
         assertTrue(fit.isApplicable)
     }
 
+    @Test
+    fun bounds_are_inclusive_and_the_next_step_is_refused() {
+        // Slope 1 makes the correction equal to the offset, and 1.25 / 1.6 keep the other
+        // checks inside the window so each assertion fails for the bound under test.
+        // Integers and quarters are exact in IEEE, which keeps the inclusive edge stable.
+
+        val lowFloor = CalibrationFit(slope = 1.0, offset = -35.0)
+        assertEquals(-35.0, lowFloor.correctionAtLow)
+        assertTrue(lowFloor.lowEndSafe)
+        assertTrue(lowFloor.isApplicable)
+
+        val belowLowFloor = CalibrationFit(slope = 1.0, offset = -35.5)
+        assertEquals(-35.5, belowLowFloor.correctionAtLow)
+        assertFalse(belowLowFloor.lowEndSafe)
+        assertTrue(belowLowFloor.correctionInRange)
+        assertFalse(belowLowFloor.isApplicable)
+
+        val lowCeiling = CalibrationFit(slope = 1.0, offset = 20.0)
+        assertEquals(20.0, lowCeiling.correctionAtLow)
+        assertTrue(lowCeiling.lowEndSafe)
+        assertTrue(lowCeiling.isApplicable)
+
+        val aboveLowCeiling = CalibrationFit(slope = 1.0, offset = 20.5)
+        assertEquals(20.5, aboveLowCeiling.correctionAtLow)
+        assertFalse(aboveLowCeiling.lowEndSafe)
+        assertTrue(aboveLowCeiling.correctionInRange)
+        assertFalse(aboveLowCeiling.isApplicable)
+
+        // y = 1.25x + 5. Centre correction is +30. Low end is +15, high-end ratio is 1.266….
+        val centerCeiling = CalibrationFit(slope = 1.25, offset = 5.0)
+        assertEquals(30.0, centerCeiling.correctionAtCenter)
+        assertTrue(centerCeiling.correctionInRange)
+        assertTrue(centerCeiling.lowEndSafe)
+        assertTrue(centerCeiling.highEndSafe)
+        assertTrue(centerCeiling.isApplicable)
+
+        val aboveCenter = CalibrationFit(slope = 1.25, offset = 6.0)
+        assertEquals(31.0, aboveCenter.correctionAtCenter)
+        assertFalse(aboveCenter.correctionInRange)
+        assertTrue(aboveCenter.lowEndSafe)
+        assertTrue(aboveCenter.highEndSafe)
+        assertFalse(aboveCenter.isApplicable)
+
+        // y = 1.6x − 45. Ratio at 300 is 1.45. Centre is +15, low end is −21.
+        val highCeiling = CalibrationFit(slope = SLOPE_MAX, offset = -45.0)
+        assertEquals(MAX_RATIO_AT_HIGH, highCeiling.ratioAtHigh, absoluteTolerance = 1e-12)
+        assertTrue(highCeiling.highEndSafe)
+        assertTrue(highCeiling.correctionInRange)
+        assertTrue(highCeiling.lowEndSafe)
+        assertTrue(highCeiling.isApplicable)
+
+        val aboveHigh = CalibrationFit(slope = SLOPE_MAX, offset = -44.0)
+        assertTrue(aboveHigh.ratioAtHigh > MAX_RATIO_AT_HIGH)
+        assertFalse(aboveHigh.highEndSafe)
+        assertTrue(aboveHigh.correctionInRange)
+        assertTrue(aboveHigh.lowEndSafe)
+        assertFalse(aboveHigh.isApplicable)
+    }
+
     private fun entry(sensor: Double, fingerstick: Double) = CAL(
         timestamp = now,
         fingerstickMgdl = fingerstick,
