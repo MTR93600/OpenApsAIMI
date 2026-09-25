@@ -1,0 +1,4 @@
+{
+  "name": "OpenAPS AIMI (Android SDK)",
+  "install": "bash .cursor/scripts/install-android-sdk.sh"
+}
