@@ -33,6 +33,7 @@ import org.mockito.Mock
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -820,6 +821,174 @@ class LinearCalibrationPluginTest : TestBase() {
         assertThat(plugin.status()).isEqualTo(CalibrationStatus.Applied)
     }
 
+    // ------------ Libre 3 promotion cutoff ------------
+    // Ref LinearCalibrationPluginTest.kt L832–858 @ 6598201d (`1b81e356c8`).
+    // The writer is Libre3NativePlugin promotion L1055. This build has no success path
+    // there, so these tests drive ignoreEntriesBefore and EntriesValidFrom directly.
+
+    @Test
+    fun entries_of_the_retired_sensor_are_left_out_after_a_promotion() = runTest {
+        val promotedAt = now - T.hours(1).msecs()
+        whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(0L)
+
+        plugin.ignoreEntriesBefore(promotedAt)
+
+        verify(preferences).put(CalibrationLongKey.EntriesValidFrom, promotedAt)
+    }
+
+    @Test
+    fun a_cutoff_that_is_not_strictly_later_is_ignored() = runTest {
+        val promotedAt = now - T.hours(1).msecs()
+        whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(promotedAt)
+
+        plugin.ignoreEntriesBefore(promotedAt)
+        plugin.ignoreEntriesBefore(promotedAt - 1L)
+
+        verify(preferences, never()).put(eq(CalibrationLongKey.EntriesValidFrom), any())
+    }
+
+    @Test
+    fun the_fit_only_reads_entries_newer_than_the_promotion() = runTest {
+        val promotedAt = now - T.hours(1).msecs()
+        whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(promotedAt)
+
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+
+        verify(persistenceLayer, atLeastOnce()).getValidCalibrationEntriesSince(promotedAt)
+        verify(persistenceLayer, never()).getValidCalibrationEntriesSince(defaultSessionStart)
+    }
+
+    @Test
+    fun a_cutoff_older_than_the_session_start_changes_nothing() = runTest {
+        whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(now - T.days(5).msecs())
+
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+
+        verify(persistenceLayer, atLeastOnce()).getValidCalibrationEntriesSince(defaultSessionStart)
+    }
+
+    @Test
+    fun promotion_cutoff_stops_applying_the_retired_sensor_bias() = runTest {
+        // y = 1.1x on the retired sensor. Session started 12 h ago, so the 2 h warm-up is over
+        // and 150 mg/dL would be shown as 165. After the cutoff, those rows are not read.
+        val promotedAt = now - T.hours(1).msecs()
+        val retired = retiredSensorEntries()
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenAnswer { invocation ->
+            val from = invocation.getArgument<Long>(0)
+            retired.filter { it.timestamp >= from }
+        }
+
+        whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(0L)
+        val before = bucketed(listOf(now to 150.0))
+        plugin.calibrate(before, CalibrationContext.NONE)
+        assertThat(before[0].calibrated!!).isWithin(1e-6).of(165.0)
+
+        whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(promotedAt)
+        val after = bucketed(listOf(now to 150.0))
+        plugin.calibrate(after, CalibrationContext.NONE)
+        assertThat(after[0].calibrated).isNull()
+        verify(persistenceLayer, atLeastOnce()).getValidCalibrationEntriesSince(promotedAt)
+    }
+
+    @Test
+    fun promotion_cutoff_fits_only_the_new_sensor_once_it_has_fingersticks() = runTest {
+        val promotedAt = now - T.hours(1).msecs()
+        val stored = retiredSensorEntries() + newSensorEntries()
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenAnswer { invocation ->
+            val from = invocation.getArgument<Long>(0)
+            stored.filter { it.timestamp >= from }
+        }
+        whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(promotedAt)
+
+        val data = bucketed(listOf(now to 150.0))
+        plugin.calibrate(data, CalibrationContext.NONE)
+
+        assertThat(data[0].calibrated!!).isWithin(1e-6).of(155.0)
+        verify(persistenceLayer, never()).getValidCalibrationEntriesSince(defaultSessionStart)
+    }
+
+    @Test
+    fun status_reads_entries_from_the_promotion_cutoff() = runTest {
+        val promotedAt = now - T.hours(1).msecs()
+        whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(promotedAt)
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(eq(defaultSessionStart)))
+            .thenReturn(retiredSensorEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(eq(promotedAt))).thenReturn(emptyList())
+
+        assertThat(plugin.status()).isEqualTo(CalibrationStatus.NeedMoreEntries(0))
+        verify(persistenceLayer, never()).getValidCalibrationEntriesSince(defaultSessionStart)
+    }
+
+    @Test
+    fun preconditions_scale_the_delta_gate_from_the_cutoff_entries() = runTest {
+        // Three points on y = 1.1x, dated now so the stored pair is kept. Slope 1.1 scales
+        // the 5 mg/dL/5min gate to 5.5. A delta of 5.3 passes. The same delta fails when the
+        // cutoff hides those points and the gate stays at 5.
+        val onTheLine = listOf(
+            CAL(id = 1L, timestamp = now, fingerstickMgdl = 110.0, sensorMgdlAtPairing = 100.0),
+            CAL(id = 2L, timestamp = now, fingerstickMgdl = 176.0, sensorMgdlAtPairing = 160.0),
+            CAL(id = 3L, timestamp = now, fingerstickMgdl = 242.0, sensorMgdlAtPairing = 220.0),
+        )
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(onTheLine)
+        whenever(glucoseStatusProvider.glucoseStatusData).thenReturn(glucoseStatus(shortAvgDelta = 5.3))
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), eq(false)))
+            .thenReturn(listOf(bgReading(now, 145.0)))
+
+        assertThat(plugin.checkPreconditions()).isEqualTo(AddEntryResult.Accepted)
+
+        whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(now + 1L)
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(emptyList())
+        val rejected = plugin.checkPreconditions()
+        assertThat(rejected).isInstanceOf(AddEntryResult.Rejected.DeltaTooHigh::class.java)
+        assertThat((rejected as AddEntryResult.Rejected.DeltaTooHigh).thresholdMgdlPer5Min).isWithin(1e-6).of(5.0)
+        assertThat(rejected.deltaMgdlPer5Min).isWithin(1e-6).of(5.3)
+    }
+
+    @Test
+    fun health_uses_the_promotion_cutoff_and_asks_for_new_fingersticks() = runTest {
+        val promotedAt = now - T.hours(1).msecs()
+        whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(promotedAt)
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(eq(defaultSessionStart)))
+            .thenReturn(retiredSensorEntries())
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(eq(promotedAt))).thenReturn(emptyList())
+        whenever(rh.gs(eq(CalibrationStrings.cal_notify_need_more_entries))).thenReturn("NEED_MORE")
+
+        val data = bucketed(listOf(now to 150.0))
+        plugin.calibrate(data, CalibrationContext.NONE)
+
+        assertThat(data[0].calibrated).isNull()
+        verifyHealthNotificationPosted("NEED_MORE")
+        verify(persistenceLayer, atLeastOnce()).getValidCalibrationEntriesSince(promotedAt)
+        verify(persistenceLayer, never()).getValidCalibrationEntriesSince(defaultSessionStart)
+    }
+
+    @Test
+    fun a_promotion_cutoff_does_not_replace_the_sensor_gap_check() = runTest {
+        // P4.5b scans stored readings and IgnoredSensorGapAt. EntriesValidFrom is a different key.
+        val promotedAt = now - T.hours(1).msecs()
+        whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(promotedAt)
+        whenever(rh.gs(any<TextRef>(), any())).thenReturn("Possible sensor change")
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenAnswer { invocation ->
+            if (invocation.getArgument<Long>(0) == promotedAt) newSensorEntries() else emptyList()
+        }
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(readingsWithGap())
+
+        plugin.calibrate(bucketed(listOf(now to 150.0)), CalibrationContext.NONE)
+
+        verify(notificationManager).post(
+            eq(NotificationId.SENSOR_CHANGE_DETECTED),
+            any<String>(),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            any<List<NotificationAction>>(),
+            anyOrNull()
+        )
+        verify(preferences, never()).put(eq(CalibrationLongKey.EntriesValidFrom), any())
+        verify(persistenceLayer, atLeastOnce()).getValidCalibrationEntriesSince(promotedAt)
+        verify(persistenceLayer, never()).getValidCalibrationEntriesSince(defaultSessionStart)
+    }
+
     // ------------ helpers ------------
 
     private fun value(ts: Long, v: Double) = InMemoryGlucoseValue(
@@ -843,6 +1012,20 @@ class LinearCalibrationPluginTest : TestBase() {
             fingerstickMgdl = fs,
             sensorMgdlAtPairing = sensor
         )
+
+    /** Retired Libre 3 sensor, y = 1.1x, all inside a 12 h session and before a cutoff 1 h ago. */
+    private fun retiredSensorEntries() = listOf(
+        CAL(id = 1L, timestamp = now - T.hours(8).msecs(), fingerstickMgdl = 110.0, sensorMgdlAtPairing = 100.0),
+        CAL(id = 2L, timestamp = now - T.hours(6).msecs(), fingerstickMgdl = 176.0, sensorMgdlAtPairing = 160.0),
+        CAL(id = 3L, timestamp = now - T.hours(4).msecs(), fingerstickMgdl = 242.0, sensorMgdlAtPairing = 220.0),
+    )
+
+    /** New sensor after promotion, y = x + 5. */
+    private fun newSensorEntries() = listOf(
+        CAL(id = 4L, timestamp = now - T.mins(40).msecs(), fingerstickMgdl = 105.0, sensorMgdlAtPairing = 100.0),
+        CAL(id = 5L, timestamp = now - T.mins(30).msecs(), fingerstickMgdl = 165.0, sensorMgdlAtPairing = 160.0),
+        CAL(id = 6L, timestamp = now - T.mins(20).msecs(), fingerstickMgdl = 225.0, sensorMgdlAtPairing = 220.0),
+    )
 
     private fun twoGoodEntries() = listOf(
         entry(sensor = 100.0, fs = 105.0, ageDays = 1L),

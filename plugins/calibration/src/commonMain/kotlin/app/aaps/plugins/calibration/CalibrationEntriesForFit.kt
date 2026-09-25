@@ -21,9 +21,10 @@ import app.aaps.core.data.model.GV
  * - L305 pair target `timestamp + PAIR_LAG_MS`, median via [sensorValueForPairing]
  * - L521 `PAIR_LAG_MS = 10 min`, L524 `PAIR_LAG_WINDOW_MS = 15 min`
  *
- * ONE+ writes the cutoff at promotion (`DexcomOnePlusPlugin.kt` L934). Libre 3 writes the same
- * cutoff at promotion (`Libre3NativePlugin.kt` L1055). Study Libre 3 has no successful promotion
- * path; that call site is not invented here.
+ * ONE+ writes the cutoff at promotion (`DexcomOnePlusPlugin.kt` L778, ref L934). Libre 3 writes
+ * the same instant only after a successful promotion (`Libre3NativePlugin.promoteStagingToProduction`,
+ * ref L1055, `System.currentTimeMillis()`, just after `logSensorChangeOnce`). A rejected promotion,
+ * `onSensorChanged`, and the glucose path do not. See `_docs/kmp/P4.8-Libre3-Staging-ANCHOR.md`.
  */
 object CalibrationEntriesForFit {
 

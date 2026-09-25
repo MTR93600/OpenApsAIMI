@@ -10,6 +10,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -85,6 +86,7 @@ class Libre3NativePlugin @Inject constructor(
     private val persistenceLayer: PersistenceLayer,
     private val availabilityProvider: Libre3AvailabilityProvider,
     private val bleRadioPriority: BleRadioPriority,
+    private val activePlugin: ActivePlugin,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -170,8 +172,57 @@ class Libre3NativePlugin @Inject constructor(
     private val _stagingEvidence = MutableStateFlow<CgmStagingEvidence?>(null)
     override val stagingEvidence: StateFlow<CgmStagingEvidence?> = _stagingEvidence.asStateFlow()
 
-    override suspend fun promoteStagingToProduction(allowEarly: Boolean): PromotionResult =
-        PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT)
+    /**
+     * Activation of a staging sensor waiting to be promoted, or null when the slot is empty.
+     * [noteStagingActivation] is the calibration-side stand-in for ref `beginStaging` until
+     * `Libre3CgmDrivers` grows a staging instance. Nothing in the product UI calls it.
+     */
+    private var stagingActivatedAtMs: Long? = null
+
+    /**
+     * Records that a staging sensor was activated at [activatedAtMs].
+     *
+     * Ref `beginStaging` is what makes `promoteStagingToProduction` able to succeed
+     * (`Libre3PromotionHandoverTest` then expects `ignoreEntriesBefore`). This build has no
+     * second BLE driver, so the note does not open a radio. It only arms the calibration cutoff.
+     */
+    internal fun noteStagingActivation(activatedAtMs: Long) {
+        if (activatedAtMs <= 0L) return
+        stagingActivatedAtMs = activatedAtMs
+        _stagingState.value = StagingState.READY
+    }
+
+    /**
+     * Hands the loop's calibration session to the staging sensor.
+     *
+     * Ref `Libre3NativePlugin.promoteStagingToProduction` @ `6598201d`: early returns L981–1007
+     * do not write the cutoff. On success, L1051 `logSensorChangeOnce(staged.activatedAtMs)`
+     * then L1055 `ignoreEntriesBefore(System.currentTimeMillis())`. [allowEarly] is accepted
+     * and ignored, as on the ref L976–978. Scan (`onSensorChanged`) and the glucose path do
+     * not call it.
+     *
+     * ⚠️ ASYNC IMPACT: [ignoreEntriesBefore] runs on this suspend call, as on the ref. The
+     * `SENSOR_CHANGE` insert stays inside [logSensorChangeOnce]'s `ioScope`. The cutoff clock
+     * is [System.currentTimeMillis], not the activation and not `dateUtil`: this plugin already
+     * timestamps sensor events that way, and `aimiWallClockMs` lives in `:plugins:aps`.
+     *
+     * There is still no BLE swap. `Ok` here means the calibration cutoff was written for a
+     * noted activation. The glucose source is unchanged.
+     */
+    override suspend fun promoteStagingToProduction(allowEarly: Boolean): PromotionResult {
+        val activatedAtMs = stagingActivatedAtMs
+            ?: return PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT)
+        // Ref L976–978: allowEarly is accepted and ignored. There is no soak gate to relax.
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "${Libre3LogMarkers.SESSION}: promote calibration cutoff early=$allowEarly activatedAtMs=$activatedAtMs",
+        )
+        logSensorChangeOnce(activatedAtMs)
+        runCatching { activePlugin.activeCalibration.ignoreEntriesBefore(System.currentTimeMillis()) }
+        stagingActivatedAtMs = null
+        _stagingState.value = StagingState.ABSENT
+        return PromotionResult.Ok
+    }
 
     /**
      * Libre 3 native is only offered when the engineering marker file is present in the AAPS
