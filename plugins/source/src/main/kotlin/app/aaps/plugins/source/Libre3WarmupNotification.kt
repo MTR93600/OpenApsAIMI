@@ -7,7 +7,9 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import app.aaps.core.interfaces.source.SensorSlot
 import app.aaps.plugins.libre3.Libre3WarmupState
+import app.aaps.plugins.source.activities.Libre3StatusActivity
 import app.aaps.plugins.source.activities.Libre3WarmupActivity
 import app.aaps.plugins.source.compose.Libre3WarmupCountdown
 import app.aaps.core.ui.R as CoreUiR
@@ -18,8 +20,23 @@ import app.aaps.core.ui.R as CoreUiR
  * It lets the user leave the warm-up screen and go back to the dashboard while the driver keeps
  * working. It shows the honest phase, and it clears itself when the sensor is running or when
  * nothing is going on.
+ *
+ * One message per slot. Both share the channel, so the user has one switch, but they carry their
+ * own id and their own title: a pre-soak that reused the production id would silently overwrite the
+ * message about the sensor that feeds the loop.
+ *
+ * @param slot which sensor this message is about.
  */
-class Libre3WarmupNotification(private val context: Context) {
+class Libre3WarmupNotification(
+    private val context: Context,
+    private val slot: SensorSlot = SensorSlot.PRODUCTION,
+) {
+
+    private val notificationId =
+        if (slot == SensorSlot.PRODUCTION) NOTIFICATION_ID_PRODUCTION else NOTIFICATION_ID_STAGING
+
+    private val titleResId =
+        if (slot == SensorSlot.PRODUCTION) R.string.libre3_notif_title else R.string.libre3_notif_title_presoak
 
     init {
         createChannel()
@@ -35,11 +52,11 @@ class Libre3WarmupNotification(private val context: Context) {
         val ongoing = state.phase != Libre3WarmupState.Phase.FAILED
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(CoreUiR.drawable.ic_shield)
-            .setContentTitle(context.getString(R.string.libre3_notif_title))
+            .setContentTitle(context.getString(titleResId))
             .setOnlyAlertOnce(true)
             .setOngoing(ongoing)
             .setAutoCancel(!ongoing)
-            .setContentIntent(openWarmupScreen())
+            .setContentIntent(openDetailScreen())
 
         when (state.phase) {
             Libre3WarmupState.Phase.PAIRING      ->
@@ -83,7 +100,7 @@ class Libre3WarmupNotification(private val context: Context) {
         }
 
         try {
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
+            NotificationManagerCompat.from(context).notify(notificationId, builder.build())
         } catch (_: SecurityException) {
             // The user did not allow notifications. The session carries on without one.
         }
@@ -91,18 +108,28 @@ class Libre3WarmupNotification(private val context: Context) {
 
     fun cancel() {
         try {
-            NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
+            NotificationManagerCompat.from(context).cancel(notificationId)
         } catch (_: Exception) {
             // Nothing to clear, or notifications are not allowed.
         }
     }
 
-    private fun openWarmupScreen(): PendingIntent {
-        val intent = Intent(context, Libre3WarmupActivity::class.java)
+    /**
+     * Where tapping the message goes.
+     *
+     * The countdown screen for the sensor that feeds the loop. For a pre-soak the status screen,
+     * because the soak time, the collected readings and the promote button all live there.
+     */
+    private fun openDetailScreen(): PendingIntent {
+        val target =
+            if (slot == SensorSlot.PRODUCTION) Libre3WarmupActivity::class.java
+            else Libre3StatusActivity::class.java
+        val intent = Intent(context, target)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         return PendingIntent.getActivity(
             context,
-            NOTIFICATION_ID,
+            // The request code follows the id, so the two slots never share a pending intent.
+            notificationId,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -120,9 +147,20 @@ class Libre3WarmupNotification(private val context: Context) {
         context.getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
     }
 
-    private companion object {
+    companion object {
 
+        /**
+         * One channel for everything this plugin says about the sensor, so the user has one switch.
+         *
+         * `Libre3SessionService` shows its own ongoing message on this same channel and reads the
+         * value from here, so there is only one copy of it.
+         */
         const val CHANNEL_ID = "libre3_sensor_status"
-        const val NOTIFICATION_ID = 4471
+
+        /** Unchanged, so an app update does not orphan a live message. */
+        private const val NOTIFICATION_ID_PRODUCTION = 4471
+
+        /** The pre-soak's own id: both messages may be on screen at the same time. */
+        private const val NOTIFICATION_ID_STAGING = 4472
     }
 }

@@ -30,10 +30,11 @@ object Libre3UiLabels {
     @Composable
     fun nfcFailureLabel(failure: Libre3NfcFailure): String = stringResource(
         when (failure) {
-            Libre3NfcFailure.NOT_A_LIBRE3_SENSOR  -> R.string.libre3_nfc_not_a_sensor
-            Libre3NfcFailure.SENSOR_REFUSED       -> R.string.libre3_nfc_sensor_refused
-            Libre3NfcFailure.LINK_LOST            -> R.string.libre3_nfc_link_lost
-            Libre3NfcFailure.PHONE_STORAGE_FAILED -> R.string.libre3_nfc_storage_failed
+            Libre3NfcFailure.NOT_A_LIBRE3_SENSOR    -> R.string.libre3_nfc_not_a_sensor
+            Libre3NfcFailure.SENSOR_REFUSED         -> R.string.libre3_nfc_sensor_refused
+            Libre3NfcFailure.LINK_LOST              -> R.string.libre3_nfc_link_lost
+            Libre3NfcFailure.PHONE_STORAGE_FAILED   -> R.string.libre3_nfc_storage_failed
+            Libre3NfcFailure.SAME_SENSOR_OTHER_SLOT -> R.string.libre3_nfc_same_sensor_other_slot
         }
     )
 

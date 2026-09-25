@@ -12,7 +12,11 @@ data class CalibrationDialogUiState(
     val bgStep: Double = 1.0,
     val bgDecimalPlaces: Int = 0,
     val preconditions: AddEntryResult? = null,
-    val submitting: Boolean = false
+    val submitting: Boolean = false,
+    /** Last sensor reading in mg/dL, kept raw so the gap can be measured in one unit. 0 when unknown. */
+    val sensorBgMgdl: Double = 0.0,
+    /** Set when the entered value is far away from the sensor value. Advisory only, never blocks submit. */
+    val gapWarning: CalibrationGapWarning? = null
 ) {
 
     val isMgdl: Boolean get() = units == GlucoseUnit.MGDL
@@ -22,3 +26,13 @@ data class CalibrationDialogUiState(
     val blockingPreconditions: AddEntryResult.Rejected? get() = preconditions as? AddEntryResult.Rejected
     val canMarkSensorChange: Boolean get() = !submitting
 }
+
+/**
+ * The entered blood value and the sensor value are far apart. Both values are in display units,
+ * so the screen only has to format them.
+ */
+@Immutable
+data class CalibrationGapWarning(
+    val bloodValue: Double,
+    val sensorValue: Double
+)

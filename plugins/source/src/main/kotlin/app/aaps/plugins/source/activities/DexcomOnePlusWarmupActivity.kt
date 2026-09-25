@@ -137,7 +137,6 @@ private fun DexcomOnePlusWarmupScreen(
 ) {
     val context = LocalContext.current
     val window = rememberCgmWindow()
-    val driver = remember { OnePlusCgmDrivers.default() }
     // Identity is read once: it only changes when a sensor is started, which leaves this screen.
     val storedSession = remember {
         OnePlusSensorStore(
@@ -145,14 +144,18 @@ private fun DexcomOnePlusWarmupScreen(
             OnePlusCgmDrivers.storeNamespace(SensorSlot.PRODUCTION),
         ).load()
     }
-    var state by remember { mutableStateOf(driver.warmupState()) }
-    var sessionUp by remember { mutableStateOf(driver.isSessionUp()) }
+    // Not `remember`-ed: a promotion swaps which driver instance `default()` hands out (see
+    // OnePlusCgmDrivers.promoteStagingInstance), and a `remember`-ed reference kept polling the
+    // retired instance for the rest of this screen's life.
+    var state by remember { mutableStateOf(OnePlusCgmDrivers.default().warmupState()) }
+    var sessionUp by remember { mutableStateOf(OnePlusCgmDrivers.default().isSessionUp()) }
     var localFallbackEndsAt by remember { mutableStateOf<Long?>(null) }
     var remainingMs by remember { mutableStateOf<Long?>(null) }
     var usingLocalFallback by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         while (true) {
+            val driver = OnePlusCgmDrivers.default()
             val now = System.currentTimeMillis()
             state = driver.warmupState()
             sessionUp = driver.isSessionUp()

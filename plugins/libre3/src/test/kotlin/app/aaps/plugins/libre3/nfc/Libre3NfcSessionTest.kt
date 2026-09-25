@@ -62,6 +62,51 @@ class Libre3NfcSessionTest {
 
     private fun session(store: Libre3IdentityStore) = Libre3NfcSession(store, nowMs = { NOW_MS })
 
+    private fun vetoedSession(store: Libre3IdentityStore, veto: (String) -> Boolean) =
+        Libre3NfcSession({ store }, nowMs = { NOW_MS }, veto = veto)
+
+    @Test
+    fun `a vetoed sensor is refused before the activation command is sent`() {
+        // The whole point of invariant I4: one step further the PIN would already be replaced and
+        // the store would already have dropped the other slot's keys.
+        val store = FakeStore()
+        val tag = FakeTag(FRESH_SENSOR, ACTIVATION_ANSWER)
+
+        val thrown = assertThrows<Libre3NfcException> {
+            vetoedSession(store) { true }.scan(tag)
+        }
+
+        assertThat(thrown.failure).isEqualTo(Libre3NfcFailure.SAME_SENSOR_OTHER_SLOT)
+        // Only the patch info frame went out, and nothing was written.
+        assertThat(tag.sent).hasSize(1)
+        assertThat(tag.sent[0]).isEqualTo("02a17a")
+        assertThat(store.saveCount).isEqualTo(0)
+        assertThat(store.saved).isNull()
+    }
+
+    @Test
+    fun `the veto is asked with the serial read from the sensor`() {
+        val store = FakeStore()
+        val tag = FakeTag(FRESH_SENSOR, ACTIVATION_ANSWER)
+        val asked = mutableListOf<String>()
+
+        vetoedSession(store) { serial -> asked.add(serial); false }.scan(tag)
+
+        assertThat(asked).containsExactly("0RRC989AQ")
+        assertThat(store.saveCount).isEqualTo(1)
+    }
+
+    @Test
+    fun `the store supplier is read once per scan, so a slot change cannot split a scan`() {
+        val store = FakeStore()
+        val tag = FakeTag(FRESH_SENSOR, ACTIVATION_ANSWER)
+        var supplied = 0
+
+        Libre3NfcSession({ supplied++; store }, nowMs = { NOW_MS }).scan(tag)
+
+        assertThat(supplied).isEqualTo(1)
+    }
+
     @Test
     fun `a fresh sensor gets the activate command`() {
         val store = FakeStore()

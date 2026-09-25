@@ -170,7 +170,16 @@ class PrepareGraphDataWorker @AssistedInject constructor(
         val workingCopy = synchronized(dataLock) {
             bucketedData?.map { it.copy(smoothed = null, calibrated = null) }?.toMutableList()
         } ?: return
-        val calibrated = activePlugin.activeCalibration.calibrate(workingCopy, CalibrationContext.NONE)
+        // Never calibrate a sensor that holds its own calibration: the fingerstick went to the sensor,
+        // its algorithm re-based itself, and the readings arriving here are already corrected. This is
+        // the "never both" rule, and it has to live here rather than only at the point where an entry
+        // is stored — entries made BEFORE the user switched sending on are still in the database, and
+        // they would otherwise keep correcting readings the sensor has already corrected.
+        //
+        // Smoothing still runs: it is a local filter, not a per sensor correction.
+        val calibrated =
+            if (activePlugin.activeBgSource.calibratesInSensor()) workingCopy
+            else activePlugin.activeCalibration.calibrate(workingCopy, CalibrationContext.NONE)
         val smoothed = activePlugin.activeSmoothing.smooth(calibrated)
         synchronized(dataLock) {
             bucketedData = smoothed

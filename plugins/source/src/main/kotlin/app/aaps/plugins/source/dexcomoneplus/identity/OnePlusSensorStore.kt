@@ -163,6 +163,23 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
     /** Sensor session start (epoch ms), or 0 when unknown. */
     fun loadSessionStart(): Long = prefs.getLong(KEY_SESSION_START, 0L)
 
+    /**
+     * Move the session start of the sensor already stored here — the user correcting the real
+     * insertion time by hand.
+     *
+     * The other writers set this clock once and never touch it again on purpose ([saveSessionStartIfAbsent],
+     * [startSessionForSensor]), so nothing else in the app could change a sensor age that was stamped
+     * at pairing time instead of at insertion time. This is the one deliberate exception, and the
+     * owner MAC is left as it is: the sensor has not changed, only the moment it went in.
+     */
+    fun overwriteSessionStart(epochMs: Long) {
+        if (epochMs <= 0L) return
+        prefs.edit().putLong(KEY_SESSION_START, epochMs).apply()
+        OnePlusLog.i(
+            "${OnePlusLogMarkers.SESSION}: sensor session start corrected by user startMs=$epochMs",
+        )
+    }
+
     fun saveLastMac(address: String) {
         if (address.isBlank()) return
         prefs.edit().putString(KEY_MAC, address.uppercase()).apply()

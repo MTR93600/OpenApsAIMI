@@ -32,4 +32,25 @@ enum class DexcomOnePlusBooleanKey(
         engineeringModeOnly = true,
         exportable = false,
     ),
+
+    /**
+     * Send a fingerstick to the sensor instead of correcting its readings inside the phone.
+     *
+     * Off by default, and engineering only, for reasons that are not about our code being young.
+     * A sensor keeps a calibration it accepts for good — it cannot be edited or deleted — and a
+     * Dexcom ONE+ does not answer in a way anyone has decoded, so the app cannot tell the user
+     * whether the value was taken. The same characteristic also starts and stops a session.
+     *
+     * While it is on, the software fit must not run on top of the same sensor, or the correction is
+     * applied twice. That is enforced by not storing a calibration entry at all when the value goes
+     * to the sensor, the way xDrip does it for this sensor family.
+     */
+    SendCalibrationToSensor(
+        key = "dexcom_oneplus_send_calibration_to_sensor",
+        defaultValue = false,
+        titleResId = R.string.dexcom_oneplus_send_calibration_to_sensor,
+        summaryResId = R.string.dexcom_oneplus_send_calibration_to_sensor_summary,
+        engineeringModeOnly = true,
+        exportable = false,
+    ),
 }

@@ -45,6 +45,13 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
+        <!-- Same reason for the Libre 3, and it matters more there: the sensor talks every minute,
+             and that cadence cannot be slowed. -->
+        <service
+            android:name=".Libre3SessionService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
         <service
             android:name=".notificationreader.NotificationCollectorService"
             android:exported="true"

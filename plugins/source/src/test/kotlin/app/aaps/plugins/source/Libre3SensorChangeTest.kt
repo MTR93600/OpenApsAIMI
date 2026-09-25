@@ -74,6 +74,22 @@ class Libre3SensorChangeTest {
     }
 
     @Test
+    fun `a promotion writes the event at the pre-soak activation, not at the promotion`() {
+        // After a promotion the store holds the pre-soak sensor and the "already written" mark of
+        // the old one is gone, so the start of the new sensor is written, dated twelve hours back.
+        val soakStartedAtMs = nowMs - 12 * 60 * 60 * 1000L
+
+        assertThat(
+            Libre3SensorChange.serialToLog(
+                loggedSerial = null,
+                serialNumber = "MH0PRESOAK",
+                activatedAtMs = soakStartedAtMs,
+                nowMs = nowMs,
+            )
+        ).isEqualTo("MH0PRESOAK")
+    }
+
+    @Test
     fun `a start exactly now is written`() {
         // A sensor this phone activates is started at this very moment.
         assertThat(

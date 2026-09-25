@@ -35,4 +35,27 @@ interface OnePlusCgmDriver {
     fun setRadioBackOff(backOff: Boolean) = Unit
     fun warmupState(): OnePlusWarmupState
     fun isSessionUp(): Boolean
+
+    /**
+     * Ask the running session to hand a fingerstick to the sensor's own algorithm.
+     *
+     * The value does not reach the sensor here: it waits for the Control loop to reach a point
+     * where it owns the characteristic, which is normally within one duty cycle. Watch
+     * [lastCalibrationOutcome] for what the sensor answered.
+     *
+     * ⚠️ A sensor keeps a calibration it accepts for good — it cannot be edited or deleted
+     * afterwards. Callers must have an explicit user action behind this, never an automatic rule.
+     *
+     * @param glucoseMgdl blood value, which the sensor only accepts between 40 and 400 mg/dL
+     * @param bloodAtMs wall clock of the PRICK, not of the moment the value was typed in
+     * @return false when the driver will not take it: no session, a pre-soak sensor, a value out of
+     *   range, a fingerstick over an hour old, or another one already waiting
+     */
+    fun offerCalibration(glucoseMgdl: Int, bloodAtMs: Long): Boolean = false
+
+    /** What became of the last fingerstick offered, or null when none ever was. */
+    fun lastCalibrationOutcome(): OnePlusCalibrationOutcome? = null
+
+    /** True while a fingerstick is still waiting to be written. */
+    fun calibrationPending(): Boolean = false
 }

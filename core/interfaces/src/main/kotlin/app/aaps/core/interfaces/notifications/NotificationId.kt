@@ -181,7 +181,16 @@ enum class NotificationId(
     SCENE_CHAIN_ERROR(IMPORTANT, AUTOMATION, allowMultiple = true),
 
     /** Bolus succeeded but the accompanying carbs could not be persisted — the user must re-enter them. */
-    CARBS_STORE_FAILED(URGENT, PUMP);
+    CARBS_STORE_FAILED(URGENT, PUMP),
+
+    /**
+     * The active calibration plugin needs attention: not enough entries yet, the fit was rejected
+     * as unsafe, entries are too clustered to fit a slope, or the last accepted entry is old. Only
+     * one of these reasons is shown at a time (see `LinearCalibrationPlugin`'s health check) and it
+     * is dismissed once the situation resolves. Appended last on purpose, because the system
+     * notification id is the ordinal.
+     */
+    CALIBRATION_HEALTH(NORMAL, CGM);
 
     companion object {
 

@@ -110,15 +110,6 @@ interface CgmSensorStatusProvider : CgmWarmupProvider {
     val stagingEvidence: StateFlow<CgmStagingEvidence?>
 
     /**
-     * Milliseconds left before the staging sensor has settled long enough to be promoted, or null
-     * when there is no staging sensor or the wait is already over.
-     *
-     * The source owns the settle rule, so the UI can show a countdown without knowing it. A UI that
-     * kept its own copy of the threshold would drift from the rule that actually gates promotion.
-     */
-    val stagingSettleRemainingMs: StateFlow<Long?>
-
-    /**
      * Promote the staging sensor to production (the ONLY action that changes the loop's glucose
      * source — safety-critical). Suspends; returns [PromotionResult.Ok] on success or
      * [PromotionResult.Rejected] with the reason (e.g. not settled) without changing any state.

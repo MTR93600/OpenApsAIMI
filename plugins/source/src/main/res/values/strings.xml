@@ -109,6 +109,9 @@
     <string name="dexcom_oneplus_permissions_needed">Bluetooth permission is required before starting the sensor</string>
     <string name="dexcom_oneplus_use_real_skeleton">Use Real BLE skeleton (engineering)</string>
     <string name="dexcom_oneplus_use_real_skeleton_summary">Routes to the Real GATT+KEKS+EGV driver (default on). Disable only to force the Stub. Not a production BLE claim until device-confirmed.</string>
+    <string name="dexcom_oneplus_send_calibration_to_sensor">Send calibration to the sensor (engineering)</string>
+    <string name="dexcom_oneplus_send_calibration_to_sensor_summary">Off: a finger prick value is used to correct readings inside the app, and can be removed later. On: the value is sent to the sensor itself. The sensor keeps it for good and it cannot be edited or deleted, this sensor does not report clearly whether it took the value, and the app stops correcting readings on its own.</string>
+    <string name="dexcom_oneplus_calibration_not_sent">The value could not be sent to the sensor. The sensor may be out of range, still warming up, or another value may still be on its way.</string>
     <string name="dexcom_oneplus_start_sensor">Start sensor</string>
     <string name="dexcom_oneplus_start_action">Start / new sensor</string>
     <string name="dexcom_oneplus_warmup_open">Open warm-up screen</string>
@@ -202,6 +205,10 @@
     <string name="libre3_warmup_summary">About 60 minute warm-up countdown</string>
     <string name="libre3_use_real_skeleton">Use real Bluetooth driver (engineering)</string>
     <string name="libre3_use_real_skeleton_summary">Routes to the real Libre 3 driver. Off by default. Turning it on is not a claim that the driver works.</string>
+    <string name="libre3_presoak_enabled">Pre-soak a second sensor (engineering)</string>
+    <string name="libre3_presoak_enabled_summary">Lets you start a new sensor while the current one keeps feeding the loop. The new sensor uses real wear time, because a Libre 3 starts its 14 day clock at the scan.</string>
+    <string name="libre3_keep_session_alive">Keep the Libre 3 session alive (engineering)</string>
+    <string name="libre3_keep_session_alive_summary">Keeps the phone from closing the Bluetooth link while the screen is off. AAPS shows a small ongoing notification for as long as a Libre 3 session is wanted.</string>
     <string name="libre3_nav_back">Back</string>
     <string name="libre3_family_three">Libre 3</string>
     <string name="libre3_family_plus">Libre 3 Plus</string>
@@ -264,6 +271,7 @@
     <string name="libre3_notif_title">Libre 3</string>
     <string name="libre3_notif_channel_name">Libre 3 sensor status</string>
     <string name="libre3_notif_channel_desc">Shows the connection and the warm-up of the sensor.</string>
+    <string name="libre3_notif_session_alive">Keeping the sensor connected</string>
     <string name="libre3_notif_pairing">Pairing with the sensor…</string>
     <string name="libre3_notif_connecting">Connecting to the sensor…</string>
     <string name="libre3_notif_reconnecting">Reconnecting…</string>
@@ -271,6 +279,45 @@
     <string name="libre3_notif_warming_text">Keep the phone near the sensor</string>
     <string name="libre3_notif_failed_title">Sensor start interrupted</string>
     <string name="libre3_notif_failed_text">Open AAPS and scan the sensor again</string>
+    <string name="libre3_notif_title_presoak">Libre 3 pre-soak</string>
+
+    <!-- Pre-soak (staging) slot on the Start screen -->
+    <string name="libre3_slot_production_short">Current sensor</string>
+    <string name="libre3_slot_staging_short">Pre-soak</string>
+    <string name="libre3_step_presoak">Pre-soak</string>
+    <string name="libre3_presoak_wear_cost_title">A pre-soak uses sensor life — read this first</string>
+    <string name="libre3_presoak_wear_cost">A Libre 3 starts both its warm-up and its 14 day clock at the moment you scan it. There is no way to start a Libre 3 quietly and begin its life later, so a pre-soak spends real wear time: soak it for 12 hours and you have 13.5 days of use left instead of 14.\n\nYou decide when to promote it. There is no smallest soak time.</string>
+    <string name="libre3_presoak_done_note">You can leave this screen. The pre-soak sensor collects readings for itself and does not feed the loop. Open the Libre 3 status screen to watch it and to promote it.</string>
+    <string name="libre3_staging_is_production">This sensor already feeds the loop. Start it as your current sensor, not as a pre-soak.</string>
+    <string name="libre3_nfc_same_sensor_other_slot">This sensor is already used by the other slot, so the scan was stopped. Nothing was sent to the sensor and nothing was changed.</string>
+
+    <!-- Pre-soak (staging) section on the Libre 3 status screen -->
+    <string name="libre3_presoak_heading">Pre-soak sensor</string>
+    <string name="libre3_presoak_state_absent">None</string>
+    <string name="libre3_presoak_state_warmup">Warming up</string>
+    <string name="libre3_presoak_state_settling">Settling</string>
+    <string name="libre3_presoak_state_ready">Ready to promote</string>
+    <string name="libre3_presoak_warmup_note">A Libre 3 sends no glucose at all while it warms up, so there is nothing to draw until the countdown ends. This sensor does not feed the loop.</string>
+    <string name="libre3_presoak_soak_time">Soaking for</string>
+    <string name="libre3_presoak_reading_count">Readings collected</string>
+    <string name="libre3_presoak_last_value">Last reading</string>
+    <string name="libre3_presoak_last_value_at" comment="%1$s=glucose value with its unit, %2$s=time of day. Example: 5.6 mmol/l at 14:32">%1$s at %2$s</string>
+    <string name="libre3_presoak_info_note">Soak time and reading count are shown for information only. There is no smallest soak time, so you decide when to promote.</string>
+    <string name="libre3_presoak_curve_empty">No pre-soak readings to draw yet. This chart is kept in memory only, so it starts empty again after AAPS restarts, while the reading count below is kept.</string>
+    <string name="libre3_presoak_promote">Promote this sensor</string>
+    <string name="libre3_presoak_promote_title">Promote the pre-soak sensor?</string>
+    <string name="libre3_presoak_promote_explain">The pre-soak sensor becomes the sensor that feeds the loop, right away. The sensor you wear now is retired: it stops sending glucose to AAPS and this phone forgets it. This cannot be undone.\n\nYou can promote a sensor that is still warming up, for example when the sensor you wear has failed. A warming sensor sends no glucose until its warm-up ends, so the loop has no glucose for that time.\n\nA Libre 3 often reads low and jumpy for about the first half day after it was started. A young sensor can therefore feed the loop readings that do not match your real glucose. Check with a finger stick before you trust it, and talk to your care team if you are not sure what to do.</string>
+    <string name="libre3_presoak_promote_confirm">Promote</string>
+    <string name="libre3_presoak_promote_cancel">Keep current sensor</string>
+    <string name="libre3_presoak_promote_ok">Done. The pre-soak sensor now feeds the loop.</string>
+    <string name="libre3_presoak_promote_rejected_absent">There is no pre-soak sensor to promote.</string>
+    <string name="libre3_presoak_promote_rejected_other">The pre-soak sensor could not be promoted. Nothing was changed.</string>
+    <string name="libre3_presoak_cancel">Cancel pre-soak</string>
+    <string name="libre3_presoak_cancel_title">Cancel the pre-soak?</string>
+    <string name="libre3_presoak_cancel_explain">This phone stops the pre-soak and forgets the pre-soak sensor and the readings collected from it. The sensor on your arm keeps running and keeps using its wear time; nothing is sent to it. The sensor that feeds the loop is not touched.</string>
+    <string name="libre3_presoak_cancel_confirm">Cancel pre-soak</string>
+    <string name="libre3_presoak_cancel_dismiss">Keep soaking</string>
+    <string name="libre3_presoak_cancel_done">Pre-soak cancelled. The sensor that feeds the loop was not touched.</string>
 
     <!-- Responsive screen frame: navigation, collapsible help, section headings -->
     <string name="cgm_nav_close">Close</string>
@@ -312,10 +359,27 @@
     <string name="dexcom_oneplus_production_no_reading">No reading received yet.</string>
     <string name="dexcom_oneplus_staging_readings_label">Readings collected</string>
     <string name="dexcom_oneplus_staging_last_label">Last reading</string>
+    <string name="dexcom_oneplus_correct_insertion_date">Correct insertion date</string>
+    <string name="dexcom_oneplus_insertion_date_future" comment="%1$s=current start time of the sensor. Example: 14:05">A sensor cannot be inserted in the future. The sensor still starts at %1$s.</string>
+    <string name="dexcom_oneplus_insertion_date_too_old" comment="%1$s=current start time of the sensor. Example: 14:05">That date is older than a full sensor life, so it belongs to another sensor. The sensor still starts at %1$s.</string>
+    <string name="dexcom_oneplus_insertion_date_no_session" comment="%1$s=current start time of the sensor. Example: 14:05">No sensor session is running, so there is no date to correct.</string>
     <string name="dexcom_oneplus_end_of_life_title">Sensor is near its end</string>
     <string name="dexcom_oneplus_end_of_life_text">Starting a pre-soak sensor now means the next one is already warm when this one stops.</string>
     <string name="dexcom_oneplus_start_presoak">Start a pre-soak sensor</string>
     <string name="dexcom_oneplus_staging_none_short">A pre-soak sensor collects readings alongside the one in use. It never feeds the loop until you promote it here.</string>
+
+    <!-- Status screen: finger prick values sent to the sensor itself (engineering setting only) -->
+    <string name="dexcom_oneplus_calibration_heading">Sensor calibration</string>
+    <string name="dexcom_oneplus_calibration_none">No finger prick value has been sent to this sensor yet.</string>
+    <string name="dexcom_oneplus_calibration_waiting">Your value is waiting to be sent to the sensor. It goes out the next time the app and the sensor talk, which is usually within a few minutes.</string>
+    <string name="dexcom_oneplus_calibration_accepted">The sensor says it took your value.</string>
+    <string name="dexcom_oneplus_calibration_refused">The sensor says it did not take your value. Your reading was not changed.</string>
+    <string name="dexcom_oneplus_calibration_unknown">The sensor answered something this app cannot read, so it is not possible to say whether your value was used. This is what a Dexcom ONE+ normally answers. It is not an app error and it is not a success. Compare the sensor with a finger prick within the next hour before you rely on its readings, and ask your care team if you are unsure.</string>
+    <string name="dexcom_oneplus_calibration_detail" comment="%1$s=what the sensor answered, as a short technical line, often raw bytes. Example: Sensor answered 34000100 - this firmware does not send a readable result">Sensor answer: %1$s</string>
+    <string name="dexcom_oneplus_calibration_state_needs">The sensor is asking for a calibration.</string>
+    <string name="dexcom_oneplus_calibration_state_needs_first">The sensor is asking for its first calibration.</string>
+    <string name="dexcom_oneplus_calibration_state_needs_second">The sensor is asking for a second calibration.</string>
+    <string name="dexcom_oneplus_calibration_state_sent">The sensor reports that a calibration has reached it.</string>
 
     <string name="cgm_driver_log_follow">Follow</string>
     <string name="cgm_driver_log_last_line" comment="%1$s=how long ago the newest line was read. Example: newest 5 s ago">newest %1$s ago</string>

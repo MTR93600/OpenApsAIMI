@@ -19,6 +19,9 @@ object Libre3LogMarkers {
     const val SCAN = "LIBRE3_SCAN"
     const val RECONNECT = "LIBRE3_RECONNECT"
 
+    /** The pre-soak slot: begin, collect, cancel and promote. */
+    const val PRESOAK = "LIBRE3_PRESOAK"
+
     /** Step by step trace of one pairing attempt. See `Libre3PairingTrace`. */
     const val TRACE = "LIBRE3_TRACE"
     const val STUB = "LIBRE3_DRIVER_STUB"

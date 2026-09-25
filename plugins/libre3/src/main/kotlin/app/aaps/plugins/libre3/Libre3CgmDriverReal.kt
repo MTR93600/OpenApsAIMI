@@ -1,6 +1,7 @@
 package app.aaps.plugins.libre3
 
 import android.content.Context
+import app.aaps.core.interfaces.source.SensorSlot
 import app.aaps.plugins.libre3.crypto.Libre3FirstPairEphemeral
 import app.aaps.plugins.libre3.gatt.Libre3BluetoothUuids
 import app.aaps.plugins.libre3.gatt.Libre3GattClientAndroid
@@ -14,14 +15,17 @@ import app.aaps.plugins.libre3.parse.Libre3PatchStatusParser
 import app.aaps.plugins.libre3.parse.toSampleOrNull
 import app.aaps.plugins.libre3.reconnect.Libre3ReconnectPolicy
 import app.aaps.plugins.libre3.reconnect.Libre3RecoveryAction
+import app.aaps.plugins.libre3.reconnect.Libre3ScanBudget
 import app.aaps.plugins.libre3.session.Libre3BleSession
 import app.aaps.plugins.libre3.session.Libre3DisconnectPolicy
+import app.aaps.plugins.libre3.session.Libre3MacArbiter
 import app.aaps.plugins.libre3.session.Libre3PairingBlockFactory
 import app.aaps.plugins.libre3.session.Libre3StartRefusal
 import app.aaps.plugins.libre3.warmup.Libre3WarmupClock
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * The real driver: one Bluetooth session, one thread, one sensor.
@@ -31,15 +35,64 @@ import java.util.concurrent.Executors
  *
  * ⚠️ ASYNC IMPACT: everything that talks to the sensor runs on [bleExecutor], one thing at a time.
  * The watchers are called from that thread, so they must not block it.
+ *
+ * @param storeNamespace which preferences file the sessions of this instance read and write. null is
+ *   the production file, a name is a pre-soak file. See [Libre3SensorStore].
  */
 class Libre3CgmDriverReal(
     private val pairingBlocks: Libre3PairingBlockFactory,
+    storeNamespace: String? = null,
 ) : Libre3CgmDriver {
+
+    /**
+     * Which preferences file this instance's sessions read and write.
+     *
+     * A `var` and not a constructor `val`, because a promotion hands a **live link** from the
+     * pre-soak slot over to production: the link must not be dropped, but from that moment on every
+     * new session of this instance has to open against the production file. See [rebindStore].
+     */
+    @Volatile
+    private var storeNamespace: String? = storeNamespace
+
+    /**
+     * Which slot this instance was built for.
+     *
+     * It stays what it was, even after a promotion, because the thread it named was already
+     * started and a bug report has to stay readable across the swap.
+     */
+    private val slot: SensorSlot =
+        if (storeNamespace.isNullOrBlank()) SensorSlot.PRODUCTION else SensorSlot.STAGING
+
+    /** Short name of this instance for the log: "prod" or "presoak". */
+    private val slotName: String = if (slot == SensorSlot.PRODUCTION) SLOT_PRODUCTION else SLOT_STAGING
+
+    /**
+     * Which slot this instance really plays for **right now**.
+     *
+     * This is the role, not the name. [slot] and [slotName] are the identity of the instance and
+     * never change, so a bug report stays readable across a promotion. The role does change: a
+     * promoted instance feeds the loop from that moment on, so it must get the production reconnect
+     * pace, not the slow pre-soak one. See [rebindStore] and `docs/LIBRE3_PRESOAK_PLAN.md` §14.
+     */
+    @Volatile
+    private var role: SensorSlot = slot
+
+    /** Which slot this instance plays for right now. It follows [rebindStore], unlike the log name. */
+    val currentRole: SensorSlot get() = role
+
+    /**
+     * What this instance is called in [Libre3MacArbiter], for as long as it lives.
+     *
+     * It is **not** [slotName]. That name stays "presoak" even after a promotion, so two different
+     * instances could carry it at once and the second one would take the first one's sensor away.
+     * A counter cannot be mistaken like that.
+     */
+    private val arbiterOwner: String = "$slotName#${nextInstance.incrementAndGet()}"
 
     private val watchers = CopyOnWriteArrayList<Libre3GlucoseWatcher>()
 
     private val bleExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "libre3-ble").apply { isDaemon = true }
+        Thread(runnable, "libre3-ble-$slotName").apply { isDaemon = true }
     }
 
     @Volatile
@@ -76,8 +129,31 @@ class Libre3CgmDriverReal(
 
     override fun setContext(context: Context) {
         this.context = context.applicationContext
-        this.store = Libre3SensorStore(context.applicationContext)
+        this.store = Libre3SensorStore(context.applicationContext, storeNamespace)
     }
+
+    /**
+     * Points this instance at another slot's preferences file, without dropping the running link.
+     *
+     * Used once, by a promotion. The running read loop kept its store in a local, so it goes on
+     * writing into the old file until the link ends, which is harmless. The next session opens
+     * against the new file.
+     *
+     * The [role] moves with the file. Without that the promoted instance would keep the slow
+     * pre-soak reconnect pace for the rest of that sensor's life, so the sensor that feeds the loop
+     * would come back more slowly than it did before the pre-soak feature existed.
+     */
+    fun rebindStore(namespace: String?) {
+        storeNamespace = namespace
+        role = if (namespace.isNullOrBlank()) SensorSlot.PRODUCTION else SensorSlot.STAGING
+        context?.let { store = Libre3SensorStore(it, namespace) }
+    }
+
+    /** True when this instance is the one the arbiter says owns [mac]. */
+    fun ownsSensor(mac: String): Boolean = Libre3MacArbiter.ownerOf(mac) == arbiterOwner
+
+    /** True when a sensor with a PIN is stored for this instance's slot. */
+    fun hasStoredSensor(): Boolean = store?.isReadyForBle() == true
 
     override fun addWatcher(watcher: Libre3GlucoseWatcher) {
         if (!watchers.contains(watcher)) watchers.add(watcher)
@@ -101,6 +177,9 @@ class Libre3CgmDriverReal(
 
     override fun shutdown() {
         stopSession(Libre3DisconnectPolicy.Reason.USER_STOPPED_PLUGIN)
+        // Said again, because this instance can never open a session after this point and its claim
+        // must not outlive it. `release` on an owner that holds nothing does nothing.
+        Libre3MacArbiter.release(arbiterOwner)
         watchers.clear()
         bleExecutor.shutdownNow()
     }
@@ -113,7 +192,7 @@ class Libre3CgmDriverReal(
     override fun setRadioBackOff(backOff: Boolean) {
         if (radioBackOff == backOff) return
         radioBackOff = backOff
-        Libre3Log.i("${Libre3LogMarkers.SESSION}: radio back off = $backOff")
+        Libre3Log.i("[$slotName] ${Libre3LogMarkers.SESSION}: radio back off = $backOff")
         gatt?.setLowPower(backOff)
     }
 
@@ -141,6 +220,9 @@ class Libre3CgmDriverReal(
         session = null
         gatt = null
         current?.close(reason)
+        // The sensor is free again. A stop that kept the claim would block the other slot from ever
+        // taking this sensor on, and a promotion from ever starting a second pre-soak.
+        Libre3MacArbiter.release(arbiterOwner)
         publishWarmup(Libre3WarmupState.Phase.IDLE)
         watchers.forEach { it.onSession(false, reason.name) }
     }
@@ -160,13 +242,13 @@ class Libre3CgmDriverReal(
         gatt = null
         current?.close(Libre3DisconnectPolicy.Reason.LINK_LOST)
         watchers.forEach { it.onSession(false, Libre3DisconnectPolicy.Reason.LINK_LOST.name) }
-        Libre3Log.i("${Libre3LogMarkers.SESSION}: reading stopped, the link is gone")
+        Libre3Log.i("[$slotName] ${Libre3LogMarkers.SESSION}: reading stopped, the link is gone")
 
         if (generation != connectGeneration) return
         failedAttempts++
         val message = "the link to the sensor was lost"
         publishWarmup(Libre3WarmupState.Phase.RECONNECTING, message = message)
-        Libre3Log.w("${Libre3LogMarkers.RECONNECT}: link lost, attempt $failedAttempts")
+        Libre3Log.w("[$slotName] ${Libre3LogMarkers.RECONNECT}: link lost, attempt $failedAttempts")
         watchers.forEach { it.onError(message, false) }
         scheduleRetry(generation)
     }
@@ -180,12 +262,45 @@ class Libre3CgmDriverReal(
         // Opening a session begins with a scan, so it waits for the radio to come back. The sensor
         // is not given up: the retry keeps knocking at the slow pace until the lease ends.
         if (radioBackOff) {
-            Libre3Log.i("${Libre3LogMarkers.SESSION}: not opening a session, the radio is lent out")
+            Libre3Log.i("[$slotName] ${Libre3LogMarkers.SESSION}: not opening a session, the radio is lent out")
             scheduleRetry(generation)
             return
         }
         val appContext = context ?: return
         val sensorStore = store ?: return
+        // One sensor, one driver instance. Taken before the scan, because from the scan on there is
+        // a link, and two links on one sensor break both pairings. A refusal is final on purpose: a
+        // retry could only keep asking for a sensor that belongs to somebody else.
+        val storedAddress = sensorStore.loadIdentity()?.bleAddress
+        if (storedAddress != null && !Libre3MacArbiter.claim(storedAddress, arbiterOwner)) {
+            // The slot that feeds the loop must never be the one that is starved. Two files can end
+            // up holding one sensor after a promotion that was cut off half way, and then whichever
+            // thread gets here first would keep it for good, because a refusal is final. So the
+            // production role takes the sensor back: the pre-soak link is dropped, which is the only
+            // way to stay at one link per sensor, and then the claim is asked for again.
+            val takenBack = role == SensorSlot.PRODUCTION &&
+                Libre3CgmDrivers.yieldStagingSensorToProduction(storedAddress, this) &&
+                Libre3MacArbiter.claim(storedAddress, arbiterOwner)
+            if (!takenBack) {
+                val message = "this sensor is already used by the other slot"
+                publishWarmup(Libre3WarmupState.Phase.FAILED, message = message)
+                watchers.forEach { it.onError(message, true) }
+                return
+            }
+            Libre3Log.w(
+                "[$slotName] ${Libre3LogMarkers.SESSION}: the pre-soak slot held the sensor of the loop, " +
+                    "it was stopped and the sensor was taken back",
+            )
+        }
+        // Opening a session starts a scan, and a scan over the platform quota reports success and
+        // then finds nothing. Waiting is the only way to be heard again.
+        val now = System.currentTimeMillis()
+        if (!Libre3ScanBudget.tryAcquire(now)) {
+            val waitMs = Libre3ScanBudget.waitMsUntilNextStart(now)
+            Libre3Log.i("[$slotName] ${Libre3LogMarkers.RECONNECT}: scan budget is full, waiting ${waitMs}ms")
+            scheduleRetryAfter(generation, waitMs)
+            return
+        }
         val client = Libre3GattClientAndroid(appContext)
         gatt = client
         val newSession = Libre3BleSession(client, sensorStore, pairingBlocks)
@@ -219,7 +334,7 @@ class Libre3CgmDriverReal(
                     message = result.reason,
                 )
                 Libre3Log.w(
-                    "${Libre3LogMarkers.RECONNECT}: attempt $failedAttempts failed, " +
+                    "[$slotName] ${Libre3LogMarkers.RECONNECT}: attempt $failedAttempts failed, " +
                         "handshakeReached=${result.handshakeReached}, next action $action",
                 )
                 watchers.forEach { it.onError(result.reason, fatal) }
@@ -241,8 +356,22 @@ class Libre3CgmDriverReal(
         // A retry means a scan, and a scan is the one thing a backed off driver must not do. So the
         // wait is stretched to the slow pace and the ladder is not climbed, which keeps this driver
         // off the air without giving the sensor up.
-        val delayMs = if (radioBackOff) Libre3ReconnectPolicy.SLOW_RETRY_MS else Libre3ReconnectPolicy.nextDelayMs(failedAttempts)
-        Libre3Log.i("${Libre3LogMarkers.RECONNECT}: retry in ${delayMs}ms, backOff=$radioBackOff")
+        val delayMs =
+            if (radioBackOff) Libre3ReconnectPolicy.SLOW_RETRY_MS
+            else Libre3ReconnectPolicy.nextDelayMs(failedAttempts, role)
+        scheduleRetryAfter(generation, delayMs)
+    }
+
+    /**
+     * The same retry, with a wait the caller has worked out itself.
+     *
+     * The scan budget needs this: its wait is the rest of the platform window, and the ladder of
+     * [Libre3ReconnectPolicy] knows nothing about that window.
+     *
+     * ⚠️ ASYNC IMPACT: same as [scheduleRetry], the wait runs on [bleExecutor].
+     */
+    private fun scheduleRetryAfter(generation: Int, delayMs: Long) {
+        Libre3Log.i("[$slotName] ${Libre3LogMarkers.RECONNECT}: retry in ${delayMs}ms, backOff=$radioBackOff")
         bleExecutor.execute {
             try {
                 Thread.sleep(delayMs)
@@ -303,9 +432,9 @@ class Libre3CgmDriverReal(
                 val plaintext = crypto.decryptTryingAllKinds(frame.encrypted, frame.sequenceNumber).plaintext
                 handlePlaintext(plaintext, isGlucose, identity, sensorStore)
             } catch (e: Libre3ParseException) {
-                Libre3Log.w("${Libre3LogMarkers.BG}: unreadable message dropped, ${e.message}")
+                Libre3Log.w("[$slotName] ${Libre3LogMarkers.BG}: unreadable message dropped, ${e.message}")
             } catch (e: Exception) {
-                Libre3Log.w("${Libre3LogMarkers.BG}: message dropped, ${e.javaClass.simpleName}")
+                Libre3Log.w("[$slotName] ${Libre3LogMarkers.BG}: message dropped, ${e.javaClass.simpleName}")
             }
         }
         // The loop ends for one of two reasons, and they must not be treated alike.
@@ -318,7 +447,7 @@ class Libre3CgmDriverReal(
         if (sessionUp) {
             endSessionAfterLinkLoss(generation)
         } else {
-            Libre3Log.i("${Libre3LogMarkers.SESSION}: reading stopped")
+            Libre3Log.i("[$slotName] ${Libre3LogMarkers.SESSION}: reading stopped")
         }
     }
 
@@ -395,5 +524,14 @@ class Libre3CgmDriverReal(
 
         /** How long one wait for a sensor message lasts before the link is checked again. */
         const val DATA_WAIT_MS = 90_000L
+
+        /** Name of the slot that feeds the loop, used in the thread name and in every log line. */
+        private const val SLOT_PRODUCTION = "prod"
+
+        /** Name of the pre-soak slot, used in the thread name and in every log line. */
+        private const val SLOT_STAGING = "presoak"
+
+        /** Makes every instance's arbiter token different, including two instances of one slot. */
+        private val nextInstance = AtomicInteger(0)
     }
 }
