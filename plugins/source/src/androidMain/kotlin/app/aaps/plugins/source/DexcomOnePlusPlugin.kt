@@ -10,6 +10,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -82,6 +83,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     private val warmupBasalGuard: DexcomOnePlusWarmupBasalGuard,
     private val availabilityProvider: DexcomOnePlusAvailabilityProvider,
     private val bleRadioPriority: BleRadioPriority,
+    private val activePlugin: ActivePlugin,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -768,6 +770,12 @@ class DexcomOnePlusPlugin @Inject constructor(
         // The promoted sensor becomes the loop's sensor: its age must show on the dashboard from the
         // moment it was applied (its staging start, verified above), not from the promotion.
         logSensorChange(startMs)
+        // That back-dated session start would otherwise pull every fingerstick taken during the
+        // pre-soak into this sensor's fit — all of them paired against the sensor just retired.
+        // Ref DexcomOnePlusPlugin.kt L932–934 @ 6598201d (1b81e356c8). Same wall clock as the soak
+        // math above: this file timestamps promotion with System.currentTimeMillis, not the APS
+        // aimiWallClockMs (that helper lives in :plugins:aps and is not a CGM dependency).
+        runCatching { activePlugin.activeCalibration.ignoreEntriesBefore(System.currentTimeMillis()) }
         // 4) In-session: the already-connected staging driver now feeds the loop (no gap).
         stagingPublishesToLoop = true
         stagingPresent = false

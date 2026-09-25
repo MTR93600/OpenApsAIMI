@@ -20,7 +20,9 @@ import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.plugins.calibration.keys.CalibrationLongKey
 import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
@@ -44,6 +46,7 @@ class LinearCalibrationPluginTest : TestBase() {
     @Mock lateinit var notificationManager: NotificationManager
     @Mock lateinit var glucoseStatusProvider: GlucoseStatusProvider
     @Mock lateinit var profileUtil: ProfileUtil
+    @Mock lateinit var preferences: Preferences
 
     private lateinit var plugin: LinearCalibrationPlugin
 
@@ -59,8 +62,10 @@ class LinearCalibrationPluginTest : TestBase() {
         whenever(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)).thenReturn(sensorChange(defaultSessionStart))
         whenever(persistenceLayer.getTherapyEventDataFromToTime(any(), any())).thenReturn(emptyList())
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(emptyList())
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(emptyList())
+        whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(0L)
         plugin = LinearCalibrationPlugin(
-            aapsLogger, rh, dateUtil, persistenceLayer, notificationManager, glucoseStatusProvider, rxBus, profileUtil
+            aapsLogger, rh, dateUtil, persistenceLayer, notificationManager, glucoseStatusProvider, rxBus, profileUtil, preferences
         )
     }
 
@@ -513,7 +518,15 @@ class LinearCalibrationPluginTest : TestBase() {
     fun addEntry_deltaThresholdScaledBySlopeWhenFitApplicable() = runTest {
         // Two entries imply slope = 1.05, well inside clamps → fit is applicable.
         // Effective threshold becomes 5.0 * 1.05 = 5.25 mg/dL/5min.
-        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(twoGoodEntries())
+        // Fresh pairs: an entry older than PAIR_LAG_WINDOW_MS is re-paired (entriesForFit) and the
+        // broad glucose stub below would replace the stored sensor values. Age 0 keeps the stored pair,
+        // which is what this slope check is about. Ref dates its slope fixtures at now for the same reason.
+        whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(
+            listOf(
+                CAL(id = 1L, timestamp = now, fingerstickMgdl = 105.0, sensorMgdlAtPairing = 100.0),
+                CAL(id = 2L, timestamp = now, fingerstickMgdl = 210.0, sensorMgdlAtPairing = 200.0)
+            )
+        )
         // Delta 5.2: would be rejected without scaling, accepted with slope-scaled threshold.
         whenever(glucoseStatusProvider.glucoseStatusData).thenReturn(glucoseStatus(shortAvgDelta = 5.2))
         whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), eq(false)))

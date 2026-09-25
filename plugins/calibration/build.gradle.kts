@@ -84,6 +84,12 @@ kotlin {
             }
         }
 
+        getByName("commonTest") {
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
+
         getByName("androidHostTest") {
             dependencies {
                 implementation(project(":shared:tests"))

@@ -12,6 +12,8 @@ import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.interfaces.calibration.AddEntryResult
 import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.calibration.CalibrationContext
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.observeChanges
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
@@ -27,7 +29,9 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventCalibrationChanged
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.plugins.calibration.keys.CalibrationLongKey
 import app.aaps.core.ui.compose.icons.IcCalibration
 import app.aaps.plugins.calibration.compose.CalibrationComposeContent
 import dev.zacsweers.metro.AppScope
@@ -59,7 +63,8 @@ class LinearCalibrationPlugin(
     private val notificationManager: NotificationManager,
     private val glucoseStatusProvider: GlucoseStatusProvider,
     private val rxBus: RxBus,
-    private val profileUtil: ProfileUtil
+    private val profileUtil: ProfileUtil,
+    private val preferences: Preferences
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.CALIBRATION)
@@ -81,6 +86,21 @@ class LinearCalibrationPlugin(
      *  not re-announced on every scan. Null once resolved or not yet checked. */
     @Volatile
     private var lastHealthMessageRes: TextRef? = null
+
+    /**
+     * Lag-corrected sensor value per calibration entry id. Worked out once per entry and kept in
+     * memory only: the stored entry itself is never rewritten.
+     *
+     * ⚠️ ASYNC IMPACT: [AapsLock] replaces the ref's `ConcurrentHashMap` (JVM-only). The lock is not
+     * held across the suspend glucose read, same as the ref, which also reads the database outside
+     * the map. Two overlapping repairs of one entry both compute the same median.
+     */
+    private val lagPairLock = AapsLock()
+    private val lagCache = CalibrationEntriesForFit.LagPairCache()
+
+    init {
+        preferences.registerPreferences(CalibrationLongKey.entries)
+    }
 
     override suspend fun onStart() {
         super.onStart()
@@ -134,7 +154,7 @@ class LinearCalibrationPlugin(
             return data
         }
 
-        val entries = persistenceLayer.getValidCalibrationEntriesSince(sessionStart)
+        val entries = entriesForFit(sessionStart, now)
         val fit = fitLinearCalibration(entries, now)
         if (fit == null) {
             aapsLogger.debug(LTag.GLUCOSE) { "LinearCalibration: ${entries.size} entries (<$MIN_ENTRIES_FOR_FIT), identity" }
@@ -181,7 +201,7 @@ class LinearCalibrationPlugin(
             // fit is in place, so its magnitude scales with slope. Scale the raw-units threshold
             // by the active slope so a sensor rate of e.g. 5 mg/dL/5min (the "stable enough"
             // bar) is treated identically whether or not calibration is multiplying the signal.
-            val activeFit = effectiveFit(persistenceLayer.getValidCalibrationEntriesSince(sessionStart), timestamp)
+            val activeFit = effectiveFit(entriesForFit(sessionStart, timestamp), timestamp)
             val effectiveThreshold = if (activeFit != null) {
                 DELTA_GATE_MGDL_PER_5MIN * activeFit.slope
             } else {
@@ -206,6 +226,54 @@ class LinearCalibrationPlugin(
         val fit = fitLinearCalibration(entries, now) ?: return null
         if (!fit.isApplicable) return null
         return fit.blendTowardIdentity(stalenessConfidence(entries.maxOf { it.timestamp }, now))
+    }
+
+    /**
+     * The session's entries, each paired with the sensor reading that actually matches it in time.
+     *
+     * A fingerstick measures blood, the sensor measures the fluid around the cells, and the fluid
+     * follows the blood by roughly 5 to 15 minutes. Pairing a fingerstick with the reading taken
+     * just BEFORE it (all that exists when the user types the value in) therefore compares two
+     * different moments, and every mg/dL of that difference goes into the fit. Once the readings
+     * that follow the fingerstick are in the database, the pair is re-made against them instead.
+     *
+     * The stored entry is left untouched. Only the fit sees the re-made pair.
+     *
+     * Ref `LinearCalibrationPlugin.entriesForFit` L276–284 and `lagPaired` L295–310 @ `6598201d`.
+     */
+    private suspend fun entriesForFit(sessionStart: Long, now: Long): List<CAL> {
+        lagPairLock.withLock { lagCache.bindSession(sessionStart) }
+        val from = CalibrationEntriesForFit.fitCutoff(sessionStart, preferences.get(CalibrationLongKey.EntriesValidFrom))
+        return persistenceLayer.getValidCalibrationEntriesSince(from).map { lagPaired(it, now) }
+    }
+
+    override suspend fun ignoreEntriesBefore(timestamp: Long) {
+        val current = preferences.get(CalibrationLongKey.EntriesValidFrom)
+        if (!CalibrationEntriesForFit.shouldAdvanceEntriesValidFrom(current, timestamp)) return
+        preferences.put(CalibrationLongKey.EntriesValidFrom, timestamp)
+        lagPairLock.withLock { lagCache.dropPairs() }
+        aapsLogger.info(LTag.GLUCOSE, "LinearCalibration: entries before $timestamp are left out of the fit")
+        rxBus.send(EventCalibrationChanged())
+    }
+
+    private suspend fun lagPaired(entry: CAL, now: Long): CAL {
+        val cached = lagPairLock.withLock { lagCache.cached(entry.id) }
+        when (val step = CalibrationEntriesForFit.beginLagRepair(entry, now, cached)) {
+            is CalibrationEntriesForFit.LagRepairStep.Keep -> return step.entry
+            is CalibrationEntriesForFit.LagRepairStep.ReadWindow -> {
+                val readings = persistenceLayer.getBgReadingsDataFromTimeToTime(
+                    start = step.startMs,
+                    end = step.endMs,
+                    ascending = false
+                )
+                val finished = CalibrationEntriesForFit.finishLagRepair(entry, readings, step.targetMs)
+                val remembered = finished.storeInCache
+                if (remembered != null) {
+                    lagPairLock.withLock { lagCache.remember(entry.id, remembered) }
+                }
+                return finished.entry
+            }
+        }
     }
 
     override suspend fun addEntry(bgMgdl: Double, timestamp: Long): AddEntryResult {
@@ -283,7 +351,7 @@ class LinearCalibrationPlugin(
             return
         }
 
-        val entries = persistenceLayer.getValidCalibrationEntriesSince(sessionStart)
+        val entries = entriesForFit(sessionStart, now)
         val fit = fitLinearCalibration(entries, now)
         val newestEntryAgeMs = entries.maxOfOrNull { now - it.timestamp }
         val isStale = newestEntryAgeMs != null && newestEntryAgeMs >= T.days(STALE_CONFIDENCE_FULL_DAYS).msecs()
