@@ -146,6 +146,15 @@ internal object AimiSmbTrainingSchedule {
         )
     }
 
+    /**
+     * Whether a candidate rejected by the liveness gates counts as a [TrainingCircuitBreaker] failure.
+     *
+     * Tip `6a6561caab`: `recordFailure()` runs only when `modelRef.get() == null`. [modelInService] is
+     * that reference being non-null. A published model must not be switched off because a later candidate
+     * was refused.
+     */
+    fun countGateRejectionAsBreakerFailure(modelInService: Boolean): Boolean = !modelInService
+
     /** [ms] clamped to 0 when it lies more than [CLOCK_SKEW_TOLERANCE_MS] past [nowMs]. */
     fun sanitizeTimestamp(ms: Long, nowMs: Long): Long =
         if (ms > nowMs + CLOCK_SKEW_TOLERANCE_MS) 0L else ms

@@ -302,7 +302,13 @@ object AimiSmbTrainer {
             circuitBreaker.reset()   // reset circuit breaker on success
             Log.i(TAG, "Model trained and saved successfully (${inputs.size} rows)")
         } else {
-            recordFailure()
+            // RULING R-CB (tip 6a6561caab): a rejected candidate must not disable the model already in
+            // service. recordFailure feeds the breaker, which after 3 failures makes refine return the
+            // raw dose for 6h. Only count this when modelRef is null — nothing is in service yet.
+            // The 6h / 24h clocks stay on lastAttemptMs, set above, either way.
+            if (AimiSmbTrainingSchedule.countGateRejectionAsBreakerFailure(modelRef.get() != null)) {
+                recordFailure()
+            }
         }
     }
 

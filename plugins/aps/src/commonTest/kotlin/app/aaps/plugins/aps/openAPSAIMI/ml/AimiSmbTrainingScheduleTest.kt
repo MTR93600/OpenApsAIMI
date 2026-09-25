@@ -148,6 +148,26 @@ class AimiSmbTrainingScheduleTest {
     }
 
     @Test
+    fun gate_rejection_with_a_model_in_service_does_not_count_against_the_breaker() {
+        val breaker = TrainingCircuitBreaker(clock = { now })
+        repeat(TrainingCircuitBreaker.DEFAULT_MAX_FAILURES) {
+            assertFalse(recordGateRejection(breaker, modelInService = true))
+        }
+        assertFalse(breaker.isOpen(now))
+    }
+
+    @Test
+    fun gate_rejection_without_a_model_counts_against_the_breaker() {
+        val breaker = TrainingCircuitBreaker(clock = { now })
+        repeat(TrainingCircuitBreaker.DEFAULT_MAX_FAILURES - 1) {
+            assertFalse(recordGateRejection(breaker, modelInService = false))
+        }
+        assertFalse(breaker.isOpen(now))
+        assertTrue(recordGateRejection(breaker, modelInService = false))
+        assertTrue(breaker.isOpen(now))
+    }
+
+    @Test
     fun persisted_counters_round_trip_and_a_future_timestamp_is_cleared_against_the_frozen_clock() {
         val encoded = AimiSmbTrainingSchedule.encodeCounters(
             AimiSmbTrainingSchedule.Counters(
@@ -169,6 +189,15 @@ class AimiSmbTrainingScheduleTest {
         assertEquals(40L, sanitized?.rowsAtLastTrain)
 
         assertNull(AimiSmbTrainingSchedule.decodeCounters("not-json", now))
+    }
+
+    /**
+     * Applies the tip R-CB rule to the real breaker: a gate rejection counts only when no model is in service.
+     * Returns whether this rejection just tripped the breaker, which is false when it was not counted.
+     */
+    private fun recordGateRejection(breaker: TrainingCircuitBreaker, modelInService: Boolean): Boolean {
+        if (!AimiSmbTrainingSchedule.countGateRejectionAsBreakerFailure(modelInService)) return false
+        return breaker.recordFailure()
     }
 
     private fun decision(
