@@ -15,6 +15,7 @@ import app.aaps.core.interfaces.source.XDripSource
 import app.aaps.core.interfaces.sync.XDripBroadcast
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.ui.UiStrings
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +31,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.Mock
 import org.mockito.MockitoAnnotations
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.whenever
 
@@ -61,6 +63,8 @@ internal class CalibrationDialogViewModelTest {
         whenever(profileUtil.convertToMgdl(any(), any())).thenReturn(120.0)
         whenever(activePlugin.activeCalibration).thenReturn(activeCalibration)
         whenever(dateUtil.now()).thenReturn(1_700_000_000_000L)
+        // Catch-all first. confirmAndSave tests override the status sentence afterwards.
+        stubResourceStrings()
         sut = CalibrationDialogViewModel(
             profileUtil, profileFunction, xDripBroadcast, xDripSource, uel, glucoseStatusProvider,
             activePlugin, persistenceLayer, dateUtil, rh, decimalFormatter
@@ -69,6 +73,23 @@ internal class CalibrationDialogViewModelTest {
 
     @AfterEach
     fun tearDown() = Dispatchers.resetMain()
+
+    /**
+     * [CalibrationDialogViewModel.buildConfirmationSummary] passes `rh.gs(...)` to
+     * [app.aaps.core.data.ui.ConfirmationLinesBuilder.line], whose `text` is non-null. An unstubbed
+     * mock returns null and the line builder throws. Placeholders cover every overload; the status
+     * tests re-stub [UiStrings.cal_saved_need_more_entries] and [UiStrings.cal_saved_unsafe_fit]
+     * so the asserted message still depends on [app.aaps.core.interfaces.calibration.CalibrationStatus].
+     */
+    private fun stubResourceStrings() {
+        whenever(rh.gs(any<Int>())).thenReturn("text")
+        whenever(rh.gs(any<TextRef>())).thenReturn("text")
+        whenever(rh.gs(any<Int>(), anyOrNull())).thenReturn("text")
+        whenever(rh.gs(any<TextRef>(), anyOrNull())).thenReturn("text")
+        whenever(rh.gs(any<Int>(), anyOrNull(), anyOrNull())).thenReturn("text")
+        whenever(rh.gs(any<TextRef>(), anyOrNull(), anyOrNull())).thenReturn("text")
+        whenever(rh.gs(UiStrings.cal_saved_unsafe_fit)).thenReturn("unsafe fit")
+    }
 
     @Test
     fun `no action when bg is zero`() {
@@ -111,5 +132,20 @@ internal class CalibrationDialogViewModelTest {
 
         val effect = sut.sideEffect.replayCache.last() as CalibrationDialogViewModel.SideEffect.EntryAccepted
         assertThat(effect.message).isNull()
+    }
+
+    @Test
+    fun `confirmAndSave on an accepted entry with an unsafe fit tells the user it was not applied`() = runTest {
+        whenever(activeCalibration.addEntry(any(), any())).thenReturn(AddEntryResult.Accepted)
+        whenever(activeCalibration.status()).thenReturn(CalibrationStatus.UnsafeFit)
+        whenever(rh.gs(UiStrings.cal_saved_unsafe_fit)).thenReturn("unsafe fit")
+
+        sut.updateBg(120.0)
+        sut.buildConfirmationSummary()
+        sut.confirmAndSave()
+        advanceUntilIdle()
+
+        val effect = sut.sideEffect.replayCache.last() as CalibrationDialogViewModel.SideEffect.EntryAccepted
+        assertThat(effect.message).isEqualTo("unsafe fit")
     }
 }
