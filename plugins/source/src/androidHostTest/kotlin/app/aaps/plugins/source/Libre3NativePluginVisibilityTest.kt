@@ -8,6 +8,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.maintenance.FileListProvider
 import app.aaps.core.interfaces.notifications.NotificationManager
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.StringKey
@@ -34,6 +35,7 @@ class Libre3NativePluginVisibilityTest : TestBase() {
     @Mock lateinit var config: Config
     @Mock lateinit var context: Context
     @Mock lateinit var persistenceLayer: PersistenceLayer
+    @Mock lateinit var activePlugin: ActivePlugin
     @Mock lateinit var fileListProvider: FileListProvider
     @Mock lateinit var notificationManager: NotificationManager
     @Mock lateinit var dateUtil: DateUtil
@@ -53,7 +55,9 @@ class Libre3NativePluginVisibilityTest : TestBase() {
         whenever(extraDir.findFile(LIBRE3_ACCESS_FILE_NAME)).thenReturn(markerFile)
         val availabilityProvider =
             Libre3AvailabilityProvider(aapsLogger, { fileListProvider }, preferences, notificationManager, dateUtil)
-        plugin = Libre3NativePlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority)
+        plugin = Libre3NativePlugin(
+            rh, aapsLogger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin,
+        )
     }
 
     @Test
