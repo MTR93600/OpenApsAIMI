@@ -209,8 +209,8 @@ class CalibrationFitGuardsTest {
         // is −31.44, a sensor at 300 becomes 424.56, ratio 1.4152. Inside every bound.
         val compression = CalibrationFit(slope = SLOPE_MAX, offset = -55.44)
         assertEquals(-31.44, compression.correctionAtLow, absoluteTolerance = 1e-9)
-        assertEquals(424.56, compression.slope * HIGH_MGDL + compression.offset)
-        assertEquals(1.4152, compression.ratioAtHigh)
+        assertEquals(424.56, compression.slope * HIGH_MGDL + compression.offset, absoluteTolerance = 1e-9)
+        assertEquals(1.4152, compression.ratioAtHigh, absoluteTolerance = 1e-9)
         assertTrue(compression.correctionInRange)
         assertTrue(compression.lowEndSafe)
         assertTrue(compression.highEndSafe)
