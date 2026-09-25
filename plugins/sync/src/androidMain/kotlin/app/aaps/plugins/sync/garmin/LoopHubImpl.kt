@@ -5,6 +5,8 @@ import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.HR
 import app.aaps.core.data.model.RM
+import app.aaps.core.data.model.TE
+import app.aaps.core.data.model.TT
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.data.ue.ValueWithUnit
@@ -17,6 +19,7 @@ import app.aaps.core.interfaces.di.ApplicationScope
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
@@ -32,6 +35,7 @@ import dev.zacsweers.metro.SingleIn
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import java.time.Clock
 import java.time.Instant
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -53,6 +57,7 @@ class LoopHubImpl @Inject constructor(
     private val preferences: Preferences,
     private val processedTbrEbData: ProcessedTbrEbData,
     private val wizardBolusExecutor: WizardBolusExecutor,
+    private val userEntryLogger: UserEntryLogger,
     @ApplicationScope private val appScope: CoroutineScope
 ) : LoopHub {
 
@@ -156,6 +161,83 @@ class LoopHubImpl @Inject constructor(
                 source = Sources.Garmin,
                 onError = { aapsLogger.error(LTag.GARMIN, "carbs delivery failed: $it") }
             )
+        }
+    }
+
+    /**
+     * ⚠️ ASYNC IMPACT: inserts or cancels the temporary target on [appScope], same as [postCarbs].
+     * A target of 0 or a duration of 0 cancels. Otherwise the target is stored in mg/dL via
+     * [profileUtil] (same conversion as the reference `postTempTarget`).
+     */
+    override fun postTempTarget(target: Double, duration: Int) {
+        if (target == 0.0 || duration == 0) {
+            appScope.launch {
+                persistenceLayer.cancelCurrentTemporaryTargetIfAny(
+                    timestamp = clock.millis(),
+                    action = Action.TT,
+                    source = Sources.TTDialog,
+                    note = null,
+                    listValues = listOf()
+                )
+            }
+        } else {
+            appScope.launch {
+                persistenceLayer.insertAndCancelCurrentTemporaryTarget(
+                    temporaryTarget = TT(
+                        timestamp = clock.millis(),
+                        duration = TimeUnit.MINUTES.toMillis(duration.toLong()),
+                        reason = TT.Reason.WEAR,
+                        lowTarget = profileUtil.convertToMgdl(target, profileUtil.units),
+                        highTarget = profileUtil.convertToMgdl(target, profileUtil.units)
+                    ),
+                    action = Action.TT,
+                    source = Sources.Garmin,
+                    note = null,
+                    listValues = listOf<ValueWithUnit?>(
+                        ValueWithUnit.TETTReason(TT.Reason.AUTOMATION),
+                        ValueWithUnit.Mgdl(target),
+                        ValueWithUnit.Minute(duration)
+                    ).filterNotNull()
+                )
+            }
+        }
+    }
+
+    /**
+     * ⚠️ ASYNC IMPACT: inserts the therapy NOTE on [appScope], same as [postTempTarget].
+     * NOTE text is the keyword only (e.g. "lunch"); duration goes on TE.duration so AIMI Therapy
+     * windows correctly without embedding minutes in the note string.
+     */
+    override fun postTherapyMode(keyword: String, durationMin: Int) {
+        val normalized = keyword.trim().lowercase()
+        if (normalized.isEmpty()) {
+            aapsLogger.warn(LTag.GARMIN, "postTherapyMode ignored: empty keyword")
+            return
+        }
+        val safeDurationMin = GarminTherapyMode.storedDurationMin(normalized, durationMin)
+        val note = normalized
+        val durationMs = TimeUnit.MINUTES.toMillis(safeDurationMin.toLong())
+        aapsLogger.info(LTag.GARMIN, "postTherapyMode note='$note' durationMin=$safeDurationMin")
+        userEntryLogger.log(
+            action = Action.CAREPORTAL,
+            source = Sources.Garmin,
+            note = note,
+        )
+        val te = TE(
+            timestamp = clock.millis(),
+            type = TE.Type.NOTE,
+            glucoseUnit = GlucoseUnit.MGDL,
+            note = note,
+            duration = durationMs,
+            enteredBy = "Garmin Widget",
+        )
+        appScope.launch {
+            try {
+                persistenceLayer.insertOrUpdateTherapyEvent(te)
+                aapsLogger.info(LTag.GARMIN, "Therapy mode stored: $note (${safeDurationMin} min)")
+            } catch (error: Exception) {
+                aapsLogger.error(LTag.GARMIN, "Failed to store therapy mode: ${error.message}")
+            }
         }
     }
 

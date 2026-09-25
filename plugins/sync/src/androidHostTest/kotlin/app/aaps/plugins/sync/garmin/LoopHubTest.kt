@@ -9,6 +9,8 @@ import app.aaps.core.data.model.ICfg
 import app.aaps.core.data.model.RM
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.model.TB
+import app.aaps.core.data.model.TE
+import app.aaps.core.data.model.TT
 import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
@@ -21,6 +23,7 @@ import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
 import app.aaps.core.interfaces.iob.IobCobCalculator
+import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
@@ -43,11 +46,14 @@ import org.mockito.ArgumentMatchers.anyString
 import org.mockito.ArgumentMatchers.isNull
 import org.mockito.Mock
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.verifyNoMoreInteractions
 import org.mockito.kotlin.whenever
 import java.time.Clock
@@ -67,6 +73,7 @@ class LoopHubTest : TestBase() {
     @Mock lateinit var preferences: Preferences
     @Mock lateinit var processedTbrEbData: ProcessedTbrEbData
     @Mock lateinit var wizardBolusExecutor: WizardBolusExecutor
+    @Mock lateinit var userEntryLogger: UserEntryLogger
 
     private lateinit var loopHub: LoopHubImpl
     private val clock = Clock.fixed(Instant.ofEpochMilli(10_000), ZoneId.of("UTC"))
@@ -82,7 +89,7 @@ class LoopHubTest : TestBase() {
         loopHub = LoopHubImpl(
             aapsLogger, commandQueue, constraints, iobCobCalculator, loop,
             profileFunction, profileUtil, persistenceLayer, preferences, processedTbrEbData,
-            wizardBolusExecutor, testScope
+            wizardBolusExecutor, userEntryLogger, testScope
         )
         loopHub.clock = clock
     }
@@ -315,5 +322,54 @@ class LoopHubTest : TestBase() {
         )
         kotlinx.coroutines.delay(100.milliseconds) // Give time for GlobalScope.launch to complete
         verify(persistenceLayer).insertOrUpdateHeartRates(listOf(hr))
+    }
+
+    @Test
+    fun testPostTherapyMode_SportStoresKeywordOnly() = runTest {
+        whenever(persistenceLayer.insertOrUpdateTherapyEvent(any())).thenReturn(PersistenceLayer.TransactionResult())
+        loopHub.postTherapyMode(" Sport ", 120)
+        val te = argumentCaptor<TE>()
+        verify(persistenceLayer).insertOrUpdateTherapyEvent(te.capture())
+        assertEquals("sport", te.firstValue.note)
+        assertEquals(TE.Type.NOTE, te.firstValue.type)
+        assertEquals(GlucoseUnit.MGDL, te.firstValue.glucoseUnit)
+        assertEquals(120L * 60_000L, te.firstValue.duration)
+        assertEquals(clock.millis(), te.firstValue.timestamp)
+        assertEquals("Garmin Widget", te.firstValue.enteredBy)
+        verify(userEntryLogger).log(Action.CAREPORTAL, Sources.Garmin, "sport", emptyList())
+    }
+
+    @Test
+    fun testPostTherapyMode_EmptyKeywordIsIgnored() {
+        loopHub.postTherapyMode("   ", 30)
+        verifyNoInteractions(userEntryLogger)
+    }
+
+    @Test
+    fun testPostTempTarget_FclCompanion() = runTest {
+        whenever(profileUtil.units).thenReturn(GlucoseUnit.MGDL)
+        whenever(
+            persistenceLayer.insertAndCancelCurrentTemporaryTarget(any(), any(), any(), anyOrNull(), any())
+        ).thenReturn(PersistenceLayer.TransactionResult())
+        loopHub.postTempTarget(80.0, 30)
+        val tt = argumentCaptor<TT>()
+        verify(persistenceLayer).insertAndCancelCurrentTemporaryTarget(
+            temporaryTarget = tt.capture(),
+            action = eq(Action.TT),
+            source = eq(Sources.Garmin),
+            note = isNull(),
+            listValues = eq(
+                listOf(
+                    ValueWithUnit.TETTReason(TT.Reason.AUTOMATION),
+                    ValueWithUnit.Mgdl(80.0),
+                    ValueWithUnit.Minute(30),
+                )
+            ),
+        )
+        assertEquals(80.0, tt.firstValue.lowTarget)
+        assertEquals(80.0, tt.firstValue.highTarget)
+        assertEquals(TT.Reason.WEAR, tt.firstValue.reason)
+        assertEquals(30L * 60_000L, tt.firstValue.duration)
+        assertEquals(clock.millis(), tt.firstValue.timestamp)
     }
 }

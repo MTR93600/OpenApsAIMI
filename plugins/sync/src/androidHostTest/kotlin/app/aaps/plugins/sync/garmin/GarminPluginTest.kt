@@ -374,6 +374,44 @@ class GarminPluginTest : TestBaseWithProfile() {
     }
 
     @Test
+    fun testOnPostMode_Lunch() {
+        val uri = createUri(mapOf("mode" to "lunch", "duration" to "60"))
+        assertEquals("""{"ok":true,"mode":"lunch","duration":60}""", gp.onPostMode(uri))
+        verify(loopHub).postTherapyMode("lunch", 60)
+        verify(loopHub, times(0)).postTempTarget(any(), any())
+    }
+
+    @Test
+    fun testOnPostMode_FclDefaultDuration() {
+        val uri = createUri(mapOf("mode" to "FCL"))
+        assertEquals("""{"ok":true,"mode":"fcl","duration":30}""", gp.onPostMode(uri))
+        verify(loopHub).postTherapyMode("fcl", 30)
+        verify(loopHub).postTempTarget(80.0, 30)
+    }
+
+    @Test
+    fun testOnPostMode_Sport() {
+        val uri = createUri(mapOf("mode" to "sport", "duration" to "120"))
+        assertEquals("""{"ok":true,"mode":"sport","duration":120}""", gp.onPostMode(uri))
+        verify(loopHub).postTherapyMode("sport", 120)
+        verify(loopHub, times(0)).postTempTarget(any(), any())
+    }
+
+    @Test
+    fun testOnPostMode_InvalidRejected() {
+        val uri = createUri(mapOf("mode" to "hack"))
+        assertEquals("""{"ok":false,"error":"invalid_mode"}""", gp.onPostMode(uri))
+        verify(loopHub, times(0)).postTherapyMode(any(), any())
+    }
+
+    @Test
+    fun testOnPostMode_Stop() {
+        val uri = createUri(mapOf("mode" to "stop"))
+        assertEquals("""{"ok":true,"mode":"stop","duration":1}""", gp.onPostMode(uri))
+        verify(loopHub).postTherapyMode("stop", 1)
+    }
+
+    @Test
     fun testOnConnectPump_Disconnect() {
         val uri = createUri(mapOf("disconnectMinutes" to "20"))
         whenever(loopHub.isConnected).thenReturn(false)
