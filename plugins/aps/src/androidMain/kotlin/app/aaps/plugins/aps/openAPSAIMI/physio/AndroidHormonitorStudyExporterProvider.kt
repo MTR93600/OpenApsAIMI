@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.keys.interfaces.Preferences
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
@@ -20,12 +21,15 @@ import dev.zacsweers.metro.SingleIn
  * support-package marker, so keep its text.
  *
  * `by lazy` on purpose: nothing is built while the dependency graph is being wired, only on the
- * first tick that asks for telemetry.
+ * first tick that asks for telemetry. That is what makes the binding below safe: the graph may hold
+ * this class from the start, but the exporter behind it is still only built on the first tick that
+ * asks for telemetry.
  *
- * **No binding is declared here yet.** The interface has no injection site until the loop entry
- * point moves into a compiled source set, and a binding would let the graph construct this class -
- * and the exporter behind it - before anything needs it.
+ * `@SingleIn(AppScope::class)` is load bearing, not tidiness. The exporter keeps day counters and a
+ * state file of its own, so a second instance would fold the same day twice. One instance per app is
+ * the same count the loop had when it held the exporter in a field of its own.
  */
+@ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class AndroidHormonitorStudyExporterProvider @Inject constructor(
     private val context: Context,

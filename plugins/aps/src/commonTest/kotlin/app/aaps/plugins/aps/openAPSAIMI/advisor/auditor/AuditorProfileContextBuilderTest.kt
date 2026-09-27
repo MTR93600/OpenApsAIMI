@@ -130,7 +130,7 @@ class AuditorProfileContextBuilderTest {
     }
 
     @Test
-    fun `the minutes label of a point is the real age of the tick, not the age of its bucket`() {
+    fun `the minutes label of a point is the real age of the tick - not the age of its bucket`() {
         val context = AuditorProfileContextBuilder.build(
             ticks = sevenTicks, nowMs = auditedTickMs, bolusU = 0.0, carbsG = 0.0,
             mealModeName = null, mealCertaintyLevel = null, mealSupport = false,
@@ -166,7 +166,7 @@ class AuditorProfileContextBuilderTest {
     }
 
     @Test
-    fun `an empty ring gives an empty, incomplete context, never a crash`() {
+    fun `an empty ring gives an empty - incomplete context - never a crash`() {
         val context = AuditorProfileContextBuilder.build(
             ticks = emptyList(), nowMs = auditedTickMs, bolusU = 0.0, carbsG = 0.0,
             mealModeName = null, mealCertaintyLevel = null, mealSupport = false,

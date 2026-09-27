@@ -106,7 +106,7 @@ class AuditorProfileFactorGateIsfTest {
     }
 
     @Test
-    fun `a raising factor lives 15 minutes, a protective one 30, both from the audited tick`() {
+    fun `a raising factor lives 15 minutes - a protective one 30 - both from the audited tick`() {
         // Raising: age 10.0 min is still valid, 15.04 min is expired.
         val valid = decide(0.85, 60.0, 60.0, tickTimestampMs = 1790022140737L)
         assertFalse(valid.refusedBy.contains("expired"))
@@ -125,7 +125,7 @@ class AuditorProfileFactorGateIsfTest {
     }
 
     @Test
-    fun `every live reason to refuse more insulin is judged, all of them`() {
+    fun `every live reason to refuse more insulin is judged - all of them`() {
         val belowAndFalling = decide(
             0.85, 100.0, null,
             safety = clearSafety.copy(bgMgdl = 90.9, deltaMgdl5m = -7.28, shortAvgDeltaMgdl5m = -7.0),
@@ -175,7 +175,7 @@ class AuditorProfileFactorGateIsfTest {
     }
 
     @Test
-    fun `key off never applies, but the shadow effective value is what key on would give`() {
+    fun `key off never applies - but the shadow effective value is what key on would give`() {
         val decision = decide(requested = 0.85, workingMgdl = 37.17, stressFloorMgdl = 30.0, keyOn = false)
         assertFalse(decision.applied)
         assertEquals(0.85, decision.effective, 1e-4)
@@ -183,7 +183,7 @@ class AuditorProfileFactorGateIsfTest {
     }
 
     @Test
-    fun `a missing prediction refuses more insulin, it does not allow it`() {
+    fun `a missing prediction refuses more insulin - it does not allow it`() {
         // The ring is empty after the plugin is rebuilt, and the proposal is process-global, so the
         // loop can hold a factor with no previous tick to check it against.
         val noMinPred = decide(0.85, 100.0, null, safety = clearSafety.copy(minPredBgMgdl = null))
@@ -202,7 +202,7 @@ class AuditorProfileFactorGateIsfTest {
     }
 
     @Test
-    fun `a proposal that outlived its ring is refused, not applied`() {
+    fun `a proposal that outlived its ring is refused - not applied`() {
         // The shape of a plugin re-instantiation: the cache still holds the proposal, the ring is
         // empty, so every field the previous tick would have filled is null.
         val emptyRing = AuditorTickRing()
@@ -237,7 +237,7 @@ class AuditorProfileFactorGateIsfTest {
     }
 
     @Test
-    fun `the early decision never claims applied, because the tick may still end before the apply step`() {
+    fun `the early decision never claims applied - because the tick may still end before the apply step`() {
         val early = AuditorProfileFactorGate.evaluateIsf(
             proposal = proposal(0.85),
             keyOn = true,
@@ -267,7 +267,7 @@ class AuditorProfileFactorGateIsfTest {
     }
 
     @Test
-    fun `an unknown profile ISF refuses more insulin, because the floor cannot be computed`() {
+    fun `an unknown profile ISF refuses more insulin - because the floor cannot be computed`() {
         val early = AuditorProfileFactorGate.evaluateIsf(
             proposal = proposal(0.85),
             keyOn = true,
@@ -300,7 +300,7 @@ class AuditorProfileFactorGateIsfTest {
     }
 
     @Test
-    fun `a factor of exactly 1 point 0 changes nothing, bit for bit`() {
+    fun `a factor of exactly 1 point 0 changes nothing - bit for bit`() {
         val value = 38.01810620968392
         assertEquals(value, AuditorProfileFactorGate.scaleIsf(value, 1.0, 60.0), 0.0)
         assertEquals(value.toRawBits(), AuditorProfileFactorGate.scaleIsf(value, 1.0, 60.0).toRawBits())

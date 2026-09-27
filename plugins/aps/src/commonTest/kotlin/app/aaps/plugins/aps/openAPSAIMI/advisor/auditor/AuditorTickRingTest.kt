@@ -47,7 +47,7 @@ class AuditorTickRingTest {
     }
 
     @Test
-    fun `what is recorded is what the snapshot hands back, oldest first`() {
+    fun `what is recorded is what the snapshot hands back - oldest first`() {
         val ring = AuditorTickRing()
         ring.record(fact(1_000_000L))
         ring.record(fact(1_060_000L))

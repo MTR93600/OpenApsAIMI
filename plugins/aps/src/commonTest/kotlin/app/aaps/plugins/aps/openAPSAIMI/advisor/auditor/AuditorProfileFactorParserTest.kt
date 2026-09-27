@@ -90,7 +90,7 @@ class AuditorProfileFactorParserTest {
     }
 
     @Test
-    fun `confidence out of the 0 to 1 range is clamped, a non-numeric one is 0`() {
+    fun `confidence out of the 0 to 1 range is clamped - a non-numeric one is 0`() {
         val over = AuditorProfileFactorParser.parse("""{"isfFactor": 1.0, "targetFactor": 1.0, "confidence": 7}""")
         assertEquals(1.0, over.confidence, 1e-9)
         val words = AuditorProfileFactorParser.parse("""{"isfFactor": 1.0, "targetFactor": 1.0, "confidence": "high"}""")
@@ -98,7 +98,7 @@ class AuditorProfileFactorParserTest {
     }
 
     @Test
-    fun `text that is not JSON fails the parse, both factors 1 point 0`() {
+    fun `text that is not JSON fails the parse - both factors 1 point 0`() {
         val out = AuditorProfileFactorParser.parse("I think ISF should be 40.")
         assertEquals("parse", out.failure)
         assertEquals(1.0, out.isfFactorRaw, 1e-9)

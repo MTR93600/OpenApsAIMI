@@ -164,7 +164,8 @@ import app.aaps.plugins.aps.openAPSAIMI.risk.SafetyPredictionTerminals
 import app.aaps.plugins.aps.openAPSAIMI.risk.SafetyPredictionTerminalsResolver
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopPhase
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopTelemetry
-import app.aaps.plugins.aps.openAPSAIMI.physio.AimiHormonitorStudyExporterMTR
+import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporter
+import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporterProvider
 import app.aaps.plugins.aps.openAPSAIMI.physio.BehavioralRiskPolicy
 import app.aaps.plugins.aps.openAPSAIMI.physio.HormonalScenarioTerminalCap
 import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorDecisionEventMTR
@@ -1532,6 +1533,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     // Keeps the decisions journal under its hard cap between retention passes. See AimiAppendCap.
     @Inject lateinit var appendCap: AimiAppendCap
+
+    // Study telemetry, as shared code sees it. The provider answers null when this platform has no
+    // exporter, or when the Android one could not be built - see AndroidHormonitorStudyExporterProvider.
+    @Inject lateinit var hormonitorStudyExporterProvider: HormonitorStudyExporterProvider
     
     // Helper to safely access learner (handles potential early access before injection)
     private val safeReactivityFactor: Double
@@ -11150,16 +11155,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // port. Same locations as the File-based fields (both resolve through AimiStorageHelper).
     private val externalDirPath: AimiPath by lazy { storage.directory() }
     private val csvfilePath: AimiPath by lazy { storage.file("oapsaimiML2_records.csv") }
-    private val appExternalFallbackDir by lazy {
-        File(context.getExternalFilesDir(null) ?: storageHelper.getAimiDirectory(), "AAPS")
-    }
+    /**
+     * The app scoped file the CSV writer falls back to when the shared storage write is denied.
+     *
+     * Same place as before, named through the storage port instead of the platform: [AimiStorage.fallbackFile]
+     * resolves `<app scoped external dir>/AAPS/<name>`, and falls back to the AIMI directory when the
+     * platform has no app scoped external directory - which is the expression this replaces.
+     */
+    private fun appExternalFallbackFile(name: String): File = File(storage.fallbackFile(name).value)
+
     // Telemetry must never crash the loop: if the study exporter can't initialize (storage / permissions / context),
     // degrade to no telemetry rather than letting its construction abort the tick into a safe-hold. Null → all
     // telemetry calls below are no-ops (`?.`); AimiLoopTelemetry.enterPhase already accepts a null exporter.
-    private val hormonitorStudyExporter: AimiHormonitorStudyExporterMTR? by lazy {
-        runCatching { AimiHormonitorStudyExporterMTR(context, aapsLogger, preferences) }
-            .onFailure { aapsLogger.error(LTag.APS, "Hormonitor exporter init failed — telemetry disabled this session", it) }
-            .getOrNull()
+    // The runCatching that used to live here moved into AndroidHormonitorStudyExporterProvider, unchanged.
+    private val hormonitorStudyExporter: HormonitorStudyExporter? by lazy {
+        hormonitorStudyExporterProvider.exporter()
     }
     private var csvPrimaryStorageDeniedLogged = false
     /** Files whose header was already compared with the wanted one since the app started. */
@@ -13871,17 +13881,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 aapsLogger.warn(
                     LTag.APS,
                     "CSV write denied on shared storage (${primaryFile.absolutePath}). " +
-                        "Switching to app-scoped fallback at ${File(appExternalFallbackDir, fallbackFileName).absolutePath}. " +
+                        "Switching to app-scoped fallback at ${appExternalFallbackFile(fallbackFileName).absolutePath}. " +
                         "Reason=${primaryError.message}",
                 )
             }
             runCatching {
-                appendCsvToFile(File(appExternalFallbackDir, fallbackFileName), headerRow, valuesRow)
+                appendCsvToFile(appExternalFallbackFile(fallbackFileName), headerRow, valuesRow)
             }.onFailure { fallbackError ->
                 aapsLogger.error(
                     LTag.APS,
                     "CSV write failed on both primary and fallback paths. primary=${primaryFile.absolutePath}, " +
-                        "fallback=${File(appExternalFallbackDir, fallbackFileName).absolutePath}",
+                        "fallback=${appExternalFallbackFile(fallbackFileName).absolutePath}",
                     fallbackError,
                 )
             }

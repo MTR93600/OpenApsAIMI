@@ -167,7 +167,7 @@ class AuditorProfileFactorValidatorTest {
     }
 
     @Test
-    fun `a hallucinated claim refuses both factors, and the claim check row says so`() {
+    fun `a hallucinated claim refuses both factors - and the claim check row says so`() {
         val claims = ProfileFactorClaims(
             bgStartMgdl = 158.7, bgEndMgdl = 173.6, bgMinMgdl = 158.7,
             iobStartU = 11.19, iobEndU = 2.0, insulinDeliveredU = 1.58,
@@ -193,7 +193,7 @@ class AuditorProfileFactorValidatorTest {
     }
 
     @Test
-    fun `a claim just inside tolerance passes, just outside it fails`() {
+    fun `a claim just inside tolerance passes - just outside it fails`() {
         // bg_end tolerance = max(5.0, 0.05 x 173.6) = 8.68
         val inside = ProfileFactorClaims(
             bgStartMgdl = 158.7, bgEndMgdl = 178.5, bgMinMgdl = 158.7,

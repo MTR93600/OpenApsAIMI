@@ -58,7 +58,7 @@ class AuditorSnapshotLevelsTest {
     }
 
     @Test
-    fun `an unknown profile isf is sent as json null, not dropped and not zero`() {
+    fun `an unknown profile isf is sent as json null - not dropped and not zero`() {
         val json = dummyInput(levels = levels.copy(isfProfileStatic = null, isfCommandOverProfile = null))
             .snapshot.toJSON()
         assertTrue(json.has("isfProfileStatic"))

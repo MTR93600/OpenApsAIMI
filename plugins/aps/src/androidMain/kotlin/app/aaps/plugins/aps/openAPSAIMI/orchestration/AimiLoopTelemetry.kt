@@ -4,7 +4,7 @@ import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
-import app.aaps.plugins.aps.openAPSAIMI.physio.AimiHormonitorStudyExporterMTR
+import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporter
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.collections.ArrayDeque
 
@@ -37,9 +37,9 @@ object AimiLoopTelemetry {
 
     /**
      * Records a coarse phase for the active tick (ring + optional blackbox JSONL).
-     * Adds [AimiHormonitorStudyExporterMTR.recordLoopPhase] timing fields when the wall anchor is set.
+     * Adds [HormonitorStudyExporter.recordLoopPhase] timing fields when the wall anchor is set.
      */
-    internal fun enterPhase(phase: AimiLoopPhase, blackbox: AimiHormonitorStudyExporterMTR?) {
+    internal fun enterPhase(phase: AimiLoopPhase, blackbox: HormonitorStudyExporter?) {
         currentLoopPhase = phase
         val tickId = activeTickId
         val wall = aimiWallClockMs()

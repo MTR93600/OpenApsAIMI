@@ -79,7 +79,7 @@ class AuditorProfileFactorGateTargetTest {
     }
 
     @Test
-    fun `when the ISF has not moved, the target gets the full 17 point 65 percent budget`() {
+    fun `when the ISF has not moved - the target gets the full 17 point 65 percent budget`() {
         val decision = decide(targetFactor = 0.85, workingTargetRawMgdl = 100.0, isfEffectiveFactor = 1.0)
         assertEquals(87.0118, decision.targetMgdl, 1e-3)
         assertEquals(0.870118, decision.effective, 1e-5)
@@ -88,7 +88,7 @@ class AuditorProfileFactorGateTargetTest {
     }
 
     @Test
-    fun `when the ISF already spent the whole budget, the target gets none`() {
+    fun `when the ISF already spent the whole budget - the target gets none`() {
         val decision = decide(targetFactor = 0.85, workingTargetRawMgdl = 100.0, isfEffectiveFactor = 0.85)
         assertEquals(100.0, decision.targetMgdl, 1e-9)
         assertEquals(1.0, decision.effective, 1e-9)
@@ -130,7 +130,7 @@ class AuditorProfileFactorGateTargetTest {
     }
 
     @Test
-    fun `scaleTargetForDose is the identity at 1 point 0, and floors and ceilings the rest`() {
+    fun `scaleTargetForDose is the identity at 1 point 0 - and floors and ceilings the rest`() {
         val t = 100.0
         assertEquals(t, AuditorProfileFactorGate.scaleTargetForDose(t, 1.0), 0.0)
         assertEquals(t.toRawBits(), AuditorProfileFactorGate.scaleTargetForDose(t, 1.0).toRawBits())
@@ -141,7 +141,7 @@ class AuditorProfileFactorGateTargetTest {
     }
 
     @Test
-    fun `each dose site is bounded against its own target, not against the one the decision saw`() {
+    fun `each dose site is bounded against its own target - not against the one the decision saw`() {
         // The step-activity branch moves the loop target member to 130 and leaves the local working
         // target at 100. The decision is taken on 100; the basal engine reads 130.
         val decision = decide(targetFactor = 0.85, workingTargetRawMgdl = 100.0, isfEffectiveFactor = 1.0, bgMgdl = 200.0)
@@ -192,7 +192,7 @@ class AuditorProfileFactorGateTargetTest {
     }
 
     @Test
-    fun `a refused decision leaves every dose site untouched, bit for bit`() {
+    fun `a refused decision leaves every dose site untouched - bit for bit`() {
         val refused = decide(targetFactor = 0.85, workingTargetRawMgdl = 100.0, isfEffectiveFactor = 0.85)
         assertFalse(refused.applied)
         val site = AuditorProfileFactorGate.targetForDoseSite(130.0, refused, 200.0, 0.85)
@@ -200,7 +200,7 @@ class AuditorProfileFactorGateTargetTest {
     }
 
     @Test
-    fun `point B judges this tick's own prediction, not the previous tick's`() {
+    fun `point B judges this tick's own prediction - not the previous tick's`() {
         val decision = decide(
             targetFactor = 0.85,
             workingTargetRawMgdl = 90.0,
