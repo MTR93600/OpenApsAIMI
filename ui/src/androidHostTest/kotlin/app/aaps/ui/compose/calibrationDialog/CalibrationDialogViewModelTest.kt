@@ -77,8 +77,8 @@ internal class CalibrationDialogViewModelTest {
     /**
      * [CalibrationDialogViewModel.buildConfirmationSummary] passes `rh.gs(...)` to
      * [app.aaps.core.data.ui.ConfirmationLinesBuilder.line], whose `text` is non-null. An unstubbed
-     * mock returns null and the line builder throws. Placeholders cover every overload; the status
-     * tests re-stub [UiStrings.cal_saved_need_more_entries] and [UiStrings.cal_saved_unsafe_fit]
+     * mock returns null and the line builder throws. Placeholders cover the overloads this dialog
+     * uses; the status tests re-stub [UiStrings.cal_saved_need_more_entries] and [UiStrings.cal_saved_unsafe_fit]
      * so the asserted message still depends on [app.aaps.core.interfaces.calibration.CalibrationStatus].
      */
     private fun stubResourceStrings() {
@@ -88,7 +88,6 @@ internal class CalibrationDialogViewModelTest {
         whenever(rh.gs(any<TextRef>(), anyOrNull())).thenReturn("text")
         whenever(rh.gs(any<Int>(), anyOrNull(), anyOrNull())).thenReturn("text")
         whenever(rh.gs(any<TextRef>(), anyOrNull(), anyOrNull())).thenReturn("text")
-        whenever(rh.gs(UiStrings.cal_saved_unsafe_fit)).thenReturn("unsafe fit")
     }
 
     @Test
