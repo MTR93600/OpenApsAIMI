@@ -18,8 +18,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.ui.compose.AapsSpacing
-import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
-import app.aaps.plugins.libre3.Libre3WarmupState
 
 /**
  * What a state means for the user, stripped of protocol detail.
@@ -43,32 +41,20 @@ enum class CgmUiState {
     Failed,
 }
 
-/** Maps a driver phase to what it means for the user. */
-fun OnePlusWarmupState.Phase.toUiState(): CgmUiState = when (this) {
-    OnePlusWarmupState.Phase.READY        -> CgmUiState.Ready
-    OnePlusWarmupState.Phase.FAILED       -> CgmUiState.Failed
-    OnePlusWarmupState.Phase.IDLE         -> CgmUiState.Waiting
-    OnePlusWarmupState.Phase.PAIRING,
-    OnePlusWarmupState.Phase.CONNECTING,
-    OnePlusWarmupState.Phase.RECONNECTING,
-    OnePlusWarmupState.Phase.WARMING      -> CgmUiState.Working
-}
-
 /**
- * Maps a Libre 3 driver phase to what it means for the user.
+ * Maps a warm-up phase to what it means for the user.
  *
- * The two drivers happen to describe the same seven phases, so the meaning is identical; only the
- * enum they come from differs. Two small extensions onto one shared [CgmUiState] keep the chip and
- * the ring driver-agnostic.
+ * Both native drivers describe the same seven phases, so they map onto [CgmWarmupPhase] on Android
+ * first and share this one function here, which keeps the chip and the ring driver-agnostic.
  */
-fun Libre3WarmupState.Phase.toUiState(): CgmUiState = when (this) {
-    Libre3WarmupState.Phase.READY        -> CgmUiState.Ready
-    Libre3WarmupState.Phase.FAILED       -> CgmUiState.Failed
-    Libre3WarmupState.Phase.IDLE         -> CgmUiState.Waiting
-    Libre3WarmupState.Phase.PAIRING,
-    Libre3WarmupState.Phase.CONNECTING,
-    Libre3WarmupState.Phase.RECONNECTING,
-    Libre3WarmupState.Phase.WARMING      -> CgmUiState.Working
+fun CgmWarmupPhase.toUiState(): CgmUiState = when (this) {
+    CgmWarmupPhase.READY        -> CgmUiState.Ready
+    CgmWarmupPhase.FAILED       -> CgmUiState.Failed
+    CgmWarmupPhase.IDLE         -> CgmUiState.Waiting
+    CgmWarmupPhase.PAIRING,
+    CgmWarmupPhase.CONNECTING,
+    CgmWarmupPhase.RECONNECTING,
+    CgmWarmupPhase.WARMING      -> CgmUiState.Working
 }
 
 /** Maps a staging slot state to what it means for the user. */

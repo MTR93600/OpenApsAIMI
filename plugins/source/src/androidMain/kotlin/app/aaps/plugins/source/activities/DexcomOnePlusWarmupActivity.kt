@@ -57,6 +57,8 @@ import app.aaps.plugins.source.compose.CgmUiState
 import app.aaps.plugins.source.compose.CgmWarmupRing
 import app.aaps.plugins.source.compose.DexcomOnePlusUiLabels
 import app.aaps.plugins.source.compose.DexcomOnePlusWarmupCountdown
+import app.aaps.plugins.source.compose.toCgmWarmupInfo
+import app.aaps.plugins.source.compose.toCgmWarmupPhase
 import app.aaps.plugins.source.compose.rememberCgmWindow
 import app.aaps.plugins.source.compose.toUiState
 import app.aaps.plugins.source.logs.DriverLogFilter
@@ -153,12 +155,13 @@ private fun DexcomOnePlusWarmupScreen(
         while (true) {
             val now = System.currentTimeMillis()
             state = driver.warmupState()
+            val info = state.toCgmWarmupInfo()
             sessionUp = driver.isSessionUp()
-            if (DexcomOnePlusWarmupCountdown.shouldStartLocalFallback(state) && localFallbackEndsAt == null) {
+            if (DexcomOnePlusWarmupCountdown.shouldStartLocalFallback(info) && localFallbackEndsAt == null) {
                 // Local fallback ONLY if remainingMs (and endsAt) are null — documented above.
                 localFallbackEndsAt = now + DexcomOnePlusWarmupCountdown.LOCAL_FALLBACK_DURATION_MS
             }
-            if (DexcomOnePlusWarmupCountdown.shouldClearLocalFallback(state.phase)) {
+            if (DexcomOnePlusWarmupCountdown.shouldClearLocalFallback(info.phase)) {
                 localFallbackEndsAt = null
             }
             usingLocalFallback =
@@ -167,7 +170,7 @@ private fun DexcomOnePlusWarmupScreen(
                     localFallbackEndsAt != null &&
                     state.phase == OnePlusWarmupState.Phase.WARMING
             remainingMs = DexcomOnePlusWarmupCountdown.resolveRemainingMs(
-                state = state,
+                state = info,
                 nowEpochMs = now,
                 localFallbackEndsAtEpochMs = localFallbackEndsAt,
             )
@@ -297,16 +300,17 @@ private fun RingCenter(model: WarmupUiModel) {
     val warmupClockPhase = model.state.phase == OnePlusWarmupState.Phase.WARMING ||
         model.state.phase == OnePlusWarmupState.Phase.IDLE ||
         model.state.phase == OnePlusWarmupState.Phase.PAIRING
+    val phase = model.state.phase.toCgmWarmupPhase()
     val centerText = when {
-        DexcomOnePlusWarmupCountdown.showsCountdown(model.state.phase) && countdownText != null -> countdownText
-        warmupClockPhase                                                                        ->
+        DexcomOnePlusWarmupCountdown.showsCountdown(phase) && countdownText != null -> countdownText
+        warmupClockPhase                                                            ->
             stringResource(R.string.dexcom_oneplus_warmup_countdown_unknown)
 
-        else                                                                                    ->
+        else                                                                        ->
             DexcomOnePlusUiLabels.phaseLabel(model.state.phase)
     }
     val showsRemainingLabel = countdownText != null &&
-        DexcomOnePlusWarmupCountdown.showsCountdown(model.state.phase)
+        DexcomOnePlusWarmupCountdown.showsCountdown(phase)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(AapsSpacing.extraSmall),

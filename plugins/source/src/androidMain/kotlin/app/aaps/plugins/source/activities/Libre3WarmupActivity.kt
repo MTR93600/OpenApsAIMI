@@ -49,6 +49,7 @@ import app.aaps.plugins.source.compose.CgmStateChip
 import app.aaps.plugins.source.compose.CgmWarmupRing
 import app.aaps.plugins.source.compose.Libre3UiLabels
 import app.aaps.plugins.source.compose.Libre3WarmupCountdown
+import app.aaps.plugins.source.compose.toCgmWarmupInfo
 import app.aaps.plugins.source.compose.rememberCgmWindow
 import app.aaps.plugins.source.compose.toUiState
 import app.aaps.plugins.source.logs.DriverLogFilter
@@ -105,8 +106,9 @@ internal fun Libre3WarmupScreen(
         while (true) {
             val now = System.currentTimeMillis()
             state = driver.warmupState()
-            remainingMs = Libre3WarmupCountdown.remainingMs(state, now)
-            finished = Libre3WarmupCountdown.isFinished(state, now)
+            val info = state.toCgmWarmupInfo()
+            remainingMs = Libre3WarmupCountdown.remainingMs(info, now)
+            finished = Libre3WarmupCountdown.isFinished(info, now)
             delay(1_000L)
         }
     }

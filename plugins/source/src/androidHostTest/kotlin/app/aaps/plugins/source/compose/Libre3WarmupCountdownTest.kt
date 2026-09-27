@@ -4,7 +4,12 @@ import app.aaps.plugins.libre3.Libre3WarmupState
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
-/** What the countdown shows, and where the number comes from. */
+/**
+ * What the countdown shows, and where the number comes from.
+ *
+ * The driver state is still what each case builds, then mapped, so the real driver phases stay
+ * covered.
+ */
 class Libre3WarmupCountdownTest {
 
     private val now = 1_777_216_508_000L
@@ -17,28 +22,28 @@ class Libre3WarmupCountdownTest {
             endsAtEpochMs = now + 60_000L,
         )
 
-        assertThat(Libre3WarmupCountdown.remainingMs(state, now)).isEqualTo(900_000L)
+        assertThat(Libre3WarmupCountdown.remainingMs(state.toCgmWarmupInfo(), now)).isEqualTo(900_000L)
     }
 
     @Test
     fun `an end time is used when no time left was given`() {
         val state = Libre3WarmupState(phase = Libre3WarmupState.Phase.WARMING, endsAtEpochMs = now + 300_000L)
 
-        assertThat(Libre3WarmupCountdown.remainingMs(state, now)).isEqualTo(300_000L)
+        assertThat(Libre3WarmupCountdown.remainingMs(state.toCgmWarmupInfo(), now)).isEqualTo(300_000L)
     }
 
     @Test
     fun `nothing known shows nothing, it never guesses`() {
         val state = Libre3WarmupState(phase = Libre3WarmupState.Phase.WARMING)
 
-        assertThat(Libre3WarmupCountdown.remainingMs(state, now)).isNull()
+        assertThat(Libre3WarmupCountdown.remainingMs(state.toCgmWarmupInfo(), now)).isNull()
     }
 
     @Test
     fun `a time that has passed shows zero, never a negative number`() {
         val state = Libre3WarmupState(phase = Libre3WarmupState.Phase.WARMING, endsAtEpochMs = now - 60_000L)
 
-        assertThat(Libre3WarmupCountdown.remainingMs(state, now)).isEqualTo(0L)
+        assertThat(Libre3WarmupCountdown.remainingMs(state.toCgmWarmupInfo(), now)).isEqualTo(0L)
     }
 
     @Test
@@ -52,20 +57,20 @@ class Libre3WarmupCountdownTest {
     fun `a running sensor counts as finished`() {
         val state = Libre3WarmupState(phase = Libre3WarmupState.Phase.READY)
 
-        assertThat(Libre3WarmupCountdown.isFinished(state, now)).isTrue()
+        assertThat(Libre3WarmupCountdown.isFinished(state.toCgmWarmupInfo(), now)).isTrue()
     }
 
     @Test
     fun `a sensor with time left is not finished`() {
         val state = Libre3WarmupState(phase = Libre3WarmupState.Phase.WARMING, remainingMs = 60_000L)
 
-        assertThat(Libre3WarmupCountdown.isFinished(state, now)).isFalse()
+        assertThat(Libre3WarmupCountdown.isFinished(state.toCgmWarmupInfo(), now)).isFalse()
     }
 
     @Test
     fun `a sensor whose countdown reached zero is finished`() {
         val state = Libre3WarmupState(phase = Libre3WarmupState.Phase.WARMING, remainingMs = 0L)
 
-        assertThat(Libre3WarmupCountdown.isFinished(state, now)).isTrue()
+        assertThat(Libre3WarmupCountdown.isFinished(state.toCgmWarmupInfo(), now)).isTrue()
     }
 }

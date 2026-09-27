@@ -11,6 +11,7 @@ import androidx.core.app.NotificationManagerCompat
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.source.activities.DexcomOnePlusWarmupActivity
 import app.aaps.plugins.source.compose.DexcomOnePlusWarmupCountdown
+import app.aaps.plugins.source.compose.toCgmWarmupInfo
 import app.aaps.core.ui.R as CoreUiR
 
 /**
@@ -92,7 +93,7 @@ class DexcomOnePlusWarmupNotification(private val context: Context) {
                 builder.setContentTitle(context.getString(R.string.dexcom_oneplus_notif_warming_title))
                     .setContentText(context.getString(R.string.dexcom_oneplus_notif_warming_text))
                 val remaining = DexcomOnePlusWarmupCountdown.resolveRemainingMs(
-                    state = state,
+                    state = state.toCgmWarmupInfo(),
                     nowEpochMs = System.currentTimeMillis(),
                     localFallbackEndsAtEpochMs = null,
                 )

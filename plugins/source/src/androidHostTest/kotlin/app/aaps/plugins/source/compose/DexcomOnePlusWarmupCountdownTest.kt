@@ -6,12 +6,13 @@ import org.junit.jupiter.api.Test
 
 class DexcomOnePlusWarmupCountdownTest {
 
+    // Built from the driver state and mapped, so the test still covers the real driver phases.
     private fun warming(remainingMs: Long? = null, endsAtEpochMs: Long? = null) =
         OnePlusWarmupState(
             phase = OnePlusWarmupState.Phase.WARMING,
             remainingMs = remainingMs,
             endsAtEpochMs = endsAtEpochMs,
-        )
+        ).toCgmWarmupInfo()
 
     // ---- formatMmSs ----
 
@@ -88,7 +89,7 @@ class DexcomOnePlusWarmupCountdownTest {
         assertThat(DexcomOnePlusWarmupCountdown.shouldStartLocalFallback(warming(endsAtEpochMs = 1L))).isFalse()
         assertThat(
             DexcomOnePlusWarmupCountdown.shouldStartLocalFallback(
-                OnePlusWarmupState(phase = OnePlusWarmupState.Phase.CONNECTING),
+                OnePlusWarmupState(phase = OnePlusWarmupState.Phase.CONNECTING).toCgmWarmupInfo(),
             ),
         ).isFalse()
     }
@@ -105,14 +106,14 @@ class DexcomOnePlusWarmupCountdownTest {
             OnePlusWarmupState.Phase.CONNECTING,
             OnePlusWarmupState.Phase.RECONNECTING,
         ).forEach { phase ->
-            assertThat(DexcomOnePlusWarmupCountdown.shouldClearLocalFallback(phase)).isFalse()
+            assertThat(DexcomOnePlusWarmupCountdown.shouldClearLocalFallback(phase.toCgmWarmupPhase())).isFalse()
         }
         listOf(
             OnePlusWarmupState.Phase.READY,
             OnePlusWarmupState.Phase.IDLE,
             OnePlusWarmupState.Phase.FAILED,
         ).forEach { phase ->
-            assertThat(DexcomOnePlusWarmupCountdown.shouldClearLocalFallback(phase)).isTrue()
+            assertThat(DexcomOnePlusWarmupCountdown.shouldClearLocalFallback(phase.toCgmWarmupPhase())).isTrue()
         }
     }
 
@@ -125,9 +126,13 @@ class DexcomOnePlusWarmupCountdownTest {
             OnePlusWarmupState.Phase.CONNECTING,
             OnePlusWarmupState.Phase.RECONNECTING,
         ).forEach { phase ->
-            assertThat(DexcomOnePlusWarmupCountdown.showsCountdown(phase)).isTrue()
+            assertThat(DexcomOnePlusWarmupCountdown.showsCountdown(phase.toCgmWarmupPhase())).isTrue()
         }
-        assertThat(DexcomOnePlusWarmupCountdown.showsCountdown(OnePlusWarmupState.Phase.READY)).isFalse()
-        assertThat(DexcomOnePlusWarmupCountdown.showsCountdown(OnePlusWarmupState.Phase.FAILED)).isFalse()
+        assertThat(
+            DexcomOnePlusWarmupCountdown.showsCountdown(OnePlusWarmupState.Phase.READY.toCgmWarmupPhase()),
+        ).isFalse()
+        assertThat(
+            DexcomOnePlusWarmupCountdown.showsCountdown(OnePlusWarmupState.Phase.FAILED.toCgmWarmupPhase()),
+        ).isFalse()
     }
 }

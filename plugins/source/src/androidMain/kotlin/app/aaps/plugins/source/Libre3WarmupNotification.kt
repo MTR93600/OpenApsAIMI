@@ -10,6 +10,7 @@ import androidx.core.app.NotificationManagerCompat
 import app.aaps.plugins.libre3.Libre3WarmupState
 import app.aaps.plugins.source.activities.Libre3WarmupActivity
 import app.aaps.plugins.source.compose.Libre3WarmupCountdown
+import app.aaps.plugins.source.compose.toCgmWarmupInfo
 import app.aaps.core.ui.R as CoreUiR
 
 /**
@@ -60,7 +61,7 @@ class Libre3WarmupNotification(private val context: Context) {
             Libre3WarmupState.Phase.WARMING      -> {
                 builder.setContentTitle(context.getString(R.string.libre3_notif_warming_title))
                     .setContentText(context.getString(R.string.libre3_notif_warming_text))
-                val remaining = Libre3WarmupCountdown.remainingMs(state, System.currentTimeMillis())
+                val remaining = Libre3WarmupCountdown.remainingMs(state.toCgmWarmupInfo(), System.currentTimeMillis())
                 if (remaining != null && remaining > 0L) {
                     // Android counts down by itself, so the message does not have to be rewritten
                     // every second.

@@ -1,16 +1,16 @@
 package app.aaps.plugins.source.compose
 
-import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
-
 /**
  * Warm-up countdown resolution for Dexcom ONE+ UI (agent A8 skeleton).
  *
  * Priority:
- * 1. Protocol [OnePlusWarmupState.remainingMs] when non-null (preferred).
- * 2. Else [OnePlusWarmupState.endsAtEpochMs] → remaining = endsAt − now.
- * 3. Else a **local fallback** timer ([localFallbackEndsAtEpochMs]) — used ONLY when the
+ * 1. Protocol [CgmWarmupInfo.remainingMs] when non-null (preferred).
+ * 2. Else [CgmWarmupInfo.endsAtEpochMs] → remaining = endsAt − now.
+ * 3. Else a **local fallback** timer (`localFallbackEndsAtEpochMs`) — used ONLY when the
  *    protocol does not expose remaining/end. Do not invent a second clock when remainingMs
  *    is already provided by the driver.
+ *
+ * The driver state is mapped onto [CgmWarmupInfo] on Android, so this rule stays shared code.
  */
 object DexcomOnePlusWarmupCountdown {
 
@@ -24,7 +24,7 @@ object DexcomOnePlusWarmupCountdown {
      * @return remaining ms to show, or null when no countdown applies
      */
     fun resolveRemainingMs(
-        state: OnePlusWarmupState,
+        state: CgmWarmupInfo,
         nowEpochMs: Long,
         localFallbackEndsAtEpochMs: Long?,
     ): Long? {
@@ -35,8 +35,8 @@ object DexcomOnePlusWarmupCountdown {
         return null
     }
 
-    fun shouldStartLocalFallback(state: OnePlusWarmupState): Boolean =
-        state.phase == OnePlusWarmupState.Phase.WARMING &&
+    fun shouldStartLocalFallback(state: CgmWarmupInfo): Boolean =
+        state.phase == CgmWarmupPhase.WARMING &&
             state.remainingMs == null &&
             state.endsAtEpochMs == null
 
@@ -46,33 +46,33 @@ object DexcomOnePlusWarmupCountdown {
      * there blanked the countdown and restarted a fresh ~30 min timer on the next WARMING packet.
      * Only a finished / stopped / failed warm-up clears it.
      */
-    fun shouldClearLocalFallback(phase: OnePlusWarmupState.Phase): Boolean = when (phase) {
-        OnePlusWarmupState.Phase.READY,
-        OnePlusWarmupState.Phase.IDLE,
-        OnePlusWarmupState.Phase.FAILED       -> true
+    fun shouldClearLocalFallback(phase: CgmWarmupPhase): Boolean = when (phase) {
+        CgmWarmupPhase.READY,
+        CgmWarmupPhase.IDLE,
+        CgmWarmupPhase.FAILED       -> true
 
-        OnePlusWarmupState.Phase.WARMING,
-        OnePlusWarmupState.Phase.PAIRING,
-        OnePlusWarmupState.Phase.CONNECTING,
-        OnePlusWarmupState.Phase.RECONNECTING -> false
+        CgmWarmupPhase.WARMING,
+        CgmWarmupPhase.PAIRING,
+        CgmWarmupPhase.CONNECTING,
+        CgmWarmupPhase.RECONNECTING -> false
     }
 
     /** Phases that show the mm:ss countdown when one is known (the link may be re-establishing). */
-    fun showsCountdown(phase: OnePlusWarmupState.Phase): Boolean = when (phase) {
-        OnePlusWarmupState.Phase.WARMING,
-        OnePlusWarmupState.Phase.IDLE,
-        OnePlusWarmupState.Phase.PAIRING,
-        OnePlusWarmupState.Phase.CONNECTING,
-        OnePlusWarmupState.Phase.RECONNECTING -> true
+    fun showsCountdown(phase: CgmWarmupPhase): Boolean = when (phase) {
+        CgmWarmupPhase.WARMING,
+        CgmWarmupPhase.IDLE,
+        CgmWarmupPhase.PAIRING,
+        CgmWarmupPhase.CONNECTING,
+        CgmWarmupPhase.RECONNECTING -> true
 
-        OnePlusWarmupState.Phase.READY,
-        OnePlusWarmupState.Phase.FAILED       -> false
+        CgmWarmupPhase.READY,
+        CgmWarmupPhase.FAILED       -> false
     }
 
     fun formatMmSs(remainingMs: Long): String {
         val totalSec = (remainingMs / 1000L).coerceAtLeast(0L)
         val minutes = totalSec / 60L
         val seconds = totalSec % 60L
-        return "%d:%02d".format(minutes, seconds)
+        return "$minutes:${seconds.toString().padStart(2, '0')}"
     }
 }
