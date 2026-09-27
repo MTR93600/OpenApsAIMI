@@ -43,9 +43,15 @@ machine you are on. On macOS these rules replace the Windows ones:
   already has the exec bit.
 - **Use the scratchpad directory for screenshots and temporary files**, not `%TEMP%`.
 - The pipe-hides-the-exit-code warning still holds. Redirect to a log file and grep it.
-- Do not install Xcode, Homebrew or CocoaPods. The Mac is already set up (Xcode 26.6, iOS SDK and
-  simulator runtime, JDK 21, Android SDK, Kotlin/Native in `~/.konan`). No module uses a
-  `cocoapods` block, so CocoaPods is not needed at all.
+- Do not install Xcode, Homebrew or CocoaPods. The Mac is already set up (Xcode 26.1.1, iOS SDK,
+  JDK 21, Android SDK, Kotlin/Native in `~/.konan`). No module uses a `cocoapods` block, so
+  CocoaPods is not needed at all.
+- **The simulator runtime is a separate download from Xcode itself.** This Mac had none until
+  2026-09-27, so `iosSimulatorArm64Test` could not run at all, and this file said it could. If
+  gradle says `Xcode does not support simulator tests for ios_simulator_arm64. Check that requested
+  SDK is installed.`, that is what it means. Install it with `xcodebuild -downloadPlatform iOS`
+  (no sudo, takes a while). Installed today: iOS 26.1 (23B86), arm64. Check with
+  `xcrun simctl list runtimes`.
 
 ### What each machine can run
 
@@ -66,9 +72,17 @@ Useful commands on the Mac:
 - Compile the iOS device target for every KMP module: `./gradlew compileKotlinIosArm64 --no-daemon`
 - Run the iOS simulator tests: `./gradlew iosSimulatorArm64Test --no-daemon`
 
-Note that today only `:core:data` has a `commonTest` source set, so it is the only module whose
-tests actually run on the simulator. The other KMP modules keep their tests in `androidHostTest`,
-and their `linkDebugTestIosSimulatorArm64` task reports `NO-SOURCE`.
+Eighteen modules now have a `commonTest` source set, so a lot more than before really runs on the
+simulator: `core/data`, `core/interfaces`, `core/nssdk`, `core/objects`, `core/utils`,
+`database/persistence`, `implementation`, the five `plugins/aimi-*` modules, `plugins/aps`,
+`plugins/calibration`, `plugins/sync`, `shared/clientbindings`, `shared/impl` and `ui`. A module
+that keeps its tests in `androidHostTest` still reports `NO-SOURCE` for
+`linkDebugTestIosSimulatorArm64`; that is expected and is not a failure.
+
+Kotlin/Native is worth running rather than assumed: a backtick-quoted test name containing a comma
+compiles fine on the JVM and fails only here, and floating point can differ. When someone loosens an
+assertion "because Native needs it", check it — on 2026-09-27 such a claim turned out to be wrong,
+the exact assertions passed on `iosSimulatorArm64Test`.
 
 ## Token Usage Reduction (Delay Conversation Compaction)
 
