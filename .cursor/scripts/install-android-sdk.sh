@@ -133,12 +133,16 @@ test -f "$SDK_ROOT/platforms/android-37.0/source.properties"
 test -f "$SDK_ROOT/build-tools/36.0.0/source.properties"
 
 # Gradle reads sdk.dir even when the agent shell does not source profile.d.
-# local.properties is gitignored at the repo root (/local.properties).
-repo_root="$(pwd)"
+# local.properties is gitignored at the repo root only (/local.properties), so resolve the root
+# instead of trusting the current directory: a run from a subdirectory would write a file that git
+# does not ignore.
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 lp="$repo_root/local.properties"
 if [ -f "$lp" ] && grep -q '^sdk\.dir=' "$lp"; then
   sed -i "s|^sdk\\.dir=.*|sdk.dir=${SDK_ROOT}|" "$lp"
 else
+  # A file with no trailing newline would otherwise get sdk.dir glued onto its last line.
+  [ -s "$lp" ] && [ "$(tail -c 1 "$lp")" != "" ] && printf '\n' >> "$lp"
   printf 'sdk.dir=%s\n' "$SDK_ROOT" >> "$lp"
 fi
 
