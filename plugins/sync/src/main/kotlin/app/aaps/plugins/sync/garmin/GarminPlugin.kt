@@ -846,10 +846,23 @@ class GarminPlugin @Inject constructor(
                     }
                 }
                 jo.addProperty("cob", loopHub.carbsOnboard)
+                // Pilot / TIR ring: % of returned SGVs in profile target range
+                val low = loopHub.lowGlucoseMark.takeIf { it > 0.0 } ?: 70.0
+                val high = loopHub.highGlucoseMark.takeIf { it > 0.0 } ?: 180.0
+                jo.addProperty("tir", calcTirPercent(glucoseValues, low, high))
             }
             joa.add(jo)
         }
         return joa.toString()
+    }
+
+    /** % of glucose samples in [low, high] (mg/dL), for Garmin Pilot outer ring. */
+    private fun calcTirPercent(values: List<GV>, low: Double, high: Double): Int {
+        if (values.isEmpty()) return 0
+        val lo = minOf(low, high)
+        val hi = maxOf(low, high)
+        val inRange = values.count { it.value in lo..hi }
+        return ((inRange * 100.0) / values.size).roundToInt().coerceIn(0, 100)
     }
 
     override fun getPreferenceScreenContent() = PreferenceSubScreenDef(
