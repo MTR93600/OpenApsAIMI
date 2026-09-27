@@ -52,7 +52,7 @@
     <string name="danar_history_alarm">Alarmes</string>
     <string name="danar_history_basalhours">Horas de Basal</string>
     <string name="danar_history_bolus">Bólus</string>
-    <string name="danar_history_carbohydrates">Hidratos de Carbono</string>
+    <string name="danar_history_carbohydrates">carboidratos</string>
     <string name="danar_history_dailyinsulin">Insulina diária</string>
     <string name="danar_history_glucose">Glicose</string>
     <string name="danar_history_refill">Encher</string>

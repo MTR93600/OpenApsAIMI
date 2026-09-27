@@ -1,2 +1,59 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources></resources>
+<resources>
+    <string name="cwf_comment_background">Imagem de fundo</string>
+    <string name="cwf_comment_chart">Gráficos (Glicemia, basal, linhas de previsão...)</string>
+    <string name="cwf_comment_cover_chart">Imagem à frente do gráfico e atrás dos campos de texto</string>
+    <string name="cwf_comment_complication">Recipiente para complicação</string>
+    <string name="cwf_comment_freetext1">Texto livre 1</string>
+    <string name="cwf_comment_freetext2">Texto livre 2</string>
+    <string name="cwf_comment_freetext3">Texto livre 3</string>
+    <string name="cwf_comment_freetext4">Texto livre 4</string>
+    <string name="cwf_comment_patient_name_ext">Nome do Paciente (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_iob1_ext">Rótulo IOB ou Soma IOB se detalhado (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_iob2_ext">Soma IOB ou (Bolus_IOB|Basal_IOB) se detalhado (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_cob2_ext">Valor COB (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_delta_ext">Delta de glicemia curto (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_avg_delta_ext">Delta de glicemia médio (15 min) (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_temp_target_ext">MetaTemporária ou MetaTemporáriaBaixa - MetaTemporáriaAlta (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_reservoir_ext">Nível do Reservatório (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_rig_battery_ext">Bateria global do loop (%) (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_basalRate_ext">Taxa Basal (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_bgi_ext">Valor BGI (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_status_ext">Síntese do estado (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_loop_ext">Estado do loop e tempo decorrido (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_direction_ext">Seta de direção (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_timestamp_ext">Minutos decorridos desde a última glicemia recebida (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_sgv_ext">Valor da glicemia (do AAPSClient ou AAPSClient2)</string>
+    <string name="cwf_comment_patient_name">Nome do Paciente</string>
+    <string name="cwf_comment_iob1">Rótulo IOB ou Soma IOB se detalhado</string>
+    <string name="cwf_comment_iob2">Soma IOB ou (Bolus_IOB|Basal_IOB) se detalhado</string>
+    <string name="cwf_comment_cob1">Rótulo COB</string>
+    <string name="cwf_comment_cob2">Valor COB</string>
+    <string name="cwf_comment_delta">Delta de glicemia curto</string>
+    <string name="cwf_comment_avg_delta">Delta de glicemia médio (15 min)</string>
+    <string name="cwf_comment_temp_target">MetaTemporária ou MetaTemporáriaBaixa - MetaTemporáriaAlta</string>
+    <string name="cwf_comment_reservoir">Nível do Reservatório</string>
+    <string name="cwf_comment_uploader_battery">Bateria do telemóvel (%)</string>
+    <string name="cwf_comment_rig_battery">Bateria global do loop (%)</string>
+    <string name="cwf_comment_basalRate">Taxa Basal</string>
+    <string name="cwf_comment_bgi">Valor BGI</string>
+    <string name="cwf_comment_status">Síntese do estado</string>
+    <string name="cwf_comment_time">Hora (HH:MM ou HH:MM:SS)</string>
+    <string name="cwf_comment_hour">Hora (HH)</string>
+    <string name="cwf_comment_minute">Minuto (MM)</string>
+    <string name="cwf_comment_second">Segundo (SS)</string>
+    <string name="cwf_comment_timePeriod">AM ou PM</string>
+    <string name="cwf_comment_day_name">Nome do dia da semana</string>
+    <string name="cwf_comment_day">Dia (DD)</string>
+    <string name="cwf_comment_week_number">Número da semana (ww)</string>
+    <string name="cwf_comment_month">Nome do mês (curto)</string>
+    <string name="cwf_comment_loop">Estado do loop e tempo decorrido</string>
+    <string name="cwf_comment_direction">Seta de direção</string>
+    <string name="cwf_comment_timestamp">Minutos decorridos desde a última glicemia recebida</string>
+    <string name="cwf_comment_sgv">Valor da glicemia</string>
+    <string name="cwf_comment_cover_plate">Imagem de cobertura à frente do texto (mostradores…)</string>
+    <string name="cwf_comment_hour_hand">Imagem do ponteiro das horas (Relógio Analógico)</string>
+    <string name="cwf_comment_minute_hand">Imagem do ponteiro dos minutos (Relógio Analógico)</string>
+    <string name="cwf_comment_second_hand">Imagem do ponteiro dos segundos (Relógio Analógico)</string>
+
+</resources>
