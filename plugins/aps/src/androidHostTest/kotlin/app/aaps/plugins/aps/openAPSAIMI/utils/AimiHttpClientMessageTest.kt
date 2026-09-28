@@ -92,6 +92,7 @@ class AimiHttpClientMessageTest {
 
     private fun auditor(http: AimiHttp, resolver: GeminiModelResolver = mock()) = AuditorAIService(
         preferences = mock<Preferences>(),
+        aapsLogger = mock<AAPSLogger>(),
         geminiResolver = resolver,
         auditorStatusLiveData = mock<AuditorStatusLiveData>(),
         aimiHttp = http
@@ -158,6 +159,7 @@ class AimiHttpClientMessageTest {
         val resources = RecordedResources()
         val service = AiCoachingService(
             rh = resources.helper,
+            aapsLogger = mock<AAPSLogger>(),
             geminiModelResolver = mock<GeminiModelResolver>(),
             aimiHttp = refusal(code = 401, reason = "Unauthorized", body = errorBody)
         )
@@ -178,6 +180,7 @@ class AimiHttpClientMessageTest {
         val resources = RecordedResources()
         val service = AiCoachingService(
             rh = resources.helper,
+            aapsLogger = mock<AAPSLogger>(),
             geminiModelResolver = mock<GeminiModelResolver>(),
             aimiHttp = refusal(code = 400, reason = "Bad Request", body = prettyBody)
         )
@@ -198,6 +201,7 @@ class AimiHttpClientMessageTest {
         val resources = RecordedResources()
         val service = AiCoachingService(
             rh = resources.helper,
+            aapsLogger = mock<AAPSLogger>(),
             geminiModelResolver = resolver,
             aimiHttp = refusal(code = 400, reason = "Bad Request", body = errorBody)
         )

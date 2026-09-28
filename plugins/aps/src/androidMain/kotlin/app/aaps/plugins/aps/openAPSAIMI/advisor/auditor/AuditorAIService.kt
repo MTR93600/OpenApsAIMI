@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
+import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
@@ -29,6 +30,7 @@ import dev.zacsweers.metro.AppScope
 @SingleIn(AppScope::class)
 class AuditorAIService @Inject constructor(
     private val preferences: Preferences,
+    private val aapsLogger: AAPSLogger,
     private val geminiResolver: GeminiModelResolver,
     private val auditorStatusLiveData: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData,
     private val aimiHttp: AimiHttp
@@ -206,13 +208,13 @@ class AuditorAIService @Inject constructor(
         val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, modelName)
         
         try {
-            return LlmHttpRetry.withTransientRetry { executeGeminiRequest(apiKey, prompt, primaryModel) }
+            return LlmHttpRetry.withTransientRetry(aapsLogger) { executeGeminiRequest(apiKey, prompt, primaryModel) }
         } catch (e: Exception) {
             // 2. Quota (429) OR still-overloaded (503) after retries → flash fallback (also retried).
             if (LlmHttpRetry.isQuota(e) || LlmHttpRetry.isTransient(e)) {
                 val fallbackModel = "gemini-flash-latest"
                 android.util.Log.w("AIMI_GEMINI", "Auditor: $primaryModel failed (${e.message?.take(80)}). Fallback to $fallbackModel")
-                return LlmHttpRetry.withTransientRetry { executeGeminiRequest(apiKey, prompt, fallbackModel) }
+                return LlmHttpRetry.withTransientRetry(aapsLogger) { executeGeminiRequest(apiKey, prompt, fallbackModel) }
             }
             throw e
         }

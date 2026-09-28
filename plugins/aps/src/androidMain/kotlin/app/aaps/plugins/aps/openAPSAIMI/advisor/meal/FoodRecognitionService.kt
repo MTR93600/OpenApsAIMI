@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.meal
 
 import android.graphics.Bitmap
+import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
@@ -15,7 +16,8 @@ import kotlinx.coroutines.withContext
  */
 class FoodRecognitionService(
     private val geminiModelResolver: GeminiModelResolver,
-    private val preferences: Preferences
+    private val preferences: Preferences,
+    private val aapsLogger: AAPSLogger
 ) {
 
     /**
@@ -26,7 +28,7 @@ class FoodRecognitionService(
 
         return when (providerName.uppercase()) {
             "OPENAI" -> OpenAIVisionProvider()
-            "GEMINI" -> GeminiVisionProvider(geminiModelResolver)
+            "GEMINI" -> GeminiVisionProvider(geminiModelResolver, aapsLogger)
             "DEEPSEEK" -> DeepSeekVisionProvider()
             "CLAUDE" -> ClaudeVisionProvider()
             else -> {

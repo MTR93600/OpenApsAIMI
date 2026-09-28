@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
+import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.plugins.aps.R
@@ -31,6 +32,7 @@ import java.util.Locale
 @SingleIn(AppScope::class)
 class AiCoachingService @Inject constructor(
     private val rh: ResourceHelper,
+    private val aapsLogger: AAPSLogger,
     private val geminiModelResolver: GeminiModelResolver,
     private val aimiHttp: AimiHttp,
 ) {
@@ -125,7 +127,7 @@ class AiCoachingService @Inject constructor(
     // ... (keep private methods)
 
 
-    private fun callOpenAI(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry {
+    private fun callOpenAI(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry(aapsLogger) {
         val jsonBody = buildOpenAiJson(prompt)
         jsonBody.put("max_completion_tokens", 4096) // GPT-5.x requires this (rejects legacy max_tokens)
         val httpResponse = aimiHttp.execute(
@@ -159,13 +161,13 @@ class AiCoachingService @Inject constructor(
 
         try {
             // Transient overload (503/UNAVAILABLE) is retried with bounded backoff on the same model.
-            return LlmHttpRetry.withTransientRetry { executeGeminiRequest(apiKey, prompt, primaryModel) }
+            return LlmHttpRetry.withTransientRetry(aapsLogger) { executeGeminiRequest(apiKey, prompt, primaryModel) }
         } catch (e: Exception) {
             // 2. Quota (429) OR still-overloaded after retries → fallback to the resilient flash alias (also retried).
             if (LlmHttpRetry.isQuota(e) || LlmHttpRetry.isTransient(e)) {
                 val fallbackModel = "gemini-flash-latest" // Durable flash alias (current GA)
                 android.util.Log.w("AIMI_GEMINI", "⚠️ $primaryModel failed (${e.message?.take(80)}). Fallback to $fallbackModel")
-                return LlmHttpRetry.withTransientRetry { executeGeminiRequest(apiKey, prompt, fallbackModel) }
+                return LlmHttpRetry.withTransientRetry(aapsLogger) { executeGeminiRequest(apiKey, prompt, fallbackModel) }
             }
             throw e // Re-throw other errors
         }
@@ -395,7 +397,7 @@ class AiCoachingService @Inject constructor(
         }
     }
     
-    private fun callDeepSeek(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry {
+    private fun callDeepSeek(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry(aapsLogger) {
         val jsonBody = buildOpenAiJson(prompt) // DeepSeek uses OpenAI-compatible format
         jsonBody.put("model", DEEPSEEK_MODEL) // Override model
         jsonBody.put("max_tokens", 4096) // DeepSeek uses the legacy max_tokens parameter
@@ -424,7 +426,7 @@ class AiCoachingService @Inject constructor(
         }
     }
     
-    private fun callClaude(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry {
+    private fun callClaude(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry(aapsLogger) {
         val jsonBody = JSONObject()
         jsonBody.put("model", CLAUDE_MODEL)
         jsonBody.put("max_tokens", 4096)

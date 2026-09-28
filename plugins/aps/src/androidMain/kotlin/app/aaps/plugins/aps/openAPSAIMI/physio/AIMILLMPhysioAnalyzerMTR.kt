@@ -85,13 +85,13 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-pro-latest")
         
         try {
-            return LlmHttpRetry.withTransientRetry { executeGeminiRequest(apiKey, prompt, primaryModel) }
+            return LlmHttpRetry.withTransientRetry(aapsLogger) { executeGeminiRequest(apiKey, prompt, primaryModel) }
         } catch (e: Exception) {
             // 2. Quota (429) OR still-overloaded (503) after retries → flash fallback (also retried).
             if (LlmHttpRetry.isQuota(e) || LlmHttpRetry.isTransient(e)) {
                 val fallbackModel = "gemini-flash-latest"
                 android.util.Log.w(TAG, "Physio: $primaryModel failed (${e.message?.take(80)}). Fallback to $fallbackModel")
-                return LlmHttpRetry.withTransientRetry { executeGeminiRequest(apiKey, prompt, fallbackModel) }
+                return LlmHttpRetry.withTransientRetry(aapsLogger) { executeGeminiRequest(apiKey, prompt, fallbackModel) }
             }
             throw e
         }

@@ -9,10 +9,14 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 
-class GeminiVisionProvider(private val geminiResolver: GeminiModelResolver) : AIVisionProvider {
+class GeminiVisionProvider(
+    private val geminiResolver: GeminiModelResolver,
+    private val aapsLogger: AAPSLogger
+) : AIVisionProvider {
     override val displayName = "Gemini (Flash)"
     override val providerId = "GEMINI"
 
@@ -37,11 +41,11 @@ class GeminiVisionProvider(private val geminiResolver: GeminiModelResolver) : AI
         val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-flash-latest")
         
         try {
-            return LlmHttpRetry.withTransientRetry { executeRequest(apiKey, base64Image, primaryModel, userDescription) }
+            return LlmHttpRetry.withTransientRetry(aapsLogger) { executeRequest(apiKey, base64Image, primaryModel, userDescription) }
         } catch (e: Exception) {
             if (LlmHttpRetry.isQuota(e) || LlmHttpRetry.isTransient(e)) {
                 val fallbackModel = "gemini-flash-latest"
-                return LlmHttpRetry.withTransientRetry { executeRequest(apiKey, base64Image, fallbackModel, userDescription) }
+                return LlmHttpRetry.withTransientRetry(aapsLogger) { executeRequest(apiKey, base64Image, fallbackModel, userDescription) }
             }
             throw e
         }

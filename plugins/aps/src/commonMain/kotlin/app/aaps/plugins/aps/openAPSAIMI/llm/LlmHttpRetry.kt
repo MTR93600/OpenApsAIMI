@@ -1,6 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.llm
 
-import android.util.Log
+import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.logging.LTag
+import app.aaps.plugins.aps.openAPSAIMI.aimiWaitMs
 
 /**
  * Centralised transient-error retry policy for LLM HTTP calls (Gemini / Claude / OpenAI / DeepSeek).
@@ -14,6 +16,20 @@ import android.util.Log
  * Retries are bounded (default 3 attempts, ~0.7s → 1.4s → 2.8s) to avoid hammering an overloaded API.
  * Callers already perform blocking HTTP on background/IO threads, so the backoff sleep is safe here
  * (never invoked from the UI thread — blocking HTTP would otherwise crash with NetworkOnMainThreadException).
+ *
+ * ### Why the logger is a parameter and not a field
+ *
+ * This stayed an `object` and takes its [AAPSLogger] at the call site, rather than becoming a
+ * Metro-injected class. Three reasons. [isTransientStatus], [isTransient] and [isQuota] are pure
+ * tests on a status code or a message, and one of them is called from inside a request body where a
+ * dependency-injected helper would be a needless hop. The object holds no state, so nothing here
+ * would benefit from a scope. And the blast radius is identical either way: the four classes that
+ * retry would each have gained a constructor parameter regardless, so injection would have bought
+ * nothing for the same cost.
+ *
+ * The log line is not optional. It is the only record that a retry storm happened, and it names the
+ * attempt, the wait and the error, so it stays a required argument rather than something a caller
+ * can leave out.
  */
 object LlmHttpRetry {
 
@@ -42,8 +58,20 @@ object LlmHttpRetry {
     /**
      * Runs [block], retrying ONLY on transient errors with bounded exponential backoff. Quota and other
      * errors propagate immediately so the caller can decide (model fallback / surface to user).
+     *
+     * @param aapsLogger where the one retry line goes. See the class note on why this is a parameter.
+     * @param wait how the backoff is waited out. The default is the real platform sleep; a test
+     *   passes its own so it can read back the exact wait that was asked for without spending it.
+     *   A `wait` that answers `false` means the thread was interrupted, and the error being retried
+     *   is then thrown as-is - which is what the Android code did before this moved to shared code.
      */
-    fun <T> withTransientRetry(maxAttempts: Int = 3, baseDelayMs: Long = 700L, block: () -> T): T {
+    fun <T> withTransientRetry(
+        aapsLogger: AAPSLogger,
+        maxAttempts: Int = 3,
+        baseDelayMs: Long = 700L,
+        wait: (Long) -> Boolean = ::aimiWaitMs,
+        block: () -> T
+    ): T {
         var attempt = 0
         while (true) {
             try {
@@ -52,13 +80,8 @@ object LlmHttpRetry {
                 attempt++
                 if (attempt >= maxAttempts || !isTransient(e)) throw e
                 val backoffMs = baseDelayMs shl (attempt - 1) // 700, 1400, 2800 …
-                Log.w(TAG, "Transient LLM error (attempt $attempt/$maxAttempts) — retry in ${backoffMs}ms: ${e.message?.take(140)}")
-                try {
-                    Thread.sleep(backoffMs)
-                } catch (ie: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    throw e
-                }
+                aapsLogger.warn(LTag.AIMI, "[$TAG] Transient LLM error (attempt $attempt/$maxAttempts) — retry in ${backoffMs}ms: ${e.message?.take(140)}")
+                if (!wait(backoffMs)) throw e
             }
         }
     }

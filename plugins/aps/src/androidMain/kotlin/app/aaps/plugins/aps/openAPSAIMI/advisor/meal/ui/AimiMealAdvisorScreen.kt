@@ -125,7 +125,7 @@ fun AimiMealAdvisorScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    val recognitionService = remember { FoodRecognitionService(geminiModelResolver, preferences) }
+    val recognitionService = remember { FoodRecognitionService(geminiModelResolver, preferences, aapsLogger) }
 
     var showCamera by remember { mutableStateOf(false) }
     var provider by remember { mutableStateOf(preferences.get(StringKey.AimiAdvisorProvider).uppercase(Locale.ROOT)) }
