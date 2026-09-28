@@ -16,10 +16,13 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 /**
- * Guards every string `DetermineBasalaimiSMB2` builds, because nothing else does.
+ * Guards every string the AIMI dosing core builds, because nothing else does.
  *
- * The class writes these strings into `rT.reason` and into the console log, and both are uploaded to
- * Nightscout, so the user reads them. Nothing constructs the class in a test, so a wrong format
+ * That is `DetermineBasalaimiSMB2` and the two neighbours it passes its `rT.reason` to,
+ * `AimiUamHandler` and `SmbInstructionExecutor`.
+ *
+ * These classes write their strings into `rT.reason` and into the console log, and both are uploaded
+ * to Nightscout, so the user reads them. Nothing constructs them in a test, so a wrong format
  * argument would only show up on a real pump, inside the dosing loop.
  *
  * The names themselves are safe without a test: they come from the generated `ApsStrings` object, so
@@ -35,7 +38,7 @@ import org.robolectric.annotation.Config
  *    unfilled placeholder behind.
  *
  * When a string gains or loses a placeholder, this test fails and names it. Fix the call sites in
- * `DetermineBasalAIMI2.kt` and the count here together.
+ * the call sites and the count here together.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -149,9 +152,14 @@ class DetermineBasalAimiStringsTest {
         private val SPECIFIER = Regex("""%(?:(\d+)\$)?([-+ 0#,(]*)([\d.]*)([a-zA-Z])""")
 
         /**
-         * Every string `DetermineBasalaimiSMB2` resolves, with the number of arguments its call sites
-         * pass. 138 names over 149 call sites, read off the file when it stopped using
+         * Every string the AIMI dosing core resolves, with the number of arguments its call sites
+         * pass. 164 names over 175 call sites, read off the files when they stopped using
          * `context.getString`.
+         *
+         * Three files, because they build one text between them: `DetermineBasalaimiSMB2` itself,
+         * and the two neighbours it hands its `rT.reason` to, `AimiUamHandler` and
+         * `SmbInstructionExecutor`. All three write into the same `reason`, so a wrong argument
+         * count in any of them shows up on the same Nightscout line.
          */
         private val usedStrings: Map<TextRef, Int> = mapOf(
             ApsStrings.adjustments_smb to 2,
@@ -175,6 +183,8 @@ class DetermineBasalAimiStringsTest {
             ApsStrings.bg_rapid_rise to 1,
             ApsStrings.bg_stable_high_delta_low to 0,
             ApsStrings.bg_trend_analysis to 0,
+            ApsStrings.cache_hit to 1,
+            ApsStrings.cache_hit_invalid to 0,
             ApsStrings.calc_dynamic_peaktime to 0,
             ApsStrings.calculated_trend to 1,
             ApsStrings.condition_acceleratingdown to 0,
@@ -195,6 +205,7 @@ class DetermineBasalAimiStringsTest {
             ApsStrings.console_adjust_basal to 2,
             ApsStrings.console_basal_unchanged to 1,
             ApsStrings.console_carb_impact to 3,
+            ApsStrings.console_dia_adjusted to 1,
             ApsStrings.console_limiting_carb_impact to 3,
             ApsStrings.console_max_bg_adjusted to 2,
             ApsStrings.console_max_bg_unchanged to 1,
@@ -212,6 +223,7 @@ class DetermineBasalAimiStringsTest {
             ApsStrings.final_dia_constrained to 1,
             ApsStrings.finalization_smb to 2,
             ApsStrings.first_bg_value to 1,
+            ApsStrings.folder_documents to 0,
             InterfacesStrings.format_insulin_units to 1,
             ApsStrings.heart_rate to 1,
             ApsStrings.hypo_risk_notification_text to 0,
@@ -223,9 +235,19 @@ class DetermineBasalAimiStringsTest {
             ApsStrings.lgs_triggered_min_pred to 2,
             ApsStrings.lgs_triggered_predicted to 3,
             ApsStrings.limits_smb to 2,
+            ApsStrings.log_error_closing_interpreter to 1,
+            ApsStrings.log_failed_init_uam to 1,
+            ApsStrings.log_interpreter_closed to 0,
+            ApsStrings.log_interpreter_initialized to 2,
+            ApsStrings.log_model_file_not_found to 1,
+            ApsStrings.log_smb_cache_cleared to 0,
+            ApsStrings.log_tflite_failed to 1,
             ApsStrings.manual_basal_override to 3,
             ApsStrings.manual_meal_prebolus to 1,
             ApsStrings.meal_mode_first_30 to 2,
+            ApsStrings.model_load_failed to 1,
+            ApsStrings.model_loaded to 2,
+            ApsStrings.model_missing to 1,
             ApsStrings.morning_adjustment to 0,
             ApsStrings.night_adjustment to 0,
             ApsStrings.no_bg_history to 0,
@@ -241,12 +263,15 @@ class DetermineBasalAimiStringsTest {
             ApsStrings.reason_activity_cap to 1,
             ApsStrings.reason_activity_ratio to 2,
             ApsStrings.reason_additional_carbs to 2,
+            ApsStrings.reason_ai_file to 2,
             ApsStrings.reason_autodrive_v3_authoritative_blender_skipped to 0,
             ApsStrings.reason_bg_data_old to 3,
             ApsStrings.reason_bg_dropping to 1,
             ApsStrings.reason_bg_dropping_floor to 2,
             ApsStrings.reason_bio_sync_flow to 3,
             ApsStrings.reason_bio_sync_stress to 2,
+            ApsStrings.reason_boost_hyper to 2,
+            ApsStrings.reason_boost_hyper_2 to 2,
             ApsStrings.reason_cgm_calibrating to 0,
             ApsStrings.reason_cgm_flat to 0,
             ApsStrings.reason_data_removed to 1,
@@ -263,6 +288,8 @@ class DetermineBasalAimiStringsTest {
             ApsStrings.reason_meal_aggression_boost to 3,
             ApsStrings.reason_meal_high_iob_relaxed to 3,
             ApsStrings.reason_microbolus to 1,
+            ApsStrings.reason_ml_training to 0,
+            ApsStrings.reason_mpc_pi to 4,
             ApsStrings.reason_prebolus_bfast1 to 1,
             ApsStrings.reason_prebolus_bfast2 to 1,
             ApsStrings.reason_prebolus_dinner1 to 1,
@@ -278,6 +305,7 @@ class DetermineBasalAimiStringsTest {
             ApsStrings.reason_wait_microbolus to 2,
             ApsStrings.safety_condition to 2,
             ApsStrings.safety_sport_smb_zero to 0,
+            ApsStrings.sanitize_info to 1,
             ApsStrings.sensitivity_ratio_temp_target to 2,
             ApsStrings.smb_disabled to 0,
             ApsStrings.smb_disabled_high_target to 1,
@@ -287,10 +315,16 @@ class DetermineBasalAimiStringsTest {
             ApsStrings.smb_enabled_for_cob to 1,
             ApsStrings.smb_enabled_for_temp_target to 1,
             ApsStrings.smb_enabled_meal_mode to 3,
+            ApsStrings.smb_final to 1,
             ApsStrings.steps to 1,
             ApsStrings.tdd_per_hour_high to 1,
             ApsStrings.temp_basal_pose to 2,
+            ApsStrings.tflite_failed to 1,
             ApsStrings.tir_high to 1,
+            ApsStrings.uam_executed to 1,
+            ApsStrings.uam_invalid to 1,
+            ApsStrings.uam_model_status to 3,
+            ApsStrings.uam_unavailable to 0,
             ApsStrings.zero_basal_forced to 1,
         )
     }

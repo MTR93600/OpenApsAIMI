@@ -2327,6 +2327,97 @@ forces the same answer independently. Production call sites are only two
 (`workflow/.../PrepareGraphDataRunner.kt:158`, already suspend; `ios/shell/.../ShellInfo.kt:83`, not), plus
 two in tests.
 
+## 6an. 2026-09-28: the AIMI CSV is the training corpus, not a log — handle with care
+
+Said by the owner, and it changes how the remaining file I/O in `DetermineBasalAIMI2.kt` must be
+treated: **AIMI trains the SMB and the basal models on the phone, from these CSV files.** The writer
+at `DetermineBasalAIMI2.kt:13906-13920` is therefore the corpus writer, and the reader is
+`AimiSmbCorpus.buildTrainingCorpus`. A careless port of this path does not lose a log line, it changes
+what the models learn. There is precedent: a header frozen at 13 columns once made the trainer learn
+the wrong column as its label.
+
+**So the `java.io.File` work in this file is NOT a mechanical lot.** 15 `File(...)` constructions
+remain, and they are the real obstacle to `commonMain` now that the strings are gone (2026-09-28,
+149 call sites moved to `TextResolver`). Whoever takes it must treat the corpus path as clinical code:
+same header handling, same row order, same append semantics, byte for byte.
+
+### Two defects found while reading it, neither fixed
+
+**1. The rewrite drops the trailing newline, so the next row written is glued onto the last kept one.**
+`removeLast200Lines` (`:13946`) ends with `csvFile.writeText(newLines.joinToString("\n"))`, which has
+no trailing newline, while `appendCsvToFile` (`:13919`) appends `valuesRow + "\n"` with no guard. So
+after every deletion the next tick's row merges with the previous last row: the two share one field and
+the line ends up with about twice as many columns.
+
+Severity is limited, and only because the reader is strict: `AimiSmbCorpus.kt:82` drops any row with
+`cols.size > headers.size`, so the glued line is skipped rather than mis-parsed. **Nothing is learned
+wrongly; two rows are silently lost, and the malformed line stays in the corpus for good.** The fix is
+one line - append a newline first when the file does not end with one - and it belongs with whoever
+ports this path, together with a test.
+
+**2. The "bad day" cleanup deletes a fixed count, while the message promises a date.**
+`automateDeletionIfBadDay` (`:13982`) fires between 00:05 and 00:10 when the 1-day TIR is under 85 %,
+computes `yesterday`, and then calls `removeLast200Lines`, which drops the **newest** 200 rows - about
+16 h at one row per 5 min - regardless of date. The user-facing reason then says the data for that date
+was removed (`reason_data_removed`). The commented-out `createFilteredAndSortedCopy(csvfile, dateToRemove)`
+on the line above shows the date-based version was the intent. The same blunt call is used by the
+therapy-note path at `:3048`.
+Whether the count is deliberate is a question for the owner, not a thing to change while porting.
+
+The timestamped backups it leaves behind (`backup_yyyyMMdd_HHmmss.csv`) are at least managed:
+`AimiRetentionPolicy.DROP_GLOBS` (`:172`) matches exactly that name.
+
+## 6ao. 2026-09-28: `DetermineBasalAIMI2` no longer holds an Android type
+
+The 20 000-line algorithm core went from "38 % of everything left in `androidMain`, held by Android"
+to held only by the JVM. Three lots, in this order, each verified on its own:
+
+1. **S1 - the two dead seams wired.** `AimiStorage.fallbackFile()` and `HormonitorStudyExporterProvider`
+   both existed, implemented, with nothing calling them. The CSV fallback and the study exporter now go
+   through them. The fallback path was proved unchanged: the Android implementation builds
+   `<app scoped external dir>/AAPS/<name>`, which is the expression it replaced.
+2. **S2 - the strings.** **149 call sites** moved from `context.getString(R.string.x, …)` to
+   `rh.gs(ApsStrings.x, …)`. 138 distinct ids, of which 137 were already generated into a commonMain
+   source dir by `GenerateKeyStringsTask`, so no XML work was needed; the 138th
+   (`format_insulin_units`) already existed as `InterfacesStrings`.
+3. **The last two `Context` holders.** `AimiModelHandler` (7 signatures, 19 ids - not the single
+   function the brief predicted) and `smb/SmbInstructionExecutor` (7 ids) converted the same way, plus
+   two lines in `OpenAPSAIMIPlugin`. `context` then left the constructor.
+
+**Result:** `android.content.Context` appears in none of the three files. The only Android imports left
+in the core are `android.annotation.SuppressLint` (an annotation) and `androidx.collection.LongSparseArray`,
+which is itself a KMP library and therefore not a blocker.
+
+### What actually guards this change
+
+A wrong string id does not compile, because `ApsStrings` members are generated from the XML. **A wrong
+argument count or order does compile**, and fails at runtime inside the dosing loop, in text that reaches
+`rT.reason` and therefore Nightscout. Worse, `rh.gs` is not `context.getString`: the implementation
+catches format errors and returns a fallback string, so what used to be a loud crash is now a silent
+wrong line.
+
+So the guard is `DetermineBasalAimiStringsTest` (`androidHostTest`), a table of **164 ids with their
+argument counts** across the three files. It fills each template with arguments of the type each
+placeholder asks for and asserts nothing is left unfilled. Two things learned while building it:
+
+- **The table is hand-written, so it needs cross-checking against the real call sites, not just the XML.**
+  Combining two lots surfaced one wrong entry (`bg_near_target` claimed 3 arguments; template and call
+  site both have 2). Each lot was green alone; only the combination failed.
+- A naive argument counter over Kotlin source is wrong in two ways that both appeared here: a **trailing
+  comma** in a multi-line call reads as an empty argument, and a **nested** `rh.gs(...)` inside another
+  call's argument list reads as its own site. Both produced false mismatches before being corrected.
+
+### What still keeps the core out of `commonMain`
+
+Not Android - the JVM. 13 `java.*` imports and, most importantly, **15 `File(...)` constructions**
+including the CSV read-filter-rewrite at `:13906-13976`. That path is the on-device training corpus
+(see `6an`) and must not be ported casually.
+
+`SmbInstructionExecutor` is now the closest of all of them: **no `android.*` import at all**, and all
+seven of its AIMI neighbours are already shared. What is left is one `Calendar`, one `TimeUnit` and about
+ten `String.format` calls - each of which formats a number that reaches `rT.reason`, so swapping them is
+behaviour-visible and deserves its own lot rather than a sweep.
+
 ---
 
 ---

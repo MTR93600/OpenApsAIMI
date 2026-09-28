@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.smb
 
-import android.content.Context
 import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
@@ -9,7 +8,8 @@ import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.plugins.aps.R
+import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
@@ -25,7 +25,7 @@ import kotlin.math.min
 object SmbInstructionExecutor {
 
     data class Input(
-        val context: Context,
+        val rh: TextResolver,
         val preferences: Preferences,
         val csvFile: AimiPath,
         val rT: RT,
@@ -130,8 +130,8 @@ object SmbInstructionExecutor {
             )
             val isModelActive = refined != predictedSmb
             input.rT.reason.appendLine(
-                input.context.getString(
-                    R.string.reason_ai_file,
+                input.rh.gs(
+                    ApsStrings.reason_ai_file,
                     if (isModelActive) "✔" else "⏳",
                     "%.2f".format(refined.takeIf { it.isFinite() } ?: predictedSmb)
                 )
@@ -141,8 +141,8 @@ object SmbInstructionExecutor {
             val maxIobPref = input.preferences.get(DoubleKey.ApsSmbMaxIob)
             if (input.bg > 170 && input.delta > 4 && input.iob < maxIobPref) {
                 input.rT.reason.appendLine(
-                    input.context.getString(
-                        R.string.reason_boost_hyper,
+                    input.rh.gs(
+                        ApsStrings.reason_boost_hyper,
                         input.bg.toInt(),
                         input.delta
                     )
@@ -150,8 +150,8 @@ object SmbInstructionExecutor {
                 predictedSmb *= 1.7f
             } else if (input.bg > 150 && input.delta > 3 && input.iob < maxIobPref) {
                 input.rT.reason.appendLine(
-                    input.context.getString(
-                        R.string.reason_boost_hyper_2,
+                    input.rh.gs(
+                        ApsStrings.reason_boost_hyper_2,
                         input.bg.toInt(),
                         input.delta
                     )
@@ -165,7 +165,7 @@ object SmbInstructionExecutor {
             }
             basal = hooks.roundBasal(basal)
         } else {
-            input.rT.reason.appendLine(input.context.getString(R.string.reason_ml_training))
+            input.rT.reason.appendLine(input.rh.gs(ApsStrings.reason_ml_training))
         }
 
         var smbToGive = if (input.bg > 130 && input.delta > 2 && predictedSmb == 0.0f) {
@@ -333,7 +333,7 @@ object SmbInstructionExecutor {
             input.iob.toDouble()
         )
         input.consoleLog.add(
-            input.context.getString(R.string.console_dia_adjusted, adjustedDIAInMinutes)
+            input.rh.gs(ApsStrings.console_dia_adjusted, adjustedDIAInMinutes)
         )
         val actCurr = input.profile.sensorLagActivity
         val actFuture = input.profile.futureActivity
@@ -413,8 +413,8 @@ object SmbInstructionExecutor {
             input.rT.reason.append(" | Post-hypo blend dampen (minBG<70)")
         }
         input.rT.reason.appendLine(
-            input.context.getString(
-                R.string.reason_mpc_pi,
+            input.rh.gs(
+                ApsStrings.reason_mpc_pi,
                 optimalBasalMpc,
                 alpha * 100,
                 piDoseForBlend,
@@ -446,7 +446,7 @@ object SmbInstructionExecutor {
             input.isConfirmedHighRise
         )
         input.rT.reason.appendLine(
-            input.context.getString(R.string.smb_final, "%.2f".format(smbDecision))
+            input.rh.gs(ApsStrings.smb_final, "%.2f".format(smbDecision))
         )
         val hypoGuard = input.threshold ?: hooks.computeHypoThreshold(
             input.profile.min_bg,

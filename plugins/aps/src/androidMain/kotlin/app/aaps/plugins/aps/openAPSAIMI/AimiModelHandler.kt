@@ -15,9 +15,9 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
-import android.content.Context
 import app.aaps.core.keys.DoubleKey
-import app.aaps.plugins.aps.R
+import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.core.keys.interfaces.Preferences
 
 /**
@@ -74,11 +74,11 @@ object AimiUamHandler {
     fun getInstance(): AimiUamHandler = this
 
     /** Ligne de statut prête à logguer dans rT.reason */
-    fun statusLine(context: Context): String {
+    fun statusLine(rh: TextResolver): String {
         val configuredModelFile = File(lastModelPath ?: modelUamFile.absolutePath)
         val path = configuredModelFile.absolutePath
         val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).absolutePath
-        val documentsFolderName = context.getString(R.string.folder_documents)
+        val documentsFolderName = rh.gs(ApsStrings.folder_documents)
         val relativePath = if (path.startsWith(documentsDir)) {
             documentsFolderName  + path.removePrefix(documentsDir)
         } else {
@@ -88,40 +88,40 @@ object AimiUamHandler {
         val flag = if (lastLoadOk) "✔" else "✘"
         val size = if (configuredModelFile.exists()) String.format("%.1f KB", configuredModelFile.length().toDouble() / 1024) else "missing"
         //return "📦 UAM model: $flag ($path, $size)"
-        return context.getString(R.string.uam_model_status, flag, relativePath, size)
+        return rh.gs(ApsStrings.uam_model_status, flag, relativePath, size)
     }
 
     /** Ajoute la ligne de statut dans un StringBuilder (ex: rT.reason) */
-    fun appendStatus(to: StringBuilder?, context: Context) {
-        to?.appendLine(statusLine(context))
+    fun appendStatus(to: StringBuilder?, rh: TextResolver) {
+        to?.appendLine(statusLine(rh))
     }
 
     /** Vide le cache des prédictions. À appeler par ex. dans onStart(). */
-    fun clearCache(context: Context) {
+    fun clearCache(rh: TextResolver) {
         smbCache.invalidateAll()
       //Log.i(TAG, "SMB cache cleared")
-        Log.i(TAG, context.getString(R.string.log_smb_cache_cleared))
+        Log.i(TAG, rh.gs(ApsStrings.log_smb_cache_cleared))
     }
 
     /** Ferme l'interpréteur. À appeler dans onStop() du plugin. */
-    fun close(context: Context) {
+    fun close(rh: TextResolver) {
         try {
             synchronized(lock) {
                 interpreter?.close()
                 interpreter = null
             }
           //Log.i(TAG, "Interpreter closed")
-            Log.i(TAG, context.getString(R.string.log_interpreter_closed))
+            Log.i(TAG, rh.gs(ApsStrings.log_interpreter_closed))
         } catch (e: Throwable) {
           //Log.w(TAG, "Error closing interpreter: ${e.message}")
-            Log.w(TAG, context.getString(R.string.log_error_closing_interpreter, e.message ?: "Unknown error"))
+            Log.w(TAG, rh.gs(ApsStrings.log_error_closing_interpreter, e.message ?: "Unknown error"))
         }
     }
 
     /** Force un autre fichier modèle (test / debug), puis purge et re-lazy-init au prochain run. */
-    fun configureUamModel(file: File?, context: Context) {
+    fun configureUamModel(file: File?, rh: TextResolver) {
         synchronized(lock) {
-            close(context)
+            close(rh)
             if (file != null) {
                 if (file.exists()) {
                     modelUamFile.parentFile?.mkdirs()
@@ -134,7 +134,7 @@ object AimiUamHandler {
             }
             lastLoadOk = false
             lastLoadError = null
-            clearCache(context)
+            clearCache(rh)
         }
     }
 
@@ -147,31 +147,31 @@ object AimiUamHandler {
     fun predictSmbUam(
         features: FloatArray,
         reason: StringBuilder? = null,
-        context: Context
+        rh: TextResolver
     ): Float {
-        appendStatus(reason, context) // affiche d'entrée l'état du modèle
+        appendStatus(reason, rh) // affiche d'entrée l'état du modèle
 
         val (inputs, replaced) = sanitizeWithCount(features)
         if (replaced > 0) {
             //reason?.appendLine("🧹 Sanitize: $replaced entrées non finies -> 0")
-            reason?.appendLine(context.getString(R.string.sanitize_info, replaced))
+            reason?.appendLine(rh.gs(ApsStrings.sanitize_info, replaced))
         }
 
         val key = cacheKey("UAM", inputs)
         smbCache.getIfPresent(key)?.let { cached ->
             if (isUsable(cached)) {
                 //reason?.appendLine("⚡ Cache HIT → ${"%.4f".format(cached)} U")
-                reason?.appendLine(context.getString(R.string.cache_hit, "%.4f".format(cached)))
+                reason?.appendLine(rh.gs(ApsStrings.cache_hit, "%.4f".format(cached)))
                 return cached
             } else {
                 //reason?.appendLine("⚠️ Cache HIT non exploitable (NaN/Inf), recalcul…")
-                reason?.appendLine(context.getString(R.string.cache_hit_invalid))
+                reason?.appendLine(rh.gs(ApsStrings.cache_hit_invalid))
             }
         }
 
-        val itp = ensureInterpreter(reason, context) ?: run {
+        val itp = ensureInterpreter(reason, rh) ?: run {
             //reason?.appendLine("❌ Modèle UAM indisponible → SMB=0")
-            reason?.appendLine(context.getString(R.string.uam_unavailable))
+            reason?.appendLine(rh.gs(ApsStrings.uam_unavailable))
             return 0f
         }
 
@@ -189,9 +189,9 @@ object AimiUamHandler {
             runModel(itp, inputs)
         } catch (e: Throwable) {
             //reason?.appendLine("💥 TFLite run échoué: ${e.message} → SMB=0")
-            reason?.appendLine(context.getString(R.string.tflite_failed, e.message ?: "Unknown error"))
+            reason?.appendLine(rh.gs(ApsStrings.tflite_failed, e.message ?: "Unknown error"))
           //Log.e(TAG, "TFLite run failed: ${e.message}")
-            Log.e(TAG, context.getString(R.string.log_tflite_failed, e.message ?: "Unknown error"))
+            Log.e(TAG, rh.gs(ApsStrings.log_tflite_failed, e.message ?: "Unknown error"))
             return 0f
         }
 
@@ -199,17 +199,17 @@ object AimiUamHandler {
         if (isUsable(result)) {
             smbCache.put(key, result)
             //reason?.appendLine("✅ UAM exécuté → ${"%.4f".format(result)} U")
-            reason?.appendLine(context.getString(R.string.uam_executed, "%.2f".format(result)))
+            reason?.appendLine(rh.gs(ApsStrings.uam_executed, "%.2f".format(result)))
         } else {
             //reason?.appendLine("⚠️ Résultat non exploitable (raw=$raw) → SMB=0")
-            reason?.appendLine(context.getString(R.string.uam_invalid, raw))
+            reason?.appendLine(rh.gs(ApsStrings.uam_invalid, raw))
         }
         return max(0f, result)
     }
 
     // ────────────────────────── Privé : init & exécution ──────────────────────────
 
-    private fun ensureInterpreter(reason: StringBuilder? = null, context: Context): Interpreter? {
+    private fun ensureInterpreter(reason: StringBuilder? = null, rh: TextResolver): Interpreter? {
         interpreter?.let { return it }
         synchronized(lock) {
             interpreter?.let { return it }
@@ -219,9 +219,9 @@ object AimiUamHandler {
                 lastLoadOk = false
                 lastLoadError = "file not found"
                 //reason?.appendLine("❌ Fichier modèle introuvable : ${file.absolutePath}")
-                reason?.appendLine(context.getString(R.string.model_missing, file.absolutePath))
+                reason?.appendLine(rh.gs(ApsStrings.model_missing, file.absolutePath))
               //Log.e(TAG, "Model file not found: ${file.absolutePath}")
-                Log.e(TAG, context.getString(R.string.log_model_file_not_found, file.absolutePath))
+                Log.e(TAG, rh.gs(ApsStrings.log_model_file_not_found, file.absolutePath))
                 return null
             }
             return try {
@@ -233,19 +233,19 @@ object AimiUamHandler {
                     lastLoadTime = aimiWallClockMs()
                     lastModelPath = file.absolutePath
                     //reason?.appendLine("📦 Chargé ✓ : ${file.name} (${file.length()} B)")
-                    reason?.appendLine(context.getString(R.string.model_loaded, file.name, "%.1f".format(file.length().toDouble() / 1024)))
+                    reason?.appendLine(rh.gs(ApsStrings.model_loaded, file.name, "%.1f".format(file.length().toDouble() / 1024)))
                   //Log.i(TAG, "Interpreter initialized from ${file.absolutePath} (${file.length()} bytes)")
-                  //Log.i(TAG, context.getString(R.string.log_interpreter_initialized, file.absolutePath, file.length()))
+                  //Log.i(TAG, rh.gs(ApsStrings.log_interpreter_initialized, file.absolutePath, file.length()))
                     val sizeKb = String.format("%.1f KB", file.length().toDouble() / 1024)
-                    Log.i(TAG, context.getString(R.string.log_interpreter_initialized, file.absolutePath, sizeKb))
+                    Log.i(TAG, rh.gs(ApsStrings.log_interpreter_initialized, file.absolutePath, sizeKb))
                 }
             } catch (e: Throwable) {
                 lastLoadOk = false
                 lastLoadError = e.message
                 //reason?.appendLine("❌ Échec chargement modèle: ${e.message}")
-                reason?.appendLine(context.getString(R.string.model_load_failed, e.message ?: "Unknown error"))
+                reason?.appendLine(rh.gs(ApsStrings.model_load_failed, e.message ?: "Unknown error"))
               //Log.e(TAG, "Failed to init UAM model: ${e.message}")
-                Log.e(TAG, context.getString(R.string.log_failed_init_uam, e.message ?: "Unknown error"))
+                Log.e(TAG, rh.gs(ApsStrings.log_failed_init_uam, e.message ?: "Unknown error"))
                 null
             }
         }

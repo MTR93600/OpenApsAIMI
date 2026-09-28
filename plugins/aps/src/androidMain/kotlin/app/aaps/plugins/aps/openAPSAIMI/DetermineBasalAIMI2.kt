@@ -1,7 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
 import android.annotation.SuppressLint
-import android.content.Context
 import androidx.collection.LongSparseArray
 import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.SourceSensor
@@ -1504,16 +1503,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val pumpCapabilityValidator: app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator,
     private val dynamicBasalController: app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController,
     private val autodriveEngine: AutodriveEngine,
-    private val rh: TextResolver,
-    /**
-     * Only passed on, never read here.
-     *
-     * This class builds all its own text through [rh] now. What still needs a `Context` is two
-     * neighbours it calls: `AimiModelHandler.predictSmbUam` and `SmbInstructionExecutor.Input`, and
-     * both use it for `getString` alone. When those two name their strings as well, this parameter
-     * and the last Android import go with them.
-     */
-    private val context: Context
+    private val rh: TextResolver
 ) {
     @Inject lateinit var persistenceLayer: PersistenceLayer
     @Inject lateinit var tddCalculator: TddCalculator
@@ -16062,7 +16052,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 recentSteps60Minutes.toFloat(), recentSteps180Minutes.toFloat()
             ),
             reason, // 👈 logs visibles si non-null
-            context
+            rh
         )
         return smb.coerceAtLeast(0f)
     }
@@ -16911,7 +16901,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): SmbInstructionExecutor.Result {
         return SmbInstructionExecutor.execute(
             SmbInstructionExecutor.Input(
-                context = context, preferences = preferences, csvFile = csvfilePath, rT = rT,
+                rh = rh, preferences = preferences, csvFile = csvfilePath, rT = rT,
                 consoleLog = consoleLog, consoleError = consoleError,
                 combinedDelta = combinedDeltaLocal.toDouble(), shortAvgDelta = shortAvgDelta.toFloat(), longAvgDelta = longAvgDelta.toFloat(),
                 profile = profile, glucoseStatus = glucoseStatusLocal,

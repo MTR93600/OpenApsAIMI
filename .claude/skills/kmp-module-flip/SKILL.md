@@ -198,6 +198,20 @@ file can name `app.aaps.core.ui.R` or take a `Context` indirectly. Compile for i
 Beware the grep, too: `^import android` also matches `androidx`, so it hides every Compose file.
 Anchor it as `^import android\.`.
 
+**And `java.lang` needs no import at all**, so an import scan cannot see `String.format`,
+`System.currentTimeMillis`, `Thread`, `Math`, `StackTraceElement` or `Throwable.stackTrace`. A file
+whose imports look completely clean can still fail to compile for iOS. Two real examples from this
+repo: `AimiLoopTickRecovery` imported nothing but reads `error.stackTrace` frame by frame
+(`className`, `methodName`, `lineNumber`), which has no shared equivalent; `AimiLoopTelemetry`
+imported one `AtomicLong` and also used `@Volatile`, `synchronized` and a neighbour that needed a
+timed `tryLock`. **Move one file, compile, keep or revert. Never move a batch on the strength of a
+grep.**
+
+Not every blocker is a substitution. Some are a design question and should stop the lot rather than
+be forced: `AapsLock` has `lock`/`unlock` and no timed `tryLock`, so anything built on
+`ReentrantLock.tryLock(timeout)` or `isHeldByCurrentThread` cannot move without changing
+`core:interfaces` first.
+
 ### Strings are usually the biggest single blocker
 
 `R.string.x` cannot exist in commonMain. The fix is `GenerateKeyStringsTask`, which turns the
@@ -330,6 +344,57 @@ Neither is a blocker, but both look like the obvious idiom and both fail:
 - **`binding<@Qualifier Type>()` is rejected** - `Inapplicable candidate(s): constructor(scope:
   KClass<*>, binding: binding<*> = ...)`. So a **qualified** map entry still needs a stated
   `@Provides` in a container; only unqualified ones can move onto the class.
+
+### The five gates, and why the iOS test one is not optional any more
+
+Run all five, and measure the baseline **before** you touch anything, or an "after" number means
+nothing:
+
+```
+:<module>:testAndroidHostTest
+:<module>:jvmTest
+:<module>:iosSimulatorArm64Test
+:<module>:compileKotlinIosArm64
+:app:assembleFullDebug
+```
+
+`:app:assembleFullDebug` is required, not a nicety: a missing or duplicated Metro binding only fails
+when the app graph is linked, so no module-level task can catch it.
+
+`iosSimulatorArm64Test` used to be skipped on every machine, which is why several traps below went
+unnoticed for months. It runs on macOS **once a simulator runtime is installed** - that is a separate
+download from Xcode (`xcodebuild -downloadPlatform iOS`). If gradle says *"Xcode does not support
+simulator tests for ios_simulator_arm64"*, that is what it means, not a broken build file.
+
+Never pipe a gradle run: the pipe's exit code hides a failure. Redirect to a log and grep it for
+`^e: `, `BUILD FAILED`, `BUILD SUCCESSFUL`. Read test counts from the XML under
+`<module>/build/test-results/<task>/`, not from the console line, and use `--rerun` when a task would
+otherwise report UP-TO-DATE.
+
+### When strings move, the argument count is what will bite you
+
+Converting `context.getString(R.string.x, a, b)` to `rh.gs(XxxStrings.x, a, b)` is safe in the one way
+people check and unsafe in the way they do not. A wrong **id** does not compile, because the members
+are generated from the XML. A wrong **argument count or order** compiles perfectly and throws at
+runtime - and in this repo those strings end up in `rT.reason`, which reaches Nightscout.
+
+Worse, the two are not equivalent on failure: `ResourceHelperImpl.gs(id, vararg)` catches the format
+error and returns a fallback, where `context.getString` threw. So a mistake stops being a crash and
+becomes a wrong line the user reads.
+
+Cover it with a table test of every id and its argument count, which fills each template with
+arguments of the type each placeholder asks for and asserts nothing is left unfilled. Then:
+
+- **Cross-check that table against the real call sites, not only against the XML.** The table is
+  hand-written; if the same person wrote both, they agree with each other and not with reality. One
+  wrong entry survived a green run and only failed when two lots were combined.
+- A naive argument counter over Kotlin source is wrong twice: a **trailing comma** in a multi-line
+  call reads as an empty argument, and a **nested** `rh.gs(...)` inside an argument list reads as a
+  call site of its own. Both produce false mismatches.
+- Check the **conversion letter against the argument type** (`%d` with an Int, `%f` with a Double).
+  The compiler never looks at it.
+- A template with non-positional specifiers (`%.2f ... %.2f`) is held together by argument order
+  alone. Keep the order byte-identical.
 
 ### Other common blockers
 
