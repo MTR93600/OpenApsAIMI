@@ -12,7 +12,7 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveBackfillWork
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataBackfiller
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveNeuralTrainer
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveNeuralTrainerWorker
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.retention.AimiRetentionWorker
 import java.util.concurrent.TimeUnit
 import dev.zacsweers.metro.Inject
@@ -29,7 +29,7 @@ import dev.zacsweers.metro.AppScope
 class AimiMlTrainingScheduler @Inject constructor(
     private val context: Context,
     private val aapsLogger: AAPSLogger,
-    private val storageHelper: AimiStorageHelper,
+    private val storage: AimiStorage,
     // Injected so their `instance` companions exist before the workers look them up. Both used to
     // schedule themselves from their `init` block; the trainer was never instantiated, so its worker
     // was never enqueued and the attention weights were never produced.
@@ -66,8 +66,8 @@ class AimiMlTrainingScheduler @Inject constructor(
             // Bootstrap: one immediate pass so the FIRST model is created ASAP when enough CSV data already exists.
             // REPLACE (not KEEP) while weights are still missing — a prior failed bootstrap must not block retries.
             val bootstrapNeeded =
-                !storageHelper.getAimiFile(BASAL_WEIGHTS).exists() ||
-                    !storageHelper.getAimiFile(T3C_WEIGHTS).exists()
+                !storage.exists(storage.file(BASAL_WEIGHTS)) ||
+                    !storage.exists(storage.file(T3C_WEIGHTS))
             val bootstrapPolicy = if (bootstrapNeeded) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP
             val bootstrapRequest = OneTimeWorkRequestBuilder<BasalMlTrainerWorker>()
                 .build()

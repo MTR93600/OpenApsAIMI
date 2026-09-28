@@ -12,7 +12,6 @@ import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeHistoryReader
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import java.io.BufferedOutputStream
 import java.io.BufferedWriter
 import java.io.File
@@ -36,7 +35,6 @@ class AimiSupportPackageExporter(
     private val context: Context,
     private val preferences: Preferences,
     private val logger: AAPSLogger,
-    private val storageHelper: AimiStorageHelper,
     private val profileFunction: ProfileFunction,
     private val rh: ResourceHelper,
     private val storage: AimiStorage,
@@ -105,12 +103,12 @@ class AimiSupportPackageExporter(
      */
     private fun addCsvTail(out: ZipOutputStream, fileName: String) {
         try {
-            val source = storageHelper.getAimiFile(fileName)
-            if (!source.exists() || !source.canRead()) {
+            val source = storage.file(fileName)
+            if (!storage.exists(source) || !storage.canRead(source)) {
                 logger.info(LTag.APS, "AIMI_DIAG: $fileName not found, not added to the package")
                 return
             }
-            val lines = source.readLines(Charsets.UTF_8)
+            val lines = storage.readLines(source)
             val tail = AimiSupportCsvTail.select(lines) ?: return
             out.putNextEntry(ZipEntry(fileName))
             out.write(AimiSupportCsvTail.toText(tail).toByteArray(Charsets.UTF_8))

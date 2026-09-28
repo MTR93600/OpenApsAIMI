@@ -11,7 +11,7 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDatasetSchem
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDatasetSchema.IDX_PHYSIO_MASK
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDatasetSchema.IDX_TIMESTAMP
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDatasetSchema.VERSION_CGM_LABELLED
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlinx.serialization.serializer
@@ -65,7 +65,7 @@ import dev.zacsweers.metro.SingleIn
 @SingleIn(AppScope::class)
 class AutodriveNeuralTrainer @Inject constructor(
     private val aapsLogger: AAPSLogger,
-    private val storageHelper: AimiStorageHelper
+    private val storage: AimiStorage
 ) {
     companion object {
 
@@ -203,19 +203,20 @@ class AutodriveNeuralTrainer @Inject constructor(
 
     /** Reads the corpus under [AutodriveDatasetLock], or null when the file cannot be read. */
     private fun readDataset(): List<TrainingExample>? = AutodriveDatasetLock.withDataset {
-        val file = storageHelper.getAimiFile(csvFileName)
-        if (!file.exists()) return@withDataset null
+        val path = storage.file(csvFileName)
+        if (!storage.exists(path)) return@withDataset null
 
         val dataset = mutableListOf<TrainingExample>()
-        try {
-            file.useLines { lines ->
-                lines.drop(1).forEach { line ->
-                    parseRow(line)?.let { dataset.add(it) }
-                }
-            }
+        // Streamed line by line, exactly as `useLines` did: the corpus gains a row every Autodrive
+        // tick and is never truncated, so it must not be held whole.
+        var isHeader = true
+        val readWholeFile = storage.forEachLine(path) { line ->
+            if (isHeader) isHeader = false else parseRow(line)?.let { dataset.add(it) }
+        }
+        if (readWholeFile) {
             dataset
-        } catch (e: Exception) {
-            aapsLogger.error(LTag.AIMI, "NeuralTrainer Error reading dataset: ${e.message}")
+        } else {
+            aapsLogger.error(LTag.AIMI, "NeuralTrainer Error reading dataset")
             null
         }
     }
@@ -307,11 +308,11 @@ class AutodriveNeuralTrainer @Inject constructor(
 
     /** The installed model, in its balanced (uncalibrated) form so the comparison is like for like. */
     private fun loadIncumbent(): Model? = try {
-        val file = storageHelper.getAimiFile(WEIGHTS_FILE_NAME)
-        if (!file.exists() || file.length() == 0L) {
+        val path = storage.file(WEIGHTS_FILE_NAME)
+        if (!storage.exists(path) || storage.sizeBytes(path) == 0L) {
             null
         } else {
-            val json = Json.parseToJsonElement(file.readText()).jsonObject
+            val json = Json.parseToJsonElement(storage.readText(path) ?: error("weights unreadable")).jsonObject
             // `bias_balanced` is absent from files written before the holdout gate existed; their
             // `bias` was the balanced one, because no prior correction was applied.
             val bias = if ("bias_balanced" in json) json.optDoubleCompat("bias_balanced", 0.0) else json.optDoubleCompat("bias", 0.0)
@@ -363,8 +364,8 @@ class AutodriveNeuralTrainer @Inject constructor(
                 put("dataset_schema_version", AutodriveDatasetSchema.CURRENT_VERSION)
             }
 
-            storageHelper.saveFileSafe(
-                storageHelper.getAimiFile(WEIGHTS_FILE_NAME),
+            storage.writeText(
+                storage.file(WEIGHTS_FILE_NAME),
                 prettyWeightsJson.encodeToString(serializer<JsonElement>(), json),
             )
         } catch (e: Exception) {

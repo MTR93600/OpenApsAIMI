@@ -2418,6 +2418,49 @@ seven of its AIMI neighbours are already shared. What is left is one `Calendar`,
 ten `String.format` calls - each of which formats a number that reaches `rT.reason`, so swapping them is
 behaviour-visible and deserves its own lot rather than a sweep.
 
+## 6ap. 2026-09-28: the blocker is no longer imports, it is a handful of androidMain hub types
+
+A compile probe tried to move the "easy" AIMI files to `commonMain` and moved **zero**, on purpose,
+with the compiler naming the blocker each time. That negative result is the useful one, because it
+kills the measure everyone reaches for first.
+
+**The import test is the wrong filter.** Of the 109 AIMI files still in `androidMain`, 42 import no
+`android.*` or `androidx.*` at all - and every one of them is still blocked. **78 of the 109 reference
+another `androidMain` type**, which no scan of Android imports can see. Ordering candidates by file
+size made it worse: the smallest files pointed at the *least* movable ones. `AuditorStatusBadgeSource`
+says so in its own first KDoc line, and it was top of the "looks free" list.
+
+### The real leverage, measured by how many files each hub gates
+
+| files gated | hub type | what it needs |
+|---|---|---|
+| **13** | `utils/AimiStorageHelper` | nothing new - `AimiStorage`/`AimiPath` already exist in commonMain and `AndroidAimiStorage` already wraps this helper. These files simply still call it directly. |
+| 7 | `llm/gemini/GeminiModelResolver` | an HTTP port |
+| 7 | `advisor/AiCoachingService` | an HTTP port |
+| 7 | `advisor/data/AdvisorHistoryRepository` | Gson → kotlinx.serialization, which changes the persisted format, so it needs a migration decision |
+| 6 | `physio/HealthContextRepository`, `steps/UnifiedActivityProviderMTR`, `autodrive/learning/AutodriveDataBackfiller` | Health Connect / the CSV corpus |
+| 5 | `AuditorUIState` | `@ColorRes`/`@DrawableRes` + `core.ui.R` - needs the colour-enum refactor the house rules already ask for |
+
+Direct HTTP imports (`java.net`, `okhttp3`) appear in **9** files, all of them LLM or API clients:
+the four vision providers, `AiCoachingService`, `AuditorAIService`, `GeminiModelResolver`,
+`AIMILLMPhysioAnalyzerMTR`, `OuraApiThermalClient`. **One HTTP port unblocks that whole family**, and
+it is the single biggest theme after storage. `org.json` appears in 13 files and usually travels with
+them.
+
+Gson is a smaller problem than it looked: exactly **one** file imports it.
+
+### Two substitutions that are not general, and were written down as if they were
+
+- **`ReentrantLock` → `AapsLock` does not always work.** `AapsLock` has `lock`/`unlock` and no timed
+  `tryLock`. `AutodriveDatasetLock` exists precisely to attempt a zero-timeout, non-blocking lock so the
+  APS decision thread never waits on the backfiller, and `AimiLoopGate` needs both `tryLock(timeout)`
+  and `isHeldByCurrentThread`. Those files cannot move until `core:interfaces` grows that API - a design
+  decision, not a swap.
+- **`java.io.File` → `AimiStorage` does not cover retention.** The port is whole-file plus
+  `readTailLines`/`forEachLine`. `AimiArchive`, `AimiLineScanner`, `JsonlTailReader` and
+  `HormonitorReader` need `RandomAccessFile`, `FileChannel`, `GZIPOutputStream` or `StandardOpenOption`.
+  The port has to be extended before they can move.
+
 ---
 
 ---

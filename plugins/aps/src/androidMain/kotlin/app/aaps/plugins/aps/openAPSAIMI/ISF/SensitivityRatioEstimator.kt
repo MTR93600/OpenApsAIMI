@@ -1,6 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.ISF
 
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import org.json.JSONObject
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -64,7 +64,7 @@ import kotlin.math.ln
  */
 @SingleIn(AppScope::class)
 class SensitivityRatioEstimator @Inject constructor(
-    private val storageHelper: AimiStorageHelper,
+    private val storage: AimiStorage,
 ) {
 
     data class Sample(
@@ -250,9 +250,9 @@ class SensitivityRatioEstimator @Inject constructor(
         if (stateLoaded) return
         stateLoaded = true
         runCatching {
-            val file = storageHelper.getAimiFile(STATE_FILE_NAME)
-            if (!file.exists() || file.length() == 0L) return@runCatching
-            val json = JSONObject(file.readText())
+            val path = storage.file(STATE_FILE_NAME)
+            if (!storage.exists(path) || storage.sizeBytes(path) == 0L) return@runCatching
+            val json = JSONObject(storage.readText(path) ?: return@runCatching)
             val savedAtMs = json.optLong("saved_at_ms", 0L)
             val ageMs = nowMs - savedAtMs
             // Too old to describe this patient, or stamped in the future by a clock change.
@@ -274,7 +274,7 @@ class SensitivityRatioEstimator @Inject constructor(
                 .put("observation_count", observationCount)
                 .put("last_fold_ms", lastFoldMs)
                 .put("saved_at_ms", nowMs)
-            storageHelper.saveFileSafe(storageHelper.getAimiFile(STATE_FILE_NAME), json.toString())
+            storage.writeText(storage.file(STATE_FILE_NAME), json.toString())
         }
     }
 

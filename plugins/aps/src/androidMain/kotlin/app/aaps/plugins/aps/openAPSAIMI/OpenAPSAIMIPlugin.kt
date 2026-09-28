@@ -1976,7 +1976,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         context = context,
                         preferences = preferences,
                         logger = aapsLogger,
-                        storageHelper = storageHelper,
                         profileFunction = profileFunction,
                         rh = rh,
                         storage = storage,

@@ -5,7 +5,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlin.math.exp
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -23,7 +23,7 @@ import dev.zacsweers.metro.SingleIn
 @SingleIn(AppScope::class)
 class MechanismAttentionGate @Inject constructor(
     private val aapsLogger: AAPSLogger,
-    private val storageHelper: AimiStorageHelper
+    private val storage: AimiStorage
 ) {
     private val weightsFileName = AutodriveNeuralTrainer.WEIGHTS_FILE_NAME
     
@@ -114,11 +114,11 @@ class MechanismAttentionGate @Inject constructor(
 
     private fun loadWeights() {
         try {
-            val file = storageHelper.getAimiFile(weightsFileName)
-            if (!file.exists()) return
+            val path = storage.file(weightsFileName)
+            if (!storage.exists(path)) return
 
-            val content = file.readText()
-            if (content.isBlank()) return
+            val content = storage.readText(path)
+            if (content.isNullOrBlank()) return
 
             val json = Json.parseToJsonElement(content).jsonObject
             weightsCache = AttentionWeights(
