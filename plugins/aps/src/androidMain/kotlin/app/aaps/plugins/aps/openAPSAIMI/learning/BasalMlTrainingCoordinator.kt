@@ -357,6 +357,25 @@ class BasalMlTrainingCoordinator @Inject constructor(
         ) != null
     }
 
+    /** Epoch ms of the last completed training run, or 0 if none yet. Read-only, dashboard-facing. */
+    fun lastTrainedAtMs(): Long = lastTrainMs.get()
+
+    /** True while the training circuit breaker is currently open (recent failures cooling down). */
+    fun isCircuitOpenNow(): Boolean = circuitBreaker.isOpen()
+
+    /**
+     * Where the basal adaptive weights live, for read-only metadata (dashboard use only).
+     *
+     * The reference returned a `java.io.File`. This branch keeps AIMI file access behind [AimiStorage],
+     * so it returns an [AimiPath] instead: a caller asks the same storage for
+     * [AimiStorage.exists] and [AimiStorage.lastModifiedMs], which is all the dashboard ever did with
+     * the `File`. Nothing has to take the path apart, which [AimiPath]'s own contract forbids.
+     *
+     * The name keeps the reference's word "file" on purpose: `AimiSmbModelStore.modelFile` made the
+     * same move on this branch and kept its name, so the two weight accessors read alike.
+     */
+    fun basalWeightsFile(): AimiPath = storage.file(BASAL_WEIGHTS)
+
     private fun isCircuitOpen(now: Long): Boolean = circuitBreaker.isOpen(now)
 
     private fun recordFailure() {

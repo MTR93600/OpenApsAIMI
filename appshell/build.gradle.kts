@@ -31,6 +31,21 @@ plugins {
  * The navigation dependency is already the JetBrains republish, so nothing is waiting on that.
  * `:plugins:sync` is multiplatform now too - an older note here said otherwise.
  */
+/**
+ * Feature plugins that are Android only and have no iOS variant to resolve.
+ *
+ * They are the fork's native CGM drivers, built on Android Bluetooth and NFC, so there is nothing to
+ * build for Apple targets. Listing them in `commonMain` made every iOS compilation of `:appshell`
+ * (and of `:ios:shell` behind it) fail at dependency resolution, before a single source file was
+ * read: Gradle cannot choose an `ios_arm64` variant of a plain Android library. They belong to
+ * `androidMain`, which is the only place that can use them.
+ */
+val ANDROID_ONLY_PLUGINS = listOf(
+    ":plugins:dexcom_oneplus",
+    ":plugins:libkeks",
+    ":plugins:libre3",
+)
+
 kotlin {
     android {
         namespace = "app.aaps.appshell"
@@ -78,7 +93,8 @@ kotlin {
                             // The AIMI KMP modules target jvm and iOS only - they have no Android
                             // variant to resolve, and they are engine libraries rather than feature
                             // plugins, so they never self-register into the plugin map.
-                            !it.path.startsWith(":plugins:aimi-")
+                            !it.path.startsWith(":plugins:aimi-") &&
+                            it.path !in ANDROID_ONLY_PLUGINS
                     }
                     .forEach { api(project(it.path)) }
 
@@ -98,6 +114,10 @@ kotlin {
             dependencies {
                 api(project.dependencies.platform(libs.androidx.compose.bom))
                 implementation(libs.androidx.activity.compose)
+
+                // The Android only feature plugins, kept out of commonMain on purpose - see
+                // ANDROID_ONLY_PLUGINS above. `:app` still reaches them through this source set.
+                ANDROID_ONLY_PLUGINS.forEach { api(project(it)) }
             }
         }
         getByName("androidHostTest") {

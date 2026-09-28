@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.ml
 
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
@@ -89,6 +90,25 @@ object AimiSmbTrainer {
     private val rowsAtLastTrain = AtomicLong(0L)
 
     /**
+     * Outcome of the most recent training ATTEMPT that really ran the gates: [TrainingOutcome.TRAINED],
+     * [TrainingOutcome.REJECTED_BY_GATES], [TrainingOutcome.TOO_FEW_SAMPLES],
+     * [TrainingOutcome.REFUSED_HEADER], [TrainingOutcome.SKIPPED_NO_CSV] or [TrainingOutcome.ERROR].
+     * Persisted, and shown on the dashboard / support report as the answer to "why does training not
+     * work". Never set to [TrainingOutcome.SKIPPED_NOT_DUE] or [TrainingOutcome.CIRCUIT_OPEN] — those
+     * are "nothing happened, still waiting" states that would otherwise overwrite a real rejection
+     * reason on every idle loop tick (up to ~18h/day) and erase it from both memory and disk. See
+     * [currentWaitingStatusRef] for that case.
+     */
+    private val lastAttemptResultRef = AtomicReference<TrainingResult?>(null)
+
+    /**
+     * Why the trainer is not attempting right now: [TrainingOutcome.SKIPPED_NOT_DUE] or
+     * [TrainingOutcome.CIRCUIT_OPEN]. In-memory only, NEVER persisted, and never a substitute for
+     * [lastAttemptResultRef] — it supplements it (dashboard: "Last attempt: ... / Now: waiting, ...").
+     */
+    private val currentWaitingStatusRef = AtomicReference<TrainingResult?>(null)
+
+    /**
      * Guards [loadPersistedState] to run exactly once, whichever of [loadModel] or [trainNow] reaches it
      * first.
      */
@@ -139,8 +159,13 @@ object AimiSmbTrainer {
         val safeLastAttempt = AimiSmbTrainingSchedule.sanitizeTimestamp(lastAttemptMs.get(), now)
         if (now - safeLastAttempt < AimiSmbTrainingSchedule.TRAIN_INTERVAL_MS) return
 
-        // Circuit breaker guard
-        if (isCircuitOpen(now)) return
+        // Circuit breaker guard. "Still cooling down" is a waiting state, not a real attempt: it goes to
+        // [currentWaitingStatusRef] only, in memory, so it never overwrites the persisted reason a real
+        // attempt left behind and never turns into a disk write on every loop tick.
+        if (isCircuitOpen(now)) {
+            currentWaitingStatusRef.set(TrainingResult(atMs = now, outcome = TrainingOutcome.CIRCUIT_OPEN))
+            return
+        }
 
         scope.launch {
             if (trainMutex.isLocked) return@launch  // Another training in progress
@@ -149,11 +174,45 @@ object AimiSmbTrainer {
                     trainNow(storage, dir, csvFile)
                 } catch (e: Exception) {
                     recordFailure()
+                    recordResult(
+                        storage,
+                        dir,
+                        TrainingResult(
+                            atMs = aimiWallClockMs(),
+                            outcome = TrainingOutcome.ERROR,
+                            gateDetail = e.message ?: e.toString(),
+                        ),
+                    )
                     Log.e(TAG, "Training failed: ${e.message}")
                 }
             }
         }
     }
+
+    /**
+     * Outcome of the most recent training ATTEMPT ([TrainingOutcome.TRAINED],
+     * [TrainingOutcome.REJECTED_BY_GATES], [TrainingOutcome.TOO_FEW_SAMPLES],
+     * [TrainingOutcome.REFUSED_HEADER], [TrainingOutcome.SKIPPED_NO_CSV] or [TrainingOutcome.ERROR]), or
+     * null if none has run since the app started and none was persisted. Never
+     * [TrainingOutcome.SKIPPED_NOT_DUE] or [TrainingOutcome.CIRCUIT_OPEN] — see [currentWaitingStatus].
+     */
+    fun lastResult(): TrainingResult? = lastAttemptResultRef.get()
+
+    /**
+     * Why the trainer is not attempting right now ([TrainingOutcome.SKIPPED_NOT_DUE] or
+     * [TrainingOutcome.CIRCUIT_OPEN]), or null when the last thing that happened was a real attempt.
+     * In-memory only: never persisted, and this is never shown IN PLACE of [lastResult] — only next to it.
+     */
+    fun currentWaitingStatus(): TrainingResult? = currentWaitingStatusRef.get()
+
+    /** Epoch ms of the last completed training ATTEMPT (success or not), or 0 if none yet. Dashboard-facing. */
+    fun lastAttemptAtMs(): Long = lastAttemptMs.get()
+
+    /** Epoch ms of the last SUCCESSFUL training (model published), or 0 if none yet. Dashboard-facing. */
+    fun lastTrainedAtMs(): Long = lastTrainMs.get()
+
+    /** True while the training circuit breaker is currently open (recent failures cooling down). */
+    fun isCircuitOpenNow(): Boolean = circuitBreaker.isOpen()
 
     /**
      * Refine [predictedSmb] using the in-memory model.
@@ -194,18 +253,32 @@ object AimiSmbTrainer {
 
     // ---- Internal training ---------------------------------------------------
 
-    private suspend fun trainNow(storage: AimiStorage, dir: AimiPath, csvFile: AimiPath) {
+    /**
+     * `@VisibleForTesting`: this is the whole training pipeline, always run under [trainMutex] in
+     * production via [maybeTrainAsync]. Widened to `internal` only so a test can call it directly and
+     * await its result instead of racing the fire-and-forget coroutine [maybeTrainAsync] launches. No
+     * production call site does this.
+     */
+    @VisibleForTesting
+    internal suspend fun trainNow(storage: AimiStorage, dir: AimiPath, csvFile: AimiPath) {
         // Caller already holds [trainMutex] (`maybeTrainAsync`). Do not take it again: Mutex is not reentrant.
         ensureStateLoadedLocked(storage, dir)
 
+        val startedAtMs = aimiWallClockMs()
+
         if (!storage.exists(csvFile)) {
             Log.d(TAG, "CSV not found — skip training")
+            recordResult(storage, dir, TrainingResult(atMs = startedAtMs, outcome = TrainingOutcome.SKIPPED_NO_CSV))
             return
         }
 
         val headerLine = storage.readFirstLine(csvFile)
         if (headerLine == null) {
             Log.d(TAG, "CSV not found — skip training")
+            // The reference read the whole file first, so it could report the row count here. This port
+            // reads the header before walking the rows, so the count is not known yet and stays 0. The
+            // outcome is the same; only that display number is missing.
+            recordResult(storage, dir, TrainingResult(atMs = startedAtMs, outcome = TrainingOutcome.SKIPPED_NO_CSV))
             return
         }
 
@@ -221,6 +294,14 @@ object AimiSmbTrainer {
         }
         if (!walkedOk) {
             Log.w(TAG, "CSV walk failed — skip training")
+            // No reference equivalent: the reference read the file in one go and let an I/O failure throw.
+            // This port answers `false` instead, so the outcome that fits is ERROR — a real attempt that
+            // could not finish. It does NOT feed the circuit breaker, exactly as before this reading existed.
+            recordResult(
+                storage,
+                dir,
+                TrainingResult(atMs = startedAtMs, outcome = TrainingOutcome.ERROR, gateDetail = "CSV walk failed"),
+            )
             return
         }
         val totalRows = dataLines.size.toLong()
@@ -244,12 +325,27 @@ object AimiSmbTrainer {
         }
         if (!decision.attempt) {
             Log.d(TAG, "Skip training: ${decision.reason}")
+            // In-memory only, not persisted: this path can run on every loop tick for hours while the
+            // corpus is still growing toward MIN_NEW_ROWS_TO_RETRAIN or STALE_ATTEMPT_MS, and a "still not
+            // due" result is not worth a disk write every few minutes. `decision.reason` (for example
+            // "only 88 new rows (need 200), last attempt not stale") is kept as the detail so a dashboard
+            // "Now: waiting" line can say why, not just that it is waiting.
+            currentWaitingStatusRef.set(
+                TrainingResult(
+                    atMs = now,
+                    outcome = TrainingOutcome.SKIPPED_NOT_DUE,
+                    totalRows = totalRows,
+                    gateDetail = decision.reason,
+                ),
+            )
             return
         }
 
         // This attempt is really running past the gates: the rate limit and the 24h trigger both
-        // measure from here, whatever the outcome below turns out to be.
+        // measure from here, whatever the outcome below turns out to be. Clear the waiting status too —
+        // it would otherwise show a stale "waiting" reason while this real attempt runs.
         lastAttemptMs.set(now)
+        currentWaitingStatusRef.set(null)
         persistState(storage, dir)
 
         val headers = headerLine.split(",").map { it.trim() }
@@ -257,14 +353,50 @@ object AimiSmbTrainer {
         if (!headerCheck.valid) {
             Log.e(TAG, "SMB corpus refused — no training. ${headerCheck.reason}")
             discardModelTrainedOnUnreadableCorpus(storage, dir)
+            recordResult(
+                storage,
+                dir,
+                TrainingResult(
+                    atMs = now,
+                    outcome = TrainingOutcome.REFUSED_HEADER,
+                    totalRows = totalRows,
+                    gateDetail = headerCheck.reason,
+                ),
+            )
             return
         }
-        val corpus = AimiSmbCorpus.buildTrainingCorpus(headers, dataLines) ?: return
+        val corpus = AimiSmbCorpus.buildTrainingCorpus(headers, dataLines)
+        if (corpus == null) {
+            recordResult(
+                storage,
+                dir,
+                TrainingResult(
+                    atMs = now,
+                    outcome = TrainingOutcome.REFUSED_HEADER,
+                    totalRows = totalRows,
+                    gateDetail = "corpus could not be built",
+                ),
+            )
+            return
+        }
         val inputs = corpus.inputs
         val targets = corpus.targets
+        val rowsRejectedByFilter = totalRows - inputs.size
 
         if (inputs.size < AimiSmbTrainingSchedule.MIN_TRAINING_SAMPLES) {
             Log.w(TAG, "Insufficient training samples (${inputs.size}) — skip")
+            recordResult(
+                storage,
+                dir,
+                TrainingResult(
+                    atMs = now,
+                    outcome = TrainingOutcome.TOO_FEW_SAMPLES,
+                    totalRows = totalRows,
+                    samplesAfterFilter = inputs.size,
+                    rowsRejectedByFilter = rowsRejectedByFilter,
+                    gateDetail = "${inputs.size} samples < ${AimiSmbTrainingSchedule.MIN_TRAINING_SAMPLES} required",
+                ),
+            )
             return
         }
 
@@ -280,6 +412,13 @@ object AimiSmbTrainer {
         // froze the basal head for 40 days: a dead incumbent anchored the comparison and every later
         // candidate was dropped. The liveness probes are the safe way to keep a bad model out; a
         // val-loss ratchet is not.
+        //
+        // The gate-rejection detail a dashboard / support report shows is read off the very last line
+        // this callback receives: every rejection path in `NeuralModelTrainer.trainAndPublish` logs its
+        // "spread x < y" / "mae ratio" reason immediately before returning null, so capturing the last
+        // message is the same as capturing the reason, without changing `trainAndPublish`'s signature or
+        // its behaviour for the basal caller.
+        var lastGateMessage = ""
         val net = NeuralModelTrainer.trainAndPublish(
             storage = storage,
             weightsPath = AimiSmbModelStore.modelFile(storage, dir),
@@ -292,7 +431,10 @@ object AimiSmbTrainer {
             spreadSweepValues = BasalNeuralLearner.ClinicalBgAnchors.PROBE_BG_MGDL,
             minOutputSpread = SMB_MIN_OUTPUT_SPREAD,
             maxBaselineMaeRatio = SMB_MAX_BASELINE_MAE_RATIO,
-            log = { Log.i(TAG, it) },
+            log = { message ->
+                Log.i(TAG, message)
+                lastGateMessage = message
+            },
         )
         if (net != null) {
             modelRef.set(net)
@@ -301,6 +443,17 @@ object AimiSmbTrainer {
             persistState(storage, dir)
             circuitBreaker.reset()   // reset circuit breaker on success
             Log.i(TAG, "Model trained and saved successfully (${inputs.size} rows)")
+            recordResult(
+                storage,
+                dir,
+                TrainingResult(
+                    atMs = now,
+                    outcome = TrainingOutcome.TRAINED,
+                    totalRows = totalRows,
+                    samplesAfterFilter = inputs.size,
+                    rowsRejectedByFilter = rowsRejectedByFilter,
+                ),
+            )
         } else {
             // RULING R-CB (tip 6a6561caab): a rejected candidate must not disable the model already in
             // service. recordFailure feeds the breaker, which after 3 failures makes refine return the
@@ -309,6 +462,18 @@ object AimiSmbTrainer {
             if (AimiSmbTrainingSchedule.countGateRejectionAsBreakerFailure(modelRef.get() != null)) {
                 recordFailure()
             }
+            recordResult(
+                storage,
+                dir,
+                TrainingResult(
+                    atMs = now,
+                    outcome = TrainingOutcome.REJECTED_BY_GATES,
+                    totalRows = totalRows,
+                    samplesAfterFilter = inputs.size,
+                    rowsRejectedByFilter = rowsRejectedByFilter,
+                    gateDetail = lastGateMessage,
+                ),
+            )
         }
     }
 
@@ -386,8 +551,12 @@ object AimiSmbTrainer {
      * A loaded timestamp more than [AimiSmbTrainingSchedule.CLOCK_SKEW_TOLERANCE_MS] in the future is
      * reset to 0. Neither timestamp is ever moved backwards by a load: the larger of the current
      * in-memory value and the loaded one wins.
+     *
+     * `@VisibleForTesting`: normally reached only through [ensureStateLoadedLocked]; exposed `internal`
+     * so a test can prove the round trip directly instead of racing [loadModel]'s coroutine.
      */
-    private fun loadPersistedState(storage: AimiStorage, dir: AimiPath) {
+    @VisibleForTesting
+    internal fun loadPersistedState(storage: AimiStorage, dir: AimiPath) {
         val file = stateFile(storage, dir)
         if (!storage.exists(file)) return
         try {
@@ -396,12 +565,22 @@ object AimiSmbTrainer {
             lastAttemptMs.set(maxOf(lastAttemptMs.get(), loaded.lastAttemptMs))
             lastTrainMs.set(maxOf(lastTrainMs.get(), loaded.lastTrainMs))
             rowsAtLastTrain.set(loaded.rowsAtLastTrain)
+            // Only when nothing has happened in this process yet: a result this run produced is newer
+            // than anything on disk and must not be replaced by it.
+            if (lastAttemptResultRef.get() == null) {
+                loaded.lastResult?.let { lastAttemptResultRef.set(it) }
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Could not load SMB training state: ${e.message}")
         }
     }
 
-    private fun persistState(storage: AimiStorage, dir: AimiPath) {
+    /**
+     * `@VisibleForTesting`: written only from the training paths above in production; exposed `internal`
+     * so a test can write a known state and read it back.
+     */
+    @VisibleForTesting
+    internal fun persistState(storage: AimiStorage, dir: AimiPath) {
         try {
             val file = stateFile(storage, dir)
             storage.createParentDirectories(file)
@@ -410,6 +589,7 @@ object AimiSmbTrainer {
                     lastAttemptMs = lastAttemptMs.get(),
                     lastTrainMs = lastTrainMs.get(),
                     rowsAtLastTrain = rowsAtLastTrain.get(),
+                    lastResult = lastAttemptResultRef.get(),
                 ),
             )
             if (!storage.replaceText(file, text)) {
@@ -418,5 +598,72 @@ object AimiSmbTrainer {
         } catch (e: Exception) {
             Log.w(TAG, "Could not persist SMB training state: ${e.message}")
         }
+    }
+
+    /**
+     * Records [result] as the last real training outcome (see [lastAttemptResultRef]), in memory and on
+     * disk.
+     *
+     * Skips the disk write when [result] carries the same outcome, counters and detail as what is
+     * already held (only the timestamp differs) — otherwise a "no CSV yet", or a candidate refused again
+     * for the SAME reason, would rewrite the state file on every attempt forever, for a user for whom
+     * nothing has actually changed.
+     */
+    private fun recordResult(storage: AimiStorage, dir: AimiPath, result: TrainingResult) {
+        val previous = lastAttemptResultRef.get()
+        lastAttemptResultRef.set(result)
+        val unchanged = previous != null &&
+            previous.outcome == result.outcome &&
+            previous.totalRows == result.totalRows &&
+            previous.samplesAfterFilter == result.samplesAfterFilter &&
+            previous.rowsRejectedByFilter == result.rowsRejectedByFilter &&
+            previous.gateDetail == result.gateDetail
+        if (unchanged) return
+        persistState(storage, dir)
+    }
+
+    // ---- Test-only access ----------------------------------------------------
+    // [AimiSmbTrainer] is a singleton object, so its state otherwise leaks between test cases (and test
+    // classes, within the same JVM). None of these is called from production code.
+
+    /** Test-only: resets every piece of shared state back to "just started". */
+    @VisibleForTesting
+    internal fun resetForTest() {
+        lastAttemptMs.set(0L)
+        lastTrainMs.set(0L)
+        rowsAtLastTrain.set(0L)
+        lastAttemptResultRef.set(null)
+        currentWaitingStatusRef.set(null)
+        modelRef.set(null)
+        staleModelDiscarded.set(false)
+        stateLoaded.set(false)
+        circuitBreaker.reset()
+    }
+
+    /** Test-only: current `rowsAtLastTrain`, which otherwise has no getter. */
+    @VisibleForTesting
+    internal fun rowsAtLastTrainForTest(): Long = rowsAtLastTrain.get()
+
+    /**
+     * Test-only: sets the three persisted counters directly, so their persistence and the shrunk-CSV
+     * correction (through [trainNow], not just the pure `AimiSmbTrainingSchedule.shouldAttempt`) can be
+     * tested without depending on a real — stochastic, unseeded — successful training run to produce
+     * non-zero values.
+     */
+    @VisibleForTesting
+    internal fun setPersistedStateForTest(lastAttemptMs: Long = 0L, lastTrainMs: Long = 0L, rowsAtLastTrain: Long = 0L) {
+        this.lastAttemptMs.set(lastAttemptMs)
+        this.lastTrainMs.set(lastTrainMs)
+        this.rowsAtLastTrain.set(rowsAtLastTrain)
+    }
+
+    /**
+     * Test-only: sets (or clears) the in-memory model, so the rule that a rejected candidate must not
+     * disable an incumbent already in service can be tested without depending on a real — stochastic,
+     * unseeded — successful training run to populate `modelRef`.
+     */
+    @VisibleForTesting
+    internal fun setModelForTest(net: AimiNeuralNetwork?) {
+        modelRef.set(net)
     }
 }

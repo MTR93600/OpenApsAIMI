@@ -1,6 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.ml
 
+import app.aaps.core.data.json.OrgJsonCompat.optIntCompat
+import app.aaps.core.data.json.OrgJsonCompat.optJsonObjectCompat
 import app.aaps.core.data.json.OrgJsonCompat.optLongCompat
+import app.aaps.core.data.json.OrgJsonCompat.optStringCompat
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -61,11 +64,18 @@ internal object AimiSmbTrainingSchedule {
      */
     const val CLOCK_SKEW_TOLERANCE_MS = 5L * 60 * 1000 // 5 min
 
-    /** The three counters the reference writes to [STATE_FILE_NAME]. */
+    /**
+     * What the reference writes to [STATE_FILE_NAME]: the three counters, plus the last real training
+     * result.
+     *
+     * [lastResult] is the reference's `lastResult` block. It is optional so an older state file, or one
+     * written before any attempt ran, still decodes into valid counters.
+     */
     data class Counters(
         val lastAttemptMs: Long,
         val lastTrainMs: Long,
         val rowsAtLastTrain: Long,
+        val lastResult: TrainingResult? = null,
     )
 
     /** Decision returned by [shouldAttempt]: whether to run, why, and the row counter corrected for a shrunk CSV. */
@@ -163,11 +173,29 @@ internal object AimiSmbTrainingSchedule {
         put("lastAttemptMs", counters.lastAttemptMs)
         put("lastTrainMs", counters.lastTrainMs)
         put("rowsAtLastTrain", counters.rowsAtLastTrain)
+        counters.lastResult?.let { result ->
+            put(
+                "lastResult",
+                buildJsonObject {
+                    put("atMs", result.atMs)
+                    put("outcome", result.outcome.name)
+                    put("totalRows", result.totalRows)
+                    put("samplesAfterFilter", result.samplesAfterFilter)
+                    put("rowsRejectedByFilter", result.rowsRejectedByFilter)
+                    put("gateDetail", result.gateDetail)
+                },
+            )
+        }
     }.toString()
 
     /**
-     * Reads the three counters. A timestamp more than [CLOCK_SKEW_TOLERANCE_MS] past [nowMs] comes back
-     * as 0. Unreadable text comes back as null, which the trainer treats as "leave memory as it is".
+     * Reads the three counters and the last training result. A timestamp more than
+     * [CLOCK_SKEW_TOLERANCE_MS] past [nowMs] comes back as 0. Unreadable text comes back as null, which
+     * the trainer treats as "leave memory as it is".
+     *
+     * A missing, malformed, or unknown-named `lastResult` block leaves [Counters.lastResult] null rather
+     * than failing the whole read: the counters are what the schedule needs, the result is what a screen
+     * shows, and a state file written by an older or newer build must not stop training.
      */
     fun decodeCounters(text: String, nowMs: Long): Counters? {
         val json = try {
@@ -179,6 +207,22 @@ internal object AimiSmbTrainingSchedule {
             lastAttemptMs = sanitizeTimestamp(json.optLongCompat("lastAttemptMs", 0L), nowMs),
             lastTrainMs = sanitizeTimestamp(json.optLongCompat("lastTrainMs", 0L), nowMs),
             rowsAtLastTrain = json.optLongCompat("rowsAtLastTrain", 0L),
+            lastResult = decodeResult(json.optJsonObjectCompat("lastResult")),
+        )
+    }
+
+    /** The `lastResult` block, or null when it is absent or names an outcome this build does not know. */
+    private fun decodeResult(json: JsonObject?): TrainingResult? {
+        if (json == null) return null
+        val name = json.optStringCompat("outcome")
+        val outcome = TrainingOutcome.entries.firstOrNull { it.name == name } ?: return null
+        return TrainingResult(
+            atMs = json.optLongCompat("atMs", 0L),
+            outcome = outcome,
+            totalRows = json.optLongCompat("totalRows", 0L),
+            samplesAfterFilter = json.optIntCompat("samplesAfterFilter", 0),
+            rowsRejectedByFilter = json.optLongCompat("rowsRejectedByFilter", 0L),
+            gateDetail = json.optStringCompat("gateDetail"),
         )
     }
 }

@@ -191,6 +191,50 @@ class AimiSmbTrainingScheduleTest {
         assertNull(AimiSmbTrainingSchedule.decodeCounters("not-json", now))
     }
 
+    @Test
+    fun the_last_training_result_round_trips_with_the_counters() {
+        val result = TrainingResult(
+            atMs = now - 120_000L,
+            outcome = TrainingOutcome.REJECTED_BY_GATES,
+            totalRows = 900L,
+            samplesAfterFilter = 640,
+            rowsRejectedByFilter = 260L,
+            gateDetail = "spread 0.021 < 0.05 - discard",
+        )
+
+        val encoded = AimiSmbTrainingSchedule.encodeCounters(
+            AimiSmbTrainingSchedule.Counters(
+                lastAttemptMs = now - 120_000L,
+                lastTrainMs = now - 86_400_000L,
+                rowsAtLastTrain = 900L,
+                lastResult = result,
+            ),
+        )
+
+        assertEquals(result, AimiSmbTrainingSchedule.decodeCounters(encoded, now)?.lastResult)
+    }
+
+    @Test
+    fun a_state_file_without_a_result_block_still_decodes_its_counters() {
+        val noResult = """{"lastAttemptMs":${now - 3_600_000L},"lastTrainMs":0,"rowsAtLastTrain":12}"""
+
+        val decoded = AimiSmbTrainingSchedule.decodeCounters(noResult, now)
+
+        assertEquals(12L, decoded?.rowsAtLastTrain)
+        assertNull(decoded?.lastResult)
+    }
+
+    @Test
+    fun a_result_naming_an_outcome_this_build_does_not_know_is_dropped_without_losing_the_counters() {
+        val unknown = """{"lastAttemptMs":${now - 3_600_000L},"lastTrainMs":0,"rowsAtLastTrain":12,""" +
+            """"lastResult":{"atMs":${now - 3_600_000L},"outcome":"SOMETHING_NEW"}}"""
+
+        val decoded = AimiSmbTrainingSchedule.decodeCounters(unknown, now)
+
+        assertEquals(12L, decoded?.rowsAtLastTrain)
+        assertNull(decoded?.lastResult)
+    }
+
     /**
      * Applies the tip R-CB rule to the real breaker: a gate rejection counts only when no model is in service.
      * Returns whether this rejection just tripped the breaker, which is false when it was not counted.

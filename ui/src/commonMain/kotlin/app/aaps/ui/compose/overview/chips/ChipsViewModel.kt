@@ -34,6 +34,7 @@ import dev.zacsweers.metro.AssistedFactory
 import dev.zacsweers.metro.AssistedInject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
@@ -59,7 +60,14 @@ class ChipsViewModel @AssistedInject constructor(
     private val aapsLogger: AAPSLogger,
     private val preferences: Preferences,
     private val rxBus: RxBus,
-    private val pluginStatusBadgeSource: PluginStatusBadgeSource
+    /**
+     * The one plugin that contributes a status chip, when a platform has one.
+     *
+     * Null on a target where no plugin binds it - iOS today, which has no AIMI plugin at all. The
+     * chip is then not drawn, rather than drawn empty by a stub that answers "nothing to report":
+     * a chip that is always idle looks like a working feature with nothing to say.
+     */
+    private val pluginStatusBadgeSource: PluginStatusBadgeSource? = null
 ) : ViewModel() {
 
     @AssistedFactory
@@ -196,10 +204,12 @@ class ChipsViewModel @AssistedInject constructor(
         )
     }
 
-    val pluginBadge: StateFlow<PluginStatusBadge> = pluginStatusBadgeSource.badge
+    /** Null while no plugin contributes a chip - see [pluginStatusBadgeSource]. */
+    val pluginBadge: StateFlow<PluginStatusBadge?> =
+        pluginStatusBadgeSource?.badge ?: MutableStateFlow(null)
 
     fun onPluginBadgeClick() {
-        pluginStatusBadgeSource.onBadgeClick()
+        pluginStatusBadgeSource?.onBadgeClick()
     }
 
     fun showIobInfo() {

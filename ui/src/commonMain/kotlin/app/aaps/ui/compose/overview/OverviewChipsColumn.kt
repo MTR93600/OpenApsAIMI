@@ -53,7 +53,7 @@ fun OverviewChipsColumn(
     iobUiState: IobUiState,
     cobUiState: CobUiState,
     sensitivityUiState: SensitivityUiState,
-    pluginBadge: PluginStatusBadge,
+    pluginBadge: PluginStatusBadge?,
     onNavigate: (NavigationRequest) -> Unit,
     onTbrChipClick: () -> Unit,
     onIobChipClick: () -> Unit,
@@ -139,10 +139,13 @@ fun OverviewChipsColumn(
             state = sensitivityUiState,
             modifier = Modifier.fillMaxWidth()
         )
-        PluginStatusChip(
-            badge = pluginBadge,
-            onClick = onPluginBadgeClick
-        )
+        // Only when a plugin contributes one; see ChipsViewModel.pluginStatusBadgeSource.
+        pluginBadge?.let { badge ->
+            PluginStatusChip(
+                badge = badge,
+                onClick = onPluginBadgeClick
+            )
+        }
     }
 }
 
