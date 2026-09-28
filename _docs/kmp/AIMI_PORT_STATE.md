@@ -1402,8 +1402,9 @@ a reader who greps for it is not left looking for a file that no longer exists.
 
 **One staged file remains**: `orchestration/AimiLoopRuntimeGuard.kt` (16 lines). The standing
 decision is to hold it rather than port it speculatively - it wraps a live telemetry method that
-nothing calls yet - and to port it together with whatever feature ends up needing it. That decision
-is unchanged and should be put to the user before it is revisited.
+nothing calls yet - and to port it together with whatever feature ends up needing it. **Updated
+2026-09-28: that feature has been named.** The owner confirmed the Glass skin and the V2 dashboard are
+in scope, so this file is deferred until they land, not held for want of a purpose. See 6ak.
 
 ---
 
@@ -2214,6 +2215,117 @@ five parameters, so every run fails. Every other AIMI worker takes only those tw
 
 **Not fixed, on purpose.** Registering it is one `@Provides` block, but it turns on a learning loop
 that affects basal dosing. That is a decision for the user, not part of a port.
+
+## 6ak. 2026-09-28: the home screen decision — Glass and Dashboard V2 are IN SCOPE
+
+The owner was asked directly, because three files kept being re-counted as "missing" at every audit
+and two live telemetry functions have no caller on this branch. His answer, in his own words: the
+Glass skin and the dashboard both matter, an AIMI-specific alternative home screen is worth having,
+**he runs the Glass skin on his own phone today**, and other users run the dashboard.
+
+**So they are not dropped. They are not ported yet. Nothing here may be deleted as dead on the
+grounds that its consumer is absent — the consumer is coming.**
+
+What is absent on this branch, measured 2026-09-28:
+
+| On `origin/dev_OAPSAIMI` | Files | Here |
+|---|---|---|
+| `plugins/main/.../general/dashboard/` (`glass/` 23, `compose/` 19, `viewmodel/` 3, `views/` 4, plus the shell) | 67 | absent, no equivalent |
+| `plugins/main/.../skins/` (`DashboardHomeVariant`, `DashboardHomeVariantResolver`, `SkinGlass`, `SkinClassic`, `SkinMinimal`, `SkinLowRes`, `SkinProvider`, …) | 12 | **absent entirely** |
+
+The order matters and is not obvious from the file counts: the reference picks the home screen at
+runtime through `DashboardHomeVariantResolver.resolve(...)` in `ComposeMainActivity` (ref `:676`,
+`:681`, `:894`, `:1048`), with three outcomes — `OVERVIEW`, the V2 dashboard, or `GLASS`. This
+branch's `ComposeMainActivity` goes straight to `OverviewScreen` with no resolver at all. **The
+missing piece is the home-screen choice mechanism, and the screens come after it.**
+
+### What this decision reverses
+
+- `AIMI_PORT_STATE.md` §1403-1406 and §2236-2243 said to hold `orchestration/AimiLoopRuntimeGuard.kt`
+  (the last staged file) until a feature needed it, and to ask the user before revisiting. Asked and
+  answered: **the feature that needs it is in scope.** Keep the file staged, but it is now waiting for
+  a named feature, not waiting for a reason to exist. `_docs/kmp/staging/` cannot be retired yet.
+- The same applies to `pkpd/TrajectoryRuntimeRepository.kt`, which was correctly not ported on
+  2026-09-27 because its only reader is `glass/GlassLoopDashboardViewModel`. That reader is coming,
+  so the file is deferred, not refused.
+- `AimiLoopTelemetry.isTickInProgress()` / `activeTickAgeMs()` have no caller here. That is the
+  amputated consumer chain of the same feature. Do not "clean them up".
+
+### A structural blocker found on 2026-09-27, which this decision makes urgent
+
+On the reference, one consumer of the loop guard is `IobCobCalculatorPlugin`
+(`scheduleDeferredAppInitializedCalculation`). On this branch that plugin now lives in
+**`plugins/main/src/commonMain`**, so it cannot reference an `androidMain` type in `:plugins:aps` at
+all. The deferral cannot come back in its reference shape; it needs a port in `core:interfaces`, the
+way `PluginStatusBadgeSource` already solved the same problem for the auditor badge.
+
+## 6al. 2026-09-28: the Glass plan, and the three things a first survey got wrong
+
+A survey scoped the Glass + V2 dashboard port; an adversarial verification then broke two of its three
+load-bearing claims. Both are recorded here because the wrong version is the intuitive one and will be
+re-derived by anyone who looks at the file list rather than at the code.
+
+**Wrong: "the home screen is a one-line swap in the `overview` slot."** There are two functions called
+`OverviewScreen` on this branch. `ui/src/commonMain/.../main/OverviewScreen.kt:68` is the whole shell -
+drawer, top bar, bottom navigation, sheets - and it is what sits in
+`appNavGraph(overview = …)` (`appshell/src/commonMain/.../navigation/AppNavGraph.kt:188`, filled at
+`app/src/main/kotlin/app/aaps/ComposeMainActivity.kt:480`). `ui/src/commonMain/.../overview/OverviewScreen.kt:50`
+is the home content. Putting a Glass screen in that slot would delete the app chrome. The reference does
+not do that either: it keeps its shell and passes the variant in, with `isGlassSkin` switching the bottom
+bar (ref `ui/src/main/.../main/MainScreen.kt:160,163,250,452`). So the real work is: parameters on this
+branch's shell, a `GlassNavigationBar` nobody counted, and 11 `AppRoute` entries in `:appshell`.
+
+**Wrong: "no new inter-module dependency is needed."** The conclusion survives, but only in a shape the
+survey did not state: `GlassLoopDashboardState` in `core:interfaces`, the screen in `:ui`, the ViewModel
+in `:plugins:aps`, and the nav graph handed a `StateFlow` rather than the ViewModel type. `:appshell` has
+no `:plugins:aps` dependency and `:plugins:aps` has no `:ui`, so any other placement needs a new edge.
+
+**Right, and it is the good news: Glass does not touch the shipping Overview graph.** No glass file
+references `BgGraphCompose`; it renders its own Canvas chart and reads only data flows from
+`GraphViewModel`. The reference's +9 dashboard-only parameters on the shared graph
+(`BgGraphCompose` 8 params here vs 17 there) belong to the V2 dashboard alone, which keeps the highest
+risk item out of the owner's slice.
+
+### A dropped capability that blocks the Glass loop screen
+
+`plugins/aps/src/androidMain/.../ml/AimiSmbTrainer.kt` is **422 lines here against 901 on the reference**.
+`lastResult()`, `currentWaitingStatus()`, `lastAttemptAtMs()`, `lastTrainedAtMs()`, `isCircuitOpenNow()` and
+the `TrainingOutcome`/`TrainingResult` types do not exist here at all, and neither do
+`BasalMlTrainingCoordinator.lastTrainedAtMs()/isCircuitOpenNow()/basalWeightsFile()`. These are exactly what
+`GlassLoopDashboardViewModel` reads. This is failure shape (e) - a capability dropped in the port, not
+renamed - and it has to be restored before that screen can exist.
+
+Other things nobody had counted: Hilt does not exist on this branch (5 glass files use `hiltViewModel`),
+`core/ui/.../compose/glass/` (4 files) is absent, ~98 strings, 5 drawables to convert to `ImageVector`,
+3 preference keys, and four glass files sit on LiveData that has to become a `StateFlow`.
+
+### The app-init deferral: do NOT port it
+
+`AppInitCalculationPolicy` on the reference is two things, and only one is cosmetic. `DEFER_MS = 5_000`
+is UI smoothness, but `WARM_START_MAX_BUCKETS_TO_COMPUTE = 100` **truncates the autosens computation** on
+cold start - consumed at `workflow/.../PrepareGraphDataWorker.kt:297` and `:528`, where it bounds both the
+AutosensData loop and the oref loop to roughly the last 8 hours. And the guarded path drops the work
+rather than rescheduling it: if an AIMI tick is running at T+5 s, the whole app-init recalculation never
+happens. **This branch is currently the safer of the two** - it recomputes everything, immediately,
+unguarded (`plugins/main/src/commonMain/.../IobCobCalculatorPlugin.kt:175-188`). Porting the reference
+shape would be a dosing-input regression. If the cold-start ANR is real, it needs a design that
+reschedules, and the bucket truncation needs its own clinical decision.
+
+## 6am. 2026-09-28: Adaptive Smoothing is in scope, by the owner's decision
+
+Asked whether `GlassSensorQualityScreen` should be dropped since adaptive smoothing does not exist here,
+the owner answered that the plugin matters in its own right: it gives good smoothing **and** the sensor
+quality view. So it is ported, and it is a clinical port - it changes the glucose series the loop doses on.
+
+Four of the five smoothing plugins were already in `commonMain`; only the adaptive one and its 6 tests were
+left behind, plus `SmoothingContext` and the three quality types in `core:interfaces`.
+
+**The part to know before touching it:** porting it changes the shared `Smoothing` interface. `smooth`
+becomes `suspend` and takes a `SmoothingContext`, and two defaulted members appear. That is not optional -
+it is the reference contract, and on this branch `profileFunction.getProfile()` is itself `suspend`, which
+forces the same answer independently. Production call sites are only two
+(`workflow/.../PrepareGraphDataRunner.kt:158`, already suspend; `ios/shell/.../ShellInfo.kt:83`, not), plus
+two in tests.
 
 ---
 

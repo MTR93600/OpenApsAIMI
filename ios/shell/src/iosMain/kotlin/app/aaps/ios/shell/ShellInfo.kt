@@ -11,6 +11,7 @@ import app.aaps.implementation.logging.AAPSLoggerIos
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.ios.shell.prefs.IosSp
 import dev.zacsweers.metro.createGraphFactory
+import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
@@ -80,7 +81,10 @@ object ShellInfo {
             InMemoryGlucoseValue(timestamp = 1_000L, value = 100.0),
             InMemoryGlucoseValue(timestamp = 2_000L, value = 105.0)
         )
-        val smoothed = graph.avgSmoothing.smooth(sample)
+        // `smooth` is suspend (the adaptive smoother reads IOB and the profile). This probe is called
+        // from Swift as a plain function, so the one suspend call is bridged here rather than making
+        // `checkDi` suspend. Same approach as `DatabaseProbe`.
+        val smoothed = runBlocking { graph.avgSmoothing.smooth(sample) }
 
         listOf(
             "graph built: yes",

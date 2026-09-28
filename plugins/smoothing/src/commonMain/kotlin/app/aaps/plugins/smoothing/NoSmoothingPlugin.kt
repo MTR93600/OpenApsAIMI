@@ -9,6 +9,7 @@ import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.smoothing.Smoothing
+import app.aaps.core.interfaces.smoothing.SmoothingContext
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
@@ -36,5 +37,6 @@ class NoSmoothingPlugin(
     aapsLogger, rh
 ), Smoothing {
 
-    override fun smooth(data: MutableList<InMemoryGlucoseValue>): MutableList<InMemoryGlucoseValue> = data
+    /** [context] carries hints only the adaptive smoother uses, so this plugin ignores it. */
+    override suspend fun smooth(data: MutableList<InMemoryGlucoseValue>, context: SmoothingContext): MutableList<InMemoryGlucoseValue> = data
 }

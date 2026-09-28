@@ -10,6 +10,7 @@ import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.smoothing.Smoothing
+import app.aaps.core.interfaces.smoothing.SmoothingContext
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
@@ -39,7 +40,14 @@ class ExponentialSmoothingPlugin(
 ), Smoothing {
 
     @Suppress("LocalVariableName")
-    override fun smooth(data: MutableList<InMemoryGlucoseValue>): MutableList<InMemoryGlucoseValue> {
+    /**
+     * This smoother rewrites the head of the series, so the recalculated value can briefly show a
+     * newer raw reading before smoothing is applied. Same answer as the reference gives.
+     */
+    override fun preferDashboardGlucoseFromGlucoseStatus(): Boolean = true
+
+    /** [context] carries hints only the adaptive smoother uses, so this plugin ignores it. */
+    override suspend fun smooth(data: MutableList<InMemoryGlucoseValue>, context: SmoothingContext): MutableList<InMemoryGlucoseValue> {
         /**
          *  TSUNAMI DATA SMOOTHING CORE
          *

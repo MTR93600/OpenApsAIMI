@@ -56,7 +56,7 @@ class IosProbeGraphTest {
     }
 
     @Test
-    fun `an injected plugin actually runs`() {
+    fun `an injected plugin actually runs`() = runTest {
         val values = mutableListOf(
             InMemoryGlucoseValue(timestamp = 1_000L, value = 90.0),
             InMemoryGlucoseValue(timestamp = 2_000L, value = 110.0)

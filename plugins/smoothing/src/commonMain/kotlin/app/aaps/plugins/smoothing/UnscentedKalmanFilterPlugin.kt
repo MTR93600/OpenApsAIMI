@@ -16,6 +16,7 @@ import app.aaps.core.interfaces.plugin.PluginBaseWithPreferences
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.smoothing.Smoothing
+import app.aaps.core.interfaces.smoothing.SmoothingContext
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.smoothing.keys.UkfDoubleNonKey
 import app.aaps.plugins.smoothing.keys.UkfIntNonKey
@@ -524,7 +525,8 @@ class UnscentedKalmanFilterPlugin(
     // MAIN FILTERING API
     // ============================================================
 
-    override fun smooth(data: MutableList<InMemoryGlucoseValue>): MutableList<InMemoryGlucoseValue> {
+    /** [context] carries hints only the adaptive smoother uses, so this plugin ignores it. */
+    override suspend fun smooth(data: MutableList<InMemoryGlucoseValue>, context: SmoothingContext): MutableList<InMemoryGlucoseValue> {
         if (data.isEmpty()) return data
 
         try {

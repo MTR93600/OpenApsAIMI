@@ -1,6 +1,7 @@
 package app.aaps.core.interfaces.smoothing
 
 import app.aaps.core.data.iob.InMemoryGlucoseValue
+import app.aaps.core.interfaces.rx.events.AdaptiveSmoothingQualitySnapshot
 
 interface Smoothing {
 
@@ -11,5 +12,21 @@ interface Smoothing {
      *
      * @return new List with smoothed values (smoothed values are stored in [InMemoryGlucoseValue.smoothed])
      */
-    fun smooth(data: MutableList<InMemoryGlucoseValue>): MutableList<InMemoryGlucoseValue>
+    suspend fun smooth(
+        data: MutableList<InMemoryGlucoseValue>,
+        context: SmoothingContext = SmoothingContext.NONE
+    ): MutableList<InMemoryGlucoseValue>
+
+    /**
+     * Optional: last adaptive-smoothing quality snapshot (non-null only for plugins that support it).
+     * Updated when [smooth] completes (same coroutine as the caller).
+     */
+    fun lastAdaptiveSmoothingQualitySnapshot(): AdaptiveSmoothingQualitySnapshot? = null
+
+    /**
+     * When true, overview / dashboard headline glucose should prefer [app.aaps.core.interfaces.aps.GlucoseStatus.glucose]
+     * (bucket head / APS pipeline) over [app.aaps.core.data.iob.InMemoryGlucoseValue.recalculated] from [app.aaps.core.interfaces.overview.LastBgData]
+     * when the latter can temporarily reflect a newer raw DB reading before smoothing is applied.
+     */
+    fun preferDashboardGlucoseFromGlucoseStatus(): Boolean = false
 }
