@@ -2443,9 +2443,19 @@ says so in its own first KDoc line, and it was top of the "looks free" list.
 
 Direct HTTP imports (`java.net`, `okhttp3`) appear in **9** files, all of them LLM or API clients:
 the four vision providers, `AiCoachingService`, `AuditorAIService`, `GeminiModelResolver`,
-`AIMILLMPhysioAnalyzerMTR`, `OuraApiThermalClient`. **One HTTP port unblocks that whole family**, and
-it is the single biggest theme after storage. `org.json` appears in 13 files and usually travels with
-them.
+`AIMILLMPhysioAnalyzerMTR`, `OuraApiThermalClient`. `org.json` appears in 13 files and usually travels
+with them.
+
+**But an HTTP port frees only four of the nine, not the family.** Checked per file, 2026-09-28: the four
+vision providers (`ClaudeVisionProvider`, `DeepSeekVisionProvider`, `GeminiVisionProvider`,
+`OpenAIVisionProvider`) each carry two Android imports of their own - `android.graphics.Bitmap` and
+`android.util.Base64` - so they need an image port as well and stay on Android until then.
+`GeminiModelResolver` has one Android import left. The four with **no** Android import at all, and
+therefore genuinely freed by an HTTP port plus `OrgJsonCompat` and `kotlinx.datetime`, are
+`AiCoachingService`, `AuditorAIService`, `AIMILLMPhysioAnalyzerMTR` and `OuraApiThermalClient`.
+
+The lesson repeats the one above: a hub type tells you what *gates* a file, not what would *free* it.
+Only the per-file check answers that.
 
 Gson is a smaller problem than it looked: exactly **one** file imports it.
 
@@ -2460,6 +2470,32 @@ Gson is a smaller problem than it looked: exactly **one** file imports it.
   `readTailLines`/`forEachLine`. `AimiArchive`, `AimiLineScanner`, `JsonlTailReader` and
   `HormonitorReader` need `RandomAccessFile`, `FileChannel`, `GZIPOutputStream` or `StandardOpenOption`.
   The port has to be extended before they can move.
+
+## 6aq. 2026-09-28: the parity rule, stated by the owner
+
+In his words: we are **porting** AIMI, and everything that works on `dev_OAPSAIMI` today has to work on
+the multiplatform version. Outside genuinely dead code - where the question may fairly be asked - the
+job is to find the balance that carries the feature across, not to drop it.
+
+This sets the default, and it is the opposite of the one an agent naturally reaches for. "Nothing calls
+it here" is a reason to **look for the lost consumer**, not a reason to leave a capability behind. The
+migration has already produced three cases of exactly that shape:
+
+- `AimiSmbTrainer` lost its whole training-telemetry surface (901 lines there, 422 here) - restored
+  2026-09-28.
+- `TrajectoryRuntimeRepository` and `AimiLoopRuntimeGuard` look unused here only because the Glass and
+  dashboard consumers were never ported; the owner has since confirmed both screens are in scope (6ak).
+- `AimiLoopTelemetry.isTickInProgress()`/`activeTickAgeMs()` are live with no caller for the same reason.
+
+So when a file cannot move because a dependency is missing, the answer is a port or a seam, not a
+deletion and not a silent stub. An implementation that quietly does nothing is worse than an absent
+feature, because the user believes it is working - which is why the badge source was made optional
+rather than stubbed (6al).
+
+The genuinely dead exceptions found so far, each confirmed dead on **both** branches before anything was
+decided: `model/StateTransitionManager` (superseded by `AimiStateTransitionManager`), `AimiSmbSimulator`,
+`AIMICompositeStepsProviderMTR`, `AIMIHealthConnectStepsProviderMTR`, and the empty Hilt scan module.
+`AimiUamHandler.configureUamModel` is a candidate but has not been checked against `master` yet.
 
 ---
 

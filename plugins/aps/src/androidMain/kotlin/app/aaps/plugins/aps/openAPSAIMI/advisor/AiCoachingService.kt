@@ -2,11 +2,6 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor
 
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -20,6 +15,8 @@ import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpRequest
 import java.util.Locale
 
 /**
@@ -28,14 +25,25 @@ import java.util.Locale
  * =============================================================================
  * 
  * Interacts with OpenAI API to generate natural language coaching advice.
- * Uses robust HttpURLConnection (zero dependency).
+ * Sends its requests through `AimiHttp`, the shared HTTP seam.
  * =============================================================================
  */
 @SingleIn(AppScope::class)
 class AiCoachingService @Inject constructor(
     private val rh: ResourceHelper,
     private val geminiModelResolver: GeminiModelResolver,
+    private val aimiHttp: AimiHttp,
 ) {
+
+    /**
+     * Joins the lines of [text] with nothing between them.
+     *
+     * The readers this replaces built their string with a `readLine()` loop and appended each line
+     * without its line ending, so every line break in a body was dropped. The error text the user
+     * finally reads is built from that string, so the joining has to stay exactly as it was.
+     */
+    private fun joinLines(text: String?): String =
+        text?.split("\r\n", "\n", "\r")?.joinToString("") ?: ""
 
     enum class Provider { OPENAI, GEMINI, DEEPSEEK, CLAUDE }
 
@@ -120,39 +128,28 @@ class AiCoachingService @Inject constructor(
     private fun callOpenAI(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry {
         val jsonBody = buildOpenAiJson(prompt)
         jsonBody.put("max_completion_tokens", 4096) // GPT-5.x requires this (rejects legacy max_tokens)
-        val url = URL(OPENAI_URL)
-        val connection = url.openConnection() as HttpURLConnection
+        val httpResponse = aimiHttp.execute(
+            AimiHttpRequest(
+                url = OPENAI_URL,
+                method = "POST",
+                connectTimeoutMs = 15000,
+                readTimeoutMs = 30000,
+                headers = mapOf(
+                    "Content-Type" to "application/json",
+                    "Authorization" to "Bearer $apiKey"
+                ),
+                body = jsonBody.toString()
+            )
+        )
 
-        connection.apply {
-            requestMethod = "POST"
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("Authorization", "Bearer $apiKey")
-            doOutput = true
-            connectTimeout = 15000
-            readTimeout = 30000
-        }
-
-        val writer = OutputStreamWriter(connection.outputStream)
-        writer.write(jsonBody.toString())
-        writer.flush()
-        writer.close()
-
-        val responseCode = connection.responseCode
+        val responseCode = httpResponse.code
         if (responseCode == 200) {
-            val reader = BufferedReader(InputStreamReader(connection.inputStream))
-            val response = StringBuilder()
-            var line: String?
-            while (reader.readLine().also { line = it } != null) response.append(line)
-            reader.close()
-            parseOpenAiResponse(response.toString())
+            parseOpenAiResponse(joinLines(httpResponse.body))
         } else {
-            // Try read error stream
-            val reader = BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream))
-            val err = StringBuilder()
-            var line: String?
-            while (reader.readLine().also { line = it } != null) err.append(line)
+            // Whatever the server said about the refusal
+            val err = joinLines(httpResponse.body)
             if (LlmHttpRetry.isTransientStatus(responseCode)) throw java.io.IOException("OpenAI Error ($responseCode): $err")
-            rh.gs(R.string.aimi_coach_svc_error_openai, responseCode, err.toString())
+            rh.gs(R.string.aimi_coach_svc_error_openai, responseCode, err)
         }
     }
 
@@ -180,9 +177,7 @@ class AiCoachingService @Inject constructor(
         modelId: String
     ): String {
         val urlStr = geminiModelResolver.getGenerateContentUrl(modelId, apiKey)
-        val url = URL(urlStr)
-        val connection = url.openConnection() as HttpURLConnection
-        
+
         val jsonBody = JSONObject()
         val parts = JSONArray()
         val part = JSONObject()
@@ -204,29 +199,22 @@ class AiCoachingService @Inject constructor(
         config.put("maxOutputTokens", 4096)
         root.put("generationConfig", config)
 
-        connection.apply {
-            requestMethod = "POST"
-            setRequestProperty("Content-Type", "application/json")
-            doOutput = true
-            connectTimeout = 15000
-            readTimeout = 60000
-        }
+        val httpResponse = aimiHttp.execute(
+            AimiHttpRequest(
+                url = urlStr,
+                method = "POST",
+                connectTimeoutMs = 15000,
+                readTimeoutMs = 60000,
+                headers = mapOf("Content-Type" to "application/json"),
+                body = root.toString()
+            )
+        )
 
-        OutputStreamWriter(connection.outputStream).use { it.write(root.toString()) }
-
-        val responseCode = connection.responseCode
+        val responseCode = httpResponse.code
         if (responseCode == 200) {
-            val reader = BufferedReader(InputStreamReader(connection.inputStream, java.nio.charset.StandardCharsets.UTF_8))
-            val response = StringBuilder()
-            var line: String?
-            while (reader.readLine().also { line = it } != null) response.append(line)
-            reader.close()
-            return parseGeminiResponse(response.toString())
+            return parseGeminiResponse(joinLines(httpResponse.body))
         } else {
-             val reader = BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream, java.nio.charset.StandardCharsets.UTF_8))
-             val err = StringBuilder()
-             var line: String?
-             while (reader.readLine().also { line = it } != null) err.append(line)
+             val err = joinLines(httpResponse.body)
              throw Exception("Gemini Error ($responseCode): $err")
         }
     }
@@ -412,45 +400,31 @@ class AiCoachingService @Inject constructor(
         jsonBody.put("model", DEEPSEEK_MODEL) // Override model
         jsonBody.put("max_tokens", 4096) // DeepSeek uses the legacy max_tokens parameter
 
-        val url = URL(DEEPSEEK_URL)
-        val connection = url.openConnection() as HttpURLConnection
+        val httpResponse = aimiHttp.execute(
+            AimiHttpRequest(
+                url = DEEPSEEK_URL,
+                method = "POST",
+                connectTimeoutMs = 15000,
+                readTimeoutMs = 30000,
+                headers = mapOf(
+                    "Content-Type" to "application/json",
+                    "Authorization" to "Bearer $apiKey"
+                ),
+                body = jsonBody.toString()
+            )
+        )
 
-        connection.apply {
-            requestMethod = "POST"
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("Authorization", "Bearer $apiKey")
-            doOutput = true
-            connectTimeout = 15000
-            readTimeout = 30000
-        }
-
-        val writer = OutputStreamWriter(connection.outputStream)
-        writer.write(jsonBody.toString())
-        writer.flush()
-        writer.close()
-
-        val responseCode = connection.responseCode
+        val responseCode = httpResponse.code
         if (responseCode == 200) {
-            val reader = BufferedReader(InputStreamReader(connection.inputStream))
-            val response = StringBuilder()
-            var line: String?
-            while (reader.readLine().also { line = it } != null) response.append(line)
-            reader.close()
-            parseOpenAiResponse(response.toString()) // Same format
+            parseOpenAiResponse(joinLines(httpResponse.body)) // Same format
         } else {
-            val reader = BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream))
-            val err = StringBuilder()
-            var line: String?
-            while (reader.readLine().also { line = it } != null) err.append(line)
+            val err = joinLines(httpResponse.body)
             if (LlmHttpRetry.isTransientStatus(responseCode)) throw java.io.IOException("DeepSeek Error ($responseCode): $err")
-            rh.gs(R.string.aimi_coach_svc_error_deepseek, responseCode, err.toString())
+            rh.gs(R.string.aimi_coach_svc_error_deepseek, responseCode, err)
         }
     }
     
     private fun callClaude(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry {
-        val url = URL(CLAUDE_URL)
-        val connection = url.openConnection() as HttpURLConnection
-
         val jsonBody = JSONObject()
         jsonBody.put("model", CLAUDE_MODEL)
         jsonBody.put("max_tokens", 4096)
@@ -464,37 +438,29 @@ class AiCoachingService @Inject constructor(
         messages.put(userMessage)
         jsonBody.put("messages", messages)
 
-        connection.apply {
-            requestMethod = "POST"
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("x-api-key", apiKey)
-            setRequestProperty("anthropic-version", "2023-06-01")
-            doOutput = true
-            connectTimeout = 15000
-            readTimeout = 60000
-        }
+        val httpResponse = aimiHttp.execute(
+            AimiHttpRequest(
+                url = CLAUDE_URL,
+                method = "POST",
+                connectTimeoutMs = 15000,
+                readTimeoutMs = 60000,
+                headers = mapOf(
+                    "Content-Type" to "application/json",
+                    "x-api-key" to apiKey,
+                    "anthropic-version" to "2023-06-01"
+                ),
+                body = jsonBody.toString()
+            )
+        )
 
-        val writer = OutputStreamWriter(connection.outputStream)
-        writer.write(jsonBody.toString())
-        writer.flush()
-        writer.close()
-
-        val responseCode = connection.responseCode
+        val responseCode = httpResponse.code
         if (responseCode == 200) {
-            val reader = BufferedReader(InputStreamReader(connection.inputStream, java.nio.charset.StandardCharsets.UTF_8))
-            val response = StringBuilder()
-            var line: String?
-            while (reader.readLine().also { line = it } != null) response.append(line)
-            reader.close()
-            parseClaudeResponse(response.toString())
+            parseClaudeResponse(joinLines(httpResponse.body))
         } else {
-            val reader = BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream, java.nio.charset.StandardCharsets.UTF_8))
-            val err = StringBuilder()
-            var line: String?
-            while (reader.readLine().also { line = it } != null) err.append(line)
+            val err = joinLines(httpResponse.body)
             // 503/529/500… → throw so it is retried with backoff; other errors surface as-is.
             if (LlmHttpRetry.isTransientStatus(responseCode)) throw java.io.IOException("Claude Error ($responseCode): $err")
-            rh.gs(R.string.aimi_coach_svc_error_claude, responseCode, err.toString())
+            rh.gs(R.string.aimi_coach_svc_error_claude, responseCode, err)
         }
     }
 

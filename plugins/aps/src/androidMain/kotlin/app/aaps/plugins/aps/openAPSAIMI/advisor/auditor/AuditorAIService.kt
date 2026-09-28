@@ -5,6 +5,8 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -12,11 +14,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -33,7 +30,8 @@ import dev.zacsweers.metro.AppScope
 class AuditorAIService @Inject constructor(
     private val preferences: Preferences,
     private val geminiResolver: GeminiModelResolver,
-    private val auditorStatusLiveData: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
+    private val auditorStatusLiveData: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData,
+    private val aimiHttp: AimiHttp
 ) {
     
     companion object {
@@ -44,6 +42,9 @@ class AuditorAIService @Inject constructor(
         
         // Timeout for API calls (45s max per security audit to avoid blocking loop)
         private const val DEFAULT_TIMEOUT_MS = 45_000L
+
+        /** Same value as `java.net.HttpURLConnection.HTTP_OK`, named here so this file needs no JVM import. */
+        private const val HTTP_OK = 200
     }
     
     enum class Provider(val id: String, val displayName: String) {
@@ -161,16 +162,6 @@ class AuditorAIService @Inject constructor(
     private fun callOpenAI(apiKey: String, prompt: String, useHighPerf: Boolean): String {
         val model = if (useHighPerf) "gpt-4o" else "gpt-4o-mini"
 
-        val url = URL(OPENAI_URL)
-        val connection = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("Authorization", "Bearer $apiKey")
-            connectTimeout = 15_000 // Reduced per audit
-            readTimeout = DEFAULT_TIMEOUT_MS.toInt()   // Reduced per audit
-        }
-        
         val requestBody = JSONObject().apply {
             put("model", model) 
             put("messages", JSONArray().apply {
@@ -183,23 +174,25 @@ class AuditorAIService @Inject constructor(
             put("response_format", JSONObject().put("type", "json_object"))
         }
         
-        OutputStreamWriter(connection.outputStream).use { it.write(requestBody.toString()) }
-        
-        val responseCode = connection.responseCode
-        if (responseCode != HttpURLConnection.HTTP_OK) {
-            throw Exception("HTTP $responseCode")
+        val response = aimiHttp.execute(
+            AimiHttpRequest(
+                url = OPENAI_URL,
+                method = "POST",
+                connectTimeoutMs = 15_000, // Reduced per audit
+                readTimeoutMs = DEFAULT_TIMEOUT_MS.toInt(), // Reduced per audit
+                headers = mapOf(
+                    "Content-Type" to "application/json",
+                    "Authorization" to "Bearer $apiKey"
+                ),
+                body = requestBody.toString()
+            )
+        )
+
+        if (response.code != HTTP_OK) {
+            throw Exception("HTTP ${response.code}")
         }
-        
-        // Robust stream reading (same as Vision Providers fix)
-        val response = StringBuilder()
-        connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
-            val buffer = CharArray(8192)  // 8KB chunks
-            var charsRead: Int
-            while (reader.read(buffer).also { charsRead = it } != -1) {
-                response.append(buffer, 0, charsRead)
-            }
-        }
-        return response.toString()
+
+        return response.body.orEmpty()
     }
     
     /**
@@ -227,15 +220,7 @@ class AuditorAIService @Inject constructor(
 
     private fun executeGeminiRequest(apiKey: String, prompt: String, modelId: String): String {
         val urlStr = geminiResolver.getGenerateContentUrl(modelId, apiKey)
-        val url = URL(urlStr)
-        val connection = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-            connectTimeout = 15_000
-            readTimeout = 45_000
-        }
-        
+
         val requestBody = JSONObject().apply {
             put("contents", JSONArray().apply {
                 put(JSONObject().apply {
@@ -254,23 +239,22 @@ class AuditorAIService @Inject constructor(
             })
         }
         
-        OutputStreamWriter(connection.outputStream).use { it.write(requestBody.toString()) }
-        
-        val responseCode = connection.responseCode
-        if (responseCode == HttpURLConnection.HTTP_OK) {
-             val response = StringBuilder()
-             connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
-                 val buffer = CharArray(8192)
-                 var charsRead: Int
-                 while (reader.read(buffer).also { charsRead = it } != -1) {
-                     response.append(buffer, 0, charsRead)
-                 }
-             }
-             return response.toString()
+        val response = aimiHttp.execute(
+            AimiHttpRequest(
+                url = urlStr,
+                method = "POST",
+                connectTimeoutMs = 15_000,
+                readTimeoutMs = 45_000,
+                headers = mapOf("Content-Type" to "application/json"),
+                body = requestBody.toString()
+            )
+        )
+
+        if (response.code == HTTP_OK) {
+             return response.body.orEmpty()
         } else {
-             val errorStream = connection.errorStream ?: connection.inputStream
-             val errorResponse = errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
-             throw Exception("HTTP $responseCode: $errorResponse")
+             val errorResponse = response.body ?: "Unknown error"
+             throw Exception("HTTP ${response.code}: $errorResponse")
         }
     }
     
@@ -278,16 +262,6 @@ class AuditorAIService @Inject constructor(
      * Call DeepSeek API
      */
     private fun callDeepSeek(apiKey: String, prompt: String): String {
-        val url = URL(DEEPSEEK_URL)
-        val connection = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("Authorization", "Bearer $apiKey")
-            connectTimeout = 15_000 // Reduced per audit
-            readTimeout = DEFAULT_TIMEOUT_MS.toInt()   // Reduced per audit
-        }
-        
         val requestBody = JSONObject().apply {
             put("model", "deepseek-chat")
             put("messages", JSONArray().apply {
@@ -301,23 +275,25 @@ class AuditorAIService @Inject constructor(
             put("response_format", JSONObject().put("type", "json_object"))
         }
         
-        OutputStreamWriter(connection.outputStream).use { it.write(requestBody.toString()) }
-        
-        val responseCode = connection.responseCode
-        if (responseCode != HttpURLConnection.HTTP_OK) {
-            throw Exception("HTTP $responseCode")
+        val response = aimiHttp.execute(
+            AimiHttpRequest(
+                url = DEEPSEEK_URL,
+                method = "POST",
+                connectTimeoutMs = 15_000, // Reduced per audit
+                readTimeoutMs = DEFAULT_TIMEOUT_MS.toInt(), // Reduced per audit
+                headers = mapOf(
+                    "Content-Type" to "application/json",
+                    "Authorization" to "Bearer $apiKey"
+                ),
+                body = requestBody.toString()
+            )
+        )
+
+        if (response.code != HTTP_OK) {
+            throw Exception("HTTP ${response.code}")
         }
-        
-        // Robust stream reading (same as Vision Providers fix)
-        val response = StringBuilder()
-        connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
-            val buffer = CharArray(8192)  // 8KB chunks
-            var charsRead: Int
-            while (reader.read(buffer).also { charsRead = it } != -1) {
-                response.append(buffer, 0, charsRead)
-            }
-        }
-        return response.toString()
+
+        return response.body.orEmpty()
     }
     
     /**
@@ -325,17 +301,6 @@ class AuditorAIService @Inject constructor(
      */
     private fun callClaude(apiKey: String, prompt: String, useHighPerf: Boolean): String {
         val model = if (useHighPerf) "claude-3-5-sonnet-20241022" else "claude-3-haiku-20240307"
-        val url = URL(CLAUDE_URL)
-        val connection = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("x-api-key", apiKey)
-            setRequestProperty("anthropic-version", "2023-06-01")
-            connectTimeout = 15_000 // Reduced per audit
-            readTimeout = DEFAULT_TIMEOUT_MS.toInt()   // Reduced per audit
-        }
-        
         val requestBody = JSONObject().apply {
             put("model", model)
             put("max_tokens", 2048)
@@ -348,23 +313,26 @@ class AuditorAIService @Inject constructor(
             })
         }
         
-        OutputStreamWriter(connection.outputStream).use { it.write(requestBody.toString()) }
-        
-        val responseCode = connection.responseCode
-        if (responseCode != HttpURLConnection.HTTP_OK) {
-            throw Exception("HTTP $responseCode")
+        val response = aimiHttp.execute(
+            AimiHttpRequest(
+                url = CLAUDE_URL,
+                method = "POST",
+                connectTimeoutMs = 15_000, // Reduced per audit
+                readTimeoutMs = DEFAULT_TIMEOUT_MS.toInt(), // Reduced per audit
+                headers = mapOf(
+                    "Content-Type" to "application/json",
+                    "x-api-key" to apiKey,
+                    "anthropic-version" to "2023-06-01"
+                ),
+                body = requestBody.toString()
+            )
+        )
+
+        if (response.code != HTTP_OK) {
+            throw Exception("HTTP ${response.code}")
         }
-        
-        // Robust stream reading (same as Vision Providers fix)
-        val response = StringBuilder()
-        connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
-            val buffer = CharArray(8192)  // 8KB chunks
-            var charsRead: Int
-            while (reader.read(buffer).also { charsRead = it } != -1) {
-                response.append(buffer, 0, charsRead)
-            }
-        }
-        return response.toString()
+
+        return response.body.orEmpty()
     }
     
     /**

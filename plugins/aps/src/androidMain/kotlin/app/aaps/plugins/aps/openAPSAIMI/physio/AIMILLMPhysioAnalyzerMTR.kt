@@ -7,6 +7,8 @@ import app.aaps.core.keys.StringKey
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpRequest
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
@@ -16,8 +18,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -47,7 +47,8 @@ import dev.zacsweers.metro.AppScope
 class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     private val sp: SP,
     private val aapsLogger: AAPSLogger,
-    private val geminiResolver: GeminiModelResolver
+    private val geminiResolver: GeminiModelResolver,
+    private val aimiHttp: AimiHttp
 ) {
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lastNarrativeRef = AtomicReference("")
@@ -391,30 +392,22 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     // ═══════════════════════════════════════════════════════════════════════
     
     private fun makeAPICall(url: String, body: String, headers: Map<String, String>): String {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        
-        try {
-            connection.requestMethod = "POST"
-            connection.doOutput = true
-            connection.connectTimeout = TIMEOUT_MS.toInt()
-            connection.readTimeout = TIMEOUT_MS.toInt()
-            
-            headers.forEach { (key, value) ->
-                connection.setRequestProperty(key, value)
-            }
-            
-            connection.outputStream.use { it.write(body.toByteArray()) }
-            
-            val responseCode = connection.responseCode
-            if (responseCode != 200) {
-                throw Exception("HTTP $responseCode: ${connection.responseMessage}")
-            }
-            
-            return connection.inputStream.bufferedReader().use { it.readText() }
-            
-        } finally {
-            connection.disconnect()
+        val response = aimiHttp.execute(
+            AimiHttpRequest(
+                url = url,
+                method = "POST",
+                connectTimeoutMs = TIMEOUT_MS.toInt(),
+                readTimeoutMs = TIMEOUT_MS.toInt(),
+                headers = headers,
+                body = body
+            )
+        )
+
+        if (response.code != 200) {
+            throw Exception("HTTP ${response.code}: ${response.reason}")
         }
+
+        return response.body.orEmpty()
     }
     
     // ═══════════════════════════════════════════════════════════════════════
