@@ -10,14 +10,12 @@ import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpRequest
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -25,7 +23,6 @@ import kotlinx.serialization.json.put
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
-import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
@@ -38,16 +35,27 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  * CRITICAL CONSTRAINTS:
  * - LLM NEVER modifies insulin parameters directly
  * - LLM output is NARRATIVE ONLY (explanation for user)
- * - Timeout: 10 seconds max
  * - If unavailable/failed → system continues normally with deterministic only
  * - API key required (stored in preferences)
- * 
+ *
+ * How long a call can take: [TIMEOUT_MS] is given to the HTTP layer as the connect timeout and the
+ * read timeout of **one** request. It is not a bound on the whole analysis, and this class no longer
+ * claims one. `LlmHttpRetry` may repeat a request up to three times with a growing wait, and the
+ * Gemini path first asks the resolver for a model and can then fall back to a second model, so a
+ * slow day can add up to a few minutes. That is why [analyze] suspends instead of blocking a loop
+ * thread: the only caller is a daily background worker, which can afford to wait.
+ *
+ * An earlier version wrapped the work in `withTimeout(TIMEOUT_MS)`. That could never interrupt
+ * anything, because the chain inside it is blocking from end to end and has no suspension point for
+ * cancellation to act on. All it could do was throw away an answer that had already arrived, a few
+ * milliseconds late. It was removed rather than kept as a promise the code cannot keep.
+ *
  * Supported Providers:
  * - GPT-4 (OpenAI)
  * - Gemini 2.0 (Google)
  * - Claude 3.5 (Anthropic)
  * - DeepSeek
- * 
+ *
  * @author MTR & Lyra AI - AIMI Physiological Intelligence
  */
 @OptIn(ExperimentalAtomicApi::class)
@@ -58,25 +66,18 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     private val geminiResolver: GeminiModelResolver,
     private val aimiHttp: AimiHttp
 ) {
-    private val ioScope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
-
     /**
-     * The last narrative that came back, kept for the next caller.
+     * The last narrative that really came back from a model.
      *
-     * An atomic, not a lock: [analyze] runs on the loop thread and reads it, while the background
-     * refresh writes it, and there is nothing to keep consistent beyond the one reference. A lock
-     * would make the loop thread wait on a network call for no gain.
+     * It is only read when today's call gives nothing, so that a failed call shows the user the last
+     * text we know is real instead of blanking the card. It is never written with an empty string:
+     * a failure must leave the previous value alone.
+     *
+     * An atomic, not a lock, because there is nothing to keep consistent beyond the one reference.
      */
     private val lastNarrativeRef = AtomicReference("")
 
-    /**
-     * True while one refresh is still running, so a second one is not started.
-     *
-     * An atomic, not a lock, because the whole gate is one compare-and-set: whoever wins starts the
-     * work, everyone else leaves at once. A lock would make the losers wait instead of leave.
-     */
-    private val analysisInFlight = AtomicBoolean(false)
-    
+
     companion object {
         private const val TAG = "LLMPhysioAnalyzer"
         private const val TIMEOUT_MS = 10_000L
@@ -147,66 +148,95 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     }
     
     /**
-     * Analyzes physiological state using LLM
-     * Returns narrative explanation (or empty string if failed)
-     * 
+     * Asks the chosen model to describe today's physiological state, and gives back the text.
+     *
+     * This suspends until the answer is there, so the narrative belongs to the run that asked for
+     * it. Before, the call was started in the background and the method returned whatever the
+     * *previous* run had produced. The only caller stores the returned value a few lines later, so
+     * today's text could only ever be stored a day late, and the held value was in memory only, so
+     * every restart of AAPS threw it away. In practice nothing was ever shown.
+     *
+     * Suspending is safe here. The caller is `AIMIPhysioManagerMTR.runPhysioPipeline`, already a
+     * suspend function, reached only from `PhysioDailyWorker`, a `CoroutineWorker` that runs once a
+     * day on the IO dispatcher. After this line the pipeline only stores the context, writes one
+     * preference and logs, so nothing else is held up, and no loop tick and no dosing path waits on
+     * this. The other two workers and the watchdog pass `runLLM = false` and never reach this code.
+     *
+     * Nothing is sent unless the feature is switched on and a key is set. Both enabling booleans
+     * stay with the caller, and the empty-key guard below stays here.
+     *
      * @param features Current features
      * @param baseline 7-day baseline
      * @param context Deterministic analysis result
-     * @return Narrative string (empty if failed/unavailable)
+     * @return the narrative for this run; the last good one when this run gave nothing; empty when
+     *   there has never been a good one.
      */
-    fun analyze(
+    suspend fun analyze(
         features: PhysioFeaturesMTR,
         baseline: PhysioBaselineMTR,
         context: PhysioContextMTR
     ): String {
-        
-        val provider = preferences.get(StringKey.AimiPhysioLLMProvider)
+
+        val provider = physioProviderFor(preferences.get(StringKey.AimiAdvisorProvider))
         val apiKey = getAPIKey(provider)
-        
+
         if (apiKey.isBlank()) {
             aapsLogger.warn(LTag.APS, "[$TAG] No API key configured for $provider")
             return ""
         }
-        
-        refreshNarrativeAsync(provider, apiKey, features, baseline, context)
-        return lastNarrativeRef.load()
+
+        val result = try {
+            withContext(aapsIoDispatcher) {
+                when (provider) {
+                    "gpt4"     -> analyzeWithGPT(features, baseline, context, apiKey)
+                    "gemini"   -> analyzeWithGemini(features, baseline, context, apiKey)
+                    "claude"   -> analyzeWithClaude(features, baseline, context, apiKey)
+                    "deepseek" -> analyzeWithDeepSeek(features, baseline, context, apiKey)
+                    // `physioProviderFor` only ever returns the four names above, so this branch is
+                    // unreachable. It stays because `when` is used as an expression here.
+                    else       -> ""
+                }
+            }
+        } catch (e: Exception) {
+            aapsLogger.warn(LTag.APS, "[$TAG] LLM analysis failed", e)
+            ""
+        }
+
+        // A model that answers nothing, a reply the provider filtered, and a call that threw all end
+        // up here as an empty string. None of them is a reason to wipe text the user could still
+        // read, so the last good narrative is kept and handed back instead.
+        if (result.isBlank()) return lastNarrativeRef.load()
+
+        lastNarrativeRef.store(result)
+        return result
     }
 
-    private fun refreshNarrativeAsync(
-        provider: String,
-        apiKey: String,
-        features: PhysioFeaturesMTR,
-        baseline: PhysioBaselineMTR,
-        context: PhysioContextMTR
-    ) {
-        if (!analysisInFlight.compareAndSet(false, true)) return
-        ioScope.launch {
-            try {
-                val result = withTimeout(TIMEOUT_MS) {
-                    withContext(aapsIoDispatcher) {
-                        when (provider) {
-                            "gpt4" -> analyzeWithGPT(features, baseline, context, apiKey)
-                            "gemini" -> analyzeWithGemini(features, baseline, context, apiKey)
-                            "claude" -> analyzeWithClaude(features, baseline, context, apiKey)
-                            "deepseek" -> analyzeWithDeepSeek(features, baseline, context, apiKey)
-                            else -> {
-                                aapsLogger.warn(LTag.APS, "[$TAG] Unknown provider: $provider")
-                                ""
-                            }
-                        }
-                    }
-                }
-                lastNarrativeRef.store(result)
-            } catch (e: Exception) {
-                aapsLogger.warn(LTag.APS, "[$TAG] LLM analysis failed", e)
-                lastNarrativeRef.store("")
-            } finally {
-                analysisInFlight.store(false)
+    /**
+     * Turns the provider the user picked on the AI keys screen into the name used inside this class.
+     *
+     * There are two settings in the code. `StringKey.AimiPhysioLLMProvider` is the one this class
+     * used to read, and it is on no preference screen at all, so it could only ever hold its default
+     * and the user could not change it. `StringKey.AimiAdvisorProvider` is the one the AI keys
+     * screen writes, and the Auditor, the coach, the meal advisor and food recognition all follow
+     * it. The two hold the same four providers under different spellings, so they map one to one and
+     * this class now follows the setting the user actually fills in, next to the four keys it reads.
+     *
+     * An unknown value falls back to OpenAI, which is what the advisor setting's own default and the
+     * other readers of it do. The fallback cannot send anything on its own: without an OpenAI key
+     * the guard in [analyze] still stops the call.
+     */
+    internal fun physioProviderFor(advisorProvider: String): String =
+        when (advisorProvider.uppercase()) {
+            "OPENAI"   -> "gpt4"
+            "GEMINI"   -> "gemini"
+            "CLAUDE"   -> "claude"
+            "DEEPSEEK" -> "deepseek"
+            else       -> {
+                aapsLogger.warn(LTag.APS, "[$TAG] Unknown provider: $advisorProvider - using OpenAI")
+                "gpt4"
             }
         }
-    }
-    
+
     // ═══════════════════════════════════════════════════════════════════════
     // GPT-4 INTEGRATION
     // ═══════════════════════════════════════════════════════════════════════
@@ -249,8 +279,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
             val json = Json.parseToJsonElement(response).jsonObject
             json.getValue("choices").jsonArray[0].jsonObject
                 .getValue("message").jsonObject
-                .getValue("content").jsonPrimitive.content
-                .trim()
+                .getValue("content").narrativeText()
         } catch (e: Exception) {
             aapsLogger.warn(LTag.APS, "[$TAG] Failed to parse GPT response", e)
             ""
@@ -269,8 +298,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
             json.getValue("candidates").jsonArray[0].jsonObject
                 .getValue("content").jsonObject
                 .getValue("parts").jsonArray[0].jsonObject
-                .getValue("text").jsonPrimitive.content
-                .trim()
+                .getValue("text").narrativeText()
         } catch (e: Exception) {
             aapsLogger.warn(LTag.APS, "[$TAG] Failed to parse Gemini response", e)
             ""
@@ -314,8 +342,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         return try {
             val json = Json.parseToJsonElement(response).jsonObject
             json.getValue("content").jsonArray[0].jsonObject
-                .getValue("text").jsonPrimitive.content
-                .trim()
+                .getValue("text").narrativeText()
         } catch (e: Exception) {
             aapsLogger.warn(LTag.APS, "[$TAG] Failed to parse Claude response", e)
             ""
@@ -433,6 +460,19 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     // UTILITIES
     // ═══════════════════════════════════════════════════════════════════════
     
+    /**
+     * The text of one JSON field, or an empty string when the field holds no usable text.
+     *
+     * Every provider is read through this, because every provider can answer with nothing. A model
+     * that has nothing to say, and a reply the provider's own content filter emptied, both come back
+     * as JSON `null`. In kotlinx.serialization `JsonNull` is itself a `JsonPrimitive`, and its
+     * `content` is the four letters `null`. Reading `.content` therefore produced the narrative
+     * "null", and because `"null".isNotBlank()` is true it passed every later check and was stored
+     * and shown to the user as that day's insight. `contentOrNull` is null for `JsonNull`, so an
+     * empty answer stays empty and [analyze] treats it as no answer.
+     */
+    private fun JsonElement.narrativeText(): String = jsonPrimitive.contentOrNull?.trim().orEmpty()
+
     /**
      * The setting that holds the key for one provider, or `null` when the provider is not known.
      *

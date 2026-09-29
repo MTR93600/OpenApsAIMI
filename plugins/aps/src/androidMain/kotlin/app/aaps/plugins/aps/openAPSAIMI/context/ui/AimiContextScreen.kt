@@ -61,6 +61,7 @@ import app.aaps.plugins.aps.openAPSAIMI.context.ContextPreset
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStatePresentation
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStatePresentationBuilder
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
+import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioContextStoreMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -82,6 +83,7 @@ fun AimiContextScreen(
     contextManager: ContextManager,
     preferences: Preferences,
     healthContextRepository: HealthContextRepository,
+    physioContextStore: AIMIPhysioContextStoreMTR,
     aapsLogger: AAPSLogger,
     dateUtil: DateUtil,
     onBack: () -> Unit,
@@ -97,6 +99,7 @@ fun AimiContextScreen(
     var contextEnabled by remember { mutableStateOf(preferences.get(BooleanKey.OApsAIMIContextEnabled)) }
     var llmEnabled by remember { mutableStateOf(preferences.get(BooleanKey.OApsAIMIContextLLMEnabled)) }
     var presentation by remember { mutableStateOf<PatientStatePresentation?>(null) }
+    var physioNarrative by remember { mutableStateOf("") }
     var extendDialogIntentId by remember { mutableStateOf<String?>(null) }
     var showClearAllDialog by remember { mutableStateOf(false) }
     var parseErrorMessage by remember { mutableStateOf<String?>(null) }
@@ -112,6 +115,9 @@ fun AimiContextScreen(
     fun refreshPatientState() {
         val snapshot = PatientStateRuntimeRepository.getLatest()
         presentation = snapshot?.let { PatientStatePresentationBuilder.build(it, dateUtil.now()) }
+        // The daily physio worker writes this, and the store keeps it on disk, so it survives a
+        // restart of AAPS. It is plain text for the user to read and nothing else reads it.
+        physioNarrative = physioContextStore.getLastContextUnsafe()?.narrative.orEmpty()
     }
 
     LaunchedEffect(Unit) {
@@ -206,6 +212,8 @@ fun AimiContextScreen(
                 )
 
                 PatientStatePanel(presentation)
+
+                PhysioNarrativePanel(physioNarrative)
 
                 OutlinedTextField(
                     value = chatText,
@@ -422,6 +430,39 @@ private fun ExtendDurationDialog(onDismiss: () -> Unit, onPick: (Int) -> Unit) {
             TextButton(onClick = onDismiss) { Text(stringResource(app.aaps.core.ui.R.string.cancel)) }
         },
     )
+}
+
+/**
+ * Shows the daily physiological summary written by the optional LLM analysis.
+ *
+ * This is a different text from the one in [PatientStatePanel]. That one is built in the app from
+ * the thermal belief and is always there. This one is written by the model the user chose on the AI
+ * keys screen, once a day, and only when the physio LLM setting is on and a key is set.
+ *
+ * Until now the only place it went was a single log line, so the user never saw the text he was
+ * paying an API for. It is read-only here, and nothing in the loop reads it.
+ */
+@Composable
+private fun PhysioNarrativePanel(narrative: String) {
+    if (narrative.isBlank()) return
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .padding(AapsSpacing.medium)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(AapsSpacing.small),
+        ) {
+            Text(
+                text = stringResource(R.string.aimi_context_physio_narrative_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(text = narrative, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = stringResource(R.string.aimi_context_physio_narrative_footnote),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
 }
 
 @Composable

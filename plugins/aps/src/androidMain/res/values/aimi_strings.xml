@@ -2227,6 +2227,9 @@
 <string name="aimi_context_intent_slow_carb" comment="%1$s = intensity">Slow-carb meal (%1$s)</string>
 <string name="aimi_context_intent_hypo_recovery" comment="%1$s = intensity">Hypo recovery (%1$s)</string>
 
+<string name="aimi_context_physio_narrative_title">Daily body summary</string>
+<string name="aimi_context_physio_narrative_footnote">Written once a day by the AI provider you chose, from your sleep, heart rate and activity data. It explains your body state only. It does not change insulin, and it is not medical advice.</string>
+
 <string name="aimi_context_patient_state_title">Patient state</string>
 <string name="aimi_context_patient_state_live_body_label">Live body signals</string>
 <string name="aimi_context_patient_state_thermal_label">Temperature</string>

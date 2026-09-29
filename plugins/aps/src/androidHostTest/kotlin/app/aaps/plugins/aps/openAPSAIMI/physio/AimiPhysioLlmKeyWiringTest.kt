@@ -9,6 +9,7 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpFailure
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpRequest
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpResponse
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
@@ -16,8 +17,6 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 /**
  * The API key this analyser sends must be the one the user typed on the AI keys screen.
@@ -30,6 +29,11 @@ import java.util.concurrent.TimeUnit
  * They also state the mapping provider by provider. A swap between two providers would compile and
  * would send one provider's key to another provider's endpoint, which leaks the key to a third
  * party, so the mapping is checked one line per provider rather than in a loop.
+ *
+ * The provider itself now comes from `StringKey.AimiAdvisorProvider`, the setting on the same AI
+ * keys screen as the four keys, so the tests below store the names that screen writes
+ * (`OPENAI`, `GEMINI`, `CLAUDE`, `DEEPSEEK`). The old `StringKey.AimiPhysioLLMProvider` was on no
+ * screen at all and could only ever hold its default.
  */
 class AimiPhysioLlmKeyWiringTest {
 
@@ -41,25 +45,23 @@ class AimiPhysioLlmKeyWiringTest {
         const val CLAUDE_SETTING = "aimi_advisor_claude_key"
         const val DEEPSEEK_SETTING = "aimi_advisor_deepseek_key"
 
+        /** The name of the setting that says which provider to use. Spelled out for the same reason. */
+        const val PROVIDER_SETTING = "aimi_advisor_provider"
+
         const val OPENAI_REPLY = """{"choices":[{"message":{"content":"ok"}}]}"""
     }
 
-    /** Records every request and lets the test wait for the background refresh to send it. */
+    /** Records every request that was sent. */
     private class RecordingAimiHttp(private val body: String) : AimiHttp {
 
         val sent = mutableListOf<AimiHttpRequest>()
-        private val arrived = CountDownLatch(1)
 
         override fun execute(request: AimiHttpRequest): AimiHttpResponse {
-            synchronized(sent) { sent.add(request) }
-            arrived.countDown()
+            sent.add(request)
             return AimiHttpResponse(code = 200, reason = "OK", body = body)
         }
 
         override fun classify(error: Throwable): AimiHttpFailure = AimiHttpFailure.OTHER
-
-        /** True when a request arrived. The refresh runs off the caller's thread. */
-        fun awaitRequest(): Boolean = arrived.await(5, TimeUnit.SECONDS)
     }
 
     /**
@@ -75,7 +77,7 @@ class AimiPhysioLlmKeyWiringTest {
         claude: String = "",
         deepSeek: String = ""
     ): Preferences = mock<Preferences>().also {
-        whenever(it.get(StringKey.AimiPhysioLLMProvider)).thenReturn(provider)
+        whenever(it.get(StringKey.AimiAdvisorProvider)).thenReturn(provider)
         whenever(it.get(StringKey.AimiAdvisorOpenAIKey)).thenReturn(openAi)
         whenever(it.get(StringKey.AimiAdvisorGeminiKey)).thenReturn(gemini)
         whenever(it.get(StringKey.AimiAdvisorClaudeKey)).thenReturn(claude)
@@ -93,54 +95,61 @@ class AimiPhysioLlmKeyWiringTest {
         aimiHttp = http
     )
 
-    private fun analyze(analyzer: AIMILLMPhysioAnalyzerMTR): String =
+    private suspend fun analyze(analyzer: AIMILLMPhysioAnalyzerMTR): String =
         analyzer.analyze(PhysioFeaturesMTR(), PhysioBaselineMTR(), PhysioContextMTR())
+
+    // ── The setting the user fills in is the setting that is read ──────────────────────────────
+
+    @Test
+    fun `the provider comes from the setting the AI keys screen writes`() {
+        assertThat(StringKey.AimiAdvisorProvider.key).isEqualTo(PROVIDER_SETTING)
+    }
 
     // ── The mapping, one line per provider ─────────────────────────────────────────────────────
 
     @Test
     fun `gpt4 reads the OpenAI key the user typed`() {
-        assertThat(analyzer(preferences("gpt4"), mock()).apiKeySettingFor("gpt4")?.key)
+        assertThat(analyzer(preferences("OPENAI"), mock()).apiKeySettingFor("gpt4")?.key)
             .isEqualTo(OPENAI_SETTING)
     }
 
     @Test
     fun `gemini reads the Gemini key the user typed`() {
-        assertThat(analyzer(preferences("gemini"), mock()).apiKeySettingFor("gemini")?.key)
+        assertThat(analyzer(preferences("GEMINI"), mock()).apiKeySettingFor("gemini")?.key)
             .isEqualTo(GEMINI_SETTING)
     }
 
     @Test
     fun `claude reads the Claude key the user typed`() {
-        assertThat(analyzer(preferences("claude"), mock()).apiKeySettingFor("claude")?.key)
+        assertThat(analyzer(preferences("CLAUDE"), mock()).apiKeySettingFor("claude")?.key)
             .isEqualTo(CLAUDE_SETTING)
     }
 
     @Test
     fun `deepseek reads the DeepSeek key the user typed`() {
-        assertThat(analyzer(preferences("deepseek"), mock()).apiKeySettingFor("deepseek")?.key)
+        assertThat(analyzer(preferences("DEEPSEEK"), mock()).apiKeySettingFor("deepseek")?.key)
             .isEqualTo(DEEPSEEK_SETTING)
     }
 
     @Test
     fun `a provider name nobody knows has no key at all`() {
-        assertThat(analyzer(preferences("gpt4"), mock()).apiKeySettingFor("bard")).isNull()
+        assertThat(analyzer(preferences("OPENAI"), mock()).apiKeySettingFor("bard")).isNull()
     }
 
     // ── With no key configured the feature stays silent ────────────────────────────────────────
 
     @Test
-    fun `no key configured means nothing is sent`() {
+    fun `no key configured means nothing is sent`() = runTest {
         val http = RecordingAimiHttp(OPENAI_REPLY)
-        val result = analyze(analyzer(preferences("gpt4"), http))
+        val result = analyze(analyzer(preferences("OPENAI"), http))
 
         assertThat(result).isEmpty()
         assertThat(http.sent).isEmpty()
     }
 
     @Test
-    fun `no key configured means nothing is sent for any provider`() {
-        for (provider in listOf("gpt4", "gemini", "claude", "deepseek", "bard")) {
+    fun `no key configured means nothing is sent for any provider`() = runTest {
+        for (provider in listOf("OPENAI", "GEMINI", "CLAUDE", "DEEPSEEK", "bard")) {
             val http = RecordingAimiHttp(OPENAI_REPLY)
             val resolver = mock<GeminiModelResolver>()
 
@@ -153,10 +162,10 @@ class AimiPhysioLlmKeyWiringTest {
     }
 
     @Test
-    fun `a key for another provider does not wake the selected one`() {
+    fun `a key for another provider does not wake the selected one`() = runTest {
         // Someone who filled in only the Gemini key but left the provider on its default.
         val http = RecordingAimiHttp(OPENAI_REPLY)
-        val preferences = preferences(provider = "gpt4", gemini = "gemini-key")
+        val preferences = preferences(provider = "OPENAI", gemini = "gemini-key")
 
         assertThat(analyze(analyzer(preferences, http))).isEmpty()
         assertThat(http.sent).isEmpty()
@@ -165,10 +174,10 @@ class AimiPhysioLlmKeyWiringTest {
     // ── The configured key is the one that reaches that provider ───────────────────────────────
 
     @Test
-    fun `the OpenAI key reaches the OpenAI endpoint and no other key does`() {
+    fun `the OpenAI key reaches the OpenAI endpoint and no other key does`() = runTest {
         val http = RecordingAimiHttp(OPENAI_REPLY)
         val preferences = preferences(
-            provider = "gpt4",
+            provider = "OPENAI",
             openAi = "openai-key",
             gemini = "gemini-key",
             claude = "claude-key",
@@ -177,41 +186,38 @@ class AimiPhysioLlmKeyWiringTest {
 
         analyze(analyzer(preferences, http))
 
-        assertThat(http.awaitRequest()).isTrue()
         val request = http.sent.single()
         assertThat(request.url).isEqualTo("https://api.openai.com/v1/chat/completions")
         assertThat(request.headers["Authorization"]).isEqualTo("Bearer openai-key")
     }
 
     @Test
-    fun `the DeepSeek key reaches the DeepSeek endpoint`() {
+    fun `the DeepSeek key reaches the DeepSeek endpoint`() = runTest {
         val http = RecordingAimiHttp(OPENAI_REPLY)
         val preferences = preferences(
-            provider = "deepseek",
+            provider = "DEEPSEEK",
             openAi = "openai-key",
             deepSeek = "deepseek-key"
         )
 
         analyze(analyzer(preferences, http))
 
-        assertThat(http.awaitRequest()).isTrue()
         val request = http.sent.single()
         assertThat(request.url).isEqualTo("https://api.deepseek.com/v1/chat/completions")
         assertThat(request.headers["Authorization"]).isEqualTo("Bearer deepseek-key")
     }
 
     @Test
-    fun `the Claude key reaches the Claude endpoint in the header Anthropic reads`() {
+    fun `the Claude key reaches the Claude endpoint in the header Anthropic reads`() = runTest {
         val http = RecordingAimiHttp("""{"content":[{"text":"ok"}]}""")
         val preferences = preferences(
-            provider = "claude",
+            provider = "CLAUDE",
             openAi = "openai-key",
             claude = "claude-key"
         )
 
         analyze(analyzer(preferences, http))
 
-        assertThat(http.awaitRequest()).isTrue()
         val request = http.sent.single()
         assertThat(request.url).isEqualTo("https://api.anthropic.com/v1/messages")
         assertThat(request.headers["x-api-key"]).isEqualTo("claude-key")
@@ -220,21 +226,20 @@ class AimiPhysioLlmKeyWiringTest {
     }
 
     @Test
-    fun `the Gemini key reaches the Gemini model resolver`() {
+    fun `the Gemini key reaches the Gemini model resolver`() = runTest {
         val http = RecordingAimiHttp("""{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}""")
         val resolver = mock<GeminiModelResolver>()
         whenever(resolver.resolveGenerateContentModel(any(), any())).thenReturn("gemini-pro-latest")
         whenever(resolver.getGenerateContentUrl(any(), any()))
             .thenAnswer { "https://example.invalid/${it.arguments[0]}:generateContent?key=${it.arguments[1]}" }
         val preferences = preferences(
-            provider = "gemini",
+            provider = "GEMINI",
             openAi = "openai-key",
             gemini = "gemini-key"
         )
 
         analyze(analyzer(preferences, http, resolver))
 
-        assertThat(http.awaitRequest()).isTrue()
         verify(resolver).resolveGenerateContentModel(eq("gemini-key"), any())
         assertThat(http.sent.single().url).endsWith("?key=gemini-key")
     }

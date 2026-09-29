@@ -162,6 +162,7 @@ import app.aaps.plugins.aps.openAPSAIMI.compose.AimiControlCenterScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPkpdSettingsScreen
 import app.aaps.plugins.aps.openAPSAIMI.context.ui.AimiContextScreen
 import app.aaps.plugins.aps.openAPSAIMI.physio.AimiHealthConnectPermissionScreen
+import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioContextStoreMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextRepository
 import app.aaps.plugins.aps.openAPSAIMI.sos.AimiSosPermissionScreen
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
@@ -216,6 +217,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator, // ?? AI Auditor MTR
     private val contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager, // ?? Context Manager
     private val healthContextRepository: HealthContextRepository,
+    private val physioContextStore: AIMIPhysioContextStoreMTR, // holds the daily physio narrative shown on the Context screen
     private val aimiBackupManager: AimiBackupManager, // ?? Cloud Backup Manager (Force Init)
     private val aimiMlTrainingScheduler: AimiMlTrainingScheduler,
     private val storageHelper: AimiStorageHelper,
@@ -1996,6 +1998,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         contextManager = contextManager,
                         preferences = preferences,
                         healthContextRepository = healthContextRepository,
+                        physioContextStore = physioContextStore,
                         aapsLogger = aapsLogger,
                         dateUtil = dateUtil,
                         onBack = onBack,
