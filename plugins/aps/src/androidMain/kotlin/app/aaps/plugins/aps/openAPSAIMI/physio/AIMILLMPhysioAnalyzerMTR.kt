@@ -9,18 +9,25 @@ import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpRequest
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import org.json.JSONObject
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 /**
  * 🤖 AIMI LLM Physiological Analyzer - MTR Implementation
@@ -43,6 +50,7 @@ import dev.zacsweers.metro.AppScope
  * 
  * @author MTR & Lyra AI - AIMI Physiological Intelligence
  */
+@OptIn(ExperimentalAtomicApi::class)
 @SingleIn(AppScope::class)
 class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     private val sp: SP,
@@ -51,7 +59,22 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     private val aimiHttp: AimiHttp
 ) {
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * The last narrative that came back, kept for the next caller.
+     *
+     * An atomic, not a lock: [analyze] runs on the loop thread and reads it, while the background
+     * refresh writes it, and there is nothing to keep consistent beyond the one reference. A lock
+     * would make the loop thread wait on a network call for no gain.
+     */
     private val lastNarrativeRef = AtomicReference("")
+
+    /**
+     * True while one refresh is still running, so a second one is not started.
+     *
+     * An atomic, not a lock, because the whole gate is one compare-and-set: whoever wins starts the
+     * work, everyone else leaves at once. A lock would make the losers wait instead of leave.
+     */
     private val analysisInFlight = AtomicBoolean(false)
     
     companion object {
@@ -90,7 +113,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
             // 2. Quota (429) OR still-overloaded (503) after retries → flash fallback (also retried).
             if (LlmHttpRetry.isQuota(e) || LlmHttpRetry.isTransient(e)) {
                 val fallbackModel = "gemini-flash-latest"
-                android.util.Log.w(TAG, "Physio: $primaryModel failed (${e.message?.take(80)}). Fallback to $fallbackModel")
+                aapsLogger.warn(LTag.APS, "[$TAG] Physio: $primaryModel failed (${e.message?.take(80)}). Fallback to $fallbackModel")
                 return LlmHttpRetry.withTransientRetry(aapsLogger) { executeGeminiRequest(apiKey, prompt, fallbackModel) }
             }
             throw e
@@ -99,18 +122,18 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
 
     private fun executeGeminiRequest(apiKey: String, prompt: String, modelId: String): String {
         val url = geminiResolver.getGenerateContentUrl(modelId, apiKey)
-        val requestBody = JSONObject().apply {
-            put("contents", org.json.JSONArray().apply {
-                put(JSONObject().apply {
+        val requestBody = buildJsonObject {
+            put("contents", buildJsonArray {
+                add(buildJsonObject {
                     put("role", "user")
-                    put("parts", org.json.JSONArray().apply {
-                        put(JSONObject().apply {
+                    put("parts", buildJsonArray {
+                        add(buildJsonObject {
                             put("text", prompt)
                         })
                     })
                 })
             })
-            put("generationConfig", JSONObject().apply {
+            put("generationConfig", buildJsonObject {
                 put("maxOutputTokens", 150)
                 put("temperature", 0.3)
             })
@@ -147,7 +170,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         }
         
         refreshNarrativeAsync(provider, apiKey, features, baseline, context)
-        return lastNarrativeRef.get()
+        return lastNarrativeRef.load()
     }
 
     private fun refreshNarrativeAsync(
@@ -174,12 +197,12 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
                         }
                     }
                 }
-                lastNarrativeRef.set(result)
+                lastNarrativeRef.store(result)
             } catch (e: Exception) {
                 aapsLogger.warn(LTag.APS, "[$TAG] LLM analysis failed", e)
-                lastNarrativeRef.set("")
+                lastNarrativeRef.store("")
             } finally {
-                analysisInFlight.set(false)
+                analysisInFlight.store(false)
             }
         }
     }
@@ -197,14 +220,14 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         
         val prompt = buildPrompt(features, baseline, context)
         
-        val requestBody = JSONObject().apply {
+        val requestBody = buildJsonObject {
             put("model", "gpt-4")
-            put("messages", org.json.JSONArray().apply {
-                put(JSONObject().apply {
+            put("messages", buildJsonArray {
+                add(buildJsonObject {
                     put("role", "system")
                     put("content", SYSTEM_ROLE_NARRATIVE)
                 })
-                put(JSONObject().apply {
+                add(buildJsonObject {
                     put("role", "user")
                     put("content", prompt)
                 })
@@ -223,11 +246,10 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     
     private fun parseGPTResponse(response: String): String {
         return try {
-            val json = JSONObject(response)
-            json.getJSONArray("choices")
-                .getJSONObject(0)
-                .getJSONObject("message")
-                .getString("content")
+            val json = Json.parseToJsonElement(response).jsonObject
+            json.getValue("choices").jsonArray[0].jsonObject
+                .getValue("message").jsonObject
+                .getValue("content").jsonPrimitive.content
                 .trim()
         } catch (e: Exception) {
             aapsLogger.warn(LTag.APS, "[$TAG] Failed to parse GPT response", e)
@@ -243,13 +265,11 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     
     private fun parseGeminiResponse(response: String): String {
         return try {
-            val json = JSONObject(response)
-            json.getJSONArray("candidates")
-                .getJSONObject(0)
-                .getJSONObject("content")
-                .getJSONArray("parts")
-                .getJSONObject(0)
-                .getString("text")
+            val json = Json.parseToJsonElement(response).jsonObject
+            json.getValue("candidates").jsonArray[0].jsonObject
+                .getValue("content").jsonObject
+                .getValue("parts").jsonArray[0].jsonObject
+                .getValue("text").jsonPrimitive.content
                 .trim()
         } catch (e: Exception) {
             aapsLogger.warn(LTag.APS, "[$TAG] Failed to parse Gemini response", e)
@@ -270,11 +290,11 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         
         val prompt = buildPrompt(features, baseline, context)
         
-        val requestBody = JSONObject().apply {
+        val requestBody = buildJsonObject {
             put("model", "claude-3-5-sonnet-20241022")
             put("max_tokens", 150)
-            put("messages", org.json.JSONArray().apply {
-                put(JSONObject().apply {
+            put("messages", buildJsonArray {
+                add(buildJsonObject {
                     put("role", "user")
                     put("content", prompt)
                 })
@@ -292,10 +312,9 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     
     private fun parseClaudeResponse(response: String): String {
         return try {
-            val json = JSONObject(response)
-            json.getJSONArray("content")
-                .getJSONObject(0)
-                .getString("text")
+            val json = Json.parseToJsonElement(response).jsonObject
+            json.getValue("content").jsonArray[0].jsonObject
+                .getValue("text").jsonPrimitive.content
                 .trim()
         } catch (e: Exception) {
             aapsLogger.warn(LTag.APS, "[$TAG] Failed to parse Claude response", e)
@@ -316,14 +335,14 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         
         val prompt = buildPrompt(features, baseline, context)
         
-        val requestBody = JSONObject().apply {
+        val requestBody = buildJsonObject {
             put("model", "deepseek-chat")
-            put("messages", org.json.JSONArray().apply {
-                put(JSONObject().apply {
+            put("messages", buildJsonArray {
+                add(buildJsonObject {
                     put("role", "system")
                     put("content", SYSTEM_ROLE_NARRATIVE)
                 })
-                put(JSONObject().apply {
+                add(buildJsonObject {
                     put("role", "user")
                     put("content", prompt)
                 })

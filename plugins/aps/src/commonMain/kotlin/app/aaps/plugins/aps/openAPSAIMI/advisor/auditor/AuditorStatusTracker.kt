@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpFailure
 import kotlin.concurrent.Volatile
 
 /**
@@ -60,7 +61,24 @@ object AuditorStatusTracker {
         fun isOffline(): Boolean = name.startsWith("OFFLINE_")
         fun isSkipped(): Boolean = name.startsWith("SKIPPED_")
     }
-    
+
+    /**
+     * The status the user is shown when a call to the AI never came back with an answer.
+     *
+     * This is the one place that turns a transport failure into one of the three statuses, and it
+     * lives here, in shared code, so it can be checked on every target. Before the port the same
+     * three lines sat inside `AuditorAIService.getVerdict` as a `when` over JVM exception types,
+     * which no shared test could reach.
+     *
+     * @param failure what the HTTP seam said the failure was. See
+     *   [app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp.classify].
+     */
+    fun statusForTransportFailure(failure: AimiHttpFailure): Status = when (failure) {
+        AimiHttpFailure.NO_NETWORK -> Status.OFFLINE_NO_NETWORK
+        AimiHttpFailure.TIMEOUT    -> Status.ERROR_TIMEOUT
+        AimiHttpFailure.OTHER      -> Status.ERROR_EXCEPTION
+    }
+
     /**
      * Update current status
      */

@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
@@ -26,6 +27,26 @@ class AimiHttpContractTest {
         override fun execute(request: AimiHttpRequest): AimiHttpResponse {
             lastRequest = request
             return response
+        }
+
+        /** These tests are about answers, not failures, so there is nothing here to name. */
+        override fun classify(error: Throwable): AimiHttpFailure = AimiHttpFailure.OTHER
+    }
+
+    /** Fails the way a platform fails: it raises, and it names what it raised. */
+    private class FailingAimiHttp(
+        private val error: Throwable,
+        private val failure: AimiHttpFailure
+    ) : AimiHttp {
+
+        var classifyCalls = 0
+            private set
+
+        override fun execute(request: AimiHttpRequest): AimiHttpResponse = throw error
+
+        override fun classify(error: Throwable): AimiHttpFailure {
+            classifyCalls++
+            return failure
         }
     }
 
@@ -99,5 +120,34 @@ class AimiHttpContractTest {
         assertEquals("POST", sent?.method)
         assertEquals(mapOf("Content-Type" to "application/json"), sent?.headers)
         assertEquals("{\"a\":1}", sent?.body)
+    }
+
+    @Test
+    fun `a failure to reach the server still travels out of execute as itself`() {
+        // Adding `classify` must not turn this into a seam type of its own. Four AIMI clients catch
+        // the platform error and word their own message from it, and `LlmHttpRetry` reads its
+        // `message` to decide whether to try again, so the error the platform raised has to arrive
+        // at the caller unwrapped.
+        val raised = IllegalStateException("connection reset")
+        val http = FailingAimiHttp(raised, AimiHttpFailure.NO_NETWORK)
+
+        val caught = try {
+            http.execute(AimiHttpRequest(url = "https://example.invalid/v1", method = "POST", connectTimeoutMs = 1, readTimeoutMs = 2))
+            null
+        } catch (e: Throwable) {
+            e
+        }
+
+        assertSame(raised, caught)
+        assertEquals(0, http.classifyCalls, "execute must not classify on its own; the caller asks")
+    }
+
+    @Test
+    fun `naming a failure is a separate question about the error that came out`() {
+        val raised = IllegalStateException("connection reset")
+        val http = FailingAimiHttp(raised, AimiHttpFailure.NO_NETWORK)
+
+        assertEquals(AimiHttpFailure.NO_NETWORK, http.classify(raised))
+        assertEquals(1, http.classifyCalls)
     }
 }

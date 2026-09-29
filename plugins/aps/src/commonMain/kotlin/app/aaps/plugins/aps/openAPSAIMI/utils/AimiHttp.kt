@@ -83,6 +83,10 @@ data class AimiHttpResponse(
  * would break a status the user reads. An implementation therefore lets the platform's own transport
  * exception travel out of [execute] untouched.
  *
+ * Shared code cannot name those JVM types, so [classify] is the way it asks which of the three cases
+ * it has. That is a question added next to [execute], not a change to it: the error still comes out
+ * of [execute] exactly as the platform raised it.
+ *
  * ### Blocking, not suspending
  *
  * [execute] blocks. Every AIMI caller is already inside `withContext(Dispatchers.IO)`, and most of
@@ -110,4 +114,76 @@ interface AimiHttp {
      * @throws Exception whatever the platform raises when the server could not be reached at all.
      */
     fun execute(request: AimiHttpRequest): AimiHttpResponse
+
+    /**
+     * Says what kind of transport failure [error] is.
+     *
+     * This asks a question, it does not change the flow: [execute] still lets the platform's own
+     * error travel out untouched, and a caller that does not care keeps catching it as before. What
+     * this adds is the one thing shared code could not do for itself - name the error - because the
+     * types that answer it (`java.net.UnknownHostException`, `java.net.SocketTimeoutException`,
+     * `java.io.IOException`) are JVM types that shared code cannot mention.
+     *
+     * Only the auditor needs the answer today, to pick between the three statuses it shows the user.
+     * See [AimiHttpFailure] for why there are three and not more.
+     *
+     * An implementation answers [AimiHttpFailure.OTHER] for anything it cannot place, and must never
+     * guess. Guessing here is not harmless: a wrong answer both retries a request that should not be
+     * retried and tells the user the wrong reason their auditor verdict did not arrive. There is no
+     * iOS implementation of this interface at all, on purpose, so no iOS classifier has to guess
+     * today. Whoever writes one should map `NSURLErrorTimedOut` to [AimiHttpFailure.TIMEOUT], the
+     * not-connected and host-not-found errors to [AimiHttpFailure.NO_NETWORK], and everything it
+     * cannot tell apart to [AimiHttpFailure.OTHER].
+     */
+    fun classify(error: Throwable): AimiHttpFailure
 }
+
+/**
+ * What went wrong when a request never came back with a status.
+ *
+ * The auditor shows the user one of three different things depending on why a call failed, and it
+ * used to tell them apart by asking whether the error was a `java.net.UnknownHostException`, a
+ * `java.net.SocketTimeoutException` or a `java.io.IOException`. None of those types exists outside
+ * the JVM, so shared code cannot ask that question itself. This enum is the question it can ask
+ * instead, through [AimiHttp.classify].
+ *
+ * There are exactly three entries because the code being ported made exactly three distinctions.
+ * A fourth would mean inventing a case no caller has ever shown a user.
+ */
+enum class AimiHttpFailure {
+
+    /**
+     * The request never reached a server: the name did not resolve, the connection was refused, the
+     * socket broke. The auditor reads this as "no network connection".
+     *
+     * A plain, unlabelled I/O failure lands here too. That is on purpose: the code being ported
+     * ended its `when` on `java.io.IOException` with the same "no network" status, so an I/O failure
+     * that is neither a name failure nor a timeout keeps reading as one.
+     */
+    NO_NETWORK,
+
+    /**
+     * A server was reached, or was being reached, but it ran out of time. The auditor reads this as
+     * "request timeout".
+     */
+    TIMEOUT,
+
+    /**
+     * Not a transport failure at all - a refused status wrapped in an error, a parse failure, a bug.
+     * The auditor reads this as a plain exception, and does not retry it.
+     */
+    OTHER
+}
+
+/**
+ * The wait for an answer ran out inside AIMI rather than inside the platform.
+ *
+ * `withTimeoutOrNull` does not raise anything, it answers `null`, so the auditor's own overall
+ * deadline used to be turned into a `java.net.SocketTimeoutException` by hand, purely so that its
+ * one retry loop and its one final `when` would treat it like any other timeout. That type cannot
+ * go to shared code, and this one takes its place.
+ *
+ * AIMI throws it, no platform does, so no [AimiHttp.classify] implementation has to know about it.
+ * The caller that throws it is the caller that recognises it.
+ */
+class AimiHttpTimeoutException(message: String) : Exception(message)

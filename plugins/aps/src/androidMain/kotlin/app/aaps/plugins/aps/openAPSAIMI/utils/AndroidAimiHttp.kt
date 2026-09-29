@@ -4,9 +4,12 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
+import java.net.UnknownHostException
 
 /**
  * Android half of [AimiHttp], on `HttpURLConnection`.
@@ -51,6 +54,21 @@ class AndroidAimiHttp @Inject constructor() : AimiHttp {
         } finally {
             connection.disconnect()
         }
+    }
+
+    /**
+     * Names a JVM transport failure, in the exact order the auditor used to name it itself.
+     *
+     * The order is the whole point and must not be tidied up. `UnknownHostException` and
+     * `SocketTimeoutException` are both `IOException`s, so a `when` that tested `IOException` first
+     * would swallow the other two and every timeout would read as "no network". This is the same
+     * chain, in the same order, that stood in `AuditorAIService.getVerdict` before the port.
+     */
+    override fun classify(error: Throwable): AimiHttpFailure = when (error) {
+        is UnknownHostException   -> AimiHttpFailure.NO_NETWORK
+        is SocketTimeoutException -> AimiHttpFailure.TIMEOUT
+        is IOException            -> AimiHttpFailure.NO_NETWORK
+        else                      -> AimiHttpFailure.OTHER
     }
 
     /**

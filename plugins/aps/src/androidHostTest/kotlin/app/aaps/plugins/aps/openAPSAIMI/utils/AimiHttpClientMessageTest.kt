@@ -37,6 +37,9 @@ class AimiHttpClientMessageTest {
     private class FixedAimiHttp(private val response: AimiHttpResponse) : AimiHttp {
 
         override fun execute(request: AimiHttpRequest): AimiHttpResponse = response
+
+        /** Names failures the way the real Android seam does, so a client under test reads them the same. */
+        override fun classify(error: Throwable): AimiHttpFailure = AndroidAimiHttp().classify(error)
     }
 
     private fun refusal(code: Int, reason: String?, body: String?) =

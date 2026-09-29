@@ -1,20 +1,28 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
 import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
+import app.aaps.plugins.aps.openAPSAIMI.aimiWaitMs
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpFailure
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpRequest
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpTimeoutException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
-import org.json.JSONArray
-import org.json.JSONObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -32,7 +40,7 @@ class AuditorAIService @Inject constructor(
     private val preferences: Preferences,
     private val aapsLogger: AAPSLogger,
     private val geminiResolver: GeminiModelResolver,
-    private val auditorStatusLiveData: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData,
+    private val auditorStatusLiveData: AuditorStatusLiveData,
     private val aimiHttp: AimiHttp
 ) {
     
@@ -86,9 +94,11 @@ class AuditorAIService @Inject constructor(
         val prompt = AuditorPromptBuilder.buildPrompt(input, profileFactorsArmed)
         
         // --- ROCKET SAUVAGE: RETRY LOGIC (3 attempts) ---
-        var lastException: Exception? = null
+        // What the last failure was, in the seam's own words. It starts at OTHER so that a loop that
+        // somehow ended without a failure still reports the plain-exception status it reported before.
+        var lastFailure = AimiHttpFailure.OTHER
         val maxRetries = 3
-        
+
         for (attempt in 1..maxRetries) {
             try {
                 // Call AI with timeout
@@ -113,35 +123,33 @@ class AuditorAIService @Inject constructor(
                     }
                 } else {
                     // Time out in coroutine
-                    throw java.net.SocketTimeoutException("Coroutine timeout after ${timeoutMs}ms")
+                    throw AimiHttpTimeoutException("Coroutine timeout after ${timeoutMs}ms")
                 }
 
             } catch (e: Exception) {
-                lastException = e
+                // The seam names the platform failure, because the JVM types that used to be tested
+                // here cannot be named in shared code. The one failure AIMI raises itself is the one
+                // the seam does not have to know about.
+                lastFailure = if (e is AimiHttpTimeoutException) AimiHttpFailure.TIMEOUT else aimiHttp.classify(e)
                 // Only retry on network/timeout/server errors
-                val isRetryable = e is java.net.SocketTimeoutException || 
-                                  e is java.io.IOException || 
-                                  e is java.net.UnknownHostException
-                                  
+                val isRetryable = lastFailure != AimiHttpFailure.OTHER
+
                 if (attempt < maxRetries && isRetryable) {
                     val backoff = attempt * 2000L // 2s, 4s
                     // Log retry
                     println("⚠️ Auditor ${provider} attempt $attempt failed: ${e.message}. Retrying in ${backoff}ms...")
-                    Thread.sleep(backoff) // Blocking inside IO dispatcher is acceptable here
+                    // Blocking inside IO dispatcher is acceptable here. A wait cut short by a thread
+                    // interrupt stops the retries and hands the error on, the same way `LlmHttpRetry` does.
+                    if (!aimiWaitMs(backoff)) throw e
                 } else {
                     // Final failure or non-retryable
                     break
                 }
             }
         }
-        
+
         // Identify final error
-        when (lastException) {
-            is java.net.UnknownHostException -> AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OFFLINE_NO_NETWORK)
-            is java.net.SocketTimeoutException -> AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_TIMEOUT)
-            is java.io.IOException -> AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OFFLINE_NO_NETWORK)
-            else -> AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_EXCEPTION)
-        }
+        AuditorStatusTracker.updateStatus(AuditorStatusTracker.statusForTransportFailure(lastFailure))
         auditorStatusLiveData.notifyUpdate()
         return@withContext null
     }
@@ -164,18 +172,18 @@ class AuditorAIService @Inject constructor(
     private fun callOpenAI(apiKey: String, prompt: String, useHighPerf: Boolean): String {
         val model = if (useHighPerf) "gpt-4o" else "gpt-4o-mini"
 
-        val requestBody = JSONObject().apply {
-            put("model", model) 
-            put("messages", JSONArray().apply {
-                put(JSONObject().apply {
+        val requestBody = buildJsonObject {
+            put("model", model)
+            put("messages", buildJsonArray {
+                add(buildJsonObject {
                     put("role", "user")
                     put("content", prompt)
                 })
             })
             put("max_tokens", 2048)
-            put("response_format", JSONObject().put("type", "json_object"))
+            put("response_format", buildJsonObject { put("type", "json_object") })
         }
-        
+
         val response = aimiHttp.execute(
             AimiHttpRequest(
                 url = OPENAI_URL,
@@ -213,7 +221,7 @@ class AuditorAIService @Inject constructor(
             // 2. Quota (429) OR still-overloaded (503) after retries → flash fallback (also retried).
             if (LlmHttpRetry.isQuota(e) || LlmHttpRetry.isTransient(e)) {
                 val fallbackModel = "gemini-flash-latest"
-                android.util.Log.w("AIMI_GEMINI", "Auditor: $primaryModel failed (${e.message?.take(80)}). Fallback to $fallbackModel")
+                aapsLogger.warn(LTag.AIMI, "[AIMI_GEMINI] Auditor: $primaryModel failed (${e.message?.take(80)}). Fallback to $fallbackModel")
                 return LlmHttpRetry.withTransientRetry(aapsLogger) { executeGeminiRequest(apiKey, prompt, fallbackModel) }
             }
             throw e
@@ -223,24 +231,24 @@ class AuditorAIService @Inject constructor(
     private fun executeGeminiRequest(apiKey: String, prompt: String, modelId: String): String {
         val urlStr = geminiResolver.getGenerateContentUrl(modelId, apiKey)
 
-        val requestBody = JSONObject().apply {
-            put("contents", JSONArray().apply {
-                put(JSONObject().apply {
+        val requestBody = buildJsonObject {
+            put("contents", buildJsonArray {
+                add(buildJsonObject {
                     put("role", "user")
-                    put("parts", JSONArray().apply {
-                        put(JSONObject().apply {
+                    put("parts", buildJsonArray {
+                        add(buildJsonObject {
                             put("text", prompt)
                         })
                     })
                 })
             })
-            put("generationConfig", JSONObject().apply {
+            put("generationConfig", buildJsonObject {
                 put("temperature", 0.3)
                 put("maxOutputTokens", 8192)
                 put("responseMimeType", "application/json")
             })
         }
-        
+
         val response = aimiHttp.execute(
             AimiHttpRequest(
                 url = urlStr,
@@ -264,17 +272,17 @@ class AuditorAIService @Inject constructor(
      * Call DeepSeek API
      */
     private fun callDeepSeek(apiKey: String, prompt: String): String {
-        val requestBody = JSONObject().apply {
+        val requestBody = buildJsonObject {
             put("model", "deepseek-chat")
-            put("messages", JSONArray().apply {
-                put(JSONObject().apply {
+            put("messages", buildJsonArray {
+                add(buildJsonObject {
                     put("role", "user")
                     put("content", prompt)
                 })
             })
             put("max_tokens", 2048)  // FIX: Was missing - same as other providers
             put("temperature", 0.3)
-            put("response_format", JSONObject().put("type", "json_object"))
+            put("response_format", buildJsonObject { put("type", "json_object") })
         }
         
         val response = aimiHttp.execute(
@@ -303,12 +311,12 @@ class AuditorAIService @Inject constructor(
      */
     private fun callClaude(apiKey: String, prompt: String, useHighPerf: Boolean): String {
         val model = if (useHighPerf) "claude-3-5-sonnet-20241022" else "claude-3-haiku-20240307"
-        val requestBody = JSONObject().apply {
+        val requestBody = buildJsonObject {
             put("model", model)
             put("max_tokens", 2048)
             put("temperature", 0.3)
-            put("messages", JSONArray().apply {
-                put(JSONObject().apply {
+            put("messages", buildJsonArray {
+                add(buildJsonObject {
                     put("role", "user")
                     put("content", prompt)
                 })
@@ -366,7 +374,7 @@ class AuditorAIService @Inject constructor(
             val text = extractContentText(responseJson, provider)
             return@withContext AuditorProfileFactorParser.parse(text)
         } catch (e: Exception) {
-            return@withContext AuditorProfileFactorLlmOutput.failed("exception:${e.javaClass.simpleName}")
+            return@withContext AuditorProfileFactorLlmOutput.failed("exception:${e::class.simpleName}")
         }
     }
 
@@ -374,29 +382,29 @@ class AuditorAIService @Inject constructor(
      * Pulls the model's own text out of the provider envelope and strips a code fence.
      *
      * Shared by the verdict and by the profile check, so both read the same four provider shapes.
+     *
+     * Every step raises when what it asked for is not there, exactly as the `org.json` getters it
+     * replaces did. That is the whole point: a reply that does not have the shape this expects has to
+     * reach the caller's `catch`, which turns it into the parse status the user sees.
      */
     private fun extractContentText(responseJson: String, provider: Provider): String {
-        val root = JSONObject(responseJson)
+        val root = Json.parseToJsonElement(responseJson).jsonObject
 
         val contentJson = when (provider) {
             Provider.OPENAI, Provider.DEEPSEEK -> {
-                root.getJSONArray("choices")
-                    .getJSONObject(0)
-                    .getJSONObject("message")
-                    .getString("content")
+                root.getValue("choices").jsonArray[0].jsonObject
+                    .getValue("message").jsonObject
+                    .getValue("content").jsonPrimitive.content
             }
             Provider.GEMINI                    -> {
-                root.getJSONArray("candidates")
-                    .getJSONObject(0)
-                    .getJSONObject("content")
-                    .getJSONArray("parts")
-                    .getJSONObject(0)
-                    .getString("text")
+                root.getValue("candidates").jsonArray[0].jsonObject
+                    .getValue("content").jsonObject
+                    .getValue("parts").jsonArray[0].jsonObject
+                    .getValue("text").jsonPrimitive.content
             }
             Provider.CLAUDE                    -> {
-                root.getJSONArray("content")
-                    .getJSONObject(0)
-                    .getString("text")
+                root.getValue("content").jsonArray[0].jsonObject
+                    .getValue("text").jsonPrimitive.content
             }
         }
 

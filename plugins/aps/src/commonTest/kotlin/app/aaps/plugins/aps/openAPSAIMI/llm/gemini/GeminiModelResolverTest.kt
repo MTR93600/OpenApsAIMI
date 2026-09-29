@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.llm.gemini
 import app.aaps.plugins.aps.openAPSAIMI.NoOpAapsLogger
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpFailure
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpRequest
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpResponse
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache
@@ -85,6 +86,9 @@ class GeminiModelResolverTest {
             failure?.let { throw it }
             return reply ?: AimiHttpResponse(code = 200, reason = "OK", body = "{}")
         }
+
+        /** The resolver never asks, so this only has to exist. */
+        override fun classify(error: Throwable): AimiHttpFailure = AimiHttpFailure.OTHER
     }
 
     private fun resolver(cache: FakeCache, http: FakeHttp) =
