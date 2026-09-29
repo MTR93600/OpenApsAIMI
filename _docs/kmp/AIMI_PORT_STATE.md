@@ -2497,6 +2497,59 @@ decided: `model/StateTransitionManager` (superseded by `AimiStateTransitionManag
 `AIMICompositeStepsProviderMTR`, `AIMIHealthConnectStepsProviderMTR`, and the empty Hilt scan module.
 `AimiUamHandler.configureUamModel` is a candidate but has not been checked against `master` yet.
 
+## 6ar. 2026-09-29: a measure that keeps being wrong — "gates" is not "frees"
+
+I have now made the same estimating error three times in one campaign, in three different lots, so it
+is worth writing down rather than re-learning:
+
+| I said | Reality |
+|---|---|
+| "an HTTP port unblocks that family of 9" | it frees **4**; the other 5 carry `Bitmap`, `Base64` or their own Android import |
+| "these 2 helpers are the last androidMain dependency of the LLM clients" | they were **two of several**; `SP`, `org.json` writing and JVM exception types remained |
+| "`AdvisorHistoryRepository` gates 7 files, so porting it unblocks 7" | it frees **0**; all 7 lose one blocker each, none becomes movable |
+
+**A hub count tells you how many files a type gates. It tells you nothing about how many would move if
+that type were freed**, because the files typically carry two to five independent blockers. The only
+honest estimate comes from checking each dependent's own remaining blockers, and the only proof is the
+compiler.
+
+The corollary matters for planning: porting a hub is still worth doing - it is a prerequisite that
+retires debt for every dependent - but it should be scheduled and reported as "removes one blocker from
+7 files", never as "unblocks 7 files". Two of those seven (`TpoSessionManager`, `TuningContextApplySupport`)
+are now a single small blocker away (`java.util.UUID` and `java.util.Locale` respectively), which is the
+useful thing to say.
+
+## 6as. 2026-09-29: the advisor history store, and what Gson was really doing
+
+`AdvisorHistoryRepository` is in `commonMain`. What the port had to preserve is history already on the
+owner's phone, where a format break does not crash - it returns an empty list and the history silently
+disappears.
+
+Three facts found by running Gson rather than reasoning about it:
+
+1. **The JSON is not byte-identical out of the box.** A plain `Gson()` writes in HTML-safe mode and
+   escapes `<`, `>`, `&`, `=` and `'` as unicode escapes; kotlinx writes them as themselves. Both readers
+   accept both forms, so this is not a read-compatibility problem - but advisor text is LLM-written and
+   really does contain `=` and `>` (`ISF > 90`). The writer now reproduces Gson's escaping exactly. It is
+   safe to apply to the finished document because none of those five characters is JSON syntax, so each
+   can only sit inside a string value.
+2. **An unknown enum value was a latent crash, not graceful degradation.** Gson kept the entry and wrote
+   `null` into the non-null Kotlin field `type`, so the next caller reading `it.type` would throw. The new
+   reader drops that one entry and keeps the rest - strictly better, and it decodes per entry precisely so
+   that one bad entry cannot cost the whole file.
+3. **A stored `""`, `"   "` or `"null"` made Gson return a null list**, which would have thrown at
+   `loadHistory().toMutableList()`. Now it is an empty list.
+
+**`kotlinx.serialization` is only half available in `:plugins:aps`:** the runtime arrives transitively
+through `:core:utils`, but the **compiler plugin is not applied**, so `@Serializable` cannot be used here
+without a build change. The store is read and written through the `JsonObject` element API with
+`OrgJsonCompat` accessors, which is what `T3cRuntimeHistoryReader` and `HarmoniaRuntimeHistoryReader`
+already do in the same package. Worth knowing before anyone plans a serialization lot in this module.
+
+Also recorded, not fixed: `getRecentActions(days)` computes `days * 24 * 60 * 60` in `Int`, so anything
+from 24856 days up silently overflows and the window becomes short or negative. No caller passes more
+than a few weeks.
+
 ---
 
 ---

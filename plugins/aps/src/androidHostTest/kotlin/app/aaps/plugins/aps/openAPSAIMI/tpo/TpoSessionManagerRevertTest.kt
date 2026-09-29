@@ -17,7 +17,8 @@ import kotlin.test.assertTrue
  * The key under test is the one the user watched move on its own: the high-glucose SMB ceiling.
  *
  * Matching tests from `origin/dev_OAPSAIMI` @ `f3de6740ee` (file unchanged on tip `a546722609`).
- * Study source set: [TpoSessionManager] is androidMain (UUID + [AdvisorHistoryRepository]), so this
+ * Study source set: [TpoSessionManager] is androidMain (its only remaining blocker is
+ * `java.util.UUID`; [AdvisorHistoryRepository] moved to commonMain), so this
  * lives in `androidHostTest` + mockito (not mockk). Persistence is mocked; the revert path does
  * not need a real file. Names are camelCase (no backtick commas).
  */
