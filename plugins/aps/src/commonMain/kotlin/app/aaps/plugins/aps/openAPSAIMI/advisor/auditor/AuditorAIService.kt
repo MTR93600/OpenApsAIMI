@@ -1,10 +1,10 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
 import app.aaps.plugins.aps.openAPSAIMI.aimiWaitMs
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
@@ -13,7 +13,6 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpFailure
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpRequest
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpTimeoutException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
@@ -40,7 +39,7 @@ class AuditorAIService @Inject constructor(
     private val preferences: Preferences,
     private val aapsLogger: AAPSLogger,
     private val geminiResolver: GeminiModelResolver,
-    private val auditorStatusLiveData: AuditorStatusLiveData,
+    private val auditorStatusNotifier: AuditorStatusNotifier,
     private val aimiHttp: AimiHttp
 ) {
     
@@ -80,13 +79,13 @@ class AuditorAIService @Inject constructor(
         timeoutMs: Long = DEFAULT_TIMEOUT_MS,
         useHighPerf: Boolean = false,
         profileFactorsArmed: Boolean = false
-    ): AuditorVerdict? = withContext(Dispatchers.IO) {
+    ): AuditorVerdict? = withContext(aapsIoDispatcher) {
         
         // Get API key
         val apiKey = getApiKey(provider)
         if (apiKey.isBlank()) {
             AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.OFFLINE_NO_APIKEY)
-            auditorStatusLiveData.notifyUpdate()
+            auditorStatusNotifier.notifyUpdate()
             return@withContext null
         }
         
@@ -118,7 +117,7 @@ class AuditorAIService @Inject constructor(
                     } catch (e: Exception) {
                         // JSON parsing failed - unlikely to succeed on retry unless response was partial
                         AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_PARSE)
-                        auditorStatusLiveData.notifyUpdate()
+                        auditorStatusNotifier.notifyUpdate()
                         return@withContext null
                     }
                 } else {
@@ -150,7 +149,7 @@ class AuditorAIService @Inject constructor(
 
         // Identify final error
         AuditorStatusTracker.updateStatus(AuditorStatusTracker.statusForTransportFailure(lastFailure))
-        auditorStatusLiveData.notifyUpdate()
+        auditorStatusNotifier.notifyUpdate()
         return@withContext null
     }
     
@@ -359,7 +358,7 @@ class AuditorAIService @Inject constructor(
         prompt: String,
         provider: Provider,
         timeoutMs: Long = DEFAULT_TIMEOUT_MS
-    ): AuditorProfileFactorLlmOutput = withContext(Dispatchers.IO) {
+    ): AuditorProfileFactorLlmOutput = withContext(aapsIoDispatcher) {
         val apiKey = getApiKey(provider)
         if (apiKey.isBlank()) return@withContext AuditorProfileFactorLlmOutput.failed("no_api_key")
         try {

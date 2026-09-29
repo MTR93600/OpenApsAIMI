@@ -2,20 +2,28 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui
 
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorStatusNotifier
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorStatusTracker
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model.AuditorUIState
+import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
 
 /**
  * Reactive layer transforming [AuditorStatusTracker.Status] → [AuditorUIState].
+ *
+ * This is the one instance the shared writers reach through [AuditorStatusNotifier], and the one the
+ * Overview chip (`AuditorStatusBadgeSource`) and the notification (`AuditorNotificationManager`)
+ * read. It stays a single instance for the whole app: a second one would carry a second state that
+ * nobody observes.
  */
+@ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class AuditorStatusLiveData @Inject constructor() {
+class AuditorStatusLiveData @Inject constructor() : AuditorStatusNotifier {
 
   private val _uiState = MutableLiveData(AuditorUIState.idle())
   val uiState: LiveData<AuditorUIState> = _uiState
@@ -23,7 +31,7 @@ class AuditorStatusLiveData @Inject constructor() {
   @Volatile
   private var lastReadTimestampMs: Long = 0L
 
-  fun notifyUpdate() {
+  override fun notifyUpdate() {
     val (status, ageMs) = AuditorStatusTracker.getStatus()
     val newState = transformStatusToUIState(status, ageMs)
     _uiState.postValue(newState)

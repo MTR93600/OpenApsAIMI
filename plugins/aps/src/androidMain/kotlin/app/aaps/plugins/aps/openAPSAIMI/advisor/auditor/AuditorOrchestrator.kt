@@ -13,7 +13,6 @@ import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
-import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
 import app.aaps.plugins.aps.openAPSAIMI.model.*
 import app.aaps.plugins.aps.openAPSAIMI.patient.AimiCascadeArbitrationArtifacts
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaHarmonizer
@@ -55,7 +54,7 @@ class AuditorOrchestrator @Inject constructor(
     private val preferences: Preferences,
     private val dataCollector: AuditorDataCollector,
     private val aiService: AuditorAIService,
-    private val auditorStatusLiveData: AuditorStatusLiveData,
+    private val auditorStatusNotifier: AuditorStatusNotifier,
     private val aapsLogger: AAPSLogger,
     private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR
 ) : AimiAuditor {
@@ -177,7 +176,7 @@ class AuditorOrchestrator @Inject constructor(
         // (DISABLED / SKIPPED_*) don't carry a stale agreement/factor into the JSONL telemetry.
         lastSentinelAdvice = null
         AuditorVerdictCache.noteCurrentBg(glucoseStatus?.date)
-        auditorStatusLiveData.notifyUpdate()
+        auditorStatusNotifier.notifyUpdate()
         
         // Check if auditor is enabled
         if (!isAuditorEnabled()) {
@@ -446,7 +445,7 @@ class AuditorOrchestrator @Inject constructor(
                     
                     // Update global cache for RT instrumentation
                     AuditorVerdictCache.update(guardedVerdict, modulated, glucoseStatus?.date)
-                    auditorStatusLiveData.notifyUpdate()
+                    auditorStatusNotifier.notifyUpdate()
                     
                     callback?.invoke(guardedVerdict, modulated)
 

@@ -1,10 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.utils
 
 import app.aaps.core.interfaces.logging.AAPSLogger
-import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorAIService
-import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorStatusNotifier
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMILLMPhysioAnalyzerMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioBaselineMTR
@@ -102,7 +101,7 @@ class AimiLlmRequestBodyParityTest {
         preferences = mock<Preferences>(),
         aapsLogger = mock<AAPSLogger>(),
         geminiResolver = resolver,
-        auditorStatusLiveData = mock<AuditorStatusLiveData>(),
+        auditorStatusNotifier = mock<AuditorStatusNotifier>(),
         aimiHttp = http
     )
 
@@ -212,7 +211,7 @@ class AimiLlmRequestBodyParityTest {
     // ── The physiology analyser ────────────────────────────────────────────────────────────────
 
     private fun analyzer(http: AimiHttp, resolver: GeminiModelResolver = mock()) = AIMILLMPhysioAnalyzerMTR(
-        sp = mock<SP>(),
+            preferences = mock<Preferences>(),
         aapsLogger = mock<AAPSLogger>(),
         geminiResolver = resolver,
         aimiHttp = http

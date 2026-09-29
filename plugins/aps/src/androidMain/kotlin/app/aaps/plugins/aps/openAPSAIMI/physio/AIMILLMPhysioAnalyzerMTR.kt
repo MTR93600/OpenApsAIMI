@@ -1,16 +1,16 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.keys.StringKey
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpRequest
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -53,12 +53,12 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 @OptIn(ExperimentalAtomicApi::class)
 @SingleIn(AppScope::class)
 class AIMILLMPhysioAnalyzerMTR @Inject constructor(
-    private val sp: SP,
+    private val preferences: Preferences,
     private val aapsLogger: AAPSLogger,
     private val geminiResolver: GeminiModelResolver,
     private val aimiHttp: AimiHttp
 ) {
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val ioScope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
 
     /**
      * The last narrative that came back, kept for the next caller.
@@ -161,7 +161,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         context: PhysioContextMTR
     ): String {
         
-        val provider = sp.getString(StringKey.AimiPhysioLLMProvider.key, "gpt4")
+        val provider = preferences.get(StringKey.AimiPhysioLLMProvider)
         val apiKey = getAPIKey(provider)
         
         if (apiKey.isBlank()) {
@@ -184,7 +184,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         ioScope.launch {
             try {
                 val result = withTimeout(TIMEOUT_MS) {
-                    withContext(Dispatchers.IO) {
+                    withContext(aapsIoDispatcher) {
                         when (provider) {
                             "gpt4" -> analyzeWithGPT(features, baseline, context, apiKey)
                             "gemini" -> analyzeWithGemini(features, baseline, context, apiKey)
@@ -433,16 +433,40 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     // UTILITIES
     // ═══════════════════════════════════════════════════════════════════════
     
+    /**
+     * The setting that holds the key for one provider, or `null` when the provider is not known.
+     *
+     * These are the same four settings the user fills in on the AI keys screen, so the key typed
+     * there is the key this class sends. Before this, the class read four names that nothing ever
+     * wrote, so it never had a key and never ran.
+     *
+     * Kept apart from [getAPIKey] so a test can read the mapping without a preference store, and
+     * so a swap between two providers shows up as a failing test instead of one provider's key
+     * being sent to another provider's endpoint.
+     */
+    internal fun apiKeySettingFor(provider: String): StringKey? = when (provider) {
+        "gpt4"     -> StringKey.AimiAdvisorOpenAIKey
+        "gemini"   -> StringKey.AimiAdvisorGeminiKey
+        "claude"   -> StringKey.AimiAdvisorClaudeKey
+        "deepseek" -> StringKey.AimiAdvisorDeepSeekKey
+        else       -> null
+    }
+
     private fun getAPIKey(provider: String): String {
         // API keys stored in preferences (user-configured)
-        return when (provider) {
-            "gpt4" -> sp.getString("aimi_openai_api_key", "")
-            "gemini" -> sp.getString("aimi_gemini_api_key", "")
-            "claude" -> sp.getString("aimi_claude_api_key", "")
-            "deepseek" -> sp.getString("aimi_deepseek_api_key", "")
-            else -> ""
-        }
+        val setting = apiKeySettingFor(provider) ?: return ""
+        return preferences.get(setting)
     }
     
+    /**
+     * Rounds a number for the prompt text.
+     *
+     * This is the one line that keeps the file in `androidMain`: `String.format` is JVM only, so
+     * `:plugins:aps:compileKotlinIosArm64` stops here and nowhere else. It is left alone on purpose.
+     * The text it makes goes straight into the prompt the model reads, and it follows the phone's
+     * locale, so a shared replacement would change what is sent - a French phone writes `7,5` today
+     * and a shared version would write `7.5`. Changing the prompt is a separate decision from moving
+     * the file, and needs its own before-and-after.
+     */
     private fun Double.format(decimals: Int): String = "%.${decimals}f".format(this)
 }

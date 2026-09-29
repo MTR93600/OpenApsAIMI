@@ -2,12 +2,11 @@ package app.aaps.plugins.aps.openAPSAIMI.utils
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.resources.ResourceHelper
-import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorAIService
-import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorStatusNotifier
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMILLMPhysioAnalyzerMTR
 import com.google.common.truth.Truth.assertThat
@@ -61,7 +60,7 @@ class AimiHttpClientMessageTest {
     @Test
     fun `the physiology analyser still says HTTP code then reason phrase`() {
         val analyzer = AIMILLMPhysioAnalyzerMTR(
-            sp = mock<SP>(),
+            preferences = mock<Preferences>(),
             aapsLogger = mock<AAPSLogger>(),
             geminiResolver = mock<GeminiModelResolver>(),
             aimiHttp = refusal(code = 500, reason = "Internal Server Error", body = "ignored by this client")
@@ -78,7 +77,7 @@ class AimiHttpClientMessageTest {
     fun `the physiology analyser still prints a missing reason phrase as null`() {
         // It interpolated a nullable reason phrase before the port and has to keep doing so.
         val analyzer = AIMILLMPhysioAnalyzerMTR(
-            sp = mock<SP>(),
+            preferences = mock<Preferences>(),
             aapsLogger = mock<AAPSLogger>(),
             geminiResolver = mock<GeminiModelResolver>(),
             aimiHttp = refusal(code = 503, reason = null, body = null)
@@ -97,7 +96,7 @@ class AimiHttpClientMessageTest {
         preferences = mock<Preferences>(),
         aapsLogger = mock<AAPSLogger>(),
         geminiResolver = resolver,
-        auditorStatusLiveData = mock<AuditorStatusLiveData>(),
+        auditorStatusNotifier = mock<AuditorStatusNotifier>(),
         aimiHttp = http
     )
 
