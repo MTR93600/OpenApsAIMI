@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -82,5 +83,86 @@ class AutodriveDatasetLockTest {
         }
 
         assertThat(result).isEqualTo("ok")
+    }
+
+    /**
+     * The data lake calls this from the APS decision thread on every tick, while the backfiller can
+     * hold the dataset across a read-modify-rename of the whole corpus. Two things must hold, and
+     * both are safety properties, not conveniences:
+     *
+     * - it returns at once instead of waiting, so a training row never delays a dose
+     * - it does **not** run the block when the dataset is busy, so the row is carried forward rather
+     *   than appended into a file that is about to be replaced
+     *
+     * This is the property that keeps [AutodriveDatasetLock] on the JVM. `AapsLock` offers only
+     * `lock`/`unlock`, so any move to shared code has to bring a non-blocking attempt with it, and
+     * this test is what would catch a replacement that quietly waits or quietly writes.
+     */
+    @Test
+    fun `tryWithDataset gives up at once and skips the block while another thread holds the dataset`() {
+        val held = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val holder = Thread {
+            AutodriveDatasetLock.withDataset {
+                held.countDown()
+                release.await()
+            }
+        }
+        holder.start()
+        assertThat(held.await(5, TimeUnit.SECONDS)).isTrue()
+
+        val blockRan = AtomicBoolean(false)
+        val startedAtNanos = System.nanoTime()
+        val result = AutodriveDatasetLock.tryWithDataset {
+            blockRan.set(true)
+            "appended"
+        }
+        val waitedMillis = (System.nanoTime() - startedAtNanos) / 1_000_000L
+
+        release.countDown()
+        holder.join(5_000)
+
+        assertThat(result).isNull()
+        assertThat(blockRan.get()).isFalse()
+        // The holder is still inside its section above, so anything that waited for it would sit
+        // here until `release`. A quarter of a second is far longer than a failed attempt needs and
+        // far shorter than a real corpus transaction.
+        assertThat(waitedMillis).isLessThan(250L)
+    }
+
+    @Test
+    fun `tryWithDataset runs the block and returns its value when the dataset is free`() {
+        val result = AutodriveDatasetLock.tryWithDataset { "appended" }
+
+        assertThat(result).isEqualTo("appended")
+    }
+
+    @Test
+    fun `a failed attempt does not leave the dataset held`() {
+        val held = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val holder = Thread {
+            AutodriveDatasetLock.withDataset {
+                held.countDown()
+                release.await()
+            }
+        }
+        holder.start()
+        assertThat(held.await(5, TimeUnit.SECONDS)).isTrue()
+
+        // Released in `finally`: an assertion that throws here would otherwise leave the holder
+        // parked inside its section, and every later test in this class would wait on a lock that
+        // is never given back.
+        val whileBusy = try {
+            AutodriveDatasetLock.tryWithDataset { "appended" }
+        } finally {
+            release.countDown()
+            holder.join(5_000)
+        }
+        assertThat(whileBusy).isNull()
+
+        // The next tick must be able to write, otherwise one busy moment would stop the corpus for
+        // good.
+        assertThat(AutodriveDatasetLock.tryWithDataset { "appended" }).isEqualTo("appended")
     }
 }
