@@ -70,6 +70,7 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
 import app.aaps.core.data.model.HR
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
+import app.aaps.plugins.aps.openAPSAIMI.ml.AimiCorpusPruner
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbTrainingRowBuffer
@@ -286,11 +287,13 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.AutodriveEngine
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.PhysiologicalStressMaskBuilder
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey
 import java.io.File
+import java.io.RandomAccessFile
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Calendar
 import java.util.Date
@@ -3030,11 +3033,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val therapy = Therapy(persistenceLayer).also {
             it.updateStatesBasedOnTherapyEvents(forceRefresh = true)
         }
-        val deleteEventDate = therapy.deleteEventDate
         val deleteTime = therapy.deleteTime
         if (deleteTime) {
-            //removeLastNLines(100)
-            //createFilteredAndSortedCopy(csvfile,deleteEventDate.toString())
+            // Still the count based clean up on purpose: the owner asked for the date based one on
+            // the "bad day" trigger only. `Therapy.deleteEventDate` does carry the day of the note,
+            // so this path could be moved to `removeRowsForDay` later, but that is a change of
+            // behaviour and needs to be asked for.
             removeLast200Lines(csvfile)
         }
         this.sleepTime = therapy.sleepTime
@@ -13906,7 +13910,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else {
             ensureCsvHeaderIsCurrent(file, headerRow)
         }
-        file.appendText(valuesRow + "\n")
+        // The guard in front of the row is what stops it being glued to the last stored one. A clean
+        // up used to rewrite the file without a final line break, so the next row written started on
+        // the same line and the reader dropped both of them. See [AimiCorpusPruner].
+        file.appendText(AimiCorpusPruner.rowPrefix(lastCharOf(file)) + valuesRow + "\n")
+    }
+
+    /**
+     * The last character stored in [file], or `null` when it is empty or could not be read.
+     *
+     * Only the last byte is read: this runs on every loop tick, on a file that only grows, so reading
+     * the whole thing to look at its end would not scale. Comparing a single byte to a line break is
+     * safe on UTF-8 text, because the bytes that make up a multi byte character are never `0x0A`.
+     */
+    private fun lastCharOf(file: File): Char? {
+        val length = runCatching { file.length() }.getOrDefault(0L)
+        if (length <= 0L) return null
+        return runCatching {
+            RandomAccessFile(file, "r").use { reader ->
+                reader.seek(length - 1)
+                reader.read().takeIf { it >= 0 }?.toChar()
+            }
+        }.getOrNull()
     }
 
     /**
@@ -13933,63 +13958,113 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
+    /**
+     * Where the copy of the training CSV goes before it is rewritten.
+     *
+     * The name is `backup_yyyyMMdd_HHmmss.csv` next to the file itself, which is the name
+     * `AimiRetentionPolicy.DROP_GLOBS` already looks for when it tidies old backups up.
+     */
+    private fun backupFileFor(csvFile: File): File {
+        val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+        val timestamp = dateFormat.format(Date())
+        return File(csvFile.parentFile, "backup_$timestamp.csv")
+    }
+
+    /**
+     * Removes the newest 200 lines of the training CSV, after copying the whole file aside.
+     *
+     * This is the count based clean up, kept for the therapy note trigger, which asks for a deletion
+     * without naming a day. The rule itself lives in [AimiCorpusPruner.keepAllButNewest] so it can be
+     * tested; the "bad day" trigger uses [removeRowsForDay] instead, which removes the rows of the
+     * day the user is told about.
+     */
     fun removeLast200Lines(csvFile: File) {
         val reasonBuilder = StringBuilder()
         if (!csvFile.exists()) {
-            //println("Le fichier original n'existe pas.")
-            println(rh.gs(ApsStrings.original_file_missing))
+            aapsLogger.info(LTag.APS, rh.gs(ApsStrings.original_file_missing))
             return
         }
 
-        // Lire toutes les lignes du fichier
-        val lines = csvFile.readLines(Charsets.UTF_8)
+        val backupFile = backupFileFor(csvFile)
+        val result = AimiCorpusPruner.removeNewest(
+            storage = storage,
+            csv = AimiPath(csvFile.absolutePath),
+            backup = AimiPath(backupFile.absolutePath),
+            count = 200,
+        )
+        when (result.outcome) {
+            AimiCorpusPruner.Outcome.REMOVED         ->
+                reasonBuilder.append(rh.gs(ApsStrings.last_200_deleted, backupFile.name))
 
-        if (lines.size <= 200) {
-            //reasonBuilder.append("Le fichier contient moins ou égal à 200 lignes, aucune suppression effectuée.")
-            reasonBuilder.append(rh.gs(ApsStrings.file_too_short))
-            return
+            AimiCorpusPruner.Outcome.NOTHING_REMOVED ->
+                reasonBuilder.append(rh.gs(ApsStrings.file_too_short))
+
+            else                                     ->
+                aapsLogger.warn(LTag.APS, "AIMI training CSV not cleaned up: ${result.outcome}")
         }
-
-        // Conserver toutes les lignes sauf les 200 dernières
-        val newLines = lines.dropLast(200)
-
-        // Création d'un nom de sauvegarde avec timestamp
-        val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-        val timestamp = dateFormat.format(Date())
-        val backupFileName = "backup_$timestamp.csv"
-        val backupFile = File(csvFile.parentFile, backupFileName)
-
-        // Sauvegarder le fichier original
-        csvFile.copyTo(backupFile, overwrite = true)
-
-        // Réécrire le fichier original avec les lignes restantes
-        csvFile.writeText(newLines.joinToString("\n"), Charsets.UTF_8)
-
-        //reasonBuilder.append("Les 200 dernières lignes ont été supprimées. Le fichier original a été sauvegardé sous '$backupFileName'.")
-        reasonBuilder.append(rh.gs(ApsStrings.last_200_deleted, backupFileName))
     }
+
+    /**
+     * Removes the rows of one day from the training CSV, keeping every other row and the header.
+     *
+     * The day is passed as text, not as a date, because column 0 of a row is written with
+     * `DateUtil.dateAndTimeString`, which is the short date in the phone's own language and time
+     * zone. The caller builds the same text with the same function, so the two can only match when
+     * they mean the same day. A row whose date cannot be read, or that was written while the phone
+     * was set to another language, does not match and is kept.
+     */
+    private fun removeRowsForDay(csvFile: File, dayText: String): AimiCorpusPruner.Result {
+        if (!csvFile.exists()) {
+            aapsLogger.info(LTag.APS, rh.gs(ApsStrings.original_file_missing))
+            return AimiCorpusPruner.Result(
+                outcome = AimiCorpusPruner.Outcome.FILE_MISSING,
+                removedRows = 0,
+                keptRows = 0,
+            )
+        }
+        val result = AimiCorpusPruner.removeDay(
+            storage = storage,
+            csv = AimiPath(csvFile.absolutePath),
+            backup = AimiPath(backupFileFor(csvFile).absolutePath),
+            dayText = dayText,
+        )
+        aapsLogger.info(
+            LTag.APS,
+            "AIMI training CSV clean up for $dayText: ${result.outcome}, " +
+                "removed ${result.removedRows} rows, kept ${result.keptRows}",
+        )
+        return result
+    }
+
     @SuppressLint("StringFormatInvalid")
     private fun automateDeletionIfBadDay(tir1DAYIR: Int) {
         val reasonBuilder = StringBuilder()
-        // Vérifier si le TIR est inférieur à 85%
+        // Only when the time in range of the last day is under 85 %.
         if (tir1DAYIR < 85) {
-            // Vérifier si l'heure actuelle est entre 00:05 et 00:10
+            // Only between 00:05 and 00:10, local time.
             val currentTime = LocalTime.now()
             val start = LocalTime.of(0, 5)
             val end = LocalTime.of(0, 10)
 
             if (currentTime.isAfter(start) && currentTime.isBefore(end)) {
-                // Calculer la date de la veille au format dd/MM/yyyy
-                val yesterday = LocalDate.now().minusDays(1)
-                val dateToRemove = yesterday.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                // The day that has just ended, in the phone's own time zone, which is both the zone
+                // the window above is read in and the zone the rows were dated in. Midday is used
+                // rather than midnight because in a few time zones a day starts without a midnight
+                // when the clocks change.
+                val yesterdayMiddayMs = LocalDate.now()
+                    .minusDays(1)
+                    .atTime(12, 0)
+                    .atZone(ZoneId.systemDefault())
+                    .toInstant()
+                    .toEpochMilli()
+                // The very text the row writer put in column 0 for that day.
+                val dateToRemove = dateUtil.dateString(yesterdayMiddayMs)
 
-                // Appeler la méthode de suppression
-                //createFilteredAndSortedCopy(csvfile,dateToRemove)
-                removeLast200Lines(csvfile)
-                //reasonBuilder.append("Les données pour la date $dateToRemove ont été supprimées car TIR1DAIIR est inférieur à 85%.")
-                reasonBuilder.append(rh.gs(ApsStrings.reason_data_removed, dateToRemove))
+                val result = removeRowsForDay(csvfile, dateToRemove)
+                if (result.outcome == AimiCorpusPruner.Outcome.REMOVED) {
+                    reasonBuilder.append(rh.gs(ApsStrings.reason_data_removed, dateToRemove))
+                }
             } else {
-                //reasonBuilder.append("La suppression ne peut être exécutée qu'entre 00:05 et 00:10.")
                 reasonBuilder.append(rh.gs(ApsStrings.reason_deletion_time_restricted))
             }
         }

@@ -12,9 +12,13 @@ package app.aaps.core.interfaces.concurrent
  * - **blocking** - [withLock] blocks the calling thread, it does not suspend. A `Mutex` from
  *   kotlinx-coroutines is NOT a drop-in replacement: it is not reentrant, and it needs a coroutine
  *
- * On Android the actual delegates straight to `kotlin.synchronized`, so the generated code and the
- * runtime behaviour there are unchanged - which matters, because the first user of this is the loop's
- * calculation cache.
+ * On Android and the JVM the actual is a `ReentrantLock`, not the object monitor: `synchronized` is a
+ * block construct and cannot be split into the separate lock and unlock calls that the inline
+ * [withLock] needs. Reentrancy and blocking are the same as the monitor these call sites used before
+ * they were made multiplatform, which is what matters, because the first user of this is the loop's
+ * calculation cache. There is **no** timed `tryLock` here, so code built on
+ * `ReentrantLock.tryLock(timeout)` or `isHeldByCurrentThread` cannot move to shared code by swapping
+ * in this class.
  *
  * One lock guards one thing. Do NOT lock on an object you also reassign:
  *

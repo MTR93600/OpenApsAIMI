@@ -128,7 +128,6 @@ class BasalMlTrainingCoordinator @Inject constructor(
         private const val STALE_TRAINING_MS = 4L * 60 * 60 * 1000 // 4h
         private const val BASAL_MIN_ROWS = 100
         private const val T3C_MIN_ROWS = 50
-        private const val VAL_LOSS_TOLERANCE = 1.05
         private const val STATE_FILE = "basal_ml_training_state.json"
         private const val CSV_FILE = "basal_adaptive_records.csv"
         private const val BASAL_WEIGHTS = "basal_adaptive_weights.json"
@@ -327,6 +326,18 @@ class BasalMlTrainingCoordinator @Inject constructor(
      * The candidate also has to beat the best constant predictor on the held-out rows
      * ([MAX_BASELINE_MAE_RATIO]). The spread probe alone cannot do that job: measured, a model trained
      * on pure label noise moves MORE across the bg anchors than a model that found the real function.
+     *
+     * `requireIncumbentBeat` is left off (the default) on purpose, same as `AimiSmbTrainer`. Comparing
+     * against the model on disk is what froze this exact basal head for 40+ days: the model shipped on
+     * 12 July 2026 answered a near-constant value, a constant hugs the label mean and so scores a
+     * deceptively low validation loss, and every later candidate - however well trained - was rejected
+     * for not beating it. The liveness probes above (range, spread, baseline-MAE) are the safe way to
+     * keep a bad model out; a val-loss ratchet against a possibly-already-broken incumbent is not.
+     *
+     * Restored 2026-09-30 to match `origin/dev_OAPSAIMI`. This branch had been passing
+     * `requireIncumbentBeat = hasIncumbent` since a mechanical peel commit, with this paragraph
+     * dropped, so the basal head was running the ratchet the reference warns against while the SMB
+     * head in the same module was not.
      */
     private fun trainAndMaybePublish(
         weightsPath: AimiPath,
@@ -338,7 +349,6 @@ class BasalMlTrainingCoordinator @Inject constructor(
         outputRange: ClosedFloatingPointRange<Double>,
         minOutputSpread: Double = MIN_OUTPUT_SPREAD,
     ): Boolean {
-        val hasIncumbent = storage.exists(weightsPath)
         return NeuralModelTrainer.trainAndPublish(
             storage = storage,
             weightsPath = weightsPath,
@@ -351,8 +361,6 @@ class BasalMlTrainingCoordinator @Inject constructor(
             spreadSweepValues = SPREAD_SWEEP_BG_MGDL,
             minOutputSpread = minOutputSpread,
             maxBaselineMaeRatio = MAX_BASELINE_MAE_RATIO,
-            requireIncumbentBeat = hasIncumbent,
-            valLossTolerance = VAL_LOSS_TOLERANCE,
             log = { log.info(LTag.AIMI, "$TAG: $it") },
         ) != null
     }

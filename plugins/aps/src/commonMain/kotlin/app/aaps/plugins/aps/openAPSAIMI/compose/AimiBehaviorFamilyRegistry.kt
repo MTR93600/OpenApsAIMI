@@ -106,7 +106,11 @@ internal object AimiBehaviorFamilyRegistry {
             ),
             expertKeys = setOf(
                 BooleanKey.AimiPhysioLLMAnalysisEnable.key,
-                StringKey.AimiPhysioLLMProvider.key,
+                // The physio analyser follows StringKey.AimiAdvisorProvider, the one setting the user
+                // fills in for every AIMI LLM feature. StringKey.AimiPhysioLLMProvider is kept as a
+                // preference so an existing stored value is not lost, but nothing reads it any more,
+                // so listing it here would tell the user it controls something it does not.
+                StringKey.AimiAdvisorProvider.key,
                 BooleanKey.OApsAIMIContextEnabled.key,
                 BooleanKey.OApsAIMIContextLLMEnabled.key,
                 AimiStringKey.ActivitySourceMode.key,

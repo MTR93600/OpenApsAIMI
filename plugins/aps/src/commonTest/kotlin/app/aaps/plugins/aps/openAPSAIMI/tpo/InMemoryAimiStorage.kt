@@ -44,9 +44,21 @@ internal class InMemoryAimiStorage : AimiStorage {
 
     override fun readText(path: AimiPath): String? = files[path.value]
 
-    override fun readLines(path: AimiPath): List<String> = files[path.value]?.lines() ?: emptyList()
+    /**
+     * The lines of the file, the way `java.io.File.readLines` reads them.
+     *
+     * `String.lines()` is not the same thing: for `"a\nb\n"` it answers three items, the last one
+     * empty, while the real storage answers two. A test that checks how many rows a CSV holds would
+     * count one row too many, so the final line break is dropped here as the real reader drops it.
+     */
+    override fun readLines(path: AimiPath): List<String> {
+        val text = files[path.value] ?: return emptyList()
+        if (text.isEmpty()) return emptyList()
+        return text.removeSuffix("\n").split("\n")
+    }
 
-    override fun readFirstLine(path: AimiPath): String? = files[path.value]?.lineSequence()?.firstOrNull()
+    override fun readFirstLine(path: AimiPath): String? =
+        files[path.value]?.takeIf { it.isNotEmpty() }?.lineSequence()?.firstOrNull()
 
     override fun forEachLine(path: AimiPath, action: (String) -> Unit): Boolean {
         val text = files[path.value] ?: return false
