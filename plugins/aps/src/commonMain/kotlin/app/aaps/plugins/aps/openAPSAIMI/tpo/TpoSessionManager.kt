@@ -8,9 +8,22 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningChange
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
-import java.util.UUID
 import kotlin.math.abs
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
+/**
+ * Starts, expires and reverts a time-period override session.
+ *
+ * `Uuid.random()` replaces `java.util.UUID.randomUUID()` for the session id, which is the same swap
+ * `QuickWizardEntry.randomGuid` and `ClientControlCrypto.newClientId` already made in shared code.
+ * Both produce a random (version 4) id and print it the same way: 36 characters, lowercase hex,
+ * grouped 8-4-4-4-12. That matters because the id is written to the session file as `session_id`
+ * and read back from it, so a different shape would not match a session stored by an older build.
+ * The API is still experimental, hence the opt in. The number of ids and the places they are made
+ * are unchanged.
+ */
+@OptIn(ExperimentalUuidApi::class)
 internal class TpoSessionManager(
     private val persistence: TpoPersistence,
 ) {
@@ -88,7 +101,7 @@ internal class TpoSessionManager(
             if (applyChange(preferences, change)) applied++
         }
         val session = TpoSessionDocument(
-            sessionId = UUID.randomUUID().toString(),
+            sessionId = Uuid.random().toString(),
             packId = plan.proposal.packId,
             tier = plan.proposal.tier,
             status = TpoSessionStatus.ACTIVE,
@@ -125,7 +138,7 @@ internal class TpoSessionManager(
         }
         persistence.saveSession(
             TpoSessionDocument(
-                sessionId = UUID.randomUUID().toString(),
+                sessionId = Uuid.random().toString(),
                 packId = plan.proposal.packId,
                 tier = plan.proposal.tier,
                 status = TpoSessionStatus.PENDING_LLM,

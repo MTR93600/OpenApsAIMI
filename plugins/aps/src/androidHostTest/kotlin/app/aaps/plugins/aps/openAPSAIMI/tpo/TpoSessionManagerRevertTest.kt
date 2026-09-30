@@ -17,10 +17,12 @@ import kotlin.test.assertTrue
  * The key under test is the one the user watched move on its own: the high-glucose SMB ceiling.
  *
  * Matching tests from `origin/dev_OAPSAIMI` @ `f3de6740ee` (file unchanged on tip `a546722609`).
- * Study source set: [TpoSessionManager] is androidMain (its only remaining blocker is
- * `java.util.UUID`; [AdvisorHistoryRepository] moved to commonMain), so this
- * lives in `androidHostTest` + mockito (not mockk). Persistence is mocked; the revert path does
- * not need a real file. Names are camelCase (no backtick commas).
+ * Study source set: [TpoSessionManager] has moved to commonMain (`java.util.UUID` gave way to
+ * `kotlin.uuid.Uuid`), but this test stays in `androidHostTest` + mockito (not mockk) because it
+ * mocks [app.aaps.core.keys.interfaces.Preferences], and that interface is far too wide to hand
+ * write a fake for, which is what `commonTest` would need. The session id shape, which does run on
+ * every target, is covered by [TpoSessionIdShapeTest] instead. Persistence is mocked; the revert
+ * path does not need a real file. Names are camelCase (no backtick commas).
  */
 class TpoSessionManagerRevertTest : TestBase() {
 

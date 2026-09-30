@@ -1,6 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.hormonitor.viewer
 
-import java.util.Locale
+import app.aaps.plugins.aps.openAPSAIMI.aimiDeviceLanguage
 
 /**
  * Humanizes raw enum-ish labels (patient_mode, safety_gate, physio_state, …) for DISPLAY IN THE VIEWER ONLY.
@@ -16,8 +16,11 @@ object HormonitorLabels {
     fun humanize(raw: String): String {
         val key = raw.trim()
         if (key.isEmpty()) return raw
-        val french = Locale.getDefault().language.equals("fr", ignoreCase = true)
-        (MAP[key] ?: MAP[key.uppercase(Locale.US)])?.let { return if (french) it.fr else it.en }
+        val french = aimiDeviceLanguage().equals("fr", ignoreCase = true)
+        // Locale independent uppercase: the argument was `Locale.US`, the JVM way of saying "not the
+        // device locale". The keys of MAP are ASCII, so the no-argument `uppercase()` finds the same
+        // entries on every locale.
+        (MAP[key] ?: MAP[key.uppercase()])?.let { return if (french) it.fr else it.en }
         return prettify(key)
     }
 
@@ -75,7 +78,13 @@ object HormonitorLabels {
             .trim()
             .replace(Regex("\\s+"), " ")
         if (spaced.isEmpty()) return raw
-        val lower = spaced.lowercase(Locale.getDefault())
-        return lower.replaceFirstChar { it.titlecase(Locale.getDefault()) }
+        // Locale independent casing, where the JVM code cased in the device locale. This is the one
+        // place in this file where the two can differ, and only on Turkish and Azerbaijani, where
+        // `I` lowercases to a dotless `ı`: an unmapped code like `PRIOR_STATE` used to render as
+        // "Prıor state" there. What goes in is an ASCII study code, not Turkish words, so casing it
+        // by Turkish rules was wrong and the shared version reads "Prior state" on every locale.
+        // Same fix, and same reasoning, as `HexByteArrayConversion` in `:core:utils`.
+        val lower = spaced.lowercase()
+        return lower.replaceFirstChar { it.titlecase() }
     }
 }

@@ -9,7 +9,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.interfaces.maintenance.ImportExportPrefs
 import app.aaps.core.interfaces.protection.ExportPasswordDataStore
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
-import java.util.Locale
+
 object TuningContextApplySupport {
 
     fun applyTuningPlan(
@@ -62,7 +62,11 @@ object TuningContextApplySupport {
         val label = TuningPreferenceLabels.shortLabel(change.key)
         val oldS = TuningPreferenceLabels.formatValue(change.oldValue)
         val newS = TuningPreferenceLabels.formatValue(change.newValue)
-        return "$label: $oldS → $newS (${change.tier.name.lowercase(Locale.US)} step)"
+        // Locale independent lowercase. The argument was `Locale.US`, which is what a JVM caller
+        // writes to mean "do not use the device locale here", and the no-argument `lowercase()` is
+        // exactly that. The input is a `TuningStepTier` name (MICRO / MODERATE / STRONG), so the two
+        // give the same text on every locale, Turkish included.
+        return "$label: $oldS → $newS (${change.tier.name.lowercase()} step)"
     }
 
     private fun formatEffectiveContext(context: AimiTuningContext): String = when (context) {
