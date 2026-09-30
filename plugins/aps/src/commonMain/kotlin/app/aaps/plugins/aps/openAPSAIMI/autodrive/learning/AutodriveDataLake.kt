@@ -2,18 +2,18 @@ package app.aaps.plugins.aps.openAPSAIMI.autodrive.learning
 
 import app.aaps.core.data.format.NumberFormat
 import app.aaps.core.data.format.NumberFormatPlatform
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.plugins.aps.openAPSAIMI.aimiCsvTimestamp
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveCommand
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
-import java.text.SimpleDateFormat
-import java.util.ArrayDeque
-import java.util.Date
-import java.util.Locale
+import kotlin.concurrent.Volatile
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -43,7 +43,7 @@ class AutodriveDataLake @Inject constructor(
 
     private val path: AimiPath by lazy { storage.file(FILE_NAME) }
 
-    private val deferredMonitor = Any()
+    private val deferredLock = AapsLock()
     private val deferred = ArrayDeque<String>()
 
     /** Rows waiting for the dataset to be free. Exported for liveness reporting. */
@@ -95,8 +95,14 @@ class AutodriveDataLake @Inject constructor(
         engaged: Boolean,
         currentTimestamp: Long,
     ): String {
-        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        val dateStr = sdf.format(Date(currentTimestamp))
+        // `yyyy-MM-dd HH:mm:ss` in the phone's own time zone, with the calendar pinned.
+        //
+        // This used to be `SimpleDateFormat(..., Locale.getDefault())`, which lets the **device**
+        // pick the calendar: a Thai phone wrote Buddhist years (`2569-…`) into the training corpus,
+        // and a Saudi one wrote Arabic-Indic digits. Nothing reads this column - the readers key off
+        // `AutodriveDatasetSchema.IDX_TIMESTAMP`, the raw epoch in column 0 - so the corpus still
+        // trained, but a human reading the file saw a date that did not exist.
+        val dateStr = aimiCsvTimestamp(currentTimestamp)
 
         // Did the shield strike? No command on a disengaged tick: the decision columns stay neutral
         // and `Engaged` says so explicitly, rather than letting the gate filter the dataset silently.
@@ -144,7 +150,7 @@ class AutodriveDataLake @Inject constructor(
      * the next tick instead of losing them.
      */
     private fun appendPendingAnd(line: String): Boolean {
-        val carried = synchronized(deferredMonitor) { deferred.toList() }
+        val carried = deferredLock.withLock { deferred.toList() }
         ensureHeader()
         val payload = buildString {
             carried.forEach { append(it) }
@@ -154,8 +160,8 @@ class AutodriveDataLake @Inject constructor(
             aapsLogger.error(LTag.AIMI, "Autodrive Data Lake write failed")
             return false
         }
-        synchronized(deferredMonitor) {
-            repeat(carried.size) { if (deferred.isNotEmpty()) deferred.pollFirst() }
+        deferredLock.withLock {
+            repeat(carried.size) { if (deferred.isNotEmpty()) deferred.removeFirstOrNull() }
             deferredRowCount = deferred.size
         }
         return true
@@ -169,10 +175,10 @@ class AutodriveDataLake @Inject constructor(
     }
 
     private fun defer(line: String) {
-        synchronized(deferredMonitor) {
+        deferredLock.withLock {
             deferred.addLast(line)
             while (deferred.size > MAX_DEFERRED_ROWS) {
-                deferred.pollFirst()
+                deferred.removeFirstOrNull()
                 droppedRowCount++
                 aapsLogger.warn(
                     LTag.AIMI,

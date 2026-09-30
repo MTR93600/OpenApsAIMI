@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.autodrive.learning
 
+import app.aaps.core.data.format.NumberFormat
+import app.aaps.core.data.format.NumberFormatPlatform
 import app.aaps.core.data.json.OrgJsonCompat.optDoubleCompat
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -12,6 +14,7 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDatasetSchem
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDatasetSchema.IDX_TIMESTAMP
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDatasetSchema.VERSION_CGM_LABELLED
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import kotlin.concurrent.Volatile
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlinx.serialization.serializer
@@ -189,14 +192,24 @@ class AutodriveNeuralTrainer @Inject constructor(
         return report(measured.copy(accepted = saved, reason = if (saved) "installed" else "save failed"))
     }
 
+    /**
+     * A holdout loss, for the log line only.
+     *
+     * Four decimals with a dot, as `"%.4f".format(..)` produced. `String.format` would follow the
+     * device separator, which this does not - and a `NaN` incumbent, which is what "no model is
+     * installed yet" looks like, still prints as `NaN`.
+     */
+    private fun fmtLoss(value: Double): String =
+        NumberFormat.withDecimals(4).format(value, NumberFormatPlatform.SEPARATOR_DOT)
+
     private fun report(r: TrainingReport): Boolean {
         lastReport = r
         aapsLogger.info(
             LTag.AIMI,
             "NeuralTrainer: ${if (r.accepted) "installed" else "kept incumbent"} — ${r.reason} " +
                 "(rows=${r.rows}, positives=${r.positives}, holdout=${r.holdoutRows}/${r.holdoutPositives}, " +
-                "loss cand=${"%.4f".format(r.candidateLoss)} base=${"%.4f".format(r.baseRateLoss)} " +
-                "incumbent=${"%.4f".format(r.incumbentLoss)})",
+                "loss cand=${fmtLoss(r.candidateLoss)} base=${fmtLoss(r.baseRateLoss)} " +
+                "incumbent=${fmtLoss(r.incumbentLoss)})",
         )
         return r.accepted
     }

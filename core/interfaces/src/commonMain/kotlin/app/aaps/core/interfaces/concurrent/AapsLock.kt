@@ -16,9 +16,19 @@ package app.aaps.core.interfaces.concurrent
  * block construct and cannot be split into the separate lock and unlock calls that the inline
  * [withLock] needs. Reentrancy and blocking are the same as the monitor these call sites used before
  * they were made multiplatform, which is what matters, because the first user of this is the loop's
- * calculation cache. There is **no** timed `tryLock` here, so code built on
- * `ReentrantLock.tryLock(timeout)` or `isHeldByCurrentThread` cannot move to shared code by swapping
- * in this class.
+ * calculation cache.
+ *
+ * [tryLock] adds the one thing a monitor cannot express: an attempt that gives up **at once** instead
+ * of waiting. Some call sites run on the decision thread and must never queue behind a slow holder -
+ * there, skipping the work is correct and waiting for it is not.
+ *
+ * Still **not** here, and still a reason a call site cannot move to shared code by swapping in this
+ * class:
+ *
+ * - a timed `tryLock(timeout)` - it needs a duration type in the contract and a bounded wait on every
+ *   actual, and `NSRecursiveLock` expresses that as `lockBeforeDate`, which is a different shape
+ * - `isHeldByCurrentThread` - `NSRecursiveLock` does not publish its owner at all, so an `actual`
+ *   would have to track the owning thread itself
  *
  * One lock guards one thing. Do NOT lock on an object you also reassign:
  *
@@ -36,6 +46,18 @@ expect class AapsLock() {
     /** Takes the lock, blocking until it is free. Prefer [withLock], which cannot leak it. */
     fun lock()
 
+    /**
+     * Takes the lock only if it is free **right now**, and returns whether it was taken.
+     *
+     * Never waits, not even briefly. Returning `false` means another thread holds it and the caller
+     * must do something else; it does not mean "try again in a moment".
+     *
+     * Reentrant like [lock]: a thread that already holds the lock always gets `true` and takes one
+     * more level, so it must [unlock] once per successful attempt. Prefer [tryWithLock], which does
+     * that for you and cannot run the block on a failed attempt.
+     */
+    fun tryLock(): Boolean
+
     /** Releases one level of the lock. */
     fun unlock()
 }
@@ -49,6 +71,26 @@ expect class AapsLock() {
  */
 inline fun <T> AapsLock.withLock(action: () -> T): T {
     lock()
+    try {
+        return action()
+    } finally {
+        unlock()
+    }
+}
+
+/**
+ * Runs [action] only if the lock is free **right now**, and returns `null` otherwise.
+ *
+ * For callers that must not wait. The block does not run at all on a failed attempt - that is the
+ * point of it, not a detail: the caller is expected to skip the work, not to do it unguarded. The
+ * lock is released in a `finally`, so a throwing block does not leave it held.
+ *
+ * [T] is bound to a non-null type so `null` can only ever mean "the lock was busy".
+ *
+ * Inline, for the same reason as [withLock].
+ */
+inline fun <T : Any> AapsLock.tryWithLock(action: () -> T): T? {
+    if (!tryLock()) return null
     try {
         return action()
     } finally {
