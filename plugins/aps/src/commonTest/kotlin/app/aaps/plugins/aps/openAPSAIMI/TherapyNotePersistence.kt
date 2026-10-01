@@ -33,12 +33,17 @@ import kotlinx.coroutines.flow.Flow
 import kotlin.reflect.KClass
 
 /**
- * CommonTest PersistenceLayer that only serves [TE] notes to [Therapy].
+ * CommonTest PersistenceLayer that serves [TE] notes to [Therapy], and glucose readings to
+ * whatever asks for a time window of them.
  *
  * mockk is JVM-only; this stub lets TherapyAnticipation/FCL detection tests run in commonTest
- * through the real snapshot path.
+ * through the real snapshot path. [bgReadings] is empty unless a test hands some over, so the
+ * callers that only need the notes are untouched.
  */
-internal class TherapyNotePersistence(private val events: List<TE>) : PersistenceLayer {
+internal class TherapyNotePersistence(
+    private val events: List<TE>,
+    private val bgReadings: List<GV> = emptyList(),
+) : PersistenceLayer {
 
     private fun unused(): Nothing = error("TherapyNotePersistence: unused PersistenceLayer method")
 
@@ -95,7 +100,8 @@ internal class TherapyNotePersistence(private val events: List<TE>) : Persistenc
     override suspend fun getLastGlucoseValue(): GV? = unused()
     override suspend fun getLastGlucoseValueId(): Long? = unused()
     override suspend fun getNextSyncElementGlucoseValue(id: Long): Pair<GV, GV>? = unused()
-    override suspend fun getBgReadingsDataFromTimeToTime(start: Long, end: Long, ascending: Boolean): List<GV> = unused()
+    override suspend fun getBgReadingsDataFromTimeToTime(start: Long, end: Long, ascending: Boolean): List<GV> =
+        bgReadings.filter { it.timestamp in start..end }.sortedBy { if (ascending) it.timestamp else -it.timestamp }
     override suspend fun getBgReadingsDataFromTime(timestamp: Long, ascending: Boolean): List<GV> = unused()
     override suspend fun getBgReadingByNSId(nsId: String): GV? = unused()
     override suspend fun invalidateGlucoseValue(id: Long, action: Action, source: Sources, note: String?, listValues: List<ValueWithUnit>): TransactionResult<GV> = unused()

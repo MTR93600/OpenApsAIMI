@@ -91,6 +91,23 @@ internal class InMemoryAimiStorage : AimiStorage {
         return writeText(path, text)
     }
 
+    /**
+     * Builds the new content in [temporary] and then moves it onto [path], the way the real storage
+     * does, so a test can check that no scratch file is left behind.
+     */
+    override fun rewriteLines(path: AimiPath, temporary: AimiPath, lines: Sequence<String>): Boolean {
+        val text = buildString {
+            lines.forEach { line ->
+                append(line)
+                append('\n')
+            }
+        }
+        files[temporary.value] = text
+        files[path.value] = text
+        files.remove(temporary.value)
+        return true
+    }
+
     override fun readTailLines(path: AimiPath, maxLines: Int): List<String> = readLines(path).takeLast(maxLines)
 
     override fun sizeBytes(path: AimiPath): Long = (files[path.value]?.length ?: 0).toLong()

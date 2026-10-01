@@ -14,7 +14,8 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDatasetSchem
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDatasetSchema.IDX_SCHEMA_VERSION
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDatasetSchema.IDX_TIMESTAMP
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDatasetSchema.VERSION_LEGACY_UNLABELLED
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import kotlin.concurrent.Volatile
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -29,7 +30,7 @@ import dev.zacsweers.metro.AppScope
 @SingleIn(AppScope::class)
 class AutodriveDataBackfiller @Inject constructor(
     private val aapsLogger: AAPSLogger,
-    private val storageHelper: AimiStorageHelper,
+    private val storage: AimiStorage,
     private val persistenceLayer: PersistenceLayer,
 ) {
     companion object {
@@ -79,16 +80,26 @@ class AutodriveDataBackfiller @Inject constructor(
      */
     private suspend fun loadGlucoseWindow(): List<Pair<Long, Double>> = try {
         val span = AutodriveDatasetLock.withDataset {
-            val file = storageHelper.getAimiFile(csvFileName)
-            if (!file.exists()) {
+            val path = storage.file(csvFileName)
+            if (!storage.exists(path)) {
                 null
             } else {
-                val stamps = file.useLines { lines ->
-                    lines.drop(1).mapNotNull { it.split(",").getOrNull(IDX_TIMESTAMP)?.toLongOrNull() }
-                        .filter { it > 0L }
-                        .toList()
+                val stamps = mutableListOf<Long>()
+                var isFirstLine = true
+                val readWholeFile = storage.forEachLine(path) { line ->
+                    if (isFirstLine) {
+                        isFirstLine = false
+                    } else {
+                        line.split(",").getOrNull(IDX_TIMESTAMP)?.toLongOrNull()
+                            ?.takeIf { it > 0L }
+                            ?.let { stamps.add(it) }
+                    }
                 }
-                if (stamps.isEmpty()) null else stamps.min() to stamps.max()
+                // A read that stopped early gives a shorter span, so the CGM window would be too
+                // narrow and some rows would stay unlabelled without anyone knowing why. Before the
+                // port the same failure threw and was caught below, which loaded no history at all;
+                // this keeps that, and the rows are labelled on the next pass either way.
+                if (!readWholeFile || stamps.isEmpty()) null else stamps.min() to stamps.max()
             }
         }
         if (span == null) {
@@ -104,13 +115,17 @@ class AutodriveDataBackfiller @Inject constructor(
     }
 
     private fun processPendingLinesLocked(readings: List<Pair<Long, Double>>): Int {
-        val originalFile = storageHelper.getAimiFile(csvFileName)
-        if (!originalFile.exists()) return 0
+        val originalPath = storage.file(csvFileName)
+        if (!storage.exists(originalPath)) return 0
 
-        val lines = try {
-            originalFile.readLines()
-        } catch (e: Exception) {
-            aapsLogger.error(LTag.AIMI, "Backfiller Error reading CSV: ${e.message}")
+        // `readLines` answers an empty list both when the file cannot be read and when it holds
+        // nothing at all. Either way there is no header row to work from, so the pass stops here.
+        // Before the port the unreadable case logged and returned 0, while the truly empty case fell
+        // through and threw on `lines[0]`; the two cannot be told apart through the port, and
+        // returning 0 is the safe half of that pair.
+        val lines = storage.readLines(originalPath)
+        if (lines.isEmpty()) {
+            aapsLogger.error(LTag.AIMI, "Backfiller Error reading CSV: no lines in ${storage.displayPath(originalPath)}")
             return 0
         }
 
@@ -123,8 +138,9 @@ class AutodriveDataBackfiller @Inject constructor(
             // Header only. Still worth fixing, otherwise the next appended rows sit under a header
             // that names the wrong columns.
             if (headerWasStale) {
-                runCatching { originalFile.writeText(AutodriveDatasetSchema.HEADER + "\n") }
-                    .onFailure { aapsLogger.error(LTag.AIMI, "Backfill: header rewrite failed — ${it.message}") }
+                if (!storage.writeText(originalPath, AutodriveDatasetSchema.HEADER + "\n")) {
+                    aapsLogger.error(LTag.AIMI, "Backfill: header rewrite failed")
+                }
             }
             return 0
         }
@@ -206,37 +222,23 @@ class AutodriveDataBackfiller @Inject constructor(
         val mustRewrite = modifiedCount > 0 || prunedCount > 0 || migratedCount > 0 ||
             malformedCount > 0 || headerWasStale
         if (mustRewrite) {
-            val tmpFile = storageHelper.getAimiFile(tmpCsvFileName)
-            try {
-                tmpFile.bufferedWriter().use { writer ->
-                    writer.write(AutodriveDatasetSchema.HEADER)
-                    writer.newLine()
-                    retained.forEach { row ->
-                        writer.write(row.cols.joinToString(","))
-                        writer.newLine()
-                    }
-                }
-
-                // Swap atomique
-                val swapped = if (tmpFile.renameTo(originalFile)) {
-                    true
-                } else {
-                    // Fallback rename manuel sur certains Androids
-                    tmpFile.copyTo(originalFile, overwrite = true)
-                    tmpFile.delete()
-                    true
-                }
-                if (swapped) {
-                    aapsLogger.info(
-                        LTag.AIMI,
-                        "Backfill: $modifiedCount rows labelled, $migratedCount migrated, $prunedCount pruned" +
-                            if (headerWasStale) ", header rewritten" else "",
-                    )
-                }
-            } catch (e: Exception) {
+            // Header first, then the kept rows, produced one at a time. The corpus is already the
+            // biggest file AIMI writes, so it is never joined into one string: `rewriteLines` builds
+            // the new file in the scratch copy and swaps it in, which is what the hand written
+            // temp-file-then-rename here did before.
+            val newLines = sequenceOf(AutodriveDatasetSchema.HEADER) +
+                retained.asSequence().map { row -> row.cols.joinToString(",") }
+            val swapped = storage.rewriteLines(originalPath, storage.file(tmpCsvFileName), newLines)
+            if (swapped) {
+                aapsLogger.info(
+                    LTag.AIMI,
+                    "Backfill: $modifiedCount rows labelled, $migratedCount migrated, $prunedCount pruned" +
+                        if (headerWasStale) ", header rewritten" else "",
+                )
+            } else {
                 // The rewrite is what persists the work. Reporting the labelled count after a failed
                 // rewrite tells the caller N rows were backfilled when none reached the disk.
-                aapsLogger.error(LTag.AIMI, "Backfiller Error writing CSV: ${e.message}")
+                aapsLogger.error(LTag.AIMI, "Backfiller Error writing CSV: rewrite of ${storage.displayPath(originalPath)} failed")
                 return 0
             }
         }
@@ -285,25 +287,30 @@ class AutodriveDataBackfiller @Inject constructor(
      */
     fun isDatasetReadyForTraining(minimumValidLines: Int = 2880): Boolean =
         AutodriveDatasetLock.withDataset {
-            val file = storageHelper.getAimiFile(csvFileName)
-            if (!file.exists()) return@withDataset false
+            val path = storage.file(csvFileName)
+            if (!storage.exists(path)) return@withDataset false
 
-            try {
-                var validCount = 0
-                file.useLines { lines ->
-                    lines.drop(1).forEach { line ->
-                        val cols = line.split(",")
-                        if (cols.size > IDX_FUTURE_BG && cols[IDX_FUTURE_BG].isNotBlank()) {
-                            validCount++
-                        }
-                        if (validCount >= minimumValidLines) return@useLines
+            var validCount = 0
+            var isFirstLine = true
+            // `forEachLine` cannot be stopped from the outside, so the counting stops instead of the
+            // reading. The answer is the same either way - `validCount` only ever grows and the test
+            // below is the same test - and the one caller is the neural trainer worker, which reads
+            // the whole file straight afterwards anyway.
+            val readWholeFile = storage.forEachLine(path) { line ->
+                if (isFirstLine) {
+                    isFirstLine = false
+                } else if (validCount < minimumValidLines) {
+                    val cols = line.split(",")
+                    if (cols.size > IDX_FUTURE_BG && cols[IDX_FUTURE_BG].isNotBlank()) {
+                        validCount++
                     }
                 }
-                validCount >= minimumValidLines
-            } catch (e: Exception) {
-                aapsLogger.error(LTag.AIMI, "Gate Error: ${e.message}")
-                false
             }
+            if (!readWholeFile) {
+                aapsLogger.error(LTag.AIMI, "Gate Error: cannot read ${storage.displayPath(path)}")
+                return@withDataset false
+            }
+            validCount >= minimumValidLines
         }
 
     private data class ParsedRow(

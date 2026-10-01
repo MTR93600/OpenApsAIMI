@@ -155,6 +155,43 @@ interface AimiStorage {
     fun replaceKeepingBackup(path: AimiPath, text: String): Boolean
 
     /**
+     * Replaces the whole content of [path] with [lines], one line at a time, and never holds the
+     * file as a single string.
+     *
+     * This exists next to [replaceText] because of what it is used on. The caller is the Autodrive
+     * backfiller, and the file is the on-device training corpus: it only ever grows inside its
+     * retention window, and on a real phone it is already megabytes. Joining it into one [String] to
+     * hand to [replaceText] would put a second full copy of the corpus on the heap of a device whose
+     * whole heap is a few hundred megabytes, so the lines are written as they are produced and
+     * [lines] is walked exactly once.
+     *
+     * Each line is followed by a single `\n`, including the last one, so the file always ends with a
+     * line break. That is what every reader and writer of these AIMI CSV files assumes: the data lake
+     * appends `row + "\n"`, and the backfiller used to get the same thing from the platform line
+     * separator, which on Android is always `\n`. Writing it explicitly makes the file identical on
+     * every host instead of depending on a system property.
+     *
+     * [temporary] is the scratch file the new content is built in before it takes the place of
+     * [path]. The caller names it rather than this method, because in the AIMI directory a temporary
+     * file is not private: `AimiBackupManager` walks that directory and decides what to back up from
+     * the file **name**, so the name is observable behaviour and belongs to the caller that owns the
+     * file. [temporary] must sit next to [path]; a scratch file on another volume cannot be renamed
+     * into place.
+     *
+     * The guarantee, and its limit:
+     * - A failure while the new content is being written leaves [path] exactly as it was, and leaves
+     *   no scratch file behind. This is the failure that can actually happen — a full disk, a
+     *   revoked permission — and it is why the content is built somewhere else first.
+     * - The final swap is a rename, which is atomic. When the platform refuses the rename the
+     *   implementation copies instead, and a failure *during that copy* can leave [path] truncated.
+     *   Nothing can be done about it without a second copy of the corpus, which is the very thing
+     *   this method exists to avoid, and it is the same window the hand-rolled code had before.
+     *
+     * @return `true` when [path] holds exactly [lines] afterwards, `false` when it was left untouched.
+     */
+    fun rewriteLines(path: AimiPath, temporary: AimiPath, lines: Sequence<String>): Boolean
+
+    /**
      * The last [maxLines] complete lines of [path], newest first.
      *
      * For a journal that only ever grows - a decision log, a training CSV - reading the whole file to

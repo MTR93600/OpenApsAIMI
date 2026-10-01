@@ -18,7 +18,13 @@ import app.aaps.core.keys.interfaces.PreferenceKey
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
-import java.util.concurrent.atomic.AtomicReference
+import app.aaps.core.data.format.NumberFormat
+import app.aaps.core.data.format.NumberFormatPlatform
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.math.abs
 import kotlin.math.max
 
 /**
@@ -28,6 +34,7 @@ import kotlin.math.max
  * DynamicBasalController, et SMB.
  * Actuellement en mode SHADOW (Fantôme) : il calcule et logge ses décisions sans ordonner à la pompe.
  */
+@OptIn(ExperimentalAtomicApi::class)
 @SingleIn(AppScope::class)
 class AutodriveEngine @Inject constructor(
     private val aapsLogger: AAPSLogger,
@@ -131,14 +138,14 @@ class AutodriveEngine @Inject constructor(
     }
 
     private fun updateState(isActive: Boolean? = null, isShadowMode: Boolean? = null) {
-        val current = systemState.get()
+        val current = systemState.load()
         if (current is AimiState.AutoDrive) {
-            systemState.set(current.copy(
+            systemState.store(current.copy(
                 isActive = isActive ?: current.isActive,
                 isShadowMode = isShadowMode ?: current.isShadowMode
             ))
         } else {
-            systemState.set(AimiState.AutoDrive(
+            systemState.store(AimiState.AutoDrive(
                 isActive = isActive ?: false,
                 isShadowMode = isShadowMode ?: true,
                 controllerType = AimiState.AutoDrive.ControllerType.Hybrid
@@ -188,13 +195,19 @@ class AutodriveEngine @Inject constructor(
         timestampMs: Long,
     ) {
         val candidate = PendingTrainingRow(tickId, state, rawCommand, safeCommand, engaged, timestampMs)
-        pendingRow.getAndUpdate { existing ->
-            when {
+        // Read, decide, then swap only if nobody changed the slot in between, and start again if
+        // somebody did. `kotlin.concurrent.atomics` has no `getAndUpdate`, and this is the loop that
+        // one runs anyway. Deciding outside the swap would let two paths of the same tick both read
+        // "empty" and let the later one win, which is exactly how an engaged row would be lost.
+        while (true) {
+            val existing = pendingRow.load()
+            val next = when {
                 existing == null || existing.tickId != tickId -> candidate
                 // Same tick: an engaged row must never be replaced by a shadow one.
                 existing.engaged && !engaged                  -> existing
                 else                                          -> candidate
             }
+            if (pendingRow.compareAndSet(existing, next)) return
         }
     }
 
@@ -205,7 +218,7 @@ class AutodriveEngine @Inject constructor(
      * and the next tick starts with a stale slot. A tick that staged nothing writes nothing.
      */
     fun flushTickRow(tickId: Long) {
-        val row = pendingRow.getAndSet(null) ?: return
+        val row = pendingRow.exchange(null) ?: return
         if (row.tickId != tickId) {
             aapsLogger.debug(
                 LTag.APS,
@@ -245,7 +258,7 @@ class AutodriveEngine @Inject constructor(
         /** Relayed to `tick`; without it this path silently took the 0.0 default. */
         mpcRaFloorMgdlPerMin: Double = 0.0,
     ): BasalOnlyTbrProposal? {
-        val previous = systemState.get()
+        val previous = systemState.load()
         return try {
             setShadowMode(false)
             setIsActive(true)
@@ -272,7 +285,7 @@ class AutodriveEngine @Inject constructor(
                 reason = cmd.reason,
             )
         } finally {
-            systemState.set(previous)
+            systemState.store(previous)
         }
     }
 
@@ -341,7 +354,7 @@ class AutodriveEngine @Inject constructor(
         profileIsfIsDynamic: Boolean = true,
     ): AutoDriveCommand? {
         clearTickObservations()
-        val state = systemState.get() as? AimiState.AutoDrive ?: return null
+        val state = systemState.load() as? AimiState.AutoDrive ?: return null
         if (!state.isActive && !state.isShadowMode) return null
 
         // On injecte les données physiologiques temps réel dans l'état avant traitement
@@ -390,8 +403,8 @@ class AutodriveEngine @Inject constructor(
         ) {
             aapsLogger.debug(
                 LTag.APS,
-                "🍽️ HTR_RA_FLOOR: MPC sees Ra=${"%.2f".format(mpcRaFloorMgdlPerMin)} " +
-                    "instead of estimated ${"%.2f".format(estimatedState.estimatedRa)}",
+                "🍽️ HTR_RA_FLOOR: MPC sees Ra=${aimiFmt2(mpcRaFloorMgdlPerMin)} " +
+                    "instead of estimated ${aimiFmt2(estimatedState.estimatedRa)}",
             )
             estimatedState.copy(estimatedRa = mpcRaFloorMgdlPerMin)
         } else {
@@ -492,7 +505,7 @@ class AutodriveEngine @Inject constructor(
         // 🚀 HYBRID SMOOTHING: If the requested correction is minor (< 0.1 U/h delta),
         // let V2 handle the fine-tuning fluidity.
         // Fix #6: Lowered from 0.3 to 0.1 to allow V3 to engage more often and collect ML data.
-        val tbrDelta = Math.abs(auditedCommand.temporaryBasalRate - profileBasal)
+        val tbrDelta = abs(auditedCommand.temporaryBasalRate - profileBasal)
         val isStrongCorrection = tbrDelta > 0.15
 
         return if (inAggressiveWindow || isHigh || needsSmb || needsSafetyBrake || isStrongCorrection) {
@@ -657,13 +670,14 @@ class AutodriveEngine @Inject constructor(
         return max(anchored, commandedSi)
     }
 
-    private fun Double.format(digits: Int) = "%.${digits}f".format(this)
+    private fun Double.format(digits: Int) =
+        NumberFormat.withDecimals(digits).format(this, NumberFormatPlatform.SEPARATOR_DOT)
 
     private fun logShadowDecision(state: AutoDriveState, autodriveCommand: AutoDriveCommand, profileBasal: Double) {
         aapsLogger.debug(
             LTag.APS,
-            "👽 [AUTODRIVE_SHADOW] BG: ${state.bg} (v: ${String.format("%.1f", state.bgVelocity)}) | " +
-            "Est_SI: ${String.format("%.2f", state.estimatedSI)} | Est_Ra: ${String.format("%.2f", state.estimatedRa)} || " +
+            "👽 [AUTODRIVE_SHADOW] BG: ${state.bg} (v: ${aimiFmt1(state.bgVelocity)}) | " +
+            "Est_SI: ${aimiFmt2(state.estimatedSI)} | Est_Ra: ${aimiFmt2(state.estimatedRa)} || " +
             "Autodrive dictates: TBR=${autodriveCommand.temporaryBasalRate} U/h, " +
             "SMB=${autodriveCommand.scheduledMicroBolus} U | Reason: ${autodriveCommand.reason}"
         )

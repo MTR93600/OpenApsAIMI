@@ -119,6 +119,36 @@ class AndroidAimiStorage @Inject constructor(
         }
     }
 
+    /**
+     * Streams [lines] into [temporary], then puts it in the place of [path].
+     *
+     * The rename is the swap. `renameTo` answers `false` rather than throwing on the emulated volume
+     * that holds `Documents/AAPS`, so the copy is kept as the second attempt exactly as the
+     * hand-rolled code in the Autodrive backfiller had it; without it the rewrite would silently do
+     * nothing on those devices. The scratch file is removed when the write fails, so a truncated CSV
+     * cannot stay in the AIMI directory and be picked up as a backup candidate.
+     */
+    override fun rewriteLines(path: AimiPath, temporary: AimiPath, lines: Sequence<String>): Boolean {
+        val tmpFile = fileOf(temporary)
+        val target = fileOf(path)
+        return try {
+            tmpFile.bufferedWriter().use { writer ->
+                lines.forEach { line ->
+                    writer.write(line)
+                    writer.write("\n")
+                }
+            }
+            if (!tmpFile.renameTo(target)) {
+                tmpFile.copyTo(target, overwrite = true)
+                tmpFile.delete()
+            }
+            true
+        } catch (e: Exception) {
+            runCatching { tmpFile.delete() }
+            false
+        }
+    }
+
     override fun readTailLines(path: AimiPath, maxLines: Int): List<String> =
         runCatching { JsonlTailReader.readTailLines(fileOf(path), maxLines) }.getOrDefault(emptyList())
 
