@@ -81,10 +81,33 @@ interface Libre3SessionStore {
  * The writes that the Bluetooth work depends on use `commit`, not `apply`. The rule is that the PIN
  * must really be on disk before any connect starts, so a crash in the middle can never leave a
  * sensor that was taken over but whose PIN is lost.
+ *
+ * @param namespace which slot this store belongs to. null or blank is the production slot and maps
+ *   to the file every install already has, so nothing is copied and nothing can be half copied. A
+ *   name gives a second, separate file, used by the pre-soak slot. A pre-soak write must never be
+ *   able to reach the production keys, because `saveIdentityAndWait` drops the pairing key when the
+ *   serial changes and a running sensor refuses a fresh first pairing.
  */
-class Libre3SensorStore(context: Context) : Libre3IdentityStore, Libre3SessionStore {
+class Libre3SensorStore(
+    context: Context,
+    namespace: String? = null,
+) : Libre3IdentityStore, Libre3SessionStore {
 
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+
+    private val prefsName = if (namespace.isNullOrBlank()) PREFS_NAME else "${PREFS_NAME}_$namespace"
+
+    private val prefs = appContext.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+
+    /**
+     * The phone's own identity, always in the production file.
+     *
+     * The receiver id is the phone's identity, not a sensor's. A second file with a second id would
+     * give one phone two identities, and a sensor binds itself to the receiver that activated it.
+     */
+    private val identityPrefs =
+        if (namespace.isNullOrBlank()) prefs
+        else appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     /**
      * Identifier this phone shows to sensors, kept for the whole install.
@@ -98,11 +121,11 @@ class Libre3SensorStore(context: Context) : Libre3IdentityStore, Libre3SessionSt
      */
     @Synchronized
     override fun receiverId(): Int {
-        val storedUuid = prefs.getString(KEY_APP_UUID, null)
-        if (storedUuid != null) return prefs.getInt(KEY_RECEIVER_ID, Libre3NfcCommands.receiverIdFrom(storedUuid))
+        val storedUuid = identityPrefs.getString(KEY_APP_UUID, null)
+        if (storedUuid != null) return identityPrefs.getInt(KEY_RECEIVER_ID, Libre3NfcCommands.receiverIdFrom(storedUuid))
         val uuid = UUID.randomUUID().toString()
         val receiverId = Libre3NfcCommands.receiverIdFrom(uuid)
-        val written = prefs.edit()
+        val written = identityPrefs.edit()
             .putString(KEY_APP_UUID, uuid)
             .putInt(KEY_RECEIVER_ID, receiverId)
             .commit()
@@ -274,6 +297,103 @@ class Libre3SensorStore(context: Context) : Libre3IdentityStore, Libre3SessionSt
             .commit()
     }
 
+    /**
+     * Wipes this slot's file completely.
+     *
+     * Only for a pre-soak file. It must never be called on the production file: that one also holds
+     * the receiver id of this phone, and this call would take it away. A pre-soak file does not hold
+     * the receiver id at all, so nothing shared can be lost here.
+     *
+     * @return true only when the change really reached the disk.
+     */
+    @Synchronized
+    fun clearAll(): Boolean = prefs.edit().clear().commit()
+
+    /**
+     * Keeps this slot's collect-only progress, so a restart does not send a warming pre-soak back to
+     * "no sensor".
+     */
+    @Synchronized
+    fun saveSlotProgress(present: Boolean, validReadingCount: Int) {
+        prefs.edit()
+            .putBoolean(KEY_SLOT_PRESENT, present)
+            .putInt(KEY_SLOT_VALID_READINGS, validReadingCount)
+            .commit()
+    }
+
+    /** True when this slot holds a sensor the plugin should pick up again after a restart. */
+    fun loadSlotPresent(): Boolean = prefs.getBoolean(KEY_SLOT_PRESENT, false)
+
+    /** How many good readings this slot has collected, 0 when none. */
+    fun loadSlotValidReadingCount(): Int = prefs.getInt(KEY_SLOT_VALID_READINGS, 0)
+
+    /**
+     * Latch: this slot's sensor has left warm-up at least once.
+     *
+     * It is a latch and not a live reading of the driver phase, because a healthy sensor reconnects
+     * for its whole life and a reconnect must not look like a new warm-up.
+     */
+    @Synchronized
+    fun saveSlotWarmupDone(done: Boolean) {
+        prefs.edit().putBoolean(KEY_SLOT_WARMUP_DONE, done).commit()
+    }
+
+    /** True once this slot's sensor has left warm-up. */
+    fun loadSlotWarmupDone(): Boolean = prefs.getBoolean(KEY_SLOT_WARMUP_DONE, false)
+
+    /** Time this slot's sensor was really activated, in epoch milliseconds. */
+    @Synchronized
+    fun saveSlotActivatedAt(epochMs: Long) {
+        prefs.edit().putLong(KEY_SLOT_ACTIVATED_AT, epochMs).commit()
+    }
+
+    /** Time this slot's sensor was really activated, or 0 when it is not known. */
+    fun loadSlotActivatedAt(): Long = prefs.getLong(KEY_SLOT_ACTIVATED_AT, 0L)
+
+    /**
+     * Takes another slot's sensor over into this file, so the driver of this slot resumes that
+     * sensor after a restart. Used by the promotion of a pre-soak sensor.
+     *
+     * One `commit`, so it either all lands or none of it does. It does **not** go through
+     * [saveIdentityAndWait], because that method drops the pairing key when the serial changes, and
+     * that is exactly the key this call has just been asked to install.
+     *
+     * Two keys are dropped on purpose. The last life counter belongs to the old sensor and would
+     * refuse every reading of the new one for its whole life. The sensor change mark has to go so
+     * the start of the new sensor is written as an event.
+     *
+     * The receiver id is **not** written. It is the identity of this phone, it always lives in the
+     * production file, and it is read from [identityPrefs], never from this slot's file. Writing it
+     * here would put a second copy into whichever file this call happens to target, and on a
+     * pre-soak file that would be a second identity for one phone.
+     *
+     * @param keys session keys of the taken over sensor. A part that is null is not written, so a
+     *   sensor taken over in mid life does not get an empty value where a key is expected.
+     * @return true only when the write really reached the disk.
+     */
+    @Synchronized
+    fun adopt(identity: Libre3SensorIdentity, keys: Libre3SessionKeys): Boolean {
+        val editor = prefs.edit()
+            .putString(KEY_SERIAL, identity.serialNumber)
+            .putString(KEY_MAC, identity.bleAddress)
+            .putString(KEY_PIN, encode(identity.blePin))
+            .putInt(KEY_GENERATION, identity.generation)
+            .putInt(KEY_WARMUP_MINUTES, identity.warmupMinutes)
+            .putInt(KEY_WEAR_MINUTES, identity.wearDurationMinutes)
+            .putLong(KEY_ACTIVATED_AT, identity.activatedAtMs)
+            .remove(KEY_LAST_LIFE_COUNT)
+            .remove(KEY_SENSOR_CHANGE_SERIAL)
+        keys.phase5RawKey?.let { editor.putString(KEY_PHASE5_RAW_KEY, encode(it)) }
+        keys.kEnc?.let { editor.putString(KEY_K_ENC, encode(it)) }
+        keys.ivEnc?.let { editor.putString(KEY_IV_ENC, encode(it)) }
+        val written = editor.commit()
+        Libre3Log.i(
+            "${Libre3LogMarkers.SESSION}: sensor taken over into $prefsName, " +
+                "pairingKey=${keys.phase5RawKey != null} written=$written",
+        )
+        return written
+    }
+
     // java.util.Base64 rather than android.util.Base64: same result, and it also runs in a plain
     // unit test, so the "write and wait" rule can be checked without a device.
     private fun encode(value: ByteArray): String = Base64.getEncoder().encodeToString(value)
@@ -305,6 +425,13 @@ class Libre3SensorStore(context: Context) : Libre3IdentityStore, Libre3SessionSt
         private const val KEY_PHASE5_RAW_KEY = "phase5_raw_key"
         private const val KEY_K_ENC = "k_enc"
         private const val KEY_IV_ENC = "iv_enc"
+
+        // Slot progress. Only a pre-soak slot writes these today, but they are plain per-file keys
+        // and the production file simply never sets them.
+        private const val KEY_SLOT_PRESENT = "slot_present"
+        private const val KEY_SLOT_VALID_READINGS = "slot_valid_readings"
+        private const val KEY_SLOT_WARMUP_DONE = "slot_warmup_done"
+        private const val KEY_SLOT_ACTIVATED_AT = "slot_activated_at"
 
         private const val PIN_SIZE = 4
         private const val PHASE5_KEY_SIZE = 16

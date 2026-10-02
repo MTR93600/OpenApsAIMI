@@ -108,7 +108,15 @@ enum class Libre3NfcFailure {
     LINK_LOST,
 
     /** This phone could not store what it needs, so nothing was sent to the sensor. */
-    PHONE_STORAGE_FAILED
+    PHONE_STORAGE_FAILED,
+
+    /**
+     * The other slot already holds this sensor, so the scan was stopped before anything was sent.
+     *
+     * One physical sensor may only be held by one slot. The check runs before the activation
+     * command, so the sensor keeps its PIN and the slot that holds it keeps working.
+     */
+    SAME_SENSOR_OTHER_SLOT
 }
 
 /**
