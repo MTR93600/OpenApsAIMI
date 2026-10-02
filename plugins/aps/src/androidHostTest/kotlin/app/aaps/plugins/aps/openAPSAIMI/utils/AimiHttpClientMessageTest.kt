@@ -3,7 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.utils
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorAIService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorStatusNotifier
@@ -169,7 +169,7 @@ class AimiHttpClientMessageTest {
         runBlocking { service.fetchText("prompt", "key", AiCoachingService.Provider.OPENAI) }
 
         assertThat(resources.calls.last())
-            .containsExactly(R.string.aimi_coach_svc_error_openai, 401, errorBody)
+            .containsExactly(ApsStrings.aimi_coach_svc_error_openai, 401, errorBody)
             .inOrder()
     }
 
@@ -190,7 +190,7 @@ class AimiHttpClientMessageTest {
         runBlocking { service.fetchText("prompt", "key", AiCoachingService.Provider.OPENAI) }
 
         assertThat(resources.calls.last())
-            .containsExactly(R.string.aimi_coach_svc_error_openai, 400, flattened)
+            .containsExactly(ApsStrings.aimi_coach_svc_error_openai, 400, flattened)
             .inOrder()
     }
 
@@ -212,7 +212,7 @@ class AimiHttpClientMessageTest {
 
         // fetchText catches it and feeds the message into the generic template.
         assertThat(resources.calls.last())
-            .containsExactly(R.string.aimi_coach_svc_generic_error, "Gemini Error (400): $errorBody")
+            .containsExactly(ApsStrings.aimi_coach_svc_generic_error, "Gemini Error (400): $errorBody")
             .inOrder()
     }
 }

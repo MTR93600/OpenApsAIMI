@@ -1,10 +1,13 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.OapsProfileAimi
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -12,6 +15,7 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.model.*
 import app.aaps.plugins.aps.openAPSAIMI.patient.AimiCascadeArbitrationArtifacts
@@ -20,9 +24,9 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaProductionDecision
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlin.concurrent.Volatile
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -56,7 +60,7 @@ class AuditorOrchestrator @Inject constructor(
     private val aiService: AuditorAIService,
     private val auditorStatusNotifier: AuditorStatusNotifier,
     private val aapsLogger: AAPSLogger,
-    private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR
+    private val healthContext: AimiHealthContext
 ) : AimiAuditor {
     // 🔄 New State Transition Manager
     private val stateManager = AimiStateTransitionManager(aapsLogger)
@@ -65,7 +69,7 @@ class AuditorOrchestrator @Inject constructor(
     private var cachedTimeBucket: Long = -1L
     
     // Coroutine scope for async operations
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
     
     // Cache for last verdict (to avoid redundant calls)
     private var lastVerdict: AuditorVerdict? = null
@@ -260,7 +264,7 @@ class AuditorOrchestrator @Inject constructor(
         )
         lastSentinelAdvice = sentinelAdvice
 
-        aapsLogger.info(LTag.APS, "🔍 Sentinel: tier=${sentinelAdvice.tier} agreement=${"%.2f".format(sentinelAdvice.agreement)} reason=${sentinelAdvice.reason}")
+        aapsLogger.info(LTag.APS, "🔍 Sentinel: tier=${sentinelAdvice.tier} agreement=${aimiFmt2(sentinelAdvice.agreement)} reason=${sentinelAdvice.reason}")
         sentinelAdvice.details.take(3).forEach { aapsLogger.debug(LTag.APS, "  └─ $it") }
         
         // ================================================================
@@ -294,7 +298,7 @@ class AuditorOrchestrator @Inject constructor(
             // D1: Tier-1 Sentinel is a coherence GENDARME, not a silent modulator — respect the audit mode.
             // AUDIT_ONLY → observe/log only, deliver the loop's UNMODULATED decision.
             val modulated = if (getModulationMode() == DecisionModulator.ModulationMode.AUDIT_ONLY)
-                createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "Sentinel audit-only (agreement=${"%.2f".format(sentinelAdvice.agreement)})")
+                createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "Sentinel audit-only (agreement=${aimiFmt2(sentinelAdvice.agreement)})")
             else combined.toDecisionResult(smbProposed, tbrRate, tbrDuration, intervalMin)
             aapsLogger.info(LTag.APS, "✅ ${combined.toLogString()}")
             
@@ -323,7 +327,7 @@ class AuditorOrchestrator @Inject constructor(
             // D1: Tier-1 Sentinel is a coherence GENDARME, not a silent modulator — respect the audit mode.
             // AUDIT_ONLY → observe/log only, deliver the loop's UNMODULATED decision.
             val modulated = if (getModulationMode() == DecisionModulator.ModulationMode.AUDIT_ONLY)
-                createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "Sentinel audit-only (agreement=${"%.2f".format(sentinelAdvice.agreement)})")
+                createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "Sentinel audit-only (agreement=${aimiFmt2(sentinelAdvice.agreement)})")
             else combined.toDecisionResult(smbProposed, tbrRate, tbrDuration, intervalMin)
             aapsLogger.info(LTag.APS, "✅ ${combined.toLogString()}")
             callback?.invoke(null, modulated)
@@ -333,7 +337,7 @@ class AuditorOrchestrator @Inject constructor(
         aapsLogger.info(LTag.APS, "🌐 External: TRIGGERED ($triggerType)")
 
         // Get physio snapshot (safe call)
-        val physioCtx = try { physioAdapter.getLatestSnapshot().toStartSnapshot() } catch (e: Exception) { null }
+        val physioCtx = try { healthContext.getLastSnapshot().toStartSnapshot() } catch (e: Exception) { null }
         val harmoniaRuntime = PatientStateRuntimeRepository.getLatest()
 
         onSyncDisposition(AuditorJsonlExport.TickDisposition.EXTERNAL_PENDING)
@@ -408,7 +412,7 @@ class AuditorOrchestrator @Inject constructor(
                     // Security: Validate Confidence Interval (0.0..1.0)
                     val safeConfidence = guardedVerdict.confidence.coerceIn(0.0, 1.0)
                     
-                    aapsLogger.info(LTag.APS, "AI Auditor: Verdict=${guardedVerdict.verdict}, Confidence=${String.format("%.2f", safeConfidence)}")
+                    aapsLogger.info(LTag.APS, "AI Auditor: Verdict=${guardedVerdict.verdict}, Confidence=${aimiFmt2(safeConfidence)}")
                     
                     // Transition to Ready
                     stateManager.transitionTo(AuditorUIState.Ready(guardedVerdict.verdict.name), "Verdict received")
@@ -430,7 +434,7 @@ class AuditorOrchestrator @Inject constructor(
                         getModulationMode() != DecisionModulator.ModulationMode.AUDIT_ONLY) {
                         modulated = sentinelFallbackDecision(
                             sentinelAdvice, smbProposed, tbrRate, tbrDuration, intervalMin,
-                            "External low-confidence → Sentinel floor (agreement=${"%.2f".format(sentinelAdvice.agreement)})",
+                            "External low-confidence → Sentinel floor (agreement=${aimiFmt2(sentinelAdvice.agreement)})",
                         )
                     }
 
@@ -461,7 +465,7 @@ class AuditorOrchestrator @Inject constructor(
                 } else {
                     aapsLogger.warn(LTag.APS, "AI Auditor: No verdict received (timeout or error)")
                     stateManager.transitionTo(AuditorUIState.Error("Timeout: No verdict received"), "External timeout")
-                    callback?.invoke(null, sentinelFallbackDecision(sentinelAdvice, smbProposed, tbrRate, tbrDuration, intervalMin, "No verdict → Sentinel floor (agreement=${"%.2f".format(sentinelAdvice.agreement)})"))
+                    callback?.invoke(null, sentinelFallbackDecision(sentinelAdvice, smbProposed, tbrRate, tbrDuration, intervalMin, "No verdict → Sentinel floor (agreement=${aimiFmt2(sentinelAdvice.agreement)})"))
                 }
                 
             } catch (e: Exception) {
@@ -712,7 +716,7 @@ class AuditorOrchestrator @Inject constructor(
     }
 }
 
-private fun app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot.toStartSnapshot(): PhysioSnapshot {
+private fun HealthContextSnapshot.toStartSnapshot(): PhysioSnapshot {
     // Map simplified Snapshot to Auditor's view
     return PhysioSnapshot(
         state = this.activityState, // Mapping ActivityState to State string

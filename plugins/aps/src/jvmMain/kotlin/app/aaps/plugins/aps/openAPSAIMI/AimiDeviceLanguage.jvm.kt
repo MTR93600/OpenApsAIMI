@@ -10,3 +10,6 @@ import java.util.Locale
  * change than one duplicated line.
  */
 actual fun aimiDeviceLanguage(): String = Locale.getDefault().language
+
+/** Desktop half of [aimiDeviceLanguageName]. Same `Locale` lookup as the Android half. */
+actual fun aimiDeviceLanguageName(): String = Locale.getDefault().displayLanguage

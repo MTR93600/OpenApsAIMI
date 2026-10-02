@@ -3058,6 +3058,11 @@ almost entirely **dependency chains inside androidMain**, not platform APIs:
 `AIMIHealthConnectPermissionsHandlerMTR` and `HealthContextRepository`. The hubs are the Health
 Connect and steps services, which are genuinely Android.
 
+> **Correction, same day (6az):** naming `UnifiedActivityProviderMTR` as one of those hubs was wrong.
+> It is 303 lines of source-priority rule code with a single Android call made twice, and it moved.
+> The error was mine and it is the usual one in a new costume: the file was classified from the
+> company it kept - it sat in `steps/` beside the sync services - rather than from what it contained.
+
 **`AIMILLMPhysioAnalyzerMTR` (512 lines) produced exactly one error**, and a previous session had
 already found it, written the reason into the file's own KDoc, and left it deliberately:
 
@@ -3093,6 +3098,174 @@ model must not change silently.**
 
 Everything mechanical in front of these has now been done. Nothing further should be guessed past
 them.
+
+## 6az. 2026-10-02: the physio and steps hub map, and a hub that was not one
+
+Three agents ran in parallel on disjoint file sets. This section is the physio/steps one.
+
+### What moved
+
+`UnifiedActivityProviderMTR` (303 lines), androidMain → commonMain. The diff is a rename plus three
+lines: `import android.os.Looper` dropped, `aimiIsMainThread()` imported, and
+`Looper.myLooper() == Looper.getMainLooper()` replaced at its two guard sites.
+
+Also one line of dead code removed: `import android.content.Context` in `HealthContextRepository`,
+which the file never used.
+
+### The seam, and why it is a substitution rather than a decision
+
+`expect fun aimiIsMainThread(): Boolean` in the module's own `commonMain`, with three actuals:
+Android on `Looper` (the original check, unchanged), iOS on `NSThread.isMainThread()` (its direct
+counterpart), and plain JVM returning `false` because a headless JVM draws no interface, so the
+caller proceeds with the blocking read it wants.
+
+This clears the bar the owner set - an interface must be honourable on every target that gets one -
+because **every target answers with a real platform fact**, not with a stub that quietly disables a
+feature. It is also the module's established pattern: `aimiWaitMs`, `aimiDeviceLanguage` and
+`AimiExclusiveLock` are existing in-module `expect`/`actual` pairs, so no new module dependency and
+no change to `core:interfaces`.
+
+### The hub map, measured
+
+| hub | genuinely Android | evidence |
+|---|---|---|
+| `UnifiedActivityProviderMTR` | **no** | one `Looper` call, twice - **moved** |
+| `AIMIPhysioManagerMTR` | yes | it *is* a WorkManager scheduler - `PeriodicWorkRequestBuilder`, `Constraints`, `ExistingPeriodicWorkPolicy`, `BackoffPolicy`, `NetworkType`, plus `Context`, across about half the class |
+| `AIMIHealthConnectSyncServiceMTR` | yes | `androidx.health.connect.client.*` + WorkManager + `java.util.Timer` |
+| `AIMIHealthConnectPermissionsHandlerMTR` | yes | `HealthConnectClient`, `PermissionController`, `Intent` |
+| `AIMIPhoneStepsSyncServiceMTR` | yes | `StepService` (hardware sensor) + `Timer` |
+| `AIMIPhoneStepsProviderMTR` | no imports, yes in effect | zero `android.*`; all 12 errors are `StepService`. **The architecture is already right** - its interface `AIMIStepsProviderMTR` is in commonMain and this is the Android implementation. Nothing to move. |
+| `StepService` | yes - the true hub | `object StepService : SensorEventListener` |
+| `HealthContextRepository` | **no** on `Context` (dead import), yes on its graph | blocked by `AIMIPhysioDataRepositoryMTR` (12 Health Connect imports). Its own shapes all have house answers. |
+| `AIMIPhysioContextStoreMTR` | yes | `Environment` + `File` + `ReentrantReadWriteLock` - this is the open storage seam |
+
+### Two of my own claims were wrong, and both in the same way
+
+1. **`UnifiedActivityProviderMTR` is not an Android hub.** I wrote that in 6ay and it is corrected
+   in place above. The file was classified by the company it kept - it sits in `steps/` next to the
+   sync services - rather than by what it contains.
+2. **`HealthContextRepository` does not carry `android.content.Context`.** I repeated that from an
+   earlier report without opening the file. It carries the *import* and nothing else. The "real
+   question" I built on top of it did not exist.
+
+Both are the campaign's recurring failure in a new costume. The rule that keeps being relearned is
+narrow and worth stating exactly: **a file's blocker is a property of its body, not of its imports,
+its folder, or what someone said about it last.**
+
+A fourth trap, new this time and the mirror image of the known ones: `@Volatile` in
+`AIMIPhysioPipelineWatchdogMTR` is written with **no import at all**, resolving implicitly to
+`kotlin.jvm.Volatile`. An import scan cannot see a missing import. Only the iOS compiler finds it.
+
+### Two seams proposed and not built, one of them recommended against
+
+- **A physio-status port** would free `AimiClinicalReportEngine` (151 lines of pure maths - LBGI,
+  HBGI, CV, GMI) for the cost of one method, `getStatus()`. The file reads exactly one key from it,
+  `status["isEnabled"]`. On iOS, with no Health Connect, "physio is off" is a true answer, not a
+  hollow one. Worth asking. *Separately: that file carries a comment admitting it works around
+  `PhysioManager` not exposing `getLastContext()`, and hardcodes `cyclePhase` to `"UNKNOWN"`.*
+- **A steps-sync coordinator port** would free `AIMIStepsManagerMTR` (122 lines). **Recommended
+  against**: `start`/`stop`/`getSyncStatus`/`triggerManualSync` over Health Connect and a hardware
+  pedometer is exactly the contract iOS cannot honour, and a user who believes step data is syncing
+  when it is not is the safety case the owner's rule names. iOS has `CMPedometer`, but wiring that is
+  a feature, not a port.
+
+### One improvement to the gate, adopted
+
+The fast pre-gate in the skill was `compileAndroidMain` + `compileKotlinIosArm64`. That misses a
+broken or missing `jvmMain` actual, and this module has a `jvmMain` source set. Add
+`compileKotlinJvm`.
+
+## 6ba. 2026-10-02: three parallel lots, and a rounding defect under all of AIMI
+
+The other two of the three parallel lots. AIMI is now **88 `androidMain` / 436 `commonMain`**.
+
+### `AuditorOrchestrator` (724 lines) moved, and its blocker was imaginary
+
+The whole diff is 15 insertions, 11 deletions: `Dispatchers.IO` → `aapsIoDispatcher`, `@Volatile` →
+`kotlin.concurrent.Volatile`, six `format` calls, and one constructor parameter.
+
+`AIMIInsulinDecisionAdapterMTR` (653 androidMain lines, `Looper` + atomics + `runBlocking`, hanging
+off `AIMIPhysioContextStoreMTR`) looked like a hard dependency. It was not. The only thing the
+orchestrator wanted from it was:
+
+```kotlin
+fun getLatestSnapshot(): HealthContextSnapshot = repo.getLastSnapshot()
+```
+
+`repo` is `AimiHealthContext` - **already a commonMain port**, already declaring `getLastSnapshot()`,
+already returning the commonMain `HealthContextSnapshot`. The orchestrator was reaching an interface
+it could inject directly, through 653 lines of Android. Swapping the parameter is zero delta:
+`AimiHealthContext` has exactly one implementation, `HealthContextRepository`, bound
+`@SingleIn(AppScope::class)`, which is the same singleton the adapter held.
+
+**Eighth time a named blocker dissolved on measurement, and the first that needed no probe move -
+reading the one method was enough.**
+
+### `AiCoachingService` (478 lines) moved, and the brief's instruction was wrong
+
+The JSON split held: four request bodies written, three responses parsed, no JSON anywhere near the
+prompt. But **the instruction to read with `OrgJsonCompat` was wrong and was correctly refused.**
+`OrgJsonCompat` only has `opt*` accessors, which return `""` for a missing key. The old code used the
+**throwing** `getJSONArray`/`getString` family, and the throw is load-bearing: it is what lands in the
+`catch` that produces `aimi_coach_svc_read_error_openai` and its siblings. With the shim a malformed
+reply would have come back as an empty coaching answer instead of an error the user can see.
+
+The right house pattern was already in this module: `AuditorAIService.extractContentText` uses
+`getValue(...).jsonArray[0].jsonObject...jsonPrimitive.content`, which raises at every step exactly as
+the `org.json` getters did, and its KDoc says so. **`OrgJsonCompat` is for readers that used `opt*`;
+a reader that used the throwing getters needs `getValue`/`jsonPrimitive`.** That distinction belongs
+beside the "reading is safe to shim" line, which is true but not the whole rule.
+
+Two more things worth keeping:
+
+- **`aimiDeviceLanguage()` is a trap for prompt text.** It returns the ISO code (`fr`); the prompt
+  line `"Respond in '$deviceLang'."` needs the display name (`French`). Reusing it blindly would have
+  changed what the model reads. A second `expect`, `aimiDeviceLanguageName()`, was added.
+- **`:plugins:aps` has its own `jvmMain` with duplicated actuals, so a new `expect` needs four halves,
+  not two.** The first full gate failed on exactly that, which the Android+iOS pre-gate could not see.
+  This is why `compileKotlinJvm` is now part of the pre-gate.
+
+### The rounding defect, which is bigger than any of the three lots
+
+`AimiFmt.kt` defines `aimiFmt0/1/2/4` on `NumberFormat.INTEGER`, `DECIMAL_1`, `DECIMAL_2` and
+`withDecimals(4)`. All of those take `NumberFormat`'s default rounding, which is **HALF_EVEN**
+(`NumberFormat.kt:31`). `String.format("%.Nf", x)` - what they replace, and what `dev_OAPSAIMI` runs -
+is **HALF_UP**. There are **355** `aimiFmt*` call sites in `:plugins:aps`.
+
+The repo already contains the right answer, two plugins away: `AdaptiveSmoothingPlugin` and
+`UnscentedKalmanFilterPlugin` both use `NumberFormat.withDecimalsHalfUp(decimals)`, with a KDoc that
+says in as many words *"`withDecimalsHalfUp` matches what `%.Nf` did: exactly N decimals, rounded
+half up."* AIMI's own helpers did not get that memo.
+
+**And the shared module's own documentation argues the problem away, incorrectly.**
+`NumberRounding.kt:6-9` claims a tie is "only reachable when the halfway point is exactly
+representable as a `Double`", that whole numbers have reachable ties, but that *"rounding to one
+decimal does not: a tie there would have to be `(2k+1)/20`, and the factor of 5 in the denominator
+means no `Double` ever lands on it."*
+
+That arithmetic is wrong. `(2k+1)/20` reduces whenever `2k+1` is a multiple of 5: `5/20 = 1/4 = 0.25`
+exactly. So **0.25, 0.75, 1.25, 1.75, 2.25 are all exactly representable one-decimal ties**, and at
+two decimals `0.125`, `0.375`, `0.625` likewise. Checked against real IEEE doubles, not reasoned
+about. An agent in this session read that KDoc and concluded the choice was "moot here"; it is not.
+
+What it costs, on values AIMI actually prints:
+
+| | `%.Nf` (today, and on `dev_OAPSAIMI`) | `aimiFmt*` (this branch) |
+|---|---|---|
+| `aimiFmt0(2.5)` | `3` | `2` |
+| `aimiFmt0(120.5)` | `121` | `120` |
+| `aimiFmt1(0.25)` | `0.3` | `0.2` |
+| `aimiFmt1(1.25)` | `1.3` | `1.2` |
+| `aimiFmt2(0.125)` | `0.13` | `0.12` |
+
+Insulin doses land on `.25` and `.5` constantly. And this is **not confined to logs** despite the
+helper's KDoc saying "for AIMI logs": `AuditorDataCollector:257-258` uses `aimiFmt2` for text that
+feeds the auditor's LLM prompt, and `OrefAnalysisReport` does the same.
+
+**This is a parity break the migration introduced**, against the owner's stated rule, at 355 sites,
+with a known-correct one-line-per-helper fix. It is the owner's call because it changes rendered
+numbers across the plugin, but there is no argument for keeping HALF_EVEN: nothing chose it, it is a
+default that was inherited by not being named.
 
 ## 7. Start here next session
 

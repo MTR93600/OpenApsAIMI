@@ -10,3 +10,11 @@ import java.util.Locale
  * French keeps getting the French labels.
  */
 actual fun aimiDeviceLanguage(): String = Locale.getDefault().language
+
+/**
+ * Android half of [aimiDeviceLanguageName].
+ *
+ * The exact call the coaching prompt used before it moved to shared code, so the sentence the
+ * assistant reads is byte for byte the one it read before.
+ */
+actual fun aimiDeviceLanguageName(): String = Locale.getDefault().displayLanguage

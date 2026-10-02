@@ -198,6 +198,14 @@ file can name `app.aaps.core.ui.R` or take a `Context` indirectly. Compile for i
 Beware the grep, too: `^import android` also matches `androidx`, so it hides every Compose file.
 Anchor it as `^import android\.`.
 
+**A missing import is a blocker an import scan cannot see.** `@Volatile` written with no import at
+all resolves implicitly to `kotlin.jvm.Volatile` on JVM and Android and fails on Native with
+`Unresolved reference 'Volatile'`; the fix is `kotlin.concurrent.Volatile`. The general form of this
+and the paragraphs around it is one rule: **a file's blocker is a property of its body, not of its
+imports, its folder, or what a previous report said about it.** One file in this campaign was
+mis-classified as Android because it sat in a folder beside Android ones, and another because an
+earlier report said it took a `Context` when it only carried a dead import.
+
 **A type in the same package needs no import either.** An `internal object` next to the file you are
 moving is invisible to any import scan, and it is the blocker the compiler finds after you have already
 convinced yourself the file is clean. This has now bitten four separate probes in one campaign.
@@ -280,6 +288,31 @@ overload. If the module's owner is not registered in `shared/tests/TextRefStubs.
 name resolves to itself, so expectations like `isNull()` become the string's own name. A Robolectric
 Compose test must still call `TextRefIdRegistry.register(owner) { XxxStringIds.idOf(it) }` in its
 setup - a host test does not go through the generated registry the way the app does.
+
+### `org.json`: which shim depends on which accessors the old code used
+
+`OrgJsonCompat` in `core/data/commonMain` replaces `org.json` **`opt*`** accessors and preserves their
+quirks (a missing key gives `""`, never null), so a straight type swap changes nothing downstream.
+
+**It is the wrong tool for a reader that used the throwing getters.** `getJSONArray`, `getJSONObject`
+and `getString` raise when what they ask for is not there, and that throw is often load-bearing: it is
+what lands in the `catch` that produces a user-visible error. Swapping it for `optStringCompat` turns
+a visible failure into a silent empty result. For those, mirror
+`AuditorAIService.extractContentText` instead - `getValue(...).jsonArray[0].jsonObject.getValue(...)
+.jsonPrimitive.content` - which raises at every step exactly as the getters did.
+
+Writing is a third case. `OrgJsonCompat`'s own KDoc says writing changes the bytes, which is true, but
+the question that matters is **who reads the result**: an HTTP request body is re-parsed by a JSON
+parser that does not care about key order or whitespace, while JSON pasted into prompt text is read by
+a language model character by character. The first is a port; the second is a decision.
+
+### A new `expect` in `:plugins:aps` needs four halves, not two
+
+This module has `commonMain`, `androidMain`, `iosMain` **and** `jvmMain`, with the JVM actuals
+deliberately duplicated rather than shared through a `jvmSharedMain`. An `expect` with only Android
+and iOS actuals passes an Android+iOS pre-gate and then fails the full gate with
+`Expected … has no actual declaration in module <commonMain> for JVM`. This is why `compileKotlinJvm`
+belongs in the pre-gate.
 
 ### An `Int` in an interface is a hard stop
 
@@ -430,7 +463,9 @@ counts from the XML under `<module>/build/test-results/<task>/`, not from the co
 
 **Task names**: the KMP-library plugin calls the Android compile `:<module>:compileAndroidMain`.
 There is no `compileFullDebugKotlinAndroid` or `compileDebugKotlinAndroid`. `compileAndroidMain`
-plus `compileKotlinIosArm64` is a useful ~1 minute pre-gate before the ~7 minute full one.
+plus `compileKotlinIosArm64` plus `compileKotlinJvm` is a useful ~1 minute pre-gate before the
+~7 minute full one. Include the JVM one whenever the module has a `jvmMain` source set: without it a
+missing or broken `jvm` actual survives the pre-gate and fails later.
 
 `--rerun` has two gotchas, both measured here, and the first one keeps being paid for even by people
 who were warned about it in writing - assume you will get it wrong and check, rather than assume you

@@ -20,3 +20,21 @@ package app.aaps.plugins.aps.openAPSAIMI
  *   Callers compare it with `ignoreCase = true`, because the case of the code is not promised.
  */
 expect fun aimiDeviceLanguage(): String
+
+/**
+ * The device language as a name a person reads, like `français` or `English`.
+ *
+ * This is the other half of [aimiDeviceLanguage] and it exists for one caller: `AiCoachingService`
+ * puts it straight into the coaching prompt, as `Respond in '<name>'`. That line read
+ * `Locale.getDefault().displayLanguage` before the file moved to shared code, so the name is what
+ * the assistant has always been given and what it has to keep being given. The ISO code from
+ * [aimiDeviceLanguage] is deliberately not reused here: swapping `French` for `fr` inside a prompt
+ * is a change to the words a model reads, which is exactly what this port must not do.
+ *
+ * The name is written in the current language itself, the way the JVM renders it, so a French phone
+ * gets `français` and not `French`.
+ *
+ * @return the display name of the current locale's language, or an empty string when the platform
+ *   has none.
+ */
+expect fun aimiDeviceLanguageName(): String

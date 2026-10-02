@@ -1,37 +1,77 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor
 
-import org.json.JSONArray
-import org.json.JSONObject
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.SingleIn
-import dev.zacsweers.metro.AppScope
-import kotlin.math.roundToInt
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import app.aaps.core.data.format.NumberFormat
+import app.aaps.core.data.format.NumberFormatPlatform
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.plugins.aps.ApsStrings
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
+import app.aaps.plugins.aps.openAPSAIMI.aimiDeviceLanguageName
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
-import app.aaps.core.interfaces.logging.AAPSLogger
-import app.aaps.core.interfaces.resources.ResourceHelper
-import app.aaps.core.keys.interfaces.TextRef
-import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpRequest
-import java.util.Locale
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.withContext
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.format.char
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlin.math.roundToInt
+import kotlin.time.Instant
+
+/**
+ * `dd/MM` in the phone's own time zone, the stamp the history lines in the prompt have always shown.
+ *
+ * This replaces `SimpleDateFormat("dd/MM", Locale.US)`, which does not exist outside the JVM. Both
+ * fields are all digits and zero padded, so `Locale.US` only ever pinned the calendar, and this
+ * formatter is calendar independent by construction - the same reasoning as `aimiCsvTimestamp`.
+ */
+private val advisorHistoryDayMonth = LocalDateTime.Format {
+    day(); char('/'); monthNumber()
+}
+
+/**
+ * One decimal, dot separator, ties away from zero - what `String.format(Locale.US, "%.1f", v)` gave.
+ *
+ * These numbers go into the prompt an assistant reads, so the text has to stay the same. Ties away
+ * from zero is what `%.1f` does, and a tie at one decimal is not reachable by a `Double` anyway.
+ */
+private fun promptFmt1(value: Double): String =
+    NumberFormat.withDecimalsHalfUp(1).format(value, NumberFormatPlatform.SEPARATOR_DOT)
+
+/** Three decimals, dot separator, ties away from zero - what `String.format(Locale.US, "%.3f", v)` gave. */
+private fun promptFmt3(value: Double): String =
+    NumberFormat.withDecimalsHalfUp(3).format(value, NumberFormatPlatform.SEPARATOR_DOT)
 
 /**
  * =============================================================================
  * AI COACHING SERVICE
  * =============================================================================
- * 
+ *
  * Interacts with OpenAI API to generate natural language coaching advice.
- * Sends its requests through `AimiHttp`, the shared HTTP seam.
+ * Sends its requests through [AimiHttp], the shared HTTP seam.
  * =============================================================================
  */
 @SingleIn(AppScope::class)
 class AiCoachingService @Inject constructor(
-    private val rh: ResourceHelper,
+    private val rh: TextResolver,
     private val aapsLogger: AAPSLogger,
     private val geminiModelResolver: GeminiModelResolver,
     private val aimiHttp: AimiHttp,
@@ -53,13 +93,13 @@ class AiCoachingService @Inject constructor(
         private const val OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 
         private const val OPENAI_MODEL = "gpt-5.4-mini" // Efficient current GA tier for coaching (gpt-4o-mini is legacy)
-        
 
-        
+
+
         // DeepSeek Chat (OpenAI-compatible)
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
         private const val DEEPSEEK_MODEL = "deepseek-chat"
-        
+
         // Claude Haiku (Fast & Cheap) — current GA fast tier (claude-3-haiku-20240307 was retired).
         private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
         private const val CLAUDE_MODEL = "claude-haiku-4-5"
@@ -73,11 +113,11 @@ class AiCoachingService @Inject constructor(
         report: AdvisorReport,
         apiKey: String,
         provider: Provider,
-        history: List<app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.AdvisorActionLog> = emptyList(),
+        history: List<AdvisorHistoryRepository.AdvisorActionLog> = emptyList(),
         includeRichOref: Boolean = true,
         causalInsights: List<AimiBehaviorCausalInsight> = emptyList(),
-    ): String = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) return@withContext rh.gs(R.string.aimi_coach_svc_missing_key, provider.name)
+    ): String = withContext(aapsIoDispatcher) {
+        if (apiKey.isBlank()) return@withContext rh.gs(ApsStrings.aimi_coach_svc_missing_key, provider.name)
 
         try {
             val prompt = buildPrompt(context, report, history, includeRichOref, causalInsights)
@@ -91,7 +131,7 @@ class AiCoachingService @Inject constructor(
 
         } catch (e: Exception) {
             e.printStackTrace()
-            return@withContext rh.gs(R.string.aimi_coach_svc_connection_error, provider.name, e.localizedMessage)
+            return@withContext rh.gs(ApsStrings.aimi_coach_svc_connection_error, provider.name, e.message)
         }
     }
 
@@ -107,9 +147,9 @@ class AiCoachingService @Inject constructor(
         prompt: String,
         apiKey: String,
         provider: Provider
-    ): String = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) return@withContext rh.gs(R.string.aimi_coach_svc_missing_key_simple)
-        if (prompt.isBlank()) return@withContext rh.gs(R.string.aimi_coach_svc_empty_prompt)
+    ): String = withContext(aapsIoDispatcher) {
+        if (apiKey.isBlank()) return@withContext rh.gs(ApsStrings.aimi_coach_svc_missing_key_simple)
+        if (prompt.isBlank()) return@withContext rh.gs(ApsStrings.aimi_coach_svc_empty_prompt)
 
         try {
             return@withContext when (provider) {
@@ -120,7 +160,7 @@ class AiCoachingService @Inject constructor(
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            return@withContext rh.gs(R.string.aimi_coach_svc_generic_error, e.localizedMessage)
+            return@withContext rh.gs(ApsStrings.aimi_coach_svc_generic_error, e.message)
         }
     }
 
@@ -128,8 +168,8 @@ class AiCoachingService @Inject constructor(
 
 
     private fun callOpenAI(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry(aapsLogger) {
-        val jsonBody = buildOpenAiJson(prompt)
-        jsonBody.put("max_completion_tokens", 4096) // GPT-5.x requires this (rejects legacy max_tokens)
+        // GPT-5.x requires max_completion_tokens (it rejects the legacy max_tokens).
+        val jsonBody = buildOpenAiJson(prompt, OPENAI_MODEL, "max_completion_tokens", 4096)
         val httpResponse = aimiHttp.execute(
             AimiHttpRequest(
                 url = OPENAI_URL,
@@ -150,8 +190,8 @@ class AiCoachingService @Inject constructor(
         } else {
             // Whatever the server said about the refusal
             val err = joinLines(httpResponse.body)
-            if (LlmHttpRetry.isTransientStatus(responseCode)) throw java.io.IOException("OpenAI Error ($responseCode): $err")
-            rh.gs(R.string.aimi_coach_svc_error_openai, responseCode, err)
+            if (LlmHttpRetry.isTransientStatus(responseCode)) throw Exception("OpenAI Error ($responseCode): $err")
+            rh.gs(ApsStrings.aimi_coach_svc_error_openai, responseCode, err)
         }
     }
 
@@ -166,7 +206,7 @@ class AiCoachingService @Inject constructor(
             // 2. Quota (429) OR still-overloaded after retries → fallback to the resilient flash alias (also retried).
             if (LlmHttpRetry.isQuota(e) || LlmHttpRetry.isTransient(e)) {
                 val fallbackModel = "gemini-flash-latest" // Durable flash alias (current GA)
-                android.util.Log.w("AIMI_GEMINI", "⚠️ $primaryModel failed (${e.message?.take(80)}). Fallback to $fallbackModel")
+                aapsLogger.warn(LTag.AIMI, "[AIMI_GEMINI] ⚠️ $primaryModel failed (${e.message?.take(80)}). Fallback to $fallbackModel")
                 return LlmHttpRetry.withTransientRetry(aapsLogger) { executeGeminiRequest(apiKey, prompt, fallbackModel) }
             }
             throw e // Re-throw other errors
@@ -180,26 +220,28 @@ class AiCoachingService @Inject constructor(
     ): String {
         val urlStr = geminiModelResolver.getGenerateContentUrl(modelId, apiKey)
 
-        val jsonBody = JSONObject()
-        val parts = JSONArray()
-        val part = JSONObject()
-        part.put("text", prompt)
-        parts.put(part)
-        
-        val content = JSONObject()
-        content.put("parts", parts)
-        content.put("role", "user")
-        
-        val contents = JSONArray()
-        contents.put(content)
-        
-        val root = JSONObject()
-        root.put("contents", contents)
-        
-        val config = JSONObject()
-        config.put("temperature", 0.7)
-        config.put("maxOutputTokens", 4096)
-        root.put("generationConfig", config)
+        // Same keys, same values and the same order the org.json builder wrote: the content block
+        // names its parts before its role, and the generation config comes after the contents.
+        val root = buildJsonObject {
+            put(
+                "contents",
+                buildJsonArray {
+                    add(
+                        buildJsonObject {
+                            put("parts", buildJsonArray { add(buildJsonObject { put("text", prompt) }) })
+                            put("role", "user")
+                        }
+                    )
+                }
+            )
+            put(
+                "generationConfig",
+                buildJsonObject {
+                    put("temperature", 0.7)
+                    put("maxOutputTokens", 4096)
+                }
+            )
+        }
 
         val httpResponse = aimiHttp.execute(
             AimiHttpRequest(
@@ -224,13 +266,13 @@ class AiCoachingService @Inject constructor(
     private fun buildPrompt(
         ctx: AdvisorContext,
         report: AdvisorReport,
-        history: List<app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.AdvisorActionLog>,
+        history: List<AdvisorHistoryRepository.AdvisorActionLog>,
         includeRichOref: Boolean,
         causalInsights: List<AimiBehaviorCausalInsight>,
     ): String {
         val sb = StringBuilder()
-        val deviceLang = java.util.Locale.getDefault().displayLanguage
-        
+        val deviceLang = aimiDeviceLanguageName()
+
         // Persona
         sb.append("You are AIMI, an expert 'Certified Diabetes Educator' specializing in Automated Insulin Delivery (AID).\n")
         sb.append("Your Goal: Analyze the patient's recent glucose & insulin data to identify patterns and suggest specific algorithm tuning.\n")
@@ -242,8 +284,10 @@ class AiCoachingService @Inject constructor(
         sb.append("--- HISTORY & STABILITY CONTEXT ---\n")
         if (history.isNotEmpty()) {
             sb.append("Recent changes made by the user:\n")
-            history.take(5).forEach { 
-                val date = java.text.SimpleDateFormat("dd/MM", java.util.Locale.US).format(java.util.Date(it.timestamp))
+            history.take(5).forEach {
+                val date = advisorHistoryDayMonth.format(
+                    Instant.fromEpochMilliseconds(it.timestamp).toLocalDateTime(TimeZone.currentSystemDefault())
+                )
                 sb.append("- [$date] ${it.description} (${it.oldValue} -> ${it.newValue})\n")
             }
             sb.append("CRITICAL: If a structured parameter was recently changed (last 3-5 days), AVOID suggesting further contradictory changes to it unless safety is at risk. Allow time for the change to work.\n\n")
@@ -253,7 +297,7 @@ class AiCoachingService @Inject constructor(
 
         // 1. Context: Metrics
         sb.append("--- PATIENT METRICS (Advisor period) ---\n")
-        sb.append("Score: ${report.overallScore}/10 | GMI-style index: ${String.format(Locale.US, "%.1f", ctx.metrics.gmi)}\n")
+        sb.append("Score: ${report.overallScore}/10 | GMI-style index: ${promptFmt1(ctx.metrics.gmi)}\n")
         sb.append("TIR (70-180): ${(ctx.metrics.tir70_180 * 100).roundToInt()}%\n")
         sb.append("Hypo (<70): ${(ctx.metrics.timeBelow70 * 100).roundToInt()}% | Severe (<54): ${(ctx.metrics.timeBelow54 * 100).roundToInt()}%\n")
         sb.append("Hyper (>180): ${(ctx.metrics.timeAbove180 * 100).roundToInt()}%\n")
@@ -279,10 +323,10 @@ class AiCoachingService @Inject constructor(
         sb.append("Total Basal (Profile): ${ctx.profile.totalBasal} U/day\n")
         sb.append("DIA (Profile): ${ctx.profile.dia} h\n")
         sb.append("Target BG: ${ctx.profile.targetBg} mg/dL\n")
-        sb.append("Unified reactivity factor: ${String.format(Locale.US, "%.3f", ctx.prefs.unifiedReactivityFactor)}\n")
+        sb.append("Unified reactivity factor: ${promptFmt3(ctx.prefs.unifiedReactivityFactor)}\n")
         if (ctx.prefs.autodriveEnabled) {
             sb.append(
-                "AutoDrive: enabled | autodrive max basal pref: ${ctx.prefs.autodriveMaxBasal} U/h | MPC insulin/kg/5min step: ${String.format(Locale.US, "%.3f", ctx.prefs.mpcInsulinUPerKgPerStep)}\n",
+                "AutoDrive: enabled | autodrive max basal pref: ${ctx.prefs.autodriveMaxBasal} U/h | MPC insulin/kg/5min step: ${promptFmt3(ctx.prefs.mpcInsulinUPerKgPerStep)}\n",
             )
         } else {
             sb.append("AutoDrive: off (per preference)\n")
@@ -296,11 +340,11 @@ class AiCoachingService @Inject constructor(
                     insights = causalInsights,
                     familyTitle = { familyId ->
                         when (familyId) {
-                            app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId.Protection -> "Protection vs correction"
-                            app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId.MealCapture -> "Meal capture and fast rises"
-                            app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId.Stability -> "Stability and damping"
-                            app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId.Physio -> "Physio influence"
-                            app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId.Autonomy -> "Autonomy"
+                            AimiBehaviorFamilyId.Protection -> "Protection vs correction"
+                            AimiBehaviorFamilyId.MealCapture -> "Meal capture and fast rises"
+                            AimiBehaviorFamilyId.Stability -> "Stability and damping"
+                            AimiBehaviorFamilyId.Physio -> "Physio influence"
+                            AimiBehaviorFamilyId.Autonomy -> "Autonomy"
                         }
                     },
                 ),
@@ -362,45 +406,53 @@ class AiCoachingService @Inject constructor(
         }
     }
 
-    // Builds the shared OpenAI-compatible body (model + messages). The token-limit parameter is set by the
-    // caller because it differs by provider: GPT-5.x rejects `max_tokens` and requires `max_completion_tokens`,
-    // whereas DeepSeek (older OpenAI-compatible spec) expects `max_tokens`.
-    private fun buildOpenAiJson(prompt: String): JSONObject {
-        val root = JSONObject()
-        root.put("model", OPENAI_MODEL)
-        val messages = JSONArray()
-        // Unified: Prompt contains the full persona and instructions.
-        val usr = JSONObject().put("role", "user").put("content", prompt)
-        messages.put(usr)
-        root.put("messages", messages)
-        return root
-    }
+    // Builds the shared OpenAI-compatible body (model + messages + token limit). The token-limit key is
+    // named by the caller because it differs by provider: GPT-5.x rejects `max_tokens` and requires
+    // `max_completion_tokens`, whereas DeepSeek (older OpenAI-compatible spec) expects `max_tokens`.
+    private fun buildOpenAiJson(prompt: String, model: String, tokenLimitKey: String, tokenLimit: Int): JsonObject =
+        buildJsonObject {
+            put("model", model)
+            // Unified: Prompt contains the full persona and instructions.
+            put(
+                "messages",
+                buildJsonArray {
+                    add(
+                        buildJsonObject {
+                            put("role", "user")
+                            put("content", prompt)
+                        }
+                    )
+                }
+            )
+            put(tokenLimitKey, tokenLimit)
+        }
 
     private fun parseOpenAiResponse(jsonStr: String): String {
         return try {
-            val root = JSONObject(jsonStr)
-            root.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
+            val root = Json.parseToJsonElement(jsonStr).jsonObject
+            root.getValue("choices").jsonArray[0].jsonObject
+                .getValue("message").jsonObject
+                .getValue("content").jsonPrimitive.content.trim()
         } catch (e: Exception) {
-            rh.gs(R.string.aimi_coach_svc_read_error_openai)
+            rh.gs(ApsStrings.aimi_coach_svc_read_error_openai)
         }
     }
 
     private fun parseGeminiResponse(jsonStr: String): String {
         return try {
-            val root = JSONObject(jsonStr)
-            val candidate = root.getJSONArray("candidates").getJSONObject(0)
-            val parts = candidate.getJSONObject("content").getJSONArray("parts")
-            parts.getJSONObject(0).getString("text").trim()
+            val root = Json.parseToJsonElement(jsonStr).jsonObject
+            val candidate = root.getValue("candidates").jsonArray[0].jsonObject
+            val parts = candidate.getValue("content").jsonObject.getValue("parts").jsonArray
+            parts[0].jsonObject.getValue("text").jsonPrimitive.content.trim()
         } catch (e: Exception) {
              // Fallback for safety blocked
-             if (jsonStr.contains("finishReason")) rh.gs(R.string.aimi_coach_svc_gemini_blocked) else rh.gs(R.string.aimi_coach_svc_read_error_gemini)
+             if (jsonStr.contains("finishReason")) rh.gs(ApsStrings.aimi_coach_svc_gemini_blocked) else rh.gs(ApsStrings.aimi_coach_svc_read_error_gemini)
         }
     }
-    
+
     private fun callDeepSeek(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry(aapsLogger) {
-        val jsonBody = buildOpenAiJson(prompt) // DeepSeek uses OpenAI-compatible format
-        jsonBody.put("model", DEEPSEEK_MODEL) // Override model
-        jsonBody.put("max_tokens", 4096) // DeepSeek uses the legacy max_tokens parameter
+        // DeepSeek uses the OpenAI-compatible format, with the legacy max_tokens parameter.
+        val jsonBody = buildOpenAiJson(prompt, DEEPSEEK_MODEL, "max_tokens", 4096)
 
         val httpResponse = aimiHttp.execute(
             AimiHttpRequest(
@@ -421,24 +473,29 @@ class AiCoachingService @Inject constructor(
             parseOpenAiResponse(joinLines(httpResponse.body)) // Same format
         } else {
             val err = joinLines(httpResponse.body)
-            if (LlmHttpRetry.isTransientStatus(responseCode)) throw java.io.IOException("DeepSeek Error ($responseCode): $err")
-            rh.gs(R.string.aimi_coach_svc_error_deepseek, responseCode, err)
+            if (LlmHttpRetry.isTransientStatus(responseCode)) throw Exception("DeepSeek Error ($responseCode): $err")
+            rh.gs(ApsStrings.aimi_coach_svc_error_deepseek, responseCode, err)
         }
     }
-    
-    private fun callClaude(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry(aapsLogger) {
-        val jsonBody = JSONObject()
-        jsonBody.put("model", CLAUDE_MODEL)
-        jsonBody.put("max_tokens", 4096)
-        jsonBody.put("temperature", 0.7)
 
-        // Claude expects messages array with role/content
-        val messages = JSONArray()
-        val userMessage = JSONObject()
-        userMessage.put("role", "user")
-        userMessage.put("content", prompt)
-        messages.put(userMessage)
-        jsonBody.put("messages", messages)
+    private fun callClaude(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry(aapsLogger) {
+        // Claude expects a messages array with role/content.
+        val jsonBody = buildJsonObject {
+            put("model", CLAUDE_MODEL)
+            put("max_tokens", 4096)
+            put("temperature", 0.7)
+            put(
+                "messages",
+                buildJsonArray {
+                    add(
+                        buildJsonObject {
+                            put("role", "user")
+                            put("content", prompt)
+                        }
+                    )
+                }
+            )
+        }
 
         val httpResponse = aimiHttp.execute(
             AimiHttpRequest(
@@ -461,18 +518,18 @@ class AiCoachingService @Inject constructor(
         } else {
             val err = joinLines(httpResponse.body)
             // 503/529/500… → throw so it is retried with backoff; other errors surface as-is.
-            if (LlmHttpRetry.isTransientStatus(responseCode)) throw java.io.IOException("Claude Error ($responseCode): $err")
-            rh.gs(R.string.aimi_coach_svc_error_claude, responseCode, err)
+            if (LlmHttpRetry.isTransientStatus(responseCode)) throw Exception("Claude Error ($responseCode): $err")
+            rh.gs(ApsStrings.aimi_coach_svc_error_claude, responseCode, err)
         }
     }
 
     private fun parseClaudeResponse(jsonStr: String): String {
         return try {
-            val root = JSONObject(jsonStr)
-            val content = root.getJSONArray("content")
-            content.getJSONObject(0).getString("text").trim()
+            val root = Json.parseToJsonElement(jsonStr).jsonObject
+            val content = root.getValue("content").jsonArray
+            content[0].jsonObject.getValue("text").jsonPrimitive.content.trim()
         } catch (e: Exception) {
-            rh.gs(R.string.aimi_coach_svc_read_error_claude)
+            rh.gs(ApsStrings.aimi_coach_svc_read_error_claude)
         }
     }
 }

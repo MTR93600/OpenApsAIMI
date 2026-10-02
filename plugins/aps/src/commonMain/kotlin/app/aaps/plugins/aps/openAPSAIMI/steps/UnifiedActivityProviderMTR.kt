@@ -1,12 +1,12 @@
 package app.aaps.plugins.aps.openAPSAIMI.steps
 
-import android.os.Looper
 import app.aaps.core.data.model.SC
 import app.aaps.core.data.model.HR
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
+import app.aaps.plugins.aps.openAPSAIMI.aimiIsMainThread
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.keys.ACTIVITY_SOURCE_MODE_DISABLED
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
@@ -275,7 +275,7 @@ class UnifiedActivityProviderMTR @Inject constructor(
     }
 
     private fun loadStepsRecords(start: Long, end: Long): List<SC> {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
+        if (aimiIsMainThread()) {
             aapsLogger.warn(LTag.APS, "[$TAG] steps read skipped on main thread (avoid blocking UI)")
             return emptyList()
         }
@@ -288,7 +288,7 @@ class UnifiedActivityProviderMTR @Inject constructor(
     }
 
     private fun loadHrRecords(start: Long, end: Long): List<HR> {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
+        if (aimiIsMainThread()) {
             aapsLogger.warn(LTag.APS, "[$TAG] HR read skipped on main thread (avoid blocking UI)")
             return emptyList()
         }
