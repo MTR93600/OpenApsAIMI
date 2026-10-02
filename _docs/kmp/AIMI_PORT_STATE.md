@@ -3267,6 +3267,94 @@ with a known-correct one-line-per-helper fix. It is the owner's call because it 
 numbers across the plugin, but there is no argument for keeping HALF_EVEN: nothing chose it, it is a
 default that was inherited by not being named.
 
+## 6bb. 2026-10-02: the rounding correction applied, and the decision list with what iOS can really do
+
+### Applied
+
+`AimiFmt.kt` now builds every helper on `NumberFormat.withDecimalsHalfUp(n)` instead of the
+`INTEGER`/`DECIMAL_1`/`DECIMAL_2`/`withDecimals(4)` constants. Those constants differ from
+`withDecimalsHalfUp(n)` in exactly one field - `rounding` - so digit counts are unchanged and only
+the tie behaviour moves, back to what `String.format("%.Nf", x)` does on the shipping build.
+
+`NumberRounding`'s KDoc is corrected: it claimed one decimal ties were unreachable because a tie
+would be `(2k+1)/20` and "the factor of 5 in the denominator means no `Double` ever lands on it".
+The factor cancels when `2k+1` is a multiple of 5, so `5/20 = 1/4` and `0.25`, `0.75`, `1.25`,
+`1.75` are all exact one decimal ties. `NumberFormat`'s own KDoc now says half-even is the right
+default only for code replacing a `DecimalFormat`, and points `%.Nf` callers at
+`withDecimalsHalfUp`.
+
+**Trio reached the same rule independently.** Its JS→Swift migration guide, on the same class of
+port, says: *"When an algorithm rounds, match the JS convention exactly (often `floor(x + 0.5)` in
+JS code)."* The discipline is not an AIMI preference; it is what a sibling AID project found it had
+to do.
+
+### What cannot be ported, named plainly
+
+These are not blocked on a decision. They are Android capabilities with no shared form. On iOS each
+would be a **new implementation against a different API**, which is a feature, not a port, and the
+owner's rule says the feature should be visibly absent until someone builds it.
+
+| what | Android | the iOS counterpart, if someone builds it |
+|---|---|---|
+| Health Connect sync + permissions | `androidx.health.connect.client.*` | HealthKit - a different API and permission model. Trio has a HealthKit service, so it is proven possible, but it is separate code. |
+| `StepService` | `SensorEventListener`, hardware pedometer | `CMPedometer` |
+| `AIMIPhysioManagerMTR` scheduling | WorkManager, about half the class | `BGTaskScheduler`. **Not equivalent**: iOS background execution is far more restricted than a `PeriodicWorkRequest`, so the schedule itself would have to be redesigned, not translated. |
+| `AimiMealAdvisorScreen` capture | `android.hardware.camera2`, 762 lines | AVFoundation |
+| `AimiCognitiveOrefCoachCards` | Vico charting | any Compose Multiplatform chart - but that is a rewrite of the cards |
+| SOS and Health Connect permission screens | Android runtime permissions | a different consent model entirely |
+| external storage discovery | `Environment.getExternalStorageDirectory()` | **iOS has no shared external storage.** See the storage decision below. |
+
+### The decisions, each with what it unblocks and what iOS can honour
+
+**1. What reaches a language model.** Unblocks `AIMILLMPhysioAnalyzerMTR` (512 lines, one line of
+locale formatting) and `TpoLlmValidator` (182, an `org.json` object interpolated into the prompt),
+and behind the second one `TpoOrchestrator` and `AimiControlCenterScreen` (1 021). About 1 715 lines
+behind one question.
+
+The branch is **already inconsistent**: `AuditorDataCollector` and `OrefAnalysisReport` use
+`aimiFmt2` in text that feeds a prompt, so part of the system already sends the model a dot while
+`AIMILLMPhysioAnalyzerMTR` sends a French phone a comma. A prompt that varies with the device locale
+is a reproducibility problem rather than a feature. Recommended: accept the change, and capture one
+real before/after prompt pair to put in the record.
+
+**2. The storage seam.** Blocks `HealthContextRepository` (403), `AIMIPhysioContextStoreMTR` (428),
+`HormonitorViewerScreen` (324) and `AimiSupportPackageScreen` (162).
+
+This question splits in two, and only one half is a real problem:
+
+- **The app's own data directory is portable.** Trio writes its algorithm artefacts - `monitor/*.json`,
+  `settings/profile.json` - into the app's documents directory on iOS, which is exactly the shape
+  `AimiStorage` already has. A sibling AID app keeps the same kind of data the same way.
+- **Scanning several shared locations is not.** `HormonitorViewerScreen` looks in
+  `Environment.getExternalStorageDirectory()/Documents/AAPS` and in `getExternalFilesDir(null)/AAPS`.
+  iOS has no shared external storage; an app sees its own container, which it may expose to the Files
+  app. There is nothing to point the second path at.
+
+Recommended: define the seam as the app's own directory only, keep multi-location discovery as an
+Android-only extra, and let the viewer show the app directory on iOS rather than pretending to search.
+
+**3. The share seam.** Blocks `AimiProfileAdvisorScreen` (923) and `AimiSupportPackageScreen` (162).
+iOS has `UIActivityViewController`, a direct counterpart of the Android chooser. Honourable on both.
+Recommended: build it with a real iOS implementation.
+
+**4. `ContextManager`'s `ConcurrentHashMap`** (650 lines, unblocking `AimiContextScreen`, 590).
+22 use sites, three internal coroutines plus the loop tick and a screen. A plain map under `AapsLock`
+would also make atomic two compound operations that are not atomic today (`filter` then `remove`).
+That is a fix, which is why it is not a neutral port. Recommended: do it as its own change, with
+tests, not folded into a move.
+
+**5. The notification resolver, now found twice** - `TpoNotificationManager` and
+`AuditorReportFormatter`. One label resolves through `rh`, its neighbours through `context`, so one
+notification can mix two languages for a user with a language override. The house pattern in AIMI
+notification managers is `context` (`AuditorNotificationManager`: 7 uses, zero `rh`). Recommended:
+decide once for both, and the zero-delta choice is `context`.
+
+**6. TPO onto the shared notification stack.** Deferred, with the costs now known: `NotificationAction`
+carries a lambda, not a `PendingIntent`, and `AndroidSystemNotificationPlatform` hardcodes an intent
+to `MainActivity` **with no extras**, so the deep link into the AIMI screen is lost; TPO's two
+channels collapse into one at `IMPORTANCE_HIGH`, so the quiet "started" notification gets louder.
+Gained: iOS works for free. Recommended: not until `AapsNotification` can carry a route.
+
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at

@@ -17,7 +17,10 @@ package app.aaps.core.data.format
  *   Trailing zeros above [minFractionDigits] are dropped.
  *   Pattern `"0.0#"` means `minFractionDigits = 1` and `maxFractionDigits = 2`.
  *
- * Rounding is half-even, same as before.
+ * Rounding defaults to half-even, which is what `DecimalFormat` did. **That is the right default
+ * only for code that replaces a `DecimalFormat`.** Code replacing `String.format("%.Nf", x)` wants
+ * [withDecimalsHalfUp] instead, because `%.Nf` rounds ties away from zero and the two disagree on
+ * values as ordinary as `0.25` and `2.5`. See [NumberRounding].
  *
  * The decimal separator is not part of this type. It comes from the platform, so a device set
  * to Czech or German keeps showing a comma exactly as it does today. Pass
