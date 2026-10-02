@@ -1,17 +1,23 @@
 package app.aaps.plugins.aps.openAPSAIMI.orchestration
 
 import app.aaps.core.interfaces.aps.RT
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporter
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.collections.ArrayDeque
+import kotlin.concurrent.Volatile
+import kotlin.concurrent.atomics.AtomicLong
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.incrementAndFetch
 
 /**
  * Observe-only loop telemetry: tick id, phases, timing hints, and blackbox correlation
  * (stall watchdog lives in the hormonitor study exporter).
  */
+@OptIn(ExperimentalAtomicApi::class)
 object AimiLoopTelemetry {
 
     private const val RING_MAX = 128
@@ -34,6 +40,12 @@ object AimiLoopTelemetry {
     private var lastPhaseMarkWallMs: Long = 0L
 
     private val ring = ArrayDeque<String>()
+
+    /**
+     * Guards [ring]. A dedicated lock rather than the deque itself, because `synchronized` is JVM
+     * only; it is reentrant and blocking, so it behaves like the monitor it replaces.
+     */
+    private val ringLock = AapsLock()
 
     /**
      * Records a coarse phase for the active tick (ring + optional blackbox JSONL).
@@ -94,7 +106,7 @@ object AimiLoopTelemetry {
             return onLockTimeout()
         }
         try {
-            val id = tickSeq.incrementAndGet()
+            val id = nextTickId()
             val previousActive = activeTickId
             activeTickId = id
             activeTickStartedWallMs = wallClockMs
@@ -141,15 +153,21 @@ object AimiLoopTelemetry {
 
     internal fun ringSnapshotTail(maxLines: Int = 32): List<String> {
         val cap = maxLines.coerceIn(1, RING_MAX)
-        synchronized(ring) {
+        ringLock.withLock {
             if (ring.isEmpty()) return emptyList()
             return ring.takeLast(cap)
         }
     }
 
+    /**
+     * Next tick id, counted once per call. Kept out of the inlined tick body so the atomic API, which
+     * still needs an opt-in, is not inlined into every call site.
+     */
+    private fun nextTickId(): Long = tickSeq.incrementAndFetch()
+
     private fun appendRing(line: String) {
         val stamped = "${aimiWallClockMs()} $line"
-        synchronized(ring) {
+        ringLock.withLock {
             ring.addLast(stamped)
             while (ring.size > RING_MAX) ring.removeFirst()
         }

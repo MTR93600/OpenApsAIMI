@@ -2550,6 +2550,119 @@ Also recorded, not fixed: `getRecentActions(days)` computes `days * 24 * 60 * 60
 from 24856 days up silently overflows and the window becomes short or negative. No caller passes more
 than a few weeks.
 
+## 6at. 2026-10-02: `String.format` has no drop-in replacement, and three blocker categories, not two
+
+### The number formatting, measured
+
+The house replacement for `String.format` / `"%.Nf".format` is `NumberFormat`. Two differences were
+being repeated in briefs, and **both are avoidable**: `NumberFormat.withDecimalsHalfUp(n)` gives
+HALF_UP, and `format(v)` without a separator argument follows the device locale. The recipe
+`withDecimals(n).format(v, SEPARATOR_DOT)` is the *locale-independent* overload, not the only one.
+
+**The real obstacle is different, and it is not fixable by picking a rounding mode.**
+`java.util.Formatter` rounds the double's **shortest decimal representation**; `DecimalFormat` rounds
+the **exact binary value**. Measured over 180 297 comparisons (en-US / fr-FR / de-DE × 1, 2, 3
+decimals, 20 000 random draws plus a tie list): **42 mismatches, all from exact ties, zero from the
+random draws**:
+
+| value | decimals | `String.format` | `NumberFormat` |
+|---|---|---|---|
+| 0.15 | 1 | `0.2` | `0.1` |
+| 8.35 | 1 | `8.4` | `8.3` |
+| 1.005 | 2 | `1.01` | `1.00` |
+| 2.675 | 2 | `2.68` | `2.67` |
+| Infinity | - | `Infinity` | `∞` |
+
+So a swap is right almost always and then silently wrong on a value like 8.35 hours of sleep. **There
+is no drop-in.** Swapping is fine for log text; for anything a reader or a model consumes it is a
+decision, not a port. The harness that produced this is reproducible; flipping it to HALF_EVEN raises
+the count 42 → 54, so the number is not a vacuous pass.
+
+### Where those strings actually go, in `AuditorOrchestrator`
+
+Traced, not guessed. Four of its six sites build a `DecisionResult.Applied.reason`, and that field is
+**written into the training corpus** - `AuditorJsonlExport.kt:104` does `put("reason", result.reason)` -
+and reaches the dose reason the user reads (`DetermineBasalAIMI2.kt:9635`,
+`finalResult.reason.append("Auditor Rejected: ${result.reason}")`). The other two are log text and
+would be swappable. **A `String.format` site in AIMI is not cosmetic until you have followed it.**
+
+### Three blocker categories, not two
+
+An import scan misses two things, and this run found a third:
+
+1. a same-module `androidMain` type;
+2. a `java.lang` API that needs no import (`String.format`, `Thread`, `Math`, `Throwable.stackTrace`);
+3. **an androidMain-only interface in *another* module** - `TpoOrchestrator` is blocked by
+   `app.aaps.core.interfaces.sharedPreferences.SP`, which exists only in `core/interfaces/androidMain`.
+
+And a fourth trap, one level down from the import scan: **a name-based scan reports blockers that do
+not exist.** Two types share the simple name `AuditorUIState` - one androidMain with `@ColorRes`, one
+already in commonMain - and `AuditorOrchestrator` uses the common one.
+
+### Kotlin/Native and stack traces
+
+`Throwable.stackTrace` **does exist** on Native. It is `private` and typed `NativePtrArray`, so no
+cast, reflection or `@Suppress` reaches it. The only shared API is `stackTraceToString()`, whose shape
+is platform-specific and whose frames can be bare addresses in an optimised build - so class, method
+and line are **absent**, not merely formatted differently. `AimiLoopTickRecovery` reads all three per
+frame, so an honest iOS actual cannot be written; an empty list would silently drop the `at X.y:123`
+from a safe-hold reason an engineer reads after an incident. This needs an owner decision, not a seam.
+
+### Harness trap worth keeping
+
+A trailing global `--rerun` does **not** apply to every task in the invocation: a run logged
+`testAndroidHostTest UP-TO-DATE` and finished in 11 s. Attach the flag per task
+(`:a --rerun :b --rerun`) and check the log says the task executed.
+
+## 6au. 2026-10-02: `AimiLoopTickRecovery` is the tick-result totality guarantee, not a stack-trace reader
+
+The owner pushed back on the framing, and he was right. This file had been written off as "it reads a
+stack trace, Kotlin/Native has no `StackTraceElement`, so it stays on Android". That is a true premise
+and the wrong conclusion.
+
+**What it actually is.** Its contract: *every AIMI `determine_basal` tick returns exactly one
+well-formed `RT` that commands no new insulin and names the loop phase it stopped in - including the
+ticks that threw or were skipped - so the loop always has a result to publish, persist and upload, and
+the failure is attributable.* Two entry points, both on the dosing path, both only on failure or skip,
+called from `DetermineBasalAIMI2.kt:18949` and `:18951`.
+
+**The no-change semantics are load-bearing and were written down nowhere.** `minimalRt` leaves `rate`,
+`duration` and `units` null, so `DetermineBasalResult.with()` leaves `isTempBasalRequested` false and
+`smb` 0.0, and `isChangeRequested()` is false. **A safe hold requests nothing and does not cancel a
+running TBR either** - whatever the last good tick set runs to its natural expiry. That is a defensible
+choice, but it is a choice.
+
+**What is lost without it:** not a different safe decision - *no* decision and no trace.
+`lastAPSResult` stays null, `LoopPlugin` has no try/catch around `usedAPS.invoke`, the exception climbs
+to the worker, nothing is persisted or uploaded, and the `"Result: $it"` log line never runs, so **the
+failure does not even reach the AAPS log file**. The pump is safe; the incident is invisible.
+
+**The stack trace is an optional enrichment the file already handles being without.** All three uses
+are null-guarded (`:47`, `:54`, `:59`). Without a frame the reason degrades from
+`AIMI safe hold [CORE_DECISION: … @ DetermineBasalAIMI2.coreDecisionBranch:4287]: NullPointerException`
+to the same line without the ` @ …` clause - phase, hint and error class survive. So the obligation
+that must be honourable everywhere (totality, no-change, phase attribution) is **fully portable**, and
+only a precision band inside one string is not. The house rule about a feature being visibly absent
+rather than present and dead is satisfied, because the clause's *presence* carries the claim.
+
+The real dependency order is **phase holder → gate → recovery**; the stack trace is the third blocker,
+not the first. The first two landed 2026-10-02.
+
+### Two tests were lost in the migration, and a stale artifact hides it
+
+`origin/dev_OAPSAIMI` has five orchestration tests. Three were carried to `androidHostTest`; **two were
+not**: `AimiLoopTickRecoveryTest` and `AimiDetermineBasalTickOrchestratorTest`. Neither exists anywhere
+on this branch.
+
+**And `plugins/aps/build/test-results/.../AimiLoopTickRecoveryTest.xml` is still on disk from an old
+run**, so a glance at the build output suggests the test still runs. It does not. When checking whether
+a test exists, look in `src`, never in `build`.
+
+The reference test pins the lock-skip and error paths, the frame rendering and that the exception
+*message* stays out of `reason` (it goes to `consoleLog`/`consoleError` instead - a deliberate
+separation documented nowhere else). **It does not pin the thing that actually protects the patient**:
+that the returned `RT` requests no change. Neither branch has ever had that test.
+
 ---
 
 ---

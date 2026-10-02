@@ -198,6 +198,10 @@ file can name `app.aaps.core.ui.R` or take a `Context` indirectly. Compile for i
 Beware the grep, too: `^import android` also matches `androidx`, so it hides every Compose file.
 Anchor it as `^import android\.`.
 
+**A type in the same package needs no import either.** An `internal object` next to the file you are
+moving is invisible to any import scan, and it is the blocker the compiler finds after you have already
+convinced yourself the file is clean. This has now bitten four separate probes in one campaign.
+
 **And `java.lang` needs no import at all**, so an import scan cannot see `String.format`,
 `System.currentTimeMillis`, `Thread`, `Math`, `StackTraceElement` or `Throwable.stackTrace`. A file
 whose imports look completely clean can still fail to compile for iOS. Two real examples from this
@@ -368,8 +372,17 @@ simulator tests for ios_simulator_arm64"*, that is what it means, not a broken b
 
 Never pipe a gradle run: the pipe's exit code hides a failure. Redirect to a log and grep it for
 `^e: `, `BUILD FAILED`, `BUILD SUCCESSFUL`. Read test counts from the XML under
-`<module>/build/test-results/<task>/`, not from the console line, and use `--rerun` when a task would
-otherwise report UP-TO-DATE.
+`<module>/build/test-results/<task>/`, not from the console line.
+
+`--rerun` has two gotchas, both measured here. A trailing flag does **not** apply to every task in the
+invocation - attach it per task (`:a --rerun :b --rerun`) and check the log says the task executed, or
+a run comes back UP-TO-DATE in eleven seconds and looks like a pass. And `--rerun` on
+`:app:assembleFullDebug` does nothing, because that is an action-less lifecycle task; to force the APK,
+put it on `:app:packageFullDebug`.
+
+**And look for a test in `src`, never in `build`.** A stale `build/test-results/…Test.xml` from an old
+run makes a test that no longer exists look as if it still runs. That is how two lost tests stayed
+hidden in this campaign.
 
 ### When strings move, the argument count is what will bite you
 
@@ -395,6 +408,29 @@ arguments of the type each placeholder asks for and asserts nothing is left unfi
   The compiler never looks at it.
 - A template with non-positional specifiers (`%.2f ... %.2f`) is held together by argument order
   alone. Keep the order byte-identical.
+
+### Atomics: the shared API is smaller than the JVM one
+
+`kotlin.concurrent.atomics` with `@OptIn(ExperimentalAtomicApi::class)` replaces
+`java.util.concurrent.atomic`, with the documented renames `get`→`load`, `set`→`store`,
+`getAndSet`→`exchange`. Two traps found by compiling, not by reading:
+
+- **`getAndUpdate` does not exist**, and neither does `addAndFetch`. A `getAndUpdate` has to become a
+  `compareAndSet` retry loop - and **the decision must sit inside the loop**, not before it. Written
+  the naive way (load, decide, store) two concurrent paths both read the old value and the later one
+  wins, which is exactly how an invariant like "an engaged row is never replaced by a shadow row"
+  disappears.
+- **`incrementAndFetch` is an extension**, so it needs its own import line; importing the type is not
+  enough.
+
+### `AapsLock` does not cover every lock
+
+It is `lock`/`unlock`/`withLock` plus `tryLock()`/`tryWithLock` - a non-blocking attempt. It has **no
+timed `tryLock(timeout)` and no `isHeldByCurrentThread`**. Code built on those needs its own
+`expect`/`actual`, and the iOS side is real work: `NSRecursiveLock` has `lockBeforeDate` for a bounded
+wait but never publishes its owner, so an actual that needs the owner has to track the thread and the
+hold count itself. Keep the Android actual byte-identical to the code you replaced, so the shipping
+platform cannot change.
 
 ### Other common blockers
 
