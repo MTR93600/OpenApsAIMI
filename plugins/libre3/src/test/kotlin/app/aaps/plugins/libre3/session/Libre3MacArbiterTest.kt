@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test
 /**
  * The invariant: one sensor, one driver instance. Two links on one Libre 3 break both pairings, so
  * the refusal here is what keeps a pre-soak from taking the sensor that feeds the loop — see
- * [Libre3MacArbiter].
+ * [Libre3MacArbiter] and `docs/LIBRE3_PRESOAK_PLAN.md` §11.2.
  */
 class Libre3MacArbiterTest {
 
