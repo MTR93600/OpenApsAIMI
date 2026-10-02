@@ -6,11 +6,13 @@ import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.PromotionRejectReason
 import app.aaps.core.interfaces.source.PromotionResult
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.libre3.Libre3CgmDriverReal
 import app.aaps.plugins.libre3.Libre3CgmDrivers
 import app.aaps.plugins.libre3.Libre3GlucoseSample
 import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
@@ -35,11 +37,12 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
 /**
- * The pre-soak slot collects, and it does not feed the loop.
+ * The pre-soak slot collects, and it does not feed the loop until a promotion succeeds.
  *
- * Promotion stays the refusal that was already on study. A test here would fail if a pre-soak
- * reading called [PersistenceLayer.insertCgmSourceData], and it would fail if promotion stopped
- * returning [PromotionRejectReason.STAGING_ABSENT].
+ * A test here fails if a pre-soak reading calls [PersistenceLayer.insertCgmSourceData]. Promotion
+ * success, the cutoff and the refusals that must write nothing are in [Libre3PromotionTest] and
+ * [Libre3PromotionHandoverTest]. With no pre-soak sensor, promotion is still
+ * [PromotionRejectReason.STAGING_ABSENT].
  */
 class Libre3PresoakPluginTest : TestBase() {
 
@@ -50,6 +53,7 @@ class Libre3PresoakPluginTest : TestBase() {
     @Mock lateinit var persistenceLayer: PersistenceLayer
 
     private val bleRadioPriority: BleRadioPriority = mock()
+    private val activePlugin: ActivePlugin = mock()
     private val availabilityProvider: Libre3AvailabilityProvider = mock()
 
     private val productionPrefs: SharedPreferences = SharedPreferencesMock()
@@ -97,7 +101,7 @@ class Libre3PresoakPluginTest : TestBase() {
     }
 
     private fun newPlugin() = Libre3NativePlugin(
-        rh, aapsLogger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority,
+        rh, aapsLogger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin,
     )
 
     private fun storeStagedSensor() {
@@ -153,6 +157,26 @@ class Libre3PresoakPluginTest : TestBase() {
 
         assertThat(plugin.beginStaging(staged)).isFalse()
         assertThat(plugin.stagingState.value).isEqualTo(StagingState.ABSENT)
+    }
+
+    @Test
+    fun `cancelling a pre-soak still clears the slot when shutdown throws`() {
+        // Reference `cancelStaging` wraps `shutdown` in `runCatching` (`Libre3NativePlugin.kt` on
+        // `dev_OAPSAIMI` @ `3dd0ca64772`). A throw must not skip the wipe, and it must not escape.
+        assertThat(Libre3SensorStore(context, null).saveIdentityAndWait(PRODUCTION_SENSOR)).isTrue()
+        val before = HashMap(productionPrefs.all)
+        val failing = mock<Libre3CgmDriverReal>()
+        whenever(failing.shutdown()).thenThrow(IllegalStateException("shutdown"))
+        val field = Libre3CgmDrivers::class.java.getDeclaredField("stagingReal")
+        field.isAccessible = true
+        field.set(Libre3CgmDrivers, failing)
+
+        plugin.cancelStaging()
+
+        assertThat(plugin.stagingState.value).isEqualTo(StagingState.ABSENT)
+        assertThat(Libre3CgmDrivers.stagingOrNull()).isNull()
+        assertThat(productionPrefs.all).isEqualTo(before)
+        verify(failing).shutdown()
     }
 
     @Test
@@ -294,23 +318,6 @@ class Libre3PresoakPluginTest : TestBase() {
         assertThat(plugin.promoteStagingToProduction(allowEarly = true))
             .isEqualTo(PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT))
 
-        verify(persistenceLayer, never()).insertCgmSourceData(any(), any(), any(), anyOrNull())
-    }
-
-    @Test
-    fun `promotion stays refused when the pre-soak slot is ready`() = runTest {
-        startPresoak()
-        feed(10)
-        assertThat(plugin.stagingState.value).isEqualTo(StagingState.READY)
-
-        val early = plugin.promoteStagingToProduction(allowEarly = true)
-        val normal = plugin.promoteStagingToProduction(allowEarly = false)
-
-        assertThat(early).isEqualTo(PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT))
-        assertThat(normal).isEqualTo(PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT))
-        assertThat(Libre3SensorStore(context, null).loadIdentity()).isNull()
-        assertThat(Libre3SensorStore(context, Libre3CgmDrivers.STAGING_NAMESPACE).loadIdentity()!!.serialNumber)
-            .isEqualTo(staged.serialNumber)
         verify(persistenceLayer, never()).insertCgmSourceData(any(), any(), any(), anyOrNull())
     }
 
