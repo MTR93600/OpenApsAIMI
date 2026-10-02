@@ -33,7 +33,42 @@ enum class Libre3BooleanKey(
         summaryResId = R.string.libre3_use_real_skeleton_summary,
         engineeringModeOnly = true,
         exportable = false,
-    )
+    ),
+
+    /**
+     * Turns the Libre 3 pre-soak on: a second sensor may be started in the pre-soak slot while the
+     * current one keeps feeding the loop.
+     *
+     * Off by default. With it off there is no second driver instance, no second preferences file,
+     * no slot choice on the start screen, and the plugin behaves exactly as it did before. A
+     * pre-soak spends real sensor wear time, because a Libre 3 starts its 14 day clock at the NFC
+     * activation.
+     */
+    PresoakEnabled(
+        key = "libre3_presoak_enabled",
+        defaultValue = false,
+        titleResId = R.string.libre3_presoak_enabled,
+        summaryResId = R.string.libre3_presoak_enabled_summary,
+        engineeringModeOnly = true,
+        exportable = false,
+    ),
+
+    /**
+     * Runs a foreground service for as long as a Libre 3 session is wanted.
+     *
+     * Kept apart from [PresoakEnabled] on purpose: it also helps the ordinary single sensor case,
+     * where an aggressive phone tears the Bluetooth link down in standby. A pre-soak wants it on,
+     * because two links have twice as much to lose, but the pre-soak must never switch it on by
+     * itself.
+     */
+    KeepSessionAlive(
+        key = "libre3_keep_session_alive",
+        defaultValue = false,
+        titleResId = R.string.libre3_keep_session_alive,
+        summaryResId = R.string.libre3_keep_session_alive_summary,
+        engineeringModeOnly = true,
+        exportable = false,
+    ),
     ;
 
     override val title: TextRef = TextRef.AndroidRes(titleResId)

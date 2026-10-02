@@ -20,6 +20,7 @@ import app.aaps.core.interfaces.source.CgmStagingEvidence
 import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.core.interfaces.source.PromotionRejectReason
 import app.aaps.core.interfaces.source.PromotionResult
+import app.aaps.core.interfaces.source.SensorSlot
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
@@ -27,11 +28,13 @@ import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.keys.interfaces.withClick
 import app.aaps.core.ui.compose.icons.IcPluginByoda
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
+import app.aaps.plugins.libre3.Libre3CgmDriverReal
 import app.aaps.plugins.libre3.Libre3CgmDrivers
 import app.aaps.plugins.libre3.Libre3GlucoseSample
 import app.aaps.plugins.libre3.Libre3GlucoseWatcher
 import app.aaps.plugins.libre3.Libre3LogMarkers
 import app.aaps.plugins.libre3.Libre3WarmupState
+import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
 import app.aaps.plugins.libre3.nfc.Libre3NfcSession
 import app.aaps.plugins.libre3.session.Libre3DisconnectPolicy
@@ -53,6 +56,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -120,6 +124,9 @@ class Libre3NativePlugin @Inject constructor(
     /** Watches who owns the radio, so the driver backs off while a pump setup runs. */
     private var radioLeaseWatcher: Job? = null
 
+    /** Watches the keep-alive switch, so flipping it takes effect at once. */
+    private var keepAliveWatcher: Job? = null
+
     private val driver
         get() = Libre3CgmDrivers.default()
 
@@ -131,6 +138,14 @@ class Libre3NativePlugin @Inject constructor(
 
     /** The status bar message, so the user can leave the warm-up screen and still see progress. */
     private val warmupNotification by lazy { Libre3WarmupNotification(context) }
+
+    /**
+     * The same message for the pre-soak slot, with its own id and its own title.
+     *
+     * `by lazy`, so with the pre-soak switched off no second message and no second channel
+     * registration is ever made.
+     */
+    private val stagingWarmupNotification by lazy { Libre3WarmupNotification(context, SensorSlot.STAGING) }
 
     @Volatile
     private var warmupPhase: Libre3WarmupState.Phase = Libre3WarmupState.Phase.IDLE
@@ -153,10 +168,11 @@ class Libre3NativePlugin @Inject constructor(
     private val _lifecycle = MutableStateFlow<CgmSensorLifecycle?>(null)
     override val lifecycle: StateFlow<CgmSensorLifecycle?> = _lifecycle.asStateFlow()
 
-    // ---- Staging (pre-soak) is out of scope for v1 ----
+    // ---- The pre-soak slot ----
     //
-    // The dashboard reads this surface generically, so the flows must exist, but this driver never
-    // runs a second sensor. They stay empty, and promotion is always refused.
+    // Everything below is collect-only. It is switched off by default, and with the switch off none
+    // of it is reachable: no second driver instance, no second preferences file, and the plugin
+    // behaves exactly as it did before.
 
     private val _stagingWarmup = MutableStateFlow<CgmWarmupStatus?>(null)
     override val stagingWarmupStatus: StateFlow<CgmWarmupStatus?> = _stagingWarmup.asStateFlow()
@@ -170,20 +186,86 @@ class Libre3NativePlugin @Inject constructor(
     private val _stagingEvidence = MutableStateFlow<CgmStagingEvidence?>(null)
     override val stagingEvidence: StateFlow<CgmStagingEvidence?> = _stagingEvidence.asStateFlow()
 
+    private val _stagingCurve = MutableStateFlow<List<Libre3PresoakPoint>>(emptyList())
+
     /**
-     * Pre-soak promotion is not in this build, so the calibration cutoff is not written here.
+     * The pre-soak readings collected so far, newest last.
      *
-     * On `origin/dev_OAPSAIMI` @ `6598201d`, the only Libre 3 writer is the success path of this
-     * function: `logSensorChangeOnce(staged.activatedAtMs)` then
+     * Capped at [Libre3Staging.CURVE_CAP] and kept in memory only, so it starts empty after a
+     * restart while the counters do survive.
+     */
+    val stagingCurve: StateFlow<List<Libre3PresoakPoint>> = _stagingCurve.asStateFlow()
+
+    /** The pre-soak driver instance. Built on first use, and only ever by a pre-soak action. */
+    private val stagingDriver: Libre3CgmDriverReal
+        get() = Libre3CgmDrivers.staging()
+
+    /**
+     * The pre-soak slot's own preferences file.
+     *
+     * `by lazy`, so with the pre-soak switched off this file is never even opened.
+     */
+    private val stagingStore by lazy { Libre3SensorStore(context, Libre3CgmDrivers.STAGING_NAMESPACE) }
+
+    /** A pre-soak sensor is running. */
+    @Volatile
+    private var stagingPresent = false
+
+    /** That sensor has not left warm-up yet, so it has sent no glucose at all. */
+    @Volatile
+    private var stagingWarming = false
+
+    /** Latched once the pre-soak sensor has left warm-up. Kept on disk across restarts. */
+    @Volatile
+    private var stagingWarmupDone = false
+
+    /** How many good readings the pre-soak slot has collected. */
+    @Volatile
+    private var stagingValidReadingCount = 0
+
+    /** Highest pre-soak life counter taken into the curve, -1 when there is none. */
+    @Volatile
+    private var stagingLastLifeCount = -1
+
+    /** Last reading collected from the pre-soak sensor, for the evidence surface. */
+    @Volatile
+    private var stagingLastValueMgdl: Double? = null
+
+    /** Time of [stagingLastValueMgdl]. */
+    @Volatile
+    private var stagingLastValueAtMs: Long? = null
+
+    /**
+     * Watches the pre-soak driver.
+     *
+     * Every path here is collect-only. It never touches [persistenceLayer] and it never calls
+     * [Libre3Ingest].
+     *
+     * It is `internal` so the invariant test in this module can drive it directly.
+     */
+    internal val stagingWatcher: Libre3GlucoseWatcher = object : Libre3GlucoseWatcher {
+        override fun onWarmup(state: Libre3WarmupState) = handleStagingWarmup(state)
+        override fun onGlucose(sample: Libre3GlucoseSample) = handleStagingGlucose(sample)
+        override fun onSession(up: Boolean, reason: String?) {
+            aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: session up=$up reason=$reason")
+        }
+
+        override fun onError(message: String, fatal: Boolean) {
+            aapsLogger.error(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: fatal=$fatal $message")
+        }
+    }
+
+    /**
+     * Pre-soak promotion is not in this lot, so the calibration cutoff is not written here.
+     *
+     * On `origin/dev_OAPSAIMI` @ `3dd0ca64772`, the success path of this function writes
+     * `logSensorChangeOnce(staged.activatedAtMs)` then
      * `activePlugin.activeCalibration.ignoreEntriesBefore(System.currentTimeMillis())`
-     * (`Libre3NativePlugin.kt` L1051–1055). Early returns (L981–1007) do not write it.
-     * `onSensorChanged` (ref L479, here the scan path) and the glucose path (ref L649, here
-     * `logSensorChangeOnce` from the reading) date the `SENSOR_CHANGE` and do not call
-     * `ignoreEntriesBefore`. `:plugins:libre3` is still an Android library, so the staging
-     * driver (`Libre3Staging`, the second store, `Libre3CgmDrivers.staging()`) stays out of this lot.
-     * The fit already honours `CalibrationLongKey.EntriesValidFrom`
-     * when some other writer, today the ONE+ promotion, sets it. `:plugins:source` does not
-     * depend on `:plugins:calibration`.
+     * (`Libre3NativePlugin.kt` L1051–1055). That body is P5.3. This function still returns
+     * [PromotionRejectReason.STAGING_ABSENT] for every caller, including a status-screen button,
+     * and `allowEarly` is not read. `onSensorChanged` and the production glucose path date the
+     * `SENSOR_CHANGE` and do not call `ignoreEntriesBefore`. `:plugins:source` does not depend on
+     * `:plugins:calibration`, and `ActivePlugin` is not in this constructor.
      */
     override suspend fun promoteStagingToProduction(allowEarly: Boolean): PromotionResult =
         PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT)
@@ -226,6 +308,8 @@ class Libre3NativePlugin @Inject constructor(
                 )
             },
             Libre3BooleanKey.UseRealSkeleton,
+            Libre3BooleanKey.PresoakEnabled,
+            Libre3BooleanKey.KeepSessionAlive,
             // The sensor age on the dashboard and the calibration session both come from the
             // SENSOR_CHANGE therapy event written by `logSensorChangeOnce`.
             BooleanKey.BgSourceCreateSensorChange,
@@ -262,6 +346,52 @@ class Libre3NativePlugin @Inject constructor(
         sensorStore.loadIdentity()?.let { identity ->
             connectStoredSensor(identity.bleAddress)
         }
+        // After the production resume on purpose: production always comes first, and a pre-soak
+        // that is not picked up again would soak on invisibly.
+        resumeStagingSessionIfStored()
+        refreshSessionService()
+        watchKeepSessionAlivePreference()
+    }
+
+    /**
+     * Makes the keep-alive switch take effect the moment the user flips it.
+     *
+     * `drop(1)` because [Preferences.observe] starts with the value as it already is, and [onStart]
+     * has just acted on that one.
+     */
+    private fun watchKeepSessionAlivePreference() {
+        keepAliveWatcher?.cancel()
+        keepAliveWatcher = ioScope.launch {
+            preferences.observe(Libre3BooleanKey.KeepSessionAlive).drop(1).collect { wanted ->
+                aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: keep session alive switched to $wanted")
+                refreshSessionService()
+            }
+        }
+    }
+
+    /**
+     * Keep the `connectedDevice` service alive while either slot wants a Bluetooth session, and give
+     * the privilege back when neither does.
+     *
+     * It never throws, because it is called from production paths as well as from pre-soak ones.
+     * The `runCatching` is the reference `refreshSessionService` (`dev_OAPSAIMI` @ `3dd0ca64772`):
+     * a failure is logged and the caller continues.
+     *
+     * `internal` so the status screen can call it after the user forgets a sensor.
+     */
+    internal fun refreshSessionService() {
+        runCatching {
+            if (!preferences.get(Libre3BooleanKey.KeepSessionAlive)) {
+                Libre3SessionService.stop(context.applicationContext)
+                return@runCatching
+            }
+            val wanted = sensorStore.isReadyForBle() ||
+                (preferences.get(Libre3BooleanKey.PresoakEnabled) && stagingStore.isReadyForBle())
+            if (wanted) Libre3SessionService.start(context.applicationContext)
+            else Libre3SessionService.stop(context.applicationContext)
+        }.onFailure { t ->
+            aapsLogger.error(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: session service refresh failed, ${t.message}", t)
+        }
     }
 
     /**
@@ -283,6 +413,9 @@ class Libre3NativePlugin @Inject constructor(
                     "${Libre3LogMarkers.SESSION}: radio lease owner=$owner, backing off=$lentOut",
                 )
                 driver.setRadioBackOff(lentOut)
+                // The pre-soak is a second link on the same radio. Only an instance that really
+                // exists is asked, so a phone without a pre-soak never builds one here.
+                runCatching { Libre3CgmDrivers.stagingOrNull()?.setRadioBackOff(lentOut) }
                 // Only a lease that has just ended needs a session asked for again. The first value
                 // of the flow is the state as it already is, and onStart connects for that one, so
                 // reacting to it here as well would ask for two sessions at start up.
@@ -374,10 +507,20 @@ class Libre3NativePlugin @Inject constructor(
     override suspend fun onStop() {
         radioLeaseWatcher?.cancel()
         radioLeaseWatcher = null
+        keepAliveWatcher?.cancel()
+        keepAliveWatcher = null
         cancelReconnectWatchdog()
+        // The pre-soak link goes down with the plugin, but the pre-soak file is kept on purpose:
+        // the plugin being switched off must not throw a soak of many hours away.
+        Libre3CgmDrivers.releaseStagingInstance()?.let { presoak ->
+            runCatching { presoak.removeWatcher(stagingWatcher) }
+            runCatching { presoak.shutdown() }
+        }
         driver.removeWatcher(this)
         driver.shutdown()
         warmupNotification.cancel()
+        runCatching { stagingWarmupNotification.cancel() }
+        Libre3SessionService.stop(context.applicationContext)
         aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: plugin stop")
         super.onStop()
     }
@@ -486,6 +629,281 @@ class Libre3NativePlugin @Inject constructor(
 
     override fun onError(message: String, fatal: Boolean) {
         aapsLogger.error(LTag.BGSOURCE, "${Libre3LogMarkers.ERROR}: fatal=$fatal $message")
+    }
+
+    // ---------------- The pre-soak slot ----------------
+
+    /**
+     * Whether that sensor is the one the pre-soak slot holds. Serial or MAC is enough.
+     *
+     * With the pre-soak switched off there is no pre-soak sensor, so the answer is always no and
+     * the pre-soak file is not even opened.
+     */
+    fun isStagingSensor(serial: String?, mac: String?): Boolean {
+        if (!preferences.get(Libre3BooleanKey.PresoakEnabled)) return false
+        return runCatching {
+            val identity = stagingStore.loadIdentity() ?: return@runCatching false
+            Libre3Staging.isSameSensor(identity.serialNumber, identity.bleAddress, serial, mac)
+        }.getOrDefault(false)
+    }
+
+    /** Whether that sensor is the one that feeds the loop right now — see [isStagingSensor]. */
+    fun isProductionSensor(serial: String?, mac: String?): Boolean =
+        runCatching {
+            val identity = sensorStore.loadIdentity() ?: return@runCatching false
+            Libre3Staging.isSameSensor(identity.serialNumber, identity.bleAddress, serial, mac)
+        }.getOrDefault(false)
+
+    /**
+     * Starts a pre-soak on the sensor the NFC scan has just written into the pre-soak slot.
+     *
+     * @return false when the request was refused, because the pre-soak is switched off or because
+     *   that sensor already feeds the loop. A throw inside the slot write is also false: the
+     *   `runCatching` / `getOrElse` is the reference `beginStaging` (`dev_OAPSAIMI` @ `3dd0ca64772`).
+     */
+    fun beginStaging(identity: Libre3SensorIdentity): Boolean {
+        if (!preferences.get(Libre3BooleanKey.PresoakEnabled)) {
+            aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: refused, the pre-soak is switched off")
+            return false
+        }
+        if (isProductionSensor(identity.serialNumber, identity.bleAddress)) {
+            aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: refused, this sensor already feeds the loop")
+            return false
+        }
+        return runCatching {
+            val presoak = stagingDriver
+            presoak.setContext(context)
+            // The NFC scan has already written the new sensor into this file, so the stored serial
+            // is the new one by now. The activation time tells a re-scan of the same sensor from a
+            // different one.
+            val sameSensor = identity.activatedAtMs > 0L &&
+                identity.activatedAtMs == stagingStore.loadSlotActivatedAt()
+            if (sameSensor) {
+                stagingValidReadingCount = stagingStore.loadSlotValidReadingCount()
+                stagingWarmupDone = stagingStore.loadSlotWarmupDone()
+            } else {
+                stagingValidReadingCount = 0
+                stagingWarmupDone = false
+                stagingLastValueMgdl = null
+                stagingLastValueAtMs = null
+                _stagingCurve.value = emptyList()
+                _stagingWarmup.value = null
+            }
+            stagingLastLifeCount = -1
+            stagingPresent = true
+            stagingWarming = !stagingWarmupDone
+            stagingStore.saveSlotActivatedAt(identity.activatedAtMs)
+            stagingStore.saveSlotWarmupDone(stagingWarmupDone)
+            stagingStore.saveSlotProgress(present = true, validReadingCount = stagingValidReadingCount)
+            presoak.addWatcher(stagingWatcher)
+            refreshStagingLifecycle()
+            refreshStagingState()
+            refreshStagingEvidence()
+            refreshSessionService()
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "${Libre3LogMarkers.PRESOAK}: begin serial=${identity.serialNumber} sameSensor=$sameSensor " +
+                    "readings=$stagingValidReadingCount warmupDone=$stagingWarmupDone",
+            )
+            true
+        }.getOrElse { t ->
+            aapsLogger.error(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: begin failed, ${t.message}", t)
+            false
+        }
+    }
+
+    /** Starts Bluetooth for the pre-soak slot. It never touches the production driver. */
+    fun connectStagingSensor(deviceAddress: String) {
+        if (!preferences.get(Libre3BooleanKey.PresoakEnabled)) return
+        val blocked = Libre3CgmDrivers.stagingBlockedReason()
+        if (blocked != null) {
+            aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: BLE not started, $blocked")
+            return
+        }
+        runCatching {
+            val presoak = stagingDriver
+            presoak.setContext(context)
+            presoak.connect(deviceAddress)
+            aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: BLE connect requested")
+        }.onFailure { t ->
+            aapsLogger.error(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: BLE connect failed, ${t.message}", t)
+        }
+    }
+
+    /**
+     * Stops the pre-soak sensor and throws it away. It has no effect on production.
+     *
+     * The sensor itself keeps running on the arm; only this phone forgets it.
+     */
+    fun cancelStaging() {
+        Libre3CgmDrivers.releaseStagingInstance()?.let { presoak ->
+            runCatching { presoak.removeWatcher(stagingWatcher) }
+            runCatching { presoak.disconnect() }
+            runCatching { presoak.shutdown() }
+        }
+        runCatching { stagingStore.clearAll() }
+        clearStagingState()
+        refreshSessionService()
+        aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: cancelled")
+    }
+
+    /**
+     * Picks a pre-soak up again after a restart.
+     *
+     * The two refusals below come before a driver instance is built, so a slot that must not be
+     * picked up never even opens a thread. A throw is a missed resume (`getOrElse` returns false),
+     * the same shape as the reference `resumeStagingSessionIfStored`.
+     *
+     * @return true when a pre-soak was picked up again.
+     */
+    internal fun resumeStagingSessionIfStored(): Boolean {
+        if (!preferences.get(Libre3BooleanKey.PresoakEnabled)) return false
+        return runCatching {
+            if (!stagingStore.loadSlotPresent()) return@runCatching false
+            val identity = stagingStore.loadIdentity()
+            if (identity == null) {
+                runCatching { stagingStore.saveSlotProgress(present = false, validReadingCount = 0) }
+                clearStagingState()
+                aapsLogger.warn(
+                    LTag.BGSOURCE,
+                    "${Libre3LogMarkers.PRESOAK}: not picked up again, the stored pre-soak sensor is incomplete, " +
+                        "please start the pre-soak once more",
+                )
+                return@runCatching false
+            }
+            if (isProductionSensor(identity.serialNumber, identity.bleAddress)) {
+                runCatching { stagingStore.clearAll() }
+                clearStagingState()
+                aapsLogger.warn(
+                    LTag.BGSOURCE,
+                    "${Libre3LogMarkers.PRESOAK}: not picked up again, this sensor already feeds the loop; " +
+                        "the leftover pre-soak slot was cleared",
+                )
+                return@runCatching false
+            }
+            stagingPresent = true
+            stagingValidReadingCount = stagingStore.loadSlotValidReadingCount()
+            stagingWarmupDone = stagingStore.loadSlotWarmupDone()
+            stagingWarming = !stagingWarmupDone
+            stagingLastLifeCount = -1
+            _stagingCurve.value = emptyList()
+            val presoak = stagingDriver
+            presoak.setContext(context)
+            presoak.addWatcher(stagingWatcher)
+            refreshStagingLifecycle()
+            refreshStagingState()
+            refreshStagingEvidence()
+            presoak.connect(identity.bleAddress)
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "${Libre3LogMarkers.PRESOAK}: picked up again readings=$stagingValidReadingCount " +
+                    "warmupDone=$stagingWarmupDone",
+            )
+            true
+        }.getOrElse { t ->
+            aapsLogger.error(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: could not be picked up again, ${t.message}", t)
+            false
+        }
+    }
+
+    private fun handleStagingWarmup(state: Libre3WarmupState) {
+        if (!stagingPresent) return
+        val decision = Libre3Staging.applyWarmupPhase(
+            warmupDoneBefore = stagingWarmupDone,
+            readyPhase = state.phase == Libre3WarmupState.Phase.READY,
+        )
+        if (decision.warmupDone) markStagingWarmupDone() else stagingWarming = decision.warming
+        _stagingWarmup.value = Libre3WarmupMapper.toCgmWarmupStatus(state)
+        runCatching { stagingWarmupNotification.update(state) }
+        refreshStagingState()
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "${Libre3LogMarkers.PRESOAK}: warmup phase=${state.phase} warmupDone=$stagingWarmupDone",
+        )
+    }
+
+    /** Latches "this pre-soak sensor has left warm-up", and keeps it — see [handleStagingWarmup]. */
+    private fun markStagingWarmupDone() {
+        if (stagingWarmupDone) return
+        stagingWarmupDone = true
+        stagingWarming = false
+        runCatching { stagingStore.saveSlotWarmupDone(true) }
+        aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: warm-up done, the slot is settling")
+    }
+
+    /**
+     * ⚠️ ASYNC IMPACT: the pre-soak driver calls this from its own BLE thread. Nothing here waits
+     * on anything, and nothing here reaches the database.
+     */
+    private fun handleStagingGlucose(sample: Libre3GlucoseSample) {
+        if (!stagingPresent) return
+        if (!Libre3Staging.acceptForCurve(stagingLastLifeCount, sample)) return
+        stagingLastLifeCount = sample.lifeCount
+        _stagingCurve.value = (_stagingCurve.value + Libre3PresoakPoint(sample.timestampMs, sample.mgdl))
+            .takeLast(Libre3Staging.CURVE_CAP)
+        markStagingWarmupDone()
+        stagingValidReadingCount++
+        stagingLastValueMgdl = sample.mgdl
+        stagingLastValueAtMs = sample.timestampMs
+        runCatching { stagingStore.saveSlotProgress(present = true, validReadingCount = stagingValidReadingCount) }
+        refreshStagingLifecycle()
+        refreshStagingState()
+        refreshStagingEvidence()
+        aapsLogger.debug(
+            LTag.BGSOURCE,
+            "${Libre3LogMarkers.PRESOAK}: collected ${sample.mgdl.toInt()} count=$stagingValidReadingCount, not published",
+        )
+    }
+
+    /** Puts the pre-soak slot back to "no sensor". It never touches a file. */
+    private fun clearStagingState() {
+        runCatching { stagingWarmupNotification.cancel() }
+        stagingPresent = false
+        stagingWarming = false
+        stagingWarmupDone = false
+        stagingValidReadingCount = 0
+        stagingLastLifeCount = -1
+        stagingLastValueMgdl = null
+        stagingLastValueAtMs = null
+        _stagingCurve.value = emptyList()
+        _stagingWarmup.value = null
+        _stagingLifecycle.value = null
+        _stagingEvidence.value = null
+        _stagingState.value = StagingState.ABSENT
+    }
+
+    private fun refreshStagingLifecycle() {
+        if (!stagingPresent) {
+            _stagingLifecycle.value = null
+            return
+        }
+        val identity = runCatching { stagingStore.loadIdentity() }.getOrNull()
+        val activatedAtMs = identity?.activatedAtMs?.takeIf { it > 0L }
+            ?: runCatching { stagingStore.loadSlotActivatedAt() }.getOrDefault(0L)
+        _stagingLifecycle.value = Libre3Staging.computeLifecycle(
+            slot = SensorSlot.STAGING,
+            activatedAtMs = activatedAtMs,
+            wearMinutes = identity?.wearDurationMinutes,
+            nowMs = System.currentTimeMillis(),
+        )
+    }
+
+    private fun refreshStagingEvidence() {
+        _stagingEvidence.value =
+            if (!stagingPresent) null
+            else CgmStagingEvidence(
+                validCount = stagingValidReadingCount,
+                lastValueMgdl = stagingLastValueMgdl,
+                lastValueAtEpochMs = stagingLastValueAtMs,
+            )
+    }
+
+    private fun refreshStagingState() {
+        _stagingState.value = Libre3Staging.computeStagingState(
+            present = stagingPresent,
+            warming = stagingWarming,
+            validReadingCount = stagingValidReadingCount,
+        )
     }
 
     companion object {
