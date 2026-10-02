@@ -14,8 +14,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import app.aaps.plugins.aps.R
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.plugins.aps.ApsStrings
 
 /** The provider ids [ProviderDropdown] offers, matching what `StringKey.AimiAdvisorProvider` stores. */
 internal val AI_PROVIDER_IDS = listOf("OPENAI", "GEMINI", "DEEPSEEK", "CLAUDE")
@@ -35,10 +35,10 @@ internal val AI_PROVIDER_IDS = listOf("OPENAI", "GEMINI", "DEEPSEEK", "CLAUDE")
 fun ProviderDropdown(selected: String, onSelect: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val displayNames = mapOf(
-        "OPENAI" to stringResource(R.string.aimi_prefs_provider_openai),
-        "GEMINI" to stringResource(R.string.aimi_prefs_provider_gemini),
-        "DEEPSEEK" to stringResource(R.string.aimi_prefs_provider_deepseek),
-        "CLAUDE" to stringResource(R.string.aimi_prefs_provider_claude),
+        "OPENAI" to stringResource(ApsStrings.aimi_prefs_provider_openai),
+        "GEMINI" to stringResource(ApsStrings.aimi_prefs_provider_gemini),
+        "DEEPSEEK" to stringResource(ApsStrings.aimi_prefs_provider_deepseek),
+        "CLAUDE" to stringResource(ApsStrings.aimi_prefs_provider_claude),
     )
     val selectedText = displayNames[selected] ?: displayNames.getValue("OPENAI")
 
@@ -50,7 +50,7 @@ fun ProviderDropdown(selected: String, onSelect: (String) -> Unit) {
             value = selectedText,
             onValueChange = {},
             readOnly = true,
-            label = { Text(stringResource(R.string.aimi_meal_advisor_provider_label)) },
+            label = { Text(stringResource(ApsStrings.aimi_meal_advisor_provider_label)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .fillMaxWidth()

@@ -20,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,12 +37,13 @@ import androidx.compose.ui.Alignment
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.decimalPlaces
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.keys.step
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.core.ui.compose.stringResourceOrNull
 import app.aaps.core.ui.compose.unitLabel
@@ -53,8 +55,8 @@ import app.aaps.core.data.format.NumberFormat
 import app.aaps.core.ui.compose.preference.AdaptiveDoublePreferenceItem
 import app.aaps.core.ui.compose.preference.AdaptiveSwitchPreferenceItem
 import app.aaps.plugins.aps.ApsStrings
-import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiRecommendation
+import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain
 import kotlin.math.abs
@@ -74,17 +76,17 @@ fun PkpdSetupWizardDialog(
     var selectedPreset by remember { mutableStateOf(PkpdInsulinPreset.ULTRA_FAST) }
 
     val title = when (step) {
-        0 -> stringResource(R.string.aimi_pkpd_wizard_step_insulin_title)
-        1 -> stringResource(R.string.aimi_pkpd_wizard_step_profile_title)
-        else -> stringResource(R.string.aimi_pkpd_wizard_step_patience_title)
+        0 -> stringResource(ApsStrings.aimi_pkpd_wizard_step_insulin_title)
+        1 -> stringResource(ApsStrings.aimi_pkpd_wizard_step_profile_title)
+        else -> stringResource(ApsStrings.aimi_pkpd_wizard_step_patience_title)
     }
     val body = when (step) {
-        0 -> stringResource(R.string.aimi_pkpd_wizard_step_insulin_body)
+        0 -> stringResource(ApsStrings.aimi_pkpd_wizard_step_insulin_body)
         1 -> {
             val profileDia = profileDiaHours ?: 6.0
-            stringResource(R.string.aimi_pkpd_wizard_step_profile_body, profileDia)
+            stringResource(ApsStrings.aimi_pkpd_wizard_step_profile_body, profileDia)
         }
-        else -> stringResource(R.string.aimi_pkpd_wizard_step_patience_body)
+        else -> stringResource(ApsStrings.aimi_pkpd_wizard_step_patience_body)
     }
 
     AlertDialog(
@@ -126,8 +128,8 @@ fun PkpdSetupWizardDialog(
                 },
             ) {
                 Text(
-                    if (step < 2) stringResource(R.string.aimi_pkpd_wizard_next)
-                    else stringResource(R.string.aimi_pkpd_wizard_done),
+                    if (step < 2) stringResource(ApsStrings.aimi_pkpd_wizard_next)
+                    else stringResource(ApsStrings.aimi_pkpd_wizard_done),
                 )
             }
         },
@@ -144,8 +146,8 @@ fun PkpdSetupWizardDialog(
                 },
             ) {
                 Text(
-                    if (step == 0) stringResource(android.R.string.cancel)
-                    else stringResource(R.string.aimi_pkpd_wizard_skip),
+                    if (step == 0) stringResource(CoreUiStrings.cancel)
+                    else stringResource(ApsStrings.aimi_pkpd_wizard_skip),
                 )
             }
         },
@@ -163,14 +165,14 @@ fun PkpdSimpleSettingsContent(
     onApplyRecommendation: (AimiAction.PreferenceUpdate) -> Unit,
     onOpenAdvanced: () -> Unit,
     onRerunWizard: () -> Unit,
-    snackbarHostState: androidx.compose.material3.SnackbarHostState,
+    snackbarHostState: SnackbarHostState,
     scope: CoroutineScope,
 ) {
     var selectedPreset by remember(preferenceRevision) {
         mutableStateOf(detectPkpdInsulinPreset(preferences))
     }
-    val presetAppliedMessage = stringResource(R.string.aimi_pkpd_preset_applied)
-    val customHintMessage = stringResource(R.string.aimi_pkpd_custom_use_advanced)
+    val presetAppliedMessage = stringResource(ApsStrings.aimi_pkpd_preset_applied)
+    val customHintMessage = stringResource(ApsStrings.aimi_pkpd_custom_use_advanced)
 
     PkpdSimpleStatusCard(
         preferences = preferences,
@@ -194,11 +196,11 @@ fun PkpdSimpleSettingsContent(
     )
 
     Text(
-        stringResource(R.string.aimi_pkpd_preset_section_title),
+        stringResource(ApsStrings.aimi_pkpd_preset_section_title),
         style = MaterialTheme.typography.titleMedium,
     )
     Text(
-        stringResource(R.string.aimi_pkpd_preset_simple_hint),
+        stringResource(ApsStrings.aimi_pkpd_preset_simple_hint),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -223,12 +225,12 @@ fun PkpdSimpleSettingsContent(
     )
 
     PkpdLabeledSlider(
-        title = stringResource(R.string.aimi_pkpd_prudence_corrections_title),
-        summary = stringResource(R.string.aimi_pkpd_prudence_corrections_summary),
+        title = stringResource(ApsStrings.aimi_pkpd_prudence_corrections_title),
+        summary = stringResource(ApsStrings.aimi_pkpd_prudence_corrections_summary),
         value = PkpdCorrectionPrudence.readLevel(preferences),
         valueRange = 0.0..1.0,
-        leftLabel = stringResource(R.string.aimi_pkpd_prudence_left),
-        rightLabel = stringResource(R.string.aimi_pkpd_prudence_right),
+        leftLabel = stringResource(ApsStrings.aimi_pkpd_prudence_left),
+        rightLabel = stringResource(ApsStrings.aimi_pkpd_prudence_right),
         onValueChange = {
             PkpdCorrectionPrudence.applyLevel(preferences, it)
             onPreferenceRevisionBump()
@@ -237,12 +239,12 @@ fun PkpdSimpleSettingsContent(
 
     // Same polarity as corrections: left = cautious (less delivery), right = allow more.
     PkpdLabeledSlider(
-        title = stringResource(R.string.aimi_pkpd_tail_prudence_title),
-        summary = stringResource(R.string.aimi_pkpd_tail_prudence_summary),
+        title = stringResource(ApsStrings.aimi_pkpd_tail_prudence_title),
+        summary = stringResource(ApsStrings.aimi_pkpd_tail_prudence_summary),
         value = PkpdTailPrudence.readUiLevel(preferences),
         valueRange = 0.0..1.0,
-        leftLabel = stringResource(R.string.aimi_pkpd_tail_left),
-        rightLabel = stringResource(R.string.aimi_pkpd_tail_right),
+        leftLabel = stringResource(ApsStrings.aimi_pkpd_tail_left),
+        rightLabel = stringResource(ApsStrings.aimi_pkpd_tail_right),
         onValueChange = {
             PkpdTailPrudence.applyUiLevel(preferences, it)
             onPreferenceRevisionBump()
@@ -250,11 +252,11 @@ fun PkpdSimpleSettingsContent(
     )
 
     OutlinedButton(onClick = onOpenAdvanced, modifier = Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.aimi_pkpd_open_advanced))
+        Text(stringResource(ApsStrings.aimi_pkpd_open_advanced))
     }
 
     TextButton(onClick = onRerunWizard, modifier = Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.aimi_pkpd_rerun_wizard))
+        Text(stringResource(ApsStrings.aimi_pkpd_rerun_wizard))
     }
 }
 
@@ -263,21 +265,21 @@ fun PkpdAdvancedSettingsContent(
     preferences: Preferences,
     preferenceRevision: Int,
     onPreferenceRevisionBump: () -> Unit,
-    snackbarHostState: androidx.compose.material3.SnackbarHostState,
+    snackbarHostState: SnackbarHostState,
     scope: CoroutineScope,
 ) {
     var showResetConfirm by remember { mutableStateOf(false) }
-    val syncDoneMessage = stringResource(R.string.aimi_pkpd_sync_done)
+    val syncDoneMessage = stringResource(ApsStrings.aimi_pkpd_sync_done)
     val preset = remember(preferenceRevision) { detectPkpdInsulinPreset(preferences) }
     var learningPace by remember(preferenceRevision) { mutableStateOf(PkpdLearningPace.NORMAL.readFrom(preferences)) }
 
     Text(
-        stringResource(R.string.aimi_pkpd_advanced_intro),
+        stringResource(ApsStrings.aimi_pkpd_advanced_intro),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
-    Text(stringResource(R.string.aimi_pkpd_learning_pace_title), style = MaterialTheme.typography.titleSmall)
+    Text(stringResource(ApsStrings.aimi_pkpd_learning_pace_title), style = MaterialTheme.typography.titleSmall)
     Row(horizontalArrangement = Arrangement.spacedBy(AapsSpacing.small)) {
         FilterChip(
             selected = learningPace == PkpdLearningPace.SLOW,
@@ -286,7 +288,7 @@ fun PkpdAdvancedSettingsContent(
                 PkpdLearningPace.SLOW.applyTo(preferences)
                 onPreferenceRevisionBump()
             },
-            label = { Text(stringResource(R.string.aimi_pkpd_pace_slow)) },
+            label = { Text(stringResource(ApsStrings.aimi_pkpd_pace_slow)) },
         )
         FilterChip(
             selected = learningPace == PkpdLearningPace.NORMAL,
@@ -295,7 +297,7 @@ fun PkpdAdvancedSettingsContent(
                 PkpdLearningPace.NORMAL.applyTo(preferences)
                 onPreferenceRevisionBump()
             },
-            label = { Text(stringResource(R.string.aimi_pkpd_pace_normal)) },
+            label = { Text(stringResource(ApsStrings.aimi_pkpd_pace_normal)) },
         )
         FilterChip(
             selected = learningPace == PkpdLearningPace.FAST,
@@ -304,60 +306,60 @@ fun PkpdAdvancedSettingsContent(
                 PkpdLearningPace.FAST.applyTo(preferences)
                 onPreferenceRevisionBump()
             },
-            label = { Text(stringResource(R.string.aimi_pkpd_pace_fast)) },
+            label = { Text(stringResource(ApsStrings.aimi_pkpd_pace_fast)) },
         )
     }
 
     PkpdReactiveDoubleSlider(
         key = DoubleKey.OApsAIMIPkpdInitialDiaH,
-        titleResId = R.string.aimi_pkpd_starting_dia_title,
+        title = ApsStrings.aimi_pkpd_starting_dia_title,
         preferenceRevision = preferenceRevision,
     )
     PkpdReactiveDoubleSlider(
         key = DoubleKey.OApsAIMIPkpdInitialPeakMin,
-        titleResId = R.string.aimi_pkpd_starting_peak_title,
+        title = ApsStrings.aimi_pkpd_starting_peak_title,
         preferenceRevision = preferenceRevision,
     )
 
     if (preset == PkpdInsulinPreset.CUSTOM) {
         Text(
-            stringResource(R.string.aimi_pkpd_custom_bounds_title),
+            stringResource(ApsStrings.aimi_pkpd_custom_bounds_title),
             style = MaterialTheme.typography.titleSmall,
             modifier = Modifier.padding(top = AapsSpacing.small),
         )
         PkpdReactiveDoubleSlider(
             key = DoubleKey.OApsAIMIPkpdBoundsDiaMinH,
-            titleResId = R.string.oaps_aimi_pkpd_dia_min_title,
+            title = ApsStrings.oaps_aimi_pkpd_dia_min_title,
             preferenceRevision = preferenceRevision,
         )
         PkpdReactiveDoubleSlider(
             key = DoubleKey.OApsAIMIPkpdBoundsDiaMaxH,
-            titleResId = R.string.oaps_aimi_pkpd_dia_max_title,
+            title = ApsStrings.oaps_aimi_pkpd_dia_max_title,
             preferenceRevision = preferenceRevision,
         )
         PkpdReactiveDoubleSlider(
             key = DoubleKey.OApsAIMIPkpdBoundsPeakMinMin,
-            titleResId = R.string.oaps_aimi_pkpd_peak_min_title,
+            title = ApsStrings.oaps_aimi_pkpd_peak_min_title,
             preferenceRevision = preferenceRevision,
         )
         PkpdReactiveDoubleSlider(
             key = DoubleKey.OApsAIMIPkpdBoundsPeakMinMax,
-            titleResId = R.string.oaps_aimi_pkpd_peak_max_title,
+            title = ApsStrings.oaps_aimi_pkpd_peak_max_title,
             preferenceRevision = preferenceRevision,
         )
         PkpdReactiveDoubleSlider(
             key = DoubleKey.OApsAIMIPkpdAnchorDiaH,
-            titleResId = R.string.oaps_aimi_pkpd_anchor_dia_title,
+            title = ApsStrings.oaps_aimi_pkpd_anchor_dia_title,
             preferenceRevision = preferenceRevision,
         )
         PkpdReactiveDoubleSlider(
             key = DoubleKey.OApsAIMIPkpdAnchorPeakMin,
-            titleResId = R.string.oaps_aimi_pkpd_anchor_peak_title,
+            title = ApsStrings.oaps_aimi_pkpd_anchor_peak_title,
             preferenceRevision = preferenceRevision,
         )
     } else {
         Text(
-            stringResource(R.string.aimi_pkpd_bounds_from_preset),
+            stringResource(ApsStrings.aimi_pkpd_bounds_from_preset),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -370,14 +372,14 @@ fun PkpdAdvancedSettingsContent(
     )
 
     OutlinedButton(onClick = { showResetConfirm = true }) {
-        Text(stringResource(R.string.aimi_pkpd_reset_to_profile_action))
+        Text(stringResource(ApsStrings.aimi_pkpd_reset_to_profile_action))
     }
 
     if (showResetConfirm) {
         AlertDialog(
             onDismissRequest = { showResetConfirm = false },
-            title = { Text(stringResource(R.string.aimi_pkpd_reset_confirm_title)) },
-            text = { Text(stringResource(R.string.aimi_pkpd_reset_confirm_body)) },
+            title = { Text(stringResource(ApsStrings.aimi_pkpd_reset_confirm_title)) },
+            text = { Text(stringResource(ApsStrings.aimi_pkpd_reset_confirm_body)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -386,11 +388,11 @@ fun PkpdAdvancedSettingsContent(
                         showResetConfirm = false
                         scope.launch { snackbarHostState.showSnackbar(syncDoneMessage) }
                     },
-                ) { Text(stringResource(R.string.aimi_pkpd_reset_confirm_ok)) }
+                ) { Text(stringResource(ApsStrings.aimi_pkpd_reset_confirm_ok)) }
             },
             dismissButton = {
                 TextButton(onClick = { showResetConfirm = false }) {
-                    Text(stringResource(android.R.string.cancel))
+                    Text(stringResource(CoreUiStrings.cancel))
                 }
             },
         )
@@ -399,12 +401,12 @@ fun PkpdAdvancedSettingsContent(
 
 @Composable
 fun PkpdExpertSettingsContent(preferenceRevision: Int) {
-    ExpandableSection(title = stringResource(R.string.aimi_pkpd_expert_peak_governor), initiallyExpanded = false) {
+    ExpandableSection(title = stringResource(ApsStrings.aimi_pkpd_expert_peak_governor), initiallyExpanded = false) {
         AdaptiveSwitchPreferenceItem(booleanKey = BooleanKey.OApsAIMIPeakGovernorEnabled)
         AdaptiveDoublePreferenceItem(doubleKey = DoubleKey.OApsAIMIPeakGovernorLearnedWeight)
     }
 
-    ExpandableSection(title = stringResource(R.string.aimi_pkpd_expert_isf_fusion), initiallyExpanded = false) {
+    ExpandableSection(title = stringResource(ApsStrings.aimi_pkpd_expert_isf_fusion), initiallyExpanded = false) {
         AdaptiveDoublePreferenceItem(
             doubleKey = DoubleKey.OApsAIMIIsfFusionMinFactor,
             title = ApsStrings.oaps_aimi_isf_fusion_min_title,
@@ -419,13 +421,13 @@ fun PkpdExpertSettingsContent(preferenceRevision: Int) {
         )
     }
 
-    ExpandableSection(title = stringResource(R.string.aimi_dyn_isf_trajectory_section_title), initiallyExpanded = false) {
+    ExpandableSection(title = stringResource(ApsStrings.aimi_dyn_isf_trajectory_section_title), initiallyExpanded = false) {
         AdaptiveSwitchPreferenceItem(booleanKey = BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled)
         AdaptiveSwitchPreferenceItem(booleanKey = BooleanKey.OApsAIMIDynIsfTrajectoryShadowOnly)
         AdaptiveDoublePreferenceItem(doubleKey = DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction)
     }
 
-    ExpandableSection(title = stringResource(R.string.aimi_pkpd_expert_smb_tail), initiallyExpanded = false) {
+    ExpandableSection(title = stringResource(ApsStrings.aimi_pkpd_expert_smb_tail), initiallyExpanded = false) {
         AdaptiveDoublePreferenceItem(
             doubleKey = DoubleKey.OApsAIMISmbTailThreshold,
             title = ApsStrings.oaps_aimi_smb_tail_threshold_title,
@@ -444,7 +446,7 @@ fun PkpdExpertSettingsContent(preferenceRevision: Int) {
         )
     }
 
-    ExpandableSection(title = stringResource(R.string.aimi_pkpd_section_expert), initiallyExpanded = false) {
+    ExpandableSection(title = stringResource(ApsStrings.aimi_pkpd_section_expert), initiallyExpanded = false) {
         AdaptiveSwitchPreferenceItem(
             booleanKey = BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled,
             title = ApsStrings.oaps_aimi_pkpd_relief_enabled_title,
@@ -496,12 +498,12 @@ fun PkpdSimpleStatusCard(
     ) {
         Column(Modifier.padding(AapsSpacing.medium)) {
             Text(
-                stringResource(R.string.aimi_pkpd_status_card_title),
+                stringResource(ApsStrings.aimi_pkpd_status_card_title),
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
                 stringResource(
-                    R.string.aimi_pkpd_status_learned_format,
+                    ApsStrings.aimi_pkpd_status_learned_format,
                     learnedDia,
                     learnedPeak,
                 ),
@@ -510,7 +512,7 @@ fun PkpdSimpleStatusCard(
             )
             Text(
                 stringResource(
-                    R.string.aimi_pkpd_status_profile_format,
+                    ApsStrings.aimi_pkpd_status_profile_format,
                     profileDia,
                     profilePeak,
                 ),
@@ -519,9 +521,9 @@ fun PkpdSimpleStatusCard(
             )
             Text(
                 when {
-                    !pkpdOn -> stringResource(R.string.aimi_pkpd_status_learning_off)
-                    fasterInsulin -> stringResource(R.string.aimi_pkpd_status_faster_insulin)
-                    else -> stringResource(R.string.aimi_pkpd_status_learning_on)
+                    !pkpdOn -> stringResource(ApsStrings.aimi_pkpd_status_learning_off)
+                    fasterInsulin -> stringResource(ApsStrings.aimi_pkpd_status_faster_insulin)
+                    else -> stringResource(ApsStrings.aimi_pkpd_status_learning_on)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
@@ -531,7 +533,7 @@ fun PkpdSimpleStatusCard(
                 PkpdTechnicalPeakDetails(preferences)
             } else {
                 Text(
-                    stringResource(R.string.aimi_pkpd_tap_for_technical),
+                    stringResource(ApsStrings.aimi_pkpd_tap_for_technical),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = AapsSpacing.extraSmall),
@@ -548,11 +550,11 @@ private fun PkpdTechnicalPeakDetails(preferences: Preferences) {
     val peakPhysio = preferences.get(DoubleKey.OApsAIMIPkpdStatePhysioPeak)
     val peakSite = preferences.get(DoubleKey.OApsAIMIPkpdStateSitePeak)
     val peakTraj = preferences.get(DoubleKey.OApsAIMIPkpdStateTrajectoryPeak)
-    val dominantBranch = preferences.get(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey.OApsAIMIPkpdStateDominantBranch)
+    val dominantBranch = preferences.get(AimiStringKey.OApsAIMIPkpdStateDominantBranch)
     if (dominantBranch.isNotEmpty()) {
         Text(
             text = stringResource(
-                R.string.aimi_pkpd_tap_g_detail,
+                ApsStrings.aimi_pkpd_tap_g_detail,
                 dominantBranch,
                 peakEffective,
                 peakPrior,
@@ -583,7 +585,7 @@ fun PkpdPresetChipRow(
         horizontalArrangement = Arrangement.spacedBy(AapsSpacing.small),
     ) {
         PresetChip(
-            label = stringResource(R.string.aimi_pkpd_preset_ultra_fast),
+            label = stringResource(ApsStrings.aimi_pkpd_preset_ultra_fast),
             selected = selectedPreset == PkpdInsulinPreset.ULTRA_FAST,
             onClick = {
                 onPresetSelected(PkpdInsulinPreset.ULTRA_FAST)
@@ -591,7 +593,7 @@ fun PkpdPresetChipRow(
             },
         )
         PresetChip(
-            label = stringResource(R.string.aimi_pkpd_preset_rapid),
+            label = stringResource(ApsStrings.aimi_pkpd_preset_rapid),
             selected = selectedPreset == PkpdInsulinPreset.RAPID,
             onClick = {
                 onPresetSelected(PkpdInsulinPreset.RAPID)
@@ -599,7 +601,7 @@ fun PkpdPresetChipRow(
             },
         )
         PresetChip(
-            label = stringResource(R.string.aimi_pkpd_preset_standard),
+            label = stringResource(ApsStrings.aimi_pkpd_preset_standard),
             selected = selectedPreset == PkpdInsulinPreset.STANDARD,
             onClick = {
                 onPresetSelected(PkpdInsulinPreset.STANDARD)
@@ -608,7 +610,7 @@ fun PkpdPresetChipRow(
         )
         if (showCustom) {
             PresetChip(
-                label = stringResource(R.string.aimi_pkpd_preset_custom),
+                label = stringResource(ApsStrings.aimi_pkpd_preset_custom),
                 selected = selectedPreset == PkpdInsulinPreset.CUSTOM,
                 onClick = {
                     onPresetSelected(PkpdInsulinPreset.CUSTOM)
@@ -701,7 +703,7 @@ fun ExpandableSection(
 @Composable
 fun PkpdReactiveDoubleSlider(
     key: DoubleKey,
-    titleResId: Int,
+    title: TextRef,
     preferenceRevision: Int,
 ) {
     val preferences = LocalPreferences.current
@@ -723,7 +725,7 @@ fun PkpdReactiveDoubleSlider(
             .fillMaxWidth()
             .padding(vertical = AapsSpacing.extraSmall),
     ) {
-        Text(stringResource(titleResId), style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(title), style = MaterialTheme.typography.titleSmall)
         summaryRes?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -740,7 +742,7 @@ fun PkpdReactiveDoubleSlider(
             valueFormatRef = valueFormatRef,
             valueFormat = valueFormat,
             unitLabel = unitLabelRef,
-            dialogLabel = stringResource(titleResId),
+            dialogLabel = stringResource(title),
             dialogSummary = summaryRes,
         )
     }

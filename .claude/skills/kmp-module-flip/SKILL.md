@@ -211,6 +211,15 @@ imported one `AtomicLong` and also used `@Volatile`, `synchronized` and a neighb
 timed `tryLock`. **Move one file, compile, keep or revert. Never move a batch on the strength of a
 grep.**
 
+**A generated declaration leaves nothing to grep for, and that cuts the other way too.** The mirror
+of the rule above: absence of a grep hit is not absence of the thing. Searching this repo for
+`TextRefIdRegistry.register(` finds two calls for sixteen string-owning modules, which reads as
+fourteen owners with no resolver and 2 000+ call sites about to draw raw resource names. They are
+all fine - the registries are generated from `StringOwnerModules.kt`, and the two hand-written calls
+are the two modules the generator cannot reach. The same goes for `XxxStrings`/`XxxStringIds`
+themselves: they live under `build/generated/`, so `find` says they do not exist until something has
+built. **Before concluding a wiring is missing, read the generator, not the call sites.**
+
 Not every blocker is a substitution. Some are a design question and should stop the lot rather than
 be forced: `AapsLock` has `lock`/`unlock` and no timed `tryLock`, so anything built on
 `ReentrantLock.tryLock(timeout)` or `isHeldByCurrentThread` cannot move without changing
@@ -224,9 +233,14 @@ module's `strings.xml` into a `XxxStrings` object of `TextRef.Named` (commonMain
 
 1. Add `kotlin.srcDir(...)` for the common output to `commonMain` and the android output to
    `androidMain`, and `implementation(project(":core:keys"))` to commonMain for `TextRef`.
-2. Register the owner in **both** `MainApp.registerStringOwners()` and `BaseTestApp` - they must
-   match, or instrumented tests render blank text and fail as "not displayed", a long way from the
-   cause.
+2. Add one line for the module to `buildSrc/src/main/kotlin/StringOwnerModules.kt`, giving the same
+   four values the task was configured with. Every platform's resolver registry is **generated** from
+   that single list, so there is no `register(` call to write by hand any more. A module generated but
+   missing from the list draws raw resource names on screen; a module in the list but not generated
+   fails the build, which is the better direction of the two. Older notes - and five KDoc comments
+   still in the tree - tell you to edit `MainApp.registerStringOwners()` and `BaseTestApp`; both lists
+   are gone, and that is why four hand-written copies drifted before (the desktop one had five of
+   sixteen modules).
 3. Swap `R.string.foo` for `XxxStrings.foo`. The substitution is name-preserving, so a wrong mapping
    cannot happen silently - it fails to compile.
 4. In Composables import `app.aaps.core.ui.compose.stringResource` alongside the androidx one. Both
@@ -243,8 +257,8 @@ and a blanket `rh.gs(anyInt())` stub becomes `doAnswer { ... }.whenever(rh).gs(a
 written that way round because `rh.gs(any<TextRef>())` on its own is ambiguous against the vararg
 overload. If the module's owner is not registered in `shared/tests/TextRefStubs.kt`, an unstubbed
 name resolves to itself, so expectations like `isNull()` become the string's own name. A Robolectric
-Compose test must call `TextRefIdRegistry.register(owner) { XxxStringIds.idOf(it) }` in its setup,
-exactly as `MainApp` does.
+Compose test must still call `TextRefIdRegistry.register(owner) { XxxStringIds.idOf(it) }` in its
+setup - a host test does not go through the generated registry the way the app does.
 
 ### An `Int` in an interface is a hard stop
 
@@ -374,9 +388,18 @@ Never pipe a gradle run: the pipe's exit code hides a failure. Redirect to a log
 `^e: `, `BUILD FAILED`, `BUILD SUCCESSFUL`. Read test counts from the XML under
 `<module>/build/test-results/<task>/`, not from the console line.
 
-`--rerun` has two gotchas, both measured here. A trailing flag does **not** apply to every task in the
-invocation - attach it per task (`:a --rerun :b --rerun`) and check the log says the task executed, or
-a run comes back UP-TO-DATE in eleven seconds and looks like a pass. And `--rerun` on
+`--rerun` has two gotchas, both measured here, and the first one keeps being paid for even by people
+who were warned about it in writing - assume you will get it wrong and check, rather than assume you
+got it right. A trailing flag does **not** apply to every task in the invocation - attach it per task
+(`:a --rerun :b --rerun`), or a run comes back UP-TO-DATE in eleven seconds and looks like a pass.
+**`BUILD SUCCESSFUL` and `UP-TO-DATE` are indistinguishable in a grep for the result line**, so make
+the check explicit and part of the gate, not an afterthought:
+
+```
+grep -E '^> Task :plugins:aps:(testAndroidHostTest|jvmTest|iosSimulatorArm64Test)' <log>
+```
+
+Any of those three printed with `UP-TO-DATE` means that gate did not run and the result is worthless. And `--rerun` on
 `:app:assembleFullDebug` does nothing, because that is an action-less lifecycle task; to force the APK,
 put it on `:app:packageFullDebug`.
 

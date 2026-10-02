@@ -2667,6 +2667,221 @@ that the returned `RT` requests no change. Neither branch has ever had that test
 
 ---
 
+## 6av. 2026-10-02: the Compose cluster measured, and a false alarm worth recording
+
+With the algorithm core done, the dominant theme in what is left of AIMI `androidMain` is Compose:
+**15 files, about 6 200 lines, 96 AIMI files left in `androidMain` against 425 in `commonMain`.**
+Measured per file (lines | `stringResource(R.` | `R.string.` | `LocalContext` | Android graphics or
+activity):
+
+```
+  53 |  0 |  1 | 0 | 0  AimiPreferenceInfoScreen.kt
+  76 |  5 |  5 | 0 | 0  AiProviderDropdown.kt
+ 162 | 11 | 12 | 0 | 0  AimiSupportPackageScreen.kt
+ 181 |  4 |  6 | 2 | 0  AimiPkpdSettingsScreen.kt
+ 239 | 10 | 13 | 2 | 3  AimiSosPermissionScreen.kt
+ 267 | 13 | 14 | 2 | 2  AimiHealthConnectPermissionScreen.kt
+ 288 |  7 | 14 | 0 | 0  AimiCognitiveOrefCoachCards.kt
+ 299 | 17 | 24 | 2 | 0  AimiModeSettingsScreen.kt
+ 324 | 40 | 41 | 2 | 0  HormonitorViewerScreen.kt
+ 514 | 67 | 90 | 0 | 0  AimiRuntimeHistoryCards.kt
+ 590 | 42 | 57 | 2 | 0  AimiContextScreen.kt
+ 747 | 49 | 62 | 0 | 0  PkpdSettingsUi.kt
+ 762 | 18 | 36 | 3 | 7  AimiMealAdvisorScreen.kt
+ 923 | 62 | 81 | 2 | 0  AimiProfileAdvisorScreen.kt
+1021 | 48 | 62 | 0 | 0  AimiControlCenterScreen.kt
+```
+
+**`R.string.` is not one job, it is four.** 518 sites, of which only 393 sit inside
+`stringResource(`. The remaining 125 split into shapes that need different answers, and counting
+only the first shape under-reads the lot by a quarter:
+
+- `stringResource(app.aaps.core.ui.R.string.x)` / `CoreUiR.string.x` - cross-module, so the
+  replacement is `CoreUiStrings.x`, not `ApsStrings.x`.
+- `stringResource(android.R.string.ok)` / `.cancel` - the **Android framework** table, which has no
+  multiplatform form at all. The same cluster already uses `app.aaps.core.ui.R.string.ok`/`cancel`
+  a few lines away, so `CoreUiStrings.ok`/`cancel` is the parity-safe swap, but it is a decision,
+  not a rename.
+- `context.getString(...)` / `rh.gs(...)` in non-Composable helpers that happen to live in these
+  files - notification titles, the SOS SMS body, an intent chooser. Same shape the algorithm core
+  already solved.
+- `titleResId = R.string.x` on preference definitions - lesson 6g (b) again: those properties were
+  retyped to `TextRef`, so the value becomes `ApsStrings.x` and nothing else changes.
+
+### The false alarm, recorded because the reasoning was reasonable and the conclusion was wrong
+
+Reading `TextRefResource.android.kt` showed only three owners hardcoded (`keys`, `coreUi`,
+`interfaces`) with everything else falling through to `TextRefIdRegistry`, and the only two
+production `register()` calls in the tree are in `ResourceHelperImpl.start()`, for `coreUi` and
+`implementation`. Sixteen modules declare an owner. That reads as twelve owners with no resolver -
+and the resolver's own KDoc names the symptom, `format_carbs` drawn on the overview instead of
+"12 g". It would have meant 2 044 production call sites, `aps` among them, drawing raw resource
+names, and a blocking precondition for this whole lot.
+
+**It is not true.** The per-platform registries are *generated* from
+`buildSrc/src/main/kotlin/StringOwnerModules.kt`, which lists all sixteen owners including
+`aps`, and which exists precisely because the four hand-written lists had drifted before (its KDoc
+records the desktop one having five of sixteen). The two surviving hand-written `register()` calls
+are the two special cases: `:core:ui` and `:implementation` cannot be seen from `:core:interfaces`,
+so `ResourceHelperImpl` registers them itself.
+
+The generalisable part: **a registration that is generated leaves no `register(` to grep for.** The
+same habit that keeps catching people out here - a grep standing in for the build - caught this
+too. The check that settled it was reading the generator, not searching for call sites.
+
+So the Compose theme has **no hidden precondition**: `plugins/aps/build.gradle.kts:14` already
+registers `GenerateKeyStringsTask` as `ApsStrings`/`ApsStringIds`, `aps` is a registered owner on
+every platform, and 686 production sites in this module already use `ApsStrings.`. The lot is the
+mechanical swap it looked like, plus the three non-string blockers (`LocalContext` in 7 files,
+`android.graphics`/`androidx.activity` in 3).
+
+Two pieces of stale documentation found on the way, left alone because the files are otherwise
+untouched and this branch does not mass-fix:
+
+- `MainApp.registerStringOwners()` is named by five KDoc comments (`TextRefResource.jvm.kt`,
+  `TextRefValueRegistry.kt`, `GeneratedTextResolver.kt`, `ResourceHelperImpl.kt`, `BaseTestApp.kt`)
+  and **does not exist** - it was replaced by the generated registries.
+- `BaseTestApp.kt:130` is an **orphan KDoc**: a doc block with no declaration under it, left behind
+  when the hand-written owner list it documented was deleted. Harmless, but it is what made the
+  missing registration look real.
+
+### First slice done, and the headline blocker was not one
+
+Two of five moved: `AimiPreferenceInfoScreen` (53) and `AiProviderDropdown` (76). Gates unchanged at
+1836 / 594 / 599, 0 failures, both compiles green. `AimiPreferenceInfoScreen` is worth noting because
+the per-file table said **0 `stringResource(R.` sites** and it was still a strings job: it took
+`@StringRes titleResId: Int` / `messageResId: Int`, which is lesson 6g (b) again. Counting one spelling
+of a problem keeps under-reading these files.
+
+The other three stayed, each for a reason no string swap would have touched:
+`AimiSupportPackageScreen` needs an `androidMain` exporter and `java.io.File`; `AimiPkpdSettingsScreen`
+needs four top-level declarations that live in `PkpdSettingsUi.kt` - **same package, so no import names
+them**, the fifth time that trap has been paid for; `AimiSosPermissionScreen` is the Android
+runtime-permission flow itself (104 errors, 77 platform) and has no honourable shared form.
+
+**The probe over the other thirteen was worth more than the slice.** Moving four "clean by import scan"
+files unconverted and classifying 432 compiler errors showed the scan wrong in both directions:
+`AimiControlCenterScreen` is blocked by a same-package `Tpo` trio, and `AimiCognitiveOrefCoachCards` is
+blocked by **Vico**, an Android-only charting library that read as clean only because the scan's regex
+never covered `com.*`. Sixth instance of the same lesson.
+
+**And the lot's reported headline finding was wrong, in a way worth recording.** The agent concluded
+that `Dispatchers.IO` blocks six Compose files, that "there is no common IO-dispatcher abstraction
+anywhere in the tree", and that one shared seam was therefore "probably the highest-leverage thing
+left and it is a decision, not a port". It had looked in `plugins/aps/commonMain` and
+`core/utils/commonMain`. The abstraction exists in neither of those: it is
+`app.aaps.core.interfaces.concurrent.aapsIoDispatcher`, an `expect val` in
+`core/interfaces/src/commonMain/` with iOS and `jvmShared` actuals, **already imported by about ten
+AIMI `commonMain` files** - `therapy.kt`, `KalmanFilter.kt`, `AuditorAIService.kt`,
+`UnifiedReactivityLearner.kt`, `OuraApiThermalClient.kt` among them. So the biggest reported blocker
+is a one-line import swap, and six files are cheaper than the report says.
+
+The pattern across 6ar, 6as, 6av and now this one is the same every time: **a negative claim from a
+search is the least reliable kind of finding here, and it is the kind that gets reported as the
+headline.** "Gates is not frees", "no `register(` call exists", "no IO dispatcher exists" - three
+searches, three confident conclusions, three wrong. A negative result from a grep is a hypothesis.
+Settle it by naming the thing it says is absent and looking for *that*, in the module where it would
+actually live, before building a decision on top of it.
+
+### The corrected map of the thirteen, after the `aapsIoDispatcher` correction
+
+Checked against the files themselves, not against a scan. Three claims from the slice report were
+spot-checked and all three held: Vico is really there (18 `com.patrykandpatrick` uses), the camera
+pipeline is really there (19 camera2/`ImageReader`/`TextureView`/`HandlerThread` uses), and
+`HormonitorViewerScreen` really does take `android.os.Environment`, `java.io.File` and
+`SimpleDateFormat`.
+
+| file | lines | what actually blocks it now |
+|---|---|---|
+| `PkpdSettingsUi` | 747 | strings only - **in flight** |
+| `AimiPkpdSettingsScreen` | 181 | same-package companion above - **in flight** |
+| `AimiRuntimeHistoryCards` | 514 | strings only - **in flight** |
+| `AimiContextScreen` | 590 | `LocalContext` for **one** string with an argument; IO solved |
+| `AimiControlCenterScreen` | 1021 | same-package `Tpo` trio |
+| `AimiSupportPackageScreen` | 162 | `AimiSupportPackageExporter` (androidMain) + `java.io.File` |
+| `AimiProfileAdvisorScreen` | 923 | `context.startActivity(Intent.createChooser(...))` at one line |
+| `AimiModeSettingsScreen` | 299 | its own `getSharedPreferences` file + `String.format(Locale)` |
+| `HormonitorViewerScreen` | 324 | `Environment` + `File` + `SimpleDateFormat` |
+| `AimiSosPermissionScreen` | 239 | the Android runtime-permission flow itself |
+| `AimiHealthConnectPermissionScreen` | 267 | same |
+| `AimiMealAdvisorScreen` | 762 | a full `android.hardware.camera2` capture pipeline |
+| `AimiCognitiveOrefCoachCards` | 288 | Vico, an Android-only charting library |
+
+Two things this changes about what to do next.
+
+**`AimiContextScreen` is a strings job after all.** Its `LocalContext` exists for exactly one call,
+`context.getString(R.string.aimi_context_intent_added, ids.size)`. That is the first
+**argument-carrying** string in this whole theme - the first slice happened to contain only
+zero-argument ones, so the runtime-silent wrong-count trap is still unproven on this path and this
+is where it will first be exercised. 590 lines unblocked by one hoist.
+
+**The real highest-leverage seam is sharing, not IO.** Two screens are each blocked by one line that
+hands a file or some text to the platform share sheet: `AimiProfileAdvisorScreen` calls
+`startActivity(Intent.createChooser(...))` directly, and `AimiSupportPackageScreen` reaches it
+through `AimiSupportPackageExporter` (143 lines, `Context` + `FileProvider` + `ZipOutputStream`).
+That is 1 085 lines behind one interface, and it is the shape CLAUDE.md names: lift the platform
+call out, keep the rule - the zip building is ordinary code, only the handoff is Android.
+
+**It is also exactly the case CLAUDE.md says to ask about first.** An interface must be honourable on
+every target it is given, and a share sheet that silently does nothing on iOS would be a feature the
+user believes they have. So this is a decision, not a port, and this time that is said after
+checking that the thing is really absent rather than inferring it from a search that found nothing.
+
+### Second slice: the Pkpd chain, all three moved
+
+`PkpdSettingsUi` (747), `AimiPkpdSettingsScreen` (181) and `AimiRuntimeHistoryCards` (514) all moved -
+1 442 lines, nothing blocked. AIMI is now **91 `androidMain` / 430 `commonMain`** (was 96 / 425 at the
+start of the Compose theme). Shapes converted: 153 `R.string` → `ApsStrings`, 3 `android.R.string` →
+`CoreUiStrings`, 2 `@StringRes Int` parameters → `TextRef` (8 and 11 call sites), 2 `Dispatchers.IO` →
+`aapsIoDispatcher`, 1 `LocalContext` removed by hoisting its single `getString` to a `val`.
+
+Ordering by what unblocks what, rather than by line count, was right: `AimiPkpdSettingsScreen` could
+only move after its 747-line same-package companion.
+
+**The `aapsIoDispatcher` correction held**, checked first-hand: the Android actual *is* `Dispatchers.IO`,
+so threading on the shipping target is unchanged. Behaviour-preserving, not a redesign.
+
+**The argument-count trap was finally exercised, and survived - because it was checked by a parser, not
+by eye.** 26 argument-carrying calls across the three files. The agent wrote a brace-matching parser
+that splits each `stringResource(` argument list at top-level commas and compares the count against
+`max(%N$)` over **every** XML in `res/values/` - which matters, because the AIMI strings live in
+`aimi_strings.xml`, not `strings.xml`. 26 of 26 correct. One case the parser could not settle,
+`stringResource(labelRes, count, percentOf(count, total))`, was resolved by hand against all 11
+`HistoryCountRow` call sites. **This is now the standard for this theme**: a wrong count compiles and
+fails at run time, so eyeballing it is not evidence.
+
+**`--rerun` nearly let the slice through unverified.** The agent's first two runs reported
+`testAndroidHostTest UP-TO-DATE`, `jvmTest UP-TO-DATE`, `compileKotlinIosArm64 UP-TO-DATE` - the flag
+written once at the end of the task list is ignored for the tasks it was meant to cover. The skill
+already documented this and the brief repeated it, and it was still got wrong twice. `BUILD SUCCESSFUL`
+and `UP-TO-DATE` are indistinguishable in a grep for the result line, so the skill now carries an
+explicit per-task grep as part of the gate rather than as advice.
+
+### The unreachable expert tab - dead on this branch, and dead upstream too
+
+`PkpdExpertSettingsContent` (~55 lines) has no caller. The agent rightly refused to delete it and
+flagged it as a possible `TriggerBTDevice.devicesPaired()` case - a lost caller rather than obsolete
+code. **Checked against `origin/dev_OAPSAIMI` (3dd0ca6477): it is dead there too, identically.** Both
+branches route `ADVANCED` and `EXPERT` to `PkpdAdvancedSettingsContent`, the tab row offers only two
+tabs, and nothing anywhere assigns `selectedLevel = PkpdSettingsLevel.EXPERT`. So the port is correct
+to carry it across untouched, and this is **not** a migration regression.
+
+It is, however, worth the owner's attention, because of what is stranded in it. The unreachable
+function is the only editor for:
+
+- `OApsAIMISmbTailDamping`, `OApsAIMISmbTailThreshold`, `OApsAIMISmbExerciseDamping`,
+  `OApsAIMISmbLateFatDamping`
+- `OApsAIMIRedCarpetRestoreThreshold`
+- `OApsAIMIPriorityMaxIobFactor`, `OApsAIMIIobSurveillanceGuard`
+- `OApsAIMIPeakGovernorEnabled` / `...LearnedWeight`, the three `OApsAIMIIsfFusion*` keys, and the
+  three `OApsAIMIDynIsfTrajectory*` keys
+
+Three of those names appear in open investigations in this project's notes - the shared-writer problem
+on `OApsAIMISmbTailDamping`, RED_CARPET as a hypo contributor, and `PriorityMaxIobFactor` as one of the
+keys TPO rewrites from inside a loop tick. The settings themselves are live and read by the algorithm;
+only the screen that would show their stored value cannot be opened. Whether to wire the EXPERT tab
+back is the owner's call, and it is a feature decision, not part of this port.
+
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at

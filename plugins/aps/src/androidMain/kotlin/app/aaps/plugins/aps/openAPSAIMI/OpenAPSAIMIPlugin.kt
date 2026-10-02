@@ -2082,8 +2082,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         ApsIntentKey.AimiHypoRiskAlarmInfo.withCompose(
                             ComposeScreenContent { onBack ->
                                 AimiPreferenceInfoScreen(
-                                    titleResId = R.string.hypo_risk_notification_title,
-                                    messageResId = R.string.aimi_hypo_risk_alarm_summary,
+                                    title = ApsStrings.hypo_risk_notification_title,
+                                    message = ApsStrings.aimi_hypo_risk_alarm_summary,
                                     onBack = onBack,
                                 )
                             },
@@ -2102,8 +2102,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         ApsIntentKey.AimiPhysioPatternCatalogInfo.withCompose(
                             ComposeScreenContent { onBack ->
                                 AimiPreferenceInfoScreen(
-                                    titleResId = R.string.aimi_physio_pattern_catalog_title,
-                                    messageResId = R.string.aimi_physio_pattern_catalog_detail,
+                                    title = ApsStrings.aimi_physio_pattern_catalog_title,
+                                    message = ApsStrings.aimi_physio_pattern_catalog_detail,
                                     onBack = onBack,
                                 )
                             },

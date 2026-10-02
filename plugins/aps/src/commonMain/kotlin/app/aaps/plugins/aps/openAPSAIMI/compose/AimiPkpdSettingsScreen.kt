@@ -27,18 +27,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
-import app.aaps.plugins.aps.R
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiRecommendation
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -52,8 +52,8 @@ fun AimiPkpdSettingsScreen(
     loadProfileInsulin: (suspend () -> Pair<Double?, Double?>)? = null,
     loadPkpdRecommendations: (suspend () -> List<AimiRecommendation>)? = null,
 ) {
-    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val advisorAppliedMessage = stringResource(ApsStrings.aimi_pkpd_advisor_applied)
     val scope = rememberCoroutineScope()
     var preferenceRevision by remember { mutableIntStateOf(0) }
     var selectedLevel by remember { mutableStateOf(PkpdSettingsLevel.SIMPLE) }
@@ -64,14 +64,14 @@ fun AimiPkpdSettingsScreen(
 
     LaunchedEffect(loadProfileInsulin) {
         val loader = loadProfileInsulin ?: return@LaunchedEffect
-        val (dia, peak) = withContext(Dispatchers.IO) { loader() }
+        val (dia, peak) = withContext(aapsIoDispatcher) { loader() }
         profileDiaHours = dia
         profilePeakMin = peak
     }
 
     LaunchedEffect(loadPkpdRecommendations, preferenceRevision) {
         val loader = loadPkpdRecommendations ?: return@LaunchedEffect
-        recommendations = withContext(Dispatchers.IO) { loader() }
+        recommendations = withContext(aapsIoDispatcher) { loader() }
     }
 
     LaunchedEffect(Unit) {
@@ -98,12 +98,12 @@ fun AimiPkpdSettingsScreen(
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 topBar = {
                     AapsTopAppBar(
-                        title = { Text(stringResource(R.string.aimi_pkpd_compose_title)) },
+                        title = { Text(stringResource(ApsStrings.aimi_pkpd_compose_title)) },
                         navigationIcon = {
                             IconButton(onClick = onBack) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = stringResource(app.aaps.core.ui.R.string.back),
+                                    contentDescription = stringResource(CoreUiStrings.back),
                                 )
                             }
                         },
@@ -119,7 +119,7 @@ fun AimiPkpdSettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
                 ) {
                     Text(
-                        stringResource(R.string.aimi_pkpd_compose_summary_v2),
+                        stringResource(ApsStrings.aimi_pkpd_compose_summary_v2),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -133,13 +133,13 @@ fun AimiPkpdSettingsScreen(
                         Tab(
                             selected = selectedLevel == PkpdSettingsLevel.SIMPLE,
                             onClick = { selectedLevel = PkpdSettingsLevel.SIMPLE },
-                            text = { Text(stringResource(R.string.aimi_pkpd_level_simple)) },
+                            text = { Text(stringResource(ApsStrings.aimi_pkpd_level_simple)) },
                         )
                         Tab(
                             selected = selectedLevel == PkpdSettingsLevel.ADVANCED ||
                                 selectedLevel == PkpdSettingsLevel.EXPERT,
                             onClick = { selectedLevel = PkpdSettingsLevel.ADVANCED },
-                            text = { Text(stringResource(R.string.aimi_pkpd_level_advanced)) },
+                            text = { Text(stringResource(ApsStrings.aimi_pkpd_level_advanced)) },
                         )
                     }
 
@@ -155,9 +155,7 @@ fun AimiPkpdSettingsScreen(
                                 if (applyPkpdPreferenceUpdate(preferences, action)) {
                                     preferenceRevision++
                                     scope.launch {
-                                        snackbarHostState.showSnackbar(
-                                            context.getString(R.string.aimi_pkpd_advisor_applied),
-                                        )
+                                        snackbarHostState.showSnackbar(advisorAppliedMessage)
                                     }
                                 }
                             },

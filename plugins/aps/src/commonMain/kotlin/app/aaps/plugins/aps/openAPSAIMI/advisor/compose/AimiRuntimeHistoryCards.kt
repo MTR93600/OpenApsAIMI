@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.compose
 
-import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -25,11 +24,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsSpacing
-import app.aaps.plugins.aps.R
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeHistorySummary
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeNumericStats
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeTickStatus
@@ -80,12 +81,12 @@ internal fun RecursiveBeliefUnfoldCard(
     var showUnfoldDialog by remember { mutableStateOf(false) }
 
     HistoryCard(
-        title = stringResource(R.string.aimi_rbt_unfold_section_title),
-        description = stringResource(R.string.aimi_rbt_unfold_section_desc),
+        title = stringResource(ApsStrings.aimi_rbt_unfold_section_title),
+        description = stringResource(ApsStrings.aimi_rbt_unfold_section_desc),
     ) {
         Text(
             text = stringResource(
-                R.string.aimi_rbt_unfold_mode,
+                ApsStrings.aimi_rbt_unfold_mode,
                 shadowEnabled.toString(),
                 authorityEnabled.toString(),
                 waveletEnabled.toString(),
@@ -94,7 +95,7 @@ internal fun RecursiveBeliefUnfoldCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (lastExport == null) {
-            HistoryBodyText(stringResource(R.string.aimi_rbt_unfold_no_data))
+            HistoryBodyText(stringResource(ApsStrings.aimi_rbt_unfold_no_data))
         } else {
             HistoryBodyText(rbtSummaryLine(lastExport))
         }
@@ -106,7 +107,7 @@ internal fun RecursiveBeliefUnfoldCard(
                 enabled = lastExport != null,
                 onClick = { showUnfoldDialog = true },
             ) {
-                Text(stringResource(R.string.aimi_rbt_unfold_view_btn))
+                Text(stringResource(ApsStrings.aimi_rbt_unfold_view_btn))
             }
         }
     }
@@ -131,7 +132,7 @@ private fun RecursiveBeliefUnfoldDialog(
     val prettyJson = remember(export) { jsonPrettyPrint.encodeToString(JsonObject.serializer(), export) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.aimi_rbt_unfold_dialog_title)) },
+        title = { Text(stringResource(ApsStrings.aimi_rbt_unfold_dialog_title)) },
         text = {
             SelectionContainer {
                 Text(
@@ -144,7 +145,7 @@ private fun RecursiveBeliefUnfoldDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(android.R.string.ok))
+                Text(stringResource(CoreUiStrings.ok))
             }
         },
     )
@@ -154,7 +155,7 @@ private fun RecursiveBeliefUnfoldDialog(
 private fun rbtSummaryLine(export: JsonObject): String {
     val resolution = export["resolution"] as? JsonObject
     return stringResource(
-        R.string.aimi_rbt_unfold_summary,
+        ApsStrings.aimi_rbt_unfold_summary,
         rbtReleaseAuthority(resolution),
         rbtSmbDemandU(resolution),
         rbtParadoxCount(export),
@@ -165,13 +166,13 @@ private fun rbtSummaryLine(export: JsonObject): String {
 @Composable
 internal fun T3cRuntimeHistoryCard(summary: T3cRuntimeHistorySummary?) {
     HistoryCard(
-        title = stringResource(R.string.aimi_t3c_history_section_title),
-        description = stringResource(R.string.aimi_t3c_history_section_desc),
+        title = stringResource(ApsStrings.aimi_t3c_history_section_title),
+        description = stringResource(ApsStrings.aimi_t3c_history_section_desc),
     ) {
         if (summary == null) {
             // "Unavailable" here also covers "the file could not be read", not only "the loop never
             // exported": the writer can fall back to app-scoped storage, which this reader cannot see.
-            HistoryBodyText(stringResource(R.string.aimi_t3c_history_unavailable))
+            HistoryBodyText(stringResource(ApsStrings.aimi_t3c_history_unavailable))
             return@HistoryCard
         }
         HistoryPillRow(
@@ -179,29 +180,29 @@ internal fun T3cRuntimeHistoryCard(summary: T3cRuntimeHistorySummary?) {
             dominantLabel = summary.dominantStatus?.let { t3cStatusLabel(it) },
         )
         if (summary.notEnoughData) {
-            HistoryBodyText(stringResource(R.string.aimi_t3c_history_not_enough_data, summary.tickCount))
+            HistoryBodyText(stringResource(ApsStrings.aimi_t3c_history_not_enough_data, summary.tickCount))
             T3cFamilySignalsSection(summary)
             return@HistoryCard
         }
         HistoryBodyText(t3cHistoryObservation(summary))
-        HistoryCountRow(R.string.aimi_t3c_history_native_applied, summary.nativeAppliedCount, summary.tickCount)
-        HistoryCountRow(R.string.aimi_t3c_history_native_blocked, summary.nativeBlockedCount, summary.tickCount)
-        HistoryCountRow(R.string.aimi_t3c_history_legacy_fallback, summary.legacyFallbackCount, summary.tickCount)
-        HistoryCountRow(R.string.aimi_t3c_history_safety_terminal, summary.safetyTerminalCount, summary.tickCount)
+        HistoryCountRow(ApsStrings.aimi_t3c_history_native_applied, summary.nativeAppliedCount, summary.tickCount)
+        HistoryCountRow(ApsStrings.aimi_t3c_history_native_blocked, summary.nativeBlockedCount, summary.tickCount)
+        HistoryCountRow(ApsStrings.aimi_t3c_history_legacy_fallback, summary.legacyFallbackCount, summary.tickCount)
+        HistoryCountRow(ApsStrings.aimi_t3c_history_safety_terminal, summary.safetyTerminalCount, summary.tickCount)
         summary.dominantBlocker?.let { blocker ->
-            HistoryBodyText(stringResource(R.string.aimi_history_blocker, blocker))
+            HistoryBodyText(stringResource(ApsStrings.aimi_history_blocker, blocker))
         }
         summary.demandStats?.let { stats ->
-            HistoryBodyText(stringResource(R.string.aimi_history_demand, formatT3cRateStats(stats)))
+            HistoryBodyText(stringResource(ApsStrings.aimi_history_demand, formatT3cRateStats(stats)))
         }
         summary.appliedRateStats?.let { stats ->
-            HistoryBodyText(stringResource(R.string.aimi_history_applied_rate, formatT3cRateStats(stats)))
+            HistoryBodyText(stringResource(ApsStrings.aimi_history_applied_rate, formatT3cRateStats(stats)))
         }
         if (summary.transitionCount > 0) {
-            HistoryBodyText(stringResource(R.string.aimi_t3c_history_transitions, summary.transitionCount))
+            HistoryBodyText(stringResource(ApsStrings.aimi_t3c_history_transitions, summary.transitionCount))
             summary.dominantTransition?.let { transition ->
                 HistoryBodyText(
-                    stringResource(R.string.aimi_t3c_history_transition_detail, formatT3cTransition(transition)),
+                    stringResource(ApsStrings.aimi_t3c_history_transition_detail, formatT3cTransition(transition)),
                 )
             }
         }
@@ -212,11 +213,11 @@ internal fun T3cRuntimeHistoryCard(summary: T3cRuntimeHistorySummary?) {
 @Composable
 internal fun HarmoniaRuntimeHistoryCard(summary: HarmoniaRuntimeHistorySummary?) {
     HistoryCard(
-        title = stringResource(R.string.aimi_harmonia_history_section_title),
-        description = stringResource(R.string.aimi_harmonia_history_section_desc),
+        title = stringResource(ApsStrings.aimi_harmonia_history_section_title),
+        description = stringResource(ApsStrings.aimi_harmonia_history_section_desc),
     ) {
         if (summary == null) {
-            HistoryBodyText(stringResource(R.string.aimi_harmonia_history_unavailable))
+            HistoryBodyText(stringResource(ApsStrings.aimi_harmonia_history_unavailable))
             return@HistoryCard
         }
         HistoryPillRow(
@@ -224,28 +225,28 @@ internal fun HarmoniaRuntimeHistoryCard(summary: HarmoniaRuntimeHistorySummary?)
             dominantLabel = summary.dominantStatus?.let { harmoniaStatusLabel(it) },
         )
         if (summary.notEnoughData) {
-            HistoryBodyText(stringResource(R.string.aimi_harmonia_history_not_enough_data, summary.tickCount))
+            HistoryBodyText(stringResource(ApsStrings.aimi_harmonia_history_not_enough_data, summary.tickCount))
             return@HistoryCard
         }
         HistoryBodyText(harmoniaHistoryObservation(summary))
-        HistoryCountRow(R.string.aimi_harmonia_history_native_applied, summary.nativeAppliedCount, summary.tickCount)
-        HistoryCountRow(R.string.aimi_harmonia_history_native_ready, summary.nativeReadyCount, summary.tickCount)
-        HistoryCountRow(R.string.aimi_harmonia_history_native_blocked, summary.nativeBlockedCount, summary.tickCount)
-        HistoryCountRow(R.string.aimi_harmonia_history_t3c_priority, summary.t3cPriorityCount, summary.tickCount)
-        HistoryCountRow(R.string.aimi_harmonia_history_smb_applied, summary.smbAppliedCount, summary.tickCount)
-        HistoryCountRow(R.string.aimi_harmonia_history_smb_ready, summary.smbReadyCount, summary.tickCount)
-        HistoryCountRow(R.string.aimi_harmonia_history_smb_blocked, summary.smbBlockedCount, summary.tickCount)
+        HistoryCountRow(ApsStrings.aimi_harmonia_history_native_applied, summary.nativeAppliedCount, summary.tickCount)
+        HistoryCountRow(ApsStrings.aimi_harmonia_history_native_ready, summary.nativeReadyCount, summary.tickCount)
+        HistoryCountRow(ApsStrings.aimi_harmonia_history_native_blocked, summary.nativeBlockedCount, summary.tickCount)
+        HistoryCountRow(ApsStrings.aimi_harmonia_history_t3c_priority, summary.t3cPriorityCount, summary.tickCount)
+        HistoryCountRow(ApsStrings.aimi_harmonia_history_smb_applied, summary.smbAppliedCount, summary.tickCount)
+        HistoryCountRow(ApsStrings.aimi_harmonia_history_smb_ready, summary.smbReadyCount, summary.tickCount)
+        HistoryCountRow(ApsStrings.aimi_harmonia_history_smb_blocked, summary.smbBlockedCount, summary.tickCount)
         summary.dominantBlocker?.let { blocker ->
-            HistoryBodyText(stringResource(R.string.aimi_history_blocker, blocker))
+            HistoryBodyText(stringResource(ApsStrings.aimi_history_blocker, blocker))
         }
         summary.demandStats?.let { stats ->
-            HistoryBodyText(stringResource(R.string.aimi_history_demand, formatHarmoniaRateStats(stats)))
+            HistoryBodyText(stringResource(ApsStrings.aimi_history_demand, formatHarmoniaRateStats(stats)))
         }
         summary.appliedRateStats?.let { stats ->
-            HistoryBodyText(stringResource(R.string.aimi_history_applied_rate, formatHarmoniaRateStats(stats)))
+            HistoryBodyText(stringResource(ApsStrings.aimi_history_applied_rate, formatHarmoniaRateStats(stats)))
         }
         summary.smbDemandStats?.let { stats ->
-            HistoryBodyText(stringResource(R.string.aimi_harmonia_history_smb_demand, formatHarmoniaSmbStats(stats)))
+            HistoryBodyText(stringResource(ApsStrings.aimi_harmonia_history_smb_demand, formatHarmoniaSmbStats(stats)))
         }
     }
 }
@@ -283,16 +284,16 @@ private fun HistoryBodyText(text: String) {
 }
 
 @Composable
-private fun HistoryCountRow(@StringRes labelRes: Int, count: Int, total: Int) {
+private fun HistoryCountRow(labelRes: TextRef, count: Int, total: Int) {
     HistoryBodyText(stringResource(labelRes, count, percentOf(count, total)))
 }
 
 @Composable
 private fun HistoryPillRow(tickCount: Int, dominantLabel: String?) {
     Row(horizontalArrangement = Arrangement.spacedBy(AapsSpacing.small)) {
-        HistoryPill(stringResource(R.string.aimi_history_period))
-        HistoryPill(stringResource(R.string.aimi_history_ticks, tickCount))
-        dominantLabel?.let { HistoryPill(stringResource(R.string.aimi_history_dominant, it)) }
+        HistoryPill(stringResource(ApsStrings.aimi_history_period))
+        HistoryPill(stringResource(ApsStrings.aimi_history_ticks, tickCount))
+        dominantLabel?.let { HistoryPill(stringResource(ApsStrings.aimi_history_dominant, it)) }
     }
 }
 
@@ -319,16 +320,16 @@ private fun HistoryPill(text: String) {
 private fun T3cFamilySignalsSection(summary: T3cRuntimeHistorySummary) {
     Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.small)) {
         Text(
-            text = stringResource(R.string.aimi_t3c_family_signals_title),
+            text = stringResource(ApsStrings.aimi_t3c_family_signals_title),
             style = MaterialTheme.typography.titleSmall,
         )
         Text(
-            text = stringResource(R.string.aimi_t3c_family_signals_desc),
+            text = stringResource(ApsStrings.aimi_t3c_family_signals_desc),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (summary.notEnoughData || summary.familyObservations.isEmpty()) {
-            HistoryBodyText(stringResource(R.string.aimi_t3c_family_signals_not_enough))
+            HistoryBodyText(stringResource(ApsStrings.aimi_t3c_family_signals_not_enough))
         } else {
             summary.familyObservations.forEach { observation ->
                 HistoryBodyText(formatT3cFamilyObservation(observation))
@@ -359,49 +360,49 @@ private fun rbtShadowOnly(export: JsonObject): Boolean =
 
 @Composable
 private fun t3cHistoryObservation(summary: T3cRuntimeHistorySummary): String {
-    val unknownBlocker = stringResource(R.string.aimi_history_blocker_unknown)
+    val unknownBlocker = stringResource(ApsStrings.aimi_history_blocker_unknown)
     return when (summary.dominantStatus) {
         T3cRuntimeTickStatus.NATIVE_APPLIED  -> stringResource(
-            R.string.aimi_t3c_history_observation_applied,
+            ApsStrings.aimi_t3c_history_observation_applied,
             percentOf(summary.nativeAppliedCount, summary.tickCount),
         )
 
         T3cRuntimeTickStatus.NATIVE_BLOCKED  -> stringResource(
-            R.string.aimi_t3c_history_observation_blocked,
+            ApsStrings.aimi_t3c_history_observation_blocked,
             summary.dominantBlocker ?: unknownBlocker,
         )
 
         T3cRuntimeTickStatus.LEGACY_FALLBACK -> stringResource(
-            R.string.aimi_t3c_history_observation_legacy,
+            ApsStrings.aimi_t3c_history_observation_legacy,
             percentOf(summary.legacyFallbackCount, summary.tickCount),
         )
 
-        T3cRuntimeTickStatus.SAFETY_TERMINAL -> stringResource(R.string.aimi_t3c_history_observation_safety)
-        else                                 -> stringResource(R.string.aimi_t3c_history_observation_mixed)
+        T3cRuntimeTickStatus.SAFETY_TERMINAL -> stringResource(ApsStrings.aimi_t3c_history_observation_safety)
+        else                                 -> stringResource(ApsStrings.aimi_t3c_history_observation_mixed)
     }
 }
 
 @Composable
 private fun harmoniaHistoryObservation(summary: HarmoniaRuntimeHistorySummary): String {
-    val unknownBlocker = stringResource(R.string.aimi_history_blocker_unknown)
+    val unknownBlocker = stringResource(ApsStrings.aimi_history_blocker_unknown)
     return when (summary.dominantStatus) {
         HarmoniaRuntimeTickStatus.NATIVE_APPLIED -> stringResource(
-            R.string.aimi_harmonia_history_observation_applied,
+            ApsStrings.aimi_harmonia_history_observation_applied,
             percentOf(summary.nativeAppliedCount, summary.tickCount),
         )
 
-        HarmoniaRuntimeTickStatus.NATIVE_READY   -> stringResource(R.string.aimi_harmonia_history_observation_ready)
+        HarmoniaRuntimeTickStatus.NATIVE_READY   -> stringResource(ApsStrings.aimi_harmonia_history_observation_ready)
         HarmoniaRuntimeTickStatus.NATIVE_BLOCKED -> stringResource(
-            R.string.aimi_harmonia_history_observation_blocked,
+            ApsStrings.aimi_harmonia_history_observation_blocked,
             summary.dominantBlocker ?: unknownBlocker,
         )
 
         HarmoniaRuntimeTickStatus.T3C_PRIORITY   -> stringResource(
-            R.string.aimi_harmonia_history_observation_t3c_priority,
+            ApsStrings.aimi_harmonia_history_observation_t3c_priority,
             percentOf(summary.t3cPriorityCount, summary.tickCount),
         )
 
-        else                                     -> stringResource(R.string.aimi_harmonia_history_observation_mixed)
+        else                                     -> stringResource(ApsStrings.aimi_harmonia_history_observation_mixed)
     }
 }
 
@@ -420,7 +421,7 @@ private fun formatHarmoniaSmbStats(stats: HarmoniaRuntimeNumericStats): String =
 @Composable
 private fun formatStatsRange(average: Double, min: Double, max: Double, unit: String): String =
     stringResource(
-        R.string.aimi_history_stats_range,
+        ApsStrings.aimi_history_stats_range,
         formatControlCenterDoubleValue(average, unit),
         formatControlCenterDoubleValue(min, null),
         formatControlCenterDoubleValue(max, null),
@@ -429,7 +430,7 @@ private fun formatStatsRange(average: Double, min: Double, max: Double, unit: St
 @Composable
 private fun formatT3cTransition(transition: T3cOwnershipTransition): String =
     stringResource(
-        R.string.aimi_t3c_history_transition_arrow,
+        ApsStrings.aimi_t3c_history_transition_arrow,
         t3cOwnershipLabel(transition.from),
         t3cOwnershipLabel(transition.to),
     )
@@ -437,7 +438,7 @@ private fun formatT3cTransition(transition: T3cOwnershipTransition): String =
 @Composable
 private fun formatT3cFamilyObservation(observation: T3cAdvisorObservation): String =
     stringResource(
-        R.string.aimi_t3c_family_signal_row,
+        ApsStrings.aimi_t3c_family_signal_row,
         t3cObservationFamilyLabel(observation.family),
         t3cObservationLevelLabel(observation.level),
         t3cObservationSignalLabel(observation.signal),
@@ -446,64 +447,64 @@ private fun formatT3cFamilyObservation(observation: T3cAdvisorObservation): Stri
 @Composable
 private fun t3cObservationFamilyLabel(family: T3cAdvisorObservationFamily): String =
     when (family) {
-        T3cAdvisorObservationFamily.STABILITY          -> stringResource(R.string.aimi_t3c_family_stability)
-        T3cAdvisorObservationFamily.MEAL_CAPTURE       -> stringResource(R.string.aimi_t3c_family_meal_capture)
-        T3cAdvisorObservationFamily.PHYSIO_AMBIGUITY   -> stringResource(R.string.aimi_t3c_family_physio_ambiguity)
-        T3cAdvisorObservationFamily.POST_HYPO_RECOVERY -> stringResource(R.string.aimi_t3c_family_post_hypo)
-        T3cAdvisorObservationFamily.ACTIVITY           -> stringResource(R.string.aimi_t3c_family_activity)
-        T3cAdvisorObservationFamily.AUTONOMY           -> stringResource(R.string.aimi_t3c_family_autonomy)
-        T3cAdvisorObservationFamily.NATIVE_RBT         -> stringResource(R.string.aimi_t3c_family_native_rbt)
+        T3cAdvisorObservationFamily.STABILITY          -> stringResource(ApsStrings.aimi_t3c_family_stability)
+        T3cAdvisorObservationFamily.MEAL_CAPTURE       -> stringResource(ApsStrings.aimi_t3c_family_meal_capture)
+        T3cAdvisorObservationFamily.PHYSIO_AMBIGUITY   -> stringResource(ApsStrings.aimi_t3c_family_physio_ambiguity)
+        T3cAdvisorObservationFamily.POST_HYPO_RECOVERY -> stringResource(ApsStrings.aimi_t3c_family_post_hypo)
+        T3cAdvisorObservationFamily.ACTIVITY           -> stringResource(ApsStrings.aimi_t3c_family_activity)
+        T3cAdvisorObservationFamily.AUTONOMY           -> stringResource(ApsStrings.aimi_t3c_family_autonomy)
+        T3cAdvisorObservationFamily.NATIVE_RBT         -> stringResource(ApsStrings.aimi_t3c_family_native_rbt)
     }
 
 @Composable
 private fun t3cObservationLevelLabel(level: T3cAdvisorObservationLevel): String =
     when (level) {
-        T3cAdvisorObservationLevel.HIGH   -> stringResource(R.string.aimi_t3c_level_high)
-        T3cAdvisorObservationLevel.MEDIUM -> stringResource(R.string.aimi_t3c_level_medium)
-        T3cAdvisorObservationLevel.LOW    -> stringResource(R.string.aimi_t3c_level_low)
-        T3cAdvisorObservationLevel.STABLE -> stringResource(R.string.aimi_t3c_level_stable)
+        T3cAdvisorObservationLevel.HIGH   -> stringResource(ApsStrings.aimi_t3c_level_high)
+        T3cAdvisorObservationLevel.MEDIUM -> stringResource(ApsStrings.aimi_t3c_level_medium)
+        T3cAdvisorObservationLevel.LOW    -> stringResource(ApsStrings.aimi_t3c_level_low)
+        T3cAdvisorObservationLevel.STABLE -> stringResource(ApsStrings.aimi_t3c_level_stable)
     }
 
 @Composable
 private fun t3cObservationSignalLabel(signal: T3cAdvisorObservationSignal): String =
     when (signal) {
-        T3cAdvisorObservationSignal.SAFETY_GATES_OFTEN_BLOCK -> stringResource(R.string.aimi_t3c_signal_safety_gates_block)
-        T3cAdvisorObservationSignal.MEAL_CONFLICTS_APPEAR    -> stringResource(R.string.aimi_t3c_signal_meal_conflicts)
-        T3cAdvisorObservationSignal.POST_HYPO_GUARD_DOMINATES -> stringResource(R.string.aimi_t3c_signal_post_hypo)
-        T3cAdvisorObservationSignal.ACTIVITY_LOCKOUT_VISIBLE -> stringResource(R.string.aimi_t3c_signal_activity_lockout)
-        T3cAdvisorObservationSignal.LEGACY_FALLBACK_VISIBLE  -> stringResource(R.string.aimi_t3c_signal_legacy_fallback)
-        T3cAdvisorObservationSignal.NATIVE_APPLIES_WHEN_CLEAR -> stringResource(R.string.aimi_t3c_signal_native_clear)
-        T3cAdvisorObservationSignal.BLOCKERS_STAY_MIXED      -> stringResource(R.string.aimi_t3c_signal_blockers_mixed)
+        T3cAdvisorObservationSignal.SAFETY_GATES_OFTEN_BLOCK -> stringResource(ApsStrings.aimi_t3c_signal_safety_gates_block)
+        T3cAdvisorObservationSignal.MEAL_CONFLICTS_APPEAR    -> stringResource(ApsStrings.aimi_t3c_signal_meal_conflicts)
+        T3cAdvisorObservationSignal.POST_HYPO_GUARD_DOMINATES -> stringResource(ApsStrings.aimi_t3c_signal_post_hypo)
+        T3cAdvisorObservationSignal.ACTIVITY_LOCKOUT_VISIBLE -> stringResource(ApsStrings.aimi_t3c_signal_activity_lockout)
+        T3cAdvisorObservationSignal.LEGACY_FALLBACK_VISIBLE  -> stringResource(ApsStrings.aimi_t3c_signal_legacy_fallback)
+        T3cAdvisorObservationSignal.NATIVE_APPLIES_WHEN_CLEAR -> stringResource(ApsStrings.aimi_t3c_signal_native_clear)
+        T3cAdvisorObservationSignal.BLOCKERS_STAY_MIXED      -> stringResource(ApsStrings.aimi_t3c_signal_blockers_mixed)
     }
 
 @Composable
 private fun t3cStatusLabel(status: T3cRuntimeTickStatus): String =
     when (status) {
-        T3cRuntimeTickStatus.NATIVE_APPLIED  -> stringResource(R.string.aimi_control_center_t3c_status_native_applied)
-        T3cRuntimeTickStatus.NATIVE_READY    -> stringResource(R.string.aimi_control_center_t3c_status_native_ready)
-        T3cRuntimeTickStatus.NATIVE_BLOCKED  -> stringResource(R.string.aimi_control_center_t3c_status_native_blocked)
-        T3cRuntimeTickStatus.LEGACY_FALLBACK -> stringResource(R.string.aimi_control_center_t3c_status_legacy_fallback)
-        T3cRuntimeTickStatus.SAFETY_TERMINAL -> stringResource(R.string.aimi_control_center_t3c_status_safety_terminal)
-        T3cRuntimeTickStatus.UNAVAILABLE     -> stringResource(R.string.aimi_control_center_t3c_status_unavailable)
+        T3cRuntimeTickStatus.NATIVE_APPLIED  -> stringResource(ApsStrings.aimi_control_center_t3c_status_native_applied)
+        T3cRuntimeTickStatus.NATIVE_READY    -> stringResource(ApsStrings.aimi_control_center_t3c_status_native_ready)
+        T3cRuntimeTickStatus.NATIVE_BLOCKED  -> stringResource(ApsStrings.aimi_control_center_t3c_status_native_blocked)
+        T3cRuntimeTickStatus.LEGACY_FALLBACK -> stringResource(ApsStrings.aimi_control_center_t3c_status_legacy_fallback)
+        T3cRuntimeTickStatus.SAFETY_TERMINAL -> stringResource(ApsStrings.aimi_control_center_t3c_status_safety_terminal)
+        T3cRuntimeTickStatus.UNAVAILABLE     -> stringResource(ApsStrings.aimi_control_center_t3c_status_unavailable)
     }
 
 @Composable
 private fun harmoniaStatusLabel(status: HarmoniaRuntimeTickStatus): String =
     when (status) {
-        HarmoniaRuntimeTickStatus.NATIVE_APPLIED -> stringResource(R.string.aimi_control_center_harmonia_status_native_applied)
-        HarmoniaRuntimeTickStatus.NATIVE_READY   -> stringResource(R.string.aimi_control_center_harmonia_status_native_ready)
-        HarmoniaRuntimeTickStatus.NATIVE_BLOCKED -> stringResource(R.string.aimi_control_center_harmonia_status_native_blocked)
-        HarmoniaRuntimeTickStatus.T3C_PRIORITY   -> stringResource(R.string.aimi_control_center_harmonia_status_t3c_priority)
-        HarmoniaRuntimeTickStatus.UNAVAILABLE    -> stringResource(R.string.aimi_control_center_harmonia_status_unavailable)
+        HarmoniaRuntimeTickStatus.NATIVE_APPLIED -> stringResource(ApsStrings.aimi_control_center_harmonia_status_native_applied)
+        HarmoniaRuntimeTickStatus.NATIVE_READY   -> stringResource(ApsStrings.aimi_control_center_harmonia_status_native_ready)
+        HarmoniaRuntimeTickStatus.NATIVE_BLOCKED -> stringResource(ApsStrings.aimi_control_center_harmonia_status_native_blocked)
+        HarmoniaRuntimeTickStatus.T3C_PRIORITY   -> stringResource(ApsStrings.aimi_control_center_harmonia_status_t3c_priority)
+        HarmoniaRuntimeTickStatus.UNAVAILABLE    -> stringResource(ApsStrings.aimi_control_center_harmonia_status_unavailable)
     }
 
 @Composable
 private fun t3cOwnershipLabel(category: T3cRuntimeOwnershipCategory): String =
     when (category) {
-        T3cRuntimeOwnershipCategory.NATIVE      -> stringResource(R.string.aimi_control_center_t3c_owner_native)
-        T3cRuntimeOwnershipCategory.LEGACY      -> stringResource(R.string.aimi_control_center_t3c_owner_legacy)
-        T3cRuntimeOwnershipCategory.SAFETY      -> stringResource(R.string.aimi_control_center_t3c_owner_safety)
-        T3cRuntimeOwnershipCategory.UNAVAILABLE -> stringResource(R.string.aimi_control_center_t3c_owner_unavailable)
+        T3cRuntimeOwnershipCategory.NATIVE      -> stringResource(ApsStrings.aimi_control_center_t3c_owner_native)
+        T3cRuntimeOwnershipCategory.LEGACY      -> stringResource(ApsStrings.aimi_control_center_t3c_owner_legacy)
+        T3cRuntimeOwnershipCategory.SAFETY      -> stringResource(ApsStrings.aimi_control_center_t3c_owner_safety)
+        T3cRuntimeOwnershipCategory.UNAVAILABLE -> stringResource(ApsStrings.aimi_control_center_t3c_owner_unavailable)
     }
 
 /**
