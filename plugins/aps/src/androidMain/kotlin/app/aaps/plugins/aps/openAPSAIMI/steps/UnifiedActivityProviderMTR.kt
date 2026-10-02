@@ -6,7 +6,7 @@ import app.aaps.core.data.model.HR
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.SP
+import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.keys.ACTIVITY_SOURCE_MODE_DISABLED
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
@@ -36,7 +36,7 @@ import kotlinx.coroutines.runBlocking
 @SingleIn(AppScope::class)
 class UnifiedActivityProviderMTR @Inject constructor(
     private val persistenceLayer: PersistenceLayer,
-    private val sp: SP,
+    private val sp: KeyValueStore,
     private val aapsLogger: AAPSLogger
 ) : ActivityVitalsProvider {
 
@@ -68,7 +68,7 @@ class UnifiedActivityProviderMTR @Inject constructor(
         private const val WINDOW_SLACK_MS = 150_000L
 
         /**
-         * Same read as the instance [getMode], for a caller that has no [SP] to inject - this is
+         * Same read as the instance [getMode], for a caller that has no [KeyValueStore] to inject - this is
          * the platform's default preference store either way, via [cache]'s `null`-store convention.
          */
         fun getMode(cache: app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache): String =

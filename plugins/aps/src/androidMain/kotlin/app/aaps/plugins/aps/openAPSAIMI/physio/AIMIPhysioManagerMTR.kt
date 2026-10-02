@@ -9,7 +9,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.SP
+import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.keys.BooleanKey
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
@@ -48,7 +48,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
     private val llmAnalyzer: AIMILLMPhysioAnalyzerMTR, // Optional
     private val unifiedActivityProvider: UnifiedActivityProviderMTR,
     private val pipelineWatchdog: AIMIPhysioPipelineWatchdogMTR,
-    private val sp: SP,
+    private val sp: KeyValueStore,
     private val aapsLogger: AAPSLogger
 ) {
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

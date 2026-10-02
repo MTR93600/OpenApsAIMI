@@ -53,7 +53,7 @@ import app.aaps.core.interfaces.rx.events.EventAPSCalculationFinished
 import app.aaps.core.interfaces.rx.events.EventPreferenceChange
 import app.aaps.core.interfaces.maintenance.ImportExportPrefs
 import app.aaps.core.interfaces.protection.ExportPasswordDataStore
-import app.aaps.core.interfaces.sharedPreferences.SP
+import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.interfaces.stats.TirCalculator
 import app.aaps.core.interfaces.ui.UiInteraction
@@ -196,7 +196,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val hardLimits: HardLimits,
     private val preferences: Preferences,
     private val pkPdLearnedState: PkPdLearnedState,
-    private val sp: SP,
+    private val sp: KeyValueStore,
     protected val dateUtil: DateUtil,
     private val processedTbrEbData: ProcessedTbrEbData,
     private val persistenceLayer: PersistenceLayer,
@@ -2001,6 +2001,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         physioContextStore = physioContextStore,
                         aapsLogger = aapsLogger,
                         dateUtil = dateUtil,
+                        textResolver = rh,
                         onBack = onBack,
                     )
                 },

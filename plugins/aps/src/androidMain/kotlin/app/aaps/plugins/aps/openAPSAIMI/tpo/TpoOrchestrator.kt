@@ -4,7 +4,7 @@ import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiTpo
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.SP
+import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
@@ -31,9 +31,9 @@ class TpoOrchestrator @Inject constructor(
     private val preferences: Preferences,
     private val storage: AimiStorage,
     private val aiCoachingService: AiCoachingService,
-    private val sp: SP,
+    private val sp: KeyValueStore,
     private val aapsLogger: AAPSLogger,
-    private val tpoNotificationManager: TpoNotificationManager,
+    private val tpoNotifications: TpoNotifications,
     private val keyValueCache: AimiKeyValueCache,
 ) : AimiTpo {
     private val persistence = TpoPersistence(storage)
@@ -60,7 +60,7 @@ class TpoOrchestrator @Inject constructor(
         val changed = sessionManager.revertNow(preferences, historyRepo, aimiWallClockMs())
         if (changed) {
             prefsChangedThisTick = true
-            tpoNotificationManager.showSessionEnded(TpoEndReason.MANUAL_REVERT)
+            tpoNotifications.showSessionEnded(TpoEndReason.MANUAL_REVERT)
         }
         return changed
     }
@@ -70,7 +70,7 @@ class TpoOrchestrator @Inject constructor(
         val changed = sessionManager.expireIfNeeded(nowMs, preferences, historyRepo)
         if (changed) {
             prefsChangedThisTick = true
-            tpoNotificationManager.showSessionEnded(TpoEndReason.EXPIRED)
+            tpoNotifications.showSessionEnded(TpoEndReason.EXPIRED)
         }
         return changed
     }
@@ -132,7 +132,7 @@ class TpoOrchestrator @Inject constructor(
                 return false
             }
             sessionManager.supersedeActiveSession(preferences, historyRepo, nowMs)
-            tpoNotificationManager.showSessionEnded(TpoEndReason.SUPERSEDED)
+            tpoNotifications.showSessionEnded(TpoEndReason.SUPERSEDED)
         }
 
         val plan = TpoDeltaBuilder.buildPlan(
@@ -150,7 +150,7 @@ class TpoOrchestrator @Inject constructor(
         if (!llmConfirmEnabled) {
             val session = sessionManager.startSession(plan, preferences, nowMs, llmResult = null, historyRepo)
             prefsChangedThisTick = true
-            tpoNotificationManager.showSessionStarted(session)
+            tpoNotifications.showSessionStarted(session)
             aapsLogger.info(LTag.APS, "TPO applied ${proposal.packId.name} algo-only")
             return true
         }
@@ -166,7 +166,7 @@ class TpoOrchestrator @Inject constructor(
                 if (llmValidator.shouldApply(result, llmConfirmEnabled = true)) {
                     if (sessionManager.activatePendingSession(pending, preferences, result, historyRepo)) {
                         prefsChangedThisTick = true
-                        sessionManager.currentSession()?.let { tpoNotificationManager.showSessionStarted(it) }
+                        sessionManager.currentSession()?.let { tpoNotifications.showSessionStarted(it) }
                     }
                     aapsLogger.info(LTag.APS, "TPO applied ${proposal.packId.name} LLM=${result.verdict}")
                 } else {

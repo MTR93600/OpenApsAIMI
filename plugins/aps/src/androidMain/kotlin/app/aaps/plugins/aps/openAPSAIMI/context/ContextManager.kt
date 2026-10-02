@@ -7,7 +7,7 @@ import app.aaps.core.data.model.TE
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.SP
+import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.*
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
@@ -54,7 +54,7 @@ import kotlin.time.Duration.Companion.minutes
 class ContextManager @Inject constructor(
     private val contextLLMClient: AimiContextLlm,
     private val contextParser: ContextParser,
-    private val sp: SP,
+    private val sp: KeyValueStore,
     internal val aapsLogger: AAPSLogger,  // Internal for inline functions
     private val persistenceLayer: PersistenceLayer,  // For NS sync
     private val dateUtil: DateUtil

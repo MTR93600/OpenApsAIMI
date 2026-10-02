@@ -8,12 +8,14 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.R as CoreUiR
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -21,13 +23,19 @@ import dev.zacsweers.metro.AppScope
 /**
  * User-visible notification when a TPO protection session starts or ends.
  * Controlled by [BooleanKey.OApsAIMITpoNotifyOnApply].
+ *
+ * This is the Android side of [TpoNotifications]. Everything here is platform work - channels,
+ * `NotificationCompat`, the `PendingIntent` that opens the AIMI screen - which is why it stays in
+ * `androidMain` while the orchestrator that decides when to call it is shared.
  */
+@ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class TpoNotificationManager @Inject constructor(
     private val context: Context,
     private val preferences: Preferences,
     private val uiInteraction: UiInteraction,
-) {
+    private val rh: ResourceHelper,
+) : TpoNotifications {
     companion object {
         private const val CHANNEL_ID_STARTED = "AIMI_TPO_PROTECTION"
         private const val CHANNEL_ID_ENDED = "AIMI_TPO_PROTECTION_ENDED"
@@ -41,12 +49,12 @@ class TpoNotificationManager @Inject constructor(
         createNotificationChannels()
     }
 
-    fun showSessionStarted(session: TpoSessionDocument) {
+    override fun showSessionStarted(session: TpoSessionDocument) {
         if (!preferences.get(BooleanKey.OApsAIMITpoNotifyOnApply)) return
         if (session.status != TpoSessionStatus.ACTIVE) return
 
         val ui = TpoUiSupport.buildActiveSessionUi(session, aimiWallClockMs()) ?: return
-        val packLabel = context.getString(ui.packTitleResId)
+        val packLabel = rh.gs(ui.packTitle)
         val title = context.getString(R.string.aimi_tpo_notification_started_title)
         val text = context.getString(
             R.string.aimi_tpo_notification_started_text,
@@ -81,7 +89,7 @@ class TpoNotificationManager @Inject constructor(
         )
     }
 
-    fun showSessionEnded(reason: TpoEndReason) {
+    override fun showSessionEnded(reason: TpoEndReason) {
         if (!preferences.get(BooleanKey.OApsAIMITpoNotifyOnApply)) return
         cancelStartedNotification()
         val title = context.getString(R.string.aimi_tpo_notification_ended_title)
@@ -171,10 +179,4 @@ class TpoNotificationManager @Inject constructor(
         notificationManager.createNotificationChannel(startedChannel)
         notificationManager.createNotificationChannel(endedChannel)
     }
-}
-
-enum class TpoEndReason {
-    EXPIRED,
-    MANUAL_REVERT,
-    SUPERSEDED,
 }

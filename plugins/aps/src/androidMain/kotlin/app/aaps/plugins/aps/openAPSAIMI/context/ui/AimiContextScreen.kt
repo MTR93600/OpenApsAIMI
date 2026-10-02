@@ -40,21 +40,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
-import app.aaps.plugins.aps.R
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextManager
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextPreset
@@ -63,7 +65,6 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStatePresentationBuilder
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioContextStoreMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextRepository
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
@@ -86,12 +87,12 @@ fun AimiContextScreen(
     physioContextStore: AIMIPhysioContextStoreMTR,
     aapsLogger: AAPSLogger,
     dateUtil: DateUtil,
+    textResolver: TextResolver,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val lifecycleOwner = LocalLifecycleOwner.current
-    val context = LocalContext.current
 
     var intents by remember { mutableStateOf<List<Pair<String, ContextIntent>>>(emptyList()) }
     var chatText by remember { mutableStateOf("") }
@@ -104,9 +105,9 @@ fun AimiContextScreen(
     var showClearAllDialog by remember { mutableStateOf(false) }
     var parseErrorMessage by remember { mutableStateOf<String?>(null) }
 
-    val llmFailureMessage = stringResource(R.string.aimi_context_llm_failure_message)
-    val offlineFailureMessage = stringResource(R.string.aimi_context_offline_failure_message)
-    val errorPrefix = stringResource(R.string.aimi_context_error_prefix)
+    val llmFailureMessage = stringResource(ApsStrings.aimi_context_llm_failure_message)
+    val offlineFailureMessage = stringResource(ApsStrings.aimi_context_offline_failure_message)
+    val errorPrefix = stringResource(ApsStrings.aimi_context_error_prefix)
 
     fun refreshIntents() {
         intents = contextManager.getAllIntents().toList()
@@ -134,7 +135,7 @@ fun AimiContextScreen(
             if (event == Lifecycle.Event.ON_RESUME) {
                 refreshIntents()
                 refreshPatientState()
-                scope.launch(Dispatchers.IO) {
+                scope.launch(aapsIoDispatcher) {
                     runCatching { healthContextRepository.fetchSnapshot() }
                         .onFailure { aapsLogger.error(LTag.APS, "AimiContextScreen physio snapshot refresh failed", it) }
                 }
@@ -154,7 +155,7 @@ fun AimiContextScreen(
                 if (ids.isNotEmpty()) {
                     chatText = ""
                     snackbarHostState.showSnackbar(
-                        context.getString(R.string.aimi_context_intent_added, ids.size)
+                        textResolver.gs(ApsStrings.aimi_context_intent_added, ids.size)
                     )
                 } else {
                     parseErrorMessage = if (llmEnabled) llmFailureMessage else offlineFailureMessage
@@ -184,12 +185,12 @@ fun AimiContextScreen(
         Scaffold(
             topBar = {
                 AapsTopAppBar(
-                    title = { Text(stringResource(R.string.context_title)) },
+                    title = { Text(stringResource(ApsStrings.context_title)) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(app.aaps.core.ui.R.string.back),
+                                contentDescription = stringResource(CoreUiStrings.back),
                             )
                         }
                     },
@@ -207,7 +208,7 @@ fun AimiContextScreen(
                 verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
             ) {
                 Text(
-                    text = stringResource(R.string.aimi_context_intro),
+                    text = stringResource(ApsStrings.aimi_context_intro),
                     style = MaterialTheme.typography.bodyMedium,
                 )
 
@@ -219,16 +220,16 @@ fun AimiContextScreen(
                     value = chatText,
                     onValueChange = { chatText = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.aimi_context_chat_hint)) },
+                    label = { Text(stringResource(ApsStrings.aimi_context_chat_hint)) },
                     minLines = 2,
                     maxLines = 4,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(AapsSpacing.medium)) {
                     Button(onClick = { onSend() }, enabled = !busy) {
-                        Text(stringResource(R.string.aimi_context_send_button))
+                        Text(stringResource(ApsStrings.aimi_context_send_button))
                     }
                     OutlinedButton(onClick = { chatText = "" }, enabled = !busy) {
-                        Text(stringResource(R.string.aimi_context_clear_button))
+                        Text(stringResource(ApsStrings.aimi_context_clear_button))
                     }
                     if (busy) {
                         CircularProgressIndicator(modifier = Modifier.padding(AapsSpacing.small))
@@ -236,7 +237,7 @@ fun AimiContextScreen(
                 }
 
                 Text(
-                    text = stringResource(R.string.aimi_context_presets_title),
+                    text = stringResource(ApsStrings.aimi_context_presets_title),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 PresetChips(onPreset = ::onPreset)
@@ -246,16 +247,16 @@ fun AimiContextScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = stringResource(R.string.aimi_context_active_intents_title),
+                        text = stringResource(ApsStrings.aimi_context_active_intents_title),
                         style = MaterialTheme.typography.titleSmall,
                     )
                     TextButton(onClick = { showClearAllDialog = true }, enabled = intents.isNotEmpty()) {
-                        Text(stringResource(R.string.aimi_context_clear_all_button))
+                        Text(stringResource(ApsStrings.aimi_context_clear_all_button))
                     }
                 }
                 if (intents.isEmpty()) {
                     Text(
-                        text = stringResource(R.string.aimi_context_empty_state),
+                        text = stringResource(ApsStrings.aimi_context_empty_state),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -275,14 +276,14 @@ fun AimiContextScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = AapsSpacing.medium))
                 Text(
-                    text = stringResource(R.string.aimi_context_settings_title),
+                    text = stringResource(ApsStrings.aimi_context_settings_title),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(stringResource(R.string.aimi_context_module_enabled_label))
+                    Text(stringResource(ApsStrings.aimi_context_module_enabled_label))
                     Switch(
                         checked = contextEnabled,
                         onCheckedChange = {
@@ -295,7 +296,7 @@ fun AimiContextScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(stringResource(R.string.aimi_context_llm_enabled_label))
+                    Text(stringResource(ApsStrings.aimi_context_llm_enabled_label))
                     Switch(
                         checked = llmEnabled,
                         onCheckedChange = {
@@ -323,8 +324,8 @@ fun AimiContextScreen(
     if (showClearAllDialog) {
         AlertDialog(
             onDismissRequest = { showClearAllDialog = false },
-            title = { Text(stringResource(R.string.aimi_context_clear_all_confirm_title)) },
-            text = { Text(stringResource(R.string.aimi_context_clear_all_confirm_message)) },
+            title = { Text(stringResource(ApsStrings.aimi_context_clear_all_confirm_title)) },
+            text = { Text(stringResource(ApsStrings.aimi_context_clear_all_confirm_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -332,11 +333,11 @@ fun AimiContextScreen(
                         refreshIntents()
                         showClearAllDialog = false
                     },
-                ) { Text(stringResource(R.string.aimi_context_clear_all_confirm_button)) }
+                ) { Text(stringResource(ApsStrings.aimi_context_clear_all_confirm_button)) }
             },
             dismissButton = {
                 TextButton(onClick = { showClearAllDialog = false }) {
-                    Text(stringResource(app.aaps.core.ui.R.string.cancel))
+                    Text(stringResource(CoreUiStrings.cancel))
                 }
             },
         )
@@ -346,11 +347,11 @@ fun AimiContextScreen(
     if (currentParseError != null) {
         AlertDialog(
             onDismissRequest = { parseErrorMessage = null },
-            title = { Text(stringResource(R.string.aimi_context_parse_failed_title)) },
+            title = { Text(stringResource(ApsStrings.aimi_context_parse_failed_title)) },
             text = { Text(currentParseError) },
             confirmButton = {
                 TextButton(onClick = { parseErrorMessage = null }) {
-                    Text(stringResource(app.aaps.core.ui.R.string.ok))
+                    Text(stringResource(CoreUiStrings.ok))
                 }
             },
         )
@@ -397,8 +398,8 @@ private fun IntentRow(
                     }
                 }
                 Row {
-                    TextButton(onClick = onExtend) { Text(stringResource(R.string.aimi_context_extend_action)) }
-                    TextButton(onClick = onRemove) { Text(stringResource(R.string.aimi_context_remove_action)) }
+                    TextButton(onClick = onExtend) { Text(stringResource(ApsStrings.aimi_context_extend_action)) }
+                    TextButton(onClick = onRemove) { Text(stringResource(ApsStrings.aimi_context_remove_action)) }
                 }
             }
         }
@@ -408,14 +409,14 @@ private fun IntentRow(
 @Composable
 private fun ExtendDurationDialog(onDismiss: () -> Unit, onPick: (Int) -> Unit) {
     val options = listOf(
-        15 to stringResource(R.string.aimi_context_duration_minutes, 15),
-        30 to stringResource(R.string.aimi_context_duration_minutes, 30),
-        60 to stringResource(R.string.aimi_context_duration_hours, 1),
-        120 to stringResource(R.string.aimi_context_duration_hours, 2),
+        15 to stringResource(ApsStrings.aimi_context_duration_minutes, 15),
+        30 to stringResource(ApsStrings.aimi_context_duration_minutes, 30),
+        60 to stringResource(ApsStrings.aimi_context_duration_hours, 1),
+        120 to stringResource(ApsStrings.aimi_context_duration_hours, 2),
     )
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.aimi_context_extend_dialog_title)) },
+        title = { Text(stringResource(ApsStrings.aimi_context_extend_dialog_title)) },
         text = {
             Column {
                 options.forEach { (minutes, label) ->
@@ -427,7 +428,7 @@ private fun ExtendDurationDialog(onDismiss: () -> Unit, onPick: (Int) -> Unit) {
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(app.aaps.core.ui.R.string.cancel)) }
+            TextButton(onClick = onDismiss) { Text(stringResource(CoreUiStrings.cancel)) }
         },
     )
 }
@@ -453,12 +454,12 @@ private fun PhysioNarrativePanel(narrative: String) {
             verticalArrangement = Arrangement.spacedBy(AapsSpacing.small),
         ) {
             Text(
-                text = stringResource(R.string.aimi_context_physio_narrative_title),
+                text = stringResource(ApsStrings.aimi_context_physio_narrative_title),
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(text = narrative, style = MaterialTheme.typography.bodyMedium)
             Text(
-                text = stringResource(R.string.aimi_context_physio_narrative_footnote),
+                text = stringResource(ApsStrings.aimi_context_physio_narrative_footnote),
                 style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -475,12 +476,12 @@ private fun PatientStatePanel(presentation: PatientStatePresentation?) {
             verticalArrangement = Arrangement.spacedBy(AapsSpacing.small),
         ) {
             Text(
-                text = stringResource(R.string.aimi_context_patient_state_title),
+                text = stringResource(ApsStrings.aimi_context_patient_state_title),
                 style = MaterialTheme.typography.titleSmall,
             )
             if (presentation == null) {
                 Text(
-                    text = stringResource(R.string.context_patient_state_empty),
+                    text = stringResource(ApsStrings.context_patient_state_empty),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 return@Column
@@ -489,13 +490,13 @@ private fun PatientStatePanel(presentation: PatientStatePresentation?) {
             Text(text = presentation.modeHeadline, fontWeight = FontWeight.Medium)
             Text(text = presentation.narrative, style = MaterialTheme.typography.bodyMedium)
 
-            LabeledValue(stringResource(R.string.aimi_context_patient_state_live_body_label), presentation.physioLiveSummary)
-            LabeledValue(stringResource(R.string.aimi_context_patient_state_thermal_label), presentation.thermalSummary)
-            LabeledValue(stringResource(R.string.aimi_context_patient_state_phase_label), presentation.physiologySummary)
-            LabeledValue(stringResource(R.string.aimi_context_patient_state_intent_label), presentation.intentSummary)
+            LabeledValue(stringResource(ApsStrings.aimi_context_patient_state_live_body_label), presentation.physioLiveSummary)
+            LabeledValue(stringResource(ApsStrings.aimi_context_patient_state_thermal_label), presentation.thermalSummary)
+            LabeledValue(stringResource(ApsStrings.aimi_context_patient_state_phase_label), presentation.physiologySummary)
+            LabeledValue(stringResource(ApsStrings.aimi_context_patient_state_intent_label), presentation.intentSummary)
 
             Text(
-                text = stringResource(R.string.aimi_context_patient_state_signals_label),
+                text = stringResource(ApsStrings.aimi_context_patient_state_signals_label),
                 style = MaterialTheme.typography.labelMedium,
             )
             presentation.signalGauges.forEach { gauge ->
@@ -512,8 +513,8 @@ private fun PatientStatePanel(presentation: PatientStatePresentation?) {
             }
             Text(text = presentation.signalSummary, style = MaterialTheme.typography.bodySmall)
 
-            LabeledValue(stringResource(R.string.aimi_context_patient_state_bias_label), presentation.deliverySummary)
-            LabeledValue(stringResource(R.string.aimi_context_patient_state_reasons_label), presentation.reasonSummary)
+            LabeledValue(stringResource(ApsStrings.aimi_context_patient_state_bias_label), presentation.deliverySummary)
+            LabeledValue(stringResource(ApsStrings.aimi_context_patient_state_reasons_label), presentation.reasonSummary)
         }
     }
 }
@@ -531,39 +532,39 @@ private fun String.titleCase(): String = lowercase().replaceFirstChar { it.upper
 @Composable
 private fun intentSummary(intent: ContextIntent): String = when (intent) {
     is ContextIntent.Activity            -> stringResource(
-        R.string.aimi_context_intent_activity, intent.activityType.name.titleCase(), intent.intensity.name.titleCase()
+        ApsStrings.aimi_context_intent_activity, intent.activityType.name.titleCase(), intent.intensity.name.titleCase()
     )
 
     is ContextIntent.Illness             -> stringResource(
-        R.string.aimi_context_intent_illness, intent.symptomType.name.titleCase(), intent.intensity.name.titleCase()
+        ApsStrings.aimi_context_intent_illness, intent.symptomType.name.titleCase(), intent.intensity.name.titleCase()
     )
 
     is ContextIntent.Stress              -> stringResource(
-        R.string.aimi_context_intent_stress, intent.stressType.name.titleCase(), intent.intensity.name.titleCase()
+        ApsStrings.aimi_context_intent_stress, intent.stressType.name.titleCase(), intent.intensity.name.titleCase()
     )
 
     is ContextIntent.UnannouncedMealRisk -> stringResource(
-        R.string.aimi_context_intent_meal_risk, intent.intensity.name.titleCase()
+        ApsStrings.aimi_context_intent_meal_risk, intent.intensity.name.titleCase()
     )
 
     is ContextIntent.Alcohol             -> stringResource(
-        R.string.aimi_context_intent_alcohol, intent.units, intent.intensity.name.titleCase()
+        ApsStrings.aimi_context_intent_alcohol, intent.units, intent.intensity.name.titleCase()
     )
 
     is ContextIntent.Travel              -> stringResource(
-        R.string.aimi_context_intent_travel, intent.timezoneShiftHours, intent.intensity.name.titleCase()
+        ApsStrings.aimi_context_intent_travel, intent.timezoneShiftHours, intent.intensity.name.titleCase()
     )
 
     is ContextIntent.MenstrualCycle      -> stringResource(
-        R.string.aimi_context_intent_cycle, intent.phase.name.titleCase()
+        ApsStrings.aimi_context_intent_cycle, intent.phase.name.titleCase()
     )
 
     is ContextIntent.SlowCarbMeal        -> stringResource(
-        R.string.aimi_context_intent_slow_carb, intent.intensity.name.titleCase()
+        ApsStrings.aimi_context_intent_slow_carb, intent.intensity.name.titleCase()
     )
 
     is ContextIntent.HypoRecovery        -> stringResource(
-        R.string.aimi_context_intent_hypo_recovery, intent.intensity.name.titleCase()
+        ApsStrings.aimi_context_intent_hypo_recovery, intent.intensity.name.titleCase()
     )
 
     is ContextIntent.Custom              -> intent.description
@@ -573,18 +574,18 @@ private fun intentSummary(intent: ContextIntent): String = when (intent) {
 private fun timeRemainingLabel(intent: ContextIntent, nowMs: Long): String {
     val remainingMinutes = (intent.endTimeMs - nowMs) / 60_000L
     return when {
-        remainingMinutes <= 0L  -> stringResource(R.string.aimi_context_time_expired)
-        remainingMinutes < 60L  -> stringResource(R.string.aimi_context_time_minutes, remainingMinutes)
+        remainingMinutes <= 0L  -> stringResource(ApsStrings.aimi_context_time_expired)
+        remainingMinutes < 60L  -> stringResource(ApsStrings.aimi_context_time_minutes, remainingMinutes)
         else                    -> stringResource(
-            R.string.aimi_context_time_hours_minutes, remainingMinutes / 60L, remainingMinutes % 60L
+            ApsStrings.aimi_context_time_hours_minutes, remainingMinutes / 60L, remainingMinutes % 60L
         )
     }
 }
 
 @Composable
 private fun confidenceLabel(confidence: Float): String? = when {
-    confidence >= 0.90f -> stringResource(R.string.aimi_context_confidence_high)
-    confidence >= 0.70f -> stringResource(R.string.aimi_context_confidence_medium)
-    confidence >= 0.50f -> stringResource(R.string.aimi_context_confidence_low)
+    confidence >= 0.90f -> stringResource(ApsStrings.aimi_context_confidence_high)
+    confidence >= 0.70f -> stringResource(ApsStrings.aimi_context_confidence_medium)
+    confidence >= 0.50f -> stringResource(ApsStrings.aimi_context_confidence_low)
     else                -> null
 }

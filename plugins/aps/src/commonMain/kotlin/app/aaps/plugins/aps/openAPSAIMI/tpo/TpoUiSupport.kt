@@ -1,13 +1,13 @@
 package app.aaps.plugins.aps.openAPSAIMI.tpo
 
-import androidx.annotation.StringRes
-import app.aaps.plugins.aps.R
+import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningChange
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningContextApplySupport
 import kotlin.math.max
 
 internal data class TpoActiveSessionUi(
-    @StringRes val packTitleResId: Int,
+    val packTitle: TextRef,
     val tierLabel: String,
     val remainingMinutes: Int,
     val changedKeyCount: Int,
@@ -27,7 +27,7 @@ internal object TpoUiSupport {
         val preview = buildPreviewLines(session)
         val maxPreview = 4
         return TpoActiveSessionUi(
-            packTitleResId = packTitleResId(session.packId),
+            packTitle = packTitle(session.packId),
             tierLabel = session.tier.name,
             remainingMinutes = ((remainingMs + 59_999L) / 60_000L).toInt(),
             changedKeyCount = session.overlay.size,
@@ -53,11 +53,10 @@ internal object TpoUiSupport {
             )
         }
 
-    @StringRes
-    private fun packTitleResId(packId: TpoPackId): Int =
+    private fun packTitle(packId: TpoPackId): TextRef =
         when (packId) {
-            TpoPackId.POST_HYPO_RECOVERY -> R.string.aimi_tpo_pack_post_hypo
-            TpoPackId.POOR_SLEEP_WINDOW -> R.string.aimi_tpo_pack_poor_sleep
-            TpoPackId.EXHAUSTED_RECOVERY -> R.string.aimi_tpo_pack_exhausted
+            TpoPackId.POST_HYPO_RECOVERY -> ApsStrings.aimi_tpo_pack_post_hypo
+            TpoPackId.POOR_SLEEP_WINDOW -> ApsStrings.aimi_tpo_pack_poor_sleep
+            TpoPackId.EXHAUSTED_RECOVERY -> ApsStrings.aimi_tpo_pack_exhausted
         }
 }

@@ -4,7 +4,7 @@ import app.aaps.core.data.model.SC
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.SP
+import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.plugins.aps.openAPSAIMI.StepService
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import java.util.Timer
@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 @SingleIn(AppScope::class)
 class AIMIPhoneStepsSyncServiceMTR @Inject constructor(
     private val persistenceLayer: PersistenceLayer,
-    private val sp: SP,
+    private val sp: KeyValueStore,
     private val aapsLogger: AAPSLogger
 ) {
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

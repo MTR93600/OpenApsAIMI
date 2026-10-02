@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
-import androidx.annotation.StringRes
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -38,16 +37,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.SliderWithButtons
 import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
 import app.aaps.core.ui.compose.stringResource
-import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoActiveSessionUi
@@ -127,9 +126,9 @@ fun AimiControlCenterScreen(
             draft = targetDraft,
         )
     }
-    val appliedMessage = stringResource(R.string.aimi_control_center_apply_done)
-    val recommendationLoadedMessage = stringResource(R.string.aimi_control_center_advisor_loaded)
-    val tpoRevertDoneMessage = stringResource(R.string.aimi_tpo_revert_done)
+    val appliedMessage = stringResource(ApsStrings.aimi_control_center_apply_done)
+    val recommendationLoadedMessage = stringResource(ApsStrings.aimi_control_center_advisor_loaded)
+    val tpoRevertDoneMessage = stringResource(ApsStrings.aimi_tpo_revert_done)
     val tpoActiveSessionUi = remember(tpoUiRevision) {
         TpoUiSupport.buildActiveSessionUi(
             session = tpoOrchestrator.currentSession(),
@@ -162,11 +161,11 @@ fun AimiControlCenterScreen(
     if (showApplyConfirm) {
         AlertDialog(
             onDismissRequest = { showApplyConfirm = false },
-            title = { Text(stringResource(R.string.aimi_control_center_confirm_apply_title)) },
+            title = { Text(stringResource(ApsStrings.aimi_control_center_confirm_apply_title)) },
             text = {
                 Text(
                     stringResource(
-                        R.string.aimi_control_center_confirm_apply_body,
+                        ApsStrings.aimi_control_center_confirm_apply_body,
                         pendingChanges.changedFamilyCount,
                         pendingChanges.changedSettingsCount,
                     ),
@@ -179,12 +178,12 @@ fun AimiControlCenterScreen(
                         applyDraft()
                     },
                 ) {
-                    Text(stringResource(R.string.aimi_control_center_apply_changes))
+                    Text(stringResource(ApsStrings.aimi_control_center_apply_changes))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showApplyConfirm = false }) {
-                    Text(stringResource(android.R.string.cancel))
+                    Text(stringResource(CoreUiStrings.cancel))
                 }
             },
         )
@@ -193,8 +192,8 @@ fun AimiControlCenterScreen(
     if (showTpoRevertConfirm) {
         AlertDialog(
             onDismissRequest = { showTpoRevertConfirm = false },
-            title = { Text(stringResource(R.string.aimi_tpo_revert_confirm_title)) },
-            text = { Text(stringResource(R.string.aimi_tpo_revert_confirm_body)) },
+            title = { Text(stringResource(ApsStrings.aimi_tpo_revert_confirm_title)) },
+            text = { Text(stringResource(ApsStrings.aimi_tpo_revert_confirm_body)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -206,12 +205,12 @@ fun AimiControlCenterScreen(
                         }
                     },
                 ) {
-                    Text(stringResource(R.string.aimi_tpo_revert_now))
+                    Text(stringResource(ApsStrings.aimi_tpo_revert_now))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showTpoRevertConfirm = false }) {
-                    Text(stringResource(android.R.string.cancel))
+                    Text(stringResource(CoreUiStrings.cancel))
                 }
             },
         )
@@ -223,12 +222,12 @@ fun AimiControlCenterScreen(
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 topBar = {
                     AapsTopAppBar(
-                        title = { Text(stringResource(R.string.aimi_control_center_title)) },
+                        title = { Text(stringResource(ApsStrings.aimi_control_center_title)) },
                         navigationIcon = {
                             IconButton(onClick = onBack) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = stringResource(app.aaps.core.ui.R.string.back),
+                                    contentDescription = stringResource(CoreUiStrings.back),
                                 )
                             }
                         },
@@ -353,7 +352,7 @@ fun AimiControlCenterScreen(
                     ControlSectionCard(section = currentSnapshot.sourceSection)
 
                     Text(
-                        text = stringResource(R.string.aimi_control_center_footer_v2),
+                        text = stringResource(ApsStrings.aimi_control_center_footer_v2),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -379,19 +378,19 @@ private fun TpoActiveSessionCard(
             verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
         ) {
             Text(
-                text = stringResource(R.string.aimi_tpo_active_session_title),
+                text = stringResource(ApsStrings.aimi_tpo_active_session_title),
                 style = MaterialTheme.typography.titleMedium,
             )
             if (sessionUi.status == TpoSessionStatus.PENDING_LLM) {
                 Text(
-                    text = stringResource(R.string.aimi_tpo_active_session_pending),
+                    text = stringResource(ApsStrings.aimi_tpo_active_session_pending),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
             Text(
                 text = stringResource(
-                    R.string.aimi_tpo_active_session_summary,
-                    stringResource(sessionUi.packTitleResId),
+                    ApsStrings.aimi_tpo_active_session_summary,
+                    stringResource(sessionUi.packTitle),
                     sessionUi.tierLabel,
                     sessionUi.remainingMinutes,
                     sessionUi.changedKeyCount,
@@ -406,7 +405,7 @@ private fun TpoActiveSessionCard(
             }
             if (sessionUi.extraChangeCount > 0) {
                 Text(
-                    text = stringResource(R.string.aimi_tpo_extra_changes, sessionUi.extraChangeCount),
+                    text = stringResource(ApsStrings.aimi_tpo_extra_changes, sessionUi.extraChangeCount),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -415,7 +414,7 @@ private fun TpoActiveSessionCard(
                     onClick = onRevertNow,
                     modifier = Modifier.align(Alignment.End),
                 ) {
-                    Text(stringResource(R.string.aimi_tpo_revert_now))
+                    Text(stringResource(ApsStrings.aimi_tpo_revert_now))
                 }
             }
         }
@@ -440,22 +439,22 @@ private fun ControlCenterIntroCard(
             verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
         ) {
             Text(
-                text = stringResource(R.string.aimi_control_center_intro_title),
+                text = stringResource(ApsStrings.aimi_control_center_intro_title),
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                text = stringResource(R.string.aimi_control_center_intro_v2),
+                text = stringResource(ApsStrings.aimi_control_center_intro_v2),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(AapsSpacing.small),
             ) {
-                ControlPill(text = stringResource(R.string.aimi_control_center_preserve_note))
-                ControlPill(text = stringResource(R.string.aimi_control_center_family_count, familyCount))
-                ControlPill(text = stringResource(R.string.aimi_control_center_expert_count, expertFamilyCount))
-                ControlPill(text = stringResource(R.string.aimi_control_center_managed_count, managedSettingCount))
-                ControlPill(text = stringResource(R.string.aimi_control_center_expert_setting_count, expertSettingCount))
+                ControlPill(text = stringResource(ApsStrings.aimi_control_center_preserve_note))
+                ControlPill(text = stringResource(ApsStrings.aimi_control_center_family_count, familyCount))
+                ControlPill(text = stringResource(ApsStrings.aimi_control_center_expert_count, expertFamilyCount))
+                ControlPill(text = stringResource(ApsStrings.aimi_control_center_managed_count, managedSettingCount))
+                ControlPill(text = stringResource(ApsStrings.aimi_control_center_expert_setting_count, expertSettingCount))
             }
         }
     }
@@ -477,16 +476,16 @@ private fun AdvisorRecommendationsCard(
             verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
         ) {
             Text(
-                text = stringResource(R.string.aimi_control_center_advisor_title),
+                text = stringResource(ApsStrings.aimi_control_center_advisor_title),
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                text = stringResource(R.string.aimi_control_center_advisor_summary),
+                text = stringResource(ApsStrings.aimi_control_center_advisor_summary),
                 style = MaterialTheme.typography.bodyMedium,
             )
             if (recommendations.isEmpty()) {
                 Text(
-                    text = stringResource(R.string.aimi_control_center_advisor_none),
+                    text = stringResource(ApsStrings.aimi_control_center_advisor_none),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
@@ -532,14 +531,14 @@ private fun AdvisorRecommendationItem(
                 horizontalArrangement = Arrangement.spacedBy(AapsSpacing.small),
             ) {
                 recommendation.affectedFamilies.forEach { familyId ->
-                    ControlPill(text = stringResource(familyId.titleResId()))
+                    ControlPill(text = stringResource(familyId.title()))
                 }
             }
             TextButton(
                 onClick = onLoadRecommendation,
                 modifier = Modifier.align(Alignment.End),
             ) {
-                Text(stringResource(R.string.aimi_control_center_advisor_load))
+                Text(stringResource(ApsStrings.aimi_control_center_advisor_load))
             }
         }
     }
@@ -570,7 +569,7 @@ private fun AimiFamilyCard(
             )
 
             Text(
-                text = stringResource(R.string.aimi_control_center_current_profile),
+                text = stringResource(ApsStrings.aimi_control_center_current_profile),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -584,10 +583,10 @@ private fun AimiFamilyCard(
                 horizontalArrangement = Arrangement.spacedBy(AapsSpacing.small),
             ) {
                 ControlPill(text = stringResource(snapshot.status.labelResId))
-                ControlPill(text = stringResource(R.string.aimi_control_center_confidence, (snapshot.confidence * 100).roundToInt()))
-                ControlPill(text = stringResource(R.string.aimi_control_center_settings_count, snapshot.managedPreferenceCount))
+                ControlPill(text = stringResource(ApsStrings.aimi_control_center_confidence, (snapshot.confidence * 100).roundToInt()))
+                ControlPill(text = stringResource(ApsStrings.aimi_control_center_settings_count, snapshot.managedPreferenceCount))
                 if (snapshot.expertPreferenceCount > 0) {
-                    ControlPill(text = stringResource(R.string.aimi_control_center_expert_setting_count, snapshot.expertPreferenceCount))
+                    ControlPill(text = stringResource(ApsStrings.aimi_control_center_expert_setting_count, snapshot.expertPreferenceCount))
                 }
             }
             Text(
@@ -605,7 +604,7 @@ private fun AimiFamilyCard(
 
             if (pendingPlan != null) {
                 Text(
-                    text = stringResource(R.string.aimi_control_center_target_after_apply),
+                    text = stringResource(ApsStrings.aimi_control_center_target_after_apply),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -631,8 +630,8 @@ private fun AimiFamilyCard(
             ) {
                 Text(
                     text = stringResource(
-                        if (expandedCurrent) R.string.aimi_control_center_hide_details
-                        else R.string.aimi_control_center_show_current_details,
+                        if (expandedCurrent) ApsStrings.aimi_control_center_hide_details
+                        else ApsStrings.aimi_control_center_show_current_details,
                     ),
                 )
             }
@@ -661,11 +660,11 @@ private fun HarmoniaRuntimeCard(runtime: AimiHarmoniaRuntimeSnapshot) {
             verticalArrangement = Arrangement.spacedBy(AapsSpacing.small),
         ) {
             Text(
-                text = stringResource(R.string.aimi_control_center_harmonia_title),
+                text = stringResource(ApsStrings.aimi_control_center_harmonia_title),
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
-                text = stringResource(R.string.aimi_control_center_harmonia_summary),
+                text = stringResource(ApsStrings.aimi_control_center_harmonia_summary),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -675,15 +674,15 @@ private fun HarmoniaRuntimeCard(runtime: AimiHarmoniaRuntimeSnapshot) {
             ) {
                 ControlPill(text = stringResource(runtime.status.labelResId))
                 if (runtime.selectedForProduction) {
-                    ControlPill(text = stringResource(R.string.aimi_control_center_harmonia_chip_selected))
+                    ControlPill(text = stringResource(ApsStrings.aimi_control_center_harmonia_chip_selected))
                 }
                 if (!runtime.addsSmbAuthority) {
-                    ControlPill(text = stringResource(R.string.aimi_control_center_harmonia_chip_no_smb_authority))
+                    ControlPill(text = stringResource(ApsStrings.aimi_control_center_harmonia_chip_no_smb_authority))
                 }
             }
             if (runtime.status == AimiHarmoniaRuntimeStatus.Unavailable && runtime.details.isEmpty()) {
                 Text(
-                    text = stringResource(R.string.aimi_control_center_harmonia_unavailable_body),
+                    text = stringResource(ApsStrings.aimi_control_center_harmonia_unavailable_body),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -710,11 +709,11 @@ private fun T3cRuntimeCard(runtime: AimiT3cRuntimeSnapshot) {
             verticalArrangement = Arrangement.spacedBy(AapsSpacing.small),
         ) {
             Text(
-                text = stringResource(R.string.aimi_control_center_t3c_title),
+                text = stringResource(ApsStrings.aimi_control_center_t3c_title),
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
-                text = stringResource(R.string.aimi_control_center_t3c_summary),
+                text = stringResource(ApsStrings.aimi_control_center_t3c_summary),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -725,15 +724,15 @@ private fun T3cRuntimeCard(runtime: AimiT3cRuntimeSnapshot) {
                 ControlPill(text = stringResource(runtime.status.labelResId))
                 ControlPill(text = stringResource(runtime.owner.labelResId))
                 if (runtime.authorityApplied) {
-                    ControlPill(text = stringResource(R.string.aimi_control_center_t3c_chip_authority_applied))
+                    ControlPill(text = stringResource(ApsStrings.aimi_control_center_t3c_chip_authority_applied))
                 }
                 if (runtime.shadowOnly) {
-                    ControlPill(text = stringResource(R.string.aimi_control_center_t3c_chip_shadow_only))
+                    ControlPill(text = stringResource(ApsStrings.aimi_control_center_t3c_chip_shadow_only))
                 }
             }
             if (runtime.status == AimiT3cRuntimeStatus.Unavailable && runtime.details.isEmpty()) {
                 Text(
-                    text = stringResource(R.string.aimi_control_center_t3c_unavailable_body),
+                    text = stringResource(ApsStrings.aimi_control_center_t3c_unavailable_body),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -822,12 +821,12 @@ private fun PreviewImpactCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = stringResource(R.string.aimi_control_center_preview_impacts),
+                    text = stringResource(ApsStrings.aimi_control_center_preview_impacts),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 ControlPill(
                     text = stringResource(
-                        R.string.aimi_control_center_preview_changes_count,
+                        ApsStrings.aimi_control_center_preview_changes_count,
                         plan.changes.size,
                     ),
                 )
@@ -849,7 +848,7 @@ private fun PreviewImpactCard(
                 onClick = onResetFamily,
                 modifier = Modifier.align(Alignment.End),
             ) {
-                Text(stringResource(R.string.aimi_control_center_reset_family))
+                Text(stringResource(ApsStrings.aimi_control_center_reset_family))
             }
         }
     }
@@ -871,13 +870,13 @@ private fun PendingChangesCard(
             verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
         ) {
             Text(
-                text = stringResource(R.string.aimi_control_center_pending_title),
+                text = stringResource(ApsStrings.aimi_control_center_pending_title),
                 style = MaterialTheme.typography.titleMedium,
             )
             if (pendingChanges.hasChanges) {
                 Text(
                     text = stringResource(
-                        R.string.aimi_control_center_pending_summary,
+                        ApsStrings.aimi_control_center_pending_summary,
                         pendingChanges.changedFamilyCount,
                         pendingChanges.changedSettingsCount,
                     ),
@@ -891,18 +890,18 @@ private fun PendingChangesCard(
                         onClick = onApplyChanges,
                         modifier = Modifier.weight(1f),
                     ) {
-                        Text(stringResource(R.string.aimi_control_center_apply_changes))
+                        Text(stringResource(ApsStrings.aimi_control_center_apply_changes))
                     }
                     TextButton(
                         onClick = onResetDraft,
                         modifier = Modifier.weight(1f),
                     ) {
-                        Text(stringResource(R.string.aimi_control_center_reset_draft))
+                        Text(stringResource(ApsStrings.aimi_control_center_reset_draft))
                     }
                 }
             } else {
                 Text(
-                    text = stringResource(R.string.aimi_control_center_no_pending_changes),
+                    text = stringResource(ApsStrings.aimi_control_center_no_pending_changes),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -984,7 +983,7 @@ private fun detailText(detail: AimiControlDetail): String =
     when {
         detail.valueResId != null -> stringResource(detail.valueResId)
         !detail.valueText.isNullOrBlank() -> detail.valueText
-        else -> stringResource(R.string.aimi_control_center_not_configured)
+        else -> stringResource(ApsStrings.aimi_control_center_not_configured)
     }
 
 @Composable
@@ -992,7 +991,7 @@ private fun descriptorText(value: AimiValueDescriptor): String =
     when {
         value.valueResId != null -> stringResource(value.valueResId)
         !value.valueText.isNullOrBlank() -> value.valueText
-        else -> stringResource(R.string.aimi_control_center_not_configured)
+        else -> stringResource(ApsStrings.aimi_control_center_not_configured)
     }
 
 @Composable
@@ -1010,12 +1009,11 @@ private fun ControlPill(text: String) {
     }
 }
 
-@StringRes
-private fun AimiBehaviorFamilyId.titleResId(): Int =
+private fun AimiBehaviorFamilyId.title(): TextRef =
     when (this) {
-        AimiBehaviorFamilyId.Protection -> R.string.aimi_control_center_protection_title
-        AimiBehaviorFamilyId.MealCapture -> R.string.aimi_control_center_meal_title
-        AimiBehaviorFamilyId.Stability -> R.string.aimi_control_center_stability_title
-        AimiBehaviorFamilyId.Physio -> R.string.aimi_control_center_physio_title
-        AimiBehaviorFamilyId.Autonomy -> R.string.aimi_control_center_autonomy_title
+        AimiBehaviorFamilyId.Protection -> ApsStrings.aimi_control_center_protection_title
+        AimiBehaviorFamilyId.MealCapture -> ApsStrings.aimi_control_center_meal_title
+        AimiBehaviorFamilyId.Stability -> ApsStrings.aimi_control_center_stability_title
+        AimiBehaviorFamilyId.Physio -> ApsStrings.aimi_control_center_physio_title
+        AimiBehaviorFamilyId.Autonomy -> ApsStrings.aimi_control_center_autonomy_title
     }

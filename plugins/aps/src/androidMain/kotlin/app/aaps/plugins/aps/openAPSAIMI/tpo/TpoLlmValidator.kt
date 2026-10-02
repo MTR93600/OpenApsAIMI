@@ -2,7 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.tpo
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.SP
+import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringKey
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
@@ -15,7 +15,7 @@ import org.json.JSONObject
 import java.util.Locale
 
 internal class TpoLlmValidator(
-    private val sp: SP,
+    private val sp: KeyValueStore,
     private val aiCoachingService: AiCoachingService,
     private val aapsLogger: AAPSLogger,
 ) {

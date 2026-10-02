@@ -245,12 +245,33 @@ module's `strings.xml` into a `XxxStrings` object of `TextRef.Named` (commonMain
    cannot happen silently - it fails to compile.
 4. In Composables import `app.aaps.core.ui.compose.stringResource` alongside the androidx one. Both
    are called `stringResource`; Kotlin picks by parameter type.
+5. **A string whose argument is only known at callback time cannot use `stringResource`.** Hoisting
+   it to a `val` in the composable body is the usual move and it works only for zero-argument
+   strings. When the argument comes from inside a nested non-Composable function - a click handler,
+   an `onSend()` - take a `TextResolver` parameter instead and call `textResolver.gs(ref, arg)`.
+   `TextResolver` is in `core/interfaces/commonMain`, `ResourceHelper` already extends it (so the
+   call site passes `rh`), and `SelectableListToolbar(rh: TextResolver)` in `core/ui/commonMain` is
+   the precedent. Restructuring the callback into a `LaunchedEffect` to make hoisting possible is
+   usually the wrong answer: if the handler suspends on `showSnackbar`, the work after it is
+   deliberately deferred and moving it changes observable behaviour.
 
 Sweep **every** receiver spelling, not just the obvious one: `rh.gs(R.string.x)`,
 `resourceHelper.gs(...)`, the fully qualified `app.aaps.plugins.foo.R.string.x`, and any aliased
 `FooR.string.x`. Each of these has been missed once and found only by a failing test.
 
 After the swap, unwrap `TextRef.AndroidRes(XxxStrings.x)` - the argument is already a `TextRef`.
+
+**Order the substitutions, or a blanket `sed` will break the cross-module ones.** Replacing
+`R\.string\.` first turns `app.aaps.core.ui.R.string.back` into `app.aaps.core.ui.ApsStrings.back`,
+which fails to compile with `Unresolved reference 'ApsStrings'` pointing somewhere unhelpful. Do the
+fully-qualified and aliased forms (`app.aaps.core.ui.R.string.x`, `CoreUiR.string.x`) **first**, then
+the bare `R.string.x`.
+
+**`android.R.string.ok` / `.cancel` are the Android framework table**, not the app's, and have no
+multiplatform form. `CoreUiStrings.ok` / `.cancel` carry identical English text, so the swap is
+parity-safe - but say so explicitly when reporting, because one of these turned out to be the
+`contentDescription` of a back arrow reading "Cancel", a pre-existing oddity a port should carry
+across rather than fix.
 
 **Tests need the same swap**: `whenever(rh.gs(R.string.x))` becomes `whenever(rh.gs(XxxStrings.x))`,
 and a blanket `rh.gs(anyInt())` stub becomes `doAnswer { ... }.whenever(rh).gs(any<TextRef>())` -
@@ -384,9 +405,32 @@ unnoticed for months. It runs on macOS **once a simulator runtime is installed**
 download from Xcode (`xcodebuild -downloadPlatform iOS`). If gradle says *"Xcode does not support
 simulator tests for ios_simulator_arm64"*, that is what it means, not a broken build file.
 
-Never pipe a gradle run: the pipe's exit code hides a failure. Redirect to a log and grep it for
-`^e: `, `BUILD FAILED`, `BUILD SUCCESSFUL`. Read test counts from the XML under
-`<module>/build/test-results/<task>/`, not from the console line.
+Never pipe a gradle run: the pipe's exit code hides a failure. Redirect to a log and grep it.
+
+**`^e: ` alone is not enough, and relying on it has already produced two "clean" reads of failing
+builds.** Only the Kotlin/Native and JVM paths print `e: `. The Android path
+(`:plugins:aps:compileAndroidMain`) prints nothing of the sort - it reports a block like
+
+```
+Problem found: Kotlin compiler error (id: kotlin:compiler:error:compiler-error)
+  Kotlin compiler error
+    Function invocation 'context(...)' expected.
+    Location: /…/DetermineBasalAIMI2.kt line 16055
+```
+
+Two real logs from this campaign carry 4 and 2 of those, with `BUILD FAILED`, and **zero `e: ` lines**.
+So grep for all of it:
+
+```
+grep -E '^e: |Kotlin compiler error|BUILD FAILED|BUILD SUCCESSFUL' <log>
+```
+
+`BUILD FAILED` is the one marker that never lies, so make it the thing you look for first. Read test
+counts from the XML under `<module>/build/test-results/<task>/`, not from the console line.
+
+**Task names**: the KMP-library plugin calls the Android compile `:<module>:compileAndroidMain`.
+There is no `compileFullDebugKotlinAndroid` or `compileDebugKotlinAndroid`. `compileAndroidMain`
+plus `compileKotlinIosArm64` is a useful ~1 minute pre-gate before the ~7 minute full one.
 
 `--rerun` has two gotchas, both measured here, and the first one keeps being paid for even by people
 who were warned about it in writing - assume you will get it wrong and check, rather than assume you

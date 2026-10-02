@@ -11,7 +11,7 @@ import app.aaps.core.data.model.SC
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.SP
+import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
@@ -54,7 +54,7 @@ import dev.zacsweers.metro.AppScope
 class AIMIHealthConnectSyncServiceMTR @Inject constructor(
     private val context: Context,
     private val persistenceLayer: PersistenceLayer,
-    private val sp: SP,
+    private val sp: KeyValueStore,
     private val aapsLogger: AAPSLogger
 ) {
     

@@ -2882,6 +2882,218 @@ keys TPO rewrites from inside a loop tick. The settings themselves are live and 
 only the screen that would show their stored value cannot be opened. Whether to wire the EXPERT tab
 back is the owner's call, and it is a feature decision, not part of this port.
 
+## 6aw. 2026-10-02: the Tpo chain - a seam built, and a lot that mostly did not move
+
+AIMI is **90 `androidMain` / 432 `commonMain`**. Only `TpoUiSupport` (63 lines) moved, plus a new
+31-line interface. The lot was briefed as ~1 866 lines and delivered 94, because the brief's
+blocker list came from an import scan **for the seventh time** and was wrong in both directions
+again. The compiler's verdict, from a probe that moved all three files unconverted and classified
+92 errors, is the only number in this section worth trusting.
+
+### The seam
+
+`TpoNotifications` in `commonMain` with the two methods `TpoOrchestrator` actually calls, implemented
+by the existing `TpoNotificationManager` in `androidMain` with `@ContributesBinding(AppScope::class)`.
+Nothing about how a notification looks or behaves changed - same channels, same `NotificationCompat`
+builder, same `PendingIntent`, same preference gate. `TpoEndReason` had to come with it; it was
+declared at the bottom of `TpoNotificationManager.kt`, not in `TpoModels.kt`.
+
+**There is no iOS implementation, and that is stated in the interface's KDoc rather than hidden.** On
+iOS a TPO session would start and end without telling the user. The owner's rule is that a feature
+should be visibly absent rather than silently dead, so this needs a decision before iOS ships.
+
+**One wart to fix, found on review rather than reported.** Because `packTitleResId: Int` became a
+`TextRef`, the notification manager now resolves that one label with `rh.gs(...)` while the other
+**12** strings in the same class still use `context.getString(...)`. For a user with an AAPS language
+override those two resolve differently, so one notification can mix two languages. The sibling
+`AuditorNotificationManager` uses `context.getString` 7 times and `rh.gs` zero, so the house pattern
+here is `context`. Three ways out: make the whole class use `rh` (consistent, but a wider behaviour
+change than a port should make), duplicate the three-arm `packId -> R.string` `when` locally
+(zero delta, but splits one mapping across two files), or leave it. **Owner's call.**
+
+### What a rewrite onto the shared `NotificationManager` would really cost
+
+Checked properly, because it is the obvious "do it right" move and it is not a like-for-like swap:
+
+1. **`NotificationAction` cannot express TPO's intent.** It is `(buttonText: TextRef, action: () -> Unit)`
+   - a button with an in-process lambda. TPO's is a *content* intent carrying
+   `extra_navigate_route = "plugin_preferences/OpenAPSAIMIPlugin"`, which survives process death.
+   `AndroidSystemNotificationPlatform` hardcodes `setContentIntent(notificationHolder().openAppIntent())`,
+   and that builds a `TaskStackBuilder` to `MainActivity` **with no extras** - so a straight rewrite
+   silently loses the deep link into the AIMI screen.
+2. **No title field, and `bigText == text`.** TPO has a title, a one-line collapsed text and a
+   different multi-line expanded text (up to 4 delta lines plus "N more changes").
+3. **`NotificationId` is append-only** - the system notification id is the enum ordinal.
+4. **Channels change audibly.** TPO owns `AIMI_TPO_PROTECTION` (DEFAULT, no vibration, no sound) and
+   `AIMI_TPO_PROTECTION_ENDED` (HIGH). The shared platform posts everything on one HIGH channel, so
+   the "started" notification gets louder and any per-channel settings the user made are orphaned.
+5. Lost: `ic_shield`, `setOnlyAlertOnce(true)`, `setAutoCancel(true)`.
+6. Gained: iOS works for free, plus swipe-dismissal tracking and expiry.
+
+### Why the rest did not move
+
+- **`AimiContextScreen`** (590): three `androidMain` collaborators totalling 1 481 lines -
+  `ContextManager` (650, only `ConcurrentHashMap`, probably movable on its own),
+  `HealthContextRepository` (403) and `AIMIPhysioContextStoreMTR` (428), the last two carrying
+  `Context` + `Environment` + `File`, i.e. the same storage shape as `HormonitorViewerScreen`.
+- **`TpoOrchestrator`** (192): the seam was necessary and nowhere near sufficient. `SP` is an
+  androidMain interface in **another** module, `AiCoachingService` is 478 androidMain lines, and
+  `TpoLlmValidator` is blocked by `org.json` - whose `JSONObject` is **interpolated straight into the
+  LLM prompt** (`INPUT:\n$payload`), so swapping to kotlinx changes key order, spacing and number
+  formatting in what the model reads. That is a prompt change, not a port.
+- **`AimiControlCenterScreen`** (1 021): now blocked by **exactly one line**, `tpoOrchestrator:
+  TpoOrchestrator` at line 63. The moment the orchestrator moves, this file is a pure `mv`.
+
+Both screens had their string sweep done in place anyway (57 and 62 sites), which is behaviour
+neutral, is covered by the gate, and leaves each one `mv` from done.
+
+### Three lessons, all now in the skill
+
+1. **`grep '^e: '` does not catch Kotlin errors on the Android path.** `:plugins:aps:compileAndroidMain`
+   reports `Problem found: Kotlin compiler error` with a `Location:` line and prints no `e: ` at all.
+   Two real logs in this session carry 4 and 2 such errors with `BUILD FAILED` and **zero** `e: `
+   lines - the grep this skill prescribed would have called both clean. `BUILD FAILED` is the marker
+   that never lies.
+2. **A string whose argument is known only at callback time cannot be hoisted to a `val`.** That move
+   works for zero-argument strings only. `context.getString(R.string.aimi_context_intent_added, ids.size)`
+   has `ids.size` available only inside a nested non-Composable `onSend()`, and the surrounding
+   `showSnackbar` **suspends** - the work after it is deliberately deferred, so restructuring into a
+   `LaunchedEffect` would change observable behaviour. The answer is a `TextResolver` parameter and
+   `textResolver.gs(ref, arg)`; `ResourceHelper` already extends it, so the call site passes `rh`.
+3. **Order the string substitutions.** A blanket `s/R\.string\./ApsStrings./` turns
+   `app.aaps.core.ui.R.string.back` into `app.aaps.core.ui.ApsStrings.back`. Do the fully-qualified
+   and aliased forms first.
+
+### Noticed, not touched
+
+`AimiContextScreen` builds user-visible text by concatenation at lines 166 and 179
+(`showSnackbar("$errorPrefix: ${e.message ?: ""}")`) - the CLAUDE.md anti-pattern. Pre-existing, needs
+a new format-string resource, and is a feature decision rather than part of a port.
+
+## 6ax. 2026-10-02: `SP` is not the blocker it looks like, and `org.json` splits in two
+
+Two structural blockers were measured rather than assumed. One dissolves; the other is real but
+smaller than it looked.
+
+### `SP` blocks 11 AIMI files and none of them needs it
+
+`SP` is the recurring "androidMain-only interface in another module" from 6at - nothing inside
+`:plugins:aps` can move it. It is injected by **11 of the 90** remaining AIMI `androidMain` files,
+and it is what stopped `TpoOrchestrator` (192 lines, which gates the 1 021-line
+`AimiControlCenterScreen`) and `ContextManager` (650, which gates the 590-line `AimiContextScreen`).
+
+But `SP` is **29 lines and all of it is the `@StringRes Int` overloads**. The string-keyed half
+already lives in `KeyValueStore`, in `core/interfaces/commonMain`, and the interface says so itself:
+*"The string keyed half moved to [KeyValueStore] so the preference layer could become common. These
+overloads stayed behind because a resource id only exists on Android."*
+
+Checked every `sp.` call in all 11 files, by reading them, not by counting: **zero resource-id
+calls.** Every one passes a `String` - either `SomeKey.X.key` or a `private const val PREF_KEY_… =
+"…"`. `KeyValueStore` is already injected directly from `commonMain` by `PreferencesImpl`,
+`LocalImportExportPrefs` and `GoogleDriveProvider`, so it is bound and reachable.
+
+So the fix is a type and an import, with no behaviour change at all. **A blocker that had stopped two
+chains across two separate lots was a one-word substitution the whole time.** The lesson is the one
+6av already states and this is its sharpest instance: the blocker was named from the *import* (`SP`),
+and nobody read what the interface actually contained.
+
+### `org.json` is two problems, and the house shim says which is which
+
+`OrgJsonCompat` in `core/data/commonMain` replaces `org.json` accessors and is already used by 22
+files. It does not solve everything, and its own KDoc draws the line precisely:
+
+> Reading is safe to shim; writing changes the bytes on the wire.
+
+That settles the `TpoLlmValidator` question from 6aw. Its `JSONObject` is **built** and interpolated
+into the prompt (`INPUT:\n$payload`), so it is the writing case: key order, spacing and number
+formatting would change what the language model reads. Not a port. The same question has to be asked
+of `AiCoachingService` (478 lines) call by call, because it is the last thing between
+`TpoOrchestrator` and a 1 021-line screen.
+
+### Where the two remaining big chains actually end
+
+- `AimiControlCenterScreen` (1 021) ← `TpoOrchestrator` (192) ← `AiCoachingService` (478) +
+  `TpoLlmValidator` (182) ← **the org.json-in-a-prompt decision**.
+- `AimiContextScreen` (590) ← `ContextManager` (650, freed by the `SP` swap) +
+  `HealthContextRepository` (403) + `AIMIPhysioContextStoreMTR` (428) ← **the storage seam decision**
+  (the same one `HormonitorViewerScreen` and `AimiSupportPackageScreen` need).
+
+Both terminate at decisions already put to the owner. Everything mechanical in front of them is
+being done; nothing further should be guessed past those two points.
+
+## 6ay. 2026-10-02: the `SP` swap done, and every remaining chain traced to its end
+
+### The swap
+
+Ten AIMI files changed `private val sp: SP` to `private val sp: KeyValueStore`, with the matching
+import, plus one KDoc `[SP]` link that would have stopped resolving once the import went. The
+eleventh file only names `SP` in a fully qualified KDoc link, so it needed nothing. Gates after:
+**1836 / 594 / 599, 0 failures, BUILD SUCCESSFUL**, all four tasks confirmed executed rather than
+`UP-TO-DATE`. No behaviour change: same keys, same defaults, same order.
+
+### `org.json` is not "read versus write" - it is "who reads the result"
+
+6ax took `OrgJsonCompat`'s KDoc at its word: *"Reading is safe to shim; writing changes the bytes on
+the wire."* Classifying `AiCoachingService` (478 lines) call by call shows the rule needs one more
+turn. That file uses JSON for exactly two things: building the HTTP request body for OpenAI, Gemini,
+DeepSeek and Claude, and parsing their responses. Its prompt is a `StringBuilder` of plain text and
+**no JSON is interpolated into it**.
+
+A request body is re-read by a JSON parser at the far end, which does not care about key order or
+whitespace. A JSON string pasted into prompt text is read by the *model*, character by character. So:
+
+- **`AiCoachingService` is portable with no decision** - both its write side and its read side are
+  safe, because nothing it produces is read as prose.
+- **`TpoLlmValidator` (182) is a real decision**, because there the JSON *is* the prompt.
+
+That leaves `TpoOrchestrator` - and behind it the 1 021-line `AimiControlCenterScreen` - blocked by
+one 182-line file and one question.
+
+### A probe of the seven remaining "clean-looking" files
+
+Moved all seven at once and let the compiler classify the 68 errors. None moved, and the shape is
+almost entirely **dependency chains inside androidMain**, not platform APIs:
+`AimiClinicalReportEngine` needs `AIMIPhysioManagerMTR`; `AIMIStepsManagerMTR` and
+`AIMIPhysioPipelineWatchdogMTR` need the two steps sync services, `UnifiedActivityProviderMTR`,
+`AIMIHealthConnectPermissionsHandlerMTR` and `HealthContextRepository`. The hubs are the Health
+Connect and steps services, which are genuinely Android.
+
+**`AIMILLMPhysioAnalyzerMTR` (512 lines) produced exactly one error**, and a previous session had
+already found it, written the reason into the file's own KDoc, and left it deliberately:
+
+> `private fun Double.format(decimals: Int): String = "%.${decimals}f".format(this)`
+> … The text it makes goes straight into the prompt the model reads, and it follows the phone's
+> locale, so a shared replacement would change what is sent - a French phone writes `7,5` today and
+> a shared version would write `7.5`.
+
+So 512 lines sit behind one line, and that line is the same decision as `TpoLlmValidator`.
+
+### The decision list, as it now stands
+
+Three of the four open questions are **one question wearing three hats: what reaches a language
+model must not change silently.**
+
+1. **Prompt text formatting.** `AIMILLMPhysioAnalyzerMTR` (512 lines, locale decimal separator) and
+   `TpoLlmValidator` (182 lines, JSON key order and spacing, which gates 1 021 more). Both change
+   what the model reads.
+2. **User-visible `String.format`/`Locale`** in three Compose screens - the `8.35` → `8.4` vs `8.3`
+   rounding difference. Display only, no clinical path.
+3. **A storage seam** for `HealthContextRepository`, `AIMIPhysioContextStoreMTR`,
+   `HormonitorViewerScreen` and `AimiSupportPackageScreen` (`Environment` + `File` + directory
+   discovery).
+4. **A share seam** for `AimiProfileAdvisorScreen` and `AimiSupportPackageScreen` - verified absent
+   by looking for the thing rather than inferring from a grep miss; `ImportExportPrefs` writes export
+   files and is not a share sheet.
+5. **`ContextManager`'s `ConcurrentHashMap`** (22 use sites, three internal coroutines plus the loop
+   tick and a screen). Replacing it with a locked plain map would *fix* compound operations that are
+   not atomic today (`filter` then `remove` in two steps) - which is exactly why it is not a neutral
+   port and was not done.
+6. **The TPO notification resolver wart** from 6aw, and whether TPO should move to the shared
+   notification stack at the cost of its two channels and its deep link.
+
+Everything mechanical in front of these has now been done. Nothing further should be guessed past
+them.
+
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at
