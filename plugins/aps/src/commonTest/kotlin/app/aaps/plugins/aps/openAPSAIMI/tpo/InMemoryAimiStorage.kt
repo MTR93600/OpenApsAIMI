@@ -33,6 +33,8 @@ internal class InMemoryAimiStorage : AimiStorage {
 
     override fun canRead(path: AimiPath): Boolean = exists(path)
 
+    override fun canWrite(path: AimiPath): Boolean = true
+
     override fun createDirectories(path: AimiPath): Boolean = true
 
     override fun createParentDirectories(path: AimiPath): Boolean = true

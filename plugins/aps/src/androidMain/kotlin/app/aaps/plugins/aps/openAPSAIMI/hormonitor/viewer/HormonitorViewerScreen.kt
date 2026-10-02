@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.hormonitor.viewer
 
-import android.os.Environment
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +45,7 @@ import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
 import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.openAPSAIMI.utils.AndroidAimiStudyLocations
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -62,10 +62,7 @@ import kotlin.math.roundToInt
 fun HormonitorViewerScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val reader = remember {
-        val dirs = buildList {
-            runCatching { Environment.getExternalStorageDirectory() }.getOrNull()?.let { add(File(it, "Documents/AAPS")) }
-            runCatching { context.getExternalFilesDir(null) }.getOrNull()?.let { add(File(it, "AAPS")) }
-        }
+        val dirs = AndroidAimiStudyLocations(context).studyDirectories().map { File(it.value) }
         HormonitorReader(dirs)
     }
 

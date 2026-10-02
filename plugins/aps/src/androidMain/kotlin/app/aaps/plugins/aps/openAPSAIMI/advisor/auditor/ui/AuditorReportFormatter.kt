@@ -1,12 +1,12 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui
 
-import android.content.Context
-import app.aaps.plugins.aps.R
+import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.plugins.aps.ApsStrings
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorStatusTracker
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdict
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model.AuditorUIState
-import java.util.Locale
 
 /**
  * Builds user-visible auditor report text from [AuditorVerdictCache] and tracker status.
@@ -26,18 +26,18 @@ object AuditorReportFormatter {
     return resolved.cached.timestamp > lastReadTimestampMs
   }
 
-  fun buildNotificationSummary(context: Context, uiState: AuditorUIState): String {
+  fun buildNotificationSummary(rh: TextResolver, uiState: AuditorUIState): String {
     val count = uiState.insightCount
     return if (count > 1) {
-      context.getString(R.string.aimi_auditor_notification_summary_multiple, count)
+      rh.gs(ApsStrings.aimi_auditor_notification_summary_multiple, count)
     } else {
-      context.getString(R.string.aimi_auditor_notification_summary_single)
+      rh.gs(ApsStrings.aimi_auditor_notification_summary_single)
     }
   }
 
-  fun buildNotificationBigText(context: Context, uiState: AuditorUIState): String {
-    val summary = buildNotificationSummary(context, uiState)
-    val reportBody = buildReportBody(context, includeStatusLine = true)
+  fun buildNotificationBigText(rh: TextResolver, uiState: AuditorUIState): String {
+    val summary = buildNotificationSummary(rh, uiState)
+    val reportBody = buildReportBody(rh, includeStatusLine = true)
       ?: uiState.statusMessage
     return buildString {
       append(summary)
@@ -46,56 +46,56 @@ object AuditorReportFormatter {
       append(reportBody)
       append('\n')
       append('\n')
-      append(context.getString(R.string.aimi_auditor_notification_tap_to_view))
+      append(rh.gs(ApsStrings.aimi_auditor_notification_tap_to_view))
     }
   }
 
-  fun buildInAppNotificationText(context: Context): String {
-    val shortSummary = buildShortVerdictSummary(context)
-      ?: context.getString(R.string.aimi_auditor_notification_summary_single)
-    return context.getString(R.string.aimi_auditor_in_app_notification_summary, shortSummary)
+  fun buildInAppNotificationText(rh: TextResolver): String {
+    val shortSummary = buildShortVerdictSummary(rh)
+      ?: rh.gs(ApsStrings.aimi_auditor_notification_summary_single)
+    return rh.gs(ApsStrings.aimi_auditor_in_app_notification_summary, shortSummary)
   }
 
-  fun buildFullReportMessage(context: Context): String {
-    return buildReportBody(context, includeStatusLine = true)
-      ?: context.getString(R.string.aimi_auditor_report_no_cache)
+  fun buildFullReportMessage(rh: TextResolver): String {
+    return buildReportBody(rh, includeStatusLine = true)
+      ?: rh.gs(ApsStrings.aimi_auditor_report_no_cache)
   }
 
-  fun buildFullReportMessageWithFallback(context: Context): Pair<String, Boolean> {
-    val body = buildReportBody(context, includeStatusLine = true)
+  fun buildFullReportMessageWithFallback(rh: TextResolver): Pair<String, Boolean> {
+    val body = buildReportBody(rh, includeStatusLine = true)
     if (body != null) {
       val aligned = AuditorVerdictCache.resolveForDisplay()?.alignedWithCurrentBg != false
       return body to aligned
     }
-    val staleBody = buildReportBodyFromRecent(context, includeStatusLine = true)
+    val staleBody = buildReportBodyFromRecent(rh, includeStatusLine = true)
     return if (staleBody != null) {
       staleBody to false
     } else {
-      context.getString(R.string.aimi_auditor_report_no_cache) to false
+      rh.gs(ApsStrings.aimi_auditor_report_no_cache) to false
     }
   }
 
-  private fun buildShortVerdictSummary(context: Context): String? {
+  private fun buildShortVerdictSummary(rh: TextResolver): String? {
     val resolved = AuditorVerdictCache.resolveForDisplay() ?: return null
     return resolved.cached.verdict.verdict.name
   }
 
-  private fun buildReportBody(context: Context, includeStatusLine: Boolean): String? {
+  private fun buildReportBody(rh: TextResolver, includeStatusLine: Boolean): String? {
     val resolved = AuditorVerdictCache.resolveForDisplay() ?: return null
     if (!resolved.alignedWithCurrentBg) return null
     return formatVerdict(
-      context,
+      rh,
       resolved.cached.verdict,
       trackerStatusMessageIfNeeded(includeStatusLine),
       staleBgNote = null,
     )
   }
 
-  private fun buildReportBodyFromRecent(context: Context, includeStatusLine: Boolean): String? {
+  private fun buildReportBodyFromRecent(rh: TextResolver, includeStatusLine: Boolean): String? {
     val cached = AuditorVerdictCache.get() ?: return null
-    val staleNote = context.getString(R.string.aimi_auditor_report_stale_bg_note)
+    val staleNote = rh.gs(ApsStrings.aimi_auditor_report_stale_bg_note)
     return formatVerdict(
-      context,
+      rh,
       cached.verdict,
       trackerStatusMessageIfNeeded(includeStatusLine),
       staleBgNote = staleNote,
@@ -109,7 +109,7 @@ object AuditorReportFormatter {
   }
 
   internal fun formatVerdict(
-    context: Context,
+    rh: TextResolver,
     verdict: AuditorVerdict,
     statusMessage: String?,
     staleBgNote: String? = null,
@@ -117,8 +117,8 @@ object AuditorReportFormatter {
     val confidencePercent = (verdict.confidence * 100.0).toInt().coerceIn(0, 100)
     return buildString {
       append(
-        context.getString(
-          R.string.aimi_auditor_report_verdict_line,
+        rh.gs(
+          ApsStrings.aimi_auditor_report_verdict_line,
           verdict.verdict.name,
           confidencePercent,
         )
@@ -129,16 +129,16 @@ object AuditorReportFormatter {
       }
       statusMessage?.let { status ->
         append('\n')
-        append(context.getString(R.string.aimi_auditor_report_status_line, status))
+        append(rh.gs(ApsStrings.aimi_auditor_report_status_line, status))
       }
       if (verdict.degradedMode) {
         append('\n')
-        append(context.getString(R.string.aimi_auditor_report_degraded_mode))
+        append(rh.gs(ApsStrings.aimi_auditor_report_degraded_mode))
       }
       if (verdict.evidence.isNotEmpty()) {
         append('\n')
         append('\n')
-        append(context.getString(R.string.aimi_auditor_report_evidence_header))
+        append(rh.gs(ApsStrings.aimi_auditor_report_evidence_header))
         verdict.evidence.forEach { line ->
           append('\n')
           append("• ")
@@ -148,7 +148,7 @@ object AuditorReportFormatter {
       if (verdict.riskFlags.isNotEmpty()) {
         append('\n')
         append('\n')
-        append(context.getString(R.string.aimi_auditor_report_risk_flags_header))
+        append(rh.gs(ApsStrings.aimi_auditor_report_risk_flags_header))
         verdict.riskFlags.forEach { flag ->
           append('\n')
           append("• ")
@@ -157,39 +157,45 @@ object AuditorReportFormatter {
       }
       append('\n')
       append('\n')
-      append(context.getString(R.string.aimi_auditor_report_adjustments_header))
+      append(rh.gs(ApsStrings.aimi_auditor_report_adjustments_header))
       append('\n')
       append(
-        context.getString(
-          R.string.aimi_auditor_report_smb_factor,
+        rh.gs(
+          ApsStrings.aimi_auditor_report_smb_factor,
           formatFactor(verdict.boundedAdjustments.smbFactorClamp),
         )
       )
       append('\n')
       append(
-        context.getString(
-          R.string.aimi_auditor_report_interval_add,
+        rh.gs(
+          ApsStrings.aimi_auditor_report_interval_add,
           verdict.boundedAdjustments.intervalAddMin,
         )
       )
       append('\n')
       append(
         if (verdict.boundedAdjustments.preferTbr) {
-          context.getString(R.string.aimi_auditor_report_prefer_tbr_yes)
+          rh.gs(ApsStrings.aimi_auditor_report_prefer_tbr_yes)
         } else {
-          context.getString(R.string.aimi_auditor_report_prefer_tbr_no)
+          rh.gs(ApsStrings.aimi_auditor_report_prefer_tbr_no)
         }
       )
       append('\n')
       append(
-        context.getString(
-          R.string.aimi_auditor_report_tbr_factor,
+        rh.gs(
+          ApsStrings.aimi_auditor_report_tbr_factor,
           formatFactor(verdict.boundedAdjustments.tbrFactorClamp),
         )
       )
     }
   }
 
-  private fun formatFactor(value: Double): String =
-    String.format(Locale.US, "%.2f", value)
+  /**
+   * Two decimals, rounded half up, with a dot separator.
+   *
+   * This was `String.format(Locale.US, "%.2f", v)`, which rounds a tie away from zero - half up for a
+   * positive factor - and always writes a dot. [aimiFmt2] is the shared formatter that already says
+   * exactly that, so the numbers here read the same as the ones in the AIMI logs.
+   */
+  private fun formatFactor(value: Double): String = aimiFmt2(value)
 }

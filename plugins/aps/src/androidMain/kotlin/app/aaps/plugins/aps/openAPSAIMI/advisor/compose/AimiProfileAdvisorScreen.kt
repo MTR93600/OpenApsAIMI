@@ -1,7 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.compose
 
-import android.content.Context
-import android.content.Intent
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -64,6 +62,7 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorSeverity
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiRecommendation
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiSharing
 import app.aaps.plugins.aps.openAPSAIMI.advisor.buildAimiBehaviorCausalInsights
 import app.aaps.plugins.aps.openAPSAIMI.advisor.buildAimiFamilyBridgeSuggestions
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
@@ -127,6 +126,7 @@ fun AimiProfileAdvisorScreen(
     aiCoachingService: AiCoachingService,
     rh: ResourceHelper,
     storage: AimiStorage,
+    sharing: AimiSharing,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -606,9 +606,8 @@ fun AimiProfileAdvisorScreen(
             text = { Text(formatBasalProposalPreview(proposal)) },
             confirmButton = {
                 TextButton(onClick = {
-                    shareBasalProposal(
-                        context = context,
-                        content = advisorService.exportBasalProfileProposalText(proposal),
+                    sharing.shareText(
+                        text = advisorService.exportBasalProfileProposalText(proposal),
                         subject = basalShareSubject,
                         chooserTitle = basalShareChooserTitle,
                     )
@@ -906,18 +905,4 @@ private fun formatBasalProposalPreview(proposal: AimiAdvisorService.BasalProfile
         stringResource(R.string.aimi_adv_basal_row_line, row.hour, row.current, row.proposed, deltaPct)
     }
     return "$disclaimer\n$strategyLine\n$factorLine\n$rationaleLine\n\n$previewHeading\n${rowLines.joinToString("\n")}"
-}
-
-/**
- * Shares the basal-proposal export text via `ACTION_SEND`, exactly like the staged
- * `shareBasalProposal`. This is the only side effect the basal-proposal feature has - no
- * preference, profile or therapy write.
- */
-private fun shareBasalProposal(context: Context, content: String, subject: String, chooserTitle: String) {
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_SUBJECT, subject)
-        putExtra(Intent.EXTRA_TEXT, content)
-    }
-    context.startActivity(Intent.createChooser(intent, chooserTitle))
 }

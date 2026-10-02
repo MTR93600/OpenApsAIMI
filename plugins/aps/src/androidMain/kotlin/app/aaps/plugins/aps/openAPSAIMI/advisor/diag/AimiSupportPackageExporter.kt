@@ -1,16 +1,16 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.diag
 
 import android.content.Context
-import android.content.Intent
-import androidx.core.content.FileProvider
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiSharing
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeHistoryReader
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import java.io.BufferedOutputStream
 import java.io.BufferedWriter
@@ -38,15 +38,10 @@ class AimiSupportPackageExporter(
     private val profileFunction: ProfileFunction,
     private val rh: ResourceHelper,
     private val storage: AimiStorage,
+    private val sharing: AimiSharing,
 ) {
 
-    sealed class Result {
-        data class Ready(val zipFile: File) : Result()
-        data object Empty : Result()
-        data class Failed(val message: String?) : Result()
-    }
-
-    suspend fun build(issue: String): Result {
+    suspend fun build(issue: String): AimiSupportPackageResult {
         return try {
             val diagManager = AimiDiagnosticsManager(context, preferences, logger)
             val runningProfile = runCatching { profileFunction.getProfile() }.getOrNull()
@@ -70,29 +65,30 @@ class AimiSupportPackageExporter(
             }
 
             if (zipFile.exists() && zipFile.length() > 0) {
-                Result.Ready(zipFile)
+                AimiSupportPackageResult.Ready(AimiPath(zipFile.absolutePath))
             } else {
-                Result.Empty
+                AimiSupportPackageResult.Empty
             }
         } catch (e: Exception) {
             logger.error(LTag.APS, "AIMI_DIAG: Failed to generate/share report", e)
-            Result.Failed(e.message)
+            AimiSupportPackageResult.Failed(e.message)
         }
     }
 
-    fun share(zipFile: File, issue: String) {
-        val authority = "${context.packageName}.fileprovider"
-        val uri = FileProvider.getUriForFile(context, authority, zipFile)
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/zip"
-            putExtra(Intent.EXTRA_SUBJECT, rh.gs(R.string.aimi_diag_subject, Date().toString()))
-            putExtra(Intent.EXTRA_TEXT, "AIMI Support Package attached (ZIP).\n\nDetails: $issue")
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        val chooser = Intent.createChooser(intent, rh.gs(R.string.aimi_diag_chooser))
-        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(chooser)
+    /**
+     * Hands the finished package to the platform's share sheet.
+     *
+     * The subject, the covering message and the chooser title are the same strings as before; only
+     * the hand-off itself moved, into [AimiSharing].
+     */
+    fun share(zip: AimiPath, issue: String) {
+        sharing.shareFile(
+            path = zip,
+            mimeType = MIME_ZIP,
+            subject = rh.gs(R.string.aimi_diag_subject, Date().toString()),
+            text = "AIMI Support Package attached (ZIP).\n\nDetails: $issue",
+            chooserTitle = rh.gs(R.string.aimi_diag_chooser),
+        )
     }
 
     /**
@@ -139,5 +135,10 @@ class AimiSupportPackageExporter(
         }
         writer.flush()
         out.closeEntry()
+    }
+
+    private companion object {
+
+        const val MIME_ZIP = "application/zip"
     }
 }

@@ -4,6 +4,9 @@ import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiContextLlm
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TE
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -16,36 +19,41 @@ import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
-import java.util.concurrent.ConcurrentHashMap
+import kotlin.reflect.KClass
 import kotlin.time.Duration.Companion.minutes
 
 /**
  * Context Manager - Storage & lifecycle gestion des intents utilisateur.
- * 
+ *
  * **Responsabilités** :
  * - Stockage thread-safe des intents actifs
  * - Lifecycle management (expiration automatique)
  * - Parsing via LLM ou offline
  * - Snapshot generation pour chaque tick
- * 
+ *
  * **Thread-Safety** :
- * - ConcurrentHashMap pour storage
- * - Synchronized methods pour modifications
+ * - One plain map, guarded by one [AapsLock]. The map is private, so the lock cannot be bypassed.
+ * - A read-then-write pair (find the expired keys, then drop them) runs inside a single
+ *   [app.aaps.core.interfaces.concurrent.withLock] block, so no other thread can add or remove an
+ *   intent in between. A `ConcurrentHashMap` made each single call safe but left those pairs open.
+ * - The lock is **never** held across a `suspend` call, across a `ioScope.launch` body, or across a
+ *   call back into other code (storage write, Nightscout sync, patient state refresh). Every method
+ *   takes the lock, copies or mutates, releases, and only then does the slow work. That is what keeps
+ *   this free of deadlock even though the loop tick calls in from another thread.
  * - Safe pour appel depuis multiple threads (UI, Loop, etc.)
- * 
+ *
  * **Usage** :
  * ```kotlin
  * // Add intent from UI
  * contextManager.addIntent("heavy cardio 1h")
- * 
+ *
  * // Get snapshot for current tick
  * val snapshot = contextManager.getSnapshot(aimiWallClockMs())
- * 
+ *
  * // Remove intent
  * contextManager.removeIntent(intentId)
  * ```
@@ -60,23 +68,26 @@ class ContextManager @Inject constructor(
     private val dateUtil: DateUtil
 ) {
 
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    
-    // Thread-safe storage (internal for inline functions)
-    internal val activeIntents = ConcurrentHashMap<String, ContextIntent>()
-    
+    private val ioScope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
+
+    /** Guards [activeIntents] and [nextId]. Both are plain state; nothing reads them unguarded. */
+    private val intentsLock = AapsLock()
+
+    // Thread-safe storage: private on purpose, so every access goes through intentsLock.
+    private val activeIntents = LinkedHashMap<String, ContextIntent>()
+
     // Auto-increment ID
     private var nextId = 1
-    
+
     init {
         loadFromStorage()
     }
-    
+
     /**
      * Add intent from user text.
-     * 
+     *
      * Tries LLM first (if enabled), then falls back to offline parser.
-     * 
+     *
      * @param userText User message or preset
      * @param forceLLM Force LLM even if disabled (for testing)
      * @return List of added intent IDs
@@ -90,15 +101,15 @@ class ContextManager @Inject constructor(
             aapsLogger.warn(LTag.APS, "[ContextManager] Empty text, ignoring")
             return emptyList()
         }
-        
+
         aapsLogger.info(LTag.APS, "[ContextManager] Adding intent: '$userText'")
-        
-        // Try LLM if enabled
+
+        // Try LLM if enabled. The lock is not held here: this suspends.
         val intents = if (shouldUseLLM() || forceLLM) {
             try {
                 aapsLogger.debug(LTag.APS, "[ContextManager] Trying LLM parsing...")
                 val llmIntents = contextLLMClient.parseWithLLM(userText)
-                
+
                 if (llmIntents.isNotEmpty()) {
                     aapsLogger.info(LTag.APS, "[ContextManager] LLM parsed ${llmIntents.size} intent(s)")
                     llmIntents
@@ -114,49 +125,53 @@ class ContextManager @Inject constructor(
             aapsLogger.debug(LTag.APS, "[ContextManager] Using offline parser (LLM disabled)")
             contextParser.parse(userText)
         }
-        
-        // Store intents
-        val ids = mutableListOf<String>()
-        for (intent in intents) {
-            val id = generateId()
-            activeIntents[id] = intent
-            ids.add(id)
+
+        // Store intents. Whole batch under one lock, so a reader never sees half of it.
+        val stored = mutableListOf<Pair<String, ContextIntent>>()
+        intentsLock.withLock {
+            for (intent in intents) {
+                val id = generateId()
+                activeIntents[id] = intent
+                stored += id to intent
+            }
+        }
+
+        // Logging and the Nightscout sync call out of this class, so they stay outside the lock.
+        for ((id, intent) in stored) {
             aapsLogger.debug(LTag.APS, "[ContextManager] Stored intent $id: $intent")
-            
-            // Sync to Nightscout via TherapyEvent wrapper
             syncContextToNS(id, intent, remotePin)
         }
-        
+
+        val ids = stored.map { it.first }
         if (ids.isEmpty()) {
             aapsLogger.warn(LTag.APS, "[ContextManager] No intents parsed from: '$userText'")
         }
-        
+
         // Cleanup expired and SAVE
         cleanupExpired(aimiWallClockMs())
         saveToStorage()
         notifyPatientStateChanged()
-        
+
         return ids
     }
-    
+
     /**
      * Add intent from preset (UI button).
-     * 
+     *
      * @param preset Preset definition
      * @param customDuration Optional custom duration (override default)
      * @param customIntensity Optional custom intensity (override default)
      * @return Intent ID
      */
-    @Synchronized
     fun addPreset(
         preset: ContextPreset,
         customDuration: kotlin.time.Duration? = null,
         customIntensity: Intensity? = null
     ): String {
         aapsLogger.info(LTag.APS, "[ContextManager] Adding preset: ${preset.displayName}")
-        
+
         var intent = contextParser.parsePreset(preset)
-        
+
         // Override duration if provided
         if (customDuration != null) {
             intent = when (intent) {
@@ -188,33 +203,36 @@ class ContextManager @Inject constructor(
                 is Custom -> intent.copy(intensity = customIntensity)
             }
         }
-        
-        val id = generateId()
-        activeIntents[id] = intent
-        
+
+        // The id is taken and the intent stored in one step, so two callers cannot share an id.
+        val id = intentsLock.withLock {
+            val newId = generateId()
+            activeIntents[newId] = intent
+            newId
+        }
+
         aapsLogger.debug(LTag.APS, "[ContextManager] Stored preset $id: $intent")
-        
+
         // Cleanup expired and SAVE
         cleanupExpired(aimiWallClockMs())
         saveToStorage()
         notifyPatientStateChanged()
-        
+
         return id
     }
-    
+
     /**
      * Remove intent by ID.
-     * 
+     *
      * @param id Intent ID
      * @return True if removed, false if not found
      */
-    @Synchronized
     fun removeIntent(id: String): Boolean {
-        val removed = activeIntents.remove(id)
+        val removed = intentsLock.withLock { activeIntents.remove(id) }
         if (removed != null) {
             aapsLogger.info(LTag.APS, "[ContextManager] Removed intent $id")
             saveToStorage()
-            
+
             ioScope.launch {
                 try {
                     persistenceLayer.invalidateTherapyEventsWithNote("AIMI_CONTEXT:$id", Action.TREATMENT, Sources.Aaps)
@@ -230,38 +248,45 @@ class ContextManager @Inject constructor(
         aapsLogger.warn(LTag.APS, "[ContextManager] Intent $id not found")
         return false
     }
-    
+
     /**
-     * Remove all intents of a specific type by class.
-     * 
-     * @param intentClass Intent type class to remove
+     * Remove all intents of a specific type.
+     *
+     * The search and the removal happen under one lock, so an intent added in between is never
+     * dropped by mistake and one that another thread just removed is not counted twice.
+     *
+     * @param intentClass Intent type to remove
      * @return Number of removed intents
      */
-    @Synchronized
-    fun removeByType(intentClass: Class<out ContextIntent>): Int {
-        val toRemove = activeIntents.filter { intentClass.isInstance(it.value) }.keys
-        toRemove.forEach { activeIntents.remove(it) }
-        
-        if (toRemove.isNotEmpty()) {
-            aapsLogger.info(LTag.APS, "[ContextManager] Removed ${toRemove.size} intent(s) of type ${intentClass.simpleName}")
+    fun removeByType(intentClass: KClass<out ContextIntent>): Int {
+        val removedCount = intentsLock.withLock {
+            val toRemove = activeIntents.filterValues { intentClass.isInstance(it) }.keys
+            toRemove.forEach { activeIntents.remove(it) }
+            toRemove.size
+        }
+
+        if (removedCount > 0) {
+            aapsLogger.info(LTag.APS, "[ContextManager] Removed $removedCount intent(s) of type ${intentClass.simpleName}")
             saveToStorage()
             notifyPatientStateChanged()
         }
-        
-        return toRemove.size
+
+        return removedCount
     }
-    
+
     /**
      * Clear all intents.
      */
-    @Synchronized
     fun clearAll() {
-        val count = activeIntents.size
-        activeIntents.clear()
+        val count = intentsLock.withLock {
+            val size = activeIntents.size
+            activeIntents.clear()
+            size
+        }
         aapsLogger.info(LTag.APS, "[ContextManager] Cleared all intents (removed $count)")
         saveToStorage()
         notifyPatientStateChanged()
-        
+
         ioScope.launch {
             try {
                 persistenceLayer.invalidateTherapyEventsWithNote("AIMI_CONTEXT:", Action.TREATMENT, Sources.Aaps)
@@ -271,98 +296,103 @@ class ContextManager @Inject constructor(
             }
         }
     }
-    
+
     /**
      * Get snapshot at specific timestamp.
-     * 
+     *
      * Removes expired intents and returns active ones.
-     * 
+     *
      * @param timestampMs Current timestamp
      * @return Snapshot of active intents
      */
     fun getSnapshot(timestampMs: Long): ContextSnapshot {
         // Cleanup expired first
         cleanupExpired(timestampMs)
-        
+
         // Get all active intents
-        val allIntents = activeIntents.values.toList()
-        
+        val allIntents = intentsLock.withLock { activeIntents.values.toList() }
+
         // Build snapshot
         val snapshot = ContextSnapshot.from(timestampMs, allIntents)
-        
+
         if (snapshot.intentCount > 0) {
             aapsLogger.debug(LTag.APS, "[ContextManager] Snapshot: ${snapshot.intentCount} active intent(s)")
         }
-        
+
         return snapshot
     }
-    
+
     /**
      * Get all active intents with their IDs.
-     * 
+     *
      * @return Map of ID → Intent
      */
     fun getAllIntents(): Map<String, ContextIntent> {
-        return activeIntents.toMap()
+        return intentsLock.withLock { activeIntents.toMap() }
     }
-    
+
     /**
      * Get intent by ID.
-     * 
+     *
      * @param id Intent ID
      * @return Intent or null if not found
      */
     fun getIntent(id: String): ContextIntent? {
-        return activeIntents[id]
+        return intentsLock.withLock { activeIntents[id] }
     }
-    
+
     /**
      * Extend intent duration.
-     * 
+     *
      * @param id Intent ID
      * @param additionalDuration Duration to add
      * @return True if extended, false if not found
      */
-    @Synchronized
     fun extendDuration(id: String, additionalDuration: kotlin.time.Duration): Boolean {
-        val intent = activeIntents[id] ?: return false
-        
-        val extended = when (intent) {
-            is Activity -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
-            is Illness -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
-            is Stress -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
-            is UnannouncedMealRisk -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
-            is Alcohol -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
-            is Travel -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
-            is MenstrualCycle -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
-            is SlowCarbMeal -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
-            is HypoRecovery -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
-            is Custom -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
+        // Read, copy and write back in one step, so a parallel extend cannot be lost.
+        val extended = intentsLock.withLock {
+            val intent = activeIntents[id]
+            if (intent == null) {
+                false
+            } else {
+                activeIntents[id] = when (intent) {
+                    is Activity -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
+                    is Illness -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
+                    is Stress -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
+                    is UnannouncedMealRisk -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
+                    is Alcohol -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
+                    is Travel -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
+                    is MenstrualCycle -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
+                    is SlowCarbMeal -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
+                    is HypoRecovery -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
+                    is Custom -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
+                }
+                true
+            }
         }
+        if (!extended) return false
 
-        activeIntents[id] = extended
-        
         aapsLogger.info(LTag.APS, "[ContextManager] Extended intent $id by ${additionalDuration.inWholeMinutes}min")
         saveToStorage()
         notifyPatientStateChanged()
-        
+
         return true
     }
-    
+
     /**
      * Check if context module is enabled.
      */
     fun isEnabled(): Boolean {
         return sp.getBoolean(app.aaps.core.keys.BooleanKey.OApsAIMIContextEnabled.key, false)
     }
-    
+
     // Private helpers
-    
+
     private fun shouldUseLLM(): Boolean {
         if (!sp.getBoolean(app.aaps.core.keys.BooleanKey.OApsAIMIContextLLMEnabled.key, false)) {
             return false
         }
-        
+
         // CHECK SHARED/ADVISOR KEYS instead of legacy Context Keys
         val provider = sp.getString(app.aaps.core.keys.StringKey.AimiAdvisorProvider.key, "OPENAI")
         val apiKey = when (provider) {
@@ -372,23 +402,32 @@ class ContextManager @Inject constructor(
             "CLAUDE" -> sp.getString(app.aaps.core.keys.StringKey.AimiAdvisorClaudeKey.key, "")
             else -> ""
         }
-        
+
         return apiKey.isNotBlank()
     }
-    
-    @Synchronized
+
+    /**
+     * Drop every intent that is no longer active at [timestampMs].
+     *
+     * The filter and the removals are one locked step. They were two before, so an intent added
+     * between them could be dropped although it had never expired.
+     */
     internal fun cleanupExpired(timestampMs: Long) {
-        val expired = activeIntents.filter { (_, intent) -> 
-            !intent.isActiveAt(timestampMs) 
-        }.keys
-        
-        if (expired.isNotEmpty()) {
+        val expiredCount = intentsLock.withLock {
+            val expired = activeIntents.filterValues { intent ->
+                !intent.isActiveAt(timestampMs)
+            }.keys
             expired.forEach { activeIntents.remove(it) }
-            aapsLogger.debug(LTag.APS, "[ContextManager] Cleaned up ${expired.size} expired intent(s)")
+            expired.size
+        }
+
+        if (expiredCount > 0) {
+            aapsLogger.debug(LTag.APS, "[ContextManager] Cleaned up $expiredCount expired intent(s)")
             saveToStorage()
         }
     }
-    
+
+    /** Caller must hold [intentsLock]: [nextId] is shared state. */
     private fun generateId(): String {
         return "CTX_${aimiWallClockMs()}_${nextId++}"
     }
@@ -396,19 +435,21 @@ class ContextManager @Inject constructor(
     // --- PERSISTENCE ---
 
     private fun saveToStorage() {
+        // Copy under the lock, then build and write outside it: the store is other people's code.
+        val snapshot = intentsLock.withLock { activeIntents.toMap() }
         try {
             val jsonArray = org.json.JSONArray()
-            activeIntents.forEach { (id, intent) ->
+            snapshot.forEach { (id, intent) ->
                 val obj = org.json.JSONObject()
                 obj.put("id", id)
                 obj.put("type", intent::class.simpleName)
-                
+
                 // Common fields
                 obj.put("start", intent.startTimeMs)
                 obj.put("duration", intent.durationMs)
                 obj.put("intensity", intent.intensity.name)
                 obj.put("confidence", intent.confidence.toDouble())
-                
+
                 // Specific fields
                 when (intent) {
                     is Activity -> obj.put("activityType", intent.activityType.name)
@@ -427,9 +468,9 @@ class ContextManager @Inject constructor(
                 }
                 jsonArray.put(obj)
             }
-            
+
             sp.putString(app.aaps.core.keys.StringKey.OApsAIMIContextStorage.key, jsonArray.toString())
-            
+
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "[ContextManager] Save failed: ${e.message}")
         }
@@ -437,17 +478,18 @@ class ContextManager @Inject constructor(
 
     private fun loadFromStorage() {
         try {
+            // Read and parse outside the lock; only the handover to the map is guarded.
             val jsonStr = sp.getString(app.aaps.core.keys.StringKey.OApsAIMIContextStorage.key, "")
             if (jsonStr.isBlank()) return
-            
+
             val jsonArray = org.json.JSONArray(jsonStr)
-            activeIntents.clear()
-            
+            val restored = LinkedHashMap<String, ContextIntent>()
+
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
                 val id = obj.optString("id", "")
                 if (id.isBlank()) continue
-                
+
                 try {
                     // Parse intent
                     val type = obj.getString("type")
@@ -455,7 +497,7 @@ class ContextManager @Inject constructor(
                     val durationMs = obj.getLong("duration")
                     val intensity = Intensity.valueOf(obj.getString("intensity"))
                     val confidence = obj.getDouble("confidence").toFloat()
-                    
+
                     val intent = when(type) {
                         "Activity" -> Activity(
                             startTimeMs = if (startTimeMs > 0) startTimeMs else aimiWallClockMs(),
@@ -529,32 +571,38 @@ class ContextManager @Inject constructor(
                         )
                         else -> null
                     }
-                    
+
                     if (intent != null) {
-                        activeIntents[id] = intent
+                        restored[id] = intent
                     }
                 } catch (e: Exception) {
                     aapsLogger.warn(LTag.APS, "[ContextManager] Failed to restore intent $id: ${e.message}")
                 }
             }
-            
-            // Restore ID counter to avoid collisions
-            val maxId = activeIntents.keys.mapNotNull { 
-                it.substringAfterLast("_", "").toIntOrNull() 
-            }.maxOrNull() ?: 0
-            nextId = maxId + 1
-             
-            aapsLogger.info(LTag.APS, "[ContextManager] Restored ${activeIntents.size} intents from storage")
-            
+
+            val restoredCount = intentsLock.withLock {
+                activeIntents.clear()
+                activeIntents.putAll(restored)
+
+                // Restore ID counter to avoid collisions
+                val maxId = activeIntents.keys.mapNotNull {
+                    it.substringAfterLast("_", "").toIntOrNull()
+                }.maxOrNull() ?: 0
+                nextId = maxId + 1
+                activeIntents.size
+            }
+
+            aapsLogger.info(LTag.APS, "[ContextManager] Restored $restoredCount intents from storage")
+
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "[ContextManager] Load failed: ${e.message}")
         }
     }
-    
+
     // ========================================
     // NIGHTSCOUT SYNC
     // ========================================
-    
+
     /**
      * Sync ContextIntent to Nightscout via TherapyEvent wrapper.
      * Creates a NOTE TherapyEvent with AIMI_CONTEXT prefix.
@@ -567,7 +615,7 @@ class ContextManager @Inject constructor(
             } else {
                 "AIMI_CONTEXT:$intentId:$intentJson"
             }
-            
+
             val therapyEvent = TE(
                 timestamp = intent.startTimeMs,
                 type = TE.Type.NOTE,
@@ -575,7 +623,7 @@ class ContextManager @Inject constructor(
                 note = note,
                 duration = intent.durationMs
             )
-            
+
             aapsLogger.debug(LTag.APS, "[ContextManager] Syncing context $intentId to NS")
 
             ioScope.launch {
@@ -590,7 +638,7 @@ class ContextManager @Inject constructor(
             aapsLogger.error(LTag.APS, "[ContextManager] Exception syncing context $intentId", e)
         }
     }
-    
+
     private fun serializeContextIntent(intent: ContextIntent): String {
         return when (intent) {
             is Activity -> """{"type":"Activity","act":"${intent.activityType}","int":"${intent.intensity}","dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
@@ -605,12 +653,11 @@ class ContextManager @Inject constructor(
             is Custom -> """{"type":"Custom","desc":"${intent.description}","strat":"${intent.suggestedStrategy}","int":"${intent.intensity}","dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
         }
     }
-    
+
     /**
      * Inject ContextIntent received from Nightscout.
      * Skips local parsing, direct injection.
      */
-    @Synchronized
     fun injectContextFromNS(intentId: String, intent: ContextIntent, receivedPin: String? = null) {
         val configuredPin = sp.getString(AimiStringKey.RemoteControlPin.key, "").trim()
         val incomingPin = receivedPin?.trim().orEmpty()
@@ -623,15 +670,22 @@ class ContextManager @Inject constructor(
             return
         }
 
-        // Check if already exists (deduplication)
-        if (activeIntents.containsKey(intentId)) {
+        // Check if already exists (deduplication) and insert in one step.
+        val inserted = intentsLock.withLock {
+            if (activeIntents.containsKey(intentId)) {
+                false
+            } else {
+                activeIntents[intentId] = intent
+                true
+            }
+        }
+        if (!inserted) {
             aapsLogger.debug(LTag.APS, "[ContextManager] Context $intentId already exists, skipping NS injection")
             return
         }
-        
-        activeIntents[intentId] = intent
+
         aapsLogger.info(LTag.APS, "[ContextManager] ✅ Injected context from NS: $intentId -> $intent")
-        
+
         saveToStorage()
         notifyPatientStateChanged()
     }

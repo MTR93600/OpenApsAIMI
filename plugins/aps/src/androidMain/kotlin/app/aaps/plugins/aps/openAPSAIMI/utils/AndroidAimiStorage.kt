@@ -40,6 +40,8 @@ class AndroidAimiStorage @Inject constructor(
 
     override fun canRead(path: AimiPath): Boolean = runCatching { fileOf(path).canRead() }.getOrDefault(false)
 
+    override fun canWrite(path: AimiPath): Boolean = runCatching { fileOf(path).canWrite() }.getOrDefault(false)
+
     override fun createDirectories(path: AimiPath): Boolean =
         runCatching { fileOf(path).let { it.exists() || it.mkdirs() } }.getOrDefault(false)
 

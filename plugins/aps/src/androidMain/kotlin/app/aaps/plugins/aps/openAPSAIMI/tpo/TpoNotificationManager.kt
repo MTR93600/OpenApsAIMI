@@ -8,12 +8,12 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.R as CoreUiR
-import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -27,6 +27,12 @@ import dev.zacsweers.metro.AppScope
  * This is the Android side of [TpoNotifications]. Everything here is platform work - channels,
  * `NotificationCompat`, the `PendingIntent` that opens the AIMI screen - which is why it stays in
  * `androidMain` while the orchestrator that decides when to call it is shared.
+ *
+ * The **text** is not platform work, so none of it goes through `Context.getString`. Every line comes
+ * from [app.aaps.core.interfaces.resources.TextResolver], which exists on every target and which the
+ * rest of the app already uses. One notification used to take its pack label from the resolver and
+ * everything else from the raw `Context`; those two do not answer in the same language when the user
+ * has set an AAPS language override, so a single notification could be half translated.
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
@@ -34,7 +40,7 @@ class TpoNotificationManager @Inject constructor(
     private val context: Context,
     private val preferences: Preferences,
     private val uiInteraction: UiInteraction,
-    private val rh: ResourceHelper,
+    private val rh: TextResolver,
 ) : TpoNotifications {
     companion object {
         private const val CHANNEL_ID_STARTED = "AIMI_TPO_PROTECTION"
@@ -55,9 +61,9 @@ class TpoNotificationManager @Inject constructor(
 
         val ui = TpoUiSupport.buildActiveSessionUi(session, aimiWallClockMs()) ?: return
         val packLabel = rh.gs(ui.packTitle)
-        val title = context.getString(R.string.aimi_tpo_notification_started_title)
-        val text = context.getString(
-            R.string.aimi_tpo_notification_started_text,
+        val title = rh.gs(ApsStrings.aimi_tpo_notification_started_title)
+        val text = rh.gs(
+            ApsStrings.aimi_tpo_notification_started_text,
             packLabel,
             ui.remainingMinutes,
             ui.changedKeyCount,
@@ -65,7 +71,7 @@ class TpoNotificationManager @Inject constructor(
         val bigText = buildString {
             append(text)
             append('\n')
-            append(context.getString(R.string.aimi_tpo_notification_started_tier, ui.tierLabel))
+            append(rh.gs(ApsStrings.aimi_tpo_notification_started_tier, ui.tierLabel))
             if (ui.deltaPreviewLines.isNotEmpty()) {
                 append('\n')
                 ui.deltaPreviewLines.forEach { line ->
@@ -74,7 +80,7 @@ class TpoNotificationManager @Inject constructor(
                 }
             }
             if (ui.extraChangeCount > 0) {
-                append(context.getString(R.string.aimi_tpo_extra_changes, ui.extraChangeCount))
+                append(rh.gs(ApsStrings.aimi_tpo_extra_changes, ui.extraChangeCount))
             }
         }.trim()
 
@@ -92,11 +98,11 @@ class TpoNotificationManager @Inject constructor(
     override fun showSessionEnded(reason: TpoEndReason) {
         if (!preferences.get(BooleanKey.OApsAIMITpoNotifyOnApply)) return
         cancelStartedNotification()
-        val title = context.getString(R.string.aimi_tpo_notification_ended_title)
+        val title = rh.gs(ApsStrings.aimi_tpo_notification_ended_title)
         val text = when (reason) {
-            TpoEndReason.EXPIRED -> context.getString(R.string.aimi_tpo_notification_ended_expired)
-            TpoEndReason.MANUAL_REVERT -> context.getString(R.string.aimi_tpo_notification_ended_manual)
-            TpoEndReason.SUPERSEDED -> context.getString(R.string.aimi_tpo_notification_ended_superseded)
+            TpoEndReason.EXPIRED -> rh.gs(ApsStrings.aimi_tpo_notification_ended_expired)
+            TpoEndReason.MANUAL_REVERT -> rh.gs(ApsStrings.aimi_tpo_notification_ended_manual)
+            TpoEndReason.SUPERSEDED -> rh.gs(ApsStrings.aimi_tpo_notification_ended_superseded)
         }
         postNotification(
             title = title,
@@ -162,19 +168,19 @@ class TpoNotificationManager @Inject constructor(
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val startedChannel = NotificationChannel(
             CHANNEL_ID_STARTED,
-            context.getString(R.string.aimi_tpo_notification_channel_name),
+            rh.gs(ApsStrings.aimi_tpo_notification_channel_name),
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
-            description = context.getString(R.string.aimi_tpo_notification_channel_description)
+            description = rh.gs(ApsStrings.aimi_tpo_notification_channel_description)
             enableVibration(false)
             setSound(null, null)
         }
         val endedChannel = NotificationChannel(
             CHANNEL_ID_ENDED,
-            context.getString(R.string.aimi_tpo_notification_channel_ended_name),
+            rh.gs(ApsStrings.aimi_tpo_notification_channel_ended_name),
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
-            description = context.getString(R.string.aimi_tpo_notification_channel_ended_description)
+            description = rh.gs(ApsStrings.aimi_tpo_notification_channel_ended_description)
         }
         notificationManager.createNotificationChannel(startedChannel)
         notificationManager.createNotificationChannel(endedChannel)

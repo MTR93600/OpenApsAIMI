@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui
 
-import android.content.Context
+import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdict
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.BoundedAdjustments
@@ -20,13 +21,13 @@ import org.mockito.kotlin.whenever
 
 class AuditorReportFormatterTest {
 
-  private val context: Context = mock()
+  private val rh: TextResolver = mock()
 
   @BeforeEach
   fun setUp() {
     AuditorVerdictCache.clear()
-    whenever(context.getString(any<Int>())).thenAnswer { "s${it.arguments[0]}" }
-    whenever(context.getString(any<Int>(), anyVararg())).thenAnswer { invocation ->
+    whenever(rh.gs(any<TextRef>())).thenAnswer { "s${it.arguments[0]}" }
+    whenever(rh.gs(any<TextRef>(), anyVararg())).thenAnswer { invocation ->
       invocation.arguments.drop(1).joinToString("|")
     }
   }
@@ -53,7 +54,7 @@ class AuditorReportFormatterTest {
       debugChecks = emptyList(),
     )
 
-    val text = AuditorReportFormatter.formatVerdict(context, verdict, "OK_SOFTEN")
+    val text = AuditorReportFormatter.formatVerdict(rh, verdict, "OK_SOFTEN")
 
     assertTrue(text.contains("SOFTEN"))
     assertTrue(text.contains("82"))

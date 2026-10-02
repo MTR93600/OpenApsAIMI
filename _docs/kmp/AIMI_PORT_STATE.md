@@ -3090,9 +3090,7 @@ model must not change silently.**
    by looking for the thing rather than inferring from a grep miss; `ImportExportPrefs` writes export
    files and is not a share sheet.
 5. **`ContextManager`'s `ConcurrentHashMap`** (22 use sites, three internal coroutines plus the loop
-   tick and a screen). Replacing it with a locked plain map would *fix* compound operations that are
-   not atomic today (`filter` then `remove` in two steps) - which is exactly why it is not a neutral
-   port and was not done.
+   tick and a screen). **See the correction below: the "not atomic today" part of this was wrong.**
 6. **The TPO notification resolver wart** from 6aw, and whether TPO should move to the shared
    notification stack at the cost of its two channels and its deep link.
 
@@ -3338,10 +3336,24 @@ iOS has `UIActivityViewController`, a direct counterpart of the Android chooser.
 Recommended: build it with a real iOS implementation.
 
 **4. `ContextManager`'s `ConcurrentHashMap`** (650 lines, unblocking `AimiContextScreen`, 590).
-22 use sites, three internal coroutines plus the loop tick and a screen. A plain map under `AapsLock`
-would also make atomic two compound operations that are not atomic today (`filter` then `remove`).
-That is a fix, which is why it is not a neutral port. Recommended: do it as its own change, with
-tests, not folded into a move.
+22 use sites, three internal coroutines plus the loop tick and a screen. Recommended: do it as its
+own change, with tests, not folded into a move.
+
+> **Correction, same day.** This entry, and item 5 of the list in 6ax, both said the change would
+> "make atomic two compound operations that are not atomic today (`filter` then `remove`)".
+> **That was wrong, and it was the stated justification for touching live dosing-adjacent code.**
+> Both methods carried `@Synchronized`, as did five others in the class - seven in all. The claim
+> came from a grep for `synchronized`, lower case, which cannot match `@Synchronized`.
+>
+> It was settled by measurement, not argument: the new tests were run against the **original**
+> file and passed 4/4, then against a deliberately re-split version and failed 2. So they are
+> regression tests that pin an invariant, not proof of a defect repaired.
+>
+> What the lock does genuinely close is smaller and real: `addIntent` is a `suspend fun` and
+> therefore **could not** carry `@Synchronized`, so its `nextId++` read-then-write raced with the
+> synchronized `addPreset`. Two adds in the same millisecond could take the same id and the second
+> would silently replace the first - the user adds two contexts and sees one. The agent could not
+> make that fail in 600 rounds and said so rather than claiming it had.
 
 **5. The notification resolver, now found twice** - `TpoNotificationManager` and
 `AuditorReportFormatter`. One label resolves through `rh`, its neighbours through `context`, so one
@@ -3354,6 +3366,189 @@ carries a lambda, not a `PendingIntent`, and `AndroidSystemNotificationPlatform`
 to `MainActivity` **with no extras**, so the deep link into the AIMI screen is lost; TPO's two
 channels collapse into one at `IMPORTANCE_HIGH`, so the quiet "started" notification gets louder.
 Gained: iOS works for free. Recommended: not until `AapsNotification` can carry a route.
+
+## 6bc. 2026-10-02: the owner's answers, and the storage seam built under them
+
+### What the owner decided
+
+- **Port the corrections.** Done in 6bb.
+- **Storage: do not change the Android directory - earlier versions of the app depend on that
+  folder. Give iOS its own dedicated directory.** This is a hard constraint, not a preference.
+- **Sharing: if a specific iOS implementation is needed, write it.**
+- **The concurrent map: go ahead.**
+- **The notification resolver: use what is planned and works for KMP, meaning Android and iOS.**
+  That reverses the recommendation in 6bb item 5. The owner is right and the reasoning is the
+  campaign's own: `context.getString` is Android-only, so choosing it would have been choosing
+  against the port. The shared path is `TextResolver`, which `ResourceHelper` already extends.
+  It costs one real behaviour change, stated plainly: for a user with an AAPS language override the
+  notification text now follows the AAPS language rather than the system one, as the rest of the app
+  does.
+
+### The storage seam
+
+A new interface, `AimiStudyLocations` in the module's `commonMain`, with one method,
+`studyDirectories(): List<AimiPath>`, and an Android and an iOS binding. **Not** a method on
+`AimiStorage`: that interface deliberately has no iOS implementation, because a stub that wrote
+nowhere would leave the learning loops looking alive. "Which folders may hold this file" is read
+only and has an honest iOS answer, so it lives apart.
+
+**An interface needs no `jvmMain` half**, unlike an `expect`. The four-halves rule from 6ba applies
+to `expect`/`actual` only. The residual risk moves from compilation to DI: a future JVM graph
+materialising the physio store would need a JVM binding, and there is no JVM graph in this module.
+
+Android returns today's two paths, in today's order, with both `runCatching` wrappers kept, so a
+device with no external volume still drops the entry and carries on. Verified against the committed
+file line by line. iOS returns `<app container>/Documents/AAPS`, created on demand - a **subfolder**,
+not `Documents` itself, because `AppDatabaseBuilder.ios.kt` puts the app database directly in
+`Documents` and the support package is built by walking a whole directory.
+
+**The trap worth recording**: the obvious simplification, `listOf(storage.directory())`, would have
+broken the owner's constraint **with no compiler error at all**. `AimiStorage.directory()` is
+`AimiStorageHelper`'s three-tier *write* policy - it requires `canWrite` and silently falls back to
+app-scoped or internal storage. The viewer's first candidate is `Documents/AAPS` unconditionally.
+The two agree on a healthy device and diverge on a broken one, which is exactly when a user needs
+their files found.
+
+`AIMIPhysioContextStoreMTR` (428 lines) moved. `AimiStorage` gained `canWrite`, purely so a
+diagnostic log line could stay byte-identical. Gates: 1836 / 594 / 599, 0 failures.
+
+### `HormonitorViewerScreen` stayed, and the refusal was right
+
+`DateUtil` has no equivalent for either format the viewer uses, and both substitutes would be
+**visible on screen**:
+
+- `"EEE d MMM"`: the nearest build is `dayNameString + dayString + monthString`, but
+  `DateUtilImpl.dayString` is `"dd"` - zero padded - so the 7th would render `07`. It also means
+  joining three pieces of user-facing text in code, which the house rules forbid.
+- `"HH:mm"`: `DateUtilImpl.timeString` is `if (is24Hour()) "HH:mm" else "hh:mm a"`, so every user on
+  a 12-hour device would start seeing `2:30 PM` where they see `14:30` today.
+
+There is a loophole - `dayNameString(mills, pattern)` forwards its pattern straight through, so
+`dayNameString(mills, "EEE d MMM")` would literally work - and it was correctly not taken. The clean
+fix is a general `format(mills, pattern)` on the `DateUtil` interface, which is a `core:interfaces`
+decision. The screen is also blocked by `HormonitorReader` (372 lines, `RandomAccessFile`).
+
+### iOS app configuration that no Kotlin change can supply
+
+The iOS folder is only visible to the user in the Files app if the Xcode target's `Info.plist`
+carries `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace`. Reads and writes work
+without them; the user simply never sees the files. To be set when an iOS target exists.
+
+### The sharing seam, with a real iOS implementation
+
+`AimiSharing` in `commonMain`, interface plus Metro bindings on four source sets. **Not**
+`expect`/`actual`, because the Android side needs an injected `Context` and an `expect fun` signature
+cannot name an Android type - the same reason `TpoNotifications` took this shape.
+
+**The sketch in the brief was wrong, and following it would have deleted user-visible content.** It
+had `shareText(text, chooserTitle)`. Both real call sites also set `Intent.EXTRA_SUBJECT`, and the ZIP
+path sets `EXTRA_TEXT` *next to* the attachment, a covering message. The shipped shape is
+`shareText(text, subject, chooserTitle)` and
+`shareFile(path, mimeType, subject, text, chooserTitle)`. The lesson is the one the campaign keeps
+paying for, in its interface-design costume: **shape a seam from the call sites, never from a sketch.**
+
+**One genuine Android behaviour change, and it is not cosmetic.** Both call sites previously started
+the chooser from the Compose `LocalContext`, which is the Activity. The binding receives the
+**application** context, and `startActivity` from outside an Activity throws without
+`FLAG_ACTIVITY_NEW_TASK`. The flag is now on both paths; it was already on the ZIP path, which ships
+and works. So the text share of the Profile Advisor would have crashed on first tap without it.
+**This is the one thing in the lot that wants a tap on a real device before anyone calls it done.**
+
+The iOS half is `UIActivityViewController`, and three details in it are load-bearing:
+
+- The root-view-controller walk is this repo's existing production pattern (`IosAuthBrowser` uses the
+  same ten lines for `SFSafariViewController`). If it cannot find a host, neither can the Google
+  sign-in that already ships.
+- **The iPad popover anchor is set.** Without it this is a hard crash on iPad, not a layout glitch.
+- The subject goes through `UIActivityItemSource.subjectForActivityType`, not the widespread
+  `setValue(subject, forKey: "subject")` KVC trick, which raises `NSUnknownKeyException` if the key
+  is ever withdrawn.
+
+**Kotlin/Native trap worth keeping**: implementing `UIActivityItemSourceProtocol` fails with
+`Conflicting overloads`, because `itemForActivityType:` and `subjectForActivityType:` are two
+Objective-C selectors that project onto one Kotlin signature - Kotlin ignores parameter names. The
+fix is `@ObjCSignatureOverride` on both. It is easy to read that error as "iOS cannot do this" and
+reach for the KVC hack, which would be a latent crash.
+
+**Nobody has seen the iOS sheet appear.** It compiles and links for `iosArm64`, and no iOS code calls
+it yet, because both callers are still androidMain. Reasoned, not observed.
+
+Moved: `AimiSupportPackageScreen` (162 lines). Its nested `Result` type became a top-level
+`AimiSupportPackageResult` carrying an `AimiPath` instead of a `java.io.File`, which is what freed it.
+
+**What still blocks the other two, named by the compiler rather than guessed:**
+
+- `AimiSupportPackageExporter` (143): a ZIP seam (`java.util.zip`), a scratch-file location
+  (`context.cacheDir` - deliberately *outside* the AIMI directory, so not the storage seam's
+  question), `AimiDiagnosticsManager`, and `java.util.Date`.
+- `AimiProfileAdvisorScreen` (923): 227 errors of which four are structural - `AimiAdvisorService`
+  (androidMain, the screen's whole data source), `ResourceHelper` → `TextResolver`, and
+  **`assetContext`**, which loads a bundled ML asset through a real Android `Context`. That last one
+  is an asset-loading seam, not a rename, and it is the interesting one.
+
+Gates after storage + sharing: **1836 / 594 / 599, 0 failures, BUILD SUCCESSFUL**, all five tasks
+confirmed executed.
+
+### The lock and the resolver, and a claim of mine that measurement overturned
+
+**`ContextManager` did not move.** Its map is now a plain `LinkedHashMap` behind one `AapsLock`,
+`removeByType` takes a `KClass` instead of a `java.lang.Class`, seven `@Synchronized` annotations are
+gone (the lock replaces the monitor and `@Synchronized` is JVM only), and `Dispatchers.IO` is
+`aapsIoDispatcher`. The one remaining blocker is `org.json` in `saveToStorage`/`loadFromStorage`, and
+it was **correctly left alone**: that is a live persistence format, and the read path's throwing
+`getString`/`getLong` is what makes the per-intent `catch` *skip* a corrupt entry. `opt*Compat`
+returns a fallback instead, so a naive swap would silently restore corrupt intents with default
+values rather than dropping them. Same distinction as `AiCoachingService` in 6ba, in a place where
+the cost is stored user data rather than an error message.
+
+The locking discipline used throughout: **take the lock, mutate or copy, release, then do the slow
+work.** No lock is held across a suspension, across a call into `KeyValueStore`, or across a
+`notifyPatientStateChanged`.
+
+**The resolver lot went wider than briefed, correctly.** Three files, not two: `TpoNotificationManager`
+(12 calls), `AuditorReportFormatter` (19 sites / 17 ids - the brief said 14) and
+`AuditorNotificationManager` (7). The third was not in the brief and had to be: it builds the
+**title** of the same notification whose **body** the formatter builds, so converting only the
+formatter would have left that one notification still mixing two languages - the exact defect being
+fixed. 38 calls verified by script before and after. `CoreUiStrings` turned out not to be needed at
+all; neither file references a core-ui string.
+
+`AuditorReportFormatter` still cannot move: `Context` is gone, but `AuditorUIState` is in
+`androidMain`.
+
+**Behaviour change for the release notes**: for a user with an AAPS language override, these
+notifications now follow the AAPS language rather than the system one. Confirmed through
+`AppAndroidBindings.kt:54`, where `TextResolver` is bound to `ResourceHelperImpl`, which resolves via
+`localizedContext`. It is what the rest of the app does and the only way title, body and pack label
+can agree - but it is not a no-op.
+
+Gates: **1840 / 594 / 599**, 0 failures. The four new tests are
+`ContextManagerAtomicityTest`.
+
+### The correction, and why it is the one to remember
+
+The brief for this lot asserted that two compound operations in `ContextManager` were not atomic, and
+that assertion was **the stated justification for touching code one step from the pump**. It was
+wrong: both methods carried `@Synchronized`, as did five others. The claim came from a grep for
+`synchronized`, lower case, which cannot match `@Synchronized`.
+
+It was settled by measurement rather than by argument - the new tests run against the **original**
+file pass 4/4, and against a deliberately re-split version fail 2 - which is the only reason the
+error did not survive into the record as a fixed defect.
+
+What the lock genuinely closes is smaller and real: `addIntent` is a `suspend fun` and so **could not**
+carry `@Synchronized`, leaving its `nextId++` racing the synchronized `addPreset`. Two adds in the
+same millisecond could take the same id, and the second would silently replace the first - the user
+adds two contexts and sees one. 600 rounds did not reproduce it, and the agent said so instead of
+claiming a fix it had not demonstrated.
+
+**The pattern, stated once for the whole campaign:** every wrong call in this migration has been a
+search that matched one spelling of a thing and was read as proof of absence - `^import android`
+missing `androidx`, a bare name hiding a same-package type, `java.lang` needing no import, `@Volatile`
+needing none either, a generated `register(` that exists only after a build, `aimiDeviceLanguage`
+answering a different question than its name suggests, and now `synchronized` not matching
+`@Synchronized`. **A grep that finds nothing is a hypothesis.** The compiler, a test, or reading the
+file is what settles it.
 
 ## 7. Start here next session
 

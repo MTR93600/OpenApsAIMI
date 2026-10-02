@@ -14,12 +14,12 @@ import app.aaps.core.interfaces.notifications.NotificationAction
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.notifications.NotificationManager as AapsNotificationManager
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventShowDialog
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.ui.R as CoreUiR
 import app.aaps.plugins.aps.ApsStrings
-import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model.AuditorUIState
 import dev.zacsweers.metro.AppScope
@@ -36,6 +36,7 @@ class AuditorNotificationManager @Inject constructor(
   private val notificationManager: AapsNotificationManager,
   private val auditorStatusLiveData: AuditorStatusLiveData,
   private val rxBus: RxBus,
+  private val rh: TextResolver,
   private val aapsLogger: AAPSLogger,
 ) {
 
@@ -74,10 +75,10 @@ class AuditorNotificationManager @Inject constructor(
   fun openReport(onFinish: (() -> Unit)? = null) {
     auditorStatusLiveData.markAsRead()
     cancelNotification()
-    val (message, _) = AuditorReportFormatter.buildFullReportMessageWithFallback(context)
+    val (message, _) = AuditorReportFormatter.buildFullReportMessageWithFallback(rh)
     rxBus.send(
       EventShowDialog.Ok(
-        title = context.getString(R.string.aimi_auditor_report_dialog_title),
+        title = rh.gs(ApsStrings.aimi_auditor_report_dialog_title),
         message = message,
         onOk = onFinish,
       )
@@ -85,7 +86,7 @@ class AuditorNotificationManager @Inject constructor(
   }
 
   private fun postInAppNotification(): Boolean {
-    val text = AuditorReportFormatter.buildInAppNotificationText(context)
+    val text = AuditorReportFormatter.buildInAppNotificationText(rh)
     notificationManager.post(
       id = NotificationId.AIMI_AUDITOR_INSIGHT,
       text = text,
@@ -112,10 +113,10 @@ class AuditorNotificationManager @Inject constructor(
     val notification = NotificationCompat.Builder(context, CHANNEL_ID)
       .setSmallIcon(CoreUiR.drawable.ic_audit_monitor)
       .setContentTitle(getNotificationTitle(uiState))
-      .setContentText(AuditorReportFormatter.buildNotificationSummary(context, uiState))
+      .setContentText(AuditorReportFormatter.buildNotificationSummary(rh, uiState))
       .setStyle(
         NotificationCompat.BigTextStyle()
-          .bigText(AuditorReportFormatter.buildNotificationBigText(context, uiState)),
+          .bigText(AuditorReportFormatter.buildNotificationBigText(rh, uiState)),
       )
       .setPriority(NotificationCompat.PRIORITY_DEFAULT)
       .setAutoCancel(true)
@@ -141,11 +142,11 @@ class AuditorNotificationManager @Inject constructor(
   private fun getNotificationTitle(uiState: AuditorUIState): String {
     return when (uiState.type) {
       AuditorUIState.StateType.WARNING ->
-        context.getString(R.string.aimi_auditor_notification_title_warning)
+        rh.gs(ApsStrings.aimi_auditor_notification_title_warning)
       AuditorUIState.StateType.READY ->
-        context.getString(R.string.aimi_auditor_notification_title_ready)
+        rh.gs(ApsStrings.aimi_auditor_notification_title_ready)
       else ->
-        context.getString(R.string.aimi_auditor_notification_title_ready)
+        rh.gs(ApsStrings.aimi_auditor_notification_title_ready)
     }
   }
 
@@ -180,7 +181,7 @@ class AuditorNotificationManager @Inject constructor(
   private fun createOpenReportAction(): NotificationCompat.Action {
     return NotificationCompat.Action.Builder(
       CoreUiR.drawable.ic_audit_monitor,
-      context.getString(R.string.aimi_auditor_notification_action_view),
+      rh.gs(ApsStrings.aimi_auditor_notification_action_view),
       createOpenReportIntent(),
     ).build()
   }
@@ -189,10 +190,10 @@ class AuditorNotificationManager @Inject constructor(
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
     val channel = NotificationChannel(
       CHANNEL_ID,
-      context.getString(R.string.aimi_auditor_notification_channel_name),
+      rh.gs(ApsStrings.aimi_auditor_notification_channel_name),
       NotificationManager.IMPORTANCE_DEFAULT,
     ).apply {
-      description = context.getString(R.string.aimi_auditor_notification_channel_description)
+      description = rh.gs(ApsStrings.aimi_auditor_notification_channel_description)
       enableVibration(false)
       setShowBadge(true)
     }

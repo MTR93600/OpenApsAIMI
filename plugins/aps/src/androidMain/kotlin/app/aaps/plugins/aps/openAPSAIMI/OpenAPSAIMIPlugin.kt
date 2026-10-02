@@ -151,6 +151,7 @@ import kotlin.math.abs
 import kotlin.math.exp
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiSharing
 import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiProfileAdvisorScreen
 import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiSupportPackageScreen
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
@@ -235,6 +236,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val importExportPrefs: ImportExportPrefs,
     private val exportPasswordDataStore: ExportPasswordDataStore,
     private val aiCoachingService: AiCoachingService,
+    private val sharing: AimiSharing,
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -1981,6 +1983,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         profileFunction = profileFunction,
                         rh = rh,
                         storage = storage,
+                        sharing = sharing,
                     )
                     AimiSupportPackageScreen(
                         onBack = onBack,
@@ -2056,6 +2059,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         aiCoachingService = aiCoachingService,
                         rh = rh,
                         storage = storage,
+                        sharing = sharing,
                         onBack = onBack,
                     )
                 },

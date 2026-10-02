@@ -56,6 +56,16 @@ interface AimiStorage {
 
     fun canRead(path: AimiPath): Boolean
 
+    /**
+     * Whether [path] can be written to right now.
+     *
+     * Diagnostic only, and deliberately not a gate: every write here already answers `false` instead
+     * of throwing, so asking first buys nothing but a race. It exists because the stores that log
+     * "the file is not where I left it" print this next to [exists] and [canRead], and that triple is
+     * what tells a reader whether a missing file is a permission problem or a first run.
+     */
+    fun canWrite(path: AimiPath): Boolean
+
     /** Creates [path] as a directory, with parents. `true` if it exists afterwards. */
     fun createDirectories(path: AimiPath): Boolean
 

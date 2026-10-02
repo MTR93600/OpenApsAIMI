@@ -27,16 +27,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
-import app.aaps.plugins.aps.R
-import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiSupportPackageExporter
-import java.io.File
-import kotlinx.coroutines.Dispatchers
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.plugins.aps.ApsStrings
+import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiSupportPackageResult
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -51,8 +52,8 @@ import kotlinx.coroutines.withContext
 fun AimiSupportPackageScreen(
     onBack: () -> Unit,
     verifyCode: (String) -> Boolean,
-    buildPackage: suspend (issue: String) -> AimiSupportPackageExporter.Result,
-    sharePackage: (zipFile: File, issue: String) -> Unit,
+    buildPackage: suspend (issue: String) -> AimiSupportPackageResult,
+    sharePackage: (zip: AimiPath, issue: String) -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -60,10 +61,10 @@ fun AimiSupportPackageScreen(
     var unlocked by rememberSaveable { mutableStateOf(false) }
     var issue by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
-    val generatingMessage = stringResource(R.string.aimi_diag_generating)
-    val invalidMessage = stringResource(R.string.aimi_adv_support_invalid)
-    val emptyMessage = stringResource(R.string.aimi_diag_empty)
-    val errorPrefix = stringResource(R.string.aimi_adv_error_gen)
+    val generatingMessage = stringResource(ApsStrings.aimi_diag_generating)
+    val invalidMessage = stringResource(ApsStrings.aimi_adv_support_invalid)
+    val emptyMessage = stringResource(ApsStrings.aimi_diag_empty)
+    val errorPrefix = stringResource(ApsStrings.aimi_adv_error_gen)
 
     fun onVerify() {
         if (verifyCode(code)) {
@@ -79,12 +80,12 @@ fun AimiSupportPackageScreen(
         busy = true
         scope.launch {
             snackbarHostState.showSnackbar(generatingMessage)
-            val result = withContext(Dispatchers.IO) { buildPackage(issue) }
+            val result = withContext(aapsIoDispatcher) { buildPackage(issue) }
             busy = false
             when (result) {
-                is AimiSupportPackageExporter.Result.Ready -> sharePackage(result.zipFile, issue)
-                AimiSupportPackageExporter.Result.Empty -> snackbarHostState.showSnackbar(emptyMessage)
-                is AimiSupportPackageExporter.Result.Failed ->
+                is AimiSupportPackageResult.Ready -> sharePackage(result.zip, issue)
+                AimiSupportPackageResult.Empty -> snackbarHostState.showSnackbar(emptyMessage)
+                is AimiSupportPackageResult.Failed ->
                     snackbarHostState.showSnackbar("$errorPrefix: ${result.message ?: ""}")
             }
         }
@@ -94,12 +95,12 @@ fun AimiSupportPackageScreen(
         Scaffold(
             topBar = {
                 AapsTopAppBar(
-                    title = { Text(stringResource(R.string.aimi_adv_support_title)) },
+                    title = { Text(stringResource(ApsStrings.aimi_adv_support_title)) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(app.aaps.core.ui.R.string.back),
+                                contentDescription = stringResource(CoreUiStrings.back),
                             )
                         }
                     },
@@ -117,14 +118,14 @@ fun AimiSupportPackageScreen(
                 verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
             ) {
                 Text(
-                    text = stringResource(R.string.aimi_adv_support_msg),
+                    text = stringResource(ApsStrings.aimi_adv_support_msg),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 OutlinedTextField(
                     value = code,
                     onValueChange = { code = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.aimi_adv_support_code_hint)) },
+                    label = { Text(stringResource(ApsStrings.aimi_adv_support_code_hint)) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -134,18 +135,18 @@ fun AimiSupportPackageScreen(
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(stringResource(R.string.aimi_adv_support_verify))
+                    Text(stringResource(ApsStrings.aimi_adv_support_verify))
                 }
                 if (unlocked) {
                     Text(
-                        text = stringResource(R.string.aimi_adv_issue_msg),
+                        text = stringResource(ApsStrings.aimi_adv_issue_msg),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     OutlinedTextField(
                         value = issue,
                         onValueChange = { issue = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.aimi_adv_issue_hint)) },
+                        label = { Text(stringResource(ApsStrings.aimi_adv_issue_hint)) },
                         minLines = 3,
                     )
                     Button(
@@ -153,7 +154,7 @@ fun AimiSupportPackageScreen(
                         enabled = !busy,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(stringResource(R.string.aimi_adv_generate_btn))
+                        Text(stringResource(ApsStrings.aimi_adv_generate_btn))
                     }
                 }
             }
