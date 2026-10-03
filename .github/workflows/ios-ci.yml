@@ -154,6 +154,9 @@ jobs:
           check ":core:data" core/data
           check ":implementation" implementation
           check ":ios:shell" ios/shell
+          # :core:interfaces has commonTest (BleSessionTest). Without this line a SKIPPED
+          # iosSimulatorArm64Test still exits 0 and the module disappears.
+          check ":core:interfaces" core/interfaces
           exit $fail
 
       - name: Upload test results
