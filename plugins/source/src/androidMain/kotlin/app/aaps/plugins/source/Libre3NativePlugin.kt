@@ -51,6 +51,7 @@ import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.IntKey
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.binding
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -109,7 +110,20 @@ class Libre3NativePlugin @Inject constructor(
     config,
 ), BgSource, Libre3GlucoseWatcher, CgmSensorStatusProvider {
 
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /**
+     * Where every database write and every wait of this plugin runs.
+     *
+     * The handler is not decoration. Without one, anything thrown inside an `ioScope.launch` walks
+     * up to the default handler of the process and takes the whole app down. The promotion is the
+     * worst moment for that: it would leave one sensor written into both slot files and the loop
+     * with no sensor at all on the next launch. A Bluetooth or database failure has to cost a log
+     * line, never the app.
+     */
+    private val ioScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, t ->
+            aapsLogger.error(LTag.BGSOURCE, "${Libre3LogMarkers.ERROR}: background work failed, ${t.message}", t)
+        },
+    )
 
     /**
      * The last resort that brings a sensor back.
