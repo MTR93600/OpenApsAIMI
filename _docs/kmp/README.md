@@ -16,7 +16,8 @@
 
 [`AIMI_KMP_EXECUTION_PLAN.md`](AIMI_KMP_EXECUTION_PLAN.md) dit quoi faire maintenant
 (semaines 1–8, One+/Libre 3, contrat KMP, go/no-go).  
-[`adr-g0-defaults.md`](adr-g0-defaults.md) fige hôte Trio, CGM One+/G7 d'abord, VirtualPump jusqu'à W8.
+[`adr-g0-defaults.md`](adr-g0-defaults.md) fige hôte Trio, CGM One+/G7 d'abord, VirtualPump jusqu'à W8.  
+Le 2026-10-03, l'hôte iOS et l'interdiction de pile BLE/NFC dans `iosMain` sont **remplacé sur ce point par ADR G1** ([`adr-g1-ios-kmp-natif.md`](adr-g1-ios-kmp-natif.md)).
 
 ## Document d'architecture
 
