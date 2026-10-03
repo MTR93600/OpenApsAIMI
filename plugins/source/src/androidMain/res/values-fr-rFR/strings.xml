@@ -37,6 +37,9 @@
     <!-- Instara App -->
     <string name="instara_app">Instara</string>
     <string name="description_source_instara_app">Recevoir des valeurs de glycémie depuis l\'application Instara.</string>
+    <string name="dexcom_oneplus_staging_promote_bound_failed">"Capteur promu, mais les anciennes entrées de calibration n'ont pas pu être ignorées. Retirez les glycémies capillaires prises avant cet échange, puis recalibrez si besoin."</string>
+    <string name="dexcom_oneplus_staging_promote_follow_up_failed">"Capteur promu, mais la reprise a échoué. Le capteur de production est celui qui vient d'être promu. Ouvrez l'écran d'état ONE+ et rapprochez le capteur. Ce n'est pas un succès complet."</string>
+    <string name="dexcom_oneplus_staging_promote_follow_up_failed_no_identity">"Une étape après l'échange a échoué, et l'identité du capteur de production est absente. Ce n'est pas un succès complet. Ouvrez l'écran d'état ONE+ et vérifiez quel capteur est en service."</string>
     <!-- Instara preferences -->
     <string name="pref_title_instara_history_request">Demande de données historiques d\'Instara</string>
     <string name="pref_summary_instara_history_request">Demander des données historiques manquantes en arrière-plan</string>

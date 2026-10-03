@@ -124,6 +124,22 @@ class DexcomOnePlusWarmupNotification(private val context: Context) {
         }
     }
 
+    /** One-shot alert. Not ongoing: the user must be able to dismiss it after reading the action. */
+    fun alert(text: String) {
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(CoreUiR.drawable.notif_icon)
+            .setContentTitle(context.getString(R.string.dexcom_oneplus_native))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setAutoCancel(true)
+            .setOngoing(false)
+        try {
+            NotificationManagerCompat.from(context).notify(ALERT_ID, builder.build())
+        } catch (_: SecurityException) {
+            // POST_NOTIFICATIONS denied — the promotion result on the status screen still says it.
+        }
+    }
+
     fun cancel() {
         try {
             NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
@@ -161,5 +177,6 @@ class DexcomOnePlusWarmupNotification(private val context: Context) {
     companion object {
         private const val CHANNEL_ID = "DEXCOM_ONEPLUS_STATUS"
         private const val NOTIFICATION_ID = 8931
+        private const val ALERT_ID = 8932
     }
 }

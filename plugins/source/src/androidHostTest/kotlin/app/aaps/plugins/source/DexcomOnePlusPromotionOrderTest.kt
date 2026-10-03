@@ -6,6 +6,8 @@ import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.PromotionRejectReason
@@ -20,7 +22,9 @@ import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorIdentity
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.dexcomoneplus.session.OnePlusMacArbiter
+import app.aaps.plugins.source.activities.dexcomOnePlusPromotionMessage
 import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
+import app.aaps.shared.tests.AAPSLoggerTest
 import app.aaps.shared.tests.SharedPreferencesMock
 import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
@@ -39,14 +43,15 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.timeout
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import java.io.File
 
 /**
  * Promotion order of Dexcom ONE+.
  *
  * Every refusal returns before the irreversible steps. A success follows the ref
  * (`DexcomOnePlusPlugin.promoteStagingToProduction` at `3dd0ca64772`): guards, then the
- * exchange, then `logSensorChange`, then `ignoreEntriesBefore` inside `runCatching`
- * (ref L934), then `select` and `resumeStoredSession`, each in its own `runCatching`.
+ * exchange, then `logSensorChange`, then `ignoreEntriesBefore`. Ref L934 swallows a throw and
+ * returns Ok. This lot does not: the exchange stays, and the result is not Ok.
  */
 class DexcomOnePlusPromotionOrderTest : TestBase() {
 
@@ -63,6 +68,8 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
     private val activePlugin: ActivePlugin = mock<ActivePlugin>().also {
         whenever(it.activeCalibration).thenReturn(activeCalibration)
     }
+    private val logger = RecordingLogger()
+    private val alerts = mutableListOf<String>()
 
     private val productionPrefs: SharedPreferences = SharedPreferencesMock()
     private val stagingPrefs: SharedPreferences = SharedPreferencesMock()
@@ -77,9 +84,10 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
         whenever(persistenceLayer.insertCgmSourceData(any(), any(), any(), anyOrNull()))
             .thenReturn(PersistenceLayer.TransactionResult())
         plugin = DexcomOnePlusPlugin(
-            rh, aapsLogger, preferences, config, context, persistenceLayer,
+            rh, logger, preferences, config, context, persistenceLayer,
             warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin,
         )
+        plugin.promotionAlerter = { alerts += it }
     }
 
     @AfterEach
@@ -189,30 +197,33 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
     }
 
     @Test
-    fun `a thrown bound is swallowed and the exchange stays`() = runTest {
-        // Ref L934: runCatching around ignoreEntriesBefore. The throw does not undo the exchange
-        // and does not stop the steps that follow it. The function still returns Ok.
+    fun `a thrown bound keeps the exchange and is not a silent success`() = runTest {
+        // Deliberate deviation from ref L934: the throw does not undo the exchange, and the
+        // result is not Ok. The user is told the sensor was promoted and what to do.
         readyStaging(mac = "AA:BB:CC:DD:EE:25", ageMs = 60_000L)
         val soak = OnePlusCgmDrivers.staging()
+        whenever(rh.gs(R.string.dexcom_oneplus_staging_promote_bound_failed)).thenReturn(BOUND_FAILED_TEXT)
         whenever(activeCalibration.ignoreEntriesBefore(any())).thenThrow(IllegalStateException("bound failed"))
 
         val result = plugin.promoteStagingToProduction(allowEarly = true)
 
-        assertThat(result).isEqualTo(PromotionResult.Ok)
+        assertThat(result).isEqualTo(PromotionResult.OkBoundFailed)
         verify(activeCalibration).ignoreEntriesBefore(any())
         assertThat(productionPrefs.getString(KEY_PIN, null)).isEqualTo("1234")
         assertThat(stagingPrefs.getString(KEY_PIN, null)).isNull()
         assertThat(OnePlusCgmDrivers.default()).isSameInstanceAs(soak)
         assertThat(OnePlusCgmDrivers.useRealSkeleton).isTrue()
+        assertThat(alerts).containsExactly(BOUND_FAILED_TEXT)
+        assertThat(logger.errors).contains(BOUND_FAILED_TEXT)
     }
 
     @Test
-    fun `a failure after the bound leaves the exchange and still returns Ok`() = runTest {
-        // Ref: resumeStoredSession sits in runCatching after the bound. A throw there is the
-        // state the ref reaches — Ok, identity already in the production file, default() already
-        // the pre-soak instance.
+    fun `a failure after the bound keeps the exchange and is not a complete success`() = runTest {
+        // load() / resume throws after the bound. The exchange stays. The result reads the
+        // production identity instead of announcing Ok.
         readyStaging(mac = "AA:BB:CC:DD:EE:26", ageMs = 60_000L)
         val soak = OnePlusCgmDrivers.staging()
+        whenever(rh.gs(R.string.dexcom_oneplus_staging_promote_follow_up_failed)).thenReturn(FOLLOW_UP_TEXT)
         val steps = mutableListOf<String>()
         whenever(activeCalibration.ignoreEntriesBefore(any())).thenAnswer {
             steps.add("bound")
@@ -230,11 +241,97 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
 
         val result = plugin.promoteStagingToProduction(allowEarly = true)
 
-        assertThat(result).isEqualTo(PromotionResult.Ok)
+        assertThat(result).isEqualTo(PromotionResult.OkFollowUpFailed(productionIdentityPresent = true))
         assertThat(steps).containsExactly("bound", "resume").inOrder()
         assertThat(productionPrefs.getString(KEY_PIN, null)).isEqualTo("1234")
         assertThat(stagingPrefs.getString(KEY_PIN, null)).isNull()
         assertThat(OnePlusCgmDrivers.default()).isSameInstanceAs(soak)
+        assertThat(alerts).containsExactly(FOLLOW_UP_TEXT)
+        assertThat(logger.errors).contains(FOLLOW_UP_TEXT)
+    }
+
+    @Test
+    fun `promotion texts distinguish refusal, a failed bound, and a later failure`() {
+        val english = readResource("src/androidMain/res/values/strings.xml")
+        val french = readResource("src/androidMain/res/values-fr-rFR/strings.xml")
+        assertThat(english).contains(
+            "Sensor promoted, but older calibration entries could not be ignored. " +
+                "Remove fingerstick calibrations taken before this switch, then calibrate again if needed.",
+        )
+        assertThat(french).contains(
+            "Capteur promu, mais les anciennes entrées de calibration n'ont pas pu être ignorées.",
+        )
+        assertThat(french).contains("Retirez les glycémies capillaires prises avant cet échange")
+        assertThat(
+            dexcomOnePlusPromotionMessage(
+                result = PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT),
+                ok = "ok",
+                boundFailed = "bound",
+                followUpIdentityPresent = "follow",
+                followUpIdentityMissing = "missing",
+                rejectedAbsent = "absent",
+                rejectedNotSettled = "settling",
+                rejectedNoGlucose = "glucose",
+                rejectedNoRecentGlucose = "recent",
+                rejectedLoopBusy = "busy",
+            ),
+        ).isEqualTo("absent")
+        assertThat(
+            dexcomOnePlusPromotionMessage(
+                result = PromotionResult.OkBoundFailed,
+                ok = "ok",
+                boundFailed = "bound",
+                followUpIdentityPresent = "follow",
+                followUpIdentityMissing = "missing",
+                rejectedAbsent = "absent",
+                rejectedNotSettled = "settling",
+                rejectedNoGlucose = "glucose",
+                rejectedNoRecentGlucose = "recent",
+                rejectedLoopBusy = "busy",
+            ),
+        ).isEqualTo("bound")
+        assertThat(
+            dexcomOnePlusPromotionMessage(
+                result = PromotionResult.OkFollowUpFailed(productionIdentityPresent = true),
+                ok = "ok",
+                boundFailed = "bound",
+                followUpIdentityPresent = "follow",
+                followUpIdentityMissing = "missing",
+                rejectedAbsent = "absent",
+                rejectedNotSettled = "settling",
+                rejectedNoGlucose = "glucose",
+                rejectedNoRecentGlucose = "recent",
+                rejectedLoopBusy = "busy",
+            ),
+        ).isEqualTo("follow")
+        assertThat(
+            dexcomOnePlusPromotionMessage(
+                result = PromotionResult.OkFollowUpFailed(productionIdentityPresent = false),
+                ok = "ok",
+                boundFailed = "bound",
+                followUpIdentityPresent = "follow",
+                followUpIdentityMissing = "missing",
+                rejectedAbsent = "absent",
+                rejectedNotSettled = "settling",
+                rejectedNoGlucose = "glucose",
+                rejectedNoRecentGlucose = "recent",
+                rejectedLoopBusy = "busy",
+            ),
+        ).isEqualTo("missing")
+        assertThat(
+            dexcomOnePlusPromotionMessage(
+                result = PromotionResult.Ok,
+                ok = "ok",
+                boundFailed = "bound",
+                followUpIdentityPresent = "follow",
+                followUpIdentityMissing = "missing",
+                rejectedAbsent = "absent",
+                rejectedNotSettled = "settling",
+                rejectedNoGlucose = "glucose",
+                rejectedNoRecentGlucose = "recent",
+                rejectedLoopBusy = "busy",
+            ),
+        ).isEqualTo("ok")
     }
 
     @Test
@@ -293,6 +390,19 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
         flow.value = state
     }
 
+    private fun readResource(relative: String): String {
+        val file = listOf(File(relative), File("plugins/source/$relative")).firstOrNull { it.isFile }
+            ?: error("missing $relative from ${File(".").absolutePath}")
+        return file.readText()
+    }
+
+    private class RecordingLogger : AAPSLogger by AAPSLoggerTest() {
+        val errors = mutableListOf<String>()
+        override fun error(tag: LTag, message: String, throwable: Throwable) {
+            errors += message
+        }
+    }
+
     private fun setPrivate(name: String, value: Any?) {
         DexcomOnePlusPlugin::class.java.getDeclaredField(name).apply { isAccessible = true }.set(plugin, value)
     }
@@ -311,5 +421,10 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
         private const val STAGING_PREFS_NAME = "dexcom_oneplus_sensor_staging"
         private const val KEY_PIN = "pin"
         private const val KEY_MAC = "last_mac"
+        private const val BOUND_FAILED_TEXT =
+            "Sensor promoted, but older calibration entries could not be ignored. " +
+                "Remove fingerstick calibrations taken before this switch, then calibrate again if needed."
+        private const val FOLLOW_UP_TEXT =
+            "Sensor promoted, but reconnecting it failed. The production sensor is the one just promoted."
     }
 }

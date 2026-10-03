@@ -104,6 +104,8 @@ class DexcomOnePlusPlugin @Inject constructor(
     config,
 ), BgSource, OnePlusGlucoseWatcher, CgmSensorStatusProvider {
 
+    private val resources: ResourceHelper = rh
+
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** Watches who owns the radio, so both slots back off while a pump setup runs. */
@@ -144,6 +146,9 @@ class DexcomOnePlusPlugin @Inject constructor(
             .stateIn(ioScope, SharingStarted.Eagerly, DexcomOnePlusWarmupMapper.toCgmWarmupStatus(_warmup.value))
 
     private val warmupNotification by lazy { DexcomOnePlusWarmupNotification(context) }
+
+    /** Posts the user-visible alert. Tests replace it; production posts a status-bar notification. */
+    internal var promotionAlerter: (String) -> Unit = { message -> warmupNotification.alert(message) }
 
     /** Private SharedPreferences-backed sensor store — used here only to persist/read the ingest
      *  high-water mark so restarts/updates don't re-insert duplicate readings. */
@@ -832,11 +837,19 @@ class DexcomOnePlusPlugin @Inject constructor(
         logSensorChange(startMs)
         // That back-dated session start would otherwise pull every fingerstick taken during the
         // pre-soak into this sensor's fit — all of them paired against the sensor just retired.
-        // Ref DexcomOnePlusPlugin.kt L934 @ 3dd0ca64772 (1b81e356c8). The runCatching is the ref's:
-        // a throw here is swallowed and the function still returns Ok, because the exchange above
-        // has already happened. Same wall clock as the soak math in this file:
+        // Ref DexcomOnePlusPlugin.kt L934 @ 3dd0ca64772 (1b81e356c8) swallows the throw and returns
+        // Ok. Deliberate deviation: the exchange above is kept (no rollback), but the result is
+        // OkBoundFailed and the user is told. Same wall clock as the soak math in this file:
         // System.currentTimeMillis, not aimiWallClockMs (:plugins:aps is not a CGM dependency).
-        runCatching { activePlugin.activeCalibration.ignoreEntriesBefore(System.currentTimeMillis()) }
+        val boundFailure: Throwable? = try {
+            activePlugin.activeCalibration.ignoreEntriesBefore(System.currentTimeMillis())
+            null
+        } catch (thrown: Throwable) {
+            thrown
+        }
+        if (boundFailure != null) {
+            notifyPromotionProblem(R.string.dexcom_oneplus_staging_promote_bound_failed, boundFailure)
+        }
         // Flips `useRealSkeleton` for THIS session too — the preferences write above only takes
         // effect after a restart, so without this `default()` kept handing out the Stub.
         runCatching { OnePlusCgmDrivers.select(useReal = true, watcher = this) }
@@ -851,8 +864,32 @@ class DexcomOnePlusPlugin @Inject constructor(
         refreshSessionService()
         // A pre-soak whose link happened to be down at this exact moment must not leave the loop
         // without a sensor until the watchdog wakes up 5 min later.
-        runCatching { if (!promoted.isSessionUp()) promoted.resumeStoredSession() }
+        val followUpFailure: Throwable? = try {
+            if (!promoted.isSessionUp()) promoted.resumeStoredSession()
+            null
+        } catch (thrown: Throwable) {
+            thrown
+        }
+        if (followUpFailure != null) {
+            val identityPresent = sensorStore.load() != null
+            val text = if (identityPresent) {
+                R.string.dexcom_oneplus_staging_promote_follow_up_failed
+            } else {
+                R.string.dexcom_oneplus_staging_promote_follow_up_failed_no_identity
+            }
+            notifyPromotionProblem(text, followUpFailure)
+            if (boundFailure != null) return PromotionResult.OkBoundFailed
+            return PromotionResult.OkFollowUpFailed(productionIdentityPresent = identityPresent)
+        }
+        if (boundFailure != null) return PromotionResult.OkBoundFailed
         return PromotionResult.Ok
+    }
+
+    /** Error log plus the user-visible alert. Does not roll the exchange back. */
+    private fun notifyPromotionProblem(textId: Int, error: Throwable) {
+        val message = resources.gs(textId)
+        aapsLogger.error(LTag.BGSOURCE, message, error)
+        promotionAlerter(message)
     }
 
     /**

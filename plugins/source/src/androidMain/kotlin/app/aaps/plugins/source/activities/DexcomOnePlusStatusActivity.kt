@@ -122,6 +122,37 @@ class DexcomOnePlusStatusActivity : MetroAppCompatActivity() {
 /** How often the screen goes back to the database for the newest reading. */
 private const val GLUCOSE_REFRESH_MILLIS = 30_000L
 
+/**
+ * Text shown after Promote. Refusal means nothing was written. [PromotionResult.OkBoundFailed]
+ * means the exchange is kept and the calibration bound threw. [PromotionResult.OkFollowUpFailed]
+ * means a later step threw; the wording follows [PromotionResult.OkFollowUpFailed.productionIdentityPresent],
+ * which the plugin read from the production store.
+ */
+internal fun dexcomOnePlusPromotionMessage(
+    result: PromotionResult,
+    ok: String,
+    boundFailed: String,
+    followUpIdentityPresent: String,
+    followUpIdentityMissing: String,
+    rejectedAbsent: String,
+    rejectedNotSettled: String,
+    rejectedNoGlucose: String,
+    rejectedNoRecentGlucose: String,
+    rejectedLoopBusy: String,
+): String = when (result) {
+    PromotionResult.Ok -> ok
+    PromotionResult.OkBoundFailed -> boundFailed
+    is PromotionResult.OkFollowUpFailed ->
+        if (result.productionIdentityPresent) followUpIdentityPresent else followUpIdentityMissing
+    is PromotionResult.Rejected -> when (result.reason) {
+        PromotionRejectReason.STAGING_ABSENT -> rejectedAbsent
+        PromotionRejectReason.STAGING_NOT_SETTLED -> rejectedNotSettled
+        PromotionRejectReason.STAGING_NO_VALID_GLUCOSE -> rejectedNoGlucose
+        PromotionRejectReason.STAGING_NO_RECENT_GLUCOSE -> rejectedNoRecentGlucose
+        PromotionRejectReason.LOOP_BUSY -> rejectedLoopBusy
+    }
+}
+
 @Composable
 private fun DexcomOnePlusStatusScreen(
     onBack: () -> Unit,
@@ -162,6 +193,9 @@ private fun DexcomOnePlusStatusScreen(
 
     // Promotion result → user message (resolved here so the coroutine has no Composable context).
     val promoteOk = stringResource(R.string.dexcom_oneplus_staging_promote_ok)
+    val promoteBoundFailed = stringResource(R.string.dexcom_oneplus_staging_promote_bound_failed)
+    val promoteFollowUpFailed = stringResource(R.string.dexcom_oneplus_staging_promote_follow_up_failed)
+    val promoteFollowUpNoIdentity = stringResource(R.string.dexcom_oneplus_staging_promote_follow_up_failed_no_identity)
     val promoteRejectedAbsent = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_absent)
     val promoteRejectedNotSettled = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_not_settled)
     val promoteRejectedNoGlucose = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_no_glucose)
@@ -298,16 +332,18 @@ private fun DexcomOnePlusStatusScreen(
                         showPromoteConfirm = false
                         val allowEarly = promoteEarly
                         scope.launch {
-                            promoteResultText = when (val result = onPromote(allowEarly)) {
-                                is PromotionResult.Ok       -> promoteOk
-                                is PromotionResult.Rejected -> when (result.reason) {
-                                    PromotionRejectReason.STAGING_ABSENT            -> promoteRejectedAbsent
-                                    PromotionRejectReason.STAGING_NOT_SETTLED       -> promoteRejectedNotSettled
-                                    PromotionRejectReason.STAGING_NO_VALID_GLUCOSE  -> promoteRejectedNoGlucose
-                                    PromotionRejectReason.STAGING_NO_RECENT_GLUCOSE -> promoteRejectedNoRecentGlucose
-                                    PromotionRejectReason.LOOP_BUSY                 -> promoteRejectedLoopBusy
-                                }
-                            }
+                            promoteResultText = dexcomOnePlusPromotionMessage(
+                                result = onPromote(allowEarly),
+                                ok = promoteOk,
+                                boundFailed = promoteBoundFailed,
+                                followUpIdentityPresent = promoteFollowUpFailed,
+                                followUpIdentityMissing = promoteFollowUpNoIdentity,
+                                rejectedAbsent = promoteRejectedAbsent,
+                                rejectedNotSettled = promoteRejectedNotSettled,
+                                rejectedNoGlucose = promoteRejectedNoGlucose,
+                                rejectedNoRecentGlucose = promoteRejectedNoRecentGlucose,
+                                rejectedLoopBusy = promoteRejectedLoopBusy,
+                            )
                         }
                     },
                 ) {
