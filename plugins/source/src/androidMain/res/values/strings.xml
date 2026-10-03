@@ -193,6 +193,8 @@
     <string name="dexcom_oneplus_staging_promote_dismiss">Cancel</string>
     <string name="dexcom_oneplus_staging_promote_ok">Staging sensor promoted — it now feeds the loop.</string>
     <string name="dexcom_oneplus_staging_promote_bound_failed">The sensor is promoted, but the old calibration entries could not be ignored. Check a fingerstick before you trust the loop, and calibrate again if those old entries still apply.</string>
+    <string name="dexcom_oneplus_staging_promote_follow_up_failed">Sensor promoted, but reconnecting it failed. The production sensor is the one just promoted. Open the ONE+ status screen and bring the sensor back in range. This is not a complete success.</string>
+    <string name="dexcom_oneplus_staging_promote_follow_up_failed_no_identity">A step after the exchange failed, and the production sensor identity is missing. This is not a complete success. Open the ONE+ status screen and check which sensor is in use.</string>
     <string name="dexcom_oneplus_staging_promote_rejected_absent">No staging sensor to promote.</string>
     <string name="dexcom_oneplus_staging_promote_rejected_not_settled">Staging sensor has not settled long enough to promote yet.</string>
     <string name="dexcom_oneplus_staging_promote_rejected_no_glucose">Staging sensor has not produced enough valid glucose yet.</string>
@@ -357,6 +359,7 @@
     <string name="libre3_presoak_promote_ok">Done. The pre-soak sensor now feeds the loop.</string>
     <string name="libre3_presoak_promote_bound_failed">The sensor is promoted, but the old calibration entries could not be ignored. Check a fingerstick before you trust the loop, and calibrate again if those old entries still apply.</string>
     <string name="libre3_presoak_promote_check_state">The sensor looks promoted, but the promotion did not finish cleanly. Check the Libre 3 status to see which sensor feeds the loop before you trust it.</string>
+    <string name="libre3_presoak_promote_follow_up_no_identity">A step after the exchange failed, and the production sensor identity is missing. This is not a complete success. Open the Libre 3 status and check which sensor is in use.</string>
     <string name="libre3_presoak_promote_rejected_absent">There is no pre-soak sensor to promote.</string>
     <string name="libre3_presoak_promote_rejected_other">The pre-soak sensor could not be promoted. Nothing was changed.</string>
     <string name="libre3_presoak_cancel">Cancel pre-soak</string>

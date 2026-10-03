@@ -313,7 +313,8 @@ class Libre3NativePlugin @Inject constructor(
      * [logSensorChangeOnce]. Reference `Libre3NativePlugin.promoteStagingToProduction` on
      * `dev_OAPSAIMI` @ `3dd0ca64772`, L980–1078. Reference L1055 swallows a throw and still returns
      * [PromotionResult.Ok]. This copy does not: a throw leaves the swap in place and returns
-     * [PromotionResult.OkBoundFailed].
+     * [PromotionResult.OkBoundFailed]. A throw from a later step returns
+     * [PromotionResult.OkFollowUpFailed], unless the bound also failed.
      *
      * @param allowEarly accepted and ignored. A Libre 3 pre-soak has no soak gate, because the user
      *   already pays real sensor wear time for the soak, so there is nothing here to relax. Please
@@ -395,38 +396,56 @@ class Libre3NativePlugin @Inject constructor(
         // every fingerstick taken during the pre-soak — all paired against the OLD sensor — would
         // be fitted onto the new one, and applied from its first minute with no warm-up left.
         // Reference L1055 wraps this call in `runCatching` and still returns Ok. Deliberate
-        // deviation: a throw does not undo the swap, and it is not reported as a full success.
-        var boundFailed = false
-        try {
+        // deviation, same types as P5.4: a throw does not undo the swap, and it is not a full success.
+        val boundFailure: Throwable? = try {
             activePlugin.activeCalibration.ignoreEntriesBefore(System.currentTimeMillis())
+            null
         } catch (thrown: Throwable) {
-            boundFailed = true
             val notice = (rh as ResourceHelper).gs(R.string.libre3_presoak_promote_bound_failed)
             aapsLogger.error(LTag.BGSOURCE, notice, thrown)
+            thrown
         }
-        // Make the promoted instance the driver the plugin really talks to from now on. `true` is
-        // written here and not read back from the preference on purpose: a promoted sensor IS a
-        // real sensor, and a `select(false)` at this point would stop the instance that has just
-        // taken the loop over.
-        runCatching { Libre3CgmDrivers.select(useReal = true, watcher = productionWatcher) }
-        refreshProductionLifecycle()
-        // One sensor moved from the pre-soak slot into production, so the service is still wanted,
-        // but the reason for it has changed. Asked again so the two slots are counted as they are.
-        refreshSessionService()
-        // A pre-soak whose link happened to be down at this moment must not leave the loop without
-        // a sensor until the watchdog wakes up. Asked straight of the promoted instance, so no
-        // driver choice can be undone here either.
-        if (!promoted.isSessionUp()) {
-            val blocked = Libre3CgmDrivers.realDriverBlockedReason()
-            if (blocked != null) aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: BLE not started, $blocked")
-            else runCatching { promoted.connect(staged.bleAddress) }
+        // Steps after the bound. A throw here is [PromotionResult.OkFollowUpFailed], with the
+        // production identity read from the store after the throw. The bound failure wins if both
+        // happened, same priority as Dexcom ONE+.
+        val followUpFailure: Throwable? = try {
+            // Make the promoted instance the driver the plugin really talks to from now on. `true` is
+            // written here and not read back from the preference on purpose: a promoted sensor IS a
+            // real sensor, and a `select(false)` at this point would stop the instance that has just
+            // taken the loop over.
+            runCatching { Libre3CgmDrivers.select(useReal = true, watcher = productionWatcher) }
+            refreshProductionLifecycle()
+            // One sensor moved from the pre-soak slot into production, so the service is still wanted,
+            // but the reason for it has changed. Asked again so the two slots are counted as they are.
+            refreshSessionService()
+            // A pre-soak whose link happened to be down at this moment must not leave the loop without
+            // a sensor until the watchdog wakes up. Asked straight of the promoted instance, so no
+            // driver choice can be undone here either.
+            if (!promoted.isSessionUp()) {
+                val blocked = Libre3CgmDrivers.realDriverBlockedReason()
+                if (blocked != null) aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: BLE not started, $blocked")
+                else runCatching { promoted.connect(staged.bleAddress) }
+            }
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "${Libre3LogMarkers.PRESOAK}: promote done serial=${staged.serialNumber} " +
+                    "retired=${retired != null} sessionUp=${promoted.isSessionUp()}",
+            )
+            null
+        } catch (thrown: Throwable) {
+            thrown
         }
-        aapsLogger.info(
-            LTag.BGSOURCE,
-            "${Libre3LogMarkers.PRESOAK}: promote done serial=${staged.serialNumber} " +
-                "retired=${retired != null} sessionUp=${promoted.isSessionUp()}",
-        )
-        return if (boundFailed) PromotionResult.OkBoundFailed else PromotionResult.Ok
+        if (followUpFailure != null) {
+            val identityPresent = sensorStore.loadIdentity() != null
+            val notice = (rh as ResourceHelper).gs(
+                if (identityPresent) R.string.libre3_presoak_promote_check_state
+                else R.string.libre3_presoak_promote_follow_up_no_identity,
+            )
+            aapsLogger.error(LTag.BGSOURCE, notice, followUpFailure)
+            if (boundFailure != null) return PromotionResult.OkBoundFailed
+            return PromotionResult.OkFollowUpFailed(productionIdentityPresent = identityPresent)
+        }
+        return if (boundFailure != null) PromotionResult.OkBoundFailed else PromotionResult.Ok
     }
 
     /**

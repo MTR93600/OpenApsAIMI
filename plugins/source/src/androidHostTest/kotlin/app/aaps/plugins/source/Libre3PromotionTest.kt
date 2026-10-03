@@ -329,19 +329,15 @@ class Libre3PromotionTest : TestBase() {
     @Test
     fun `a failure after the cutoff leaves the swap done and does not return Ok`() = runTest {
         whenever(preferences.get(BooleanKey.BgSourceCreateSensorChange)).thenReturn(true)
+        whenever(rh.gs(app.aaps.plugins.source.R.string.libre3_presoak_promote_check_state)).thenReturn("check")
         val cutoff = StoringCutoff()
         plugin = newPlugin(logger = PromoteDoneFailsLogger(), calibration = cutoff)
         startPresoak()
 
-        var thrown: Throwable? = null
-        try {
-            plugin.promoteStagingToProduction()
-        } catch (t: Throwable) {
-            thrown = t
-        }
+        val result = plugin.promoteStagingToProduction()
 
-        assertThat(thrown).isInstanceOf(IllegalStateException::class.java)
-        assertThat(thrown!!.message).isEqualTo("log failed")
+        assertThat(result).isEqualTo(PromotionResult.OkFollowUpFailed(productionIdentityPresent = true))
+        assertThat(Libre3SensorStore(context, null).loadIdentity()).isNotNull()
         assertThat(cutoff.storedTimestamp).isNotNull()
         assertThat(Libre3SensorStore(context, null).loadIdentity()!!.serialNumber).isEqualTo(staged.serialNumber)
         assertThat(Libre3SensorStore(context, Libre3CgmDrivers.STAGING_NAMESPACE).loadIdentity()).isNull()

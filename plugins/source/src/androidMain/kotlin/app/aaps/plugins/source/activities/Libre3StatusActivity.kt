@@ -207,6 +207,7 @@ internal fun Libre3StatusScreen(
     val promoteOk = stringResource(R.string.libre3_presoak_promote_ok)
     val promoteBoundFailed = stringResource(R.string.libre3_presoak_promote_bound_failed)
     val promoteCheckState = stringResource(R.string.libre3_presoak_promote_check_state)
+    val promoteFollowUpNoIdentity = stringResource(R.string.libre3_presoak_promote_follow_up_no_identity)
     val promoteRejectedAbsent = stringResource(R.string.libre3_presoak_promote_rejected_absent)
     val promoteRejectedOther = stringResource(R.string.libre3_presoak_promote_rejected_other)
     val presoakCancelled = stringResource(R.string.libre3_presoak_cancel_done)
@@ -409,23 +410,16 @@ internal fun Libre3StatusScreen(
                     onClick = {
                         askingToPromote = false
                         runPresoakAction {
-                            // Read the production identity around the call. A throw after the swap
-                            // is told apart from a throw before it by that read, not by assuming
-                            // the swap happened.
-                            val serialBefore = store.loadIdentity()?.serialNumber
-                            try {
-                                when (val result = onPromote()) {
-                                    PromotionResult.Ok            -> promoteOk
-                                    PromotionResult.OkBoundFailed -> promoteBoundFailed
-                                    is PromotionResult.Rejected   -> when (result.reason) {
-                                        PromotionRejectReason.STAGING_ABSENT -> promoteRejectedAbsent
-                                        else                                 -> promoteRejectedOther
-                                    }
+                            when (val result = onPromote()) {
+                                PromotionResult.Ok                 -> promoteOk
+                                PromotionResult.OkBoundFailed      -> promoteBoundFailed
+                                is PromotionResult.OkFollowUpFailed ->
+                                    if (result.productionIdentityPresent) promoteCheckState
+                                    else promoteFollowUpNoIdentity
+                                is PromotionResult.Rejected        -> when (result.reason) {
+                                    PromotionRejectReason.STAGING_ABSENT -> promoteRejectedAbsent
+                                    else                                 -> promoteRejectedOther
                                 }
-                            } catch (_: Throwable) {
-                                val serialAfter = store.loadIdentity()?.serialNumber
-                                if (serialAfter != null && serialAfter != serialBefore) promoteCheckState
-                                else promoteRejectedOther
                             }
                         }
                     }

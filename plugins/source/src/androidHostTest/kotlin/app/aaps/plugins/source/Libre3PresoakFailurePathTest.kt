@@ -1,7 +1,6 @@
 package app.aaps.plugins.source
 
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -11,7 +10,6 @@ import androidx.core.app.ServiceCompat
 import app.aaps.core.interfaces.source.PromotionRejectReason
 import app.aaps.core.interfaces.source.PromotionResult
 import app.aaps.core.interfaces.source.StagingState
-import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
 import androidx.test.core.app.ApplicationProvider
 import app.aaps.plugins.source.activities.Libre3PresoakAction
@@ -112,34 +110,22 @@ class Libre3PresoakFailurePathTest {
 
     @Test
     @Config(sdk = [35], qualifiers = "h2000dp")
-    fun `a throw after the swap says to check the sensor when production identity changed`() {
-        val promoted = Libre3SensorIdentity(
-            serialNumber = "MH0PROMOTED",
-            bleAddress = "AA:BB:CC:DD:EE:09",
-            blePin = byteArrayOf(1, 2, 3, 4),
-            receiverId = 9,
-            generation = 0,
-            warmupMinutes = 60,
-            wearDurationMinutes = 14 * 24 * 60,
-            activatedAtMs = 1_777_216_508_000L,
-        )
-        val shown = confirmPromote {
-            val context = ApplicationProvider.getApplicationContext<Context>()
-            assertThat(Libre3SensorStore(context, null).saveIdentityAndWait(promoted)).isTrue()
-            throw IllegalStateException("promote")
-        }
+    fun `a follow-up failure with a production identity says to check the sensor`() {
+        val shown = confirmPromote { PromotionResult.OkFollowUpFailed(productionIdentityPresent = true) }
 
         assertThat(shown).isEqualTo(CHECK_STATE_TEXT)
         assertThat(shown).isNotEqualTo("The pre-soak sensor could not be promoted. Nothing was changed.")
+        assertThat(shown).isNotEqualTo(NO_IDENTITY_TEXT)
     }
 
     @Test
     @Config(sdk = [35], qualifiers = "h2000dp")
-    fun `a throw before any production identity is written still says that nothing was changed`() {
-        val shown = confirmPromote { throw IllegalStateException("promote") }
+    fun `a follow-up failure without a production identity does not claim the sensor is in place`() {
+        val shown = confirmPromote { PromotionResult.OkFollowUpFailed(productionIdentityPresent = false) }
 
-        assertThat(shown).isEqualTo("The pre-soak sensor could not be promoted. Nothing was changed.")
+        assertThat(shown).isEqualTo(NO_IDENTITY_TEXT)
         assertThat(shown).isNotEqualTo(CHECK_STATE_TEXT)
+        assertThat(shown).isNotEqualTo("The pre-soak sensor could not be promoted. Nothing was changed.")
     }
 
     private fun confirmPromote(onPromote: suspend () -> PromotionResult): String? {
@@ -181,5 +167,8 @@ class Libre3PresoakFailurePathTest {
         private const val CHECK_STATE_TEXT =
             "The sensor looks promoted, but the promotion did not finish cleanly. " +
                 "Check the Libre 3 status to see which sensor feeds the loop before you trust it."
+        private const val NO_IDENTITY_TEXT =
+            "A step after the exchange failed, and the production sensor identity is missing. " +
+                "This is not a complete success. Open the Libre 3 status and check which sensor is in use."
     }
 }
