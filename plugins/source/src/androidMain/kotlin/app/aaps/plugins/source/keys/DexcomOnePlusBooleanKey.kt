@@ -32,6 +32,22 @@ enum class DexcomOnePlusBooleanKey(
         summaryResId = R.string.dexcom_oneplus_use_real_skeleton_summary,
         engineeringModeOnly = true,
         exportable = false,
+    ),
+
+    /**
+     * Put a missing SENSOR_CHANGE back for the running ONE+ session.
+     *
+     * The reference does this whenever "create sensor change" is on. That choice is not
+     * settled, so this stays off. While it is off, a refresh writes no therapy event.
+     * Turning it on still writes nothing when "create sensor change" is off.
+     */
+    RepairMissingSensorChange(
+        key = "dexcom_oneplus_repair_missing_sensor_change",
+        defaultValue = false,
+        titleResId = R.string.dexcom_oneplus_repair_missing_sensor_change,
+        summaryResId = R.string.dexcom_oneplus_repair_missing_sensor_change_summary,
+        engineeringModeOnly = true,
+        exportable = false,
     )
     ;
 

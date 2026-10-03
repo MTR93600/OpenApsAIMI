@@ -111,6 +111,8 @@
     <string name="dexcom_oneplus_permissions_needed">Bluetooth permission is required before starting the sensor</string>
     <string name="dexcom_oneplus_use_real_skeleton">Use Real BLE skeleton (engineering)</string>
     <string name="dexcom_oneplus_use_real_skeleton_summary">Routes to the Real GATT+KEKS+EGV driver (default on). Disable only to force the Stub. Not a production BLE claim until device-confirmed.</string>
+    <string name="dexcom_oneplus_repair_missing_sensor_change">Repair a missing sensor change (engineering)</string>
+    <string name="dexcom_oneplus_repair_missing_sensor_change_summary">Off by default. When on, and when "Create sensor change" is on, a missing SENSOR_CHANGE for the running ONE+ session is written once. It does not replace an event you deleted after that write.</string>
     <string name="dexcom_oneplus_start_sensor">Start sensor</string>
     <string name="dexcom_oneplus_start_action">Start / new sensor</string>
     <string name="dexcom_oneplus_warmup_open">Open warm-up screen</string>

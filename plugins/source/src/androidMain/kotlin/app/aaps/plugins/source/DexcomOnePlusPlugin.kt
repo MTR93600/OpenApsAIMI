@@ -3,6 +3,7 @@ package app.aaps.plugins.source
 import android.content.Context
 import android.content.Intent
 import app.aaps.core.data.model.SourceSensor
+import app.aaps.core.data.model.TE
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.ble.BleRadioPriority
@@ -14,6 +15,8 @@ import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.rx.events.EventRefreshOverview
 import app.aaps.core.interfaces.source.BgSource
 import app.aaps.core.interfaces.source.CgmSensorLifecycle
 import app.aaps.core.interfaces.source.CgmSensorStatusProvider
@@ -84,6 +87,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     private val availabilityProvider: DexcomOnePlusAvailabilityProvider,
     private val bleRadioPriority: BleRadioPriority,
     private val activePlugin: ActivePlugin,
+    private val rxBus: RxBus,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -154,6 +158,10 @@ class DexcomOnePlusPlugin @Inject constructor(
 
     /** Collector that drives the safety basal guard from the warm-up state (cancelled in onStop). */
     private var warmupGuardJob: Job? = null
+
+    /** Session start already checked by [healMissingSensorChange], so a deletion is not undone twice. */
+    @Volatile
+    private var healedSensorChangeStartMs: Long = 0L
 
     // ---- Dual-sensor (staging / pre-soak) state — see docs/DEXCOM_ONEPLUS_DUAL_SENSOR_STAGING_PLAN.md ----
 
@@ -248,6 +256,7 @@ class DexcomOnePlusPlugin @Inject constructor(
                 )
             },
             DexcomOnePlusBooleanKey.UseRealSkeleton,
+            DexcomOnePlusBooleanKey.RepairMissingSensorChange,
             // Sensor age on the dashboard comes from the SENSOR_CHANGE therapy event this writes.
             BooleanKey.BgSourceCreateSensorChange,
         ),
@@ -416,9 +425,15 @@ class DexcomOnePlusPlugin @Inject constructor(
                 "DEXCOM_ONEPLUS_BG: insert complete — inserted: ${result.inserted.size}, updated: ${result.updated.size}",
             )
             // Persist the ingest high-water mark so a restart/update can't re-insert this reading,
-            // and anchor the production sensor's lifecycle (session start) on first reading.
+            // and anchor the production sensor's lifecycle (session start) on first reading — unless
+            // the user already logged the real insertion time by hand (see DexcomOnePlusSensorChangeAnchor).
             store.saveLastIngest(sample.sequence, sample.timestampMs)
-            store.saveSessionStartIfAbsent(sample.timestampMs)
+            val anchoredStartMs = DexcomOnePlusSensorChangeAnchor.resolve(
+                autoStartMs = sample.timestampMs,
+                lastSensorChangeMs = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp,
+                now = System.currentTimeMillis(),
+            )
+            store.saveSessionStartIfAbsent(anchoredStartMs)
             refreshProductionLifecycle()
         }
     }
@@ -447,9 +462,19 @@ class DexcomOnePlusPlugin @Inject constructor(
         if (profileWantsForegroundService()) {
             DexcomOnePlusSessionService.start(context.applicationContext)
         }
-        if (!sensorStore.startSessionForSensor(deviceAddress, startMs, previousMac)) return
-        refreshProductionLifecycle()
-        logSensorChange(startMs)
+        ioScope.launch {
+            // If the user already logged the real insertion time by hand (e.g. in Careportal, right
+            // after physically inserting the sensor and before pairing it here), honor that instead of
+            // stamping "now" — see DexcomOnePlusSensorChangeAnchor.
+            val anchoredStartMs = DexcomOnePlusSensorChangeAnchor.resolve(
+                autoStartMs = startMs,
+                lastSensorChangeMs = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp,
+                now = System.currentTimeMillis(),
+            )
+            if (!sensorStore.startSessionForSensor(deviceAddress, anchoredStartMs, previousMac)) return@launch
+            refreshProductionLifecycle()
+            logSensorChange(anchoredStartMs)
+        }
     }
 
     /**
@@ -458,19 +483,24 @@ class DexcomOnePlusPlugin @Inject constructor(
      */
     private fun logSensorChange(startMs: Long) {
         if (!preferences.get(BooleanKey.BgSourceCreateSensorChange)) return
-        ioScope.launch {
-            val result = persistenceLayer.insertCgmSourceData(
-                Sources.DexcomOnePlus,
-                emptyList(),
-                emptyList(),
-                sensorInsertionTime = startMs,
-            )
-            aapsLogger.info(
-                LTag.BGSOURCE,
-                "DEXCOM_ONEPLUS_SESSION: sensor change logged startMs=$startMs " +
-                    "inserted=${result.sensorInsertionsInserted.size}",
-            )
-        }
+        ioScope.launch { writeSensorChange(startMs) }
+    }
+
+    /** @return true when a sensor change was really written (the DB refuses a duplicate timestamp). */
+    private suspend fun writeSensorChange(startMs: Long): Boolean {
+        val result = persistenceLayer.insertCgmSourceData(
+            Sources.DexcomOnePlus,
+            emptyList(),
+            emptyList(),
+            sensorInsertionTime = startMs,
+        )
+        val inserted = result.sensorInsertionsInserted.isNotEmpty()
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_SESSION: sensor change logged startMs=$startMs " +
+                "inserted=${result.sensorInsertionsInserted.size}",
+        )
+        return inserted
     }
 
     override fun onSession(up: Boolean, reason: String?) {
@@ -851,8 +881,56 @@ class DexcomOnePlusPlugin @Inject constructor(
     }
 
     private fun refreshProductionLifecycle() {
+        val startMs = sensorStore.loadSessionStart()
         _lifecycle.value =
-            DexcomOnePlusStaging.computeLifecycle(SensorSlot.PRODUCTION, sensorStore.loadSessionStart(), System.currentTimeMillis())
+            DexcomOnePlusStaging.computeLifecycle(SensorSlot.PRODUCTION, startMs, System.currentTimeMillis())
+        if (startMs > 0L) ioScope.launch { healMissingSensorChange(startMs) }
+    }
+
+    /**
+     * Put back the `SENSOR_CHANGE` of the running sensor when the database has none.
+     *
+     * The driver knows when its sensor started; the dashboard, the Glass skin, the status line and
+     * the calibration session all read a therapy event instead. When that event is missing, every one
+     * of them falls back to the previous sensor.
+     *
+     * Healed once per session start: if the user deliberately deletes the event again, it is not
+     * resurrected on the next reading.
+     *
+     * Ref `3dd0ca64772` `healMissingSensorChange` (commit `5f02b1718e`), with two cuts. The
+     * engineering switch is off because the owner has not confirmed this net. The one-second
+     * shift for an occupied timestamp (`DexcomOnePlusSensorStartCorrection.freeTimestamp`) is
+     * P5.6 and is not called here: this lot writes [startMs] itself.
+     */
+    private suspend fun healMissingSensorChange(startMs: Long) {
+        if (!preferences.get(DexcomOnePlusBooleanKey.RepairMissingSensorChange)) return
+        if (healedSensorChangeStartMs == startMs) return
+        if (!preferences.get(BooleanKey.BgSourceCreateSensorChange)) {
+            // Said once per session, because it explains an age that can never be right: with this
+            // setting off nothing writes a sensor change, so every screen that reads the therapy
+            // event keeps showing the sensor before this one.
+            healedSensorChangeStartMs = startMs
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "DEXCOM_ONEPLUS_SESSION: sensor age not repaired — 'create sensor change' is off " +
+                    "(driver start $startMs)",
+            )
+            return
+        }
+        val last = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp
+        // A valid event at or after this session's start means the age is already right.
+        if (last != null && last >= startMs - SENSOR_CHANGE_MATCH_TOLERANCE_MS) {
+            healedSensorChangeStartMs = startMs
+            return
+        }
+        healedSensorChangeStartMs = startMs
+        val written = writeSensorChange(startMs)
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_SESSION: sensor age had no therapy event — rewritten at $startMs " +
+                "(driver start $startMs, previous last=$last, written=$written)",
+        )
+        if (written) rxBus.send(EventRefreshOverview(from = "DexcomOnePlus sensor age repair"))
     }
 
     private fun refreshStagingLifecycle() {
@@ -887,6 +965,13 @@ class DexcomOnePlusPlugin @Inject constructor(
     }
 
     companion object {
+
+        /**
+         * How far before the driver's own session start a therapy event may sit and still count as
+         * this sensor's. Covers a manual entry made a few minutes before the sensor was paired.
+         * The extra second a date correction may shift is P5.6.
+         */
+        private const val SENSOR_CHANGE_MATCH_TOLERANCE_MS = 15L * 60L * 1000L
 
         /** How far back to seed the ingest dedup from the DB on start — wide enough to cover any
          *  plausible on-reconnect backfill, capped downstream by [DexcomOnePlusIngest] RECENT_CAP. */
