@@ -56,4 +56,7 @@
     <string name="aidex_sensor_stabilizing">Le capteur est en cours de stabilisation, veuillez patienter…</string>
     <string name="aidex_sensor_replace">Remplacement du capteur requis, veuillez le remplacer par un nouveau capteur dès que possible</string>
     <string name="aidex_signal_lost">Signal capteur perdu, veuillez vérifier la connexion</string>
+    <string name="libre3_presoak_promote_bound_failed">Le capteur est promu, mais les anciennes entrées de calibration n\'ont pas pu être ignorées. Vérifiez avec une glycémie capillaire avant de faire confiance à la boucle, et calibrez de nouveau si ces anciennes entrées s\'appliquent encore.</string>
+    <string name="libre3_presoak_promote_check_state">Le capteur semble promu, mais la promotion ne s\'est pas terminée correctement. Vérifiez l\'état Libre 3 pour voir quel capteur alimente la boucle avant de lui faire confiance.</string>
+    <string name="dexcom_oneplus_staging_promote_bound_failed">Le capteur est promu, mais les anciennes entrées de calibration n\'ont pas pu être ignorées. Vérifiez avec une glycémie capillaire avant de faire confiance à la boucle, et calibrez de nouveau si ces anciennes entrées s\'appliquent encore.</string>
 </resources>

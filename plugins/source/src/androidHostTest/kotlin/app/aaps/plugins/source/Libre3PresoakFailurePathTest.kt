@@ -1,13 +1,19 @@
 package app.aaps.plugins.source
 
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.core.app.ServiceCompat
+import app.aaps.core.interfaces.source.PromotionRejectReason
+import app.aaps.core.interfaces.source.PromotionResult
 import app.aaps.core.interfaces.source.StagingState
+import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
+import app.aaps.plugins.libre3.identity.Libre3SensorStore
+import androidx.test.core.app.ApplicationProvider
 import app.aaps.plugins.source.activities.Libre3PresoakAction
 import app.aaps.plugins.source.activities.Libre3StatusScreen
 import com.google.common.truth.Truth.assertThat
@@ -54,6 +60,7 @@ class Libre3PresoakFailurePathTest {
         // Clear while the test dispatcher is still installed. The action object captures
         // Dispatchers.Main the first time it is touched.
         Libre3PresoakAction.clear()
+        Libre3SensorStore(ApplicationProvider.getApplicationContext(), null).clear()
         Dispatchers.resetMain()
     }
 
@@ -85,7 +92,58 @@ class Libre3PresoakFailurePathTest {
 
     @Test
     @Config(sdk = [35], qualifiers = "h2000dp")
-    fun `the promote dialog maps a throw to the other rejection and does not claim success`() {
+    fun `a refusal before the swap says that nothing was changed`() {
+        val shown = confirmPromote { PromotionResult.Rejected(PromotionRejectReason.LOOP_BUSY) }
+
+        assertThat(shown).isEqualTo("The pre-soak sensor could not be promoted. Nothing was changed.")
+        assertThat(shown).isNotEqualTo(BOUND_FAILED_TEXT)
+        assertThat(shown).isNotEqualTo(CHECK_STATE_TEXT)
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "h2000dp")
+    fun `a failed calibration bound says the sensor is promoted and the old entries remain`() {
+        val shown = confirmPromote { PromotionResult.OkBoundFailed }
+
+        assertThat(shown).isEqualTo(BOUND_FAILED_TEXT)
+        assertThat(shown).isNotEqualTo("The pre-soak sensor could not be promoted. Nothing was changed.")
+        assertThat(shown).isNotEqualTo("Done. The pre-soak sensor now feeds the loop.")
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "h2000dp")
+    fun `a throw after the swap says to check the sensor when production identity changed`() {
+        val promoted = Libre3SensorIdentity(
+            serialNumber = "MH0PROMOTED",
+            bleAddress = "AA:BB:CC:DD:EE:09",
+            blePin = byteArrayOf(1, 2, 3, 4),
+            receiverId = 9,
+            generation = 0,
+            warmupMinutes = 60,
+            wearDurationMinutes = 14 * 24 * 60,
+            activatedAtMs = 1_777_216_508_000L,
+        )
+        val shown = confirmPromote {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            assertThat(Libre3SensorStore(context, null).saveIdentityAndWait(promoted)).isTrue()
+            throw IllegalStateException("promote")
+        }
+
+        assertThat(shown).isEqualTo(CHECK_STATE_TEXT)
+        assertThat(shown).isNotEqualTo("The pre-soak sensor could not be promoted. Nothing was changed.")
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "h2000dp")
+    fun `a throw before any production identity is written still says that nothing was changed`() {
+        val shown = confirmPromote { throw IllegalStateException("promote") }
+
+        assertThat(shown).isEqualTo("The pre-soak sensor could not be promoted. Nothing was changed.")
+        assertThat(shown).isNotEqualTo(CHECK_STATE_TEXT)
+    }
+
+    private fun confirmPromote(onPromote: suspend () -> PromotionResult): String? {
+        Libre3SensorStore(ApplicationProvider.getApplicationContext(), null).clear()
         var shown: String? = null
         compose.setContent {
             MaterialTheme {
@@ -101,7 +159,7 @@ class Libre3PresoakFailurePathTest {
                     formatGlucose = { it.toString() },
                     formatTime = { it.toString() },
                     formatAge = { it.toString() },
-                    onPromote = { throw IllegalStateException("promote") },
+                    onPromote = onPromote,
                     onCancelStaging = {},
                     onSensorForgotten = {},
                     presoakMessageFlow = MutableStateFlow(null),
@@ -109,13 +167,19 @@ class Libre3PresoakFailurePathTest {
                 )
             }
         }
-
         // The status list is taller than a phone window. A tall test window keeps the
         // promote button on screen, because touch injection misses a node that is off screen.
         compose.onNodeWithText("Promote this sensor").performClick()
         compose.onNodeWithText("Promote", substring = false).performClick()
+        return shown
+    }
 
-        assertThat(shown).isEqualTo("The pre-soak sensor could not be promoted. Nothing was changed.")
-        assertThat(shown).isNotEqualTo("Done. The pre-soak sensor now feeds the loop.")
+    companion object {
+        private const val BOUND_FAILED_TEXT =
+            "The sensor is promoted, but the old calibration entries could not be ignored. " +
+                "Check a fingerstick before you trust the loop, and calibrate again if those old entries still apply."
+        private const val CHECK_STATE_TEXT =
+            "The sensor looks promoted, but the promotion did not finish cleanly. " +
+                "Check the Libre 3 status to see which sensor feeds the loop before you trust it."
     }
 }

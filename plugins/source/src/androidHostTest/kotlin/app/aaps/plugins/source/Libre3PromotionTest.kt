@@ -303,16 +303,20 @@ class Libre3PromotionTest : TestBase() {
     }
 
     @Test
-    fun `a thrown cutoff still returns Ok because the reference swallows it`() = runTest {
+    fun `a thrown cutoff keeps the swap and reports that the bound failed`() = runTest {
         whenever(preferences.get(BooleanKey.BgSourceCreateSensorChange)).thenReturn(true)
+        whenever(rh.gs(app.aaps.plugins.source.R.string.libre3_presoak_promote_bound_failed))
+            .thenReturn(BOUND_FAILED_TEXT)
         val cutoff = ThrowingCutoff()
-        plugin = newPlugin(calibration = cutoff)
+        val logger = RecordingLogger()
+        plugin = newPlugin(logger = logger, calibration = cutoff)
         startPresoak()
 
-        assertThat(plugin.promoteStagingToProduction()).isEqualTo(PromotionResult.Ok)
+        assertThat(plugin.promoteStagingToProduction()).isEqualTo(PromotionResult.OkBoundFailed)
 
         assertThat(cutoff.calls).isEqualTo(1)
         assertThat(cutoff.storedTimestamp).isNull()
+        assertThat(logger.errors).contains(BOUND_FAILED_TEXT)
         assertThat(Libre3SensorStore(context, null).loadIdentity()!!.serialNumber).isEqualTo(staged.serialNumber)
         assertThat(Libre3SensorStore(context, Libre3CgmDrivers.STAGING_NAMESPACE).loadIdentity()).isNull()
         assertThat(plugin.stagingState.value).isEqualTo(StagingState.ABSENT)
@@ -423,6 +427,18 @@ class Libre3PromotionTest : TestBase() {
         override suspend fun status(): CalibrationStatus = CalibrationStatus.Applied
     }
 
+    private class RecordingLogger(
+        private val delegate: AAPSLogger = AAPSLoggerTest(),
+    ) : AAPSLogger by delegate {
+
+        val errors = mutableListOf<String>()
+
+        override fun error(tag: LTag, message: String, throwable: Throwable) {
+            errors += message
+            delegate.error(tag, message, throwable)
+        }
+    }
+
     private class PromoteDoneFailsLogger(
         private val delegate: AAPSLogger = AAPSLoggerTest(),
     ) : AAPSLogger by delegate {
@@ -437,5 +453,8 @@ class Libre3PromotionTest : TestBase() {
         private const val PRODUCTION_PREFS_NAME = "libre3_sensor_store"
         private const val STAGING_PREFS_NAME = "libre3_sensor_store_staging"
         private const val SLOW_INSERT_MS = 5_000L
+        private const val BOUND_FAILED_TEXT =
+            "The sensor is promoted, but the old calibration entries could not be ignored. " +
+                "Check a fingerstick before you trust the loop, and calibrate again if those old entries still apply."
     }
 }

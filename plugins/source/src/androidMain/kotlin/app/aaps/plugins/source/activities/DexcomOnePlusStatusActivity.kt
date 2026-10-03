@@ -159,6 +159,7 @@ private fun DexcomOnePlusStatusScreen(
 
     // Promotion result → user message (resolved here so the coroutine has no Composable context).
     val promoteOk = stringResource(R.string.dexcom_oneplus_staging_promote_ok)
+    val promoteBoundFailed = stringResource(R.string.dexcom_oneplus_staging_promote_bound_failed)
     val promoteRejectedAbsent = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_absent)
     val promoteRejectedNotSettled = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_not_settled)
     val promoteRejectedNoGlucose = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_no_glucose)
@@ -295,8 +296,9 @@ private fun DexcomOnePlusStatusScreen(
                         val allowEarly = promoteEarly
                         scope.launch {
                             promoteResultText = when (val result = onPromote(allowEarly)) {
-                                is PromotionResult.Ok       -> promoteOk
-                                is PromotionResult.Rejected -> when (result.reason) {
+                                is PromotionResult.Ok            -> promoteOk
+                                is PromotionResult.OkBoundFailed -> promoteBoundFailed
+                                is PromotionResult.Rejected      -> when (result.reason) {
                                     PromotionRejectReason.STAGING_ABSENT            -> promoteRejectedAbsent
                                     PromotionRejectReason.STAGING_NOT_SETTLED       -> promoteRejectedNotSettled
                                     PromotionRejectReason.STAGING_NO_VALID_GLUCOSE  -> promoteRejectedNoGlucose

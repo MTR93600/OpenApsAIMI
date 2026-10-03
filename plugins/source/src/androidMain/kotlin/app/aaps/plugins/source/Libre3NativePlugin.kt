@@ -311,9 +311,9 @@ class Libre3NativePlugin @Inject constructor(
      *
      * The calibration cutoff is written only after that store write, the driver swap and
      * [logSensorChangeOnce]. Reference `Libre3NativePlugin.promoteStagingToProduction` on
-     * `dev_OAPSAIMI` @ `3dd0ca64772`, L980–1078. The cutoff call is inside `runCatching`, same as
-     * reference L1055: a throw there does not undo the swap, and the function still returns
-     * [PromotionResult.Ok].
+     * `dev_OAPSAIMI` @ `3dd0ca64772`, L980–1078. Reference L1055 swallows a throw and still returns
+     * [PromotionResult.Ok]. This copy does not: a throw leaves the swap in place and returns
+     * [PromotionResult.OkBoundFailed].
      *
      * @param allowEarly accepted and ignored. A Libre 3 pre-soak has no soak gate, because the user
      *   already pays real sensor wear time for the soak, so there is nothing here to relax. Please
@@ -394,9 +394,16 @@ class Libre3NativePlugin @Inject constructor(
         // The session is dated at the pre-soak activation, hours before this swap. Without this,
         // every fingerstick taken during the pre-soak — all paired against the OLD sensor — would
         // be fitted onto the new one, and applied from its first minute with no warm-up left.
-        // Reference L1055. The `runCatching` is the reference: a throw is logged by returning from
-        // the lambda and the swap still reports [PromotionResult.Ok].
-        runCatching { activePlugin.activeCalibration.ignoreEntriesBefore(System.currentTimeMillis()) }
+        // Reference L1055 wraps this call in `runCatching` and still returns Ok. Deliberate
+        // deviation: a throw does not undo the swap, and it is not reported as a full success.
+        var boundFailed = false
+        try {
+            activePlugin.activeCalibration.ignoreEntriesBefore(System.currentTimeMillis())
+        } catch (thrown: Throwable) {
+            boundFailed = true
+            val notice = (rh as ResourceHelper).gs(R.string.libre3_presoak_promote_bound_failed)
+            aapsLogger.error(LTag.BGSOURCE, notice, thrown)
+        }
         // Make the promoted instance the driver the plugin really talks to from now on. `true` is
         // written here and not read back from the preference on purpose: a promoted sensor IS a
         // real sensor, and a `select(false)` at this point would stop the instance that has just
@@ -419,7 +426,7 @@ class Libre3NativePlugin @Inject constructor(
             "${Libre3LogMarkers.PRESOAK}: promote done serial=${staged.serialNumber} " +
                 "retired=${retired != null} sessionUp=${promoted.isSessionUp()}",
         )
-        return PromotionResult.Ok
+        return if (boundFailed) PromotionResult.OkBoundFailed else PromotionResult.Ok
     }
 
     /**

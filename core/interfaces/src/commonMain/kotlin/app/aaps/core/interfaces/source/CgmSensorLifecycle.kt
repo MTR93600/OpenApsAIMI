@@ -62,8 +62,16 @@ enum class PromotionRejectReason {
 
 /** Result of a promote-staging-to-production request. */
 sealed interface PromotionResult {
-    /** Promotion succeeded — the staging sensor now feeds the loop. */
+    /** Promotion succeeded — the staging sensor now feeds the loop, and the calibration cutoff was applied. */
     data object Ok : PromotionResult
+
+    /**
+     * The staging sensor now feeds the loop, but [app.aaps.core.interfaces.calibration.Calibration.ignoreEntriesBefore]
+     * threw. Nothing is rolled back. The old calibration entries may still apply to the new sensor.
+     *
+     * A flag on [Ok] would still match `is Ok`, so a caller could treat this as a full success.
+     */
+    data object OkBoundFailed : PromotionResult
 
     /** Promotion refused; [reason] says why (no state changed). */
     data class Rejected(val reason: PromotionRejectReason) : PromotionResult
