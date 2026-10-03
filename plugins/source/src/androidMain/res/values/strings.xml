@@ -281,6 +281,7 @@
     <string name="libre3_nfc_sensor_refused">The sensor did not accept the scan. Wait a moment and try again.</string>
     <string name="libre3_nfc_link_lost">Hold the phone still on the sensor until the scan finishes.</string>
     <string name="libre3_nfc_storage_failed">This phone could not save the sensor. Free some storage and try again.</string>
+    <string name="libre3_nfc_same_sensor_other_slot">This sensor is already used by the other slot, so the scan was stopped. Nothing was sent to the sensor and nothing was changed.</string>
     <string name="libre3_start_steps">How to start:\n1. Put the sensor on your arm.\n2. Stop the Abbott app and Juggluco. Only one app can hold a sensor.\n3. Hold the top of your phone on the sensor until the scan finishes.\n4. Allow Bluetooth if you are asked.\n5. Warm-up takes about 60 minutes for a new sensor. A sensor that is already running can send glucose sooner.</string>
     <string name="libre3_start_scan_hint">Hold the top of your phone flat on the sensor. Do not move until the screen changes.</string>
     <string name="libre3_start_conflict_warning">Stop the Abbott app and Juggluco before you scan. A sensor answers only one app, and the last one to scan takes it over.</string>
