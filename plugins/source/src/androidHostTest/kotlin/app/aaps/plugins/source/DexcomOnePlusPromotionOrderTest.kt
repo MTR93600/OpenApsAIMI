@@ -251,6 +251,52 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
     }
 
     @Test
+    fun `a thrown bound wins when the follow-up also fails`() = runTest {
+        readyStaging(mac = "AA:BB:CC:DD:EE:29", ageMs = 60_000L)
+        val soak = OnePlusCgmDrivers.staging()
+        whenever(rh.gs(R.string.dexcom_oneplus_staging_promote_bound_failed)).thenReturn(BOUND_FAILED_TEXT)
+        whenever(rh.gs(R.string.dexcom_oneplus_staging_promote_follow_up_failed)).thenReturn(FOLLOW_UP_TEXT)
+        whenever(activeCalibration.ignoreEntriesBefore(any())).thenThrow(IllegalStateException("bound failed"))
+        val throwingStore = mock<OnePlusSensorStore>()
+        whenever(throwingStore.load()).thenThrow(IllegalStateException("resume failed after the bound"))
+        OnePlusCgmDriverReal::class.java.getDeclaredField("sensorStore").apply {
+            isAccessible = true
+            set(soak, throwingStore)
+        }
+
+        val result = plugin.promoteStagingToProduction(allowEarly = true)
+
+        assertThat(result).isEqualTo(PromotionResult.OkBoundFailed)
+        assertThat(productionPrefs.getString(KEY_PIN, null)).isEqualTo("1234")
+        assertThat(stagingPrefs.getString(KEY_PIN, null)).isNull()
+        assertThat(OnePlusCgmDrivers.default()).isSameInstanceAs(soak)
+    }
+
+    @Test
+    fun `a follow-up failure with no production identity is not a complete success`() = runTest {
+        readyStaging(mac = "AA:BB:CC:DD:EE:2A", ageMs = 60_000L)
+        val soak = OnePlusCgmDrivers.staging()
+        whenever(rh.gs(R.string.dexcom_oneplus_staging_promote_follow_up_failed_no_identity))
+            .thenReturn(FOLLOW_UP_NO_IDENTITY_TEXT)
+        val throwingStore = mock<OnePlusSensorStore>()
+        whenever(throwingStore.load()).thenAnswer {
+            productionPrefs.edit().remove(KEY_PIN).commit()
+            throw IllegalStateException("resume failed after the bound")
+        }
+        OnePlusCgmDriverReal::class.java.getDeclaredField("sensorStore").apply {
+            isAccessible = true
+            set(soak, throwingStore)
+        }
+
+        val result = plugin.promoteStagingToProduction(allowEarly = true)
+
+        assertThat(result).isEqualTo(PromotionResult.OkFollowUpFailed(productionIdentityPresent = false))
+        assertThat(productionPrefs.getString(KEY_PIN, null)).isNull()
+        assertThat(OnePlusCgmDrivers.default()).isSameInstanceAs(soak)
+        assertThat(alerts).containsExactly(FOLLOW_UP_NO_IDENTITY_TEXT)
+    }
+
+    @Test
     fun `promotion texts distinguish refusal, a failed bound, and a later failure`() {
         val english = readResource("src/androidMain/res/values/strings.xml")
         val french = readResource("src/androidMain/res/values-fr-rFR/strings.xml")
@@ -366,6 +412,7 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
     private suspend fun assertNothingIrreversible() {
         verify(activeCalibration, never()).ignoreEntriesBefore(any())
         verify(persistenceLayer, never()).insertCgmSourceData(any(), any(), any(), anyOrNull())
+        verify(preferences, never()).put(DexcomOnePlusBooleanKey.UseRealSkeleton, true)
         assertThat(productionPrefs.getString(KEY_PIN, null)).isNull()
         assertThat(productionPrefs.getString(KEY_MAC, null)).isNull()
         assertThat(OnePlusCgmDrivers.useRealSkeleton).isFalse()
@@ -426,5 +473,7 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
                 "Remove fingerstick calibrations taken before this switch, then calibrate again if needed."
         private const val FOLLOW_UP_TEXT =
             "Sensor promoted, but reconnecting it failed. The production sensor is the one just promoted."
+        private const val FOLLOW_UP_NO_IDENTITY_TEXT =
+            "A step after the exchange failed, and the production sensor identity is missing."
     }
 }

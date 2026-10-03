@@ -65,8 +65,7 @@ enum class PromotionRejectReason {
  *
  * Shared by Dexcom ONE+ and Libre 3. [OkBoundFailed] and [OkFollowUpFailed] are a deliberate
  * deviation from ref `DexcomOnePlusPlugin.kt` L934 @ `3dd0ca64772`, which swallowed the bound
- * and still returned [Ok]. P5.3 (`cursor/p53-libre3-promotion-52ba` @ `089cdb3321`) still returns
- * [Ok] there; it must reuse these same types, not a second shape.
+ * and still returned [Ok].
  */
 sealed interface PromotionResult {
     /** Promotion succeeded — the staging sensor now feeds the loop, and the bound was applied. */

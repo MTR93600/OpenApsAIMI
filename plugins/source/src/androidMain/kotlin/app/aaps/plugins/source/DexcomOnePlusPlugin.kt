@@ -871,7 +871,16 @@ class DexcomOnePlusPlugin @Inject constructor(
             thrown
         }
         if (followUpFailure != null) {
-            val identityPresent = sensorStore.load() != null
+            // Same protection as refreshSessionService (ref L628–630): a throw while reading the
+            // store must not escape. The flag is whatever load() actually returned.
+            val identityPresent = runCatching { sensorStore.load() != null }.getOrElse { thrown ->
+                aapsLogger.error(
+                    LTag.BGSOURCE,
+                    "DEXCOM_ONEPLUS_PROMOTE: production identity unreadable, ${thrown.message}",
+                    thrown,
+                )
+                false
+            }
             val text = if (identityPresent) {
                 R.string.dexcom_oneplus_staging_promote_follow_up_failed
             } else {

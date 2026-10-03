@@ -14,6 +14,9 @@ import app.aaps.plugins.source.compose.DexcomOnePlusWarmupCountdown
 import app.aaps.plugins.source.compose.toCgmWarmupInfo
 import app.aaps.core.ui.R as CoreUiR
 
+/** Importance of the shared ONE+ status channel. One value, so it can be changed in one place. */
+internal const val DEXCOM_ONEPLUS_STATUS_CHANNEL_IMPORTANCE = NotificationManager.IMPORTANCE_LOW
+
 /**
  * Ongoing status-bar notification mirroring the live Dexcom ONE+ session / warm-up state
  * ([OnePlusWarmupState]). It lets the user leave the warm-up screen and stay on the dashboard while
@@ -165,7 +168,7 @@ class DexcomOnePlusWarmupNotification(private val context: Context) {
         val channel = NotificationChannel(
             CHANNEL_ID,
             context.getString(R.string.dexcom_oneplus_notif_channel_name),
-            NotificationManager.IMPORTANCE_LOW,
+            DEXCOM_ONEPLUS_STATUS_CHANNEL_IMPORTANCE,
         ).apply {
             description = context.getString(R.string.dexcom_oneplus_notif_channel_desc)
             enableVibration(false)
@@ -177,6 +180,8 @@ class DexcomOnePlusWarmupNotification(private val context: Context) {
     companion object {
         private const val CHANNEL_ID = "DEXCOM_ONEPLUS_STATUS"
         private const val NOTIFICATION_ID = 8931
-        private const val ALERT_ID = 8932
+
+        /** Not 8931 (warm-up) and not 8932 (session foreground service): those replace each other. */
+        private const val ALERT_ID = 8933
     }
 }
