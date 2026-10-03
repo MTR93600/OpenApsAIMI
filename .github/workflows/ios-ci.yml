@@ -124,6 +124,7 @@ jobs:
           echo "Running with TZ=$TZ"
           ./gradlew --console=plain --no-daemon \
             :core:data:iosSimulatorArm64Test :core:nssdk:iosSimulatorArm64Test :core:keys:iosSimulatorArm64Test \
+            :core:objects:iosSimulatorArm64Test \
             :implementation:iosSimulatorArm64Test :ios:shell:iosSimulatorArm64Test \
             | tee test.log
 
@@ -154,6 +155,9 @@ jobs:
           check ":core:data" core/data
           check ":implementation" implementation
           check ":ios:shell" ios/shell
+          # :core:objects commonTest holds LinkCryptoVectorsTest. Without this line a SKIPPED
+          # iosSimulatorArm64Test still exits 0 and the module disappears.
+          check ":core:objects" core/objects
           exit $fail
 
       - name: Upload test results
