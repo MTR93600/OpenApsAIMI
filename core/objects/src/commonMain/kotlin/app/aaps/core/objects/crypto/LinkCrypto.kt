@@ -7,8 +7,10 @@ package app.aaps.core.objects.crypto
  * other seam: AES-CCM, AES-CMAC, X25519, ECDH P-256 and ECDSA P-256. Nothing here is wired into a
  * driver. `PUMPDRIVERS` stays false, and no pump class calls this.
  *
- * An implementation uses a vetted library. If a platform cannot provide an operation, the actual
- * says so and fails closed. It does not invent a cipher, and it does not copy Abbott tables.
+ * AES-CCM and AES-CMAC are the published constructions (NIST SP 800-38C / RFC 3610, RFC 4493) in
+ * common code, over one AES block from the platform: JCE `AES/ECB/NoPadding`, or CommonCrypto
+ * `CCCrypt` in ECB mode. X25519, ECDH and ECDSA stay in a vetted library. Nothing here is wired
+ * into a driver, and nothing copies Abbott tables.
  */
 interface LinkCrypto {
 
@@ -26,7 +28,10 @@ interface LinkCrypto {
         tagBits: Int,
     ): ByteArray
 
-    /** The inverse of [aesCcmEncrypt]. Throws when the tag does not verify. */
+    /**
+     * The inverse of [aesCcmEncrypt]. A wrong tag throws [AesCcmAuthenticationException] and returns
+     * no plaintext.
+     */
     fun aesCcmDecrypt(
         key: ByteArray,
         nonce: ByteArray,

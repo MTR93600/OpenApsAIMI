@@ -12,8 +12,8 @@ import dev.whyoleg.cryptography.algorithms.XDH
  * provider reaches Apple's implementation via the library's published Swift interop. This file does
  * not add a Swift bridge of its own.
  *
- * AES-CCM and AES-CMAC stop here. CommonCrypto (the Apple provider) has neither, and CryptoKit has
- * neither. The functions fail closed. They do not fall back to a hand-rolled cipher.
+ * AES-CCM and AES-CMAC are the common constructions over one CommonCrypto AES block
+ * (`CCCrypt` with `kCCOptionECBMode`, no PKCS7). CommonCrypto and CryptoKit have neither mode.
  */
 class IosLinkCrypto : LinkCrypto {
 
@@ -25,7 +25,7 @@ class IosLinkCrypto : LinkCrypto {
         plaintext: ByteArray,
         associatedData: ByteArray,
         tagBits: Int,
-    ): ByteArray = notYet()
+    ): ByteArray = computeAesCcmEncrypt(key, nonce, plaintext, associatedData, tagBits)
 
     override fun aesCcmDecrypt(
         key: ByteArray,
@@ -33,9 +33,9 @@ class IosLinkCrypto : LinkCrypto {
         ciphertextAndTag: ByteArray,
         associatedData: ByteArray,
         tagBits: Int,
-    ): ByteArray = notYet()
+    ): ByteArray = computeAesCcmDecrypt(key, nonce, ciphertextAndTag, associatedData, tagBits)
 
-    override fun aesCmac(key: ByteArray, message: ByteArray): ByteArray = notYet()
+    override fun aesCmac(key: ByteArray, message: ByteArray): ByteArray = computeAesCmac(key, message)
 
     override fun x25519Public(privateKey: ByteArray): ByteArray =
         x25519Private(privateKey).getPublicKeyBlocking().encodeToByteArrayBlocking(XDH.PublicKey.Format.RAW)
@@ -72,6 +72,4 @@ class IosLinkCrypto : LinkCrypto {
         provider.get(XDH)
             .privateKeyDecoder(XDH.Curve.X25519)
             .decodeFromByteArrayBlocking(XDH.PrivateKey.Format.RAW, privateKey)
-
-    private fun notYet(): Nothing = throw NotImplementedError("LinkCrypto AES")
 }

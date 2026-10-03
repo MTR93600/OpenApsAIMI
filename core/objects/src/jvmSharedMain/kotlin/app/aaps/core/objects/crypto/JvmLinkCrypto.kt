@@ -6,23 +6,22 @@ import dev.whyoleg.cryptography.algorithms.ECDH
 import dev.whyoleg.cryptography.algorithms.ECDSA
 import dev.whyoleg.cryptography.algorithms.SHA256
 import dev.whyoleg.cryptography.algorithms.XDH
-import dev.whyoleg.cryptography.providers.jdk.JDK
-import org.bouncycastle.jce.provider.BouncyCastleProvider
 
 /**
- * JVM and Android. The calls are the library's; nothing below reimplements a cipher.
+ * JVM and Android. AES-CCM and AES-CMAC are the common constructions over JCE `AES/ECB/NoPadding`.
+ * OpenJDK 21's SunJCE has neither `AES/CCM/NoPadding` nor `AESCMAC`, so BouncyCastle is not the
+ * production path for them.
  *
- * OpenJDK 21's SunJCE has neither `AES/CCM/NoPadding` nor `AESCMAC`, and its XDH key factory cannot
- * derive a public key. [BouncyCastleProvider] is the provider `cryptography-kotlin` uses for those
- * gaps (see its `BouncyCastleBridge`). It is passed in here and not installed as the process-wide
- * JCA provider, so the rest of the app keeps SunJCE.
+ * X25519, ECDH and ECDSA use [CryptographyProvider.Default] (SunEC / SunJCE). Deriving an X25519
+ * public key still needs BouncyCastle classes inside `cryptography-kotlin` (`BouncyCastleBridge`).
+ * This module does not depend on BouncyCastle: without those classes on the classpath the call
+ * fails closed. The unit tests put the jar on the test classpath so the RFC vector still runs.
  *
- * A tag failure and a bad key come back as the library's exception. They are not caught: a caller
- * that wanted a boolean gets one only from [ecdsaP256VerifySha256], whose contract is verify-or-false.
+ * A tag failure is [AesCcmAuthenticationException]. It is not caught.
  */
 class JvmLinkCrypto : LinkCrypto {
 
-    private val provider = CryptographyProvider.JDK(BouncyCastleProvider())
+    private val provider = CryptographyProvider.Default
 
     override fun aesCcmEncrypt(
         key: ByteArray,
@@ -30,7 +29,7 @@ class JvmLinkCrypto : LinkCrypto {
         plaintext: ByteArray,
         associatedData: ByteArray,
         tagBits: Int,
-    ): ByteArray = notYet()
+    ): ByteArray = computeAesCcmEncrypt(key, nonce, plaintext, associatedData, tagBits)
 
     override fun aesCcmDecrypt(
         key: ByteArray,
@@ -38,9 +37,9 @@ class JvmLinkCrypto : LinkCrypto {
         ciphertextAndTag: ByteArray,
         associatedData: ByteArray,
         tagBits: Int,
-    ): ByteArray = notYet()
+    ): ByteArray = computeAesCcmDecrypt(key, nonce, ciphertextAndTag, associatedData, tagBits)
 
-    override fun aesCmac(key: ByteArray, message: ByteArray): ByteArray = notYet()
+    override fun aesCmac(key: ByteArray, message: ByteArray): ByteArray = computeAesCmac(key, message)
 
     override fun x25519Public(privateKey: ByteArray): ByteArray =
         x25519Private(privateKey).getPublicKeyBlocking().encodeToByteArrayBlocking(XDH.PublicKey.Format.RAW)
@@ -72,8 +71,6 @@ class JvmLinkCrypto : LinkCrypto {
         return publicKey.signatureVerifier(SHA256, ECDSA.SignatureFormat.RAW)
             .tryVerifySignatureBlocking(message, signatureRaw)
     }
-
-    private fun notYet(): Nothing = throw NotImplementedError("LinkCrypto AES")
 
     private fun x25519Private(privateKey: ByteArray) =
         provider.get(XDH)

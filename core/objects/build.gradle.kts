@@ -53,13 +53,11 @@ kotlin {
         val jvmSharedMain = create("jvmSharedMain") {
             dependsOn(commonMain.get())
             dependencies {
-                // JDK provider. OpenJDK 21 SunJCE has no AES/CCM and no AESCMAC, and it cannot
-                // derive an X25519 public key. BouncyCastle is the provider the library calls for
-                // that, same 1.81 coordinate as :plugins:libkeks. iOS does not get this jar.
+                // X25519, ECDH and ECDSA. AES-CCM and AES-CMAC do not use this library: they are the
+                // common constructions over JCE AES/ECB/NoPadding. BouncyCastle is a test oracle
+                // only (see jvmTest), same 1.81 coordinate as :plugins:libkeks.
                 implementation(libs.cryptography.core)
                 implementation(libs.cryptography.provider.optimal)
-                implementation(libs.cryptography.provider.jdk)
-                implementation("org.bouncycastle:bcprov-jdk18on:1.81")
             }
         }
         androidMain.get().dependsOn(jvmSharedMain)
@@ -92,6 +90,14 @@ kotlin {
                 implementation(kotlin("test"))
             }
         }
+        // BouncyCastle is not a production dependency. The JVM tests use it as an independent
+        // AES-CCM oracle, and `cryptography-kotlin` finds the same classes when it derives an
+        // X25519 public key (SunEC cannot). iOS never sees this jar.
+        getByName("jvmTest") {
+            dependencies {
+                implementation("org.bouncycastle:bcprov-jdk18on:1.81")
+            }
+        }
         getByName("androidHostTest") {
             dependencies {
                 implementation(project(":shared:tests"))
@@ -105,6 +111,9 @@ kotlin {
                 // The platform org.json on the Android unit-test classpath is a stub.
                 implementation(libs.org.json.android)
                 runtimeOnly(libs.org.junit.platform.launcher)
+                // Same test-only jar as jvmTest: the X25519 public-key vector needs the classes
+                // cryptography-kotlin looks up. Not a production dependency.
+                implementation("org.bouncycastle:bcprov-jdk18on:1.81")
             }
         }
     }
