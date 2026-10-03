@@ -91,7 +91,7 @@ class Libre3SessionService : Service() {
             NotificationChannel(
                 CHANNEL_ID,
                 getString(R.string.libre3_notif_channel_name),
-                NotificationManager.IMPORTANCE_LOW,
+                LIBRE3_SENSOR_STATUS_CHANNEL_IMPORTANCE,
             ).apply { description = getString(R.string.libre3_notif_channel_desc) },
         )
     }

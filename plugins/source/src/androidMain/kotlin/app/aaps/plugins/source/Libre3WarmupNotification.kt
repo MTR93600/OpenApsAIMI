@@ -16,6 +16,14 @@ import app.aaps.plugins.source.compose.toCgmWarmupInfo
 import app.aaps.core.ui.R as CoreUiR
 
 /**
+ * Importance of the shared Libre 3 sensor-status channel.
+ *
+ * One value, so a later decision changes it in one place. The promotion alert posts on this
+ * existing channel. LOW is the same level as the Dexcom ONE+ alert channel.
+ */
+internal const val LIBRE3_SENSOR_STATUS_CHANNEL_IMPORTANCE = NotificationManager.IMPORTANCE_LOW
+
+/**
  * The ongoing status bar message about the sensor.
  *
  * It lets the user leave the warm-up screen and go back to the dashboard while the driver keeps
@@ -110,8 +118,9 @@ class Libre3WarmupNotification(
     /**
      * One-shot alert. Not ongoing: the user must be able to dismiss it after reading the action.
      *
-     * Its id is not the warm-up id, so the alert does not replace the countdown, and it is not
-     * 8932, which the ONE+ session service already uses.
+     * It uses the existing sensor-status channel, at [LIBRE3_SENSOR_STATUS_CHANNEL_IMPORTANCE].
+     * Its id is not a warm-up id, so the alert does not replace the countdown, and it is neither
+     * 8932 nor 8933, which the ONE+ session service and the ONE+ alert already use.
      */
     fun alert(text: String) {
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -161,7 +170,7 @@ class Libre3WarmupNotification(
         val channel = NotificationChannel(
             CHANNEL_ID,
             context.getString(R.string.libre3_notif_channel_name),
-            NotificationManager.IMPORTANCE_LOW,
+            LIBRE3_SENSOR_STATUS_CHANNEL_IMPORTANCE,
         ).apply {
             description = context.getString(R.string.libre3_notif_channel_desc)
             setShowBadge(false)
@@ -185,7 +194,7 @@ class Libre3WarmupNotification(
         /** The pre-soak's own id: both messages may be on screen at the same time. */
         private const val NOTIFICATION_ID_STAGING = 4472
 
-        /** Promotion problem. Distinct from 4471, 4472, 4473 and from the ONE+ id 8932. */
+        /** Promotion problem. Distinct from 4471, 4472, 4473, and from the ONE+ ids 8932 and 8933. */
         private const val ALERT_ID = 4474
     }
 }
