@@ -50,7 +50,18 @@ kotlin {
     applyDefaultHierarchyTemplate()
 
     sourceSets {
-        val jvmSharedMain = create("jvmSharedMain") { dependsOn(commonMain.get()) }
+        val jvmSharedMain = create("jvmSharedMain") {
+            dependsOn(commonMain.get())
+            dependencies {
+                // JDK provider. OpenJDK 21 SunJCE has no AES/CCM and no AESCMAC, and it cannot
+                // derive an X25519 public key. BouncyCastle is the provider the library calls for
+                // that, same 1.81 coordinate as :plugins:libkeks. iOS does not get this jar.
+                implementation(libs.cryptography.core)
+                implementation(libs.cryptography.provider.optimal)
+                implementation(libs.cryptography.provider.jdk)
+                implementation("org.bouncycastle:bcprov-jdk18on:1.81")
+            }
+        }
         androidMain.get().dependsOn(jvmSharedMain)
         jvmMain.get().dependsOn(jvmSharedMain)
 
