@@ -1,9 +1,6 @@
 package app.aaps.core.objects.crypto
 
-import dev.whyoleg.cryptography.BinarySize.Companion.bits
 import dev.whyoleg.cryptography.CryptographyProvider
-import dev.whyoleg.cryptography.DelicateCryptographyApi
-import dev.whyoleg.cryptography.algorithms.AES
 import dev.whyoleg.cryptography.algorithms.EC
 import dev.whyoleg.cryptography.algorithms.ECDH
 import dev.whyoleg.cryptography.algorithms.ECDSA
@@ -22,11 +19,7 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider
  *
  * A tag failure and a bad key come back as the library's exception. They are not caught: a caller
  * that wanted a boolean gets one only from [ecdsaP256VerifySha256], whose contract is verify-or-false.
- *
- * [DelicateCryptographyApi] is the library's own mark on the CCM calls that take associated data.
- * The same opt-in is already how this module reaches PBKDF2-HMAC-SHA1. It does not catch anything.
  */
-@OptIn(DelicateCryptographyApi::class)
 class JvmLinkCrypto : LinkCrypto {
 
     private val provider = CryptographyProvider.JDK(BouncyCastleProvider())
@@ -37,7 +30,7 @@ class JvmLinkCrypto : LinkCrypto {
         plaintext: ByteArray,
         associatedData: ByteArray,
         tagBits: Int,
-    ): ByteArray = ccm(key, tagBits).encryptWithIvBlocking(nonce, plaintext, associatedData)
+    ): ByteArray = notYet()
 
     override fun aesCcmDecrypt(
         key: ByteArray,
@@ -45,14 +38,9 @@ class JvmLinkCrypto : LinkCrypto {
         ciphertextAndTag: ByteArray,
         associatedData: ByteArray,
         tagBits: Int,
-    ): ByteArray = ccm(key, tagBits).decryptWithIvBlocking(nonce, ciphertextAndTag, associatedData)
+    ): ByteArray = notYet()
 
-    override fun aesCmac(key: ByteArray, message: ByteArray): ByteArray {
-        val decoded = provider.get(AES.CMAC)
-            .keyDecoder()
-            .decodeFromByteArrayBlocking(AES.Key.Format.RAW, key)
-        return decoded.signatureGenerator().generateSignatureBlocking(message)
-    }
+    override fun aesCmac(key: ByteArray, message: ByteArray): ByteArray = notYet()
 
     override fun x25519Public(privateKey: ByteArray): ByteArray =
         x25519Private(privateKey).getPublicKeyBlocking().encodeToByteArrayBlocking(XDH.PublicKey.Format.RAW)
@@ -85,11 +73,7 @@ class JvmLinkCrypto : LinkCrypto {
             .tryVerifySignatureBlocking(message, signatureRaw)
     }
 
-    private fun ccm(key: ByteArray, tagBits: Int) =
-        provider.get(AES.CCM)
-            .keyDecoder()
-            .decodeFromByteArrayBlocking(AES.Key.Format.RAW, key)
-            .cipher(tagBits.bits)
+    private fun notYet(): Nothing = throw NotImplementedError("LinkCrypto AES")
 
     private fun x25519Private(privateKey: ByteArray) =
         provider.get(XDH)

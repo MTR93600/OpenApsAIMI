@@ -25,7 +25,7 @@ class IosLinkCrypto : LinkCrypto {
         plaintext: ByteArray,
         associatedData: ByteArray,
         tagBits: Int,
-    ): ByteArray = unavailable("AES-CCM")
+    ): ByteArray = notYet()
 
     override fun aesCcmDecrypt(
         key: ByteArray,
@@ -33,9 +33,9 @@ class IosLinkCrypto : LinkCrypto {
         ciphertextAndTag: ByteArray,
         associatedData: ByteArray,
         tagBits: Int,
-    ): ByteArray = unavailable("AES-CCM")
+    ): ByteArray = notYet()
 
-    override fun aesCmac(key: ByteArray, message: ByteArray): ByteArray = unavailable("AES-CMAC")
+    override fun aesCmac(key: ByteArray, message: ByteArray): ByteArray = notYet()
 
     override fun x25519Public(privateKey: ByteArray): ByteArray =
         x25519Private(privateKey).getPublicKeyBlocking().encodeToByteArrayBlocking(XDH.PublicKey.Format.RAW)
@@ -73,11 +73,5 @@ class IosLinkCrypto : LinkCrypto {
             .privateKeyDecoder(XDH.Curve.X25519)
             .decodeFromByteArrayBlocking(XDH.PrivateKey.Format.RAW, privateKey)
 
-    private fun unavailable(algorithm: String): Nothing =
-        error(
-            "$algorithm is not available on iOS with cryptography-kotlin 0.6.0. " +
-                "The Apple CommonCrypto provider has neither AES-CCM nor AES-CMAC, and the CryptoKit " +
-                "provider has neither. No hand-rolled cipher is substituted. See " +
-                "_docs/kmp/crypto-kmp-ios-ecarts.md.",
-        )
+    private fun notYet(): Nothing = throw NotImplementedError("LinkCrypto AES")
 }
