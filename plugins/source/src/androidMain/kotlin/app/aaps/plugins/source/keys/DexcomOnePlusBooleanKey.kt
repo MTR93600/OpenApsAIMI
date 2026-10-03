@@ -70,6 +70,22 @@ enum class DexcomOnePlusBooleanKey(
     ),
 
     /**
+     * Let the Status screen move the insertion time of the sensor that feeds the loop.
+     *
+     * Off by default. The owner has not confirmed that invalidating SENSOR_CHANGE events
+     * for this correction is wanted. While it is off the action is hidden and the function
+     * returns before any invalidation or any write. Calibration rows are never removed.
+     */
+    CorrectSensorStart(
+        key = "dexcom_oneplus_correct_sensor_start",
+        defaultValue = false,
+        titleResId = R.string.dexcom_oneplus_correct_sensor_start,
+        summaryResId = R.string.dexcom_oneplus_correct_sensor_start_summary,
+        engineeringModeOnly = true,
+        exportable = false,
+    ),
+
+    /**
      * Replace the automatic session start with a SENSOR_CHANGE the user already logged.
      *
      * The reference does this on every start and on the first accepted reading. That rolls

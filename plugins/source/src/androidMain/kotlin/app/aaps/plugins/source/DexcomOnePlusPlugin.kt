@@ -5,7 +5,9 @@ import android.content.Intent
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.plugin.PluginType
+import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
+import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -282,6 +284,7 @@ class DexcomOnePlusPlugin @Inject constructor(
             DexcomOnePlusBooleanKey.SendCalibrationToSensor,
             DexcomOnePlusBooleanKey.RepairMissingSensorChange,
             DexcomOnePlusBooleanKey.AnchorSessionToManualSensorChange,
+            DexcomOnePlusBooleanKey.CorrectSensorStart,
             // Sensor age on the dashboard comes from the SENSOR_CHANGE therapy event this writes.
             BooleanKey.BgSourceCreateSensorChange,
         ),
@@ -531,6 +534,70 @@ class DexcomOnePlusPlugin @Inject constructor(
                 "inserted=${result.sensorInsertionsInserted.size}",
         )
         return inserted
+    }
+
+    /**
+     * Move the insertion time of the sensor that feeds the loop — the Status screen's "correct the
+     * insertion date".
+     *
+     * Two clocks have to agree, or the correction is only half visible: this source's own session
+     * start and the `SENSOR_CHANGE` therapy event. Calibration entries are kept.
+     *
+     * Ref `3dd0ca64772` L512–556 (`1b81e356c8`, flag at L556). [DexcomOnePlusSensorStartCorrection.Verdict.Disabled]
+     * is the unsettled owner decision: the body below is the ref, and it does not run while the switch is off.
+     */
+    suspend fun correctProductionSensorStart(newStartMs: Long): DexcomOnePlusSensorStartCorrection.Verdict {
+        if (!preferences.get(DexcomOnePlusBooleanKey.CorrectSensorStart)) {
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "DEXCOM_ONEPLUS_SESSION: insertion date refused — correction switch is off",
+            )
+            return DexcomOnePlusSensorStartCorrection.Verdict.Disabled
+        }
+        val currentStartMs = sensorStore.loadSessionStart()
+        val now = System.currentTimeMillis()
+        val verdict = DexcomOnePlusSensorStartCorrection.validate(newStartMs, currentStartMs, now)
+        if (verdict != DexcomOnePlusSensorStartCorrection.Verdict.Accepted) {
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "DEXCOM_ONEPLUS_SESSION: insertion date refused verdict=$verdict " +
+                    "newStartMs=$newStartMs currentStartMs=$currentStartMs",
+            )
+            return verdict
+        }
+        val from = DexcomOnePlusSensorStartCorrection.cleanupFrom(newStartMs, currentStartMs)
+        val taken = persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(from, true)
+            .filter { it.type == TE.Type.SENSOR_CHANGE }
+            .map { it.timestamp }
+            .toSet()
+        val stampMs = DexcomOnePlusSensorStartCorrection.freeTimestamp(newStartMs, taken)
+        val stale = persistenceLayer.getTherapyEventDataFromToTime(from, now)
+            .filter { it.type == TE.Type.SENSOR_CHANGE }
+        stale.forEach { event ->
+            persistenceLayer.invalidateTherapyEvent(
+                id = event.id,
+                action = Action.CAREPORTAL_REMOVED,
+                source = Sources.DexcomOnePlus,
+                note = event.note,
+                listValues = listOf(
+                    ValueWithUnit.Timestamp(event.timestamp),
+                    ValueWithUnit.TEType(event.type),
+                ),
+            )
+        }
+        sensorStore.overwriteSessionStart(stampMs)
+        val written = writeSensorChange(stampMs)
+        healedSensorChangeStartMs = stampMs
+        refreshProductionLifecycle()
+        rxBus.send(EventRefreshOverview(from = "DexcomOnePlus insertion date"))
+        val nowShowing = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_SESSION: insertion date corrected from=$currentStartMs to=$stampMs " +
+                "asked=$newStartMs removedSensorChanges=${stale.size} written=$written " +
+                "lastSensorChangeNow=$nowShowing",
+        )
+        return verdict
     }
 
     override fun onSession(up: Boolean, reason: String?) {
@@ -1052,10 +1119,9 @@ class DexcomOnePlusPlugin @Inject constructor(
      * Healed once per session start: if the user deliberately deletes the event again, it is not
      * resurrected on the next reading.
      *
-     * Ref `3dd0ca64772` `healMissingSensorChange` (commit `5f02b1718e`), with two cuts. The
-     * engineering switch is off because the owner has not confirmed this net. The one-second
-     * shift for an occupied timestamp (`DexcomOnePlusSensorStartCorrection.freeTimestamp`) is
-     * P5.6 and is not called here: this lot writes [startMs] itself.
+     * Ref `3dd0ca64772` `healMissingSensorChange` (commit `5f02b1718e`). The engineering switch is
+     * off because the owner has not confirmed this net. An occupied timestamp is stepped by
+     * [DexcomOnePlusSensorStartCorrection.freeTimestamp], which arrived with the insertion-date lot.
      */
     private suspend fun healMissingSensorChange(startMs: Long) {
         if (!preferences.get(DexcomOnePlusBooleanKey.RepairMissingSensorChange)) return
@@ -1079,10 +1145,18 @@ class DexcomOnePlusPlugin @Inject constructor(
             return
         }
         healedSensorChangeStartMs = startMs
-        val written = writeSensorChange(startMs)
+        val taken = persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(
+            startMs - SENSOR_CHANGE_MATCH_TOLERANCE_MS,
+            true,
+        )
+            .filter { it.type == TE.Type.SENSOR_CHANGE }
+            .map { it.timestamp }
+            .toSet()
+        val stampMs = DexcomOnePlusSensorStartCorrection.freeTimestamp(startMs, taken)
+        val written = writeSensorChange(stampMs)
         aapsLogger.info(
             LTag.BGSOURCE,
-            "DEXCOM_ONEPLUS_SESSION: sensor age had no therapy event — rewritten at $startMs " +
+            "DEXCOM_ONEPLUS_SESSION: sensor age had no therapy event — rewritten at $stampMs " +
                 "(driver start $startMs, previous last=$last, written=$written)",
         )
         if (written) rxBus.send(EventRefreshOverview(from = "DexcomOnePlus sensor age repair"))

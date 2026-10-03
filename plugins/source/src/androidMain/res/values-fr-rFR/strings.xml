@@ -65,6 +65,12 @@
     <string name="dexcom_oneplus_repair_missing_sensor_change_summary">Désactivé par défaut. Quand il est activé, et que « Enreg. changement de capteur » l’est aussi, un SENSOR_CHANGE manquant pour la session ONE+ en cours est écrit une seule fois. Il ne remplace pas un événement que vous avez supprimé après cette écriture.</string>
     <string name="dexcom_oneplus_anchor_session_to_manual_sensor_change">Ancrer la session sur un changement de capteur manuel (ingénierie)</string>
     <string name="dexcom_oneplus_anchor_session_to_manual_sensor_change_summary">Désactivé par défaut. Désactivé, une nouvelle session ONE+ garde l’heure du démarrage ou de la première lecture, et un changement de capteur noté plus tôt ne sert pas à reculer cette heure. Activé, un changement de capteur des dernières 24 heures, plus tôt que cette heure automatique, devient le début de session.</string>
+    <string name="dexcom_oneplus_correct_sensor_start">Corriger la date d’insertion (ingénierie)</string>
+    <string name="dexcom_oneplus_correct_sensor_start_summary">Désactivé par défaut. Quand il est activé, l’écran d’état peut déplacer l’heure d’insertion de ce capteur. Cela invalide les événements SENSOR_CHANGE de la fenêtre. Les entrées de calibration ne sont pas supprimées.</string>
+    <string name="dexcom_oneplus_correct_insertion_date">Corriger la date d’insertion</string>
+    <string name="dexcom_oneplus_insertion_date_future" comment="%1$s=heure de départ actuelle du capteur. Exemple : 14:05">Un capteur ne peut pas être inséré dans le futur. Le capteur démarre toujours à %1$s.</string>
+    <string name="dexcom_oneplus_insertion_date_too_old" comment="%1$s=heure de départ actuelle du capteur. Exemple : 14:05">Cette date est plus ancienne qu’une vie complète de capteur, elle appartient donc à un autre capteur. Le capteur démarre toujours à %1$s.</string>
+    <string name="dexcom_oneplus_insertion_date_no_session" comment="%1$s=heure de départ actuelle du capteur. Exemple : 14:05">Aucune session de capteur n’est en cours, il n’y a donc pas de date à corriger.</string>
     <string name="dexcom_oneplus_calibration_not_sent">La valeur n’a pas pu être envoyée au capteur. Le capteur est peut-être hors de portée, encore en préchauffage, ou une autre valeur est peut-être encore en route.</string>
     <string name="dexcom_oneplus_calibration_heading">Calibration du capteur</string>
     <string name="dexcom_oneplus_calibration_none">Aucune glycémie capillaire n’a encore été envoyée à ce capteur.</string>

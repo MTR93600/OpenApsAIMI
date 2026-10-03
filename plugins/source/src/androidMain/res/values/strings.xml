@@ -117,6 +117,12 @@
     <string name="dexcom_oneplus_repair_missing_sensor_change_summary">Off by default. When on, and when "Create sensor change" is on, a missing SENSOR_CHANGE for the running ONE+ session is written once. It does not replace an event you deleted after that write.</string>
     <string name="dexcom_oneplus_anchor_session_to_manual_sensor_change">Anchor the session to a manual sensor change (engineering)</string>
     <string name="dexcom_oneplus_anchor_session_to_manual_sensor_change_summary">Off by default. When off, a new ONE+ session keeps the time of the start or of the first reading, and a sensor change logged earlier is not used to move that time back. When on, a sensor change from the last 24 hours that is earlier than that automatic time becomes the session start.</string>
+    <string name="dexcom_oneplus_correct_sensor_start">Correct the insertion date (engineering)</string>
+    <string name="dexcom_oneplus_correct_sensor_start_summary">Off by default. When on, the Status screen can move the insertion time of this sensor. That invalidates SENSOR_CHANGE events in the window. It does not delete calibration entries.</string>
+    <string name="dexcom_oneplus_correct_insertion_date">Correct insertion date</string>
+    <string name="dexcom_oneplus_insertion_date_future" comment="%1$s=current start time of the sensor. Example: 14:05">A sensor cannot be inserted in the future. The sensor still starts at %1$s.</string>
+    <string name="dexcom_oneplus_insertion_date_too_old" comment="%1$s=current start time of the sensor. Example: 14:05">That date is older than a full sensor life, so it belongs to another sensor. The sensor still starts at %1$s.</string>
+    <string name="dexcom_oneplus_insertion_date_no_session" comment="%1$s=current start time of the sensor. Example: 14:05">No sensor session is running, so there is no date to correct.</string>
     <string name="dexcom_oneplus_calibration_not_sent">The value could not be sent to the sensor. The sensor may be out of range, still warming up, or another value may still be on its way.</string>
     <string name="dexcom_oneplus_calibration_heading">Sensor calibration</string>
     <string name="dexcom_oneplus_calibration_none">No finger prick value has been sent to this sensor yet.</string>
