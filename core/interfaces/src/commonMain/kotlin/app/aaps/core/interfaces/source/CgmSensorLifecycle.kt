@@ -60,10 +60,28 @@ enum class PromotionRejectReason {
     LOOP_BUSY,
 }
 
-/** Result of a promote-staging-to-production request. */
+/**
+ * Result of a promote-staging-to-production request.
+ *
+ * Shared by Dexcom ONE+ and Libre 3. [OkBoundFailed] and [OkFollowUpFailed] are a deliberate
+ * deviation from ref `DexcomOnePlusPlugin.kt` L934 @ `3dd0ca64772`, which swallowed the bound
+ * and still returned [Ok].
+ */
 sealed interface PromotionResult {
-    /** Promotion succeeded — the staging sensor now feeds the loop. */
+    /** Promotion succeeded — the staging sensor now feeds the loop, and the bound was applied. */
     data object Ok : PromotionResult
+
+    /**
+     * The exchange already happened and is kept. `ignoreEntriesBefore` threw, so older calibration
+     * entries were not ignored. Not a rollback, and not a full success.
+     */
+    data object OkBoundFailed : PromotionResult
+
+    /**
+     * The exchange already happened, the bound ran, and a later step (`load` / resume) threw.
+     * [productionIdentityPresent] is read from the production store after that throw.
+     */
+    data class OkFollowUpFailed(val productionIdentityPresent: Boolean) : PromotionResult
 
     /** Promotion refused; [reason] says why (no state changed). */
     data class Rejected(val reason: PromotionRejectReason) : PromotionResult

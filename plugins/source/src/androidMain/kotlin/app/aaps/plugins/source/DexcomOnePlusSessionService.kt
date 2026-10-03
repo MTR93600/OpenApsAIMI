@@ -81,7 +81,7 @@ class DexcomOnePlusSessionService : Service() {
             NotificationChannel(
                 CHANNEL_ID,
                 getString(R.string.dexcom_oneplus_notif_channel_name),
-                NotificationManager.IMPORTANCE_LOW,
+                DEXCOM_ONEPLUS_STATUS_CHANNEL_IMPORTANCE,
             ).apply { description = getString(R.string.dexcom_oneplus_notif_channel_desc) },
         )
     }

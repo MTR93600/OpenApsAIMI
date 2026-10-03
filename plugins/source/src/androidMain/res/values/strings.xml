@@ -192,6 +192,9 @@
     <string name="dexcom_oneplus_staging_promote_confirm">Promote</string>
     <string name="dexcom_oneplus_staging_promote_dismiss">Cancel</string>
     <string name="dexcom_oneplus_staging_promote_ok">Staging sensor promoted — it now feeds the loop.</string>
+    <string name="dexcom_oneplus_staging_promote_bound_failed">Sensor promoted, but older calibration entries could not be ignored. Remove fingerstick calibrations taken before this switch, then calibrate again if needed.</string>
+    <string name="dexcom_oneplus_staging_promote_follow_up_failed">Sensor promoted, but reconnecting it failed. The production sensor is the one just promoted. Open the ONE+ status screen and bring the sensor back in range. This is not a complete success.</string>
+    <string name="dexcom_oneplus_staging_promote_follow_up_failed_no_identity">A step after the exchange failed, and the production sensor identity is missing. This is not a complete success. Open the ONE+ status screen and check which sensor is in use.</string>
     <string name="dexcom_oneplus_staging_promote_rejected_absent">No staging sensor to promote.</string>
     <string name="dexcom_oneplus_staging_promote_rejected_not_settled">Staging sensor has not settled long enough to promote yet.</string>
     <string name="dexcom_oneplus_staging_promote_rejected_no_glucose">Staging sensor has not produced enough valid glucose yet.</string>
