@@ -51,6 +51,38 @@ enum class DexcomOnePlusBooleanKey(
         summaryResId = R.string.dexcom_oneplus_send_calibration_to_sensor_summary,
         engineeringModeOnly = true,
         exportable = false,
+    ),
+
+    /**
+     * Put a missing SENSOR_CHANGE back for the running ONE+ session.
+     *
+     * The reference does this whenever "create sensor change" is on. That choice is not
+     * settled, so this stays off. While it is off, a refresh writes no therapy event.
+     * Turning it on still writes nothing when "create sensor change" is off.
+     */
+    RepairMissingSensorChange(
+        key = "dexcom_oneplus_repair_missing_sensor_change",
+        defaultValue = false,
+        titleResId = R.string.dexcom_oneplus_repair_missing_sensor_change,
+        summaryResId = R.string.dexcom_oneplus_repair_missing_sensor_change_summary,
+        engineeringModeOnly = true,
+        exportable = false,
+    ),
+
+    /**
+     * Replace the automatic session start with a SENSOR_CHANGE the user already logged.
+     *
+     * The reference does this on every start and on the first accepted reading. That rolls
+     * the stored start back by up to 24 hours. The owner asked for the same code behind a
+     * switch that stays off, so a start keeps the time it had before this lot.
+     */
+    AnchorSessionToManualSensorChange(
+        key = "dexcom_oneplus_anchor_session_to_manual_sensor_change",
+        defaultValue = false,
+        titleResId = R.string.dexcom_oneplus_anchor_session_to_manual_sensor_change,
+        summaryResId = R.string.dexcom_oneplus_anchor_session_to_manual_sensor_change_summary,
+        engineeringModeOnly = true,
+        exportable = false,
     )
     ;
 

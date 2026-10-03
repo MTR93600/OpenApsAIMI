@@ -57,7 +57,7 @@ class DexcomOnePlusSensorCalibrationTest : TestBase() {
         whenever(rh.gs(any<Int>())).thenReturn("not sent")
         plugin = DexcomOnePlusPlugin(
             rh, aapsLogger, preferences, config, context, persistenceLayer,
-            warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin,
+            warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus,
         )
         OnePlusCgmDrivers.select(useReal = true)
     }
