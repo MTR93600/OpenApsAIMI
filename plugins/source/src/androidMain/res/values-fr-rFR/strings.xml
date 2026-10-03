@@ -56,4 +56,10 @@
     <string name="aidex_sensor_stabilizing">Le capteur est en cours de stabilisation, veuillez patienter…</string>
     <string name="aidex_sensor_replace">Remplacement du capteur requis, veuillez le remplacer par un nouveau capteur dès que possible</string>
     <string name="aidex_signal_lost">Signal capteur perdu, veuillez vérifier la connexion</string>
+    <string name="dexcom_oneplus_correct_sensor_start">Corriger la date d’insertion (ingénierie)</string>
+    <string name="dexcom_oneplus_correct_sensor_start_summary">Désactivé par défaut. Quand il est activé, l’écran d’état peut déplacer l’heure d’insertion de ce capteur. Cela invalide les événements SENSOR_CHANGE de la fenêtre. Les entrées de calibration ne sont pas supprimées.</string>
+    <string name="dexcom_oneplus_correct_insertion_date">Corriger la date d’insertion</string>
+    <string name="dexcom_oneplus_insertion_date_future" comment="%1$s=heure de départ actuelle du capteur. Exemple : 14:05">Un capteur ne peut pas être inséré dans le futur. Le capteur démarre toujours à %1$s.</string>
+    <string name="dexcom_oneplus_insertion_date_too_old" comment="%1$s=heure de départ actuelle du capteur. Exemple : 14:05">Cette date est plus ancienne qu’une vie complète de capteur, elle appartient donc à un autre capteur. Le capteur démarre toujours à %1$s.</string>
+    <string name="dexcom_oneplus_insertion_date_no_session" comment="%1$s=heure de départ actuelle du capteur. Exemple : 14:05">Aucune session de capteur n’est en cours, il n’y a donc pas de date à corriger.</string>
 </resources>
