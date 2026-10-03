@@ -21,6 +21,7 @@ import app.aaps.core.interfaces.source.CgmStagingEvidence
 import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.core.interfaces.source.PromotionRejectReason
 import app.aaps.core.interfaces.source.PromotionResult
+import app.aaps.core.interfaces.source.SensorCalibrationResult
 import app.aaps.core.interfaces.source.SensorSlot
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.keys.BooleanKey
@@ -226,6 +227,26 @@ class DexcomOnePlusPlugin @Inject constructor(
      */
     override fun specialShowInListCondition(): Boolean = availabilityProvider.isAvailable()
 
+    /**
+     * A fingerstick goes to the sensor only while the engineering switch is on.
+     *
+     * See [DexcomOnePlusBooleanKey.SendCalibrationToSensor]. When it is true the app must not also
+     * fit a software line on the same readings. That second gate (the calibration dialog and the
+     * graph worker) is not in this lot; the switch stays off, so [calibrateSensor] returns
+     * [SensorCalibrationResult.NotSupported] and no opcode 0x34 is queued.
+     */
+    override fun calibratesInSensor(): Boolean =
+        preferences.get(DexcomOnePlusBooleanKey.SendCalibrationToSensor)
+
+    override fun calibrateSensor(glucoseMgdl: Int, bloodAtMs: Long): SensorCalibrationResult {
+        if (!calibratesInSensor()) return SensorCalibrationResult.NotSupported
+        // Only the production driver: a pre-soak sensor is not the one feeding the loop, and a
+        // calibration it accepted would stay in it for the whole of its own life.
+        val queued = driver.offerCalibration(glucoseMgdl, bloodAtMs)
+        return if (queued) SensorCalibrationResult.Queued
+        else SensorCalibrationResult.Refused(resources.gs(R.string.dexcom_oneplus_calibration_not_sent))
+    }
+
     override fun getPreferenceScreenContent() = PreferenceSubScreenDef(
         key = "dexcom_oneplus_settings",
         titleResId = R.string.dexcom_oneplus_native,
@@ -250,6 +271,7 @@ class DexcomOnePlusPlugin @Inject constructor(
                 )
             },
             DexcomOnePlusBooleanKey.UseRealSkeleton,
+            DexcomOnePlusBooleanKey.SendCalibrationToSensor,
             // Sensor age on the dashboard comes from the SENSOR_CHANGE therapy event this writes.
             BooleanKey.BgSourceCreateSensorChange,
         ),

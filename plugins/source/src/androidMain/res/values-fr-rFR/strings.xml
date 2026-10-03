@@ -59,4 +59,18 @@
     <string name="aidex_sensor_stabilizing">Le capteur est en cours de stabilisation, veuillez patienter…</string>
     <string name="aidex_sensor_replace">Remplacement du capteur requis, veuillez le remplacer par un nouveau capteur dès que possible</string>
     <string name="aidex_signal_lost">Signal capteur perdu, veuillez vérifier la connexion</string>
+    <string name="dexcom_oneplus_send_calibration_to_sensor">Envoyer la calibration au capteur (ingénierie)</string>
+    <string name="dexcom_oneplus_send_calibration_to_sensor_summary">Désactivé : une glycémie capillaire sert à corriger les lectures dans l’application, et peut être retirée plus tard. Activé : la valeur est envoyée au capteur lui-même. Le capteur la conserve définitivement, elle ne peut être ni modifiée ni supprimée, ce capteur n’indique pas clairement s’il a pris la valeur, et l’application cesse de corriger les lectures de son côté.</string>
+    <string name="dexcom_oneplus_calibration_not_sent">La valeur n’a pas pu être envoyée au capteur. Le capteur est peut-être hors de portée, encore en préchauffage, ou une autre valeur est peut-être encore en route.</string>
+    <string name="dexcom_oneplus_calibration_heading">Calibration du capteur</string>
+    <string name="dexcom_oneplus_calibration_none">Aucune glycémie capillaire n’a encore été envoyée à ce capteur.</string>
+    <string name="dexcom_oneplus_calibration_waiting">Votre valeur attend d’être envoyée au capteur. Elle part à la prochaine conversation entre l’application et le capteur, en général dans quelques minutes.</string>
+    <string name="dexcom_oneplus_calibration_accepted">Le capteur indique qu’il a pris votre valeur.</string>
+    <string name="dexcom_oneplus_calibration_refused">Le capteur indique qu’il n’a pas pris votre valeur. Votre lecture n’a pas été modifiée.</string>
+    <string name="dexcom_oneplus_calibration_unknown">Le capteur a répondu quelque chose que cette application ne sait pas lire, il est donc impossible de dire si votre valeur a été utilisée. C’est ce qu’un Dexcom ONE+ répond en temps normal. Ce n’est pas une erreur de l’application et ce n’est pas un succès. Comparez le capteur à une glycémie capillaire dans l’heure qui suit avant de vous fier à ses lectures, et demandez à votre équipe soignante en cas de doute.</string>
+    <string name="dexcom_oneplus_calibration_detail" comment="%1$s=réponse du capteur, en une courte ligne technique, souvent des octets bruts.">Réponse du capteur : %1$s</string>
+    <string name="dexcom_oneplus_calibration_state_needs">Le capteur demande une calibration.</string>
+    <string name="dexcom_oneplus_calibration_state_needs_first">Le capteur demande sa première calibration.</string>
+    <string name="dexcom_oneplus_calibration_state_needs_second">Le capteur demande une seconde calibration.</string>
+    <string name="dexcom_oneplus_calibration_state_sent">Le capteur signale qu’une calibration lui est parvenue.</string>
 </resources>
