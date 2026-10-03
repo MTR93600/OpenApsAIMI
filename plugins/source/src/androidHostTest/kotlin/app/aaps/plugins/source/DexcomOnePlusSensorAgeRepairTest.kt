@@ -143,6 +143,10 @@ class DexcomOnePlusSensorAgeRepairTest : TestBase() {
     @Test
     fun `repair stays off by default and writes nothing`() = runTest {
         assertThat(DexcomOnePlusBooleanKey.RepairMissingSensorChange.defaultValue).isFalse()
+        // Create-sensor-change stays on, as in the tests below. Without this stub Mockito
+        // returns false and the second guard would refuse the write even if the repair switch
+        // were gone, so the test would pass for the wrong reason.
+        whenever(preferences.get(BooleanKey.BgSourceCreateSensorChange)).thenReturn(true)
         val startedAt = System.currentTimeMillis() - 26 * HOUR_MS
         OnePlusSensorStore(context).startSessionForSensor(MAC, startedAt, null)
         whenever(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE))

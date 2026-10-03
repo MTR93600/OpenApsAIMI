@@ -56,4 +56,6 @@
     <string name="aidex_sensor_stabilizing">Le capteur est en cours de stabilisation, veuillez patienter…</string>
     <string name="aidex_sensor_replace">Remplacement du capteur requis, veuillez le remplacer par un nouveau capteur dès que possible</string>
     <string name="aidex_signal_lost">Signal capteur perdu, veuillez vérifier la connexion</string>
+    <string name="dexcom_oneplus_repair_missing_sensor_change">Réparer un changement de capteur manquant (ingénierie)</string>
+    <string name="dexcom_oneplus_repair_missing_sensor_change_summary">Désactivé par défaut. Quand il est activé, et que « Enreg. changement de capteur » l’est aussi, un SENSOR_CHANGE manquant pour la session ONE+ en cours est écrit une seule fois. Il ne remplace pas un événement que vous avez supprimé après cette écriture.</string>
 </resources>
