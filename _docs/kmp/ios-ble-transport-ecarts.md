@@ -1,6 +1,6 @@
 # Écarts — `BleTransport` iOS (lot transport, sans pompe)
 
-> Branche : `cursor/ios-ble-transport-1982`, base `kmp-aimi-migration-study` @ `16029c9587ad2bf76f0c047d9f98e892b3740a0a`.  
+> Branche : `cursor/ios-ble-transport-1982`, base `kmp-aimi-migration-study` @ `7c13732990b338969c5c54f832492efb2bf8de57` (merge de #144).  
 > Contrat inchangé : `core/interfaces/src/commonMain/kotlin/app/aaps/core/interfaces/pump/ble/BleTransport.kt`.  
 > Code : `core/interfaces/src/commonMain/kotlin/app/aaps/core/interfaces/pump/ble/session/BleSession.kt`, `core/interfaces/src/iosMain/kotlin/app/aaps/core/interfaces/pump/ble/session/CoreBluetoothCentral.kt`, `IosBleTransport.kt`.  
 > `IosClientConfig.PUMPDRIVERS` reste `false`. `IosBleTransport` n'est pas `@Inject`, n'est pas dans le graphe Metro, et aucun driver ne le construit.
