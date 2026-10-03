@@ -2,7 +2,7 @@
 
 > **Statut :** accepté le 2026-10-03, décision du propriétaire.  
 > **Remplace, sur ce point seulement :** l'hôte iOS Trio / LoopKit (D1) et l'interdiction de pile BLE/NFC dans `iosMain`, dans [ADR G0](adr-g0-defaults.md) (accepté le 2026-08-26). La même phrase vaut pour les deux rappels de [ADR G0-D2b](adr-g0-d2-ios-pump-medtrum.md) : hôte Trio, pompe iOS via `MedtrumKit`, « do not put `:pump:medtrum` in `iosMain` ».  
-> **Branche lue :** `kmp-aimi-migration-study` @ `16029c9587ad2bf76f0c047d9f98e892b3740a0a` (2026-10-02, 21:17 +0200).  
+> **Branche lue :** `kmp-aimi-migration-study` @ `7c13732990b338969c5c54f832492efb2bf8de57` (merge de #144, P5). La première rédaction lisait `16029c9587`. Le paragraphe P5 ci-dessous est la relecture.  
 > **Règle :** identique à G0. Un changement de comportement thérapeutique exige en plus un replay avant/après. Cette ADR n'en est pas un : elle ne branche aucun appareil.
 
 ## Contexte
@@ -71,13 +71,20 @@ Les sources qui n'existent que par un canal Android restent hors iOS : broadcast
 3. Medtrum. `comm/` compte 35 fichiers Kotlin ; aucun n'importe `android.*`. `encryption/Crypt.kt` non plus. `MedtrumService.kt` fait 1 200 lignes et reste le gros morceau plateforme.
 4. Dana RS / Dana-i. `services/BLEComm.kt` fait 828 lignes. Neuf des 46 fichiers de `comm/` importent Joda ou Android.
 5. Equil, puis Diaconn. Diaconn doit d'abord passer par `BleTransport` : il ne l'utilise pas.
-6. Chantiers XL, après les cinq précédents : Dexcom ONE+ / G7, Omnipod Dash, Libre 3, RileyLink, Medtronic, Omnipod Eros, EOPatch. L'ordre à l'intérieur de ce paquet n'est pas tranché ici.
+6. Chantiers XL, après les cinq précédents : Dexcom ONE+ / G7, Omnipod Dash, Libre 3, RileyLink, Medtronic, Omnipod Eros, EOPatch. L'ordre à l'intérieur de ce paquet n'est pas tranché ici. P5 n'en avance aucun sur iOS (voir plus bas).
 
 La pompe virtuelle n'est pas un lot driver. L'allumer serait quitter le mode suiveur, ce que la règle de sécurité interdit tant qu'aucun appareil réel n'a été testé — et elle n'est de toute façon pas un appareil BLE.
 
 ## Risques
 
-**Propriété intellectuelle Abbott (Libre 3).** Les tables binaires sont dans `plugins/libre3/src/main/resources/libre3/`, y compris `phone_cert_162b.bin` et les programmes `firstpair_*.bin`. `plugins/libre3/NOTICE` les rattache à un portage de LibreCRKit. La licence MIT du code ne couvre pas ces tables. Libre 3 reste dans le paquet XL et ne se porte pas tant que ce risque n'est pas traité à part.
+**P5 (Libre 3, ONE+), relu sur `7c13732990`.** Le merge de #144 ajoute du code Android. Il ne change pas cette décision.
+
+- `:plugins:libre3` et `:plugins:dexcom_oneplus` restent `alias(libs.plugins.android.library)`. Aucun `iosMain`. `ios/shell` ne les cite pas.
+- Libre 3 : `Libre3BooleanKey.UseRealSkeleton` (`libre3_use_real_skeleton`) est à `false`, réservé à l'engineering. Le pré-soak (`libre3_presoak_enabled`) et le service de session (`libre3_keep_session_alive`) sont aussi à `false`. `Libre3CgmDrivers` documente le stub comme défaut.
+- ONE+ : l'envoi de calibration, la réparation de `SENSOR_CHANGE`, la correction de date d'insertion et l'ancre manuelle sont à `false`, engineering seulement. `dexcom_oneplus_use_real_skeleton` vaut `true` mais reste engineering, et son commentaire dit que le squelette échoue fermé au GATT et à l'authentification. Ce n'est pas une claim BLE de production, et ce n'est pas iOS.
+- `PUMPDRIVERS` est toujours `false` dans `IosClientConfig`.
+
+**Propriété intellectuelle Abbott (Libre 3).** Les tables binaires sont toujours dans `plugins/libre3/src/main/resources/libre3/`, y compris `phone_cert_162b.bin` et les programmes `firstpair_*.bin`. `plugins/libre3/NOTICE` les rattache à un portage de LibreCRKit. La licence MIT du code ne couvre pas ces tables. On ne copie rien depuis LibreCRKit. P5 ne lève pas ce risque : Libre 3 reste dans le paquet XL et ne se porte pas sur iOS tant que ce risque n'est pas traité à part.
 
 **Alarmes sonores.** `_docs/ios_blockers.md` dit encore que `setAudibleAlarm` se contente de journaliser. C'est périmé sur ce tip : `IosSystemNotificationPlatform.setAudibleAlarm` appelle `IosAlarmSoundPlayer.play` (`implementation/src/iosMain/kotlin/app/aaps/implementation/notifications/IosAlarmSoundPlayer.kt`), un `AVAudioPlayer` en catégorie `playback`, donc audible téléphone en silencieux **tant que le processus vit**. Il n'y a toujours pas de son si l'app n'est pas lancée (pas d'équivalent du service de premier plan, entitlement Critical Alerts non décidé — question laissée ouverte par G0). Aucun driver ne pilote une boucle réelle tant que ce trou-là n'est pas assumé.
 
