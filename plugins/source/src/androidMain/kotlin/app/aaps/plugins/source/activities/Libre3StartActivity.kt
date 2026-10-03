@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -22,11 +25,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import app.aaps.core.interfaces.source.SensorSlot
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.MetroAppCompatActivity
+import app.aaps.plugins.libre3.Libre3CgmDrivers
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
 import app.aaps.plugins.libre3.nfc.Libre3NfcFailure
 import app.aaps.plugins.libre3.nfc.Libre3NfcReader
@@ -48,6 +53,7 @@ import app.aaps.plugins.source.compose.CgmUiState
 import app.aaps.plugins.source.compose.CgmWidth
 import app.aaps.plugins.source.compose.Libre3UiLabels
 import app.aaps.plugins.source.compose.rememberCgmWindow
+import app.aaps.plugins.source.keys.Libre3BooleanKey
 import javax.inject.Inject
 
 /**
@@ -61,6 +67,9 @@ import javax.inject.Inject
  * so there is no list of candidates and nothing to put in a second column. One column at every
  * size is the honest layout here — the value of the redesign is that the screen scrolls, that the
  * help folds away, and that the current step is always named.
+ *
+ * With the pre-soak switched on the screen also asks **which slot** the scan is for, and that is
+ * the most safety relevant line of this whole feature. See [slot].
  */
 class Libre3StartActivity : MetroAppCompatActivity() {
 
@@ -70,10 +79,48 @@ class Libre3StartActivity : MetroAppCompatActivity() {
 
     private var reader: Libre3NfcReader? = null
 
+    /**
+     * Which slot the next scan writes into.
+     *
+     * ⚠️ This is what protects the sensor that feeds the loop. The store the NFC step writes is
+     * chosen from this value, and `Libre3SensorStore.saveIdentityAndWait` drops the pairing key,
+     * `k_enc` and `iv_enc` of the file it writes as soon as the serial changes. Writing a pre-soak
+     * sensor into the production file would therefore throw the running sensor's keys away, and a
+     * running Libre 3 refuses a fresh first pairing — the sensor on the arm would be lost for good.
+     * The pre-soak slot must always land in its own file. That is invariant I2 of
+     * `docs/LIBRE3_PRESOAK_PLAN.md`.
+     *
+     * Because of that it is written to the saved instance state by [onSaveInstanceState] and read
+     * back in [onCreate], instead of living in memory only. Android rebuilds this activity for a
+     * rotation, a dark mode flip, a font size change, split screen, and after killing the app in
+     * the background. A slot that quietly fell back to production on any of those would send the
+     * next scan into the production file, and the user would have no way of noticing: the picker
+     * simply jumps back one button.
+     */
+    private var slot by mutableStateOf(SensorSlot.PRODUCTION)
+
+    /**
+     * Whether the pre-soak preference is on, read again on every [onResume].
+     *
+     * Read once it could be stale: the user can switch the preference while this screen waits in
+     * the back stack.
+     */
+    private var presoakEnabled by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val store = Libre3SensorStore(this)
-        val nfcReader = Libre3NfcReader(Libre3NfcSession(store))
+        slot = readSlot(savedInstanceState)
+        presoakEnabled = preferences.get(Libre3BooleanKey.PresoakEnabled)
+        // The reader is built once and never rebuilt on a slot change: it owns an executor and it
+        // registers reader mode on this activity, and only one reader mode may be on at a time. The
+        // store follows the slot through the supplier instead, so the toggle costs nothing. The
+        // veto stops a scan of a sensor the other slot already holds.
+        val nfcReader = Libre3NfcReader(
+            Libre3NfcSession(
+                { Libre3SensorStore(this, Libre3CgmDrivers.storeNamespace(slot)) },
+                veto = ::sensorHeldByOtherSlot,
+            ),
+        )
         reader = nfcReader
         setContent {
             CompositionLocalProvider(LocalPreferences provides preferences) {
@@ -81,21 +128,74 @@ class Libre3StartActivity : MetroAppCompatActivity() {
                     Libre3StartScreen(
                         activity = this,
                         reader = nfcReader,
+                        slot = slot,
+                        presoakEnabled = presoakEnabled,
+                        onSlotChange = { slot = it },
                         onBack = { finish() },
-                        onSensorScanned = { result ->
-                            // A different sensor counts its own minutes from zero, so the repeat
-                            // guard has to start again. Without this every reading of the new
-                            // sensor would be refused as "already seen".
-                            plugin.onSensorChanged()
-                            plugin.syncDriverFromPrefs()
-                            if (result.readyForBle) {
-                                plugin.connectStoredSensor(result.identity.bleAddress)
-                            }
-                        },
+                        onSensorScanned = ::onSensorScanned,
                     )
                 }
             }
         }
+    }
+
+    /**
+     * What to do with a sensor the NFC step has just stored, told apart by slot.
+     *
+     * @return false when the pre-soak refused the sensor, so the screen can say why. The production
+     *   path always returns true: it has nothing left to refuse at this point.
+     */
+    private fun onSensorScanned(result: Libre3NfcScanResult): Boolean = when (slot) {
+        SensorSlot.PRODUCTION -> {
+            plugin.onSensorChanged()
+            plugin.syncDriverFromPrefs()
+            if (result.readyForBle) {
+                plugin.connectStoredSensor(result.identity.bleAddress)
+            }
+            true
+        }
+
+        SensorSlot.STAGING    -> {
+            // Never onSensorChanged() here: it resets the process wide repeat guard, and the next
+            // reading of the sensor that feeds the loop would then look new.
+            val accepted = plugin.beginStaging(result.identity)
+            if (accepted && result.readyForBle) {
+                plugin.connectStagingSensor(result.identity.bleAddress)
+            }
+            accepted
+        }
+    }
+
+    /**
+     * Is this sensor already held by the slot the user is not starting?
+     *
+     * Asked by the NFC step with the serial read from the patch info, before the activation command
+     * goes out.
+     */
+    private fun sensorHeldByOtherSlot(serial: String): Boolean = when (slot) {
+        SensorSlot.PRODUCTION -> plugin.isStagingSensor(serial, mac = null)
+        SensorSlot.STAGING    -> plugin.isProductionSensor(serial, mac = null)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        presoakEnabled = preferences.get(Libre3BooleanKey.PresoakEnabled)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(KEY_SLOT, slot.name)
+    }
+
+    /**
+     * The slot written by [onSaveInstanceState], or production when there is nothing to read.
+     *
+     * A name that does not match any [SensorSlot] falls back to production. The `runCatching` is
+     * the reference `readSlot` (`dev_OAPSAIMI` @ `3dd0ca64772`).
+     */
+    private fun readSlot(saved: Bundle?): SensorSlot {
+        val name = saved?.getString(KEY_SLOT) ?: return SensorSlot.PRODUCTION
+        return runCatching { SensorSlot.valueOf(name) }.getOrDefault(SensorSlot.PRODUCTION)
     }
 
     override fun onDestroy() {
@@ -103,24 +203,39 @@ class Libre3StartActivity : MetroAppCompatActivity() {
         reader?.shutdown()
         reader = null
     }
+
+    companion object {
+
+        /** Name of the chosen slot in the saved instance state. */
+        private const val KEY_SLOT = "libre3_slot"
+    }
 }
 
 @Composable
 internal fun Libre3StartScreen(
     activity: Activity,
     reader: Libre3NfcReader,
+    slot: SensorSlot,
+    presoakEnabled: Boolean,
+    onSlotChange: (SensorSlot) -> Unit,
     onBack: () -> Unit,
-    onSensorScanned: (Libre3NfcScanResult) -> Unit,
+    onSensorScanned: (Libre3NfcScanResult) -> Boolean,
     modifier: Modifier = Modifier,
 ) {
     val window = rememberCgmWindow()
     var scanned by remember { mutableStateOf<Libre3NfcScanResult?>(null) }
     var failure by remember { mutableStateOf<Libre3NfcFailure?>(null) }
+    var presoakRefused by remember { mutableStateOf(false) }
     var nfcAvailable by remember { mutableStateOf(true) }
     var permissionsGranted by remember { mutableStateOf(Libre3BlePermissionHelper.hasAll(activity)) }
 
-    // The reader follows the screen, not the first drawing of it. Turning it on once would leave
-    // the screen looking ready while the reader was off after the user came back from another app.
+    val changeSlot: (SensorSlot) -> Unit = { wanted ->
+        scanned = null
+        failure = null
+        presoakRefused = false
+        onSlotChange(wanted)
+    }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -131,7 +246,7 @@ internal fun Libre3StartScreen(
                         onResult = { result ->
                             failure = null
                             scanned = result
-                            onSensorScanned(result)
+                            presoakRefused = !onSensorScanned(result)
                         },
                         onError = { reason -> failure = reason },
                     )
@@ -148,8 +263,6 @@ internal fun Libre3StartScreen(
         }
     }
 
-    // Allow → NFC on → hold the phone on the sensor → warming up. The same four-step shape as the
-    // ONE+ flow, with the content this one actually has.
     val currentStep = when {
         !permissionsGranted -> 0
         !nfcAvailable       -> 1
@@ -161,7 +274,6 @@ internal fun Libre3StartScreen(
         title = stringResource(R.string.libre3_start_title),
         onNavigate = onBack,
         modifier = modifier,
-        // A task the user either completes by scanning or abandons — see the AapsTopAppBar convention.
         navIcon = CgmNavIcon.Close,
     ) {
         CgmLazyColumn {
@@ -172,16 +284,48 @@ internal fun Libre3StartScreen(
                         stringResource(R.string.libre3_step_permissions),
                         stringResource(R.string.libre3_step_nfc),
                         stringResource(R.string.libre3_step_scan),
-                        stringResource(R.string.libre3_step_warmup),
+                        stringResource(
+                            if (slot == SensorSlot.STAGING) R.string.libre3_step_presoak
+                            else R.string.libre3_step_warmup
+                        ),
                     ),
                     compact = window.width == CgmWidth.Compact,
                 )
+            }
+
+            if (presoakEnabled || slot == SensorSlot.STAGING) {
+                item(key = "slot") {
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        SegmentedButton(
+                            selected = slot == SensorSlot.PRODUCTION,
+                            onClick = { changeSlot(SensorSlot.PRODUCTION) },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                        ) {
+                            Text(stringResource(R.string.libre3_slot_production_short))
+                        }
+                        SegmentedButton(
+                            selected = slot == SensorSlot.STAGING,
+                            onClick = { changeSlot(SensorSlot.STAGING) },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                        ) {
+                            Text(stringResource(R.string.libre3_slot_staging_short))
+                        }
+                    }
+                }
             }
 
             item(key = "state") {
                 val result = scanned
                 val problem = failure
                 when {
+                    presoakRefused       -> CgmCard(tone = CgmCardTone.Warning) {
+                        CgmCardHeader(stringResource(R.string.libre3_scan_problem))
+                        Text(
+                            text = stringResource(R.string.libre3_staging_is_production),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+
                     result != null       -> CgmCard(accent = true) {
                         CgmCardHeader(stringResource(R.string.libre3_scan_ready)) {
                             CgmStateChip(
@@ -198,7 +342,10 @@ internal fun Libre3StartScreen(
                             style = MaterialTheme.typography.bodyLarge,
                         )
                         Text(
-                            text = stringResource(R.string.libre3_start_done_note),
+                            text = stringResource(
+                                if (slot == SensorSlot.STAGING) R.string.libre3_presoak_done_note
+                                else R.string.libre3_start_done_note
+                            ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -210,8 +357,6 @@ internal fun Libre3StartScreen(
                             text = Libre3UiLabels.nfcFailureLabel(problem),
                             style = MaterialTheme.typography.bodyMedium,
                         )
-                        // Nothing was written, so saying so removes the fear of having half-paired
-                        // a sensor and makes retrying the obvious next move.
                         Text(
                             text = stringResource(R.string.libre3_scan_retry_hint),
                             style = MaterialTheme.typography.bodySmall,
@@ -266,6 +411,18 @@ internal fun Libre3StartScreen(
 
             item(key = "help") {
                 Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.large)) {
+                    if (slot == SensorSlot.STAGING) {
+                        CgmHelpCard(
+                            title = stringResource(R.string.libre3_presoak_wear_cost_title),
+                            tone = CgmCardTone.Warning,
+                            expandedByDefault = true,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.libre3_presoak_wear_cost),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
                     CgmHelpCard(title = stringResource(R.string.libre3_help_how_to_start)) {
                         Text(
                             text = stringResource(R.string.libre3_start_steps),

@@ -73,4 +73,10 @@
     <string name="dexcom_oneplus_calibration_state_needs_first">Le capteur demande sa première calibration.</string>
     <string name="dexcom_oneplus_calibration_state_needs_second">Le capteur demande une seconde calibration.</string>
     <string name="dexcom_oneplus_calibration_state_sent">Le capteur signale qu’une calibration lui est parvenue.</string>
+    <string name="libre3_presoak_promote_bound_failed">Le capteur est promu, mais les anciennes entrées de calibration n\'ont pas pu être ignorées. Vérifiez avec une glycémie capillaire avant de faire confiance à la boucle, et calibrez de nouveau si ces anciennes entrées s\'appliquent encore.</string>
+    <string name="libre3_presoak_promote_check_state">Le capteur semble promu, mais la promotion ne s\'est pas terminée correctement. Vérifiez l\'état Libre 3 pour voir quel capteur alimente la boucle avant de lui faire confiance.</string>
+    <string name="libre3_presoak_promote_follow_up_no_identity">Une étape après l\'échange a échoué, et l\'identité du capteur de production est absente. Ce n\'est pas un succès complet. Ouvrez l\'état Libre 3 et vérifiez quel capteur est en service.</string>
+    <string name="libre3_presoak_promote_threw">La promotion a échoué avant de renvoyer un résultat. Capteur de production lu dans le store : %1$s.</string>
+    <string name="libre3_presoak_promote_threw_none">aucun</string>
+    <string name="libre3_presoak_promote_threw_unreadable">La promotion a échoué avant de renvoyer un résultat. Le store du capteur de production n\'a pas pu être lu.</string>
 </resources>
