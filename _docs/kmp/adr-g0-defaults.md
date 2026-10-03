@@ -3,7 +3,8 @@
 > **Status:** accepted 2026-08-26.  
 > **Branch:** `kmp-aimi-migration-study`.  
 > **AIMI freeze:** tag `aimi-baseline-2026-08-26` on `1ae418e106`.  
-> **Change rule:** a later change of these defaults needs a new ADR. A therapy behaviour change also needs replay before/after.
+> **Change rule:** a later change of these defaults needs a new ADR. A therapy behaviour change also needs replay before/after.  
+> **2026-10-03.** D1 (iOS host Trio / LoopKit) and the consequence « iOS does not get the Android BLE/NFC stack in `iosMain` » are **remplacé sur ce point par ADR G1** ([`adr-g1-ios-kmp-natif.md`](adr-g1-ios-kmp-natif.md)). The rest of this ADR is unchanged.
 
 ## Context
 

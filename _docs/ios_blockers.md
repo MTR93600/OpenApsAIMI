@@ -565,7 +565,10 @@ Not blockers, and not for the Windows session to fix. Listed so nobody is surpri
   identically. The graph has to take it as a factory parameter from the app at start up.
 
 - `IosSystemNotificationPlatform.setAudibleAlarm` only logs, so **an urgent alarm makes no sound on
-  iOS today**. There are two separate paths and they are easy to confuse:
+  iOS today**. **Correction 2026-10-03 (tip `16029c9587`) :** this sentence is stale.
+  `setAudibleAlarm` calls `IosAlarmSoundPlayer.play` (`implementation/src/iosMain/.../IosAlarmSoundPlayer.kt`),
+  which starts an `AVAudioPlayer` while the process is alive. What is still missing is a sound when
+  the app is not running. There are two separate paths and they are easy to confuse:
   - *While the app is alive* - an `AVAudioPlayer` on an `AVAudioSession` with category `.playback`,
     which ignores the hardware mute switch. **No entitlement needed.** This is the counterpart of
     `AlarmSoundPlayerImpl`, and it is the missing piece: writing an iOS `AlarmSoundPlayer` and
